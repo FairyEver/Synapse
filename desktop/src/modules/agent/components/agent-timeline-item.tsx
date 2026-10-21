@@ -40,7 +40,9 @@ function AgentTimelineItem({
   toolCancelled,
   projectId,
   conversationId,
+  generatedUiDisabled,
 }: {
+  readonly generatedUiDisabled?: boolean
   readonly item: SynapseAgentTimelineItem
   readonly toolResult?: SynapseAgentToolResultTimelineItem
   readonly toolCancelled?: boolean
@@ -72,6 +74,7 @@ function AgentTimelineItem({
           referenceActions={referenceActions}
           projectId={projectId}
           conversationId={conversationId}
+          generatedUiDisabled={generatedUiDisabled}
         />
       )
     case "thinking":

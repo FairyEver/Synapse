@@ -125,6 +125,9 @@ import {
 } from "./permission-sanitize"
 import { redactSensitiveText } from "./redaction"
 import { markCancelRequested } from "./turn-outcome"
+import { GeneratedUiService } from "./generated-ui-service"
+import type { GeneratedUiStateEntry } from "../../runtime/data-repo/schemas/agent-generated-ui"
+import type { GeneratedUiTarget, SaveGeneratedUiStateInput, SubmitGeneratedUiActionInput } from "../../../src/types/agent-generated-ui"
 import type { AgentFileCheckpointEntryV1 } from "../../runtime/data-repo"
 import {
   AgentFileCheckpointService,
@@ -160,6 +163,7 @@ export interface AgentRuntimeServiceDeps {
   readonly taskProgress?: DataNamespace<AgentTaskProgressEntryV1>
   readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
   readonly fileCheckpointEntries?: DataNamespace<AgentFileCheckpointEntryV1>
+  readonly generatedUiStates?: DataNamespace<GeneratedUiStateEntry>
   readonly agentArtifactStore?: AgentArtifactStore
   readonly attachmentStagingService?: AttachmentStagingService
   readonly getUsagePriceRules?: () => readonly ModelPriceRule[]
@@ -246,6 +250,7 @@ export class AgentRuntimeService {
   private readonly sessionManager: SessionManager
   private readonly conversationRouter: ConversationRouter
   private readonly fileCheckpoints: AgentFileCheckpointService | undefined
+  private readonly generatedUi: GeneratedUiService | undefined
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
 
@@ -253,6 +258,7 @@ export class AgentRuntimeService {
 
   constructor(deps: AgentRuntimeServiceDeps) {
     this.deps = deps
+    this.generatedUi = deps.generatedUiStates ? new GeneratedUiService(deps.projectId, deps.conversations, deps.generatedUiStates) : undefined
     this.fileCheckpoints = deps.fileCheckpointEntries && deps.workDir && deps.permissionGuard && deps.auditSink
       ? new AgentFileCheckpointService({
           projectId: deps.projectId,
@@ -389,6 +395,29 @@ export class AgentRuntimeService {
   ): Promise<AgentRuntimeTurnResult> {
     return this.claudeCodeContinuation.runWritable(conversationId, () =>
       this.conversationRouter.sendToConversation(message, conversationId, options))
+  }
+
+  getGeneratedUiState(input: GeneratedUiTarget) { return this.requireGeneratedUi().get(input) }
+  saveGeneratedUiState(input: SaveGeneratedUiStateInput) {
+    return this.claudeCodeContinuation.runWritable(input.conversationId, () => this.requireGeneratedUi().save(input))
+  }
+  submitGeneratedUiAction(input: SubmitGeneratedUiActionInput, rendererId: number) {
+    return this.claudeCodeContinuation.runWritable(input.conversationId, () => this.requireGeneratedUi().submit(input, async (submission) => {
+      const conversation = await this.repository.get(submission.conversationId)
+      if (!conversation) throw new Error("找不到当前对话。")
+      const accepted = await this.submitToConversation({
+        projectId: this.deps.projectId, sessionKey: conversation.sessionKey, platform: "local-renderer",
+        userId: "renderer", userName: "Renderer", originRendererId: rendererId,
+        content: submission.content, displayContent: submission.displayContent,
+        replyCtx: { kind: "local-renderer", projectId: this.deps.projectId, sessionKey: conversation.sessionKey },
+      }, conversation.id)
+      return accepted.accepted
+    }))
+  }
+
+  private requireGeneratedUi(): GeneratedUiService {
+    if (!this.generatedUi) throw new Error("当前项目不支持生成界面。")
+    return this.generatedUi
   }
 
   async submitToConversation(
@@ -1443,6 +1472,8 @@ export class AgentRuntimeService {
       const reset = await this.sessionLifecycle.resetSession(sessionKey, platform, workspaceKey, conversation.id)
       if (reset) {
         this.conversationRouter.forgetSavedSdkSession(reset.id)
+        await this.repository.revokeGeneratedUi(reset.id)
+        await this.generatedUi?.removeConversation(reset.id)
       }
       return reset
     })
@@ -1538,6 +1569,7 @@ export class AgentRuntimeService {
       this.conversationRouter.forgetSavedSdkSession(conversationIdValue)
       await this.deps.agentArtifactStore?.removeConversationArtifacts(conversationIdValue)
       await this.fileCheckpoints?.removeConversation(conversationIdValue)
+      await this.generatedUi?.removeConversation(conversationIdValue)
     }
     return deleted
   }

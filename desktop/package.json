@@ -14,7 +14,7 @@
     "dev:electron:build": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && node scripts/build/generate-definitions-registry.mjs && node scripts/build/generate-ipc.mjs && concurrently --kill-others-on-fail \"tsc -p tsconfig.electron.json --watch --preserveWatchOutput\" \"pnpm build:preload --watch\"",
     "dev:electron:app": "node scripts/dev/dev-electron-app.mjs",
     "icons": "node scripts/build/build-icons.mjs",
-    "build": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && pnpm generate:definitions-registry && pnpm build:renderer && pnpm build:electron",
+    "build": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && pnpm generate:definitions-registry && pnpm generate:agent-ui && pnpm build:renderer && pnpm build:electron",
     "build:renderer": "vite build",
     "build:electron": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && node scripts/build/generate-ipc.mjs && tsc -p tsconfig.electron.json && pnpm build:preload",
     "build:preload": "esbuild electron/preload.ts --bundle --platform=node --target=es2022 --format=cjs --external:electron --outfile=dist-electron/electron/preload.js --sourcemap",
@@ -41,14 +41,16 @@
     "package:win:compiled": "pnpm exec electron-builder --win nsis --x64 --publish never",
     "release:mac": "node scripts/release/package-mac-release.mjs --check && pnpm bump:commit:push && node scripts/release/package-mac-release.mjs && node scripts/release/publish-mac-release.mjs",
     "bump:commit:push": "node scripts/release/bump-version-commit-push.mjs",
-    "typecheck": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && pnpm generate:definitions-registry && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && pnpm generate:definitions-registry && pnpm generate:agent-ui && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run",
     "test:watch": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest",
     "test:ipc": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run tests/ipc",
     "test:ci": "pnpm --filter @synapse/shared run build && pnpm generate:deployment-config && vitest run",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
-    "test:agent:cross-platform": "vitest run electron/services/__tests__/error-sanitize.test.ts electron/services/agent-runtime/__tests__/export-evidence.test.ts electron/services/agent-runtime/__tests__/query-stop-barrier.test.ts electron/runtime/data-repo/__tests__/sqlite-atomic.test.ts electron/runtime/data-repo/__tests__/schemas.test.ts electron/services/agent-runtime/__tests__/timeline-page.test.ts app-capabilities/agent/main/__tests__/conversation-reference.test.ts src/modules/agent/hooks/__tests__/use-stick-to-bottom.hook.test.tsx"
+    "test:agent:cross-platform": "vitest run electron/services/__tests__/error-sanitize.test.ts electron/services/agent-runtime/__tests__/export-evidence.test.ts electron/services/agent-runtime/__tests__/query-stop-barrier.test.ts electron/runtime/data-repo/__tests__/sqlite-atomic.test.ts electron/runtime/data-repo/__tests__/schemas.test.ts electron/services/agent-runtime/__tests__/timeline-page.test.ts app-capabilities/agent/main/__tests__/conversation-reference.test.ts src/modules/agent/hooks/__tests__/use-stick-to-bottom.hook.test.tsx",
+    "generate:agent-ui": "openui --no-telemetry generate src/modules/agent/openui/library.ts --spec --out src/lib/generated-ui-library.json --no-interactive",
+    "test:agent:openui-sdk": "vitest run --config tests/manual/agent-openui-sdk.config.mts"
   },
   "repository": {
     "type": "git",
@@ -65,6 +67,10 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist": "^5.2.8",
+    "@openuidev/lang-core": "1.0.1",
+    "@openuidev/react-headless": "0.18.1",
+    "@openuidev/react-lang": "1.0.1",
+    "@openuidev/react-ui": "0.18.1",
     "@synapse/shared": "workspace:*",
     "@synapse/ui": "workspace:*",
     "@uiw/react-codemirror": "^4.25.9",
@@ -118,11 +124,13 @@
     "ws": "^8.20.0",
     "yaml": "^2.8.4",
     "zod": "^4.3.6",
-    "zod-to-json-schema": "^3.25.2"
+    "zod-to-json-schema": "^3.25.2",
+    "zustand": "4.5.7"
   },
   "devDependencies": {
     "2": "^3.0.0",
     "@eslint/js": "^10.0.1",
+    "@openuidev/cli": "0.6.0",
     "@tailwindcss/vite": "4.2.2",
     "@types/dagre": "^0.7.52",
     "@types/markdown-it": "^14.1.2",

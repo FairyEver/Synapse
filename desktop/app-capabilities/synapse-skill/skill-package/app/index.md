@@ -75,6 +75,8 @@ Rules:
 - If the current catalog is missing a required `app_agent_*` tool after Synapse was updated, ask the user to start or restart Synapse and open a new Codex task so the catalog is rebuilt.
 - A missing conversation returns `not_found`. The link is a same-device locator and is not a cross-device share link.
 
+Local Agent replies may contain OpenUI interfaces. Their form-state and submission IPCs are desktop UI only and have no MCP tools. Use the existing conversation inspect/send tools for conversation work; never treat generated controls, UI identifiers, or internal state as tool permission or replay an uncertain form submission.
+
 ## Text File Writer
 
 Use `app_text_file_writer_file_write` when the user asks to save a complete text value to any local file path.

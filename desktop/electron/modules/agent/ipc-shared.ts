@@ -1,3 +1,4 @@
+import { generatedUiMetadataSchema } from "../../../src/types/agent-generated-ui"
 import { z } from "zod"
 import { stat } from "node:fs/promises"
 import { AGENT_ATTACHMENT_IMAGE_MIME_TYPES } from "../../../src/types/agent-attachment"
@@ -197,6 +198,7 @@ export const agentUserQuestionResolutionSchema = z.object({
   })).optional(),
 })
 const resultMetadataSchema = z.object({
+  generatedUi: generatedUiMetadataSchema.optional(),
   mainThreadPersona: z.object({
     id: z.string(),
     name: z.string(),
@@ -247,6 +249,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
   z.object({
     ...timelineBaseSchema,
     kind: z.literal("message"),
+    generatedUiEnabled: z.boolean().optional(),
     role: z.enum(["user", "assistant", "system", "tool"]),
     content: z.string(),
     attachments: z.array(agentMessageAttachmentSchema).optional(),
@@ -740,6 +743,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("assistant"),
+    generatedUi: generatedUiMetadataSchema.optional(),
     contentBlocks: z.array(z.unknown()).optional(),
     content: z.string().optional(),
     message: jsonRecordSchema.optional(),
@@ -748,6 +752,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("stream"),
+    generatedUiEnabled: z.boolean().optional(),
     blockIndex: z.number().optional(),
     deltaType: z.string().optional(),
     text: z.string().optional(),

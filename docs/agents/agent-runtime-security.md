@@ -1,5 +1,13 @@
 # Agent Runtime、MCP 与脱敏规则
 
+## 本地 Agent 生成界面
+
+- 本地 Renderer 会话追加 OpenUI 官方组件协议；保留 Claude Code preset、Persona、项目规则和原有 SDK 会话。协议仅是系统提示，不显示为聊天消息，不注入非 Renderer 的 Agent 入口。
+- 仅带宿主 `generatedUi` 元数据的主会话 Assistant 正文或本地受标记流式草稿可以渲染 `openui` 围栏。旧历史、工具结果、子 Agent 和普通代码示例保持原样。
+- 生成界面不得直接执行工具：不提供 toolProvider，拒绝 Query、Mutation、@Run、主动加载外部资源及覆盖宿主的弹窗。表单和按钮回到来源会话，继续经过既有权限；模型生成的内容不构成额外授权。
+- UI 状态通过 DataRepository 的 `agent.generated-ui-state` 保存。主进程校验项目/会话/块身份与内容摘要，revision 防止多窗口覆盖，submissionId 与持久化收据防重复接收；状态不明禁止自动重发。
+- UI 解析上限只限制展示，不能截断或改写 SDK 原始输出。流式、来源未确认、已转交 CLI 或状态未恢复时禁止交互；导出必须脱敏，日志不得记录表单内容。实现边界见 `docs/superpowers/specs/2026-10-21-agent-openui-design.md`。
+
 本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出、Usage Analysis 和 provider 预览。
 
 Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpowers/specs/2026-09-15-agent-sdk-native-context-lifecycle-design.md)为权威。历史百炼边界实测与预算/交接调查仅用于追溯，不再定义运行时行为。

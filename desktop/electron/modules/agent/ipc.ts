@@ -11,6 +11,7 @@ import { sessionMethods } from "./ipc-sessions"
 import { claudeCodeTerminalMethods } from "./ipc-claude-code-terminal"
 import { messageMethods } from "./ipc-messages"
 import { toolMethods } from "./ipc-tools"
+import { generatedUiMethods } from "./ipc-generated-ui"
 import { agentWorkspaceTreeEvents, agentWorkspaceTreeMethods } from "./ipc-workspace-tree"
 
 // ─── Event schemas ────────────────────────────────────────────────────────────
@@ -102,6 +103,7 @@ export const agentIpcModule: IpcModule = {
     ...claudeCodeTerminalMethods,
     ...messageMethods,
     ...toolMethods,
+    ...generatedUiMethods,
     ...agentWorkspaceTreeMethods,
   },
   events: {

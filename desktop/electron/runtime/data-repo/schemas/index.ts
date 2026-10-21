@@ -1,3 +1,4 @@
+import { agentGeneratedUiStateSchema } from "./agent-generated-ui"
 export { agentTaskProgressSchema, type AgentTaskProgressEntryV1 } from "./agent-task-progress"
 import { agentTaskProgressSchema } from "./agent-task-progress"
 /**
@@ -310,6 +311,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaSettingsSchema,
   agentPersonaRemoteCacheSchema,
   agentFileCheckpointsSchema,
+  agentGeneratedUiStateSchema,
   agentTaskProgressSchema,
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,

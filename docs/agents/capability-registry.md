@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- Agent OpenUI 是既有 Agent 对话内的展示与交互能力，不新增 System App、Dock、Workflow、Automation、Deep Link 或 MCP 工具；Agent Conversation 仍为 11 项。新增三个 UI 专用 IPC operation：`app.agent.generated_ui.get_state`、`app.agent.generated_ui.save_state`、`app.agent.generated_ui.submit_action`。它们只处理当前桌面对话的状态和用户提交，不提供通用业务工具执行能力。
+
 本文件记录 Synapse 当前运行时代码的真实产品表面。声明文件、目录名、测试夹具或计划文档不能单独作为“已注册”的证据。
 
 ## 注册表面与权威入口

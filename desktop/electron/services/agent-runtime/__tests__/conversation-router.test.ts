@@ -284,6 +284,41 @@ describe("ConversationRouter", () => {
     await turn
   })
 
+  it("persists host UI identity only for local main-thread output without visible protocol instructions", async () => {
+    const content = '```openui\nroot = Stack([TextContent("Hello")])\n```'
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      eventBus,
+      activeProviderId: "anthropic", env: { ANTHROPIC_API_KEY: "sk-test" },
+      session: new ScriptedSession([
+        { type: "stream", text: content, event: { type: "content_block_delta" } },
+        { type: "assistant", content, message: { role: "assistant" } },
+        { type: "result", content, done: true },
+      ], "sdk-1"),
+    })
+    const result = await router.send({ ...baseMessage("生成图表"), platform: "local-renderer" })
+    const saved = await conversations.get(result.conversationId)
+    const assistant = saved?.history.find((entry) => entry.role === "assistant")
+    expect(assistant?.metadata?.generatedUi).toMatchObject({ version: 1, blocks: [{ ordinal: 0, id: expect.any(String), sourceHash: expect.any(String) }] })
+    expect(saved?.history.filter((entry) => entry.role === "user").map((entry) => entry.content)).toEqual(["生成图表"])
+    expect(events.find((event) => event.type === "eventBatch")?.payload).toMatchObject({ events: [{ event: { generatedUiEnabled: true } }] })
+  })
+
+  it("does not enable UI previews for subagent streams", async () => {
+    const { eventBus, events } = createEventBusRecorder()
+    const { router } = createRouter({
+      eventBus, activeProviderId: "anthropic", env: { ANTHROPIC_API_KEY: "sk-test" },
+      session: new ScriptedSession([
+        { type: "stream", text: '```openui\nroot = Stack([])', event: { type: "content_block_delta" }, payload: { parent_tool_use_id: "child-tool" } },
+        { type: "result", content: "done", done: true },
+      ], "sdk-child"),
+    })
+    await router.send({ ...baseMessage("查询"), platform: "local-renderer" })
+    const batch = events.find((event) => event.type === "eventBatch")?.payload
+    expect(batch).toMatchObject({ events: [{ event: { type: "stream" } }] })
+    expect(JSON.stringify(batch)).not.toContain('"generatedUiEnabled":true')
+  })
+
   it("binds new conversations to the active provider and passes ProviderService env to the SDK session", async () => {
     const { conversations, router, providerService, factoryCalls } = createRouter({
       activeProviderId: "anthropic",

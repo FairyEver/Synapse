@@ -22,6 +22,7 @@ import { formatAgentTranscript } from "../../../src/lib/agent-transcript"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 import { isAbsoluteLocalPath, redactAbsolutePathsInText } from "../error-sanitize"
 import { REDACTED, redactSensitiveValue } from "./redaction"
+import type { GeneratedUiStateEntry } from "../../runtime/data-repo/schemas/agent-generated-ui"
 import {
   isStreamDiagnosticEntry,
   MAX_EXPORTED_STREAM_DIAGNOSTIC_BYTES,
@@ -57,6 +58,7 @@ interface AgentConversationExportServiceDeps {
   readonly agentEvents: DataNamespace<AgentEventEntryV1>
   readonly agentUsage: DataNamespace<AgentUsageEntryV1>
   readonly agentArtifacts?: DataNamespace<AgentArtifactEntry>
+  readonly generatedUiStates?: DataNamespace<GeneratedUiStateEntry>
   readonly chooseSavePath: (defaultFileName: string) => Promise<string | null>
   readonly createZipArchive: (sourceDirectoryPath: string, outputFilePath: string) => Promise<void>
   readonly makeTempDir?: (prefix: string) => Promise<string>
@@ -255,6 +257,12 @@ class AgentConversationExportService {
       await this.writeJson(packageRoot, "agent-events.json", agentEvents, included)
       await this.writeCompactJson(packageRoot, "sdk-stream-events.json", sdkStreamEvents, included)
       await this.writeJson(packageRoot, "agent-usage.json", agentUsage, included)
+      if (this.deps.generatedUiStates) {
+        const uiState = await this.collectRows("generated-ui-state.json", () => this.deps.generatedUiStates!.list({
+          projectId: request.projectId, conversationId: request.conversationId,
+        }), skipped)
+        await this.writeJson(packageRoot, "generated-ui-state.json", uiState, included)
+      }
       if (this.deps.agentArtifacts) {
         const agentArtifacts = await this.collectRows(
           "agent-artifacts.json",

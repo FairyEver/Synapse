@@ -32,6 +32,7 @@ import type {
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
 import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
+import { appendGeneratedUiPrompt } from "./generated-ui-prompt"
 import { resolveTierModelFromEnv } from "./provider-model-tier"
 import {
   SYNAPSE_MCP_TOOL_PREFIX,
@@ -477,7 +478,9 @@ export class SessionManager {
       agent: activeAgentName,
       agentDefinitionsHash,
       agents: routedAgents,
-      systemPrompt: personaConfig.systemPrompt,
+      systemPrompt: input.message.platform === "local-renderer"
+        ? appendGeneratedUiPrompt(personaConfig.systemPrompt)
+        : personaConfig.systemPrompt,
       ...personaSdkToolOptions,
       personaToolPolicy: personaConfig.toolPolicy,
       subagentToolPolicies: await Promise.resolve(

@@ -12,6 +12,8 @@ import type {
 } from "../../../runtime/data-repo"
 import type { AuditSink } from "../../../runtime/security"
 import { AgentConversationExportService } from "../conversation-export-service"
+import type { GeneratedUiStateEntry } from "../../../runtime/data-repo/schemas/agent-generated-ui"
+import { createGeneratedUiMetadata } from "../generated-ui-service"
 
 const tempRoots: string[] = []
 const TEST_SESSION_KEY = "local:renderer-secret-session"
@@ -24,6 +26,33 @@ afterEach(async () => {
 })
 
 describe("AgentConversationExportService", () => {
+  it("exports UI source, official library version and redacted state for only the requested conversation", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-openui-export-"))
+    tempRoots.push(root)
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const generatedUiStates = new MemoryNamespace<GeneratedUiStateEntry>("agent.generated-ui-state")
+    const conversation = createConversation()
+    const content = '```openui\nroot = Stack([TextContent("Report")])\n```'
+    const generatedUi = createGeneratedUiMetadata(content, "turn-ui")!
+    conversation.history.push({ role: "assistant", content, timestamp: "2026-10-21T00:00:00Z", metadata: { generatedUi } })
+    await conversations.upsert(conversation)
+    const state: GeneratedUiStateEntry = { id: "state-1", schemaVersion: 1, projectId: "project-1", conversationId: "conv-1", blockId: generatedUi.blocks[0].id, sourceHash: generatedUi.blocks[0].sourceHash, revision: 1, state: { apiKey: "secret-fixture", period: "month" }, submissions: [] }
+    await generatedUiStates.upsert(state)
+    await generatedUiStates.upsert({ ...state, id: "other", conversationId: "other", state: { period: "foreign-conversation" } })
+    const service = new AgentConversationExportService({ conversations, generatedUiStates,
+      agentEvents: new MemoryNamespace<AgentEventEntryV1>("agent.events"), agentUsage: new MemoryNamespace<AgentUsageEntryV1>("agent.usage"),
+      chooseSavePath: async () => path.join(root, "export.zip"), createZipArchive: async (directory) => {
+        const exported = JSON.parse(await readFile(path.join(directory, "conversation.json"), "utf8"))
+        expect(exported.history.at(-1)).toMatchObject({ content, metadata: { generatedUi: { libraryVersion: generatedUi.libraryVersion } } })
+        const states = await readFile(path.join(directory, "generated-ui-state.json"), "utf8")
+        expect(JSON.parse(states)).toHaveLength(1)
+        expect(states).toContain("month")
+        expect(states).not.toContain("secret-fixture")
+        expect(states).not.toContain("foreign-conversation")
+      },
+    })
+    expect((await service.exportBundle({ projectId: "project-1", conversationId: "conv-1" })).success).toBe(true)
+  })
   it("keeps every JSON file parseable with nested quotes, paths, large fields and redacted secrets", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-export-escaping-"))
     tempRoots.push(root)

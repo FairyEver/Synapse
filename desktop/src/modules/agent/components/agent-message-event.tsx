@@ -1,5 +1,7 @@
 import {
   isValidElement,
+  lazy,
+  Suspense,
   useMemo,
   type ComponentProps,
   type MouseEvent,
@@ -34,6 +36,10 @@ import {
 } from "./agent-local-reference-link"
 import { errorLogMeta } from "../utils"
 import { AgentLongContentDialog } from "./agent-long-content-dialog"
+import { splitGeneratedUiContent } from "@/lib/agent-generated-ui"
+import { useGeneratedUiContent } from "../openui/use-generated-ui-content"
+
+const GeneratedUiView = lazy(() => import("../openui/generated-ui-view").then((module) => ({ default: module.GeneratedUiView })))
 
 import "streamdown/styles.css"
 
@@ -71,6 +77,7 @@ const STREAMDOWN_COMPONENTS = {
 const logger = createRendererLogger("agent")
 
 interface AgentMessageEventProps {
+  readonly generatedUiDisabled?: boolean
   readonly item: SynapseAgentMessageTimelineItem
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
@@ -87,6 +94,7 @@ function AgentMessageEvent({
   referenceActions = unavailableReferenceActions,
   projectId,
   conversationId,
+  generatedUiDisabled,
 }: AgentMessageEventProps) {
   const outgoing = item.role === "user"
 
@@ -146,6 +154,9 @@ function AgentMessageEvent({
       />
       <AssistantMessageBody
         item={item}
+        projectId={projectId}
+        conversationId={conversationId}
+        generatedUiDisabled={generatedUiDisabled}
         onOpenReference={onOpenReference}
         referenceActions={referenceActions}
       />
@@ -167,14 +178,25 @@ const unavailableReferenceActions: AgentReferenceActions = {
 
 function AssistantMessageBody({
   item,
+  projectId,
+  conversationId,
+  generatedUiDisabled,
   onOpenReference,
   referenceActions,
 }: {
   readonly item: SynapseAgentMessageTimelineItem
+  readonly projectId?: string
+  readonly conversationId?: string
+  readonly generatedUiDisabled?: boolean
   readonly onOpenReference: (reference: string) => void
   readonly referenceActions: AgentReferenceActions
 }) {
   const streaming = item.streaming === true
+  const fullContent = useGeneratedUiContent(item, projectId, conversationId)
+  const generatedUiEnabled = Boolean(item.metadata?.generatedUi || (streaming && item.generatedUiEnabled))
+  const contentParts = useMemo(() => generatedUiEnabled
+    ? splitGeneratedUiContent(fullContent.content ?? "", streaming)
+    : [{ kind: "markdown" as const, content: fullContent.content ?? "" }], [generatedUiEnabled, fullContent.content, streaming])
   const referenceMenuEnabled = item.role === "assistant" && !streaming
   const suppressNativeReferenceMenu = item.role === "assistant" && streaming
   const { safeContent, preprocessed } = useMemo(() => {
@@ -268,13 +290,20 @@ function AssistantMessageBody({
   }
 
   return (
-    <div className="group/message w-full min-w-0 max-w-[76ch] px-1 py-2">
+    <div className={cn("group/message w-full min-w-0 px-1 py-2", !generatedUiEnabled && "max-w-[76ch]")}>
       <div
         data-allow-select="true"
         className="min-w-0 max-w-full overflow-hidden"
         onClick={handleClick}
       >
-        <Streamdown
+        {fullContent.loading ? <p className="text-sm text-muted-foreground">加载中</p> : fullContent.error ? <p className="text-sm text-muted-foreground">{fullContent.error}</p> : contentParts.map((part, index) => part.kind === "openui" ? (
+          <Suspense key={`openui:${part.ordinal}`} fallback={<p className="text-sm text-muted-foreground">加载中</p>}>
+            <GeneratedUiView source={part.content} streaming={streaming}
+              block={item.metadata?.generatedUi?.blocks.find((block) => block.ordinal === part.ordinal)}
+              projectId={projectId} conversationId={conversationId} disabled={generatedUiDisabled} />
+          </Suspense>
+        ) : <Streamdown
+          key={`markdown:${index}`}
           className={agentMessageMarkdownClassName}
           components={streamdownComponents}
           controls={STREAMDOWN_CONTROLS}
@@ -284,8 +313,8 @@ function AssistantMessageBody({
           parseIncompleteMarkdown={streaming}
           translations={STREAMDOWN_TRANSLATIONS}
         >
-          {preprocessed}
-        </Streamdown>
+          {generatedUiEnabled ? wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(redactSensitiveText(part.content)))) : preprocessed}
+        </Streamdown>)}
       </div>
       {hasUsage ? (
         <AgentUsageCard

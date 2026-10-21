@@ -2,6 +2,7 @@ import type { ActorIdentity } from "../../runtime/security"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 import type { AgentTurnOutcome } from "./turn-outcome"
 import type { AgentAttachmentRef } from "../../../src/types/agent-attachment"
+import type { GeneratedUiMetadata } from "../../../src/types/agent-generated-ui"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
@@ -240,6 +241,7 @@ export interface AgentContextUsage {
 }
 
 export interface AgentResultMetadata {
+  readonly generatedUi?: GeneratedUiMetadata
   readonly model?: string
   readonly effort?: string
   readonly contextRemainingPercent?: number
@@ -310,6 +312,7 @@ export interface AgentSessionInitEvent extends AgentEventBase {
 }
 
 export interface AgentAssistantEvent extends AgentEventBase {
+  readonly generatedUi?: GeneratedUiMetadata
   readonly type: "assistant"
   readonly message: Record<string, unknown>
   readonly contentBlocks?: readonly unknown[]
@@ -319,6 +322,7 @@ export interface AgentAssistantEvent extends AgentEventBase {
 }
 
 export interface AgentStreamEvent extends AgentEventBase {
+  readonly generatedUiEnabled?: boolean
   readonly type: "stream"
   readonly event: Record<string, unknown>
   readonly blockIndex?: number

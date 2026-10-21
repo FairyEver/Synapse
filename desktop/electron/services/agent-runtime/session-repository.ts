@@ -367,6 +367,19 @@ export class AgentSessionRepository {
     })
   }
 
+  async revokeGeneratedUi(conversationIdValue: string): Promise<void> {
+    await this.runConversationMutation(conversationIdValue, async () => {
+      const conversation = await this.requireConversation(conversationIdValue)
+      const history = conversation.history.map((entry) => {
+        if (!entry.metadata?.generatedUi) return entry
+        const metadata = { ...entry.metadata }
+        delete metadata.generatedUi
+        return { ...entry, metadata }
+      })
+      await this.persistConversation({ ...conversation, history })
+    })
+  }
+
   async mergeLastHistoryMetadata(
     conversationIdValue: string,
     role: ConversationEntryV1["history"][number]["role"],

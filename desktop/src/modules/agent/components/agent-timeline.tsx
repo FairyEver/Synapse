@@ -18,6 +18,7 @@ import {
   timelineDisplayEntries,
 } from "./agent-timeline-display"
 import { AgentTimelineItem } from "./agent-timeline-item"
+import { GeneratedUiTheme } from "../openui/generated-ui-theme"
 
 function AgentTimeline({
   items,
@@ -37,7 +38,9 @@ function AgentTimeline({
   projectId,
   conversationId,
   footer,
+  readOnly = false,
 }: {
+  readonly readOnly?: boolean
   readonly items: readonly SynapseAgentTimelineItem[]
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
@@ -75,6 +78,7 @@ function AgentTimeline({
   })
   const [processGroupOpenOverrides, setProcessGroupOpenOverrides] = useState<Record<string, boolean>>({})
   return (
+    <GeneratedUiTheme>
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <ScrollArea
         className="min-h-0 min-w-0 flex-1"
@@ -142,6 +146,7 @@ function AgentTimeline({
                           onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
                           projectId={projectId}
                           conversationId={conversationId}
+                          generatedUiDisabled={sending || readOnly}
                         />
                       )
                     ))}
@@ -167,6 +172,7 @@ function AgentTimeline({
                   onContinue={sending || entry.item.id !== continuableInterruptionId ? undefined : onContinue}
                   projectId={projectId}
                   conversationId={conversationId}
+                  generatedUiDisabled={sending || readOnly}
                 />
               )
             })}
@@ -179,6 +185,7 @@ function AgentTimeline({
         ) : null}
       </ScrollArea>
     </div>
+    </GeneratedUiTheme>
   )
 }
 

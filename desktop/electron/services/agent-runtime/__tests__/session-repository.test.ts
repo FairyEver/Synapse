@@ -11,6 +11,16 @@ import type {
 import { AgentSessionRepository, conversationId } from "../session-repository"
 
 describe("AgentSessionRepository", () => {
+  it("revokes generated UI identities without deleting history or unrelated metadata", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({ projectId: "project-1", conversations })
+    const session = await repository.createSession({ sessionKey: "ui-reset" })
+    await repository.appendHistory(session.id, "assistant", "original", { generatedUi: { version: 1 }, model: "model" })
+    await repository.revokeGeneratedUi(session.id)
+    const saved = await repository.get(session.id)
+    expect(saved?.history[0]).toMatchObject({ content: "original", metadata: { model: "model" } })
+    expect(saved?.history[0].metadata).not.toHaveProperty("generatedUi")
+  })
   it("records the native launch choice with the SDK session without persisting credentials", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const repository = new AgentSessionRepository({ projectId: "project-1", conversations })

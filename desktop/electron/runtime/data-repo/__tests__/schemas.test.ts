@@ -95,6 +95,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.artifacts",
         "agent.events",
         "agent.file-checkpoints",
+        "agent.generated-ui-state",
         "agent.task-progress",
         "agent.usage",
         "app.agent-personas.items",

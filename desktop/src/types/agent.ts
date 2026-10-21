@@ -139,6 +139,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
     }
   | {
       type: "assistant"
+      generatedUi?: import("./agent-generated-ui").GeneratedUiMetadata
       contentBlocks?: unknown[]
       content?: string
       message?: Record<string, unknown>
@@ -146,6 +147,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
     }
   | {
       type: "stream"
+      generatedUiEnabled?: boolean
       blockIndex?: number
       deltaType?: string
       text?: string
@@ -292,6 +294,7 @@ interface SynapseAgentTimelineBase {
 }
 
 export interface SynapseAgentResultMetadata {
+  readonly generatedUi?: import("./agent-generated-ui").GeneratedUiMetadata
   readonly mainThreadPersona?: SynapseAgentMainThreadPersonaMetadata
   readonly model?: string
   readonly effort?: string
@@ -342,6 +345,7 @@ export type SynapseAgentMessageAttachment =
     }
 
 export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {
+  readonly generatedUiEnabled?: boolean
   readonly kind: "message"
   readonly role: "user" | "assistant" | "system" | "tool"
   readonly content: string

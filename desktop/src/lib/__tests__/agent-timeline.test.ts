@@ -7,6 +7,13 @@ import {
 } from "../agent-timeline"
 
 describe("agent timeline conversion", () => {
+  it("does not interpret mixed root and child stream text as generated UI", () => {
+    const root = appendAgentTimelineEvent([], { type: "stream", text: "Root", generatedUiEnabled: true, deltaType: "text_delta", event: {} }, "2026-10-21T00:00:00Z")
+    const child = appendAgentTimelineEvent(root, { type: "stream", text: "Child", deltaType: "text_delta", event: {} }, "2026-10-21T00:00:01Z")
+    expect(child[0]).toMatchObject({ content: "RootChild", generatedUiEnabled: false })
+    const resumed = appendAgentTimelineEvent(child, { type: "stream", text: "Root", generatedUiEnabled: true, deltaType: "text_delta", event: {} }, "2026-10-21T00:00:02Z")
+    expect(resumed[0]).toMatchObject({ generatedUiEnabled: false })
+  })
   it("keeps streamed thinking active until its content block stops", () => {
     const started = appendAgentTimelineEvent([], {
       type: "stream",

@@ -1,3 +1,4 @@
+import { generatedUiMetadataSchema } from "../types/agent-generated-ui"
 import type {
   SynapseAgentEvent,
   SynapseAgentFileCheckpointFile,
@@ -62,11 +63,12 @@ export function agentEventToTimelineItem(
             kind: "message",
             role: "assistant",
             content: streamText(event),
+            generatedUiEnabled: event.generatedUiEnabled,
             streaming: true,
           }
     }
     case "assistant":
-      return { ...base, kind: "message", role: "assistant", content: assistantText(event) }
+      return { ...base, kind: "message", role: "assistant", content: assistantText(event), metadata: event.generatedUi ? { generatedUi: event.generatedUi } : undefined }
     case "thinking":
       return { ...base, kind: "thinking", content: event.content }
     case "toolUse":
@@ -344,7 +346,10 @@ export function appendAgentTimelineEvent(
         if (assistant.kind === "message" && assistant.role === "assistant") {
           return [
             ...streamCurrent.slice(0, assistantIndex),
-            { ...assistant, content: `${assistant.content}${item.content}`, timestamp, streaming: true },
+            { ...assistant, content: `${assistant.content}${item.content}`, timestamp, streaming: true,
+              ...((assistant.generatedUiEnabled !== undefined || item.generatedUiEnabled !== undefined)
+                ? { generatedUiEnabled: assistant.generatedUiEnabled === true && item.generatedUiEnabled === true } : {}),
+            },
             ...streamCurrent.slice(assistantIndex + 1),
           ]
         }
@@ -414,7 +419,7 @@ export function appendAgentTimelineEvent(
   }
   if (event.type === "assistant" && item.kind === "message" && last?.kind === "message" && last.role === "assistant") {
     if (isStreamedAssistantDraft(last)) {
-      return [...current.slice(0, -1), { ...last, content: item.content, timestamp, streaming: false }]
+      return [...current.slice(0, -1), { ...last, content: item.content, metadata: { ...last.metadata, ...item.metadata }, timestamp, streaming: false }]
     }
     if (last.content === item.content) return [...current]
     if (item.content.startsWith(last.content)) {
@@ -428,7 +433,7 @@ export function appendAgentTimelineEvent(
     if (assistant?.kind === "message" && assistant.role === "assistant") {
       return [
         ...current.slice(0, assistantIndex),
-        { ...assistant, content: item.content, timestamp, streaming: false },
+        { ...assistant, content: item.content, metadata: { ...assistant.metadata, ...item.metadata }, timestamp, streaming: false },
         ...current.slice(assistantIndex + 1),
       ]
     }
@@ -876,7 +881,9 @@ function imageArtifactsMetadata(
 }
 
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {
+  const parsedGeneratedUi = generatedUiMetadataSchema.safeParse(metadata?.generatedUi)
   const result: SynapseAgentResultMetadata = {
+    generatedUi: parsedGeneratedUi.success ? parsedGeneratedUi.data : undefined,
     mainThreadPersona: mainThreadPersonaMetadata(metadata),
     model: stringMetadata(metadata, "model"),
     effort: stringMetadata(metadata, "effort"),
@@ -980,7 +987,7 @@ function mergeResultIntoAssistantMessage(
   if (!metadata && content === item.content) {
     return item.streaming ? { ...item, streaming: false, timestamp } : item
   }
-  return { ...item, content, metadata: metadata ?? item.metadata, timestamp, streaming: false }
+  return { ...item, content, metadata: metadata ? { ...item.metadata, ...metadata } : item.metadata, timestamp, streaming: false }
 }
 
 function assistantText(event: Extract<SynapseAgentEvent, { type: "assistant" }>): string {

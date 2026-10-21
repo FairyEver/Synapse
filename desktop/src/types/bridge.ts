@@ -1849,6 +1849,9 @@ export type SynapseBridge = {
     }
   }
   agent: {
+    getGeneratedUiState: (input: import("./agent-generated-ui").GeneratedUiTarget) => Promise<import("./agent-generated-ui").GeneratedUiSnapshot>
+    saveGeneratedUiState: (input: import("./agent-generated-ui").SaveGeneratedUiStateInput) => Promise<import("./agent-generated-ui").GeneratedUiSnapshot>
+    submitGeneratedUiAction: (input: import("./agent-generated-ui").SubmitGeneratedUiActionInput) => Promise<import("./agent-generated-ui").GeneratedUiSubmission>
     status: (projectId: string) => Promise<SynapseAgentStatus>
     listSessions: (projectId: string) => Promise<SynapseAgentSessionSummary[]>
     resumeClaudeCodeTerminal: (input: { projectId: string; conversationId: string }) => Promise<{ sessionId: string }>,

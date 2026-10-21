@@ -1,3 +1,4 @@
+import { createGeneratedUiMetadata } from "./generated-ui-service"
 import { isSafeTokenMeasurement } from "./redaction"
 import { randomUUID } from "node:crypto"
 
@@ -1089,6 +1090,12 @@ export class ConversationRouter {
         responseStarted = true
         onResponseStarted?.()
       }
+      if (message.platform === "local-renderer" && !("payload" in event && event.payload?.parent_tool_use_id)) {
+        if (event.type === "stream") event = { ...event, generatedUiEnabled: true }
+        if (event.type === "assistant") {
+          event = { ...event, generatedUi: createGeneratedUiMetadata(assistantEventText(event) ?? "", turnId) }
+        }
+      }
       const assistantText = assistantEventText(event)
       if (assistantText) latestAssistantText = assistantText
       else streamedText = appendStreamedText(streamedText, event)
@@ -1241,6 +1248,8 @@ export class ConversationRouter {
       }
 
       const preparedEvent = await this.prepareEventForStorageAndDisplay(conversation.id, turnId, event)
+      const uiHistoryPersisted = preparedEvent.type === "assistant" && preparedEvent.generatedUi
+        ? await this.saveEventHistory(conversation.id, preparedEvent) : false
       if (preparedEvent.type === "permissionRequest") {
         state.permissionAdmissionPending = true
       }
@@ -1248,7 +1257,7 @@ export class ConversationRouter {
       this.emitEvent(message, conversation.id, preparedEvent)
       await this.persistAgentEvent(conversation.id, turnId, ++persistedSequence, preparedEvent)
       await this.saveEventSdkSession(conversation.id, preparedEvent, liveSession, state)
-      const preparedEventHistoryPersisted = await this.saveEventHistory(conversation.id, preparedEvent)
+      const preparedEventHistoryPersisted = uiHistoryPersisted || await this.saveEventHistory(conversation.id, preparedEvent)
       assistantHistoryPersisted = preparedEventHistoryPersisted || assistantHistoryPersisted
       if (preparedEvent.type === "assistant" && preparedEventHistoryPersisted) {
         stageAssistantPersisted = true
@@ -3138,6 +3147,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
+          generatedUi: event.generatedUi,
         }),
       }
     }
@@ -3798,6 +3808,7 @@ function projectAgentEventForRenderer(event: AgentEvent): AgentEvent {
 
 function mergeAdjacentStreamEvents(previous: AgentEvent, next: AgentEvent): AgentEvent | undefined {
   if (previous.type !== "stream" || next.type !== "stream") return undefined
+  if (previous.generatedUiEnabled !== next.generatedUiEnabled) return undefined
   if (previous.deltaType !== next.deltaType || previous.blockIndex !== next.blockIndex) return undefined
   const merged = {
     ...next,

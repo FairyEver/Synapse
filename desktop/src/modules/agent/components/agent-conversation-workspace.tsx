@@ -828,6 +828,7 @@ function AgentConversationWorkspace({
       ) : null}
 
       <AgentTimeline
+        readOnly={continuation.readOnly || continuation.continuing}
         items={chat.timeline}
         profile={displayProfile}
         agentIcon={agentIcon}

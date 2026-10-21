@@ -1,3 +1,4 @@
+import type { GeneratedUiStateEntry } from "../../runtime/data-repo/schemas/agent-generated-ui"
 import type {
   AgentArtifactEntry,
   AgentCommandEntryV1,
@@ -283,6 +284,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           configService ? (await configService.load()).agent.allowedWriteDirectories : []
         ),
         conversations,
+        generatedUiStates: ctx.dataRepo.namespace<GeneratedUiStateEntry>("agent.generated-ui-state"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         fileCheckpointEntries: ctx.dataRepo.namespace<AgentFileCheckpointEntryV1>("agent.file-checkpoints"),

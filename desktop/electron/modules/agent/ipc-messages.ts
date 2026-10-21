@@ -25,6 +25,7 @@ import { AGENT_RUNTIME_SERVICE_ID } from "../../services/agent-runtime"
 import { AGENT_ATTACHMENT_IMAGE_MIME_TYPES } from "../../../src/types/agent-attachment"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
+import type { GeneratedUiStateEntry } from "../../runtime/data-repo/schemas/agent-generated-ui"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
@@ -585,6 +586,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         agentEvents: dataRepo.namespace<AgentEventEntryV1>("agent.events"),
         agentUsage: dataRepo.namespace<AgentUsageEntryV1>("agent.usage"),
         agentArtifacts: dataRepo.namespace<AgentArtifactEntry>("agent.artifacts"),
+        generatedUiStates: dataRepo.namespace<GeneratedUiStateEntry>("agent.generated-ui-state"),
         permissionGuard,
         auditSink,
         logger,
