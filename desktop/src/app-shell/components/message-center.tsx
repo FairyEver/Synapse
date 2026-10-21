@@ -205,7 +205,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
             </ScrollArea>
           </section>
           <section aria-label="通知内容" className={`${center.selected ? "block" : "hidden @3xl/message-center:block"} min-h-0 min-w-0 flex-1`}>
-            <ScrollArea className="h-full" viewportClassName="px-6 py-7 @3xl/message-center:px-9"><MessageDetail center={center} /></ScrollArea>
+            <ScrollArea className="h-full min-w-0 max-w-full" viewportClassName="min-w-0 max-w-full overflow-x-hidden px-6 py-7 @3xl/message-center:px-9 [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"><MessageDetail center={center} /></ScrollArea>
           </section>
         </div>
       </SheetContent>
