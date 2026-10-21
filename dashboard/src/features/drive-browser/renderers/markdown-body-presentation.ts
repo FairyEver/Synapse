@@ -6,6 +6,11 @@ export const MARKDOWN_BODY_CLASSNAME = cn(
   DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME,
 )
 
+export const MARKDOWN_READER_BODY_CLASSNAME = cn(
+  MARKDOWN_BODY_CLASSNAME,
+  '[&_table]:min-w-0 [&_table]:mx-auto',
+)
+
 // Keep the body/annotation coordinate space full-width; only ordinary blocks use the reading measure.
 // Mermaid replaces its source <pre> asynchronously, so match the resulting figure without rewriting HTML.
 export const MARKDOWN_READING_BODY_CLASSNAME = cn(

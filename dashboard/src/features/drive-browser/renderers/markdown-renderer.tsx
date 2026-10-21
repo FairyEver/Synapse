@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import 'github-markdown-css/github-markdown-light.css'
-import { MARKDOWN_BODY_CLASSNAME, MARKDOWN_READING_BODY_CLASSNAME } from './markdown-body-presentation'
+import { MARKDOWN_READER_BODY_CLASSNAME, MARKDOWN_READING_BODY_CLASSNAME } from './markdown-body-presentation'
 import {
   isDriveCommentableMarkdownItem,
   type DriveAnnotationSelectorsV2,
@@ -883,7 +883,7 @@ function DriveMarkdownBody({
           <div
             ref={bodyRef}
             data-testid='markdown-body'
-            className={cn(MARKDOWN_BODY_CLASSNAME, widthMode === 'reading' && MARKDOWN_READING_BODY_CLASSNAME)}
+            className={cn(MARKDOWN_READER_BODY_CLASSNAME, widthMode === 'reading' && MARKDOWN_READING_BODY_CLASSNAME)}
             onClick={handleBodyClick}
             onKeyDown={handleBodyKeyDown}
             onPointerUp={syncSelectionActionFromCurrentSelection}
