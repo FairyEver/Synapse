@@ -195,7 +195,7 @@ function AssistantMessageBody({
   const fullContent = useGeneratedUiContent(item, projectId, conversationId)
   const generatedUiEnabled = Boolean(item.metadata?.generatedUi || (streaming && item.generatedUiEnabled))
   const contentParts = useMemo(() => generatedUiEnabled
-    ? splitGeneratedUiContent(fullContent.content ?? "", streaming)
+    ? splitGeneratedUiContent(fullContent.content ?? "", streaming).filter((part) => part.kind === "openui" || part.content.trim())
     : [{ kind: "markdown" as const, content: fullContent.content ?? "" }], [generatedUiEnabled, fullContent.content, streaming])
   const referenceMenuEnabled = item.role === "assistant" && !streaming
   const suppressNativeReferenceMenu = item.role === "assistant" && streaming
@@ -293,7 +293,7 @@ function AssistantMessageBody({
     <div className={cn("group/message w-full min-w-0 px-1 py-2", !generatedUiEnabled && "max-w-[76ch]")}>
       <div
         data-allow-select="true"
-        className="min-w-0 max-w-full overflow-hidden"
+        className={cn("min-w-0 max-w-full overflow-hidden", generatedUiEnabled && "flex flex-col gap-6")}
         onClick={handleClick}
       >
         {fullContent.loading ? <p className="text-sm text-muted-foreground">加载中</p> : fullContent.error ? <p className="text-sm text-muted-foreground">{fullContent.error}</p> : contentParts.map((part, index) => part.kind === "openui" ? (
