@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, Check, Inbox, MailOpen, MoreHorizontal, Paperclip, Pencil, RefreshCw, Search, Send, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { MailQuickReplyDialog } from "@/components/mail-quick-reply-dialog"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -14,6 +15,7 @@ import { SystemAppWindowShell } from "@/modules/apps/components/system-app-windo
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { useAccount } from "@/app-shell/account"
 import { mailRequest } from "@/lib/mail-api"
+import { canQuickReplyToMail } from "@/lib/mail-reply"
 import { buildMailMessageReference } from "../../../synapse-capabilities/shared/message-reference"
 import type { MailAddress, MailContact, MailMessage, MailPerson, MailSummary } from "@/types/mail"
 import { MailCompose, type ComposeStart } from "./compose"
@@ -61,6 +63,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [pendingDelete, setPendingDelete] = useState<"selected" | "all" | null>(null)
   const [compose, setCompose] = useState<ComposeStart | null>(null)
+  const [quickReply, setQuickReply] = useState<MailMessage | null>(null)
   const mail = useMail(box, search, box === "inbox" && unreadOnly, contact?.key)
   const context = useMailContext(mail.detail?.messageId === mail.selectedId && !mail.detail.legacyFormat ? mail.selectedId : null)
   const hasListItems = mail.messages.length > 0 || !!mail.nextCursor
@@ -168,9 +171,18 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
     } catch (error) { toast.error(error instanceof Error ? error.message : "读取信件失败。") }
   }
 
+  async function quickReplyFrom(message: MailSummary) {
+    try {
+      const source = mail.detail?.messageId === message.messageId ? mail.detail : await mailRequest({ kind: "messageGet", messageId: message.messageId })
+      if (!canQuickReplyToMail(source)) { toast.error("平台公告不能回复。"); return }
+      setQuickReply(source)
+    } catch (error) { toast.error(error instanceof Error ? error.message : "读取信件失败。") }
+  }
+
   function messageActions(message: MailSummary) {
     return [
       ...(message.kind === "platform_broadcast" ? [] : [
+        { id: "quick-reply", label: "快速回复", run: () => { void quickReplyFrom(message) } },
         { id: "reply", label: "回复", run: () => { void composeFrom(message, "reply") } },
         { id: "forward", label: "转发", run: () => { void composeFrom(message, "forward") } },
       ]),
@@ -235,6 +247,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
             </article> : mail.selectedId ? mail.error ? <Empty><EmptyHeader><EmptyTitle>信件加载失败</EmptyTitle><EmptyDescription role="alert">{mail.error}</EmptyDescription></EmptyHeader><EmptyContent><Button type="button" variant="outline" onClick={mail.refresh}><RefreshCw />重试</Button></EmptyContent></Empty> : <div role="status" aria-label="加载信件内容中" className="mx-auto w-full max-w-3xl space-y-3"><Skeleton className="h-7 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-24 w-full" /></div> : <Empty><EmptyHeader><EmptyMedia variant="icon"><MailOpen /></EmptyMedia><EmptyTitle>选择一封信件</EmptyTitle></EmptyHeader></Empty>}
           </section> : null} showDetail={showMessageColumns} />
     <MailCompose start={compose} onClose={() => setCompose(null)} onSent={() => { changeBox("sent"); mail.refresh() }} />
+    <MailQuickReplyDialog source={quickReply} onClose={() => setQuickReply(null)} onSent={() => mail.refresh()} />
     <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}>
       <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{pendingDelete === "selected" ? `删除选中的 ${selectedIds.size} 封信件？` : `清空${box === "inbox" ? "收件箱" : "已发送"}？`}</AlertDialogTitle><AlertDialogDescription>{pendingDelete === "selected" ? "只从你的信箱隐藏选中的信件。" : `将清空整个${box === "inbox" ? "收件箱" : "已发送"}，包括搜索结果和未加载的信件。`}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => void performDelete()}>删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
     </AlertDialog>

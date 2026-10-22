@@ -206,6 +206,20 @@ describe("useMessageCenter", () => {
     expect(mocks.read).toHaveBeenCalledWith({ id: "n1" })
   })
 
+  it("loads a target mail for quick reply without changing the selected notification", async () => {
+    const target = { ...notice, id: "n2", targetId: "mail-2" }
+    mocks.mailRequest.mockResolvedValueOnce({ messageId: "mail-2", kind: "user" })
+    await act(async () => { await current.openItem(notice); await flush() })
+    const selected = current.selected
+
+    let source: unknown
+    await act(async () => { source = await current.loadMailForReply(target); await flush() })
+    expect(source).toMatchObject({ messageId: "mail-2" })
+    expect(mocks.mailRequest).toHaveBeenLastCalledWith({ kind: "messageGet", messageId: "mail-2" })
+    expect(current.selected).toBe(selected)
+    expect(mocks.read).toHaveBeenCalledTimes(1)
+  })
+
   it("lets a single deletion be undone before it reaches the server", async () => {
     vi.useFakeTimers()
     await act(async () => { current.remove(notice) })

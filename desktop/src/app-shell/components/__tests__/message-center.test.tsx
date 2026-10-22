@@ -8,6 +8,7 @@ import type { SynapseNotification } from "@/types/notification-center"
 
 const openExternal = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ openExternal }) }))
+vi.mock("@/components/mail-quick-reply-dialog", () => ({ MailQuickReplyDialog: () => null }))
 
 const mockCenter = vi.hoisted(() => ({
   authenticated: true, open: true, filter: "all", source: "all", items: [] as SynapseNotification[], cursor: null, unread: 0,
@@ -26,6 +27,7 @@ const mockCenter = vi.hoisted(() => ({
   changeOpen: vi.fn(), changeFilter: vi.fn(), changeSource: vi.fn(), openItem: vi.fn(), navigate: vi.fn(),
   openApiGuide: vi.fn(), remove: vi.fn(), markAllRead: vi.fn(), setRead: vi.fn(),
   deleteAll: vi.fn(), loadMore: vi.fn(), refresh: vi.fn(), retryMail: vi.fn(), closeDetail: vi.fn(),
+  loadMailForReply: vi.fn(),
 }))
 
 vi.mock("@/app-shell/hooks/use-message-center", () => ({ useMessageCenter: () => mockCenter }))
@@ -41,9 +43,37 @@ beforeEach(() => {
   }
 })
 
-afterEach(() => { document.body.innerHTML = ""; openExternal.mockClear(); mockCenter.mail.body = "管理员发送的完整正文"; mockCenter.items = []; mockCenter.setRead.mockClear(); mockCenter.remove.mockClear(); mockCenter.changeSource.mockClear() })
+afterEach(() => {
+  document.body.innerHTML = ""
+  openExternal.mockClear()
+  mockCenter.mail.body = "管理员发送的完整正文"
+  mockCenter.mail.kind = "platform_broadcast"
+  mockCenter.items = []
+  mockCenter.setRead.mockClear()
+  mockCenter.remove.mockClear()
+  mockCenter.changeSource.mockClear()
+  mockCenter.loadMailForReply.mockReset()
+})
 
 describe("MessageCenter", () => {
+  it("shows a quick reply action for user mail and withholds it from platform announcements", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<MessageCenter />) })
+    expect([...document.querySelectorAll("button")].some((button) => button.textContent === "快速回复")).toBe(false)
+
+    mockCenter.mail = {
+      ...mockCenter.mail,
+      kind: "user",
+      messageId: "broadcast-1",
+    } as never
+    await act(async () => { root.render(<MessageCenter />) })
+    expect([...document.querySelectorAll("button")].some((button) => button.textContent === "快速回复")).toBe(true)
+    await act(async () => { root.unmount() })
+    mockCenter.mail.kind = "platform_broadcast"
+  })
+
   it("keeps the reading body mounted while the notification list refreshes", async () => {
     const host = document.createElement("div")
     document.body.append(host)
@@ -174,6 +204,22 @@ describe("MessageCenter", () => {
     act(() => document.querySelector<HTMLButtonElement>('button[aria-label="通知操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
     await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "删除通知")?.click() })
     expect(mockCenter.remove).toHaveBeenCalledWith(mockCenter.selected)
+    await act(async () => { root.unmount() })
+  })
+
+  it("requests the row's mail for quick reply without opening it", async () => {
+    const other = { ...mockCenter.selected, id: "n2", targetId: "mail-2", readAt: null } as SynapseNotification
+    mockCenter.items = [mockCenter.selected as SynapseNotification, other]
+    mockCenter.loadMailForReply.mockResolvedValue({ ...mockCenter.mail, messageId: "mail-2", kind: "user" })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<MessageCenter />) })
+    const row = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("来自 Synapse") && item.getAttribute("aria-current") !== "true")!
+    act(() => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "快速回复")?.click(); await Promise.resolve() })
+    expect(mockCenter.loadMailForReply).toHaveBeenCalledWith(other)
+    expect(mockCenter.openItem).not.toHaveBeenCalled()
     await act(async () => { root.unmount() })
   })
 

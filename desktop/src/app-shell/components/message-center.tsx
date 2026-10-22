@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { getDriveDiscussionActionLabel, type NotificationSource } from "@synapse/shared"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
@@ -8,6 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { MailQuickReplyDialog } from "@/components/mail-quick-reply-dialog"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -15,7 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { MailAddress, MailPerson } from "@/types/mail"
+import { canQuickReplyToMail } from "@/lib/mail-reply"
+import type { MailAddress, MailMessage, MailPerson } from "@/types/mail"
 import type { SynapseNotification } from "@/types/notification-center"
 import { buildNotificationReference } from "../../../synapse-capabilities/shared/message-reference"
 
@@ -106,8 +108,9 @@ async function copyNotificationBody(item: SynapseNotification, mailBody: string 
   } catch { toast.error("复制失败") }
 }
 
-function notificationActions(center: Center, item: SynapseNotification, mailBody: string | null) {
+function notificationActions(center: Center, item: SynapseNotification, mailBody: string | null, quickReply?: (item: SynapseNotification) => void) {
   return [
+    ...(quickReply && item.source === "mail" && item.targetId ? [{ id: "quick-reply", label: "快速回复", run: () => quickReply(item) }] : []),
     { id: "read", label: item.readAt ? "标记为未读" : "标记为已读", run: () => { void center.setRead(item, !item.readAt) } },
     { id: "copy-body", label: "复制正文", run: () => { void copyNotificationBody(item, mailBody) } },
     { id: "copy-id", label: "复制 ID", run: () => { void copyNotificationId(item) } },
@@ -115,7 +118,7 @@ function notificationActions(center: Center, item: SynapseNotification, mailBody
   ]
 }
 
-function MessageDetail({ center }: { center: Center }) {
+function MessageDetail({ center, quickReply }: { center: Center; quickReply: (item: SynapseNotification) => void }) {
   const item = center.selected
   if (!item) return <div className="flex h-full min-h-48 items-center justify-center text-sm text-muted-foreground">选择一条通知查看内容</div>
   const isMail = item.source === "mail" && !!item.targetId
@@ -150,7 +153,7 @@ function MessageDetail({ center }: { center: Center }) {
           : <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />}
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
-      {action && <div className="mt-7 flex flex-wrap gap-2"><Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button></div>}
+      {(action || (isMail && mail && canQuickReplyToMail(mail))) && <div className="mt-7 flex flex-wrap gap-2">{action && <Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button>}{isMail && mail && canQuickReplyToMail(mail) && <Button type="button" variant="outline" size="default" onClick={() => quickReply(item)}>快速回复</Button>}</div>}
     </>}
   </article>
 }
@@ -158,7 +161,27 @@ function MessageDetail({ center }: { center: Center }) {
 function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) => void }) {
   const center = useMessageCenter(onOpenMeeting)
   const [clearScope, setClearScope] = useState<"all" | "pending" | null>(null)
+  const [quickReply, setQuickReply] = useState<MailMessage | null>(null)
+  const quickReplyRequest = useRef(0)
+  useEffect(() => {
+    if (center.open) return
+    quickReplyRequest.current += 1
+    setQuickReply(null)
+  }, [center.open])
   if (!center.authenticated) return null
+
+  async function openQuickReply(item: SynapseNotification) {
+    const requestId = ++quickReplyRequest.current
+    try {
+      const source = await center.loadMailForReply(item)
+      if (!source || requestId !== quickReplyRequest.current) return
+      if (!canQuickReplyToMail(source)) { toast.error("平台公告不能回复。"); return }
+      setQuickReply(source)
+    } catch (cause) {
+      if (requestId !== quickReplyRequest.current) return
+      toast.error(cause instanceof Error ? cause.message : "读取信件失败。")
+    }
+  }
 
   let previousDate = ""
   return <>
@@ -198,18 +221,19 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
                   <ContextMenu><ContextMenuTrigger asChild><button type="button" aria-current={center.selected?.id === item.id ? "true" : undefined} className={`grid w-full grid-cols-[0.5rem_minmax(0,1fr)] gap-2.5 border-b px-5 py-3 text-left focus-visible:outline-2 focus-visible:outline-ring ${center.selected?.id === item.id ? "bg-selected" : "hover:bg-muted"}`} onClick={() => { void center.openItem(item) }}>
                     <span className={`mt-1.5 size-2 rounded-full ${item.readAt ? "bg-transparent" : "bg-primary"}`} aria-hidden="true" />
                     <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="text-xs text-muted-foreground">{sourceName(item)}{item.source === "drive-discussion" && item.driveDiscussion && ` · ${discussionContentLabel(item.driveDiscussion)}`}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span>{item.source === "drive-discussion" ? <DiscussionPreview body={item.body} /> : <span className="truncate text-sm text-muted-foreground">{item.body}</span>}</span>
-                  </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item, null).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
+                  </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item, null, (target) => { void openQuickReply(target) }).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
                 </div>
               })}
               {center.cursor && <Button type="button" variant="ghost" className="h-12 w-full rounded-none" onClick={() => { void center.loadMore() }}>加载更多</Button>}
             </ScrollArea>
           </section>
           <section aria-label="通知内容" className={`${center.selected ? "block" : "hidden @3xl/message-center:block"} min-h-0 min-w-0 flex-1`}>
-            <ScrollArea className="h-full min-w-0 max-w-full" viewportClassName="min-w-0 max-w-full overflow-x-hidden px-6 py-7 @3xl/message-center:px-9 [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"><MessageDetail center={center} /></ScrollArea>
+            <ScrollArea className="h-full min-w-0 max-w-full" viewportClassName="min-w-0 max-w-full overflow-x-hidden px-6 py-7 @3xl/message-center:px-9 [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"><MessageDetail center={center} quickReply={(item) => { void openQuickReply(item) }} /></ScrollArea>
           </section>
         </div>
       </SheetContent>
     </Sheet>
+    <MailQuickReplyDialog source={quickReply} onClose={() => setQuickReply(null)} onSent={() => undefined} />
     <AlertDialog open={clearScope !== null} onOpenChange={(open) => { if (!open) setClearScope(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{clearScope === "pending" ? "忽略全部待处理通知？" : "清空全部通知？"}</AlertDialogTitle><AlertDialogDescription>{clearScope === "pending" ? "通知会从列表中移除，终端中的待处理状态不会改变。" : "这些通知会从当前账号的所有设备中移除，包括未加载的通知。"}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { if (clearScope) void center.deleteAll(clearScope) }}>{clearScope === "pending" ? "确认忽略" : "确认清空"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>
 }

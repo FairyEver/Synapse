@@ -8,6 +8,7 @@ import type { MailContact, MailMessage, MailSummary } from "@/types/mail"
 const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), useMailArgs: vi.fn(), contacts: [] as MailContact[], messages: [] as MailSummary[], detail: null as MailMessage | null, selectedId: null as string | null }))
 const openExternal = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ openExternal }) }))
+vi.mock("@/components/mail-quick-reply-dialog", () => ({ MailQuickReplyDialog: ({ source }: { source: MailMessage | null }) => source ? <div role="dialog">快速回复</div> : null }))
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "reader" } } } }) }))
 vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
 vi.mock("../use-mail", () => ({ useMail: (...args: unknown[]) => { mocks.useMailArgs(...args); return { contacts: mocks.contacts, contactsReady: true, contactsError: null, messages: mocks.messages, ready: true, loading: false, error: null, selectedId: mocks.selectedId, detail: mocks.detail, nextCursor: null, counts: { inboxTotal: 3, sentTotal: 0, unread: 2 }, refresh: mocks.refresh, setSelectedId: mocks.setSelectedId } } }))
@@ -161,6 +162,18 @@ describe("mail bulk controls", () => {
     act(() => document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
     await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "设为已读")?.click(); await Promise.resolve() })
     expect(mocks.request).toHaveBeenCalledWith({ kind: "messageSetRead", messageId: "first", read: true })
+  })
+
+  it("opens quick reply for the right-clicked row without opening or selecting it", async () => {
+    mocks.messages = [message("first"), message("second")]
+    mocks.request.mockResolvedValue({ ...message("second"), viewerId: "reader", body: "正文", team: null, conversationId: "second", replyToId: null, relation: null, quote: null, attachments: [] })
+    render()
+    const second = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("second"))!
+    act(() => second.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+    await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "快速回复")?.click(); await Promise.resolve() })
+    expect(mocks.request).toHaveBeenCalledWith({ kind: "messageGet", messageId: "second" })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("快速回复")
+    expect(mocks.setSelectedId).not.toHaveBeenCalled()
   })
 
   it("copies the selected row or open message as a typed mail reference", async () => {

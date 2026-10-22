@@ -303,6 +303,12 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     }
   }
 
+  const loadMailForReply = async (item: SynapseNotification): Promise<MailMessage | null> => {
+    if (item.source !== "mail" || !item.targetId) return null
+    if (mail?.messageId === item.targetId) return mail
+    return mailRequest({ kind: "messageGet", messageId: item.targetId })
+  }
+
   const loadMore = async () => {
     if (!cursor || loading) return
     const requestId = refreshId.current
@@ -325,6 +331,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     selected, mail, mailLoading, mailError, loading, error,
     changeOpen, changeFilter, changeSource, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
     retryMail: () => setMailRevision((value) => value + 1),
+    loadMailForReply,
     closeDetail: () => { navigationId.current += 1; setSelected(null) },
   }
 }
