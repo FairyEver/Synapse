@@ -22,13 +22,18 @@ export type WecomCliErrorCode =
   | "cli_unavailable"
   | "auth_required"
   | "auth_timeout"
+  | "permission_denied"
   | "command_failed"
   | "invalid_response"
   | "qr_unavailable"
   | "storage_error"
 
 export class WecomCliError extends Error {
-  constructor(readonly code: WecomCliErrorCode, message: string) {
+  constructor(
+    readonly code: WecomCliErrorCode,
+    message: string,
+    readonly helpUrl?: string,
+  ) {
     super(message)
     this.name = "WecomCliError"
   }
@@ -43,9 +48,12 @@ export type WecomCliAuthSession = {
 export type WecomCliAccount = {
   readonly address?: string
   readonly displayName?: string
+  readonly warningMessage?: string
+  readonly helpUrl?: string
 }
 
 export type WecomCliClient = {
+  isAuthorized(ownerUserId: string): Promise<boolean>
   startAuth(ownerUserId: string): Promise<WecomCliAuthSession>
   validate(ownerUserId: string): Promise<WecomCliAccount>
   disconnect(ownerUserId: string): Promise<void>
@@ -125,7 +133,7 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     }
     if (result.timedOut) throw new WecomCliError("command_failed", "企业微信邮箱操作超时，请重试。")
     if (result.exitCode !== 0) {
-      throw new WecomCliError("command_failed", commandErrorMessage(result.stdout))
+      throw commandError(result.stdout)
     }
     return result.stdout ?? ""
   }
@@ -182,7 +190,7 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
 
     const wait = completion.then((result) => {
       if (result.timedOut) throw new WecomCliError("auth_timeout", "企业微信邮箱授权超时，请重新连接。")
-      if (result.exitCode !== 0) throw new WecomCliError("command_failed", commandErrorMessage(result.stdout))
+      if (result.exitCode !== 0) throw commandError(result.stdout)
     }).finally(async () => {
       await rm(qrPath, { force: true }).catch(() => undefined)
     })
@@ -198,27 +206,44 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     }
   }
 
-  async function validate(ownerUserId: string): Promise<WecomCliAccount> {
+  async function isAuthorized(ownerUserId: string): Promise<boolean> {
     const status = (await runCommand(ownerUserId, ["auth", "show", "--status"], {
       actor: "system",
       metadata: { operation: "auth.status" },
     })).trim()
-    if (status !== "authorized") throw new WecomCliError("auth_required", "企业微信邮箱授权已失效，请重新连接。")
+    return status === "authorized"
+  }
+
+  async function validate(ownerUserId: string): Promise<WecomCliAccount> {
+    if (!await isAuthorized(ownerUserId)) {
+      throw new WecomCliError("auth_required", "企业微信邮箱授权已失效，请重新连接。")
+    }
 
     const identity = await runCommand(ownerUserId, ["identity", "whoami"], {
       actor: "system",
       metadata: { operation: "identity.whoami" },
     })
-    await runCommand(ownerUserId, ["mail", "search", "--json", JSON.stringify({
-      folder_names: ["收件箱"],
-      limit: 1,
-    })], {
-      actor: "system",
-      metadata: { operation: "mail.search.verify" },
-    })
-
     const email = identity.match(EMAIL_PATTERN)?.[0]
-    return email ? { address: email } : {}
+    const account: WecomCliAccount = email ? { address: email } : {}
+    try {
+      await runCommand(ownerUserId, ["mail", "search", "--json", JSON.stringify({
+        folder_names: ["收件箱"],
+        limit: 1,
+      })], {
+        actor: "system",
+        metadata: { operation: "mail.search.verify" },
+      })
+    } catch (error) {
+      if (error instanceof WecomCliError && error.code === "permission_denied") {
+        return {
+          ...account,
+          warningMessage: error.message,
+          ...(error.helpUrl ? { helpUrl: error.helpUrl } : {}),
+        }
+      }
+      throw error
+    }
+    return account
   }
 
   async function disconnect(ownerUserId: string): Promise<void> {
@@ -254,7 +279,7 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     const first = Array.isArray(body.mail_list) ? body.mail_list[0] : null
     if (!isRecord(first)) throw new WecomCliError("invalid_response", "企业微信邮箱返回了无效的邮件内容。")
     if (typeof first.errcode === "number" && first.errcode !== 0) {
-      throw new WecomCliError("command_failed", errorMessageFromRecord(first))
+      throw commandError(JSON.stringify(first))
     }
 
     let content = typeof first.content === "string" ? first.content : ""
@@ -319,7 +344,7 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     }
   }
 
-  return { startAuth, validate, disconnect, search, get, send }
+  return { isAuthorized, startAuth, validate, disconnect, search, get, send }
 }
 
 async function waitForQrCode(
@@ -389,29 +414,49 @@ function normalizeAttachments(value: unknown): Array<{ name: string; size?: numb
   })
 }
 
-function commandErrorMessage(stdout: string | undefined): string {
-  if (stdout) {
-    try {
-      const parsed: unknown = JSON.parse(stdout)
-      if (isRecord(parsed) && isRecord(parsed.error)) return errorMessageFromRecord(parsed.error)
-    } catch {
-      // Never expose raw CLI output; it can contain sensitive authorization details.
-    }
+function commandError(stdout: string | undefined): WecomCliError {
+  if (!stdout) return new WecomCliError("command_failed", "企业微信邮箱操作失败，请重试。")
+  try {
+    const parsed: unknown = JSON.parse(stdout)
+    if (!isRecord(parsed)) return new WecomCliError("command_failed", "企业微信邮箱操作失败，请重试。")
+    const error = isRecord(parsed.error) ? parsed.error : parsed
+    const errcode = typeof error.errcode === "number" ? error.errcode : undefined
+    const helpMessage = normalizeCliText(stringValue(error.help_message) || stringValue(error.instruction))
+    const message = commandErrorMessage(error, helpMessage)
+    const permissionDenied = errcode === 851008
+    return new WecomCliError(
+      permissionDenied
+        ? "permission_denied"
+        : errcode === 853004
+          ? "auth_required"
+          : "command_failed",
+      message,
+      permissionDenied ? extractHelpUrl(helpMessage) : undefined,
+    )
+  } catch {
+    // Never expose raw CLI output; it can contain sensitive authorization details.
+    return new WecomCliError("command_failed", "企业微信邮箱操作失败，请重试。")
   }
-  return "企业微信邮箱操作失败，请重试。"
 }
 
-function errorMessageFromRecord(value: Record<string, unknown>): string {
+function commandErrorMessage(value: Record<string, unknown>, helpMessage: string): string {
+  if (helpMessage) return helpMessage.split("\n").find((line) => line.trim())?.trim() ?? helpMessage
   const message = typeof value.message === "string"
     ? value.message.trim()
     : typeof value.errmsg === "string"
       ? value.errmsg.trim()
       : ""
-  const instruction = typeof value.instruction === "string" ? value.instruction.trim() : ""
-  if (message && instruction) return `${message} ${instruction}`
-  if (message) return message
-  if (instruction) return instruction
-  return "企业微信邮箱操作失败，请重试。"
+  return message || "企业微信邮箱操作失败，请重试。"
+}
+
+function extractHelpUrl(message: string): string | undefined {
+  const markdownLink = message.match(/\[[^\]]+\]\((https:\/\/[^)\s]+)\)/u)?.[1]
+  if (markdownLink) return markdownLink
+  return message.match(/https:\/\/[^\s)]+/u)?.[0]
+}
+
+function normalizeCliText(value: string): string {
+  return value.replace(/\\n/gu, "\n").trim()
 }
 
 function stringValue(value: unknown): string {

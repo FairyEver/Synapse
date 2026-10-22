@@ -35,8 +35,14 @@ function harness() {
     wait: vi.fn(() => wait),
     cancel: vi.fn(async () => undefined),
   }
+  let authStarted = false
+  const startAuth = vi.fn(async () => {
+    authStarted = true
+    return authSession
+  })
   const client: WecomCliClient = {
-    startAuth: vi.fn(async () => authSession),
+    isAuthorized: vi.fn(async () => authStarted),
+    startAuth,
     validate: vi.fn(async () => ({ address: "owner@example.com", displayName: "Owner" })),
     disconnect: vi.fn(async () => undefined),
     search: vi.fn(async () => ({ items: [], nextCursor: null, hasMore: false })),
@@ -148,5 +154,22 @@ describe("WeCom mail connector", () => {
     expect(h.client.disconnect).toHaveBeenCalledWith("owner-a")
     expect(h.state.value()?.bindings).toEqual({})
     expect(await h.driver.lifecycle!.item(wecomMailConnector)).toMatchObject({ connectionStatus: "disconnected" })
+  })
+
+  it("reuses an existing bot authorization and reports missing mail read permission without a new QR scan", async () => {
+    const h = harness()
+    h.client.isAuthorized = vi.fn(async () => true)
+    h.client.validate = vi.fn(async () => ({
+      warningMessage: "当前机器人未被授权「搜索与获取邮件内容」能力，需向管理员申请使用。",
+      helpUrl: "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7",
+    }))
+    await h.driver.lifecycle!.initialize(() => undefined)
+
+    await expect(h.driver.lifecycle!.connect(wecomMailConnector)).resolves.toMatchObject({
+      connectionStatus: "connected",
+      warningMessage: "当前机器人未被授权「搜索与获取邮件内容」能力，需向管理员申请使用。",
+      helpUrl: "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7",
+    })
+    expect(h.client.startAuth).not.toHaveBeenCalled()
   })
 })

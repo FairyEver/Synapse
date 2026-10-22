@@ -172,6 +172,8 @@ describe("ConnectorsModule", () => {
       enabled: true,
       probeStatus: "ready" as const,
       connectionStatus: "connected" as const,
+      warningMessage: "当前机器人未被授权「搜索与获取邮件内容」能力。",
+      helpUrl: "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7",
       mailbox: {
         address: "owner@example.com",
         displayName: "Owner",
@@ -207,6 +209,13 @@ describe("ConnectorsModule", () => {
     })
     renderModule()
     await act(async () => { await Promise.resolve() })
+
+    const permissionHelp = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "申请邮箱权限")
+    await act(async () => {
+      permissionHelp?.click()
+      await Promise.resolve()
+    })
+    expect(mocks.openExternal).toHaveBeenCalledWith("https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7")
 
     const open = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "打开邮箱")
     await act(async () => {

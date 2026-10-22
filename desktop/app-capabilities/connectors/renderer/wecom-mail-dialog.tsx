@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, Mail, Search, Send } from "lucide-react"
 import { toast } from "sonner"
 import { MarkdownViewer } from "../../../src/components/markdown-viewer"
+import { Alert, AlertDescription, AlertTitle } from "../../../src/components/ui/alert"
 import { Button } from "../../../src/components/ui/button"
 import {
   Dialog,
@@ -37,6 +38,7 @@ type ComposeState = {
 
 export function WecomMailDialog({ connector, open, onOpenChange }: WecomMailDialogProps) {
   const bridge = useMemo(() => requireBridgeDomain("connectors"), [])
+  const shellBridge = useMemo(() => requireBridgeDomain("shell"), [])
   const [query, setQuery] = useState("")
   const [items, setItems] = useState<WecomMailSummary[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -66,6 +68,15 @@ export function WecomMailDialog({ connector, open, onOpenChange }: WecomMailDial
       setLoading(false)
     }
   }, [bridge, connector.id])
+
+  const openPermissionHelp = useCallback(async () => {
+    if (!connector.helpUrl) return
+    try {
+      await shellBridge.openExternal(connector.helpUrl)
+    } catch {
+      toast.error("无法打开权限申请页面")
+    }
+  }, [connector.helpUrl, shellBridge])
 
   useEffect(() => {
     if (!open) return
@@ -129,6 +140,19 @@ export function WecomMailDialog({ connector, open, onOpenChange }: WecomMailDial
                     {loading ? <Spinner /> : <Search />}
                   </Button>
                 </form>
+                {connector.warningMessage ? (
+                  <Alert variant="destructive" className="mx-3 mb-3 shrink-0">
+                    <AlertTitle>缺少邮件读取权限</AlertTitle>
+                    <AlertDescription>
+                      <p className="whitespace-pre-line">{connector.warningMessage}</p>
+                      {connector.helpUrl ? (
+                        <Button type="button" variant="outline" className="mt-2" data-track="connectors.wecom-mail.permission.apply" onClick={() => void openPermissionHelp()}>
+                          申请邮箱权限
+                        </Button>
+                      ) : null}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
                 <ScrollArea className="min-h-0 flex-1">
                   {loading && items.length === 0 ? (
                     <div className="flex items-center justify-center py-12"><Spinner /></div>

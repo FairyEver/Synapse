@@ -16,9 +16,9 @@ async function root() {
   return value
 }
 
-function result(stdout: string) {
+function result(stdout: string, exitCode = 0) {
   return {
-    exitCode: 0,
+    exitCode,
     signal: null,
     stdout,
     stderr: "",
@@ -128,6 +128,36 @@ describe("WeCom CLI client", () => {
 
     await expect(client.startAuth("owner-a")).resolves.toMatchObject({
       qrCodeDataUrl: `data:image/png;base64,${png.toString("base64")}`,
+    })
+  })
+
+  it("surfaces the official mail read permission error and help URL", async () => {
+    const workRoot = await root()
+    const helpUrl = "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7"
+    const permissionError = JSON.stringify({
+      errcode: 851008,
+      errmsg: "partial no authorization",
+      help_message: `当前机器人未被授权「搜索与获取邮件内容」能力，需向管理员申请使用。\\n[点击这里](${helpUrl})`,
+    })
+    const run = vi.fn(async (request: { readonly args: readonly string[] }) => {
+      if (request.args[0] === "auth") return result("authorized")
+      if (request.args[0] === "identity") return result("{}")
+      return result(permissionError, 1)
+    })
+    const client = createWecomCliClient({
+      binaryPath: "/fake/wecom-cli",
+      rootDir: workRoot,
+      processRunner: { run, start: vi.fn() } as never,
+    })
+
+    await expect(client.validate("owner-a")).resolves.toEqual({
+      warningMessage: "当前机器人未被授权「搜索与获取邮件内容」能力，需向管理员申请使用。",
+      helpUrl,
+    })
+    await expect(client.search("owner-a", {})).rejects.toMatchObject({
+      code: "permission_denied",
+      message: "当前机器人未被授权「搜索与获取邮件内容」能力，需向管理员申请使用。",
+      helpUrl,
     })
   })
 })

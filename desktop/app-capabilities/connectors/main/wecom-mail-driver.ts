@@ -28,6 +28,8 @@ type Attempt = {
   session?: WecomCliAuthSession
   qrCodeDataUrl?: string
   errorMessage?: string
+  warningMessage?: string
+  helpUrl?: string
   account?: WecomCliAccount
 }
 
@@ -148,7 +150,17 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
         },
       } : {}),
       ...(attempt?.errorMessage ? { errorMessage: attempt.errorMessage } : {}),
+      ...(attempt?.warningMessage ? { warningMessage: attempt.warningMessage } : {}),
+      ...(attempt?.helpUrl ? { helpUrl: attempt.helpUrl } : {}),
     }
+  }
+
+  function applyAccount(attempt: Attempt, account: WecomCliAccount): void {
+    attempt.account = account
+    attempt.warningMessage = account.warningMessage
+    attempt.helpUrl = account.helpUrl
+    attempt.errorMessage = undefined
+    attempt.status = "connected"
   }
 
   async function item(definition: BuiltinConnectorDefinition): Promise<ConnectorItem> {
@@ -170,6 +182,54 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
       await session.cancel()
     }
     cancel(previous)
+
+    let authorized: boolean
+    try {
+      authorized = await deps.client.isAuthorized(owner)
+    } catch (error) {
+      const attempt: Attempt = {
+        ownerUserId: owner,
+        generation: `${now()}-${Math.random()}`,
+        status: "failed",
+        errorMessage: errorMessage(error),
+        helpUrl: errorHelpUrl(error),
+      }
+      attempts.set(attemptKey(owner, typed), attempt)
+      notify()
+      throw error
+    }
+
+    if (authorized) {
+      const binding = await readBinding(owner, typed)
+      const attempt: Attempt = {
+        ownerUserId: owner,
+        generation: `${now()}-${Math.random()}`,
+        status: "verifying",
+        account: binding ? { address: binding.address, displayName: binding.displayName } : undefined,
+      }
+      attempts.set(attemptKey(owner, typed), attempt)
+      notify()
+      try {
+        const account = await deps.client.validate(owner)
+        if (attempts.get(attemptKey(owner, typed)) !== attempt) return itemFromAttempt(typed, attempt, binding)
+        await writeBinding(owner, typed, account)
+        applyAccount(attempt, account)
+        notify()
+        return itemFromAttempt(typed, attempt, await readBinding(owner, typed))
+      } catch (error) {
+        if (attempts.get(attemptKey(owner, typed)) !== attempt) return itemFromAttempt(typed, attempt, binding)
+        if (error instanceof WecomCliError && error.code === "auth_required") {
+          attempts.delete(attemptKey(owner, typed))
+        } else {
+          attempt.status = "failed"
+          attempt.errorMessage = errorMessage(error)
+          attempt.helpUrl = errorHelpUrl(error)
+          notify()
+          return itemFromAttempt(typed, attempt, binding)
+        }
+      }
+    }
+
     await removeBinding(owner, typed)
 
     const attempt: Attempt = {
@@ -195,8 +255,7 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
           const account = await deps.client.validate(owner)
           if (attempts.get(attemptKey(owner, typed)) !== attempt) return
           await writeBinding(owner, typed, account)
-          attempt.account = account
-          attempt.status = "connected"
+          applyAccount(attempt, account)
           attempt.session = undefined
           notify()
         })
@@ -206,6 +265,7 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
             ? "reconnect_required"
             : "failed"
           attempt.errorMessage = errorMessage(error)
+          attempt.helpUrl = errorHelpUrl(error)
           attempt.session = undefined
           attempt.qrCodeDataUrl = undefined
           notify()
@@ -213,6 +273,7 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
     } catch (error) {
       attempt.status = "failed"
       attempt.errorMessage = errorMessage(error)
+      attempt.helpUrl = errorHelpUrl(error)
       attempt.session = undefined
       attempt.qrCodeDataUrl = undefined
       notify()
@@ -275,14 +336,14 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
         const account = await deps.client.validate(owner)
         if (attempts.get(key) !== attempt) return
         await writeBinding(owner, typed, account)
-        attempt.account = account
-        attempt.status = "connected"
+        applyAccount(attempt, account)
       } catch (error) {
         if (attempts.get(key) !== attempt) return
         attempt.status = error instanceof WecomCliError && error.code === "auth_required"
           ? "reconnect_required"
           : "failed"
         attempt.errorMessage = errorMessage(error)
+        attempt.helpUrl = errorHelpUrl(error)
       }
       notify()
     } finally {
@@ -300,6 +361,23 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
     return { owner, typed }
   }
 
+  function clearMailWarning(typed: WecomMailDefinition): void {
+    const attempt = currentAttempt(typed)
+    if (!attempt?.warningMessage && !attempt?.helpUrl) return
+    attempt.warningMessage = undefined
+    attempt.helpUrl = undefined
+    notify()
+  }
+
+  function applyMailPermissionError(typed: WecomMailDefinition, error: unknown): void {
+    if (!(error instanceof WecomCliError) || error.code !== "permission_denied") return
+    const attempt = currentAttempt(typed)
+    if (!attempt) return
+    attempt.warningMessage = error.message
+    attempt.helpUrl = error.helpUrl
+    notify()
+  }
+
   const driver: ConnectorDriver = {
     probe: async (definition): Promise<ProbeResult> => {
       const typed = requireDefinition(definition)
@@ -311,12 +389,26 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
     createAgentContribution: () => ({ mcpServers: [], skillPackageIds: [] }),
     mail: {
       async search(definition, input: WecomMailSearchInput): Promise<WecomMailSearchResult> {
-        const { owner } = await requireConnected(definition)
-        return deps.client.search(owner, input)
+        const { owner, typed } = await requireConnected(definition)
+        try {
+          const result = await deps.client.search(owner, input)
+          clearMailWarning(typed)
+          return result
+        } catch (error) {
+          applyMailPermissionError(typed, error)
+          throw error
+        }
       },
       async get(definition, input: WecomMailGetInput): Promise<WecomMailDetail> {
-        const { owner } = await requireConnected(definition)
-        return deps.client.get(owner, input)
+        const { owner, typed } = await requireConnected(definition)
+        try {
+          const result = await deps.client.get(owner, input)
+          clearMailWarning(typed)
+          return result
+        } catch (error) {
+          applyMailPermissionError(typed, error)
+          throw error
+        }
       },
       async send(definition, input: WecomMailSendInput): Promise<WecomMailSendResult> {
         const { owner } = await requireConnected(definition)
@@ -355,4 +447,8 @@ export function createWecomMailDriver(deps: WecomMailDriverDeps): ConnectorDrive
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "企业微信邮箱操作失败，请重试。"
+}
+
+function errorHelpUrl(error: unknown): string | undefined {
+  return error instanceof WecomCliError ? error.helpUrl : undefined
 }

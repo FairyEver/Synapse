@@ -67,6 +67,7 @@ function ConnectorCard({ item, busy, onAction, onReconnect, onRetry, openDocumen
     : item.account
       ? [item.account.displayName ?? item.account.portalUserId, item.account.tenantName ?? item.account.tenantId].join(" · ")
       : undefined
+  const reconnectLabel = item.kind === "wecom-mail" && item.warningMessage ? "重新检查" : "重新连接"
 
   return (
     <Card size="sm">
@@ -89,11 +90,24 @@ function ConnectorCard({ item, busy, onAction, onReconnect, onRetry, openDocumen
           ) : null}
           {accountLabel ? <p className="mt-1 text-xs text-muted-foreground">{accountLabel}</p> : null}
           {item.probeStatus === "error" && item.errorMessage ? <p className="mt-1 text-xs text-destructive">{item.errorMessage}</p> : null}
+          {item.warningMessage ? <p className="mt-1 whitespace-pre-line text-xs text-destructive">{item.warningMessage}</p> : null}
+          {item.helpUrl ? (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="mt-1 h-auto p-0 text-xs font-normal"
+              data-track="connectors.wecom-mail.permission.apply"
+              onClick={() => void openDocumentation(item.helpUrl!)}
+            >
+              申请邮箱权限
+            </Button>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {item.kind === "wecom-mail" && item.connectionStatus === "connected" ? <Button variant="ghost" size="sm" data-track="connectors.connector.mail.open" onClick={() => onOpenMail(item)}>打开邮箱</Button> : null}
           {item.canRetry && item.kind !== "wecom-mail" ? <Button variant="ghost" size="sm" data-track="connectors.connector.retry" onClick={() => onRetry(item)}>重试验证</Button> : null}
-          {item.connectionStatus && item.connectionStatus !== "disconnected" ? <Button variant="ghost" size="sm" data-track="connectors.connector.reconnect" onClick={() => onReconnect(item)}>重新连接</Button> : null}
+          {item.connectionStatus && item.connectionStatus !== "disconnected" ? <Button variant="ghost" size="sm" data-track="connectors.connector.reconnect" onClick={() => onReconnect(item)}>{reconnectLabel}</Button> : null}
           {connecting ? <Spinner className="size-3.5" aria-hidden="true" /> : null}
           <span className="text-sm text-muted-foreground">{stateLabel}</span>
           <Switch

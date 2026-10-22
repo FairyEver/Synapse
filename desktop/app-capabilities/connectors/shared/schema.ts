@@ -16,6 +16,8 @@ export const connectorItemSchema = z.object({
   canRetry: z.boolean().optional(),
   qrCodeDataUrl: z.string().startsWith("data:image/png;base64,").max(1_500_000).optional(),
   mailbox: wecomMailAccountSchema.optional(),
+  warningMessage: z.string().max(2000).optional(),
+  helpUrl: z.string().url().optional(),
   account: z.object({
     portalUserId: z.string(), tenantId: z.string(), displayName: z.string().optional(), tenantName: z.string().optional(),
     connectedAt: z.string(), lastValidatedAt: z.string(),
