@@ -341,6 +341,14 @@ const requiredExtraResourceFiles = [
     label: "Todo Skill API contract",
   },
   {
+    relativePath: "synapse-skill/wecom-mail/index.md",
+    label: "Enterprise WeChat mail Skill guide",
+  },
+  {
+    relativePath: "synapse-skill/wecom-mail/api-reference.md",
+    label: "Enterprise WeChat mail Skill API contract",
+  },
+  {
     relativePath: "knowledge-base/synapse-knowledge-base-template/CLAUDE.md",
     label: "Knowledge Base runtime template",
   },
@@ -1257,7 +1265,7 @@ function findResourceTargets(targetPath, targets = new Map()) {
   }
 
   for (const entry of readdirSync(targetPath)) {
-    if (entry === "app.asar.unpacked") {
+    if (entry === "app.asar.unpacked" || entry === "openui-validation") {
       continue
     }
     const childPath = path.join(targetPath, entry)

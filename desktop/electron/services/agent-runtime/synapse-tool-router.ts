@@ -31,6 +31,7 @@ const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
   repository: ["仓库", "repository", "repo"],
   skill_repository: ["技能仓库", "skill repository", "skill repo"],
   workflow: ["工作流", "节点", "workflow", "node"],
+  wecom: ["企业微信", "企微", "WeCom", "企业邮箱", "wecom"],
 }
 
 const SEARCH_STOP_WORDS = new Set([
@@ -175,7 +176,7 @@ export const SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS: readonly SynapseToolRouterToo
 export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Synapse is the local desktop app this MCP server belongs to. It manages Database, Drive,",
   "Workflow, Automation, Content (Rules/Skills/Prompts), Skill Repository, model price rules,",
-  "local secrets and repositories, Terminal sessions, App capabilities and extensions.",
+  "local secrets and repositories, Enterprise WeChat, Terminal sessions, App capabilities and extensions.",
   "",
   "This server publishes exactly two tools. Every Synapse capability is reached in two steps:",
   "",
@@ -190,6 +191,8 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "",
   "Extensions use `extend_*` names in the `extend` domain; Portal Link credential tools",
   "supply credentials for direct HTTPS calls to the extension backend. Never log credentials.",
+  "Enterprise WeChat mail tools use the `wecom` domain and `app_wecom_mail_*` names; they require the",
+  "Enterprise WeChat connector and never expose its credentials.",
   "",
   "Rules:",
   "- Never call a name that `search` did not return, and never guess arguments.",
@@ -311,7 +314,15 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
   if (!query) return toolIndex(domain, normalizeIndexLimit(input.limit))
   const limit = normalizeLimit(input.limit)
 
-  const excludedDomains = excludedSearchDomains(query)
+  const excludedDomains = [
+    ...new Set([
+      ...excludedSearchDomains(query),
+      ...(/(?:站内信|通知中心|synapse\s*邮件)/iu.test(query)
+        && !/(?:企业微信|企微|企业邮箱|\bwecom\b)/iu.test(query)
+        ? ["wecom"]
+        : []),
+    ]),
+  ]
   const matchesScope = (entry: SynapseToolCatalogEntry) => (!domain || entry.domain === domain) && !excludedDomains.includes(entry.domain)
   const exact = catalogByName.get(query)
   const exactChinesePhrase = containsHan(query) && [...query].length >= 4

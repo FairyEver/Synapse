@@ -64,10 +64,11 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 | Text File Writer | 否 | 否 | 1 | — | 1 | — |
 | Script Runtime | 否 | 否 | — | — | — | — |
 | Screenshot | 否 | 否 | — | — | — | — |
+| WeCom Mail | 否 | 否 | — | — | 3 | — |
 
 固定例外：
 
-- Connectors 的企业微信邮箱连接器新增 3 个 UI 专用 IPC operation：`app.connectors.mail.search`、`app.connectors.mail.get`、`app.connectors.mail.send`；它们不注册 MCP capability/tool，Connectors 仍为 0 个 MCP。连接器使用 `@wecom/cli` 的本地扫码授权，凭据不上传 Synapse 服务端；仅支持搜索、详情、发送和回复，不提供删除、标记已读/未读、草稿、标签或撤回。机器人已绑定但缺少「搜索与获取邮件内容」权限时保持连接，显示企业微信返回的具体原因和官方申请入口，不把业务权限缺失误报为授权失败。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
+- Connectors 的「企业微信」连接器只负责扫码绑定机器人、保存本地凭据、连接状态和连接信息弹窗，Connectors 仍为 0 个 MCP。它使用 `@wecom/cli`，凭据不上传 Synapse 服务端，也不向 Renderer 或 MCP 暴露。企业微信 CLI 不提供完整业务权限清单查询，因此连接信息弹窗只展示连接时间、最近检查时间及企业微信权限管理入口，不展示推测的逐项权限。独立的 WeCom Mail 能力通过主进程 `core.wecom` 服务使用凭据，注册 3 个 MCP 工具：`app_wecom_mail_list`、`app_wecom_mail_get`、`app_wecom_mail_send`；仅支持收件箱搜索、详情、发送和回复，不提供删除、标记已读/未读、草稿、标签、撤回、附件上传下载或任意 CLI 调用。企业业务权限不足时不影响连接器状态，MCP 返回 `WECOM_PERMISSION_REQUIRED`、中文权限名和官方申请链接，由始终加载的 `wecom-mail` Skill 向用户说明。`core.wecom` 后续可为其他企业微信 MCP/Skill 提供窄类型化能力，但不会返回 token。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
 
 - 云盘文件搜索扩展既有 `app.drive.item_tree.list`（MCP 索引名 `app_drive_item_tree_list`），增加名称、类型、更新时间、有效分享和排序条件；桌面通过同一 operation 的 `drive.itemTree.list` IPC 调用。服务端在自有普通云盘递归结果上先筛选、统计再分页，返回真实路径与祖先；不新增 capability、MCP 工具、System App、Dock 或 Deep Link，Drive 仍为 76 项。
 - AI 文件查找在既有工具发现词表中区分查找文件、浏览目录、分享链接、回收站和历史版本；明确查找本地或第三方存储时排除错误的 Drive 领域候选，精确工具名与领域限制继续有效；不新增工具。`app.drive.item_tree.list` 的 MCP 搜索默认每页 20 条，返回实际搜索条件、结果编号和需登录的本人预览链接，供现有对话续查/选择；普通目录树、桌面 IPC 和服务端查询默认保持不变。仅匹配名称及元数据，不创建分享、不读取正文、不新增全文或语义索引；Drive 仍为 76 项。

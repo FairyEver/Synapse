@@ -146,6 +146,19 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreTextExtractorDescriptor.stop).toBeTypeOf("function")
   })
 
+  it("coreWecomDescriptor owns the local Enterprise WeChat connection service", async () => {
+    const { coreWecomDescriptor } = await importBootstrap()
+    expect(coreWecomDescriptor.id).toBe("core.wecom")
+    expect(coreWecomDescriptor.criticality).toBe("degraded")
+    expect(coreWecomDescriptor.dependsOn).toEqual([
+      "core.data-repository",
+      "core.permission-guard",
+      "core.audit-sink",
+    ])
+    expect(coreWecomDescriptor.start).toBeTypeOf("function")
+    expect(coreWecomDescriptor.stop).toBeTypeOf("function")
+  })
+
   it("registers one HTML render core and a Writer composition service", async () => {
     const {
       coreHtmlGenerationDescriptor,
@@ -171,6 +184,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreDatabaseDescriptor.criticality).toBe("degraded")
     expect(coreDatabaseDescriptor.dependsOn).toEqual([
       "app.todos.cloud",
+      "core.wecom",
       "core.config",
       "core.connectors",
       "core.event-bus",

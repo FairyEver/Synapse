@@ -87,14 +87,6 @@ import type {
 } from "../../app-capabilities/secrets/shared/schema"
 import type { ConnectorItem, ConnectorListResult } from "../../app-capabilities/connectors/shared/schema"
 import type {
-  WecomMailDetail,
-  WecomMailGetInput,
-  WecomMailSearchInput,
-  WecomMailSearchResult,
-  WecomMailSendInput,
-  WecomMailSendResult,
-} from "../../app-capabilities/connectors/shared/wecom-mail"
-import type {
   SynapseMeetingDetail,
   SynapseMeetingAudioEnsureResult,
   SynapseMeetingAudioReadyEvent,
@@ -1146,11 +1138,6 @@ export type SynapseBridge = {
       retry: (input: { id: string }) => Promise<ConnectorItem>
       disconnect: (input: { id: string }) => Promise<void>
       onChanged: (listener: (event: { items: ConnectorItem[] }) => void) => () => void
-    }
-    mail: {
-      search: (input: { id: string; input: WecomMailSearchInput }) => Promise<WecomMailSearchResult>
-      get: (input: { id: string; input: WecomMailGetInput }) => Promise<WecomMailDetail>
-      send: (input: { id: string; input: WecomMailSendInput }) => Promise<WecomMailSendResult>
     }
   }
   agentPersonas: {

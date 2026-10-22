@@ -22,7 +22,7 @@ export function resolveWecomCliBinaryPath(options: ResolveWecomCliBinaryOptions 
   const arch = options.arch ?? process.arch
   const platformKey = `${platform}-${arch}` as WecomCliPlatformKey
   const packageName = WECOM_CLI_PLATFORM_PACKAGES[platformKey]
-  if (!packageName) throw new Error(`企业微信邮箱不支持当前平台：${platformKey}`)
+  if (!packageName) throw new Error(`企业微信不支持当前平台：${platformKey}`)
 
   const requireFromDesktop = createRequire(__filename)
   const cliPackageJson = requireFromDesktop.resolve("@wecom/cli/package.json")

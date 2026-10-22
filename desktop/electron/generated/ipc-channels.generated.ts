@@ -394,9 +394,6 @@ export const IPC_CHANNELS = {
     "connect": "synapse:app:connectors:item:connect",
     "retry": "synapse:app:connectors:item:retry",
     "disconnect": "synapse:app:connectors:item:disconnect",
-    "mailSearch": "synapse:app:connectors:mail:search",
-    "mailGet": "synapse:app:connectors:mail:get",
-    "mailSend": "synapse:app:connectors:mail:send",
     "changed": "synapse:app:connectors:item:changed",
   },
   "secrets": {

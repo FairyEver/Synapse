@@ -7,7 +7,6 @@ import type {
   ConnectorStateStoreV1,
 } from "../../../electron/runtime/data-repo/schemas/connectors"
 import type { ConnectorItem } from "../shared/schema"
-import type { WecomMailGetInput, WecomMailSearchInput, WecomMailSendInput } from "../shared/wecom-mail"
 import { builtinConnectors } from "./definitions"
 import type { ConnectorDriverRegistry } from "./driver-registry"
 import type { AgentContribution, BuiltinConnectorDefinition, ProbeResult } from "./types"
@@ -150,24 +149,6 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
     return driver.getSessionInput(id)
   }
 
-  async function mailSearch(id: string, input: WecomMailSearchInput) {
-    const driver = deps.drivers.resolve(requireDefinition(id))
-    if (!driver.mail) throw new Error("连接器不支持邮件操作。")
-    return driver.mail.search(requireDefinition(id), input)
-  }
-
-  async function mailGet(id: string, input: WecomMailGetInput) {
-    const driver = deps.drivers.resolve(requireDefinition(id))
-    if (!driver.mail) throw new Error("连接器不支持邮件操作。")
-    return driver.mail.get(requireDefinition(id), input)
-  }
-
-  async function mailSend(id: string, input: WecomMailSendInput) {
-    const driver = deps.drivers.resolve(requireDefinition(id))
-    if (!driver.mail) throw new Error("连接器不支持邮件操作。")
-    return driver.mail.send(requireDefinition(id), input)
-  }
-
   function dispose(): void {
     const lifecycles = new Set(definitions.map((definition) => deps.drivers.resolve(definition).lifecycle))
     for (const lifecycle of lifecycles) lifecycle?.dispose()
@@ -251,9 +232,6 @@ export function createConnectorsService(deps: ConnectorServiceDeps) {
     retry,
     handleCallback,
     getSessionInput,
-    mailSearch,
-    mailGet,
-    mailSend,
     dispose,
     getEnabledConnectorIds,
     createAgentContribution,

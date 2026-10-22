@@ -240,6 +240,7 @@ describe("SynapseSkillService", () => {
     expect(detail.content).not.toContain("name: synapse-skill")
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("workflow/index.md")
+    expect(detail.content).toContain("wecom-mail/index.md")
     expect(detail.content).toContain("case-insensitive) as a standalone word")
     expect(detail.content).toContain("用 sy 查一下云盘")
     expect(detail.content).toContain("static site publishing or republishing")
@@ -285,6 +286,8 @@ describe("SynapseSkillService", () => {
       "terminal/index.md",
       "todos/api-reference.md",
       "todos/index.md",
+      "wecom-mail/api-reference.md",
+      "wecom-mail/index.md",
       "workflow/api-reference.md",
       "workflow/index.md",
     ])

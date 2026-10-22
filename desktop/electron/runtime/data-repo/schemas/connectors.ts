@@ -85,6 +85,19 @@ export interface WecomMailStateV1 extends Record<string, unknown> {
   bindings: Record<string, WecomMailBindingV1>
 }
 
+export interface WecomConnectionBindingV1 extends Record<string, unknown> {
+  ownerUserId: string
+  connectorId: "wecom"
+  enabled: boolean
+  connectedAt: string
+  lastValidatedAt: string
+}
+
+export interface WecomConnectionStateV1 extends Record<string, unknown> {
+  schemaVersion: 1
+  bindings: Record<string, WecomConnectionBindingV1>
+}
+
 const noMigrations: readonly Migration[] = []
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 const isDate = (value: unknown): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value))
@@ -163,6 +176,25 @@ export const connectorsWecomMailStateSchema: NamespaceSchema<WecomMailStateV1> =
         && typeof binding.connectorId === "string" && binding.connectorId.length > 0
         && (binding.address === undefined || typeof binding.address === "string")
         && (binding.displayName === undefined || typeof binding.displayName === "string")
+        && isDate(binding.connectedAt)
+        && isDate(binding.lastValidatedAt)
+    })
+  },
+}
+
+export const wecomConnectionStateSchema: NamespaceSchema<WecomConnectionStateV1> = {
+  name: "app.wecom.connection",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  encrypted: false,
+  validate: (value): value is WecomConnectionStateV1 => {
+    if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.bindings)) return false
+    return Object.values(value.bindings).every((binding) => {
+      if (!isRecord(binding)) return false
+      return typeof binding.ownerUserId === "string" && binding.ownerUserId.length > 0
+        && binding.connectorId === "wecom"
+        && typeof binding.enabled === "boolean"
         && isDate(binding.connectedAt)
         && isDate(binding.lastValidatedAt)
     })

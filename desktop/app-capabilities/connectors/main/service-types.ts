@@ -6,9 +6,6 @@ export type ReturnTypeOfConnectorsService = {
   retry(id: string): Promise<import("../shared/schema").ConnectorItem>
   handleCallback(id: string, url: string): Promise<void>
   getSessionInput(id: string): Promise<{ connectionGeneration: string; baseUrl: string; environmentId: string; userId: string; language: string; credential: { token: string; tenantId: string } }>
-  mailSearch(id: string, input: import("../shared/wecom-mail").WecomMailSearchInput): Promise<import("../shared/wecom-mail").WecomMailSearchResult>
-  mailGet(id: string, input: import("../shared/wecom-mail").WecomMailGetInput): Promise<import("../shared/wecom-mail").WecomMailDetail>
-  mailSend(id: string, input: import("../shared/wecom-mail").WecomMailSendInput): Promise<import("../shared/wecom-mail").WecomMailSendResult>
   dispose(): void
   getEnabledConnectorIds(): Promise<string[]>
   createAgentContribution(connectorIds: readonly string[]): import("./types").AgentContribution

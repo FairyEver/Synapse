@@ -24,6 +24,7 @@ export {
   coreHttpTestDescriptor,
   coreAgentPersonasDescriptor,
   coreQuickInputDescriptor,
+  coreWecomDescriptor,
   coreSecretsDescriptor,
   coreUpdateDescriptor,
   coreWorkspaceFileTreeDescriptor,

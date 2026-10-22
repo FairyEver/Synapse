@@ -1,7 +1,6 @@
 import { z } from "zod"
-import { wecomMailAccountSchema } from "./wecom-mail"
 
-export const connectorIntegrationKindSchema = z.enum(["mcp-streamable-http", "portal-session", "wecom-mail"])
+export const connectorIntegrationKindSchema = z.enum(["mcp-streamable-http", "portal-session", "wecom"])
 export const connectorProbeStatusSchema = z.enum(["idle", "checking", "ready", "error"])
 export const connectorItemSchema = z.object({
   id: z.string().min(1),
@@ -15,9 +14,10 @@ export const connectorItemSchema = z.object({
   connectionStatus: z.enum(["disconnected", "connecting", "verifying", "connected", "reconnect_required", "failed"]).optional(),
   canRetry: z.boolean().optional(),
   qrCodeDataUrl: z.string().startsWith("data:image/png;base64,").max(1_500_000).optional(),
-  mailbox: wecomMailAccountSchema.optional(),
-  warningMessage: z.string().max(2000).optional(),
-  helpUrl: z.string().url().optional(),
+  wecom: z.object({
+    connectedAt: z.string().min(1),
+    lastValidatedAt: z.string().min(1),
+  }).strict().optional(),
   account: z.object({
     portalUserId: z.string(), tenantId: z.string(), displayName: z.string().optional(), tenantName: z.string().optional(),
     connectedAt: z.string(), lastValidatedAt: z.string(),

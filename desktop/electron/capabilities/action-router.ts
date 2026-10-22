@@ -23,6 +23,7 @@ export type SynapseActionRouterDeps = {
   readonly driveDispatch: DomainDispatch
   readonly mailDispatch: DomainDispatch
   readonly todosDispatch?: DomainDispatch
+  readonly wecomDispatch?: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
   readonly skillRepositoryDispatch?: DomainDispatch
@@ -46,6 +47,10 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "todos") {
         if (!deps.todosDispatch) throw new Error("Todo dispatcher is not configured")
         return deps.todosDispatch(action, params, context)
+      }
+      if (domainId === "wecom") {
+        if (!deps.wecomDispatch) throw new Error("WeCom dispatcher is not configured")
+        return deps.wecomDispatch(action, params, context)
       }
       if (domainId === "model_price") return deps.modelPriceDispatch(action, params, context)
       if (domainId === "repository") return deps.repositoryDispatch(action, params, context)

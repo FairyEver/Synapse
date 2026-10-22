@@ -65,6 +65,7 @@ export {
   conversationsSchema,
   connectorsStateSchema,
   connectorsWecomMailStateSchema,
+  wecomConnectionStateSchema,
   coreConfigSchema,
   coreIdentitySchema,
   driveSyncBaselineSchema,

@@ -114,12 +114,23 @@ import { createMcpStreamableHttpDriver } from "../../app-capabilities/connectors
 import { createPortalSessionDriver } from "../../app-capabilities/connectors/main/portal-session-driver"
 import { createPortalVerifier } from "../../app-capabilities/connectors/main/portal-verifier"
 import { builtinConnectors } from "../../app-capabilities/connectors/main/definitions"
-import { createWecomCliClient } from "../../app-capabilities/connectors/main/wecom-cli-client"
-import { resolveWecomCliBinaryPath } from "../../app-capabilities/connectors/main/wecom-cli-binary"
-import { createWecomMailDriver } from "../../app-capabilities/connectors/main/wecom-mail-driver"
+import { createWecomCliClient } from "../../app-capabilities/wecom/main/cli-client"
+import { resolveWecomCliBinaryPath } from "../../app-capabilities/wecom/main/cli-binary"
+import { createWecomConnectorDriver } from "../../app-capabilities/wecom/main/connector-driver"
+import { WecomConnectionService } from "../../app-capabilities/wecom/main/connection-service"
+import { createWecomMailCapabilityDispatcher } from "../../app-capabilities/wecom/main/mail-dispatcher"
+import { WecomMailService } from "../../app-capabilities/wecom/main/mail-service"
+import {
+  WECOM_CONNECTION_SERVICE_ID,
+  WECOM_CONNECTION_STATE_NAMESPACE,
+  WECOM_LEGACY_STATE_NAMESPACE,
+} from "../../app-capabilities/wecom/shared/capability"
 import { createAccountExternalUrlOpener } from "./account-external-opener"
-import type { ConnectorCredentialEntryV1 } from "../runtime/data-repo/schemas/connectors"
-import type { WecomMailStateV1 } from "../runtime/data-repo/schemas/connectors"
+import type {
+  ConnectorCredentialEntryV1,
+  WecomConnectionStateV1,
+  WecomMailStateV1,
+} from "../runtime/data-repo/schemas/connectors"
 import { createConnectorsService } from "../../app-capabilities/connectors/main/service"
 import type { ReturnTypeOfConnectorsService } from "../../app-capabilities/connectors/main/service-types"
 import {
@@ -143,7 +154,6 @@ import {
 import {
   CONNECTORS_ITEMS_NAMESPACE,
   CONNECTORS_STATE_NAMESPACE,
-  CONNECTORS_WECOM_MAIL_STATE_NAMESPACE,
 } from "../../app-capabilities/connectors/shared/capability"
 import type { ConnectorItemEntryV1, ConnectorStateStoreV1 } from "../runtime/data-repo/schemas/connectors"
 import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/cache"
@@ -698,10 +708,38 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
   },
 }
 
+export const coreWecomDescriptor: ServiceDescriptor<WecomConnectionService> = {
+  id: WECOM_CONNECTION_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return new WecomConnectionService({
+      state: dataRepository.namespace<WecomConnectionStateV1>(WECOM_CONNECTION_STATE_NAMESPACE),
+      legacyState: dataRepository.namespace<WecomMailStateV1>(WECOM_LEGACY_STATE_NAMESPACE),
+      account: accountService,
+      client: createWecomCliClient({
+        binaryPath: resolveWecomCliBinaryPath({ isPackaged: app.isPackaged }),
+        rootDir: path.join(app.getPath("userData"), "connectors", "wecom-mail"),
+        processRunner: createControlledProcessRunner({
+          permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+          auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+        }),
+      }),
+    })
+  },
+  start(instance) {
+    instance.initialize()
+  },
+  stop(instance) {
+    instance.dispose()
+  },
+}
+
 export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsService> = {
   id: "core.connectors",
   criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink", "core.event-bus"],
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink", "core.event-bus", WECOM_CONNECTION_SERVICE_ID],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     const drivers = new ConnectorDriverRegistry()
@@ -722,14 +760,8 @@ export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsS
       secureStorageAvailable: () => safeStorage.isEncryptionAvailable()
         && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
     }))
-    drivers.register("wecom-mail", createWecomMailDriver({
-      state: dataRepository.namespace<WecomMailStateV1>(CONNECTORS_WECOM_MAIL_STATE_NAMESPACE),
-      account: accountService,
-      client: createWecomCliClient({
-        binaryPath: resolveWecomCliBinaryPath({ isPackaged: app.isPackaged }),
-        rootDir: path.join(app.getPath("userData"), "connectors", "wecom-mail"),
-        processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-      }),
+    drivers.register("wecom", createWecomConnectorDriver({
+      service: ctx.registry.get<WecomConnectionService>(WECOM_CONNECTION_SERVICE_ID),
     }))
     return createConnectorsService({
       eventBus: ctx.registry.get<EventBus>("core.event-bus"),
@@ -1557,6 +1589,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
   criticality: "degraded",
   dependsOn: [
     TODOS_SERVICE_ID,
+    WECOM_CONNECTION_SERVICE_ID,
     "core.config",
     "core.connectors",
     "core.event-bus",
@@ -1729,6 +1762,12 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       auditSink,
     })
     const mailDispatcher = createMailCapabilityDispatcher({ accountService, permissionGuard, auditSink })
+    const wecomConnection = ctx.registry.get<WecomConnectionService>(WECOM_CONNECTION_SERVICE_ID)
+    const wecomMailDispatcher = createWecomMailCapabilityDispatcher({
+      mail: new WecomMailService({ connection: wecomConnection }),
+      permissionGuard,
+      auditSink,
+    })
     const todosDispatcher = createTodoCapabilityDispatcher({ service: ctx.registry.get<TodoCloudService>(TODOS_SERVICE_ID), permissionGuard, auditSink })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
       service: createDocumentTemplateService(),
@@ -1824,6 +1863,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
       mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
+      wecomDispatch: (action, params, context) => wecomMailDispatcher.dispatch(action, params, context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),

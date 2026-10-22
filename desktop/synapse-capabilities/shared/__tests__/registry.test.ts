@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { isCanonicalCapabilityId } from "../naming"
 import { MAIL_DOMAIN } from "../mail-domain"
 import { CAPABILITY_DOMAINS, MCP_TOOL_ACTIONS, getActionDomainId } from "../registry"
+import { WECOM_DOMAIN } from "../wecom-domain"
 
 describe("mail capability registry", () => {
   it("registers the Todo cloud domain", () => {
@@ -16,7 +17,10 @@ describe("mail capability registry", () => {
 
   it("loads the complete registry with the conversation tool", () => {
     expect(CAPABILITY_DOMAINS).toContain(MAIL_DOMAIN)
+    expect(CAPABILITY_DOMAINS).toContain(WECOM_DOMAIN)
     expect(getActionDomainId("app.mail.context.list")).toBe("mail")
+    expect(getActionDomainId("app.wecom.mail.list")).toBe("wecom")
     expect(MCP_TOOL_ACTIONS.app_mail_context_list).toBe("app.mail.context.list")
+    expect(MCP_TOOL_ACTIONS.app_wecom_mail_list).toBe("app.wecom.mail.list")
   })
 })

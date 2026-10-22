@@ -2,13 +2,6 @@ import { z } from "zod"
 
 const emailListSchema = z.array(z.string().trim().email()).max(100)
 
-export const wecomMailAccountSchema = z.object({
-  address: z.string().email().optional(),
-  displayName: z.string().min(1).max(120).optional(),
-  connectedAt: z.string().min(1),
-  lastValidatedAt: z.string().min(1),
-}).strict()
-
 export const wecomMailPersonSchema = z.object({
   name: z.string(),
   email: z.string(),
@@ -61,13 +54,13 @@ export const wecomMailSendInputSchema = z.object({
   body: z.string().max(100_000),
   replyToMailId: z.string().min(1).max(1024).optional(),
   replyAll: z.boolean().optional(),
+  confirmed: z.literal(true),
 }).strict()
 
 export const wecomMailSendResultSchema = z.object({
   ok: z.literal(true),
 }).strict()
 
-export type WecomMailAccount = z.infer<typeof wecomMailAccountSchema>
 export type WecomMailPerson = z.infer<typeof wecomMailPersonSchema>
 export type WecomMailSummary = z.infer<typeof wecomMailSummarySchema>
 export type WecomMailDetail = z.infer<typeof wecomMailDetailSchema>
