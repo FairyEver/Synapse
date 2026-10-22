@@ -235,10 +235,13 @@ describe("SynapseSkillService", () => {
       description: source.description,
     })
     expect(source.description.trim()).not.toBe("")
+    expect(source.description).toContain("abbreviates Synapse as sy")
     expect(source.mainContent).toMatch(/^---\nname: synapse-skill\ndescription: .+\n---\n/)
     expect(detail.content).not.toContain("name: synapse-skill")
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("workflow/index.md")
+    expect(detail.content).toContain("case-insensitive) as a standalone word")
+    expect(detail.content).toContain("用 sy 查一下云盘")
     expect(detail.content).toContain("static site publishing or republishing")
     expect(detail.content).toContain("mcp__synapse-tool-router__search")
     expect(detail.content).toContain("mcp__synapse-tool-router__invoke")
