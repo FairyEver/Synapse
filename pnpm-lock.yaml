@@ -342,6 +342,9 @@ importers:
       '@uiw/react-codemirror':
         specifier: ^4.25.9
         version: 4.25.9(@babel/runtime@7.29.2)(@codemirror/autocomplete@6.20.2)(@codemirror/language@6.12.3)(@codemirror/lint@6.9.6)(@codemirror/search@6.7.0)(@codemirror/state@6.6.0)(@codemirror/theme-one-dark@6.1.3)(@codemirror/view@6.43.0)(codemirror@6.0.2)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@wecom/cli':
+        specifier: 1.3.4
+        version: 1.3.4
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -5446,6 +5449,41 @@ packages:
 
   '@webassemblyjs/wast-printer@1.14.1':
     resolution: {integrity: sha512-kPSSXE6De1XOR820C90RIo2ogvZG+c3KiHzqUoO/F34Y2shGzesfqv7o57xrxovZJH/MetF5UjroJ/R/3isoiw==}
+
+  '@wecom/cli-darwin-arm64@1.3.4':
+    resolution: {integrity: sha512-mktTGWYWqwE5exPs/vdiYcwas77G7DPEhAmj1Hl0LqQHUp6tfwplSfJQ/TaESZvmKtoqDglrywtIQeJ0ksFsWA==}
+    engines: {node: '>=18'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@wecom/cli-darwin-x64@1.3.4':
+    resolution: {integrity: sha512-w9TuS95c06uyqbylxNjBCtC3GvR/6Vf6WK1zvsIcif7ivUq6Gu5scssagbD6rBWwhQUJ6o2MQKufpa439mL8bg==}
+    engines: {node: '>=18'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@wecom/cli-linux-arm64@1.3.4':
+    resolution: {integrity: sha512-BUvkJCMiM6aImK1MGjA6TuNslfay9eg/cOrmmvg3RLAlB9xTQUfqdq9YQxFog04wEpnlZSsgNXq6bWQaIvwX9w==}
+    engines: {node: '>=18'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@wecom/cli-linux-x64@1.3.4':
+    resolution: {integrity: sha512-Mguwa8AqwTM5hqKZXBs7lwMJ7AZLCJpu+usuHdQLQV9bzF3gM9e70khKHAQCS7focgMHvT/+mW++S7JvXKdL6Q==}
+    engines: {node: '>=18'}
+    cpu: [x64]
+    os: [linux]
+
+  '@wecom/cli-win32-x64@1.3.4':
+    resolution: {integrity: sha512-FomGDkkDVZpKB9GZjAdMvR7491z9DMiaEzYQyDkA+3Yx6I100gJFnIJ31VZr6oMIRrZCT19GzNP+7c4DzuoPbg==}
+    engines: {node: '>=18'}
+    cpu: [x64]
+    os: [win32]
+
+  '@wecom/cli@1.3.4':
+    resolution: {integrity: sha512-vz47EsT/BKkHBONVt94xhZtUWhvMR4uF9Y4TTNUwF7PnLETqyFyrNNHwG3aTLmhMNC/ecqRWUUqvNgP90nreaQ==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
@@ -16153,6 +16191,29 @@ snapshots:
     dependencies:
       '@webassemblyjs/ast': 1.14.1
       '@xtuc/long': 4.2.2
+
+  '@wecom/cli-darwin-arm64@1.3.4':
+    optional: true
+
+  '@wecom/cli-darwin-x64@1.3.4':
+    optional: true
+
+  '@wecom/cli-linux-arm64@1.3.4':
+    optional: true
+
+  '@wecom/cli-linux-x64@1.3.4':
+    optional: true
+
+  '@wecom/cli-win32-x64@1.3.4':
+    optional: true
+
+  '@wecom/cli@1.3.4':
+    optionalDependencies:
+      '@wecom/cli-darwin-arm64': 1.3.4
+      '@wecom/cli-darwin-x64': 1.3.4
+      '@wecom/cli-linux-arm64': 1.3.4
+      '@wecom/cli-linux-x64': 1.3.4
+      '@wecom/cli-win32-x64': 1.3.4
 
   '@xmldom/xmldom@0.8.13': {}
 

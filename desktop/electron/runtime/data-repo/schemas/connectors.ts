@@ -71,6 +71,20 @@ export interface ConnectorStateStoreV1 extends Record<string, unknown> {
   portalBinding?: PortalConnectionBindingV1
 }
 
+export interface WecomMailBindingV1 extends Record<string, unknown> {
+  ownerUserId: string
+  connectorId: string
+  address?: string
+  displayName?: string
+  connectedAt: string
+  lastValidatedAt: string
+}
+
+export interface WecomMailStateV1 extends Record<string, unknown> {
+  schemaVersion: 1
+  bindings: Record<string, WecomMailBindingV1>
+}
+
 const noMigrations: readonly Migration[] = []
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 const isDate = (value: unknown): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value))
@@ -131,6 +145,26 @@ export const connectorsStateSchema: NamespaceSchema<ConnectorStateStoreV1> = {
       if (state.lastProbe.status !== "success" && state.lastProbe.status !== "failed") return false
       return state.lastProbe.errorCode === undefined
         || connectorProbeErrorCodes.has(state.lastProbe.errorCode as ConnectorProbeErrorCodeV1)
+    })
+  },
+}
+
+export const connectorsWecomMailStateSchema: NamespaceSchema<WecomMailStateV1> = {
+  name: "app.connectors.wecom-mail",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  encrypted: false,
+  validate: (value): value is WecomMailStateV1 => {
+    if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.bindings)) return false
+    return Object.values(value.bindings).every((binding) => {
+      if (!isRecord(binding)) return false
+      return typeof binding.ownerUserId === "string" && binding.ownerUserId.length > 0
+        && typeof binding.connectorId === "string" && binding.connectorId.length > 0
+        && (binding.address === undefined || typeof binding.address === "string")
+        && (binding.displayName === undefined || typeof binding.displayName === "string")
+        && isDate(binding.connectedAt)
+        && isDate(binding.lastValidatedAt)
     })
   },
 }

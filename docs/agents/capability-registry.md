@@ -67,6 +67,8 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 
 固定例外：
 
+- Connectors 的企业微信邮箱连接器新增 3 个 UI 专用 IPC operation：`app.connectors.mail.search`、`app.connectors.mail.get`、`app.connectors.mail.send`；它们不注册 MCP capability/tool，Connectors 仍为 0 个 MCP。连接器使用 `@wecom/cli` 的本地扫码授权，凭据不上传 Synapse 服务端；仅支持搜索、详情、发送和回复，不提供删除、标记已读/未读、草稿、标签或撤回。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
+
 - 云盘文件搜索扩展既有 `app.drive.item_tree.list`（MCP 索引名 `app_drive_item_tree_list`），增加名称、类型、更新时间、有效分享和排序条件；桌面通过同一 operation 的 `drive.itemTree.list` IPC 调用。服务端在自有普通云盘递归结果上先筛选、统计再分页，返回真实路径与祖先；不新增 capability、MCP 工具、System App、Dock 或 Deep Link，Drive 仍为 76 项。
 - AI 文件查找在既有工具发现词表中区分查找文件、浏览目录、分享链接、回收站和历史版本；明确查找本地或第三方存储时排除错误的 Drive 领域候选，精确工具名与领域限制继续有效；不新增工具。`app.drive.item_tree.list` 的 MCP 搜索默认每页 20 条，返回实际搜索条件、结果编号和需登录的本人预览链接，供现有对话续查/选择；普通目录树、桌面 IPC 和服务端查询默认保持不变。仅匹配名称及元数据，不创建分享、不读取正文、不新增全文或语义索引；Drive 仍为 76 项。
 - 云盘同步的 `app.drive_sync.remote_items.get` 是 UI 私有批量读取 IPC，返回自有条目、完整父链和当前版本；HTTP `/api/drive/items/batch`、`/api/drive/changes/batch` 只供既有账号客户端合并读取。同步根继续保留独立游标、分页及错误，不新增公开 MCP、System App、Dock、Workflow、Automation 或 Deep Link；Drive 仍为 76 个 MCP 工具。

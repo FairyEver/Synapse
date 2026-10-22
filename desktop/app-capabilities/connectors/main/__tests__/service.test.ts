@@ -52,6 +52,7 @@ describe("connectors service", () => {
     await expect(service.list()).resolves.toEqual({
       items: [{
         id: "figma",
+        kind: "mcp-streamable-http",
         name: "Figma",
         description: "连接 Figma Desktop MCP",
         documentationUrl: "https://synapse.d2.pub/document/connectors/figma",

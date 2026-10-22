@@ -489,6 +489,11 @@ const synapseBridge: SynapseBridge = {
       disconnect: (input) => invoke(IPC_CHANNELS.connectors.disconnect)(input),
       onChanged: createDomainEventPayloadSubscription(subscribe, "connector", "item.changed"),
     },
+    mail: {
+      search: (input) => invoke(IPC_CHANNELS.connectors.mailSearch)(input),
+      get: (input) => invoke(IPC_CHANNELS.connectors.mailGet)(input),
+      send: (input) => invoke(IPC_CHANNELS.connectors.mailSend)(input),
+    },
   },
   agentPersonas: {
     list: () => invoke(IPC_CHANNELS.agentPersonas.list)(),

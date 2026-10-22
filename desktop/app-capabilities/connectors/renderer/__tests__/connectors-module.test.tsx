@@ -14,6 +14,11 @@ const mocks = vi.hoisted(() => ({
       retry: vi.fn(),
       onChanged: vi.fn(() => vi.fn()),
     },
+    mail: {
+      search: vi.fn(),
+      get: vi.fn(),
+      send: vi.fn(),
+    },
   },
   openExternal: vi.fn(),
   toast: { error: vi.fn(), success: vi.fn() },
@@ -157,6 +162,66 @@ describe("ConnectorsModule", () => {
     expect(document.body.textContent).toContain("Design Tool")
     expect(mocks.connectors.item.connect).toHaveBeenCalledWith({ id: "design-tool" })
     expect(mocks.toast.success).toHaveBeenCalledWith("Design Tool MCP 已激活")
+  })
+
+  it("opens a connected WeCom mailbox and reads a message", async () => {
+    const item = {
+      id: "wecom-mail",
+      kind: "wecom-mail" as const,
+      name: "企业微信邮箱",
+      enabled: true,
+      probeStatus: "ready" as const,
+      connectionStatus: "connected" as const,
+      mailbox: {
+        address: "owner@example.com",
+        displayName: "Owner",
+        connectedAt: "now",
+        lastValidatedAt: "now",
+      },
+    }
+    mocks.connectors.item.list.mockResolvedValue({ items: [item] })
+    mocks.connectors.mail.search.mockResolvedValue({
+      items: [{
+        mailId: "mail-1",
+        subject: "项目周报",
+        sendTime: "2026-10-22T09:00:00Z",
+        sender: { name: "甲", email: "sender@example.com" },
+        receivers: [],
+        isRead: false,
+      }],
+      nextCursor: null,
+      hasMore: false,
+    })
+    mocks.connectors.mail.get.mockResolvedValue({
+      mailId: "mail-1",
+      subject: "项目周报",
+      sendTime: "2026-10-22T09:00:00Z",
+      sender: { name: "甲", email: "sender@example.com" },
+      receivers: [],
+      isRead: false,
+      content: "邮件正文",
+      to: [],
+      cc: [],
+      bcc: [],
+      attachments: [],
+    })
+    renderModule()
+    await act(async () => { await Promise.resolve() })
+
+    const open = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "打开邮箱")
+    await act(async () => {
+      open?.click()
+      await Promise.resolve()
+    })
+    expect(mocks.connectors.mail.search).toHaveBeenCalledWith({ id: "wecom-mail", input: { limit: 50 } })
+
+    const mail = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent?.includes("项目周报"))
+    await act(async () => {
+      mail?.click()
+      await Promise.resolve()
+    })
+    expect(mocks.connectors.mail.get).toHaveBeenCalledWith({ id: "wecom-mail", input: { mailId: "mail-1" } })
+    expect(document.body.textContent).toContain("邮件正文")
   })
 })
 

@@ -41,7 +41,16 @@ export const portalConnector = {
   },
 } as const satisfies BuiltinConnectorDefinition
 
-export const builtinConnectors = [figmaConnector, portalTestConnector, portalConnector] as const satisfies readonly BuiltinConnectorDefinition[]
+export const wecomMailConnector = {
+  id: "wecom-mail",
+  name: "企业微信邮箱",
+  description: "通过企业微信扫码连接邮箱",
+  integration: {
+    kind: "wecom-mail",
+  },
+} as const satisfies BuiltinConnectorDefinition
+
+export const builtinConnectors = [figmaConnector, portalTestConnector, portalConnector, wecomMailConnector] as const satisfies readonly BuiltinConnectorDefinition[]
 
 const definitionsById = new Map<string, BuiltinConnectorDefinition>()
 for (const definition of builtinConnectors) {

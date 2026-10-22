@@ -114,8 +114,12 @@ import { createMcpStreamableHttpDriver } from "../../app-capabilities/connectors
 import { createPortalSessionDriver } from "../../app-capabilities/connectors/main/portal-session-driver"
 import { createPortalVerifier } from "../../app-capabilities/connectors/main/portal-verifier"
 import { builtinConnectors } from "../../app-capabilities/connectors/main/definitions"
+import { createWecomCliClient } from "../../app-capabilities/connectors/main/wecom-cli-client"
+import { resolveWecomCliBinaryPath } from "../../app-capabilities/connectors/main/wecom-cli-binary"
+import { createWecomMailDriver } from "../../app-capabilities/connectors/main/wecom-mail-driver"
 import { createAccountExternalUrlOpener } from "./account-external-opener"
 import type { ConnectorCredentialEntryV1 } from "../runtime/data-repo/schemas/connectors"
+import type { WecomMailStateV1 } from "../runtime/data-repo/schemas/connectors"
 import { createConnectorsService } from "../../app-capabilities/connectors/main/service"
 import type { ReturnTypeOfConnectorsService } from "../../app-capabilities/connectors/main/service-types"
 import {
@@ -136,7 +140,11 @@ import {
   SECRETS_ITEMS_NAMESPACE,
   SECRETS_SETTINGS_NAMESPACE,
 } from "../../app-capabilities/secrets/shared/capability"
-import { CONNECTORS_ITEMS_NAMESPACE, CONNECTORS_STATE_NAMESPACE } from "../../app-capabilities/connectors/shared/capability"
+import {
+  CONNECTORS_ITEMS_NAMESPACE,
+  CONNECTORS_STATE_NAMESPACE,
+  CONNECTORS_WECOM_MAIL_STATE_NAMESPACE,
+} from "../../app-capabilities/connectors/shared/capability"
 import type { ConnectorItemEntryV1, ConnectorStateStoreV1 } from "../runtime/data-repo/schemas/connectors"
 import { AgentPersonaCache } from "../../app-capabilities/agent-personas/main/cache"
 import { RemoteAgentPersonaClient } from "../../app-capabilities/agent-personas/main/remote-client"
@@ -713,6 +721,15 @@ export const coreConnectorsDescriptor: ServiceDescriptor<ReturnTypeOfConnectorsS
       verify: createPortalVerifier(),
       secureStorageAvailable: () => safeStorage.isEncryptionAvailable()
         && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
+    }))
+    drivers.register("wecom-mail", createWecomMailDriver({
+      state: dataRepository.namespace<WecomMailStateV1>(CONNECTORS_WECOM_MAIL_STATE_NAMESPACE),
+      account: accountService,
+      client: createWecomCliClient({
+        binaryPath: resolveWecomCliBinaryPath({ isPackaged: app.isPackaged }),
+        rootDir: path.join(app.getPath("userData"), "connectors", "wecom-mail"),
+        processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      }),
     }))
     return createConnectorsService({
       eventBus: ctx.registry.get<EventBus>("core.event-bus"),

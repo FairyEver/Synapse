@@ -1,5 +1,13 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import type { ConnectorProbeErrorCodeV1 } from "../../../electron/runtime/data-repo/schemas/connectors"
+import type {
+  WecomMailGetInput,
+  WecomMailSearchInput,
+  WecomMailSearchResult,
+  WecomMailSendInput,
+  WecomMailSendResult,
+  WecomMailDetail,
+} from "../shared/wecom-mail"
 
 export type McpStreamableHttpIntegration = {
   readonly kind: "mcp-streamable-http"
@@ -16,7 +24,10 @@ export type PortalIntegration = {
   readonly callbackUrl: string
   readonly language: string
 }
-export type ConnectorIntegration = McpStreamableHttpIntegration | PortalIntegration
+export type WecomMailIntegration = {
+  readonly kind: "wecom-mail"
+}
+export type ConnectorIntegration = McpStreamableHttpIntegration | PortalIntegration | WecomMailIntegration
 
 export type BuiltinConnectorDefinition = {
   readonly id: string
@@ -57,6 +68,11 @@ export type ConnectorDriver = {
   getSessionInput?(connectorId: string): Promise<{
     connectionGeneration: string; baseUrl: string; environmentId: string; userId: string; language: string; credential: { token: string; tenantId: string }
   }>
+  mail?: {
+    search(definition: BuiltinConnectorDefinition, input: WecomMailSearchInput): Promise<WecomMailSearchResult>
+    get(definition: BuiltinConnectorDefinition, input: WecomMailGetInput): Promise<WecomMailDetail>
+    send(definition: BuiltinConnectorDefinition, input: WecomMailSendInput): Promise<WecomMailSendResult>
+  }
   probe(definition: BuiltinConnectorDefinition): Promise<ProbeResult>
   createAgentContribution(definition: BuiltinConnectorDefinition): AgentContribution
 }

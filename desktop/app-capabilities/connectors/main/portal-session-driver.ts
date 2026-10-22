@@ -141,6 +141,7 @@ export function createPortalSessionDriver(deps: PortalSessionDriverDeps) {
     const binding = attempt?.binding
     return {
       id: definition.id, name: definition.name,
+      kind: "portal-session",
       enabled: Boolean(attempt?.pending || binding?.enabled || ["connecting", "verifying", "connected"].includes(status)),
       probeStatus: status === "connected" ? "ready" : ["connecting", "verifying"].includes(status) ? "checking" : ["failed", "reconnect_required"].includes(status) ? "error" : "idle",
       connectionStatus: status,
