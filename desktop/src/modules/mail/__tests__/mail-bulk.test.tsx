@@ -3,12 +3,19 @@ import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { toast } from "sonner"
-import type { MailContact, MailMessage, MailSummary } from "@/types/mail"
+import type { MailContact, MailMessage, MailOperationResult, MailSummary } from "@/types/mail"
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), refresh: vi.fn(), setSelectedId: vi.fn(), useMailArgs: vi.fn(), contacts: [] as MailContact[], messages: [] as MailSummary[], detail: null as MailMessage | null, selectedId: null as string | null }))
 const openExternal = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ openExternal }) }))
-vi.mock("@/components/mail-quick-reply-dialog", () => ({ MailQuickReplyDialog: ({ source }: { source: MailMessage | null }) => source ? <div role="dialog">快速回复</div> : null }))
+const quickReplyState = vi.hoisted(() => ({ source: null as MailMessage | null, onSent: null as null | ((receipt: MailOperationResult["send"]) => void) }))
+vi.mock("@/components/mail-quick-reply-dialog", () => ({
+  MailQuickReplyDialog: ({ source, onSent }: { source: MailMessage | null; onSent: (receipt: MailOperationResult["send"]) => void }) => {
+    quickReplyState.source = source
+    quickReplyState.onSent = onSent
+    return source ? <div role="dialog">快速回复</div> : null
+  },
+}))
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "reader" } } } }) }))
 vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.request }))
 vi.mock("../use-mail", () => ({ useMail: (...args: unknown[]) => { mocks.useMailArgs(...args); return { contacts: mocks.contacts, contactsReady: true, contactsError: null, messages: mocks.messages, ready: true, loading: false, error: null, selectedId: mocks.selectedId, detail: mocks.detail, nextCursor: null, counts: { inboxTotal: 3, sentTotal: 0, unread: 2 }, refresh: mocks.refresh, setSelectedId: mocks.setSelectedId } } }))
@@ -51,7 +58,7 @@ function click(label: string) {
   act(() => button.click())
 }
 
-afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); mocks.useMailArgs.mockClear(); mocks.contacts = []; openExternal.mockClear(); mocks.messages = []; mocks.detail = null; mocks.selectedId = null })
+afterEach(() => { if (root) act(() => root?.unmount()); root = null; container?.remove(); container = null; mocks.request.mockReset(); mocks.refresh.mockReset(); mocks.setSelectedId.mockReset(); mocks.useMailArgs.mockClear(); mocks.contacts = []; openExternal.mockClear(); mocks.messages = []; mocks.detail = null; mocks.selectedId = null; quickReplyState.source = null; quickReplyState.onSent = null })
 
 describe("mail bulk controls", () => {
   it("distinguishes a user named Synapse from the system sender without exposing a malformed identity", () => {
@@ -174,6 +181,10 @@ describe("mail bulk controls", () => {
     expect(mocks.request).toHaveBeenCalledWith({ kind: "messageGet", messageId: "second" })
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("快速回复")
     expect(mocks.setSelectedId).not.toHaveBeenCalled()
+
+    act(() => quickReplyState.onSent?.({ messageId: "reply-1", recipientCount: 1, sentAt: "2026-10-22T00:00:00.000Z" }))
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+    expect(mocks.setSelectedId).toHaveBeenCalledWith("second")
   })
 
   it("copies the selected row or open message as a typed mail reference", async () => {

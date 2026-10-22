@@ -27,7 +27,7 @@ const mockCenter = vi.hoisted(() => ({
   changeOpen: vi.fn(), changeFilter: vi.fn(), changeSource: vi.fn(), openItem: vi.fn(), navigate: vi.fn(),
   openApiGuide: vi.fn(), remove: vi.fn(), markAllRead: vi.fn(), setRead: vi.fn(),
   deleteAll: vi.fn(), loadMore: vi.fn(), refresh: vi.fn(), retryMail: vi.fn(), closeDetail: vi.fn(),
-  loadMailForReply: vi.fn(),
+  loadMailForReply: vi.fn(), refreshAfterQuickReply: vi.fn(), accountId: "reader",
 }))
 
 vi.mock("@/app-shell/hooks/use-message-center", () => ({ useMessageCenter: () => mockCenter }))
@@ -53,6 +53,8 @@ afterEach(() => {
   mockCenter.remove.mockClear()
   mockCenter.changeSource.mockClear()
   mockCenter.loadMailForReply.mockReset()
+  mockCenter.refreshAfterQuickReply.mockReset()
+  mockCenter.accountId = "reader"
 })
 
 describe("MessageCenter", () => {
@@ -72,6 +74,24 @@ describe("MessageCenter", () => {
     expect([...document.querySelectorAll("button")].some((button) => button.textContent === "快速回复")).toBe(true)
     await act(async () => { root.unmount() })
     mockCenter.mail.kind = "platform_broadcast"
+  })
+
+  it("shows quick reply in the detail menu for user mail only", async () => {
+    mockCenter.mail = { ...mockCenter.mail, kind: "user" } as never
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<MessageCenter />) })
+    act(() => document.querySelector<HTMLButtonElement>('button[aria-label="通知操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
+    await act(async () => { await Promise.resolve() })
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].some((item) => item.textContent === "快速回复")).toBe(true)
+
+    mockCenter.mail = { ...mockCenter.mail, kind: "platform_broadcast" } as never
+    await act(async () => { root.render(<MessageCenter />) })
+    act(() => document.querySelector<HTMLButtonElement>('button[aria-label="通知操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
+    await act(async () => { await Promise.resolve() })
+    expect([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].some((item) => item.textContent === "快速回复")).toBe(false)
+    await act(async () => { root.unmount() })
   })
 
   it("keeps the reading body mounted while the notification list refreshes", async () => {
@@ -220,6 +240,25 @@ describe("MessageCenter", () => {
     await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "快速回复")?.click(); await Promise.resolve() })
     expect(mockCenter.loadMailForReply).toHaveBeenCalledWith(other)
     expect(mockCenter.openItem).not.toHaveBeenCalled()
+    await act(async () => { root.unmount() })
+  })
+
+  it("ignores a quick reply mail response after the account changes", async () => {
+    const other = { ...mockCenter.selected, id: "n2", targetId: "mail-2", readAt: null } as SynapseNotification
+    mockCenter.items = [other]
+    let resolveSource!: (value: unknown) => void
+    mockCenter.loadMailForReply.mockReturnValue(new Promise((resolve) => { resolveSource = resolve }))
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<MessageCenter />) })
+    const row = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("来自 Synapse"))!
+    act(() => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
+    act(() => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "快速回复")?.click() })
+    mockCenter.accountId = "other"
+    await act(async () => { root.render(<MessageCenter />) })
+    await act(async () => { resolveSource({ ...mockCenter.mail, kind: "user" }); await Promise.resolve() })
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
     await act(async () => { root.unmount() })
   })
 

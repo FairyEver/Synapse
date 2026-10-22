@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { canQuickReplyToMail, createMailQuickReplyContent, mailReplyRecipientIds } from "../mail-reply"
+import { canQuickReplyToMail, createMailQuickReplyContent, mailReplyRecipients } from "../mail-reply"
 import type { MailMessage } from "@/types/mail"
 
 const reader = { userId: "reader", nickname: "阅读者", handle: "reader" }
@@ -33,18 +33,31 @@ function message(overrides: Partial<MailMessage> = {}): MailMessage {
 
 describe("mail reply helpers", () => {
   it("replies to the sender for received mail", () => {
-    expect(mailReplyRecipientIds(message(), "reader")).toEqual(["writer"])
+    expect(mailReplyRecipients(message(), "reader")).toEqual({ toIds: ["writer"], toOrganizationIds: [] })
   })
 
   it("replies to the original To recipients for sent mail using the existing reply rule", () => {
-    expect(mailReplyRecipientIds(message({
+    expect(mailReplyRecipients(message({
       sender: reader,
       toRecipients: [reader, writer, observer, writer],
-    }), "reader")).toEqual(["reader", "writer", "observer"])
+    }), "reader")).toEqual({ toIds: ["reader", "writer", "observer"], toOrganizationIds: [] })
   })
 
   it("keeps the viewer for self mail", () => {
-    expect(mailReplyRecipientIds(message({ sender: reader, toRecipients: [reader] }), "reader")).toEqual(["reader"])
+    expect(mailReplyRecipients(message({ sender: reader, toRecipients: [reader] }), "reader")).toEqual({ toIds: ["reader"], toOrganizationIds: [] })
+  })
+
+  it("keeps the original organization addresses for sent mail", () => {
+    expect(mailReplyRecipients(message({
+      sender: reader,
+      toRecipients: [],
+      toAddresses: [
+        { kind: "user", userId: "writer", name: "发件人" },
+        { kind: "organization", organizationId: "org-1", name: "研发部" },
+        { kind: "user", userId: "observer", name: "观察者" },
+        { kind: "user", userId: "writer", name: "发件人" },
+      ],
+    }), "reader")).toEqual({ toIds: ["writer", "observer"], toOrganizationIds: ["org-1"] })
   })
 
   it("builds a text-only reply in the source conversation", () => {

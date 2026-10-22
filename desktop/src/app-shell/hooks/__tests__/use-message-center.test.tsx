@@ -220,6 +220,25 @@ describe("useMessageCenter", () => {
     expect(mocks.read).toHaveBeenCalledTimes(1)
   })
 
+  it("refreshes notifications and the open mail after a quick reply", async () => {
+    mocks.mailRequest.mockImplementation(async (operation: { kind: string; messageId?: string }) => operation.kind === "messageGet"
+      ? {
+          messageId: operation.messageId, kind: "user", subject: "回复", body: "正文",
+          sender: { userId: "writer", nickname: "发件人", handle: "writer" }, viewerId: "reader", readAt: null,
+          toRecipients: [{ userId: "reader", nickname: "阅读者", handle: "reader" }], recipients: [],
+          ccRecipients: [], toAddresses: [], ccAddresses: [], team: { id: "team", name: "团队" }, conversationId: "conversation",
+          relationKind: null, relation: null, quote: null, replyToId: null, attachments: [], attachmentCount: 0,
+          sentAt: "2026-10-22T00:00:00.000Z", snippet: "正文",
+        }
+      : { read: true })
+    await act(async () => { await current.openItem(notice); await flush() })
+    const before = mocks.mailRequest.mock.calls.filter(([request]) => request.kind === "messageGet").length
+    const listCalls = mocks.list.mock.calls.length
+    await act(async () => { await current.refreshAfterQuickReply("broadcast-1"); await flush() })
+    expect(mocks.list.mock.calls.length).toBe(listCalls + 1)
+    expect(mocks.mailRequest.mock.calls.filter(([request]) => request.kind === "messageGet").length).toBe(before)
+  })
+
   it("lets a single deletion be undone before it reaches the server", async () => {
     vi.useFakeTimers()
     await act(async () => { current.remove(notice) })

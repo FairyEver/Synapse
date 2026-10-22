@@ -49,9 +49,13 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
 
   useEffect(() => {
     refreshId.current += 1
+    navigationId.current += 1
     setItems([])
     setUnread(0)
     setSelected(null)
+    setMail(null)
+    setMailError(null)
+    setMailLoading(false)
   }, [userId])
 
   useEffect(() => {
@@ -309,6 +313,11 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     return mailRequest({ kind: "messageGet", messageId: item.targetId })
   }
 
+  const refreshAfterQuickReply = async (messageId: string) => {
+    await latestRefresh.current()
+    if (selected?.source === "mail" && selected.targetId === messageId) setMailRevision((value) => value + 1)
+  }
+
   const loadMore = async () => {
     if (!cursor || loading) return
     const requestId = refreshId.current
@@ -326,12 +335,13 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
 
   return {
     authenticated: state.status === "authenticated",
+    accountId: userId,
     open, filter, source, items: items.filter((item) => !hiddenIds.has(item.id)), cursor,
     unread: Math.max(0, unread - items.filter((item) => hiddenIds.has(item.id) && !item.readAt).length),
     selected, mail, mailLoading, mailError, loading, error,
     changeOpen, changeFilter, changeSource, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
     retryMail: () => setMailRevision((value) => value + 1),
-    loadMailForReply,
+    loadMailForReply, refreshAfterQuickReply,
     closeDetail: () => { navigationId.current += 1; setSelected(null) },
   }
 }

@@ -104,6 +104,14 @@ describe("MailQuickReplyDialog", () => {
     expect(document.activeElement).toBe(textarea())
   })
 
+  it("discards text when closed and opened again for the same message", async () => {
+    const handlers = await render(source)
+    await enter("未发送")
+    await render(null, handlers.onClose, handlers.onSent)
+    await render(source, handlers.onClose, handlers.onSent)
+    expect(textarea().value).toBe("")
+  })
+
   it("previews and directly sends trimmed text", async () => {
     mocks.request
       .mockResolvedValueOnce({ previewId: "preview-1" })

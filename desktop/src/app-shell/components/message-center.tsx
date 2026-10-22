@@ -132,7 +132,7 @@ function MessageDetail({ center, quickReply }: { center: Center; quickReply: (it
       <DropdownMenu>
         <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="通知操作"><MoreHorizontal /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {notificationActions(center, item, mail?.body ?? null).map((action) => <DropdownMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</DropdownMenuItem>)}
+          {notificationActions(center, item, mail?.body ?? null, mail && canQuickReplyToMail(mail) ? quickReply : undefined).map((action) => <DropdownMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</DropdownMenuItem>)}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -163,22 +163,30 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
   const [clearScope, setClearScope] = useState<"all" | "pending" | null>(null)
   const [quickReply, setQuickReply] = useState<MailMessage | null>(null)
   const quickReplyRequest = useRef(0)
+  const quickReplyAccount = useRef<string | null>(null)
   useEffect(() => {
-    if (center.open) return
+    if (center.open && center.accountId) return
     quickReplyRequest.current += 1
     setQuickReply(null)
-  }, [center.open])
+  }, [center.accountId, center.open])
+  useEffect(() => {
+    if (!quickReplyAccount.current || quickReplyAccount.current === center.accountId) return
+    quickReplyRequest.current += 1
+    quickReplyAccount.current = center.accountId
+    setQuickReply(null)
+  }, [center.accountId])
   if (!center.authenticated) return null
 
   async function openQuickReply(item: SynapseNotification) {
     const requestId = ++quickReplyRequest.current
+    quickReplyAccount.current = center.accountId
     try {
       const source = await center.loadMailForReply(item)
-      if (!source || requestId !== quickReplyRequest.current) return
+      if (!source || requestId !== quickReplyRequest.current || quickReplyAccount.current !== center.accountId) return
       if (!canQuickReplyToMail(source)) { toast.error("平台公告不能回复。"); return }
       setQuickReply(source)
     } catch (cause) {
-      if (requestId !== quickReplyRequest.current) return
+      if (requestId !== quickReplyRequest.current || quickReplyAccount.current !== center.accountId) return
       toast.error(cause instanceof Error ? cause.message : "读取信件失败。")
     }
   }
@@ -233,7 +241,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
         </div>
       </SheetContent>
     </Sheet>
-    <MailQuickReplyDialog source={quickReply} onClose={() => setQuickReply(null)} onSent={() => undefined} />
+    <MailQuickReplyDialog source={quickReply} onClose={() => setQuickReply(null)} onSent={(receipt) => { void center.refreshAfterQuickReply(receipt.messageId) }} />
     <AlertDialog open={clearScope !== null} onOpenChange={(open) => { if (!open) setClearScope(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{clearScope === "pending" ? "忽略全部待处理通知？" : "清空全部通知？"}</AlertDialogTitle><AlertDialogDescription>{clearScope === "pending" ? "通知会从列表中移除，终端中的待处理状态不会改变。" : "这些通知会从当前账号的所有设备中移除，包括未加载的通知。"}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { if (clearScope) void center.deleteAll(clearScope) }}>{clearScope === "pending" ? "确认忽略" : "确认清空"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>
 }
