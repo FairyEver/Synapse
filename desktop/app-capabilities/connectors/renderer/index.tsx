@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Bot, ExternalLink, Info } from "lucide-react"
+import { ExternalLink, Info } from "lucide-react"
 import { Button } from "../../../src/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../../../src/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../../src/components/ui/dialog"
@@ -11,6 +11,7 @@ import { SystemAppWindowShell } from "../../../src/modules/apps/components/syste
 import type { ConnectorItem } from "../shared/schema"
 import figmaIcon from "./assets/figma.png"
 import portalHeadlessIcon from "./assets/portal-headless.png"
+import wecomIcon from "./assets/wecom.png"
 import { useConnectors } from "./hooks/use-connectors"
 import { WecomConnectionInfoDialog } from "./wecom-connection-info-dialog"
 
@@ -128,7 +129,7 @@ function ConnectorCard({ item, busy, onAction, onReconnect, onRetry, openDocumen
 
 function ConnectorIcon({ item }: { readonly item: ConnectorItem }) {
   if (item.kind === "wecom") {
-    return <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground"><Bot className="size-6" aria-hidden="true" /></div>
+    return <img src={wecomIcon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
   }
   return <img src={item.kind === "portal-session" ? portalHeadlessIcon : figmaIcon} alt="" className="size-12 shrink-0 rounded-xl object-contain" />
 }
