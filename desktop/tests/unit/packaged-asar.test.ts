@@ -878,6 +878,9 @@ describe("packaged asar verification", () => {
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "todos", "index.md"], "# Todos\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "todos", "api-reference.md"], "# Todo API\n")
+    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "wecom", "wecomcli-shared", "SKILL.md"], "# WeCom Shared\n")
+    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "wecom", "wecomcli-message", "SKILL.md"], "# WeCom Message\n")
+    await writeUnpackedFixture(resourcesPath, ["synapse-skill", "wecom", "LICENSE"], "MIT License\n")
     await writeUnpackedFixture(resourcesPath, ["knowledge-base", "synapse-knowledge-base-template", "CLAUDE.md"], "# Knowledge Base\n")
   }
 

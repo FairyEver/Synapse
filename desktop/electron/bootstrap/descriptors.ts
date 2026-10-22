@@ -118,8 +118,8 @@ import { createWecomCliClient } from "../../app-capabilities/wecom/main/cli-clie
 import { resolveWecomCliBinaryPath } from "../../app-capabilities/wecom/main/cli-binary"
 import { createWecomConnectorDriver } from "../../app-capabilities/wecom/main/connector-driver"
 import { WecomConnectionService } from "../../app-capabilities/wecom/main/connection-service"
-import { createWecomMailCapabilityDispatcher } from "../../app-capabilities/wecom/main/mail-dispatcher"
-import { WecomMailService } from "../../app-capabilities/wecom/main/mail-service"
+import { createWecomCapabilityDispatcher } from "../../app-capabilities/wecom/main/dispatcher"
+import { WecomInvocationService } from "../../app-capabilities/wecom/main/invocation-service"
 import {
   WECOM_CONNECTION_SERVICE_ID,
   WECOM_CONNECTION_STATE_NAMESPACE,
@@ -1763,8 +1763,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     })
     const mailDispatcher = createMailCapabilityDispatcher({ accountService, permissionGuard, auditSink })
     const wecomConnection = ctx.registry.get<WecomConnectionService>(WECOM_CONNECTION_SERVICE_ID)
-    const wecomMailDispatcher = createWecomMailCapabilityDispatcher({
-      mail: new WecomMailService({ connection: wecomConnection }),
+    const wecomDispatcher = createWecomCapabilityDispatcher({
+      service: new WecomInvocationService({ connection: wecomConnection }),
       permissionGuard,
       auditSink,
     })
@@ -1863,7 +1863,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
       mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
-      wecomDispatch: (action, params, context) => wecomMailDispatcher.dispatch(action, params, context),
+      wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),

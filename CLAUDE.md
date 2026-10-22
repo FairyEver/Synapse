@@ -149,6 +149,8 @@ GitHub 的 `CI` 和 `Release` 工作流仅接受手动 `workflow_dispatch`。日
 
 用户消息出现 `PH` 时，结合上下文视为 Portal Link 的历史简称：既指 `extend/portal-headless/` 这个 SDK（「改一下 PH」「PH 的用法文档」），也指 Portal 的业务操作（「用 PH 查一下我的年度双赢协议」「用 PH 提交表单」）。连接器显示名称统一为 `Portal Link` / `Portal Link Test`；内部 ID、回调、MCP 工具名、API 路径和 SDK 包名保持兼容，不随显示名称修改。当前项目或目录对 `PH` 另有定义时以本地定义为准。只在上下文确实指向别的事物时才按本义理解；无法判断时问一句简短澄清。
 
+企业微信长期排除 `wecomcli-disk`、`wecomcli-todo`、`wecomcli-meeting`、`wecomcli-calendar`、`wecomcli-pptx`、`wecomcli-smartpage`、`wecomcli-doc`；这些功能未来也不需要，不得在更新或重新同步官方 Skill 时恢复。只保留 8 个 Skill，清单与命令限制见 `docs/agents/module-boundaries.md` 和系统 Skill 包的 `wecom/UPSTREAM.md`。
+
 ## 完成前检查
 
 - diff 保持聚焦，命名、类型、校验和错误处理一致。

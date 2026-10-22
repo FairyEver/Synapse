@@ -40,6 +40,7 @@ vi.mock("../log-store", () => ({
 
 import { ContentCapabilityError } from "../content-capability-errors"
 import {
+  CONTENT_SKILL_ATTACHMENT_MAX_COUNT,
   CONTENT_SKILL_SOURCE_MAX_DEPTH,
   CONTENT_SKILL_SOURCE_MAX_DIRECTORY_COUNT,
   CONTENT_SKILL_SOURCE_MAX_ENTRIES_PER_DIRECTORY,
@@ -302,6 +303,23 @@ describe("content skill source service", () => {
     }
 
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(`Skill 附件目录深度超过 ${CONTENT_SKILL_SOURCE_MAX_DEPTH} 层。`)
+  })
+
+  it("allows a trusted package to raise only the attachment count budget", async () => {
+    const root = await createTempRoot()
+    await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
+    await Promise.all(Array.from(
+      { length: CONTENT_SKILL_ATTACHMENT_MAX_COUNT + 1 },
+      (_, index) => writeText(path.join(root, "files", `entry-${index}.txt`), `${index}`),
+    ))
+
+    await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(
+      `附件数量超过 ${CONTENT_SKILL_ATTACHMENT_MAX_COUNT} 个。`,
+    )
+    const draft = await readSkillDraftFromDirectory(root, undefined, {
+      maxAttachmentCount: CONTENT_SKILL_ATTACHMENT_MAX_COUNT + 1,
+    })
+    expect(draft.files).toHaveLength(CONTENT_SKILL_ATTACHMENT_MAX_COUNT + 1)
   })
 
   it.skipIf(process.platform === "win32")("rejects unreadable attachments instead of returning an incomplete draft", async () => {

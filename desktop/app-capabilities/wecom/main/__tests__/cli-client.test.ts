@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -46,22 +46,25 @@ describe("WeCom CLI client", () => {
     expect(request.env.WECOM_CLI_CONFIG_DIR).toBe(path.join(request.cwd, "config"))
   })
 
-  it("writes and removes an owner-scoped temporary text file", async () => {
+  it("keeps agent commands in a stable controller-scoped working directory", async () => {
     const workRoot = await root()
+    const run = vi.fn(async () => result('{"ok":true}'))
     const client = createWecomCliClient({
       binaryPath: "/fake/wecom-cli",
       rootDir: workRoot,
-      processRunner: { run: vi.fn(), start: vi.fn() } as never,
-    })
-    let capturedPath = ""
-
-    await client.withTemporaryText("owner-a", "mail-body", "回复正文", async (filePath) => {
-      capturedPath = filePath
-      await expect(readFile(filePath, "utf8")).resolves.toBe("回复正文")
-      await expect(client.readGeneratedText("owner-a", filePath)).resolves.toBe("回复正文")
+      processRunner: { run, start: vi.fn() } as never,
     })
 
-    await expect(readFile(capturedPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    const first = await client.runAgent("owner-a", "conversation-a", ["identity", "whoami"])
+    const second = await client.runAgent("owner-a", "conversation-a", ["mail", "search"])
+    const other = await client.runAgent("owner-a", "conversation-b", ["contact", "users", "search"])
+
+    expect(first.workingDirectory).toBe(second.workingDirectory)
+    expect(other.workingDirectory).not.toBe(first.workingDirectory)
+    expect(run.mock.calls[0]![0]).toMatchObject({
+      cwd: first.workingDirectory,
+      args: ["identity", "whoami"],
+    })
   })
 
   it("returns a data URL after the QR file appears", async () => {
@@ -108,7 +111,7 @@ describe("WeCom CLI client", () => {
     ])
   })
 
-  it("surfaces the official mail read permission error without raw hint text", async () => {
+  it("extracts the official business permission name without raw hint text", async () => {
     const workRoot = await root()
     const helpUrl = "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7"
     const permissionError = JSON.stringify({
@@ -130,6 +133,29 @@ describe("WeCom CLI client", () => {
         helpUrl,
         permission: "搜索与获取邮件内容",
       },
+    })
+  })
+
+  it("maps nested numeric authentication errors to a reconnect requirement", async () => {
+    const workRoot = await root()
+    const client = createWecomCliClient({
+      binaryPath: "/fake/wecom-cli",
+      rootDir: workRoot,
+      processRunner: {
+        run: vi.fn(async () => result(JSON.stringify({
+          error: {
+            type: "AuthError",
+            code: 853004,
+            message: "access token expired",
+          },
+        }), 1)),
+        start: vi.fn(),
+      } as never,
+    })
+
+    await expect(client.run("owner-a", ["identity", "whoami"])).rejects.toMatchObject({
+      code: "auth_required",
+      options: { errcode: 853004 },
     })
   })
 })

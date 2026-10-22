@@ -20,6 +20,8 @@ import {
 } from "../shared/capability"
 import type { SynapseSkillInstallerSource } from "../shared/schema"
 
+const SYSTEM_SKILL_ATTACHMENT_MAX_COUNT = 300
+
 type SynapseSkillServiceDeps = {
   readonly createId?: () => string
   readonly maxPreparedSources?: number
@@ -259,7 +261,9 @@ class SynapseSkillService {
   }
 
   private readDraft(): Promise<ContentSkillSourceDraft> {
-    return readSkillDraftFromDirectory(this.packageRoot)
+    return readSkillDraftFromDirectory(this.packageRoot, undefined, {
+      maxAttachmentCount: SYSTEM_SKILL_ATTACHMENT_MAX_COUNT,
+    })
   }
 
   private requirePrepared(sourceId: string, contentId: string): PreparedSynapseSkill {

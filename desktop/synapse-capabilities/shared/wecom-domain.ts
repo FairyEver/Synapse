@@ -1,26 +1,21 @@
 import {
-  WECOM_MAIL_GET_CAPABILITY_ID,
-  WECOM_MAIL_LIST_CAPABILITY_ID,
-  WECOM_MAIL_MCP_TOOL_NAMES,
-  WECOM_MAIL_SEND_CAPABILITY_ID,
+  WECOM_CLI_RUN_CAPABILITY_ID,
+  WECOM_CONNECTION_GET_CAPABILITY_ID,
+  WECOM_MCP_TOOL_NAMES,
 } from "../../app-capabilities/wecom/shared/capability"
+import { WECOM_CLI_SERVICES } from "../../app-capabilities/wecom/shared/command-schema"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 const definitions = [
   [
-    WECOM_MAIL_MCP_TOOL_NAMES.list,
-    WECOM_MAIL_LIST_CAPABILITY_ID,
-    "Search or list mail in the inbox of the connected Enterprise WeChat mailbox. Requires the WeCom connector. Pagination: cursor-based. Continue with nextCursor; reset the cursor when the query changes.",
+    WECOM_MCP_TOOL_NAMES.connectionGet,
+    WECOM_CONNECTION_GET_CAPABILITY_ID,
+    "Check whether the Enterprise WeChat connector is connected and return its connection and last-validation times. Use for 企业微信连接状态、授权状态、是否已连接. This tool never returns credentials or bot identifiers.",
   ],
   [
-    WECOM_MAIL_MCP_TOOL_NAMES.get,
-    WECOM_MAIL_GET_CAPABILITY_ID,
-    "Read one Enterprise WeChat mail by its internal mailId, including Markdown content and attachment names. Requires the WeCom connector and mail read permission.",
-  ],
-  [
-    WECOM_MAIL_MCP_TOOL_NAMES.send,
-    WECOM_MAIL_SEND_CAPABILITY_ID,
-    "Send a new Enterprise WeChat mail, or reply when replyToMailId is present. Show the complete recipient, subject and body preview to the user first, then set confirmed=true only when the user has authorized sending and no unresolved review request remains.",
+    WECOM_MCP_TOOL_NAMES.cliRun,
+    WECOM_CLI_RUN_CAPABILITY_ID,
+    "Run one approved Enterprise WeChat CLI command through the connected bot. Use for 企业微信消息、企业微信邮件 mail list mail get mail send mail search、文档搜索与名称/权限管理、在线表格、智能表格、通讯录、媒体文件、身份 and schema operations. The doc service only supports search, names update, members update and rules update. This is the Enterprise WeChat mail list, mail get, mail send and mail search entry. Pass the canonical arguments from the matching Synapse WeCom Skill without the `wecom-cli` executable name. Never pass auth commands or credentials.",
   ],
 ] as const
 
@@ -30,7 +25,8 @@ export const WECOM_DOMAIN: CapabilityDomainDefinition = {
     id,
     title: description,
     description,
-    mutates: id === WECOM_MAIL_SEND_CAPABILITY_ID,
+    mutates: id === WECOM_CLI_RUN_CAPABILITY_ID,
+    ...(id === WECOM_CLI_RUN_CAPABILITY_ID ? { risk: "high" as const } : {}),
   })),
 }
 
@@ -38,45 +34,24 @@ export const WECOM_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntries
   definitions.map(([name, id]) => [name, id]),
 )
 
-const text = (description: string) => ({ type: "string", description })
-const emails = (description: string) => ({
-  type: "array",
-  items: { type: "string", format: "email" },
-  minItems: 1,
-  maxItems: 100,
-  description,
-})
-
 const schemas: Record<string, { properties: Record<string, unknown>; required?: readonly string[] }> = {
-  [WECOM_MAIL_MCP_TOOL_NAMES.list]: {
-    properties: {
-      query: text("Optional search words matched against subject and body."),
-      cursor: text("Opaque nextCursor returned by the previous page."),
-      limit: { type: "integer", minimum: 1, maximum: 100, description: "Page size, default 50." },
-    },
+  [WECOM_MCP_TOOL_NAMES.connectionGet]: {
+    properties: {},
   },
-  [WECOM_MAIL_MCP_TOOL_NAMES.get]: {
+  [WECOM_MCP_TOOL_NAMES.cliRun]: {
     properties: {
-      mailId: text("Internal mailId returned by app_wecom_mail_list."),
-    },
-    required: ["mailId"],
-  },
-  [WECOM_MAIL_MCP_TOOL_NAMES.send]: {
-    properties: {
-      to: emails("Primary recipient email addresses."),
-      cc: { ...emails("Cc email addresses."), minItems: 0 },
-      bcc: { ...emails("Bcc email addresses."), minItems: 0 },
-      subject: text("Mail subject."),
-      body: text("Complete Markdown mail body."),
-      replyToMailId: text("Source mailId when replying; omit for a new mail."),
-      replyAll: { type: "boolean", description: "Reply to all recipients when replyToMailId is present." },
-      confirmed: {
-        type: "boolean",
-        enum: [true],
-        description: "Set true only after showing the full preview and confirming the user authorized this exact send.",
+      args: {
+        type: "array",
+        items: {
+          type: "string",
+          maxLength: 64 * 1024,
+        },
+        minItems: 1,
+        maxItems: 256,
+        description: `Canonical Enterprise WeChat CLI arguments without the executable name. The first argument must be one of: ${WECOM_CLI_SERVICES.join(", ")}. For doc, only search, names update, members update and rules update are supported.`,
       },
     },
-    required: ["to", "subject", "body", "confirmed"],
+    required: ["args"],
   },
 }
 

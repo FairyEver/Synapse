@@ -53,6 +53,7 @@ type Attempt = {
 export class WecomConnectionService {
   private readonly attempts = new Map<string, Attempt>()
   private readonly activeOperations = new Set<AbortController>()
+  private readonly activeOwners = new Set<string>()
   private readonly restoring = new Set<string>()
   private readonly listeners = new Set<() => void>()
   private unsubscribe: Array<() => void> = []
@@ -216,6 +217,7 @@ export class WecomConnectionService {
     this.assertCurrent(owner, generation)
     const controller = new AbortController()
     this.activeOperations.add(controller)
+    this.activeOwners.add(owner)
     try {
       return await operation({ ownerUserId: owner, client: this.deps.client, signal: controller.signal })
     } catch (error) {
@@ -230,6 +232,7 @@ export class WecomConnectionService {
       throw error
     } finally {
       this.activeOperations.delete(controller)
+      this.activeOwners.delete(owner)
     }
   }
 
@@ -322,9 +325,14 @@ export class WecomConnectionService {
   private invalidate(): void {
     this.generation += 1
     for (const attempt of this.attempts.values()) this.cancelAttempt(attempt)
+    const ownersToClear = new Set([...this.attempts.keys(), ...this.activeOwners])
     this.attempts.clear()
     for (const controller of this.activeOperations) controller.abort()
     this.activeOperations.clear()
+    this.activeOwners.clear()
+    for (const owner of ownersToClear) {
+      void this.deps.client.clearAgentWork(owner).catch(() => undefined)
+    }
     this.restoredOwner = null
     this.notify()
   }

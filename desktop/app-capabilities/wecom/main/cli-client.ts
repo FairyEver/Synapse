@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto"
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rm } from "node:fs/promises"
 import path from "node:path"
 import type { ControlledProcessRunner, ControlledProcessSession } from "../../../electron/runtime/process"
-import { WECOM_CONNECTOR_ID, WECOM_MAIL_READ_PERMISSION } from "../shared/capability"
+import { WECOM_CONNECTOR_ID } from "../shared/capability"
 
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000
 const COMMAND_TIMEOUT_MS = 45_000
@@ -54,14 +54,14 @@ export type WecomCliClient = {
   validate(ownerUserId: string): Promise<void>
   startAuth(ownerUserId: string): Promise<WecomCliAuthSession>
   disconnect(ownerUserId: string): Promise<void>
+  clearAgentWork(ownerUserId: string): Promise<void>
   run(ownerUserId: string, args: readonly string[], options?: WecomCliRunOptions): Promise<string>
-  withTemporaryText(
+  runAgent(
     ownerUserId: string,
-    prefix: string,
-    content: string,
-    run: (filePath: string) => Promise<void>,
-  ): Promise<void>
-  readGeneratedText(ownerUserId: string, filePath: string): Promise<string>
+    sessionKey: string,
+    args: readonly string[],
+    options?: WecomCliRunOptions,
+  ): Promise<{ readonly output: string; readonly workingDirectory: string }>
 }
 
 export type WecomCliClientDeps = {
@@ -85,6 +85,10 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     return path.join(ownerDirectory(ownerUserId), "work")
   }
 
+  function agentWorkDirectory(ownerUserId: string, sessionKey: string): string {
+    return path.join(ownerDirectory(ownerUserId), "agent-work", createHash("sha256").update(sessionKey).digest("hex"))
+  }
+
   async function ensureDirectories(ownerUserId: string) {
     const ownerDir = ownerDirectory(ownerUserId)
     const configDir = configDirectory(ownerUserId)
@@ -97,12 +101,13 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     return { ownerDir, configDir, workDir }
   }
 
-  async function run(
+  async function runInDirectory(
     ownerUserId: string,
+    cwd: string,
     args: readonly string[],
     options: WecomCliRunOptions = {},
   ): Promise<string> {
-    const { ownerDir, configDir } = await ensureDirectories(ownerUserId)
+    const { configDir } = await ensureDirectories(ownerUserId)
     let result
     try {
       result = await deps.processRunner.run({
@@ -112,7 +117,7 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
         action: "shell.exec",
         command: deps.binaryPath,
         args: [...args],
-        cwd: ownerDir,
+        cwd,
         env: { WECOM_CLI_CONFIG_DIR: configDir },
         envAllowlist: ["WECOM_CLI_CONFIG_DIR"],
         timeoutMs: options.timeoutMs ?? COMMAND_TIMEOUT_MS,
@@ -135,6 +140,33 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     }
     if (result.exitCode !== 0) throw commandError(result.stdout)
     return result.stdout ?? ""
+  }
+
+  async function run(
+    ownerUserId: string,
+    args: readonly string[],
+    options: WecomCliRunOptions = {},
+  ): Promise<string> {
+    const { ownerDir } = await ensureDirectories(ownerUserId)
+    return runInDirectory(ownerUserId, ownerDir, args, options)
+  }
+
+  async function runAgent(
+    ownerUserId: string,
+    sessionKey: string,
+    args: readonly string[],
+    options: WecomCliRunOptions = {},
+  ): Promise<{ readonly output: string; readonly workingDirectory: string }> {
+    const workingDirectory = agentWorkDirectory(ownerUserId, sessionKey)
+    try {
+      await mkdir(workingDirectory, { recursive: true, mode: 0o700 })
+    } catch {
+      throw new WecomCliError("storage_error", "无法创建企业微信工作目录。")
+    }
+    return {
+      output: await runInDirectory(ownerUserId, workingDirectory, args, options),
+      workingDirectory,
+    }
   }
 
   async function isAuthorized(ownerUserId: string): Promise<boolean> {
@@ -229,41 +261,15 @@ export function createWecomCliClient(deps: WecomCliClientDeps): WecomCliClient {
     }
   }
 
-  async function withTemporaryText(
-    ownerUserId: string,
-    prefix: string,
-    content: string,
-    operation: (filePath: string) => Promise<void>,
-  ): Promise<void> {
-    const { workDir } = await ensureDirectories(ownerUserId)
-    const filePath = path.join(workDir, `${prefix}-${randomUUID()}.md`)
+  async function clearAgentWork(ownerUserId: string): Promise<void> {
     try {
-      await writeFile(filePath, content, { encoding: "utf8", mode: 0o600 })
-      await operation(filePath)
-    } catch (error) {
-      if (error instanceof WecomCliError) throw error
-      throw new WecomCliError("storage_error", "无法准备企业微信邮件正文。")
-    } finally {
-      await rm(filePath, { force: true }).catch(() => undefined)
-    }
-  }
-
-  async function readGeneratedText(ownerUserId: string, filePath: string): Promise<string> {
-    const resolvedOwnerDir = path.resolve(ownerDirectory(ownerUserId))
-    const resolvedFile = path.resolve(filePath)
-    if (resolvedFile !== resolvedOwnerDir && !resolvedFile.startsWith(`${resolvedOwnerDir}${path.sep}`)) {
-      throw new WecomCliError("invalid_response", "企业微信返回了无效的正文路径。")
-    }
-    try {
-      const content = await readFile(resolvedFile, "utf8")
-      await rm(resolvedFile, { force: true }).catch(() => undefined)
-      return content
+      await rm(path.join(ownerDirectory(ownerUserId), "agent-work"), { recursive: true, force: true })
     } catch {
-      throw new WecomCliError("invalid_response", "无法读取企业微信邮件正文。")
+      throw new WecomCliError("storage_error", "无法清理企业微信工作目录。")
     }
   }
 
-  return { isAuthorized, validate, startAuth, disconnect, run, withTemporaryText, readGeneratedText }
+  return { isAuthorized, validate, startAuth, disconnect, clearAgentWork, run, runAgent }
 }
 
 async function waitForQrCode(
@@ -293,11 +299,16 @@ function commandError(stdout: string | undefined): WecomCliError {
     const parsed: unknown = JSON.parse(stdout)
     if (!isRecord(parsed)) return new WecomCliError("command_failed", "企业微信操作失败，请重试。")
     const error = isRecord(parsed.error) ? parsed.error : parsed
-    const errcode = typeof error.errcode === "number" ? error.errcode : undefined
+    const errcode = typeof error.errcode === "number"
+      ? error.errcode
+      : typeof error.code === "number"
+        ? error.code
+        : undefined
     const helpMessage = normalizeCliText(stringValue(error.help_message) || stringValue(error.instruction))
     const permissionDenied = errcode === 851008
     const message = commandErrorMessage(error, helpMessage)
     const helpUrl = permissionDenied ? extractHelpUrl(helpMessage) : undefined
+    const permission = permissionDenied ? extractPermission(message) : undefined
     return new WecomCliError(
       permissionDenied
         ? "permission_denied"
@@ -308,7 +319,7 @@ function commandError(stdout: string | undefined): WecomCliError {
       {
         ...(errcode === undefined ? {} : { errcode }),
         ...(helpUrl ? { helpUrl } : {}),
-        ...(permissionDenied ? { permission: WECOM_MAIL_READ_PERMISSION } : {}),
+        ...(permission ? { permission } : {}),
       },
     )
   } catch {
@@ -334,6 +345,10 @@ function extractHelpUrl(message: string): string | undefined {
   const markdownLink = message.match(/\[[^\]]+\]\((https:\/\/[^)\s]+)\)/u)?.[1]
   if (markdownLink) return markdownLink
   return message.match(/https:\/\/[^\s)]+/u)?.[0]
+}
+
+function extractPermission(message: string): string | undefined {
+  return message.match(/「([^」]+)」能力/u)?.[1]?.trim() || undefined
 }
 
 function normalizeCliText(value: string): string {

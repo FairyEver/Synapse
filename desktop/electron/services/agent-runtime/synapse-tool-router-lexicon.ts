@@ -124,6 +124,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
 
   // ---------------- 名词：terminal ----------------
   ["会话", "session"],
+  ["连接", "connection"],
   ["标签", "workspace"],
   ["工作区", "workspace"],
   ["分组", "group"],
@@ -137,6 +138,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["视图", "view"],
   ["元数据", "metadata"],
   ["全局", "global"],
+  ["命令行", "cli"],
 
   // ---------------- 名词：database ----------------
   ["字段", "column"],

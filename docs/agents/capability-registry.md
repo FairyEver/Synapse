@@ -64,11 +64,11 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 | Text File Writer | 否 | 否 | 1 | — | 1 | — |
 | Script Runtime | 否 | 否 | — | — | — | — |
 | Screenshot | 否 | 否 | — | — | — | — |
-| WeCom Mail | 否 | 否 | — | — | 3 | — |
+| WeCom | 否 | 否 | — | — | 2 | — |
 
 固定例外：
 
-- Connectors 的「企业微信」连接器只负责扫码绑定机器人、保存本地凭据、连接状态和连接信息弹窗，Connectors 仍为 0 个 MCP。它使用 `@wecom/cli`，凭据不上传 Synapse 服务端，也不向 Renderer 或 MCP 暴露。企业微信 CLI 不提供完整业务权限清单查询，因此连接信息弹窗只展示连接时间、最近检查时间及企业微信权限管理入口，不展示推测的逐项权限。独立的 WeCom Mail 能力通过主进程 `core.wecom` 服务使用凭据，注册 3 个 MCP 工具：`app_wecom_mail_list`、`app_wecom_mail_get`、`app_wecom_mail_send`；仅支持收件箱搜索、详情、发送和回复，不提供删除、标记已读/未读、草稿、标签、撤回、附件上传下载或任意 CLI 调用。企业业务权限不足时不影响连接器状态，MCP 返回 `WECOM_PERMISSION_REQUIRED`、中文权限名和官方申请链接，由始终加载的 `wecom-mail` Skill 向用户说明。`core.wecom` 后续可为其他企业微信 MCP/Skill 提供窄类型化能力，但不会返回 token。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
+- Connectors 的「企业微信」连接器只负责扫码绑定机器人、保存本地凭据、连接状态和连接信息弹窗，Connectors 仍为 0 个 MCP。它使用 `@wecom/cli`，凭据不上传 Synapse 服务端，也不向 Renderer 或 MCP 暴露。企业微信 CLI 不提供完整业务权限清单查询，因此连接信息弹窗只展示连接时间、最近检查时间及企业微信权限管理入口，不展示推测的逐项权限。WeCom 能力通过主进程 `core.wecom` 服务使用凭据，注册 2 个 MCP 工具：`app_wecom_connection_get` 只返回连接状态和时间；`app_wecom_cli_run` 接受官方 Skill 的规范参数数组并执行消息、邮件、文档搜索与名称/权限管理、在线表格、智能表格、通讯录、媒体、身份和 schema 命令。它不使用 shell 字符串，不允许 `auth`、`cache`，所有文件都限制在账号和 controller/client 隔离的临时工作目录。企业业务权限不足时不影响连接器状态，MCP 返回 `WECOM_PERMISSION_REQUIRED`、中文权限名和官方申请链接。筛选后的官方 8 个 Skill 固定在 `synapse-skill/skill-package/wecom/`，同步关闭安装 CLI、登录和任意终端执行路径。永久排除微盘、企业微信待办、在线会议、日程、PPT、智能文档内容与 doc 新建/导入/正文操作；后续更新不得重新导入对应的 7 个 Skill。`doc` 只允许 `search`、`names update`、`members update`、`rules update`，完整保留与排除清单见 `module-boundaries.md` 和 `wecom/UPSTREAM.md`。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
 
 - 云盘文件搜索扩展既有 `app.drive.item_tree.list`（MCP 索引名 `app_drive_item_tree_list`），增加名称、类型、更新时间、有效分享和排序条件；桌面通过同一 operation 的 `drive.itemTree.list` IPC 调用。服务端在自有普通云盘递归结果上先筛选、统计再分页，返回真实路径与祖先；不新增 capability、MCP 工具、System App、Dock 或 Deep Link，Drive 仍为 76 项。
 - AI 文件查找在既有工具发现词表中区分查找文件、浏览目录、分享链接、回收站和历史版本；明确查找本地或第三方存储时排除错误的 Drive 领域候选，精确工具名与领域限制继续有效；不新增工具。`app.drive.item_tree.list` 的 MCP 搜索默认每页 20 条，返回实际搜索条件、结果编号和需登录的本人预览链接，供现有对话续查/选择；普通目录树、桌面 IPC 和服务端查询默认保持不变。仅匹配名称及元数据，不创建分享、不读取正文、不新增全文或语义索引；Drive 仍为 76 项。
@@ -184,12 +184,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `drive` | 76 | 76 |
 | `mail` | 17 | 17 |
 | `todos` | 6 | 6 |
+| `wecom` | 2 | 2 |
 | `extend` | 1 | 1 |
-| 合计 | 293 | 289 |
+| 合计 | 295 | 291 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 289 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 291 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

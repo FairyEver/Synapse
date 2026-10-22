@@ -3,25 +3,23 @@ import type { AuditSink, PermissionGuard } from "../../../electron/runtime/secur
 import type { DispatchContext, DispatchResult } from "../../../synapse-capabilities/shared/types"
 import { checkCapabilityPermission } from "../../../electron/capabilities/permission-audit"
 import {
-  WECOM_MAIL_GET_CAPABILITY_ID,
-  WECOM_MAIL_LIST_CAPABILITY_ID,
-  WECOM_MAIL_SEND_CAPABILITY_ID,
+  WECOM_CLI_RUN_CAPABILITY_ID,
+  WECOM_CONNECTION_GET_CAPABILITY_ID,
 } from "../shared/capability"
 import {
-  wecomMailGetInputSchema,
-  wecomMailSearchInputSchema,
-  wecomMailSendInputSchema,
-} from "../shared/mail-schema"
+  wecomCliRunInputSchema,
+  wecomConnectionGetInputSchema,
+} from "../shared/command-schema"
 import { WecomCliError } from "./cli-client"
-import type { WecomMailService } from "./mail-service"
+import type { WecomInvocationService } from "./invocation-service"
 
-export type WecomMailDispatcherDeps = {
-  readonly mail: WecomMailService
+export type WecomDispatcherDeps = {
+  readonly service: WecomInvocationService
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
 }
 
-export function createWecomMailCapabilityDispatcher(deps: WecomMailDispatcherDeps) {
+export function createWecomCapabilityDispatcher(deps: WecomDispatcherDeps) {
   return {
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
       const actor = context.actor ?? { kind: "user" as const, id: "synapse-mcp", display: "Synapse MCP" }
@@ -50,27 +48,33 @@ export function createWecomMailCapabilityDispatcher(deps: WecomMailDispatcherDep
       }
 
       try {
-        if (action === WECOM_MAIL_LIST_CAPABILITY_ID) {
-          const input = wecomMailSearchInputSchema.parse(params)
-          const data = await deps.mail.list(input)
+        if (action === WECOM_CONNECTION_GET_CAPABILITY_ID) {
+          wecomConnectionGetInputSchema.parse(params)
+          const data = await deps.service.getConnection()
           deps.auditSink?.record({ action: "network.connect", actor, resource: "wecom-cli", outcome: "allowed", metadata })
           return { ok: true, data }
         }
-        if (action === WECOM_MAIL_GET_CAPABILITY_ID) {
-          const input = wecomMailGetInputSchema.parse(params)
-          const data = await deps.mail.get(input)
-          deps.auditSink?.record({ action: "network.connect", actor, resource: "wecom-cli", outcome: "allowed", metadata })
+        if (action === WECOM_CLI_RUN_CAPABILITY_ID) {
+          const input = wecomCliRunInputSchema.parse(params)
+          const data = await deps.service.run(input, sessionKey(context), {
+            abortSignal: context.abortSignal,
+          })
+          deps.auditSink?.record({
+            action: "network.connect",
+            actor,
+            resource: "wecom-cli",
+            outcome: "allowed",
+            metadata: {
+              ...metadata,
+              service: input.args[0],
+              argCount: input.args.length,
+            },
+          })
           return { ok: true, data }
         }
-        if (action === WECOM_MAIL_SEND_CAPABILITY_ID) {
-          const input = wecomMailSendInputSchema.parse(params)
-          const data = await deps.mail.send(input)
-          deps.auditSink?.record({ action: "network.connect", actor, resource: "wecom-cli", outcome: "allowed", metadata })
-          return { ok: true, data }
-        }
-        return { ok: false, code: "WECOM_UNKNOWN_ACTION", error: "Unknown WeCom mail action." }
+        return { ok: false, code: "WECOM_UNKNOWN_ACTION", error: "Unknown Enterprise WeChat action." }
       } catch (error) {
-        const failure = mailFailure(error)
+        const failure = wecomFailure(error)
         deps.auditSink?.record({
           action: "network.connect",
           actor,
@@ -84,12 +88,19 @@ export function createWecomMailCapabilityDispatcher(deps: WecomMailDispatcherDep
   }
 }
 
-function mailFailure(error: unknown): DispatchResult & { readonly ok: false } {
+function sessionKey(context: DispatchContext): string {
+  return context.controllerInstanceId
+    ?? context.clientId
+    ?? context.actor?.id
+    ?? "wecom-default"
+}
+
+function wecomFailure(error: unknown): DispatchResult & { readonly ok: false } {
   if (error instanceof z.ZodError) {
     return {
       ok: false,
       code: "WECOM_INVALID_INPUT",
-      error: "企业微信邮件参数无效。",
+      error: "企业微信命令参数无效。",
       data: { fields: error.issues.map((issue) => issue.path.join(".")).filter(Boolean) },
     }
   }
@@ -106,8 +117,8 @@ function mailFailure(error: unknown): DispatchResult & { readonly ok: false } {
         code: "WECOM_PERMISSION_REQUIRED",
         error: error.message,
         data: {
-          permission: error.options.permission,
-          helpUrl: error.options.helpUrl,
+          ...(error.options.permission ? { permission: error.options.permission } : {}),
+          ...(error.options.helpUrl ? { helpUrl: error.options.helpUrl } : {}),
         },
       }
     }

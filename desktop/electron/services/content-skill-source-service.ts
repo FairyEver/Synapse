@@ -54,6 +54,11 @@ type ContentSkillSourceDraft = {
 
 type SkillSourceReadMode = "install" | "publish"
 
+type SkillSourceReadOptions = {
+  readonly mode?: SkillSourceReadMode
+  readonly maxAttachmentCount?: number
+}
+
 type SkillSourceImportSummary = {
   controlFilesExcluded: string[]
   fileCount: number
@@ -72,6 +77,7 @@ type SkillFileCollectionState = {
   runtimeEnvExcluded: boolean
   symlinkCount: number
   totalSize: number
+  maxAttachmentCount: number
 }
 
 async function resolveSkillMainFile(dirPath: string, maxEntries?: number): Promise<string | null> {
@@ -144,7 +150,7 @@ async function resolveTrustedSkillMainFile(dirPath: string, filePath: string): P
 async function readSkillDraftFromDirectory(
   sourceDirectoryPath: string,
   security?: ContentSkillSourceSecurityDeps,
-  options: { mode?: SkillSourceReadMode } = {},
+  options: SkillSourceReadOptions = {},
 ): Promise<ContentSkillSourceDraft> {
   const dirPath = sourceDirectoryPath
   if (!dirPath.trim()) {
@@ -188,6 +194,7 @@ async function readSkillDraftFromDirectory(
       runtimeEnvExcluded: false,
       symlinkCount: 0,
       totalSize: mainFileStat.size,
+      maxAttachmentCount: options.maxAttachmentCount ?? CONTENT_SKILL_ATTACHMENT_MAX_COUNT,
     }
     await collectSkillFiles(dirPath, sourceRealPath, dirPath, skip, state, 0, options.mode ?? "install")
     state.files.sort((a, b) => a.originalName.localeCompare(b.originalName))
@@ -358,8 +365,8 @@ async function collectSkillFile(
   }
 
   state.fileCount += 1
-  if (state.fileCount > CONTENT_SKILL_ATTACHMENT_MAX_COUNT) {
-    throwInvalid("files", `附件数量超过 ${CONTENT_SKILL_ATTACHMENT_MAX_COUNT} 个。`)
+  if (state.fileCount > state.maxAttachmentCount) {
+    throwInvalid("files", `附件数量超过 ${state.maxAttachmentCount} 个。`)
   }
 
   state.totalSize += fileStat.size
@@ -623,6 +630,7 @@ export {
   SYNAPSE_SKILL_REPOSITORY_ID_FILE,
   type ContentSkillSourceDraft,
   type ContentSkillSourceSecurityDeps,
+  type SkillSourceReadOptions,
   type SkillSourceImportSummary,
   type SkillSourceReadMode,
 }

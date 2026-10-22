@@ -240,7 +240,7 @@ describe("SynapseSkillService", () => {
     expect(detail.content).not.toContain("name: synapse-skill")
     expect(detail.content).toContain("database/index.md")
     expect(detail.content).toContain("workflow/index.md")
-    expect(detail.content).toContain("wecom-mail/index.md")
+    expect(detail.content).toContain("wecom/wecomcli-shared/SKILL.md")
     expect(detail.content).toContain("case-insensitive) as a standalone word")
     expect(detail.content).toContain("用 sy 查一下云盘")
     expect(detail.content).toContain("static site publishing or republishing")
@@ -253,44 +253,23 @@ describe("SynapseSkillService", () => {
     // Clients namespace the two tools differently; naming the Codex form saves a
     // discovery round trip. Verified against a live Codex session.
     expect(detail.content).toContain("mcp__synapse_mcp__search")
-    expect(attachmentNames).toEqual([
+    expect(attachmentNames.filter((name) => name.startsWith("wecom/"))).toHaveLength(70)
+    expect(attachmentNames).toEqual(expect.arrayContaining([
       "app/api-reference.md",
-      "app/index.md",
-      "automation/api-reference.md",
-      "automation/index.md",
-      "content/api-reference.md",
-      "content/index.md",
-      "database/api-reference.md",
       "database/index.md",
-      "drive/api-reference.md",
       "drive/index.md",
-      "extend/index.md",
-      "extend/portal-headless/api-reference.md",
-      "extend/portal-headless/index.md",
-      "extend/portal-headless/scripts/client.mjs",
-      "mail/api-reference.md",
-      "mail/index.md",
-      "model-price/api-reference.md",
-      "model-price/index.md",
-      "notifications/api-reference.md",
-      "notifications/index.md",
-      "repository/api-reference.md",
-      "repository/index.md",
-      "secrets/api-reference.md",
-      "secrets/index.md",
       "skill-authoring/index.md",
-      "skill-repository/api-reference.md",
-      "skill-repository/index.md",
-      "terminal/api-reference.md",
-      "terminal/examples.md",
-      "terminal/index.md",
-      "todos/api-reference.md",
       "todos/index.md",
-      "wecom-mail/api-reference.md",
-      "wecom-mail/index.md",
-      "workflow/api-reference.md",
+      "wecom/LICENSE",
+      "wecom/UPSTREAM.md",
+      "wecom/wecomcli-shared/SKILL.md",
+      "wecom/wecomcli-email/SKILL.md",
+      "wecom/wecomcli-message/SKILL.md",
+      "wecom/wecomcli-doc-manage/SKILL.md",
       "workflow/index.md",
-    ])
+    ]))
+    expect(attachmentNames).not.toContain("wecom-mail/index.md")
+    expect(attachmentNames.filter((name) => /^wecom\/wecomcli-[^/]+\/SKILL\.md$/u.test(name))).toHaveLength(8)
   })
 
   it("documents local Skill authoring without taking over Synapse publishing", async () => {

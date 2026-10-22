@@ -341,12 +341,16 @@ const requiredExtraResourceFiles = [
     label: "Todo Skill API contract",
   },
   {
-    relativePath: "synapse-skill/wecom-mail/index.md",
-    label: "Enterprise WeChat mail Skill guide",
+    relativePath: "synapse-skill/wecom/wecomcli-shared/SKILL.md",
+    label: "Enterprise WeChat shared Skill guide",
   },
   {
-    relativePath: "synapse-skill/wecom-mail/api-reference.md",
-    label: "Enterprise WeChat mail Skill API contract",
+    relativePath: "synapse-skill/wecom/wecomcli-message/SKILL.md",
+    label: "Enterprise WeChat message Skill",
+  },
+  {
+    relativePath: "synapse-skill/wecom/LICENSE",
+    label: "Enterprise WeChat Skills license",
   },
   {
     relativePath: "knowledge-base/synapse-knowledge-base-template/CLAUDE.md",

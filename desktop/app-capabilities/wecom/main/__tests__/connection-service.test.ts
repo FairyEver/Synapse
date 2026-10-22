@@ -53,9 +53,12 @@ function harness(options: {
     }),
     startAuth,
     disconnect: vi.fn(async () => undefined),
+    clearAgentWork: vi.fn(async () => undefined),
     run: vi.fn(async () => "{}"),
-    withTemporaryText: vi.fn(async (_owner, _prefix, _content, run) => run("/tmp/fake-body.md")),
-    readGeneratedText: vi.fn(async () => "正文"),
+    runAgent: vi.fn(async () => ({
+      output: "{}",
+      workingDirectory: "/tmp/fake-wecom-work",
+    })),
   }
   const beforeIdentityListeners: Array<() => void | Promise<void>> = []
   const service = new WecomConnectionService({
@@ -168,6 +171,7 @@ describe("WeCom connection service", () => {
     await active.invalidateForAccountChange()
     await expect(pending).rejects.toMatchObject({ code: "auth_required" })
     expect(observedSignal?.aborted).toBe(true)
+    expect(active.client.clearAgentWork).toHaveBeenCalledWith("owner-a")
   })
 
   it("migrates an old wecom-mail binding without requiring another scan", async () => {
