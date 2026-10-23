@@ -66,7 +66,7 @@ class WorkSlots {
     }
   }
 }
-interface Runner { ctx: MailContext; accountId: string; controller: AbortController; task: Promise<void>; idle?: MailImapSession; idleTask?: Promise<void>; hint: boolean; jobId: string; folderId?: string; lastFolders: number }
+interface Runner { ctx: MailContext; accountId: string; controller: AbortController; task: Promise<void>; idle?: MailImapSession; idleTask?: Promise<void>; hint: boolean; jobId: string; folderId?: string; lastFolders: number; historyPaused?: boolean }
 
 export class MailSync {
   private runners = new Map<string, Runner>()
@@ -99,7 +99,7 @@ export class MailSync {
     }
     return rows.filter(f => paths.has(f.data.folder.path))
   }
-  private async syncFolder(ctx: MailContext, accountId: string, initialFolder: MailRecord<StoredFolder>, session: MailImapSession): Promise<Coverage> {
+  private async syncFolder(ctx: MailContext, accountId: string, initialFolder: MailRecord<StoredFolder>, session: MailImapSession, newMailOnly = false): Promise<Coverage> {
     let folder = initialFolder
     const selected = await session.select(folder.data.folder.path, ctx.signal)
     const uids = await session.searchUids(folder.data.folder.path, { all: true }, ctx.signal)
@@ -128,7 +128,9 @@ export class MailSync {
       }
       cursor = page.nextCursor ?? undefined
     } while (cursor)
-    const missing = uids.filter(uid => !existing.has(uid))
+    const allMissing = uids.filter(uid => !existing.has(uid))
+    const baselineUid = checkpoint.data.baselineUid
+    const missing = allMissing.filter(uid => !newMailOnly || uid > baselineUid)
     let indexed = 0
     if (missing.length) {
       const batch = missing.slice(0, checkpoint.data.firstPageDone ? MAIL_HISTORY_BATCH_SIZE : MAIL_PAGE_SIZE)
@@ -176,22 +178,22 @@ export class MailSync {
       }
       flagsOffset = Math.min(uids.length, flagsOffset + MAIL_HISTORY_BATCH_SIZE)
     }
-    const metadataComplete = headersComplete && flagsOffset >= uids.length
+    const metadataComplete = indexed === allMissing.length && flagsOffset >= uids.length
     const currentFolder = await this.repo.get<StoredFolder>(ctx, "folders", folder.id)
     await this.repo.save(ctx, "folders", folder.id, accountId, { ...currentFolder.data, folder: { ...currentFolder.data.folder, metadataComplete } }, currentFolder.revision, currentFolder.sortKey)
     await this.repo.save(ctx, "sync-state", checkpointId, accountId, { ...checkpoint.data, metadataComplete, flagsOffset, flagsCheckedAt: metadataComplete ? Date.now() : checkpoint.data.flagsCheckedAt ?? 0, uidDigest, indexedCount: existing.size, updatedAt: Date.now() }, checkpoint.revision)
     this.emit(ctx, accountId, [folder.id])
     return { ...emptyCoverage(), metadataComplete, indexedCount: existing.size, reason: metadataComplete ? "server_visible_history_only" : "metadata_indexing" }
   }
-  async runOnce(ctx: MailContext, accountId: string, folderId?: string, refreshFolders = true): Promise<Coverage> {
+  async runOnce(ctx: MailContext, accountId: string, folderId?: string, refreshFolders = true, newMailOnly = false): Promise<Coverage> {
     return this.slots.run(ctx.signal, () => this.accounts.exclusive(ctx, accountId, async () => {
       const { config, credential } = await this.accounts.credential(ctx, accountId)
       const session = await this.accounts.protocols.imap(ctx, config, credential)
       try {
         const folders = (await this.folders(ctx, accountId, session, refreshFolders)).filter(f => f.data.folder.selectable).sort((a, b) => Number(b.data.folder.role === "inbox") - Number(a.data.folder.role === "inbox"))
         let coverage: Coverage = { ...emptyCoverage(), metadataComplete: true, reason: "server_visible_history_only" }
-        for (const folder of folders.filter(f => folderId ? f.id === folderId : refreshFolders || f.data.folder.role === "inbox" || !f.data.folder.metadataComplete)) {
-          const result = await this.syncFolder(ctx, accountId, folder, session)
+        for (const folder of folders.filter(f => newMailOnly ? f.data.folder.role === "inbox" : folderId ? f.id === folderId : refreshFolders || f.data.folder.role === "inbox" || !f.data.folder.metadataComplete)) {
+          const result = await this.syncFolder(ctx, accountId, folder, session, newMailOnly)
           if (!result.metadataComplete) break
         }
         for (const folder of folders.filter(f => !folderId || f.id === folderId)) {
@@ -218,7 +220,8 @@ export class MailSync {
       const folder = await this.repo.get<StoredFolder>(ctx, "folders", folderId)
       if (folder.accountId !== accountId) throw new MailError("UNAVAILABLE", "文件夹不属于此账号")
     }
-    if (existing && !existing.controller.signal.aborted) { existing.hint = true; existing.folderId = folderId; return { jobId: existing.jobId } }
+    if (existing && !existing.controller.signal.aborted && !existing.ctx.signal.aborted && !existing.historyPaused) { existing.hint = true; existing.folderId = folderId; return { jobId: existing.jobId } }
+    if (existing) { existing.controller.abort(); await existing.idle?.close() }
     const controller = new AbortController(), signal = AbortSignal.any([ctx.signal, controller.signal])
     const jobId = `mj_${randomUUID()}`
     const runner: Runner = { ctx: { ...ctx, actor: "sync", signal }, accountId, controller, jobId, task: Promise.resolve(), hint: false, folderId, lastFolders: -Infinity }
@@ -237,21 +240,21 @@ export class MailSync {
         const refresh = Date.now() - runner.lastFolders >= MAIL_FOLDER_REFRESH_MS
         const requestedFolder = runner.folderId
         runner.hint = false
-        const coverage = await this.runOnce(ctx, accountId, requestedFolder, refresh)
+        const coverage = await this.runOnce(ctx, accountId, requestedFolder, refresh, runner.historyPaused)
         if (runner.folderId === requestedFolder) runner.folderId = undefined
         if (refresh) runner.lastFolders = Date.now()
         failures = 0
-        await this.updateJob(ctx, runner.jobId, coverage.metadataComplete ? "completed" : "running", coverage, null)
+        if (!runner.historyPaused) await this.updateJob(ctx, runner.jobId, coverage.metadataComplete ? "completed" : "running", coverage, null)
         if (!runner.idleTask) runner.idleTask = this.watchInbox(runner).catch(error => {
           if (!ctx.signal.aborted) this.events.error(normalizeProtocolError(error).code, accountId)
         }).finally(() => { runner.idleTask = undefined })
-        if (!coverage.metadataComplete) { await wait(0, ctx.signal); continue }
+        if (!coverage.metadataComplete && !runner.historyPaused) { await wait(0, ctx.signal); continue }
         // IDLE is only a hint; periodic reconciliation remains authoritative.
         for (let elapsed = 0; elapsed < MAIL_POLL_INTERVAL_MS && !runner.hint && !ctx.signal.aborted; elapsed += 1000) await wait(1000, ctx.signal)
       } catch (error) {
         if (ctx.signal.aborted) break
         const code = normalizeProtocolError(error).code
-        await this.updateJob(ctx, runner.jobId, code === "AUTH_FAILED" ? "paused" : "failed", emptyCoverage(), code)
+        if (!runner.historyPaused) await this.updateJob(ctx, runner.jobId, code === "AUTH_FAILED" ? "paused" : "failed", emptyCoverage(), code)
         const row = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)
         await this.repo.save(ctx, "accounts", accountId, accountId, { ...row.data, state: code === "AUTH_FAILED" ? "auth_failed" : "offline", errorCode: code }, row.revision)
         this.emit(ctx, accountId, [accountId]); this.events.error(code, accountId)
@@ -284,7 +287,8 @@ export class MailSync {
   async get(ctx: MailContext, input: MailInputs["sync.get"]): Promise<MailJob> { return (await this.repo.get<StoredJob>(ctx, "sync-state", input.jobId)).data.job }
   async cancel(ctx: MailContext, input: MailInputs["sync.cancel"]): Promise<MailJob> {
     const job = await this.get(ctx, input)
-    await this.stopAccount(job.accountId)
+    const runner = this.runners.get(`${ctx.ownerId}:${job.accountId}`)
+    if (runner?.jobId === job.jobId) runner.historyPaused = true
     return this.updateJob(ctx, input.jobId, "cancelled", job.coverage, null)
   }
   async stopAccount(accountId: string): Promise<void> {

@@ -25,6 +25,7 @@ export class MailContextProvider {
     this.refreshIdentity()
     if (ctx.signal.aborted || ctx.ownerId !== this.owner || ctx.generation !== this.generation) throw new MailError("IDENTITY_CHANGED", "邮箱身份已变化")
   }
+  status(): { ownerId: string | null; generation: number } { this.refreshIdentity(); return { ownerId: this.owner, generation: this.generation } }
   dispose(): void { this.controller.abort() }
 }
 
@@ -32,9 +33,17 @@ export function createMailAccess(context: MailContextProvider, guard: Permission
   return async (ctx, action, resource) => {
     context.assertCurrent(ctx)
     const actor = ctx.actor === "sync" ? { kind: "system" as const, id: ctx.ownerId } : { kind: "user" as const, id: ctx.ownerId }
-    const result = await guard.check({ action, actor, resource, context: { domain: "mail", source: ctx.actor } })
+    const result = await guard.check({ action, actor, resource, context: { domain: "mail", source: ctx.actor, ownerId: ctx.ownerId } })
     audit.record({ action, actor, resource, outcome: result.allowed ? "allowed" : "denied", metadata: { domain: "mail", source: ctx.actor } })
     context.assertCurrent(ctx)
     if (!result.allowed) throw new MailError("PERMISSION_DENIED", "此邮箱操作未获授权")
   }
+}
+
+export const mailBackgroundPolicy: import("../../../electron/runtime/security").PermissionPolicy = {
+  id: "mail-background",
+  decide(request) {
+    const allowed = ["network.connect", "secret.read", "secret.write", "fs.write", "content.read", "content.mutate", "notification.trigger"]
+    return request.actor.kind === "system" && request.actor.id === request.context.ownerId && typeof request.actor.id === "string" && request.context.domain === "mail" && request.context.source === "sync" && allowed.includes(request.action) ? "allow" : "defer-to-next"
+  },
 }

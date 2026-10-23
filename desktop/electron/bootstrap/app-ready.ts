@@ -1,4 +1,5 @@
 import { createConnectorProtocolHandlers } from "./connector-protocol-handlers"
+import { createMailProtocolHandlers } from "../../app-capabilities/mail/main/protocol-handler"
 import { createMailInternalProtocolHandlers } from "./mail-internal-protocol-handlers"
 import { createTodosProtocolHandlers } from "./todos-protocol-handlers"
 import { dialog } from "electron"
@@ -140,7 +141,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     })
   }
 
-  deps.setPrivateProtocolHandlers?.({ ...createConnectorProtocolHandlers(registry), ...createMailInternalProtocolHandlers(registry), ...createTodosProtocolHandlers(registry) })
+  deps.setPrivateProtocolHandlers?.({ ...createConnectorProtocolHandlers(registry), ...createMailInternalProtocolHandlers(registry), ...createMailProtocolHandlers(registry), ...createTodosProtocolHandlers(registry) })
 
   const eventBus = registry.get<EventBus>("core.event-bus")
   accountService.setEventBus(eventBus)

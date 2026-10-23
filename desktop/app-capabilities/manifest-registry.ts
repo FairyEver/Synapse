@@ -12,6 +12,7 @@ import { problemFeedbackCapabilityManifest } from "./problem-feedback/shared/man
 import { jsonRepairCapabilityManifest } from "./json-repair/shared/manifest"
 import { agentConversationCapabilityManifest } from "./agent/shared/manifest"
 import { terminalCapabilityManifest } from "./terminal/shared/manifest"
+import { mailCapabilityManifest } from "./mail/shared/manifest"
 import { mailInternalCapabilityManifest } from "./mail-internal/shared/manifest"
 import { todosCapabilityManifest } from "./todos/shared/manifest"
 
@@ -28,6 +29,7 @@ const appDeepLinkManifests = [
   agentConversationCapabilityManifest,
   terminalCapabilityManifest,
   mailInternalCapabilityManifest,
+  mailCapabilityManifest,
   todosCapabilityManifest,
   fileOpenerCapabilityManifest,
   textFileWriterCapabilityManifest,

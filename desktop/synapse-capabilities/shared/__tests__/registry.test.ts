@@ -25,8 +25,8 @@ describe("mail capability registry", () => {
   })
 })
 
-it("publishes exactly 17 internal mail tools and no legacy mail tools", () => {
+it("publishes 17 internal mail tools and 44 separate external mail tools", () => {
   const tools = buildAllMcpTools()
   expect(tools.filter(t => t.name.startsWith("app_mail_internal_"))).toHaveLength(17)
-  expect(tools.filter(t => t.name.startsWith("app_mail_") && !t.name.startsWith("app_mail_internal_"))).toHaveLength(0)
+  expect(tools.filter(t => t.name.startsWith("app_mail_") && !t.name.startsWith("app_mail_internal_"))).toHaveLength(44)
 })

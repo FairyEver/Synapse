@@ -84,7 +84,7 @@ function sensitiveMapSummary(value: unknown): unknown {
 }
 
 function sanitizeIpcRequest(channel: string, request: unknown): unknown {
-  if (channel.startsWith("synapse:app:todos:item:")) return { inputType: typeof request }
+  if ((channel.startsWith("synapse:app:todos:item:") || channel.startsWith("synapse:app:mail:"))) return { inputType: typeof request }
   if (!SECRETS_MUTATION_CHANNELS.has(channel)) return sanitizeIpcValue("request", request)
   if (!request || typeof request !== "object" || Array.isArray(request)) {
     return { inputType: typeof request }

@@ -148,6 +148,19 @@ export class MailAssets {
     } else await this.repo.remove(ctx, "assets", id, pending.revision)
   }
 
+  async removeAccount(ctx: MailContext, accountId: string): Promise<void> {
+    await this.repo.get(ctx, "accounts", accountId)
+    let cursor: string | undefined
+    do {
+      const page = await this.repo.page<StoredMailAsset>(ctx, "assets", { accountId, cursor, limit: 100 })
+      for (const row of page.items) {
+        await this.access(ctx, "fs.write", row.id)
+        if (row.data.key) { await this.files.remove(row.data.key); await this.files.remove(row.data.key, true) }
+        await this.repo.remove(ctx, "assets", row.id, row.revision)
+      }
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+  }
   async clearCache(ctx: MailContext, accountId?: string, budget = 0): Promise<{ removed: number; bytes: number }> {
     let remaining = 0
     let cursor: string | undefined

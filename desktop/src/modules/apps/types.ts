@@ -111,6 +111,7 @@ export type SynapseSystemAppOpenOptions = {
   readonly contentOpenRequest?: SynapseSystemAppContentOpenRequest | null
   readonly gitOpenRequest?: SynapseSystemAppGitOpenRequest | null
   readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
+  readonly mailOpenRequest?: import("../../../app-capabilities/mail/shared/private-schema").MailOpenRequest | null
   readonly mailInternalOpenRequest?: SynapseSystemAppMailInternalOpenRequest | null
 }
 

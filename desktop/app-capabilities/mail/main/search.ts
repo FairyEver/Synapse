@@ -128,19 +128,20 @@ export class MailSearch {
     } else if (action === "search.get") {
       const params = MAIL_INPUT_SCHEMAS["search.get"].parse(input), row = await this.task(ctx, params.jobId)
       const items: MailResults["search.get"]["items"] = []
-      let cursor = params.cursor
+      let cursor = params.cursor, changed = false
       do {
         const page = await this.repo.page<SearchResult>(ctx, "search-results", { accountId: row.accountId, cursor, limit: params.limit - items.length, binding: params.jobId })
         for (const entry of page.items) {
           if (entry.data.jobId !== params.jobId || !entry.data.matched) continue
           const message = await this.repo.find<StoredMessage>(ctx, "messages", entry.data.messageId)
-          if (message && !message.data.summary.stale) items.push(messageSummary(message))
+          if (!message || message.revision !== entry.data.sourceRevision) changed = true
+          if (message && matchesMailFilters(message.data.summary, row.data.input) && (row.data.input.fields === "body" || matchesMailText(message.data.summary, row.data.input.query))) items.push(messageSummary(message))
         }
         cursor = page.nextCursor ?? undefined
         if (!cursor) break
       } while (items.length < params.limit)
       const state = await this.indexState(ctx, row.accountId, row.data.input.folderId)
-      const coverage = { ...row.data.job.coverage, ...(state.token !== row.data.indexToken ? { metadataComplete: false, reason: "index_changed" } : {}) }
+      const coverage = { ...row.data.job.coverage, ...(changed || state.token !== row.data.indexToken ? { metadataComplete: false, reason: "index_changed" } : {}) }
       result = { items, nextCursor: cursor ?? null, coverage, canContinue: row.data.phase !== "complete" && row.data.job.state !== "cancelled" }
     } else if (action === "search.resume") {
       const params = MAIL_INPUT_SCHEMAS["search.resume"].parse(input), row = await this.task(ctx, params.jobId)

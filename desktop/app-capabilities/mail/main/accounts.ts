@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import { MAIL_ENTITIES } from "../../../electron/runtime/data-repo/schemas/mail"
-import { accountConfigSchema, accountIdSchema, accountSummarySchema, MAIL_INPUT_SCHEMAS, revisionSchema } from "../shared/schema"
+import { accountConfigSchema, accountSummarySchema, MAIL_INPUT_SCHEMAS } from "../shared/schema"
 import { MailError, type AccountAction, type AccountConfig, type AccountSummary, type MailContext, type MailInputs, type MailResults } from "../shared/types"
 import { MailRepository } from "./repository"
 import { MailContextProvider } from "./context"
@@ -10,8 +10,8 @@ import { normalizeProtocolError, type MailProtocols } from "./protocol/types"
 import type { StoredMessage } from "./sync"
 import type { StoredDraft } from "./drafts"
 
-export const configureAccountSchema = accountConfigSchema.extend({ credential: z.string().min(1).max(4096), accountId: accountIdSchema.optional(), expectedRevision: revisionSchema.optional() }).strict()
-  .refine(v => (v.accountId === undefined) === (v.expectedRevision === undefined), "Existing account requires its revision")
+export { configureAccountSchema } from "../shared/private-schema"
+import { configureAccountSchema } from "../shared/private-schema"
 export interface StoredAccount extends Record<string, unknown> {
   config: AccountConfig; credentialId: string; paused: boolean; state: AccountSummary["state"]; errorCode: string | null; capabilities: string[]
   reindexRequired?: boolean

@@ -229,7 +229,7 @@ export class MailContent {
     const complete = positions.html === content.body.html.length && positions.text === content.body.text.length
     return { bodyRef: content.bodyRef, ...chunk, nextCursor: complete ? null : Buffer.from(JSON.stringify({ ...positions, scope })).toString("base64url"), complete, truncated: false }
   }
-  async ensureAsset(ctx: MailContext, id: string): Promise<MailAsset> {
+  async ensureAsset(ctx: MailContext, id: string, maxBytes = MAIL_MAX_ATTACHMENT_BYTES): Promise<MailAsset> {
     const asset = await this.assets.info(ctx, id)
     if (asset.state === "ready") return asset
     if (!asset.messageId || !asset.attachmentId) throw new MailError("UNAVAILABLE", "附件不可用")
@@ -238,7 +238,7 @@ export class MailContent {
       const current = await this.assets.info(ctx, id)
       if (current.state === "ready") return current
       const source = await session.fetchPart(folder.folder.path, message.data.summary.locator.uid, asset.attachmentId!, ctx.signal)
-      return this.assets.materialize(ctx, id, source)
+      return this.assets.materialize(ctx, id, source, maxBytes)
     })
   }
   private async assetReference(ctx: MailContext, input: { assetId: string } | { messageId: string; attachmentId: string }): Promise<MailAsset> {

@@ -141,6 +141,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         if (options.todoOpenRequest) {
           sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_TODO_OPEN_REQUEST_CHANNEL, options.todoOpenRequest)
         }
+        if (options.mailOpenRequest) {
+          sendToSystemAppWindow(deps.windowManager, existing, "synapse:app:apps:operation:mail_open_request", options.mailOpenRequest)
+        }
         if (options.mailInternalOpenRequest) {
           sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL, options.mailInternalOpenRequest)
         }
@@ -162,6 +165,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       if (options.todoOpenRequest) {
         params.set("todoOpenRequest", JSON.stringify(options.todoOpenRequest))
       }
+      if (options.mailOpenRequest) params.set("mailOpenRequest", JSON.stringify(options.mailOpenRequest))
       if (options.mailInternalOpenRequest) {
         params.set("mailInternalOpenRequest", JSON.stringify(options.mailInternalOpenRequest))
       }

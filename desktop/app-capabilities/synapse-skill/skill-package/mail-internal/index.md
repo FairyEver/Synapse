@@ -6,7 +6,7 @@
 
 ## 工具入口
 
-先通过 Synapse MCP `search` 查找 mail domain，取得工具当前完整 schema，再用 `invoke` 调用。契约见 `api-reference.md`。
+先通过 Synapse MCP `search` 查找 mail_internal domain，取得工具当前完整 schema，再用 `invoke` 调用。契约见 `api-reference.md`。
 
 ## AI 发送流程
 
@@ -23,7 +23,7 @@
 
 ## 读信
 
-用户通过站内信列表或正文菜单的“复制 ID”取得的 `synapse://mail-internal/<id>` 可直接定位原信。使用 `app_mail_internal_message_get` 的 `reference` 参数传入完整原文，不自行拆出 ID；该链接也可在桌面和 iOS 定位信件，但不是授权凭证。即使用户只说“看这个”，也由 `mail` 前缀选择站内信工具。读取仍受当前登录账号权限控制，`get` 不会自动设为已读。
+用户通过站内信列表或正文菜单的“复制 ID”取得的 `synapse://mail-internal/<id>` 可直接定位原信。使用 `app_mail_internal_message_get` 的 `reference` 参数传入完整原文，不自行拆出 ID；该链接也可在桌面和 iOS 定位信件，但不是授权凭证。即使用户只说“看这个”，也由 `mail-internal` 前缀选择站内信工具。读取仍受当前登录账号权限控制，`get` 不会自动设为已读。
 
 桌面菜单的“复制全文”仅复制标题和完整正文，不包含附件或信件定位 ID；这是桌面剪贴板操作，不新增 MCP 工具。
 

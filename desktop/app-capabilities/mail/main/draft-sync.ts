@@ -15,22 +15,32 @@ const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex")
 const result = (row: MailRecord<StoredDraft>): DraftSyncResult => ({ draftId: row.id, syncState: row.data.syncState, remoteLocator: row.data.remoteLocator })
 export class MailDraftSync {
   private running = new Map<string, Promise<void>>()
+  private controllers = new Map<string, AbortController>()
   private requested = new Map<string, MailContext>()
   constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly assets: MailAssets, private readonly drafts: MailDrafts, private readonly onError: (code: string, id: string) => void = () => undefined) {}
   enqueue(ctx: MailContext, id: string): void {
     if (this.running.has(id)) { this.requested.set(id, ctx); return }
+    const controller = new AbortController(); this.controllers.set(id, controller)
+    ctx = { ...ctx, signal: AbortSignal.any([ctx.signal, controller.signal]) }
     const task = Promise.resolve().then(() => this.sync(ctx, id)).then(async result => {
       if (result.syncState === "pending" && !ctx.signal.aborted) {
         const draft = await this.drafts.stored(ctx, id), account = await this.accounts.get(ctx, draft.accountId)
         if (!account.paused && account.state === "connected") this.requested.set(id, ctx)
       }
     }).catch(error => { if (!ctx.signal.aborted) this.onError(normalizeProtocolError(error).code, id) }).finally(() => {
-      this.running.delete(id)
+      this.running.delete(id); this.controllers.delete(id)
       const next = this.requested.get(id); this.requested.delete(id)
       if (next && !next.signal.aborted) this.enqueue(next, id)
     })
     this.running.set(id, task)
   }
+  async stopAccount(ctx: MailContext, accountId: string): Promise<void> {
+    for (const [id, controller] of this.controllers) {
+      const row = await this.repo.find<StoredDraft>(ctx, "drafts", id)
+      if (row?.accountId === accountId) { this.requested.delete(id); controller.abort() }
+    }
+  }
+  async dispose(): Promise<void> { this.requested.clear(); for (const c of this.controllers.values()) c.abort(); await this.settle() }
   async settle(): Promise<void> { while (this.running.size) await Promise.all(this.running.values()) }
   private async update(ctx: MailContext, id: string, patch: Partial<StoredDraft>): Promise<MailRecord<StoredDraft>> {
     const row = await this.drafts.stored(ctx, id)

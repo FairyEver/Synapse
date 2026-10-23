@@ -109,3 +109,17 @@ it("restores online state after a transient connection failure is repaired", asy
     expect(await r.accounts.get(r.ctx, r.account.id)).toMatchObject({ state: "connected", errorCode: null })
   } finally { await r.sync.dispose(); await r.close() }
 })
+it("can stop history while continuing to index and notify new Inbox mail", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue(Array.from({ length: 151 }, (_, i) => i + 1))
+    await r.sync.runOnce(r.ctx, r.account.id)
+    const first = vi.mocked(r.session.fetchHeaders).mock.calls.length
+    await r.sync.runOnce(r.ctx, r.account.id, undefined, false, true)
+    expect(r.session.fetchHeaders).toHaveBeenCalledTimes(first)
+    vi.mocked(r.session.searchUids).mockResolvedValue(Array.from({ length: 152 }, (_, i) => i + 1))
+    await r.sync.runOnce(r.ctx, r.account.id, undefined, false, true)
+    expect(vi.mocked(r.session.fetchHeaders).mock.calls.at(-1)?.[1]).toEqual([152])
+    expect(r.delta).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ baseline: false, messages: [expect.objectContaining({ locator: expect.objectContaining({ uid: 152 }) })] }))
+  } finally { await r.sync.dispose(); await r.close() }
+})

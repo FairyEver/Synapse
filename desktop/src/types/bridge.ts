@@ -1411,6 +1411,7 @@ export type SynapseBridge = {
       deleteAll: (input: { filter: "all" | "pending" }) => Promise<{ ok: true }>
     }
   }
+  mail: import("../../app-capabilities/mail/shared/bridge").MailBridge
   todos: {
     item: {
       list: (input?: import("@synapse/shared/todo-contracts").TodoListInput) => Promise<import("@synapse/shared/todo-contracts").TodoPageDto>

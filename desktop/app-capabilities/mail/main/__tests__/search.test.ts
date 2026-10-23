@@ -72,3 +72,17 @@ it("does not download already scanned cached bodies again when resuming remote s
     expect((await search.execute(r.ctx, "search.get", { ...job, limit: 50 })).coverage.bodyScannedCount).toBe(2)
   } finally { await r.sync.dispose(); await r.close() }
 })
+it("rechecks result filters after a message changes and reports the changed index", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1]); await r.sync.runOnce(r.ctx, r.account.id)
+    const search = new MailSearch(r.repo, async () => ({ text: "", bytes: 0, available: false }))
+    const job = await search.execute(r.ctx, "search.start", { accountId: r.account.id, query: "Mail", fields: "metadata", unreadOnly: true }); await search.settle()
+    const first = await search.execute(r.ctx, "search.get", { ...job, limit: 50 })
+    expect(first.items).toHaveLength(1)
+    const row = await r.repo.get<import("../sync").StoredMessage>(r.ctx, "messages", first.items[0].id)
+    await r.repo.save(r.ctx, "messages", row.id, row.accountId, { ...row.data, summary: { ...row.data.summary, read: true } }, row.revision, row.sortKey)
+    const next = await search.execute(r.ctx, "search.get", { ...job, limit: 50 })
+    expect(next.items).toEqual([]); expect(next.coverage.reason).toBe("index_changed")
+  } finally { await r.sync.dispose(); await r.close() }
+})

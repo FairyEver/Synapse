@@ -4,6 +4,7 @@
  * Creates a type-safe bridge for renderer-to-main communication.
  */
 
+import { createMailBridge } from "../app-capabilities/mail/shared/bridge"
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import { unwrapTodoResult, type TodoIpcResult } from "../app-capabilities/todos/shared/ipc-result"
 import type {
@@ -254,7 +255,7 @@ function writeRendererIpcFailureLog(channel: string, args: unknown, error: unkno
       operationId: operationIdForChannel(channel),
       durationMs,
       error: describeIpcError(error),
-      request: channel.startsWith("synapse:app:todos:item:")
+      request: (channel.startsWith("synapse:app:todos:item:") || channel.startsWith("synapse:app:mail:"))
         ? { inputType: typeof args }
         : sanitizeIpcPayload("request", args),
     },
@@ -774,6 +775,7 @@ const synapseBridge: SynapseBridge = {
       deleteAll: invoke(IPC_CHANNELS.account.deleteAllNotifications),
     },
   },
+  mail: createMailBridge((channel, input) => invoke(channel)(input), createDomainEventPayloadSubscription(subscribe, "account", "mail.changed")),
   todos: {
     item: {
       list: async (input = {}) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.list)(input) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoPageDto>),

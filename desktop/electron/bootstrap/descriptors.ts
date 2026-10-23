@@ -23,8 +23,15 @@
  * T1.7 adds repo.* + ui.tray.
  */
 
+import { MailService } from "../../app-capabilities/mail/main/service"
+import { MAIL_SERVICE_ID } from "../../app-capabilities/mail/shared/manifest"
+import { createMailCapabilityDispatcher } from "../../app-capabilities/mail/main/dispatcher"
+import { createMailNotificationAdapter } from "../../app-capabilities/mail/main/notification-adapter"
+import { mailBackgroundPolicy } from "../../app-capabilities/mail/main/context"
+import { ManagedAssetStore } from "../runtime/data-repo/assets"
+import { isSystemAppId } from "../../src/modules/apps/types"
 import { createPortalCredentialDispatcher } from "../../app-capabilities/connectors/main/credential-dispatcher"
-import { app, BrowserWindow, clipboard, Notification, safeStorage, shell } from "electron"
+import { app, BrowserWindow, clipboard, dialog, Notification, powerMonitor, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -1588,6 +1595,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
   id: "core.database",
   criticality: "degraded",
   dependsOn: [
+    MAIL_SERVICE_ID,
     TODOS_SERVICE_ID,
     WECOM_CONNECTION_SERVICE_ID,
     "core.config",
@@ -1761,6 +1769,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       permissionGuard,
       auditSink,
     })
+    const mailDispatcher = createMailCapabilityDispatcher({ service: ctx.registry.get<MailService>(MAIL_SERVICE_ID), permissionGuard, auditSink })
     const mailInternalDispatcher = createMailInternalCapabilityDispatcher({ accountService, permissionGuard, auditSink })
     const wecomConnection = ctx.registry.get<WecomConnectionService>(WECOM_CONNECTION_SERVICE_ID)
     const wecomDispatcher = createWecomCapabilityDispatcher({
@@ -1862,6 +1871,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
+      mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
       mailInternalDispatch: (action, params, context) => mailInternalDispatcher.dispatch(action, params, context),
       wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
@@ -2480,6 +2490,7 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     guard.registerPolicy(systemShellExecPolicy)
     guard.registerPolicy(systemTerminalCwdProbePolicy)
     guard.registerPolicy(webhookShellExecPolicy)
+    guard.registerPolicy(mailBackgroundPolicy)
     guard.registerPolicy(systemAutomationPolicy)
     guard.registerPolicy(systemMcpAutoRegisterPolicy)
     guard.registerPolicy(systemDataMaintenancePolicy)
@@ -3556,4 +3567,36 @@ export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWind
     const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
     return new WorkflowWindowManager(windowManager)
   },
+}
+
+export const coreMailDescriptor: ServiceDescriptor<MailService> = {
+  id: MAIL_SERVICE_ID, criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.event-bus", "core.permission-guard", "core.audit-sink", SYSTEM_APP_WINDOW_SERVICE_ID],
+  create(ctx) {
+    const logger = ctx.logger.child("mail")
+    const diagnostic = (code: string, accountId = "mail") => logger.warn("邮箱本机诊断", { code, accountId })
+    return new MailService({
+      storage: ctx.registry.get<DataRepository>("core.data-repository"), files: new ManagedAssetStore(path.join(app.getPath("userData"), "mail-assets")),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"), auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      resolveOwner: () => { const state = accountService.getState(); return state.status === "authenticated" ? state.profile.user.id : null },
+      events: (payload, rendererIds) => ctx.registry.get<EventBus>("core.event-bus").emit({ domain: "account", type: "mail.changed", payload, timestamp: new Date().toISOString(), scope: { rendererIds } }),
+      open: async request => { const id: string = "mail"; if (!isSystemAppId(id)) throw new Error("邮箱界面尚不可用"); await ctx.registry.get<ReturnType<typeof createDefaultSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).open(id, { mailOpenRequest: request }) },
+      notifications: createMailNotificationAdapter({ isSupported: () => Notification.isSupported(), create: options => new Notification(options) }, diagnostic), notificationsSupported: () => Notification.isSupported(), diagnostic,
+      pickFiles: async () => { const result = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"] }); return result.canceled ? [] : result.filePaths },
+      saveFile: async name => { const result = await dialog.showSaveDialog({ defaultPath: path.basename(name) }); return result.canceled ? null : result.filePath ?? null },
+    })
+  },
+  stop: service => service.dispose(),
+}
+export const coreMailBackgroundDescriptor: ServiceDescriptor<{ service: MailService; detach: (() => void)[] }> = {
+  id: "core.mail.background", criticality: "degraded", startupPhase: "background", dependsOn: [MAIL_SERVICE_ID],
+  create(ctx) {
+    const service = ctx.registry.get<MailService>(MAIL_SERVICE_ID)
+    const onSuspend = () => { void service.suspend().catch(() => ctx.logger.warn("邮箱暂停失败")) }
+    const onResume = () => { void service.resume().catch(() => ctx.logger.warn("邮箱恢复失败")) }
+    powerMonitor.on("suspend", onSuspend); powerMonitor.on("resume", onResume)
+    return { service, detach: [accountService.onBeforeIdentityChange(() => service.beforeIdentityChange()), accountService.onStateChanged(() => service.identityChanged()), () => { powerMonitor.removeListener("suspend", onSuspend); powerMonitor.removeListener("resume", onResume) }] }
+  },
+  start: instance => instance.service.startBackground(),
+  stop: instance => { for (const detach of instance.detach) detach() },
 }
