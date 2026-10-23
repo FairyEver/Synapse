@@ -14,10 +14,11 @@ export interface MailSearchControls { onSearch?(query: string): void; coverage?:
 function Hint({ label, children }: { label: string; children: ReactNode }) {
   return <Tooltip><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
 }
-export function MailListToolbar({ count, all, disabled, busy, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, coverage, canContinue, onContinue }: MailSearchControls & {
-  count: number; all: boolean; disabled: boolean; busy?: boolean; onToggle(value: boolean): void; onBatch(action: BatchAction): void; onMove(id: string): void; folders: Folder[]; canPermanentlyDelete: boolean
+export function MailListToolbar({ count, all, disabled, busy, draftView, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, coverage, canContinue, onContinue }: MailSearchControls & {
+  count: number; all: boolean; disabled: boolean; busy?: boolean; draftView?: boolean; onToggle(value: boolean): void; onBatch(action: BatchAction): void; onMove(id: string): void; folders: Folder[]; canPermanentlyDelete: boolean
 }) {
   const [searching, setSearching] = useState(false), [query, setQuery] = useState("")
+  const itemName = draftView ? "草稿" : "邮件"
   const indexing = coverage && !coverage.metadataComplete
   const status = coverage?.reason === "body_truncated" ? "部分正文未完整检索" : canContinue ? "部分邮件尚未检索" : indexing ? "历史邮件索引中" : null
   const exitSearch = () => { setSearching(false); setQuery(""); onSearch?.("") }
@@ -28,12 +29,14 @@ export function MailListToolbar({ count, all, disabled, busy, onToggle, onBatch,
         <InputGroupAddon align="inline-end">{query && <InputGroupButton aria-label="清空搜索" size="icon-xs" onClick={() => { setQuery(""); onSearch?.("") }}><X /></InputGroupButton>}<InputGroupButton type="submit" size="icon-xs" aria-label="提交搜索"><Search /></InputGroupButton></InputGroupAddon>
       </InputGroup>
     </form> : <>
-      <Checkbox aria-label="选择当前页邮件" checked={all ? true : count ? "indeterminate" : false} onCheckedChange={value => onToggle(value === true)} disabled={disabled || busy} />
-      {count > 0 ? <><span className="ml-2 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground" aria-label={`已选 ${count} 封邮件`}>{count}</span><div className="flex-1" />
+      <Checkbox aria-label={`选择当前页${itemName}`} checked={all ? true : count ? "indeterminate" : false} onCheckedChange={value => onToggle(value === true)} disabled={disabled || busy} />
+      {count > 0 ? <><span className="ml-2 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground" aria-label={`已选 ${count} 封${itemName}`}>{count}</span><div className="flex-1" />
         <DropdownMenu><DropdownMenuTrigger asChild><SystemAppTopBarActionButton disabled={busy}>操作<ChevronDown data-icon="inline-end" /></SystemAppTopBarActionButton></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup>
+          {draftView ? <DropdownMenuItem variant="destructive" onSelect={() => onBatch("delete")}>删除草稿</DropdownMenuItem> : <>
           <DropdownMenuItem onSelect={() => onBatch("read")}>标记已读</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("unread")}>标记未读</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("star")}>加星标</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("unstar")}>取消星标</DropdownMenuItem>
           <DropdownMenuSub><DropdownMenuSubTrigger>移动至</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuGroup>{folders.filter(f => f.selectable && f.role !== "drafts").map(folder => <DropdownMenuItem key={folder.id} onSelect={() => onMove(folder.id)}>{folderName(folder)}</DropdownMenuItem>)}</DropdownMenuGroup></DropdownMenuSubContent></DropdownMenuSub>
           <DropdownMenuItem onSelect={() => onBatch("delete")}>移至回收站</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("restore")}>恢复到收件箱</DropdownMenuItem>{canPermanentlyDelete && <DropdownMenuItem variant="destructive" onSelect={() => onBatch("permanent")}>永久删除</DropdownMenuItem>}
+          </>}
         </DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
       </> : <><div className="flex-1" />{onSearch && <Hint label="搜索邮件"><SystemAppTopBarActionButton iconOnly aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></SystemAppTopBarActionButton></Hint>}</>}
     </>}

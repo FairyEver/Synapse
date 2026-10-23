@@ -13,14 +13,24 @@ import type { MailViewModel } from "./use-mail"
 import type { ComposeIntent } from "../../../app-capabilities/mail/shared/private-schema"
 export type { ComposeIntent } from "../../../app-capabilities/mail/shared/private-schema"
 export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewModel; onSettings(): void; onCompose(intent: ComposeIntent): void }) {
-  const [permanent, setPermanent] = useState<string[] | null>(null), [busy, setBusy] = useState(false)
+  const [confirmation, setConfirmation] = useState<{ ids: string[]; drafts: boolean } | null>(null), [busy, setBusy] = useState(false)
   const body = useMailBody(mail.detail, mail.owner)
   const performBatch = async (action: Parameters<typeof mail.mutate>[0], ids: string[], targetFolderId?: string) => {
     setBusy(true)
-    try { const result = await mail.mutate(action, ids, targetFolderId); const succeeded = result.items.filter(item => item.status === "succeeded").length, unknown = result.items.filter(item => item.status === "unknown").length; toast(`${succeeded} 封完成${unknown ? `，${unknown} 封结果待核验` : ""}${result.items.length - succeeded - unknown ? `，${result.items.length - succeeded - unknown} 封失败` : ""}`); setPermanent(null) }
+    try { const result = await mail.mutate(action, ids, targetFolderId); const succeeded = result.items.filter(item => item.status === "succeeded").length, unknown = result.items.filter(item => item.status === "unknown").length; toast(`${succeeded} 封完成${unknown ? `，${unknown} 封结果待核验` : ""}${result.items.length - succeeded - unknown ? `，${result.items.length - succeeded - unknown} 封失败` : ""}`); setConfirmation(null) }
     catch (cause) { toast.error(mailError(cause)) } finally { setBusy(false) }
   }
-  const onBatch = (action: Parameters<typeof mail.mutate>[0], ids: string[]) => { if (action === "permanent") setPermanent(ids); else void performBatch(action, ids) }
+  const performDraftDelete = async (ids: string[]) => {
+    setBusy(true)
+    try {
+      const result = await mail.deleteDrafts(ids), failed = result.items.filter(item => item.status === "failed")
+      const message = `已删除 ${result.items.length - failed.length} 封草稿`
+      if (failed.length) toast.error(`${message}，${failed.length} 封失败：${failed[0].error}`)
+      else toast(message)
+      setConfirmation(null)
+    } catch (cause) { toast.error(mailError(cause)) } finally { setBusy(false) }
+  }
+  const onBatch = (action: Parameters<typeof mail.mutate>[0], ids: string[]) => { if (mail.view.drafts && action === "delete") setConfirmation({ ids, drafts: true }); else if (action === "permanent") setConfirmation({ ids, drafts: false }); else void performBatch(action, ids) }
   const download = async (assetId: string) => { try { await mailApi().saveAttachment({ assetId }) } catch (cause) { toast.error(mailError(cause)) } }
   const openLink = async (url: string) => { try { await openMailLink(url) } catch (cause) { toast.error(mailError(cause)) } }
   const copy = async (target: "id" | "body") => {
@@ -44,6 +54,6 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
         {mail.detail ? <MailDetail detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={target => void copy(target)} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}
       </div>
     </div>}
-    <AlertDialog open={!!permanent} onOpenChange={open => { if (!open && !busy) setPermanent(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>永久删除 {permanent?.length} 封邮件？</AlertDialogTitle><AlertDialogDescription>只能删除回收站中的邮件，删除后无法恢复。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>取消</AlertDialogCancel><Button variant="destructive" disabled={busy} onClick={() => void performBatch("permanent", permanent!)}>永久删除</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <AlertDialog open={!!confirmation} onOpenChange={open => { if (!open && !busy) setConfirmation(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{confirmation?.drafts ? "删除" : "永久删除"} {confirmation?.ids.length} 封{confirmation?.drafts ? "草稿" : "邮件"}？</AlertDialogTitle><AlertDialogDescription>{confirmation?.drafts ? "将删除所选草稿及其已同步副本，删除后无法恢复。" : "只能删除回收站中的邮件，删除后无法恢复。"}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>取消</AlertDialogCancel><Button variant="destructive" disabled={busy} onClick={() => { if (confirmation) void (confirmation.drafts ? performDraftDelete(confirmation.ids) : performBatch("permanent", confirmation.ids)) }}>{confirmation?.drafts ? "删除草稿" : "永久删除"}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </div>
 }
