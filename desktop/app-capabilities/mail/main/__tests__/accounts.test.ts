@@ -53,3 +53,13 @@ describe("local mail account lifecycle", () => {
     } finally { await rig.close() }
   })
 })
+it("requires a fresh connection check before using changed endpoints", async () => {
+  const r = await createMailTestRig()
+  try {
+    const account = await r.accounts.configure(r.ctx, { ...aliyunConfig("me@example.com", "Work"), credential: "secret" })
+    await r.accounts.update(r.ctx, { accountId: account.id, expectedRevision: account.revision, patch: { imap: { host: "other.example.com", port: 993, security: "tls" } } })
+    await expect(r.accounts.credential(r.ctx, account.id)).rejects.toMatchObject({ code: "CONNECTION_CHECK_REQUIRED" })
+    await r.accounts.inspect(r.ctx, account.id)
+    await expect(r.accounts.credential(r.ctx, account.id)).resolves.toMatchObject({ config: { imap: { host: "other.example.com" } } })
+  } finally { await r.close() }
+})

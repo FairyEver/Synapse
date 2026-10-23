@@ -10,7 +10,7 @@ import { MailError, type MailAction, type MailAsset, type MailContext, type Mail
 import { MailRepository } from "./repository"
 import { MailAccounts } from "./accounts"
 import { MailAssets, type MailAccess, type StoredMailAsset } from "./assets"
-import { resolveMessage, messageSummary, type StoredFolder, type StoredMessage } from "./sync"
+import { resolveMessage, messageSummary, assertRemoteGeneration, type StoredFolder, type StoredMessage } from "./sync"
 import type { ReadSearchText } from "./search"
 import type { MailBodyStructure, MailImapSession } from "./protocol/types"
 
@@ -99,7 +99,7 @@ export class MailContent {
       const session = await this.accounts.protocols.imap(ctx, config, credential)
       try {
         const selected = await session.select(folder.data.folder.path, ctx.signal)
-        if (selected.uidValidity !== row.data.summary.locator.uidValidity) throw new MailError("STALE_TARGET", "邮件位置已失效")
+        await assertRemoteGeneration(this.repo, ctx, folder.id, row.data.summary.locator.uidValidity, selected.uidValidity)
         return await task(row, folder.data, session)
       } finally { await session.close() }
     })

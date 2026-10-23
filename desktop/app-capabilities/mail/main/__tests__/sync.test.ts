@@ -69,3 +69,11 @@ describe("mail metadata synchronization", () => {
     expect((await r.accounts.get(r.ctx, r.account.id)).state).toBe("auth_failed")
   })
 })
+it("marks messages stale when a complete folder listing reports their folder removed", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1]); await r.sync.runOnce(r.ctx, r.account.id)
+    vi.mocked(r.session.listFolders).mockResolvedValue([]); await r.sync.runOnce(r.ctx, r.account.id)
+    expect((await r.repo.page(r.ctx, "messages", { accountId: r.account.id })).items[0].data.summary).toMatchObject({ stale: true })
+  } finally { await r.sync.dispose(); await r.close() }
+})

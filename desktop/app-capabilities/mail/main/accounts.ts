@@ -34,8 +34,9 @@ export class MailAccounts {
     const row = await this.repo.get<StoredAccount>(ctx, "accounts", id)
     return accountSummarySchema.parse({ ...row.data.config, id: row.id, revision: row.revision, paused: row.data.paused, state: row.data.state, errorCode: row.data.errorCode, capabilities: row.data.capabilities })
   }
-  async credential(ctx: MailContext, accountId: string): Promise<{ config: AccountConfig; credential: string }> {
+  async credential(ctx: MailContext, accountId: string, checkingConnection = false): Promise<{ config: AccountConfig; credential: string }> {
     const row = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)
+    if (row.data.state === "unverified" && !checkingConnection) throw new MailError("CONNECTION_CHECK_REQUIRED", "请先检查修改后的邮箱连接")
     await this.access(ctx, "secret.read", accountId)
     const secret = await this.repo.get<{ credential: string }>(ctx, "credentials", row.data.credentialId)
     if (typeof secret.data.credential !== "string") throw new MailError("CREDENTIAL_UNAVAILABLE", "请重新配置邮箱密码")
@@ -85,7 +86,7 @@ export class MailAccounts {
 
   async inspect(ctx: MailContext, id: string): Promise<MailResults["account.inspect"]> {
     return this.exclusive(ctx, id, async () => {
-      const { config, credential } = await this.credential(ctx, id)
+      const { config, credential } = await this.credential(ctx, id, true)
       const checks = await this.check(ctx, config, credential)
       const row = await this.repo.get<StoredAccount>(ctx, "accounts", id)
       const code = checks.imap.code ?? checks.smtp.code

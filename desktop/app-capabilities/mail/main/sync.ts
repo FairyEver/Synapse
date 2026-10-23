@@ -26,6 +26,22 @@ export async function resolveMessage(repo: MailRepository, ctx: MailContext, mes
   if (row.data.summary.stale || !folder || folder.data.folder.uidValidity !== row.data.summary.locator.uidValidity) throw new MailError("STALE_TARGET", "邮件位置已失效，请重新同步")
   return row
 }
+/** A newly observed generation invalidates cached locators immediately, even when the caller fails. */
+export async function assertRemoteGeneration(repo: MailRepository, ctx: MailContext, folderId: string, expected: string, actual: string): Promise<void> {
+  if (actual === expected) return
+  await invalidateFolderGeneration(repo, ctx, folderId, actual)
+  throw new MailError("STALE_TARGET", "邮件位置已失效，请重新同步")
+}
+async function invalidateFolderGeneration(repo: MailRepository, ctx: MailContext, folderId: string, actual: string | null): Promise<void> {
+  const row = await repo.get<StoredFolder>(ctx, "folders", folderId)
+  await repo.save(ctx, "folders", row.id, row.accountId, { ...row.data, folder: { ...row.data.folder, uidValidity: actual, metadataComplete: false } }, row.revision, row.sortKey)
+  let cursor: string | undefined
+  do {
+    const page = await repo.page<StoredMessage>(ctx, "messages", { accountId: row.accountId, cursor, limit: 100 })
+    for (const message of page.items) if (message.data.summary.locator.folderId === folderId && message.data.summary.locator.uidValidity !== actual && !message.data.summary.stale) await repo.save(ctx, "messages", message.id, row.accountId, { ...message.data, summary: { ...message.data.summary, stale: true } }, message.revision, message.sortKey)
+    cursor = page.nextCursor ?? undefined
+  } while (cursor)
+}
 const role = (path: string, special: string | null): Folder["role"] => path.toUpperCase() === "INBOX" ? "inbox" : ({ "\\Sent": "sent", "\\Drafts": "drafts", "\\Trash": "trash", "\\Junk": "junk" } as const)[special as "\\Sent"] ?? "none"
 function wait(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -74,6 +90,8 @@ export class MailSync {
     // Keep removed folders as invalid locators; do not redirect references by matching names.
     for (const old of rows.filter(f => !paths.has(f.data.folder.path))) {
       await this.repo.save(ctx, "folders", old.id, accountId, { ...old.data, folder: { ...old.data.folder, selectable: false, uidValidity: null } }, old.revision, old.sortKey)
+      await invalidateFolderGeneration(this.repo, ctx, old.id, null)
+      this.emit(ctx, accountId, [old.id])
     }
     return rows.filter(f => paths.has(f.data.folder.path))
   }
