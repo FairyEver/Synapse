@@ -1,3 +1,4 @@
+import { mailOpenRequestSchema } from "../../../app-capabilities/mail/shared/private-schema"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   type ContentOpenRequest,
@@ -21,6 +22,7 @@ type AppsBridge = {
   readonly onContentOpenRequest: (listener: (request: ContentOpenRequest) => void) => () => void
   readonly onGitOpenRequest: (listener: (request: SynapseSystemAppGitOpenRequest) => void) => () => void
   readonly onTerminalOpenRequest: (listener: (request: SynapseSystemAppTerminalOpenRequest) => void) => () => void
+  readonly onMailOpenRequest?: (listener: (request: import("../../../app-capabilities/mail/shared/private-schema").MailOpenRequest) => void) => () => void
   readonly onTodoOpenRequest?: (listener: (request: TodoOpenRequest) => void) => () => void
   readonly onMailInternalOpenRequest: (listener: (request: SynapseSystemAppMailInternalOpenRequest) => void) => () => void
 }
@@ -112,6 +114,12 @@ export function SystemAppWindowApp() {
   const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
     useState<SynapseSystemAppTerminalOpenRequest | null>(() => parseInitialTerminalOpenRequest())
   const [pendingTodoOpenRequest, setPendingTodoOpenRequest] = useState<TodoOpenRequest | null>(() => parseInitialTodoOpenRequest())
+  const [pendingMailOpenRequest, setPendingMailOpenRequest] = useState<import("../../../app-capabilities/mail/shared/private-schema").MailOpenRequest | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("mailOpenRequest")
+    if (!raw) return null
+    try { const result = mailOpenRequestSchema.safeParse(JSON.parse(raw)); return result.success ? result.data : null } catch { return null }
+  })
+  useEffect(() => getAppsBridge()?.onMailOpenRequest?.(request => { replaceOpenRequestInUrl("mailOpenRequest", request); setPendingMailOpenRequest(request) }), [])
   const [pendingMailInternalOpenRequest, setPendingMailInternalOpenRequest] =
     useState<SynapseSystemAppMailInternalOpenRequest | null>(() => parseInitialMailInternalOpenRequest())
 
@@ -191,6 +199,8 @@ export function SystemAppWindowApp() {
       }}
       todoOpenRequest={pendingTodoOpenRequest}
       onTodoOpenRequestConsumed={handleTodoConsumed}
+      mailOpenRequest={pendingMailOpenRequest}
+      onMailOpenRequestConsumed={id => setPendingMailOpenRequest(current => current?.requestId === id ? null : current)}
       mailInternalOpenRequest={pendingMailInternalOpenRequest}
       onMailInternalOpenRequestConsumed={(requestId) => {
         setPendingMailInternalOpenRequest((current) => current?.requestId === requestId ? null : current)

@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱核心，界面接入前） | 否 | 否 | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是 | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文） | 否（旧配置升级时一次性加入） | — | — | 17 | `open` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -232,3 +232,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记迁移，保留取消固定状态和布局；历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。
 
 2026-10-23 邮箱核心接入：新增 `mail` domain 的 44 个 capability / MCP 索引工具，实际全局 capability 340 项、MCP 索引和工具定义各 336 项。公开 MCP 仍只有 search/invoke。新增严格桌面路由 `synapse://mail/em_<uuid>`，站内信 `mail-internal` / `mail_internal` 独立保留 17 项且无别名。私有密码配置、图片资源和本机文件对话框只走 IPC，不进公开目录；core.mail 在窗口建立后后台恢复，不调用云端消息中心。此阶段尚未注册邮箱 System App，现有 21 个保持不变。
+
+2026-10-23 邮箱阅读界面注册为第 22 个 System App：App ID / namespace 均为 `mail`，与 `mail-internal` 并列，启动器可打开且不默认固定 Dock。内嵌和独立窗口复用单顶栏；私有 `app.apps.operation.mail_open_request` 只传定位信息。44 个邮箱 MCP 工具、340 个全局 capability、336 个索引工具保持不变，不新增 Workflow 或 Automation Action。

@@ -18,6 +18,7 @@ describe("system app registry", () => {
       "workflow",
       "drive",
       "mail-internal",
+      "mail",
       "todos",
       "automation",
       "launcher",

@@ -1,3 +1,4 @@
+import { mailOpenRequestSchema } from "../../../app-capabilities/mail/shared/private-schema"
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import { CHEAT_CODE_STATE_SERVICE_ID, type CheatCodeStateService } from "../../services/cheat-code-state-service"
@@ -53,6 +54,7 @@ const openSystemAppRequestSchema = z.object({
     contentOpenRequest: contentOpenRequestSchema.optional(),
     gitOpenRequest: gitOpenRequestSchema.optional(),
     terminalOpenRequest: terminalOpenRequestSchema.optional(),
+    mailOpenRequest: mailOpenRequestSchema.nullable().optional(),
     mailInternalOpenRequest: mailInternalOpenRequestSchema.optional(),
     todoOpenRequest: todoOpenRequestSchema.nullable().optional(),
   }).strict().optional(),
@@ -74,6 +76,7 @@ const openSystemAppRequestSchema = z.object({
   if (request.options?.todoOpenRequest && request.appId !== "todos") {
     context.addIssue({ code: "custom", message: "Todo open requests require the Todos app.", path: ["options", "todoOpenRequest"] })
   }
+  if (request.options?.mailOpenRequest && request.appId !== "mail") context.addIssue({ code: "custom", message: "Mailbox targets require the Mail app.", path: ["options", "mailOpenRequest"] })
   if (request.options?.mailInternalOpenRequest && request.appId !== "mail-internal") {
     context.addIssue({ code: "custom", message: "Mail open requests require the Mail app.", path: ["options", "mailInternalOpenRequest"] })
   }
@@ -118,6 +121,7 @@ export const appsIpcModule: IpcModule = {
     },
   },
   events: {
+    mailOpenRequest: { operationId: "app.apps.operation.mail_open_request", kind: "event", payload: mailOpenRequestSchema },
     todoOpenRequest: { operationId: "app.apps.operation.todo_open_request", kind: "event", payload: todoOpenRequestSchema },
   },
 }

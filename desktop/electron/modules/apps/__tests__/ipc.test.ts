@@ -153,3 +153,9 @@ function createContext(windowManager: unknown): IpcHandlerContext {
     resolve,
   }
 }
+it("accepts external mailbox target options only for the mailbox app", () => {
+  const schema = appsIpcModule.methods.openSystemApp.request
+  const options = { mailOpenRequest: { requestId: "test", ownerId: "server-user", generation: 1, messageId: "em_e69940c0-4db1-4a0a-8f87-9027d116e194" } }
+  expect(schema.safeParse({ appId: "mail", options }).success).toBe(true)
+  expect(schema.safeParse({ appId: "mail-internal", options }).success).toBe(false)
+})

@@ -1048,6 +1048,7 @@ export type SynapseBridge = {
     onTerminalOpenRequest: (
       listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
     ) => () => void
+    onMailOpenRequest: (listener: (request: import("../../app-capabilities/mail/shared/private-schema").MailOpenRequest) => void) => () => void
     onTodoOpenRequest: (listener: (request: TodoOpenRequest) => void) => () => void
     onMailInternalOpenRequest: (
       listener: (request: SynapseSystemAppMailInternalOpenRequest) => void,

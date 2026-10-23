@@ -4,6 +4,7 @@ export const SYSTEM_APP_IDS = [
   "workflow",
   "drive",
   "mail-internal",
+  "mail",
   "todos",
   "automation",
   "launcher",
@@ -30,6 +31,7 @@ export type SynapseSystemAppNamespace =
   | "workflow"
   | "drive"
   | "mail_internal"
+  | "mail"
   | "todos"
   | "automation"
   | "launcher"

@@ -257,3 +257,12 @@
 - 设备设置只有两个 UI 私有 IPC，无公开 MCP/Workflow/Automation/Deep Link。硬件摘要不能作为认证凭证；缺少摘要或克隆硬件 UUID 相同时无法保证自动区分。协议与旧客户端升级边界见 Live Client Connections 设计。
 
 2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记迁移，保留取消固定状态和布局；历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。
+
+## 外部邮箱（桌面）
+
+- `mail` 是桌面邮箱客户端，站内信 `mail-internal` / `mail_internal` 独立保留；两类 ID、payload、API 和深链不兼容。外部链接严格为 `synapse://mail/em_<uuid>`，不支持手机端外部邮箱。
+- 账号、加密凭据、元数据索引、正文和附件仅归当前电脑，按已登录 SY 服务端用户 ID 分区，不进入云备份、移动端实时数据或账号消息中心。公开 MCP 不接受凭据，`account.open` 只打开本机配置界面，`account.configure` 仅私有 IPC。
+- 主进程 `core.mail` 是 UI、MCP 和深链的共同能力边界；44 个公开动作必须使用共享 schema。后台初始化在主窗口建立后执行；账号切换、退出、暂停和移除取消旧上下文及连接。关闭邮箱面板继续收信，进程退出或休眠不收信。
+- 同步只持久化元数据，正文和附件按需缓存；草稿和未知发送占用资产必须保留。删除本机账号不删除服务器邮件；本机未发草稿与 unknown 操作须明确确认影响后移除。
+- 邮件为不可信外部数据。MCP 成功结果在 `{externalData:true,value}` 中返回 DTO；读取不自动已读。HTML 完整拼接后清洗并使用无脚本、无同源权限的 sandbox；远程图片只由用户明确加载并经过主进程固定解析 IP 的网络限制。
+- 新信通知只在当前电脑呈现，不同步云端消息中心；历史 baseline 不提醒。发送固定预览、稳定请求 ID 和草稿修订，SMTP 接受不等于送达；unknown 只能核验，不得自动重发；阿里 Sent 由服务器保存。
