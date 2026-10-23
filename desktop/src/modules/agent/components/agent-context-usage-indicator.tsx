@@ -6,10 +6,6 @@ type AgentContextUsageIndicatorProps = {
   readonly contextUsage?: SynapseAgentContextUsage
 }
 
-const compactTokenFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-})
 const exactTokenFormatter = new Intl.NumberFormat("en-US")
 
 function AgentContextUsageIndicator({ contextUsage }: AgentContextUsageIndicatorProps) {
@@ -30,29 +26,15 @@ function AgentContextUsageIndicator({ contextUsage }: AgentContextUsageIndicator
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="flex shrink-0 items-center gap-2 rounded-sm px-2 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-6 shrink-0 items-center rounded-sm px-2 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-agent-context-usage
           tabIndex={0}
         >
-          {hasWindow ? (
-            <>
-              <span className="whitespace-nowrap @max-[620px]/agent-header:hidden">
-                {autoCompactThresholdTokens ? `占用 ${compactTokenFormatter.format(usedTokens)} · 整理 ${compactTokenFormatter.format(displayWindowTokens)}` : `上下文 ${compactTokenFormatter.format(usedTokens)} / ${compactTokenFormatter.format(displayWindowTokens)} · ${percentage}%`}
-              </span>
-              <span className="hidden whitespace-nowrap @max-[620px]/agent-header:inline">
-                上下文 {percentage}%
-              </span>
-              <Progress
-                className="w-16 shrink-0"
-                value={progressValue}
-                aria-label={`上下文占用 ${percentage}%`}
-              />
-            </>
-          ) : (
-            <span className="whitespace-nowrap">
-              上下文 {compactTokenFormatter.format(usedTokens)}
-            </span>
-          )}
+          <Progress
+            className="w-16 shrink-0"
+            value={progressValue}
+            aria-label={percentage === undefined ? `上下文已用 ${exactUsed} token` : `上下文占用 ${percentage}%`}
+          />
         </span>
       </TooltipTrigger>
       <TooltipContent>

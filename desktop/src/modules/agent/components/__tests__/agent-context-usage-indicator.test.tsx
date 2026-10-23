@@ -49,15 +49,14 @@ async function openTooltip(container: HTMLDivElement): Promise<void> {
 }
 
 describe("AgentContextUsageIndicator", () => {
-  it("renders exact occupancy, percentage and a responsive progress bar", async () => {
+  it("only renders a progress bar with an accessible occupancy label", async () => {
     const container = await renderIndicator({
       usedTokens: 58_000,
       contextWindowTokens: 200_000,
       model: "claude",
     })
 
-    expect(container.textContent).toContain("上下文 58K / 200K · 29%")
-    expect(container.textContent).toContain("上下文 29%")
+    expect(container.textContent).toBe("")
     const progress = container.querySelector('[role="progressbar"]')
     expect(progress?.getAttribute("aria-label")).toBe("上下文占用 29%")
     expect(container.querySelector('[data-slot="progress-indicator"]')?.getAttribute("style"))
@@ -65,11 +64,15 @@ describe("AgentContextUsageIndicator", () => {
     expect(container.querySelector("[data-agent-context-usage]")?.className).toContain("text-muted-foreground")
   })
 
-  it("only renders used tokens while the context window is unknown", async () => {
+  it("keeps used tokens in the tooltip while the context window is unknown", async () => {
     const container = await renderIndicator({ usedTokens: 12_400, model: "custom-model" })
 
-    expect(container.textContent).toBe("上下文 12.4K")
-    expect(container.querySelector('[role="progressbar"]')).toBeNull()
+    expect(container.textContent).toBe("")
+    const progress = container.querySelector('[role="progressbar"]')
+    expect(progress?.getAttribute("aria-label")).toBe("上下文已用 12,400 token")
+    expect(progress?.getAttribute("aria-valuenow")).toBeNull()
+    await openTooltip(container)
+    expect(document.body.textContent).toContain("已用 12,400 token")
   })
 
   it("lets keyboard users focus the usage summary and open its details", async () => {
@@ -90,10 +93,10 @@ describe("AgentContextUsageIndicator", () => {
     expect(container.innerHTML).toBe("")
   })
 
-  it("keeps raw percentage text while clamping progress to 100", async () => {
+  it("keeps raw percentage accessible while clamping progress to 100", async () => {
     const container = await renderIndicator({ usedTokens: 210_000, contextWindowTokens: 200_000 })
 
-    expect(container.textContent).toContain("上下文 210K / 200K · 105%")
+    expect(container.textContent).toBe("")
     const progress = container.querySelector('[role="progressbar"]')
     expect(progress?.getAttribute("aria-label")).toBe("上下文占用 105%")
     expect(container.querySelector('[data-slot="progress-indicator"]')?.getAttribute("style"))
@@ -114,7 +117,9 @@ describe("AgentContextUsageIndicator", () => {
       autoCompactThresholdTokens: 167_000,
     })
 
-    expect(container.textContent).toContain("占用 150K · 整理 167K")
+    expect(container.textContent).toBe("")
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-label"))
+      .toBe("上下文占用 90%")
     await openTooltip(container)
     expect(document.body.textContent).toContain("自动整理触发 167,000 token")
     expect(document.body.textContent).toContain("模型窗口 200,000 token")
