@@ -46,4 +46,3 @@
 - Ruling: API reference is generated, not hand-maintained; runtime search/invoke schema remains authoritative — prevents drift, costs regenerated50KiB documentation.
 - Ruling: use isolated local candidate output with signing auto-discovery disabled (electron-builder applies an ad-hoc signature, not a production certificate) — avoids publishing/notarization or overwriting previous build output; does not prove production signature/update behavior or Windows compatibility.
 - Ruling: default check:packaged-asar scans all release history and fails on old release/mac-arm64 hashes; preserve historical artifacts and run the same verifier against release/mail-client-candidate explicitly — current candidate has meaningful source/hash and runtime verification, while whole-history command remains reported as failed. No deletion or weakening of checks.
-

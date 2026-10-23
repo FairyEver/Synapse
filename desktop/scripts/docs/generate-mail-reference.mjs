@@ -11,5 +11,5 @@ for (const tool of tools) {
   const definition = Object.values(MAIL_DEFINITIONS).find(item => item.id === `app.mail.${tool.name.slice(9).replace(/^(account|folder|sync|message|search|draft|attachment|body|send|operation|cache)_/, "$1.")}`)
   output += `### ${tool.name}\n\n${tool.description}\n\n权限：${definition?.permission ?? "见运行时定义"}；风险：${definition?.risk ?? "normal"}。\n\n\`\`\`json\n${JSON.stringify(tool.inputSchema, null, 2)}\n\`\`\`\n\n`
 }
-await writeFile(path.join(desktop, "app-capabilities/synapse-skill/skill-package/mail/api-reference.md"), output)
+await writeFile(path.join(desktop, "app-capabilities/synapse-skill/skill-package/mail/api-reference.md"), output.trimEnd() + "\n")
 process.stdout.write(`Generated ${tools.length} mailbox input definitions.\n`)
