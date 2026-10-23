@@ -145,6 +145,85 @@ it("supports native close cancellation and discards edits without rewriting an e
   expect(editor.draft).toBeNull()
 })
 
+it("closes without prompting after all edits are restored to the saved content", async () => {
+  await setup()
+  act(() => { editor.edit({ subject: "临时主题" }); editor.changeAddress("to", "other@example.com") })
+  act(() => { editor.edit({ subject: draft.subject }); editor.changeAddress("to", "to@example.com") })
+  expect(editor.dirty).toBe(false)
+  const leave = vi.fn()
+  await act(async () => { expect(await runAppNavigation(leave)).toBe(true) })
+  expect(leave).toHaveBeenCalledTimes(1)
+  const event = new Event("beforeunload", { cancelable: true })
+  act(() => { window.dispatchEvent(event) })
+  expect(event.defaultPrevented).toBe(false)
+  await act(async () => { expect(await editor.close()).toBe(true) })
+  expect(editor.closeRequested).toBe(false)
+  expect(mocks.api.draftUpdate).not.toHaveBeenCalled()
+})
+
+it("does not mark repeated identical updates as unsaved edits", async () => {
+  await setup()
+  act(() => { editor.edit({ html: draft.html, text: draft.text }); editor.changeAddress("to", "to@example.com") })
+  expect(editor.dirty).toBe(false)
+  await act(async () => { expect(await editor.close()).toBe(true) })
+  expect(editor.closeRequested).toBe(false)
+})
+
+it("closes without prompting when edits leave only whitespace and empty formatting", async () => {
+  await setup()
+  act(() => {
+    editor.changeAddress("to", " \n "); editor.changeAddress("cc", " ")
+    editor.edit({ subject: " \t ", text: "", html: "<p><strong> &nbsp; </strong><br></p>" })
+  })
+  const event = new Event("beforeunload", { cancelable: true })
+  act(() => { window.dispatchEvent(event) })
+  expect(event.defaultPrevented).toBe(false)
+  const leave = vi.fn()
+  await act(async () => { expect(await runAppNavigation(leave)).toBe(true) })
+  await act(async () => { expect(await editor.close()).toBe(true) })
+  expect(editor.closeRequested).toBe(false)
+  expect(mocks.api.draftUpdate).not.toHaveBeenCalled()
+})
+
+it.each([
+  { name: "recipient", patch: {}, to: "new@example.com", cc: "" },
+  { name: "Cc recipient", patch: {}, to: "", cc: "copy@example.com" },
+  { name: "subject", patch: { subject: "新主题" }, to: "", cc: "" },
+  { name: "body", patch: { html: "<p>新正文</p>", text: "新正文" }, to: "", cc: "" },
+  { name: "attachment", patch: { assetIds: ["mas_attachment"] }, to: "", cc: "" },
+  { name: "inline image", patch: { html: '<p><img src="cid:image@local"></p>', inlineImages: [{ assetId: "mas_image", cid: "image@local" }] }, to: "", cc: "" },
+])("prompts before discarding a changed $name even without other content", async ({ patch, to, cc }) => {
+  await setup(); await act(async () => { await editor.close() })
+  mocks.api.draftPrepare = vi.fn().mockResolvedValue({ ...draft, to: [], subject: "", text: "", html: "", localSaved: false })
+  await act(async () => { await editor.open({ accountId: draft.accountId }) })
+  act(() => { editor.changeAddress("to", to); editor.changeAddress("cc", cc); editor.edit(patch) })
+  const event = new Event("beforeunload", { cancelable: true })
+  act(() => { window.dispatchEvent(event) })
+  expect(event.defaultPrevented).toBe(true)
+  await act(async () => { expect(await editor.close()).toBe(false) })
+  expect(editor.closeRequested).toBe(true)
+})
+
+it("uses the most recent explicit save as the comparison baseline", async () => {
+  await setup()
+  act(() => editor.edit({ subject: "已保存主题" }))
+  await act(async () => { await editor.save() })
+  act(() => { editor.edit({ subject: "临时修改" }); editor.edit({ subject: "已保存主题" }) })
+  expect(editor.dirty).toBe(false)
+  await act(async () => { expect(await editor.close()).toBe(true) })
+  expect(mocks.api.draftUpdate).toHaveBeenCalledTimes(1)
+})
+
+it("ignores unused image metadata after an inserted image is removed", async () => {
+  await setup()
+  act(() => editor.edit({ html: '<p>正文<img src="cid:image@local"></p>', inlineImages: [{ assetId: "mas_image", cid: "image@local" }] }))
+  expect(editor.dirty).toBe(true)
+  act(() => editor.edit({ html: draft.html, text: draft.text }))
+  expect(editor.dirty).toBe(false)
+  await act(async () => { expect(await editor.close()).toBe(true) })
+  expect(editor.closeRequested).toBe(false)
+})
+
 it("retains an image arriving after first save without saving it implicitly", async () => {
   await setup(); await act(async () => { await editor.close() })
   mocks.api.draftPrepare = vi.fn().mockResolvedValue({ ...draft, localSaved: false })
@@ -160,6 +239,8 @@ it("retains an image arriving after first save without saving it implicitly", as
   await act(async () => { pending.resolve({ id: "mas_image" }); expect(await importing).toMatchObject({ assetId: "mas_image" }) })
   expect(editor.sessionId).toBe(session)
   expect(editor.draft?.inlineImages).toHaveLength(1)
+  const image = editor.draft!.inlineImages[0]
+  act(() => editor.edit({ html: `<p>正文<img src="cid:${image.cid}"></p>` }))
   expect(editor.dirty).toBe(true)
   expect(mocks.api.draftCommit).toHaveBeenCalledTimes(1)
   expect(mocks.api.draftUpdate).not.toHaveBeenCalled()

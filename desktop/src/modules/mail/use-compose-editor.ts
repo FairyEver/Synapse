@@ -11,6 +11,7 @@ export function useComposeEditor(model: ComposeModel) {
   const latest = useRef(model); latest.current = model
   const [error, setError] = useState<string | null>(null), [activeMarks, setActiveMarks] = useState<string[]>([])
   const [linkOpen, setLinkOpen] = useState(false), [link, changeLink] = useState("")
+  const initialBody = useRef<{ json: string; html: string; text: string } | null>(null)
   const currentSession = useRef(model.sessionId); currentSession.current = model.sessionId
   const imageExtension = useRef(Image.extend({
     addNodeView() {
@@ -45,16 +46,25 @@ export function useComposeEditor(model: ComposeModel) {
     onUpdate({ editor }) {
       const draft = latest.current.currentDraft()
       if (!draft) return
-      try { const safe = sanitizeComposeDocument(editor.getHTML(), draft.inlineImages); latest.current.edit(safe) } catch (cause) { setError(mailError(cause)) }
+      try {
+        const initial = initialBody.current
+        // 编辑器会规范化标签；撤销回加载时的文档不应被视为正文修改。
+        const safe = initial?.json === JSON.stringify(editor.getJSON()) ? { html: initial.html, text: initial.text } : sanitizeComposeDocument(editor.getHTML(), draft.inlineImages)
+        latest.current.edit(safe)
+      } catch (cause) { setError(mailError(cause)) }
     },
     onSelectionUpdate({ editor }) { setActiveMarks(["bold", "italic", "underline", "bulletList", "orderedList"].filter(mark => editor.isActive(mark))) },
   })
   useEffect(() => {
     const draft = model.draft
     setError(null)
-    if (editor) editor.commands.setContent(draft ? sanitizeComposeDocument(draft.html || draft.text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/\n/gu, "<br>"), draft.inlineImages).html : "", { emitUpdate: false })
+    if (editor) {
+      const body = draft ? sanitizeComposeDocument(draft.html || draft.text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/\n/gu, "<br>"), draft.inlineImages) : { html: "", text: "" }
+      editor.commands.setContent(body.html, { emitUpdate: false })
+      initialBody.current = { ...body, json: JSON.stringify(editor.getJSON()) }
+    }
   }, [editor, model.sessionId, !!model.draft])
-  useEffect(() => { editor?.setEditable(model.draft?.state === "editing" && !model.sending && !["unknown", "failed"].includes(model.receipt?.state ?? "")) }, [editor, model.draft?.state, model.sending, model.receipt?.state])
+  useEffect(() => { editor?.setEditable(model.draft?.state === "editing" && !model.sending && !["unknown", "failed"].includes(model.receipt?.state ?? ""), false) }, [editor, model.draft?.state, model.sending, model.receipt?.state])
   async function insertImages(files: File[]) {
     const session = currentSession.current
     for (const file of files) {

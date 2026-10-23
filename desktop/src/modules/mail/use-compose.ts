@@ -10,6 +10,15 @@ import { registerNavigationGuard } from "@/app-shell/navigation-guard"
 import type { ComposeIntent } from "./layout"
 const fields = (draft: Draft): Omit<DraftInput, "accountId"> => ({ to: draft.to, cc: draft.cc, bcc: [], subject: draft.subject, html: draft.html, text: draft.text, assetIds: draft.assetIds, inlineImages: draft.inlineImages })
 const addressText = (addresses: Draft["to"]) => addresses.map(a => a.name ? `${JSON.stringify(a.name)} <${a.address}>` : a.address).join(", ")
+function composeContent(draft: Draft, addresses: { to: string; cc: string }) {
+  const source = draft.html || draft.text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/\n/gu, "<br>")
+  const body = sanitizeComposeDocument(source, draft.inlineImages)
+  const hasBody = !!body.text.replace(/[\s\u200b-\u200d\ufeff]/gu, "") || body.html.includes("<img ")
+  return {
+    key: JSON.stringify({ to: addresses.to.trim(), cc: addresses.cc.trim(), subject: draft.subject, html: hasBody ? body.html : "", assetIds: draft.assetIds }),
+    hasContent: !!(addresses.to.trim() || addresses.cc.trim() || draft.subject.trim() || hasBody || draft.assetIds.length),
+  }
+}
 export function parseMailAddresses(value: string): Draft["to"] {
   const parts: string[] = []
   let part = "", quoted = false, escaped = false, angle = false
@@ -39,15 +48,24 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const [error, setError] = useState<string | null>(null), [saving, setSaving] = useState(false), [sending, setSending] = useState(false), [loading, setLoading] = useState(false)
   const [dirty, setDirty] = useState(false), [editVersion, setEditVersion] = useState(0), [preview, setPreview] = useState<MailPreview | null>(null), [receipt, setReceipt] = useState<SendReceipt | null>(null)
   const value = useRef<Draft | null>(null), addressRef = useRef(addresses), changed = useRef(0), saved = useRef(0), epoch = useRef(0), active = useRef(true), ownerRef = useRef(owner)
+  const baseline = useRef(""), unsavedContent = useRef(false)
   ownerRef.current = owner
   const savingTask = useRef<Promise<void> | null>(null), sendLock = useRef(false), opening = useRef(false)
   const request = useRef<{ previewId: string; key: string } | null>(null)
   const replace = (next: Draft | null) => { value.current = next; setDraft(next) }
+  const refreshDirty = () => {
+    const current = value.current && composeContent(value.current, addressRef.current)
+    const isDirty = !!current && current.key !== baseline.current
+    unsavedContent.current = isDirty && !!current?.hasContent
+    setDirty(isDirty)
+  }
   const initialize = (next: Draft) => {
     replace(next); const a = { to: addressText(next.to), cc: addressText(next.cc) }; addressRef.current = a; setAddresses(a); changed.current = 0; saved.current = 0; setDirty(false); setPreview(null); setReceipt(null); request.current = null
+    baseline.current = composeContent(next, a).key; unsavedContent.current = false
   }
   useEffect(() => {
     active.current = true; epoch.current++; replace(null); setDirty(false); setError(null); setPreview(null); setReceipt(null); sendLock.current = false; opening.current = false; savingTask.current = null; setSaving(false); setSending(false); setLoading(false); setCloseRequested(false); persisted.current = false; changed.current = 0; saved.current = 0
+    baseline.current = ""; unsavedContent.current = false
     return () => { active.current = false; epoch.current++ }
   }, [owner])
   const open = useCallback(async (intent: ComposeIntent) => {
@@ -62,11 +80,11 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   }, [owner])
   const edit = useCallback((patch: Partial<Omit<DraftInput, "accountId">>) => {
     if (!value.current || value.current.state !== "editing" || sendLock.current) return
-    changed.current++; replace({ ...value.current, ...patch }); setDirty(true); setPreview(null); request.current = null; setEditVersion(changed.current)
+    changed.current++; replace({ ...value.current, ...patch }); refreshDirty(); setPreview(null); request.current = null; setEditVersion(changed.current)
   }, [])
   const changeAddress = (key: keyof typeof addresses, text: string) => {
     if (sendLock.current || value.current?.state !== "editing") return
-    addressRef.current = { ...addressRef.current, [key]: text }; setAddresses(addressRef.current); changed.current++; setDirty(true); setPreview(null); request.current = null; setEditVersion(changed.current)
+    addressRef.current = { ...addressRef.current, [key]: text }; setAddresses(addressRef.current); changed.current++; refreshDirty(); setPreview(null); request.current = null; setEditVersion(changed.current)
   }
   const save = useCallback(async (): Promise<void> => {
     if (savingTask.current) return savingTask.current
@@ -81,8 +99,9 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
         const result = await runMailUiOperation("save", () => wasPersisted ? mailApi().draftUpdate({ draftId: snapshot.id, expectedRevision: snapshot.revision, patch }) : mailApi().draftCommit({ content: { accountId: snapshot.accountId, ...patch }, ...(snapshot.sourceMessageId && snapshot.mode !== "new" ? { source: { messageId: snapshot.sourceMessageId, mode: snapshot.mode } } : {}) }))
         if (!active.current || e !== epoch.current || identity !== ownerRef.current) return
         persisted.current = true; saved.current = version
+        baseline.current = composeContent(result, recipientSnapshot).key
         replace(changed.current === version ? result : { ...value.current!, id: result.id, revision: result.revision, localSaved: result.localSaved, syncState: result.syncState })
-        setDirty(changed.current !== saved.current)
+        refreshDirty()
       } catch (cause) { if (active.current && e === epoch.current) setError(mailError(cause)); throw cause }
       finally { if (e === epoch.current) { setSaving(false); savingTask.current = null } }
     })
@@ -92,12 +111,13 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const finishClose = useCallback(() => {
     epoch.current++; opening.current = false; replace(null); setLoading(false); setPreview(null); setReceipt(null); setDirty(false); setError(null); setCloseRequested(false)
     changed.current = 0; saved.current = 0; persisted.current = false
+    baseline.current = ""; unsavedContent.current = false
     closedCallback.current?.()
     return true
   }, [])
   const close = useCallback(async () => {
     if (sendLock.current || savingTask.current) return false
-    if (changed.current !== saved.current) { setCloseRequested(true); return false }
+    if (unsavedContent.current) { setCloseRequested(true); return false }
     return finishClose()
   }, [finishClose])
   const resolveClose = async (choice: "save" | "discard" | "cancel") => {
@@ -108,14 +128,14 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   }
   useEffect(() => {
     const prevent = (event: BeforeUnloadEvent) => {
-      if (changed.current !== saved.current || sendLock.current || savingTask.current) {
+      if (unsavedContent.current || sendLock.current || savingTask.current) {
         event.preventDefault(); event.returnValue = ""
         if (!sendLock.current && !savingTask.current) setCloseRequested(true)
       }
     }
     window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent)
   }, [])
-  useEffect(() => registerNavigationGuard(() => !sendLock.current && !savingTask.current && changed.current === saved.current), [owner])
+  useEffect(() => registerNavigationGuard(() => !sendLock.current && !savingTask.current && !unsavedContent.current), [owner])
   const preparePreview = async () => {
     const e = epoch.current
     try {
