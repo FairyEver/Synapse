@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除及实时进度；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -246,6 +246,6 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-23 邮箱阅读区保留固定回复工具栏，其下邮件信息、附件和正文一起滚动，移除头部重复链接区，原文链接复用既有受控打开能力；用户批准仅为正文测量与点击接管开启 sandbox 同源读取，脚本仍禁止。上表 Mail 的各注册项不变，邮箱仍为 44 项公开动作、桌面 System App 22 个；MCP schema、系统 Skill 的读信契约不变。
 
-2026-10-23 草稿箱提供与收件箱一致的多选、全选和计数，最多 100 封，确认后逐项调用已有 `draft.delete` 并校验各自 revision。删除失败保留草稿及选择，刷新仅重读已加载的草稿页；不新增批量 IPC 或公开动作。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及 Dock、Workflow、Automation、Deep Link 数量均不变；MCP schema 保持逐封删除，系统 Skill 补充对应操作指南。
+2026-10-23 草稿箱提供与收件箱一致的多选、全选和计数，最多 100 封，确认后逐项调用已有 `draft.delete` 并校验各自 revision。删除按钮显示加载状态，弹窗实时显示剩余待处理数量，每项成功或失败后更新，全部处理后显示列表刷新状态；进度仅在 Renderer 内传递。删除失败保留草稿及选择，刷新仅重读已加载的草稿页；不新增批量 IPC 或公开动作。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及 Dock、Workflow、Automation、Deep Link 数量均不变；MCP schema 保持逐封删除，系统 Skill 的逐封删除契约不变。
 
 2026-10-23 写信窗口移除密送入口与顶栏关闭按钮，仅保留收件人/抄送和原生关闭；窗口显式保存或发送会清空已有草稿的密送地址。共享 MCP schema、系统 Skill 的 Bcc 契约保留兼容，不新增注册表面，邮箱 44 项公开动作、全局 340 capability / 336 MCP 索引和 22 个 System App 均不变。

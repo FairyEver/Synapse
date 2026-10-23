@@ -96,9 +96,43 @@ it("disables draft selection and repeat deletion while the request is pending", 
   act(() => confirmButton("删除草稿").click()); await flush()
   expect(button("选择当前页草稿").disabled).toBe(true)
   expect(button("选择 第二封草稿").disabled).toBe(true)
-  expect(confirmButton("删除草稿").disabled).toBe(true)
+  expect(confirmButton("删除中").disabled).toBe(true)
+  expect(confirmButton("删除中").getAttribute("aria-busy")).toBe("true")
+  expect(confirmButton("删除中").querySelector("svg.animate-spin")).not.toBeNull()
   await act(async () => { remaining = remaining.filter(item => item.id !== draft.id); pending.resolve({ success: true }) }); await flush()
   expect(mocks.api.draftDelete).toHaveBeenCalledTimes(1)
+})
+
+it("updates the remaining count after each settled draft and keeps loading until the list refreshes", async () => {
+  const pending = [deferred<{ success: boolean }>(), deferred<{ success: boolean }>(), deferred<{ success: boolean }>()]
+  mocks.api.draftDelete.mockImplementation(async ({ draftId }) => {
+    const index = [draft.id, second.id, third.id].indexOf(draftId)
+    const result = await pending[index].promise
+    if (draftId === second.id) throw new Error("远端草稿删除失败")
+    remaining = remaining.filter(item => item.id !== draftId)
+    return result
+  })
+  await setup(); select("选择当前页草稿"); await requestDelete()
+  const refresh = deferred<{ items: typeof remaining; nextCursor: null }>()
+  mocks.api.draftList.mockReturnValueOnce(refresh.promise)
+  const progress = () => document.querySelector('[data-slot="alert-dialog-description"]')
+  act(() => confirmButton("删除草稿").click()); await flush()
+  expect(progress()?.textContent).toBe("剩余 3 封")
+  expect(progress()?.getAttribute("aria-live")).toBe("polite")
+  expect(document.querySelector('[data-slot="alert-dialog-title"]')?.textContent).toBe("正在删除草稿")
+  await flush()
+  expect(progress()?.textContent).toBe("剩余 3 封")
+  await act(async () => { pending[0].resolve({ success: true }) }); await flush()
+  expect(progress()?.textContent).toBe("剩余 2 封")
+  await act(async () => { pending[1].resolve({ success: true }) }); await flush()
+  expect(progress()?.textContent).toBe("剩余 1 封")
+  await act(async () => { pending[2].resolve({ success: true }) }); await flush()
+  expect(progress()?.textContent).toBe("剩余 0 封，正在刷新列表。")
+  expect(confirmButton("删除中").disabled).toBe(true)
+  await act(async () => { refresh.resolve({ items: remaining, nextCursor: null }) }); await flush()
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+  expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("1 封失败"))
+  expect(button("选择 第二封草稿").getAttribute("aria-checked")).toBe("true")
 })
 
 it("caps page selection at 100 drafts and preserves it when another page is appended", async () => {
@@ -141,13 +175,15 @@ it("rejects empty, duplicate, oversized, or out-of-account draft selections befo
 
 it("stops the remaining draft deletions when the mailbox account changes", async () => {
   const pending = deferred<{ success: boolean }>()
+  const progress = vi.fn()
   mocks.api.draftDelete.mockReturnValueOnce(pending.promise)
   await setup()
   let deleting!: ReturnType<typeof current.deleteDrafts>
-  act(() => { deleting = current.deleteDrafts([draft.id, second.id]) })
+  act(() => { deleting = current.deleteDrafts([draft.id, second.id], progress) })
   act(() => current.selectAccount("ma_two")); await flush()
   await act(async () => { pending.resolve({ success: true }); await expect(deleting).rejects.toThrow("邮箱账号已变化") })
   expect(mocks.api.draftDelete).toHaveBeenCalledTimes(1)
+  expect(progress).not.toHaveBeenCalled()
   expect(current.accountId).toBe("ma_two")
   expect(current.drafts).toEqual([])
 })

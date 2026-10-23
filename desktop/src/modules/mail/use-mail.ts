@@ -146,7 +146,7 @@ export function useMail() {
     await refreshRef.current(); return result
   }, [owner, detail])
   const clearDetail = useCallback(() => { selection.current++; setDetail(null) }, [])
-  const deleteDrafts = useCallback(async (ids: string[]): Promise<DraftDeleteResult> => {
+  const deleteDrafts = useCallback(async (ids: string[], onRemainingChange?: (remaining: number) => void): Promise<DraftDeleteResult> => {
     if (!ids.length || ids.length > 100 || new Set(ids).size !== ids.length) throw new Error("每次请选择 1–100 封不同草稿")
     const id = accountRef.current, e = epoch.current
     if (!id || !owner) throw new Error("请选择邮箱")
@@ -164,6 +164,7 @@ export function useMail() {
         result.items.push({ id: draft.id, status: "succeeded" })
       } catch (cause) { result.items.push({ id: draft.id, status: "failed", error: mailError(cause) }) }
       if (!current(e, id)) throw new Error("邮箱账号已变化")
+      onRemainingChange?.(selected.length - result.items.length)
     }
     const deleted = new Set(result.items.filter(item => item.status === "succeeded").map(item => item.id))
     setDrafts(rows => rows.filter(draft => !deleted.has(draft.id)))
