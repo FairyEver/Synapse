@@ -70,3 +70,5 @@
 ## 本机邮箱存储
 
 `app.mail.*` 的 11 个命名空间标记 `transferPolicy: local-only`，不进入 DataRepository 导出（包括 includeSecrets），导入包含这些命名空间时在任何写入前拒绝。未声明策略的现有域保持 portable。邮件凭据走 encrypted-json，元数据走有条件和上限的 SQLite 索引，正文/附件通过 DataRepository 的 ManagedAssetStore 管理文件字节；业务层不裸写文件。资产元数据先 staged 再 ready，删除先持久 delete-pending；后台有界维护仅在窗口创建后执行，已引用的草稿和发送资产不参与缓存淘汰。
+
+邮箱附件的外部文件 IO 必须通过资产基础设施执行有界读取或独占导出，先校验规范化路径的权限；不允许覆盖已有文件。邮件正文分块完成后统一清洗，阅读容器不授予脚本、同源、表单或顶层导航权限；CID 图片令牌绑定 SY 身份、generation 和邮件 ID，远程图片逐跳校验并固定公共 IP，无 cookies/认证头。

@@ -68,5 +68,8 @@ export const MAIL_DOMAIN: CapabilityDomainDefinition = {
 }
 export const MAIL_MCP_TOOL_ACTIONS = Object.fromEntries(MAIL_ACTIONS.map((a) => [`app_mail_${a.replaceAll(".", "_")}`, MAIL_DEFINITIONS[a].id]))
 export function buildMailTools(): McpToolDefinition[] {
-  return MAIL_ACTIONS.map((a) => ({ name: `app_mail_${a.replaceAll(".", "_")}`, description: MAIL_DEFINITIONS[a].description, inputSchema: z.toJSONSchema(MAIL_INPUT_SCHEMAS[a], { io: "input" }) }))
+  return MAIL_ACTIONS.map((a) => {
+    const schema = z.toJSONSchema(MAIL_INPUT_SCHEMAS[a], { io: "input" })
+    return { name: `app_mail_${a.replaceAll(".", "_")}`, description: MAIL_DEFINITIONS[a].description, inputSchema: { ...schema, type: "object", properties: schema.properties ?? {}, additionalProperties: typeof schema.additionalProperties === "boolean" ? schema.additionalProperties : true } }
+  })
 }

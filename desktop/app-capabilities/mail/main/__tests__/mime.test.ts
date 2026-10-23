@@ -1,0 +1,45 @@
+import { Readable } from "node:stream"
+import { readFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { expect, it, vi } from "vitest"
+import { parseMailStream, MailContent } from "../mime"
+import { syncRig } from "./sync-fixtures"
+it("streams nested MIME, encoded words and GB18030 without conflating repeated Message-IDs or CIDs", async () => {
+  const bytes = await readFile(new URL("./fixtures/nested.eml", import.meta.url))
+  const attachments: Buffer[] = []
+  const parse = () => parseMailStream(Readable.from([bytes]), { signal: new AbortController().signal, attachment: async (_metadata, stream) => {
+    const chunks: Buffer[] = []; for await (const chunk of stream) chunks.push(chunk); attachments.push(Buffer.concat(chunks))
+  } })
+  const a = await parse(), b = await parse()
+  expect(a.subject).toBe("中文测试"); expect(a.text).toContain("中文")
+  expect(a.messageId).toBe(b.messageId); expect(a.attachments).toHaveLength(2)
+  expect(a.attachments[0].sha256).toBe(createHash("sha256").update(attachments[0]).digest("hex"))
+  expect(a.ambiguousCids).toEqual(["same"])
+  const missing = await parseMailStream(Readable.from(["From: sender@example.com\r\n\r\nText"]), { signal: new AbortController().signal })
+  expect(missing.subject).toBe(""); expect(missing.date).toBeNull()
+  await expect(parseMailStream(Readable.from([bytes]), { signal: new AbortController().signal, maxBytes: 10 })).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" })
+})
+it("fetches only text MIME parts, returns bounded chunks and preserves downloaded attachment bytes", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1]); await r.sync.runOnce(r.ctx, r.account.id)
+    const message = (await r.repo.page(r.ctx, "messages", { accountId: r.account.id })).items[0]
+    vi.mocked(r.session.fetchBodyStructure).mockResolvedValue({ type: "multipart/mixed", childNodes: [{ type: "text/html", part: "1" }, { type: "application/octet-stream", part: "2", size: 4, disposition: "attachment", dispositionParameters: { filename: "test.bin" } }] })
+    vi.mocked(r.session.fetchPart).mockImplementation(async (_path, _uid, part) => Readable.from([part === "2" ? Buffer.from([0, 1, 254, 255]) : Buffer.from("<p>" + "中文".repeat(20_000) + "</p>")]))
+    const content = new MailContent(r.repo, r.accounts, r.assets, r.access)
+    const first = await content.readChunk(r.ctx, { messageId: message.id })
+    expect(Buffer.byteLength(first.html) + Buffer.byteLength(first.text)).toBeLessThanOrEqual(65_536)
+    expect(first.complete).toBe(false); expect(first.nextCursor).toBeTruthy()
+    expect(vi.mocked(r.session.fetchPart).mock.calls.every(c => c[2] !== "2" && c[2] !== undefined)).toBe(true)
+    const list = await content.executeAttachment(r.ctx, "attachment.list", { messageId: message.id, limit: 50 })
+    expect(list.items).toHaveLength(1)
+    const outputPath = `${r.root}/out.bin`
+    const result = await content.executeAttachment(r.ctx, "attachment.download_file", { assetId: list.items[0].id, outputPath })
+    expect(await readFile(outputPath)).toEqual(Buffer.from([0, 1, 254, 255])); expect(result.size).toBe(4)
+    await expect(content.executeAttachment(r.ctx, "attachment.download_file", { assetId: list.items[0].id, outputPath })).rejects.toMatchObject({ code: "OUTPUT_EXISTS" })
+  } finally { await r.sync.dispose(); await r.close() }
+})
+it("contains corrupt source streams without leaking raw error contents", async () => {
+  const source = Readable.from((async function* () { yield "From: sender@example.com\r\n\r\n"; throw new Error("secret protocol failure") })())
+  await expect(parseMailStream(source, { signal: new AbortController().signal })).rejects.toMatchObject({ code: "MIME_INVALID", message: "邮件格式无法解析" })
+})

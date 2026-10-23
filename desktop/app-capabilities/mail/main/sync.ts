@@ -8,7 +8,7 @@ import { normalizeProtocolError, type MailBodyStructure, type MailImapSession, t
 
 export interface StoredFolder extends Record<string, unknown> { folder: Folder; delimiter: string; flags: string[] }
 export interface StoredMessage extends Record<string, unknown> {
-  summary: Omit<MailSummary, "revision">; headers: MailDetail["headers"]; structure: MailBodyStructure | null; bodyRef: string | null; originalFolderId?: string
+  summary: Omit<MailSummary, "revision">; headers: MailDetail["headers"]; structure: MailBodyStructure | null; bodyRef: string | null; searchTextRef?: string; originalFolderId?: string
 }
 interface FolderCheckpoint extends Record<string, unknown> { kind: "folder"; folderId: string; uidValidity: string; baselineUid: number; metadataComplete: boolean; updatedAt: number }
 interface StoredJob extends Record<string, unknown> { kind: "job"; job: MailJob }
@@ -158,7 +158,7 @@ export class MailSync {
       const session = await this.accounts.protocols.imap(ctx, config, credential)
       try {
         const folders = await this.folders(ctx, accountId, session, refreshFolders)
-        let coverage = { ...emptyCoverage(), metadataComplete: true, reason: "server_visible_history_only" }
+        let coverage: Coverage = { ...emptyCoverage(), metadataComplete: true, reason: "server_visible_history_only" }
         for (const folder of folders.filter(f => f.data.folder.selectable && (folderId ? f.id === folderId : refreshFolders || f.data.folder.role === "inbox"))) {
           const result = await this.syncFolder(ctx, accountId, folder, session)
           coverage = { ...result, indexedCount: coverage.indexedCount + result.indexedCount }

@@ -1,0 +1,35 @@
+From: =?UTF-8?B?5byg5LiJ?= <sender@example.com>
+To: me@example.com
+Subject: =?UTF-8?B?5Lit5paH5rWL6K+V?=
+Message-ID: <duplicate@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: multipart/alternative; boundary="inner"
+
+--inner
+Content-Type: text/plain; charset=GB18030
+Content-Transfer-Encoding: base64
+
+1tDOxA==
+--inner
+Content-Type: text/html; charset=UTF-8
+
+<p>中文<img src="cid:same"></p>
+--inner--
+--outer
+Content-Type: image/png
+Content-ID: <same>
+Content-Disposition: inline; filename="one.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgo=
+--outer
+Content-Type: image/png
+Content-ID: <same>
+Content-Disposition: inline; filename="two.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgo=
+--outer--

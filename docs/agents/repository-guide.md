@@ -102,3 +102,5 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 ## 本机邮箱存储
 
 `app.mail.*` 的 11 个命名空间标记 `transferPolicy: local-only`，不进入 DataRepository 导出（包括 includeSecrets），导入包含这些命名空间时在任何写入前拒绝。未声明策略的现有域保持 portable。邮件凭据走 encrypted-json，元数据走有条件和上限的 SQLite 索引，正文/附件通过 DataRepository 的 ManagedAssetStore 管理文件字节；业务层不裸写文件。资产元数据先 staged 再 ready，删除先持久 delete-pending；后台有界维护仅在窗口创建后执行，已引用的草稿和发送资产不参与缓存淘汰。
+
+邮箱本机附件的导入和导出使用资产基础设施的有界流接口；业务层先对规范化绝对路径执行权限检查。导入拒绝最终符号链接，导出用独占创建且不覆盖已有文件；失败时只清理本次新建的输出。远程邮件图片默认阻断，仅在当前邮件明确允许后解析并固定公共 IP 连接，每次重定向重新校验，禁止认证头、cookies 和内网目标。

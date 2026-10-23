@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto"
 import type { Readable } from "node:stream"
 import type { PermissionAction } from "../../../electron/runtime/security"
-import { ManagedAssetStore } from "../../../electron/runtime/data-repo/assets"
+import type { MailRecord } from "../../../electron/runtime/data-repo/schemas/mail"
+import { ManagedAssetStore, AssetSizeLimitError } from "../../../electron/runtime/data-repo/assets"
 import { MAIL_CACHE_BYTES, MAIL_MAX_ATTACHMENT_BYTES } from "../shared/limits"
-import { MailError, type MailAsset, type MailContext } from "../shared/types"
+import { MailError, type MailAsset, type MailContext, type Page } from "../shared/types"
 import { MailRepository } from "./repository"
 
 export type MailAccess = (ctx: MailContext, action: PermissionAction, resource: string) => Promise<void>
@@ -13,6 +14,7 @@ export interface StoredMailAsset extends Record<string, unknown> {
   pins: number
   cache: boolean
   accessedAt: string
+  part?: string
 }
 
 export class MailAssets {
@@ -27,7 +29,10 @@ export class MailAssets {
     const asset: MailAsset = { id, accountId: metadata.accountId, name: metadata.name, mime: metadata.mime, size: 0, sha256: null, cid: metadata.cid ?? null, state: "staged", attachmentId: metadata.attachmentId ?? null, messageId: metadata.messageId ?? null }
     const data: StoredMailAsset = { asset, key: id.slice(4), pins: 0, cache: metadata.cache ?? false, accessedAt: new Date().toISOString() }
     await this.repo.save(ctx, "assets", id, metadata.accountId, data, 0)
-    const stored = await this.files.put(source, maxBytes, ctx.signal, data.key!)
+    const stored = await this.files.put(source, maxBytes, ctx.signal, data.key!).catch(error => {
+      if (error instanceof AssetSizeLimitError) throw new MailError("LIMIT_EXCEEDED", "附件超过大小上限")
+      throw error
+    })
     // Keep the staged row recoverable if identity changes or committing metadata fails.
     // The immutable key equals the generated file key and is never supplied by a caller.
     data.key = stored.key
@@ -44,6 +49,26 @@ export class MailAssets {
 
   async info(ctx: MailContext, id: string): Promise<MailAsset> {
     return (await this.repo.get<StoredMailAsset>(ctx, "assets", id)).data.asset
+  }
+
+  async materialize(ctx: MailContext, id: string, source: Readable, maxBytes = MAIL_MAX_ATTACHMENT_BYTES): Promise<MailAsset> {
+    const row = await this.repo.get<StoredMailAsset>(ctx, "assets", id)
+    if (row.data.asset.state === "ready") { source.destroy(); return row.data.asset }
+    if (row.data.asset.state !== "remote") { source.destroy(); throw new MailError("ASSET_BUSY", "附件正在处理，请稍后重试") }
+    await this.access(ctx, "fs.write", id)
+    const key = randomUUID()
+    const staged = await this.repo.save(ctx, "assets", id, row.accountId, { ...row.data, key, cache: true, asset: { ...row.data.asset, state: "staged" as const } }, row.revision, row.sortKey)
+    let stored: Awaited<ReturnType<ManagedAssetStore["put"]>>
+    try { stored = await this.files.put(source, maxBytes, ctx.signal, key) } catch (error) {
+      if (!ctx.signal.aborted) {
+        try { await this.repo.save(ctx, "assets", id, row.accountId, row.data, staged.revision, row.sortKey) } catch (rollback) { throw new AggregateError([error, rollback], "Attachment download and recovery failed") }
+      }
+      if (error instanceof AssetSizeLimitError) throw new MailError("LIMIT_EXCEEDED", "附件超过大小上限")
+      throw error
+    }
+    const asset = { ...row.data.asset, state: "ready" as const, size: stored.size, sha256: stored.sha256 }
+    try { await this.repo.save(ctx, "assets", id, row.accountId, { ...staged.data, asset }, staged.revision, row.sortKey) } catch (error) { await this.files.remove(key); throw error }
+    return asset
   }
 
   async read(ctx: MailContext, id: string, maxBytes = MAIL_MAX_ATTACHMENT_BYTES): Promise<Buffer> {
@@ -110,7 +135,7 @@ export class MailAssets {
     let removed = 0, bytes = 0
     cursor = undefined
     while (remaining > budget) {
-      const page = await this.repo.page<StoredMailAsset>(ctx, "assets", { accountId, cursor, limit: 100 })
+      const page: Page<MailRecord<StoredMailAsset>> = await this.repo.page<StoredMailAsset>(ctx, "assets", { accountId, cursor, limit: 100 })
       for (const row of page.items) {
         if (remaining <= budget) break
         if (!row.data.cache || row.data.pins > 0 || row.data.asset.state !== "ready") continue

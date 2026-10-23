@@ -17,6 +17,8 @@
     }
   },
   "include": [
+    "app-capabilities/mail/**/__tests__/**/*.ts",
+    "app-capabilities/mail/**/__tests__/**/*.tsx",
     "extensions/**/__tests__/**/*.ts",
     "workflow-nodes/**/__tests__/**/*.ts",
     "workflow-nodes/**/*.ts",

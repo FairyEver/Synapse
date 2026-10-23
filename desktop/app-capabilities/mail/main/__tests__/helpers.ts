@@ -21,7 +21,7 @@ export async function createMailTestRig() {
   const storage = new DataRepositoryImpl()
   for (const schema of mailSchemas) {
     if (schema.backend === "sqlite") storage.register(schema, new SqliteNamespace({ name: schema.name, schemaVersion: 1, backend: "sqlite", database, validate: schema.validate, sqlite: schema.sqlite }))
-    else storage.register(schema, new EncryptedJsonNamespace({ name: schema.name, schemaVersion: 1, filePath: path.join(root, "credentials.bin"), safeStorage: { isEncryptionAvailable: () => true, encryptString: s => Buffer.from(s), decryptString: b => b.toString() }, validate: schema.validate }))
+    else storage.register(schema, new EncryptedJsonNamespace({ name: schema.name, schemaVersion: 1, backend: "encrypted-json", filePath: path.join(root, "credentials.bin"), safeStorage: { isEncryptionAvailable: () => true, encryptString: s => Buffer.from(s), decryptString: b => b.toString() }, validate: schema.validate }))
   }
   let owner: string | null = "test-owner"
   const context = new MailContextProvider(() => owner)
