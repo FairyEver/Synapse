@@ -47,6 +47,13 @@ const SYSTEM_APP_WINDOW_BOUNDS = {
   minHeight: 640,
 }
 
+const MAIL_COMPOSE_WINDOW_BOUNDS = {
+  width: 800,
+  height: 640,
+  minWidth: 640,
+  minHeight: 480,
+}
+
 function resolveSystemAppWindowPreloadPath(baseDir: string): string {
   return path.join(baseDir, "../preload.js")
 }
@@ -191,7 +198,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         key: windowKey,
         payload: { appId, definition, url },
         options: {
-          ...SYSTEM_APP_WINDOW_BOUNDS,
+          ...(compose ? MAIL_COMPOSE_WINDOW_BOUNDS : SYSTEM_APP_WINDOW_BOUNDS),
           title: compose ? "写邮件" : buildSystemAppWindowTitle(definition),
           webPreferences: {
             preload: deps.getPreloadPath?.() ?? resolveSystemAppWindowPreloadPath(__dirname),
