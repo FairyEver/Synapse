@@ -562,7 +562,7 @@ import type {
 import type {
   SynapseSystemAppContentOpenRequest,
   SynapseSystemAppGitOpenRequest,
-  SynapseSystemAppMailOpenRequest,
+  SynapseSystemAppMailInternalOpenRequest,
   TodoOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
@@ -1049,8 +1049,8 @@ export type SynapseBridge = {
       listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
     ) => () => void
     onTodoOpenRequest: (listener: (request: TodoOpenRequest) => void) => () => void
-    onMailOpenRequest: (
-      listener: (request: SynapseSystemAppMailOpenRequest) => void,
+    onMailInternalOpenRequest: (
+      listener: (request: SynapseSystemAppMailInternalOpenRequest) => void,
     ) => () => void
   }
   documentTemplate: {
@@ -1423,7 +1423,7 @@ export type SynapseBridge = {
       onReset: (listener: () => void) => () => void
     }
   }
-  mail: {
+  mailInternal: {
     contact: { list: (input: { box: "inbox" | "sent" }) => Promise<import("./mail").MailOperationResult["contactList"]> }
     recipient: { list: (input: { query: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["recipientSearch"]> }
     organization: {

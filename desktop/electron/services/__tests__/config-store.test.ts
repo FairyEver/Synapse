@@ -17,6 +17,7 @@ vi.mock("electron", () => ({
 import { configStore } from "../config-store"
 import { DEFAULT_DOCK_MIGRATION_IDS } from "../../../src/modules/apps/dock"
 import type { SynapseConfigPatch } from "../../../src/types/config"
+import { createDefaultConfig } from "../../../src/lib/config"
 
 describe("ConfigStore", () => {
   beforeEach(() => {
@@ -29,6 +30,21 @@ describe("ConfigStore", () => {
       initialized: false,
       namespace: null,
     })
+  })
+
+  it("keeps the old config and retries when saving the rename fails", async () => {
+    const original = createDefaultConfig()
+    const legacy = { ...original, global: { ...original.global, dockAppIds: ["mail", "launcher"], dockMigrationIds: ["dock.mail-introduction.v1"] } }
+    const setSingleton = vi.fn().mockRejectedValueOnce(new Error("disk full")).mockResolvedValue(undefined)
+    const namespace = { getSingleton: vi.fn().mockResolvedValue(legacy), setSingleton }
+    Object.assign(configStore, { initialized: true, cachedConfig: null, namespace })
+    await expect(configStore.load()).rejects.toThrow("disk full")
+    expect(legacy.global.dockAppIds).toEqual(["mail", "launcher"])
+    expect(legacy.global.dockMigrationIds).toEqual(["dock.mail-introduction.v1"])
+    const result = await configStore.load()
+    expect(result.global.dockAppIds).toEqual(["mail-internal", "launcher"])
+    expect(result.global.dockMigrationIds).toContain("dock.mail-internal-rename.v1")
+    expect(setSingleton).toHaveBeenCalledTimes(2)
   })
 
   it("normalizes existing persisted config before returning it", async () => {
@@ -90,7 +106,7 @@ describe("ConfigStore", () => {
       }))
 
       const migrated = await configStore.load()
-      expect(migrated.global.dockAppIds).toEqual(["agent", "mail", "launcher"])
+      expect(migrated.global.dockAppIds).toEqual(["agent", "mail-internal", "launcher"])
       expect(migrated.global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
 
       await configStore.update({ global: { dockAppIds: ["agent", "launcher"] } })

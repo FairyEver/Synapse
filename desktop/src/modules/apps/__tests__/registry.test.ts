@@ -17,7 +17,7 @@ describe("system app registry", () => {
       "agent-personas",
       "workflow",
       "drive",
-      "mail",
+      "mail-internal",
       "todos",
       "automation",
       "launcher",

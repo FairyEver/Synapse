@@ -59,16 +59,16 @@ describe("app Dock model", () => {
 
   it("supports moving an app to the end and inserting another app before it", () => {
     expect(moveDockAppIdToEnd(["launcher", "agent"], "launcher")).toEqual(["agent", "launcher"])
-    expect(insertDockAppIdBefore(["agent", "launcher"], "mail", "launcher"))
-      .toEqual(["agent", "mail", "launcher"])
-    expect(insertDockAppIdBefore(["agent", "mail", "launcher"], "mail", "launcher"))
-      .toEqual(["agent", "mail", "launcher"])
+    expect(insertDockAppIdBefore(["agent", "launcher"], "mail-internal", "launcher"))
+      .toEqual(["agent", "mail-internal", "launcher"])
+    expect(insertDockAppIdBefore(["agent", "mail-internal", "launcher"], "mail-internal", "launcher"))
+      .toEqual(["agent", "mail-internal", "launcher"])
   })
 
   it("applies each Dock migration once and preserves the applied ids", () => {
     const migrated = applyDockMigrations(["launcher", "agent"], [])
 
-    expect(migrated.dockAppIds).toEqual(["agent", "mail", "launcher"])
+    expect(migrated.dockAppIds).toEqual(["agent", "mail-internal", "launcher"])
     expect(migrated.appliedMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
     expect(applyDockMigrations(migrated.dockAppIds, migrated.appliedMigrationIds)).toEqual(migrated)
   })
@@ -80,8 +80,8 @@ describe("app Dock model", () => {
 
   it("keeps other apps in user order and moves an existing Mail without duplication", () => {
     expect(applyDockMigrations(["mail", "database", "launcher", "workflow", "agent"], []).dockAppIds)
-      .toEqual(["database", "workflow", "agent", "mail", "launcher"])
-    expect(applyDockMigrations([], []).dockAppIds).toEqual(["mail", "launcher"])
+      .toEqual(["database", "workflow", "agent", "mail-internal", "launcher"])
+    expect(applyDockMigrations([], []).dockAppIds).toEqual(["mail-internal", "launcher"])
   })
 
   it("does not move launcher or reintroduce Mail after the migration was recorded", () => {

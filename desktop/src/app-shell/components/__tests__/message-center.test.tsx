@@ -13,7 +13,7 @@ vi.mock("@/components/mail-quick-reply-dialog", () => ({ MailQuickReplyDialog: (
 const mockCenter = vi.hoisted(() => ({
   authenticated: true, open: true, filter: "all", source: "all", items: [] as SynapseNotification[], cursor: null, unread: 0,
   selected: {
-    id: "n1", source: "mail", title: "新站内信", body: "来自 Synapse。", group: "mail", url: null,
+    id: "n1", source: "mail-internal", title: "新站内信", body: "来自 Synapse。", group: "mail-internal", url: null,
     level: "active", targetId: "broadcast-1", deviceId: null, readAt: "2026-09-29T10:00:00.000Z",
     resolvedAt: null, createdAt: "2026-09-29T10:00:00.000Z",
   },

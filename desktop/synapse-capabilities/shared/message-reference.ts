@@ -6,11 +6,11 @@ function validId(id: string): string {
 }
 
 export function buildMailMessageReference(messageId: string): string {
-  return `synapse://mail/${validId(messageId)}`
+  return `synapse://mail-internal/${validId(messageId)}`
 }
 
 export function parseMailMessageReference(reference: string): string {
-  const match = /^synapse:\/\/mail\/([A-Za-z0-9_-]{1,200})$/u.exec(reference)
+  const match = /^synapse:\/\/mail-internal\/([A-Za-z0-9_-]{1,200})$/u.exec(reference)
   if (!match) throw new Error("invalid_mail_reference")
   return match[1]
 }

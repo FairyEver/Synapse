@@ -33,7 +33,7 @@ import { readFile, realpath, stat, statfs } from "node:fs/promises"
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter, type SynapseActionRouter } from "../capabilities/action-router"
-import { createMailCapabilityDispatcher } from "../capabilities/mail-dispatcher"
+import { createMailInternalCapabilityDispatcher } from "../capabilities/mail-internal-dispatcher"
 import { TodoCloudService } from "../../app-capabilities/todos/main/service"
 import { createTodoCapabilityDispatcher } from "../../app-capabilities/todos/main/dispatcher"
 import { TODOS_SERVICE_ID } from "../../app-capabilities/todos/shared/capability"
@@ -1761,7 +1761,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       permissionGuard,
       auditSink,
     })
-    const mailDispatcher = createMailCapabilityDispatcher({ accountService, permissionGuard, auditSink })
+    const mailInternalDispatcher = createMailInternalCapabilityDispatcher({ accountService, permissionGuard, auditSink })
     const wecomConnection = ctx.registry.get<WecomConnectionService>(WECOM_CONNECTION_SERVICE_ID)
     const wecomDispatcher = createWecomCapabilityDispatcher({
       service: new WecomInvocationService({ connection: wecomConnection }),
@@ -1862,7 +1862,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       automationDispatch: (action, params, context) => automationDispatcher.dispatch(action, params, context),
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       driveDispatch: (action, params, context) => driveDispatcher.dispatch(action, params, context),
-      mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
+      mailInternalDispatch: (action, params, context) => mailInternalDispatcher.dispatch(action, params, context),
       wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),

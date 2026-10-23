@@ -1,3 +1,4 @@
+import { migrateInternalMailConfig } from "../modules/apps/mail-internal-migration"
 import { isTerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
 import {
   DEFAULT_AGENT_GLOBAL_CONFIG,
@@ -711,6 +712,7 @@ export function createDefaultConfig(): SynapseConfig {
 }
 
 export function sanitizeSynapseConfig(value: unknown): SynapseConfig {
+  value = migrateInternalMailConfig(value)
   const fallbackConfig = createDefaultConfig()
 
   if (!isRecord(value)) {

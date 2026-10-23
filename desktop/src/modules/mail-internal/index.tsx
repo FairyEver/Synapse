@@ -23,7 +23,7 @@ import { MailLayout } from "./layout"
 import { MailNavigation } from "./navigation"
 import { useMail, type MailBox } from "./use-mail"
 import { useMailContext } from "./use-mail-context"
-import type { SynapseSystemAppMailOpenRequest } from "../apps/types"
+import type { SynapseSystemAppMailInternalOpenRequest } from "../apps/types"
 
 const boxes: { id: MailBox; name: string; icon: typeof Inbox }[] = [
   { id: "inbox", name: "收件箱", icon: Inbox },
@@ -45,7 +45,7 @@ function MailEmptyState({ box, searched, onClearSearch, onCompose }: { box: Mail
   </Empty>
 }
 
-type MailModuleProps = { openRequest?: SynapseSystemAppMailOpenRequest | null; onOpenRequestConsumed?: (requestId: string) => void }
+type MailModuleProps = { openRequest?: SynapseSystemAppMailInternalOpenRequest | null; onOpenRequestConsumed?: (requestId: string) => void }
 
 export function MailModule(props: MailModuleProps = {}) {
   const { state } = useAccount()

@@ -27,7 +27,7 @@ const notificationSourceLabels: Record<NotificationSource, string> = {
   "system-notifier": "系统通知",
   "terminal-attention": "Agent 待回复",
   "terminal-complete": "Agent 回复完成",
-  mail: "站内信",
+  "mail-internal": "站内信",
   "meeting-transcription": "录音转写",
   "todo-reminder": "待办提醒",
   external: "外部通知",
@@ -37,7 +37,7 @@ const notificationSourceLabels: Record<NotificationSource, string> = {
 function sourceName(item: SynapseNotification): string {
   if (item.source === "drive-discussion") return "云盘"
   if (item.source === "todo-reminder") return "待办事项"
-  if (item.source === "mail") return "站内信"
+  if (item.source === "mail-internal") return "站内信"
   if (item.source.startsWith("terminal-")) return "终端"
   if (item.source === "meeting-transcription") return "录音"
   if (item.source === "external") return item.group || "外部通知"
@@ -49,7 +49,7 @@ function isPending(item: SynapseNotification): boolean {
 }
 
 function listSubtitle(item: SynapseNotification): string {
-  if (item.source === "mail" && item.mailSubject) return item.mailSubject
+  if (item.source === "mail-internal" && item.mailSubject) return item.mailSubject
   return sourceName(item)
 }
 
@@ -88,7 +88,7 @@ function recipientNames(addresses: MailAddress[] | undefined, people: MailPerson
 function primaryAction(item: SynapseNotification): string | null {
   if (item.source === "drive-discussion") return getDriveDiscussionActionLabel(item.driveDiscussion)
   if (item.source === "todo-reminder" && item.targetId) return "查看待办"
-  if (item.source === "mail" && item.targetId) return "在站内信中打开"
+  if (item.source === "mail-internal" && item.targetId) return "在站内信中打开"
   if (isPending(item) && item.targetId) return "前往处理"
   if (item.targetId && item.source.startsWith("terminal-")) return "打开会话"
   if (item.targetId && item.source === "meeting-transcription") return "打开录音"
@@ -115,7 +115,7 @@ async function copyNotificationBody(item: SynapseNotification, mailBody: string 
 
 function notificationActions(center: Center, item: SynapseNotification, mailBody: string | null, quickReply?: (item: SynapseNotification) => void) {
   return [
-    ...(quickReply && item.source === "mail" && item.targetId ? [{ id: "quick-reply", label: "快速回复", run: () => quickReply(item) }] : []),
+    ...(quickReply && item.source === "mail-internal" && item.targetId ? [{ id: "quick-reply", label: "快速回复", run: () => quickReply(item) }] : []),
     { id: "read", label: item.readAt ? "标记为未读" : "标记为已读", run: () => { void center.setRead(item, !item.readAt) } },
     { id: "copy-body", label: "复制正文", run: () => { void copyNotificationBody(item, mailBody) } },
     { id: "copy-id", label: "复制 ID", run: () => { void copyNotificationId(item) } },
@@ -126,7 +126,7 @@ function notificationActions(center: Center, item: SynapseNotification, mailBody
 function MessageDetail({ center, quickReply }: { center: Center; quickReply: (item: SynapseNotification) => void }) {
   const item = center.selected
   if (!item) return <div className="flex h-full min-h-48 items-center justify-center text-sm text-muted-foreground">选择一条通知查看内容</div>
-  const isMail = item.source === "mail" && !!item.targetId
+  const isMail = item.source === "mail-internal" && !!item.targetId
   const mail = center.mail?.messageId === item.targetId ? center.mail : null
   const action = primaryAction(item)
 

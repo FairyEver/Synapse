@@ -81,7 +81,7 @@ const EVENT_CHANNELS = {
     contentOpenRequest: "synapse:app:apps:operation:content_open_request",
     gitOpenRequest: "synapse:app:apps:operation:git_open_request",
     terminalOpenRequest: "synapse:app:apps:operation:terminal_open_request",
-    mailOpenRequest: "synapse:app:apps:operation:mail_open_request",
+    mailInternalOpenRequest: "synapse:app:apps:operation:mail_internal_open_request",
   },
 }
 
@@ -395,9 +395,9 @@ const synapseBridge: SynapseBridge = {
       EVENT_CHANNELS.apps.terminalOpenRequest,
     ),
     onTodoOpenRequest: createRawPayloadSubscription(subscribe, IPC_CHANNELS.apps.todoOpenRequest),
-    onMailOpenRequest: createRawPayloadSubscription(
+    onMailInternalOpenRequest: createRawPayloadSubscription(
       subscribe,
-      EVENT_CHANNELS.apps.mailOpenRequest,
+      EVENT_CHANNELS.apps.mailInternalOpenRequest,
     ),
   },
   documentTemplate: {
@@ -786,7 +786,7 @@ const synapseBridge: SynapseBridge = {
       onReset: (listener) => createDomainEventPayloadSubscription(subscribe, "account", "todos.reset")(() => listener()),
     },
   },
-  mail: {
+  mailInternal: {
     contact: { list: invoke(IPC_CHANNELS.account.mailContactList) },
     recipient: { list: invoke(IPC_CHANNELS.account.mailRecipientList) },
     organization: { list: invoke(IPC_CHANNELS.account.mailOrganizationList), members: invoke(IPC_CHANNELS.account.mailOrganizationMembers) },

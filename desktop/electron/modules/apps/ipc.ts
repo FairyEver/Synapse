@@ -45,7 +45,7 @@ const terminalOpenRequestSchema = z.object({
 
 const todoOpenRequestSchema = z.object({ requestId: z.string().min(1).max(200), id: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u) }).strict()
 
-const mailOpenRequestSchema = z.object({ requestId: z.string().min(1), messageId: z.string().min(1) }).strict()
+const mailInternalOpenRequestSchema = z.object({ requestId: z.string().min(1), messageId: z.string().min(1) }).strict()
 
 const openSystemAppRequestSchema = z.object({
   appId: systemAppIdSchema,
@@ -53,7 +53,7 @@ const openSystemAppRequestSchema = z.object({
     contentOpenRequest: contentOpenRequestSchema.optional(),
     gitOpenRequest: gitOpenRequestSchema.optional(),
     terminalOpenRequest: terminalOpenRequestSchema.optional(),
-    mailOpenRequest: mailOpenRequestSchema.optional(),
+    mailInternalOpenRequest: mailInternalOpenRequestSchema.optional(),
     todoOpenRequest: todoOpenRequestSchema.nullable().optional(),
   }).strict().optional(),
 }).strict().superRefine((request, context) => {
@@ -74,8 +74,8 @@ const openSystemAppRequestSchema = z.object({
   if (request.options?.todoOpenRequest && request.appId !== "todos") {
     context.addIssue({ code: "custom", message: "Todo open requests require the Todos app.", path: ["options", "todoOpenRequest"] })
   }
-  if (request.options?.mailOpenRequest && request.appId !== "mail") {
-    context.addIssue({ code: "custom", message: "Mail open requests require the Mail app.", path: ["options", "mailOpenRequest"] })
+  if (request.options?.mailInternalOpenRequest && request.appId !== "mail-internal") {
+    context.addIssue({ code: "custom", message: "Mail open requests require the Mail app.", path: ["options", "mailInternalOpenRequest"] })
   }
 })
 

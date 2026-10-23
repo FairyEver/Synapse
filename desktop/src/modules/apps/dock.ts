@@ -2,6 +2,7 @@ import type { SynapseSystemAppId, SynapseSystemAppManifest } from "./types"
 import { listSystemAppDefinitions } from "./definitions"
 import { isSystemAppId } from "./types"
 import { isSystemAppEntryVisible } from "./visibility"
+import { INTERNAL_MAIL_RENAME_MIGRATION_ID, migrateInternalMailConfig } from "./mail-internal-migration"
 
 export const DEFAULT_DOCK_APP_IDS: readonly SynapseSystemAppId[] =
   listSystemAppDefinitions()
@@ -14,11 +15,11 @@ export const REQUIRED_DOCK_APP_ID = "launcher" as const satisfies SynapseSystemA
 export type DockMigrationOperation =
   | {
       readonly kind: "move-to-end"
-      readonly appId: SynapseSystemAppId
+      readonly appId: SynapseSystemAppId | "mail"
     }
   | {
       readonly kind: "insert-before"
-      readonly appId: SynapseSystemAppId
+      readonly appId: SynapseSystemAppId | "mail"
       readonly targetAppId: SynapseSystemAppId
     }
 
@@ -39,6 +40,7 @@ export const DOCK_MIGRATIONS: readonly DockMigration[] = [
       { kind: "insert-before", appId: "mail", targetAppId: "launcher" },
     ],
   },
+  { id: INTERNAL_MAIL_RENAME_MIGRATION_ID, operations: [] },
 ]
 
 export const DEFAULT_DOCK_MIGRATION_IDS: readonly string[] = DOCK_MIGRATIONS.map((migration) => migration.id)
@@ -150,18 +152,21 @@ function applyDockMigrationOperation(
   operation: DockMigrationOperation,
 ): SynapseSystemAppId[] {
   if (operation.kind === "move-to-end") {
-    return moveDockAppIdToEnd(values, operation.appId)
+    return moveDockAppIdToEnd(values, operation.appId === "mail" ? "mail-internal" : operation.appId)
   }
 
-  return insertDockAppIdBefore(values, operation.appId, operation.targetAppId)
+  return insertDockAppIdBefore(values, operation.appId === "mail" ? "mail-internal" : operation.appId, operation.targetAppId)
 }
 
 export function applyDockMigrations(
   values: readonly unknown[] | undefined,
   appliedMigrationIds: readonly unknown[] | undefined,
 ): { readonly dockAppIds: SynapseSystemAppId[]; readonly appliedMigrationIds: string[] } {
-  let dockAppIds = normalizeDockAppIds(values)
-  const applied = normalizeDockMigrationIds(appliedMigrationIds)
+  const migrated = migrateInternalMailConfig({ global: {
+    dockAppIds: values ?? seedDefaultDockAppIds(), dockMigrationIds: appliedMigrationIds ?? [],
+  } }) as { global: { dockAppIds: unknown[]; dockMigrationIds: unknown[] } }
+  let dockAppIds = normalizeDockAppIds(migrated.global.dockAppIds)
+  const applied = normalizeDockMigrationIds(migrated.global.dockMigrationIds)
 
   for (const migration of DOCK_MIGRATIONS) {
     if (applied.includes(migration.id)) {

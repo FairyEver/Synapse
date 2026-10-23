@@ -84,7 +84,7 @@ describe("preload bridge", () => {
     registration?.[1]({}, { domain: "connector", type: "item.changed", payload, timestamp: "now" })
     expect(listener).toHaveBeenCalledWith(payload)
     expect(bridge.connectors).not.toHaveProperty("getSessionInput")
-    expect(bridge.connectors).not.toHaveProperty("mail")
+    expect(bridge.connectors).not.toHaveProperty("mail-internal")
     expect(bridge.connectors.item).not.toHaveProperty("handleCallback")
   })
 

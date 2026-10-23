@@ -8,7 +8,7 @@ import { updateTrackingContext } from "@/lib/ui-tracking"
 import { SystemAppContent } from "./components/system-app-content"
 import type {
   SynapseSystemAppGitOpenRequest,
-  SynapseSystemAppMailOpenRequest,
+  SynapseSystemAppMailInternalOpenRequest,
   TodoOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
@@ -22,7 +22,7 @@ type AppsBridge = {
   readonly onGitOpenRequest: (listener: (request: SynapseSystemAppGitOpenRequest) => void) => () => void
   readonly onTerminalOpenRequest: (listener: (request: SynapseSystemAppTerminalOpenRequest) => void) => () => void
   readonly onTodoOpenRequest?: (listener: (request: TodoOpenRequest) => void) => () => void
-  readonly onMailOpenRequest: (listener: (request: SynapseSystemAppMailOpenRequest) => void) => () => void
+  readonly onMailInternalOpenRequest: (listener: (request: SynapseSystemAppMailInternalOpenRequest) => void) => () => void
 }
 
 function getAppsBridge(): AppsBridge | undefined {
@@ -81,11 +81,11 @@ function parseInitialTodoOpenRequest(): TodoOpenRequest | null {
   } catch { return null }
 }
 
-function parseInitialMailOpenRequest(): SynapseSystemAppMailOpenRequest | null {
-  const raw = new URLSearchParams(window.location.search).get("mailOpenRequest")
+function parseInitialMailInternalOpenRequest(): SynapseSystemAppMailInternalOpenRequest | null {
+  const raw = new URLSearchParams(window.location.search).get("mailInternalOpenRequest")
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as Partial<SynapseSystemAppMailOpenRequest>
+    const parsed = JSON.parse(raw) as Partial<SynapseSystemAppMailInternalOpenRequest>
     return typeof parsed.requestId === "string" && typeof parsed.messageId === "string" ? { requestId: parsed.requestId, messageId: parsed.messageId } : null
   } catch { return null }
 }
@@ -112,8 +112,8 @@ export function SystemAppWindowApp() {
   const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
     useState<SynapseSystemAppTerminalOpenRequest | null>(() => parseInitialTerminalOpenRequest())
   const [pendingTodoOpenRequest, setPendingTodoOpenRequest] = useState<TodoOpenRequest | null>(() => parseInitialTodoOpenRequest())
-  const [pendingMailOpenRequest, setPendingMailOpenRequest] =
-    useState<SynapseSystemAppMailOpenRequest | null>(() => parseInitialMailOpenRequest())
+  const [pendingMailInternalOpenRequest, setPendingMailInternalOpenRequest] =
+    useState<SynapseSystemAppMailInternalOpenRequest | null>(() => parseInitialMailInternalOpenRequest())
 
   useEffect(() => {
     updateTrackingContext({ moduleId: appId ?? "apps", windowType: "system-app" })
@@ -149,9 +149,9 @@ export function SystemAppWindowApp() {
   useEffect(() => {
     const bridge = getAppsBridge()
     if (!bridge) return undefined
-    return bridge.onMailOpenRequest((request) => {
-      replaceOpenRequestInUrl("mailOpenRequest", request)
-      setPendingMailOpenRequest(request)
+    return bridge.onMailInternalOpenRequest((request) => {
+      replaceOpenRequestInUrl("mailInternalOpenRequest", request)
+      setPendingMailInternalOpenRequest(request)
     })
   }, [])
 
@@ -191,9 +191,9 @@ export function SystemAppWindowApp() {
       }}
       todoOpenRequest={pendingTodoOpenRequest}
       onTodoOpenRequestConsumed={handleTodoConsumed}
-      mailOpenRequest={pendingMailOpenRequest}
-      onMailOpenRequestConsumed={(requestId) => {
-        setPendingMailOpenRequest((current) => current?.requestId === requestId ? null : current)
+      mailInternalOpenRequest={pendingMailInternalOpenRequest}
+      onMailInternalOpenRequestConsumed={(requestId) => {
+        setPendingMailInternalOpenRequest((current) => current?.requestId === requestId ? null : current)
       }}
       onContentOpenRequest={forwardContentOpenRequest}
     />

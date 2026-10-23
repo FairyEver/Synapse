@@ -1,8 +1,8 @@
 import type { SynapseSystemAppDefinition } from "../apps/types"
 
-export const mailAppDefinition = {
-  id: "mail",
-  namespace: "mail",
+export const mailInternalAppDefinition = {
+  id: "mail-internal",
+  namespace: "mail_internal",
   type: "system",
   name: "站内信",
   windowTitle: "站内信",

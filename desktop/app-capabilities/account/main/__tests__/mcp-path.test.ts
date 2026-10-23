@@ -45,7 +45,7 @@ function createMcpPath(state: SynapseAccountState) {
     contentDispatch: unused.dispatch,
     databaseDispatch: unused.dispatch,
     driveDispatch: unused.dispatch,
-    mailDispatch: unused.dispatch,
+    mailInternalDispatch: unused.dispatch,
     modelPriceDispatch: unused.dispatch,
     repositoryDispatch: unused.dispatch,
     skillRepositoryDispatch: unused.dispatch,
@@ -85,15 +85,15 @@ describe("account MCP tools", () => {
     expect(MCP_TOOL_ACTIONS.app_account_notification_delete_all).toBe("app.account.notification.delete_all")
     const listTool = buildNotificationTools().find((tool) => tool.name === "app_account_notification_list")
     expect(listTool?.inputSchema.properties).toHaveProperty("source", expect.objectContaining({ enum: [...NOTIFICATION_SOURCES] }))
-    await expect(dispatcher.dispatch("app.account.notification.list", { filter: "unread", source: "mail", cursor: "n1" })).resolves.toMatchObject({ ok: true })
-    expect(notifications.listNotifications).toHaveBeenCalledWith({ filter: "unread", source: "mail", cursor: "n1" })
+    await expect(dispatcher.dispatch("app.account.notification.list", { filter: "unread", source: "mail-internal", cursor: "n1" })).resolves.toMatchObject({ ok: true })
+    expect(notifications.listNotifications).toHaveBeenCalledWith({ filter: "unread", source: "mail-internal", cursor: "n1" })
     await expect(dispatcher.dispatch("app.account.notification.list", { source: "unknown" })).rejects.toThrow()
     expect(notifications.listNotifications).toHaveBeenCalledOnce()
     await expect(dispatcher.dispatch("app.account.notification.delete_all", { filter: "unread" })).rejects.toThrow()
     await dispatcher.dispatch("app.account.notification.get", { id: "n1" })
     await expect(dispatcher.dispatch("app.account.notification.get", { reference: "synapse:notification:n1" })).resolves.toMatchObject({ ok: true, data: { body: "private body" } })
     expect(notifications.getNotification).toHaveBeenCalledWith("n1")
-    await expect(dispatcher.dispatch("app.account.notification.get", { reference: "synapse://mail/n1" })).rejects.toThrow()
+    await expect(dispatcher.dispatch("app.account.notification.get", { reference: "synapse://mail-internal/n1" })).rejects.toThrow()
     await expect(dispatcher.dispatch("app.account.notification.get", { id: "n1", reference: "synapse:notification:n1" })).rejects.toThrow()
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("private body")
     const denied = createAccountCapabilityDispatcher({

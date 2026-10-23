@@ -1,3 +1,4 @@
+import { migrateInternalMailConfig } from "../../src/modules/apps/mail-internal-migration"
 import { isTerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
 import { app, dialog } from "electron"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
@@ -756,6 +757,7 @@ function validateConfig(
   rawValue: unknown,
   errors: string[],
 ): BackupConfigWithLegacyVariables | null {
+  rawValue = migrateInternalMailConfig(rawValue)
   if (!isRecord(rawValue)) {
     errors.push("config 不是对象。")
     return null

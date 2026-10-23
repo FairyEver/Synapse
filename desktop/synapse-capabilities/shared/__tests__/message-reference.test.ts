@@ -8,8 +8,8 @@ import {
 
 describe("copied message references", () => {
   it("keeps the mail route and notification ID distinguishable", () => {
-    expect(buildMailMessageReference("mail_1-2")).toBe("synapse://mail/mail_1-2")
-    expect(parseMailMessageReference("synapse://mail/mail_1-2")).toBe("mail_1-2")
+    expect(buildMailMessageReference("mail_1-2")).toBe("synapse://mail-internal/mail_1-2")
+    expect(parseMailMessageReference("synapse://mail-internal/mail_1-2")).toBe("mail_1-2")
     expect(buildNotificationReference("notice_1-2")).toBe("synapse:notification:notice_1-2")
     expect(parseNotificationReference("synapse:notification:notice_1-2")).toBe("notice_1-2")
   })
@@ -21,9 +21,10 @@ describe("copied message references", () => {
 
   it.each([
     "synapse://notifications/n1",
-    "synapse://mail/n1?extra=1",
-    "synapse://mail/n1/extra",
-    "synapse://mail/%6e1",
+    "synapse://mail/n1",
+    "synapse://mail-internal/n1?extra=1",
+    "synapse://mail-internal/n1/extra",
+    "synapse://mail-internal/%6e1",
     "synapse:notification:n1#extra",
     "synapse:notification:n1/extra",
   ])("rejects changed or mismatched references: %s", (reference) => {

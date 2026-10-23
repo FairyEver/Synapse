@@ -30,6 +30,6 @@ export function notificationDetailText(item: SynapseNotification, mailBody: stri
     ]
     return sections.filter((section): section is string => section !== null).join("\n\n")
   }
-  if (item.source === "mail" && item.targetId) return mailBody ?? item.body
+  if (item.source === "mail-internal" && item.targetId) return mailBody ?? item.body
   return item.body
 }

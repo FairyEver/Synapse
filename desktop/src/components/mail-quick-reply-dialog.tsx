@@ -3,7 +3,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { useMailQuickReply } from "@/modules/mail/use-mail-quick-reply"
+import { useMailQuickReply } from "@/modules/mail-internal/use-mail-quick-reply"
 import type { MailMessage, MailOperationResult } from "@/types/mail"
 
 type MailQuickReplyDialogProps = {

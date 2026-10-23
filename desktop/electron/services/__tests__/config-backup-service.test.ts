@@ -68,6 +68,17 @@ describe("ConfigBackupService quick inputs", () => {
     setConfigBackupDataRepository(null)
   })
 
+  it("renames legacy mail before validating App IDs in an imported backup", async () => {
+    const filePath = await writeBackupFile({ dockAppIds: ["mail", "launcher"], dockMigrationIds: ["dock.mail-introduction.v1"] })
+    try {
+      const plan = await configBackupService.prepareImport(filePath)
+      expect(plan.nextConfig.global.dockAppIds).toEqual(["mail-internal", "launcher"])
+      expect(plan.nextConfig.global.dockMigrationIds).toContain("dock.mail-internal-rename.v1")
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("preserves the desktop terminal theme when importing a backup", async () => {
     const filePath = await writeBackupFile({ terminalTheme: "catppuccin-mocha" })
     try {

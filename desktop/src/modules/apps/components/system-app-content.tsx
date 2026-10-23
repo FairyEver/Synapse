@@ -11,7 +11,7 @@ import { AutomationModule } from "@/modules/automation"
 import { DatabaseModule } from "@/modules/database"
 import { DriveModule } from "@/modules/drive"
 import { TodosModule } from "@/modules/todos"
-import { MailModule } from "@/modules/mail"
+import { MailModule } from "@/modules/mail-internal"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { GitModule } from "@/modules/git"
 import { ModelPriceModule } from "@/modules/model-price"
@@ -34,7 +34,7 @@ import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
 import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
 import type {
   SynapseSystemAppGitOpenRequest,
-  SynapseSystemAppMailOpenRequest,
+  SynapseSystemAppMailInternalOpenRequest,
   TodoOpenRequest,
   SynapseSystemAppId,
   SynapseSystemAppOpenOptions,
@@ -61,8 +61,8 @@ type SystemAppContentProps = {
   readonly meetingOpenRequest?: string | null
   readonly todoOpenRequest?: TodoOpenRequest | null
   readonly onTodoOpenRequestConsumed?: (requestId: string) => void
-  readonly mailOpenRequest?: SynapseSystemAppMailOpenRequest | null
-  readonly onMailOpenRequestConsumed?: (requestId: string) => void
+  readonly mailInternalOpenRequest?: SynapseSystemAppMailInternalOpenRequest | null
+  readonly onMailInternalOpenRequestConsumed?: (requestId: string) => void
   readonly onMeetingOpenRequestConsumed?: () => void
 }
 
@@ -82,8 +82,8 @@ function SystemAppContent({
   meetingOpenRequest = null,
   todoOpenRequest = null,
   onTodoOpenRequestConsumed,
-  mailOpenRequest = null,
-  onMailOpenRequestConsumed,
+  mailInternalOpenRequest = null,
+  onMailInternalOpenRequestConsumed,
   onMeetingOpenRequestConsumed,
 }: SystemAppContentProps) {
   useEffect(() => {
@@ -103,7 +103,7 @@ function SystemAppContent({
   if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
   if (appId === "todos") return <TodosModule openRequest={todoOpenRequest} onOpenRequestConsumed={onTodoOpenRequestConsumed} />
-  if (appId === "mail") return <MailModule openRequest={mailOpenRequest} onOpenRequestConsumed={onMailOpenRequestConsumed} />
+  if (appId === "mail-internal") return <MailModule openRequest={mailInternalOpenRequest} onOpenRequestConsumed={onMailInternalOpenRequestConsumed} />
   if (appId === "automation") return <AutomationModule />
   if (appId === "launcher") {
     return (

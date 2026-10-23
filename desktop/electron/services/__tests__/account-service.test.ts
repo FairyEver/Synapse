@@ -350,9 +350,9 @@ describe("AccountService", () => {
       getAuthenticatedJson: (...args: unknown[]) => Promise<unknown>
     }, "getAuthenticatedJson").mockResolvedValue({ items: [], nextCursor: null })
 
-    await service.listNotifications({ source: "mail", filter: "unread", cursor: "n1" })
+    await service.listNotifications({ source: "mail-internal", filter: "unread", cursor: "n1" })
     const url = new URL(request.mock.calls[0]?.[0] as string)
-    expect(Object.fromEntries(url.searchParams)).toEqual({ source: "mail", filter: "unread", cursor: "n1" })
+    expect(Object.fromEntries(url.searchParams)).toEqual({ source: "mail-internal", filter: "unread", cursor: "n1" })
     await service.listNotifications({ filter: "all" })
     expect(new URL(request.mock.calls[1]?.[0] as string).searchParams.has("source")).toBe(false)
   })

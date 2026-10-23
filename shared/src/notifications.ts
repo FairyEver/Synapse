@@ -5,7 +5,7 @@ export const NOTIFICATION_SOURCES = [
   "terminal-attention",
   "terminal-complete",
   "meeting-transcription",
-  "mail",
+  "mail-internal",
   "todo-reminder",
   "drive-discussion",
 ] as const

@@ -16,7 +16,7 @@ import {
   DRIVE_LOCAL_UPLOAD_MAX_FOLDER_DEPTH,
 } from "../../../src/lib/drive-local-upload-limits"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
-import { mailBoxInputSchema, mailMessageListInputSchema } from "../../../synapse-capabilities/shared/mail-input"
+import { mailBoxInputSchema, mailMessageListInputSchema } from "../../../synapse-capabilities/shared/mail-internal-input"
 
 const accountUserSchema = z.object({
   id: z.string(),
@@ -1150,74 +1150,74 @@ export const accountIpcModule: IpcModule = {
       handler: async (_ctx, input) => accountService.deleteAllNotifications(notificationDeleteAllRequestSchema.parse(input).filter),
     },
     mailRecipientList: {
-      kind: "invoke", operationId: "app.mail.recipient.list",
+      kind: "invoke", operationId: "app.mail_internal.recipient.list",
       request: mailRecipientListInputSchema,
       response: z.object({ items: z.array(mailPersonSchema.extend({ matchKind: z.enum(["exact", "prefix", "partial", "fuzzy", "browse"]), similarity: z.number(), sharedTeamIds: z.array(z.string()) })), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "recipientSearch", ...mailRecipientListInputSchema.parse(input) }),
     },
     mailOrganizationList: {
-      kind: "invoke", operationId: "app.mail.organization.list",
+      kind: "invoke", operationId: "app.mail_internal.organization.list",
       request: z.object({ query: z.string().max(100) }).strict(),
       response: z.object({ items: z.array(mailOrganizationSchema) }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(input) }),
     },
     mailOrganizationMembers: {
-      kind: "invoke", operationId: "app.mail.organization_members.list",
+      kind: "invoke", operationId: "app.mail_internal.organization_members.list",
       request: z.object({ organizationId: mailIdSchema, cursor: mailIdSchema.optional() }).strict(),
       response: z.object({ items: z.array(mailPersonSchema), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "organizationMembers", ...z.object({ organizationId: mailIdSchema, cursor: mailIdSchema.optional() }).strict().parse(input) }),
     },
     mailContactList: {
-      kind: "invoke", operationId: "app.mail.contact.list", request: mailBoxInputSchema,
+      kind: "invoke", operationId: "app.mail_internal.contact.list", request: mailBoxInputSchema,
       response: z.object({ items: z.array(z.object({ key: z.string(), kind: z.enum(["user", "organization", "platform"]), name: z.string(), handle: z.string().nullable(), teamName: z.string().nullable(), unread: z.number().int().nonnegative(), lastSentAt: z.string() })) }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "contactList", ...mailBoxInputSchema.parse(input) }),
     },
     mailMessageList: {
-      kind: "invoke", operationId: "app.mail.message.list",
+      kind: "invoke", operationId: "app.mail_internal.message.list",
       request: mailMessageListInputSchema,
       response: z.object({ items: z.array(mailSummarySchema), nextCursor: z.string().nullable(), contactKey: z.string().optional() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageList", ...mailMessageListInputSchema.parse(input) }),
     },
     mailMessageCount: {
-      kind: "invoke", operationId: "app.mail.message.count", request: z.object({}).strict(),
+      kind: "invoke", operationId: "app.mail_internal.message.count", request: z.object({}).strict(),
       response: z.object({ inboxTotal: z.number(), sentTotal: z.number(), unread: z.number() }),
       handler: async () => accountService.executeMailOperation({ kind: "messageCount" }),
     },
     mailMessageReadAll: {
-      kind: "invoke", operationId: "app.mail.message.read_all", request: z.object({}).strict(),
+      kind: "invoke", operationId: "app.mail_internal.message.read_all", request: z.object({}).strict(),
       response: z.object({ updated: z.number() }),
       handler: async () => accountService.executeMailOperation({ kind: "messageReadAll" }),
     },
     mailMessageDeleteBatch: {
-      kind: "invoke", operationId: "app.mail.message.delete_batch", request: mailMessageBatchInputSchema,
+      kind: "invoke", operationId: "app.mail_internal.message.delete_batch", request: mailMessageBatchInputSchema,
       response: z.object({ deleted: z.number(), skippedIds: z.array(z.string()) }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDeleteBatch", ...mailMessageBatchInputSchema.parse(input) }),
     },
     mailMessageDeleteAll: {
-      kind: "invoke", operationId: "app.mail.message.delete_all", request: mailBoxInputSchema,
+      kind: "invoke", operationId: "app.mail_internal.message.delete_all", request: mailBoxInputSchema,
       response: z.object({ deleted: z.number() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDeleteAll", ...mailBoxInputSchema.parse(input) }),
     },
     mailMessageGet: {
-      kind: "invoke", operationId: "app.mail.message.get", request: mailIdInputSchema, response: mailMessageSchema,
+      kind: "invoke", operationId: "app.mail_internal.message.get", request: mailIdInputSchema, response: mailMessageSchema,
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageGet", ...mailIdInputSchema.parse(input) }),
     },
     mailContextList: {
-      kind: "invoke", operationId: "app.mail.context.list", request: mailMessageContextInputSchema,
+      kind: "invoke", operationId: "app.mail_internal.context.list", request: mailMessageContextInputSchema,
       response: z.object({ items: z.array(mailSummarySchema), nextCursor: z.string().nullable() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageContext", ...mailMessageContextInputSchema.parse(input) }),
     },
     mailMessageUpdate: {
-      kind: "invoke", operationId: "app.mail.message.update",
+      kind: "invoke", operationId: "app.mail_internal.message.update",
       request: mailMessageUpdateInputSchema, response: z.object({ read: z.boolean() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageSetRead", ...mailMessageUpdateInputSchema.parse(input) }),
     },
     mailMessageDelete: {
-      kind: "invoke", operationId: "app.mail.message.delete", request: mailMessageDeleteInputSchema, response: mailDeletedSchema,
+      kind: "invoke", operationId: "app.mail_internal.message.delete", request: mailMessageDeleteInputSchema, response: mailDeletedSchema,
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "messageDelete", ...mailMessageDeleteInputSchema.parse(input) }),
     },
     mailAttachmentCreate: {
-      kind: "invoke", operationId: "app.mail.attachment.create",
+      kind: "invoke", operationId: "app.mail_internal.attachment.create",
       request: mailAttachmentCreateInputSchema,
       response: mailAttachmentSchema.extend({ attachmentToken: z.string(), state: z.literal("ready") }),
       handler: async (ctx, input) => {
@@ -1227,7 +1227,7 @@ export const accountIpcModule: IpcModule = {
       },
     },
     mailAttachmentLocalCreate: {
-      kind: "invoke", operationId: "app.mail.attachment.local_create",
+      kind: "invoke", operationId: "app.mail_internal.attachment.local_create",
       request: mailAttachmentLocalInputSchema,
       response: mailAttachmentSchema.extend({ attachmentToken: z.string(), state: z.literal("ready") }),
       handler: async (ctx, input) => {
@@ -1237,7 +1237,7 @@ export const accountIpcModule: IpcModule = {
       },
     },
     mailAttachmentDownloadFile: {
-      kind: "invoke", operationId: "app.mail.attachment.download_file",
+      kind: "invoke", operationId: "app.mail_internal.attachment.download_file",
       request: mailAttachmentDownloadInputSchema,
       response: z.object({ path: z.string() }).nullable(),
       handler: async (ctx, input) => {
@@ -1252,12 +1252,12 @@ export const accountIpcModule: IpcModule = {
       },
     },
     mailSendPreview: {
-      kind: "invoke", operationId: "app.mail.send.preview", request: mailContentInputSchema,
+      kind: "invoke", operationId: "app.mail_internal.send.preview", request: mailContentInputSchema,
       response: z.object({ previewId: z.string(), expiresAt: z.string(), team: z.object({ id: z.string(), name: z.string() }), recipients: z.array(mailPersonSchema), toRecipients: z.array(mailPersonSchema), ccRecipients: z.array(mailPersonSchema), toAddresses: z.array(mailAddressSchema), ccAddresses: z.array(mailAddressSchema), recipientCount: z.number(), subject: z.string(), body: z.string(), quote: mailQuoteSchema.nullable(), attachments: z.array(mailAttachmentSchema) }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "sendPreview", ...mailContentInputSchema.parse(input) }),
     },
     mailMessageSend: {
-      kind: "invoke", operationId: "app.mail.message.send",
+      kind: "invoke", operationId: "app.mail_internal.message.send",
       request: mailMessageSendInputSchema,
       response: z.object({ messageId: z.string(), recipientCount: z.number(), sentAt: z.string() }),
       handler: async (_ctx, input) => accountService.executeMailOperation({ kind: "send", ...mailMessageSendInputSchema.parse(input) }),

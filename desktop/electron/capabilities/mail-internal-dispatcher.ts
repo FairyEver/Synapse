@@ -2,7 +2,7 @@ import path from "node:path"
 import { z } from "zod"
 import type { MailOperation } from "../../src/types/mail"
 import { parseMailMessageReference } from "../../synapse-capabilities/shared/message-reference"
-import { mailBoxInputSchema, mailMessageListInputSchema } from "../../synapse-capabilities/shared/mail-input"
+import { mailBoxInputSchema, mailMessageListInputSchema } from "../../synapse-capabilities/shared/mail-internal-input"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { checkCapabilityPermission } from "./permission-audit"
@@ -17,29 +17,29 @@ const getInput = z.object({ messageId: id.optional(), reference: z.string().opti
 
 function parseOperation(action: string, params: Record<string, unknown>): MailOperation {
   switch (action) {
-    case "app.mail.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
-    case "app.mail.organization.list": return { kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(params) }
-    case "app.mail.organization_members.list": return { kind: "organizationMembers", ...z.object({ organizationId: id, cursor: id.optional() }).strict().parse(params) }
-    case "app.mail.message.list": {
+    case "app.mail_internal.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
+    case "app.mail_internal.organization.list": return { kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(params) }
+    case "app.mail_internal.organization_members.list": return { kind: "organizationMembers", ...z.object({ organizationId: id, cursor: id.optional() }).strict().parse(params) }
+    case "app.mail_internal.message.list": {
       const parsed = mailMessageListInputSchema.parse(params)
       return { kind: "messageList", ...parsed }
     }
-    case "app.mail.contact.list": return { kind: "contactList", ...mailBoxInputSchema.parse(params) }
-    case "app.mail.message.count": z.object({}).strict().parse(params); return { kind: "messageCount" }
-    case "app.mail.message.read_all": z.object({}).strict().parse(params); return { kind: "messageReadAll" }
-    case "app.mail.message.delete_batch": return { kind: "messageDeleteBatch", ...z.object({ messageIds: z.array(id).min(1).max(100).refine((items) => new Set(items).size === items.length), box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }
-    case "app.mail.message.delete_all": return { kind: "messageDeleteAll", ...z.object({ box: z.enum(["inbox", "sent"]) }).strict().parse(params) }
-    case "app.mail.message.get": {
+    case "app.mail_internal.contact.list": return { kind: "contactList", ...mailBoxInputSchema.parse(params) }
+    case "app.mail_internal.message.count": z.object({}).strict().parse(params); return { kind: "messageCount" }
+    case "app.mail_internal.message.read_all": z.object({}).strict().parse(params); return { kind: "messageReadAll" }
+    case "app.mail_internal.message.delete_batch": return { kind: "messageDeleteBatch", ...z.object({ messageIds: z.array(id).min(1).max(100).refine((items) => new Set(items).size === items.length), box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }
+    case "app.mail_internal.message.delete_all": return { kind: "messageDeleteAll", ...z.object({ box: z.enum(["inbox", "sent"]) }).strict().parse(params) }
+    case "app.mail_internal.message.get": {
       const input = getInput.parse(params)
       return { kind: "messageGet", messageId: input.reference === undefined ? input.messageId! : parseMailMessageReference(input.reference) }
     }
-    case "app.mail.context.list": return { kind: "messageContext", ...z.object({ messageId: id, cursor: id.optional() }).strict().parse(params) }
-    case "app.mail.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }
-    case "app.mail.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id, box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }
-    case "app.mail.attachment.create": return { kind: "attachmentLocal", ...z.object({ filePath: z.string().min(1) }).strict().parse(params) }
-    case "app.mail.attachment.download_file": return { kind: "attachmentDownload", ...z.object({ messageId: id, attachmentId: id, outputPath: z.string().min(1) }).strict().parse(params) }
-    case "app.mail.send.preview": return { kind: "sendPreview", content: content.parse(params) }
-    case "app.mail.message.send": {
+    case "app.mail_internal.context.list": return { kind: "messageContext", ...z.object({ messageId: id, cursor: id.optional() }).strict().parse(params) }
+    case "app.mail_internal.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }
+    case "app.mail_internal.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id, box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }
+    case "app.mail_internal.attachment.create": return { kind: "attachmentLocal", ...z.object({ filePath: z.string().min(1) }).strict().parse(params) }
+    case "app.mail_internal.attachment.download_file": return { kind: "attachmentDownload", ...z.object({ messageId: id, attachmentId: id, outputPath: z.string().min(1) }).strict().parse(params) }
+    case "app.mail_internal.send.preview": return { kind: "sendPreview", content: content.parse(params) }
+    case "app.mail_internal.message.send": {
       const parsed = z.object({ previewId: id, clientRequestId: id, confirmed: z.literal(true) }).strict().parse(params)
       return { kind: "send", previewId: parsed.previewId, clientRequestId: parsed.clientRequestId }
     }
@@ -47,7 +47,7 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
   }
 }
 
-export function createMailCapabilityDispatcher(deps: MailDeps) {
+export function createMailInternalCapabilityDispatcher(deps: MailDeps) {
   return {
     async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
       const operation = parseOperation(action, params)

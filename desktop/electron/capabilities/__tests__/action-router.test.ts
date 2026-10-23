@@ -9,7 +9,7 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
     contentDispatch: vi.fn(),
     databaseDispatch: vi.fn(),
     driveDispatch: vi.fn(),
-    mailDispatch: vi.fn(),
+    mailInternalDispatch: vi.fn(),
     modelPriceDispatch: vi.fn(),
     repositoryDispatch: vi.fn(),
     skillRepositoryDispatch: vi.fn(),
@@ -19,6 +19,13 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
 }
 
 describe("createSynapseActionRouter", () => {
+  it("rejects the old internal-mail send action without invoking any dispatcher", async () => {
+    const deps = createRouterDeps()
+    await expect(createSynapseActionRouter(deps).dispatch("app.mail.message.send", {}, { source: "api" }))
+      .rejects.toThrow("Unknown action:")
+    expect(deps.mailInternalDispatch).not.toHaveBeenCalled()
+    expect(deps.appDispatch).not.toHaveBeenCalled()
+  })
   it("routes App actions to the App dispatcher", async () => {
     const appDispatch = vi.fn(async () => ({ ok: true as const, data: { outputPath: "/tmp/output.docx" } }))
     const deps = createRouterDeps({ appDispatch })

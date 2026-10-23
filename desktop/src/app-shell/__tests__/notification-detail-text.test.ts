@@ -18,12 +18,12 @@ describe("notificationDetailText", () => {
   })
 
   it("copies the mail body once it has loaded", () => {
-    const item = notification({ source: "mail", targetId: "m1" })
+    const item = notification({ source: "mail-internal", targetId: "m1" })
     expect(notificationDetailText(item, "来信正文")).toBe("来信正文")
   })
 
   it("falls back to the notification body when the mail has not loaded", () => {
-    const item = notification({ source: "mail", targetId: "m1" })
+    const item = notification({ source: "mail-internal", targetId: "m1" })
     expect(notificationDetailText(item, null)).toBe("正文")
   })
 

@@ -30,7 +30,7 @@ describe("appsIpcModule", () => {
     const options = { todoOpenRequest: { requestId: "open-1", id: "todo-1" } }
     const schema = appsIpcModule.methods.openSystemApp.request
     expect(schema.safeParse({ appId: "todos", options }).success).toBe(true)
-    expect(schema.safeParse({ appId: "mail", options }).success).toBe(false)
+    expect(schema.safeParse({ appId: "mail-internal", options }).success).toBe(false)
     expect(schema.safeParse({ appId: "todos", options: { ...options, userId: "other" } }).success).toBe(false)
     expect(schema.safeParse({ appId: "todos", options: { todoOpenRequest: { requestId: "open-1", id: "a/b" } } }).success).toBe(false)
     await appsIpcModule.methods.openSystemApp.handler(createContext({}), { appId: "todos", options })

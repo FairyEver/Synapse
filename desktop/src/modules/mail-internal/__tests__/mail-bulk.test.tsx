@@ -197,11 +197,11 @@ describe("mail bulk controls", () => {
     const second = [...document.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes("second"))!
     act(() => second.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })))
     await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
-    expect(writeText).toHaveBeenCalledWith("synapse://mail/second")
+    expect(writeText).toHaveBeenCalledWith("synapse://mail-internal/second")
 
     act(() => document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))
     await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
-    expect(writeText).toHaveBeenCalledWith("synapse://mail/first")
+    expect(writeText).toHaveBeenCalledWith("synapse://mail-internal/first")
   })
 
   it("copies the full title and Markdown body from detail without attachments or mail metadata", async () => {

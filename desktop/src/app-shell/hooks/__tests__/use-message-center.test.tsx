@@ -33,7 +33,7 @@ vi.mock("@/lib/electron-bridge", () => ({
 import { useMessageCenter } from "../use-message-center"
 
 const notice: SynapseNotification = {
-  id: "n1", source: "mail", title: "新站内信", body: "来自 Synapse。", group: "mail", url: null,
+  id: "n1", source: "mail-internal", title: "新站内信", body: "来自 Synapse。", group: "mail-internal", url: null,
   copyOnTap: false, level: "active", targetId: "broadcast-1", deviceId: null, readAt: null, resolvedAt: null,
   createdAt: "2026-09-29T10:00:00.000Z",
 }
@@ -171,11 +171,11 @@ describe("useMessageCenter", () => {
     const systemNotice: SynapseNotification = { ...notice, id: "system-1", source: "system-notifier" }
     const oldPage = deferred<{ items: SynapseNotification[]; nextCursor: string | null }>()
     mocks.list.mockResolvedValueOnce({ items: [notice], nextCursor: "mail-next" })
-    await act(async () => { current.changeSource("mail"); await flush() })
+    await act(async () => { current.changeSource("mail-internal"); await flush() })
     mocks.list.mockReturnValueOnce(oldPage.promise)
     let loadingOldPage!: Promise<void>
     await act(async () => { loadingOldPage = current.loadMore(); await flush() })
-    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "all", source: "mail", cursor: "mail-next" })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "all", source: "mail-internal", cursor: "mail-next" })
 
     mocks.list.mockResolvedValueOnce({ items: [systemNotice], nextCursor: "system-next" })
     await act(async () => { current.changeSource("system-notifier"); await flush() })
@@ -189,11 +189,11 @@ describe("useMessageCenter", () => {
   })
 
   it("keeps bulk read and deletion operations scoped to the account across category filters", async () => {
-    await act(async () => { current.changeFilter("unread"); current.changeSource("mail"); await flush() })
+    await act(async () => { current.changeFilter("unread"); current.changeSource("mail-internal"); await flush() })
     await act(async () => { await current.markAllRead(); await current.deleteAll("all"); await current.deleteAll("pending"); await flush() })
     expect(mocks.readAll).toHaveBeenCalledWith()
     expect(mocks.deleteAll.mock.calls).toEqual([[{ filter: "all" }], [{ filter: "pending" }]])
-    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "mail" })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "unread", source: "mail-internal" })
   })
 
   it("loads the full platform announcement only after opening its notification", async () => {
@@ -259,12 +259,12 @@ describe("useMessageCenter", () => {
   it("refreshes the current category when a deletion timer finishes after a category change", async () => {
     vi.useFakeTimers()
     await act(async () => { current.remove(notice) })
-    await act(async () => { current.changeSource("mail"); await flush() })
+    await act(async () => { current.changeSource("mail-internal"); await flush() })
     mocks.list.mockClear()
 
     await act(async () => { vi.advanceTimersByTime(5_500); await flush() })
     expect(mocks.delete).toHaveBeenCalledWith({ id: "n1" })
-    expect(current.source).toBe("mail")
-    expect(mocks.list.mock.calls).toEqual([[{ filter: "all", source: "mail" }]])
+    expect(current.source).toBe("mail-internal")
+    expect(mocks.list.mock.calls).toEqual([[{ filter: "all", source: "mail-internal" }]])
   })
 })

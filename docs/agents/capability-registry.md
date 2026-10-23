@@ -28,11 +28,11 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 2026-10-13 文档互动通知增加可选只读 `driveDiscussion.snapshot`（完整标题、本次内容、原文及回复对象的当时摘录）。手机长按详情是既有通知读取的 UI 操作，点按继续直达；通知输入 schema、工具数量和 System Notifier 契约不变。
 
-桌面通知列表和详情复制 `synapse:notification:<id>` 作为带类型的 MCP 定位 ID；现有 `app_account_notification_get` 接收完整 `reference`，读取仍受当前账号权限限制。这不是桌面 Deep Link，不增加账号消息中心的 7 个 MCP 工具或路由。站内信复制现有 `synapse://mail/<id>` 路由，`app_mail_message_get` 也可接收完整 `reference`；复制定位功能不增加 Mail MCP 工具或 `open` 路由。两类读取都不因 MCP 调用自动设已读。
+桌面通知列表和详情复制 `synapse:notification:<id>` 作为带类型的 MCP 定位 ID；现有 `app_account_notification_get` 接收完整 `reference`，读取仍受当前账号权限限制。这不是桌面 Deep Link，不增加账号消息中心的 7 个 MCP 工具或路由。站内信复制现有 `synapse://mail-internal/<id>` 路由，`app_mail_internal_message_get` 也可接收完整 `reference`；复制定位功能不增加 Mail MCP 工具或 `open` 路由。两类读取都不因 MCP 调用自动设已读。
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
-下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 4 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>`、`synapse://mail/<message-id>` 和 `synapse://todos/<id>`。Terminal 路由进入终端列表或会话：不带 `session` 时可省略 `desktop`，携带 `session` 时必须同时指明 `desktop`。会话目标先等待当前账号与连接的电脑状态；已知电脑离线时退回会话列表并清除旧详情选择，在线时还要等待当前连接收到对应电脑的实时摘要，才校验会话是否可打开。已结束会话给出原因并保留当前选择；用户随后主动选择会取消旧待跳转。通知与 Widget 共用此打开判定，旧通知未携带电脑标识时沿当前电脑处理，不放宽 URL 参数校验。Mail 路由进入站内信并按当前用户权限读取该信件。Todo 路由严格接受单一 ID，在账号就绪后只读定位，已完成目标进入全部，query / fragment / 编码分隔符无效；新导航和身份变化取消旧目标。四条路由均由 iOS App 本地处理；本次生命周期与回退修复不改变表中的注册数量或 MCP/Skill 表面。
+下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 4 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>`、`synapse://mail-internal/<message-id>` 和 `synapse://todos/<id>`。Terminal 路由进入终端列表或会话：不带 `session` 时可省略 `desktop`，携带 `session` 时必须同时指明 `desktop`。会话目标先等待当前账号与连接的电脑状态；已知电脑离线时退回会话列表并清除旧详情选择，在线时还要等待当前连接收到对应电脑的实时摘要，才校验会话是否可打开。已结束会话给出原因并保留当前选择；用户随后主动选择会取消旧待跳转。通知与 Widget 共用此打开判定，旧通知未携带电脑标识时沿当前电脑处理，不放宽 URL 参数校验。Mail 路由进入站内信并按当前用户权限读取该信件。Todo 路由严格接受单一 ID，在账号就绪后只读定位，已完成目标进入全部，query / fragment / 编码分隔符无效；新导航和身份变化取消旧目标。四条路由均由 iOS App 本地处理；本次生命周期与回退修复不改变表中的注册数量或 MCP/Skill 表面。
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
@@ -89,7 +89,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 - System Notifier 的触发工具 2026-10-15 起增加可选 `copyOnTap`（布尔，缺省 false）：为真时用户在手机上点这条通知即把正文复制到剪贴板。桌面端另在消息中心详情提供「复制正文」，iOS 端在通知详情提供同一入口，两者对任何通知都可用、不读这个开关。开放 API 的两个请求体形状接受同名布尔，路径式用 `?copyOnTap=1`（只认字面量 `1`）。**MCP 工具数不变（仍 1）**，Workflow 节点仍为 1，Automation Action 与 Deep Link 无新增，三张表的注册数量都不动；能力版本仍为 `1.0.0`。
 
-- Mail 是独立 System App，不默认固定 Dock；桌面与 iOS 都可人工收发、处理附件和批量整理信箱。桌面 IPC 按 `app.mail.<resource>.<action>` 分开并在 preload 中按资源嵌套；本机文件附件另有不注册 MCP 的 UI 专用操作。17 个 MCP 工具包含组织搜索及成员分页、完整历史信箱的人员列表、当前账号可见往来、精确统计、全部已读和批量整理。Synapse Skill 引导 AI 搜索同团队个人或组织、分别确定收件人与抄送人、固定并检查完整预览；用户已授权发送且无疑惑、不确定或确需检查的内容时直接后台发送，仅有待解决问题或用户要求先审阅时取得明确答复。回复与转发遵循同一规则，组织成员在发送时按最新名单展开。当前 `confirmed: true` 是调用者已核对发送授权与预览、无待解决问题的声明，不构成服务端可验证的对话确认凭证。上述发送授权规则不增加 MCP 工具或路由。附件不从云盘复制；转发原信附件由站内信存储自行复制，云盘文件仍以分享链接放入正文。信件查看与下载只允许发件人或该信收件人。唯一跨团队入口是管理员保护的全站平台公告 API，公告进入活跃用户收件箱且只读，不新增 Mail MCP 工具或普通用户发送权限。桌面 `synapse://mail/<message-id>` 与手机同形路由只定位信件，不放宽服务端鉴权。
+- Mail 是独立 System App，不默认固定 Dock；桌面与 iOS 都可人工收发、处理附件和批量整理信箱。桌面 IPC 按 `app.mail_internal.<resource>.<action>` 分开并在 preload 中按资源嵌套；本机文件附件另有不注册 MCP 的 UI 专用操作。17 个 MCP 工具包含组织搜索及成员分页、完整历史信箱的人员列表、当前账号可见往来、精确统计、全部已读和批量整理。Synapse Skill 引导 AI 搜索同团队个人或组织、分别确定收件人与抄送人、固定并检查完整预览；用户已授权发送且无疑惑、不确定或确需检查的内容时直接后台发送，仅有待解决问题或用户要求先审阅时取得明确答复。回复与转发遵循同一规则，组织成员在发送时按最新名单展开。当前 `confirmed: true` 是调用者已核对发送授权与预览、无待解决问题的声明，不构成服务端可验证的对话确认凭证。上述发送授权规则不增加 MCP 工具或路由。附件不从云盘复制；转发原信附件由站内信存储自行复制，云盘文件仍以分享链接放入正文。信件查看与下载只允许发件人或该信收件人。唯一跨团队入口是管理员保护的全站平台公告 API，公告进入活跃用户收件箱且只读，不新增 Mail MCP 工具或普通用户发送权限。桌面 `synapse://mail-internal/<message-id>` 与手机同形路由只定位信件，不放宽服务端鉴权。
 
 - Desktop Update / Restart 的 4 个 App MCP 能力为 `app.update.state.get`、`app.update.check.execute`、`app.update.install.execute`、`app.desktop.restart.execute`。后三者的规范 MCP 名称特例缩短为 `app_update_check`、`app_update_run`、`app_desktop_restart`，不是旧工具别名。它们复用桌面更新器与正常退出链路；远程重启保留未同步推送而不弹本机确认框。该入口不注册 System App、Dock、Workflow、Automation 或 Deep Link；与要求短时凭证的公开更新深链互不替代。
 
@@ -148,7 +148,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Usage Monitor | 是 | 否 | — |
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
-| Mail | 是 | 否 | `mail` |
+| Mail Internal | 是 | 否 | `mail_internal` |
 | Todos | 是 | 否 | `todos` |
 | Meeting | 是 | 否 | — |
 
@@ -166,7 +166,7 @@ MCP 不是 System App，不进入启动器、Dock 或独立应用窗口。系统
 
 Meeting 是普通 System App（界面上的名字是「录音」），不新增 MCP domain：录音与转写文字只通过桌面端与手机端的用户界面读写，没有注册 MCP capability、tool、Workflow Node、Automation Action 或 Deep Link。它注册 12 个 UI 私有 IPC operation（`app.meeting.*`），用于录音起止、分片上报、录音读写与删除、转写重试、回放地址与波形，以及音频本机缓存；分片是裸字节，经主进程代理写入平台媒体对象存储，不进用户云盘。发言人与纪要在两端的界面上都已去掉，对应的写入 IPC 与 HTTP 接口一并下线；服务端 DTO 仍照常返回 `speakers` / `minutes` 等字段，手机端才不会因旧版本解码失败。异常退出留下的未完成录音由主进程在启动时静默收尾，不占用任何 IPC——但**只收本机录的那一条**（判据是本机暂存目录还在不在）：手机端上线后两端录的是同一批数据，无条件收尾会把对方正在录的那条强行结束掉。服务端的 `GET /meetings/recordings/pending` 因此多了可选参数 `?all=1`，无参数时的行为不变，旧版桌面端照常可用。转写完成后服务端经既有 `broadcastToUser` 通知桌面端，并经 `MobilePushService` 的 `MEETING_TRANSCRIPTION` category 通知手机——两者都不改变上表的 capability 或 MCP 数量。转写进度：详情 DTO 多返回一个可选的 `transcription`（阶段 / 服务端此刻的已用时长 / 按音频时长估的预期耗时），两端据此画一条会往前走的进度条（封顶 95%），秒表由客户端在两次刷新之间接着走；这只是既有 `app.meeting.entry.get` 的一个字段，没有新增 operation。转写失败的重试只覆盖**投递阶段**的抖动，识别引擎判定音频不可识别属终局、一次收尾不再重投。新增的第 12 个 operation 是 `app.meeting.audio.ensure`（`{ meetingId }` → `ready` / `downloading` / `unavailable`）：音频在本机留一份，听过的再听不走网络，没网也能听听过的那些。**缓存是纯客户端行为，服务端零改动**——失效判断用的 `recording.status` 与 `recording.size` 详情接口本来就在返回。缓存只有这一个 operation，没有配套的清理入口：清理是主进程自己的事。桌面端缓存目录是 `userData/meeting-audio-cache/`，手机端沿用录音落盘目录，两端都不进 `DataRepository`（派生产物，禁止把大文件字节写进去）；两端各自的命中判据、2 GB 上限与清理时机必须一致。界面上不出现缓存的任何痕迹——没有「已下载」「已缓存」「离线」「本地」任何一个词，列表行也不加标记。手机端的录音实时活动另有一条**只属于手机**的深链 `synapse://recording`：锁屏和灵动岛上那张卡片点一下落在录音界面，而不是把这一条结束掉——卡片是「带我去看」，那两个按钮才是「替我做」。它由 iOS App 自己注册与解析（`CFBundleURLTypes` + `onOpenURL`），不经桌面端协议路由：桌面端的 `synapse://` 路由对它照常按未知路由处理（一条 warn 日志加聚焦主窗口），不新增 System App、Dock、Workflow Node、Automation Action 或 MCP capability/tool。手机端因此成为第一个注册 Deep Link 的客户端；「卡片点开落在录音界面且不起新录音」与「按钮在 App 进程里执行」两条同时成立，见 `docs/superpowers/specs/2026-09-19-mobile-recording-design.md` 的补记。
 
-2026-10-16 站内信人员筛选新增 `app.mail.contact.list`（MCP `app_mail_contact_list`），并给 `app.mail.message.list` 增加可选 `contactKey`。名单仅从当前账号完整可见信箱聚合；收件箱是发件人，已发送是 To/Cc 地址快照中的个人与组织，不展开组织成员。该只读能力沿用 Mail 权限与审计；Mail 增至 17 项，当前全局 capability 293 项、MCP 索引 289 项。System App、Dock、Workflow、Automation 和 Deep Link 无增量，公开 MCP 仍为 `search`、`invoke` 两个。桌面新增侧栏和窄窗口选择器，iOS 入口不变。
+2026-10-16 站内信人员筛选新增 `app.mail_internal.contact.list`（MCP `app_mail_internal_contact_list`），并给 `app.mail_internal.message.list` 增加可选 `contactKey`。名单仅从当前账号完整可见信箱聚合；收件箱是发件人，已发送是 To/Cc 地址快照中的个人与组织，不展开组织成员。该只读能力沿用 Mail 权限与审计；Mail 增至 17 项，当前全局 capability 293 项、MCP 索引 289 项。System App、Dock、Workflow、Automation 和 Deep Link 无增量，公开 MCP 仍为 `search`、`invoke` 两个。桌面新增侧栏和窄窗口选择器，iOS 入口不变。
 
 ## MCP capability domain
 
@@ -181,7 +181,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 76 | 76 |
-| `mail` | 17 | 17 |
+| `mail_internal` | 17 | 17 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
 | 合计 | 296 | 292 |
@@ -227,3 +227,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-11 集成核对：从实际 `CAPABILITY_DOMAINS` 累加 289 项、`MCP_TOOL_ACTIONS` 与 `buildAllMcpTools()` 各 285 项；`todos` 均为 6。System App 注册测试列出 21 个应用。相对实施前增量为 1 个 System App、6 个 capability / MCP 索引、1 条桌面 Todo 路由及 1 条 iOS Todo 路由；Workflow / Automation 增量均为 0，默认 Dock 无增量，公开 MCP 工具仍为 2。iOS 入口为主页现有导航栈，不注册桌面 System App 或额外底栏。
 
 2026-10-23 Automation 的 `builtin.cron` 与 `builtin.interval` 配置新增可选 `timeRange: { start, end }`，由既有触发器发现工具返回 schema，创建和更新沿用通用 trigger config。活跃日和每日范围共同限制自动触发与启动补跑，缺省全天；手动运行不受限。Automation 仍为 14 个 capability / MCP 索引，System App、Dock、Workflow、Automation Action 和 Deep Link 数量不变。
+
+2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记迁移，保留取消固定状态和布局；历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。

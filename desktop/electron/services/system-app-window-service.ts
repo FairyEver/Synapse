@@ -21,7 +21,7 @@ const SYSTEM_APP_CONTENT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:cont
 const SYSTEM_APP_GIT_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:git_open_request"
 const SYSTEM_APP_TERMINAL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:terminal_open_request"
 const SYSTEM_APP_TODO_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:todo_open_request"
-const SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:mail_open_request"
+const SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL = "synapse:app:apps:operation:mail_internal_open_request"
 export const SYSTEM_APP_WINDOW_SERVICE_ID = "core.system-app-window"
 
 type SystemAppWindowLogger = {
@@ -141,8 +141,8 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         if (options.todoOpenRequest) {
           sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_TODO_OPEN_REQUEST_CHANNEL, options.todoOpenRequest)
         }
-        if (options.mailOpenRequest) {
-          sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL, options.mailOpenRequest)
+        if (options.mailInternalOpenRequest) {
+          sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_MAIL_OPEN_REQUEST_CHANNEL, options.mailInternalOpenRequest)
         }
         logger.info("Focused existing system app window.", { appId, appType: definition.type })
         return
@@ -162,8 +162,8 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       if (options.todoOpenRequest) {
         params.set("todoOpenRequest", JSON.stringify(options.todoOpenRequest))
       }
-      if (options.mailOpenRequest) {
-        params.set("mailOpenRequest", JSON.stringify(options.mailOpenRequest))
+      if (options.mailInternalOpenRequest) {
+        params.set("mailInternalOpenRequest", JSON.stringify(options.mailInternalOpenRequest))
       }
       const url = buildDetachedViewWindowUrl(baseUrl, params)
       await detachedWindows.open({

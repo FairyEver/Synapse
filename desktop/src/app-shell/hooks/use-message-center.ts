@@ -59,7 +59,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }, [userId])
 
   useEffect(() => {
-    if (!open || selected?.source !== "mail" || !selected.targetId) {
+    if (!open || selected?.source !== "mail-internal" || !selected.targetId) {
       setMail(null)
       setMailError(null)
       setMailLoading(false)
@@ -193,9 +193,9 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
       } else if (item.source === "todo-reminder" && item.targetId) {
         await requireBridgeDomain("apps").openSystemApp("todos", { todoOpenRequest: { requestId: crypto.randomUUID(), id: item.targetId } })
         setOpen(false)
-      } else if (item.source === "mail" && item.targetId) {
-        await requireBridgeDomain("apps").openSystemApp("mail", {
-          mailOpenRequest: { requestId: crypto.randomUUID(), messageId: item.targetId },
+      } else if (item.source === "mail-internal" && item.targetId) {
+        await requireBridgeDomain("apps").openSystemApp("mail-internal", {
+          mailInternalOpenRequest: { requestId: crypto.randomUUID(), messageId: item.targetId },
         })
         setOpen(false)
       } else if (item.url) {
@@ -308,14 +308,14 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }
 
   const loadMailForReply = async (item: SynapseNotification): Promise<MailMessage | null> => {
-    if (item.source !== "mail" || !item.targetId) return null
+    if (item.source !== "mail-internal" || !item.targetId) return null
     if (mail?.messageId === item.targetId) return mail
     return mailRequest({ kind: "messageGet", messageId: item.targetId })
   }
 
   const refreshAfterQuickReply = async (messageId: string) => {
     await latestRefresh.current()
-    if (selected?.source === "mail" && selected.targetId === messageId) setMailRevision((value) => value + 1)
+    if (selected?.source === "mail-internal" && selected.targetId === messageId) setMailRevision((value) => value + 1)
   }
 
   const loadMore = async () => {
