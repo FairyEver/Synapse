@@ -16,7 +16,7 @@ function harness() {
     findMany: vi.fn(async () => [record]), findFirst: vi.fn(async (): Promise<UserNotification | null> => record),
     count: vi.fn(async () => 1), updateMany: vi.fn(async () => ({ count: 1 })),
     deleteMany: vi.fn(async (_input: unknown) => ({ count: 1 })),
-  } }
+  }, mailMessage: { findMany: vi.fn(async (): Promise<{ id: string; subject: string }[]> => []) } }
   const desktops = { broadcastToUser: vi.fn() }
   const mobiles = { sendToMobileClients: vi.fn() }
   const push = {
@@ -29,6 +29,35 @@ function harness() {
 }
 
 describe("NotificationService", () => {
+  it("adds full subjects to existing mail notifications in one permission-scoped query", async () => {
+    const { service, prisma } = harness()
+    const subject = "【需求变更留档】" + "很长的站内信标题".repeat(12)
+    const mail = { ...record, source: "mail", title: "新站内信", targetId: "mail-1" }
+    prisma.userNotification.findMany.mockResolvedValueOnce([mail, { ...mail, id: "message-2" }, { ...mail, id: "message-3", targetId: "deleted-mail" }, record])
+    prisma.mailMessage.findMany.mockResolvedValueOnce([{ id: "mail-1", subject }])
+
+    const result = await service.list("user-1", {})
+    expect(result.items[0]).toMatchObject({ title: "新站内信", body: record.body, mailSubject: subject })
+    expect(result.items[1]).toHaveProperty("mailSubject", subject)
+    expect(result.items[2]).not.toHaveProperty("mailSubject")
+    expect(result.items[3]).not.toHaveProperty("mailSubject")
+    expect(prisma.mailMessage.findMany).toHaveBeenCalledExactlyOnceWith({
+      where: { id: { in: ["mail-1", "deleted-mail"] }, OR: [{ senderId: "user-1", senderDeletedAt: null }, { recipients: { some: { userId: "user-1", deletedAt: null } } }] },
+      select: { id: true, subject: true }, take: 2,
+    })
+  })
+
+  it("includes a readable mail subject in detail but skips mail queries for other sources", async () => {
+    const { service, prisma } = harness()
+    prisma.userNotification.findFirst.mockResolvedValueOnce({ ...record, source: "mail", targetId: "mail-1" })
+    prisma.mailMessage.findMany.mockResolvedValueOnce([{ id: "mail-1", subject: "版本公告" }])
+    await expect(service.get("user-1", record.id)).resolves.toHaveProperty("mailSubject", "版本公告")
+    prisma.mailMessage.findMany.mockClear()
+    await service.list("user-1", {})
+    await service.get("user-1", record.id)
+    expect(prisma.mailMessage.findMany).not.toHaveBeenCalled()
+  })
+
   it("projects discussion metadata without exposing its internal share context", async () => {
     const { service, prisma } = harness()
     prisma.userNotification.findFirst.mockResolvedValueOnce({

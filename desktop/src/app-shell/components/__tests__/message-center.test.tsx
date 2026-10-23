@@ -58,6 +58,28 @@ afterEach(() => {
 })
 
 describe("MessageCenter", () => {
+  it("shows mail subjects in the list before opening them and keeps the source fallback", async () => {
+    const subject = "【需求变更留档】" + "很长的站内信标题".repeat(12)
+    mockCenter.items = [
+      { ...mockCenter.selected, id: "unopened-mail", targetId: "mail-2", mailSubject: subject } as SynapseNotification,
+      { ...mockCenter.selected, id: "deleted-mail", targetId: "mail-3" } as SynapseNotification,
+      { ...mockCenter.selected, id: "terminal", source: "terminal-complete", title: "Claude Code" } as SynapseNotification,
+    ]
+    const host = document.createElement("div")
+    document.body.append(host)
+    const root = createRoot(host)
+    try {
+      await act(async () => root.render(<MessageCenter />))
+      const list = document.querySelector('[aria-label="通知列表"]')!
+      expect(list.textContent).toContain(subject)
+      expect(list.textContent).toContain("站内信")
+      expect(list.textContent).toContain("终端")
+      expect(mockCenter.loadMailForReply).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+    }
+  })
+
   it("shows a quick reply action for user mail and withholds it from platform announcements", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

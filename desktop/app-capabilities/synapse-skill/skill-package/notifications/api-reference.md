@@ -20,6 +20,8 @@
 
 通知详情里可以「复制正文」，拿到的是页面上显示的那一段文字（云盘互动这类展开显示的来源不是原始 `body`）；这与复制 `synapse:notification:<id>` 引用是两件事 —— 引用是给 Agent 用来定位这条通知的，正文是给用户拿去用的。这个入口对任何通知都可用，与发送方有没有声明「点按复制」无关，也不经过任何 MCP 工具。
 
+站内信通知的列表和详情可返回 `mailSubject?: string`，表示当前账号仍有权读取的原信完整标题；原信已删除或不可访问时不返回该字段。通知的 `title` 和 `body` 仍为安全摘要。桌面列表优先展示原信标题，超长时单行省略。
+
 ## 文档互动通知
 
 `app_account_notification_list` 的 `source` 接受 `drive-discussion`；工具数量和权限不变。返回的 `driveDiscussion?: {kind: annotation | message, action: created | replied, snapshot?: {detailTitle, content, original?: {kind: text | image, text}, replyTo?: {authorName, content}}}` 仅用于展示，旧通知不一定存在该字段。定位 `url` 按通知 ID 重新验证本人记录，不包含密码或凭据；`get` 不会自动标已读。历史摘要保留，点击目标已删除或权限失效时给出当前不可用状态。

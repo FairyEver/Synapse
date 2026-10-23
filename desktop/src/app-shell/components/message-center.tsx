@@ -48,6 +48,11 @@ function isPending(item: SynapseNotification): boolean {
   return item.source === "terminal-attention" && !item.resolvedAt
 }
 
+function listSubtitle(item: SynapseNotification): string {
+  if (item.source === "mail" && item.mailSubject) return item.mailSubject
+  return sourceName(item)
+}
+
 function DiscussionDetail({ item }: { item: SynapseNotification }) {
   const snapshot = item.driveDiscussion?.snapshot
   if (!snapshot) return <p className="whitespace-pre-wrap break-words text-sm">{item.body}</p>
@@ -217,7 +222,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
               </Select>
             </div>
             {center.error && <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm text-destructive">{center.error}<Button type="button" variant="outline" size="default" onClick={() => { void center.refresh() }}>重试</Button></div>}
-            <ScrollArea className="min-h-0 flex-1">
+            <ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
               {center.loading && center.items.length === 0 && <div role="status" aria-label="加载通知中" className="space-y-3 p-4"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>}
               {!center.loading && !center.error && center.items.length === 0 && <div className="py-16 text-center text-sm text-muted-foreground">这里没有通知</div>}
               {center.items.map((item) => {
@@ -228,7 +233,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
                   {showDate && <h3 className="px-5 pb-2 pt-5 text-xs font-medium text-muted-foreground">{date}</h3>}
                   <ContextMenu><ContextMenuTrigger asChild><button type="button" aria-current={center.selected?.id === item.id ? "true" : undefined} className={`grid w-full grid-cols-[0.5rem_minmax(0,1fr)] gap-2.5 border-b px-5 py-3 text-left focus-visible:outline-2 focus-visible:outline-ring ${center.selected?.id === item.id ? "bg-selected" : "hover:bg-muted"}`} onClick={() => { void center.openItem(item) }}>
                     <span className={`mt-1.5 size-2 rounded-full ${item.readAt ? "bg-transparent" : "bg-primary"}`} aria-hidden="true" />
-                    <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="text-xs text-muted-foreground">{sourceName(item)}{item.source === "drive-discussion" && item.driveDiscussion && ` · ${discussionContentLabel(item.driveDiscussion)}`}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span>{item.source === "drive-discussion" ? <DiscussionPreview body={item.body} /> : <span className="truncate text-sm text-muted-foreground">{item.body}</span>}</span>
+                    <span className="flex min-w-0 flex-col gap-1"><span className="flex items-baseline justify-between gap-2"><span className={`min-w-0 truncate text-sm ${item.readAt ? "font-medium" : "font-semibold"}`}>{item.title}</span><time className="shrink-0 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></span><span className="truncate text-xs text-muted-foreground">{listSubtitle(item)}{item.source === "drive-discussion" && item.driveDiscussion && ` · ${discussionContentLabel(item.driveDiscussion)}`}{isPending(item) && <span className="font-medium text-foreground"> · 待处理</span>}</span>{item.source === "drive-discussion" ? <DiscussionPreview body={item.body} /> : <span className="truncate text-sm text-muted-foreground">{item.body}</span>}</span>
                   </button></ContextMenuTrigger><ContextMenuContent>{notificationActions(center, item, null, (target) => { void openQuickReply(target) }).map((action) => <ContextMenuItem key={action.id} variant={action.destructive ? "destructive" : "default"} onSelect={action.run}>{action.label}</ContextMenuItem>)}</ContextMenuContent></ContextMenu>
                 </div>
               })}

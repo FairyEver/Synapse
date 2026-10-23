@@ -151,12 +151,29 @@ export class NotificationService implements OnModuleInit {
       take: 51,
       include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } },
     })
-    return { items: rows.slice(0, 50).map(toNotificationProjection), nextCursor: rows.length > 50 ? rows[49]?.id ?? null : null }
+    const items = await this.withMailSubjects(userId, rows.slice(0, 50).map(toNotificationProjection))
+    return { items, nextCursor: rows.length > 50 ? rows[49]?.id ?? null : null }
   }
 
   async get(userId: string, id: string) {
     const record = await this.prisma.userNotification.findFirst({ where: { id, userId, deletedAt: null }, include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } } })
-    return record ? toNotificationProjection(record) : null
+    if (!record) return null
+    const [item] = await this.withMailSubjects(userId, [toNotificationProjection(record)])
+    return item ?? null
+  }
+
+  private async withMailSubjects(userId: string, items: ReturnType<typeof toNotificationProjection>[]) {
+    const messageIds = [...new Set(items.flatMap((item) => item.source === "mail" && item.targetId ? [item.targetId] : []))]
+    if (messageIds.length === 0) return items
+    const messages = await this.prisma.mailMessage.findMany({
+      where: { id: { in: messageIds }, OR: [{ senderId: userId, senderDeletedAt: null }, { recipients: { some: { userId, deletedAt: null } } }] },
+      select: { id: true, subject: true }, take: messageIds.length,
+    })
+    const subjects = new Map(messages.map((message) => [message.id, message.subject]))
+    return items.map((item) => {
+      const mailSubject = item.source === "mail" && item.targetId ? subjects.get(item.targetId) : undefined
+      return mailSubject === undefined ? item : { ...item, mailSubject }
+    })
   }
 
   async unreadCount(userId: string): Promise<number> {
