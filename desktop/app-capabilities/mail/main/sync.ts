@@ -17,6 +17,7 @@ export interface SyncEvents {
   changed(event: MailChanged): void
   inbox(ctx: MailContext, delta: InboxDelta): void | Promise<void>
   error(code: string, accountId: string): void
+  draft?(ctx: MailContext, messageId: string): Promise<void>
 }
 export const emptyCoverage = (): Coverage => ({ metadataComplete: false, serverHistoryComplete: null, indexedCount: 0, bodyScannedCount: 0, bodyPendingCount: null, reason: "metadata_indexing" })
 export const messageSummary = (row: MailRecord<StoredMessage>): MailSummary => ({ ...row.data.summary, revision: row.revision })
@@ -117,7 +118,7 @@ export class MailSync {
         if (locator.folderId !== folder.id) continue
         if (locator.uidValidity !== selected.uidValidity) {
           if (!row.data.summary.stale) await this.repo.save(ctx, "messages", row.id, accountId, { ...row.data, summary: { ...row.data.summary, stale: true } }, row.revision, row.sortKey)
-        } else existing.set(locator.uid, { id: row.id, stale: row.data.summary.stale })
+        } else if (!row.data.summary.stale) existing.set(locator.uid, { id: row.id, stale: false })
       }
       cursor = page.nextCursor ?? undefined
     } while (cursor)
@@ -135,6 +136,7 @@ export class MailSync {
         const summary: StoredMessage["summary"] = { id, accountId, locator: { accountId, folderId: folder.id, uidValidity: selected.uidValidity, uid: header.uid }, subject: header.subject, from: header.from, to: header.to, cc: header.cc, date, snippet: "", read: header.flags.includes("\\Seen"), star: header.flags.includes("\\Flagged"), attachmentCount: countAttachments(header.structure), bodyState: "remote", stale: false }
         const saved = await this.repo.save<StoredMessage>(ctx, "messages", id, accountId, { summary, headers: { replyTo: header.replyTo, messageId: header.messageId, references: header.references }, structure: header.structure, bodyRef: null }, 0, `${String(9_999_999_999_999 - (date ? Date.parse(date) : header.uid)).padStart(13, "0")}`)
         existing.set(header.uid, { id, stale: false }); this.emit(ctx, accountId, [id], saved.revision)
+        if (folder.data.folder.role === "drafts") await this.events.draft?.(ctx, id)
         if (header.uid > checkpoint.data.baselineUid && folder.data.folder.role === "inbox") notifications.push(messageSummary(saved))
       }
       if (notifications.length) await this.events.inbox(ctx, { accountId, messages: notifications, baseline: false })

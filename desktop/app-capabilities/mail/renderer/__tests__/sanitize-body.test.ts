@@ -8,3 +8,7 @@ it("removes active HTML, styles and all ungranted image sources, retaining only 
   expect(result.html).toContain("default-src 'none'")
   expect(result.blockedImages).toBe(2); expect(result.links).toEqual([{ label: "open", url: "https://example.com/path" }])
 })
+it("treats prototype names as ungranted external image identifiers", () => {
+  const result = sanitizeMailHtml('<img src="cid:__proto__"><img src="constructor">', { cid: {}, remote: {} })
+  expect(result.blockedImages).toBe(2)
+})

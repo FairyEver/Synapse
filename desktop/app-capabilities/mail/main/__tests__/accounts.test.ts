@@ -63,3 +63,18 @@ it("requires a fresh connection check before using changed endpoints", async () 
     await expect(r.accounts.credential(r.ctx, account.id)).resolves.toMatchObject({ config: { imap: { host: "other.example.com" } } })
   } finally { await r.close() }
 })
+it("requests lifecycle cancellation before waiting for the busy account queue", async () => {
+  const r = await createMailTestRig()
+  let release!: () => void
+  let paused: Promise<unknown> | undefined, busy: Promise<unknown> | undefined
+  try {
+    const account = await r.accounts.configure(r.ctx, { ...aliyunConfig("me@example.com", "Work"), credential: "secret" })
+    r.lifecycle.stop.mockClear()
+    let started!: () => void
+    const entered = new Promise<void>(resolve => { started = resolve })
+    busy = r.accounts.exclusive(r.ctx, account.id, async () => { started(); await new Promise<void>(resolve => { release = resolve }) })
+    await entered
+    paused = r.accounts.pause(r.ctx, account.id)
+    await vi.waitFor(() => expect(r.lifecycle.stop).toHaveBeenCalledTimes(1))
+  } finally { release?.(); await busy; await paused; await r.close() }
+})

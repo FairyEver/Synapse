@@ -15,8 +15,10 @@ export function sanitizeMailHtml(source: string, resources: MailHtmlResources): 
   const remoteImages: string[] = [], links: ExternalLink[] = []
   for (const image of fragment.querySelectorAll("img")) {
     const src = image.getAttribute("src") ?? ""
-    const granted = src.startsWith("cid:") ? resources.cid[src.slice(4)] : resources.remote[src]
-    if (granted?.startsWith("blob:")) image.setAttribute("src", granted)
+    const key = src.startsWith("cid:") ? src.slice(4) : src
+    const entries = src.startsWith("cid:") ? resources.cid : resources.remote
+    const granted = Object.hasOwn(entries, key) ? entries[key] : undefined
+    if (typeof granted === "string" && granted.startsWith("blob:")) image.setAttribute("src", granted)
     else {
       if (/^https?:/iu.test(src)) remoteImages.push(src)
       image.removeAttribute("src"); blockedImages++

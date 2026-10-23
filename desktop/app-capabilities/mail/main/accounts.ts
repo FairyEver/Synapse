@@ -7,11 +7,14 @@ import { MailRepository } from "./repository"
 import { MailContextProvider } from "./context"
 import type { MailAccess } from "./assets"
 import { normalizeProtocolError, type MailProtocols } from "./protocol/types"
+import type { StoredMessage } from "./sync"
+import type { StoredDraft } from "./drafts"
 
 export const configureAccountSchema = accountConfigSchema.extend({ credential: z.string().min(1).max(4096), accountId: accountIdSchema.optional(), expectedRevision: revisionSchema.optional() }).strict()
   .refine(v => (v.accountId === undefined) === (v.expectedRevision === undefined), "Existing account requires its revision")
 export interface StoredAccount extends Record<string, unknown> {
   config: AccountConfig; credentialId: string; paused: boolean; state: AccountSummary["state"]; errorCode: string | null; capabilities: string[]
+  reindexRequired?: boolean
 }
 export interface MailAccountLifecycle {
   start(ctx: MailContext, accountId: string): Promise<{ jobId: string }>
@@ -19,6 +22,7 @@ export interface MailAccountLifecycle {
   remove(ctx: MailContext, accountId: string): Promise<void>
   open?(ctx: MailContext, accountId?: string): Promise<void>
 }
+const imapNamespace = (config: AccountConfig) => JSON.stringify([config.imap.host.toLowerCase(), config.imap.port, config.imap.security, config.username ?? config.email])
 export class MailAccounts {
   private readonly queues = new Map<string, Promise<void>>()
   constructor(private readonly repo: MailRepository, readonly context: MailContextProvider, readonly protocols: MailProtocols, private readonly access: MailAccess, private readonly lifecycle: MailAccountLifecycle) {}
@@ -34,9 +38,43 @@ export class MailAccounts {
     const row = await this.repo.get<StoredAccount>(ctx, "accounts", id)
     return accountSummarySchema.parse({ ...row.data.config, id: row.id, revision: row.revision, paused: row.data.paused, state: row.data.state, errorCode: row.data.errorCode, capabilities: row.data.capabilities })
   }
+  private async invalidateRemoteState(ctx: MailContext, accountId: string): Promise<void> {
+    for (const entity of ["folders", "messages", "sync-state", "drafts"] as const) {
+      let cursor: string | undefined
+      do {
+        const page = await this.repo.page(ctx, entity, { accountId, cursor, limit: 100 })
+        for (const record of page.items) {
+          if (entity === "folders") {
+            // A different server is a different folder namespace, even at the same path/UIDVALIDITY.
+            await this.repo.remove(ctx, entity, record.id, record.revision)
+          } else if (entity === "messages") {
+            const data = record.data as StoredMessage
+            if (!data.summary.stale) await this.repo.save(ctx, entity, record.id, accountId, { ...data, summary: { ...data.summary, stale: true } }, record.revision, record.sortKey)
+          } else if (entity === "sync-state" && record.data.kind === "folder") await this.repo.remove(ctx, entity, record.id, record.revision)
+          else if (entity === "drafts") {
+            const data = record.data as StoredDraft
+            if (data.remoteLocator || data.pendingAppend) await this.repo.save(ctx, entity, record.id, accountId, { ...data, state: "conflict", syncState: "conflict" }, record.revision, record.sortKey)
+          }
+        }
+        cursor = page.nextCursor ?? undefined
+      } while (cursor)
+    }
+    const account = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)
+    await this.repo.save(ctx, "accounts", accountId, accountId, { ...account.data, reindexRequired: false }, account.revision)
+  }
+  async recover(ctx: MailContext): Promise<void> {
+    let cursor: string | undefined
+    do {
+      const page = await this.repo.page<StoredAccount>(ctx, "accounts", { cursor, limit: 100 })
+      for (const account of page.items) if (account.data.reindexRequired) await this.exclusive(ctx, account.id, () => this.invalidateRemoteState(ctx, account.id))
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+  }
   async credential(ctx: MailContext, accountId: string, checkingConnection = false): Promise<{ config: AccountConfig; credential: string }> {
     const row = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)
+    if (row.data.reindexRequired && !checkingConnection) throw new MailError("ACCOUNT_REINDEX_REQUIRED", "邮箱索引正在恢复，请稍后重试")
     if (row.data.state === "unverified" && !checkingConnection) throw new MailError("CONNECTION_CHECK_REQUIRED", "请先检查修改后的邮箱连接")
+    if (row.data.errorCode === "AUTH_FAILED" && !checkingConnection) throw new MailError("AUTH_FAILED", "请先重新检查邮箱认证")
     await this.access(ctx, "secret.read", accountId)
     const secret = await this.repo.get<{ credential: string }>(ctx, "credentials", row.data.credentialId)
     if (typeof secret.data.credential !== "string") throw new MailError("CREDENTIAL_UNAVAILABLE", "请重新配置邮箱密码")
@@ -77,8 +115,10 @@ export class MailAccounts {
       const credentialId = `mc_${randomUUID()}`
       // Immutable credential generation: a failed config commit cannot overwrite the previous secret.
       await this.repo.save(ctx, "credentials", credentialId, accountId, { credential: parsed.credential, createdAt: new Date().toISOString() }, 0)
-      const data: StoredAccount = { config, credentialId, paused: false, state: "connected", errorCode: null, capabilities: ["imap", "smtp", "local-search"] }
+      const reindexRequired = !!previous && (!!previous.data.reindexRequired || imapNamespace(previous.data.config) !== imapNamespace(config))
+      const data: StoredAccount = { config, credentialId, paused: false, state: "connected", errorCode: null, capabilities: ["imap", "smtp", "local-search"], reindexRequired }
       await this.repo.save(ctx, "accounts", accountId, accountId, data, previous?.revision ?? 0)
+      if (reindexRequired) await this.invalidateRemoteState(ctx, accountId)
       await this.lifecycle.start(ctx, accountId)
       return this.get(ctx, accountId)
     })
@@ -95,8 +135,9 @@ export class MailAccounts {
     })
   }
   async pause(ctx: MailContext, id: string): Promise<AccountSummary> {
+    await this.get(ctx, id)
+    await this.lifecycle.stop(ctx, id)
     return this.exclusive(ctx, id, async () => {
-      await this.lifecycle.stop(ctx, id)
       const row = await this.repo.get<StoredAccount>(ctx, "accounts", id)
       await this.repo.save(ctx, "accounts", id, id, { ...row.data, paused: true, state: "paused" }, row.revision)
       return this.get(ctx, id)
@@ -108,8 +149,10 @@ export class MailAccounts {
       if (row.revision !== input.expectedRevision) throw new MailError("VERSION_CONFLICT", "邮箱配置已变化")
       const config = accountConfigSchema.parse({ ...row.data.config, ...input.patch })
       const revalidate = Object.keys(input.patch).some(k => ["imap", "smtp", "email", "username", "smtpUsername", "provider"].includes(k))
-      if (revalidate) await this.lifecycle.stop(ctx, input.accountId)
-      await this.repo.save(ctx, "accounts", row.id, row.id, { ...row.data, config, ...(revalidate ? { state: "unverified" as const, errorCode: null } : {}) }, row.revision)
+      const reindexRequired = !!row.data.reindexRequired || imapNamespace(row.data.config) !== imapNamespace(config)
+      if (revalidate || reindexRequired) await this.lifecycle.stop(ctx, input.accountId)
+      await this.repo.save(ctx, "accounts", row.id, row.id, { ...row.data, config, reindexRequired, ...(revalidate ? { state: "unverified" as const, errorCode: null } : {}) }, row.revision)
+      if (reindexRequired) await this.invalidateRemoteState(ctx, row.id)
       return this.get(ctx, row.id)
     })
   }

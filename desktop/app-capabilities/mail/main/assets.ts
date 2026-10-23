@@ -111,6 +111,30 @@ export class MailAssets {
     await this.repo.save(ctx, "assets", id, row.accountId, { ...row.data, pins }, row.revision, row.sortKey)
   }
 
+  /** Call under the account queue before cache maintenance or resuming jobs. */
+  async rebuildPins(ctx: MailContext, accountId: string): Promise<void> {
+    const counts = new Map<string, number>()
+    for (const entity of ["drafts", "previews", "operations"] as const) {
+      let cursor: string | undefined
+      do {
+        const page = await this.repo.page(ctx, entity, { accountId, cursor, limit: 100 })
+        for (const row of page.items) if (Array.isArray(row.data.pinnedAssetIds)) {
+          for (const id of new Set(row.data.pinnedAssetIds.filter((id): id is string => typeof id === "string"))) counts.set(id, (counts.get(id) ?? 0) + 1)
+        }
+        cursor = page.nextCursor ?? undefined
+      } while (cursor)
+    }
+    let cursor: string | undefined
+    do {
+      const page = await this.repo.page<StoredMailAsset>(ctx, "assets", { accountId, cursor, limit: 100 })
+      for (const row of page.items) {
+        const pins = counts.get(row.id) ?? 0
+        if (row.data.pins !== pins) await this.repo.save(ctx, "assets", row.id, accountId, { ...row.data, pins }, row.revision, row.sortKey)
+      }
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+  }
+
   async remove(ctx: MailContext, id: string, eviction = false): Promise<void> {
     const row = await this.repo.get<StoredMailAsset>(ctx, "assets", id)
     if (!eviction && row.data.asset.messageId) throw new MailError("ASSET_IN_USE", "服务端邮件附件只能清理缓存")
