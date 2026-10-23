@@ -22,7 +22,7 @@ function limitStream(max: number): Transform {
   let size = 0
   return new Transform({ transform(chunk: Buffer, _encoding, callback) { size += chunk.length; callback(size > max ? new MailError("LIMIT_EXCEEDED", "邮件内容超过大小上限") : null, chunk) } })
 }
-export async function parseMailStream(source: Readable, options: { signal: AbortSignal; maxBytes?: number; attachment?: (metadata: Omit<ParsedAttachment, "size" | "sha256">, source: Readable) => Promise<void> }): Promise<ParsedBody & { subject: string; date: string | null; messageId: string | null; inReplyTo: string | null; references: string[]; to: MailDetail["to"]; cc: MailDetail["cc"]; bcc: MailDetail["to"]; attachments: ParsedAttachment[]; ambiguousCids: string[] }> {
+export async function parseMailStream(source: Readable, options: { signal: AbortSignal; maxBytes?: number; attachment?: (metadata: Omit<ParsedAttachment, "size" | "sha256">, source: Readable) => Promise<void> }): Promise<ParsedBody & { subject: string; date: string | null; messageId: string | null; inReplyTo: string | null; references: string[]; from: MailDetail["from"]; to: MailDetail["to"]; cc: MailDetail["cc"]; bcc: MailDetail["to"]; attachments: ParsedAttachment[]; ambiguousCids: string[] }> {
   const parser = new MailParser({ skipImageLinks: true, skipTextToHtml: true, maxHtmlLengthToParse: MAIL_MAX_BODY_BYTES, ignoreEmbedded: true, maxChildNodes: 1000, maxHeadSize: 64 * 1024 })
   const input = pipeline(source, limitStream(options.maxBytes ?? MAIL_MAX_ATTACHMENT_BYTES), parser, { signal: options.signal })
   // Both sides are observed immediately so a parser/input error cannot become an unhandled rejection.
@@ -58,7 +58,7 @@ export async function parseMailStream(source: Readable, options: { signal: Abort
       const result = addressSchema.safeParse({ address: address.address, ...(address.name ? { name: address.name } : {}) })
       return result.success ? [result.data] : []
     })
-    return { html, text, subject: parser.subject ?? "", date: parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate.toISOString() : null, messageId: parser.messageId ?? null, inReplyTo: parser.inReplyTo ?? null, references: typeof parser.references === "string" ? [parser.references] : parser.references ?? [], to: addresses(parser.to), cc: addresses(parser.cc), bcc: addresses(parser.bcc), attachments, ambiguousCids: [...new Set(cids.filter((cid, i) => cids.indexOf(cid) !== i))] }
+    return { html, text, subject: parser.subject ?? "", date: parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate.toISOString() : null, messageId: parser.messageId ?? null, inReplyTo: parser.inReplyTo ?? null, references: typeof parser.references === "string" ? [parser.references] : parser.references ?? [], from: addresses(parser.from), to: addresses(parser.to), cc: addresses(parser.cc), bcc: addresses(parser.bcc), attachments, ambiguousCids: [...new Set(cids.filter((cid, i) => cids.indexOf(cid) !== i))] }
   } catch (error) {
     source.destroy(); parser.destroy(); await safeInput
     if (error instanceof MailError) throw error

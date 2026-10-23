@@ -132,7 +132,12 @@ export class ImapSession implements MailImapSession {
   }
   async append(path: string, bytes: Buffer, flags: string[], signal: AbortSignal) {
     return protocolCall(signal, () => this.client.close(), async () => {
-      const result = await this.client.append(path, bytes, flags)
+      let result: Awaited<ReturnType<ImapFlow["append"]>>
+      try { result = await this.client.append(path, bytes, flags) } catch (error) {
+        const status = (error as { responseStatus?: unknown } | null)?.responseStatus
+        if (status === "NO" || status === "BAD") throw new MailError("APPEND_REJECTED", "服务端拒绝保存邮件副本", { definitelyNotSubmitted: true })
+        throw error
+      }
       return result && result.uid && result.uidValidity ? { uid: result.uid, uidValidity: String(result.uidValidity) } : null
     })
   }

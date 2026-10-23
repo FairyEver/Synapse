@@ -21,3 +21,9 @@ describe("mail protocol safety", () => {
     expect(String(error)).not.toContain("secret")
   })
 })
+
+it("retains only static pre-DATA rejection evidence without raw server transcripts", () => {
+  const error = normalizeProtocolError({ code: "ECONNECTION", command: "CONN", message: "password=secret" })
+  expect(error.details).toEqual({ definitelyNotSubmitted: true })
+  expect(String(error)).not.toContain("secret")
+})

@@ -106,7 +106,7 @@ const ok = z.object({ success: z.boolean() }).strict()
 const job = z.object({ jobId: jobIdSchema }).strict()
 export const jobSchema = z.object({ jobId: jobIdSchema, accountId: accountIdSchema, state: z.enum(["running", "paused", "completed", "cancelled", "failed"]), coverage: coverageSchema, errorCode: z.string().nullable() }).strict()
 const download = z.object({ outputPath: z.string(), size: z.number().int().nonnegative(), sha256: z.string() }).strict()
-export const previewSchema = z.object({ previewId: opaque("mp"), expiresAt: z.string(), draft: draftSchema, attachments: z.array(assetSchema), messageId: z.string() }).strict()
+export const previewSchema = z.object({ previewId: opaque("mp"), expiresAt: z.string(), from: addressSchema, draft: draftSchema, attachments: z.array(assetSchema), messageId: z.string() }).strict()
 export const MAIL_RESULT_SCHEMAS = {
   "account.list": page(accountSummarySchema), "account.get": accountSummarySchema, "account.open": ok, "account.update": accountSummarySchema,
   "account.inspect": z.object({ imap: z.object({ ok: z.boolean(), code: z.string().nullable() }).strict(), smtp: z.object({ ok: z.boolean(), code: z.string().nullable() }).strict() }).strict(),

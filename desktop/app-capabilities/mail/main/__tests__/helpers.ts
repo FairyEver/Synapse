@@ -13,7 +13,7 @@ import { MailContextProvider } from "../context"
 import { MailRepository } from "../repository"
 import { MailAssets } from "../assets"
 import { MailAccounts } from "../accounts"
-import type { MailImapSession, MailProtocols } from "../protocol/types"
+import type { MailImapSession, MailProtocols, MailSmtp } from "../protocol/types"
 
 export async function createMailTestRig() {
   const root = await mkdtemp(path.join(tmpdir(), "synapse-mail-rig-"))
@@ -38,7 +38,7 @@ export async function createMailTestRig() {
     uidExpunge: vi.fn(async () => undefined), createFolder: vi.fn(async () => undefined), renameFolder: vi.fn(async () => undefined), deleteFolder: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
   }
-  const smtp = { verify: vi.fn(async () => undefined), submit: vi.fn(async () => ({ accepted: ["to@example.com"], rejected: [] as string[], messageId: "<sent@example.com>" })), close: vi.fn() }
+  const smtp = { verify: vi.fn<MailSmtp["verify"]>(async () => undefined), submit: vi.fn<MailSmtp["submit"]>(async snapshot => ({ accepted: snapshot.to, rejected: [], messageId: snapshot.messageId })), close: vi.fn<MailSmtp["close"]>() }
   const protocols: MailProtocols = { imap: vi.fn(async () => session), smtp: vi.fn(async () => smtp) }
   const lifecycle = { start: vi.fn(async () => ({ jobId: "mj_e69940c0-4db1-4a0a-8f87-9027d116e194" })), stop: vi.fn(async () => undefined), remove: vi.fn(async () => undefined) }
   const accounts = new MailAccounts(repo, context, protocols, access, lifecycle)

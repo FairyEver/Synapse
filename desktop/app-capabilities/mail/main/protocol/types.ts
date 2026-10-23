@@ -45,10 +45,11 @@ export interface MailProtocols {
 }
 export function normalizeProtocolError(error: unknown): MailError {
   if (error instanceof MailError) return error
-  const details = error as { code?: unknown; authenticationFailed?: unknown; responseCode?: unknown } | null
-  return details?.authenticationFailed === true || details?.code === "EAUTH" || details?.responseCode === 535
-    ? new MailError("AUTH_FAILED", "邮箱认证失败，请检查密码或客户端授权码")
-    : new MailError("NETWORK_ERROR", "邮箱连接失败，请稍后重试")
+  const details = error as { code?: unknown; authenticationFailed?: unknown; responseCode?: unknown; command?: unknown } | null
+  const auth = details?.authenticationFailed === true || details?.code === "EAUTH" || details?.responseCode === 535
+  const command = typeof details?.command === "string" ? details.command.toUpperCase() : ""
+  const beforeData = auth || ["CONN", "EHLO", "HELO", "STARTTLS", "MAIL FROM", "RCPT TO"].includes(command) || /^AUTH(?: |$)/u.test(command)
+  return new MailError(auth ? "AUTH_FAILED" : "NETWORK_ERROR", auth ? "邮箱认证失败，请检查密码或客户端授权码" : "邮箱连接失败，请稍后重试", beforeData ? { definitelyNotSubmitted: true } : undefined)
 }
 export async function protocolCall<T>(signal: AbortSignal, cancel: () => void, operation: () => Promise<T>, milliseconds = 30_000): Promise<T> {
   signal.throwIfAborted()
