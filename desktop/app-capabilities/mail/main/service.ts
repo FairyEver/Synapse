@@ -49,6 +49,7 @@ export class MailService {
   private maintenanceCursors: { assets?: string; previews?: string } = {}
   private notificationError: string | null = null
   private accountScopes = new Map<string, AbortController>()
+  private composeLeases = new Map<number, { key: string; detach(): void; controller: AbortController }>()
   private subscribers = new Map<number, { ownerId: string; generation: number; detach(): void }>()
   private readonly contexts: MailContextProvider
   private readonly repo: MailRepository
@@ -133,6 +134,8 @@ export class MailService {
   async openMessage(messageId: string): Promise<void> { const ctx = this.context("ui"), row = await resolveMessage(this.repo, ctx, messageId); await this.open(ctx, { accountId: row.accountId, messageId }) }
   async configure(input: ConfigureAccount) { const ctx = this.context("ui"); const result = await this.accounts.configure(ctx, configureAccountSchema.parse(input)); this.changed({ ownerId: ctx.ownerId, generation: ctx.generation, accountId: result.id, ids: [result.id], revision: result.revision }); return result }
   async beforeIdentityChange(): Promise<void> {
+    for (const lease of this.composeLeases.values()) { lease.controller.abort(); lease.detach(); this.assets.release(lease.key) }
+    this.composeLeases.clear()
     this.identityChanging = true; this.contexts.refreshIdentity(); this.resources.clear(); this.notifications.dispose()
     for (const c of this.accountScopes.values()) c.abort()
     this.accountScopes.clear()
@@ -182,6 +185,42 @@ export class MailService {
     const ctx = this.scoped(this.context("ui"), accountId), bytes = Buffer.from(base64, "base64"), mime = rasterMime(bytes)
     if (!mime || bytes.length > MAIL_MAX_IMAGE_BYTES) throw new MailError("IMAGE_BLOCKED", "图片格式或大小不受支持")
     return this.assets.put(ctx, Readable.from([bytes]), { accountId, name: `image.${mime.split("/")[1]}`, mime }, MAIL_MAX_IMAGE_BYTES)
+  }
+  private composeContext(accountId: string, sender?: IpcInvocationSender) {
+    if (!sender || sender.isDestroyed()) throw new MailError("UNAVAILABLE", "写信窗口已关闭")
+    const ctx = this.scoped(this.context("ui"), accountId)
+    let lease = this.composeLeases.get(sender.id)
+    if (!lease) {
+      const key = `${ctx.ownerId}:${ctx.generation}:${sender.id}`, controller = new AbortController()
+      const detach = sender.onDestroyed(() => { controller.abort(); this.assets.release(key); this.composeLeases.delete(sender.id) })
+      lease = { key, detach, controller }; this.composeLeases.set(sender.id, lease)
+    }
+    return { ctx: { ...ctx, signal: AbortSignal.any([ctx.signal, lease.controller.signal]) }, key: lease.key }
+  }
+  async retainComposeAssets(accountId: string, assetIds: string[], sender?: IpcInvocationSender) {
+    const { ctx, key } = this.composeContext(accountId, sender)
+    await this.accounts.get(ctx, accountId)
+    await this.assets.hold(ctx, key, accountId, assetIds)
+    return { success: true as const }
+  }
+  async prepareDraft(input: MailInputs["draft.create"], sender?: IpcInvocationSender) {
+    const { ctx, key } = this.composeContext(input.accountId, sender)
+    const draft = await this.drafts.prepare(ctx, input)
+    await this.assets.hold(ctx, key, input.accountId, [...draft.assetIds, ...draft.inlineImages.map(image => image.assetId)])
+    return draft
+  }
+  async commitDraft(input: import("../shared/private-schema").DraftCommit) {
+    const ctx = await this.actionContext(this.context("ui"), { accountId: input.content.accountId })
+    return this.drafts.commit(ctx, input)
+  }
+  async composeImageAsset(accountId: string, assetId: string) {
+    const ctx = this.scoped(this.context("ui"), accountId)
+    await this.accounts.get(ctx, accountId)
+    const asset = await this.assets.info(ctx, assetId)
+    if (asset.accountId !== accountId) throw new MailError("UNAVAILABLE", "图片不属于此邮箱")
+    const bytes = await this.assets.read(ctx, assetId, MAIL_MAX_IMAGE_BYTES), mime = rasterMime(bytes)
+    if (!mime) throw new MailError("IMAGE_BLOCKED", "图片格式不可显示")
+    return { mime, base64: bytes.toString("base64") }
   }
   async draftImageAsset(draftId: string, assetId: string) {
     const ctx = await this.actionContext(this.context("ui"), { draftId }), draft = await this.drafts.get(ctx, draftId)

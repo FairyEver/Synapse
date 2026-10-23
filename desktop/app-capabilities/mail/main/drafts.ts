@@ -3,6 +3,7 @@ import { Readable } from "node:stream"
 import type { MailRecord } from "../../../electron/runtime/data-repo/schemas/mail"
 import { MAIL_MAX_BODY_BYTES, MAIL_MAX_IMAGE_BYTES } from "../shared/limits"
 import { draftInputSchema, draftSchema, MAIL_INPUT_SCHEMAS } from "../shared/schema"
+import { draftCommitSchema, type DraftCommit } from "../shared/private-schema"
 import { MailError, type Address, type Draft, type DraftAction, type DraftInput, type MailContext, type MailInputs, type MailResults, type MessageLocator } from "../shared/types"
 import { MailRepository } from "./repository"
 import { MailAccounts, type StoredAccount } from "./accounts"
@@ -119,6 +120,30 @@ export class MailDrafts {
     const messageId = source.data.headers.messageId
     const subject = source.data.summary.subject
     return { input: draftInputSchema.parse({ accountId: input.accountId, to, cc, bcc: [], subject: input.mode === "forward" ? /^(?:fw|fwd):/iu.test(subject) ? subject : `Fwd: ${subject}` : /^re:/iu.test(subject) ? subject : `Re: ${subject}`, html, text: `\n\n${quoted.split("\n").map(line => `> ${line}`).join("\n")}`, assetIds, inlineImages }), extra: { sourceMessageId: source.id, mode: input.mode, headers: { inReplyTo: input.mode !== "forward" && validId(messageId) ? messageId : null, references: input.mode === "forward" ? [] : safeRefs([...source.data.headers.references, ...(validId(messageId) ? [messageId] : [])]) } } }
+  }
+  /** Prepare UI editing content without writing or synchronizing a draft. */
+  async prepare(ctx: MailContext, input: MailInputs["draft.create"]): Promise<Draft> {
+    const params = MAIL_INPUT_SCHEMAS["draft.create"].parse(input)
+    await this.accounts.get(ctx, params.accountId)
+    const prepared = "sourceMessageId" in params ? await this.prepareSource(ctx, params) : { input: params, extra: {} }
+    this.accounts.context.assertCurrent(ctx)
+    return draftSchema.parse({ ...prepared.input, id: `md_${randomUUID()}`, revision: 1, state: "editing", sourceMessageId: "sourceMessageId" in params ? params.sourceMessageId : null, mode: "mode" in params ? params.mode : "new", remoteLocator: null, localSaved: false, syncState: "pending", updatedAt: new Date().toISOString() })
+  }
+  /** First explicit UI save: preserve the edited body, deriving threading only from owned metadata. */
+  async commit(ctx: MailContext, input: DraftCommit): Promise<Draft> {
+    const { content, source } = draftCommitSchema.parse(input)
+    await this.accounts.get(ctx, content.accountId)
+    let extra: Partial<StoredDraft> = {}
+    if (source) {
+      const message = await resolveMessage(this.repo, ctx, source.messageId)
+      if (message.accountId !== content.accountId) throw new MailError("UNAVAILABLE", "源邮件不属于此邮箱")
+      if (message.data.summary.metadataTruncated) throw new MailError("METADATA_INCOMPLETE", "源邮件头不完整")
+      const id = message.data.headers.messageId
+      extra = { sourceMessageId: source.messageId, mode: source.mode, headers: { inReplyTo: source.mode !== "forward" && validId(id) ? id : null, references: source.mode === "forward" ? [] : safeRefs([...message.data.headers.references, ...(validId(id) ? [id] : [])]) } }
+    }
+    const result = await this.accounts.exclusive(ctx, content.accountId, () => this.persist(ctx, `md_${randomUUID()}`, content, extra))
+    this.hooks.schedule?.(ctx, result.id)
+    return result
   }
   /** Called by metadata sync while it already holds the account queue. Never fetches a body. */
   async indexRemote(ctx: MailContext, messageId: string): Promise<string | null> {

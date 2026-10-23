@@ -1,3 +1,4 @@
+import { MailComposeWindow } from "../mail/compose-window"
 import { mailOpenRequestSchema } from "../../../app-capabilities/mail/shared/private-schema"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
@@ -181,6 +182,8 @@ export function SystemAppWindowApp() {
   if (!appId) {
     return <SystemAppWindowError />
   }
+
+  if (appId === "mail" && new URLSearchParams(window.location.search).get("mailCompose") === "1") return <MailComposeWindow request={pendingMailOpenRequest} />
 
   return (
     <SystemAppContent

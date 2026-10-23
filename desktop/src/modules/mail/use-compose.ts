@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Draft, DraftInput, MailPreview, SendReceipt, MailAsset } from "../../../app-capabilities/mail/shared/types"
 import { addressSchema } from "../../../app-capabilities/mail/shared/schema"
-import { MAIL_DRAFT_DEBOUNCE_MS, MAIL_MAX_IMAGE_BYTES } from "../../../app-capabilities/mail/shared/limits"
+import { MAIL_MAX_IMAGE_BYTES } from "../../../app-capabilities/mail/shared/limits"
 import { sanitizeComposeDocument } from "../../../app-capabilities/mail/renderer/compose-document"
 import { runMailUiOperation } from "../../../app-capabilities/mail/renderer/tracking"
 import { getSynapseBridge } from "@/lib/electron-bridge"
@@ -31,30 +31,33 @@ export function parseMailAddresses(value: string): Draft["to"] {
     return addressSchema.parse({ address: formatted[2].trim(), name })
   })
 }
-export function useCompose(owner: string | null) {
+export function useCompose(owner: string | null, onClosed?: () => void) {
+  const closedCallback = useRef(onClosed); closedCallback.current = onClosed
+  const persisted = useRef(false)
+  const [closeRequested, setCloseRequested] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null), [addresses, setAddresses] = useState({ to: "", cc: "", bcc: "" })
   const [error, setError] = useState<string | null>(null), [saving, setSaving] = useState(false), [sending, setSending] = useState(false), [loading, setLoading] = useState(false)
   const [dirty, setDirty] = useState(false), [editVersion, setEditVersion] = useState(0), [preview, setPreview] = useState<MailPreview | null>(null), [receipt, setReceipt] = useState<SendReceipt | null>(null)
   const value = useRef<Draft | null>(null), addressRef = useRef(addresses), changed = useRef(0), saved = useRef(0), epoch = useRef(0), active = useRef(true), ownerRef = useRef(owner)
   ownerRef.current = owner
-  const savingTask = useRef<Promise<void> | null>(null), sendLock = useRef(false), opening = useRef(false), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const savingTask = useRef<Promise<void> | null>(null), sendLock = useRef(false), opening = useRef(false)
   const request = useRef<{ previewId: string; key: string } | null>(null)
   const replace = (next: Draft | null) => { value.current = next; setDraft(next) }
   const initialize = (next: Draft) => {
     replace(next); const a = { to: addressText(next.to), cc: addressText(next.cc), bcc: addressText(next.bcc) }; addressRef.current = a; setAddresses(a); changed.current = 0; saved.current = 0; setDirty(false); setPreview(null); setReceipt(null); request.current = null
   }
   useEffect(() => {
-    active.current = true; epoch.current++; clearTimeout(timer.current); replace(null); setDirty(false); setError(null); setPreview(null); setReceipt(null); sendLock.current = false; opening.current = false; savingTask.current = null; setSaving(false); setSending(false)
-    return () => { active.current = false; epoch.current++; clearTimeout(timer.current) }
+    active.current = true; epoch.current++; replace(null); setDirty(false); setError(null); setPreview(null); setReceipt(null); sendLock.current = false; opening.current = false; savingTask.current = null; setSaving(false); setSending(false); setLoading(false); setCloseRequested(false); persisted.current = false; changed.current = 0; saved.current = 0
+    return () => { active.current = false; epoch.current++ }
   }, [owner])
   const open = useCallback(async (intent: ComposeIntent) => {
     if (!owner || opening.current || sendLock.current) return
-    if (value.current) throw new Error("请先保存并关闭当前草稿")
+    if (value.current) throw new Error("请先关闭当前写信窗口")
     opening.current = true; const e = ++epoch.current; setError(null); setLoading(true)
     try {
-      const next = "draftId" in intent ? await mailApi().draftGet({ draftId: intent.draftId }) : await mailApi().draftCreate(intent.sourceMessageId ? { accountId: intent.accountId, sourceMessageId: intent.sourceMessageId, mode: intent.mode!, forwardMode: "inline" } : { accountId: intent.accountId })
-      if (active.current && epoch.current === e && ownerRef.current === owner) initialize(next)
-    } catch (cause) { if (epoch.current === e) setError(mailError(cause)); throw cause }
+      const next = "draftId" in intent ? await mailApi().draftGet({ draftId: intent.draftId }) : await mailApi().draftPrepare("sourceMessageId" in intent ? { accountId: intent.accountId, sourceMessageId: intent.sourceMessageId, mode: intent.mode!, forwardMode: "inline" } : { accountId: intent.accountId })
+      if (active.current && epoch.current === e && ownerRef.current === owner) { persisted.current = "draftId" in intent; initialize(next) }
+    } catch (cause) { if (epoch.current === e) { setError(mailError(cause)); throw cause } }
     finally { if (epoch.current === e) { opening.current = false; setLoading(false) } }
   }, [owner])
   const edit = useCallback((patch: Partial<Omit<DraftInput, "accountId">>) => {
@@ -68,42 +71,51 @@ export function useCompose(owner: string | null) {
   const save = useCallback(async (): Promise<void> => {
     if (savingTask.current) return savingTask.current
     const snapshot = value.current
-    if (!snapshot || changed.current === saved.current || snapshot.state !== "editing") return
-    const version = changed.current, e = epoch.current, identity = ownerRef.current
+    if (!snapshot || (persisted.current && changed.current === saved.current) || snapshot.state !== "editing") return
+    const version = changed.current, e = epoch.current, identity = ownerRef.current, recipientSnapshot = { ...addressRef.current }, wasPersisted = persisted.current
     setSaving(true); setError(null)
     const task = Promise.resolve().then(async () => {
       try {
         const body = sanitizeComposeDocument(snapshot.html, snapshot.inlineImages)
-        const patch = { ...fields(snapshot), ...body, to: parseMailAddresses(addressRef.current.to), cc: parseMailAddresses(addressRef.current.cc), bcc: parseMailAddresses(addressRef.current.bcc) }
-        const result = await runMailUiOperation("save", () => mailApi().draftUpdate({ draftId: snapshot.id, expectedRevision: snapshot.revision, patch }))
+        const patch = { ...fields(snapshot), ...body, to: parseMailAddresses(recipientSnapshot.to), cc: parseMailAddresses(recipientSnapshot.cc), bcc: parseMailAddresses(recipientSnapshot.bcc) }
+        const result = await runMailUiOperation("save", () => wasPersisted ? mailApi().draftUpdate({ draftId: snapshot.id, expectedRevision: snapshot.revision, patch }) : mailApi().draftCommit({ content: { accountId: snapshot.accountId, ...patch }, ...(snapshot.sourceMessageId && snapshot.mode !== "new" ? { source: { messageId: snapshot.sourceMessageId, mode: snapshot.mode } } : {}) }))
         if (!active.current || e !== epoch.current || identity !== ownerRef.current) return
-        saved.current = version
-        replace(changed.current === version ? result : { ...value.current!, revision: result.revision, localSaved: result.localSaved, syncState: result.syncState })
+        persisted.current = true; saved.current = version
+        replace(changed.current === version ? result : { ...value.current!, id: result.id, revision: result.revision, localSaved: result.localSaved, syncState: result.syncState })
         setDirty(changed.current !== saved.current)
       } catch (cause) { if (active.current && e === epoch.current) setError(mailError(cause)); throw cause }
       finally { if (e === epoch.current) { setSaving(false); savingTask.current = null } }
     })
     savingTask.current = task; return task
   }, [])
+  const flush = useCallback(async () => { await save(); while (value.current?.state === "editing" && changed.current !== saved.current) await save() }, [save])
+  const finishClose = useCallback(() => {
+    epoch.current++; opening.current = false; replace(null); setLoading(false); setPreview(null); setReceipt(null); setDirty(false); setError(null); setCloseRequested(false)
+    changed.current = 0; saved.current = 0; persisted.current = false
+    closedCallback.current?.()
+    return true
+  }, [])
+  const close = useCallback(async () => {
+    if (sendLock.current || savingTask.current) return false
+    if (changed.current !== saved.current) { setCloseRequested(true); return false }
+    return finishClose()
+  }, [finishClose])
+  const resolveClose = async (choice: "save" | "discard" | "cancel") => {
+    if (choice === "cancel") { setCloseRequested(false); return false }
+    if (sendLock.current || savingTask.current) return false
+    if (choice === "discard") return finishClose()
+    try { await flush(); return finishClose() } catch { return false }
+  }
   useEffect(() => {
-    clearTimeout(timer.current)
-    if (dirty && draft?.state === "editing" && !sending) timer.current = setTimeout(() => { void save().catch(() => undefined) }, MAIL_DRAFT_DEBOUNCE_MS)
-    return () => clearTimeout(timer.current)
-  }, [editVersion, dirty, draft?.id, draft?.state, sending, save])
-  useEffect(() => {
-    const prevent = (event: BeforeUnloadEvent) => { if (changed.current !== saved.current || sendLock.current || savingTask.current) { event.preventDefault(); event.returnValue = "" } }
+    const prevent = (event: BeforeUnloadEvent) => {
+      if (changed.current !== saved.current || sendLock.current || savingTask.current) {
+        event.preventDefault(); event.returnValue = ""
+        if (!sendLock.current && !savingTask.current) setCloseRequested(true)
+      }
+    }
     window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent)
   }, [])
-  const flush = useCallback(async () => { clearTimeout(timer.current); await save(); while (value.current?.state === "editing" && changed.current !== saved.current) await save() }, [save])
-  useEffect(() => registerNavigationGuard(() => {
-    if (sendLock.current || opening.current) return false
-    if (!savingTask.current && changed.current === saved.current) return true
-    return flush().then(() => true, () => false)
-  }), [flush, owner])
-  const close = async () => {
-    if (sendLock.current || opening.current) return false
-    try { await flush(); epoch.current++; replace(null); setPreview(null); setReceipt(null); setDirty(false); setError(null); return true } catch { return false }
-  }
+  useEffect(() => registerNavigationGuard(() => !sendLock.current && !savingTask.current && changed.current === saved.current), [owner])
   const preparePreview = async () => {
     const e = epoch.current
     try {
@@ -131,13 +143,13 @@ export function useCompose(owner: string | null) {
   const copyDraft = async () => {
     if (!value.current || sendLock.current) return
     const e = epoch.current
-    try { const source = value.current, result = await mailApi().draftCreate({ accountId: source.accountId, ...fields(source), to: parseMailAddresses(addressRef.current.to), cc: parseMailAddresses(addressRef.current.cc), bcc: parseMailAddresses(addressRef.current.bcc) }); if (active.current && e === epoch.current) initialize(result) }
+    try { const source = value.current, result = await mailApi().draftCreate({ accountId: source.accountId, ...fields(source), to: parseMailAddresses(addressRef.current.to), cc: parseMailAddresses(addressRef.current.cc), bcc: parseMailAddresses(addressRef.current.bcc) }); if (active.current && e === epoch.current) { epoch.current++; persisted.current = true; initialize(result) } }
     catch (cause) { if (e === epoch.current) setError(mailError(cause)) }
   }
   const attach = (assets: MailAsset[]) => { const current = value.current; if (current) edit({ assetIds: [...new Set([...current.assetIds, ...assets.map(a => a.id)])] }) }
-  const pickAttachments = async () => { const current = value.current; if (!current) return; try { const assets = await mailApi().pickAttachments({ accountId: current.accountId }); if (value.current?.id === current.id) attach(assets) } catch (cause) { setError(mailError(cause)) } }
+  const pickAttachments = async () => { const current = value.current, session = epoch.current; if (!current) return; try { const assets = await mailApi().pickAttachments({ accountId: current.accountId }); if (active.current && epoch.current === session) attach(assets) } catch (cause) { setError(mailError(cause)) } }
   const importFiles = async (files: File[]) => {
-    const current = value.current; if (!current) return
+    const current = value.current, session = epoch.current; if (!current) return
     try {
       const assets: MailAsset[] = []
       for (const file of files) {
@@ -145,20 +157,20 @@ export function useCompose(owner: string | null) {
         if (!filePath) throw new Error("无法读取此文件，请使用选择附件")
         assets.push(await mailApi().attachmentImportLocal({ accountId: current.accountId, filePath }))
       }
-      if (value.current?.id === current.id) attach(assets)
+      if (active.current && epoch.current === session) attach(assets)
     } catch (cause) { setError(mailError(cause)) }
   }
   const importImage = async (file: File): Promise<{ assetId: string; cid: string } | null> => {
-    const current = value.current; if (!current) return null
+    const current = value.current, session = epoch.current; if (!current) return null
     try {
       if (file.size > MAIL_MAX_IMAGE_BYTES) throw new Error("图片不能超过 10 MiB")
       const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ""; for (let start = 0; start < bytes.length; start += 8192) binary += String.fromCharCode(...bytes.subarray(start, start + 8192))
       const asset = await mailApi().imageImport({ accountId: current.accountId, base64: btoa(binary) })
-      if (value.current?.id !== current.id) return null
+      if (!active.current || epoch.current !== session || !value.current) return null
       const image = { assetId: asset.id, cid: `${crypto.randomUUID()}@synapse.local` }
       edit({ inlineImages: [...value.current.inlineImages, image] }); return image
     } catch (cause) { setError(mailError(cause)); return null }
   }
-  return { draft, currentDraft: () => value.current, addresses, error, saving, sending, loading, dirty, preview, receipt, editVersion, open, edit, changeAddress, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
+  return { sessionId: epoch.current, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, saving, sending, loading, dirty, preview, receipt, editVersion, open, edit, changeAddress, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
 }
 export type ComposeModel = ReturnType<typeof useCompose>

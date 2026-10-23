@@ -11,19 +11,19 @@ export function useComposeEditor(model: ComposeModel) {
   const latest = useRef(model); latest.current = model
   const [error, setError] = useState<string | null>(null), [activeMarks, setActiveMarks] = useState<string[]>([])
   const [linkOpen, setLinkOpen] = useState(false), [link, changeLink] = useState("")
-  const currentId = useRef(model.draft?.id); currentId.current = model.draft?.id
+  const currentSession = useRef(model.sessionId); currentSession.current = model.sessionId
   const imageExtension = useRef(Image.extend({
     addNodeView() {
       return ({ node }) => {
-        const dom = document.createElement("img"), source = String(node.attrs.src ?? ""), draft = latest.current.currentDraft()
+        const dom = document.createElement("img"), source = String(node.attrs.src ?? ""), draft = latest.current.currentDraft(), session = currentSession.current
         dom.alt = "邮件图片"; let alive = true, url: string | undefined
         const image = draft?.inlineImages.find(image => source === `cid:${image.cid}`)
         if (draft && image) {
-          void mailApi().draftImageAsset({ draftId: draft.id, assetId: image.assetId }).then(result => {
-            if (!alive || currentId.current !== draft.id) return
+          void mailApi().composeImageAsset({ accountId: draft.accountId, assetId: image.assetId }).then(result => {
+            if (!alive || currentSession.current !== session) return
             const bytes = Uint8Array.from(atob(result.base64), char => char.charCodeAt(0))
             url = URL.createObjectURL(new Blob([bytes], { type: result.mime })); dom.src = url
-          }).catch(cause => { if (alive && currentId.current === draft.id) setError(mailError(cause)) })
+          }).catch(cause => { if (alive && currentSession.current === session) setError(mailError(cause)) })
         }
         return { dom, destroy() { alive = false; if (url) URL.revokeObjectURL(url) } }
       }
@@ -53,14 +53,13 @@ export function useComposeEditor(model: ComposeModel) {
     const draft = model.draft
     setError(null)
     if (editor) editor.commands.setContent(draft ? sanitizeComposeDocument(draft.html || draft.text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/\n/gu, "<br>"), draft.inlineImages).html : "", { emitUpdate: false })
-  }, [editor, model.draft?.id])
+  }, [editor, model.sessionId, !!model.draft])
   useEffect(() => { editor?.setEditable(model.draft?.state === "editing" && !model.sending && !["unknown", "failed"].includes(model.receipt?.state ?? "")) }, [editor, model.draft?.state, model.sending, model.receipt?.state])
   async function insertImages(files: File[]) {
-    const id = currentId.current
+    const session = currentSession.current
     for (const file of files) {
       const image = await latest.current.importImage(file)
-      if (!image || currentId.current !== id || !editor || editor.isDestroyed) return
-      await latest.current.save()
+      if (!image || currentSession.current !== session || !editor || editor.isDestroyed) return
       editor.chain().focus().setImage({ src: `cid:${image.cid}`, alt: file.name }).run()
     }
   }

@@ -1,8 +1,9 @@
+import { SYSTEM_APP_WINDOW_SERVICE_ID, type createSystemAppWindowService } from "../../../electron/services/system-app-window-service"
 import { z } from "zod"
 import type { IpcModule, IpcMethodDescriptor, IpcHandlerContext } from "../../../electron/runtime/ipc/types"
 import { MAIL_SERVICE_ID } from "../shared/manifest"
 import { MAIL_MAX_IMAGE_BYTES } from "../shared/limits"
-import { configureAccountSchema, type ConfigureAccount } from "../shared/private-schema"
+import { draftCommitSchema, configureAccountSchema, type ConfigureAccount } from "../shared/private-schema"
 import { MAIL_INPUT_SCHEMAS, accountIdSchema, messageIdSchema, assetIdSchema, draftIdSchema } from "../shared/schema"
 import type { MailAction, MailInputs } from "../shared/types"
 import { mailFailure } from "./dispatcher"
@@ -46,7 +47,11 @@ export const mailIpcModule: IpcModule = { id: "mail", methods: {
   searchCancel: { ...method("search.cancel"), operationId: "app.mail.search.cancel" },
   draftList: { ...method("draft.list"), operationId: "app.mail.draft.list" },
   draftGet: { ...method("draft.get"), operationId: "app.mail.draft.get" },
-  draftCreate: { ...method("draft.create"), operationId: "app.mail.draft.create" },
+  draftCreate: { ...privateMethod(MAIL_INPUT_SCHEMAS["draft.create"], async (s, i, c) => {
+    const result = await s.execute(s.context("ui"), "draft.create", i)
+    if (c.sender) c.resolve<ReturnType<typeof createSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).bindMailComposeDraft(c.sender.id, result.id)
+    return result
+  }), operationId: "app.mail.draft.create" },
   draftUpdate: { ...method("draft.update"), operationId: "app.mail.draft.update" },
   draftDelete: { ...method("draft.delete"), operationId: "app.mail.draft.delete" },
   attachmentImportLocal: { ...method("attachment.import_local"), operationId: "app.mail.attachment.import_local" },
@@ -64,6 +69,14 @@ export const mailIpcModule: IpcModule = { id: "mail", methods: {
   accountConfigure: { ...privateMethod(configureAccountSchema, (s, i) => s.configure(i as ConfigureAccount)), operationId: "app.mail.account.configure" },
   uiScope: { ...privateMethod(z.object({}).strict(), (s, _i, c) => s.scope(c.sender)), operationId: "app.mail.ui.scope" },
   imageGrant: { ...privateMethod(z.object({ messageId: messageIdSchema, assetId: assetIdSchema }).strict(), (s, i) => s.imageGrant(i.messageId, i.assetId)), operationId: "app.mail.image.grant" },
+  composeRetainAssets: { ...privateMethod(z.object({ accountId: accountIdSchema, assetIds: z.array(assetIdSchema).max(200) }).strict(), (s, i, c) => s.retainComposeAssets(i.accountId, i.assetIds, c.sender)), operationId: "app.mail.compose.retain_assets" },
+  draftPrepare: { ...privateMethod(MAIL_INPUT_SCHEMAS["draft.create"], (s, i, c) => s.prepareDraft(i, c.sender)), operationId: "app.mail.draft.prepare" },
+  draftCommit: { ...privateMethod(draftCommitSchema, async (s, i, c) => {
+    const result = await s.commitDraft(i)
+    if (c.sender) c.resolve<ReturnType<typeof createSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).bindMailComposeDraft(c.sender.id, result.id)
+    return result
+  }), operationId: "app.mail.draft.commit" },
+  composeImageAsset: { ...privateMethod(z.object({ accountId: accountIdSchema, assetId: assetIdSchema }).strict(), (s, i) => s.composeImageAsset(i.accountId, i.assetId)), operationId: "app.mail.compose.image_asset" },
   draftImageAsset: { ...privateMethod(z.object({ draftId: draftIdSchema, assetId: assetIdSchema }).strict(), (s, i) => s.draftImageAsset(i.draftId, i.assetId)), operationId: "app.mail.draft.image_asset" },
   imageRead: { ...privateMethod(z.object({ messageId: messageIdSchema, token: z.uuid() }).strict(), (s, i) => s.imageRead(i.messageId, i.token)), operationId: "app.mail.image.read" },
   imageRemote: { ...privateMethod(z.object({ messageId: messageIdSchema, url: z.string().max(8192), allowed: z.literal(true) }).strict(), (s, i) => s.imageRemote(i.messageId, i.url, i.allowed)), operationId: "app.mail.image.remote" },

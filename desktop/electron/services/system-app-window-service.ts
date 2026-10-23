@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron"
 import path from "node:path"
+import { randomUUID } from "node:crypto"
 
 import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
 import type { WindowManager } from "../runtime/window"
@@ -50,7 +51,7 @@ function resolveSystemAppWindowPreloadPath(baseDir: string): string {
   return path.join(baseDir, "../preload.js")
 }
 
-function systemAppWindowManagerId(appId: SynapseSystemAppId): string {
+function systemAppWindowManagerId(appId: string): string {
   return `system-app:${appId}`
 }
 
@@ -78,7 +79,16 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
     logger,
   })
 
+  const composeWindows = new Map<number, { key: string; scope: string; draftKey?: string }>()
+  const composeAliases = new Map<string, string>()
   return {
+    bindMailComposeDraft(senderId: number, draftId: string): void {
+      const entry = composeWindows.get(senderId)
+      if (!entry || !detachedWindows.get(entry.key)) return
+      if (entry.draftKey) composeAliases.delete(entry.draftKey)
+      entry.draftKey = `${entry.scope}:draft:${draftId}`
+      composeAliases.set(entry.draftKey, entry.key)
+    },
     async open(appId: SynapseSystemAppId, options: SynapseSystemAppOpenOptions = {}): Promise<void> {
       const definition = (deps.getAppDefinition ?? getSystemAppDefinition)(appId)
       if (!definition) {
@@ -93,9 +103,14 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         throw new Error("System app does not support detached windows.")
       }
 
-      const existing = detachedWindows.get(appId)
+      const request = options.mailOpenRequest
+      const compose = appId === "mail" ? request?.compose : undefined
+      const composeTarget = compose ? ("draftId" in compose ? `draft:${compose.draftId}` : compose.sourceMessageId ? `${compose.accountId}:${compose.mode}:${compose.sourceMessageId}` : `new:${compose.accountId}`) : null
+      const lookupKey = composeTarget ? `${appId}:compose:${request!.ownerId}:${request!.generation}:${composeTarget}` : appId
+      const existing = detachedWindows.get(composeAliases.get(lookupKey) ?? lookupKey)
       if (existing) {
         focusDetachedViewWindow(existing)
+        if (compose) return
         if (options.contentOpenRequest) {
           const sent = sendToSystemAppWindow(
             deps.windowManager,
@@ -151,8 +166,10 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         return
       }
 
+      const windowKey = compose ? `mail:compose-window:${randomUUID()}` : appId
       const baseUrl = deps.baseUrl()
       const params = new URLSearchParams({ window: "system-app", appId })
+      if (compose) params.set("mailCompose", "1")
       if (options.contentOpenRequest) {
         params.set("contentOpenRequest", JSON.stringify(options.contentOpenRequest))
       }
@@ -171,11 +188,11 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       }
       const url = buildDetachedViewWindowUrl(baseUrl, params)
       await detachedWindows.open({
-        key: appId,
+        key: windowKey,
         payload: { appId, definition, url },
         options: {
           ...SYSTEM_APP_WINDOW_BOUNDS,
-          title: buildSystemAppWindowTitle(definition),
+          title: compose ? "写邮件" : buildSystemAppWindowTitle(definition),
           webPreferences: {
             preload: deps.getPreloadPath?.() ?? resolveSystemAppWindowPreloadPath(__dirname),
             contextIsolation: true,
@@ -185,13 +202,21 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         },
         load: (targetWindow, payload) => targetWindow.loadURL(payload.url),
         onCreated: ({ window }) => {
+          if (compose) {
+            composeWindows.set(window.webContents.id, { key: windowKey, scope: `mail:compose:${request!.ownerId}:${request!.generation}`, ...("draftId" in compose ? { draftKey: lookupKey } : {}) })
+            composeAliases.set(lookupKey, windowKey)
+          }
           deps.windowManager?.attach(
-            { id: systemAppWindowManagerId(appId), role: "detail" },
+            { id: systemAppWindowManagerId(windowKey), role: "detail" },
             managedBrowserWindow(window, "detail"),
           )
         },
         onRemoved: () => {
-          deps.windowManager?.detach(systemAppWindowManagerId(appId))
+          for (const [id, entry] of composeWindows) if (entry.key === windowKey) {
+            for (const [alias, key] of composeAliases) if (key === windowKey) composeAliases.delete(alias)
+            composeWindows.delete(id)
+          }
+          deps.windowManager?.detach(systemAppWindowManagerId(windowKey))
         },
         onClosed: () => {
           logger.info("System app window closed.", { appId, appType: definition.type })

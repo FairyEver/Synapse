@@ -1,6 +1,6 @@
 import type { MailArguments, MailResults, MailAsset } from "./types"
 import type { AccountSummary } from "./types"
-import type { ConfigureAccount, MailScope, MailChanged } from "./private-schema"
+import type { DraftCommit, ConfigureAccount, MailScope, MailChanged } from "./private-schema"
 export type MailIpcResult<T> = { ok: true; data: T } | { ok: false; failure: { code: string; message: string; details?: Readonly<Record<string, unknown>> } }
 export interface MailBridge {
   accountList(input: MailArguments["account.list"]): Promise<MailResults["account.list"]>
@@ -50,6 +50,10 @@ export interface MailBridge {
   accountConfigure(input: ConfigureAccount): Promise<AccountSummary>
   uiScope(): Promise<MailScope>
   imageGrant(input: { messageId: string; assetId: string }): Promise<{ token: string }>
+  composeRetainAssets(input: { accountId: string; assetIds: string[] }): Promise<{ success: true }>
+  draftPrepare(input: MailArguments["draft.create"]): Promise<MailResults["draft.create"]>
+  draftCommit(input: DraftCommit): Promise<MailResults["draft.create"]>
+  composeImageAsset(input: { accountId: string; assetId: string }): Promise<{ mime: string; base64: string }>
   draftImageAsset(input: { draftId: string; assetId: string }): Promise<{ mime: string; base64: string }>
   imageRead(input: { messageId: string; token: string }): Promise<{ mime: string; base64: string }>
   imageRemote(input: { messageId: string; url: string; allowed: true }): Promise<{ token: string; assetId: string }>
@@ -112,6 +116,10 @@ export function createMailBridge(invoke: <T>(channel: string, input: unknown) =>
     accountConfigure: input => call("account.configure", input),
     uiScope: () => call("ui.scope", {}),
     imageGrant: input => call("image.grant", input),
+    composeRetainAssets: input => call("compose.retain_assets", input),
+    draftPrepare: input => call("draft.prepare", input),
+    draftCommit: input => call("draft.commit", input),
+    composeImageAsset: input => call("compose.image_asset", input),
     draftImageAsset: input => call("draft.image_asset", input),
     imageRead: input => call("image.read", input),
     imageRemote: input => call("image.remote", input),

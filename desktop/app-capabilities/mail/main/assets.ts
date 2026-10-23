@@ -18,6 +18,18 @@ export interface StoredMailAsset extends Record<string, unknown> {
 }
 
 export class MailAssets {
+  private readonly leases = new Map<string, { ownerId: string; ids: Set<string> }>()
+  async hold(ctx: MailContext, key: string, accountId: string, ids: string[]): Promise<void> {
+    for (const id of ids) {
+      const asset = await this.info(ctx, id)
+      if (asset.accountId !== accountId || asset.state !== "ready") throw new MailError("ASSET_UNAVAILABLE", "写信附件不可用")
+    }
+    ctx.signal.throwIfAborted()
+    this.leases.set(key, { ownerId: ctx.ownerId, ids: new Set([...(this.leases.get(key)?.ids ?? []), ...ids]) })
+  }
+  release(key: string): void { this.leases.delete(key) }
+  private leased(ctx: MailContext, id: string): boolean { return [...this.leases.values()].some(lease => lease.ownerId === ctx.ownerId && lease.ids.has(id)) }
+
   constructor(private readonly repo: MailRepository, private readonly files: ManagedAssetStore, private readonly access: MailAccess) {}
 
   async put(ctx: MailContext, source: Readable, metadata: {
@@ -138,7 +150,7 @@ export class MailAssets {
   async remove(ctx: MailContext, id: string, eviction = false): Promise<void> {
     const row = await this.repo.get<StoredMailAsset>(ctx, "assets", id)
     if (!eviction && row.data.asset.messageId) throw new MailError("ASSET_IN_USE", "服务端邮件附件只能清理缓存")
-    if (row.data.pins > 0 || (eviction && !row.data.cache)) throw new MailError("ASSET_IN_USE", "附件仍被草稿或发送操作使用")
+    if (this.leased(ctx, id) || row.data.pins > 0 || (eviction && !row.data.cache)) throw new MailError("ASSET_IN_USE", "附件仍被草稿或发送操作使用")
     await this.access(ctx, "fs.write", id)
     const pending = await this.repo.save(ctx, "assets", id, row.accountId, { ...row.data, asset: { ...row.data.asset, state: "delete-pending" as const } }, row.revision, row.sortKey)
     if (row.data.key) await this.files.remove(row.data.key)
@@ -175,7 +187,7 @@ export class MailAssets {
       const page: Page<MailRecord<StoredMailAsset>> = await this.repo.page<StoredMailAsset>(ctx, "assets", { accountId, cursor, limit: 100 })
       for (const row of page.items) {
         if (remaining <= budget) break
-        if (!row.data.cache || row.data.pins > 0 || row.data.asset.state !== "ready") continue
+        if (this.leased(ctx, row.id) || !row.data.cache || row.data.pins > 0 || row.data.asset.state !== "ready") continue
         await this.remove(ctx, row.id, true)
         remaining -= row.data.asset.size
         bytes += row.data.asset.size
@@ -198,7 +210,7 @@ export class MailAssets {
     for (const row of page.items) {
       const staleStaging = (row.data.asset.state === "staged" || (!row.data.cache && row.data.asset.state === "ready"))
         && Date.now() - Date.parse(row.data.accessedAt) > 24 * 60 * 60_000
-      if (row.data.pins === 0 && (staleStaging || row.data.asset.state === "delete-pending")) {
+      if (!this.leased(ctx, row.id) && row.data.pins === 0 && (staleStaging || row.data.asset.state === "delete-pending")) {
         await this.remove(ctx, row.id, row.data.cache)
         removed++
       }

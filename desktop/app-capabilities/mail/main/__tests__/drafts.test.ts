@@ -55,3 +55,42 @@ it("indexes remote drafts without downloading bodies and hydrates the original e
     expect(draft.localSaved).toBe(true); expect(draft.remoteLocator).toMatchObject({ uid: 1 })
   } finally { await r.sync.dispose(); await r.close() }
 })
+
+it("prepares a reply without creating a persistent draft and commits edited content explicitly", async () => {
+  const r = await draftRig()
+  try {
+    const source = { accountId: r.account.id, sourceMessageId: r.source.id, mode: "reply" as const, forwardMode: "inline" as const }
+    const prepared = await r.drafts.prepare(r.ctx, source)
+    expect(prepared.localSaved).toBe(false)
+    expect((await r.drafts.execute(r.ctx, "draft.list", { accountId: r.account.id, limit: 100 })).items).toHaveLength(0)
+    const { to, cc, bcc, subject, html, text, assetIds, inlineImages } = prepared
+    const committed = await r.drafts.commit(r.ctx, { content: { accountId: r.account.id, to, cc, bcc, subject, html, text: `Edited ${text}`, assetIds, inlineImages }, source: { messageId: r.source.id, mode: "reply" } })
+    expect(committed.text).toContain("Edited")
+    expect((await r.drafts.stored(r.ctx, committed.id)).data.headers.inReplyTo).toBe("<1@example.com>")
+    expect((await r.drafts.execute(r.ctx, "draft.list", { accountId: r.account.id, limit: 100 })).items).toHaveLength(1)
+  } finally { await r.sync.dispose(); await r.close() }
+})
+
+it("protects unsaved compose attachments from cache clearing until their window releases them", async () => {
+  const r = await draftRig()
+  try {
+    const asset = await r.assets.put(r.ctx, Readable.from(["attachment"]), { accountId: r.account.id, name: "a.txt", mime: "text/plain", cache: true })
+    await r.assets.hold(r.ctx, "window-1", r.account.id, [asset.id])
+    expect((await r.assets.clearCache(r.ctx, r.account.id)).removed).toBe(0)
+    r.assets.release("window-1")
+    expect((await r.assets.clearCache(r.ctx, r.account.id)).removed).toBe(1)
+  } finally { await r.sync.dispose(); await r.close() }
+})
+
+it("skips live compose leases while recovering other expired imports", async () => {
+  const r = await draftRig()
+  try {
+    const put = () => r.assets.put(r.ctx, Readable.from(["attachment"]), { accountId: r.account.id, name: "a.txt", mime: "text/plain" })
+    const held = await put(), expired = await put()
+    await r.assets.hold(r.ctx, "window", r.account.id, [held.id])
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 25 * 60 * 60_000)
+    expect((await r.assets.recover(r.ctx)).removed).toBe(1)
+    expect(await r.assets.info(r.ctx, held.id)).toMatchObject({ state: "ready" })
+    await expect(r.assets.info(r.ctx, expired.id)).rejects.toThrow()
+  } finally { vi.restoreAllMocks(); await r.sync.dispose(); await r.close() }
+})

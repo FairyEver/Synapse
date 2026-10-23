@@ -47,6 +47,13 @@ describe("system app header architecture", () => {
     })
   }
 
+  it("keeps the dedicated mail composer on the shared window shell", async () => {
+    const source = await readFile(new URL("../../mail/compose.tsx", import.meta.url), "utf8")
+    expect(source).toContain("<SystemAppWindowShell")
+    expect(source).toContain("<SystemAppTopBarActionButton")
+    expect(source).not.toMatch(/<Sheet(?:\s|>)/)
+  })
+
   it("keeps terminal header controls on the shared action button", async () => {
     const source = await readFile(new URL(appEntrypoints.terminal.path, import.meta.url), "utf8")
 

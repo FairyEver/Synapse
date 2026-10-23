@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（新版蓝色 PNG 图标） | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含独立写信窗口） | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 否（旧配置升级时一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -239,3 +239,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-23 邮箱接入与写信面板：配置向导、账号设置、富文本草稿、附件与发送均复用 44 项核心动作；私有 `app.mail.draft.image_asset` 只返回当前草稿已关联的受控图片，不进入 MCP / HTTP 目录。邮箱仍是第 22 个 System App，44 个邮箱 MCP，340 个全局 capability / 336 个索引工具，默认 Dock 无变化。
 
 2026-10-23 邮箱与站内信分别使用各自模块 `assets/icon.png` 中的用户指定蓝色/黑色图标，启动器与 Dock 共用 manifest 资源。仅替换图标，22 个 System App、340 个 capability、336 个 MCP 索引及各自深链均不变，MCP schema 和系统 Skill 无需调整。
+
+2026-10-23 邮箱体验调整：独立写信使用同一 `mail` System App 的私有 `MailOpenRequest.compose`，不新增 App、Dock、Workflow、Automation 或 Deep Link。新增 UI 专用 `app.mail.draft.prepare`、`app.mail.draft.commit`、`app.mail.compose.image_asset`、`app.mail.compose.retain_assets` 四条 IPC；前两者区分未保存编辑与首次显式保存，后两者在不保存草稿的情况下显示和保留编辑图片/附件。已有草稿创建及首次保存的 UI IPC 将草稿 ID 绑定到当前写信窗口，避免重复打开。公开邮箱能力仍 44 项，全局 340 capability / 336 MCP、桌面 System App 22 个不变；这些私有 IPC 不向 Agent 暴露。

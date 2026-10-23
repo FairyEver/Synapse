@@ -29,6 +29,44 @@ describe("createSystemAppWindowService", () => {
     expect(filter?.({ id: window.webContents.id })).toBe(true)
     expect(filter?.({ id: window.webContents.id + 1 })).toBe(false)
   })
+  it("keeps mail reading and compose windows separate and focuses a repeated compose intent", async () => {
+    const reading = createWindowMock(), composing = createWindowMock(), manager = createWindowManagerMock()
+    const createWindow = vi.fn().mockReturnValueOnce(reading).mockReturnValueOnce(composing)
+    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html", windowManager: manager })
+    const request = { requestId: "write-1", ownerId: "owner", generation: 1, compose: { accountId: "account" } }
+    await service.open("mail")
+    await service.open("mail", { mailOpenRequest: request })
+    await service.open("mail", { mailOpenRequest: { ...request, requestId: "write-2" } })
+    expect(createWindow).toHaveBeenCalledTimes(2)
+    expect(composing.loadURL.mock.calls[0]?.[0]).toContain("mailCompose=1")
+    expect(composing.focus).toHaveBeenCalledTimes(1)
+    expect(manager.broadcast).not.toHaveBeenCalled()
+  })
+  it("reuses a newly saved compose window when opening its draft", async () => {
+    const window = createWindowMock(), createWindow = vi.fn(() => window as never)
+    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })
+    const scope = { requestId: "new", ownerId: "owner", generation: 1 }
+    await service.open("mail", { mailOpenRequest: { ...scope, compose: { accountId: "account" } } })
+    service.bindMailComposeDraft(window.webContents.id, "md_saved")
+    await service.open("mail", { mailOpenRequest: { ...scope, compose: { draftId: "md_saved" } } })
+    expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(window.focus).toHaveBeenCalledTimes(1)
+  })
+  it("keeps the original draft distinct after saving a copy in its window", async () => {
+    const first = createWindowMock(), second = createWindowMock()
+    second.webContents.id = first.webContents.id + 1
+    const createWindow = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second)
+    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })
+    const scope = { requestId: "draft", ownerId: "owner", generation: 1 }
+    const open = (draftId: string) => service.open("mail", { mailOpenRequest: { ...scope, compose: { draftId } } })
+    await open("md_original")
+    service.bindMailComposeDraft(first.webContents.id, "md_copy")
+    await open("md_original")
+    expect(createWindow).toHaveBeenCalledTimes(2)
+    await open("md_copy")
+    expect(first.focus).toHaveBeenCalledTimes(1)
+    expect(second.focus).not.toHaveBeenCalled()
+  })
   it("opens and focuses one window per app id", async () => {
     const window = createWindowMock()
     const createWindow = vi.fn(() => window as never)

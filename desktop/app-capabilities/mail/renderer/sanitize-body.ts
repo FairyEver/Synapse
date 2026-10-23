@@ -1,6 +1,8 @@
 import { sanitizeInertMailFragment } from "./inert-document"
 import { MAIL_MAX_BODY_BYTES } from "../shared/limits"
 
+// Only this application-owned stylesheet is allowed in the inert mail document.
+const readingStyle = "html{color-scheme:light dark}body{margin:0;padding:16px 20px;font-family:system-ui,sans-serif;font-size:14px;line-height:1.65;overflow-wrap:anywhere}p{margin:0 0 1em}blockquote{margin:1em 0;padding-inline-start:1em;border-inline-start:2px solid GrayText}pre{white-space:pre-wrap}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}td,th{overflow-wrap:anywhere}"
 export interface ExternalLink { label: string; url: string }
 export interface MailHtmlResources { cid: Readonly<Record<string, string>>; remote: Readonly<Record<string, string>> }
 export function sanitizeMailHtml(source: string, resources: MailHtmlResources): { html: string; links: ExternalLink[]; blockedImages: number; remoteImages: string[] } {
@@ -37,6 +39,6 @@ export function sanitizeMailHtml(source: string, resources: MailHtmlResources): 
     anchor.removeAttribute("href")
   }
   const container = document.createElement("div"); container.append(...fragment.childNodes)
-  const csp = "default-src 'none'; img-src blob:; style-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"
-  return { html: `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"></head><body>${container.innerHTML}</body></html>`, links, blockedImages, remoteImages: [...new Set(remoteImages)] }
+  const csp = "default-src 'none'; img-src blob:; style-src 'nonce-synapse-mail-typography'; base-uri 'none'; form-action 'none'; frame-src 'none'"
+  return { html: `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style nonce="synapse-mail-typography">${readingStyle}</style></head><body>${container.innerHTML}</body></html>`, links, blockedImages, remoteImages: [...new Set(remoteImages)] }
 }

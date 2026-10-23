@@ -1,7 +1,8 @@
 import { useState } from "react"
-import { Mail, Server } from "lucide-react"
 import { Dialog, DialogContent, DialogFrame } from "@/components/ui/dialog"
-import { GuidedChoices, GuidedFlow } from "@/components/guided-flow"
+import { GuidedFlow } from "@/components/guided-flow"
+import { Field, FieldLabel, FieldTitle, FieldSet, FieldLegend } from "@/components/ui/field"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -17,10 +18,10 @@ export function MailAccountDialog({ model }: { model: MailAccountsModel }) {
   const { form } = model
   const next = () => { if (model.step === "provider") model.setStep("details"); else void model.connect() }
   return <Dialog open={model.dialogOpen} onOpenChange={open => { if (!open) model.close() }}><DialogContent className="h-4/5 max-w-2xl p-0" showCloseButton={false} aria-describedby={undefined}><DialogFrame><GuidedFlow title={form.accountId ? "重新连接邮箱" : "添加邮箱"} step={model.step} steps={steps} busy={model.busy} nextLabel={model.step === "details" ? model.busy ? "连接中…" : "连接" : "下一步"} onBack={model.step === "details" && !form.accountId ? () => model.setStep("provider") : undefined} onNext={next} onCancel={model.close} canNext={model.step === "provider" || !!form.email.trim() && !!form.credential}>
-    {model.step === "provider" ? <GuidedChoices title="邮箱类型" value={form.provider} options={[{ value: "aliyun", title: "阿里邮箱", icon: <Mail /> }, { value: "custom", title: "其他邮箱（IMAP / SMTP）", icon: <Server /> }]} onChange={provider => { model.change({ provider: provider as "aliyun" | "custom", ...(provider === "aliyun" ? { imap: { host: "imap.qiye.aliyun.com", port: 993, security: "tls" }, smtp: { host: "smtp.qiye.aliyun.com", port: 465, security: "tls" }, sentPolicy: "server" } : {}) }) }} disabled={model.busy} /> : <div className="space-y-4">
+    {model.step === "provider" ? <FieldSet><FieldLegend>邮箱类型</FieldLegend><RadioGroup value={form.provider} onValueChange={provider => { model.change({ provider: provider as "aliyun" | "custom", ...(provider === "aliyun" ? { imap: { host: "imap.qiye.aliyun.com", port: 993, security: "tls" }, smtp: { host: "smtp.qiye.aliyun.com", port: 465, security: "tls" }, sentPolicy: "server" } : {}) }) }} disabled={model.busy}>{[{ value: "aliyun", title: "阿里邮箱" }, { value: "custom", title: "其他邮箱（IMAP / SMTP）" }].map(option => <FieldLabel key={option.value} htmlFor={`mail-provider-${option.value}`}><Field orientation="horizontal"><RadioGroupItem id={`mail-provider-${option.value}`} value={option.value} /><FieldTitle>{option.title}</FieldTitle></Field></FieldLabel>)}</RadioGroup></FieldSet> : <div className="space-y-4">
       <div className="space-y-1"><Label htmlFor="mail-email">邮箱地址</Label><Input id="mail-email" type="email" autoComplete="username" value={form.email} disabled={model.busy} onChange={event => model.change({ email: event.target.value })} /></div>
       <div className="space-y-1"><Label htmlFor="mail-credential">密码或应用专用密码</Label><Input id="mail-credential" type="password" autoComplete="new-password" value={form.credential} disabled={model.busy} onChange={event => model.change({ credential: event.target.value })} data-track="mail.account.credential" /></div>
-      <Button variant="ghost" onClick={() => setAdvanced(value => !value)} aria-expanded={advanced}>高级设置</Button>
+      <div className="flex justify-end"><Button variant="ghost" onClick={() => setAdvanced(value => !value)} aria-expanded={advanced}>高级设置</Button></div>
       {(advanced || form.provider === "custom") && <div className="space-y-5">
         <div className="space-y-1"><Label htmlFor="mail-account-name">显示名称</Label><Input data-track="mail.account.name" id="mail-account-name" value={form.name} disabled={model.busy} onChange={event => model.change({ name: event.target.value })} placeholder={form.email} /></div>
         <EndpointFields kind="IMAP" value={form.imap} disabled={model.busy} onChange={imap => model.change({ imap })} />
