@@ -242,4 +242,4 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-23 邮箱体验调整：独立写信使用同一 `mail` System App 的私有 `MailOpenRequest.compose`，不新增 App、Dock、Workflow、Automation 或 Deep Link。新增 UI 专用 `app.mail.draft.prepare`、`app.mail.draft.commit`、`app.mail.compose.image_asset`、`app.mail.compose.retain_assets` 四条 IPC；前两者区分未保存编辑与首次显式保存，后两者在不保存草稿的情况下显示和保留编辑图片/附件。已有草稿创建及首次保存的 UI IPC 将草稿 ID 绑定到当前写信窗口，避免重复打开。公开邮箱能力仍 44 项，全局 340 capability / 336 MCP、桌面 System App 22 个不变；这些私有 IPC 不向 Agent 暴露。
 
-2026-10-23 邮箱阅读区改为整页滚动，移除头部重复链接区，原文链接复用既有受控打开能力；用户批准仅为正文测量与点击接管开启 sandbox 同源读取，脚本仍禁止。上表 Mail 的各注册项不变，邮箱仍为 44 项公开动作、桌面 System App 22 个；MCP schema、系统 Skill 的读信契约不变。
+2026-10-23 邮箱阅读区保留固定回复工具栏，其下邮件信息、附件和正文一起滚动，移除头部重复链接区，原文链接复用既有受控打开能力；用户批准仅为正文测量与点击接管开启 sandbox 同源读取，脚本仍禁止。上表 Mail 的各注册项不变，邮箱仍为 44 项公开动作、桌面 System App 22 个；MCP schema、系统 Skill 的读信契约不变。
