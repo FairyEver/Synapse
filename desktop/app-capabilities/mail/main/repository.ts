@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import type { DataRepository } from "../../../electron/runtime/data-repo"
 import type { MailEntity, MailRecord } from "../../../electron/runtime/data-repo/schemas/mail"
 import { MailError, type MailContext, type Page } from "../shared/types"
+import { MAIL_SEARCH_TTL_MS } from "../shared/limits"
 
 export class MailRepository {
   constructor(readonly storage: DataRepository, private readonly assertCurrent: (ctx: MailContext) => void) {}
@@ -61,17 +62,19 @@ export class MailRepository {
     const limit = Math.min(100, input.limit ?? 50)
     const scope = createHash("sha256").update(JSON.stringify([ctx.ownerId, ctx.generation, entity, input.accountId, input.binding])).digest("hex")
     let after: string | undefined
+    let expiresAt = Date.now() + MAIL_SEARCH_TTL_MS
     if (input.cursor) {
       try {
-        const cursor = JSON.parse(Buffer.from(input.cursor, "base64url").toString()) as { scope: string; after: string }
-        if (cursor.scope !== scope || typeof cursor.after !== "string") throw new Error("scope")
+        const cursor = JSON.parse(Buffer.from(input.cursor, "base64url").toString()) as { scope: string; after: string; expiresAt: number }
+        if (cursor.scope !== scope || typeof cursor.after !== "string" || !Number.isFinite(cursor.expiresAt) || cursor.expiresAt <= Date.now()) throw new Error("scope")
         after = cursor.after
+        expiresAt = cursor.expiresAt
       } catch { throw new MailError("CURSOR_EXPIRED", "查询条件已变化，请重新查询") }
     }
     const query = this.namespace(entity).queryRange
     if (!query) throw new MailError("UNSUPPORTED", "此存储不支持分页")
     const rows = await query.call(this.namespace(entity), { index: input.accountId ? "owner_account_sort" : "owner_sort", equal: { ownerId: ctx.ownerId, ...(input.accountId ? { accountId: input.accountId } : {}) }, ...(after ? { range: { field: "sortKey", gt: after } } : {}), direction: "asc", limit })
     this.current(ctx)
-    return { items: rows as MailRecord<T>[], nextCursor: rows.length === limit ? Buffer.from(JSON.stringify({ scope, after: rows.at(-1)!.sortKey })).toString("base64url") : null }
+    return { items: rows as MailRecord<T>[], nextCursor: rows.length === limit ? Buffer.from(JSON.stringify({ scope, after: rows.at(-1)!.sortKey, expiresAt })).toString("base64url") : null }
   }
 }
