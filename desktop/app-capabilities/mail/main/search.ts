@@ -16,7 +16,7 @@ interface SearchResult extends Record<string, unknown> { jobId: string; messageI
 
 export class MailSearch {
   private running = new Map<string, { task: Promise<void>; controller: AbortController }>()
-  constructor(private readonly repo: MailRepository, private readonly readSearchText: ReadSearchText) {}
+  constructor(private readonly repo: MailRepository, private readonly readSearchText: ReadSearchText, private readonly onChanged: (ctx: MailContext, accountId: string, jobId: string) => void = () => undefined) {}
   private async indexState(ctx: MailContext, accountId: string, folderId?: string): Promise<{ coverage: Coverage; serverReported: number | null; token: string }> {
     let cursor: string | undefined, complete = true, found = false, reported: number | null = 0
     const token = createHash("sha256")
@@ -69,6 +69,7 @@ export class MailSearch {
       if (scanCtx.signal.aborted) return
       const row = await this.task(ctx, id)
       await this.repo.save(ctx, "search-tasks", id, row.accountId, { ...row.data, job: { ...row.data.job, state: "failed", errorCode: error instanceof MailError ? error.code : "SEARCH_FAILED" }, bodyComplete: false }, row.revision)
+      this.onChanged(ctx, row.accountId, id)
     }).finally(() => this.running.delete(id))
     this.running.set(id, { controller, task })
   }
@@ -116,6 +117,7 @@ export class MailSearch {
     const coverage = { ...data.job.coverage, metadataComplete: state.coverage.metadataComplete, serverHistoryComplete: null, bodyPendingCount: body ? (phase === "local" ? null : phase === "complete" ? 0 : data.remotePending) : null, reason }
     const current = await this.task(ctx, id)
     await this.repo.save<SearchTask>(ctx, "search-tasks", id, row.accountId, { ...data, phase, scanCursor: cursor, bodyComplete: !limited, job: { ...data.job, state: phase === "complete" ? "completed" : "paused", coverage, errorCode: null } }, current.revision)
+    this.onChanged(ctx, row.accountId, id)
   }
   async execute<K extends SearchAction>(ctx: MailContext, action: K, input: MailInputs[K]): Promise<MailResults[K]> {
     let result: unknown

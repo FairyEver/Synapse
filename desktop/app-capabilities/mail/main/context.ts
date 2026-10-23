@@ -34,7 +34,7 @@ export function createMailAccess(context: MailContextProvider, guard: Permission
     context.assertCurrent(ctx)
     const actor = ctx.actor === "sync" ? { kind: "system" as const, id: ctx.ownerId } : { kind: "user" as const, id: ctx.ownerId }
     const result = await guard.check({ action, actor, resource, context: { domain: "mail", source: ctx.actor, ownerId: ctx.ownerId } })
-    audit.record({ action, actor, resource, outcome: result.allowed ? "allowed" : "denied", metadata: { domain: "mail", source: ctx.actor } })
+    audit.record({ action, actor, resource: action === "fs.read.outside-userdata" || action === "fs.write.outside-userdata" ? "mail-local-file" : resource, outcome: result.allowed ? "allowed" : "denied", metadata: { domain: "mail", source: ctx.actor } })
     context.assertCurrent(ctx)
     if (!result.allowed) throw new MailError("PERMISSION_DENIED", "此邮箱操作未获授权")
   }

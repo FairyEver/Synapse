@@ -123,3 +123,36 @@ it("can stop history while continuing to index and notify new Inbox mail", async
     expect(r.delta).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ baseline: false, messages: [expect.objectContaining({ locator: expect.objectContaining({ uid: 152 }) })] }))
   } finally { await r.sync.dispose(); await r.close() }
 })
+it("keeps indexing when a message has an excessively nested MIME structure", async () => {
+  const r = await syncRig()
+  try {
+    let structure: import("../protocol/types").MailBodyStructure = { type: "application/octet-stream", part: "1", disposition: "attachment" }
+    for (let depth = 0; depth < 10000; depth++) structure = { type: "multipart/mixed", childNodes: [structure] }
+    vi.mocked(r.session.searchUids).mockResolvedValue([1, 2]); vi.mocked(r.session.fetchHeaders).mockImplementation(async (_path, uids) => uids.map(uid => ({ ...remoteHeader(uid), structure: uid === 2 ? structure : null })))
+    const result = await r.sync.runOnce(r.ctx, r.account.id)
+    expect(result.indexedCount).toBe(2)
+    const page = await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id, limit: 50 })
+    expect(page.items.find(row => row.data.summary.locator.uid === 2)?.data.structure).toBeNull()
+  } finally { await r.sync.dispose(); await r.close() }
+})
+it("isolates oversized message envelopes so following mail continues indexing", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1, 2]); vi.mocked(r.session.fetchHeaders).mockImplementation(async (_path, uids) => uids.map(uid => ({ ...remoteHeader(uid), subject: uid === 2 ? "A".repeat(70_000) : "normal" })))
+    expect((await r.sync.runOnce(r.ctx, r.account.id)).indexedCount).toBe(2)
+    const page = await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id, limit: 50 })
+    const summary = page.items.find(row => row.data.summary.locator.uid === 2)!.data.summary
+    expect(summary).toMatchObject({ metadataTruncated: true, from: [], to: [], cc: [] })
+    expect(summary.subject.length).toBeLessThan(1000)
+  } finally { await r.sync.dispose(); await r.close() }
+})
+it("keeps malformed envelope addresses from breaking the public message list", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1]); vi.mocked(r.session.fetchHeaders).mockImplementation(async (_path, uids) => uids.map(uid => ({ ...remoteHeader(uid), from: [{ address: "broken-address" }] })))
+    const coverage = await r.sync.runOnce(r.ctx, r.account.id), page = await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id, limit: 50 })
+    const { MAIL_RESULT_SCHEMAS } = await import("../../shared/schema")
+    expect(MAIL_RESULT_SCHEMAS["message.list"].safeParse({ items: page.items.map(row => ({ ...row.data.summary, revision: row.revision })), nextCursor: null, coverage }).success).toBe(true)
+    expect(page.items[0].data.summary).toMatchObject({ metadataTruncated: true, from: [] })
+  } finally { await r.sync.dispose(); await r.close() }
+})

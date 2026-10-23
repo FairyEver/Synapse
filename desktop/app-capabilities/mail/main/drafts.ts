@@ -92,6 +92,7 @@ export class MailDrafts {
   private async prepareSource(ctx: MailContext, input: Extract<MailInputs["draft.create"], { sourceMessageId: string }>): Promise<{ input: DraftInput; extra: Partial<StoredDraft> }> {
     const source = await resolveMessage(this.repo, ctx, input.sourceMessageId)
     if (source.accountId !== input.accountId) throw new MailError("UNAVAILABLE", "源邮件不属于此邮箱")
+    if (source.data.summary.metadataTruncated) throw new MailError("METADATA_INCOMPLETE", "源邮件头不完整，请先核对原文")
     const account = await this.accounts.get(ctx, input.accountId), content = await this.content.body(ctx, source.id)
     const own = new Set([account.email, ...account.aliases].map(address => address.toLowerCase()))
     const seen = new Set<string>()

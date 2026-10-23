@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { getSynapseBridge } from "@/lib/electron-bridge"
 import { useAccount } from "@/app-shell/account"
 import type { AccountSummary, Folder, MailSummary, MailDetail, Coverage, Draft, BatchResult } from "../../../app-capabilities/mail/shared/types"
 import type { MailScope } from "../../../app-capabilities/mail/shared/private-schema"
@@ -53,6 +54,9 @@ export function useMail() {
     if (!identity) return
     try {
       const api = mailApi(), nextScope = await api.uiScope(), result: AccountSummary[] = []
+      if (nextScope.ownerId !== identity) return
+      const resetGeneration = scope.current !== null && scope.current.generation !== nextScope.generation
+      if (resetGeneration) { epoch.current++; sequence.current++; selection.current++; retries.current.clear(); searchJob.current = null; setItems([]); setDrafts([]); setDetail(null); setCoverage(null); setCursor(null); setCanContinue(false) }
       let next: string | undefined
       do { const page = await api.accountList({ limit: 100, cursor: next }); result.push(...page.items); next = page.nextCursor ?? undefined } while (next && ownerRef.current === identity)
       if (!active.current || ownerRef.current !== identity) return
@@ -62,6 +66,7 @@ export function useMail() {
         else { accountRef.current = null; setAccountId(null); setItems([]); setDetail(null); setFolders([]) }
       }
       await loadFolders()
+      if (resetGeneration) void refreshRef.current()
     } catch (cause) { if (active.current && ownerRef.current === identity) setError(mailError(cause)) }
   }, [owner, selectAccount, loadFolders])
   useEffect(() => {
@@ -77,6 +82,7 @@ export function useMail() {
   useEffect(() => {
     if (!owner) return
     let timer: ReturnType<typeof setTimeout> | undefined
+    const offIdentity = getSynapseBridge()?.account.state.onChanged(() => { void loadAccounts() })
     const off = mailApi().onChanged(event => {
       if (event.ownerId !== ownerRef.current || event.generation !== scope.current?.generation) return
       clearTimeout(timer)
@@ -84,7 +90,7 @@ export function useMail() {
     })
     const focus = () => { void loadAccounts(); void refreshRef.current() }
     window.addEventListener("focus", focus)
-    return () => { off(); clearTimeout(timer); window.removeEventListener("focus", focus) }
+    return () => { off(); offIdentity?.(); clearTimeout(timer); window.removeEventListener("focus", focus) }
   }, [owner, loadAccounts])
   const selectView = useCallback((next: MailView) => {
     epoch.current++; sequence.current++; selection.current++; viewRef.current = next; searchJob.current = null

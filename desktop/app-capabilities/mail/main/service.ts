@@ -6,7 +6,7 @@ import type { PermissionGuard, AuditSink } from "../../../electron/runtime/secur
 import type { IpcInvocationSender } from "../../../electron/runtime/ipc/types"
 import { MAIL_INPUT_SCHEMAS, MAIL_RESULT_SCHEMAS } from "../shared/schema"
 import { parseMailReference } from "../shared/manifest"
-import { MAIL_MAX_IMAGE_BYTES } from "../shared/limits"
+import { MAIL_MAX_IMAGE_BYTES, MAIL_POLL_INTERVAL_MS } from "../shared/limits"
 import { configureAccountSchema, type ConfigureAccount, type MailChanged, type MailOpenRequest, type MailScope } from "../shared/private-schema"
 import { MailError, type MailAction, type MailContext, type MailInputs, type MailResults } from "../shared/types"
 import { MailContextProvider, createMailAccess } from "./context"
@@ -43,6 +43,10 @@ export class MailService {
   private enabled = false
   private initialization: Promise<void> = Promise.resolve()
   private initializedGeneration = -1
+  private suspended = false
+  private maintenanceTimer: ReturnType<typeof setInterval> | undefined
+  private maintenanceTask: Promise<void> | null = null
+  private maintenanceCursors: { assets?: string; previews?: string } = {}
   private notificationError: string | null = null
   private accountScopes = new Map<string, AbortController>()
   private subscribers = new Map<number, { ownerId: string; generation: number; detach(): void }>()
@@ -73,7 +77,7 @@ export class MailService {
     })
     this.content = new MailContent(this.repo, this.accounts, this.assets, access)
     this.resources = new MailBodyResources(this.repo, this.assets, access)
-    this.search = new MailSearch(this.repo, (ctx, id, budget) => this.content.readSearchText(ctx, id, budget))
+    this.search = new MailSearch(this.repo, (ctx, id, budget) => this.content.readSearchText(ctx, id, budget), (ctx, accountId, id) => this.changed({ ownerId: ctx.ownerId, generation: ctx.generation, accountId, ids: [id], revision: 1 }))
     this.mutations = new MailMutations(this.repo, this.accounts, event => this.changed(event))
     this.drafts = new MailDrafts(this.repo, this.accounts, this.assets, this.content, {
       schedule: (ctx, id) => this.draftSync.enqueue({ ...ctx, actor: "sync" }, id),
@@ -129,12 +133,14 @@ export class MailService {
   async openMessage(messageId: string): Promise<void> { const ctx = this.context("ui"), row = await resolveMessage(this.repo, ctx, messageId); await this.open(ctx, { accountId: row.accountId, messageId }) }
   async configure(input: ConfigureAccount) { const ctx = this.context("ui"); const result = await this.accounts.configure(ctx, configureAccountSchema.parse(input)); this.changed({ ownerId: ctx.ownerId, generation: ctx.generation, accountId: result.id, ids: [result.id], revision: result.revision }); return result }
   async beforeIdentityChange(): Promise<void> {
-    this.identityChanging = true; this.contexts.refreshIdentity(); this.resources.clear()
+    this.identityChanging = true; this.contexts.refreshIdentity(); this.resources.clear(); this.notifications.dispose()
     for (const c of this.accountScopes.values()) c.abort()
     this.accountScopes.clear()
     for (const s of this.subscribers.values()) s.detach()
     this.subscribers.clear()
-    await Promise.all([this.sync.dispose(), this.search.dispose(), this.draftSync.dispose()])
+    this.stopMaintenance()
+    await Promise.all([this.sync.dispose(), this.search.dispose(), this.draftSync.dispose(), this.maintenanceTask])
+    this.maintenanceCursors = {}
   }
   identityChanged(): void { this.identityChanging = false; this.contexts.refreshIdentity(); if (this.enabled) this.initializeBackground() }
   private initializeBackground(): void {
@@ -146,17 +152,31 @@ export class MailService {
       this.contexts.assertCurrent(ctx)
       await this.accounts.recover(ctx); await this.mutations.recover(ctx); await this.operations.recover(ctx); await this.drafts.recover(ctx)
       await this.accounts.recoverCredentials(ctx); await this.assets.recover(ctx); await this.send.expire(ctx)
-      await this.sync.resume(ctx)
+      if (!this.suspended) { await this.sync.resume(ctx); this.startMaintenance(ctx) }
       let cursor: string | undefined
       do { const page = await this.repo.page(ctx, "drafts", { cursor, limit: 100 }); for (const row of page.items) if (row.data.state === "editing" && row.data.syncState !== "synced") this.draftSync.enqueue(ctx, row.id); cursor = page.nextCursor ?? undefined } while (cursor)
     }).catch(() => { if (!ctx.signal.aborted) this.deps.diagnostic("MAIL_RECOVERY_FAILED", "mail") })
   }
+  private stopMaintenance(): void { clearInterval(this.maintenanceTimer); this.maintenanceTimer = undefined }
+  private startMaintenance(ctx: MailContext): void {
+    this.stopMaintenance()
+    this.maintenanceTimer = setInterval(() => {
+      if (this.maintenanceTask || ctx.signal.aborted || this.suspended) return
+      this.maintenanceTask = (async () => {
+        const previews = await this.send.expire(ctx, this.maintenanceCursors.previews)
+        this.maintenanceCursors.previews = previews.nextCursor ?? undefined
+        const assets = await this.assets.recover(ctx, this.maintenanceCursors.assets)
+        this.maintenanceCursors.assets = assets.nextCursor ?? undefined
+      })().catch(() => { if (!ctx.signal.aborted) this.deps.diagnostic("MAIL_MAINTENANCE_FAILED", "mail") }).finally(() => { this.maintenanceTask = null })
+    }, MAIL_POLL_INTERVAL_MS)
+    this.maintenanceTimer.unref?.()
+  }
   startBackground(): void { this.enabled = true; this.initializeBackground() }
-  async suspend(): Promise<void> { await Promise.all([this.sync.suspend(), this.draftSync.dispose()]) }
-  async resume(): Promise<void> { if (this.contexts.status().ownerId) await this.sync.resume(this.context("sync")) }
+  async suspend(): Promise<void> { this.suspended = true; this.stopMaintenance(); await Promise.all([this.sync.suspend(), this.draftSync.dispose(), this.maintenanceTask]) }
+  async resume(): Promise<void> { this.suspended = false; if (this.contexts.status().ownerId) { const ctx = this.context("sync"); await this.sync.resume(ctx); this.startMaintenance(ctx) } }
   async dispose(): Promise<void> { this.enabled = false; await this.beforeIdentityChange(); await this.initialization; this.notifications.dispose(); this.contexts.dispose() }
-  async imageGrant(messageId: string, assetId: string) { const ctx = await this.actionContext(this.context("ui"), { messageId }); await this.content.ensureAsset(ctx, assetId, MAIL_MAX_IMAGE_BYTES); return { token: await this.resources.issue(ctx, messageId, assetId) } }
-  async imageRead(messageId: string, token: string) { return this.resources.read(this.context("ui"), messageId, token) }
+  async imageGrant(messageId: string, assetId: string) { const ctx = await this.actionContext(this.context("ui"), { messageId }), message = await resolveMessage(this.repo, ctx, messageId), asset = await this.assets.info(ctx, assetId); if (asset.messageId !== messageId || asset.accountId !== message.accountId) throw new MailError("UNAVAILABLE", "图片不属于当前邮件"); await this.content.ensureAsset(ctx, assetId, MAIL_MAX_IMAGE_BYTES); return { token: await this.resources.issue(ctx, messageId, assetId) } }
+  async imageRead(messageId: string, token: string) { const ctx = await this.actionContext(this.context("ui"), { messageId }); return this.resources.read(ctx, messageId, token) }
   async imageRemote(messageId: string, url: string, allowed: boolean) { const ctx = await this.actionContext(this.context("ui"), { messageId }); return this.resources.remote(ctx, messageId, url, allowed) }
   async importImage(accountId: string, base64: string) {
     const ctx = this.scoped(this.context("ui"), accountId), bytes = Buffer.from(base64, "base64"), mime = rasterMime(bytes)

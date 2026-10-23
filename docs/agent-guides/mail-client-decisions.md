@@ -1,0 +1,49 @@
+# 邮箱实施取舍记录
+
+按两份批准计划顺序实施。以下保留执行时的全部 Ruling 原文及其影响；最终审阅的判断和延期小项在审阅结束后追加。它们不构成真实账号或生产发布验收。
+
+## 站内信改名
+
+- Ruling: Work in current main checkout — explicitly required by user and approved plans; no worktree or branch created — changes share the checkout.
+- Ruling: Preserve unrelated dirty router/naming files and desktop/coverage; stage only task-owned files.
+- Ruling: Normalize task headings to Task N: Rn/Cn so supplied task-start/task-done tools can track both existing plans; no scope change.
+- Task 2: Ruling: Rename shared notification source constant with desktop consumers now so type checking remains coherent; server producers and migration follow in R3 before release.
+- Task 3: Ruling: Execute migration SQL against isolated in-memory SQLite fixtures to validate update semantics/idempotency without business DB access; actual PostgreSQL preflight remains release acceptance. SourceKey, readAt/deletedAt unchanged.
+
+## 本机邮箱
+
+- Ruling: Inline on current main per explicit user authorization; preserve dirty router/naming. No separate worktree/branch.
+- Task 2: Ruling: Persist immutable asset file keys before byte writes, and collect unpinned staging/unreferenced local assets after 24 hours in bounded post-window batches — recovers crashes without touching draft/send pins — unused imported assets older than a day may require re-import.
+- Task 3: Ruling: Store immutable credential generations and collect unreferenced secrets after 24 hours — failed account commits cannot overwrite the active credential — unused secrets remain encrypted until maintenance.
+- Task 3: Ruling: Require advertised UIDPLUS for precise expunge — SDK IMAP4rev2 support also depends on negotiation state — an IMAP4rev2-only server will report unsupported until explicitly verified.
+- Task 4: Ruling: Stop cancels queued account work without waiting while the account lifecycle holds its queue — prevents pause/configuration deadlock; queued work validates the aborted context before IO — cleanup completion is awaited by top-level dispose.
+- Task 5: Ruling: Initial body search scans cached text only; explicit resume enables bounded remote text scans — avoids unexpected downloads and preserves truthful incomplete results — users must continue to cover uncached bodies.
+- Task 6: Ruling: Add mail tests to the normal test typecheck and compile the not-yet-registered mail production tree through a focused scratch tsconfig — default Electron roots do not reach it before C11; earlier electron tsc success was a workspace check — other pre-existing app-capability test suites remain outside this task's typecheck scope.
+- Task 6: Ruling: Search caches text parts separately from the complete display body — remote search counts actual downloaded text bytes without fetching HTML alternatives or attachments — a later display can fetch HTML separately.
+- Task 7: Ruling: A mutation that entered network submission but lacks complete confirmation remains unknown; repeat request IDs return its persisted result and do not replay — Alibaba COPY/timeout cannot be safely retried — some outcomes require user reconciliation instead of automatic completion.
+- Task 8: Ruling: Expose logical draft content revisions independently from storage CAS revisions — sync status cannot invalidate an editor's unchanged content — internal callers must use the repository revision for metadata CAS.
+- Task 8: Ruling: Pin new references before draft commit, release old references afterward, and rebuild counts from pinnedAssetIds under the account queue before cache GC — the global 128-item atomic limit cannot cover 100 attachments — interrupted writes may temporarily retain extra pinned bytes until recovery.
+- Task 8: Ruling: Index remote drafts as metadata-only placeholders and hydrate their original MIME on first open — the spec's metadata-first boundary takes precedence over the plan's literal first-index snapshot wording — first open needs network access; unopened drafts do not all download attachments.
+- Task 8: Ruling: Unknown draft APPEND reconciliation requires a unique generated Message-ID plus exact complete raw hash within the newest 1000 UID candidates — ID alone is insufficient proof — servers rewriting draft MIME, older results or ambiguous copies remain unknown for manual reconciliation.
+- Task 8: Ruling: IMAP endpoint/auth namespace changes rebuild folder IDs and stale old message IDs, preserving local content and marking old remote drafts conflicted; a durable reindexRequired gate survives interruption — a new server may reuse UIDVALIDITY/UID — old links and folder mappings need rebuilding after a connection namespace change.
+- Task 9: Ruling: Continue metadata history as separate 50/100-header and 100-flag cycles, closing the work connection and releasing the account queue between them — a monolithic history pass would block foreground read/write actions — reconnecting per batch costs extra handshakes until a shared connection lease is implemented.
+- Task 9: Ruling: Add explicit From to the preview DTO and bind frozen content to the authenticated primary address plus connection fingerprint — reviewers need the exact sender and old previews must not target a new server — a connection change requires a new preview.
+- Task 9: Ruling: operation.get remains read-only; only a repeated confirmed send request repairs a definitely unsubmitted client Sent copy, and never repeats SMTP — matches the public tool's read-only promise — callers must retry the original send intent to repair a known copy failure.
+- Task 9: Ruling: A matching Sent copy confirms archived content but cannot reconstruct lost per-recipient RCPT outcomes; retain SMTP unknown with sentCopyState saved — avoids inventing recipient acceptance — some interrupted sends need manual confirmation even after their copy is found.
+- Ruling: use account EventBus domain with trusted rendererIds and owner/generation payload rather than adding a hardcoded EventDomain — preserves extension boundary and prevents broadcasts of mailbox data to other identities.
+- Ruling: public MCP results wrap validated DTO as {externalData:true,value}; UI receives raw DTO through private envelope — makes untrusted external content explicit without editing another task's dirty router.
+- Ruling: background service assembly is nonblocking and starts after main window; core.mail itself only composes dependencies — avoids delaying startup for network/recovery.
+- Ruling: C12 creates panel integration callbacks; C13 immediately binds them to real settings/compose state — keeps the approved sequential UI split, temporary entry buttons remain disabled until next task. This is an intermediate commit, not claimed as a finished mailbox product.
+- Ruling: reused the repository's existing envelope PNG for mail, preserving visual conventions without adding a design dependency. Both apps have separate identities and names.
+- Ruling: complete safe iframe has fixed viewport with its own scrolling; controlled links appear outside body. No scripts/same-origin or top navigation, no visual/browser acceptance claimed.
+- Ruling: six exact Tiptap3.32.0 packages include core and pm as explicit peer dependencies; StarterKit already owns link/underline — avoids duplicate extensions, maintains uniform MIT version. Cost is48 extra transitive packages; candidate bundle audit in C14.
+- Ruling: native image NodeView renders private draft-associated bytes, and pasted images save before insertion — avoids loading arbitrary sender/clipboard URLs and supports reopening drafts; failed import/save remains visible and does not insert an unsafe URL.
+- Ruling: known failed/unknown sends require explicit new-draft copy rather than a second send button, while unknown offers read-only receipt reconciliation — conservative user flow avoids accidental re-send.
+- Ruling: local removal presents explicit draft/unknown-operation acknowledgement flags and relies on core's final impact check; no remote mailbox data deletion. Normal folder actions and mapping share the core service.
+- Ruling: actual application/browser visual acceptance remains pending because project forbids app/browser startup without explicit request. Keyboard-capable Radix controls and JSDOM behavior verified, not visual or OS permission acceptance.
+- Applied synapse-capability-mcp-skill-audit. Ruling: its historic templates paths are stale; use repository-authoritative app-capabilities/synapse-skill/skill-package instead — root rules explicitly designate it. No changes to old templates.
+- Ruling: isolate malformed/oversized envelope as a clearly incomplete item and require original-header review before reply/forward — protects remaining inbox and avoids guessed recipients; affected mail cannot be directly replied to until manually reviewed.
+- Ruling: API reference is generated, not hand-maintained; runtime search/invoke schema remains authoritative — prevents drift, costs regenerated50KiB documentation.
+- Ruling: use isolated local candidate output with signing auto-discovery disabled (electron-builder applies an ad-hoc signature, not a production certificate) — avoids publishing/notarization or overwriting previous build output; does not prove production signature/update behavior or Windows compatibility.
+- Ruling: default check:packaged-asar scans all release history and fails on old release/mac-arm64 hashes; preserve historical artifacts and run the same verifier against release/mail-client-candidate explicitly — current candidate has meaningful source/hash and runtime verification, while whole-history command remains reported as failed. No deletion or weakening of checks.
+

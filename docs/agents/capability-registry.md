@@ -32,7 +32,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 “应用页=否”表示不存在 System App 身份、启动器、Dock 或独立应用窗口。数字为注册数量，`—` 表示没有该表面。
 
-下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 4 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>`、`synapse://mail-internal/<message-id>` 和 `synapse://todos/<id>`。Terminal 路由进入终端列表或会话：不带 `session` 时可省略 `desktop`，携带 `session` 时必须同时指明 `desktop`。会话目标先等待当前账号与连接的电脑状态；已知电脑离线时退回会话列表并清除旧详情选择，在线时还要等待当前连接收到对应电脑的实时摘要，才校验会话是否可打开。已结束会话给出原因并保留当前选择；用户随后主动选择会取消旧待跳转。通知与 Widget 共用此打开判定，旧通知未携带电脑标识时沿当前电脑处理，不放宽 URL 参数校验。Mail 路由进入站内信并按当前用户权限读取该信件。Todo 路由严格接受单一 ID，在账号就绪后只读定位，已完成目标进入全部，query / fragment / 编码分隔符无效；新导航和身份变化取消旧目标。四条路由均由 iOS App 本地处理；本次生命周期与回退修复不改变表中的注册数量或 MCP/Skill 表面。
+下表的 Deep Link 列只统计桌面端路由。iOS 客户端另有 4 条路由：`synapse://recording`、`synapse://terminal?desktop=<id>&session=<id>`、`synapse://mail-internal/<message-id>` 和 `synapse://todos/<id>`。Terminal 路由进入终端列表或会话：不带 `session` 时可省略 `desktop`，携带 `session` 时必须同时指明 `desktop`。会话目标先等待当前账号与连接的电脑状态；已知电脑离线时退回会话列表并清除旧详情选择，在线时还要等待当前连接收到对应电脑的实时摘要，才校验会话是否可打开。已结束会话给出原因并保留当前选择；用户随后主动选择会取消旧待跳转。通知与 Widget 共用此打开判定，旧通知未携带电脑标识时沿当前电脑处理，不放宽 URL 参数校验。mail-internal 路由进入站内信并按当前用户权限读取该信件。Todo 路由严格接受单一 ID，在账号就绪后只读定位，已完成目标进入全部，query / fragment / 编码分隔符无效；新导航和身份变化取消旧目标。四条路由均由 iOS App 本地处理；本次生命周期与回退修复不改变表中的注册数量或 MCP/Skill 表面。
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
@@ -48,7 +48,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail（邮箱） | 是 | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
-| Mail Internal | 是（含复制全文） | 否（旧配置升级时一次性加入） | — | — | 17 | `open` |
+| Mail Internal | 是（含复制全文） | 否（旧配置升级时一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
@@ -183,13 +183,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `content` | 16 | 16 |
 | `drive` | 76 | 76 |
 | `mail_internal` | 17 | 17 |
+| `mail` | 44 | 44 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
-| 合计 | 296 | 292 |
+| 合计 | 340 | 336 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 292 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 336 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -231,7 +232,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记迁移，保留取消固定状态和布局；历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。
 
-2026-10-23 邮箱核心接入：新增 `mail` domain 的 44 个 capability / MCP 索引工具，实际全局 capability 340 项、MCP 索引和工具定义各 336 项。公开 MCP 仍只有 search/invoke。新增严格桌面路由 `synapse://mail/em_<uuid>`，站内信 `mail-internal` / `mail_internal` 独立保留 17 项且无别名。私有密码配置、图片资源和本机文件对话框只走 IPC，不进公开目录；core.mail 在窗口建立后后台恢复，不调用云端消息中心。此阶段尚未注册邮箱 System App，现有 21 个保持不变。
+2026-10-23 邮箱核心接入：新增 `mail` domain 的 44 个 capability / MCP 索引工具，实际全局 capability 340 项、MCP 索引和工具定义各 336 项。公开 MCP 仍只有 search/invoke。新增严格桌面路由 `synapse://mail/em_<uuid>`，站内信 `mail-internal` / `mail_internal` 独立保留 17 项且无别名。私有密码配置、图片资源和本机文件对话框只走 IPC，不进公开目录；core.mail 在窗口建立后后台恢复，不调用云端消息中心。该核心阶段未增加应用；随后阅读界面阶段已注册为下述第 22 个 System App。
 
 2026-10-23 邮箱阅读界面注册为第 22 个 System App：App ID / namespace 均为 `mail`，与 `mail-internal` 并列，启动器可打开且不默认固定 Dock。内嵌和独立窗口复用单顶栏；私有 `app.apps.operation.mail_open_request` 只传定位信息。44 个邮箱 MCP 工具、340 个全局 capability、336 个索引工具保持不变，不新增 Workflow 或 Automation Action。
 

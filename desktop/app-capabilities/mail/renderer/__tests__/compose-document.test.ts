@@ -8,3 +8,7 @@ it("keeps basic pasted styles and only currently owned CID images", () => {
   expect(result.html).not.toMatch(/script|https:|file:|javascript:|position|background/iu)
   expect(result.text).toContain("BoldText")
 })
+it("keeps repeated draft sanitization stable without adding wrapper elements", () => {
+  const once = sanitizeComposeDocument("<p>draft</p>", [])
+  expect(sanitizeComposeDocument(once.html, [])).toEqual(once)
+})

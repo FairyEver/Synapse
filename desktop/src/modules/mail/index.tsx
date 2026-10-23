@@ -13,9 +13,11 @@ import { useCompose } from "./use-compose"
 import { useMailAccounts } from "./use-mail-accounts"
 import { mailError } from "./api"
 export function ExternalMailModule({ openRequest, onOpenRequestConsumed }: { openRequest?: MailOpenRequest | null; onOpenRequestConsumed?: (id: string) => void } = {}) {
-  const mail = useMail(), handled = useRef<string | null>(null), editor = useCompose(mail.owner)
+  const mail = useMail(), handled = useRef<string | null>(null)
+  const identity = mail.scope?.ownerId === mail.owner && mail.owner ? `${mail.owner}:${mail.scope.generation}` : null
+  const editor = useCompose(identity)
   const saved = useCallback(async () => { await mail.loadAccounts(); await mail.refresh() }, [mail.loadAccounts, mail.refresh])
-  const accountModel = useMailAccounts(mail.owner, saved)
+  const accountModel = useMailAccounts(identity, saved)
   const settings = () => { if (!mail.accounts.length) accountModel.begin(); else accountModel.setSettingsOpen(true) }
   const compose = (intent: ComposeIntent) => { void editor.open(intent).catch(cause => toast.error(mailError(cause))) }
   useEffect(() => {

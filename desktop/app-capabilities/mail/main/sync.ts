@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto"
 import type { MailRecord } from "../../../electron/runtime/data-repo/schemas/mail"
 import { MAIL_FOLDER_REFRESH_MS, MAIL_HISTORY_BATCH_SIZE, MAIL_HISTORY_CONCURRENCY, MAIL_PAGE_SIZE, MAIL_POLL_INTERVAL_MS } from "../shared/limits"
 import { MailError, type Coverage, type Folder, type InboxDelta, type MailContext, type MailDetail, type MailInputs, type MailJob, type MailSummary } from "../shared/types"
+import { summarySchema, addressSchema } from "../shared/schema"
 import { MailRepository } from "./repository"
 import { MailAccounts, type StoredAccount } from "./accounts"
 import { normalizeProtocolError, type MailBodyStructure, type MailImapSession, type RemoteHeader } from "./protocol/types"
@@ -142,8 +143,13 @@ export class MailSync {
         seen.add(header.uid)
         const id = `em_${randomUUID()}`
         const date = header.date && Number.isFinite(Date.parse(header.date)) ? header.date : null
-        const summary: StoredMessage["summary"] = { id, accountId, locator: { accountId, folderId: folder.id, uidValidity: selected.uidValidity, uid: header.uid }, subject: header.subject, from: header.from, to: header.to, cc: header.cc, date, snippet: "", read: header.flags.includes("\\Seen"), star: header.flags.includes("\\Flagged"), attachmentCount: countAttachments(header.structure), bodyState: "remote", stale: false }
-        const saved = await this.repo.save<StoredMessage>(ctx, "messages", id, accountId, { summary, headers: { replyTo: header.replyTo, messageId: header.messageId, references: header.references }, structure: header.structure, bodyRef: null }, 0, `${String(9_999_999_999_999 - (date ? Date.parse(date) : header.uid)).padStart(13, "0")}`)
+        const mime = indexedStructure(header.structure)
+        const summary: StoredMessage["summary"] = { id, accountId, locator: { accountId, folderId: folder.id, uidValidity: selected.uidValidity, uid: header.uid }, subject: header.subject, from: header.from, to: header.to, cc: header.cc, date, snippet: "", read: header.flags.includes("\\Seen"), star: header.flags.includes("\\Flagged"), attachmentCount: mime.attachments, bodyState: "remote", stale: false }
+        let data: StoredMessage = { summary, headers: { replyTo: header.replyTo, messageId: header.messageId, references: header.references }, structure: mime.structure, bodyRef: null }
+        // A single malformed/oversized envelope must not block newer mail. The original
+        // MIME remains available on demand; never guess recipients from partial headers.
+        if (Buffer.byteLength(JSON.stringify(data)) > 48 * 1024 || !summarySchema.safeParse({ ...summary, revision: 1 }).success || !header.replyTo.every(address => addressSchema.safeParse(address).success)) data = { summary: { ...summary, subject: "（邮件头异常或过大，部分信息不可用）", from: [], to: [], cc: [], metadataTruncated: true }, headers: { replyTo: [], messageId: null, references: [] }, structure: null, bodyRef: null }
+        const saved = await this.repo.save<StoredMessage>(ctx, "messages", id, accountId, data, 0, `${String(9_999_999_999_999 - (date ? Date.parse(date) : header.uid)).padStart(13, "0")}`)
         existing.set(header.uid, { id, stale: false }); this.emit(ctx, accountId, [id], saved.revision)
         if (folder.data.folder.role === "drafts") await this.events.draft?.(ctx, id)
         if (header.uid > checkpoint.data.baselineUid && folder.data.folder.role === "inbox") notifications.push(messageSummary(saved))
@@ -314,7 +320,16 @@ export class MailSync {
     await Promise.all(runners.map(r => r.idleTask))
   }
 }
-function countAttachments(structure: MailBodyStructure | null): number {
-  if (!structure) return 0
-  return (structure.disposition?.toLowerCase() === "attachment" ? 1 : 0) + (structure.childNodes ?? []).reduce((sum, child) => sum + countAttachments(child), 0)
+function indexedStructure(structure: MailBodyStructure | null): { structure: MailBodyStructure | null; attachments: number } {
+  if (!structure) return { structure: null, attachments: 0 }
+  const pending = [{ node: structure, depth: 0 }], seen = new Set<MailBodyStructure>()
+  let attachments = 0
+  while (pending.length) {
+    const { node, depth } = pending.pop()!
+    if (seen.has(node) || seen.size >= 1000 || depth > 30 || typeof node.type !== "string") return { structure: null, attachments: 0 }
+    seen.add(node)
+    if (node.disposition?.toLowerCase() === "attachment") attachments++
+    for (const child of node.childNodes ?? []) pending.push({ node: child, depth: depth + 1 })
+  }
+  return { structure: Buffer.byteLength(JSON.stringify(structure)) <= 16 * 1024 ? structure : null, attachments }
 }

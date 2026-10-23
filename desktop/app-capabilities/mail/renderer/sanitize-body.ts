@@ -1,11 +1,11 @@
-import DOMPurify from "dompurify"
+import { sanitizeInertMailFragment } from "./inert-document"
 import { MAIL_MAX_BODY_BYTES } from "../shared/limits"
 
 export interface ExternalLink { label: string; url: string }
 export interface MailHtmlResources { cid: Readonly<Record<string, string>>; remote: Readonly<Record<string, string>> }
 export function sanitizeMailHtml(source: string, resources: MailHtmlResources): { html: string; links: ExternalLink[]; blockedImages: number; remoteImages: string[] } {
   if (new TextEncoder().encode(source).length > MAIL_MAX_BODY_BYTES) throw new Error("邮件正文超过显示上限")
-  const fragment = DOMPurify.sanitize(source, {
+  const fragment = sanitizeInertMailFragment(source, {
     RETURN_DOM_FRAGMENT: true, ALLOWED_TAGS: ["p", "br", "div", "span", "strong", "b", "em", "i", "u", "s", "blockquote", "pre", "code", "ul", "ol", "li", "a", "img", "table", "thead", "tbody", "tr", "th", "td", "hr", "h1", "h2", "h3", "h4"],
     ALLOWED_ATTR: ["href", "src", "alt", "title", "colspan", "rowspan", "width", "height"], ALLOW_DATA_ATTR: false, ALLOW_ARIA_ATTR: false,
     // CID is resolved below, after sanitizing the rest of the tree. No arbitrary URLs survive.
@@ -36,7 +36,7 @@ export function sanitizeMailHtml(source: string, resources: MailHtmlResources): 
     }
     anchor.removeAttribute("href")
   }
-  const container = document.createElement("div"); container.append(fragment)
+  const container = document.createElement("div"); container.append(...fragment.childNodes)
   const csp = "default-src 'none'; img-src blob:; style-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"
   return { html: `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"></head><body>${container.innerHTML}</body></html>`, links, blockedImages, remoteImages: [...new Set(remoteImages)] }
 }
