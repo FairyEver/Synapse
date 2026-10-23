@@ -163,6 +163,13 @@ export class MailService {
     if (!mime || bytes.length > MAIL_MAX_IMAGE_BYTES) throw new MailError("IMAGE_BLOCKED", "图片格式或大小不受支持")
     return this.assets.put(ctx, Readable.from([bytes]), { accountId, name: `image.${mime.split("/")[1]}`, mime }, MAIL_MAX_IMAGE_BYTES)
   }
+  async draftImageAsset(draftId: string, assetId: string) {
+    const ctx = await this.actionContext(this.context("ui"), { draftId }), draft = await this.drafts.get(ctx, draftId)
+    if (!draft.inlineImages.some(image => image.assetId === assetId)) throw new MailError("UNAVAILABLE", "图片不属于当前草稿")
+    const bytes = await this.assets.read(ctx, assetId, MAIL_MAX_IMAGE_BYTES), mime = rasterMime(bytes)
+    if (!mime) throw new MailError("IMAGE_BLOCKED", "图片格式不可显示")
+    return { mime, base64: bytes.toString("base64") }
+  }
   async pickAttachments(accountId: string) {
     const ctx = this.scoped(this.context("ui"), accountId); await this.accounts.get(ctx, accountId)
     const paths = await this.deps.pickFiles?.() ?? [], results = []

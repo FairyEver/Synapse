@@ -50,6 +50,7 @@ export interface MailBridge {
   accountConfigure(input: ConfigureAccount): Promise<AccountSummary>
   uiScope(): Promise<MailScope>
   imageGrant(input: { messageId: string; assetId: string }): Promise<{ token: string }>
+  draftImageAsset(input: { draftId: string; assetId: string }): Promise<{ mime: string; base64: string }>
   imageRead(input: { messageId: string; token: string }): Promise<{ mime: string; base64: string }>
   imageRemote(input: { messageId: string; url: string; allowed: true }): Promise<{ token: string; assetId: string }>
   imageImport(input: { accountId: string; base64: string }): Promise<MailAsset>
@@ -111,6 +112,7 @@ export function createMailBridge(invoke: <T>(channel: string, input: unknown) =>
     accountConfigure: input => call("account.configure", input),
     uiScope: () => call("ui.scope", {}),
     imageGrant: input => call("image.grant", input),
+    draftImageAsset: input => call("draft.image_asset", input),
     imageRead: input => call("image.read", input),
     imageRemote: input => call("image.remote", input),
     imageImport: input => call("image.import", input),

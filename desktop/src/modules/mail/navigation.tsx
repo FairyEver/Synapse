@@ -14,10 +14,10 @@ export function MailNavigation({ accounts, accountId, folders, view, onAccount, 
       {accounts.map(account => <NativeSelectOption key={account.id} value={account.id}>{account.name}</NativeSelectOption>)}
     </NativeSelect>
     <div className="min-h-0 flex-1 space-y-1 overflow-auto">
-      <Button variant="ghost" className={cn("w-full justify-start", !view.folderId && !view.starredOnly && !view.drafts && "bg-selected")} onClick={() => onView({})} data-track="mail.folder.all"><Inbox />全部邮件</Button>
-      <Button variant="ghost" className={cn("w-full justify-start", view.starredOnly && "bg-selected")} onClick={() => onView({ starredOnly: true })} data-track="mail.folder.starred"><Star />星标邮件</Button>
-      <Button variant="ghost" className={cn("w-full justify-start", view.drafts && "bg-selected")} onClick={() => onView({ drafts: true })} data-track="mail.folder.drafts"><FilePen />草稿箱</Button>
-      {folders.filter(folder => folder.selectable && folder.role !== "drafts").map(folder => { const Icon = icons[folder.role]; return <Button key={folder.id} variant="ghost" className={cn("w-full justify-start", view.folderId === folder.id && "bg-selected")} onClick={() => onView({ folderId: folder.id })} data-track="mail.folder.select"><Icon /><span className="truncate">{folderName(folder)}</span></Button> })}
+      <Button variant="ghost" className={cn("w-full justify-start", !view.folderId && !view.starredOnly && !view.drafts && "bg-selected hover:bg-selected")} onClick={() => onView({})} data-track="mail.folder.all"><Inbox />全部邮件</Button>
+      <Button variant="ghost" className={cn("w-full justify-start", view.starredOnly && "bg-selected hover:bg-selected")} onClick={() => onView({ starredOnly: true })} data-track="mail.folder.starred"><Star />星标邮件</Button>
+      <Button variant="ghost" className={cn("w-full justify-start", view.drafts && "bg-selected hover:bg-selected")} onClick={() => onView({ drafts: true })} data-track="mail.folder.drafts"><FilePen />草稿箱</Button>
+      {folders.filter(folder => folder.selectable && folder.role !== "drafts").map(folder => { const Icon = icons[folder.role]; return <Button key={folder.id} variant="ghost" className={cn("w-full justify-start", view.folderId === folder.id && "bg-selected hover:bg-selected")} onClick={() => onView({ folderId: folder.id })} data-track="mail.folder.select"><Icon /><span className="truncate">{folderName(folder)}</span></Button> })}
     </div>
     <Button variant="ghost" className="w-full justify-start" onClick={onSettings} data-track="mail.settings"><Settings />邮箱设置</Button>
   </nav>

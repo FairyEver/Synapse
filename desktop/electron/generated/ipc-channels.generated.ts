@@ -457,6 +457,7 @@ export const IPC_CHANNELS = {
     "accountConfigure": "synapse:app:mail:account:configure",
     "uiScope": "synapse:app:mail:ui:scope",
     "imageGrant": "synapse:app:mail:image:grant",
+    "draftImageAsset": "synapse:app:mail:draft:image_asset",
     "imageRead": "synapse:app:mail:image:read",
     "imageRemote": "synapse:app:mail:image:remote",
     "imageImport": "synapse:app:mail:image:import",

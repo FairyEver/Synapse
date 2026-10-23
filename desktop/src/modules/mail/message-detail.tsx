@@ -19,8 +19,8 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
       {body?.truncated && <p role="status" className="mb-3 text-sm text-muted-foreground">正文未完整读取，显示纯文本</p>}
       {projection ? <iframe title="邮件正文" sandbox="" referrerPolicy="no-referrer" srcDoc={projection.html} className="min-h-96 w-full border-0" /> : <pre className="font-sans text-sm whitespace-pre-wrap break-words">{body?.text ?? ""}</pre>}
       {projection?.remoteImages.length ? <Button variant="outline" onClick={() => onResource(projection.remoteImages)} disabled={loading} className="my-3">加载远程图片</Button> : null}
-      {!!projection?.links.length && <div className="my-3 flex flex-wrap gap-2">{projection.links.map((link, index) => <Button variant="link" key={`${link.url}:${index}`} className="h-auto max-w-full whitespace-normal break-all" onClick={() => onLink(link.url)}>{link.label}</Button>)}</div>}
-      {detail.attachments.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{detail.attachments.map(asset => <Button key={asset.id} variant="outline" size="sm" onClick={() => onDownload(asset.id)}><Download />{asset.name} · {Math.ceil(asset.size / 1024)} KB</Button>)}</div>}
+      {!!projection?.links.length && <div className="my-3 flex flex-wrap gap-2">{projection.links.map((link, index) => <Button variant="link" key={`${link.url}:${index}`} data-track="mail.link.open" className="h-auto max-w-full whitespace-normal break-all" onClick={() => onLink(link.url)}>{link.label}</Button>)}</div>}
+      {detail.attachments.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{detail.attachments.map(asset => <Button key={asset.id} data-track="mail.attachment.download" variant="outline" size="sm" onClick={() => onDownload(asset.id)}><Download />{asset.name} · {Math.ceil(asset.size / 1024)} KB</Button>)}</div>}
     </div>
   </article>
 }

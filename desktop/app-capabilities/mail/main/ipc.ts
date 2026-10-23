@@ -3,7 +3,7 @@ import type { IpcModule, IpcMethodDescriptor, IpcHandlerContext } from "../../..
 import { MAIL_SERVICE_ID } from "../shared/manifest"
 import { MAIL_MAX_IMAGE_BYTES } from "../shared/limits"
 import { configureAccountSchema, type ConfigureAccount } from "../shared/private-schema"
-import { MAIL_INPUT_SCHEMAS, accountIdSchema, messageIdSchema, assetIdSchema } from "../shared/schema"
+import { MAIL_INPUT_SCHEMAS, accountIdSchema, messageIdSchema, assetIdSchema, draftIdSchema } from "../shared/schema"
 import type { MailAction, MailInputs } from "../shared/types"
 import { mailFailure } from "./dispatcher"
 import type { MailService } from "./service"
@@ -64,6 +64,7 @@ export const mailIpcModule: IpcModule = { id: "mail", methods: {
   accountConfigure: { ...privateMethod(configureAccountSchema, (s, i) => s.configure(i as ConfigureAccount)), operationId: "app.mail.account.configure" },
   uiScope: { ...privateMethod(z.object({}).strict(), (s, _i, c) => s.scope(c.sender)), operationId: "app.mail.ui.scope" },
   imageGrant: { ...privateMethod(z.object({ messageId: messageIdSchema, assetId: assetIdSchema }).strict(), (s, i) => s.imageGrant(i.messageId, i.assetId)), operationId: "app.mail.image.grant" },
+  draftImageAsset: { ...privateMethod(z.object({ draftId: draftIdSchema, assetId: assetIdSchema }).strict(), (s, i) => s.draftImageAsset(i.draftId, i.assetId)), operationId: "app.mail.draft.image_asset" },
   imageRead: { ...privateMethod(z.object({ messageId: messageIdSchema, token: z.uuid() }).strict(), (s, i) => s.imageRead(i.messageId, i.token)), operationId: "app.mail.image.read" },
   imageRemote: { ...privateMethod(z.object({ messageId: messageIdSchema, url: z.string().max(8192), allowed: z.literal(true) }).strict(), (s, i) => s.imageRemote(i.messageId, i.url, i.allowed)), operationId: "app.mail.image.remote" },
   imageImport: { ...privateMethod(z.object({ accountId: accountIdSchema, base64: z.string().max(Math.ceil(MAIL_MAX_IMAGE_BYTES / 3) * 4) }).strict(), (s, i) => s.importImage(i.accountId, i.base64)), operationId: "app.mail.image.import" },

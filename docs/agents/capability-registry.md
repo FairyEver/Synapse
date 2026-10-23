@@ -234,3 +234,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-23 邮箱核心接入：新增 `mail` domain 的 44 个 capability / MCP 索引工具，实际全局 capability 340 项、MCP 索引和工具定义各 336 项。公开 MCP 仍只有 search/invoke。新增严格桌面路由 `synapse://mail/em_<uuid>`，站内信 `mail-internal` / `mail_internal` 独立保留 17 项且无别名。私有密码配置、图片资源和本机文件对话框只走 IPC，不进公开目录；core.mail 在窗口建立后后台恢复，不调用云端消息中心。此阶段尚未注册邮箱 System App，现有 21 个保持不变。
 
 2026-10-23 邮箱阅读界面注册为第 22 个 System App：App ID / namespace 均为 `mail`，与 `mail-internal` 并列，启动器可打开且不默认固定 Dock。内嵌和独立窗口复用单顶栏；私有 `app.apps.operation.mail_open_request` 只传定位信息。44 个邮箱 MCP 工具、340 个全局 capability、336 个索引工具保持不变，不新增 Workflow 或 Automation Action。
+
+2026-10-23 邮箱接入与写信面板：配置向导、账号设置、富文本草稿、附件与发送均复用 44 项核心动作；私有 `app.mail.draft.image_asset` 只返回当前草稿已关联的受控图片，不进入 MCP / HTTP 目录。邮箱仍是第 22 个 System App，44 个邮箱 MCP，340 个全局 capability / 336 个索引工具，默认 Dock 无变化。

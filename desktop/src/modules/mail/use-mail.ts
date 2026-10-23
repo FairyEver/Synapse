@@ -41,6 +41,13 @@ export function useMail() {
     finally { if (valid()) setLoading(false) }
   }, [owner])
   const refreshRef = useRef(refresh); refreshRef.current = refresh
+  const loadFolders = useCallback(async () => {
+    const id = accountRef.current, identity = owner
+    if (!id || !identity) return
+    const all: Folder[] = []; let next: string | undefined
+    do { const page = await mailApi().folderList({ accountId: id, cursor: next, limit: 100 }); all.push(...page.items); next = page.nextCursor ?? undefined } while (next && active.current && accountRef.current === id && ownerRef.current === identity)
+    if (active.current && accountRef.current === id && ownerRef.current === identity) setFolders(all)
+  }, [owner])
   const loadAccounts = useCallback(async () => {
     const identity = owner
     if (!identity) return
@@ -54,8 +61,9 @@ export function useMail() {
         if (result[0]) selectAccount(result[0].id)
         else { accountRef.current = null; setAccountId(null); setItems([]); setDetail(null); setFolders([]) }
       }
+      await loadFolders()
     } catch (cause) { if (active.current && ownerRef.current === identity) setError(mailError(cause)) }
-  }, [owner, selectAccount])
+  }, [owner, selectAccount, loadFolders])
   useEffect(() => {
     active.current = true; epoch.current++; accountRef.current = null; setAccountId(null); setAccounts([]); setLoadedOwner(null); setItems([]); setDetail(null); setFolders([]); setDrafts([])
     scope.current = null
@@ -64,12 +72,6 @@ export function useMail() {
   }, [owner, loadAccounts])
   useEffect(() => {
     if (!accountId) return
-    const e = epoch.current, id = accountId
-    void (async () => {
-      const all: Folder[] = []; let next: string | undefined
-      do { const page = await mailApi().folderList({ accountId: id, cursor: next, limit: 100 }); all.push(...page.items); next = page.nextCursor ?? undefined } while (next && current(e, id))
-      if (current(e, id)) setFolders(all)
-    })().catch(cause => { if (current(e, id)) setError(mailError(cause)) })
     void refreshRef.current()
   }, [accountId, owner])
   useEffect(() => {

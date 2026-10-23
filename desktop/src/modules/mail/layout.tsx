@@ -16,9 +16,9 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
   const [query, setQuery] = useState(""), [fields, setFields] = useState<"metadata" | "body">("metadata")
   const [permanent, setPermanent] = useState<string[] | null>(null), [busy, setBusy] = useState(false)
   const body = useMailBody(mail.detail, mail.owner)
-  const performBatch = async (action: Parameters<typeof mail.mutate>[0], ids: string[]) => {
+  const performBatch = async (action: Parameters<typeof mail.mutate>[0], ids: string[], targetFolderId?: string) => {
     setBusy(true)
-    try { const result = await mail.mutate(action, ids); const succeeded = result.items.filter(item => item.status === "succeeded").length, unknown = result.items.filter(item => item.status === "unknown").length; toast(`${succeeded} 封完成${unknown ? `，${unknown} 封结果待核验` : ""}${result.items.length - succeeded - unknown ? `，${result.items.length - succeeded - unknown} 封失败` : ""}`); setPermanent(null) }
+    try { const result = await mail.mutate(action, ids, targetFolderId); const succeeded = result.items.filter(item => item.status === "succeeded").length, unknown = result.items.filter(item => item.status === "unknown").length; toast(`${succeeded} 封完成${unknown ? `，${unknown} 封结果待核验` : ""}${result.items.length - succeeded - unknown ? `，${result.items.length - succeeded - unknown} 封失败` : ""}`); setPermanent(null) }
     catch (cause) { toast.error(mailError(cause)) } finally { setBusy(false) }
   }
   const onBatch = (action: Parameters<typeof mail.mutate>[0], ids: string[]) => { if (action === "permanent") setPermanent(ids); else void performBatch(action, ids) }
@@ -36,7 +36,7 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
           <NativeSelect size="sm" aria-label="搜索范围" value={fields} onChange={event => setFields(event.target.value as typeof fields)}><NativeSelectOption value="metadata">发件人、收件人和主题</NativeSelectOption><NativeSelectOption value="body">含正文</NativeSelectOption></NativeSelect>
           {mail.coverage && (!mail.coverage.metadataComplete || mail.coverage.serverHistoryComplete !== true) && <div role="status" className="flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{mail.canContinue ? "部分邮件尚未检索" : !mail.coverage.metadataComplete ? "历史邮件索引中" : "范围：服务器当前可见历史"}</span>{mail.canContinue && <Button variant="ghost" size="xs" onClick={() => void mail.continueSearch().catch(cause => toast.error(mailError(cause)))}>继续检索</Button>}</div>}
         </div>
-        <div className="min-h-0 flex-1"><MailList items={mail.items} drafts={mail.drafts} draftView={mail.view.drafts} selected={mail.detail?.id} loading={mail.loading} more={!!mail.cursor} onSelect={id => void mail.selectMessage(id)} onDraft={draftId => onCompose({ draftId })} onMore={() => void mail.loadMore()} onBatch={onBatch} /></div>
+        <div className="min-h-0 flex-1"><MailList items={mail.items} drafts={mail.drafts} draftView={mail.view.drafts} selected={mail.detail?.id} loading={mail.loading} more={!!mail.cursor} onSelect={id => void mail.selectMessage(id)} onDraft={draftId => onCompose({ draftId })} onMore={() => void mail.loadMore()} onBatch={onBatch} folders={mail.folders} onMove={(ids, target) => void performBatch("move", ids, target)} /></div>
       </div>
       <div className={cn("min-h-0 min-w-0 flex-1", !mail.detail && "hidden lg:block")}>
         {mail.detail ? <MailDetail detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={() => void copy()} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}

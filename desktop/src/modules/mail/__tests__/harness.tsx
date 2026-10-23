@@ -5,7 +5,7 @@ import type { MailBridge } from "../../../../app-capabilities/mail/shared/bridge
 const mocks = vi.hoisted(() => ({ owner: "user", api: {} as Record<string, ReturnType<typeof vi.fn>>, changed: (_event: unknown) => undefined }))
 export { mocks }
 vi.mock("@/app-shell/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: mocks.owner } } } }) }))
-vi.mock("../api", () => ({ mailApi: () => mocks.api as unknown as MailBridge }))
+vi.mock("../api", () => ({ mailApi: () => mocks.api as unknown as MailBridge, mailError: (error: unknown) => error instanceof Error ? error.message : "邮箱操作失败" }))
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 export const summary = { id: "em_one", accountId: "ma_one", subject: "测试主题", from: [{ address: "a@example.com" }], to: [], cc: [], date: null, snippet: "", read: false, star: false, stale: false, attachmentCount: 0, revision: 1, bodyState: "remote" as const, locator: { accountId: "ma_one", folderId: "mf_one", uid: 1, uidValidity: "1" } }
 export const detail = { ...summary, attachments: [], headers: { replyTo: [], references: [], messageId: null }, bodyRef: null }
