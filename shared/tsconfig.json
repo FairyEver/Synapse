@@ -20,7 +20,7 @@
     "src/urls.ts",
     "src/drive-sync-constants.ts",
     "src/mobile-live-constants.cjs",
-    "src/versioned-data-migrator.cts",
+    "src/versioned-data-migrator.ts",
     "src/webhook.ts",
     "src/problem-feedback.ts",
     "src/problem-feedback-fixtures.ts"

@@ -63,6 +63,47 @@ describe("package entrypoint", () => {
     expect(desktopSources).toEqual(["system-notifier", "terminal-complete"])
   })
 
+  it("loads the migrator as browser ESM while preserving Electron CommonJS migrations", () => {
+    const result = execFileSync(process.execPath, ["--experimental-vm-modules", "--input-type=module", "--eval", `
+      import { readFileSync } from "node:fs"
+      import { createRequire } from "node:module"
+      import { SourceTextModule } from "node:vm"
+
+      const specifier = "@synapse/shared/versioned-data-migrator"
+      const require = createRequire(import.meta.url)
+      const consumer = new SourceTextModule(
+        'import { VersionedDataMigrator } from "@synapse/shared/versioned-data-migrator"; export { VersionedDataMigrator };'
+      )
+      await consumer.link((name) => {
+        const url = import.meta.resolve(name)
+        return new SourceTextModule(readFileSync(new URL(url), "utf8"), { identifier: url })
+      })
+      await consumer.evaluate()
+
+      const source = { meta: { schemaVersion: "1.0.0" }, appId: "mail" }
+      function migrate(Migrator) {
+        return Migrator.migrate({
+          source, sourceVersion: "1.0.0", targetVersion: "1.0.1",
+          migrations: { "1.0.1": (data) => ({ ...data, appId: "mail-internal" }) },
+          validate: (data) => {
+            if (data.appId !== "mail-internal") throw new Error("App ID was not migrated")
+          },
+        })
+      }
+      process.stdout.write(JSON.stringify({
+        esm: migrate(consumer.namespace.VersionedDataMigrator),
+        cjs: migrate(require(specifier).VersionedDataMigrator),
+        source,
+      }))
+    `], { cwd: packageDirectory, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] })
+
+    expect(JSON.parse(result)).toEqual({
+      esm: { meta: { schemaVersion: "1.0.1" }, appId: "mail-internal" },
+      cjs: { meta: { schemaVersion: "1.0.1" }, appId: "mail-internal" },
+      source: { meta: { schemaVersion: "1.0.0" }, appId: "mail" },
+    })
+  })
+
   it("loads identical search rules in browser ESM and Electron CommonJS without importing the root", () => {
     const result = execFileSync(process.execPath, ["--input-type=module", "--eval", `
       import { createRequire } from "node:module"

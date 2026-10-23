@@ -89,6 +89,7 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 
 ## 工程边界
 
+- 通用版本迁移器子入口 `@synapse/shared/versioned-data-migrator` 按 `import` / `require` 分流 ESM / CommonJS 及类型声明；两种产物均由 `shared/src/versioned-data-migrator.ts` 构建，Renderer 不得加载 `.cjs`。
 - 共享通知常量只在 `shared/src/notifications.ts` 定义；`@synapse/shared` 的构建同时生成 ESM 与 Electron CommonJS 产物。通知子入口按 `import` / `require` 分流运行时文件与类型声明，浏览器 ESM 依赖链不得导入 `.cjs`；不要手工维护第二份常量。
 - 云盘搜索纯规则 `shared/src/drive-search.ts` 通过 `@synapse/shared/drive-search` 子入口向 ESM / CommonJS 分别导出 `.js` / `.cjs` 及对应类型；Electron 静态依赖使用该子入口，不能因此加载 ESM 根入口。新增规则必须通过共享包构建生成两种产物。
 - 云盘同步常量子入口同样按 `import` / `require` 分流：`shared/src/drive-sync-constants.ts` 是该子入口的源码，构建生成 Electron 所需的 `.cjs` 和 `.d.cts`；批量读取上限只在此处定义，Renderer 和共享包 ESM 根入口均不得引用 CommonJS 产物。

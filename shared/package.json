@@ -34,10 +34,15 @@
       "default": "./dist/drive-sync-constants.js"
     },
     "./versioned-data-migrator": {
-      "types": "./dist/versioned-data-migrator.d.cts",
-      "import": "./dist/versioned-data-migrator.cjs",
-      "require": "./dist/versioned-data-migrator.cjs",
-      "default": "./dist/versioned-data-migrator.cjs"
+      "import": {
+        "types": "./dist/versioned-data-migrator.d.ts",
+        "default": "./dist/versioned-data-migrator.js"
+      },
+      "require": {
+        "types": "./dist/versioned-data-migrator.d.cts",
+        "default": "./dist/versioned-data-migrator.cjs"
+      },
+      "default": "./dist/versioned-data-migrator.js"
     },
     "./mobile-live-constants": {
       "types": "./dist/mobile-live-constants.d.cts",
@@ -69,7 +74,7 @@
     }
   },
   "scripts": {
-    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs && node scripts/build-drive-search.mjs",
+    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs && node scripts/build-drive-search.mjs && node scripts/build-versioned-data-migrator.mjs",
     "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
