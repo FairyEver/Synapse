@@ -79,6 +79,7 @@ export class DataRepositoryImpl implements DataRepository {
     const excludedNamespaces = new Set(options.excludeNamespaces)
     const emptyNamespaces = new Set(options.emptyNamespaces)
     for (const [name, entry] of this.entries) {
+      if (entry.schema.transferPolicy === "local-only") continue
       if (excludedNamespaces.has(name)) continue
       if (emptyNamespaces.has(name)) {
         namespaces.push({
@@ -127,6 +128,11 @@ export class DataRepositoryImpl implements DataRepository {
       throw new Error(`Unexpected backup format "${payload.format}"`)
     }
 
+    for (const ns of payload.namespaces) {
+      if (this.entries.get(ns.name)?.schema.transferPolicy === "local-only") {
+        throw new Error(`Cannot import local-only namespace: ${ns.name}`)
+      }
+    }
     for (const ns of payload.namespaces) {
       const entry = this.entries.get(ns.name)
       if (!entry) continue

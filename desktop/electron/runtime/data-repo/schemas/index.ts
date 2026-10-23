@@ -1,3 +1,5 @@
+import { mailSchemas } from "./mail"
+export { mailSchemas, type MailRecord, type MailEntity } from "./mail"
 import { agentGeneratedUiStateSchema } from "./agent-generated-ui"
 export { agentTaskProgressSchema, type AgentTaskProgressEntryV1 } from "./agent-task-progress"
 import { agentTaskProgressSchema } from "./agent-task-progress"
@@ -299,6 +301,7 @@ import type { NamespaceSchema } from "../types"
 
 /** Stable iteration order: framework reads/writes namespaces in this order. */
 export const allSchemas: readonly NamespaceSchema<unknown>[] = [
+  ...mailSchemas,
   coreConfigSchema,
   clientTelemetryOutboxSchema,
   clientTelemetryEnvironmentSchema,

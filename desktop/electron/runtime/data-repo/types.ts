@@ -214,6 +214,8 @@ export interface Migration<From = unknown, To = unknown> {
 }
 
 export interface NamespaceSchema<T> {
+  /** Local machine data must never enter portable backups or imported snapshots. */
+  readonly transferPolicy?: "portable" | "local-only"
   readonly name: string
   readonly backend: BackendKind
   readonly currentVersion: number

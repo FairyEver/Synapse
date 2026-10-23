@@ -120,6 +120,18 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(names).toEqual(
       [
         "audit",
+        "app.mail.accounts",
+        "app.mail.credentials",
+        "app.mail.folders",
+        "app.mail.messages",
+        "app.mail.drafts",
+        "app.mail.operations",
+        "app.mail.sync-state",
+        "app.mail.assets",
+        "app.mail.search-tasks",
+        "app.mail.search-results",
+        "app.mail.previews",
+
         "agent.command-settings",
         "agent.commands",
         "agent.compress_state",
@@ -374,6 +386,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         || schema.name === "app.terminal.launch-bodies"
         || schema.name === "app.terminal.toolbar-actions"
         || schema.name === "app.connectors.credentials"
+        || schema.name === "app.mail.credentials"
         || schema.name === "webhook.config"
       expect(schema.encrypted ?? false, schema.name).toBe(expected)
     }

@@ -66,3 +66,7 @@
 - 触发输入与稳定定义分离。`action` 每次执行一次；`state` 通过统一状态管理器切换，持久化成功后回调。
 - 状态不得散落在组件、hook 或 `localStorage`。点击字符按 index 匹配以区分重复字符。
 - UI 不暴露金手指提示；日志可记录名称但不得记录完整输入序列。敏感操作仍需权限和审计。
+
+## 本机邮箱存储
+
+`app.mail.*` 的 11 个命名空间标记 `transferPolicy: local-only`，不进入 DataRepository 导出（包括 includeSecrets），导入包含这些命名空间时在任何写入前拒绝。未声明策略的现有域保持 portable。邮件凭据走 encrypted-json，元数据走有条件和上限的 SQLite 索引，正文/附件通过 DataRepository 的 ManagedAssetStore 管理文件字节；业务层不裸写文件。资产元数据先 staged 再 ready，删除先持久 delete-pending；后台有界维护仅在窗口创建后执行，已引用的草稿和发送资产不参与缓存淘汰。
