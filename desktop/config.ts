@@ -288,3 +288,26 @@ export const AGENT_HISTORY_PREVIEW_UNITS = 512
 
 // Agent V2 同会话追加遇到 CAS 竞争后的最大尝试次数，超限显式返回可重试错误。
 export const AGENT_HISTORY_APPEND_ATTEMPTS = 64
+/** 邮箱分页和补历史预算，避免大邮箱阻塞桌面。 */
+export const MAIL_PAGE_SIZE = 50
+export const MAIL_MAX_PAGE_SIZE = 100
+export const MAIL_HISTORY_BATCH_SIZE = 100
+export const MAIL_HISTORY_CONCURRENCY = 2
+/** 邮箱缓存为当前 SY 身份下全部账号共享；草稿与待发资产不参与淘汰。 */
+export const MAIL_CACHE_BYTES = 1024 ** 3
+/** 邮箱附件、图片、正文及 MIME 预算，发送前按编码后实际字节复验。 */
+export const MAIL_MAX_ATTACHMENT_BYTES = 100 * 1024 ** 2
+export const MAIL_MAX_IMAGE_BYTES = 10 * 1024 ** 2
+export const MAIL_MAX_BODY_BYTES = 5 * 1024 ** 2
+export const MAIL_MAX_ATTACHMENTS = 100
+export const MAIL_BODY_CHUNK_BYTES = 64 * 1024
+/** 邮箱同步、草稿保存与预览有效期，均为毫秒。 */
+export const MAIL_POLL_INTERVAL_MS = 60_000
+export const MAIL_FOLDER_REFRESH_MS = 5 * 60_000
+export const MAIL_DRAFT_DEBOUNCE_MS = 1000
+export const MAIL_PREVIEW_TTL_MS = 10 * 60_000
+/** 正文搜索单批预算及查询任务的本机有效期。 */
+export const MAIL_SEARCH_BATCH_BYTES = 20 * 1024 ** 2
+export const MAIL_SEARCH_BATCH_MS = 30_000
+export const MAIL_SEARCH_TTL_MS = 24 * 60 * 60_000
+
