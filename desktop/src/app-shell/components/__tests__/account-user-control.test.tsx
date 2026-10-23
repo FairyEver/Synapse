@@ -249,7 +249,7 @@ describe("AccountUserControl", () => {
     const toolbar = renderControl("toolbar")
     const panel = renderControl("panel")
 
-    expect(toolbar.textContent).toContain("取消")
+    expect(toolbar.querySelector("button")?.getAttribute("aria-label")).toBe("取消登录")
     expect(toolbar.querySelector("button")?.disabled).toBe(false)
     expect(panel.textContent).toContain("登录中")
     expect(panel.textContent).toContain("正在等待浏览器登录")
@@ -278,8 +278,7 @@ describe("AccountUserControl", () => {
 
     const container = renderActions()
 
-    expect(container.textContent).toContain("ada")
-    expect(container.querySelector("button")?.textContent).toContain("ada")
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe("账号：ada")
   })
 
   it("opens the user dashboard home from the account summary", async () => {

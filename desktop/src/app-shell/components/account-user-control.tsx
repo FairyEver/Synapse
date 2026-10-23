@@ -1,4 +1,4 @@
-import { ChevronDown, CircleUserRound, LoaderCircle, LogIn, LogOut, RefreshCw, Settings } from "lucide-react"
+import { CircleUserRound, LoaderCircle, LogIn, LogOut, RefreshCw, Settings } from "lucide-react"
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -21,7 +21,7 @@ type AccountUserControlProps = {
 }
 
 const logger = createRendererLogger("account-user-control")
-const toolbarButtonClassName = "h-9 px-3 has-data-[icon=inline-start]:pl-3 has-data-[icon=inline-end]:pr-3"
+const toolbarButtonClassName = "relative size-10"
 
 function getAccountDisplayName(state: SynapseAccountState): string | null {
   if (state.status !== "authenticated") return null
@@ -167,35 +167,36 @@ function AccountUserControl({
   }
 
   if (state.status !== "authenticated") {
+    const label = isAuthenticating ? "取消登录" : "登录"
     return (
       <Button
         data-track={isAuthenticating ? "account.login.cancel.click" : "account.login.click"}
         variant="ghost"
-        size="sm"
+        size="icon"
         className={toolbarButtonClassName}
+        aria-label={label}
+        title={label}
         disabled={isActionPending}
         onClick={isAuthenticating ? handleCancelLogin : handleLogin}
       >
         {isAuthenticating ? (
-          <LoaderCircle data-icon="inline-start" className="animate-spin" />
+          <LoaderCircle className="animate-spin" />
         ) : (
-          <CircleUserRound data-icon="inline-start" />
+          <CircleUserRound />
         )}
-        {isAuthenticating ? "取消" : "登录"}
       </Button>
     )
   }
 
+  const label = `账号：${getAccountTitle(state)}${isAccountOffline(state) ? "（离线）" : ""}`
   return (
     <DropdownMenu data-track="account-user-menu">
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className={`${toolbarButtonClassName} max-w-48`}>
-          <CircleUserRound data-icon="inline-start" />
-          <span className="truncate">{getAccountTitle(state)}</span>
+        <Button variant="ghost" size="icon" className={toolbarButtonClassName} aria-label={label} title={label}>
+          <CircleUserRound />
           {isAccountOffline(state) ? (
-            <span className="text-muted-foreground">离线</span>
+            <span aria-hidden="true" className="absolute bottom-2 right-2 size-1.5 rounded-full bg-muted-foreground" />
           ) : null}
-          <ChevronDown data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
