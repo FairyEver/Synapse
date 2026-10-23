@@ -223,6 +223,8 @@
 
 ## Workflow 与 Automation
 
+- Automation 的 Cron、固定间隔可在 `trigger.config.timeRange` 设置单个当天范围 `{ start, end }`（`HH:mm`，结束允许 `24:00`），必须完整填写且开始早于结束；缺省表示全天，不迁移或要求重存旧任务。活跃日与时间范围先于自动触发规则生效，采用开始包含、结束不包含；Cron 沿用配置时区，其余使用本机时区。正常触发、休眠延迟触发和启动补跑都要复验，范围外跳过并重新调度；手动运行不受限，已开始任务不因越过范围而中止。间隔过滤保留原有起算节奏；新范围最多向后搜索五年，无匹配返回空计划，不得返回范围外候选。
+
 - Workflow 保持外层 DAG；MCP/agent 写操作走 get → mutate → validate → save，校验失败不得保存，不得删除 end 节点。
 - 文件/文件夹参数用 `allowMultiple` 明确单选/多选。多选是有序、非空、最多 100 项且不重复的资源引用数组；两者不得自动转换。子工作流直接绑定时资源类型与 `allowMultiple` 必须一致。
 - loop 退出由子图真实节点和 Loop Output 的 continue/break 出口表达，不得退回隐藏配置表达式。

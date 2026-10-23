@@ -6,6 +6,7 @@ import {
 import { Input } from "../../../src/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { WeekdaySelector } from "../../../src/automation-triggers/weekday-selector"
+import { TimeRangeField } from "../../../src/automation-triggers/time-range-field"
 import type { IntervalTriggerConfig } from "./schema"
 
 export function IntervalTriggerConfigForm({
@@ -58,6 +59,16 @@ export function IntervalTriggerConfigForm({
           />
         </FieldContent>
       </Field>
+      <TimeRangeField
+        id="automation-trigger-interval-time-range"
+        value={value.timeRange}
+        onValueChange={(timeRange) => {
+          const next = { ...value }
+          if (timeRange) next.timeRange = timeRange
+          else delete next.timeRange
+          onChange(next)
+        }}
+      />
     </div>
   )
 }

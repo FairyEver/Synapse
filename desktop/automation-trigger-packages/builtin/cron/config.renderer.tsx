@@ -6,6 +6,7 @@ import {
 import { Input } from "../../../src/components/ui/input"
 import { CronInput } from "../../../src/automation-triggers/cron-input"
 import { WeekdaySelector } from "../../../src/automation-triggers/weekday-selector"
+import { TimeRangeField } from "../../../src/automation-triggers/time-range-field"
 import type { CronTriggerConfig } from "./schema"
 
 export function CronTriggerConfigForm({
@@ -48,6 +49,16 @@ export function CronTriggerConfigForm({
           />
         </FieldContent>
       </Field>
+      <TimeRangeField
+        id="automation-trigger-cron-time-range"
+        value={value.timeRange}
+        onValueChange={(timeRange) => {
+          const next = { ...value }
+          if (timeRange) next.timeRange = timeRange
+          else delete next.timeRange
+          onChange(next)
+        }}
+      />
     </div>
   )
 }

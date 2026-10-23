@@ -162,7 +162,14 @@ function formatAutomationTriggerType(item: Pick<AutomationItem, "trigger">): str
 function formatAutomationNextRun(item: Pick<AutomationItem, "activeRun" | "enabled" | "nextRunAt" | "trigger">, now = new Date()): string {
   if (!item.enabled) return "停用中"
   if (isCompletionAnchoredInterval(item) && item.activeRun?.status === "running") return "未知"
-  if (!item.nextRunAt) return "未知"
+  if (!item.nextRunAt) {
+    const isSchedule = rendererAutomationTriggerRegistry.list().some(
+      (definition) => definition.manifest.id === item.trigger.type && definition.manifest.kind === "schedule",
+    )
+    return isSchedule && item.trigger.config.timeRange
+      ? "无匹配时间"
+      : "未知"
+  }
   const nextRunAt = new Date(item.nextRunAt)
   if (!Number.isFinite(nextRunAt.getTime())) return "未知"
   if (nextRunAt.getTime() <= now.getTime()) return "未知"

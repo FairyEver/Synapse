@@ -69,7 +69,7 @@ Input:
   "cwd": "/Users/example/project",
   "trigger": {
     "type": "builtin.interval",
-    "config": { "everyMinutes": 60, "anchor": "created_at", "activeDays": [1, 2, 3, 4, 5] }
+    "config": { "everyMinutes": 60, "anchor": "created_at", "activeDays": [1, 2, 3, 4, 5], "timeRange": { "start": "08:00", "end": "17:00" } }
   },
   "executor": {
     "type": "builtin.command",
@@ -252,3 +252,9 @@ Item summaries do not include `trigger.config` or `executor.config`.
 Run summaries include id, status, trigger/executor type, timestamps, sanitized result summary, and whitelisted non-secret metrics.
 
 Run summaries do not include logs, raw outputs, Agent prompts, shell command text, scripts, HTTP bodies, Authorization values, Bearer tokens, Basic passwords, cookies, API keys, environment variable values, or raw event payloads.
+
+### Daily schedule window
+
+Both `builtin.cron` and `builtin.interval` accept optional `trigger.config.timeRange` with `start` and `end` in `HH:mm`. End may be `24:00`; start must be earlier than end. A window applies to each selected `activeDays` date, includes start and excludes end. Cron uses its own timezone or local time; intervals use local time and retain their existing cadence. Automatic triggers and startup catchups must be inside the window; manual runs are unrestricted.
+
+Omit `timeRange` for unrestricted hours. To clear an existing window, replace the trigger ref with the complete desired config omitting `timeRange`; do not send incomplete endpoints or reconstruct a private config from a summary. No migration or schema-version change is required for existing automations.

@@ -5,9 +5,10 @@ import type {
   AutomationTriggerRuntime,
 } from "../../types.shared"
 import type { IntervalTriggerConfig } from "./schema"
+import { isAutomationScheduleAllowed } from "../../schedule-constraints"
 
 export const intervalTriggerRuntime: AutomationTriggerRuntime<IntervalTriggerConfig> = {
-  computeNextRunAt(input: AutomationScheduleInput<IntervalTriggerConfig>): Date {
+  computeNextRunAt(input: AutomationScheduleInput<IntervalTriggerConfig>): Date | null {
     return computeAutomationNextRunAt({
       trigger: { type: "builtin.interval", config: input.config },
       from: input.from,
@@ -15,8 +16,7 @@ export const intervalTriggerRuntime: AutomationTriggerRuntime<IntervalTriggerCon
     })
   },
   shouldRunNow(input: AutomationScheduleGuardInput<IntervalTriggerConfig>): boolean {
-    if (input.config.activeDays.length >= 7) return true
-    return input.config.activeDays.includes(input.now.getDay())
+    return isAutomationScheduleAllowed(input.now, input.config)
   },
   getReschedulePolicy(config: IntervalTriggerConfig) {
     return config.anchor === "last_completed_at"

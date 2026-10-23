@@ -149,6 +149,24 @@ describe("AutomationModule", () => {
     expect(html).toContain("暂无自动化")
   })
 
+  it("shows that a configured daily range has no matching next run", () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem({ nextRunAt: undefined, trigger: {
+        type: "builtin.cron", config: { expr: "0 2 * * *", activeDays: [1], timeRange: { start: "08:00", end: "17:00" } },
+      } })], loading: false, error: null, refresh: vi.fn(),
+    })
+    expect(renderToStaticMarkup(<AutomationModule />)).toContain("无匹配时间")
+  })
+
+  it("still renders an unavailable trigger with no next run", () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem({ nextRunAt: undefined, trigger: {
+        type: "unavailable.trigger", config: { timeRange: { start: "08:00", end: "17:00" } },
+      } })], loading: false, error: null, refresh: vi.fn(),
+    })
+    expect(renderToStaticMarkup(<AutomationModule />)).toContain("unavailable.trigger")
+  })
+
   it("renders automation names and trigger and executor types in list rows", () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem({ name: "日报自动化" })],

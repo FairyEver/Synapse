@@ -1,4 +1,11 @@
-import { nextCronRun } from "./cron-expression"
+import { matchesDayFields, nextCronRun, parseCronExpression } from "./cron-expression"
+import {
+  createScheduleClockReader,
+  isAutomationScheduleAllowed,
+  timeOfDayMinutes,
+  type AutomationTimeRange,
+  type ScheduleClock,
+} from "../../../automation-trigger-packages/schedule-constraints"
 
 const MAX_ADVANCE_ITERATIONS = 7
 
@@ -9,6 +16,7 @@ export type AutomationTimeTrigger =
         readonly expr: string
         readonly timezone?: string
         readonly activeDays: readonly number[]
+        readonly timeRange?: AutomationTimeRange
       }
     }
   | {
@@ -17,6 +25,7 @@ export type AutomationTimeTrigger =
         readonly everyMinutes: number
         readonly anchor: "created_at" | "last_completed_at"
         readonly activeDays: readonly number[]
+        readonly timeRange?: AutomationTimeRange
       }
     }
 
@@ -24,7 +33,8 @@ export function computeNextRunAt(input: {
   readonly trigger: AutomationTimeTrigger
   readonly from: Date
   readonly createdAt: string
-}): Date {
+}): Date | null {
+  if (input.trigger.config.timeRange) return computeWindowedNextRunAt(input)
   const activeDays = input.trigger.config.activeDays.length < 7
     ? new Set(input.trigger.config.activeDays)
     : null
@@ -41,6 +51,130 @@ export function computeNextRunAt(input: {
   }
 
   return candidate
+}
+
+function computeWindowedNextRunAt(input: {
+  readonly trigger: AutomationTimeTrigger
+  readonly from: Date
+  readonly createdAt: string
+}): Date | null {
+  const { trigger, from } = input
+  const range = trigger.config.timeRange!
+  const startMinute = timeOfDayMinutes(range.start)
+  const endMinute = timeOfDayMinutes(range.end)
+  const timezone = trigger.type === "builtin.cron" ? trigger.config.timezone : undefined
+  const readClock = createScheduleClockReader(timezone)
+  const end = new Date(from)
+  end.setFullYear(end.getFullYear() + 5)
+  const endMs = end.getTime()
+  const first = readClock(from)
+  const day = new Date(Date.UTC(first.year, first.month - 1, first.day))
+  const last = readClock(end)
+  const lastDay = Date.UTC(last.year, last.month - 1, last.day)
+  const parsed = trigger.type === "builtin.cron" ? parseCronExpression(trigger.config.expr) : null
+  const minutes = parsed
+    ? Array.from({ length: endMinute - startMinute }, (_, i) => startMinute + i)
+      .filter((minute) => parsed.hour.has(Math.floor(minute / 60)) && parsed.minute.has(minute % 60))
+    : []
+  if (parsed && minutes.length === 0) return null
+
+  // Keep a single interval origin throughout the search, including skipped days.
+  const origin = trigger.type === "builtin.interval" ? computeRawCandidate(input).getTime() : 0
+  const everyMs = trigger.type === "builtin.interval" ? trigger.config.everyMinutes * 60_000 : 0
+  if (!parsed) {
+    if (origin > endMs) return null
+    const candidate = new Date(origin)
+    if (isAutomationScheduleAllowed(candidate, trigger.config)) return candidate
+  }
+
+  for (; day.getTime() <= lastDay; day.setUTCDate(day.getUTCDate() + 1)) {
+    if (!trigger.config.activeDays.includes(day.getUTCDay())) continue
+    if (parsed && (!parsed.month.has(day.getUTCMonth() + 1) ||
+      !matchesDayFields(parsed, day.getUTCDate(), day.getUTCDay()))) continue
+    const offsets = offsetsAroundDay(day, readClock)
+    let earliest = Infinity
+    const dailyMinutes = parsed ? minutes : intervalWindowMinutes(day, startMinute, endMinute, offsets, readClock)
+    for (const minute of dailyMinutes) {
+      for (const offset of offsets) {
+        const instant = day.getTime() + minute * 60_000 - offset
+        if ((parsed && instant <= from.getTime()) || instant > endMs || instant >= earliest) continue
+        const clock = readClock(new Date(instant))
+        // Nonexistent spring-forward times must not be shifted into another hour.
+        if (!sameWallMinute(clock, day, minute)) continue
+        if (parsed) {
+          earliest = instant
+        } else {
+          const aligned = origin + Math.max(0, Math.ceil((instant - origin) / everyMs)) * everyMs
+          if (aligned >= earliest || aligned > endMs) continue
+          const alignedDate = new Date(aligned)
+          const alignedClock = readClock(alignedDate)
+          if (sameWallDay(alignedClock, day) && isAutomationScheduleAllowed(alignedDate, trigger.config)) {
+            earliest = aligned
+          }
+        }
+      }
+    }
+    if (earliest !== Infinity) return new Date(earliest)
+  }
+  return null
+}
+
+function sameWallDay(clock: ScheduleClock, day: Date): boolean {
+  return clock.year === day.getUTCFullYear() && clock.month === day.getUTCMonth() + 1 && clock.day === day.getUTCDate()
+}
+
+function sameWallMinute(clock: ScheduleClock, day: Date, minute: number): boolean {
+  return sameWallDay(clock, day) && clock.minute === minute
+}
+
+function offsetsAroundDay(day: Date, readClock: (date: Date) => ScheduleClock): Set<number> {
+  const offsets = new Set<number>()
+  // Probe both sides of local clock changes so repeated minutes retain both instants.
+  for (const hours of [-36, -12, 12, 36]) {
+    const probe = day.getTime() + hours * 3_600_000
+    offsets.add(clockOffsetMs(probe, readClock))
+  }
+  return offsets
+}
+
+function clockOffsetMs(instant: number, readClock: (date: Date) => ScheduleClock): number {
+  const clock = readClock(new Date(instant))
+  return Date.UTC(clock.year, clock.month - 1, clock.day) + clock.minute * 60_000 - instant
+}
+
+function intervalWindowMinutes(
+  day: Date,
+  startMinute: number,
+  endMinute: number,
+  offsets: ReadonlySet<number>,
+  readClock: (date: Date) => ScheduleClock,
+): number[] {
+  const minutes = new Set([startMinute])
+  if (offsets.size === 1) return [...minutes]
+  // Clock changes can open an additional segment of the daily window: e.g.
+  // 02:10–04:00 starts at 03:00 after a spring gap, and a fall fold reopens 01:00.
+  let left = day.getTime() - 36 * 3_600_000
+  let previousOffset = clockOffsetMs(left, readClock)
+  for (const hours of [-12, 12, 36]) {
+    const right = day.getTime() + hours * 3_600_000
+    const nextOffset = clockOffsetMs(right, readClock)
+    if (previousOffset !== nextOffset) {
+      let low = left
+      let high = right
+      while (high - low > 60_000) {
+        const middle = Math.floor((low + high) / 120_000) * 60_000
+        if (clockOffsetMs(middle, readClock) === previousOffset) low = middle
+        else high = middle
+      }
+      const clock = readClock(new Date(high))
+      if (sameWallDay(clock, day) && clock.minute >= startMinute && clock.minute < endMinute) {
+        minutes.add(clock.minute)
+      }
+    }
+    left = right
+    previousOffset = nextOffset
+  }
+  return [...minutes]
 }
 
 function computeRawCandidate(input: {

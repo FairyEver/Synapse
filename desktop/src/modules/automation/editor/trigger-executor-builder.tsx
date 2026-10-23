@@ -141,7 +141,7 @@ function parseTriggerValue(type: string, config: AutomationTriggerConfig): Autom
   try {
     return rendererAutomationTriggerRegistry.parseConfig(type, config)
   } catch {
-    return { ...rendererAutomationTriggerRegistry.getDefaultConfig(type) }
+    return { ...rendererAutomationTriggerRegistry.getDefaultConfig(type), ...config }
   }
 }
 

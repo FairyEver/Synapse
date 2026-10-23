@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { createBuiltinAutomationTriggerRegistry } from "../../services/automation/builtin-triggers"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -245,6 +246,24 @@ describe("automation capability dispatcher", () => {
       .toContain("Fails if the run is missing or no longer active")
     expect(tools.find((tool) => tool.name === "app_automation_run_disable")?.description)
       .toContain("stopRequested")
+  })
+
+  it("discovers the optional daily range schema for real built-in schedule triggers", async () => {
+    const harness = createHarness()
+    const dispatcher = createAutomationCapabilityDispatcher({
+      ...harness, triggers: createBuiltinAutomationTriggerRegistry(),
+    })
+    const result = await dispatcher.dispatch("app.automation.trigger_type.list", {}, { source: "api" })
+    expect(result.ok).toBe(true)
+    const descriptors = result.data as Array<{ type: string; configSchema: { properties?: Record<string, unknown>; required?: string[] }; defaultConfig: Record<string, unknown> }>
+    for (const type of ["builtin.cron", "builtin.interval"]) {
+      const descriptor = descriptors.find((entry) => entry.type === type)!
+      expect(descriptor.configSchema.properties?.timeRange).toMatchObject({
+        type: "object", required: ["start", "end"], properties: { start: { type: "string" }, end: { type: "string" } },
+      })
+      expect(descriptor.configSchema.required).not.toContain("timeRange")
+      expect(descriptor.defaultConfig).not.toHaveProperty("timeRange")
+    }
   })
 
   it("lists trigger and executor descriptors from registries", async () => {

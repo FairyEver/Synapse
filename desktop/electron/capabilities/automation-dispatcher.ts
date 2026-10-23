@@ -1,4 +1,4 @@
-import { zodToJsonSchema } from "zod-to-json-schema"
+import { z } from "zod"
 import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { MainActionRegistry } from "../action-runtime/action-registry"
@@ -104,9 +104,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
               title: definition.manifest.title,
               kind: definition.manifest.kind,
               defaultConfig: definition.manifest.defaultConfig,
-              configSchema: zodToJsonSchema(
-                definition.manifest.configSchema as unknown as Parameters<typeof zodToJsonSchema>[0],
-              ),
+              configSchema: z.toJSONSchema(definition.manifest.configSchema),
               ...(definition.manifest.variables ? { variables: definition.manifest.variables } : {}),
             }))
             result = { ok: true, data: descriptors, total: descriptors.length }

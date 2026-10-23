@@ -223,7 +223,7 @@ function normalizeWallClock(wc: WallClock): void {
   }
 }
 
-function matchesDayFields(parsed: ParsedCronExpression, day: number, weekday: number): boolean {
+export function matchesDayFields(parsed: ParsedCronExpression, day: number, weekday: number): boolean {
   const dayMatches = parsed.day.has(day)
   const weekdayMatches = parsed.weekday.has(weekday)
   if (!parsed.dayWildcard && !parsed.weekdayWildcard) return dayMatches || weekdayMatches

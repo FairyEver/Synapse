@@ -227,3 +227,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-12 审核修复：桌面更多菜单的完成／恢复复用既有 completion 操作；iOS 待办通知统一按通知 ID 重取、标记已读并解析本次服务器记录。旧回执隔离与服务端投递租约、过期、APNs 超时修复均为内部行为修正；仍为 21 个 System App、6 个 todos capability / MCP 索引，桌面与 iOS 各一条 Todo 路由，Workflow、Automation 和默认 Dock 无增量，MCP schema 与系统 Skill 指南无需新增动作。
 
 2026-10-11 集成核对：从实际 `CAPABILITY_DOMAINS` 累加 289 项、`MCP_TOOL_ACTIONS` 与 `buildAllMcpTools()` 各 285 项；`todos` 均为 6。System App 注册测试列出 21 个应用。相对实施前增量为 1 个 System App、6 个 capability / MCP 索引、1 条桌面 Todo 路由及 1 条 iOS Todo 路由；Workflow / Automation 增量均为 0，默认 Dock 无增量，公开 MCP 工具仍为 2。iOS 入口为主页现有导航栈，不注册桌面 System App 或额外底栏。
+
+2026-10-23 Automation 的 `builtin.cron` 与 `builtin.interval` 配置新增可选 `timeRange: { start, end }`，由既有触发器发现工具返回 schema，创建和更新沿用通用 trigger config。活跃日和每日范围共同限制自动触发与启动补跑，缺省全天；手动运行不受限。Automation 仍为 14 个 capability / MCP 索引，System App、Dock、Workflow、Automation Action 和 Deep Link 数量不变。

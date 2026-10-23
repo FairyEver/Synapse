@@ -70,6 +70,65 @@ describe("AutomationEditorApp", () => {
     window.history.replaceState(null, "", "/")
   })
 
+  it.each(["builtin.cron", "builtin.interval"])("edits and clears the daily range for %s", async (type) => {
+    vi.spyOn(window, "close").mockImplementation(() => undefined)
+    const config = type === "builtin.cron"
+      ? { expr: "* * * * *", activeDays: [1, 2, 3, 4, 5] }
+      : { everyMinutes: 60, anchor: "created_at", activeDays: [1, 2, 3, 4, 5] }
+    const item = buildAutomationItem({ trigger: { type, config } })
+    getItem.mockResolvedValue(item)
+    updateItem.mockResolvedValue(item)
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => { root.render(<AutomationEditorApp />) })
+      const start = document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')
+      const end = document.querySelector<HTMLInputElement>('input[aria-label="结束时间"]')
+      expect(start).not.toBeNull()
+      expect(end).not.toBeNull()
+      expect(start!.value).toBe("")
+      expect(end!.value).toBe("")
+      await act(async () => { changeInput(start!, "08:00") })
+      expect(start!.value).toBe("08:00")
+      await act(async () => { changeInput(end!, "24:00") })
+      await act(async () => { findButtonContaining("仅保存")?.click() })
+      expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
+        patch: expect.objectContaining({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }),
+      }))
+      // Reopen the returned config, then remove both fields to restore unrestricted scheduling.
+      updateItem.mockClear()
+      getItem.mockResolvedValue(buildAutomationItem({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }))
+      await act(async () => { window.dispatchEvent(new Event("focus")) })
+      expect(document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')!.value).toBe("08:00")
+      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')!, "") })
+      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="结束时间"]')!, "") })
+      await act(async () => { findButtonContaining("仅保存")?.click() })
+      expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
+        patch: expect.objectContaining({ trigger: { type, config } }),
+      }))
+    } finally { await act(async () => { root.unmount() }) }
+  })
+
+  it("blocks saving an incomplete time range with a readable error", async () => {
+    getItem.mockResolvedValue(buildAutomationItem())
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => { root.render(<AutomationEditorApp />) })
+      const start = document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')
+      expect(start).not.toBeNull()
+      await act(async () => { changeInput(start!, "08:00") })
+      await act(async () => { findButtonContaining("仅保存")?.click() })
+      expect(updateItem).not.toHaveBeenCalled()
+      expect(document.body.textContent).toContain("结束时间")
+      expect(document.body.textContent).not.toContain('"origin"')
+    } finally { await act(async () => { root.unmount() }) }
+  })
+
   it("shows trigger and executor lists in create mode", async () => {
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
     const rootElement = document.createElement("div")
@@ -583,7 +642,7 @@ describe("AutomationEditorApp", () => {
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
-  it("saves new Windows command executors with cmd shell defaults", async () => {
+  it.each([undefined, { start: "08:00", end: "17:00" }])("saves new Windows commands and the selected daily range %j", async (timeRange) => {
     window.synapse = { platform: "win32" } as typeof window.synapse
     createItem.mockResolvedValue(buildAutomationItem())
     vi.spyOn(window, "close").mockImplementation(() => undefined)
@@ -602,6 +661,11 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("命令")?.click()
     })
 
+    if (timeRange) {
+      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')!, timeRange.start) })
+      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="结束时间"]')!, timeRange.end) })
+    }
+
     const command = document.querySelector<HTMLInputElement>("#task-action-command-content")
     await act(async () => {
       if (!command) return
@@ -613,6 +677,9 @@ describe("AutomationEditorApp", () => {
 
     expect(createItem).toHaveBeenCalledWith(expect.objectContaining({
       enabled: true,
+      trigger: { type: "builtin.cron", config: {
+        expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6], ...(timeRange ? { timeRange } : {}),
+      } },
       executor: {
         type: "builtin.command",
         config: expect.objectContaining({

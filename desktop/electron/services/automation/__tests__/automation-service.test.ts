@@ -36,6 +36,60 @@ describe("AutomationService", () => {
     await harness.service.stop()
   })
 
+  it("leaves an automation without a matching time unscheduled while allowing manual runs", async () => {
+    const harness = createHarness({ now: () => new Date("2026-10-23T18:00:00Z") })
+    const item = await harness.service.automationCreate({
+      ...createCronAutomationInput(), trigger: { type: "builtin.cron", config: {
+        expr: "0 2 * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5], timeRange: { start: "08:00", end: "17:00" },
+      } },
+    })
+    await harness.service.start()
+    try {
+      expect(item.nextRunAt).toBeUndefined()
+      expect(harness.service.automationRuntimeInspect().timers).toEqual([])
+      expect((await harness.service.runNow(item.id))?.status).toBe("success")
+      expect((await harness.items.get(item.id))?.nextRunAt).toBeUndefined()
+    } finally { await harness.service.stop() }
+  })
+
+  it("rechecks the range when a due timer fires late after sleep", async () => {
+    vi.useFakeTimers()
+    const clock = { now: new Date("2026-10-23T16:58:00Z") }
+    const harness = createHarness({ now: () => clock.now })
+    try {
+      const item = await harness.service.automationCreate({
+        ...createCronAutomationInput(), trigger: { type: "builtin.cron", config: {
+          expr: "* * * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5], timeRange: { start: "08:00", end: "17:00" },
+        } },
+      })
+      await harness.service.start()
+      expect(item.nextRunAt).toBe("2026-10-23T16:59:00.000Z")
+      clock.now = new Date("2026-10-23T17:01:00Z")
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([expect.objectContaining({ status: "skipped" })])
+      expect((await harness.items.get(item.id))?.nextRunAt).toBe("2026-10-26T08:00:00.000Z")
+    } finally {
+      await harness.service.stop()
+      vi.useRealTimers()
+    }
+  })
+
+  it("blocks startup run_once catchup outside the daily range", async () => {
+    const harness = createHarness({ now: () => new Date("2026-10-23T17:00:00Z") })
+    const item = createStoredAutomation({
+      trigger: { type: "builtin.cron", config: {
+        expr: "* * * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5], timeRange: { start: "08:00", end: "17:00" },
+      } }, policy: { missedRunPolicy: "run_once", overlapPolicy: "skip" }, nextRunAt: "2026-10-23T16:59:00Z",
+    })
+    await harness.itemStore.upsert(item)
+    await harness.service.start()
+    try {
+      await waitFor(async () => (await harness.runs.listByAutomation(item.id)).length === 1)
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([expect.objectContaining({ triggeredBy: "missed_run", status: "skipped" })])
+      expect((await harness.items.get(item.id))?.nextRunAt).toBe("2026-10-26T08:00:00.000Z")
+    } finally { await harness.service.stop() }
+  })
+
   it("runs an automation manually", async () => {
     const harness = createHarness()
     const item = await harness.service.automationCreate(createAutomationInput())

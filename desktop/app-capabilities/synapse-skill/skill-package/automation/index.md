@@ -50,6 +50,10 @@ Known built-in trigger types include:
 
 Use the returned `configSchema`, `defaultConfig`, and `variables` from `app_automation_trigger_type_list`. Do not guess fields that are not in the schema.
 
+For `builtin.cron` and `builtin.interval`, optional `trigger.config.timeRange` sets a single same-day window: `{ "start": "08:00", "end": "17:00" }`. Times use `HH:mm`; only the end may be `24:00`. Both values are required when configured, and start must be earlier than end. Omit the entire field for unrestricted hours, including when clearing a previous range. Existing configs without this field remain valid.
+
+`activeDays` and `timeRange` are intersected with the trigger schedule. The start is inclusive and the end exclusive. Cron uses its configured timezone (or local time when omitted); interval uses local time. Filtering preserves interval cadence rather than restarting it at the window start. Scheduled and missed-run catchups outside the window are skipped; manual runs remain available, and already-started runs continue past the end. A configured window with no matching occurrence within five years has no next run and no timer.
+
 For `builtin.webhook`, call `app_automation_webhook_list` and set `trigger.config.webhookPublicId` from the returned `publicId`. You may also set `trigger.config.webhookName` from the returned name.
 
 ## Executor Rules

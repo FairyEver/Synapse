@@ -6,6 +6,7 @@ import { cronTriggerDefinition } from "../../../../automation-trigger-packages/b
 import { intervalTriggerDefinition } from "../../../../automation-trigger-packages/builtin/interval/index.main"
 import { webhookTriggerDefinition } from "../../../../automation-trigger-packages/builtin/webhook/index.main"
 import { AutomationTriggerRegistry } from "../trigger-registry"
+import { createBuiltinAutomationTriggerRegistry } from "../builtin-triggers"
 
 const testTrigger = {
   manifest: {
@@ -188,4 +189,39 @@ describe("AutomationTriggerRegistry", () => {
       "trigger.request.headers",
     ]))
   })
+})
+
+describe("daily time range config and runtime", () => {
+  const registry = createBuiltinAutomationTriggerRegistry()
+  for (const [type, base] of [
+    ["builtin.cron", { expr: "* * * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5] }],
+    ["builtin.interval", { everyMinutes: 60, anchor: "created_at", activeDays: [1, 2, 3, 4, 5] }],
+  ] as const) {
+    it(`${type} preserves a range and accepts old configs without one`, () => {
+      expect(registry.parseConfig(type, base)).toEqual(base)
+      const config = { ...base, timeRange: { start: "08:00", end: "24:00" } }
+      expect(registry.parseConfig(type, config)).toEqual(config)
+    })
+    it.each([
+      { start: "08:00", end: "" }, { start: "", end: "17:00" },
+      { start: "8:00", end: "17:00" }, { start: "24:00", end: "24:00" },
+      { start: "08:60", end: "17:00" }, { start: "17:00", end: "08:00" },
+      { start: "08:00", end: "08:00" },
+    ])(`${type} rejects invalid or incomplete ranges %j`, (timeRange) => {
+      expect(() => registry.parseConfig(type, { ...base, timeRange })).toThrow()
+    })
+    it(`${type} blocks scheduled runs outside the daily window`, () => {
+      const config = { ...base, timeRange: { start: "08:00", end: "17:00" } }
+      const runtime = registry.get(type).runtime
+      const date = new Date(2026, 9, 23, 7, 59)
+      // Cron uses UTC; interval uses the host's local timezone.
+      const at = (hour: number, minute = 0) => type === "builtin.cron"
+        ? new Date(Date.UTC(2026, 9, 23, hour, minute))
+        : new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute)
+      expect(runtime.shouldRunNow?.({ config, now: at(7, 59) })).toBe(false)
+      expect(runtime.shouldRunNow?.({ config, now: at(8) })).toBe(true)
+      expect(runtime.shouldRunNow?.({ config, now: at(16, 59) })).toBe(true)
+      expect(runtime.shouldRunNow?.({ config, now: at(17) })).toBe(false)
+    })
+  }
 })

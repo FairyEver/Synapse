@@ -5,9 +5,10 @@ import type {
   AutomationTriggerRuntime,
 } from "../../types.shared"
 import type { CronTriggerConfig } from "./schema"
+import { isAutomationScheduleAllowed } from "../../schedule-constraints"
 
 export const cronTriggerRuntime: AutomationTriggerRuntime<CronTriggerConfig> = {
-  computeNextRunAt(input: AutomationScheduleInput<CronTriggerConfig>): Date {
+  computeNextRunAt(input: AutomationScheduleInput<CronTriggerConfig>): Date | null {
     return computeAutomationNextRunAt({
       trigger: { type: "builtin.cron", config: input.config },
       from: input.from,
@@ -15,20 +16,7 @@ export const cronTriggerRuntime: AutomationTriggerRuntime<CronTriggerConfig> = {
     })
   },
   shouldRunNow(input: AutomationScheduleGuardInput<CronTriggerConfig>): boolean {
-    return isActiveDay(input.now, input.config)
+    return isAutomationScheduleAllowed(input.now, input.config, input.config.timezone)
   },
   getReschedulePolicy: () => ({ mode: "before_run" }),
-}
-
-function isActiveDay(date: Date, config: CronTriggerConfig): boolean {
-  if (config.activeDays.length >= 7) return true
-  const weekday = config.timezone ? weekdayForTimezone(date, config.timezone) : date.getDay()
-  return config.activeDays.includes(weekday)
-}
-
-function weekdayForTimezone(date: Date, timezone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).formatToParts(date)
-  const weekdayStr = parts.find((part) => part.type === "weekday")?.value ?? ""
-  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
-  return map[weekdayStr] ?? date.getDay()
 }
