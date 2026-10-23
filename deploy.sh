@@ -329,6 +329,8 @@ sync_remote_code() {
     --include='/document/***' \
     --include='/pdf-renderer/***' \
     --include='/patches/***' \
+    --include='/scripts/' \
+    --include='/scripts/deploy/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \
     --include='/package.json' \
@@ -337,7 +339,14 @@ sync_remote_code() {
 }
 
 build_remote_image() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env build server pdf-renderer"
+  ssh "$SERVER" "cd $REMOTE_DIR/server && NEW_IMAGE_TAG='$NEW_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env build --pull server pdf-renderer
+for service in server pdf-renderer; do
+  docker run --rm --network none --entrypoint node "synapse-${service}:${NEW_IMAGE_TAG}" \
+    /app/scripts/deploy/check-node-runtime.mjs
+done
+REMOTE_SCRIPT
 }
 
 tag_remote_rollback_image() {

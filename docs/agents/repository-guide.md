@@ -70,6 +70,12 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 
 当前轻量 Backup 包含数据库和 Drive COS 对象清单，不包含 Drive、Skill Repository 或 Platform Media 的对象字节。需要可恢复的新域必须同步设计 manifest、复制和恢复流程。
 
+## 服务端 Node 安全基线
+
+- API 镜像固定 Node `22.23.4-alpine`，PDF 构建阶段固定 `22.23.4-bookworm-slim`；PDF 最终运行阶段保留 Playwright 的 Chromium 与系统依赖，使用 `24.22.1-bookworm-slim` 提供的 Node 二进制替换 `/usr/bin/node`。不能只更新 PDF 的构建阶段。
+- 两个最终镜像都运行 `scripts/deploy/check-node-runtime.mjs`，仅接受 Node 22（至少 `22.23.4`）或 Node 24（至少 `24.22.1`）。更新安全基线时同步调整 Dockerfile、检查器及测试。
+- 部署构建使用 `--pull`，切换前在候选镜像中再次执行运行时检查；上线后核对实际容器版本和 API/PDF 请求，不能以宿主机 Node 版本或旧容器健康代替验证。
+
 ## 桌面更新与发布
 
 - 服务端桌面更新凭证使用独立 `DESKTOP_UPDATE_INTENT_SECRET`；生产必须使用至少 32 个随机字节生成的未填充 Base64URL 高熵值，不得与管理员或用户 JWT 密钥相同。

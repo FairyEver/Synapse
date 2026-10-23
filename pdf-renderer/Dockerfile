@@ -1,6 +1,6 @@
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 
-FROM node:22-bookworm-slim AS build
+FROM node:22.23.4-bookworm-slim AS build
 ARG NPM_REGISTRY
 ENV COREPACK_NPM_REGISTRY=$NPM_REGISTRY NPM_CONFIG_REGISTRY=$NPM_REGISTRY
 WORKDIR /workspace
@@ -12,8 +12,14 @@ RUN pnpm install --frozen-lockfile --filter @synapse/pdf-renderer...
 COPY pdf-renderer pdf-renderer
 RUN pnpm --filter @synapse/pdf-renderer run build
 
+FROM node:24.22.1-bookworm-slim AS node-runtime
+
 FROM mcr.microsoft.com/playwright:v1.59.1-noble
 WORKDIR /app
+# Playwright 镜像提供 Chromium；最终 Node 运行时独立固定到安全版本。
+COPY --from=node-runtime /usr/local/bin/node /usr/bin/node
+COPY scripts/deploy/check-node-runtime.mjs scripts/deploy/check-node-runtime.mjs
+RUN node scripts/deploy/check-node-runtime.mjs
 RUN apt-get update \
   && apt-get install -y --no-install-recommends fonts-noto-cjk \
   && rm -rf /var/lib/apt/lists/* \
