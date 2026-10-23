@@ -3,12 +3,20 @@ import { syncRig, remoteHeader } from "./sync-fixtures"
 import { MailError } from "../../shared/types"
 import { aliyunConfig } from "../protocol/aliyun-policy"
 
+async function completeSync(r: Awaited<ReturnType<typeof syncRig>>) {
+  for (let i = 0; i < 100; i++) {
+    const coverage = await r.sync.runOnce(r.ctx, r.account.id)
+    if (coverage.metadataComplete) return coverage
+  }
+  throw new Error("Metadata did not finish within bounded cycles")
+}
+
 describe("mail metadata synchronization", () => {
   const close: (() => Promise<void>)[] = []
   afterEach(async () => { vi.useRealTimers(); for (const fn of close.splice(0)) await fn() })
   it("indexes first 50 then bounded 100-header batches without fetching bodies; repeated hints are idempotent", async () => {
     const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
-    await r.sync.runOnce(r.ctx, r.account.id)
+    await completeSync(r)
     expect(vi.mocked(r.session.fetchHeaders).mock.calls.map(c => c[1].length)).toEqual([50, 100, 100, 1])
     expect(r.session.fetchPart).not.toHaveBeenCalled()
     expect(r.delta).not.toHaveBeenCalled()
@@ -36,11 +44,11 @@ describe("mail metadata synchronization", () => {
       if (uids.length === 100) arrived = true
       return uids.map(uid => ({ ...remoteHeader(uid), date: "invalid date" }))
     })
-    await r.sync.runOnce(r.ctx, r.account.id)
-    await r.sync.runOnce(r.ctx, r.account.id)
+    await completeSync(r)
+    await completeSync(r)
     expect(r.delta).toHaveBeenCalledTimes(1)
     expect(r.delta.mock.calls[0][1].messages.map((m: { locator: { uid: number } }) => m.locator.uid)).toEqual([252])
-    await r.sync.runOnce(r.ctx, r.account.id); expect(r.delta).toHaveBeenCalledTimes(1)
+    await completeSync(r); expect(r.delta).toHaveBeenCalledTimes(1)
   })
   it("limits concurrent history work to two accounts", async () => {
     const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
@@ -75,5 +83,29 @@ it("marks messages stale when a complete folder listing reports their folder rem
     vi.mocked(r.session.searchUids).mockResolvedValue([1]); await r.sync.runOnce(r.ctx, r.account.id)
     vi.mocked(r.session.listFolders).mockResolvedValue([]); await r.sync.runOnce(r.ctx, r.account.id)
     expect((await r.repo.page(r.ctx, "messages", { accountId: r.account.id })).items[0].data.summary).toMatchObject({ stale: true })
+  } finally { await r.sync.dispose(); await r.close() }
+})
+it("releases the work connection and account queue after the first header batch for foreground operations", async () => {
+  const r = await syncRig()
+  try {
+    const progress = await r.sync.runOnce(r.ctx, r.account.id)
+    expect(progress.metadataComplete).toBe(false)
+    expect(r.session.fetchHeaders).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(r.session.fetchHeaders).mock.calls[0][1]).toHaveLength(50)
+    const foreground = vi.fn()
+    await r.accounts.exclusive(r.ctx, r.account.id, async () => { foreground(); expect(r.session.close).toHaveBeenCalled() })
+    expect(foreground).toHaveBeenCalledTimes(1)
+    await r.sync.runOnce(r.ctx, r.account.id)
+    expect(vi.mocked(r.session.fetchHeaders).mock.calls[1][1]).toHaveLength(100)
+  } finally { await r.sync.dispose(); await r.close() }
+})
+it("restores online state after a transient connection failure is repaired", async () => {
+  const r = await syncRig()
+  try {
+    const row = await r.repo.get(r.ctx, "accounts", r.account.id)
+    await r.repo.save(r.ctx, "accounts", row.id, row.id, { ...row.data, state: "offline", errorCode: "NETWORK_ERROR" }, row.revision)
+    vi.mocked(r.session.searchUids).mockResolvedValue([1])
+    await r.sync.runOnce(r.ctx, r.account.id)
+    expect(await r.accounts.get(r.ctx, r.account.id)).toMatchObject({ state: "connected", errorCode: null })
   } finally { await r.sync.dispose(); await r.close() }
 })

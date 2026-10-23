@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { MailRecord } from "../../../electron/runtime/data-repo/schemas/mail"
 import { MAIL_FOLDER_REFRESH_MS, MAIL_HISTORY_BATCH_SIZE, MAIL_HISTORY_CONCURRENCY, MAIL_PAGE_SIZE, MAIL_POLL_INTERVAL_MS } from "../shared/limits"
 import { MailError, type Coverage, type Folder, type InboxDelta, type MailContext, type MailDetail, type MailInputs, type MailJob, type MailSummary } from "../shared/types"
@@ -10,7 +10,10 @@ export interface StoredFolder extends Record<string, unknown> { folder: Folder; 
 export interface StoredMessage extends Record<string, unknown> {
   summary: Omit<MailSummary, "revision">; headers: MailDetail["headers"]; structure: MailBodyStructure | null; bodyRef: string | null; searchTextRef?: string; originalFolderId?: string
 }
-interface FolderCheckpoint extends Record<string, unknown> { kind: "folder"; folderId: string; uidValidity: string; baselineUid: number; metadataComplete: boolean; updatedAt: number }
+interface FolderCheckpoint extends Record<string, unknown> {
+  kind: "folder"; folderId: string; uidValidity: string; baselineUid: number; metadataComplete: boolean; updatedAt: number;
+  firstPageDone?: boolean; flagsOffset?: number; flagsCheckedAt?: number; uidDigest?: string; indexedCount?: number
+}
 interface StoredJob extends Record<string, unknown> { kind: "job"; job: MailJob }
 export interface MailChanged { ownerId: string; generation: number; accountId: string; ids: string[]; revision: number }
 export interface SyncEvents {
@@ -102,12 +105,15 @@ export class MailSync {
     const uids = await session.searchUids(folder.data.folder.path, { all: true }, ctx.signal)
     if (uids.some(uid => !Number.isSafeInteger(uid) || uid < 1) || new Set(uids).size !== uids.length) throw new MailError("SEARCH_INCOMPLETE", "邮件 UID 校对不完整")
     uids.sort((a, b) => b - a)
+    const uidDigest = createHash("sha256").update(uids.join(",")).digest("hex")
     const checkpointId = `folder:${folder.id}`
     let checkpoint = await this.repo.find<FolderCheckpoint>(ctx, "sync-state", checkpointId)
     const validityChanged = checkpoint?.data.uidValidity !== selected.uidValidity
     if (!checkpoint || validityChanged) {
       checkpoint = await this.repo.save(ctx, "sync-state", checkpointId, accountId, { kind: "folder", folderId: folder.id, uidValidity: selected.uidValidity, baselineUid: uids[0] ?? 0, metadataComplete: false, updatedAt: Date.now() }, checkpoint?.revision ?? 0)
     }
+    const flagsDue = checkpoint.data.uidDigest !== uidDigest || checkpoint.data.metadataComplete && Date.now() - (checkpoint.data.flagsCheckedAt ?? 0) >= (folder.data.folder.role === "inbox" ? MAIL_POLL_INTERVAL_MS : MAIL_FOLDER_REFRESH_MS)
+    let flagsOffset = flagsDue ? 0 : checkpoint.data.flagsOffset ?? 0
     folder = await this.repo.save(ctx, "folders", folder.id, accountId, { ...folder.data, folder: { ...folder.data.folder, uidValidity: selected.uidValidity, metadataComplete: false } }, folder.revision, folder.sortKey)
     const existing = new Map<number, { id: string; stale: boolean }>()
     let cursor: string | undefined
@@ -123,8 +129,9 @@ export class MailSync {
       cursor = page.nextCursor ?? undefined
     } while (cursor)
     const missing = uids.filter(uid => !existing.has(uid))
-    for (let offset = 0; offset < missing.length;) {
-      const batch = missing.slice(offset, offset + (offset === 0 && !checkpoint.data.metadataComplete ? MAIL_PAGE_SIZE : MAIL_HISTORY_BATCH_SIZE))
+    let indexed = 0
+    if (missing.length) {
+      const batch = missing.slice(0, checkpoint.data.firstPageDone ? MAIL_HISTORY_BATCH_SIZE : MAIL_PAGE_SIZE)
       const headers = await session.fetchHeaders(folder.data.folder.path, batch, ctx.signal)
       const allowed = new Set(batch), seen = new Set<number>()
       const notifications: MailSummary[] = []
@@ -142,8 +149,8 @@ export class MailSync {
       if (notifications.length) await this.events.inbox(ctx, { accountId, messages: notifications, baseline: false })
       // UID disappearing between SEARCH and FETCH is retried by the next reconciliation, never guessed.
       if (seen.size !== batch.length) throw new MailError("SEARCH_INCOMPLETE", "邮件索引尚未完成")
-      offset += batch.length
-      await this.repo.save(ctx, "sync-state", checkpointId, accountId, { ...checkpoint.data, updatedAt: Date.now() }, checkpoint.revision).then(row => { checkpoint = row })
+      indexed = batch.length
+      checkpoint = await this.repo.save(ctx, "sync-state", checkpointId, accountId, { ...checkpoint.data, firstPageDone: true, metadataComplete: false, updatedAt: Date.now() }, checkpoint.revision)
     }
     // Recheck generation before destructive local reconciliation.
     const verify = await session.select(folder.data.folder.path, ctx.signal)
@@ -153,10 +160,12 @@ export class MailSync {
       if (remote.has(uid) || local.stale) continue
       const row = await this.repo.get<StoredMessage>(ctx, "messages", local.id)
       const saved = await this.repo.save(ctx, "messages", row.id, accountId, { ...row.data, summary: { ...row.data.summary, stale: true } }, row.revision, row.sortKey)
+      existing.delete(uid)
       this.emit(ctx, accountId, [saved.id], saved.revision)
     }
-    for (let offset = 0; offset < uids.length; offset += MAIL_HISTORY_BATCH_SIZE) {
-      const flags = await session.fetchFlags(folder.data.folder.path, uids.slice(offset, offset + MAIL_HISTORY_BATCH_SIZE), ctx.signal)
+    const headersComplete = indexed === missing.length
+    if (headersComplete && (flagsOffset < uids.length || flagsDue)) {
+      const flags = await session.fetchFlags(folder.data.folder.path, uids.slice(flagsOffset, flagsOffset + MAIL_HISTORY_BATCH_SIZE), ctx.signal)
       for (const value of flags) {
         const target = existing.get(value.uid); if (!target || !remote.has(value.uid)) continue
         const row = await this.repo.get<StoredMessage>(ctx, "messages", target.id)
@@ -165,23 +174,36 @@ export class MailSync {
         const saved = await this.repo.save(ctx, "messages", row.id, accountId, { ...row.data, summary: { ...row.data.summary, read, star, stale: false } }, row.revision, row.sortKey)
         this.emit(ctx, accountId, [saved.id], saved.revision)
       }
+      flagsOffset = Math.min(uids.length, flagsOffset + MAIL_HISTORY_BATCH_SIZE)
     }
+    const metadataComplete = headersComplete && flagsOffset >= uids.length
     const currentFolder = await this.repo.get<StoredFolder>(ctx, "folders", folder.id)
-    await this.repo.save(ctx, "folders", folder.id, accountId, { ...currentFolder.data, folder: { ...currentFolder.data.folder, metadataComplete: true } }, currentFolder.revision, currentFolder.sortKey)
-    await this.repo.save(ctx, "sync-state", checkpointId, accountId, { ...checkpoint.data, metadataComplete: true, updatedAt: Date.now() }, checkpoint.revision)
+    await this.repo.save(ctx, "folders", folder.id, accountId, { ...currentFolder.data, folder: { ...currentFolder.data.folder, metadataComplete } }, currentFolder.revision, currentFolder.sortKey)
+    await this.repo.save(ctx, "sync-state", checkpointId, accountId, { ...checkpoint.data, metadataComplete, flagsOffset, flagsCheckedAt: metadataComplete ? Date.now() : checkpoint.data.flagsCheckedAt ?? 0, uidDigest, indexedCount: existing.size, updatedAt: Date.now() }, checkpoint.revision)
     this.emit(ctx, accountId, [folder.id])
-    return { ...emptyCoverage(), metadataComplete: true, indexedCount: uids.length, reason: "server_visible_history_only" }
+    return { ...emptyCoverage(), metadataComplete, indexedCount: existing.size, reason: metadataComplete ? "server_visible_history_only" : "metadata_indexing" }
   }
   async runOnce(ctx: MailContext, accountId: string, folderId?: string, refreshFolders = true): Promise<Coverage> {
     return this.slots.run(ctx.signal, () => this.accounts.exclusive(ctx, accountId, async () => {
       const { config, credential } = await this.accounts.credential(ctx, accountId)
       const session = await this.accounts.protocols.imap(ctx, config, credential)
       try {
-        const folders = await this.folders(ctx, accountId, session, refreshFolders)
+        const folders = (await this.folders(ctx, accountId, session, refreshFolders)).filter(f => f.data.folder.selectable).sort((a, b) => Number(b.data.folder.role === "inbox") - Number(a.data.folder.role === "inbox"))
         let coverage: Coverage = { ...emptyCoverage(), metadataComplete: true, reason: "server_visible_history_only" }
-        for (const folder of folders.filter(f => f.data.folder.selectable && (folderId ? f.id === folderId : refreshFolders || f.data.folder.role === "inbox"))) {
+        for (const folder of folders.filter(f => folderId ? f.id === folderId : refreshFolders || f.data.folder.role === "inbox" || !f.data.folder.metadataComplete)) {
           const result = await this.syncFolder(ctx, accountId, folder, session)
-          coverage = { ...result, indexedCount: coverage.indexedCount + result.indexedCount }
+          if (!result.metadataComplete) break
+        }
+        for (const folder of folders.filter(f => !folderId || f.id === folderId)) {
+          const checkpoint = await this.repo.find<FolderCheckpoint>(ctx, "sync-state", `folder:${folder.id}`)
+          coverage.indexedCount += checkpoint?.data.indexedCount ?? 0
+          coverage.metadataComplete &&= checkpoint?.data.metadataComplete ?? false
+        }
+        if (!coverage.metadataComplete) coverage.reason = "metadata_indexing"
+        const account = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)
+        if (!account.data.paused && ["offline", "error", "connecting"].includes(account.data.state)) {
+          await this.repo.save(ctx, "accounts", accountId, accountId, { ...account.data, state: "connected", errorCode: null }, account.revision)
+          this.emit(ctx, accountId, [accountId])
         }
         return coverage
       } finally { await session.close() }
@@ -192,7 +214,11 @@ export class MailSync {
     await this.accounts.get(ctx, accountId)
     const key = `${ctx.ownerId}:${accountId}`
     const existing = this.runners.get(key)
-    if (existing && !existing.controller.signal.aborted) { existing.hint = true; return { jobId: existing.jobId } }
+    if (folderId) {
+      const folder = await this.repo.get<StoredFolder>(ctx, "folders", folderId)
+      if (folder.accountId !== accountId) throw new MailError("UNAVAILABLE", "文件夹不属于此账号")
+    }
+    if (existing && !existing.controller.signal.aborted) { existing.hint = true; existing.folderId = folderId; return { jobId: existing.jobId } }
     const controller = new AbortController(), signal = AbortSignal.any([ctx.signal, controller.signal])
     const jobId = `mj_${randomUUID()}`
     const runner: Runner = { ctx: { ...ctx, actor: "sync", signal }, accountId, controller, jobId, task: Promise.resolve(), hint: false, folderId, lastFolders: -Infinity }
@@ -209,14 +235,17 @@ export class MailSync {
     while (!ctx.signal.aborted && !this.suspended) {
       try {
         const refresh = Date.now() - runner.lastFolders >= MAIL_FOLDER_REFRESH_MS
-        const coverage = await this.runOnce(ctx, accountId, runner.folderId, refresh)
+        const requestedFolder = runner.folderId
+        runner.hint = false
+        const coverage = await this.runOnce(ctx, accountId, requestedFolder, refresh)
+        if (runner.folderId === requestedFolder) runner.folderId = undefined
         if (refresh) runner.lastFolders = Date.now()
         failures = 0
-        await this.updateJob(ctx, runner.jobId, "completed", coverage, null)
+        await this.updateJob(ctx, runner.jobId, coverage.metadataComplete ? "completed" : "running", coverage, null)
         if (!runner.idleTask) runner.idleTask = this.watchInbox(runner).catch(error => {
           if (!ctx.signal.aborted) this.events.error(normalizeProtocolError(error).code, accountId)
         }).finally(() => { runner.idleTask = undefined })
-        runner.hint = false
+        if (!coverage.metadataComplete) { await wait(0, ctx.signal); continue }
         // IDLE is only a hint; periodic reconciliation remains authoritative.
         for (let elapsed = 0; elapsed < MAIL_POLL_INTERVAL_MS && !runner.hint && !ctx.signal.aborted; elapsed += 1000) await wait(1000, ctx.signal)
       } catch (error) {
