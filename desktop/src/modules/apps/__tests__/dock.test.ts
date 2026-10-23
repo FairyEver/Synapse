@@ -30,7 +30,7 @@ describe("app Dock model", () => {
     )
   })
 
-  it("seeds the default Dock with terminal before settings", () => {
+  it("seeds the default Dock with internal mail and mailbox immediately before launcher", () => {
     expect(seedDefaultDockAppIds()).toEqual([
       "agent",
       "drive",
@@ -38,6 +38,8 @@ describe("app Dock model", () => {
       "workflow",
       "terminal",
       "settings",
+      "mail-internal",
+      "mail",
       "launcher",
     ])
     expect(restoreDefaultDockAppIds()).toEqual(DEFAULT_DOCK_APP_IDS)
@@ -68,7 +70,7 @@ describe("app Dock model", () => {
   it("applies each Dock migration once and preserves the applied ids", () => {
     const migrated = applyDockMigrations(["launcher", "agent"], [])
 
-    expect(migrated.dockAppIds).toEqual(["agent", "mail-internal", "launcher"])
+    expect(migrated.dockAppIds).toEqual(["agent", "mail-internal", "mail", "launcher"])
     expect(migrated.appliedMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
     expect(applyDockMigrations(migrated.dockAppIds, migrated.appliedMigrationIds)).toEqual(migrated)
   })
@@ -80,11 +82,23 @@ describe("app Dock model", () => {
 
   it("keeps other apps in user order and moves an existing Mail without duplication", () => {
     expect(applyDockMigrations(["mail", "database", "launcher", "workflow", "agent"], []).dockAppIds)
-      .toEqual(["database", "workflow", "agent", "mail-internal", "launcher"])
-    expect(applyDockMigrations([], []).dockAppIds).toEqual(["mail-internal", "launcher"])
+      .toEqual(["database", "workflow", "agent", "mail-internal", "mail", "launcher"])
+    expect(applyDockMigrations([], []).dockAppIds).toEqual(["mail-internal", "mail", "launcher"])
   })
 
-  it("does not move launcher or reintroduce Mail after the migration was recorded", () => {
+  it.each([
+    { ids: ["launcher", "database", "agent"], applied: ["dock.mail-introduction.v1"] },
+    { ids: ["mail", "database", "launcher", "agent"], applied: ["dock.mail-introduction.v1"] },
+    { ids: ["mail", "database", "mail-internal", "launcher", "agent", "mail"], applied: ["dock.mail-introduction.v1", "dock.mail-internal-rename.v1"] },
+  ])("introduces both mail apps after earlier migrations while retaining other app order: $ids", ({ ids, applied }) => {
+    const migrated = applyDockMigrations(ids, applied)
+
+    expect(migrated.dockAppIds).toEqual(["database", "agent", "mail-internal", "mail", "launcher"])
+    expect(migrated.appliedMigrationIds).toContain("dock.mail-apps-introduction.v1")
+    expect(applyDockMigrations(migrated.dockAppIds, migrated.appliedMigrationIds)).toEqual(migrated)
+  })
+
+  it("does not move launcher or reintroduce either mail app after the migration was recorded", () => {
     const userDock = ["launcher", "database", "agent"]
     const applied = [...DEFAULT_DOCK_MIGRATION_IDS, "future-migration"]
     expect(applyDockMigrations(userDock, applied)).toEqual({

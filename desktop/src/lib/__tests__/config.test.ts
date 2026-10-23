@@ -15,14 +15,19 @@ describe("Synapse config Agent defaults", () => {
     expect(createDefaultConfig().global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
   })
 
-  it("leaves legacy Dock configs eligible for pending migrations", () => {
+  it("leaves the new mail introduction pending after normalizing legacy Dock ids", () => {
     const config = sanitizeSynapseConfig({
       activeRepoUuid: null,
       repositories: [],
       global: { themeMode: "light", projects: [], dockAppIds: ["agent", "launcher"] },
     })
 
-    expect(config.global.dockMigrationIds).toEqual([])
+    expect(config.global.dockAppIds).toEqual(["agent", "mail-internal", "launcher"])
+    expect(config.global.dockMigrationIds).toEqual([
+      "dock.mail-introduction.v1",
+      "dock.mail-internal-rename.v1",
+    ])
+    expect(config.global.dockMigrationIds).not.toContain("dock.mail-apps-introduction.v1")
     expect(sanitizeSynapseConfig({ activeRepoUuid: null, repositories: [] }).global.dockMigrationIds)
       .toEqual([])
   })
@@ -750,7 +755,7 @@ describe("Synapse user variables config", () => {
       },
     })
 
-    expect(config.global.dockAppIds).toEqual(["database", "launcher"])
+    expect(config.global.dockAppIds).toEqual(["database", "mail-internal", "launcher"])
   })
 
   it("normalizes the Agent project order in global config", () => {

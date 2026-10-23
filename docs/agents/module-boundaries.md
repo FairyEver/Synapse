@@ -256,7 +256,7 @@
 - 设备名称仅为显示元数据，设置入口位于基础设置；改名不得改变设备 ID、OS 主机名或本地用户身份。Live hello 与 mobile summary 使用同一名称。服务端只按不同机器摘要判定顶号，不再用名称推断机器身份。
 - 设备设置只有两个 UI 私有 IPC，无公开 MCP/Workflow/Automation/Deep Link。硬件摘要不能作为认证凭证；缺少摘要或克隆硬件 UUID 相同时无法保证自动区分。协议与旧客户端升级边界见 Live Client Connections 设计。
 
-2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记迁移，保留取消固定状态和布局；历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。
+2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记完成改名，改名本身保留取消固定状态和布局；随后独立的双邮件入口迁移将末尾排为「站内信 → 邮箱 → 应用」，此前移除过站内信也执行一次。两款应用均默认固定，迁移后用户的移除和排序不会被重置；历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。
 
 ## 外部邮箱（桌面）
 

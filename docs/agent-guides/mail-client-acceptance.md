@@ -22,7 +22,7 @@
 - C1–C13：邮箱核心与 UI / 内部信件回归127项通过；完整 desktop typecheck、IPC codegen、hard constraints、UI tracking 通过。
 - C14：完整 mock 流程包含后台基线→IDLE新信→本机提醒→搜索完成事件→UI/MCP并发草稿CAS→MIME发送→Sent内容核验→服务重建读取回执。SMTP只提交一次，Sent不重复APPEND，无云通知请求，备份无mail命名空间。
 - C14 安全回归：跨邮件图片在下载前拒绝；暂停使进行中的图片读取失效；切换身份关闭原生通知；同一 SY 用户重新登录也更新 UI generation。44份 Skill 输入定义逐项与实际工具schema比对。异常/过深MIME和超大/无效地址邮件头单封降级，后续索引继续；不完整地址不能自动构造回复。
-- 当前全局340个 capability、336个 MCP 索引；公开 tools/list 仍只有 search / invoke。邮箱44项，站内信17项。22个桌面 System App，邮箱不默认固定 Dock；外部邮箱不进入手机。
+- 当前全局340个 capability、336个 MCP 索引；公开 tools/list 仍只有 search / invoke。邮箱44项，站内信17项。22个桌面 System App，默认 Dock 共9项（Workflow 条件显示），末尾为站内信、邮箱、应用；旧配置按 `dock.mail-apps-introduction.v1` 一次性调整，之后的移除与排序保持不变；外部邮箱不进入手机。
 
 桌面扩大回归52个文件285项通过，服务端5个文件70项通过；最终完整desktop typecheck通过（包含renderer、Electron、preload和测试），主进程及renderer候选构建通过。IPC codegen、hard constraints和UI tracking通过。候选包的最终核对与包体信息见下方。所有测试数据为虚构邮箱或临时本机 fixture，没有新实现的真实收发凭据和个人邮件内容。
 

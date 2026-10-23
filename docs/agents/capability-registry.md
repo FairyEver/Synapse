@@ -47,8 +47,8 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除；写信仅收件人/抄送，关闭使用系统窗口按钮） | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
-| Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 否（旧配置升级时一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
+| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
@@ -151,7 +151,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Usage Monitor | 是 | 否 | — |
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
-| Mail Internal | 是 | 否 | `mail_internal` |
+| Mail Internal | 是 | 是（邮箱左侧） | `mail_internal` |
 | Todos | 是 | 否 | `todos` |
 | Meeting | 是 | 否 | — |
 
@@ -159,9 +159,9 @@ Settings 的基础设置增加设备名称，通过 `app.live.device.get_setting
 
 Settings 已移除空置的“实验功能”分类及占位内容。此调整仅涉及设置导航，System App、Dock、Workflow、Automation、MCP 与 Deep Link 注册数量和接口均不变，MCP schema 与系统 Skill 指南无需变更。
 
-默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
+默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，共 9 项，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`mail-internal`、`mail`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 
-Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。首条迁移把 `launcher`（「应用」）移到末尾，把 `mail` 放到其左侧；其它应用的相对顺序保持不变，已有 Mail 只移动且不重复。新安装预先记录当前迁移，不改变默认 Dock；用户之后移除 Mail、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。
+Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。历史 `dock.mail-introduction.v1` 中的 `mail` 仍表示站内信；改名迁移先将其归入 `mail-internal`。新增 `dock.mail-apps-introduction.v1`，将末尾一次性排为 `mail-internal` → `mail` → `launcher`（「应用」），已有图标只移动且不重复，其它应用相对顺序不变，即使此前移除过站内信也会执行这次独立迁移。新安装默认包含两款邮件应用并预先记录当前迁移；用户之后移除任一邮件图标、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。
 
 Git 仍是普通 System App，不新增 MCP domain。其带恢复 journal 的原子 clone、仓库注册、状态与差异预览、主进程选择令牌、精确提交与按文件丢弃、同步、空仓库初始化与远端默认分支接入、缓存远程分支发现与 tracking 检出、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；仓库目录定位复用受权限与审计保护的 Shell IPC，设为项目复用系统设置的全局项目配置与添加流程。Agent 项目与 Git 仓库根路径精确匹配时，composer 可复用同一 Git IPC 执行确认后的全部改动提交及常用远端操作，并可定向打开对应 Git 工作台；该入口不经过 Agent、MCP 或通用命令执行。这不改变上表的 capability 或 MCP 数量。远程分支、空仓库初始化与文件丢弃能力不注册任意 Git 命令入口，也不扩展为 Workflow、Automation、MCP 或 Deep Link 表面。
 
@@ -232,11 +232,11 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-23 Automation 的 `builtin.cron` 与 `builtin.interval` 配置新增可选 `timeRange: { start, end }`，由既有触发器发现工具返回 schema，创建和更新沿用通用 trigger config。活跃日和每日范围共同限制自动触发与启动补跑，缺省全天；手动运行不受限。Automation 仍为 14 个 capability / MCP 索引，System App、Dock、Workflow、Automation Action 和 Deep Link 数量不变。
 
-2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记迁移，保留取消固定状态和布局；历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。
+2026-10-23：站内信桌面 App ID 为 `mail-internal`，公开 capability namespace 为 `mail_internal`，深链为 `synapse://mail-internal/<id>`；17 个工具整体改名且无别名，数量不变。旧 App 配置在校验前按一次性标记完成改名，改名本身保留取消固定状态和布局；随后独立的双邮件入口迁移按上述新顺序固定两个图标。历史 introduction 条目保留原样。服务端和手机入口必须同批完成切换后再发布。
 
 2026-10-23 邮箱核心接入：新增 `mail` domain 的 44 个 capability / MCP 索引工具，实际全局 capability 340 项、MCP 索引和工具定义各 336 项。公开 MCP 仍只有 search/invoke。新增严格桌面路由 `synapse://mail/em_<uuid>`，站内信 `mail-internal` / `mail_internal` 独立保留 17 项且无别名。私有密码配置、图片资源和本机文件对话框只走 IPC，不进公开目录；core.mail 在窗口建立后后台恢复，不调用云端消息中心。该核心阶段未增加应用；随后阅读界面阶段已注册为下述第 22 个 System App。
 
-2026-10-23 邮箱阅读界面注册为第 22 个 System App：App ID / namespace 均为 `mail`，与 `mail-internal` 并列，启动器可打开且不默认固定 Dock。内嵌和独立窗口复用单顶栏；私有 `app.apps.operation.mail_open_request` 只传定位信息。44 个邮箱 MCP 工具、340 个全局 capability、336 个索引工具保持不变，不新增 Workflow 或 Automation Action。
+2026-10-23 邮箱阅读界面注册为第 22 个 System App：App ID / namespace 均为 `mail`，与 `mail-internal` 并列，启动器可打开；后续 Dock 调整已改为默认固定在站内信右侧、「应用」左侧，并对旧配置执行一次性迁移。内嵌和独立窗口复用单顶栏；私有 `app.apps.operation.mail_open_request` 只传定位信息。44 个邮箱 MCP 工具、340 个全局 capability、336 个索引工具保持不变，不新增 Workflow 或 Automation Action。
 
 2026-10-23 邮箱接入与写信面板：配置向导、账号设置、富文本草稿、附件与发送均复用 44 项核心动作；私有 `app.mail.draft.image_asset` 只返回当前草稿已关联的受控图片，不进入 MCP / HTTP 目录。邮箱仍是第 22 个 System App，44 个邮箱 MCP，340 个全局 capability / 336 个索引工具，默认 Dock 无变化。
 

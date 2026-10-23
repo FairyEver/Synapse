@@ -42,7 +42,7 @@ describe("ConfigStore", () => {
     expect(legacy.global.dockAppIds).toEqual(["mail", "launcher"])
     expect(legacy.global.dockMigrationIds).toEqual(["dock.mail-introduction.v1"])
     const result = await configStore.load()
-    expect(result.global.dockAppIds).toEqual(["mail-internal", "launcher"])
+    expect(result.global.dockAppIds).toEqual(["mail-internal", "mail", "launcher"])
     expect(result.global.dockMigrationIds).toContain("dock.mail-internal-rename.v1")
     expect(setSingleton).toHaveBeenCalledTimes(2)
   })
@@ -106,7 +106,7 @@ describe("ConfigStore", () => {
       }))
 
       const migrated = await configStore.load()
-      expect(migrated.global.dockAppIds).toEqual(["agent", "mail-internal", "launcher"])
+      expect(migrated.global.dockAppIds).toEqual(["agent", "mail-internal", "mail", "launcher"])
       expect(migrated.global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
 
       await configStore.update({ global: { dockAppIds: ["agent", "launcher"] } })
@@ -121,6 +121,45 @@ describe("ConfigStore", () => {
       const afterUnsafePatch = await configStore.load()
       expect(afterUnsafePatch.global.dockAppIds).toEqual(["agent", "launcher"])
       expect(afterUnsafePatch.global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("persists both mail apps for users who completed earlier Dock migrations and keeps later customization across reloads", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-store-mail-apps-"))
+    electronMock.userDataPath = dir
+
+    try {
+      const dataDir = path.join(dir, "data-v1")
+      const configPath = path.join(dataDir, "core.config.json")
+      await mkdir(dataDir, { recursive: true })
+      const original = createDefaultConfig()
+      await writeFile(configPath, JSON.stringify({
+        schemaVersion: 1,
+        singleton: {
+          ...original,
+          global: {
+            ...original.global,
+            dockAppIds: ["launcher", "database", "agent"],
+            dockMigrationIds: ["dock.mail-introduction.v1", "dock.mail-internal-rename.v1"],
+          },
+        },
+        items: {},
+      }))
+
+      const migrated = await configStore.load()
+      expect(migrated.global.dockAppIds).toEqual(["database", "agent", "mail-internal", "mail", "launcher"])
+      const persisted = JSON.parse(await readFile(configPath, "utf8"))
+      expect(persisted.singleton.global.dockAppIds).toEqual(migrated.global.dockAppIds)
+      expect(persisted.singleton.global.dockMigrationIds).toContain("dock.mail-apps-introduction.v1")
+
+      await configStore.update({ global: { dockAppIds: ["launcher", "agent", "database"] } })
+      Object.assign(configStore, { cachedConfig: null, initialized: false, namespace: null })
+
+      const reloaded = await configStore.load()
+      expect(reloaded.global.dockAppIds).toEqual(["launcher", "agent", "database"])
+      expect(reloaded.global.dockMigrationIds).toEqual(migrated.global.dockMigrationIds)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

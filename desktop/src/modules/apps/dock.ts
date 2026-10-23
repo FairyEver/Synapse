@@ -41,6 +41,14 @@ export const DOCK_MIGRATIONS: readonly DockMigration[] = [
     ],
   },
   { id: INTERNAL_MAIL_RENAME_MIGRATION_ID, operations: [] },
+  {
+    id: "dock.mail-apps-introduction.v1",
+    operations: [
+      { kind: "move-to-end", appId: "launcher" },
+      { kind: "insert-before", appId: "mail-internal", targetAppId: "launcher" },
+      { kind: "insert-before", appId: "mail", targetAppId: "launcher" },
+    ],
+  },
 ]
 
 export const DEFAULT_DOCK_MIGRATION_IDS: readonly string[] = DOCK_MIGRATIONS.map((migration) => migration.id)
@@ -150,12 +158,17 @@ export function insertDockAppIdBefore(
 function applyDockMigrationOperation(
   values: readonly SynapseSystemAppId[],
   operation: DockMigrationOperation,
+  migrationId: string,
 ): SynapseSystemAppId[] {
+  // 只有历史 introduction 中的 mail 指站内信，后续迁移的 mail 指独立邮箱。
+  const appId = migrationId === "dock.mail-introduction.v1" && operation.appId === "mail"
+    ? "mail-internal"
+    : operation.appId
   if (operation.kind === "move-to-end") {
-    return moveDockAppIdToEnd(values, operation.appId === "mail" ? "mail-internal" : operation.appId)
+    return moveDockAppIdToEnd(values, appId)
   }
 
-  return insertDockAppIdBefore(values, operation.appId === "mail" ? "mail-internal" : operation.appId, operation.targetAppId)
+  return insertDockAppIdBefore(values, appId, operation.targetAppId)
 }
 
 export function applyDockMigrations(
@@ -174,7 +187,7 @@ export function applyDockMigrations(
     }
 
     for (const operation of migration.operations) {
-      dockAppIds = applyDockMigrationOperation(dockAppIds, operation)
+      dockAppIds = applyDockMigrationOperation(dockAppIds, operation, migration.id)
     }
     applied.push(migration.id)
   }

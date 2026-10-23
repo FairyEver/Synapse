@@ -198,7 +198,7 @@ Product introductions may need to expose an existing app without repeatedly over
 config.global.dockMigrationIds
 ```
 
-Each migration runs once for an existing config, persists its layout and completed ids atomically, and never runs again after the user removes an introduced app. New installations mark the current migrations as already applied so the ordinary default Dock remains unchanged. Supported operations include moving an app to the end and inserting an app immediately before another app. The first migration moves `launcher` (shown as “应用”) to the end and inserts `mail` immediately before it.
+Each migration runs once for an existing config, persists its layout and completed ids atomically, and never runs again after the user removes an introduced app. New installations mark the current migrations as already applied so the ordinary default Dock remains unchanged. Supported operations include moving an app to the end and inserting an app immediately before another app. The first migration moves `launcher` (shown as “应用”) to the end and inserts the historical internal-mail `mail` immediately before it. After the internal-mail rename, `dock.mail-apps-introduction.v1` separately puts `mail-internal`, `mail`, and `launcher` at the end in that order, preserving the relative order of other apps and deduplicating existing entries. This introduction runs once even if internal mail was previously unpinned. New installations and restore-default use the same two mail entries; later user removals and reordering remain intact.
 
 ### Normalization
 
@@ -221,7 +221,7 @@ Examples:
 
 ```text
 undefined
--> agent, drive, automation, workflow, terminal, settings, launcher
+-> agent, drive, automation, workflow, terminal, settings, mail-internal, mail, launcher
 
 []
 -> launcher

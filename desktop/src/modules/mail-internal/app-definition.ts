@@ -6,7 +6,7 @@ export const mailInternalAppDefinition = {
   type: "system",
   name: "站内信",
   windowTitle: "站内信",
-  dock: { pinnedByDefault: false, order: 25 },
+  dock: { pinnedByDefault: true, order: 55 },
   window: { openable: true },
   removable: false,
   renameable: false,

@@ -11,6 +11,8 @@ describe("app Dock order", () => {
       "workflow",
       "terminal",
       "settings",
+      "mail-internal",
+      "mail",
       "launcher",
     ])
   })
@@ -22,6 +24,8 @@ describe("app Dock order", () => {
       "automation",
       "terminal",
       "settings",
+      "mail-internal",
+      "mail",
       "launcher",
     ])
   })
