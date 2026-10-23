@@ -47,8 +47,8 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是 | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
-| Mail Internal | 是（含复制全文） | 否（旧配置升级时一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
+| Mail（邮箱） | 是（新版蓝色 PNG 图标） | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 否（旧配置升级时一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
@@ -237,3 +237,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-23 邮箱阅读界面注册为第 22 个 System App：App ID / namespace 均为 `mail`，与 `mail-internal` 并列，启动器可打开且不默认固定 Dock。内嵌和独立窗口复用单顶栏；私有 `app.apps.operation.mail_open_request` 只传定位信息。44 个邮箱 MCP 工具、340 个全局 capability、336 个索引工具保持不变，不新增 Workflow 或 Automation Action。
 
 2026-10-23 邮箱接入与写信面板：配置向导、账号设置、富文本草稿、附件与发送均复用 44 项核心动作；私有 `app.mail.draft.image_asset` 只返回当前草稿已关联的受控图片，不进入 MCP / HTTP 目录。邮箱仍是第 22 个 System App，44 个邮箱 MCP，340 个全局 capability / 336 个索引工具，默认 Dock 无变化。
+
+2026-10-23 邮箱与站内信分别使用各自模块 `assets/icon.png` 中的用户指定蓝色/黑色图标，启动器与 Dock 共用 manifest 资源。仅替换图标，22 个 System App、340 个 capability、336 个 MCP 索引及各自深链均不变，MCP schema 和系统 Skill 无需调整。
