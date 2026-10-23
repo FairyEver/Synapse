@@ -6,13 +6,29 @@ import { sanitizeComposeDocument } from "../../../app-capabilities/mail/renderer
 import { runMailUiOperation } from "../../../app-capabilities/mail/renderer/tracking"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { mailApi, mailError } from "./api"
+import { registerNavigationGuard } from "@/app-shell/navigation-guard"
 import type { ComposeIntent } from "./layout"
 const fields = (draft: Draft): Omit<DraftInput, "accountId"> => ({ to: draft.to, cc: draft.cc, bcc: draft.bcc, subject: draft.subject, html: draft.html, text: draft.text, assetIds: draft.assetIds, inlineImages: draft.inlineImages })
-const addressText = (addresses: Draft["to"]) => addresses.map(a => a.name ? `${a.name} <${a.address}>` : a.address).join(", ")
+const addressText = (addresses: Draft["to"]) => addresses.map(a => a.name ? `${JSON.stringify(a.name)} <${a.address}>` : a.address).join(", ")
 export function parseMailAddresses(value: string): Draft["to"] {
-  return value.split(/[,;\n]/u).map(item => item.trim()).filter(Boolean).map(item => {
+  const parts: string[] = []
+  let part = "", quoted = false, escaped = false, angle = false
+  for (const char of value) {
+    if (escaped) { part += char; escaped = false; continue }
+    if (quoted && char === "\\") { part += char; escaped = true; continue }
+    if (char === '"') quoted = !quoted
+    if (!quoted && char === "<") { if (angle) throw new Error("收件人格式无效"); angle = true }
+    if (!quoted && char === ">") { if (!angle) throw new Error("收件人格式无效"); angle = false }
+    if (!quoted && !angle && /[,;\n]/u.test(char)) { parts.push(part); part = "" } else part += char
+  }
+  if (quoted || angle || escaped) throw new Error("收件人格式无效")
+  parts.push(part)
+  return parts.map(item => item.trim()).filter(Boolean).map(item => {
     const formatted = item.match(/^(.*?)<([^<>]+)>$/u)
-    return addressSchema.parse(formatted ? { address: formatted[2].trim(), name: formatted[1].trim().replace(/^"|"$/gu, "") } : { address: item })
+    if (!formatted) return addressSchema.parse({ address: item })
+    const rawName = formatted[1].trim()
+    const name = rawName.startsWith('"') && rawName.endsWith('"') ? rawName.slice(1, -1).replace(/\\(.)/gu, "$1") : rawName
+    return addressSchema.parse({ address: formatted[2].trim(), name })
   })
 }
 export function useCompose(owner: string | null) {
@@ -78,7 +94,12 @@ export function useCompose(owner: string | null) {
     const prevent = (event: BeforeUnloadEvent) => { if (changed.current !== saved.current || sendLock.current || savingTask.current) { event.preventDefault(); event.returnValue = "" } }
     window.addEventListener("beforeunload", prevent); return () => window.removeEventListener("beforeunload", prevent)
   }, [])
-  const flush = async () => { clearTimeout(timer.current); await save(); while (value.current?.state === "editing" && changed.current !== saved.current) await save() }
+  const flush = useCallback(async () => { clearTimeout(timer.current); await save(); while (value.current?.state === "editing" && changed.current !== saved.current) await save() }, [save])
+  useEffect(() => registerNavigationGuard(() => {
+    if (sendLock.current || opening.current) return false
+    if (!savingTask.current && changed.current === saved.current) return true
+    return flush().then(() => true, () => false)
+  }), [flush, owner])
   const close = async () => {
     if (sendLock.current || opening.current) return false
     try { await flush(); epoch.current++; replace(null); setPreview(null); setReceipt(null); setDirty(false); setError(null); return true } catch { return false }

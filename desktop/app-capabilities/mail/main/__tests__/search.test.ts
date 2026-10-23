@@ -86,3 +86,26 @@ it("rechecks result filters after a message changes and reports the changed inde
     expect(next.items).toEqual([]); expect(next.coverage.reason).toBe("index_changed")
   } finally { await r.sync.dispose(); await r.close() }
 })
+
+it("resumes large cached bodies without declaring budget-truncated tails scanned", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1, 2, 3, 4, 5, 6]); await r.sync.runOnce(r.ctx, r.account.id)
+    const messages = (await r.repo.page(r.ctx, "messages", { accountId: r.account.id, limit: 100 })).items
+    const target = messages[4].id, body = "a".repeat(4.5 * 1024 * 1024)
+    const search = new MailSearch(r.repo, async (_ctx, id, options) => {
+      const full = body + (id === target ? "needle-at-end" : "")
+      const text = full.slice(0, options.maxBytes)
+      return { text, bytes: text.length, available: true, truncated: text.length < full.length }
+    })
+    const job = await search.execute(r.ctx, "search.start", { accountId: r.account.id, query: "needle-at-end", fields: "body" }); await search.settle()
+    let result = await search.execute(r.ctx, "search.get", { ...job, limit: 100 })
+    for (let count = 0; result.canContinue && count < 8; count++) {
+      await search.execute(r.ctx, "search.resume", job); await search.settle()
+      result = await search.execute(r.ctx, "search.get", { ...job, limit: 100 })
+    }
+    expect(result.items.map(item => item.id)).toEqual([target])
+    expect(result.coverage.bodyScannedCount).toBe(6); expect(result.coverage.bodyPendingCount).toBe(0)
+    expect(result.canContinue).toBe(false)
+  } finally { await r.sync.dispose(); await r.close() }
+})

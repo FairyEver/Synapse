@@ -84,3 +84,25 @@ it("recovers a crash after SMTP acceptance but before durable outcome storage wi
     expect(r.smtp.submit).toHaveBeenCalledTimes(1)
   } finally { await r.close() }
 })
+
+it("recovers a prepared operation using its persisted MIME despite a later equivalent preview", async () => {
+  const r = await sendRig()
+  try {
+    const a = await r.send.preview(r.ctx, { draftId: r.draft.id, expectedRevision: r.draft.revision })
+    const save = r.repo.save.bind(r.repo)
+    const crash = vi.spyOn(r.repo, "save").mockImplementation(async (...args) => {
+      if (args[1] === "operations" && args[2].startsWith("request:")) throw new Error("crash after prepare")
+      return save(...args)
+    })
+    await expect(r.send.submit(r.ctx, { previewId: a.previewId, clientRequestId: randomUUID(), confirmed: true })).rejects.toThrow("crash after prepare")
+    crash.mockRestore(); expect(r.smtp.submit).not.toHaveBeenCalled()
+    const b = await r.send.preview(r.ctx, { draftId: r.draft.id, expectedRevision: r.draft.revision })
+    expect(b.messageId).not.toBe(a.messageId)
+    const receipt = await r.send.submit(r.ctx, { previewId: b.previewId, clientRequestId: randomUUID(), confirmed: true })
+    const operation = await r.repo.get<import("../send").StoredSend>(r.ctx, "operations", receipt.operationId)
+    expect(r.smtp.submit).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(r.smtp.submit).mock.calls[0][0].messageId).toBe(a.messageId)
+    expect(vi.mocked(r.smtp.submit).mock.calls[0][0].raw).toEqual(await r.assets.read(r.ctx, operation.data.snapshot.rawAssetId))
+    expect(receipt.messageId).toBe(a.messageId)
+  } finally { await r.close() }
+})

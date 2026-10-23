@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import { registerNavigationGuard } from "@/app-shell/navigation-guard"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -369,6 +370,32 @@ describe("AppsModule", () => {
     expect(document.body.textContent).toContain("资源仓库")
     expect(document.body.textContent).toContain("resource-repository 内容")
   })
+  it("keeps an embedded editor mounted when leaving is blocked", async () => {
+    await renderAppsModule(roots)
+    await act(async () => { findButton("用量监控").click() })
+    const off = registerNavigationGuard(() => false)
+    try {
+      await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="返回应用列表"]')!.click() })
+      expect(document.body.textContent).toContain("usage-monitor 内容")
+      await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')!.click() })
+      expect(mocks.openSystemApp).not.toHaveBeenCalled()
+    } finally { off() }
+  })
+
+  it("rechecks saved content after the asynchronous new-window request", async () => {
+    await renderAppsModule(roots)
+    await act(async () => { findButton("用量监控").click() })
+    let release!: () => void, allowed = true
+    mocks.openSystemApp.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
+    const off = registerNavigationGuard(() => allowed)
+    try {
+      await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')!.click() })
+      allowed = false
+      await act(async () => { release(); await Promise.resolve(); await Promise.resolve() })
+      expect(document.body.textContent).toContain("usage-monitor 内容")
+    } finally { off() }
+  })
+
 })
 
 async function renderAppsModule(

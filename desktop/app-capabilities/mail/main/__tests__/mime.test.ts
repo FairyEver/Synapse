@@ -43,3 +43,18 @@ it("contains corrupt source streams without leaking raw error contents", async (
   const source = Readable.from((async function* () { yield "From: sender@example.com\r\n\r\n"; throw new Error("secret protocol failure") })())
   await expect(parseMailStream(source, { signal: new AbortController().signal })).rejects.toMatchObject({ code: "MIME_INVALID", message: "邮件格式无法解析" })
 })
+
+it("rejects a cached attachment export after UIDVALIDITY invalidates its source", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1]); await r.sync.runOnce(r.ctx, r.account.id)
+    const message = (await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id })).items[0]
+    const content = new MailContent(r.repo, r.accounts, r.assets, r.access)
+    const asset = await r.assets.put(r.ctx, Readable.from([Buffer.from("saved attachment")]), { accountId: r.account.id, messageId: message.id, attachmentId: "2", name: "a.txt", mime: "text/plain", cache: true })
+    await content.executeAttachment(r.ctx, "attachment.download_file", { assetId: asset.id, outputPath: `${r.root}/before.txt` })
+    const { assertRemoteGeneration } = await import("../sync")
+    await expect(assertRemoteGeneration(r.repo, r.ctx, message.data.summary.locator.folderId, "1", "2")).rejects.toMatchObject({ code: "STALE_TARGET" })
+    await expect(content.executeAttachment(r.ctx, "attachment.download_file", { assetId: asset.id, outputPath: `${r.root}/after.txt` })).rejects.toMatchObject({ code: "STALE_TARGET" })
+    expect((await r.assets.read(r.ctx, asset.id)).toString()).toBe("saved attachment")
+  } finally { await r.sync.dispose(); await r.close() }
+})

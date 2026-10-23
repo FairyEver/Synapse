@@ -3,11 +3,11 @@ import { expect, it, vi } from "vitest"
 import { syncRig, remoteHeader } from "./sync-fixtures"
 import { MailMutations } from "../mutations"
 import { MailError } from "../../shared/types"
-import { resolveMessage, type StoredFolder } from "../sync"
+import { resolveMessage, type StoredFolder, type StoredMessage } from "../sync"
 async function setup(provider: "aliyun" | "custom" = "aliyun") {
   const r = await syncRig(provider)
   vi.mocked(r.session.searchUids).mockResolvedValue([1]); await r.sync.runOnce(r.ctx, r.account.id)
-  const message = (await r.repo.page(r.ctx, "messages", { accountId: r.account.id })).items[0]
+  const message = (await r.repo.page<StoredMessage>(r.ctx, "messages", { accountId: r.account.id })).items[0]
   const targetId = `mf_${randomUUID()}`
   await r.repo.save<StoredFolder>(r.ctx, "folders", targetId, r.account.id, { folder: { id: targetId, accountId: r.account.id, path: "Trash", name: "Trash", role: "trash", uidValidity: "1", serverCount: 0, metadataComplete: true, selectable: true }, delimiter: "/", flags: [] }, 0)
   vi.mocked(r.session.searchUids).mockImplementation(async (_path, query) => query.uid ? [] : [1])
@@ -105,5 +105,25 @@ it("recovers local folder updates after remote success without replaying the ren
     await r.mutations.recover(r.ctx)
     expect((await r.repo.get<StoredFolder>(r.ctx, "folders", custom)).data.folder.path).toBe("After")
     expect(r.session.renameFolder).toHaveBeenCalledTimes(1)
+  } finally { await r.sync.dispose(); await r.close() }
+})
+
+it("permanently deletes only Trash entries in a mixed batch and rejects Inbox and Sent before STORE", async () => {
+  const r = await setup()
+  try {
+    const inbox = r.message.data.summary.locator.folderId
+    for (const role of ["inbox", "sent"] as const) {
+      const folder = await r.repo.get<StoredFolder>(r.ctx, "folders", inbox)
+      await r.repo.save(r.ctx, "folders", inbox, r.account.id, { ...folder.data, folder: { ...folder.data.folder, role } }, folder.revision)
+      const result = await r.mutations.execute(r.ctx, "message.delete", { accountId: r.account.id, messageIds: [r.message.id], permanent: true, clientRequestId: randomUUID() })
+      expect(result.items[0]).toMatchObject({ status: "failed", code: "TRASH_REQUIRED" })
+      expect(r.session.storeFlags).not.toHaveBeenCalled(); expect(r.session.uidExpunge).not.toHaveBeenCalled()
+    }
+    const trashId = `em_${randomUUID()}`
+    await r.repo.save(r.ctx, "messages", trashId, r.account.id, { ...r.message.data, summary: { ...r.message.data.summary, id: trashId, locator: { ...r.message.data.summary.locator, folderId: r.targetId, uid: 2 } } }, 0)
+    const result = await r.mutations.execute(r.ctx, "message.delete", { accountId: r.account.id, messageIds: [r.message.id, trashId], permanent: true, clientRequestId: randomUUID() })
+    expect(result.items).toMatchObject([{ status: "failed", code: "TRASH_REQUIRED" }, { status: "succeeded" }])
+    expect(r.session.storeFlags).toHaveBeenCalledTimes(1)
+    expect(r.session.uidExpunge).toHaveBeenCalledWith("Trash", [2], r.ctx.signal)
   } finally { await r.sync.dispose(); await r.close() }
 })

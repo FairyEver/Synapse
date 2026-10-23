@@ -1,6 +1,6 @@
 # 邮箱实施取舍记录
 
-按两份批准计划顺序实施。以下保留执行时的全部 Ruling 原文及其影响；最终审阅的判断和延期小项在审阅结束后追加。它们不构成真实账号或生产发布验收。
+按两份批准计划顺序实施。以下保留全部 Ruling 原文及代价，按作出顺序归档。它们不构成真实账号或生产发布验收。
 
 ## 站内信改名
 
@@ -10,7 +10,7 @@
 - Task 2: Ruling: Rename shared notification source constant with desktop consumers now so type checking remains coherent; server producers and migration follow in R3 before release.
 - Task 3: Ruling: Execute migration SQL against isolated in-memory SQLite fixtures to validate update semantics/idempotency without business DB access; actual PostgreSQL preflight remains release acceptance. SourceKey, readAt/deletedAt unchanged.
 
-## 本机邮箱
+## 本机邮箱及最终审阅
 
 - Ruling: Inline on current main per explicit user authorization; preserve dirty router/naming. No separate worktree/branch.
 - Task 2: Ruling: Persist immutable asset file keys before byte writes, and collect unpinned staging/unreferenced local assets after 24 hours in bounded post-window batches — recovers crashes without touching draft/send pins — unused imported assets older than a day may require re-import.
@@ -46,3 +46,26 @@
 - Ruling: API reference is generated, not hand-maintained; runtime search/invoke schema remains authoritative — prevents drift, costs regenerated50KiB documentation.
 - Ruling: use isolated local candidate output with signing auto-discovery disabled (electron-builder applies an ad-hoc signature, not a production certificate) — avoids publishing/notarization or overwriting previous build output; does not prove production signature/update behavior or Windows compatibility.
 - Ruling: default check:packaged-asar scans all release history and fails on old release/mac-arm64 hashes; preserve historical artifacts and run the same verifier against release/mail-client-candidate explicitly — current candidate has meaningful source/hash and runtime verification, while whole-history command remains reported as failed. No deletion or weakening of checks.
+- Final: Ruling: 保留当前main和已有本地提交，不执行finishing-a-development-branch的分支菜单、合并或推送；沿用计划明确要求的最小充分验证 — 用户已明确当前目录/分支及仅本地提交，重复扩大测试和另建集成流程不在范围内 — 风险是未覆盖的无关模块问题不由本次回归保证。
+- Final: Ruling: 保留忽略目录中的实施台账、测试日志与候选审计材料，不执行Skill建议的工作目录删除 — 用户禁止未经授权的破坏性清理，材料有验收价值 — 成本是本机继续占用审计文件空间。
+- Final: Ruling: 真实阿里收发、COPY、Sent改写及持续IDLE — 保持真实账号待验，既有mock和旧实验不足以推定新客户端兼容 — 若判断错误会把协议适配缺陷带入真实邮箱，因此不宣称正式验收。
+- Final: Ruling: 原生退出、休眠、OS通知和视觉/焦点 — 仅修复源码可确定的导航丢稿，其余保持真实应用待验，未擅自启动应用 — 成本是尚不能保证原生交互通过。
+- Final: Ruling: Windows文件系统、安装包和运行时 — 当前环境不外推Windows结论，保留平台验收项 — 成本是Windows交付尚待对应环境。
+- Final: Ruling: PostgreSQL生产迁移和多端切换 — 保持发布前预检及协调切换，不访问业务库或部署 — 若遗漏预检会有半迁移风险。
+- Final: Ruling: 历史release全目录ASAR失败 — 历史产物保留，当前候选单独使用同一校验脚本，全集失败继续公开记录 — 成本是全目录命令仍不能作为当前候选的单一通过指标。
+- Final: Ruling: 正文扫描在开始下一封前预留5MiB单封上限，不引入邮件内偏移协议 — 已允许的正文可在下一批完整扫描，避免误报完整 — 成本是每个20MiB批次可能有不足5MiB的未用预算。
+- Final: Ruling: 直接持有锁定版本Nodemailer的SMTPConnection，MIME仍复用现有编译器 — 非池transport.close并不关闭活动连接，必须明确控制底层生命周期 — 成本是升级Nodemailer时需保留真实适配层取消及包内子路径导出检查。
+
+## 独立审阅修复
+
+唯一一次整段审阅由独立上下文的 gpt-6-astra 完成，只读覆盖两份计划的实现提交；没有再次派发复审。两项内容丢失/删除风险和五项正确性问题均进入一次 TDD 修复。
+
+- 永久删除限回收站，混合批次仅处理合法项。
+- Dock、启动器返回/重置及转窗口前等待保存；失败保留编辑，异步打开窗口后再次检查新编辑。
+- 正文检索不把批次预算截断的余文记作已完成。
+- SMTP 取消关闭真实连接，迟到回调不能继续认证或发送。
+- prepared 操作恢复沿用持久 MIME、Message-ID 与回执。
+- 联系人显示名中的逗号、分号、引号和多语言可往返。
+- 原邮件失效后缓存附件公开下载也失效，内部固定内容继续保留。
+
+每项均观察到失败回归再修复；扩大桌面回归285项通过。没有延期小项。最终类型、候选构建及真实验收边界见 `mail-client-acceptance.md`。

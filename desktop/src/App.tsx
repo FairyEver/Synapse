@@ -1,3 +1,4 @@
+import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
@@ -118,24 +119,26 @@ function MainApp() {
 
   const setActiveAppId = useCallback(
     (nextAppId: ActiveAppId, source: ActiveAppChangeSource) => {
-      const previousAppId = activeAppIdRef.current
-      if (previousAppId !== nextAppId) {
-        logger.info("Active system app changed.", {
-          from: previousAppId,
-          to: nextAppId,
-          source,
-        })
-        track({
-          component: "app-navigation",
-          name: "active-system-app-changed",
-          action: "select",
-          eventKey: `navigation.${nextAppId}`,
-          category: "navigation",
-          value: nextAppId,
-          metadata: { source },
-        })
-      }
-      setActiveAppIdRaw(nextAppId)
+      void runAppNavigation(() => {
+        const previousAppId = activeAppIdRef.current
+        if (previousAppId !== nextAppId) {
+          logger.info("Active system app changed.", {
+            from: previousAppId,
+            to: nextAppId,
+            source,
+          })
+          track({
+            component: "app-navigation",
+            name: "active-system-app-changed",
+            action: "select",
+            eventKey: `navigation.${nextAppId}`,
+            category: "navigation",
+            value: nextAppId,
+            metadata: { source },
+          })
+        }
+        setActiveAppIdRaw(nextAppId)
+      })
     },
     [],
   )

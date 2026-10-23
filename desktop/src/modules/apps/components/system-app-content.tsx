@@ -1,3 +1,4 @@
+import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { requestOpenSettingsDock, type OpenAgentSessionPayload } from "@/app-shell/navigation"
@@ -183,23 +184,26 @@ function LauncherContent({
 
   useEffect(() => {
     if (!pendingContentOpenRequest) return
-    setActiveAppId("resource-repository")
-    setResourceContentOpenRequest(pendingContentOpenRequest)
+    void runAppNavigation(() => {
+      setActiveAppId("resource-repository")
+      setResourceContentOpenRequest(pendingContentOpenRequest)
+    })
   }, [pendingContentOpenRequest])
 
   useEffect(() => {
     if (resetKeyRef.current === resetKey) return
     resetKeyRef.current = resetKey
-    setActiveAppId(null)
-    setResourceContentOpenRequest(null)
+    void runAppNavigation(() => { setActiveAppId(null); setResourceContentOpenRequest(null) })
   }, [resetKey])
 
   const openApp = useCallback((appId: SynapseSystemAppId) => {
-    setLauncherFocusAppId(null)
-    setActiveAppId(appId)
+    void runAppNavigation(() => {
+      setLauncherFocusAppId(null)
+      setActiveAppId(appId)
+    })
   }, [])
 
-  const openAppWindow = async (appId: SynapseSystemAppId) => {
+  const openAppWindow = (appId: SynapseSystemAppId) => runAppNavigation(async () => {
     try {
       const appsBridge = (getSynapseBridge() as ReturnType<typeof getSynapseBridge> & {
         readonly apps?: AppsBridge
@@ -208,17 +212,18 @@ function LauncherContent({
         throw new Error("System app window bridge is unavailable.")
       }
       await appsBridge.openSystemApp(appId)
-      setLauncherFocusAppId(appId)
-      setActiveAppId(null)
-      setResourceContentOpenRequest(null)
+      await runAppNavigation(() => {
+        setLauncherFocusAppId(appId)
+        setActiveAppId(null)
+        setResourceContentOpenRequest(null)
+      })
     } catch {
       toast.error("打开应用失败")
     }
-  }
+  })
 
   const openResourceRepository = useCallback((request: ContentOpenRequest) => {
-    setActiveAppId("resource-repository")
-    setResourceContentOpenRequest(request)
+    void runAppNavigation(() => { setActiveAppId("resource-repository"); setResourceContentOpenRequest(request) })
   }, [])
 
   const handleResourceContentOpenRequestConsumed = useCallback((requestId: string) => {
@@ -234,11 +239,11 @@ function LauncherContent({
       <AppSwitchTransition transitionKey={activeApp.id} animateOnMount>
         <EmbeddedSystemAppShell
           appName={activeApp.name}
-          onBack={() => {
+          onBack={() => { void runAppNavigation(() => {
             setLauncherFocusAppId(activeApp.id)
             setActiveAppId(null)
             setResourceContentOpenRequest(null)
-          }}
+          }) }}
           onOpenWindow={activeApp.window.openable
             ? () => void openAppWindow(activeApp.id)
             : undefined}

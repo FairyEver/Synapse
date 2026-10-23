@@ -242,7 +242,11 @@ export class MailContent {
     })
   }
   private async assetReference(ctx: MailContext, input: { assetId: string } | { messageId: string; attachmentId: string }): Promise<MailAsset> {
-    if ("assetId" in input) return this.assets.info(ctx, input.assetId)
+    if ("assetId" in input) {
+      const asset = await this.assets.info(ctx, input.assetId)
+      if (asset.messageId) await resolveMessage(this.repo, ctx, asset.messageId)
+      return asset
+    }
     const asset = (await this.attachments(ctx, input.messageId)).find(a => a.attachmentId === input.attachmentId)
     if (!asset) throw new MailError("UNAVAILABLE", "附件不存在")
     return asset

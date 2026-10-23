@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import { registerNavigationGuard } from "@/app-shell/navigation-guard"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -174,6 +175,34 @@ describe("SystemAppContent launcher", () => {
     })
 
     expect(onConsumed).toHaveBeenCalledWith("request-1")
+  })
+
+  it("retains the embedded editor when back, reset or window transfer is blocked", async () => {
+    const launcher = await renderLauncher(roots)
+    await act(async () => { findButton("本地数据库").click() })
+    const off = registerNavigationGuard(() => false)
+    try {
+      await act(async () => { findButtonByLabel("返回应用列表").click() })
+      expect(document.body.textContent).toContain("数据库内容")
+      await act(async () => { findButtonByLabel("新窗口打开").click() })
+      expect(mocks.openSystemApp).not.toHaveBeenCalled()
+      await launcher.rerender({ launcherResetKey: 1 })
+      expect(document.body.textContent).toContain("数据库内容")
+    } finally { off() }
+  })
+
+  it("rechecks saved content after the asynchronous new-window request", async () => {
+    await renderLauncher(roots)
+    await act(async () => { findButton("本地数据库").click() })
+    let release!: () => void, allowed = true
+    mocks.openSystemApp.mockImplementationOnce(() => new Promise<undefined>(resolve => { release = () => resolve(undefined) }))
+    const off = registerNavigationGuard(() => allowed)
+    try {
+      await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')!.click() })
+      allowed = false
+      await act(async () => { release(); await Promise.resolve(); await Promise.resolve() })
+      expect(document.body.textContent).toContain("数据库内容")
+    } finally { off() }
   })
 
 })

@@ -1,5 +1,7 @@
 # 站内信领域改名 Implementation Plan
 
+> 实施记录（2026-10-23）：R1–R4 已在当前 main 顺序实现并本地提交，独立整段审阅发现的7项问题已修复。自动化结果、候选包及仍待进行的真实账号/原生应用/生产迁移验收见 [验收记录](../../agent-guides/mail-client-acceptance.md)，全部取舍见 [实施记录](../../agent-guides/mail-client-decisions.md)。下方保留原始实施步骤，复选框不是当前进度。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把现有站内信的公开领域改为 `mail-internal`，保留历史数据和功能，为外部邮箱释放 `mail`。

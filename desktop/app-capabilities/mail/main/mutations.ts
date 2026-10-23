@@ -182,6 +182,7 @@ export class MailMutations {
           }
           try {
             const message = await resolveMessage(this.repo, ctx, id), source = await this.folder(ctx, params.accountId, message.data.summary.locator.folderId)
+            if (action === "message.delete" && "permanent" in params && params.permanent && source.data.folder.role !== "trash") throw new MailError("TRASH_REQUIRED", "只能永久删除回收站中的邮件")
             if (!session) {
               if (connectionError) throw connectionError
               try { const { config, credential } = await this.accounts.credential(ctx, params.accountId); session = await this.accounts.protocols.imap(ctx, config, credential) } catch (error) { connectionError = error; throw error }

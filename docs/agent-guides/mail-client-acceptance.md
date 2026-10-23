@@ -24,7 +24,11 @@
 - C14 安全回归：跨邮件图片在下载前拒绝；暂停使进行中的图片读取失效；切换身份关闭原生通知；同一 SY 用户重新登录也更新 UI generation。44份 Skill 输入定义逐项与实际工具schema比对。异常/过深MIME和超大/无效地址邮件头单封降级，后续索引继续；不完整地址不能自动构造回复。
 - 当前全局340个 capability、336个 MCP 索引；公开 tools/list 仍只有 search / invoke。邮箱44项，站内信17项。22个桌面 System App，邮箱不默认固定 Dock；外部邮箱不进入手机。
 
-桌面扩大回归48个文件252项通过，服务端5个文件70项通过；最终完整desktop typecheck通过（包含renderer、Electron、preload和测试），主进程及renderer候选构建通过。IPC codegen、hard constraints和UI tracking通过。候选包的最终核对与包体信息见下方。所有测试数据为虚构邮箱或临时本机 fixture，没有新实现的真实收发凭据和个人邮件内容。
+桌面扩大回归52个文件285项通过，服务端5个文件70项通过；最终完整desktop typecheck通过（包含renderer、Electron、preload和测试），主进程及renderer候选构建通过。IPC codegen、hard constraints和UI tracking通过。候选包的最终核对与包体信息见下方。所有测试数据为虚构邮箱或临时本机 fixture，没有新实现的真实收发凭据和个人邮件内容。
+
+## 独立审阅
+
+最终整段审阅确认7项问题，并以失败回归集中修复：永久删除限回收站、离开应用先保存、正文扫描批次不跳过余文、SMTP取消关闭实际连接、prepared发送沿用持久MIME、显示名引号与逗号往返、失效邮件的缓存附件拒绝导出。真实邮件附件的旧assetId失效不清除已固定的草稿或发送字节；发送编译使用其已保留资产。审阅未延期小项；上述真实账号、原生应用、Windows与生产迁移边界继续待验。修复后52个文件285项桌面回归通过，完整desktop typecheck通过，IPC codegen、hard constraints和UI tracking通过；候选包仍按下方实际结果区分。
 
 ## 真实阿里验收步骤
 
@@ -60,11 +64,11 @@
 
 固定依赖：ImapFlow2.9.1、Nodemailer10.2.1、MailParser3.12.4、DOMPurify3.4.17；Tiptap六包统一3.32.0（react/core/pm/starter-kit/extension-image/extension-text-style）。Tiptap所需Link/Underline已由StarterKit提供，测试确认不重复注册。ImapFlow/MailParser及Tiptap使用MIT，Nodemailer使用MIT-0，DOMPurify为MPL-2.0或Apache-2.0双许可；未新增协作、云编辑或付费服务。
 
-候选输出为 `desktop/release/mail-client-candidate/`，构建命令为 `pnpm --filter @synapse/desktop run build`，并使用 `CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @synapse/desktop run package:mac:compiled --config.directories.output=release/mail-client-candidate` 打包。不改版本、不发布；electron-builder回退ad-hoc签名并跳过公证。警告中缺失的是其他平台的可选WeCom/Claude SDK二进制，不能据此声称Windows验证通过。
+候选包基于当前共享工作区构建，保留了任务开始前已有的两份 router / naming 未提交修改；它们没有纳入本次提交，候选不是纯净发布构建。候选输出为 `desktop/release/mail-client-candidate/`，构建命令为 `pnpm --filter @synapse/desktop run build`，并使用 `CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @synapse/desktop run package:mac:compiled --config.directories.output=release/mail-client-candidate` 打包。不改版本、不发布；electron-builder回退ad-hoc签名并跳过公证。警告中缺失的是其他平台的可选WeCom/Claude SDK二进制，不能据此声称Windows验证通过。
 
-最终候选ASAR检查通过：53724个packed、1640个unpacked文件，含既有JSON Repair、文本提取、HTML Worker和Terminal smoke。实际协议闭包45个包，提取922个文件约8.05MB；实际包中进行ImapFlow构造、Nodemailer仅内存MIME生成和MailParser UTF-8往返，未连接网络。生产账号的IMAP/SMTP行为仍待验。
+最终候选ASAR检查通过：53724个packed、1640个unpacked文件，含既有JSON Repair、文本提取、HTML Worker和Terminal smoke。实际协议闭包45个包，提取922个文件约8.05MB；实际包中进行ImapFlow与SMTPConnection构造、Nodemailer仅内存MIME生成和MailParser UTF-8往返，未连接网络。生产账号的IMAP/SMTP行为仍待验。
 
-Vite实际构建图8071个模块、preload esbuild图4个模块，均未包含imapflow/nodemailer/mailparser或mail/main。相对任务开始前既有本地构建缓存，renderer JS由9527007增至10049893字节（+522886，约511KiB），preload由109626增至116623字节（+6997）；这不是同commit控制组，不能将全部差值归因于单项依赖。最终ASAR为440661316字节，DMG为309592954字节，ZIP为299475541字节。
+Vite实际构建图8072个模块、preload esbuild图4个模块，均未包含imapflow/nodemailer/mailparser或mail/main。相对任务开始前既有本地构建缓存，renderer JS由9527007增至10051132字节（+524125，约512KiB），preload由109626增至116623字节（+6997）；这不是同commit控制组，不能将全部差值归因于单项依赖。最终ASAR为440667850字节，DMG为309546897字节，ZIP为299484784字节。
 
 持续运行的维护每分钟处理有界预览和资产批次，预览过期释放自己的引用；不释放草稿或发送作业持有的引用。测试推进11分钟而不重启服务，确认过期预览不再长期占用资产。
 

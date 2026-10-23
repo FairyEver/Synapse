@@ -3,6 +3,7 @@ import { mocks, mount, flush, deferred } from "./harness"
 import { act } from "react"
 import { afterEach, expect, it, vi } from "vitest"
 import { useCompose } from "../use-compose"
+import { runAppNavigation } from "@/app-shell/navigation-guard"
 const draft = { id: "md_draft", accountId: "ma_one", revision: 1, to: [{ address: "to@example.com" }], cc: [], bcc: [], subject: "主题", html: "<p>正文</p>", text: "正文", assetIds: [], inlineImages: [], state: "editing" as const, mode: "new" as const, sourceMessageId: null, remoteLocator: null, localSaved: true, syncState: "pending" as const, updatedAt: "2026-10-23T00:00:00Z" }
 let editor: ReturnType<typeof useCompose>
 function Harness() { editor = useCompose(mocks.owner); return null }
@@ -62,4 +63,29 @@ it("keeps unknown send results for read-only reconciliation without resubmission
   await act(async () => { await editor.send() }); await act(async () => { await editor.send(); await editor.reconcile() })
   expect(editor.receipt?.state).toBe("unknown"); expect(mocks.api.messageSend).toHaveBeenCalledTimes(1)
   expect(mocks.api.operationGet).toHaveBeenCalledWith({ operationId: "mo_unknown" })
+})
+
+it("roundtrips comma, quoted and multilingual display names while saving a reply", async () => {
+  await setup(); await act(async () => { await editor.close() })
+  const to = [{ address: "john@example.com", name: "Doe, John" }, { address: "cn@example.com", name: '张三; \"同事\"' }]
+  mocks.api.draftGet.mockResolvedValueOnce({ ...draft, to })
+  await act(async () => { await editor.open({ draftId: draft.id }) })
+  act(() => editor.edit({ subject: "修改正文也能保存" }))
+  await act(async () => { await editor.save() })
+  expect(mocks.api.draftUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ patch: expect.objectContaining({ to }) }))
+})
+
+it("waits for unsaved edits before leaving and blocks navigation when persistence fails", async () => {
+  await setup(); act(() => editor.edit({ subject: "before debounce" }))
+  const pending = deferred<typeof draft>(); mocks.api.draftUpdate.mockReturnValueOnce(pending.promise)
+  const leave = vi.fn(); let navigation!: Promise<boolean>
+  act(() => { navigation = runAppNavigation(leave) }); await flush()
+  expect(leave).not.toHaveBeenCalled()
+  await act(async () => { pending.resolve({ ...draft, revision: 2, subject: "before debounce" }); await navigation })
+  expect(leave).toHaveBeenCalledOnce()
+  act(() => editor.edit({ subject: "must remain visible" }))
+  mocks.api.draftUpdate.mockRejectedValueOnce(new Error("save failed"))
+  let result = true; await act(async () => { result = await runAppNavigation(leave) })
+  expect(result).toBe(false); expect(leave).toHaveBeenCalledOnce()
+  expect(editor.draft?.subject).toBe("must remain visible"); expect(editor.error).toBe("save failed")
 })

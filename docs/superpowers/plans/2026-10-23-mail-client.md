@@ -1,5 +1,7 @@
 # 本机邮箱客户端 Implementation Plan
 
+> 实施记录（2026-10-23）：C1–C14 已在当前 main 顺序实现并本地提交，独立整段审阅发现的7项问题已修复。自动化结果、候选包及仍待进行的真实账号/原生应用/生产迁移验收见 [验收记录](../../agent-guides/mail-client-acceptance.md)，全部取舍见 [实施记录](../../agent-guides/mail-client-decisions.md)。下方保留原始实施步骤，复选框不是当前进度。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 SY 桌面提供阿里邮箱优先的本机邮件客户端，并向 Agent 提供同等业务能力的 MCP 与 Skill。
@@ -321,4 +323,4 @@
 - Review Focus 五类各有对应失败断言；新附件/多账号/大邮箱边界不依赖真实敏感样本。
 - 推荐按任务实现并逐任务独立审阅：迁移与发信状态机错误代价较高，适合把问题限制在当前任务；如用户选择主 Agent 顺序执行，则保持同样任务顺序和验收标准。
 - 2026-10-23 已完成自检，补齐账号级星标视图、folder.list 的服务接口、正文分块到安全渲染的边界、查询批次限制和 App definitions 注册位置。两份计划共有 18 个任务；R1–R4、C1–C14 均未开始。
-- 当前仅完成计划；实现、自动测试、包体验证及真实邮箱验收均未执行。两份计划评审并选择执行方式后，先执行 R1–R4，再开始 C1。
+- 规划阶段原始状态：仅完成计划，实现、自动测试、包体验证及真实邮箱验收均未执行。两份计划评审并选择执行方式后，先执行 R1–R4，再开始 C1。

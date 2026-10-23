@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { MAIL_SEARCH_BATCH_BYTES, MAIL_SEARCH_BATCH_MS, MAIL_SEARCH_TTL_MS } from "../shared/limits"
+import { MAIL_SEARCH_BATCH_BYTES, MAIL_SEARCH_BATCH_MS, MAIL_SEARCH_TTL_MS, MAIL_MAX_BODY_BYTES } from "../shared/limits"
 import { matchesMailFilters, matchesMailText } from "../shared/search"
 import { MAIL_INPUT_SCHEMAS } from "../shared/schema"
 import { MailError, type Coverage, type MailContext, type MailInputs, type MailJob, type MailResults, type SearchAction } from "../shared/types"
@@ -81,7 +81,7 @@ export class MailSearch {
     const started = Date.now(), remote = data.phase === "remote", body = data.input.fields === "body"
     if (data.phase === "complete" || data.job.state === "cancelled") return
     let ended = false, limited = !data.bodyComplete
-    while (scanned < (body ? 100 : 1000) && Date.now() - started < MAIL_SEARCH_BATCH_MS && bytes < MAIL_SEARCH_BATCH_BYTES) {
+    while (scanned < (body ? 100 : 1000) && Date.now() - started < MAIL_SEARCH_BATCH_MS && bytes <= MAIL_SEARCH_BATCH_BYTES - (body ? MAIL_MAX_BODY_BYTES : 1)) {
       const page = await this.repo.page<StoredMessage>(ctx, "messages", { accountId: row.accountId, cursor, limit: body ? 1 : 100, binding: id })
       for (const message of page.items) {
         if (!matchesMailFilters(message.data.summary, data.input)) continue

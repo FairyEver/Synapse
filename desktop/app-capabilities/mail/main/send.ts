@@ -105,7 +105,8 @@ export class MailSend {
   async submit(ctx: MailContext, input: MailInputs["message.send"]): Promise<SendReceipt> {
     const params = MAIL_INPUT_SCHEMAS["message.send"].parse(input), preview = await this.repo.get<StoredPreview>(ctx, "previews", params.previewId)
     return this.accounts.exclusive(ctx, preview.accountId, async () => {
-      const snapshot = preview.data.snapshot, id = operationId(`send:${ctx.ownerId}:${preview.accountId}:${snapshot.draft.id}:${snapshot.draft.revision}`), keyId = `request:${mailHash(`${ctx.ownerId}:${preview.accountId}:${params.clientRequestId}`)}`
+      let snapshot = preview.data.snapshot
+      const id = operationId(`send:${ctx.ownerId}:${preview.accountId}:${snapshot.draft.id}:${snapshot.draft.revision}`), keyId = `request:${mailHash(`${ctx.ownerId}:${preview.accountId}:${params.clientRequestId}`)}`
       const key = await this.repo.find<SendKey>(ctx, "operations", keyId)
       if (key && (key.data.kind !== "send-key" || key.data.signature !== snapshot.signature)) throw new MailError("IDEMPOTENCY_CONFLICT", "此请求标识已用于其他邮件内容")
       let operation = await this.repo.find<StoredSend>(ctx, "operations", key?.data.operationId ?? id)
@@ -119,6 +120,8 @@ export class MailSend {
         if (operation.data.state === "submitting") operation = await this.outcome(ctx, operation, { ...operation.data.receipt, state: "unknown", errorCode: "INTERRUPTED", retryStage: "reconcile" })
         return this.operations.finishSentCopyLocked(ctx, operation.id)
       }
+      // A prepared operation owns its exact MIME, Message-ID and date across previews.
+      snapshot = operation?.data.snapshot ?? snapshot
       await this.validateSnapshot(ctx, snapshot)
       if (!operation) {
         const refs = [...new Set([snapshot.bodyRef, snapshot.rawAssetId, snapshot.sentRawAssetId, ...snapshot.attachments.map(a => a.id)])]
