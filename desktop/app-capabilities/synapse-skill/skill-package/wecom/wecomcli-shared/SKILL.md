@@ -1,15 +1,17 @@
 ---
 name: wecomcli-shared
-description: Use when working with Enterprise WeChat messaging through Synapse, including 企业微信消息、企微单聊群聊、最近会话、发送文本图片文件语音视频, or checking the 企业微信连接状态.
+description: Use when 用户要求通过 Synapse 向企业微信/企微里的某人、某个群或自己发消息，查询能给谁发消息、最近会话或连接状态，包括文本、图片、文件、语音和视频；明确指定 Webhook 或已绑定 Webhook 的任务除外。
 ---
 
 # 企业微信官方 Skills 的 Synapse 入口
 
 Synapse 已内置 `@wecom/cli`。不要安装或升级 CLI，不要运行 `auth init` 或 `auth show`，不要读取、打印、记录或传递 Bot ID、Secret、token、Authorization header 或凭据文件。
 
+企业微信中的按人、按群和“发给我”请求默认使用 Synapse 已连接的智能机器人，用户不必额外指定“机器人”。“我的企业微信”仍由机器人代发，不是登录或操作用户个人账号。只有用户明确指定 Webhook 或任务已明确绑定该渠道时才使用对应的 Webhook Skill；找不到会话、未连接或发送失败时，不切换到默认 Webhook。
+
 ## 1. 检查连接
 
-Synapse publishes only `search` and `invoke`. Search with `domain: "wecom"` or the exact tool name, then invoke the returned tool with its complete schema.
+Synapse publishes only `search` and `invoke`. For messaging, search once with `{"domain":"wecom","query":"企业微信消息 连接状态","limit":2}` to obtain the complete schemas for `app_wecom_connection_get` and `app_wecom_cli_run`, then invoke the returned names. A domain-only search is an index, not a schema.
 
 1. 调用 `app_wecom_connection_get`，参数为 `{}`。
 2. `status: "connected"` 时继续。
@@ -17,11 +19,15 @@ Synapse publishes only `search` and `invoke`. Search with `domain: "wecom"` or t
 4. 工具返回 `WECOM_CONNECTOR_REQUIRED` 或 `WECOM_AUTH_REQUIRED` 时，同样停止并引导用户处理连接，不重试同一业务命令。
 5. 工具返回 `WECOM_PERMISSION_REQUIRED` 时这是企业微信业务权限问题，不是连接失效。展示返回的 `permission` 和完整 `helpUrl` 后停止，不要重连、重试或猜测其他接口。
 
-需要当前机器人或授权人身份时，通过 `app_wecom_cli_run` 执行：
+本次连续操作已确认连接正常时复用该结果；连接变化、账号切换或出现授权错误时重新检查。常规消息命令在消息 Skill 中已给出，直接使用，不先尝试裸 `schema`、枚举命令或查找安装目录。
 
-```text
-wecom-cli identity whoami
+仅在目标是“我/本人/授权人”或确需核对身份时，通过 `app_wecom_cli_run` 执行 `wecom-cli identity whoami`：
+
+```json
+{"args":["identity","whoami"]}
 ```
+
+向本人发送时只取返回中的授权真人用户 ID，不取机器人 ID；按姓名、群名或查询最近会话时直接使用消息 Skill 的 `sessions list`，不例行追加身份查询。
 
 ## 2. 选择业务 Skill
 

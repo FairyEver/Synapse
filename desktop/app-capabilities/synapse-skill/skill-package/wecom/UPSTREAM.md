@@ -19,6 +19,10 @@ Local changes are limited to:
 - Folding the minimal `media upload` instructions into the message Skill so
   messages can still include local images, files, voice and video without a
   standalone media Skill.
+- Clarifying connected-bot versus explicitly selected Webhook routing, and
+  providing direct MCP argument examples and separate self, single-chat,
+  group-chat and contextual-target flows. Preserve fresh-session validation,
+  type-aware exact matching and concise, evidence-based send results on updates.
 
 ## Permanent Exclusions
 

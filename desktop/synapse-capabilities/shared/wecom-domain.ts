@@ -15,7 +15,7 @@ const definitions = [
   [
     WECOM_MCP_TOOL_NAMES.cliRun,
     WECOM_CLI_RUN_CAPABILITY_ID,
-    "Run one approved Enterprise WeChat messaging command through the connected bot. Use for 企业微信消息、企微单聊群聊、最近会话、发送文本图片文件语音视频. Supports message commands, media upload for message attachments, identity and schema operations. Pass the canonical arguments from the Synapse WeCom messaging Skill without the `wecom-cli` executable name. Never pass auth commands or credentials.",
+    "Run one approved Enterprise WeChat messaging command through the connected bot. Use for 企业微信消息、给某人发消息、发到某个群、发给我、能给谁发消息、最近会话、发送文本图片文件语音视频. Default to this bot for named people/groups; use a Webhook only when explicitly specified or already bound to the task, never as fallback. First read wecom/wecomcli-shared/SKILL.md and wecom/wecomcli-message/SKILL.md relative to the current installed synapse-skill root from the Skill catalog, not a .synapse-install-dir-* staging copy. Supports message commands, media upload for message attachments, identity and schema operations. Known message flows need no schema probe. Pass the Skill's canonical args without the `wecom-cli` executable name. Never pass auth commands or credentials.",
   ],
 ] as const
 
@@ -48,7 +48,7 @@ const schemas: Record<string, { properties: Record<string, unknown>; required?: 
         },
         minItems: 1,
         maxItems: 256,
-        description: `Canonical Enterprise WeChat CLI arguments without the executable name. The first argument must be one of: ${WECOM_CLI_SERVICES.join(", ")}. For media, only upload is supported as a messaging dependency.`,
+        description: `Canonical Enterprise WeChat CLI arguments without the executable name. The first argument must be one of: ${WECOM_CLI_SERVICES.join(", ")}. For media, only upload is supported as a messaging dependency. List available single/group chats with ["message","aibot","sessions","list"]; for sending to the authorizing user, use ["identity","whoami"]. Read the messaging Skill for target matching and send arguments; do not probe with ["schema"].`,
       },
     },
     required: ["args"],
