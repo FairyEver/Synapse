@@ -14,6 +14,45 @@ async function completeSync(r: Awaited<ReturnType<typeof syncRig>>) {
 describe("mail metadata synchronization", () => {
   const close: (() => Promise<void>)[] = []
   afterEach(async () => { vi.useRealTimers(); for (const fn of close.splice(0)) await fn() })
+  it("reconciles removed drafts before Inbox history finishes, releasing each bounded turn", async () => {
+    const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
+    vi.mocked(r.session.close).mockClear()
+    vi.mocked(r.session.listFolders).mockResolvedValue([
+      { path: "INBOX", name: "INBOX", delimiter: "/", flags: [], specialUse: null, count: 251 },
+      { path: "Drafts", name: "Drafts", delimiter: "/", flags: [], specialUse: "\\Drafts", count: 2 },
+    ])
+    let draftUids = [1, 2]
+    vi.mocked(r.session.searchUids).mockImplementation(async path => path === "Drafts" ? draftUids : Array.from({ length: 251 }, (_, i) => i + 1))
+    await r.sync.runOnce(r.ctx, r.account.id)
+    await r.sync.runOnce(r.ctx, r.account.id, undefined, false)
+    const folders = (await r.repo.page<import("../sync").StoredFolder>(r.ctx, "folders", { accountId: r.account.id })).items
+    const drafts = folders.find(f => f.data.folder.role === "drafts")!
+    expect(folders.find(f => f.data.folder.role === "inbox")!.data.folder.metadataComplete).toBe(false)
+    const messages = (await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id, limit: 100 })).items
+    expect(messages.filter(m => m.data.summary.locator.folderId === drafts.id)).toHaveLength(2)
+    draftUids = [2]
+    await r.sync.runOnce(r.ctx, r.account.id)
+    await r.sync.runOnce(r.ctx, r.account.id, undefined, false)
+    const old = await r.repo.get<import("../sync").StoredMessage>(r.ctx, "messages", messages.find(m => m.data.summary.locator.folderId === drafts.id && m.data.summary.locator.uid === 1)!.id)
+    expect(old.data.summary.stale).toBe(true)
+    expect(r.session.close).toHaveBeenCalledTimes(4)
+    expect(vi.mocked(r.session.fetchHeaders).mock.calls.map(call => call[1].length)).toEqual([50, 2, 100])
+  })
+  it("gives other folders a turn after an Inbox batch fails", async () => {
+    const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
+    vi.mocked(r.session.listFolders).mockResolvedValue([
+      { path: "INBOX", name: "INBOX", delimiter: "/", flags: [], specialUse: null, count: 251 },
+      { path: "Drafts", name: "Drafts", delimiter: "/", flags: [], specialUse: "\\Drafts", count: 1 },
+    ])
+    vi.mocked(r.session.searchUids).mockImplementation(async path => path === "Drafts" ? [1] : Array.from({ length: 251 }, (_, i) => i + 1))
+    vi.mocked(r.session.fetchHeaders).mockRejectedValueOnce(new MailError("NETWORK_TIMEOUT", "Timeout"))
+    await expect(r.sync.runOnce(r.ctx, r.account.id)).rejects.toMatchObject({ code: "NETWORK_TIMEOUT" })
+    await r.sync.runOnce(r.ctx, r.account.id)
+    const rows = (await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id, limit: 100 })).items
+    expect(rows).toHaveLength(1)
+    const folder = await r.repo.get<import("../sync").StoredFolder>(r.ctx, "folders", rows[0].data.summary.locator.folderId)
+    expect(folder.data.folder.role).toBe("drafts")
+  })
   it("indexes first 50 then bounded 100-header batches without fetching bodies; repeated hints are idempotent", async () => {
     const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
     await completeSync(r)

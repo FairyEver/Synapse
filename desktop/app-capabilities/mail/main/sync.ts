@@ -71,6 +71,7 @@ interface Runner { ctx: MailContext; accountId: string; controller: AbortControl
 
 export class MailSync {
   private runners = new Map<string, Runner>()
+  private folderQueues = new Map<string, string[]>()
   private slots = new WorkSlots()
   private suspended = false
   constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly events: SyncEvents) {}
@@ -198,15 +199,24 @@ export class MailSync {
       try {
         const folders = (await this.folders(ctx, accountId, session, refreshFolders)).filter(f => f.data.folder.selectable).sort((a, b) => Number(b.data.folder.role === "inbox") - Number(a.data.folder.role === "inbox"))
         let coverage: Coverage = { ...emptyCoverage(), metadataComplete: true, reason: "server_visible_history_only" }
-        for (const folder of folders.filter(f => newMailOnly ? f.data.folder.role === "inbox" : folderId ? f.id === folderId : refreshFolders || f.data.folder.role === "inbox" || !f.data.folder.metadataComplete)) {
-          const result = await this.syncFolder(ctx, accountId, folder, session, newMailOnly)
-          if (!result.metadataComplete) break
+        const key = `${ctx.ownerId}:${ctx.generation}:${accountId}`
+        const queue = (this.folderQueues.get(key) ?? []).filter(id => folders.some(f => f.id === id))
+        if (!newMailOnly) {
+          for (const folder of folders) if ((refreshFolders || folder.data.folder.role === "inbox" || !folder.data.folder.metadataComplete) && !queue.includes(folder.id)) queue.push(folder.id)
         }
+        const targetId = newMailOnly ? folders.find(f => f.data.folder.role === "inbox")?.id : folderId ?? queue[0]
+        const target = folders.find(f => f.id === targetId)
+        // Advance before IO so a failing Inbox cannot starve other folders. Each
+        // turn still releases the work connection and account queue after one batch.
+        if (!newMailOnly && targetId) { const index = queue.indexOf(targetId); if (index >= 0) queue.splice(index, 1) }
+        this.folderQueues.set(key, queue)
+        if (target) await this.syncFolder(ctx, accountId, target, session, newMailOnly)
         for (const folder of folders.filter(f => !folderId || f.id === folderId)) {
           const checkpoint = await this.repo.find<FolderCheckpoint>(ctx, "sync-state", `folder:${folder.id}`)
           coverage.indexedCount += checkpoint?.data.indexedCount ?? 0
           coverage.metadataComplete &&= checkpoint?.data.metadataComplete ?? false
         }
+        if (!folderId && !newMailOnly && queue.length) coverage.metadataComplete = false
         if (!coverage.metadataComplete) coverage.reason = "metadata_indexing"
         const account = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)
         if (!account.data.paused && ["offline", "error", "connecting"].includes(account.data.state)) {
@@ -298,6 +308,7 @@ export class MailSync {
     return this.updateJob(ctx, input.jobId, "cancelled", job.coverage, null)
   }
   async stopAccount(accountId: string): Promise<void> {
+    for (const key of this.folderQueues.keys()) if (key.endsWith(`:${accountId}`)) this.folderQueues.delete(key)
     const runners = [...this.runners.values()].filter(r => r.accountId === accountId)
     for (const r of runners) { r.controller.abort(); await r.idle?.close() }
     // May be called while holding the account queue. Aborted queued work validates
@@ -318,6 +329,7 @@ export class MailSync {
     await Promise.all([...new Set(runners.map(r => r.accountId))].map(id => this.stopAccount(id)))
     await Promise.all(runners.map(r => r.task))
     await Promise.all(runners.map(r => r.idleTask))
+    this.folderQueues.clear()
   }
 }
 function indexedStructure(structure: MailBodyStructure | null): { structure: MailBodyStructure | null; attachments: number } {

@@ -76,7 +76,7 @@ export class MailService {
       remove: (ctx, id) => this.assets.removeAccount(ctx, id),
       open: (ctx, accountId) => this.open(ctx, { accountId, configure: true }),
     })
-    this.content = new MailContent(this.repo, this.accounts, this.assets, access)
+    this.content = new MailContent(this.repo, this.accounts, this.assets, access, event => this.changed(event))
     this.resources = new MailBodyResources(this.repo, this.assets, access)
     this.search = new MailSearch(this.repo, (ctx, id, budget) => this.content.readSearchText(ctx, id, budget), (ctx, accountId, id) => this.changed({ ownerId: ctx.ownerId, generation: ctx.generation, accountId, ids: [id], revision: 1 }))
     this.mutations = new MailMutations(this.repo, this.accounts, event => this.changed(event))

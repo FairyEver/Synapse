@@ -16,7 +16,7 @@ export type { ComposeIntent } from "../../../app-capabilities/mail/shared/privat
 export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewModel; onSettings(): void; onCompose(intent: ComposeIntent): void }) {
   const [confirmation, setConfirmation] = useState<{ ids: string[]; drafts: boolean } | null>(null), [busy, setBusy] = useState(false)
   const [draftRemaining, setDraftRemaining] = useState(0)
-  const body = useMailBody(mail.detail, mail.owner)
+  const body = useMailBody(mail.detail, mail.owner, mail.clearDetail)
   const performBatch = async (action: Parameters<typeof mail.mutate>[0], ids: string[], targetFolderId?: string) => {
     setBusy(true)
     try { const result = await mail.mutate(action, ids, targetFolderId); const succeeded = result.items.filter(item => item.status === "succeeded").length, unknown = result.items.filter(item => item.status === "unknown").length; toast(`${succeeded} 封完成${unknown ? `，${unknown} 封结果待核验` : ""}${result.items.length - succeeded - unknown ? `，${result.items.length - succeeded - unknown} 封失败` : ""}`); setConfirmation(null) }

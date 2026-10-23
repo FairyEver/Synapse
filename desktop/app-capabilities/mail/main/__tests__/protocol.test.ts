@@ -1,8 +1,20 @@
-import { describe, expect, it } from "vitest"
-import { imapOptions } from "../protocol/imap"
+import { describe, expect, it, vi } from "vitest"
+import { ImapFlow } from "imapflow"
+import { ImapSession, imapOptions } from "../protocol/imap"
 import { smtpOptions } from "../protocol/smtp"
 import { aliyunConfig, providerPolicy } from "../protocol/aliyun-policy"
 import { normalizeProtocolError } from "../protocol/types"
+
+for (const exists of [true, false]) it(`checks whether the UID still exists when a part download is empty (${exists})`, async () => {
+  const client = new ImapFlow(imapOptions(aliyunConfig("me@example.com", "Work"), "fixture"))
+  const release = vi.fn()
+  vi.spyOn(client, "getMailboxLock").mockResolvedValue({ path: "INBOX", release })
+  vi.spyOn(client, "download").mockResolvedValue({})
+  vi.spyOn(client, "fetchOne").mockResolvedValue(exists ? { uid: 42, seq: 1 } : false)
+  const session = new ImapSession(client)
+  await expect(session.fetchPart("INBOX", 42, "1", new AbortController().signal)).rejects.toMatchObject({ code: exists ? "BODY_UNAVAILABLE" : "STALE_TARGET" })
+  expect(release).toHaveBeenCalledTimes(1)
+})
 
 describe("mail protocol safety", () => {
   it("uses verified TLS for Aliyun and requires STARTTLS for custom endpoints", () => {

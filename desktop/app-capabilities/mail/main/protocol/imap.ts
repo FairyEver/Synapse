@@ -84,7 +84,11 @@ export class ImapSession implements MailImapSession {
       const lock = await this.client.getMailboxLock(path)
       try {
         const download = await this.client.download(String(uid), part, { uid: true, maxBytes: maxBytes + 1 })
-        if (!download.content) throw new MailError("STALE_TARGET", "邮件内容不可用")
+        if (!download.content) {
+          const message = await this.client.fetchOne(String(uid), { uid: true }, { uid: true })
+          if (!message) throw new MailError("STALE_TARGET", "邮件已失效，请刷新列表")
+          throw new MailError("BODY_UNAVAILABLE", "邮件内容暂不可用，请重试")
+        }
         const source = download.content
         let released = false
         let timer: ReturnType<typeof setTimeout>

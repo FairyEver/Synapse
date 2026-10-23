@@ -5,7 +5,7 @@ import type { MailHtmlResources } from "../../../app-capabilities/mail/renderer/
 import { mailApi, mailError } from "./api"
 export interface MailBody { html: string; text: string; complete: boolean; truncated: boolean }
 const emptyResources = (): MailHtmlResources => ({ cid: {}, remote: {} })
-export function useMailBody(detail: MailDetail | null, owner: string | null) {
+export function useMailBody(detail: MailDetail | null, owner: string | null, onInvalidated?: () => void) {
   const [body, setBody] = useState<MailBody | null>(null), [resources, setResources] = useState<MailHtmlResources>(emptyResources)
   const [error, setError] = useState<string | null>(null), [loading, setLoading] = useState(false)
   const epoch = useRef(0), blobs = useRef<string[]>([]), current = useRef({ id: detail?.id, owner }); current.current = { id: detail?.id, owner }
@@ -43,9 +43,13 @@ export function useMailBody(detail: MailDetail | null, owner: string | null) {
         } catch (cause) { if (valid()) setError(mailError(cause)) }
       }
       if (valid()) setResources({ cid, remote: {} })
-    })().catch(cause => { if (valid()) setError(mailError(cause)) }).finally(() => { if (valid()) setLoading(false) })
+    })().catch(cause => {
+      if (!valid()) return
+      setError(mailError(cause))
+      if (cause && typeof cause === "object" && "code" in cause && cause.code === "STALE_TARGET") onInvalidated?.()
+    }).finally(() => { if (valid()) setLoading(false) })
     return () => { epoch.current++; reset() }
-  }, [detail?.id, owner])
+  }, [detail?.id, owner, onInvalidated])
   const loadRemote = async (urls: string[]) => {
     if (!detail) return
     const e = epoch.current, id = detail.id, remote: Record<string, string> = {}

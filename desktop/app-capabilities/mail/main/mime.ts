@@ -10,7 +10,7 @@ import { MailError, type MailAction, type MailAsset, type MailContext, type Mail
 import { MailRepository } from "./repository"
 import { MailAccounts } from "./accounts"
 import { MailAssets, type MailAccess, type StoredMailAsset } from "./assets"
-import { resolveMessage, messageSummary, assertRemoteGeneration, type StoredFolder, type StoredMessage } from "./sync"
+import { resolveMessage, messageSummary, assertRemoteGeneration, type MailChanged, type StoredFolder, type StoredMessage } from "./sync"
 import type { ReadSearchText } from "./search"
 import type { MailBodyStructure, MailImapSession } from "./protocol/types"
 
@@ -94,7 +94,7 @@ function attachmentAssetId(messageId: string, part: string): string {
 }
 type AttachmentAction = Extract<MailAction, `attachment.${string}`> | "message.extract_to_file"
 export class MailContent {
-  constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly assets: MailAssets, private readonly access: MailAccess) {}
+  constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly assets: MailAssets, private readonly access: MailAccess, private readonly onChanged: (event: MailChanged) => void = () => undefined) {}
   private async withMessage<T>(ctx: MailContext, id: string, task: (row: Awaited<ReturnType<typeof resolveMessage>>, folder: StoredFolder, session: MailImapSession) => Promise<T>): Promise<T> {
     const target = await resolveMessage(this.repo, ctx, id)
     return this.accounts.exclusive(ctx, target.accountId, async () => {
@@ -105,6 +105,13 @@ export class MailContent {
         const selected = await session.select(folder.data.folder.path, ctx.signal)
         await assertRemoteGeneration(this.repo, ctx, folder.id, row.data.summary.locator.uidValidity, selected.uidValidity)
         return await task(row, folder.data, session)
+      } catch (error) {
+        if (error instanceof MailError && error.code === "STALE_TARGET") {
+          const current = await this.repo.get<StoredMessage>(ctx, "messages", id)
+          const saved = current.data.summary.stale ? current : await this.repo.save(ctx, "messages", id, current.accountId, { ...current.data, summary: { ...current.data.summary, stale: true } }, current.revision, current.sortKey)
+          this.onChanged({ ownerId: ctx.ownerId, generation: ctx.generation, accountId: saved.accountId, ids: [id], revision: saved.revision })
+        }
+        throw error
       } finally { await session.close() }
     })
   }
