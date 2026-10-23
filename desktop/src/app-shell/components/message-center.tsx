@@ -206,7 +206,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
           {center.unread > 0 && <span aria-hidden="true" className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" />}
         </Button>
       </SheetTrigger>
-      <SheetContent showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={(event) => event.preventDefault()} className="@container/message-center gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-4xl">
+      <SheetContent showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={(event) => event.preventDefault()} className="@container/message-center gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-212">
         <SystemAppTopBar
           left={<><SheetTitle className="truncate text-sm font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</>}
           actions={<>
@@ -216,7 +216,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
           </>}
         />
         <div className="flex min-h-0 flex-1">
-          <section aria-label="通知列表" className={`${center.selected ? "hidden @3xl/message-center:flex" : "flex"} min-h-0 min-w-0 w-full flex-col @3xl/message-center:w-88 @3xl/message-center:shrink-0 @3xl/message-center:border-r`}>
+          <section aria-label="通知列表" className={`${center.selected ? "hidden @3xl/message-center:flex" : "flex"} min-h-0 min-w-0 w-full flex-col @3xl/message-center:w-84 @3xl/message-center:shrink-0 @3xl/message-center:border-r`}>
             <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
               <Tabs value={center.filter} onValueChange={(value) => center.changeFilter(value as MessageFilter)}><TabsList><TabsTrigger value="all">全部</TabsTrigger><TabsTrigger value="unread">未读{center.unread > 0 && ` ${center.unread}`}</TabsTrigger><TabsTrigger value="pending">待处理</TabsTrigger></TabsList></Tabs>
               <Select value={center.source} onValueChange={(value) => center.changeSource(value as MessageSourceFilter)} data-track="message-center-source">
