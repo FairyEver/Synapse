@@ -35,7 +35,7 @@
 ### Task 2: 阅读容器
 
 **Files:** `message-detail.tsx`, `app-capabilities/mail/renderer/sanitize-body.ts` 及对应测试。
-**Interfaces:** 隔离 HTML 输出保持无脚本无同源；唯一可信基础排版样式。
+**Interfaces:** 隔离 HTML 输出保持无脚本；唯一可信基础排版样式。后续用户批准为整页滚动开放同源读取，当前约束以 mail-client-design 的「内容隔离」为准。
 - [x] 添加正文排版与安全清洗测试，确认旧实现失败。
 - [x] 附件前置，HTML 阅读区填满可用高度，信息头紧凑。
 - [x] 运行 mail renderer 与 reading 测试。

@@ -32,11 +32,17 @@ export function sanitizeMailHtml(source: string, resources: MailHtmlResources): 
   }
   for (const anchor of fragment.querySelectorAll("a")) {
     const value = anchor.getAttribute("href")
+    anchor.removeAttribute("href")
     if (value && URL.canParse(value)) {
       const url = new URL(value)
-      if (["http:", "https:", "mailto:"].includes(url.protocol) && !url.username && !url.password) links.push({ label: anchor.textContent?.trim() || url.hostname || value, url: url.toString() })
+      if (["http:", "https:", "mailto:"].includes(url.protocol) && !url.username && !url.password) {
+        const index = links.length
+        links.push({ label: anchor.textContent?.trim() || url.hostname || value, url: url.toString() })
+        // Only local fragments enter the frame; the parent handles approved URLs.
+        anchor.setAttribute("href", `#mail-link-${index}`)
+        anchor.setAttribute("data-mail-link", String(index))
+      }
     }
-    anchor.removeAttribute("href")
   }
   const container = document.createElement("div"); container.append(...fragment.childNodes)
   const csp = "default-src 'none'; img-src blob:; style-src 'nonce-synapse-mail-typography'; base-uri 'none'; form-action 'none'; frame-src 'none'"

@@ -30,3 +30,16 @@ it("provides only trusted typography while rejecting sender styles", () => {
   expect(result.html).not.toContain("100px")
   expect(result.html.match(/<style/g)).toHaveLength(1)
 })
+
+it("keeps links in place as inert local targets and strips forged link identifiers", () => {
+  const result = sanitizeMailHtml('<a href="https://example.com/doc" data-mail-link="99" target="_top"><strong>文档</strong></a><a href="javascript:alert(1)" data-mail-link="0">危险链接</a>', { cid: {}, remote: {} })
+  const doc = new DOMParser().parseFromString(result.html, "text/html")
+  const [safe, unsafe] = doc.querySelectorAll("a")
+  expect(safe.getAttribute("href")).toBe("#mail-link-0")
+  expect(safe.getAttribute("data-mail-link")).toBe("0")
+  expect(safe.querySelector("strong")?.textContent).toBe("文档")
+  expect(safe.hasAttribute("target")).toBe(false)
+  expect(unsafe.hasAttribute("href")).toBe(false)
+  expect(unsafe.hasAttribute("data-mail-link")).toBe(false)
+  expect(result.links).toEqual([{ label: "文档", url: "https://example.com/doc" }])
+})

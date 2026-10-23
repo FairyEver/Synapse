@@ -17,6 +17,11 @@ let root: Root | null = null
 export function mount(node: React.ReactNode) { if (!root) { const div = document.createElement("div"); document.body.append(div); root = createRoot(div) }; act(() => root!.render(node)) }
 export async function flush() { await act(async () => { for (let i = 0; i < 12; i++) await Promise.resolve() }) }
 beforeEach(() => {
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   mocks.owner = "user"; mocks.api = {}
   for (const name of ["accountList", "folderList", "messageList", "messageGet", "messageUpdate", "messageDelete", "messageRestore", "messageMove", "bodyReadChunk", "searchStart", "searchGet", "searchResume", "syncStart", "uiScope", "onChanged", "draftList"]) mocks.api[name] = vi.fn()
   mocks.api.uiScope.mockResolvedValue({ ownerId: "user", generation: 1, notificationsSupported: true, notificationError: null })
