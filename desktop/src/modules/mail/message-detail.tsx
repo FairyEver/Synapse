@@ -1,18 +1,29 @@
 import { useMemo } from "react"
-import { ArrowLeft, Copy, Download, Reply, ReplyAll, Forward } from "lucide-react"
+import { ArrowLeft, Copy, Download, Reply, ReplyAll, Forward, MoreHorizontal, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { MailDetail as Detail } from "../../../app-capabilities/mail/shared/types"
 import { sanitizeMailHtml, type MailHtmlResources } from "../../../app-capabilities/mail/renderer/sanitize-body"
 import type { MailBody } from "./use-mail-body"
 import { MailHtmlBody } from "./mail-html-body"
-export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(): void }) {
+export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(target: "id" | "body"): void }) {
   const projection = useMemo(() => body?.complete && body.html ? sanitizeMailHtml(body.html, resources) : null, [body, resources])
   return <article aria-label="邮件详情" className="flex h-full min-h-0 flex-col bg-background" key={detail.id}>
     <div className="flex h-10 shrink-0 items-center border-b bg-background px-3">
       <SystemAppTopBarActionButton iconOnly className="lg:hidden" aria-label="返回邮件列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
-      <SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("reply")} data-track="mail.reply"><Reply />回复</SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("reply_all")}><ReplyAll />回复全部</SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("forward")}><Forward />转发</SystemAppTopBarActionButton><SystemAppTopBarActionButton iconOnly aria-label="复制邮件链接" onClick={onCopy}><Copy /></SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("reply")} data-track="mail.reply"><Reply />回复</SystemAppTopBarActionButton>
+      <DropdownMenu data-track="mail.detail.more">
+        <DropdownMenuTrigger asChild><SystemAppTopBarActionButton><MoreHorizontal />更多</SystemAppTopBarActionButton></DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem disabled={detail.metadataTruncated} onSelect={() => onReply("reply_all")}><ReplyAll />回复全部</DropdownMenuItem>
+          <DropdownMenuItem disabled={detail.metadataTruncated} onSelect={() => onReply("forward")}><Forward />转发</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => onCopy("id")}><Copy />复制ID</DropdownMenuItem>
+          <DropdownMenuItem disabled={!body?.complete} onSelect={() => onCopy("body")}><FileText />复制正文</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
     <div className="min-h-0 flex-1 overflow-auto">
       <div className="px-5 py-3">

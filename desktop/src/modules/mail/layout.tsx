@@ -23,7 +23,12 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
   const onBatch = (action: Parameters<typeof mail.mutate>[0], ids: string[]) => { if (action === "permanent") setPermanent(ids); else void performBatch(action, ids) }
   const download = async (assetId: string) => { try { await mailApi().saveAttachment({ assetId }) } catch (cause) { toast.error(mailError(cause)) } }
   const openLink = async (url: string) => { try { await openMailLink(url) } catch (cause) { toast.error(mailError(cause)) } }
-  const copy = async () => { if (mail.detail) { try { await navigator.clipboard.writeText(`synapse://mail/${mail.detail.id}`); toast("链接已复制") } catch { toast.error("复制失败") } } }
+  const copy = async (target: "id" | "body") => {
+    if (!mail.detail) return
+    const text = target === "id" ? mail.detail.id : body.body?.complete ? body.body.text : undefined
+    if (text === undefined) return
+    try { await navigator.clipboard.writeText(text); toast(target === "id" ? "ID 已复制" : "正文已复制") } catch { toast.error("复制失败") }
+  }
   return <div className="flex h-full min-h-0 flex-col">
     {(mail.error || body.error) && <div role="alert" className="flex items-center justify-between gap-3 border-b p-3 text-sm text-destructive"><span>{mail.error ?? body.error}</span><Button variant="ghost" onClick={() => void mail.refresh()}>重试</Button></div>}
     {!mail.authenticated ? <p className="p-6 text-sm text-muted-foreground">请先登录 Synapse</p> : !mail.accounts.length ? <div className="flex flex-1 flex-col items-center justify-center gap-4"><p className="text-sm text-muted-foreground">尚未添加邮箱</p><Button onClick={onSettings}>添加邮箱</Button></div> : <div className="flex min-h-0 flex-1">
@@ -36,7 +41,7 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
         <div className="min-h-0 flex-1"><MailList key={`${mail.owner}:${mail.scope?.generation}:${mail.accountId}:${JSON.stringify(mail.view)}`} busy={busy} onSearch={query => void mail.search(query, "body")} coverage={mail.coverage} canContinue={mail.canContinue} onContinue={() => void mail.continueSearch().catch(cause => toast.error(mailError(cause)))} items={mail.items} drafts={mail.drafts} draftView={mail.view.drafts} selected={mail.detail?.id} loading={mail.loading} more={!!mail.cursor} onSelect={id => void mail.selectMessage(id)} onDraft={draftId => onCompose({ draftId })} onMore={() => void mail.loadMore()} onBatch={onBatch} folders={mail.folders} onMove={(ids, target) => void performBatch("move", ids, target)} /></div>
       </div>
       <div className={cn("min-h-0 min-w-0 flex-1", !mail.detail && "hidden lg:block")}>
-        {mail.detail ? <MailDetail detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={() => void copy()} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}
+        {mail.detail ? <MailDetail detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={target => void copy(target)} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}
       </div>
     </div>}
     <AlertDialog open={!!permanent} onOpenChange={open => { if (!open && !busy) setPermanent(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>永久删除 {permanent?.length} 封邮件？</AlertDialogTitle><AlertDialogDescription>只能删除回收站中的邮件，删除后无法恢复。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>取消</AlertDialogCancel><Button variant="destructive" disabled={busy} onClick={() => void performBatch("permanent", permanent!)}>永久删除</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
