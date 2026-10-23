@@ -30,7 +30,7 @@ const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
   repository: ["仓库", "repository", "repo"],
   skill_repository: ["技能仓库", "skill repository", "skill repo"],
   workflow: ["工作流", "节点", "workflow", "node"],
-  wecom: ["企业微信", "企微", "WeCom", "企业邮箱", "wecom"],
+  wecom: ["企业微信", "企微", "WeCom", "wecom"],
 }
 
 const SEARCH_STOP_WORDS = new Set([
@@ -314,7 +314,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
     ...new Set([
       ...excludedSearchDomains(query),
       ...(/(?:站内信|通知中心|synapse\s*邮件)/iu.test(query)
-        && !/(?:企业微信|企微|企业邮箱|\bwecom\b)/iu.test(query)
+        && !/(?:企业微信|企微|\bwecom\b)/iu.test(query)
         ? ["wecom"]
         : []),
     ]),

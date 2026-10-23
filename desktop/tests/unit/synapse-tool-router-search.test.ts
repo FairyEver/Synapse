@@ -109,9 +109,8 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "把这条待办事项标记完成", expect: "app_todos_item_set_completed" },
   { intent: "删除这条待办事项", expect: "app_todos_item_delete" },
   { intent: "企业微信连接状态", expect: "app_wecom_connection_get" },
-  { intent: "企业微信邮箱里有哪些邮件", expect: "app_wecom_cli_run" },
-  { intent: "查一下这封企业微信邮件的详情", expect: "app_wecom_cli_run" },
-  { intent: "用企业微信邮箱发封邮件", expect: "app_wecom_cli_run" },
+  { intent: "用企业微信发条消息", expect: "app_wecom_cli_run" },
+  { intent: "用企微给群里发个文件", expect: "app_wecom_cli_run" },
   { intent: "看看企业微信最近的聊天消息", expect: "app_wecom_cli_run" },
   { intent: "Portal Link 凭证", expect: "app_connectors_portal_link_credential_get" },
   { intent: "Portal Link Test 凭证", expect: "app_connectors_portal_link_test_credential_get" },
@@ -155,7 +154,7 @@ export const ENGLISH_CORPUS: readonly { readonly intent: string; readonly expect
   { intent: "list workflows", expect: "app_workflow_definition_list" },
   { intent: "list scheduled automation items", expect: "app_automation_item_list" },
   { intent: "list workspace tabs", expect: "app_terminal_workspace_list" },
-  { intent: "wecom mail list", expect: "app_wecom_cli_run" },
+  { intent: "wecom message", expect: "app_wecom_cli_run" },
   // 英文只有这种最短形式能过：Fuse 把整句当一个串比，描述字段权重 0.15，
   // 句子一长就整体跌出 0.42 阈值。英文长句（"notify me when the build finishes"）
   // 当前返回空集，是检索机制的既有边界，不是这条能力的触发问题。

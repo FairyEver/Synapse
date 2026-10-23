@@ -6,25 +6,12 @@ const MAX_CLI_TOTAL_CHARS = 512 * 1024
 
 export const WECOM_CLI_SERVICES = [
   "message",
-  "mail",
-  "doc",
-  "sheet",
-  "smartsheet",
-  "contact",
   "media",
   "identity",
   "schema",
 ] as const
 
 export const WECOM_CLI_SERVICE_SET: ReadonlySet<string> = new Set<string>(WECOM_CLI_SERVICES)
-
-// The doc service also implements the retained document-management Skill.
-const DOC_MANAGEMENT_COMMANDS = [
-  ["search"],
-  ["names", "update"],
-  ["members", "update"],
-  ["rules", "update"],
-] as const
 
 export const wecomConnectionGetInputSchema = z.object({}).strict()
 
@@ -48,13 +35,11 @@ export const wecomCliRunInputSchema = z.object({
       message: "不支持的企业微信命令。",
     })
   }
-  if (service === "doc" && !DOC_MANAGEMENT_COMMANDS.some((command) => (
-    command.every((part, index) => input.args[index + 1] === part)
-  ))) {
+  if (service === "media" && input.args[1] !== "upload") {
     context.addIssue({
       code: "custom",
       path: ["args", 1],
-      message: "仅支持企业微信文档搜索、改名、成员权限和加入规则管理。",
+      message: "仅支持企业微信消息所需的媒体上传。",
     })
   }
 })

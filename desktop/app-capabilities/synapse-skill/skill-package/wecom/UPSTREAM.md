@@ -4,12 +4,11 @@
 - Commit: `55785fa0a5c922279533a5b5a836b44b56f65ce7`
 - Imported path: `skills/`
 - Source snapshot: 15 Skills, 194 files
-- Included subset: 8 Skills, 68 upstream files (70 files including this notice and `LICENSE`)
+- Included subset: 2 Skills, 2 upstream files (4 files including this notice and `LICENSE`)
 - License: MIT, copied to `LICENSE`
 
-Synapse includes only `wecomcli-shared`, `wecomcli-message`, `wecomcli-email`,
-`wecomcli-contact`, `wecomcli-media`, `wecomcli-doc-manage`, `wecomcli-sheet`,
-and `wecomcli-smartsheet`. Local changes are limited to:
+Synapse includes only `wecomcli-shared` and `wecomcli-message`.
+Local changes are limited to:
 
 - Removing the `wecom-cli` binary requirement from each top-level Skill.
 - Adding the Synapse execution note to each business Skill.
@@ -17,6 +16,9 @@ and `wecomcli-smartsheet`. Local changes are limited to:
   CLI execution instructions with the Synapse connector and
   `app_wecom_cli_run`.
 - Removing routes and cross-Skill dependencies for excluded capabilities.
+- Folding the minimal `media upload` instructions into the message Skill so
+  messages can still include local images, files, voice and video without a
+  standalone media Skill.
 
 ## Permanent Exclusions
 
@@ -30,11 +32,20 @@ never be imported, installed, routed to, or reintroduced during upstream updates
 - `wecomcli-pptx`
 - `wecomcli-smartpage`
 - `wecomcli-doc`
+- `wecomcli-contact`
+- `wecomcli-media`
+- `wecomcli-email`
+- `wecomcli-doc-manage`
+- `wecomcli-sheet`
+- `wecomcli-smartsheet`
 
-Use the eight-Skill allowlist above for every future synchronization. Do not
+Use the two-Skill allowlist above for every future synchronization. Do not
 copy the upstream `skills/` directory wholesale. The alignment tests enforce
 the exact included set and reject references to excluded Skills.
 
-The command adapter also rejects `disk`, `todo`, `meeting`, `calendar`, `slide`
-and `smartpage`. The `doc` service is retained only for `search`, `names update`,
-`members update` and `rules update`, required by `wecomcli-doc-manage`.
+The command adapter allows only `message`, `media`, `identity` and `schema`.
+The `media` service permits only `upload` as a shared dependency of messaging;
+`download` and all other media commands are rejected. The adapter rejects
+`mail`, `contact`, `doc`, `sheet`, `smartsheet`, `disk`, `todo`, `meeting`,
+`calendar`, `slide`, `smartpage` and `parser`. Their exclusive references,
+templates and Python scripts are not shipped.

@@ -255,7 +255,7 @@ describe("SynapseSkillService", () => {
     // Clients namespace the two tools differently; naming the Codex form saves a
     // discovery round trip. Verified against a live Codex session.
     expect(detail.content).toContain("mcp__synapse_mcp__search")
-    expect(attachmentNames.filter((name) => name.startsWith("wecom/"))).toHaveLength(70)
+    expect(attachmentNames.filter((name) => name.startsWith("wecom/"))).toHaveLength(4)
     expect(attachmentNames).toEqual(expect.arrayContaining([
       "app/api-reference.md",
       "database/index.md",
@@ -265,13 +265,11 @@ describe("SynapseSkillService", () => {
       "wecom/LICENSE",
       "wecom/UPSTREAM.md",
       "wecom/wecomcli-shared/SKILL.md",
-      "wecom/wecomcli-email/SKILL.md",
       "wecom/wecomcli-message/SKILL.md",
-      "wecom/wecomcli-doc-manage/SKILL.md",
       "workflow/index.md",
     ]))
     expect(attachmentNames).not.toContain("wecom-mail/index.md")
-    expect(attachmentNames.filter((name) => /^wecom\/wecomcli-[^/]+\/SKILL\.md$/u.test(name))).toHaveLength(8)
+    expect(attachmentNames.filter((name) => /^wecom\/wecomcli-[^/]+\/SKILL\.md$/u.test(name))).toHaveLength(2)
   })
 
   it("documents local Skill authoring without taking over Synapse publishing", async () => {

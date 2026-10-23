@@ -148,7 +148,7 @@ GitHub 的 `CI` 和 `Release` 工作流仅接受手动 `workflow_dispatch`。日
 
 Portal Link 与 Portal Link Test 仅负责正式和测试环境授权及本机凭据管理，各自提供一个纯凭据 MCP 工具；不承载 Portal 业务操作。内部连接器 ID 和回调地址保留兼容，不随显示名称修改。
 
-企业微信长期排除 `wecomcli-disk`、`wecomcli-todo`、`wecomcli-meeting`、`wecomcli-calendar`、`wecomcli-pptx`、`wecomcli-smartpage`、`wecomcli-doc`；这些功能未来也不需要，不得在更新或重新同步官方 Skill 时恢复。只保留 8 个 Skill，清单与命令限制见 `docs/agents/module-boundaries.md` 和系统 Skill 包的 `wecom/UPSTREAM.md`。
+企业微信长期排除 `wecomcli-disk`、`wecomcli-todo`、`wecomcli-meeting`、`wecomcli-calendar`、`wecomcli-pptx`、`wecomcli-smartpage`、`wecomcli-doc`、`wecomcli-contact`、`wecomcli-media`、`wecomcli-email`、`wecomcli-doc-manage`、`wecomcli-sheet`、`wecomcli-smartsheet`；这些 Skill 不得在更新或重新同步官方内容时恢复。只保留 `wecomcli-shared` 和 `wecomcli-message` 两个 Skill，媒体仅保留消息发送所需的上传命令。清单与命令限制见 `docs/agents/module-boundaries.md` 和系统 Skill 包的 `wecom/UPSTREAM.md`。
 
 ## 完成前检查
 

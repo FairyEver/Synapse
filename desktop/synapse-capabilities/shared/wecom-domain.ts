@@ -15,7 +15,7 @@ const definitions = [
   [
     WECOM_MCP_TOOL_NAMES.cliRun,
     WECOM_CLI_RUN_CAPABILITY_ID,
-    "Run one approved Enterprise WeChat CLI command through the connected bot. Use for 企业微信消息、企业微信邮件 mail list mail get mail send mail search、文档搜索与名称/权限管理、在线表格、智能表格、通讯录、媒体文件、身份 and schema operations. The doc service only supports search, names update, members update and rules update. This is the Enterprise WeChat mail list, mail get, mail send and mail search entry. Pass the canonical arguments from the matching Synapse WeCom Skill without the `wecom-cli` executable name. Never pass auth commands or credentials.",
+    "Run one approved Enterprise WeChat messaging command through the connected bot. Use for 企业微信消息、企微单聊群聊、最近会话、发送文本图片文件语音视频. Supports message commands, media upload for message attachments, identity and schema operations. Pass the canonical arguments from the Synapse WeCom messaging Skill without the `wecom-cli` executable name. Never pass auth commands or credentials.",
   ],
 ] as const
 
@@ -48,7 +48,7 @@ const schemas: Record<string, { properties: Record<string, unknown>; required?: 
         },
         minItems: 1,
         maxItems: 256,
-        description: `Canonical Enterprise WeChat CLI arguments without the executable name. The first argument must be one of: ${WECOM_CLI_SERVICES.join(", ")}. For doc, only search, names update, members update and rules update are supported.`,
+        description: `Canonical Enterprise WeChat CLI arguments without the executable name. The first argument must be one of: ${WECOM_CLI_SERVICES.join(", ")}. For media, only upload is supported as a messaging dependency.`,
       },
     },
     required: ["args"],

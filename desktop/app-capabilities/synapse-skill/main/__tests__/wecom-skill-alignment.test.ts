@@ -5,14 +5,8 @@ import { describe, expect, it } from "vitest"
 const root = path.join(__dirname, "..", "..", "skill-package", "wecom")
 const upstreamCommit = "55785fa0a5c922279533a5b5a836b44b56f65ce7"
 const supportedSkills = [
-  "wecomcli-contact",
-  "wecomcli-doc-manage",
-  "wecomcli-email",
-  "wecomcli-media",
   "wecomcli-message",
   "wecomcli-shared",
-  "wecomcli-sheet",
-  "wecomcli-smartsheet",
 ]
 const excludedSkills = [
   "wecomcli-disk",
@@ -22,6 +16,12 @@ const excludedSkills = [
   "wecomcli-pptx",
   "wecomcli-smartpage",
   "wecomcli-doc",
+  "wecomcli-contact",
+  "wecomcli-media",
+  "wecomcli-email",
+  "wecomcli-doc-manage",
+  "wecomcli-sheet",
+  "wecomcli-smartsheet",
 ]
 
 async function readMarkdown(directory: string): Promise<string[]> {
@@ -35,7 +35,7 @@ async function readMarkdown(directory: string): Promise<string[]> {
 }
 
 describe("Enterprise WeChat official Skills", () => {
-  it("ships only the eight supported official Skills on every upstream update", async () => {
+  it("ships only the two messaging Skills on every upstream update", async () => {
     const entries = (await readdir(root, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory() && entry.name.startsWith("wecomcli-"))
       .map((entry) => entry.name)
@@ -73,16 +73,18 @@ describe("Enterprise WeChat official Skills", () => {
     ])
 
     expect(upstream).toContain(upstreamCommit)
-    expect(upstream).toContain("8 Skills")
+    expect(upstream).toContain("2 Skills")
     for (const name of excludedSkills) expect(upstream).toContain(name)
     expect(license).toContain("MIT License")
     expect(license).toContain("Copyright (c) 2026 WeCom")
   })
 
-  it("keeps supported official references", async () => {
-    const email = await readFile(path.join(root, "wecomcli-email", "references", "send-mail.md"), "utf8")
+  it("keeps media upload instructions within messaging without a separate Skill", async () => {
+    const message = await readFile(path.join(root, "wecomcli-message", "SKILL.md"), "utf8")
 
-    expect(email).toContain("wecom-cli mail send")
+    expect(message).toContain("wecom-cli media upload")
+    expect(message).toContain("file_path")
+    expect(message).toContain("workingDirectory")
   })
 
   it("never routes supported Skills to excluded Skills", async () => {

@@ -23,13 +23,17 @@ description: 查询当前可以发送消息的聊天会话范围，并向会话�
 
 - 发送对象不是授权人且不在本次 `sessions list` 返回结果中 → 告知用户当前只能向最近活跃的会话或授权人发送
 
-## 技能依赖
+## 消息媒体上传
 
-调用依赖技能前，必须先完整读取对应 `SKILL.md`。
+发送图片、文件、语音或视频时，若没有可直接复用的 `media_id`，在目标会话匹配成功后上传本地文件。先按 `wecomcli-shared` 的文件规则将用户文件复制到工具返回的 `workingDirectory`，再通过 `app_wecom_cli_run` 执行以下参数规范：
 
-| 依赖技能 | 触发场景 | 数据流向 |
-|---|---|---|
-| `wecomcli-media` | 发送图片、文件、语音或视频时只有本地文件路径，没有可直接复用的 `media_id` | 包含媒体上传接口，如没有已有的 `media_id`，必须先阅读该技能获取 `media_id`，上传时传入的 `type` 应和发送时的`msg_type` 对齐|
+```bash
+wecom-cli media upload --json '{"file_path":"<workingDirectory>/example.png"}'
+```
+
+`file_path` 是必填的真实本地文件路径。返回的 `media_id`、`type`、`created_at` 分别为媒体标识、媒体类型和创建时间；将真实返回的 `media_id` 用于后续消息。返回的 `type` 必须与发送时的 `msg_type` 一致（`image` / `file` / `voice` / `video`），不匹配时停止发送并说明原因。
+
+已有可复用且类型匹配的 `media_id` 时直接使用，不重复上传。仅保留消息所需的上传，不提供独立媒体下载或文件内容解析。
 
 ## 获取能发送消息的会话列表
 
@@ -58,7 +62,7 @@ wecom-cli message aibot sessions list
 
 - 用户输入的 ID
 - 之前轮次或历史上下文保存的 `chat_id`
-- `wecomcli-contact` 返回的 `userid`
+- 通讯录返回的 `userid`
 - 根据姓名、群名或其他字段自行构造的值
 
 这些值最多只能作为匹配线索；最终发送参数必须重新取自本次 `sessions list` 的匹配项。

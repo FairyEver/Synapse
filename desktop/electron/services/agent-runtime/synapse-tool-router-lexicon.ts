@@ -58,7 +58,6 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["待办", "todos"],
   ["企业微信", "wecom"],
   ["企微", "wecom"],
-  ["企业邮箱", "wecom"],
 
   // ---------------- 名词：drive ----------------
   ["文件", "item"],

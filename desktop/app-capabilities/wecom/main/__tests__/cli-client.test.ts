@@ -37,11 +37,11 @@ describe("WeCom CLI client", () => {
       processRunner: { run, start: vi.fn() } as never,
     })
 
-    await expect(client.run("owner-a", ["mail", "search", "--json", "{}"], {
-      metadata: { operation: "mail.list" },
+    await expect(client.run("owner-a", ["message", "aibot", "sessions", "list"], {
+      metadata: { operation: "message.sessions.list" },
     })).resolves.toBe('{"ok":true}')
     const request = run.mock.calls[0]![0] as { args: readonly string[]; cwd: string; env: Record<string, string> }
-    expect(request.args).toEqual(["mail", "search", "--json", "{}"])
+    expect(request.args).toEqual(["message", "aibot", "sessions", "list"])
     expect(request.cwd).toContain(path.join("owners"))
     expect(request.env.WECOM_CLI_CONFIG_DIR).toBe(path.join(request.cwd, "config"))
   })
@@ -56,8 +56,8 @@ describe("WeCom CLI client", () => {
     })
 
     const first = await client.runAgent("owner-a", "conversation-a", ["identity", "whoami"])
-    const second = await client.runAgent("owner-a", "conversation-a", ["mail", "search"])
-    const other = await client.runAgent("owner-a", "conversation-b", ["contact", "users", "search"])
+    const second = await client.runAgent("owner-a", "conversation-a", ["message", "aibot", "sessions", "list"])
+    const other = await client.runAgent("owner-a", "conversation-b", ["message", "aibot", "sessions", "list"])
 
     expect(first.workingDirectory).toBe(second.workingDirectory)
     expect(other.workingDirectory).not.toBe(first.workingDirectory)
@@ -92,7 +92,7 @@ describe("WeCom CLI client", () => {
     })
   })
 
-  it("validates only bot authorization and identity, not mail permissions", async () => {
+  it("validates only bot authorization and identity, not business permissions", async () => {
     const workRoot = await root()
     const run = vi.fn(async (request: { readonly args: readonly string[] }) => {
       if (request.args[0] === "auth") return result("authorized")
@@ -113,11 +113,11 @@ describe("WeCom CLI client", () => {
 
   it("extracts the official business permission name without raw hint text", async () => {
     const workRoot = await root()
-    const helpUrl = "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7"
+    const helpUrl = "https://work.weixin.qq.com/ai/aiHelper/authorizationList"
     const permissionError = JSON.stringify({
       errcode: 851008,
       errmsg: "partial no authorization, hint: [secret], from ip: 127.0.0.1",
-      help_message: `当前机器人未被授权「搜索与获取邮件内容」能力，需向管理员申请使用。\\n[点击这里](${helpUrl})`,
+      help_message: `当前机器人未被授权「发送消息」能力，需向管理员申请使用。\\n[点击这里](${helpUrl})`,
     })
     const client = createWecomCliClient({
       binaryPath: "/fake/wecom-cli",
@@ -125,13 +125,13 @@ describe("WeCom CLI client", () => {
       processRunner: { run: vi.fn(async () => result(permissionError, 1)), start: vi.fn() } as never,
     })
 
-    await expect(client.run("owner-a", ["mail", "search", "--json", "{}"])).rejects.toMatchObject({
+    await expect(client.run("owner-a", ["message", "aibot", "sessions", "list"])).rejects.toMatchObject({
       code: "permission_denied",
-      message: "当前机器人未被授权「搜索与获取邮件内容」能力，需向管理员申请使用。",
+      message: "当前机器人未被授权「发送消息」能力，需向管理员申请使用。",
       options: {
         errcode: 851008,
         helpUrl,
-        permission: "搜索与获取邮件内容",
+        permission: "发送消息",
       },
     })
   })

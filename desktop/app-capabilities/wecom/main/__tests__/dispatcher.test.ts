@@ -88,7 +88,7 @@ describe("Enterprise WeChat capability dispatcher", () => {
   it("parses NDJSON and text outputs", async () => {
     const ndjson = harness({ output: '{"page":1}\n{"page":2}\n' })
     await expect(ndjson.dispatcher.dispatch("app.wecom.cli.run", {
-      args: ["doc", "search", "--json", "{}", "--page-count", "2"],
+      args: ["message", "aibot", "sessions", "list"],
     }, {})).resolves.toMatchObject({
       ok: true,
       data: {
@@ -137,6 +137,21 @@ describe("Enterprise WeChat capability dispatcher", () => {
     ["doc", "contents", "get"],
     ["doc", "contents", "append"],
     ["doc", "contents", "overwrite"],
+    ["doc", "search"],
+    ["doc", "names", "update"],
+    ["doc", "members", "update"],
+    ["doc", "rules", "update"],
+    ["mail", "list"],
+    ["mail", "get"],
+    ["mail", "search"],
+    ["mail", "send"],
+    ["contact", "users", "search"],
+    ["sheet", "workbook", "get"],
+    ["smartsheet", "records", "get"],
+    ["media", "download"],
+    ["media", "delete"],
+    ["media", "upload-extra"],
+    ["parser", "office", "convert"],
   ])("rejects excluded business commands: %s %s %s", async (...args) => {
     const h = harness()
 
@@ -150,15 +165,8 @@ describe("Enterprise WeChat capability dispatcher", () => {
 
   it.each([
     ["message", "aibot", "sessions", "list"],
-    ["mail", "search"],
-    ["contact", "users", "search"],
-    ["media", "download"],
-    ["sheet", "create"],
-    ["smartsheet", "records", "get"],
-    ["doc", "search"],
-    ["doc", "names", "update"],
-    ["doc", "members", "update"],
-    ["doc", "rules", "update"],
+    ["message", "aibot", "send"],
+    ["media", "upload"],
     ["identity", "whoami"],
     ["schema", "list"],
   ])("keeps supported business commands: %s %s %s", async (...args) => {
@@ -192,19 +200,19 @@ describe("Enterprise WeChat capability dispatcher", () => {
     })
 
     const permission = harness({
-      runError: new WecomCliError("permission_denied", "当前机器人未被授权「搜索与获取邮件内容」能力。", {
-        permission: "搜索与获取邮件内容",
-        helpUrl: "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7",
+      runError: new WecomCliError("permission_denied", "当前机器人未被授权「发送消息」能力。", {
+        permission: "发送消息",
+        helpUrl: "https://work.weixin.qq.com/ai/aiHelper/authorizationList",
       }),
     })
     await expect(permission.dispatcher.dispatch("app.wecom.cli.run", {
-      args: ["mail", "search", "--json", "{}"],
+      args: ["message", "aibot", "send", "--json", "{}"],
     }, {})).resolves.toMatchObject({
       ok: false,
       code: "WECOM_PERMISSION_REQUIRED",
       data: {
-        permission: "搜索与获取邮件内容",
-        helpUrl: "https://work.weixin.qq.com/ai/aiHelper/authorizationList?type=7",
+        permission: "发送消息",
+        helpUrl: "https://work.weixin.qq.com/ai/aiHelper/authorizationList",
       },
     })
   })
