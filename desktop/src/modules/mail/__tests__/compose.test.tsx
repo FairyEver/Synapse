@@ -15,6 +15,17 @@ async function setup() {
   mount(<Harness />); await flush(); await act(async () => { await editor.open({ draftId: draft.id }) })
 }
 afterEach(() => vi.useRealTimers())
+it("clears hidden Bcc recipients only on explicit save before preparing a send", async () => {
+  await setup(); await act(async () => { await editor.close() })
+  mocks.api.draftGet.mockResolvedValueOnce({ ...draft, bcc: [{ address: "hidden@example.com" }] })
+  await act(async () => { await editor.open({ draftId: draft.id }) })
+  expect(mocks.api.draftUpdate).not.toHaveBeenCalled()
+  mocks.api.messageSend.mockResolvedValueOnce({ operationId: "mo_send", state: "accepted", accepted: [draft.to[0].address], rejected: [], sentCopyState: "saved", errorCode: null })
+  await act(async () => { await editor.send() })
+  expect(mocks.api.draftUpdate).toHaveBeenCalledWith(expect.objectContaining({ patch: expect.objectContaining({ to: draft.to, bcc: [] }) }))
+  expect(mocks.api.draftUpdate.mock.invocationCallOrder[0]).toBeLessThan(mocks.api.sendPreview.mock.invocationCallOrder[0])
+  expect(editor.receipt?.state).toBe("accepted")
+})
 it("does not autosave and asks before closing dirty edits", async () => {
   await setup(); vi.useFakeTimers()
   act(() => editor.edit({ subject: "新主题" }))

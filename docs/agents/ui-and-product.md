@@ -85,7 +85,7 @@
 
 - System App 入口不得直接渲染 `SystemAppTopBar`。有 tabs、actions 或顶栏信息时，统一通过 `SystemAppWindowShell` 声明；使用 `ModulePage` 的列表页由 `ModulePage` 代为接入该壳层。
 - 启动台内嵌模式只允许 `EmbeddedSystemAppShell` 渲染一条应用顶栏：左侧返回、应用名和可选信息，中间 tabs，右侧应用 actions 和新窗口入口。应用内容区不得再渲染第二条应用顶栏。
-- 用户确认的邮箱独立写信窗口例外：`SystemAppWindowShell.left` 放置发送、保存草稿、附件，复用共享 action button；右侧显示发件账号和关闭，不新增一条工具栏。
+- 用户确认的邮箱独立写信窗口例外：`SystemAppWindowShell.left` 放置发送、保存草稿、附件，复用共享 action button；右侧只显示发件账号和保存状态，关闭使用系统窗口按钮，不新增一条工具栏。收件区域仅提供收件人和可展开的抄送，不提供密送。
 - 其他场景 `SystemAppWindowShell.left` 只用于独立窗口的左侧标题；需要在内嵌顶栏应用名旁显示的信息通过 `embeddedLeftAddon` 注册，不能靠保留内部顶栏实现。
 - `SystemAppTopBar` 是共享壳层的底层布局组件；业务入口只使用 `SystemAppTopBarActionButton` 声明操作，不自行组装顶栏。
 - 居中 tab 顶栏：左侧等宽占位，中间 tab，右侧操作区；不得为填空添加冗余窗口标题。

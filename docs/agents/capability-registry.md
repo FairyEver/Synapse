@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含独立写信窗口） | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含独立写信窗口；写信仅收件人/抄送，关闭使用系统窗口按钮） | 否（可手动固定） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 否（旧配置升级时一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -243,3 +243,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-23 邮箱体验调整：独立写信使用同一 `mail` System App 的私有 `MailOpenRequest.compose`，不新增 App、Dock、Workflow、Automation 或 Deep Link。新增 UI 专用 `app.mail.draft.prepare`、`app.mail.draft.commit`、`app.mail.compose.image_asset`、`app.mail.compose.retain_assets` 四条 IPC；前两者区分未保存编辑与首次显式保存，后两者在不保存草稿的情况下显示和保留编辑图片/附件。已有草稿创建及首次保存的 UI IPC 将草稿 ID 绑定到当前写信窗口，避免重复打开。公开邮箱能力仍 44 项，全局 340 capability / 336 MCP、桌面 System App 22 个不变；这些私有 IPC 不向 Agent 暴露。
 
 2026-10-23 邮箱阅读区保留固定回复工具栏，其下邮件信息、附件和正文一起滚动，移除头部重复链接区，原文链接复用既有受控打开能力；用户批准仅为正文测量与点击接管开启 sandbox 同源读取，脚本仍禁止。上表 Mail 的各注册项不变，邮箱仍为 44 项公开动作、桌面 System App 22 个；MCP schema、系统 Skill 的读信契约不变。
+
+2026-10-23 写信窗口移除密送入口与顶栏关闭按钮，仅保留收件人/抄送和原生关闭；窗口显式保存或发送会清空已有草稿的密送地址。共享 MCP schema、系统 Skill 的 Bcc 契约保留兼容，不新增注册表面，邮箱 44 项公开动作、全局 340 capability / 336 MCP 索引和 22 个 System App 均不变。

@@ -8,7 +8,7 @@ import { getSynapseBridge } from "@/lib/electron-bridge"
 import { mailApi, mailError } from "./api"
 import { registerNavigationGuard } from "@/app-shell/navigation-guard"
 import type { ComposeIntent } from "./layout"
-const fields = (draft: Draft): Omit<DraftInput, "accountId"> => ({ to: draft.to, cc: draft.cc, bcc: draft.bcc, subject: draft.subject, html: draft.html, text: draft.text, assetIds: draft.assetIds, inlineImages: draft.inlineImages })
+const fields = (draft: Draft): Omit<DraftInput, "accountId"> => ({ to: draft.to, cc: draft.cc, bcc: [], subject: draft.subject, html: draft.html, text: draft.text, assetIds: draft.assetIds, inlineImages: draft.inlineImages })
 const addressText = (addresses: Draft["to"]) => addresses.map(a => a.name ? `${JSON.stringify(a.name)} <${a.address}>` : a.address).join(", ")
 export function parseMailAddresses(value: string): Draft["to"] {
   const parts: string[] = []
@@ -35,7 +35,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const closedCallback = useRef(onClosed); closedCallback.current = onClosed
   const persisted = useRef(false)
   const [closeRequested, setCloseRequested] = useState(false)
-  const [draft, setDraft] = useState<Draft | null>(null), [addresses, setAddresses] = useState({ to: "", cc: "", bcc: "" })
+  const [draft, setDraft] = useState<Draft | null>(null), [addresses, setAddresses] = useState({ to: "", cc: "" })
   const [error, setError] = useState<string | null>(null), [saving, setSaving] = useState(false), [sending, setSending] = useState(false), [loading, setLoading] = useState(false)
   const [dirty, setDirty] = useState(false), [editVersion, setEditVersion] = useState(0), [preview, setPreview] = useState<MailPreview | null>(null), [receipt, setReceipt] = useState<SendReceipt | null>(null)
   const value = useRef<Draft | null>(null), addressRef = useRef(addresses), changed = useRef(0), saved = useRef(0), epoch = useRef(0), active = useRef(true), ownerRef = useRef(owner)
@@ -44,7 +44,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const request = useRef<{ previewId: string; key: string } | null>(null)
   const replace = (next: Draft | null) => { value.current = next; setDraft(next) }
   const initialize = (next: Draft) => {
-    replace(next); const a = { to: addressText(next.to), cc: addressText(next.cc), bcc: addressText(next.bcc) }; addressRef.current = a; setAddresses(a); changed.current = 0; saved.current = 0; setDirty(false); setPreview(null); setReceipt(null); request.current = null
+    replace(next); const a = { to: addressText(next.to), cc: addressText(next.cc) }; addressRef.current = a; setAddresses(a); changed.current = 0; saved.current = 0; setDirty(false); setPreview(null); setReceipt(null); request.current = null
   }
   useEffect(() => {
     active.current = true; epoch.current++; replace(null); setDirty(false); setError(null); setPreview(null); setReceipt(null); sendLock.current = false; opening.current = false; savingTask.current = null; setSaving(false); setSending(false); setLoading(false); setCloseRequested(false); persisted.current = false; changed.current = 0; saved.current = 0
@@ -71,13 +71,13 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const save = useCallback(async (): Promise<void> => {
     if (savingTask.current) return savingTask.current
     const snapshot = value.current
-    if (!snapshot || (persisted.current && changed.current === saved.current) || snapshot.state !== "editing") return
+    if (!snapshot || (persisted.current && changed.current === saved.current && snapshot.bcc.length === 0) || snapshot.state !== "editing") return
     const version = changed.current, e = epoch.current, identity = ownerRef.current, recipientSnapshot = { ...addressRef.current }, wasPersisted = persisted.current
     setSaving(true); setError(null)
     const task = Promise.resolve().then(async () => {
       try {
         const body = sanitizeComposeDocument(snapshot.html, snapshot.inlineImages)
-        const patch = { ...fields(snapshot), ...body, to: parseMailAddresses(recipientSnapshot.to), cc: parseMailAddresses(recipientSnapshot.cc), bcc: parseMailAddresses(recipientSnapshot.bcc) }
+        const patch = { ...fields(snapshot), ...body, to: parseMailAddresses(recipientSnapshot.to), cc: parseMailAddresses(recipientSnapshot.cc) }
         const result = await runMailUiOperation("save", () => wasPersisted ? mailApi().draftUpdate({ draftId: snapshot.id, expectedRevision: snapshot.revision, patch }) : mailApi().draftCommit({ content: { accountId: snapshot.accountId, ...patch }, ...(snapshot.sourceMessageId && snapshot.mode !== "new" ? { source: { messageId: snapshot.sourceMessageId, mode: snapshot.mode } } : {}) }))
         if (!active.current || e !== epoch.current || identity !== ownerRef.current) return
         persisted.current = true; saved.current = version
@@ -143,7 +143,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const copyDraft = async () => {
     if (!value.current || sendLock.current) return
     const e = epoch.current
-    try { const source = value.current, result = await mailApi().draftCreate({ accountId: source.accountId, ...fields(source), to: parseMailAddresses(addressRef.current.to), cc: parseMailAddresses(addressRef.current.cc), bcc: parseMailAddresses(addressRef.current.bcc) }); if (active.current && e === epoch.current) { epoch.current++; persisted.current = true; initialize(result) } }
+    try { const source = value.current, result = await mailApi().draftCreate({ accountId: source.accountId, ...fields(source), to: parseMailAddresses(addressRef.current.to), cc: parseMailAddresses(addressRef.current.cc) }); if (active.current && e === epoch.current) { epoch.current++; persisted.current = true; initialize(result) } }
     catch (cause) { if (e === epoch.current) setError(mailError(cause)) }
   }
   const attach = (assets: MailAsset[]) => { const current = value.current; if (current) edit({ assetIds: [...new Set([...current.assetIds, ...assets.map(a => a.id)])] }) }

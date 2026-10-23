@@ -6,7 +6,7 @@ import { TextStyle, FontSize } from "@tiptap/extension-text-style"
 import { sanitizeComposeDocument } from "../../../app-capabilities/mail/renderer/compose-document"
 import { mailApi, mailError } from "./api"
 import type { ComposeModel } from "./use-compose"
-const empty = { to: "", cc: "", bcc: "" }
+const empty = { to: "", cc: "" }
 export function useComposeEditor(model: ComposeModel) {
   const latest = useRef(model); latest.current = model
   const [error, setError] = useState<string | null>(null), [activeMarks, setActiveMarks] = useState<string[]>([])

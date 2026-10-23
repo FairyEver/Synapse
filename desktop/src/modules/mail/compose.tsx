@@ -22,21 +22,21 @@ const toolGroups = [
   { label: "列表", tools: [{ id: "bulletList", label: "项目列表", Icon: List }, { id: "orderedList", label: "编号列表", Icon: ListOrdered }] },
   { label: "编辑历史", tools: [{ id: "undo", label: "撤销", Icon: Undo2 }, { id: "redo", label: "重做", Icon: Redo2 }] },
 ] as const
-const recipientFields = [{ key: "to", label: "收件人" }, { key: "cc", label: "抄送" }, { key: "bcc", label: "密送" }] as const
+const recipientFields = [{ key: "to", label: "收件人" }, { key: "cc", label: "抄送" }] as const
 
 function ComposeToolButton({ label, ...props }: ComponentProps<typeof Button> & { label: string }) {
   return <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={label} {...props} className={cn("relative m-1.5 after:absolute after:-inset-1.5", props.className)} /></TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
 }
 
 function ComposeRecipients({ model, disabled }: { model: ComposeModel; disabled: boolean }) {
-  const [expanded, setExpanded] = useState({ cc: false, bcc: false })
-  const visible = { to: true, cc: expanded.cc || !!model.addresses.cc, bcc: expanded.bcc || !!model.addresses.bcc }
+  const [expanded, setExpanded] = useState({ cc: false })
+  const visible = { to: true, cc: expanded.cc || !!model.addresses.cc }
   return <>
     {recipientFields.map(({ key, label }) => visible[key] && <div key={key} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-3">
       <Label className="text-muted-foreground" htmlFor={`mail-compose-${key}`}>{label}</Label>
       <div className="flex min-w-0 items-center gap-2">
         <Input id={`mail-compose-${key}`} value={model.addresses[key]} disabled={disabled} autoComplete="off" autoFocus={key !== "to" && expanded[key]} onFocus={() => { if (key !== "to") setExpanded(current => ({ ...current, [key]: true })) }} onChange={event => model.changeAddress(key, event.target.value)} data-track={`mail.compose.${key}`} />
-        {key === "to" && (!visible.cc || !visible.bcc) && <div className="flex shrink-0 items-center">
+        {key === "to" && !visible.cc && <div className="flex shrink-0 items-center">
           {recipientFields.slice(1).map(({ key: field, label: fieldLabel }) => field !== "to" && !visible[field] && <Button key={field} variant="ghost" disabled={disabled} aria-label={`添加${fieldLabel}`} aria-controls={`mail-compose-${field}`} onClick={() => setExpanded(current => ({ ...current, [field]: true }))}>{fieldLabel}</Button>)}
         </div>}
       </div>
@@ -48,14 +48,13 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
   const composer = useComposeEditor(model), attachments = useComposeAssets(model.draft), imageInput = useRef<HTMLInputElement>(null)
   const draft = model.draft, account = accounts.find(a => a.id === draft?.accountId)
   const disabled = !draft || draft.state !== "editing" || model.sending || model.receipt?.state === "unknown" || model.receipt?.state === "failed"
-  const close = () => { void model.close() }
-  const sendDisabled = disabled || model.saving || !model.addresses.to.trim() && !model.addresses.cc.trim() && !model.addresses.bcc.trim()
+  const sendDisabled = disabled || model.saving || !model.addresses.to.trim() && !model.addresses.cc.trim()
   const save = () => { void model.save().catch(() => undefined) }
   return <><SystemAppWindowShell left={<div className="flex items-center">
     <SystemAppTopBarActionButton disabled={sendDisabled} onClick={() => void model.send()} data-track="mail.send"><Send />{model.sending ? "发送中…" : "发送"}</SystemAppTopBarActionButton>
     <SystemAppTopBarActionButton disabled={disabled || model.saving} onClick={save} data-track="mail.draft.save"><Save />保存草稿</SystemAppTopBarActionButton>
     <SystemAppTopBarActionButton disabled={disabled} onClick={() => void model.pickAttachments()}><Paperclip />附件</SystemAppTopBarActionButton>
-  </div>} actions={<><div className="flex min-w-0 items-center gap-3 pr-2"><span title={account?.email} className="max-w-32 truncate text-sm text-muted-foreground sm:max-w-48 lg:max-w-72">{account?.email}</span><span role="status" className="w-14 shrink-0 text-right text-xs text-muted-foreground">{model.saving ? "保存中…" : model.dirty ? "未保存" : draft?.localSaved ? "已保存" : ""}</span></div><SystemAppTopBarActionButton iconOnly aria-label="关闭写信" disabled={model.sending || model.saving} onClick={close}><X /></SystemAppTopBarActionButton></>}>
+  </div>} actions={<div className="flex min-w-0 items-center gap-3"><span title={account?.email} className="max-w-32 truncate text-sm text-muted-foreground sm:max-w-48 lg:max-w-72">{account?.email}</span><span role="status" className="w-14 shrink-0 text-right text-xs text-muted-foreground">{model.saving ? "保存中…" : model.dirty ? "未保存" : draft?.localSaved ? "已保存" : ""}</span></div>}>
     <div className="flex h-full min-h-0 flex-col bg-background">
       {model.loading && <div role="status" className="flex items-center gap-3 p-4"><Skeleton className="h-4 w-32" /><span className="text-sm text-muted-foreground">正在准备邮件…</span></div>}
       {unavailable && <p role="alert" className="p-4 text-sm text-destructive">{unavailable}</p>}
