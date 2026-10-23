@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
 import { ArrowLeft, Search, X, LoaderCircle, Info, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { Checkbox } from "@/components/ui/checkbox"
 import { InputGroup, InputGroupInput, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
@@ -20,22 +21,22 @@ export function MailListToolbar({ count, all, disabled, busy, onToggle, onBatch,
   const indexing = coverage && !coverage.metadataComplete
   const status = coverage?.reason === "body_truncated" ? "部分正文未完整检索" : canContinue ? "部分邮件尚未检索" : indexing ? "历史邮件索引中" : null
   const exitSearch = () => { setSearching(false); setQuery(""); onSearch?.("") }
-  return <TooltipProvider><div className="flex h-12 shrink-0 items-center gap-2 border-b px-3" aria-label="邮件列表工具栏">
+  return <TooltipProvider><div className="flex h-10 shrink-0 items-center border-b bg-background px-3" aria-label="邮件列表工具栏">
     {count === 0 && searching ? <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={event => { event.preventDefault(); onSearch?.(query) }}>
-      <Button type="button" size="icon" variant="ghost" aria-label="退出搜索" onClick={exitSearch}><ArrowLeft /></Button>
+      <SystemAppTopBarActionButton type="button" iconOnly aria-label="退出搜索" onClick={exitSearch}><ArrowLeft /></SystemAppTopBarActionButton>
       <InputGroup><InputGroupInput autoFocus aria-label="搜索邮件" placeholder="搜索邮件" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Escape") exitSearch() }} />
         <InputGroupAddon align="inline-end">{query && <InputGroupButton aria-label="清空搜索" size="icon-xs" onClick={() => { setQuery(""); onSearch?.("") }}><X /></InputGroupButton>}<InputGroupButton type="submit" size="icon-xs" aria-label="提交搜索"><Search /></InputGroupButton></InputGroupAddon>
       </InputGroup>
     </form> : <>
       <Checkbox aria-label="选择当前页邮件" checked={all ? true : count ? "indeterminate" : false} onCheckedChange={value => onToggle(value === true)} disabled={disabled || busy} />
-      {count > 0 ? <><span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground" aria-label={`已选 ${count} 封邮件`}>{count}</span><div className="flex-1" />
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" disabled={busy}>操作<ChevronDown data-icon="inline-end" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup>
+      {count > 0 ? <><span className="ml-2 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground" aria-label={`已选 ${count} 封邮件`}>{count}</span><div className="flex-1" />
+        <DropdownMenu><DropdownMenuTrigger asChild><SystemAppTopBarActionButton disabled={busy}>操作<ChevronDown data-icon="inline-end" /></SystemAppTopBarActionButton></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuGroup>
           <DropdownMenuItem onSelect={() => onBatch("read")}>标记已读</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("unread")}>标记未读</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("star")}>加星标</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("unstar")}>取消星标</DropdownMenuItem>
           <DropdownMenuSub><DropdownMenuSubTrigger>移动至</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuGroup>{folders.filter(f => f.selectable && f.role !== "drafts").map(folder => <DropdownMenuItem key={folder.id} onSelect={() => onMove(folder.id)}>{folderName(folder)}</DropdownMenuItem>)}</DropdownMenuGroup></DropdownMenuSubContent></DropdownMenuSub>
           <DropdownMenuItem onSelect={() => onBatch("delete")}>移至回收站</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("restore")}>恢复到收件箱</DropdownMenuItem>{canPermanentlyDelete && <DropdownMenuItem variant="destructive" onSelect={() => onBatch("permanent")}>永久删除</DropdownMenuItem>}
         </DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
-      </> : <><div className="flex-1" />{onSearch && <Hint label="搜索邮件"><Button size="icon" variant="ghost" aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></Button></Hint>}</>}
+      </> : <><div className="flex-1" />{onSearch && <Hint label="搜索邮件"><SystemAppTopBarActionButton iconOnly aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></SystemAppTopBarActionButton></Hint>}</>}
     </>}
-    {status && <Popover><Hint label={status}><PopoverTrigger asChild><Button size="icon" variant="ghost" aria-label={status}>{indexing ? <LoaderCircle className="animate-spin" /> : <Info />}</Button></PopoverTrigger></Hint><PopoverContent align="end" className="w-64"><p className="text-sm">{status}</p>{canContinue && <Button variant="ghost" className="mt-2" disabled={busy} onClick={onContinue}>继续检索</Button>}</PopoverContent></Popover>}
+    {status && <Popover><Hint label={status}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly aria-label={status}>{indexing ? <LoaderCircle className="animate-spin" /> : <Info />}</SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="end" className="w-64"><p className="text-sm">{status}</p>{canContinue && <Button variant="ghost" className="mt-2" disabled={busy} onClick={onContinue}>继续检索</Button>}</PopoverContent></Popover>}
   </div></TooltipProvider>
 }

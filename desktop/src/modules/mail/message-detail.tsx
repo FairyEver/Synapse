@@ -2,15 +2,16 @@ import { useMemo } from "react"
 import { ArrowLeft, Copy, Download, Reply, ReplyAll, Forward } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { MailDetail as Detail } from "../../../app-capabilities/mail/shared/types"
 import { sanitizeMailHtml, type MailHtmlResources } from "../../../app-capabilities/mail/renderer/sanitize-body"
 import type { MailBody } from "./use-mail-body"
 export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(): void }) {
   const projection = useMemo(() => body?.complete && body.html ? sanitizeMailHtml(body.html, resources) : null, [body, resources])
   return <article aria-label="邮件详情" className="flex h-full min-h-0 flex-col bg-background">
-    <div className="flex flex-wrap items-center gap-1 border-b p-2">
-      <Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="返回邮件列表" onClick={onBack}><ArrowLeft /></Button>
-      <Button variant="ghost" size="sm" disabled={detail.metadataTruncated} onClick={() => onReply("reply")} data-track="mail.reply"><Reply />回复</Button><Button variant="ghost" size="sm" disabled={detail.metadataTruncated} onClick={() => onReply("reply_all")}><ReplyAll />回复全部</Button><Button variant="ghost" size="sm" disabled={detail.metadataTruncated} onClick={() => onReply("forward")}><Forward />转发</Button><Button variant="ghost" size="icon-sm" aria-label="复制邮件链接" onClick={onCopy}><Copy /></Button>
+    <div className="flex h-10 shrink-0 items-center border-b bg-background px-3">
+      <SystemAppTopBarActionButton iconOnly className="lg:hidden" aria-label="返回邮件列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("reply")} data-track="mail.reply"><Reply />回复</SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("reply_all")}><ReplyAll />回复全部</SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("forward")}><Forward />转发</SystemAppTopBarActionButton><SystemAppTopBarActionButton iconOnly aria-label="复制邮件链接" onClick={onCopy}><Copy /></SystemAppTopBarActionButton>
     </div>
     <div className="shrink-0 max-h-[45%] overflow-auto border-b px-5 py-3">
       <h2 className="mb-2 text-lg font-semibold break-words">{detail.subject || "（无主题）"}</h2>
