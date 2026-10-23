@@ -46,7 +46,7 @@ enum NotificationDestination {
         if item.source == "meeting-transcription", let target = item.targetId {
             return .route(.meeting(meetingId: target))
         }
-        if item.source == "mail", let target = item.targetId {
+        if item.source == "mail-internal", let target = item.targetId {
             return .route(.mail(messageId: target))
         }
         if item.source == "todo-reminder" {

@@ -72,7 +72,7 @@ struct RootView: View {
             beginNavigationRequest()
             if let id = TodoReference.id(in: url.absoluteString) {
                 openTodoTarget(id)
-            } else if url.scheme == "synapse", url.host == "mail", let id = url.pathComponents.dropFirst().first, !id.isEmpty {
+            } else if let id = InternalMailReference.parse(url) {
                 mailSelection = id
                 homePath = [.mail]
                 selectedTab = .home

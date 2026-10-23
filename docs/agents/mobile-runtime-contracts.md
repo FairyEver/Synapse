@@ -66,3 +66,7 @@
 - 受保护链接加载前用 WebKit Cookie 查询 Console 会话，不用原生 Bearer 代替。网页身份缺失或与当前 Remote 身份不同时，经用户确认再签发网页会话。服务端用原生 Bearer 和有效 refresh token 双重校验；App 以 HttpOnly Cookie 保存 Web 会话，不放入 URL 或 JavaScript。原生退出时撤销关联会话并清理本机 Cookie。
 - 分享站内网页时以 `WKWebView.url` 的当前地址确定目标；单页应用的同文档导航不能依赖 `WKNavigationDelegate` 获取。本人云盘的 `/drive/items/:itemId` 和 `/console/drive/items/:itemId`（兼容部署路径前缀）在用户点击顶栏分享后，先通过现有账号 API 发送空设置创建或复用公开分享，再把返回的链接交给系统面板；新分享默认仅阅读、无密码、永久有效，有效分享保留已有权限、密码与有效期，带密码时使用完整带密码链接。打开网页和查看分享设置本身仍不创建分享；公开分享页和其他网页继续分享当前地址。
 - 云盘网页分享请求期间禁止重复提交；失败提供重试，不回退私有查看地址。页面关闭、导航变化或账号归属变化取消旧操作，迟到结果不得打开面板、显示错误或刷新新账号云盘。成功后在原账号内刷新云盘；取消系统分享面板不撤销已经创建的分享。回归见 `DriveBrowserShareTests` 和 `LinkBrowserWebViewTests`。
+
+## 站内信领域
+
+现有手机站内信仅使用 `synapse://mail-internal/<id>`、`/api/mail-internal/` 与通知 source `mail-internal`。链接严格限制单个 ID，不接受旧 mail host、query、fragment 或编码分隔符；旧 host 留给桌面外部邮箱，手机不增加外部邮箱功能。

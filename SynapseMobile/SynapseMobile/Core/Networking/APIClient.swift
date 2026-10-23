@@ -1258,16 +1258,16 @@ actor APIClient {
     func mailRecipients(query: String, cursor: String? = nil) async throws -> MailRecipientPage {
         var items = [URLQueryItem(name: "query", value: query)]
         if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
-        return try await send(path: "/mail/recipients" + mailQuery(items), method: "GET")
+        return try await send(path: "/mail-internal/recipients" + mailQuery(items), method: "GET")
     }
 
     func mailOrganizations(query: String) async throws -> MailOrganizationPage {
-        try await send(path: "/mail/organizations" + mailQuery([URLQueryItem(name: "query", value: query)]), method: "GET")
+        try await send(path: "/mail-internal/organizations" + mailQuery([URLQueryItem(name: "query", value: query)]), method: "GET")
     }
 
     func mailOrganizationMembers(id: String, cursor: String? = nil) async throws -> MailOrganizationMemberPage {
         let query = cursor.map { mailQuery([URLQueryItem(name: "cursor", value: $0)]) } ?? ""
-        return try await send(path: "/mail/organizations/\(escaped(id))/members" + query, method: "GET")
+        return try await send(path: "/mail-internal/organizations/\(escaped(id))/members" + query, method: "GET")
     }
 
     func mailMessages(box: String, query: String = "", cursor: String? = nil, unreadOnly: Bool = false) async throws -> MailMessagePage {
@@ -1275,43 +1275,43 @@ actor APIClient {
         if !query.isEmpty { items.append(URLQueryItem(name: "query", value: query)) }
         if let cursor { items.append(URLQueryItem(name: "cursor", value: cursor)) }
         if unreadOnly { items.append(URLQueryItem(name: "unreadOnly", value: "true")) }
-        return try await send(path: "/mail/messages" + mailQuery(items), method: "GET")
+        return try await send(path: "/mail-internal/messages" + mailQuery(items), method: "GET")
     }
 
     func mailCounts() async throws -> MailCounts {
-        try await send(path: "/mail/messages/count", method: "GET")
+        try await send(path: "/mail-internal/messages/count", method: "GET")
     }
 
     func mailReadAll() async throws -> MailBulkReadResult {
-        try await send(path: "/mail/messages/read-all", method: "PATCH", body: EmptyBody())
+        try await send(path: "/mail-internal/messages/read-all", method: "PATCH", body: EmptyBody())
     }
 
     func mailDeleteBatch(ids: [String], box: String?) async throws -> MailBulkDeleteResult {
         struct Body: Encodable { let messageIds: [String]; let box: String? }
-        return try await send(path: "/mail/messages/delete-batch", method: "POST", body: Body(messageIds: ids, box: box))
+        return try await send(path: "/mail-internal/messages/delete-batch", method: "POST", body: Body(messageIds: ids, box: box))
     }
 
     func mailDeleteAll(box: String) async throws -> MailBulkDeleteResult {
-        try await send(path: "/mail/messages" + mailQuery([URLQueryItem(name: "box", value: box)]), method: "DELETE")
+        try await send(path: "/mail-internal/messages" + mailQuery([URLQueryItem(name: "box", value: box)]), method: "DELETE")
     }
 
     func mailMessage(id: String) async throws -> MailMessage {
-        try await send(path: "/mail/messages/\(escaped(id))", method: "GET")
+        try await send(path: "/mail-internal/messages/\(escaped(id))", method: "GET")
     }
 
     func mailContext(id: String, cursor: String? = nil) async throws -> MailMessagePage {
         let query = cursor.map { mailQuery([URLQueryItem(name: "cursor", value: $0)]) } ?? ""
-        return try await send(path: "/mail/messages/\(escaped(id))/context" + query, method: "GET")
+        return try await send(path: "/mail-internal/messages/\(escaped(id))/context" + query, method: "GET")
     }
 
     func mailSetRead(id: String, read: Bool) async throws {
         struct Body: Encodable { let read: Bool }
-        let _: MailReadResult = try await send(path: "/mail/messages/\(escaped(id))/read", method: "PATCH", body: Body(read: read))
+        let _: MailReadResult = try await send(path: "/mail-internal/messages/\(escaped(id))/read", method: "PATCH", body: Body(read: read))
     }
 
     func mailDelete(id: String, box: String?) async throws {
         let query = box.map { mailQuery([URLQueryItem(name: "box", value: $0)]) } ?? ""
-        let _: MailDeleteResult = try await send(path: "/mail/messages/\(escaped(id))" + query, method: "DELETE")
+        let _: MailDeleteResult = try await send(path: "/mail-internal/messages/\(escaped(id))" + query, method: "DELETE")
     }
 
     func mailPrepareLocalAttachment(url: URL) async throws -> MailPreparedAttachment {
@@ -1321,17 +1321,17 @@ actor APIClient {
         guard !data.isEmpty && data.count <= 20 * 1024 * 1024 else {
             throw APIError(status: 413, code: "too_large", message: "附件不能超过 20 MB。")
         }
-        let path = "/mail/attachments/local" + mailQuery([URLQueryItem(name: "fileName", value: url.lastPathComponent)])
+        let path = "/mail-internal/attachments/local" + mailQuery([URLQueryItem(name: "fileName", value: url.lastPathComponent)])
         return try await perform(path: path, method: "PUT", encodedBody: data, contentType: "application/octet-stream", authenticated: true, allowRefresh: true)
     }
 
     func mailPreview(_ content: MailContent) async throws -> MailPreview {
-        try await send(path: "/mail/send-previews", method: "POST", body: content)
+        try await send(path: "/mail-internal/send-previews", method: "POST", body: content)
     }
 
     func mailSend(previewId: String, clientRequestId: String) async throws -> MailReceipt {
         struct Body: Encodable { let previewId: String; let clientRequestId: String }
-        return try await send(path: "/mail/messages", method: "POST", body: Body(previewId: previewId, clientRequestId: clientRequestId))
+        return try await send(path: "/mail-internal/messages", method: "POST", body: Body(previewId: previewId, clientRequestId: clientRequestId))
     }
 
     func mailDownloadAttachment(messageId: String, attachment: MailAttachment) async throws -> URL {
@@ -1353,7 +1353,7 @@ actor APIClient {
         }
         guard let token = accessToken else { throw APIError(status: 401, code: "unauthenticated", message: "登录已过期，请重新登录。") }
         try Task.checkCancellation()
-        let path = "/mail/messages/\(escaped(messageId))/attachments/\(escaped(attachment.attachmentId))"
+        let path = "/mail-internal/messages/\(escaped(messageId))/attachments/\(escaped(attachment.attachmentId))"
         guard let url = URL(string: AppConfiguration.apiBaseURL.absoluteString + path) else { throw APIError(status: 0, code: "bad_url", message: "附件地址无效。") }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
