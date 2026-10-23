@@ -57,8 +57,8 @@ test("uses an ephemeral admin cookie for audience and send, then logs out", asyn
   assert.deepEqual(result, { messageId: "mail-1", recipientCount: 2 })
   assert.deepEqual(requests.map((item) => [new URL(item.url).pathname, item.init.method ?? "GET"]), [
     ["/api/admin/session", "POST"],
-    ["/api/admin/mail/broadcasts/audience", "GET"],
-    ["/api/admin/mail/broadcasts", "POST"],
+    ["/api/admin/mail-internal/broadcasts/audience", "GET"],
+    ["/api/admin/mail-internal/broadcasts", "POST"],
     ["/api/admin/session", "DELETE"],
   ])
   assert.equal(JSON.parse(requests[0].init.body).accessSecret, "private-admin-secret")
@@ -79,7 +79,7 @@ test("stops preflight when the production broadcast endpoint is unavailable and 
   await assert.rejects(withAdminSession(config, checkAudience, fetchImpl), /HTTP 404/u)
   assert.deepEqual(requests, [
     { path: "/api/admin/session", method: "POST" },
-    { path: "/api/admin/mail/broadcasts/audience", method: "GET" },
+    { path: "/api/admin/mail-internal/broadcasts/audience", method: "GET" },
     { path: "/api/admin/session", method: "DELETE" },
   ])
 })

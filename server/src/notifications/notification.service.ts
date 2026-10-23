@@ -163,7 +163,7 @@ export class NotificationService implements OnModuleInit {
   }
 
   private async withMailSubjects(userId: string, items: ReturnType<typeof toNotificationProjection>[]) {
-    const messageIds = [...new Set(items.flatMap((item) => item.source === "mail" && item.targetId ? [item.targetId] : []))]
+    const messageIds = [...new Set(items.flatMap((item) => item.source === "mail-internal" && item.targetId ? [item.targetId] : []))]
     if (messageIds.length === 0) return items
     const messages = await this.prisma.mailMessage.findMany({
       where: { id: { in: messageIds }, OR: [{ senderId: userId, senderDeletedAt: null }, { recipients: { some: { userId, deletedAt: null } } }] },
@@ -171,7 +171,7 @@ export class NotificationService implements OnModuleInit {
     })
     const subjects = new Map(messages.map((message) => [message.id, message.subject]))
     return items.map((item) => {
-      const mailSubject = item.source === "mail" && item.targetId ? subjects.get(item.targetId) : undefined
+      const mailSubject = item.source === "mail-internal" && item.targetId ? subjects.get(item.targetId) : undefined
       return mailSubject === undefined ? item : { ...item, mailSubject }
     })
   }

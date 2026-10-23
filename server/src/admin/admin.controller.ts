@@ -76,13 +76,13 @@ export class AdminController {
     private readonly mail: AdminMailService,
   ) {}
 
-  @Get("/mail/broadcasts/audience")
+  @Get("/mail-internal/broadcasts/audience")
   @Header("Cache-Control", "no-store")
   audience() {
     return this.mailBroadcast.audience()
   }
 
-  @Post("/mail/broadcasts")
+  @Post("/mail-internal/broadcasts")
   @Header("Cache-Control", "no-store")
   sendMailBroadcast(@Body() body: unknown, @Req() request: AdminRequest) {
     const parsed = mailBroadcastSchema.safeParse(body)
@@ -90,7 +90,7 @@ export class AdminController {
     return this.mailBroadcast.send(parsed.data, request.admin!.sessionId, request.ip ?? "")
   }
 
-  @Get("/mail/messages")
+  @Get("/mail-internal/messages")
   @Header("Cache-Control", "no-store")
   async listMailMessages(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
     const pagination = parsePagination({ ...query, sortBy: query.sortBy ?? "sentAt" }, { allowedSortFields: mailSortFields })
@@ -105,7 +105,7 @@ export class AdminController {
     return result
   }
 
-  @Get("/mail/messages/:id")
+  @Get("/mail-internal/messages/:id")
   @Header("Cache-Control", "no-store")
   async getMailMessage(@Param("id") id: string, @Req() request?: AdminRequest) {
     const result = await this.mail.getMessage(id)
@@ -117,7 +117,7 @@ export class AdminController {
     return result
   }
 
-  @Get("/mail/messages/:id/context")
+  @Get("/mail-internal/messages/:id/context")
   @Header("Cache-Control", "no-store")
   async listMailContext(@Param("id") id: string, @Query("cursor") cursor?: string, @Req() request?: AdminRequest) {
     const result = await this.mail.listContext(id, cursor)

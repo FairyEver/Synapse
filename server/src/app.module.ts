@@ -50,8 +50,8 @@ function hasSensitiveRequestUrl(url: string): boolean {
   return pathname === "/api/todos"
     || pathname.startsWith("/api/todos/")
     || pathname === "/api/problem-feedback"
-    || pathname === "/api/mail"
-    || pathname.startsWith("/api/mail/")
+    || pathname === "/api/mail-internal"
+    || pathname.startsWith("/api/mail-internal/")
     || pathname === OPEN_API_NOTIFICATIONS_BASE_PATH
     || pathname.startsWith(`${OPEN_API_NOTIFICATIONS_BASE_PATH}/`)
 }

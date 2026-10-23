@@ -1628,15 +1628,15 @@ export const adminApi = {
     request<SystemOverview>(`${adminApiBasePath}/system`),
   listMailMessages: (options: AdminMailListOptions = {}) =>
     request<PaginatedResponse<AdminMailMessageSummary>>(
-      `${adminApiBasePath}/mail/messages${adminMailQuerySuffix(options)}`
+      `${adminApiBasePath}/mail-internal/messages${adminMailQuerySuffix(options)}`
     ),
   getMailMessage: (id: string) =>
     request<AdminMailMessageDetail>(
-      `${adminApiBasePath}/mail/messages/${encodeURIComponent(id)}`
+      `${adminApiBasePath}/mail-internal/messages/${encodeURIComponent(id)}`
     ),
   listMailContext: (id: string, cursor?: string) =>
     request<{ items: AdminMailMessageDetail[]; nextCursor: string | null }>(
-      `${adminApiBasePath}/mail/messages/${encodeURIComponent(id)}/context${querySuffix({ cursor })}`
+      `${adminApiBasePath}/mail-internal/messages/${encodeURIComponent(id)}/context${querySuffix({ cursor })}`
     ),
   getTelemetryStats: (options: TelemetryStatsOptions = {}) =>
     request<TelemetryStats>(

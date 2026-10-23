@@ -36,7 +36,7 @@ describe("package entrypoint", () => {
     `], { cwd: packageDirectory, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] })
 
     expect(JSON.parse(result)).toEqual([
-      "external", "system-notifier", "terminal-attention", "terminal-complete", "meeting-transcription", "mail", "todo-reminder", "drive-discussion",
+      "external", "system-notifier", "terminal-attention", "terminal-complete", "meeting-transcription", "mail-internal", "todo-reminder", "drive-discussion",
     ])
   })
 

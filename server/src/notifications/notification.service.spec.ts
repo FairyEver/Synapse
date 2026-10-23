@@ -32,7 +32,7 @@ describe("NotificationService", () => {
   it("adds full subjects to existing mail notifications in one permission-scoped query", async () => {
     const { service, prisma } = harness()
     const subject = "【需求变更留档】" + "很长的站内信标题".repeat(12)
-    const mail = { ...record, source: "mail", title: "新站内信", targetId: "mail-1" }
+    const mail = { ...record, source: "mail-internal", title: "新站内信", targetId: "mail-1" }
     prisma.userNotification.findMany.mockResolvedValueOnce([mail, { ...mail, id: "message-2" }, { ...mail, id: "message-3", targetId: "deleted-mail" }, record])
     prisma.mailMessage.findMany.mockResolvedValueOnce([{ id: "mail-1", subject }])
 
@@ -49,7 +49,7 @@ describe("NotificationService", () => {
 
   it("includes a readable mail subject in detail but skips mail queries for other sources", async () => {
     const { service, prisma } = harness()
-    prisma.userNotification.findFirst.mockResolvedValueOnce({ ...record, source: "mail", targetId: "mail-1" })
+    prisma.userNotification.findFirst.mockResolvedValueOnce({ ...record, source: "mail-internal", targetId: "mail-1" })
     prisma.mailMessage.findMany.mockResolvedValueOnce([{ id: "mail-1", subject: "版本公告" }])
     await expect(service.get("user-1", record.id)).resolves.toHaveProperty("mailSubject", "版本公告")
     prisma.mailMessage.findMany.mockClear()
@@ -101,16 +101,16 @@ describe("NotificationService", () => {
   })
   it("applies the source before cursor pagination and retains the unread intersection", async () => {
     const { service, prisma } = harness()
-    const mail = { ...record, source: "mail" }
+    const mail = { ...record, source: "mail-internal" }
     const rows = Array.from({ length: 51 }, (_, index) => ({ ...mail, id: `mail-${index}` }))
     prisma.userNotification.findMany.mockResolvedValueOnce(rows)
 
-    await expect(service.list("user-1", { source: "mail", filter: "unread", cursor: "message-1" }))
+    await expect(service.list("user-1", { source: "mail-internal", filter: "unread", cursor: "message-1" }))
       .resolves.toEqual({ items: rows.slice(0, 50), nextCursor: "mail-49" })
     expect(prisma.userNotification.findMany).toHaveBeenCalledWith({
       where: {
         userId: "user-1", deletedAt: null, createdAt: { gte: expect.any(Date) },
-        source: "mail", readAt: null,
+        source: "mail-internal", readAt: null,
         OR: [{ createdAt: { lt: record.createdAt } }, { createdAt: record.createdAt, id: { lt: record.id } }],
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],

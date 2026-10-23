@@ -118,7 +118,7 @@ describe("MailService", () => {
       id: "outbox-platform", messageId: "broadcast-1", recipientId: "reader", message: { sender: null },
     }] as never)
     await service.retryPendingNotifications()
-    expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "reader", source: "mail", sourceKey: "mail:broadcast-1", body: "来自 Synapse。" }))
+    expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ userId: "reader", source: "mail-internal", sourceKey: "mail:broadcast-1", body: "来自 Synapse。" }))
     expect(prisma.mailNotificationOutbox.deleteMany).toHaveBeenCalledWith({ where: { id: "outbox-platform" } })
   })
 

@@ -286,7 +286,7 @@ export class MailService {
       for (const item of pending) {
         try {
           const senderName = item.message.sender?.nickname || item.message.sender?.handle || "Synapse"
-          await this.notifications.create({ userId: item.recipientId, source: "mail", sourceKey: `mail:${item.messageId}`, title: "新站内信", body: `来自 ${senderName}。`, group: "mail", targetId: item.messageId, url: `synapse://mail/${item.messageId}` })
+          await this.notifications.create({ userId: item.recipientId, source: "mail-internal", sourceKey: `mail:${item.messageId}`, title: "新站内信", body: `来自 ${senderName}。`, group: "mail-internal", targetId: item.messageId, url: `synapse://mail-internal/${item.messageId}` })
           await this.prisma.mailNotificationOutbox.deleteMany({ where: { id: item.id } })
         } catch (error) {
           this.logger.warn({ recipientId: item.recipientId, messageId: item.messageId, reason: error instanceof Error ? error.name : typeof error }, "Mail notification failed")

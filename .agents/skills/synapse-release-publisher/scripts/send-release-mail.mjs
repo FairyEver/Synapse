@@ -130,7 +130,7 @@ export async function withAdminSession(config, callback, fetchImpl = fetch) {
 }
 
 export async function checkAudience(session) {
-  const url = new URL("/api/admin/mail/broadcasts/audience", session.baseUrl)
+  const url = new URL("/api/admin/mail-internal/broadcasts/audience", session.baseUrl)
   const response = await request(session.fetchImpl, url, { headers: { Cookie: session.cookie } })
   const data = await response.json()
   if (!Number.isSafeInteger(data.activeUsers) || data.activeUsers < 1) throw new Error("当前没有可投递的活跃用户。")
@@ -138,7 +138,7 @@ export async function checkAudience(session) {
 }
 
 export async function sendMail(session, mail) {
-  const url = new URL("/api/admin/mail/broadcasts", session.baseUrl)
+  const url = new URL("/api/admin/mail-internal/broadcasts", session.baseUrl)
   const response = await request(session.fetchImpl, url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: session.origin, Cookie: session.cookie },

@@ -497,7 +497,7 @@ export class AccountService {
 
   async executeMailOperation<K extends MailOperation["kind"]>(operation: Extract<MailOperation, { kind: K }>): Promise<MailOperationResult[K]>
   async executeMailOperation(operation: MailOperation): Promise<unknown> {
-    const base = `${apiBaseUrl()}/mail`
+    const base = `${apiBaseUrl()}/mail-internal`
     const id = (value: string) => encodeURIComponent(value)
     const json = <T>(method: string, path: string, body?: unknown) => this.requestAuthenticatedJson<T>(method, `${base}${path}`, body, "站内信操作失败。")
     switch (operation.kind) {

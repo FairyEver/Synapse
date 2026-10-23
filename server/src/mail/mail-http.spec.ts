@@ -41,54 +41,63 @@ async function fixture() {
 }
 
 describe("internal mail HTTP routes", () => {
+  it("does not expose the former mail API as a compatibility alias", async () => {
+    const { app, mail } = await fixture()
+    try {
+      await request(app.getHttpServer()).get("/api/mail/messages").expect(404)
+      expect(mail.listMessages).not.toHaveBeenCalled()
+    } finally {
+      await app.close()
+    }
+  })
   it("validates historical contact scope and forwards filters under the authenticated account", async () => {
     const { app, mail } = await fixture()
     try {
-      await request(app.getHttpServer()).get("/api/mail/contacts?box=inbox").expect(200)
+      await request(app.getHttpServer()).get("/api/mail-internal/contacts?box=inbox").expect(200)
       expect(mail.listContacts).toHaveBeenCalledWith("sender", "inbox")
-      await request(app.getHttpServer()).get("/api/mail/contacts?box=other").expect(400)
-      await request(app.getHttpServer()).get("/api/mail/messages?box=sent&contactKey=organization%3Aengineering").expect(200)
+      await request(app.getHttpServer()).get("/api/mail-internal/contacts?box=other").expect(400)
+      await request(app.getHttpServer()).get("/api/mail-internal/messages?box=sent&contactKey=organization%3Aengineering").expect(200)
       expect(mail.listMessages).toHaveBeenLastCalledWith("sender", "sent", undefined, undefined, false, "organization:engineering")
-      await request(app.getHttpServer()).get("/api/mail/messages?box=inbox&contactKey=organization%3Aengineering").expect(400)
-      await request(app.getHttpServer()).get("/api/mail/messages?box=sent&contactKey=platform").expect(400)
+      await request(app.getHttpServer()).get("/api/mail-internal/messages?box=inbox&contactKey=organization%3Aengineering").expect(400)
+      await request(app.getHttpServer()).get("/api/mail-internal/messages?box=sent&contactKey=platform").expect(400)
     } finally { await app.close() }
   })
   it("routes counts, unread filtering and bulk changes through the authenticated user", async () => {
     const { app, mail } = await fixture()
     try {
-      await request(app.getHttpServer()).get("/api/mail/messages?box=inbox&unreadOnly=true").expect(200)
+      await request(app.getHttpServer()).get("/api/mail-internal/messages?box=inbox&unreadOnly=true").expect(200)
       expect(mail.listMessages).toHaveBeenCalledWith("sender", "inbox", undefined, undefined, true, undefined)
-      await request(app.getHttpServer()).get("/api/mail/messages?box=sent&unreadOnly=true").expect(400)
-      await request(app.getHttpServer()).get("/api/mail/messages/count").expect(200)
+      await request(app.getHttpServer()).get("/api/mail-internal/messages?box=sent&unreadOnly=true").expect(400)
+      await request(app.getHttpServer()).get("/api/mail-internal/messages/count").expect(200)
       expect(mail.countMessages).toHaveBeenCalledWith("sender")
-      await request(app.getHttpServer()).patch("/api/mail/messages/read-all").send({}).expect(200)
+      await request(app.getHttpServer()).patch("/api/mail-internal/messages/read-all").send({}).expect(200)
       expect(mail.readAllMessages).toHaveBeenCalledWith("sender")
-      await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["a", "b"] }).expect(201)
+      await request(app.getHttpServer()).post("/api/mail-internal/messages/delete-batch").send({ messageIds: ["a", "b"] }).expect(201)
       expect(mail.deleteMessages).toHaveBeenCalledWith("sender", ["a", "b"])
-      await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["self"], box: "inbox" }).expect(201)
+      await request(app.getHttpServer()).post("/api/mail-internal/messages/delete-batch").send({ messageIds: ["self"], box: "inbox" }).expect(201)
       expect(mail.deleteMessages).toHaveBeenCalledWith("sender", ["self"], "inbox")
-      await request(app.getHttpServer()).post("/api/mail/messages/delete-batch").send({ messageIds: ["a", "a"] }).expect(400)
-      await request(app.getHttpServer()).delete("/api/mail/messages?box=sent").expect(200)
+      await request(app.getHttpServer()).post("/api/mail-internal/messages/delete-batch").send({ messageIds: ["a", "a"] }).expect(400)
+      await request(app.getHttpServer()).delete("/api/mail-internal/messages?box=sent").expect(200)
       expect(mail.deleteAllMessages).toHaveBeenCalledWith("sender", "sent")
-      await request(app.getHttpServer()).delete("/api/mail/messages/self?box=sent").expect(200)
+      await request(app.getHttpServer()).delete("/api/mail-internal/messages/self?box=sent").expect(200)
       expect(mail.deleteMessage).toHaveBeenCalledWith("sender", "self", "sent")
     } finally { await app.close() }
   })
   it("routes recipient search, fixed preview and send using the authenticated user", async () => {
     const { app, mail } = await fixture()
     try {
-      await request(app.getHttpServer()).get("/api/mail/recipients?query=%E7%8E%8B%E6%98%8E").expect(200)
+      await request(app.getHttpServer()).get("/api/mail-internal/recipients?query=%E7%8E%8B%E6%98%8E").expect(200)
       expect(mail.searchRecipients).toHaveBeenCalledWith("sender", "王明", undefined)
 
-      await request(app.getHttpServer()).get("/api/mail/recipients?query=&cursor=person-49").expect(200)
+      await request(app.getHttpServer()).get("/api/mail-internal/recipients?query=&cursor=person-49").expect(200)
       expect(mail.searchRecipients).toHaveBeenCalledWith("sender", "", "person-49")
 
-      await request(app.getHttpServer()).post("/api/mail/send-previews")
+      await request(app.getHttpServer()).post("/api/mail-internal/send-previews")
         .send({ formatVersion: 2, toIds: ["teammate"], ccIds: [], subject: "报告", body: "完整正文", attachmentIds: [], forwardAttachmentIds: [] })
         .expect(201)
       expect(mail.createPreview).toHaveBeenCalledWith("sender", expect.objectContaining({ toIds: ["teammate"], body: "完整正文" }))
 
-      await request(app.getHttpServer()).post("/api/mail/messages")
+      await request(app.getHttpServer()).post("/api/mail-internal/messages")
         .send({ previewId: "preview-1", clientRequestId: "request-1" })
         .expect(201)
       expect(mail.send).toHaveBeenCalledWith("sender", "preview-1", "request-1")
@@ -98,11 +107,11 @@ describe("internal mail HTTP routes", () => {
   it("rejects legacy send previews and routes context through the authenticated user", async () => {
     const { app, mail } = await fixture()
     try {
-      await request(app.getHttpServer()).post("/api/mail/send-previews")
+      await request(app.getHttpServer()).post("/api/mail-internal/send-previews")
         .send({ recipientIds: ["teammate"], subject: "旧信", body: "正文", attachmentIds: [] })
         .expect(426)
       expect(mail.createPreview).not.toHaveBeenCalled()
-      await request(app.getHttpServer()).get("/api/mail/messages/message-1/context?cursor=older-1").expect(200)
+      await request(app.getHttpServer()).get("/api/mail-internal/messages/message-1/context?cursor=older-1").expect(200)
       expect(mail.listContext).toHaveBeenCalledWith("sender", "message-1", "older-1")
     } finally { await app.close() }
   })
@@ -110,7 +119,7 @@ describe("internal mail HTTP routes", () => {
   it("streams binary attachment bytes through the production body parser", async () => {
     const { app, mail } = await fixture()
     try {
-      await request(app.getHttpServer()).put("/api/mail/attachments/local?fileName=report.txt")
+      await request(app.getHttpServer()).put("/api/mail-internal/attachments/local?fileName=report.txt")
         .set("Content-Type", "application/octet-stream")
         .send(Buffer.from("report body"))
         .expect(200)
@@ -121,7 +130,7 @@ describe("internal mail HTTP routes", () => {
   it("does not expose Drive file import as a mail attachment route", async () => {
     const { app } = await fixture()
     try {
-      await request(app.getHttpServer()).post("/api/mail/attachments/prepare")
+      await request(app.getHttpServer()).post("/api/mail-internal/attachments/prepare")
         .send({ driveItemId: "drive-file" })
         .expect(404)
     } finally { await app.close() }

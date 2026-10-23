@@ -25,7 +25,7 @@ export const adminSidebarData: SidebarData = {
       { title: '系统概览', url: '/system', icon: LayoutDashboard },
       { title: '埋点统计', url: '/telemetry', icon: ChartNoAxesCombined },
       { title: '用户管理', url: '/users', icon: Users },
-      { title: '站内信', url: '/mail', icon: Mail },
+      { title: '站内信', url: '/mail-internal', icon: Mail },
       { title: '团队', url: '/teams', icon: UsersRound },
       { title: '设备', url: '/devices', icon: MonitorSmartphone },
       { title: 'Skill 仓库', url: '/skill-repositories', icon: FolderKanban },

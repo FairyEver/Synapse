@@ -20,7 +20,7 @@ function userId(request: AuthenticatedUserRequest): string {
   return request.user!.id
 }
 
-@Controller("api/mail")
+@Controller("api/mail-internal")
 @UseGuards(UserAuthGuard)
 export class MailController {
   constructor(private readonly mail: MailService) {}

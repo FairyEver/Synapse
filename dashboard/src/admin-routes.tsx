@@ -100,7 +100,7 @@ const mailSearchSchema = z.object({
 })
 const mailRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
-  path: 'mail',
+  path: 'mail-internal',
   validateSearch: mailSearchSchema,
   component: () => <MailPage search={mailRoute.useSearch()} />,
 })
