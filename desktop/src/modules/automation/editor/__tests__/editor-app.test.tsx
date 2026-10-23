@@ -8,6 +8,11 @@ import { AutomationEditorApp } from "../editor-app"
 import type { AutomationItem } from "@/types/automation"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver
 
 const createItem = vi.fn()
 const updateItem = vi.fn()
@@ -84,15 +89,11 @@ describe("AutomationEditorApp", () => {
     const root = createRoot(container)
     try {
       await act(async () => { root.render(<AutomationEditorApp />) })
-      const start = document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')
-      const end = document.querySelector<HTMLInputElement>('input[aria-label="结束时间"]')
-      expect(start).not.toBeNull()
-      expect(end).not.toBeNull()
-      expect(start!.value).toBe("")
-      expect(end!.value).toBe("")
-      await act(async () => { changeInput(start!, "08:00") })
-      expect(start!.value).toBe("08:00")
-      await act(async () => { changeInput(end!, "24:00") })
+      const rangeTrigger = document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')
+      expect(rangeTrigger?.textContent).toContain("不限时间")
+      await act(async () => { rangeTrigger?.click() })
+      await selectTimePart("结束小时", "24")
+      await act(async () => { findButtonContaining("确定")?.click() })
       await act(async () => { findButtonContaining("仅保存")?.click() })
       expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
         patch: expect.objectContaining({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }),
@@ -101,9 +102,11 @@ describe("AutomationEditorApp", () => {
       updateItem.mockClear()
       getItem.mockResolvedValue(buildAutomationItem({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }))
       await act(async () => { window.dispatchEvent(new Event("focus")) })
-      expect(document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')!.value).toBe("08:00")
-      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')!, "") })
-      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="结束时间"]')!, "") })
+      const reloadedRangeTrigger = document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')
+      expect(reloadedRangeTrigger?.textContent).toContain("08:00")
+      expect(reloadedRangeTrigger?.textContent).toContain("24:00")
+      await act(async () => { reloadedRangeTrigger?.click() })
+      await act(async () => { findButtonContaining("不限时间")?.click() })
       await act(async () => { findButtonContaining("仅保存")?.click() })
       expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
         patch: expect.objectContaining({ trigger: { type, config } }),
@@ -111,21 +114,29 @@ describe("AutomationEditorApp", () => {
     } finally { await act(async () => { root.unmount() }) }
   })
 
-  it("blocks saving an incomplete time range with a readable error", async () => {
-    getItem.mockResolvedValue(buildAutomationItem())
+  it("keeps an invalid picker draft out of the saved automation config", async () => {
+    const item = buildAutomationItem()
+    getItem.mockResolvedValue(item)
+    updateItem.mockResolvedValue(item)
+    vi.spyOn(window, "close").mockImplementation(() => undefined)
     window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
     try {
       await act(async () => { root.render(<AutomationEditorApp />) })
-      const start = document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')
-      expect(start).not.toBeNull()
-      await act(async () => { changeInput(start!, "08:00") })
-      await act(async () => { findButtonContaining("仅保存")?.click() })
+      await act(async () => { document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')?.click() })
+      await selectTimePart("开始小时", "18")
+      expect(findButtonContaining("确定")?.disabled).toBe(true)
+      expect(document.body.textContent).toContain("结束时间必须晚于开始时间")
       expect(updateItem).not.toHaveBeenCalled()
-      expect(document.body.textContent).toContain("结束时间")
-      expect(document.body.textContent).not.toContain('"origin"')
+      await act(async () => {
+        document.querySelector('[role="combobox"][aria-label="开始小时"]')?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      })
+      await act(async () => { findButtonContaining("仅保存")?.click() })
+      expect(updateItem).toHaveBeenCalledWith(expect.objectContaining({
+        patch: expect.objectContaining({ trigger: item.trigger }),
+      }))
     } finally { await act(async () => { root.unmount() }) }
   })
 
@@ -662,8 +673,8 @@ describe("AutomationEditorApp", () => {
     })
 
     if (timeRange) {
-      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="开始时间"]')!, timeRange.start) })
-      await act(async () => { changeInput(document.querySelector<HTMLInputElement>('input[aria-label="结束时间"]')!, timeRange.end) })
+      await act(async () => { document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')?.click() })
+      await act(async () => { findButtonContaining("确定")?.click() })
     }
 
     const command = document.querySelector<HTMLInputElement>("#task-action-command-content")
@@ -927,4 +938,13 @@ function buildAutomationItem(overrides: Partial<AutomationItem> = {}): Automatio
     configVersion: 0,
     ...overrides,
   }
+}
+
+async function selectTimePart(label: string, value: string): Promise<void> {
+  const trigger = document.querySelector<HTMLButtonElement>(`[role="combobox"][aria-label="${label}"]`)
+  expect(trigger).not.toBeNull()
+  await act(async () => { trigger!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })) })
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((element) => element.textContent === value)
+  expect(option).toBeDefined()
+  await act(async () => { option!.click() })
 }
