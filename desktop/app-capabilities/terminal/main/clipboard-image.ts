@@ -12,8 +12,8 @@ type ClipboardImage = {
 }
 
 type ClipboardSource = {
-  readText: () => string
-  readImage: () => ClipboardImage
+  readText: () => string | Promise<string>
+  readImage: () => ClipboardImage | Promise<ClipboardImage>
 }
 
 type MaterializeClipboardImageInput = {
@@ -27,9 +27,9 @@ type MaterializeClipboardImageInput = {
 export async function materializeTerminalClipboardImage(
   input: MaterializeClipboardImageInput,
 ): Promise<string | null> {
-  if (input.clipboard.readText().length > 0) return null
+  if ((await input.clipboard.readText()).length > 0) return null
 
-  const image = input.clipboard.readImage()
+  const image = await input.clipboard.readImage()
   if (image.isEmpty()) return null
 
   const png = image.toPNG()

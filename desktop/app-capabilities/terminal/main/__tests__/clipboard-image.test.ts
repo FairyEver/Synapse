@@ -20,7 +20,7 @@ describe("materializeTerminalClipboardImage", () => {
     const readImage = vi.fn()
 
     await expect(materializeTerminalClipboardImage({
-      clipboard: { readText: () => "plain text", readImage },
+      clipboard: { readText: async () => "plain text", readImage },
       directory,
     })).resolves.toBeNull()
 

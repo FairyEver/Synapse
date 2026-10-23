@@ -55,10 +55,10 @@ export class ClipboardService {
     }
   }
 
-  read(context: ClipboardOperationContext): { readonly text: string } {
+  async read(context: ClipboardOperationContext): Promise<{ readonly text: string }> {
     let text: string
     try {
-      text = this.adapter.readText()
+      text = await this.adapter.readText()
     } catch {
       this.warn(
         "clipboard_read",
@@ -89,9 +89,9 @@ export class ClipboardService {
     return { text: validation.text }
   }
 
-  write(text: string, context: ClipboardOperationContext): { readonly success: true } {
+  async write(text: string, context: ClipboardOperationContext): Promise<{ readonly success: true }> {
     try {
-      this.adapter.writeText(text)
+      await this.adapter.writeText(text)
     } catch {
       this.warn(
         "clipboard_write",

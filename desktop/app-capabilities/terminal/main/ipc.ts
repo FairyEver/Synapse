@@ -1,4 +1,5 @@
-import { app, BrowserWindow, clipboard, dialog } from "electron"
+import { readClipboardPng } from "../../../electron/runtime/clipboard/native-reader"
+import { app, BrowserWindow, clipboard, dialog, nativeImage } from "electron"
 import path from "node:path"
 import { z } from "zod"
 
@@ -347,10 +348,10 @@ export const terminalIpcModule: IpcModule = {
       kind: "invoke",
       request: terminalEnvironmentValueInputSchema,
       response: z.void(),
-      handler: (ctx, request: z.infer<typeof terminalEnvironmentValueInputSchema>) => {
+      handler: async (ctx, request: z.infer<typeof terminalEnvironmentValueInputSchema>) => {
         const value = request.draftValue ?? resolveEnvironmentValue(resolveTerminalService(ctx), request)
         if (value === null) throw new Error("Terminal environment value is unavailable.")
-        clipboard.writeText(value)
+        await clipboard.writeText(value)
       },
     },
     materializeClipboardImage: {
@@ -359,7 +360,7 @@ export const terminalIpcModule: IpcModule = {
       request: z.void(),
       response: z.string().nullable(),
       handler: () => materializeTerminalClipboardImage({
-        clipboard,
+        clipboard: { readText: () => clipboard.readText(), readImage: async () => nativeImage.createFromBuffer(await readClipboardPng(clipboard)) },
         directory: path.join(app.getPath("userData"), "terminal", "clipboard-images"),
         onCleanupError: (error) => {
           logger.warn("Failed to remove a stale terminal clipboard image.", error)

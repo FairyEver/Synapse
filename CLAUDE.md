@@ -17,7 +17,7 @@
 
 ## 项目与代码位置
 
-Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用，技术栈为 Electron 41、Vite 8、React 19、TypeScript 6、shadcn/ui（Radix Nova）、Tailwind CSS 4 和 pnpm monorepo。
+Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用，技术栈为 Electron 44、Vite 8、React 19、TypeScript 6、shadcn/ui（Radix Nova）、Tailwind CSS 4 和 pnpm monorepo；macOS 最低支持 13。
 
 - Electron 主进程：`desktop/electron/`
 - Renderer：`desktop/src/`

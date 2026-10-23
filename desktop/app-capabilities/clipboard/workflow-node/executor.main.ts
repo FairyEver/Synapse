@@ -49,7 +49,7 @@ export const clipboardTextWriteNodeExecutor: NodeExecutor<ClipboardTextWriteNode
     }
 
     try {
-      const result = service.write(validation.text, context)
+      const result = await service.write(validation.text, context)
       return {
         status: "success",
         output: JSON.stringify(result),
@@ -83,7 +83,7 @@ export const clipboardTextReadNodeExecutor: NodeExecutor<ClipboardTextReadNodeCo
     }
 
     try {
-      const result = service.read(context)
+      const result = await service.read(context)
       return {
         status: "success",
         output: result.text,

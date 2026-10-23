@@ -8,13 +8,13 @@ export type ClipboardAttachmentResult = {
 }
 
 export class AgentClipboardAttachmentService {
-  constructor(private readonly readImage: () => NativeImage) {}
+  constructor(private readonly readImage: () => NativeImage | Promise<NativeImage>) {}
 
   async stage(
     agent: AgentRuntimeService,
     input: { readonly draftScopeId: string; readonly name?: string },
   ): Promise<ClipboardAttachmentResult> {
-    const image = this.readImage()
+    const image = await this.readImage()
     if (image.isEmpty()) return { attachments: [], rejectedCount: 1 }
     const staged = await agent.stageAttachmentBytes({
       actor: { kind: "user", id: "renderer" },

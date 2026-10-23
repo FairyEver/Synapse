@@ -47,11 +47,11 @@ clipboard.writeText(text)
 
 Both calls target Electron's default standard clipboard. V1 does not use the Linux selection clipboard, macOS Find pasteboard, or platform-specific business branches. It does not inspect, preserve, merge, or expose HTML, RTF, images, or file lists.
 
-`writeText(text)` runs exactly once. Existing non-text formats may be replaced or removed. Success guarantees only that the valid plain text was passed to `writeText()` and the synchronous call returned normally. It does not prove that other formats remain or that the value remains current after later external changes.
+`writeText(text)` runs exactly once. Existing non-text formats may be replaced or removed. Success guarantees only that the valid plain text was passed to `writeText()` and the asynchronous call resolved normally. It does not prove that other formats remain or that the value remains current after later external changes.
 
-The service never reads back after writing, compares values, snapshots the old clipboard, restores a prior value, or performs a second audit. If native `writeText()` throws, the public result is `WRITE_FAILED` and clipboard state is unknown: it may be unchanged, partially changed, or fully changed.
+The service never reads back after writing, compares values, snapshots the old clipboard, restores a prior value, or performs a second audit. If native `writeText()` throws or rejects, the public result is `WRITE_FAILED` and clipboard state is unknown: it may be unchanged, partially changed, or fully changed.
 
-The synchronous return also completes the contract for process lifetime. Synapse does not delay shutdown, retain a background process, register a Clipboard shutdown flush, or replay content after normal exit, crash, or forced termination. Whether written content survives process exit remains an operating-system and clipboard-manager behavior, not a cross-platform product guarantee.
+Since Electron 44, both calls are awaited and native rejection maps to the existing READ_FAILED / WRITE_FAILED results. Completion is bounded by the native promise; no success or allowed audit is emitted before it resolves. This does not add a shutdown guarantee. Synapse does not delay shutdown, retain a background process, register a Clipboard shutdown flush, or replay content after normal exit, crash, or forced termination. Whether written content survives process exit remains an operating-system and clipboard-manager behavior, not a cross-platform product guarantee.
 
 ## Shared plain-text validation
 

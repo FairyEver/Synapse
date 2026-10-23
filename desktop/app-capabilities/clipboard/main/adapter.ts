@@ -1,12 +1,12 @@
 export interface ClipboardAdapter {
   readonly kind: "electron" | "unavailable"
-  readText(): string
-  writeText(text: string): void
+  readText(): string | Promise<string>
+  writeText(text: string): void | Promise<void>
 }
 
 export interface ElectronClipboardPort {
-  readText(): string
-  writeText(text: string): void
+  readText(): string | Promise<string>
+  writeText(text: string): void | Promise<void>
 }
 
 export function createElectronClipboardAdapter(

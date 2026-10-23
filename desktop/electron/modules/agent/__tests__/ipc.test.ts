@@ -23,12 +23,8 @@ const electronMock = vi.hoisted(() => ({
     showOpenDialog: vi.fn(),
     showSaveDialog: vi.fn(),
   },
-  clipboard: {
-    readImage: vi.fn<() => { isEmpty: () => boolean; toPNG: () => Buffer }>(() => ({
-      isEmpty: () => true,
-      toPNG: () => Buffer.alloc(0),
-    })),
-  },
+  clipboard: { read: vi.fn<() => Promise<Electron.ClipboardItem[]>>(async () => []) },
+  nativeImage: { createFromBuffer: (bytes: Buffer) => ({ isEmpty: () => bytes.length === 0, toPNG: () => bytes }) },
 }))
 
 import { createInMemoryHarness } from "../../../runtime/ipc"
@@ -73,11 +69,8 @@ describe("agentIpcModule", () => {
     electronMock.BrowserWindow.getFocusedWindow.mockReturnValue(undefined)
     electronMock.dialog.showOpenDialog.mockReset()
     electronMock.dialog.showSaveDialog.mockReset()
-    electronMock.clipboard.readImage.mockReset()
-    electronMock.clipboard.readImage.mockReturnValue({
-      isEmpty: () => true,
-      toPNG: () => Buffer.alloc(0),
-    })
+    electronMock.clipboard.read.mockReset()
+    electronMock.clipboard.read.mockResolvedValue([])
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -250,10 +243,7 @@ describe("agentIpcModule", () => {
   it("stages a clipboard image through the Agent attachment service", async () => {
     const ref = testImageRef("clipboard-1", "paste.png")
     const stageAttachmentBytes = vi.fn().mockResolvedValue([{ ref }])
-    electronMock.clipboard.readImage.mockReturnValueOnce({
-      isEmpty: () => false,
-      toPNG: () => Buffer.from([1, 2, 3]),
-    })
+    electronMock.clipboard.read.mockResolvedValueOnce([{ types: ["image/png"], getType: async () => new Blob([new Uint8Array([1, 2, 3])]) } as unknown as Electron.ClipboardItem])
 
     await expect(createHarness({ agent: { stageAttachmentBytes } }).invoke(
       "synapse:app:agent:operation:stage_clipboard_image",
@@ -284,10 +274,7 @@ describe("agentIpcModule", () => {
   })
 
   it("propagates clipboard staging and attachment release failures", async () => {
-    electronMock.clipboard.readImage.mockReturnValueOnce({
-      isEmpty: () => false,
-      toPNG: () => Buffer.from([1, 2, 3]),
-    })
+    electronMock.clipboard.read.mockResolvedValueOnce([{ types: ["image/png"], getType: async () => new Blob([new Uint8Array([1, 2, 3])]) } as unknown as Electron.ClipboardItem])
     const stagingFailure = new Error("staging failed")
     await expect(createHarness({
       agent: { stageAttachmentBytes: vi.fn().mockRejectedValue(stagingFailure) },

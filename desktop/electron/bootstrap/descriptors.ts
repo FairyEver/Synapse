@@ -1,3 +1,4 @@
+import { readClipboardRawFormat } from "../runtime/clipboard/native-reader"
 /**
  * Phase 0.1 — Bootstrap layer.
  *
@@ -995,7 +996,10 @@ export const coreClipboardSyncDescriptor: ServiceDescriptor<ClipboardSyncService
   // 顺序在审计之后，但审计起不来也不拦着采集 —— 所以是 startAfter 而不是 dependsOn。
   startAfter: ["core.audit-sink"],
   create() {
-    return new ClipboardSyncService({ clipboard })
+    return new ClipboardSyncService({ clipboard: {
+      readText: () => clipboard.readText(),
+      readBuffer: (format) => readClipboardRawFormat(clipboard, format),
+    } })
   },
   start(service) {
     service.start()

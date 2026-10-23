@@ -6,11 +6,12 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
 import { Worker } from "node:worker_threads"
+import { verifyPackagedElectron } from "./verify-electron-runtime.mjs"
 
 const require = createRequire(import.meta.url)
 
 function usage() {
-  console.error("Usage: node scripts/checks/verify-packaged-asar.mjs <release-dir-or-app-path>")
+  console.error("Usage: node scripts/checks/verify-packaged-asar.mjs <release-dir-or-app-path> [--resources-only]")
 }
 
 function readAsarHeader(buffer) {
@@ -1236,6 +1237,10 @@ async function verifyResources(resourcesPath, label) {
   verifyClaudeRuntime(unpackedPath, failures)
   verifyTerminalRuntime(header, resourcesPath, unpackedPath, failures)
   verifyExtraResources(resourcesPath, failures)
+  if (failures.length === 0 && !process.argv.includes("--resources-only")) {
+    const runtime = verifyPackagedElectron(resourcesPath)
+    process.stdout.write(`Verified candidate Electron runtime: ${JSON.stringify(runtime)}\n`)
+  }
 
   if (failures.length > 0) {
     throw new Error([

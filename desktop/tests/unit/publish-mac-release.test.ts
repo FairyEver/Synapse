@@ -18,6 +18,7 @@ async function writeMacArtifacts(dir: string): Promise<void> {
   await writeFile(path.join(dir, "Synapse-0.2.214-mac-arm64.zip.blockmap"), "mac-zip-blockmap")
   await writeFile(path.join(dir, "latest-mac.yml"), [
     "version: 0.2.214",
+    "minimumSystemVersion: 22.0.0",
     "path: Synapse-0.2.214-mac-arm64.zip",
     "files:",
     "  - url: Synapse-0.2.214-mac-arm64.zip",

@@ -1,5 +1,6 @@
+import { readClipboardPng } from "../../runtime/clipboard/native-reader"
 import { randomUUID } from "node:crypto"
-import { BrowserWindow, clipboard, dialog, type OpenDialogOptions } from "electron"
+import { BrowserWindow, clipboard, dialog, nativeImage, type OpenDialogOptions } from "electron"
 import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
@@ -47,7 +48,7 @@ const MAX_CLIENT_SKEW_MS = 60_000
 const MAX_AGENT_ATTACHMENT_RESOLUTION_PATHS = 256
 const logger = createMainLogger("agent.ipc")
 const rendererDestroyCleanupRegistered = new Set<number>()
-const clipboardAttachmentService = new AgentClipboardAttachmentService(() => clipboard.readImage())
+const clipboardAttachmentService = new AgentClipboardAttachmentService(async () => nativeImage.createFromBuffer(await readClipboardPng(clipboard)))
 const agentImageMimeTypeSchema = z.enum(AGENT_ATTACHMENT_IMAGE_MIME_TYPES)
 const attachmentPathSchema = z.string()
   .trim()

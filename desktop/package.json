@@ -36,7 +36,7 @@
     "check:terminal-runtime": "electron scripts/checks/terminal-runtime-app",
     "database:import-legacy": "node --no-warnings scripts/migrations/import-legacy-database.mjs",
     "package:mac": "pnpm build && pnpm package:mac:compiled",
-    "package:mac:compiled": "pnpm exec electron-builder --mac dmg zip --arm64 --publish never",
+    "package:mac:compiled": "node scripts/release/package-mac-compiled.mjs",
     "package:win": "pnpm build && pnpm package:win:compiled",
     "package:win:compiled": "pnpm exec electron-builder --win nsis --x64 --publish never",
     "release:mac": "node scripts/release/package-mac-release.mjs --check && pnpm bump:commit:push && node scripts/release/package-mac-release.mjs && node scripts/release/publish-mac-release.mjs",
@@ -160,7 +160,7 @@
     "@vitest/coverage-v8": "^4.1.5",
     "concurrently": "9.2.1",
     "cross-env": "10.1.0",
-    "electron": "41.2.1",
+    "electron": "44.9.3",
     "electron-builder": "26.3.3",
     "esbuild": "^0.28.0",
     "eslint": "^10.2.1",
@@ -265,6 +265,7 @@
       }
     ],
     "mac": {
+      "minimumSystemVersion": "13.0.0",
       "category": "public.app-category.productivity",
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",

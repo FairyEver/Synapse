@@ -4,7 +4,7 @@
 
 ## 技术栈与目录
 
-- Electron 41 + Vite 8 + React 19 + TypeScript 6。
+- Electron 44 + Vite 8 + React 19 + TypeScript 6；macOS 最低支持 13。
 - shadcn/ui（`radix-nova`）+ Tailwind CSS 4。
 - pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
 - Git 管理内容，SQLite / DataRepository 管理业务数据。
@@ -87,6 +87,10 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 
 ## Electron 打包边界
 
+- Electron 固定 `44.9.3`；macOS 安装包 `minimumSystemVersion` 为 `13.0.0`，更新元数据 `latest-mac.yml` 的同名字段为 Darwin `22.0.0`。打包 wrapper 在 builder 全部结束后写入、发布准备再次严格校验，不能混用两种版本号或把门槛加到 Windows 元数据。
+- `check:packaged-asar` 对完整候选包执行实际 Electron 运行时与网络探针，并将原生代码 section 指纹与 `desktop/scripts/checks/electron-security-baseline.json` 中核对过官方校验和的产物比较；签名和资源变化不应改变该代码 section。仅显式 `--resources-only` 可做零散 resources 结构检查，不代表完整安装包验收。升级 Electron 时必须重新审查并更新指纹，不允许仅放宽版本比较。
+- Electron 的 Brotli 使用 Chromium 实现，不能直接套用服务端 Node 版本门槛。44.9.3 包含 Brotli 和 eMudhra 修复，但未包含全部 Node 24.22.1 修复；剩余风险和发布验收见 `docs/superpowers/specs/2026-10-23-desktop-electron-security-upgrade.md`。
+- Electron 44 剪贴板原生 API 异步执行：工作流等待读写完成再返回和审计；图片走 ClipboardItem 的 PNG Blob；敏感格式走 osclipboard MIME，探测失败不采集，停止后或旧轮次的异步结果不能进入同步历史。业务 IPC、MCP 与 Workflow 输入输出不变。
 - `app.asar` 是启动关键路径。改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 worker、原生模块、可执行文件、运行时资源时，必须检查 sourcemap、packed 与 unpacked 文件不会错位。
 - Claude SDK native binary 必须实际落在目标平台的 `app.asar.unpacked`；只有 `asarUnpack` 声明不足以作为证明。
 - macOS Terminal 的 `node-pty` 保持在 `app.asar.unpacked`，`spawn-helper` 通过 macOS `extraFiles` 放在 `Contents/Frameworks/node-pty-spawn-helper`，由补丁通过 `SYNAPSE_NODE_PTY_SPAWN_HELPER` 使用；不得回退到 `Contents/Resources`。

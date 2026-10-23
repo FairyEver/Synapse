@@ -26,6 +26,7 @@ ignoredBuiltDependencies:
 
 overrides:
   js-yaml: 4.2.0
+  '@electron/rebuild>node-abi': 4.39.0
 
 patchedDependencies:
   node-pty@1.1.0: patches/node-pty@1.1.0.patch

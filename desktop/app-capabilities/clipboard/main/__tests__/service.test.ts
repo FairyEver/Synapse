@@ -16,7 +16,7 @@ function logger() {
 }
 
 describe("ClipboardService", () => {
-  it("reads and writes through one synchronous native call with minimal audit metadata", () => {
+  it("reads and writes through one asynchronous native call with minimal audit metadata", async () => {
     const readText = vi.fn(() => "value")
     const writeText = vi.fn()
     const audit = new InMemoryAuditSink()
@@ -26,8 +26,8 @@ describe("ClipboardService", () => {
       logger(),
     )
 
-    expect(service.read(context)).toEqual({ text: "value" })
-    expect(service.write("next", context)).toEqual({ success: true })
+    expect(await service.read(context)).toEqual({ text: "value" })
+    expect(await service.write("next", context)).toEqual({ success: true })
     expect(readText).toHaveBeenCalledTimes(1)
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText).toHaveBeenCalledWith("next")
@@ -57,7 +57,7 @@ describe("ClipboardService", () => {
     ])
   })
 
-  it("returns an empty string as a successful read", () => {
+  it("returns an empty string as a successful read", async () => {
     const audit = new InMemoryAuditSink()
     const service = new ClipboardService({
       kind: "electron",
@@ -65,28 +65,28 @@ describe("ClipboardService", () => {
       writeText: vi.fn(),
     }, audit, logger())
 
-    expect(service.read(context)).toEqual({ text: "" })
+    expect(await service.read(context)).toEqual({ text: "" })
     expect(audit.list()[0]).toMatchObject({ outcome: "allowed" })
   })
 
-  it("normalizes native failures without exposing the exception", () => {
+  it("normalizes native failures without exposing the exception", async () => {
     const log = logger()
     const audit = new InMemoryAuditSink()
     const adapter: ClipboardAdapter = {
       kind: "electron",
-      readText: () => {
+      readText: async () => {
         throw new Error("private read failure")
       },
-      writeText: () => {
+      writeText: async () => {
         throw new Error("private write failure")
       },
     }
     const service = new ClipboardService(adapter, audit, log)
 
-    expect(() => service.read(context)).toThrowError(expect.objectContaining({
+    await expect(service.read(context)).rejects.toThrowError(expect.objectContaining({
       code: "READ_FAILED",
     }))
-    expect(() => service.write("value", context)).toThrowError(expect.objectContaining({
+    await expect(service.write("value", context)).rejects.toThrowError(expect.objectContaining({
       code: "WRITE_FAILED",
     }))
     expect(log.warn).toHaveBeenNthCalledWith(
@@ -106,7 +106,7 @@ describe("ClipboardService", () => {
     ])
   })
 
-  it("rejects invalid or oversized native results after access without returning a partial value", () => {
+  it("rejects invalid or oversized native results after access without returning a partial value", async () => {
     for (const [text, code] of [
       ["a\u0000b", "READ_FAILED"],
       ["\ud800", "READ_FAILED"],
@@ -118,7 +118,7 @@ describe("ClipboardService", () => {
         readText: () => text,
         writeText: vi.fn(),
       }, audit, logger())
-      expect(() => service.read(context)).toThrowError(expect.objectContaining({ code }))
+      await expect(service.read(context)).rejects.toThrowError(expect.objectContaining({ code }))
       expect(audit.list()[0]).toMatchObject({
         outcome: "failed",
         metadata: { errorCode: code },
@@ -126,7 +126,7 @@ describe("ClipboardService", () => {
     }
   })
 
-  it("keeps node results independent from AuditSink failures", () => {
+  it("keeps node results independent from AuditSink failures", async () => {
     const log = logger()
     const audit = {
       record: () => {
@@ -141,15 +141,15 @@ describe("ClipboardService", () => {
       writeText: vi.fn(),
     }, audit, log)
 
-    expect(service.read(context)).toEqual({ text: "value" })
-    expect(service.write("value", context)).toEqual({ success: true })
+    expect(await service.read(context)).toEqual({ text: "value" })
+    expect(await service.write("value", context)).toEqual({ success: true })
     expect(log.warn).toHaveBeenCalledWith(
       "Clipboard operation degraded.",
       { stage: "audit_record", reason: "sink_failure" },
     )
   })
 
-  it("stays registered with stable failures when the adapter is unavailable", () => {
+  it("stays registered with stable failures when the adapter is unavailable", async () => {
     const log = logger()
     const audit = new InMemoryAuditSink()
     const service = new ClipboardService(undefined, audit, log)
@@ -158,10 +158,10 @@ describe("ClipboardService", () => {
       status: "degraded",
       reason: "adapter_unavailable",
     })
-    expect(() => service.read(context)).toThrowError(expect.objectContaining({
+    await expect(service.read(context)).rejects.toThrowError(expect.objectContaining({
       code: "READ_FAILED",
     }))
-    expect(() => service.write("value", context)).toThrowError(expect.objectContaining({
+    await expect(service.write("value", context)).rejects.toThrowError(expect.objectContaining({
       code: "WRITE_FAILED",
     }))
     expect(log.warn).toHaveBeenCalledWith(

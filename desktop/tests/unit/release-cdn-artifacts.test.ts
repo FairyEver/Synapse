@@ -31,6 +31,7 @@ async function writeFixtureArtifacts(dir: string): Promise<void> {
   ].join("\n"))
   await writeFile(path.join(dir, "latest-mac.yml"), [
     "version: 0.2.214",
+    "minimumSystemVersion: 22.0.0",
     "path: Synapse-0.2.214-mac-arm64.zip",
     "files:",
     "  - url: Synapse-0.2.214-mac-arm64.zip",
@@ -44,6 +45,48 @@ async function writeFixtureArtifacts(dir: string): Promise<void> {
 }
 
 describe("prepare-cdn-release-artifacts", () => {
+  it("adds the Darwin minimum after packaging so old clients refuse macOS 12 updates", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-os-hook-"))
+    await writeFixtureArtifacts(root)
+    const metadataPath = path.join(root, "latest-mac.yml")
+    await writeFile(metadataPath, (await readFile(metadataPath, "utf8")).replace("minimumSystemVersion: 22.0.0\n", ""))
+    await execFileAsync(process.execPath, ["--input-type=module", "-e",
+      "const url=process.argv[1];process.argv[1]='hook-test';const mod = await import(url); await mod.default({outDir:process.argv[2],artifactPaths:['Synapse-0.2.214-mac-arm64.zip']})",
+      scriptPath, root])
+    const metadata = parse(await readFile(metadataPath, "utf8"))
+    expect(metadata.minimumSystemVersion).toBe("22.0.0")
+    const { createRequire } = await import("node:module")
+    const require = createRequire(import.meta.url)
+    const { AppUpdater } = require("electron-updater/out/AppUpdater.js")
+    const osModule = require("node:os")
+    const original = osModule.release
+    try {
+      for (const [kernel, allowed] of [["21.6.0", false], ["22.0.0", true], ["25.0.0", true]]) {
+        osModule.release = () => kernel
+        expect(AppUpdater.prototype.checkIfUpdateSupported.call({ _logger: { info() {}, warn() {} } }, metadata)).toBe(allowed)
+      }
+    } finally { osModule.release = original }
+  })
+
+  it.each([undefined, "13.0.0", "21.6.0", "invalid"])(
+    "rejects unsafe macOS metadata (%s) before replacing the output directory",
+    async (minimum) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-os-gate-"))
+      const artifactsDir = path.join(root, "artifacts")
+      const outDir = path.join(root, "out")
+      await writeFixtureArtifacts(artifactsDir)
+      const metadataPath = path.join(artifactsDir, "latest-mac.yml")
+      const raw = await readFile(metadataPath, "utf8")
+      await writeFile(metadataPath, raw.replace("minimumSystemVersion: 22.0.0\n", minimum === undefined ? "" : `minimumSystemVersion: ${minimum}\n`))
+      await mkdir(outDir)
+      await writeFile(path.join(outDir, "preserve.txt"), "previous release")
+      await expect(execFileAsync(process.execPath, [scriptPath,
+        "--artifacts-dir", artifactsDir, "--out-dir", outDir, "--version", "0.2.214",
+        "--cdn-base-url", "https://desktop.release.synapse.d2.pub/", "--platform", "mac",
+      ])).rejects.toMatchObject({ stderr: expect.stringContaining("minimumSystemVersion must be 22.0.0") })
+      expect(await readFile(path.join(outDir, "preserve.txt"), "utf8")).toBe("previous release")
+    },
+  )
   it("runs the bundled publish script without workspace dependencies", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-release-bundle-"))
     const artifactsDir = path.join(root, "release-artifacts")
@@ -105,6 +148,7 @@ describe("prepare-cdn-release-artifacts", () => {
     await expect(stat(path.join(outDir, "v0.2.214/Synapse-0.2.214-mac-arm64.dmg"))).resolves.toBeTruthy()
 
     const latest = parse(await readFile(path.join(outDir, "latest.yml"), "utf8"))
+    expect(latest.minimumSystemVersion).toBeUndefined()
     expect(latest.path).toBe("v0.2.214/Synapse-0.2.214-win-x64.exe")
     expect(latest.files[0].url).toBe("v0.2.214/Synapse-0.2.214-win-x64.exe")
 
@@ -112,6 +156,7 @@ describe("prepare-cdn-release-artifacts", () => {
     expect(latestWindows).toEqual(latest)
 
     const latestMac = parse(await readFile(path.join(outDir, "latest-mac.yml"), "utf8"))
+    expect(latestMac.minimumSystemVersion).toBe("22.0.0")
     expect(latestMac.path).toBe("v0.2.214/Synapse-0.2.214-mac-arm64.zip")
     expect(latestMac.files.map((file: { url: string }) => file.url)).toEqual([
       "v0.2.214/Synapse-0.2.214-mac-arm64.zip",

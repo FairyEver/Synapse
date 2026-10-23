@@ -954,6 +954,20 @@ describe("packaged asar verification", () => {
     }
   }
 
+  it("rejects a Windows package whose executable is missing", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
+    try {
+      const resourcesPath = path.join(root, "resources")
+      await mkdir(resourcesPath, { recursive: true })
+      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
+      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
+      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
+      await writeExtraResourceFixtures(resourcesPath)
+      await expect(execFileAsync(process.execPath, [path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"), root]))
+        .rejects.toMatchObject({ stderr: expect.stringContaining("Candidate executable missing") })
+    } finally { await rm(root, { recursive: true, force: true }) }
+  })
+
   it("verifies a Windows-style resources directory with unpacked files", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
@@ -967,6 +981,7 @@ describe("packaged asar verification", () => {
       const result = await execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
+        "--resources-only",
       ])
 
       expect(result.stdout).toContain("Verified packaged text extraction worker smoke")
@@ -1051,7 +1066,7 @@ describe("packaged asar verification", () => {
     await expectJsonRepairExportFailure({ omitJsonRepairExtractExport: true })
   })
 
-  it("verifies a macOS app bundle resources directory with unpacked files", async () => {
+  it("rejects a macOS bundle with valid resources but no candidate executable", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
     try {
       const appPath = path.join(root, "Synapse.app")
@@ -1062,12 +1077,10 @@ describe("packaged asar verification", () => {
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
       await writeExtraResourceFixtures(resourcesPath)
 
-      const result = await execFileAsync(process.execPath, [
+      await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         appPath,
-      ])
-
-      expect(result.stdout).toContain("Verified Synapse.app")
+      ])).rejects.toMatchObject({ stderr: expect.stringContaining("Candidate executable missing") })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -1637,6 +1650,7 @@ describe("packaged asar verification", () => {
       const result = await execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
         root,
+        "--resources-only",
       ])
 
       expect(result.stdout).toContain("Verified resources")

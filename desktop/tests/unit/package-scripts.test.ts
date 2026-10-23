@@ -11,7 +11,7 @@ describe("desktop package scripts", () => {
 
     expect(scripts["package:mac"]).toMatch(/^pnpm build && pnpm package:mac:compiled$/)
     expect(scripts["package:win"]).toMatch(/^pnpm build && pnpm package:win:compiled$/)
-    expect(scripts["package:mac:compiled"]).toContain("electron-builder --mac")
+    expect(scripts["package:mac:compiled"]).toBe("node scripts/release/package-mac-compiled.mjs")
     expect(scripts["package:win:compiled"]).toContain("electron-builder --win")
   })
 

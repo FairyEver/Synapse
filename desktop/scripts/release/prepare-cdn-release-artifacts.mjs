@@ -5,6 +5,25 @@ import { pathToFileURL } from "node:url"
 import { parse, stringify } from "yaml"
 
 const DESKTOP_UPDATE_HANDOFF_URL = "https://synapse.d2.pub/desktop/update"
+// electron-updater 使用 Darwin 内核版本；macOS 13 对应 Darwin 22。
+const MAC_UPDATE_MINIMUM_SYSTEM_VERSION = "22.0.0"
+
+function assertMacUpdateMinimum(metadata) {
+  if (metadata?.minimumSystemVersion !== MAC_UPDATE_MINIMUM_SYSTEM_VERSION) {
+    throw new Error("latest-mac.yml minimumSystemVersion must be 22.0.0 (Darwin, macOS 13)")
+  }
+}
+
+// 必须在 electron-builder build() 完全结束后调用；afterAllArtifactBuild 早于元数据落盘。
+export default async function finalizeMacUpdateMetadata({ artifactPaths, outDir }) {
+  if (!artifactPaths.some((file) => /-mac-[^.]+\.(zip|dmg)$/.test(file))) return []
+  const file = path.join(outDir, "latest-mac.yml")
+  const metadata = parse(await readFile(file, "utf8"))
+  if (metadata.minimumSystemVersion !== undefined) assertMacUpdateMinimum(metadata)
+  metadata.minimumSystemVersion = MAC_UPDATE_MINIMUM_SYSTEM_VERSION
+  await writeFile(file, stringify(metadata), "utf8")
+  return []
+}
 
 const PLATFORM_CONFIGS = {
   all: {
@@ -162,6 +181,7 @@ export async function prepareReleaseArtifacts({ artifactsDir, outDir, version, c
   for (const metadataFile of platformConfig.metadata) {
     const raw = await readFile(path.join(artifactsDir, metadataFile.source), "utf8")
     const metadata = parse(raw)
+    if (metadataFile.source === "latest-mac.yml") assertMacUpdateMinimum(metadata)
     const content = rewriteMetadata(metadata, versionPrefix, artifactNames)
     for (const target of metadataFile.targets) {
       rewrittenMetadata.push({
@@ -208,7 +228,7 @@ async function main() {
   })
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     process.exitCode = 1
