@@ -20,10 +20,13 @@ async function setup() {
   mount(<Harness />); await flush()
   await act(async () => { await current.selectMessage(detail.id) }); await flush()
 }
+function toolbarButton(label: string) {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('article button')].find(button => button.textContent === label)
+  expect(button).toBeDefined()
+  return button!
+}
 async function openMore() {
-  const trigger = [...document.querySelectorAll<HTMLButtonElement>('article button')].find(button => button.textContent === "更多")
-  expect(trigger).toBeDefined()
-  act(() => trigger!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })))
+  act(() => toolbarButton("更多").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })))
   await flush()
 }
 function menuItem(label: string) {
@@ -32,12 +35,11 @@ function menuItem(label: string) {
   return item!
 }
 
-it("copies the message ID and plain body through the collapsed actions menu", async () => {
+it("copies the message ID from the toolbar and plain body from more", async () => {
   mocks.api.bodyReadChunk.mockResolvedValue({ bodyRef: "mas_body", html: "<p>第一行</p><p>第二行</p>", text: "第一行\n第二行", complete: true, nextCursor: null, truncated: false })
   await setup()
   expect(document.querySelector('article')?.textContent).not.toContain("回复全部")
-  await openMore()
-  act(() => menuItem("复制ID").click()); await flush()
+  act(() => toolbarButton("复制ID").click()); await flush()
   expect(writeText).toHaveBeenLastCalledWith("em_one")
   expect(toast).toHaveBeenLastCalledWith("ID 已复制")
   await openMore()
@@ -46,13 +48,15 @@ it("copies the message ID and plain body through the collapsed actions menu", as
   expect(toast).toHaveBeenLastCalledWith("正文已复制")
 })
 
-it("keeps reply all and forward available from more", async () => {
-  await setup(); await openMore()
+it("opens reply and forward from the toolbar and reply all from more", async () => {
+  await setup()
+  act(() => toolbarButton("回复").click()); await flush()
+  expect(compose).toHaveBeenLastCalledWith({ accountId: "ma_one", sourceMessageId: "em_one", mode: "reply" })
+  act(() => toolbarButton("转发").click()); await flush()
+  expect(compose).toHaveBeenLastCalledWith({ accountId: "ma_one", sourceMessageId: "em_one", mode: "forward" })
+  await openMore()
   act(() => menuItem("回复全部").click()); await flush()
   expect(compose).toHaveBeenLastCalledWith({ accountId: "ma_one", sourceMessageId: "em_one", mode: "reply_all" })
-  await openMore()
-  act(() => menuItem("转发").click()); await flush()
-  expect(compose).toHaveBeenLastCalledWith({ accountId: "ma_one", sourceMessageId: "em_one", mode: "forward" })
 })
 
 it("does not copy an incomplete body while it is loading or truncated", async () => {

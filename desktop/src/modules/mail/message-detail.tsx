@@ -1,7 +1,7 @@
 import { useMemo } from "react"
 import { ArrowLeft, Copy, Download, Reply, ReplyAll, Forward, MoreHorizontal, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { MailDetail as Detail } from "../../../app-capabilities/mail/shared/types"
@@ -14,13 +14,12 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
     <div className="flex h-10 shrink-0 items-center border-b bg-background px-3">
       <SystemAppTopBarActionButton iconOnly className="lg:hidden" aria-label="返回邮件列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
       <SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("reply")} data-track="mail.reply"><Reply />回复</SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("forward")}><Forward />转发</SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton onClick={() => onCopy("id")}><Copy />复制ID</SystemAppTopBarActionButton>
       <DropdownMenu data-track="mail.detail.more">
-        <DropdownMenuTrigger asChild><SystemAppTopBarActionButton><MoreHorizontal />更多</SystemAppTopBarActionButton></DropdownMenuTrigger>
-        <DropdownMenuContent>
+        <DropdownMenuTrigger asChild><SystemAppTopBarActionButton className="ml-auto"><MoreHorizontal />更多</SystemAppTopBarActionButton></DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
           <DropdownMenuItem disabled={detail.metadataTruncated} onSelect={() => onReply("reply_all")}><ReplyAll />回复全部</DropdownMenuItem>
-          <DropdownMenuItem disabled={detail.metadataTruncated} onSelect={() => onReply("forward")}><Forward />转发</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => onCopy("id")}><Copy />复制ID</DropdownMenuItem>
           <DropdownMenuItem disabled={!body?.complete} onSelect={() => onCopy("body")}><FileText />复制正文</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
