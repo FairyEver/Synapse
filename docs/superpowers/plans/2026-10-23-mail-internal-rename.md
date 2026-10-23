@@ -41,7 +41,7 @@
 
 现有目录移动须保留 `git mv` 历史。服务端 `server/src/mail/`、Prisma `Mail*` 表、COS `mail/attachments/`、历史审计键及去重 `sourceKey=mail:<id>` 保持为内部实现细节，不属于旧公开入口。不为重命名制造数据库表搬迁。
 
-### R1：旧 App 身份迁移
+### Task 1: R1 — 旧 App 身份迁移
 
 **Files:**
 - Create: `desktop/src/modules/apps/mail-internal-migration.ts`
@@ -62,7 +62,7 @@
 - [ ] 重跑 `pnpm --filter @synapse/desktop test src/modules/apps/__tests__/mail-internal-migration.test.ts`，全部 PASS。
 - [ ] 检查暂存区只含本任务文件；提交 `fix: 保留站内信布局并迁移旧应用身份`。此阶段不发布。
 
-### R2：桌面领域、MCP、IPC 与深链改名
+### Task 2: R2 — 桌面领域、MCP、IPC 与深链改名
 
 **Files:**
 - Move: `desktop/src/modules/mail/` → `desktop/src/modules/mail-internal/`；`desktop/app-capabilities/mail/` → `desktop/app-capabilities/mail-internal/`
@@ -92,7 +92,7 @@
 - [ ] 运行 `pnpm --filter @synapse/desktop run generate:ipc`、`pnpm --filter @synapse/desktop run check:ipc-codegen`，再运行 `pnpm --filter @synapse/desktop test src/modules/mail-internal electron/capabilities/__tests__/mail-internal-dispatcher.test.ts synapse-capabilities/shared/__tests__ tests/unit/api-mcp-capability-surface.test.ts`，全部 PASS；审查 `git diff --check`。
 - [ ] 仅提交本任务文件：`refactor: 将桌面站内信能力和深链迁入 mail-internal 领域`。
 
-### R3：服务端、数据、管理台和发布通知改名
+### Task 3: R3 — 服务端、数据、管理台和发布通知改名
 
 **Files:**
 - Modify: `server/src/mail/{mail.controller.ts,mail.service.ts,mail-http.spec.ts,mail.service.spec.ts}`；`server/src/admin/{admin.controller.ts,admin-mail-broadcast-http.spec.ts}`
@@ -119,7 +119,7 @@
 - [ ] 用测试数据做转换断言和 SQL 静态检查；真实 PostgreSQL 迁移验证只在已授权、明确隔离的测试库执行，未配置时保留为发布前待验项，不能连接默认业务库。运行上述 server 测试、`pnpm --filter @synapse/server run typecheck`、`pnpm --filter @synapse/shared test`、`pnpm --filter @synapse/dashboard run tsc`、`node --test .agents/skills/synapse-release-publisher/scripts/send-release-mail.test.mjs`，全部 PASS。
 - [ ] 提交 `refactor: 切换站内信 API 和通知领域并保留历史去重状态`。
 
-### R4：原有手机入口与跨端交接验收
+### Task 4: R4 — 原有手机入口与跨端交接验收
 
 **Files:**
 - Modify: `SynapseMobile/SynapseMobile/Core/Networking/APIClient.swift`、`SynapseMobile/SynapseMobile/Features/Root/RootView.swift`、`SynapseMobile/SynapseMobile/Features/Inbox/NotificationDestination.swift`

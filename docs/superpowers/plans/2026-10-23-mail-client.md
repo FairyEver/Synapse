@@ -144,7 +144,7 @@
 
 `C1 → C2 → C3 → C4 → C5/C6 → C7 → C8 → C9 → C10 → C11 → C12 → C13 → C14`。这是推荐的顺序验收路径，不授权并行代理或新分支。每任务交付可测服务或入口；C11 前不把未实现动作注册到公开 MCP。
 
-### C1：契约、命名与能力 schema
+### Task 1: C1 — 契约、命名与能力 schema
 
 **Files:** Create `M/shared/{types.ts,schema.ts,capability.ts,manifest.ts,limits.ts}`、`M/shared/__tests__/{schema.test.ts,manifest.test.ts}`；Modify `desktop/config.ts`（集中运行配置）。
 
@@ -155,7 +155,7 @@
 - [ ] 实现 schema 和常量；内外 ID 分开；状态枚举为业务状态而非扩展能力清单，公开动作复用现有 CapabilityAction，不增加 naming.ts 枚举。每项明确 mutations/风险/权限。
 - [ ] 重跑同一测试 PASS；提交 `feat: 定义外部邮箱契约和严格输入边界`。
 
-### C2：本机元数据、文件资产与备份排除
+### Task 2: C2 — 本机元数据、文件资产与备份排除
 
 **Files:** Create `D/assets.ts`、`D/schemas/mail.ts`、`D/__tests__/{assets.test.ts,mail-schema.test.ts}`、`M/main/{repository.ts,assets.ts}`、`M/main/__tests__/repository.test.ts`；Modify `D/{types.ts,repository.ts,index.ts,schemas/index.ts}` 及其既有测试、`desktop/electron/services/__tests__/config-backup-service.test.ts`、`docs/agents/{repository-guide.md,workflow-and-capabilities.md}`。
 
@@ -167,7 +167,7 @@
 - [ ] 实现资产 staged→ready→delete-pending 流程；先落文件再提交引用，孤儿/失败删除分批恢复，不吞错；1 GiB LRU 只淘汰可重取资源。清理任务延迟到窗口创建后，不导入 Agent artifact-store。审计记录 ID/结果/大小，不记录正文或路径。
 - [ ] 重跑目标测试和 DataRepository repository/atomic 现有测试 PASS；提交 `feat: 增加邮箱本机存储和受控资产缓存`。
 
-### C3：账号配置、身份隔离与协议连接
+### Task 3: C3 — 账号配置、身份隔离与协议连接
 
 **Files:** Create `M/main/{context.ts,accounts.ts}`、`M/main/protocol/{types.ts,imap.ts,smtp.ts,aliyun-policy.ts}`、`M/main/__tests__/{helpers.ts,accounts.test.ts,protocol.test.ts}`；Modify `desktop/package.json`、`pnpm-lock.yaml`。
 
@@ -179,7 +179,7 @@
 - [ ] 实现 account lifecycle：身份+generation 隔离，secret 凭据仅主进程使用；协议端点改动要重新验证，账号移除先显示草稿/unknown 数量并校验两项影响声明，再停止队列、本地清理；存在未确认影响时拒绝。移除不调用 IMAP delete；保留脱敏操作 tombstone 供诊断，不能保留可继续发送的作业。阿里策略 `copyActsAsMove=true`、`serverSavesSent=true`、`remoteTextSearchReliable=false`；通用策略不继承。
 - [ ] 重跑两组测试 PASS；提交 `feat: 支持本机阿里邮箱配置和受控协议连接`。
 
-### C4：元数据索引、后台增量和删除校对
+### Task 4: C4 — 元数据索引、后台增量和删除校对
 
 **Files:** Create `M/main/sync.ts`、`M/main/__tests__/{sync.test.ts,locator.test.ts}`。
 
@@ -191,7 +191,7 @@
 - [ ] 实现断网退避（1 秒起、最多 5 分钟、±20% 抖动）、认证失败暂停、sleep/wake 和身份取消；所有后台任务异步启动，不阻塞窗口。
 - [ ] 重跑测试 PASS；提交 `feat: 建立邮箱索引和可恢复的后台同步`。
 
-### C5：分页搜索和真实覆盖范围
+### Task 5: C5 — 分页搜索和真实覆盖范围
 
 **Files:** Create `M/main/search.ts`、`M/main/__tests__/search.test.ts`。
 
@@ -203,7 +203,7 @@
 - [ ] 对任务和 cursor 使用 24 小时 TTL；任务过期明确报 CURSOR_EXPIRED。扫描中数据变化标明 coverage 已变化，不能伪称快照；列表稳定键 date+id，不深 OFFSET。
 - [ ] 重跑测试 PASS；提交 `feat: 增加有界邮箱搜索并报告索引覆盖范围`。
 
-### C6：MIME、正文、附件与安全资源加载
+### Task 6: C6 — MIME、正文、附件与安全资源加载
 
 **Files:** Create `M/main/{mime.ts,body-resources.ts}`、`M/renderer/sanitize-body.ts`、`M/main/__tests__/{mime.test.ts,body-resources.test.ts}`、`M/renderer/__tests__/sanitize-body.test.ts`、`M/main/__tests__/fixtures/*.eml`；Modify `desktop/package.json`、`pnpm-lock.yaml`。
 
@@ -215,7 +215,7 @@
 - [ ] renderer 白名单清洗；64 KiB 正文块只能拼接到有总大小限制的完整 HTML 文档后统一清洗，未完成正文使用纯文本回退，不将任意半标签块直接插入 DOM。sandbox iframe 不包含 allow-scripts / allow-same-origin / allow-forms / allow-top-navigation，CSP default-src none。本机 CID 经窄 token 资源接口供给，令牌绑定 owner/generation/message；远程图片由主进程受控下载，限制 HTTP(S)、解析 IP 并固定连接地址、每次重定向再校验、最大 3 跳/10 MiB，无 cookies/认证头。不能让裸 fetch 重解析绕过 DNS 检查。
 - [ ] 重跑测试 PASS；提交 `feat: 安全解析邮件正文和按需读取附件`。
 
-### C7：文件夹和可恢复的邮件整理
+### Task 7: C7 — 文件夹和可恢复的邮件整理
 
 **Files:** Create `M/main/mutations.ts`、`M/main/__tests__/mutations.test.ts`；Modify `M/main/protocol/aliyun-policy.ts`。
 
@@ -227,7 +227,7 @@
 - [ ] 操作写入 intent 后触网，重试先根据回执和 locator 核验；完成后更新索引再发布事件，批量每项独立回执。
 - [ ] 重跑测试 PASS；提交 `feat: 支持文件夹管理和阿里邮箱安全整理`。
 
-### C8：富文本草稿、回复构造与远端草稿同步
+### Task 8: C8 — 富文本草稿、回复构造与远端草稿同步
 
 **Files:** Create `M/main/{drafts.ts,draft-sync.ts}`、`M/renderer/compose-document.ts`、`M/main/__tests__/{drafts.test.ts,draft-sync.test.ts}`。
 
@@ -239,7 +239,7 @@
 - [ ] 构造引用、In-Reply-To / References、CID 附件与 EML 转发；草稿新增图片必须来自当前账号受控资产，不能将任意远程 URL 在后台下载到发送内容。远端草稿首次索引按原文创建本机编辑快照，保持来源 revision。
 - [ ] 重跑测试 PASS；提交 `feat: 支持可恢复草稿和回复转发内容构造`。
 
-### C9：发送预览、持久幂等与不确定结果
+### Task 9: C9 — 发送预览、持久幂等与不确定结果
 
 **Files:** Create `M/main/{send.ts,send-reconcile.ts}`、`M/main/__tests__/{send.test.ts,send-reconcile.test.ts}`。
 
@@ -252,7 +252,7 @@
 - [ ] 成功/partial 将草稿置只读已消费，保留审计快照；仅明确新建草稿/重发操作生成新的幂等身份。SMTP 接受与 Sent 保存状态分别返回；失败时保留正文和资产。
 - [ ] 重跑测试 PASS；提交 `feat: 增加邮件发送幂等和未知结果核验`。
 
-### C10：本机新邮件提醒
+### Task 10: C10 — 本机新邮件提醒
 
 **Files:** Create `M/main/{notifications.ts,notification-adapter.ts}`、`M/main/__tests__/notifications.test.ts`；复用参考 `desktop/app-capabilities/system-notifier/main/adapter.ts`、现有 Terminal 可点击通知实现，不改变其公开契约。
 
@@ -263,7 +263,7 @@
 - [ ] 先持久去重键再呈现；5 秒窗口同账号聚合，单封带 messageId、多封定位该账号 Inbox。标题为账号显示名、正文只显示发件人/主题的有界安全摘要。点击重新校验当前身份与 locator，不暴露秘密。后台权限与诊断复用现有基础设施，构造 native 对象仅在适配器。
 - [ ] 重跑测试 PASS；提交 `feat: 增加仅当前电脑显示的新邮件提醒`。
 
-### C11：服务组装、公开 MCP、窄 IPC 和深链
+### Task 11: C11 — 服务组装、公开 MCP、窄 IPC 和深链
 
 **Files:** Create `M/main/{service.ts,dispatcher.ts,ipc.ts,protocol-handler.ts}`、`M/main/__tests__/{dispatcher.test.ts,ipc.test.ts,protocol-handler.test.ts,lifecycle.test.ts}`；Modify `desktop/electron/{bootstrap/descriptors.ts,bootstrap/app-ready.ts,bootstrap/ipc-registry.ts,capabilities/action-router.ts}`、`desktop/synapse-capabilities/shared/registry.ts`、`desktop/app-capabilities/mail/shared/manifest.ts` 及对应 registry 测试。
 
@@ -275,7 +275,7 @@
 - [ ] 运行 generate:ipc、check:ipc-codegen、typecheck、hard-constraints 与目标测试，全部 PASS。更新 capability-registry 当前 MCP 数/协议路由与例外、Skill 最小可执行说明，不把 configure 计入公开 44 项。
 - [ ] 提交 `feat: 接入邮箱核心服务及 MCP IPC 深链入口`。
 
-### C12：三栏阅读、账号导航与安全正文
+### Task 12: C12 — 三栏阅读、账号导航与安全正文
 
 **Files:** Create `U/{app-definition.ts,app-manifest.ts,index.tsx,layout.tsx,navigation.tsx,message-list.tsx,message-detail.tsx,use-mail.ts}`、`U/assets/icon.png`、`U/__tests__/{mail-reading.test.tsx,mail-navigation.test.tsx}`；Modify `desktop/src/modules/apps/{types.ts,definitions.ts,registry.ts,components/system-app-content.tsx}`、`desktop/electron/services/system-app-window-service.ts`；适配已有 UI 跟踪边界。
 
@@ -287,7 +287,7 @@
 - [ ] 阅读外链经现有受控 open 能力：隔离 iframe 内不直接开 top 窗口，清洗投影提供外链清单供受控按钮打开；将该可用回退作为验收基线。若增加正文原位链接点击，必须由主进程验证实际用户导航并拦截，不开放脚本或 same-origin 权限。远程图片显示明确加载操作。
 - [ ] 重跑测试 PASS，运行 check:ui-tracking-coverage；提交 `feat: 增加邮箱三栏阅读与账号导航界面`。
 
-### C13：连接向导、设置与写信面板
+### Task 13: C13 — 连接向导、设置与写信面板
 
 **Files:** Create `U/{compose.tsx,account-dialog.tsx,settings.tsx,use-compose.ts,use-mail-accounts.ts}`、`U/__tests__/{compose.test.tsx,account-dialog.test.tsx}`；Modify C8 的 compose-document helper、`desktop/package.json`、`pnpm-lock.yaml`。
 
@@ -300,7 +300,7 @@
 - [ ] 重跑测试 PASS，验证组件可键盘操作、焦点返回和已有主题。真实浏览器/应用视觉验收需用户授权启动时执行，不能只凭 JSDOM 宣称视觉通过。
 - [ ] 提交 `feat: 增加邮箱接入设置和富文本写信面板`。
 
-### C14：Skill、集成验收与发布交接
+### Task 14: C14 — Skill、集成验收与发布交接
 
 **Files:** Create `desktop/app-capabilities/synapse-skill/skill-package/mail/{index.md,api-reference.md,aliyun-compatibility.md}`、`docs/agent-guides/mail-client-acceptance.md`、`M/main/__tests__/end-to-end.test.ts`；Modify Skill 总索引、`docs/agents/{capability-registry.md,module-boundaries.md,repository-guide.md}`、`RELEASE_NOTES_PENDING.md`，打包配置仅在实际构建证明需要时修改。
 
