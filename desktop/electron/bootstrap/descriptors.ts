@@ -23,7 +23,7 @@
  * T1.7 adds repo.* + ui.tray.
  */
 
-import { createPortalHeadlessDispatcher } from "../../extensions/portal-headless/main/dispatcher"
+import { createPortalCredentialDispatcher } from "../../app-capabilities/connectors/main/credential-dispatcher"
 import { app, BrowserWindow, clipboard, Notification, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
@@ -1832,7 +1832,12 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
         }
       },
     })
+    const connectorCredentials = createPortalCredentialDispatcher({
+      connectors: ctx.registry.get<ReturnTypeOfConnectorsService>("core.connectors"),
+      account: accountService, permissionGuard, auditSink,
+    })
     const appDispatcher = createAppCapabilityDispatcher({
+      connectorCredentials,
       account: accountDispatcher,
       desktopControl: createDesktopControlDispatcher(desktopControl),
       agentConversation: agentConversationDispatcher,
@@ -1847,12 +1852,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       htmlGenerator: htmlGeneratorDispatcher,
     })
 
-    const extensionDispatcher = createPortalHeadlessDispatcher({
-      connectors: ctx.registry.get<ReturnTypeOfConnectorsService>("core.connectors"),
-      account: accountService, permissionGuard, auditSink,
-    })
     const actionRouter = createSynapseActionRouter({
-      extendDispatch: (action, params, context) => extensionDispatcher.dispatch(action, params, context),
       appDispatch: (action, params, context) => {
         if (action.startsWith("app.terminal.")) {
           return terminalDispatcher.dispatch(action, params, context)

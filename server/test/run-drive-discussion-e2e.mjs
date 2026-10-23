@@ -5,7 +5,6 @@ let database
 try { database = requireDriveDiscussionTestDatabase(process.env.DRIVE_DISCUSSION_E2E_DATABASE_URL) }
 catch (error) { process.stderr.write(error.message + "\n"); process.exit(1) }
 const commands = [
-  ["--filter", "@synapse/portal-headless", "run", "build"],
   ["--filter", "@synapse/shared", "run", "build"],
   ["exec", "prisma", "migrate", "deploy"],
   ["exec", "prisma", "generate"],

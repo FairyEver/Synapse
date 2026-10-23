@@ -1,5 +1,7 @@
 # Portal Link 扩展直连
 
+> 历史记录：2026-10-22 已移除 Portal Headless 后台、SDK、旧凭据工具和系统 Skill 指引。仅保留两个授权连接器及其独立本机凭据工具；本文旧业务、部署与 SDK 约束不再适用。现行连接器契约见 `docs/integrations/portal-headless-test.md` 与 `docs/integrations/portal-headless.md`。
+
 ## 产品边界
 
 Skill 引导用户自己的 AI 从本机 MCP 获取凭证，AI 使用自己的 HTTP 执行工具直连 `/api/extend/portal-headless/*`，SY 后端收到凭证后调用 SDK。Portal Link 与未来扩展平行，不是 System App，没有 Dock、独立应用页、Workflow、Automation 或业务转发 MCP。

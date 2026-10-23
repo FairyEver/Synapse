@@ -1,5 +1,7 @@
 # Portal Link 本机 GUI 验收
 
+> 历史记录：2026-10-22 已移除 Portal Headless 后台、SDK、旧凭据工具和系统 Skill 指引。仅保留两个授权连接器及其独立本机凭据工具；本文旧业务、部署与 SDK 约束不再适用。现行连接器契约见 `docs/integrations/portal-headless-test.md` 与 `docs/integrations/portal-headless.md`。
+
 日期：2026-09-22。用户已启动 `pnpm dev`，SY 连接本机开发环境。所有应用点击、输入与页面观察均使用 Computer Use；没有通过直接调用内部 IPC 或伪造授权回调替代用户流程。
 
 > 后续测试边界已调整：Portal Link 当前直接暴露固定 SDK 的完整读写能力目录，不再使用三项只读白名单或 Portal 页面权限裁剪目录。本页以下内容仅记录调整前的历史验收结果；当前行为以 `portal-headless-extension.md` 和系统 Skill 为准。

@@ -13,11 +13,10 @@
 | Workflow Node | 节点类型、Renderer manifest、Main executor | `desktop/workflow-nodes/register.renderer.ts`、`register.main.ts` |
 | Automation Action | 动作类型、Renderer 配置、Main executor | `desktop/src/action-runtime/builtin-actions.ts`、`desktop/electron/action-runtime/builtin-actions.ts` |
 | MCP Capability / Tool | capability catalog、tool 到 action 映射 | `desktop/synapse-capabilities/shared/registry.ts` 及各 domain registry |
-| Extension Capability | 扩展贡献，通过 `extend.capabilities` ExtensionPoint 注册 | `desktop/extensions/shared/registry.ts` |
 | MCP 公开工具表面 | `tools/list` 载荷、`initialize` instructions | `desktop/electron/services/agent-runtime/synapse-tool-router.ts` |
 | Deep Link | 桌面端默认 `synapse://app/<app-id>/<action>`；声明式短路由可使用独立 host。iOS 客户端路由独立计数 | 桌面：`desktop/app-capabilities/manifest-registry.ts`、`desktop/electron/bootstrap/app-deep-link.ts`；iOS：`SynapseMobile/SynapseMobile/Features/Root/RootView.swift` |
 
-Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和正式环境；私有回调 `synapse://portal-headless-test/callback`、`synapse://portal-headless/callback` 分别交给可信主进程。独立 `extend` domain 保持 1 个 capability / MCP 索引工具：`extend.portal-headless.credential.get` / `extend_portal_headless_credential_get`，仅允许 MCP 来源；不新增 System App、Dock、Workflow、Automation 或公开 Deep Link。系统 Skill 指南位于 `skill-package/extend/portal-headless/`，引导 AI 携带绑定环境的短期 SY 授权与 Portal 凭证直连 `/api/extend/portal-headless/*`。后端按授权环境选择固定 Portal API，发布固定 SDK 的完整读写目录；PH 服务端先执行已审阅的页面链、动作链和可信上下文判断；缺失、过期、未接受策略返回 `PH_PERMISSION_DENIED`，不发送目标请求。`/invoke` 和兼容 `/read` 共用闸门；权限码和企业开通系统复用 SDK 用户会话缓存，按 owner/环境/企业/语言/凭据隔离，凭据轮换或缓存失效后重载；每次调用仍执行权限判断，不缓存授权结论。用户可通过经认证的 `/session/refresh` 清除自己的当前环境/企业/语言会话并重验身份，其它会话不受影响；刷新不能替换权限策略或自动重试业务请求，不新增 MCP 工具。Portal 业务接口继续执行自身鉴权。连接器凭据不属于 Secrets MCP 数据。正式授权页尚未部署，真实联调待完成。
+Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本机加密凭据和各自私有回调。Connectors 新增两个仅限 MCP 的只读凭据能力：`app.connectors.portal_link.credential.get` / `app_connectors_portal_link_credential_get`、`app.connectors.portal_link_test.credential.get` / `app_connectors_portal_link_test_credential_get`，均注册在 `app` domain，固定读取各自连接器。工具只读本机，经权限和审计返回 Portal API 地址、token、租户和已验证身份摘要；不注册 IPC 或通用 HTTP 凭据入口，不提供网络业务代理。旧 Portal Headless 后台、SDK、扩展凭据工具、`extend` domain 与系统 Skill 指引已删除。内部连接器 ID、回调和存储键保留兼容；System App、Dock、Workflow、Automation 和 Deep Link 数量不变。连接器凭据不属于通用 Secrets MCP 数据。
 
 ## `desktop/app-capabilities` 产品表面
 
@@ -40,7 +39,7 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 11 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
-| Connectors | 是 | 否 | — | — | — | 2 个私有授权回调 |
+| Connectors | 是 | 否 | — | — | 2 | 2 个私有授权回调 |
 | Clipboard | 否 | 否 | 2 | — | — | — |
 | Desktop Update / Restart | 否 | 否 | — | — | 4 | — |
 | Document Template | 否 | 否 | 1 | — | 1 | — |
@@ -68,7 +67,7 @@ Portal Link Test 与 Portal Link 分别通过 Connectors 应用连接测试和�
 
 固定例外：
 
-- Connectors 的「企业微信」连接器只负责扫码绑定机器人、保存本地凭据、连接状态和连接信息弹窗，Connectors 仍为 0 个 MCP。它使用 `@wecom/cli`，凭据不上传 Synapse 服务端，也不向 Renderer 或 MCP 暴露。企业微信 CLI 不提供完整业务权限清单查询，因此连接信息弹窗只展示连接时间、最近检查时间及企业微信权限管理入口，不展示推测的逐项权限。WeCom 能力通过主进程 `core.wecom` 服务使用凭据，注册 2 个 MCP 工具：`app_wecom_connection_get` 只返回连接状态和时间；`app_wecom_cli_run` 接受官方 Skill 的规范参数数组并执行消息、邮件、文档搜索与名称/权限管理、在线表格、智能表格、通讯录、媒体、身份和 schema 命令。它不使用 shell 字符串，不允许 `auth`、`cache`，所有文件都限制在账号和 controller/client 隔离的临时工作目录。企业业务权限不足时不影响连接器状态，MCP 返回 `WECOM_PERMISSION_REQUIRED`、中文权限名和官方申请链接。筛选后的官方 8 个 Skill 固定在 `synapse-skill/skill-package/wecom/`，同步关闭安装 CLI、登录和任意终端执行路径。永久排除微盘、企业微信待办、在线会议、日程、PPT、智能文档内容与 doc 新建/导入/正文操作；后续更新不得重新导入对应的 7 个 Skill。`doc` 只允许 `search`、`names update`、`members update`、`rules update`，完整保留与排除清单见 `module-boundaries.md` 和 `wecom/UPSTREAM.md`。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
+- Connectors 的「企业微信」连接器只负责扫码绑定机器人、保存本地凭据、连接状态和连接信息弹窗，Connectors 的 2 个 MCP 仅用于 Portal 凭据，企业微信凭据不通过它们交付。它使用 `@wecom/cli`，凭据不上传 Synapse 服务端，也不向 Renderer 或 MCP 暴露。企业微信 CLI 不提供完整业务权限清单查询，因此连接信息弹窗只展示连接时间、最近检查时间及企业微信权限管理入口，不展示推测的逐项权限。WeCom 能力通过主进程 `core.wecom` 服务使用凭据，注册 2 个 MCP 工具：`app_wecom_connection_get` 只返回连接状态和时间；`app_wecom_cli_run` 接受官方 Skill 的规范参数数组并执行消息、邮件、文档搜索与名称/权限管理、在线表格、智能表格、通讯录、媒体、身份和 schema 命令。它不使用 shell 字符串，不允许 `auth`、`cache`，所有文件都限制在账号和 controller/client 隔离的临时工作目录。企业业务权限不足时不影响连接器状态，MCP 返回 `WECOM_PERMISSION_REQUIRED`、中文权限名和官方申请链接。筛选后的官方 8 个 Skill 固定在 `synapse-skill/skill-package/wecom/`，同步关闭安装 CLI、登录和任意终端执行路径。永久排除微盘、企业微信待办、在线会议、日程、PPT、智能文档内容与 doc 新建/导入/正文操作；后续更新不得重新导入对应的 7 个 Skill。`doc` 只允许 `search`、`names update`、`members update`、`rules update`，完整保留与排除清单见 `module-boundaries.md` 和 `wecom/UPSTREAM.md`。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
 
 - 云盘文件搜索扩展既有 `app.drive.item_tree.list`（MCP 索引名 `app_drive_item_tree_list`），增加名称、类型、更新时间、有效分享和排序条件；桌面通过同一 operation 的 `drive.itemTree.list` IPC 调用。服务端在自有普通云盘递归结果上先筛选、统计再分页，返回真实路径与祖先；不新增 capability、MCP 工具、System App、Dock 或 Deep Link，Drive 仍为 76 项。
 - AI 文件查找在既有工具发现词表中区分查找文件、浏览目录、分享链接、回收站和历史版本；明确查找本地或第三方存储时排除错误的 Drive 领域候选，精确工具名与领域限制继续有效；不新增工具。`app.drive.item_tree.list` 的 MCP 搜索默认每页 20 条，返回实际搜索条件、结果编号和需登录的本人预览链接，供现有对话续查/选择；普通目录树、桌面 IPC 和服务端查询默认保持不变。仅匹配名称及元数据，不创建分享、不读取正文、不新增全文或语义索引；Drive 仍为 76 项。
@@ -173,7 +172,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 | Domain | Capability 数 | MCP Tool 数 |
 |---|---:|---:|
-| `app` | 93 | 89 |
+| `app` | 95 | 91 |
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
@@ -185,12 +184,11 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `mail` | 17 | 17 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
-| `extend` | 1 | 1 |
-| 合计 | 295 | 291 |
+| 合计 | 296 | 292 |
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 291 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 292 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

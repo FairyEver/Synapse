@@ -235,6 +235,8 @@ describe("SynapseSkillService", () => {
       description: source.description,
     })
     expect(source.description.trim()).not.toBe("")
+    expect(source.mainContent).not.toMatch(/Portal|portal-headless|\bPH\b/)
+    expect(attachmentNames.some((name) => name.startsWith("extend/"))).toBe(false)
     expect(source.description).toContain("abbreviates Synapse as sy")
     expect(source.mainContent).toMatch(/^---\nname: synapse-skill\ndescription: .+\n---\n/)
     expect(detail.content).not.toContain("name: synapse-skill")
@@ -521,7 +523,7 @@ describe("SynapseSkillService", () => {
     expect(terminalExamples).toContain("Running sessions have no per-client count cap")
   })
 
-  it("documents every canonical MCP tool in the installed package", async () => {
+  it("documents canonical tools except the two credential-only Portal connectors", async () => {
     const service = createSynapseSkillService({ packageRoot: systemPackageRoot })
     const source = await service.prepareInstallSource()
     const detail = await service.readPreparedSkill(source.preparedSourceId, source.sourceIdentity)
@@ -531,10 +533,13 @@ describe("SynapseSkillService", () => {
         .filter((attachment) => attachment.originalName.endsWith(".md"))
         .map((attachment) => readFile(path.join(systemPackageRoot, attachment.originalName), "utf8")),
     ])).join("\n")
+    // Portal connectors intentionally have tool descriptions only, with no Skill guide.
+    const credentialOnlyTools = new Set(["app_connectors_portal_link_credential_get", "app_connectors_portal_link_test_credential_get"])
+    for (const name of credentialOnlyTools) expect(packageText).not.toContain(name)
     const missingTools = buildAllMcpTools()
       .map((tool) => tool.name)
       .filter((toolName) => toolName.startsWith("app_"))
-      .filter((toolName) => !packageText.includes(toolName))
+      .filter((toolName) => !credentialOnlyTools.has(toolName) && !packageText.includes(toolName))
 
     expect(missingTools).toEqual([])
   })

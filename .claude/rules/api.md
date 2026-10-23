@@ -40,7 +40,7 @@ paths:
 ## Capability API
 
 - 本地 HTTP 路径保持 `POST /api`，请求体 `action` 必须是已注册的规范 `app.*` capability id。
-- MCP 索引工具名由 capability id 的点号和连字符替换为下划线得到。内置能力使用 `app.*`；扩展使用 `extend.<extension-slug>.<resource>.<action>`，例如 `extend.portal-headless.credential.get`。扩展通过 ExtensionPoint 注册，不可派生 IPC；Portal 凭证 action 仅允许 MCP 来源。
+- MCP 索引工具名由 capability id 的点号和连字符替换为下划线得到。内置能力使用 `app.*`；扩展标识的通用命名支持保留，但当前没有注册 `extend` domain。Portal 两个凭据 action 仅允许 MCP 来源，不注册 IPC、preload bridge 或普通 HTTP 凭据入口。
 - 唯一例外：公开 MCP 表面额外暴露两个路由包装工具 `search` 与 `invoke`。它们不对应任何 capability id，不得注册进 capability catalog 或 `MCP_TOOL_ACTIONS`，也不得出现在 `app.*` 命名空间里。`app_*` / `extend_*` 仅作为 search 索引和 invoke 映射，不直接加入 tools/list。
 - dispatcher 直接接收规范 action；禁止旧 action 转译、别名、fallback 或双重注册。
 

@@ -1,5 +1,7 @@
 # 内置 MCP + Skill 连接器设计
 
+> 2026-10-22 更新：文末 Portal 独立扩展方案已退役，Portal Headless 后台、SDK 和系统 Skill 已删除。两个 Portal 连接器仍保留原授权与存储契约，分别提供一个仅限 MCP 的本机凭据工具；现行边界以 `docs/agents/module-boundaries.md` 为准。
+
 日期：2026-09-03  
 状态：已实施
 

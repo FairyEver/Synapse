@@ -66,25 +66,17 @@ Synapse 连接器中的 **Portal Link Test** 永久用于测试环境。打开�
 
 恢复连接先后台验证，不阻塞启动，验证前不给执行层使用；网络失败保留已保存凭据以便重试。切换 SY 账号不会展示、使用其他账号绑定；返回原账号会重新验证。断开先使正在进行的尝试失效，持久化禁用标记，再删除凭据与摘要；删除失败明确报错，禁用记录用于下次清理。启动清理本 owner/environment/connector 下的孤立凭据。
 
-所有凭据访问、网络和浏览器打开经过权限与无正文审计。回调走已有声明式协议路由的私有主进程 handler，不注册公开 capability/MCP/HTTP/Workflow/Automation。Renderer 仅收到白名单状态摘要，变更通过 EventBus 的 `connector/item.changed` 发送。禁止 token 进入日志、错误、埋点、普通配置或 Agent 快照。唯一专用交付面是扩展凭证 MCP 响应，允许用户自己的 AI 临时使用，不得复述或保存到文档。
+所有凭据访问、网络和浏览器打开经过权限与无正文审计。回调走已有声明式协议路由的私有主进程 handler，不注册公开 capability/MCP/HTTP/Workflow/Automation。Renderer 仅收到白名单状态摘要，变更通过 EventBus 的 `connector/item.changed` 发送。禁止 token 进入日志、错误、埋点、普通配置或 Agent 快照。唯一专用交付面是对应连接器的凭据 MCP 响应，允许用户自己的 AI 临时使用，不得复述或保存到文档。
 
-## SDK 扩展接线
+## 本机凭据交付
 
-内部 `core.connectors.getSessionInput(connectorId)` 在主进程检查当前账号、连接代次、验证状态和凭据绑定后返回：
+测试环境使用 `app_connectors_portal_link_test_credential_get`，正式环境使用 `app_connectors_portal_link_credential_get`。两个工具均接受空对象，只允许 MCP 来源；不接受环境、账号或地址覆盖，不跨环境回退。
 
-```ts
-{
-  baseUrl,       // 可信环境定义
-  userId,        // ownerUserId，不是 portalUserId
-  language,      // zh-CN
-  connectionGeneration, // 本次连接尝试代次，用于异步交付前复核
-  credential: { token, tenantId }
-}
-```
+内部 `core.connectors.getSessionInput(connectorId)` 检查当前账号、连接代次、验证状态和凭据绑定，返回可信 Portal API 地址、语言、Portal token、租户及已验证身份摘要。凭据 dispatcher 执行调用者的 secret.read 权限与审计，交付前复核账号与连接代次。结果包含 `environment`、`baseUrl`、`language`、`token`、`tenantId`、`portalUserId` 和可选 `displayName`、`tenantName`，不暴露内部连接器 ID 或 SY 用户 ID。
 
-独立扩展的凭证 dispatcher 复用该内部入口，经过权限和审计，再向后端换取短期 SY 扩展授权；返回前复核账号与 connectionGeneration。AI 携带两类凭证直连 SY 后端，后端按 owner/环境/企业/语言/凭据复用 SDK 用户会话；初始化和用户明确调用 `/session/refresh` 后重新验证 `user-basic`、`tenant-context`，权限与系统数据按需缓存。SDK 仅安装在服务端，连接器不注册 Agent contribution。详见 [扩展直连契约](portal-headless-extension.md)。
+取凭据只读取本机，不请求 SY 后台、不签发临时授权，也不执行 Portal 业务操作。连接器不注册 Agent contribution，系统 Skill 不提供 Portal 操作指南。已有 Portal Headless 后台、SDK 和业务客户端已移除。
 
-使用凭据时仍需处理远端失效，不能将最近一次验证当作永久有效。断开删除本机凭据并阻止后续交付，不承诺吊销 Portal token 或即时撤销已交付的五分钟 SY 授权。
+最近一次验证不是永久有效性保证；断开删除本机凭据并阻止后续交付，不承诺吊销已交付的 Portal token。
 
 ## 验收口径
 

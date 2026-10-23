@@ -1,5 +1,7 @@
 # Portal Link Test 交付报告
 
+> 历史记录：2026-10-22 已移除 Portal Headless 后台、SDK、旧凭据工具和系统 Skill 指引。仅保留两个授权连接器及其独立本机凭据工具；本文旧业务、部署与 SDK 约束不再适用。现行连接器契约见 `docs/integrations/portal-headless-test.md` 与 `docs/integrations/portal-headless.md`。
+
 ## 已完成与使用方法
 
 SY 侧已实现 Portal Link Test 测试连接器、私有协议回调、一次性 state 校验、真实用户/企业只读验证、加密凭据保存、账号/环境隔离、取消/断开/重新连接与网络失败重试。

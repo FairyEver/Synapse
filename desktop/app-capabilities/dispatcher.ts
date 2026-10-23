@@ -1,3 +1,4 @@
+import { PORTAL_CREDENTIAL_CAPABILITY_IDS } from "./connectors/shared/capability"
 import type { DispatchContext, DispatchResult } from "../synapse-capabilities/shared/types"
 import {
   TEXT_EXTRACTOR_CAPABILITY_ID,
@@ -29,6 +30,7 @@ export type AppCapabilityDispatcher = AppCapabilitySubDispatcher
 
 export function createAppCapabilityDispatcher(deps: {
   readonly account: AppCapabilitySubDispatcher
+  readonly connectorCredentials?: AppCapabilitySubDispatcher
   readonly desktopControl?: AppCapabilitySubDispatcher
   readonly agentConversation: AppCapabilitySubDispatcher
   readonly textExtractor: AppCapabilitySubDispatcher
@@ -43,6 +45,10 @@ export function createAppCapabilityDispatcher(deps: {
 }): AppCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
+      if ((PORTAL_CREDENTIAL_CAPABILITY_IDS as readonly string[]).includes(action)) {
+        if (!deps.connectorCredentials) throw new Error("Connector credential dispatcher is not configured")
+        return deps.connectorCredentials.dispatch(action, params, context)
+      }
       if (accountCapabilityIds.has(action)) {
         return deps.account.dispatch(action, params, context)
       }

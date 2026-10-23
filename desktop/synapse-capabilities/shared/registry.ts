@@ -1,4 +1,3 @@
-import { EXTEND_DOMAIN, EXTEND_TOOLS, EXTEND_MCP_TOOL_ACTIONS } from "../../extensions/shared/registry"
 import { DATABASE_DOMAIN, buildMcpToolActions as buildDatabaseMcpToolActions } from "../../database/shared/capability-registry"
 import { buildTools as buildDatabaseTools } from "../../database/shared/mcp-tools"
 import {
@@ -49,7 +48,6 @@ import { assertCanonicalCapabilityId } from "./naming"
 
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   APP_DOMAIN,
-  EXTEND_DOMAIN,
   DATABASE_DOMAIN,
   MODEL_PRICE_DOMAIN,
   REPOSITORY_DOMAIN,
@@ -71,7 +69,6 @@ for (const domain of CAPABILITY_DOMAINS) {
 
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...APP_MCP_TOOL_ACTIONS,
-  ...EXTEND_MCP_TOOL_ACTIONS,
   ...buildDatabaseMcpToolActions(),
   ...MODEL_PRICE_MCP_TOOL_ACTIONS,
   ...REPOSITORY_MCP_TOOL_ACTIONS,
@@ -88,7 +85,6 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
 export function buildAllMcpTools(): McpToolDefinition[] {
   return [
     ...buildAppTools(),
-    ...EXTEND_TOOLS,
     ...buildDatabaseTools(),
     ...buildModelPriceTools(),
     ...buildRepositoryTools(),

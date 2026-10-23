@@ -113,8 +113,10 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "查一下这封企业微信邮件的详情", expect: "app_wecom_cli_run" },
   { intent: "用企业微信邮箱发封邮件", expect: "app_wecom_cli_run" },
   { intent: "看看企业微信最近的聊天消息", expect: "app_wecom_cli_run" },
-  { intent: "Portal Link 凭证", expect: "extend_portal_headless_credential_get" },
-  { intent: "Portal Link Test 凭证", expect: "extend_portal_headless_credential_get" },
+  { intent: "Portal Link 凭证", expect: "app_connectors_portal_link_credential_get" },
+  { intent: "Portal Link Test 凭证", expect: "app_connectors_portal_link_test_credential_get" },
+  { intent: "我的 Portal 信息", expect: "app_connectors_portal_link_credential_get" },
+  { intent: "Portal 测试环境凭证", expect: "app_connectors_portal_link_test_credential_get" },
 ]
 
 /**

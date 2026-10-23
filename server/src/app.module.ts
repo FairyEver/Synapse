@@ -1,7 +1,6 @@
 import { TodosModule } from "./todos/todos.module"
 import { todoLogRequest } from "./todos/todo-log"
 import { Module } from "@nestjs/common"
-import { PortalHeadlessModule } from "./extend/portal-headless/portal-headless.module"
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core"
 import { ScheduleModule } from "@nestjs/schedule"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
@@ -72,7 +71,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
             return hasSensitiveRequestUrl(url)
           },
         },
-        redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret", 'req.headers["x-portal-token"]'],
+        redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret"],
         serializers: {
           req(request: RequestLogObject) {
             return todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
@@ -123,7 +122,6 @@ function hasSensitiveRequestUrl(url: string): boolean {
     MailModule,
     TeamModule,
     HealthModule,
-    PortalHeadlessModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

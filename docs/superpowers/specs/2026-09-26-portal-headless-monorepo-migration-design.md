@@ -1,5 +1,7 @@
 # Portal Link SDK 迁入 pnpm monorepo 设计
 
+> 历史记录：2026-10-22 已移除 Portal Headless 后台、SDK、旧凭据工具和系统 Skill 指引。仅保留两个授权连接器及其独立本机凭据工具；本文旧业务、部署与 SDK 约束不再适用。现行连接器契约见 `docs/integrations/portal-headless-test.md` 与 `docs/integrations/portal-headless.md`。
+
 日期：2026-09-26  
 状态：待实施
 

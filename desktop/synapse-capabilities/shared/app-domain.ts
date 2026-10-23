@@ -1,3 +1,4 @@
+import { portalCredentialCapabilities, portalCredentialToolActions, buildPortalCredentialTools } from "../../app-capabilities/connectors/shared/credential-mcp"
 import {
   DOCUMENT_TEMPLATE_CAPABILITY_ID,
   DOCUMENT_TEMPLATE_MCP_TOOL_NAME,
@@ -98,6 +99,7 @@ import {
 } from "../../app-capabilities/desktop-control/shared/capability"
 
 const appCapabilities: readonly CapabilityDefinition[] = [
+  ...portalCredentialCapabilities,
   {
     id: UPDATE_STATE_GET_CAPABILITY_ID,
     title: "Get desktop update state",
@@ -254,6 +256,7 @@ export const APP_DOMAIN: CapabilityDomainDefinition = {
 }
 
 export const APP_MCP_TOOL_ACTIONS: Record<string, string> = {
+  ...portalCredentialToolActions,
   [UPDATE_STATE_GET_MCP_TOOL_NAME]: UPDATE_STATE_GET_CAPABILITY_ID,
   [UPDATE_CHECK_MCP_TOOL_NAME]: UPDATE_CHECK_CAPABILITY_ID,
   [UPDATE_RUN_MCP_TOOL_NAME]: UPDATE_RUN_CAPABILITY_ID,
@@ -301,6 +304,7 @@ const strictEmptyInputSchema = {
 }
 export function buildAppTools(): McpToolDefinition[] {
   return [
+    ...buildPortalCredentialTools(),
     {
       name: UPDATE_STATE_GET_MCP_TOOL_NAME,
       description: "Read the current Synapse Desktop version, update status, last check time, process bootId and startedAt, and remote operation state on this computer. After a remote restart, reconnect and compare bootId; after an update, also compare currentVersion. Chinese intent: 检查 sy 更新, 更新状态, 重启后状态.",

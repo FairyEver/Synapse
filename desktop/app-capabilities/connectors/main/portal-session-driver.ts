@@ -339,7 +339,9 @@ export function createPortalSessionDriver(deps: PortalSessionDriverDeps) {
       assertCurrent(attempt)
       if (attempt.status !== "connected") throw new PortalConnectionError("credential_invalid")
       return { connectionGeneration: attempt.generation, baseUrl: definition.integration.baseUrl, environmentId: definition.integration.environmentId, userId, language: definition.integration.language,
-        credential: { token: credential.token, tenantId: credential.tenantId } }
+        credential: { token: credential.token, tenantId: credential.tenantId },
+        account: { portalUserId: credential.portalUserId, tenantId: credential.tenantId,
+          displayName: attempt.binding?.displayName, tenantName: attempt.binding?.tenantName } }
     },
   }
 }

@@ -27,7 +27,6 @@ Synapse 是跨编辑器的 Rules / Skills / Prompts 管理桌面应用，技术�
 - 共享 renderer helper / 类型：`desktop/src/lib/`、`desktop/src/types/`
 - 文档站：`document/`
 - 服务端：`server/`
-- Portal Link SDK：`extend/portal-headless/`（server 的运行时依赖；兼容历史简称 `PH`）
 
 Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问特权能力。文件系统、Git、安装、下载、dialog、updater 和 OS 逻辑属于 Electron 主进程。
 
@@ -147,7 +146,7 @@ GitHub 的 `CI` 和 `Release` 工作流仅接受手动 `workflow_dispatch`。日
 
 用户消息出现 `sss` 时，按上下文使用匹配的 `synapse-mcp` 工具：数据库请求使用 Database；定时任务、cron、启停、运行历史使用 Automation。领域仍不明确时只问一句简短澄清。
 
-用户消息出现 `PH` 时，结合上下文视为 Portal Link 的历史简称：既指 `extend/portal-headless/` 这个 SDK（「改一下 PH」「PH 的用法文档」），也指 Portal 的业务操作（「用 PH 查一下我的年度双赢协议」「用 PH 提交表单」）。连接器显示名称统一为 `Portal Link` / `Portal Link Test`；内部 ID、回调、MCP 工具名、API 路径和 SDK 包名保持兼容，不随显示名称修改。当前项目或目录对 `PH` 另有定义时以本地定义为准。只在上下文确实指向别的事物时才按本义理解；无法判断时问一句简短澄清。
+Portal Link 与 Portal Link Test 仅负责正式和测试环境授权及本机凭据管理，各自提供一个纯凭据 MCP 工具；不承载 Portal 业务操作。内部连接器 ID 和回调地址保留兼容，不随显示名称修改。
 
 企业微信长期排除 `wecomcli-disk`、`wecomcli-todo`、`wecomcli-meeting`、`wecomcli-calendar`、`wecomcli-pptx`、`wecomcli-smartpage`、`wecomcli-doc`；这些功能未来也不需要，不得在更新或重新同步官方 Skill 时恢复。只保留 8 个 Skill，清单与命令限制见 `docs/agents/module-boundaries.md` 和系统 Skill 包的 `wecom/UPSTREAM.md`。
 

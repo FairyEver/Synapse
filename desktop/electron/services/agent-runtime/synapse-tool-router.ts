@@ -21,7 +21,6 @@ export const SYNAPSE_TOOL_ROUTER_INVOKE_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVE
 export const SYNAPSE_MCP_TOOL_PREFIX = "mcp__synapse-mcp__"
 
 const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
-  extend: ["扩展", "Portal", "Headless", "凭证", "会议室", "双赢协议", "extension"],
   app: ["应用", "终端", "通知", "模板", "文件", "密钥", "app", "terminal", "notification", "secret"],
   automation: ["自动化", "定时任务", "调度", "cron", "automation", "schedule"],
   content: ["资源", "规则", "技能", "提示词", "content", "rule", "skill", "prompt"],
@@ -174,14 +173,14 @@ export const SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS: readonly SynapseToolRouterToo
 // limit clients apply, and keep the worked example: the nested `invoke` argument
 // shape is what non-Claude models get wrong most often.
 export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
-  "Synapse is the local desktop app this MCP server belongs to. It manages Database, Drive,",
+  "Synapse is this MCP server's local desktop app. It manages Database, Drive,",
   "Workflow, Automation, Content (Rules/Skills/Prompts), Skill Repository, model price rules,",
-  "local secrets and repositories, Enterprise WeChat, Terminal sessions, App capabilities and extensions.",
+  "local secrets and repositories, Enterprise WeChat, Terminal sessions, App capabilities.",
   "",
   "This server publishes exactly two tools. Every Synapse capability is reached in two steps:",
   "",
-  "1. `search` - call it first with the user's intent in natural language (Chinese or English)",
-  "   or with an exact tool name. It returns matching tools with their full",
+  "1. `search` - start with the user's intent (Chinese or English)",
+  "   or an exact tool name. Results include each tool's full",
   "   `inputSchema`. Optional `domain` narrows it; `limit` is 1-5 per search.",
   "2. `invoke` - call it with `toolName` set to the exact name that `search` returned,",
   "   and `arguments` matching that tool's returned `inputSchema`.",
@@ -189,8 +188,6 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Example: search {\"query\":\"list drive files\"} returns app_drive_item_list with its",
   "inputSchema; then call invoke {\"toolName\":\"app_drive_item_list\",\"arguments\":{\"limit\":20}}.",
   "",
-  "Extensions use `extend_*` names in the `extend` domain; Portal Link credential tools",
-  "supply credentials for direct HTTPS calls to the extension backend. Never log credentials.",
   "Enterprise WeChat uses the `wecom` domain. `app_wecom_connection_get` reports connector status",
   "and `app_wecom_cli_run` executes the canonical WeCom Skill command arguments without exposing credentials.",
   "",
@@ -206,8 +203,7 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "  high-risk tool can still ask the user for approval, and a denial is not an error to retry.",
   "- When `invoke` returns an error result, read the error text before retrying.",
   "",
-  "Before destructive or high-risk operations, read the Synapse Skill domain guide that matches",
-  "the task.",
+  "For destructive or high-risk operations, read the matching Synapse Skill guide when available.",
 ].join("\n")
 
 export function buildSynapseToolRouterTools(): McpToolDefinition[] {

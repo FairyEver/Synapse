@@ -113,6 +113,8 @@ describe("App capability domain", () => {
       .toBe(TEXT_EXTRACTOR_CAPABILITY_ID)
     expect(APP_MCP_TOOL_ACTIONS.app_document_template_docx_generate).toBe("app.document_template.docx.generate")
     expect(buildAppTools().map((tool) => tool.name)).toEqual([
+      "app_connectors_portal_link_credential_get",
+      "app_connectors_portal_link_test_credential_get",
       "app_update_state_get",
       "app_update_check",
       "app_update_run",

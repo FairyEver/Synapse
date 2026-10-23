@@ -1,3 +1,4 @@
+import { createPortalCredentialDispatcher } from "../credential-dispatcher"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { ConnectorCredentialEntryV1, ConnectorStateStoreV1 } from "../../../../electron/runtime/data-repo/schemas/connectors"
 import type { SynapseAccountState } from "../../../../src/types/account"
@@ -58,6 +59,42 @@ function harness() {
 }
 
 describe("Portal session connector", () => {
+  it("reads both real connector lifecycles through isolated MCP tools", async () => {
+    const h = harness()
+    const driver = createPortalSessionDriver({ ...h.deps, definitions: [portalConnector, portalTestConnector] })
+    disposers.push(() => driver.lifecycle!.dispose())
+    await driver.lifecycle!.initialize(h.notify)
+    for (const [definition, secret] of [[portalConnector, "prod-canary"], [portalTestConnector, "test-canary"]] as const) {
+      await driver.lifecycle!.connect(definition)
+      const state = new URLSearchParams(new URL(h.openExternal.mock.calls.at(-1)![0]).hash.split("?")[1]).get("state")!
+      await driver.handleCallback(h.callback(state, { token: secret }).replace(portalTestConnector.integration.callbackUrl, definition.integration.callbackUrl))
+    }
+    const { dispatch } = createPortalCredentialDispatcher({ connectors: driver, account: h.deps.account, permissionGuard: h.deps.permissionGuard, auditSink: h.deps.auditSink })
+    const context = { source: "mcp-http" as const }
+    expect(await dispatch("app.connectors.portal_link.credential.get", {}, context)).toMatchObject({ ok: true, data: { environment: "prod", token: "prod-canary", portalUserId: "portal-user" } })
+    expect(await dispatch("app.connectors.portal_link_test.credential.get", {}, context)).toMatchObject({ ok: true, data: { environment: "test", token: "test-canary" } })
+    await driver.lifecycle!.disconnect(portalTestConnector)
+    expect(await dispatch("app.connectors.portal_link_test.credential.get", {}, context)).toMatchObject({ ok: false })
+    expect(await dispatch("app.connectors.portal_link.credential.get", {}, context)).toMatchObject({ ok: true, data: { token: "prod-canary" } })
+  })
+  it.each(["disconnect", "reconnect", "account"])("rejects a real credential read interrupted by %s", async (change) => {
+    const h = harness(); await h.init(); const state = await h.start(); await h.driver.handleCallback(h.callback(state))
+    const read = h.credentials.get.getMockImplementation()!
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    h.credentials.get.mockClear()
+    h.credentials.get.mockImplementationOnce(async (id) => { const value = await read(id); await gate; return value })
+    const { dispatch } = createPortalCredentialDispatcher({ connectors: h.driver, account: h.deps.account, permissionGuard: h.deps.permissionGuard, auditSink: h.deps.auditSink })
+    const pending = dispatch("app.connectors.portal_link_test.credential.get", {}, { source: "mcp-http" })
+    await vi.waitFor(() => expect(h.credentials.get).toHaveBeenCalledOnce())
+    if (change === "disconnect") await h.driver.lifecycle!.disconnect(portalTestConnector)
+    if (change === "reconnect") await h.start()
+    if (change === "account") await h.switchUser("owner-b")
+    release()
+    const result = await pending
+    expect(result).toMatchObject({ ok: false })
+    expect(JSON.stringify(result)).not.toContain(token)
+  })
   it("opens the fixed authorization page, verifies before persisting, and exposes no credentials publicly", async () => {
     const h = harness(); await h.init()
     const state = await h.start()
@@ -71,8 +108,8 @@ describe("Portal session connector", () => {
     const publicItem = await h.item()
     expect(publicItem).toMatchObject({ connectionStatus: "connected", account: profile })
     expect(JSON.stringify([publicItem, [...h.state.entries.values()], h.auditSink.record.mock.calls])).not.toContain(token)
-    const sdkInput = await h.driver.getSessionInput(portalTestConnector.id)
-    expect(sdkInput).toEqual({ connectionGeneration: expect.any(String), baseUrl: portalTestConnector.integration.baseUrl, environmentId: "test", userId: "owner-a", language: "zh-CN", credential: { token, tenantId: profile.tenantId } })
+    const sessionInput = await h.driver.getSessionInput(portalTestConnector.id)
+    expect(sessionInput).toEqual({ connectionGeneration: expect.any(String), baseUrl: portalTestConnector.integration.baseUrl, environmentId: "test", userId: "owner-a", language: "zh-CN", credential: { token, tenantId: profile.tenantId }, account: profile })
     expect(h.driver.createAgentContribution(portalTestConnector)).toEqual({ mcpServers: [], skillPackageIds: [] })
   })
   it("cancels without storing credentials and rejects replay", async () => {
