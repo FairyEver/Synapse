@@ -2,7 +2,7 @@ import { sanitizeInertMailFragment } from "./inert-document"
 import { MAIL_MAX_BODY_BYTES } from "../shared/limits"
 
 // Only this application-owned stylesheet is allowed in the inert mail document.
-const readingStyle = "html{color-scheme:light dark}body{margin:0;padding:16px 20px;font-family:system-ui,sans-serif;font-size:14px;line-height:1.65;overflow-wrap:anywhere}p{margin:0 0 1em}blockquote{margin:1em 0;padding-inline-start:1em;border-inline-start:2px solid GrayText}pre{white-space:pre-wrap}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}td,th{overflow-wrap:anywhere}"
+const readingStyle = "html{color-scheme:light dark;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}body{display:flow-root;margin:0;font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;overflow-wrap:anywhere}body>:first-child{margin-top:0}body>:last-child{margin-bottom:0}p{margin:0 0 1em}p,li{text-wrap:pretty}strong,b{font-weight:600}h1,h2,h3,h4{font-weight:600;line-height:1.4;text-wrap:balance}blockquote{margin:1em 0;padding-inline-start:1em;border-inline-start:1px solid GrayText}blockquote blockquote{margin-block:.75em;padding-inline-start:.75em}pre{white-space:pre-wrap}img{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}td,th{overflow-wrap:anywhere}"
 export interface ExternalLink { label: string; url: string }
 export interface MailHtmlResources { cid: Readonly<Record<string, string>>; remote: Readonly<Record<string, string>> }
 export function sanitizeMailHtml(source: string, resources: MailHtmlResources): { html: string; links: ExternalLink[]; blockedImages: number; remoteImages: string[] } {
