@@ -310,3 +310,4 @@ export const MAIL_PREVIEW_TTL_MS = 10 * 60_000
 export const MAIL_SEARCH_BATCH_BYTES = 20 * 1024 ** 2
 export const MAIL_SEARCH_BATCH_MS = 30_000
 export const MAIL_SEARCH_TTL_MS = 24 * 60 * 60_000
+export const MAIL_NOTIFICATION_WINDOW_MS = 5000
