@@ -13,10 +13,11 @@ import { MarkdownViewer } from "@/components/markdown-viewer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { canQuickReplyToMail } from "@/lib/mail-reply"
+import { SystemAppTopBar, SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { MailAddress, MailMessage, MailPerson } from "@/types/mail"
 import type { SynapseNotification } from "@/types/notification-center"
 import { buildNotificationReference } from "../../../synapse-capabilities/shared/message-reference"
@@ -206,14 +207,14 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
         </Button>
       </SheetTrigger>
       <SheetContent showCloseButton={false} aria-describedby={undefined} onCloseAutoFocus={(event) => event.preventDefault()} className="@container/message-center gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-4xl">
-        <SheetHeader className="flex h-16 shrink-0 flex-row items-center justify-between gap-3 border-b px-5 py-0">
-          <div className="flex items-center gap-2"><SheetTitle className="text-lg font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</div>
-          <div className="flex items-center gap-1">
-            <Button type="button" variant="ghost" size="default" disabled={!center.unread} onClick={() => { void center.markAllRead() }}>全部设为已读</Button>
-            <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" aria-label="更多操作"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setClearScope("all")}>清空全部通知…</DropdownMenuItem>{center.filter === "pending" && center.items.length > 0 && <DropdownMenuItem onSelect={() => setClearScope("pending")}>忽略全部待处理…</DropdownMenuItem>}<DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
-            <Button type="button" variant="ghost" size="icon" aria-label="关闭通知中心" onClick={() => center.changeOpen(false)}><X /></Button>
-          </div>
-        </SheetHeader>
+        <SystemAppTopBar
+          left={<><SheetTitle className="truncate text-sm font-semibold">通知</SheetTitle>{center.unread > 0 && <Badge variant="secondary">{center.unread}</Badge>}</>}
+          actions={<>
+            <SystemAppTopBarActionButton type="button" disabled={!center.unread} onClick={() => { void center.markAllRead() }}>全部设为已读</SystemAppTopBarActionButton>
+            <DropdownMenu><DropdownMenuTrigger asChild><SystemAppTopBarActionButton type="button" iconOnly aria-label="更多操作"><MoreHorizontal /></SystemAppTopBarActionButton></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem variant="destructive" onSelect={() => setClearScope("all")}>清空全部通知…</DropdownMenuItem>{center.filter === "pending" && center.items.length > 0 && <DropdownMenuItem onSelect={() => setClearScope("pending")}>忽略全部待处理…</DropdownMenuItem>}<DropdownMenuItem onSelect={() => { void center.openApiGuide() }}>通知 API 文档</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+            <SystemAppTopBarActionButton type="button" iconOnly aria-label="关闭通知中心" onClick={() => center.changeOpen(false)}><X /></SystemAppTopBarActionButton>
+          </>}
+        />
         <div className="flex min-h-0 flex-1">
           <section aria-label="通知列表" className={`${center.selected ? "hidden @3xl/message-center:flex" : "flex"} min-h-0 min-w-0 w-full flex-col @3xl/message-center:w-88 @3xl/message-center:shrink-0 @3xl/message-center:border-r`}>
             <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-3">
