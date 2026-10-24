@@ -167,8 +167,8 @@ function WorkflowImportDialog({
                 </Select>
               </div>
             ) : null}
-            <ScrollArea className="min-h-0 flex-1 pr-3">
-              <div className="space-y-3">
+            <ScrollArea className="-mx-4 min-h-0 flex-1">
+              <div className="space-y-3 pr-7 pl-4">
                 {rows.map((ref) => {
                   const mapping = mappings[ref.id]
                   return (

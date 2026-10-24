@@ -335,9 +335,9 @@ function LogExportPanel() {
               title="选择要复制的日志文件"
               description={`共 ${logFilePickerState?.files.length ?? 0} 个日志文件，已选 ${formatFileSize(selectedLogSize)}，复制上限 ${formatFileSize(LOG_CLIPBOARD_MAX_BYTES)}。`}
             />
-            <DialogFrameBody className="px-5 py-4">
+            <DialogFrameBody className="py-4">
               <ScrollArea className="max-h-64">
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 px-5">
                   {logFilePickerState?.files.map((file, index) => {
                     const isChecked = logFilePickerState.selected.has(file.name)
                     return (

@@ -1032,12 +1032,12 @@ function ScanItemDetailDialog({
             </DialogFrameHeader>
 
             <DialogFrameBody className={cn(
-              "flex flex-col px-5 py-4 transition-opacity duration-200",
+              "flex flex-col py-4 transition-opacity duration-200",
               contentReady ? "opacity-100" : "opacity-0",
             )}>
               {contentReady ? (
                 <div className="flex min-h-0 flex-1 flex-col">
-                  <div className="flex items-center">
+                  <div className="mx-5 flex items-center">
                     <Tabs
                       value={viewMode}
                       onValueChange={(v) => setViewMode(v === "source" ? "source" : "rendered")}
@@ -1051,15 +1051,17 @@ function ScanItemDetailDialog({
                   </div>
 
                   <ScrollArea className="mt-4 min-h-0 flex-1">
-                    <ScanItemContentArea
-                      content={content}
-                      error={error}
-                      loading={loading}
-                      viewMode={viewMode}
-                      skillFiles={skillFiles}
-                      skillFilesLoading={skillFilesLoading}
-                      skillFilesError={skillFilesError}
-                    />
+                    <div className="px-5">
+                      <ScanItemContentArea
+                        content={content}
+                        error={error}
+                        loading={loading}
+                        viewMode={viewMode}
+                        skillFiles={skillFiles}
+                        skillFilesLoading={skillFilesLoading}
+                        skillFilesError={skillFilesError}
+                      />
+                    </div>
                   </ScrollArea>
                 </div>
               ) : null}

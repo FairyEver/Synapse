@@ -79,8 +79,8 @@ function ContentDetailPanel<T extends SynapseContentType>({
           </Tabs>
         </div>
 
-        <ScrollArea className="mt-4 min-h-0 flex-1 overflow-hidden">
-          <div className="min-w-0 max-w-full">
+        <ScrollArea className="-mx-4 mt-4 min-h-0 flex-1 overflow-hidden">
+          <div className="min-w-0 max-w-full px-4">
             {previewError ? (
               <Empty className={stateContainerClassName ?? "min-h-[360px] rounded-lg border border-border bg-muted/20"}>
                 <EmptyHeader>

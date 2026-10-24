@@ -159,8 +159,8 @@ function CcSwitchImportDialog({
           </Alert>
         ) : null}
 
-        <ScrollArea className="max-h-96">
-          <div className="flex flex-col gap-2 pr-3">
+        <ScrollArea className="-mx-4 max-h-96">
+          <div className="flex flex-col gap-2 pr-7 pl-4">
             {loading ? (
               <div className="rounded-lg bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
                 正在扫描

@@ -18,7 +18,7 @@ export function DriveFileReplaceDialog({ item, onClose, onChanged, onManageSync,
   return <Dialog open onOpenChange={(open) => { if (!open && !flow.busy) onClose() }}>
     <DialogContent aria-describedby={undefined}>
       <DialogHeader><DialogTitle>{flow.result ? "云端已更新" : "上传新版本"}</DialogTitle></DialogHeader>
-      <FieldGroup className="max-h-[60vh] overflow-auto">
+      <FieldGroup className="-mx-4 max-h-[60vh] w-auto overflow-auto px-4">
         <Field><FieldLabel>云端文件</FieldLabel><span className="break-all text-sm">{flow.result?.item.name ?? flow.preview?.name ?? item.name}</span></Field>
         {flow.result ? <Alert>
           <AlertTitle>云端已更新</AlertTitle>

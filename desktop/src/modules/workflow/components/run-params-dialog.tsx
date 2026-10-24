@@ -391,10 +391,10 @@ export function RunParamsDialog({ open, workflowId, params, lastValues, onConfir
               </div>
             )}
             <ScrollArea
-              className="min-w-0 max-h-[56vh] pr-2"
+              className="-mx-4 min-w-0 max-h-[56vh]"
               viewportClassName="min-w-0 max-w-full overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"
             >
-              <div className="grid gap-3 py-1">
+              <div className="grid gap-3 py-1 pr-6 pl-4">
                 {params.length === 0 && <p className="text-sm text-muted-foreground">无需参数</p>}
                 {params.map((param, paramIndex) => {
                   const isMultiResource = (param.type === "file" || param.type === "directory") && param.allowMultiple === true

@@ -393,7 +393,7 @@ function SkillUpdateDialog({
             选择需要更新的安装目标。
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="max-h-72">
+        <ScrollArea className="-mx-4 max-h-72" viewportClassName="px-4">
           <label
             className="flex items-center gap-3 rounded-md px-2 py-2 font-medium hover:bg-muted/50"
             htmlFor="skill-update-select-all"

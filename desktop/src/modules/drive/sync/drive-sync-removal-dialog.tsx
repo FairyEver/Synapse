@@ -24,7 +24,7 @@ export function DriveSyncRemovalDialog({ controller, binding, onClose, onRemoved
         <AlertDialogTitle>解除同步 {binding.driveItemName}</AlertDialogTitle>
         <AlertDialogDescription>停止双向同步，选择两端文件的处理方式。</AlertDialogDescription>
       </AlertDialogHeader>
-      <FieldGroup className="max-h-[60vh] overflow-auto">
+      <FieldGroup className="-mx-4 max-h-[60vh] w-auto overflow-auto px-4">
         <RadioGroup aria-label="解除后的文件处理" value={flow.disposition} disabled={flow.busy || Boolean(flow.result) || binding.status === "removed"} onValueChange={(value) => flow.choose(value as DriveSyncRemovalDisposition)}>
           {choices.map((choice) => <Field key={choice.value} orientation="horizontal"><RadioGroupItem id={`remove-${choice.value}`} value={choice.value} /><FieldLabel htmlFor={`remove-${choice.value}`}>{choice.label}</FieldLabel></Field>)}
         </RadioGroup>

@@ -53,8 +53,8 @@ export function DriveUploadTaskPanel({
           </SheetDescription>
         </SheetHeader>
         {task ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-2">
-            <div className="space-y-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 pb-2">
+            <div className="mx-4 space-y-2">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-medium text-foreground">{uploadTaskStatusText(task)}</span>
                 <span className="tabular-nums text-muted-foreground">{completedCount} / {task.totalItems}</span>
@@ -68,7 +68,7 @@ export function DriveUploadTaskPanel({
             </div>
 
             {currentItem ? (
-              <div className="space-y-1 border-y py-3">
+              <div className="mx-4 space-y-1 border-y py-3">
                 <div className="text-xs text-muted-foreground">当前</div>
                 <EndTruncatedText value={displayPath(currentItem)} className="text-sm font-medium text-foreground" />
                 {currentItem.status === "uploading" && currentItem.uploadedBytes !== null && currentItem.totalBytes !== null ? (
@@ -81,7 +81,7 @@ export function DriveUploadTaskPanel({
             ) : null}
 
             <ScrollArea className="min-h-0 flex-1">
-              <div className="space-y-1 pr-3">
+              <div className="space-y-1 pr-7 pl-4">
                 {task.items.map((item) => (
                   <UploadTaskItemRow key={item.key} item={item} />
                 ))}

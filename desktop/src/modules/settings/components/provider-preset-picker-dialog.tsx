@@ -152,8 +152,8 @@ function ProviderPresetPickerDialog({
             自定义
           </button>
 
-          <ScrollArea className="h-80">
-            <div className="flex flex-col gap-2 pr-3">
+          <ScrollArea className="-mx-4 h-80">
+            <div className="flex flex-col gap-2 pr-7 pl-4">
               {groups.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">没有匹配的预设</p>
               ) : groups.map((group) => (

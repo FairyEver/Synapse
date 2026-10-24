@@ -451,7 +451,10 @@ export function SkillUninstallerFlow({
         </label>
       ) : null}
 
-      <ScrollArea className={mode === "modal" ? "min-h-0 flex-1" : "max-h-96"}>
+      <ScrollArea
+        className={mode === "modal" ? "-mx-5 min-h-0 flex-1" : "max-h-96"}
+        viewportClassName={mode === "modal" ? "px-5" : undefined}
+      >
         {scanResult && candidates.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">未找到匹配的 Skill。</p>
         ) : (
