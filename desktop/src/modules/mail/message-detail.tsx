@@ -30,10 +30,10 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
     </div>
     <div className="min-h-0 min-w-0 flex-1 overflow-auto">
       <div className="mx-auto w-full max-w-3xl px-5 py-6 sm:px-6">
-        <header className="space-y-4">
+        <header className="space-y-3">
           <h2 className="text-xl font-semibold leading-snug text-balance break-words">{detail.subject || "（无主题）"}</h2>
           {detail.metadataTruncated && <p role="alert" className="text-sm text-destructive">邮件头异常或过大，地址等信息不完整，不能直接回复或转发。</p>}
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2 text-xs leading-5 text-muted-foreground">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 text-xs leading-5 text-muted-foreground">
             <dt>发件人</dt>
             <dd className="min-w-0 text-sm [overflow-wrap:anywhere]">
               {detail.from.map((from, index) => <span key={`${from.address}-${index}`}>
