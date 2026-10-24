@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-25 审查修复：邮箱工具栏补齐当前范围的未读筛选，复用 `message.list` / `search.start` 的现有条件。发送副本明确失败时可复用原 `message.send` 请求安全补存；未知结果继续只读核验。同步 MCP 描述及系统 Skill。44 项邮箱动作、343 项全局 capability、339 项 MCP 索引、22 个 System App 与全部 IPC/注册数量不变。
+
 - 2026-10-24 Agent 图片分享：新增 app.agent.share.messages / share.generate / share.output 三项能力，Agent 11→14；全局 capability 343、MCP 索引 339（app domain 98 / 94），公开工具仍仅 search / invoke。两类邮件附件增加与 filePath 互斥的 shareImageRef，数量不变。新增 4 条 UI 私有 IPC：share_render.complete、share_images.list/read/output；原有 read_share_image_resource 可携带生成任务身份。System App 22、Dock、Workflow、Automation、Deep Link 均无新增。历史条目中的 11 / 340 / 336 为当次基线，当前数量以本条及汇总表为准。
 
 

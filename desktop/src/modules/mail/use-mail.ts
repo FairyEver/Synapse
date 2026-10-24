@@ -7,7 +7,7 @@ import { runMailUiOperation } from "../../../app-capabilities/mail/renderer/trac
 import { MAIL_INPUT_SCHEMAS } from "../../../app-capabilities/mail/shared/schema"
 import { mailApi, mailError } from "./api"
 import { useMailSync } from "./use-mail-sync"
-export type MailView = { folderId?: string; starredOnly?: boolean; drafts?: boolean }
+export type MailView = { folderId?: string; unreadOnly?: boolean; starredOnly?: boolean; drafts?: boolean }
 type DraftDeleteResult = { items: { id: string; status: "succeeded" | "failed"; error?: string }[] }
 export function useMail() {
   const { state } = useAccount(), owner = state.status === "authenticated" ? state.profile.user.id : null
@@ -47,7 +47,7 @@ export function useMail() {
         } while (next && pages < limit)
         if (valid()) { draftPages.current = more ? draftPages.current + pages : pages; setDrafts(previous => more ? [...previous, ...rows] : rows); setCursor(next ?? null); setError(null) }
       } else {
-        const page = job ? await mailApi().searchGet({ jobId: job, cursor: nextCursor, limit: 50 }) : await mailApi().messageList({ accountId: id, folderId: selected.folderId, starredOnly: selected.starredOnly, cursor: nextCursor, limit: 50 })
+        const page = job ? await mailApi().searchGet({ jobId: job, cursor: nextCursor, limit: 50 }) : await mailApi().messageList({ accountId: id, folderId: selected.folderId, unreadOnly: selected.unreadOnly, starredOnly: selected.starredOnly, cursor: nextCursor, limit: 50 })
         if (valid()) { setItems(previous => more ? [...new Map([...previous, ...page.items].map(item => [item.id, item])).values()] : page.items); setCursor(page.nextCursor); setCoverage(page.coverage); setCanContinue("canContinue" in page && page.canContinue === true); setError(null) }
       }
     } catch (cause) { if (valid()) setError(mailError(cause)) }
@@ -160,7 +160,7 @@ export function useMail() {
     if (!query.trim()) { searchJob.current = null; setCanContinue(false); await refreshRef.current(); return }
     const e = epoch.current; selection.current++; setDetail(null)
     try {
-      const job = await mailApi().searchStart({ accountId: id, folderId: viewRef.current.folderId, query, fields })
+      const job = await mailApi().searchStart({ accountId: id, folderId: viewRef.current.folderId, unreadOnly: viewRef.current.unreadOnly, starredOnly: viewRef.current.starredOnly, query, fields })
       if (!current(e, id) || querySequence !== searchSequence.current) return
       searchJob.current = job.jobId; await refreshRef.current()
     } catch (cause) { if (current(e, id)) setError(mailError(cause)) }

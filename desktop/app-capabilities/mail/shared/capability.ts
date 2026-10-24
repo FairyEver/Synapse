@@ -46,7 +46,7 @@ const descriptions: Record<MailAction, string> = {
   "message.extract_to_file": "Export one external email's original MIME to an absolute local EML file.",
   "body.read_chunk": "Fetch and read a bounded body chunk for one external email; reports completeness and continuation. Never marks it read.",
   "send.preview": "Freeze the exact draft revision, addresses including Bcc, body, references and attachment hashes before sending.",
-  "message.send": "Submit a frozen email preview authorized by the user with a stable request ID. confirmed declares checked authorization. Ask only for unresolved ambiguity or requested review; SMTP acceptance is not final delivery. An unknown result must be reconciled, not resent.",
+  "message.send": "Submit a frozen email preview authorized by the user with a stable request ID. confirmed declares checked authorization. Ask only for unresolved ambiguity or requested review; SMTP acceptance is not final delivery. An unknown result must be reconciled, not resent. For accepted/partial with retryStage=sent-copy, reuse the original previewId and clientRequestId to repair only the Sent copy without repeating SMTP.",
   "operation.list": "List durable email send receipts, including partial rejection and unknown outcomes.",
   "operation.get": "Read a send receipt and perform bounded read-only Sent reconciliation; never repeats SMTP submission.",
   "cache.clear": "Clear only re-downloadable email body/attachment cache; preserves credentials, drafts and pending or unknown sends.",

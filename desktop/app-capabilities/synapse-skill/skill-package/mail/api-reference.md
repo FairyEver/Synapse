@@ -1823,7 +1823,7 @@
 
 ### app_mail_message_send
 
-发送已授权的邮件预览。Submit a frozen email preview authorized by the user with a stable request ID. confirmed declares checked authorization. Ask only for unresolved ambiguity or requested review; SMTP acceptance is not final delivery. An unknown result must be reconciled, not resent.
+发送已授权的邮件预览。Submit a frozen email preview authorized by the user with a stable request ID. confirmed declares checked authorization. Ask only for unresolved ambiguity or requested review; SMTP acceptance is not final delivery. An unknown result must be reconciled, not resent. For accepted/partial with retryStage=sent-copy, reuse the original previewId and clientRequestId to repair only the Sent copy without repeating SMTP.
 
 权限：content.mutate；风险：normal。
 

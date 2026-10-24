@@ -88,6 +88,8 @@ search.start.query 是一个普通字面子串，不支持“张三 合同”的
 
 `accepted` / `partial` 且 sentCopyState 尚未 saved 时，也可沿用原 operationId 调 operation.get 核验副本，不重新提交 SMTP。桌面提供同一核验入口，并将已消费草稿标为已发送只读快照；文件夹刷新优先同步当前所见文件夹。
 
+仅在 `accepted` / `partial`、`sentCopyState:failed` 且 `retryStage:sent-copy` 时，可用**原始** previewId 和 clientRequestId 再次调用 message.send（confirmed:true），只补存已发送副本，不重发 SMTP、不生成新预览或新请求标识；保留原 accepted / rejected 分组。桌面提供“重试保存已发送副本”。结果未知或需对账时只能先 operation.get，不盲目追加。
+
 只发送用户要求发送的内容；明确仅起草或先审阅时停在草稿或预览。`confirmed:true` 声明已核对授权，不要求每封邮件额外询问确认；存在收件人歧义、附件版本不确定或越出授权范围时仍须先解决。
 
 准确输入及权限见 [api-reference.md](api-reference.md)，阿里特性与真实验收边界见 [aliyun-compatibility.md](aliyun-compatibility.md)。

@@ -10,11 +10,11 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import type { Coverage, Folder } from "../../../app-capabilities/mail/shared/types"
 import { folderName } from "./navigation"
 export type BatchAction = "read" | "unread" | "star" | "unstar" | "delete" | "restore" | "permanent"
-export interface MailSearchControls { onSearch?(query: string): void; coverage?: Coverage | null; canContinue?: boolean; onContinue?(): void }
+export interface MailSearchControls { onSearch?(query: string): void; unreadOnly?: boolean; onUnreadOnlyChange?(value: boolean): void; coverage?: Coverage | null; canContinue?: boolean; onContinue?(): void }
 function Hint({ label, children }: { label: string; children: ReactNode }) {
   return <Tooltip><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
 }
-export function MailListToolbar({ count, all, disabled, busy, draftView, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, coverage, canContinue, onContinue }: MailSearchControls & {
+export function MailListToolbar({ count, all, disabled, busy, draftView, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, unreadOnly, onUnreadOnlyChange, coverage, canContinue, onContinue }: MailSearchControls & {
   count: number; all: boolean; disabled: boolean; busy?: boolean; draftView?: boolean; onToggle(value: boolean): void; onBatch(action: BatchAction): void; onMove(id: string): void; folders: Folder[]; canPermanentlyDelete: boolean
 }) {
   const [searching, setSearching] = useState(false), [query, setQuery] = useState("")
@@ -40,6 +40,6 @@ export function MailListToolbar({ count, all, disabled, busy, draftView, onToggl
           <DropdownMenuItem onSelect={() => onBatch("delete")}>移至回收站</DropdownMenuItem><DropdownMenuItem onSelect={() => onBatch("restore")}>恢复到收件箱</DropdownMenuItem>{canPermanentlyDelete && <DropdownMenuItem variant="destructive" onSelect={() => onBatch("permanent")}>永久删除</DropdownMenuItem>}
           </>}
         </DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
-      : onSearch && <Hint label="搜索邮件"><SystemAppTopBarActionButton iconOnly aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></SystemAppTopBarActionButton></Hint>}</>}
+      : <>{onUnreadOnlyChange && <SystemAppTopBarActionButton aria-label="仅看未读" aria-pressed={unreadOnly === true} className="aria-pressed:bg-selected aria-pressed:hover:bg-selected" disabled={busy} data-track="mail.message.filter.unread" onClick={() => onUnreadOnlyChange(!unreadOnly)}>未读</SystemAppTopBarActionButton>}{onSearch && <Hint label="搜索邮件"><SystemAppTopBarActionButton iconOnly aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></SystemAppTopBarActionButton></Hint>}</>}</>}
   </div></TooltipProvider>
 }

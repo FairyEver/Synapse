@@ -189,6 +189,19 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     catch (cause) { if (active.current && e === epoch.current) setError(mailError(cause)) }
     finally { if (e === epoch.current) { reconciliation.current = null; setReconciling(false) } }
   }
+  const canRetrySentCopy = !!request.current && !!receipt && ["accepted", "partial"].includes(receipt.state)
+    && receipt.sentCopyState === "failed" && receipt.retryStage === "sent-copy"
+  const retrySentCopy = async () => {
+    const original = request.current
+    if (!canRetrySentCopy || !original || !receipt || sendLock.current || reconciliation.current) return
+    const e = epoch.current
+    sendLock.current = true; reconciliation.current = receipt.operationId; setReconciling(true); setError(null)
+    try {
+      const result = await runMailUiOperation("mutate", () => mailApi().messageSend({ previewId: original.previewId, clientRequestId: original.key, confirmed: true }))
+      if (active.current && e === epoch.current) setReceipt(result)
+    } catch (cause) { if (active.current && e === epoch.current) setError(mailError(cause)) }
+    finally { if (e === epoch.current) { sendLock.current = false; reconciliation.current = null; setReconciling(false) } }
+  }
   const copyDraft = async () => {
     if (!value.current || sendLock.current) return
     const e = epoch.current
@@ -220,6 +233,6 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
       edit({ inlineImages: [...value.current.inlineImages, image] }); return image
     } catch (cause) { setError(mailError(cause)); return null }
   }
-  return { sessionId: epoch.current, focusBodyOnOpen, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, dirty, preview, receipt, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
+  return { sessionId: epoch.current, focusBodyOnOpen, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, canRetrySentCopy, dirty, preview, receipt, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, reconcile, retrySentCopy, copyDraft, pickAttachments, importFiles, importImage }
 }
 export type ComposeModel = ReturnType<typeof useCompose>

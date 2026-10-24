@@ -1,13 +1,14 @@
 /** @vitest-environment jsdom */
-import { mocks, mount, flush } from "./harness"
+import { mocks, mount, flush, deferred } from "./harness"
 import { act } from "react"
-import { expect, it, vi } from "vitest"
+import { afterEach, expect, it, vi } from "vitest"
 import { MailCompose } from "../compose"
 import { useCompose } from "../use-compose"
 import type { Draft } from "../../../../app-capabilities/mail/shared/types"
 
 const draft: Draft = { id: "md_draft", accountId: "ma_one", revision: 1, to: [], cc: [], bcc: [], subject: "", html: "", text: "", assetIds: [], inlineImages: [], state: "editing", mode: "new", sourceMessageId: null, remoteLocator: null, localSaved: true, syncState: "pending", updatedAt: "2026-10-23T00:00:00Z" }
 let model: ReturnType<typeof useCompose>
+afterEach(() => vi.useRealTimers())
 function Harness() {
   model = useCompose("user")
   return <MailCompose model={model} accounts={[]} />
@@ -97,6 +98,29 @@ it("can verify a pending Sent copy after SMTP acceptance without sending the mes
   await act(async () => { verify!.click() }); await flush()
   expect(document.body.textContent).toContain("已发送副本：已保存")
   expect(mocks.api.messageSend).toHaveBeenCalledTimes(1)
+})
+it("repairs a definitively failed Sent copy with the original request even after its preview expires", async () => {
+  await setup({ ...draft, to: [{ address: "to@example.com" }] })
+  mocks.api.sendPreview = vi.fn().mockResolvedValue({ previewId: "mp_one", expiresAt: "2099-01-01T00:00:00Z" })
+  const receipt = { operationId: "mo_one", state: "partial", accepted: ["to@example.com"], rejected: ["rejected@example.com"], sentCopyState: "failed", retryStage: "sent-copy", errorCode: "NETWORK_ERROR" }
+  mocks.api.messageSend = vi.fn().mockResolvedValueOnce(receipt)
+  await act(async () => { await model.send() })
+  expect(model.draft?.state).toBe("consumed")
+  const retry = [...document.querySelectorAll("button")].find(node => node.textContent === "重试保存已发送副本")
+  expect(retry).toBeTruthy()
+  const original = mocks.api.messageSend.mock.calls[0][0]
+  const pending = deferred<Omit<typeof receipt, "errorCode"> & { errorCode: string | null }>()
+  mocks.api.messageSend.mockReturnValueOnce(pending.promise)
+  vi.useFakeTimers(); vi.setSystemTime(new Date("2100-01-01T00:00:00Z"))
+  act(() => { retry!.click(); retry!.click() }); await flush()
+  expect(mocks.api.messageSend).toHaveBeenCalledTimes(2)
+  expect(mocks.api.messageSend).toHaveBeenLastCalledWith(original)
+  expect(mocks.api.sendPreview).toHaveBeenCalledTimes(1)
+  await act(async () => { pending.resolve({ ...receipt, sentCopyState: "saved", retryStage: "none", errorCode: null }); await pending.promise }); await flush()
+  expect(document.body.textContent).toContain("已发送副本：已保存")
+  expect(document.body.textContent).toContain("已拒绝：rejected@example.com")
+  expect(document.body.textContent).not.toContain("重试保存已发送副本")
+  expect(model.draft?.state).toBe("consumed")
 })
 it("identifies a reopened consumed draft as sent and keeps its controls read-only", async () => {
   await setup({ ...draft, state: "consumed", subject: "已提交的邮件" })

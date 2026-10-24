@@ -91,6 +91,19 @@ it("keeps unknown send results for read-only reconciliation without resubmission
   expect(mocks.api.operationGet).toHaveBeenCalledWith({ operationId: "mo_unknown" })
 })
 
+it.each([
+  { state: "unknown", sentCopyState: "failed", retryStage: "sent-copy" },
+  { state: "failed", sentCopyState: "failed", retryStage: "sent-copy" },
+  { state: "accepted", sentCopyState: "unknown", retryStage: "reconcile" },
+])("never offers Sent repair for $state / $sentCopyState", async result => {
+  await setup()
+  mocks.api.messageSend.mockResolvedValue({ operationId: "mo_send", ...result, accepted: [], rejected: [], errorCode: null })
+  await act(async () => { await editor.send() })
+  expect(editor.canRetrySentCopy).toBe(false)
+  await act(async () => { await editor.retrySentCopy() })
+  expect(mocks.api.messageSend).toHaveBeenCalledTimes(1)
+})
+
 it("roundtrips comma, quoted and multilingual display names while saving a reply", async () => {
   await setup(); await act(async () => { await editor.close() })
   const to = [{ address: "john@example.com", name: "Doe, John" }, { address: "cn@example.com", name: '张三; \"同事\"' }]
