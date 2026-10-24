@@ -17,12 +17,10 @@ export type AgentShareSettings = {
   readonly scale: 2 | 3
   readonly redact: boolean
   readonly showTitle: boolean
-  readonly showTime: boolean
-  readonly showModel: boolean
   readonly showBrand: boolean
 }
 
 export const DEFAULT_AGENT_SHARE_SETTINGS: AgentShareSettings = {
   title: "对话摘录", width: 720, scale: 2, redact: true,
-  showTitle: true, showTime: false, showModel: false, showBrand: true,
+  showTitle: true, showBrand: true,
 }

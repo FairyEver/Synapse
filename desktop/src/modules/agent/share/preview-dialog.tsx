@@ -16,10 +16,6 @@ import { useShareImageExport } from "./use-share-image-export"
 function Toggle({ label, id, checked, onChange }: { label: string; id: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return <div className="flex items-center justify-between gap-4 py-2"><Label htmlFor={id} className="font-normal">{label}</Label><Switch id={id} checked={checked} onCheckedChange={onChange} /></div>
 }
-function timeLabel(value: string, date = false): string {
-  const time = new Date(value)
-  return Number.isFinite(time.getTime()) ? new Intl.DateTimeFormat(undefined, date ? { dateStyle: "medium" } : { hour: "2-digit", minute: "2-digit" }).format(time) : ""
-}
 
 export function AgentSharePreviewDialog({ share, target }: { readonly share: AgentShareController; readonly target: AgentConversationTarget }) {
   const [paper, setPaper] = useState<HTMLElement | null>(null)
@@ -60,7 +56,7 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
           <div ref={setViewport} tabIndex={0} aria-label="长图预览" className="min-h-0 min-w-0 flex-1 overflow-auto bg-surface p-8">
             <GeneratedUiTheme><div className="mx-auto" style={{ width: settings.width * zoom, height: size.height * zoom }}><div className="origin-top-left" style={{ width: settings.width, transform: `scale(${zoom})` }}>
               <article ref={setPaper} data-agent-share-paper className="overflow-hidden rounded-lg bg-background p-10 text-sm text-foreground [&_[data-streamdown=code-block-copy-button]]:hidden [&_[data-slot=scroll-area-scrollbar]]:hidden" style={{ width: settings.width }}>
-                {settings.showTitle && <header className="mb-8 border-b pb-7"><p className="mb-3 text-sm text-muted-foreground">对话摘录</p><h2 className="break-words text-2xl leading-snug font-semibold">{redactShareText(settings.title.trim() || "对话摘录", settings.redact)}</h2>{settings.showTime && share.preview?.[0] && <p className="mt-3 text-sm text-muted-foreground">{timeLabel(share.preview[0].timestamp, true)}</p>}</header>}
+                {settings.showTitle && <header className="mb-8 border-b pb-7"><h2 className="break-words text-2xl leading-snug font-semibold">{redactShareText(settings.title.trim() || "对话摘录", settings.redact)}</h2></header>}
                 <div className="space-y-8">{share.preview?.map((message, index, all) => {
                   const previous = index > 0 ? indexes.get(all[index - 1]!.id) : undefined
                   const current = indexes.get(message.id)
@@ -68,7 +64,7 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
                   const item = { ...message, content: redactShareText(message.content, settings.redact) }
                   return <Fragment key={message.id}>
                     {omitted && <div data-share-omission className="flex items-center gap-4 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />已省略内容<span className="h-px flex-1 bg-border" /></div>}
-                    <section data-share-export-message={message.id}><div className="mb-3 flex items-center gap-2"><span className="flex size-6 items-center justify-center rounded-md bg-muted text-xs font-medium">{message.role === "user" ? "我" : "Sy"}</span><span className="text-sm font-medium">{message.role === "user" ? "我" : "Synapse"}</span>{settings.showModel && message.metadata?.model && message.role === "assistant" && <span className="ml-1 text-xs text-muted-foreground">{redactShareText(message.metadata.model, settings.redact)}</span>}{settings.showTime && <time className="ml-auto text-xs text-muted-foreground">{timeLabel(message.timestamp)}</time>}</div>
+                    <section data-share-export-message={message.id}>
                       <AgentShareMessageBody item={item} projectId={target.projectId} conversationId={target.conversationId} hideEmails={settings.redact} />
                     </section>
                   </Fragment>
@@ -82,7 +78,7 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
             <div className="space-y-2"><p className="text-sm font-medium">清晰度</p><div role="group" aria-label="清晰度" className="flex gap-1 rounded-lg bg-muted p-1">{([2, 3] as const).map((scale) => <Button key={scale} type="button" className="flex-1" variant={settings.scale === scale ? "outline" : "ghost"} aria-pressed={settings.scale === scale} onClick={() => change("scale", scale)}>{scale === 2 ? "高清 2×" : "超清 3×"}</Button>)}</div></div>
             <div className="space-y-2"><p className="text-sm font-medium">版式宽度</p><div role="group" aria-label="版式宽度" className="flex gap-1 rounded-lg bg-muted p-1">{([720, 960] as const).map((width) => <Button key={width} type="button" className="flex-1" variant={settings.width === width ? "outline" : "ghost"} aria-pressed={settings.width === width} onClick={() => change("width", width)}>{width === 720 ? "标准" : "宽版"}</Button>)}</div></div>
             <div><Toggle label="显示标题" id="agent-share-title" checked={settings.showTitle} onChange={(value) => change("showTitle", value)} />{settings.showTitle && <Input aria-label="分享图片标题" maxLength={60} className="mt-2" value={settings.title} onChange={(event) => change("title", event.target.value)} />}</div>
-            <div className="border-t pt-4"><Toggle label="隐藏邮箱" id="agent-share-email" checked={settings.redact} onChange={(value) => change("redact", value)} /><Toggle label="显示时间" id="agent-share-time" checked={settings.showTime} onChange={(value) => change("showTime", value)} /><Toggle label="显示模型" id="agent-share-model" checked={settings.showModel} onChange={(value) => change("showModel", value)} /><Toggle label="底部标识" id="agent-share-brand" checked={settings.showBrand} onChange={(value) => change("showBrand", value)} /></div>
+            <div className="border-t pt-4"><Toggle label="隐藏邮箱" id="agent-share-email" checked={settings.redact} onChange={(value) => change("redact", value)} /><Toggle label="底部标识" id="agent-share-brand" checked={settings.showBrand} onChange={(value) => change("showBrand", value)} /></div>
           </fieldset></aside>
         </DialogFrameBody>
         {output.error && <div role="alert" className="border-t px-5 py-3 text-sm text-destructive">{output.error}</div>}

@@ -68,11 +68,17 @@ describe("message selection and preview UI", () => {
     act(() => button("返回选择").click())
     expect(share.preview).toBeNull(); expect([...share.selected]).toEqual(["m1", "m4"])
   })
-  it("labels each historical reply using its own frozen model", async () => {
-    await act(async () => share.enter()); act(() => share.preset("ai")); await act(async () => share.openPreview())
-    act(() => document.querySelector<HTMLButtonElement>("#agent-share-model")!.click())
-    expect(document.querySelector('[data-share-export-message="m2"]')!.textContent).toContain("Old Model")
-    expect(document.querySelector('[data-share-export-message="m4"]')!.textContent).toContain("New Model")
+  it("shows the editable title and message bodies without identity or metadata rows", async () => {
+    await act(async () => share.enter()); act(() => share.preset("all")); await act(async () => share.openPreview())
+    const paper = document.querySelector<HTMLElement>("[data-agent-share-paper]")!
+    expect(paper.querySelector("header")!.textContent).toBe("selected conversation")
+    for (const message of items) {
+      expect(paper.querySelector(`[data-share-export-message="${message.id}"]`)!.textContent).toBe(message.content.replace("test@example.com", "［邮箱已隐藏］"))
+    }
+    expect(document.querySelector("#agent-share-model")).toBeNull()
+    expect(document.querySelector("#agent-share-time")).toBeNull()
+    act(() => document.querySelector<HTMLButtonElement>("#agent-share-title")!.click())
+    expect(paper.querySelector("header")).toBeNull()
   })
   it("keeps only selection actions in the source messages and a compact toolbar", async () => {
     await act(async () => share.enter("m1"))
