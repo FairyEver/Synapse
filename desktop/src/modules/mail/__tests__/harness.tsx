@@ -23,15 +23,19 @@ beforeEach(() => {
     disconnect() {}
   }
   mocks.owner = "user"; mocks.api = {}
-  for (const name of ["accountList", "folderList", "messageList", "messageGet", "messageUpdate", "messageDelete", "messageRestore", "messageMove", "bodyReadChunk", "searchStart", "searchGet", "searchResume", "syncStart", "uiScope", "onChanged", "draftList"]) mocks.api[name] = vi.fn()
+  for (const name of ["accountList", "folderList", "messageList", "messageGet", "messageUpdate", "messageDelete", "messageRestore", "messageMove", "bodyReadChunk", "searchStart", "searchGet", "searchResume", "syncStart", "syncGet", "messageCount", "uiScope", "onChanged", "draftList"]) mocks.api[name] = vi.fn()
   mocks.api.uiScope.mockResolvedValue({ ownerId: "user", generation: 1, notificationsSupported: true, notificationError: null })
   mocks.api.accountList.mockResolvedValue({ items: [account, { ...account, id: "ma_two", name: "个人" }], nextCursor: null })
   mocks.api.folderList.mockResolvedValue({ items: [{ id: "mf_one", accountId: "ma_one", role: "inbox", name: "收件箱", selectable: true }], nextCursor: null })
   mocks.api.messageList.mockResolvedValue({ items: [summary], nextCursor: null, coverage })
+  mocks.api.syncGet.mockResolvedValue(null)
+  mocks.api.messageCount.mockResolvedValue({ indexed: 1, unread: 1, serverReported: 1, coverage })
   mocks.api.messageGet.mockResolvedValue(detail)
   mocks.api.messageUpdate.mockResolvedValue({ items: [{ id: summary.id, status: "succeeded", newRevision: 2 }] })
   mocks.api.bodyReadChunk.mockResolvedValue({ bodyRef: "mas_body", html: "<p>正文</p>", text: "正文", complete: true, nextCursor: null, truncated: false })
-  mocks.api.onChanged.mockImplementation(listener => { mocks.changed = listener; return () => undefined })
+  const listeners = new Set<(event: unknown) => void>()
+  mocks.changed = event => { for (const listener of listeners) listener(event) }
+  mocks.api.onChanged.mockImplementation(listener => { listeners.add(listener); return () => { listeners.delete(listener) } })
   mocks.api.draftList.mockResolvedValue({ items: [], nextCursor: null })
 })
 afterEach(() => { if (root) act(() => root!.unmount()); root = null; document.body.innerHTML = "" })

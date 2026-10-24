@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { ArrowLeft, Search, X, LoaderCircle, Info, ChevronDown } from "lucide-react"
+import { ArrowLeft, Search, X, LoaderCircle, Info, ChevronDown, Pause, CircleAlert, Check, CircleSlash, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -9,18 +9,20 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
 import type { Coverage, Folder } from "../../../app-capabilities/mail/shared/types"
 import { folderName } from "./navigation"
+import type { MailSyncStatus } from "./use-mail-sync"
 export type BatchAction = "read" | "unread" | "star" | "unstar" | "delete" | "restore" | "permanent"
-export interface MailSearchControls { onSearch?(query: string): void; coverage?: Coverage | null; canContinue?: boolean; onContinue?(): void }
+export interface MailSearchControls { onSearch?(query: string): void; coverage?: Coverage | null; canContinue?: boolean; onContinue?(): void; syncStatus?: MailSyncStatus | null }
 function Hint({ label, children }: { label: string; children: ReactNode }) {
   return <Tooltip><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
 }
-export function MailListToolbar({ count, all, disabled, busy, draftView, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, coverage, canContinue, onContinue }: MailSearchControls & {
+export function MailListToolbar({ count, all, disabled, busy, draftView, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, coverage, canContinue, onContinue, syncStatus }: MailSearchControls & {
   count: number; all: boolean; disabled: boolean; busy?: boolean; draftView?: boolean; onToggle(value: boolean): void; onBatch(action: BatchAction): void; onMove(id: string): void; folders: Folder[]; canPermanentlyDelete: boolean
 }) {
   const [searching, setSearching] = useState(false), [query, setQuery] = useState("")
   const itemName = draftView ? "草稿" : "邮件"
-  const indexing = coverage && !coverage.metadataComplete
-  const status = coverage?.reason === "body_truncated" ? "部分正文未完整检索" : canContinue ? "部分邮件尚未检索" : indexing ? "历史邮件索引中" : null
+  const status = coverage?.reason === "body_truncated" ? "部分正文未完整检索" : canContinue ? "部分邮件尚未检索" : !syncStatus && coverage && !coverage.metadataComplete ? "部分邮件尚未同步" : null
+  const SyncIcon = syncStatus?.state === "running" ? LoaderCircle : syncStatus?.state === "paused" ? Pause : syncStatus?.state === "failed" ? CircleAlert : syncStatus?.state === "completed" ? Check : syncStatus?.state === "cancelled" ? CircleSlash : Clock
+  const syncLabel = syncStatus ? [syncStatus.label, syncStatus.progress].filter(Boolean).join("，") : ""
   const exitSearch = () => { setSearching(false); setQuery(""); onSearch?.("") }
   return <TooltipProvider><div className="flex h-10 shrink-0 items-center border-b bg-background px-3" aria-label="邮件列表工具栏">
     {count === 0 && searching ? <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={event => { event.preventDefault(); onSearch?.(query) }}>
@@ -40,6 +42,7 @@ export function MailListToolbar({ count, all, disabled, busy, draftView, onToggl
         </DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
       </> : <><div className="flex-1" />{onSearch && <Hint label="搜索邮件"><SystemAppTopBarActionButton iconOnly aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></SystemAppTopBarActionButton></Hint>}</>}
     </>}
-    {status && <Popover><Hint label={status}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly aria-label={status}>{indexing ? <LoaderCircle className="animate-spin" /> : <Info />}</SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="end" className="w-64"><p className="text-sm">{status}</p>{canContinue && <Button variant="ghost" className="mt-2" disabled={busy} onClick={onContinue}>继续检索</Button>}</PopoverContent></Popover>}
+    {status && <Popover><Hint label={status}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly aria-label={status}><Info /></SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="end" className="w-64"><p className="text-sm">{status}</p>{canContinue && <Button variant="ghost" className="mt-2" disabled={busy} onClick={onContinue}>继续检索</Button>}</PopoverContent></Popover>}
+    {syncStatus && <Popover><Hint label={syncLabel}><PopoverTrigger asChild><SystemAppTopBarActionButton aria-label={syncLabel} className="min-w-0 shrink" aria-busy={syncStatus.state === "running"}><SyncIcon className={syncStatus.state === "running" ? "animate-spin motion-reduce:animate-none" : undefined} /><span className="truncate">{syncStatus.label}</span>{syncStatus.count && <span className="tabular-nums">{syncStatus.count}</span>}</SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="end" className="w-64 space-y-2 text-sm"><p>{syncStatus.label}</p>{syncStatus.progress && <p className="tabular-nums text-muted-foreground">{syncStatus.progress}</p>}{syncStatus.error && <p className="text-destructive">{syncStatus.error}</p>}</PopoverContent></Popover>}
   </div></TooltipProvider>
 }

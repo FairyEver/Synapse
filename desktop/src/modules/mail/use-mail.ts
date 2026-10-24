@@ -5,6 +5,7 @@ import type { AccountSummary, Folder, MailSummary, MailDetail, Coverage, Draft, 
 import type { MailScope } from "../../../app-capabilities/mail/shared/private-schema"
 import { runMailUiOperation } from "../../../app-capabilities/mail/renderer/tracking"
 import { mailApi, mailError } from "./api"
+import { useMailSync } from "./use-mail-sync"
 export type MailView = { folderId?: string; starredOnly?: boolean; drafts?: boolean }
 type DraftDeleteResult = { items: { id: string; status: "succeeded" | "failed"; error?: string }[] }
 export function useMail() {
@@ -174,7 +175,8 @@ export function useMail() {
   }, [owner, drafts])
   const sync = useCallback(async () => { if (accountRef.current) { await mailApi().syncStart({ accountId: accountRef.current, folderId: viewRef.current.folderId }); await refreshRef.current() } }, [])
   const visible = loadedOwner === owner
+  const syncStatus = useMailSync(visible ? owner : null, visible ? accounts.find(account => account.id === accountId) : undefined, scope.current?.generation)
   return { accounts: visible ? accounts : [], accountId: visible ? accountId : null, folders: visible ? folders : [], items: visible ? items : [], drafts: visible ? drafts : [], detail: visible ? detail : null, view, coverage, cursor, canContinue, loading, error, authenticated: !!owner, scope: scope.current, owner,
-    selectAccount, selectView, selectMessage, clearDetail, refresh, loadAccounts, loadMore: () => refresh(true, cursor ?? undefined), search, continueSearch, mutate, deleteDrafts, sync }
+    syncStatus, selectAccount, selectView, selectMessage, clearDetail, refresh, loadAccounts, loadMore: () => refresh(true, cursor ?? undefined), search, continueSearch, mutate, deleteDrafts, sync }
 }
 export type MailViewModel = ReturnType<typeof useMail>

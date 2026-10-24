@@ -20,7 +20,7 @@ const descriptions: Record<MailAction, string> = {
   "folder.delete": "Delete an empty ordinary email folder only; system folders are protected.",
   "folder.update": "Map a real server folder to a special role with account revision checking.",
   "sync.start": "Request bounded metadata synchronization. Returns a job ID; historical bodies and attachments are not mirrored.",
-  "sync.get": "Get a synchronization job's progress, actual coverage and diagnostic status.",
+  "sync.get": "Read synchronization state without starting work. Provide exactly one of jobId or accountId; accountId returns the current runtime job or null when none exists. Stopped jobs are not reported as running. Use message.count for indexed and server-reported totals.",
   "sync.cancel": "Cancel historical synchronization for this job while leaving normal new-mail monitoring enabled.",
   "message.list": "List indexed external email; omit folderId for this account's folders. Filters and coverage are explicit; reading does not mark mail read.",
   "message.get": "Read metadata and attachment references for one external email ID or full synapse://mail/<id> reference; provide exactly one of messageId or reference. Does not mark it read or fetch every body.",

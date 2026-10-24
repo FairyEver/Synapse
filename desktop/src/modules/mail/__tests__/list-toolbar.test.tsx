@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { mount, summary } from "./harness"
+import { coverage, mount, summary } from "./harness"
 import { act } from "react"
 import { expect, it, vi } from "vitest"
 import { MailList } from "../message-list"
@@ -23,4 +23,12 @@ it("labels consumed drafts as sent instead of merely synced", () => {
   const row = [...document.querySelectorAll("button")].find(node => node.textContent?.includes("已发送测试信"))
   expect(row?.textContent).toContain("已发送（只读）")
   expect(row?.textContent).not.toContain("已同步")
+})
+it("does not treat incomplete search coverage as an active synchronization job", () => {
+  const resume = vi.fn()
+  mount(<MailList items={[]} drafts={[]} loading={false} more={false} onSelect={vi.fn()} onDraft={vi.fn()} onMore={vi.fn()} onBatch={vi.fn()} folders={[]} onMove={vi.fn()} coverage={{ ...coverage, metadataComplete: false }} canContinue onContinue={resume} />)
+  expect(document.querySelector(".animate-spin")).toBeNull()
+  act(() => document.querySelector<HTMLButtonElement>('button[aria-label="部分邮件尚未检索"]')!.click())
+  act(() => [...document.querySelectorAll("button")].find(button => button.textContent === "继续检索")!.click())
+  expect(resume).toHaveBeenCalledTimes(1)
 })

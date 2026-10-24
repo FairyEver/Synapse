@@ -24,6 +24,7 @@ MCP 公开入口仍为 `search`、`invoke`。先按意图或精确 `app_mail_*` 
 - 新邮件：draft.create `{accountId,to:[{address:"recipient@example.com"}],subject:"测试",text:"正文",html:"<p>正文</p>"}`；附件先 attachment.import_local，随后 draft.update 引用 assetIds；图片必须是当前账号受控资产及 inlineImages 的 CID，不后台抓取任意 URL。
 - 整理：先核对 message.list 的具体 ID，随后 message.update / move / delete / restore；每批最多100、每项结果独立。默认删除到 Trash；永久删除只能对 Trash 中明确 UID。系统文件夹缺映射时通过 folder.update 明确指定，不能按中文名称猜。
 - 草稿清理：先用 draft.list 核对草稿 ID 与 revision，再逐封调用 draft.delete `{draftId,expectedRevision}`，删除本机草稿及明确关联的远端副本。桌面草稿箱提供最多 100 封的批选确认；MCP 仍逐封删除，版本冲突先重读并报告，不自动覆盖或重放。
+- 同步状态：sync.get 必须且只能传 jobId 或 accountId；accountId 只读当前运行时任务，无任务返回 null，不启动或恢复同步。message.count 使用同一 accountId 读取 indexed / serverReported；未知总数保持 null。metadataComplete 只说明覆盖范围，不能判断任务是否运行；paused / failed / cancelled 不表示正在同步。
 - 本机维护：account.pause/resume 控制后台收信；sync.cancel 只取消历史索引。cache.clear 保留草稿和待核验发送资产。account.delete 只移除本机，先核对未发草稿和未知操作，明确决定 discardLocalDrafts / acknowledgeUnknownOperations。
 
 ## 发送结果的解释

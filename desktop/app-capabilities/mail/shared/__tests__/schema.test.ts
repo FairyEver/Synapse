@@ -7,6 +7,13 @@ const accountId = `ma_${uuid}`
 const messageId = `em_${uuid}`
 
 describe("external mail contracts", () => {
+  it("reads sync status by exactly one job or account without starting work", () => {
+    const schema = MAIL_INPUT_SCHEMAS["sync.get"], jobId = `mj_${uuid}`
+    expect(schema.safeParse({ accountId }).success).toBe(true)
+    expect(schema.safeParse({ jobId }).success).toBe(true)
+    expect(schema.safeParse({}).success).toBe(false)
+    expect(schema.safeParse({ accountId, jobId }).success).toBe(false)
+  })
   it("defines 44 unique, strictly validated actions with explicit permission metadata", () => {
     expect(MAIL_ACTIONS).toHaveLength(44)
     expect(new Set(MAIL_ACTIONS).size).toBe(44)
