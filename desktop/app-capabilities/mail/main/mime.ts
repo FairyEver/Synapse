@@ -1,5 +1,5 @@
 import type { ShareImageSource } from "../../agent/shared/share"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import path from "node:path"
 import { Readable, Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
@@ -262,19 +262,25 @@ export class MailContent {
   async emlAsset(ctx: MailContext, messageId: string): Promise<MailAsset> {
     return this.withMessage(ctx, messageId, async (message, folder, session) => this.assets.put(ctx, await session.fetchPart(folder.folder.path, message.data.summary.locator.uid, undefined, ctx.signal), { accountId: message.accountId, messageId, name: "original.eml", mime: "message/rfc822", cache: true }))
   }
-  private async export(ctx: MailContext, assetId: string, inputPath: string) {
-    const outputPath = await externalAssetPath(inputPath)
-    await this.access(ctx, "fs.write.outside-userdata", outputPath)
-    const stream = await this.assets.open(ctx, assetId)
+  private async export(ctx: MailContext, asset: MailAsset, inputPath: string) {
+    const leaseKey = `mail-export:${randomUUID()}`
+    let stream: Readable | undefined
     try {
+      await this.assets.hold(ctx, leaseKey, asset.accountId, [asset.id])
+      const outputPath = await externalAssetPath(inputPath)
+      await this.access(ctx, "fs.write.outside-userdata", outputPath)
+      stream = await this.assets.open(ctx, asset.id)
       const result = await exportExternalAsset(stream, outputPath, MAIL_MAX_ATTACHMENT_BYTES, ctx.signal)
-      await this.assets.info(ctx, assetId)
+      await this.assets.info(ctx, asset.id)
       return { outputPath, ...result }
     } catch (error) {
-      stream.destroy()
+      stream?.destroy()
       if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new MailError("OUTPUT_EXISTS", "目标文件已存在，请选择其他路径")
       if (error instanceof AssetSizeLimitError) throw new MailError("LIMIT_EXCEEDED", "附件超过大小上限")
       throw error
+    } finally {
+      this.assets.release(leaseKey)
+      if (!ctx.signal.aborted) await this.assets.trim(ctx)
     }
   }
   async executeAttachment<K extends AttachmentAction>(ctx: MailContext, action: K, input: MailInputs[K]): Promise<MailResults[K]> {
@@ -322,12 +328,12 @@ export class MailContent {
     } else if (action === "attachment.get") result = await this.assetReference(ctx, MAIL_INPUT_SCHEMAS["attachment.get"].parse(input))
     else if (action === "attachment.download_file") {
       const params = MAIL_INPUT_SCHEMAS["attachment.download_file"].parse(input), asset = await this.assetReference(ctx, params)
-      await this.ensureAsset(ctx, asset.id); result = await this.export(ctx, asset.id, params.outputPath)
+      await this.ensureAsset(ctx, asset.id); result = await this.export(ctx, asset, params.outputPath)
     } else if (action === "attachment.delete") {
       await this.assets.remove(ctx, MAIL_INPUT_SCHEMAS["attachment.delete"].parse(input).assetId); result = { success: true }
     } else {
       const params = MAIL_INPUT_SCHEMAS["message.extract_to_file"].parse(input), asset = await this.emlAsset(ctx, params.messageId)
-      result = await this.export(ctx, asset.id, params.outputPath)
+      result = await this.export(ctx, asset, params.outputPath)
     }
     return result as MailResults[K]
   }
