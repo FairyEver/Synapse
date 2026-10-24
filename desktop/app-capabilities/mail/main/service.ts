@@ -5,6 +5,7 @@ import type { ManagedAssetStore } from "../../../electron/runtime/data-repo/asse
 import type { PermissionGuard, AuditSink } from "../../../electron/runtime/security"
 import type { IpcInvocationSender } from "../../../electron/runtime/ipc/types"
 import { MAIL_INPUT_SCHEMAS, MAIL_RESULT_SCHEMAS } from "../shared/schema"
+import { MAIL_DEFINITIONS } from "../shared/capability"
 import { parseMailReference } from "../shared/manifest"
 import { MAIL_MAX_IMAGE_BYTES, MAIL_POLL_INTERVAL_MS } from "../shared/limits"
 import { configureAccountSchema, type ConfigureAccount, type MailChanged, type MailOpenRequest, type MailScope } from "../shared/private-schema"
@@ -293,7 +294,7 @@ export class MailService {
     }
     this.contexts.assertCurrent(ctx)
     const output = MAIL_RESULT_SCHEMAS[action].parse(result) as MailResults[K]
-    if (!action.endsWith(".get") && !action.endsWith(".list") && "accountId" in parsed && typeof parsed.accountId === "string") this.changed({ ownerId: ctx.ownerId, generation: ctx.generation, accountId: parsed.accountId, ids: [], revision: 1 })
+    if (MAIL_DEFINITIONS[action].mutates && "accountId" in parsed && typeof parsed.accountId === "string") this.changed({ ownerId: ctx.ownerId, generation: ctx.generation, accountId: parsed.accountId, ids: [], revision: 1 })
     return output
   }
 }
