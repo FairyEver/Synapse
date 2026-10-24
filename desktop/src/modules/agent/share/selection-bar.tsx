@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Download, Eye, LoaderCircle } from "lucide-react"
+import { ChevronDown, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
@@ -30,12 +30,12 @@ export function AgentShareSelectionBar({ share }: { readonly share: AgentShareCo
           </DropdownMenu>
         </div>
         <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" className={actionHitArea} disabled={disabled} onClick={() => void share.openPreview()}><Eye />预览</Button>
+          <Button type="button" variant="ghost" className={actionHitArea} disabled={disabled} onClick={() => void share.openPreview()}>预览</Button>
           <Button type="button" variant="ghost" className={actionHitArea} disabled={disabled} onClick={() => void share.openPreview("copy")}>
-            {share.exportAction === "copy" ? <LoaderCircle className="animate-spin" /> : <Copy />}复制
+            {share.exportAction === "copy" && <LoaderCircle className="animate-spin" />}复制
           </Button>
           <Button type="button" className={actionHitArea} disabled={disabled} onClick={() => void share.openPreview("save")}>
-            {share.exportAction === "save" ? <LoaderCircle className="animate-spin" /> : <Download />}下载
+            {share.exportAction === "save" && <LoaderCircle className="animate-spin" />}下载
           </Button>
         </div>
         {share.error && <div role="alert" className="flex w-full items-center justify-between gap-2 border-t px-2 pt-2 text-sm text-destructive">
