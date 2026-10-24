@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
@@ -17,7 +17,7 @@ export function useShareImageExport(scope: string) {
     return () => { operation.current?.abort(); operation.current = null }
   }, [scope])
 
-  async function run(paper: HTMLElement | null, settings: AgentShareSettings, action: "copy" | "save") {
+  const run = useCallback(async (paper: HTMLElement | null, settings: AgentShareSettings, action: "copy" | "save") => {
     if (!paper || operation.current) return
     const controller = new AbortController(); operation.current = controller
     setBusy(action); setError(null)
@@ -39,6 +39,6 @@ export function useShareImageExport(scope: string) {
     } finally {
       if (operation.current === controller) { operation.current = null; setBusy(null) }
     }
-  }
+  }, [])
   return { busy, error, run }
 }

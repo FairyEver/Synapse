@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { SynapseAgentTimelineItem } from "@/types/agent"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { createRendererLogger } from "@/app-shell/logging"
 import { DEFAULT_AGENT_SHARE_SETTINGS, type AgentShareSettings } from "@/types/agent-share"
 import { loadShareContent, loadShareHistory, selectShareRange, shareHistoryIndex, shareHistoryPrefix, shareMessageRounds, shareMessages, type ShareMessage } from "./messages"
+import { useShareImageExport } from "./use-share-image-export"
 
 const logger = createRendererLogger("agent.share")
 type ScrollAnchor = { readonly id?: string; readonly offset: number; readonly top: number }
@@ -22,6 +23,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [preview, setPreview] = useState<readonly ShareMessage[] | null>(null)
+  const [exportAction, setExportAction] = useState<"copy" | "save" | null>(null)
   const [settings, setSettings] = useState<AgentShareSettings>(DEFAULT_AGENT_SHARE_SETTINGS)
   const controller = useRef<AbortController | null>(null)
   const anchor = useRef<string | null>(null)
@@ -29,6 +31,8 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
   const preparingRef = useRef(false)
   const scroll = useRef<ScrollAnchor | null>(null)
   const active = owner === key && enabled
+  const output = useShareImageExport(`${key}:${active}`)
+  const closePreview = useCallback(() => { setPreview(null); setExportAction(null) }, [])
   const liveItems = useMemo(() => {
     if (owner !== key || !cachedHistory.length) return input.items
     return input.items.length ? [...shareHistoryPrefix(cachedHistory, input.items), ...input.items] : input.items
@@ -51,7 +55,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     viewport.scrollTop = node ? viewport.scrollTop + (node.querySelector("article") ?? node.firstElementChild ?? node).getBoundingClientRect().top - viewport.getBoundingClientRect().top - saved.offset : saved.top
   }, [items, active, input.viewport])
   useEffect(() => {
-    setEnabled(false); setOwner(key); setSnapshot([]); setCachedHistory([]); setSelected(new Set()); setFocusedId(null); setPreview(null); setLoading(false); setPreparing(false); setComplete(false); setError(null)
+    setEnabled(false); setOwner(key); setSnapshot([]); setCachedHistory([]); setSelected(new Set()); setFocusedId(null); setPreview(null); setExportAction(null); setLoading(false); setPreparing(false); setComplete(false); setError(null)
     preparingRef.current = false
     defaultRoundId.current = null
     return () => { controller.current?.abort(); preparingRef.current = false }
@@ -83,7 +87,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     const initialMessages = shareMessages(frozen, input.sending)
     const eligible = new Set(initialMessages.map((item) => item.id))
     const initial = frozen.map((item) => item.kind === "message" && item.role === "assistant" && !eligible.has(item.id) ? { ...item, streaming: true } : item)
-    saveScroll(); setOwner(key); setSnapshot(initial); setEnabled(true); setComplete(false); setLoading(true); setError(null); setPreview(null)
+    saveScroll(); setOwner(key); setSnapshot(initial); setEnabled(true); setComplete(false); setLoading(true); setError(null); setPreview(null); setExportAction(null)
     defaultRoundId.current = id && eligible.has(id) ? id : null
     setSelected(new Set(id ? shareMessageRounds(initialMessages).find((ids) => ids.includes(id)) ?? [] : [])); anchor.current = null
     setFocusedId(id && eligible.has(id) ? id : null)
@@ -93,7 +97,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
   function exit() {
     controller.current?.abort(); preparingRef.current = false
     defaultRoundId.current = null
-    saveScroll(); setEnabled(false); setSelected(new Set()); setFocusedId(null); setPreview(null); setLoading(false); setPreparing(false); setError(null)
+    saveScroll(); setEnabled(false); setSelected(new Set()); setFocusedId(null); setPreview(null); setExportAction(null); setLoading(false); setPreparing(false); setError(null)
   }
   function choose(id: string, range: boolean) {
     if (!messages.some((item) => item.id === id)) return
@@ -117,15 +121,15 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     setSelected(new Set(ids)); anchor.current = null
     setFocusedId(kind === "latest" ? ids[0] ?? null : null)
   }
-  async function openPreview() {
-    if (preparingRef.current || !controller.current || !selected.size) return
+  async function openPreview(action?: "copy" | "save") {
+    if (preparingRef.current || exportAction || output.busy || !controller.current || !selected.size) return
     preparingRef.current = true; setPreparing(true); setError(null)
     const signal = controller.current.signal
     try {
       const chosen = messages.filter((item) => selected.has(item.id))
       if (!chosen.length || chosen.length !== selected.size) throw new Error("所选消息已变化，请重新选择。")
       const full = await loadShareContent(requireBridgeDomain("agent"), input.target, chosen, signal)
-      if (!signal.aborted) setPreview(full)
+      if (!signal.aborted) { setExportAction(action ?? null); setPreview(full) }
     } catch (cause) {
       if (!signal.aborted) {
         logger.warn("Agent share content failed.", { errorName: cause instanceof Error ? cause.name : typeof cause })
@@ -134,8 +138,8 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     } finally { if (!signal.aborted) { preparingRef.current = false; setPreparing(false) } }
   }
   const currentRound = shareMessageRounds(messages).find((ids) => focusedId !== null && ids.includes(focusedId)) ?? []
-  return { active, items, messages, selected, currentRound, loading, preparing, complete, error, preview, settings, setSettings, enter, exit, choose, toggleRound, preset, openPreview,
-    closePreview: () => setPreview(null),
+  return { active, items, messages, selected, currentRound, loading, preparing, complete, error: error ?? output.error, preview, exportAction, output, settings, setSettings, enter, exit, choose, toggleRound, preset, openPreview,
+    closePreview,
     retryHistory: () => { if (controller.current && !controller.current.signal.aborted) { setLoading(true); void fetchHistory(snapshot, controller.current.signal) } },
   }
 }
