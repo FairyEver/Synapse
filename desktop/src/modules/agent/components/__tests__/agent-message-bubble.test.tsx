@@ -15,13 +15,13 @@ describe("AgentMessageBubble", () => {
     expect(html).toContain("break-words")
   })
 
-  it("uses equal padding on every side of user messages", () => {
+  it("uses compact vertical spacing for user messages", () => {
     const html = renderToStaticMarkup(
       <AgentMessageBubble role="user">消息</AgentMessageBubble>,
     )
 
-    expect(html).toContain("p-4")
-    expect(html).not.toContain("px-5")
-    expect(html).not.toContain("py-3")
+    expect(html).toContain("px-4")
+    expect(html).toContain("py-2")
+    expect(html).toContain("leading-6")
   })
 })

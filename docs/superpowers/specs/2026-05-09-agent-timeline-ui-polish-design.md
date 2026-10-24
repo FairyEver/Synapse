@@ -19,7 +19,7 @@
 - 复制按钮默认 `opacity-0`，hover 气泡时 `opacity-100`
 
 **保留**:
-- 气泡样式 `bg-muted rounded-2xl p-4` 靠右对齐，四边统一 16px 内边距
+- 气泡样式 `bg-muted rounded-2xl px-4 py-2 leading-6` 靠右对齐，左右 16px、上下 8px 内边距，行高 24px
 - 文本可拖选
 
 ### 2. Agent 消息
