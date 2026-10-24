@@ -225,3 +225,41 @@ HTML与粘贴内容先解析到inert template的独立owner document，再进行
 - 没有调用普通邮件删除、移动、标记或发送工具，没有操作其他邮件；原邮件和其他草稿不在本轮删除范围内。
 
 本节是已有实际操作的验收补录，不新增邮箱操作，也不改变此前 QQ 最终投递、断网/休眠、OS 通知、Windows 等待验边界。
+
+## 2026-10-24 多邮箱与收件人歧义：隔离数据回归
+
+按用户要求，本轮仅用虚构 `example.com` 地址、内存 SQLite 和临时资产目录验证；IMAP/SMTP 及账号生命周期均为现有测试替身。没有访问真实邮箱配置、真实业务库或运行中 MCP，没有安装或修改真实邮箱账号，没有实际发送邮件。新增服务回归为每个 fixture 设置 SMTP submit 失败哨兵，并在结束时断言调用次数为0；草稿及预览只存在于测试 fixture，关闭后清理临时目录。
+
+### 询问规则与验证层次
+
+系统 Skill 的 [mail/scenarios.md](../../desktop/app-capabilities/synapse-skill/skill-package/mail/scenarios.md) 新增 D01–D22，共22个虚构数据场景，按现有指南逐项走查：
+
+- 无需重复询问：完整列表仅一个账号、唯一账号名称匹配、用户明确给定发件地址、回复/转发继承原信账号、继续已有草稿、姓名候选为同一真实地址、用户已给定或已确认收件地址。
+- 必须澄清：多账号且无明确选择、账号同名、指定账号不存在、明确发件账号与回复/转发原信账号冲突、重名或同一人有多个地址、没有地址证据、覆盖不足影响唯一性判断。只询问未确定项，不因缺收件地址重复询问已经确定的发件账号。
+- 先查询再判断：首屏只有一项但有 nextCursor 时继续有界分页；coverage 不完整时不宣称唯一或不存在。不得按列表顺序、最近往来、出现频率或猜测公司域名选地址，不用站内信人员查询兜底。
+
+这22项是 **Skill 决策走查与回归预期**，不是自动运行模型得到的询问次数。生产代码没有独立的姓名/账号语义决策器；本轮自动化验证下表所列的工具发现与真实服务逻辑，没有用测试自造的选择器冒充生产实现。
+
+### 自动化结果
+
+| 范围 | 已执行证据与结论 |
+|---|---|
+| 账号候选 | account.list 区分0个、完整单账号、暂停单账号和多账号；limit=1 的第一页保留 nextCursor，续页能取得第二账号。同名账号各自保留真实 fixture 地址和 ID，未知 ID 返回 UNAVAILABLE，不回退首账号。 |
+| 收件人重名/多地址 | 在账号 A 中分别以 sender=张三、recipient=李四分页查询，3条匹配记录包含两个不同地址和一个重复地址；首屏一条不隐藏后续候选。账号 B 的同名人员另有地址，未混入 A。只读取邮件头，不读取正文。服务保留原始证据，地址去重与最终选择仍由 Skill 指导 Agent 完成。 |
+| 无候选与覆盖范围 | 未出现的人、只在主题出现的人、仅属于另一账号的地址均返回空；明确地址按完整值忽略大小写匹配。索引不完整时，即使 nextCursor=null 且只有一个或零候选，coverage 仍为 metadataComplete=false。 |
+| 查询与身份隔离 | A 的分页游标传到 B 被 CURSOR_EXPIRED 拒绝。切换 SY 身份后，旧上下文被取消，新上下文无法读取旧账号、原信或草稿。 |
+| 回复/全部回复/转发 | 三种模式分别验证：原信 A + 发件账号 B 在读取正文和持久化草稿前拒绝，两账号草稿列表仍为空；使用 A 时创建、编辑和预览均保持 A，访问过 B 不会改变草稿归属或预览 From。回复使用 Reply-To，转发不自动填收件人，未填地址时预览返回 NO_RECIPIENTS。 |
+| 新信与已有草稿 | 缺少 accountId、只有姓名或把姓名作为 address 均被 schema 拒绝；draft.update 不接受修改 accountId。明确地址的新信预览保持原账号和指定地址。不能据此宣称后端能识别“格式合法但凭空猜出的地址”，也不能证明 Agent 一定选择了语义上正确的已配置账号。 |
+| 工具发现 | 新增8条多邮箱、重名、多地址、无地址、账号冲突和转发提示词；全部仅发现 mail 域工具，不包含 app_mail_message_send。2条涉及“用工作邮箱”的提示词先发现 account.list，其余6条先发现 draft.create；消歧后按规范名称发现 draft.create/send.preview。工具可被发现不等于已经消歧或获得执行授权。 |
+
+新增 `desktop/app-capabilities/mail/main/__tests__/ambiguity.test.ts` **15项通过**；邮箱路由由61项增至 **69项通过**，原41条提示词和此前回复/转发复合提示词保持不变。与语义查询6项、草稿7项、路由器22项一起运行，**5个文件119项全部通过**。测试 TypeScript 检查与 diff 空白检查通过。
+
+复现命令：
+
+```bash
+pnpm --filter @synapse/desktop exec vitest run app-capabilities/mail/main/__tests__/ambiguity.test.ts app-capabilities/mail/main/__tests__/semantic-query.test.ts app-capabilities/mail/main/__tests__/drafts.test.ts tests/unit/mail-intent-routing.test.ts electron/services/agent-runtime/__tests__/synapse-tool-router.test.ts
+pnpm --filter @synapse/desktop exec tsc -p tsconfig.test.json --noEmit
+git diff --check
+```
+
+本轮只增加测试和回归/验收文档，未修改产品行为、工具注册或 schema，邮箱44项能力与现有不支持边界不变，因此不新增产品发布说明。真实多邮箱 MCP 对话、模型澄清次数、真实 SMTP 与投递结果不在本轮验证范围；前一节实际单邮箱 MCP 验收结论与未验项目均保留。

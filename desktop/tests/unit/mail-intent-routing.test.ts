@@ -23,6 +23,31 @@ describe("mail natural-language routing", () => {
     expect(result.tools.every(tool => tool.domain === "mail")).toBe(true)
   })
 
+  it.each([
+    ["我有两个邮箱，给张三写邮件，先只创建草稿和预览，不要发送", "app_mail_draft_create"],
+    ["用工作邮箱给张三写邮件，先只创建草稿和预览，不要发送", "app_mail_account_list"],
+    ["用 work@example.com 给 chosen@example.com 写邮件，先只创建草稿和预览，不要发送", "app_mail_draft_create"],
+    ["有两个张三，给张三写邮件，先只创建草稿和预览，不要发送", "app_mail_draft_create"],
+    ["张三有两个邮箱地址，给张三写邮件，先只创建草稿和预览，不要发送", "app_mail_draft_create"],
+    ["没有王五的邮箱地址，给王五写邮件，先只创建草稿和预览，不要发送", "app_mail_draft_create"],
+    ["用私人邮箱回复工作邮箱收到的这封邮件，先只创建草稿和预览，不要发送", "app_mail_account_list"],
+    ["把工作邮箱的这封邮件转发给张三，先只创建草稿和预览，不要发送", "app_mail_draft_create"],
+  ])("keeps ambiguous requests in external discovery without authorizing execution: %s", async (query, expected) => {
+    // Discovery has no account/address candidates; Skill must resolve ambiguity
+    // before invoking draft.create. A tool match does not mean safe to execute.
+    const result = await searchSynapseTools({ query, limit: 5 })
+    // A named sender account may route to account.list first. After resolution,
+    // the Skill discovers the exact next tool rather than replaying this prompt.
+    expect(result.tools[0]?.name).toBe(expected)
+    expect(result.tools.every(tool => tool.domain === "mail")).toBe(true)
+    expect(result.tools.some(tool => tool.name === "app_mail_message_send")).toBe(false)
+    for (const name of ["app_mail_draft_create", "app_mail_send_preview"]) {
+      const next = await searchSynapseTools({ query: name, limit: 1 })
+      expect(next.tools[0]?.name).toBe(name)
+      expect(next.tools[0]?.domain).toBe("mail")
+    }
+  })
+
   it("preserves typed references, canonical names, and domain constraints", async () => {
     expect((await searchSynapseTools({ query: "synapse://mail-internal/example", limit: 1 })).tools[0]?.name).toBe("app_mail_internal_message_get")
     expect((await searchSynapseTools({ query: "app_mail_internal_message_send", limit: 1 })).tools[0]?.name).toBe("app_mail_internal_message_send")
