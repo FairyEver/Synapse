@@ -87,7 +87,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     if (value.current) throw new Error("请先关闭当前写信窗口")
     opening.current = true; const e = ++epoch.current; setError(null); setLoading(true)
     try {
-      const next = "draftId" in intent ? await mailApi().draftGet({ draftId: intent.draftId }) : await mailApi().draftPrepare("sourceMessageId" in intent ? { accountId: intent.accountId, sourceMessageId: intent.sourceMessageId, mode: intent.mode!, forwardMode: "inline" } : { accountId: intent.accountId })
+      const next = "draftId" in intent ? await mailApi().draftGet({ draftId: intent.draftId }) : await mailApi().draftPrepare("sourceMessageId" in intent ? { accountId: intent.accountId, sourceMessageId: intent.sourceMessageId, mode: intent.mode!, forwardMode: "inline" } : { accountId: intent.accountId, ...(intent.recipient ? { to: [intent.recipient] } : {}) })
       if (active.current && epoch.current === e && ownerRef.current === owner) { persisted.current = "draftId" in intent; initialize(next) }
     } catch (cause) { if (epoch.current === e) { setError(mailError(cause)); throw cause } }
     finally { if (epoch.current === e) { opening.current = false; setLoading(false) } }

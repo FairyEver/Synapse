@@ -16,7 +16,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 function renderDetail(html: string, onLink = vi.fn(), mail: ComponentProps<typeof MailDetail>["detail"] = detail) {
-  mount(<MailDetail detail={mail} body={{ html, text: "正文", complete: true, truncated: false }} resources={{ cid: {}, remote: {} }} onBack={() => undefined} onResource={() => undefined} onDownload={() => undefined} onLink={onLink} onReply={() => undefined} onCopy={() => undefined} />)
+  mount(<MailDetail onCompose={() => undefined} detail={mail} body={{ html, text: "正文", complete: true, truncated: false }} resources={{ cid: {}, remote: {} }} onBack={() => undefined} onResource={() => undefined} onDownload={() => undefined} onLink={onLink} onReply={() => undefined} onCopy={() => undefined} />)
   const iframe = document.querySelector("iframe")!
   // jsdom does not load srcdoc. Populate the frame with the application's sanitized output.
   const doc = iframe.contentDocument!

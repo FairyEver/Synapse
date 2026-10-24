@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -274,3 +274,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-24 外部邮箱地址显示修复：既有 message.get 输出增加可选 headers.sender，补充原始名称与代发说明；不新增动作、IPC、权限或注册入口，邮箱仍为 44 项。
 
 2026-10-24：邮箱写信新增按部门选择实际 To/Cc，复用 `app_mail_internal_organization_list` / `app_mail_internal_organization_members_list`（成员返回可空 contactEmail）作外部邮件只读地址解析。无新增工具、App、深链或注册项，mail 44 / mail_internal 17 数量不变。缺失联系邮箱必须提示并由用户明确排除，组织 ID 不进入外部发送 payload。
+
+2026-10-24：邮箱地址弹层新增「写邮件」，通过私有 `MailOpenRequest.compose.recipient` 预填新信收件人，并按账号及收件地址复用窗口。复用现有 draft.prepare/commit，无新增公开工具、App、Dock、Workflow、Automation 或 Deep Link；mail 44 项公开动作及全局数量不变，MCP schema 和系统 Skill 的新信创建契约不变。

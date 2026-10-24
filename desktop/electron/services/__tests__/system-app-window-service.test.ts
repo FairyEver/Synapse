@@ -42,6 +42,26 @@ describe("createSystemAppWindowService", () => {
     expect(composing.focus).toHaveBeenCalledTimes(1)
     expect(manager.broadcast).not.toHaveBeenCalled()
   })
+  it("separates new messages by recipient and reuses only the matching window", async () => {
+    const blank = createWindowMock(), first = createWindowMock(), second = createWindowMock()
+    first.webContents.id = blank.webContents.id + 1
+    second.webContents.id = blank.webContents.id + 2
+    const createWindow = vi.fn().mockReturnValueOnce(blank).mockReturnValueOnce(first).mockReturnValueOnce(second)
+    const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })
+    const scope = { requestId: "new", ownerId: "owner", generation: 1 }
+    await service.open("mail", { mailOpenRequest: { ...scope, compose: { accountId: "account" } } })
+    for (const address of ["first@example.com", "second@example.com", "first@example.com"]) {
+      await service.open("mail", { mailOpenRequest: { ...scope, compose: { accountId: "account", recipient: { address } } } })
+    }
+    expect(createWindow).toHaveBeenCalledTimes(3)
+    expect(first.focus).toHaveBeenCalledTimes(1)
+    expect(blank.focus).not.toHaveBeenCalled()
+    expect(second.focus).not.toHaveBeenCalled()
+    service.bindMailComposeDraft(first.webContents.id, "md_saved_recipient")
+    await service.open("mail", { mailOpenRequest: { ...scope, compose: { draftId: "md_saved_recipient" } } })
+    expect(createWindow).toHaveBeenCalledTimes(3)
+    expect(first.focus).toHaveBeenCalledTimes(2)
+  })
   it("reuses a newly saved compose window when opening its draft", async () => {
     const window = createWindowMock(), createWindow = vi.fn(() => window as never)
     const service = createSystemAppWindowService({ createWindow, baseUrl: () => "app://index.html" })

@@ -267,3 +267,15 @@ it("adds reviewed department addresses to the latest draft, requiring explicit e
   await act(async () => { await editor.save() })
   expect(mocks.api.draftUpdate).toHaveBeenCalledWith(expect.objectContaining({ patch: expect.objectContaining({ to: [draft.to[0], members[0].address], cc: [{ address: "manual@example.com" }] }) }))
 })
+
+it("prepares a new unsaved message with the chosen recipient and no reply content", async () => {
+  const recipient = { name: 'Doe, John', address: "john@example.com" }
+  mocks.api.draftPrepare = vi.fn(async input => ({ ...draft, ...input, subject: "", html: "", text: "", localSaved: false }))
+  mocks.api.draftCommit = vi.fn()
+  mount(<Harness />); await flush()
+  await act(async () => { await editor.open({ accountId: "ma_one", recipient }) })
+  expect(mocks.api.draftPrepare).toHaveBeenCalledExactlyOnceWith({ accountId: "ma_one", to: [recipient] })
+  expect(editor.draft).toMatchObject({ to: [recipient], subject: "", html: "", text: "", mode: "new", sourceMessageId: null })
+  expect(editor.addresses.to).toBe('"Doe, John" <john@example.com>')
+  expect(mocks.api.draftCommit).not.toHaveBeenCalled()
+})

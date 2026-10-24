@@ -72,7 +72,7 @@ it("preserves individual restore results and ignores old identity events", async
 })
 it("uses a fixed sandbox for cleaned complete HTML and provides a back action", () => {
   const back = () => undefined
-  mount(<MailDetail detail={detail} body={{ html: "<p>hello<script>alert(1)</script><img src='https://private/x'></p>", text: "hello", complete: true, truncated: false }} resources={{ cid: {}, remote: {} }} onBack={back} onResource={() => undefined} onDownload={() => undefined} onLink={() => undefined} onReply={() => undefined} onCopy={() => undefined} />)
+  mount(<MailDetail onCompose={() => undefined} detail={detail} body={{ html: "<p>hello<script>alert(1)</script><img src='https://private/x'></p>", text: "hello", complete: true, truncated: false }} resources={{ cid: {}, remote: {} }} onBack={back} onResource={() => undefined} onDownload={() => undefined} onLink={() => undefined} onReply={() => undefined} onCopy={() => undefined} />)
   const iframe = document.querySelector("iframe")!
   expect(iframe.getAttribute("sandbox")).toBe("allow-same-origin")
   expect(iframe.getAttribute("srcdoc")).not.toContain("<script")

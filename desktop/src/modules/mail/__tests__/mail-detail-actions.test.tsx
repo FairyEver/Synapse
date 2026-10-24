@@ -77,3 +77,19 @@ it("reports a clipboard failure without claiming success", async () => {
   expect(toast.error).toHaveBeenCalledWith("复制失败")
   expect(toast).not.toHaveBeenCalled()
 })
+
+it("opens a new message to the selected address using the message account", async () => {
+  const recipient = { name: "设计中心 · 16", address: "opaque_party_rd_dm@wecom.work" }
+  mocks.api.messageGet.mockResolvedValue({ ...detail, to: [recipient] })
+  await setup()
+  await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="设计中心 · 16，查看邮箱地址"]')!.click() })
+  const dialog = document.querySelector('[role="dialog"]')!
+  const copy = dialog.querySelector<HTMLButtonElement>('button[aria-label="复制邮箱地址"]')!
+  expect(copy.textContent).toBe("")
+  await act(async () => { copy.click() })
+  expect(writeText).toHaveBeenCalledExactlyOnceWith(recipient.address)
+  expect(compose).not.toHaveBeenCalled()
+  await act(async () => { [...dialog.querySelectorAll('button')].find(button => button.textContent === "写邮件")!.click() })
+  expect(compose).toHaveBeenCalledExactlyOnceWith({ accountId: detail.accountId, recipient })
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+})

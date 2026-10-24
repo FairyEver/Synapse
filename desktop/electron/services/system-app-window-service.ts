@@ -112,7 +112,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
 
       const request = options.mailOpenRequest
       const compose = appId === "mail" ? request?.compose : undefined
-      const composeTarget = compose ? ("draftId" in compose ? `draft:${compose.draftId}` : compose.sourceMessageId ? `${compose.accountId}:${compose.mode}:${compose.sourceMessageId}` : `new:${compose.accountId}`) : null
+      const composeTarget = compose ? ("draftId" in compose ? `draft:${compose.draftId}` : compose.sourceMessageId ? `${compose.accountId}:${compose.mode}:${compose.sourceMessageId}` : `new:${compose.accountId}${"recipient" in compose && compose.recipient ? `:recipient:${compose.recipient.address}` : ""}`) : null
       const lookupKey = composeTarget ? `${appId}:compose:${request!.ownerId}:${request!.generation}:${composeTarget}` : appId
       const existing = detachedWindows.get(composeAliases.get(lookupKey) ?? lookupKey)
       if (existing) {

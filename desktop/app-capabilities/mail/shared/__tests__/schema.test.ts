@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { composeIntentSchema } from "../private-schema"
 import { MAIL_INPUT_SCHEMAS } from "../schema"
 import { MAIL_ACTIONS, MAIL_DEFINITIONS, buildMailTools } from "../capability"
 
@@ -40,4 +41,13 @@ describe("external mail contracts", () => {
     expect(MAIL_INPUT_SCHEMAS["account.update"].parse({ accountId, expectedRevision: 1, patch: { name: "New name" } }).patch).toEqual({ name: "New name" })
     expect(MAIL_INPUT_SCHEMAS["draft.update"].parse({ draftId: `md_${uuid}`, expectedRevision: 1, patch: { subject: "New subject" } }).patch).toEqual({ subject: "New subject" })
   })
+})
+
+it("validates recipient-prefilled compose intents without accepting reply or draft overrides", () => {
+  const intent = { accountId, recipient: { name: "Doe, John", address: "john@example.com" } }
+  expect(composeIntentSchema.parse(intent)).toEqual(intent)
+  expect(composeIntentSchema.safeParse({ ...intent, recipient: { address: "bad-address" } }).success).toBe(false)
+  expect(composeIntentSchema.safeParse({ ...intent, recipient: { address: "john@example.com\r\nBcc: other@example.com" } }).success).toBe(false)
+  expect(composeIntentSchema.safeParse({ ...intent, sourceMessageId: messageId, mode: "reply" }).success).toBe(false)
+  expect(composeIntentSchema.safeParse({ ...intent, draftId: `md_${uuid}` }).success).toBe(false)
 })

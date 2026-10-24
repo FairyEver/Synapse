@@ -6,12 +6,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { formatDateTime } from "@/lib/date-time"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
-import type { MailDetail as Detail } from "../../../app-capabilities/mail/shared/types"
+import type { MailDetail as Detail, Address } from "../../../app-capabilities/mail/shared/types"
 import { sanitizeMailHtml, type MailHtmlResources } from "../../../app-capabilities/mail/renderer/sanitize-body"
 import type { MailBody } from "./use-mail-body"
 import { MailAddresses, mailDelegates } from "./mail-addresses"
 import { MailHtmlBody } from "./mail-html-body"
-export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(target: "id" | "body"): void }) {
+export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, onCompose, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(target: "id" | "body"): void; onCompose(recipient: Address): void }) {
   const projection = useMemo(() => body?.complete && body.html ? sanitizeMailHtml(body.html, resources) : null, [body, resources])
   const delegates = mailDelegates(detail.from, detail.headers.sender)
   return <article aria-label="邮件详情" className="flex h-full min-h-0 min-w-0 flex-col bg-background" key={detail.id}>
@@ -43,13 +43,13 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
             </dd>
             {delegates.length > 0 && <>
               <dt className="text-right">代发</dt>
-              <dd className="min-w-0"><MailAddresses addresses={delegates} showAddress /></dd>
+              <dd className="min-w-0"><MailAddresses onCompose={onCompose} addresses={delegates} showAddress /></dd>
             </>}
             <dt className="text-right">收件人</dt>
-            <dd className="min-w-0"><MailAddresses addresses={detail.to} /></dd>
+            <dd className="min-w-0"><MailAddresses onCompose={onCompose} addresses={detail.to} /></dd>
             {detail.cc.length > 0 && <>
               <dt className="text-right">抄送</dt>
-              <dd className="min-w-0"><MailAddresses addresses={detail.cc} /></dd>
+              <dd className="min-w-0"><MailAddresses onCompose={onCompose} addresses={detail.cc} /></dd>
             </>}
             {detail.date && <>
               <dt className="text-right">时间</dt>
