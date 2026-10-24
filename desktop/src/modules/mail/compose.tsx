@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentProps } from "react"
+import { Fragment, useRef, useState, type ComponentProps } from "react"
 import { EditorContent } from "@tiptap/react"
 import { Bold, Italic, Underline, List, ListOrdered, Undo2, Redo2, Link2, ImagePlus, Paperclip, X, Send, Save } from "lucide-react"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
@@ -8,8 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { FieldError } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { track } from "@/lib/ui-tracking"
@@ -25,21 +28,20 @@ const toolGroups = [
 const recipientFields = [{ key: "to", label: "收件人" }, { key: "cc", label: "抄送" }] as const
 
 function ComposeToolButton({ label, ...props }: ComponentProps<typeof Button> & { label: string }) {
-  return <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={label} {...props} className={cn("relative m-1.5 after:absolute after:-inset-1.5", props.className)} /></TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
+  return <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={label} {...props} /></TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
 }
 
 function ComposeRecipients({ model, disabled }: { model: ComposeModel; disabled: boolean }) {
   const [expanded, setExpanded] = useState({ cc: false })
   const visible = { to: true, cc: expanded.cc || !!model.addresses.cc }
   return <>
-    {recipientFields.map(({ key, label }) => visible[key] && <div key={key} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-3">
-      <Label className="text-muted-foreground" htmlFor={`mail-compose-${key}`}>{label}</Label>
-      <div className="flex min-w-0 items-center gap-2">
-        <Input id={`mail-compose-${key}`} value={model.addresses[key]} disabled={disabled} autoComplete="off" autoFocus={key !== "to" && expanded[key]} onFocus={() => { if (key !== "to") setExpanded(current => ({ ...current, [key]: true })) }} onChange={event => model.changeAddress(key, event.target.value)} data-track={`mail.compose.${key}`} />
-        {key === "to" && !visible.cc && <div className="flex shrink-0 items-center">
-          {recipientFields.slice(1).map(({ key: field, label: fieldLabel }) => field !== "to" && !visible[field] && <Button key={field} variant="ghost" disabled={disabled} aria-label={`添加${fieldLabel}`} aria-controls={`mail-compose-${field}`} onClick={() => setExpanded(current => ({ ...current, [field]: true }))}>{fieldLabel}</Button>)}
-        </div>}
-      </div>
+    {recipientFields.map(({ key, label }) => visible[key] && <div key={key} className="flex min-w-0 flex-col gap-1.5">
+      <InputGroup>
+        <InputGroupAddon><Label className="w-12 shrink-0" htmlFor={`mail-compose-${key}`}>{label}</Label></InputGroupAddon>
+        <InputGroupInput id={`mail-compose-${key}`} value={model.addresses[key]} disabled={disabled} autoComplete="off" aria-invalid={model.addressError?.field === key || undefined} aria-describedby={model.addressError?.field === key ? `mail-compose-${key}-error` : undefined} autoFocus={key !== "to" && expanded[key]} onFocus={() => { if (key !== "to") setExpanded(current => ({ ...current, [key]: true })) }} onChange={event => model.changeAddress(key, event.target.value)} data-track={`mail.compose.${key}`} />
+        {key === "to" && !visible.cc && <InputGroupAddon align="inline-end"><InputGroupButton disabled={disabled} aria-label="添加抄送" aria-controls="mail-compose-cc" onClick={() => setExpanded(current => ({ ...current, cc: true }))}>抄送</InputGroupButton></InputGroupAddon>}
+      </InputGroup>
+      {model.addressError?.field === key && <FieldError id={`mail-compose-${key}-error`}>{model.addressError.message}</FieldError>}
     </div>)}
   </>
 }
@@ -49,6 +51,8 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
   const draft = model.draft, account = accounts.find(a => a.id === draft?.accountId)
   const disabled = !draft || draft.state !== "editing" || model.sending || model.receipt?.state === "unknown" || model.receipt?.state === "failed"
   const sendDisabled = disabled || model.saving || !model.addresses.to.trim() && !model.addresses.cc.trim()
+  const operationError = model.error === model.addressError?.message ? null : model.error
+  const contentError = operationError ?? (composer.linkOpen ? null : composer.error) ?? attachments.error
   const save = () => { void model.save().catch(() => undefined) }
   return <><SystemAppWindowShell left={<div className="flex items-center">
     <SystemAppTopBarActionButton disabled={sendDisabled} onClick={() => void model.send()} data-track="mail.send"><Send />{model.sending ? "发送中…" : "发送"}</SystemAppTopBarActionButton>
@@ -60,24 +64,24 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
       {unavailable && <p role="alert" className="p-4 text-sm text-destructive">{unavailable}</p>}
       {!draft && model.error && <div role="alert" className="flex items-center gap-3 p-4"><span className="text-sm text-destructive">{model.error}</span><Button variant="outline" onClick={onRetry}>重试</Button></div>}
     <div className="flex min-h-0 flex-1 flex-col" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); track({ component: "mail", name: "attachment drop", eventKey: "mail.attachment.drop", action: "drop" }); if (!disabled) void model.importFiles([...event.dataTransfer.files]) }}>
-      <div className="flex shrink-0 flex-col gap-2 border-b px-4 py-3">
+      <div className="flex shrink-0 flex-col gap-2 px-4 py-3">
         <ComposeRecipients key={model.sessionId} model={model} disabled={disabled} />
-        <div className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-3"><Label className="text-muted-foreground" htmlFor="mail-compose-subject">主题</Label><Input id="mail-compose-subject" value={draft?.subject ?? ""} disabled={disabled} onChange={event => model.edit({ subject: event.target.value })} data-track="mail.compose.subject" /></div>
+        <InputGroup><InputGroupAddon><Label className="w-12 shrink-0" htmlFor="mail-compose-subject">主题</Label></InputGroupAddon><InputGroupInput id="mail-compose-subject" value={draft?.subject ?? ""} disabled={disabled} onChange={event => model.edit({ subject: event.target.value })} data-track="mail.compose.subject" /></InputGroup>
       </div>
-      {attachments.assets.length > 0 && <div className="flex shrink-0 flex-wrap gap-2 px-4 pt-3">{attachments.assets.map(asset => <div key={asset.id} className="flex min-w-0 max-w-full items-center gap-1 rounded-md border px-2 py-1 text-xs"><Paperclip className="size-3" /><span className="truncate" title={asset.name}>{asset.name}</span><span className="shrink-0 tabular-nums text-muted-foreground">{Math.ceil(asset.size / 1024)} KB</span><Button size="icon-xs" variant="ghost" data-track="mail.attachment.remove" aria-label={`移除附件 ${asset.name}`} disabled={disabled} onClick={() => model.edit({ assetIds: draft!.assetIds.filter(id => id !== asset.id) })}><X /></Button></div>)}</div>}
-      <TooltipProvider delayDuration={300}><div className="flex shrink-0 flex-wrap items-center gap-x-3 border-b px-2 py-1" role="toolbar" aria-label="正文格式">
-        {toolGroups.map(group => <div key={group.label} role="group" aria-label={group.label} className="flex items-center">
+      {draft && contentError && <FieldError className="px-4 pb-3">{contentError}</FieldError>}
+      {attachments.assets.length > 0 && <div className="flex shrink-0 flex-wrap gap-2 px-4 pb-3">{attachments.assets.map(asset => <div key={asset.id} className="flex min-w-0 max-w-full items-center gap-1 rounded-md border px-2 py-1 text-xs"><Paperclip className="size-3" /><span className="truncate" title={asset.name}>{asset.name}</span><span className="shrink-0 tabular-nums text-muted-foreground">{Math.ceil(asset.size / 1024)} KB</span><Button size="icon-xs" variant="ghost" data-track="mail.attachment.remove" aria-label={`移除附件 ${asset.name}`} disabled={disabled} onClick={() => model.edit({ assetIds: draft!.assetIds.filter(id => id !== asset.id) })}><X /></Button></div>)}</div>}
+      <TooltipProvider delayDuration={300}><div className="flex shrink-0 flex-wrap items-center gap-2 border-y px-4 py-2" role="toolbar" aria-label="正文格式">
+        {toolGroups.map(group => <Fragment key={group.label}><div role="group" aria-label={group.label} className="flex items-center gap-0.5">
           {group.tools.map(({ id, label, Icon }) => <ComposeToolButton key={id} label={label} aria-pressed={id === "undo" || id === "redo" ? undefined : composer.activeMarks.includes(id)} className={cn(composer.activeMarks.includes(id) && "bg-selected hover:bg-selected")} disabled={disabled} onClick={() => composer.format(id)}><Icon /></ComposeToolButton>)}
-        </div>)}
-        <div role="group" aria-label="字号与插入" className="flex items-center">
-          <NativeSelect size="sm" className="mx-1.5 tabular-nums" aria-label="字号" defaultValue="16px" disabled={disabled} onChange={event => composer.fontSize(event.target.value)}>{[12, 14, 16, 18, 20, 24, 32].map(size => <NativeSelectOption key={size} value={`${size}px`}>{size}</NativeSelectOption>)}</NativeSelect>
+        </div><Separator orientation="vertical" className="h-4 data-vertical:self-center" /></Fragment>)}
+        <div role="group" aria-label="字号与插入" className="flex items-center gap-1">
+          <NativeSelect size="sm" className="tabular-nums" aria-label="字号" defaultValue="16px" disabled={disabled} onChange={event => composer.fontSize(event.target.value)}>{[12, 14, 16, 18, 20, 24, 32].map(size => <NativeSelectOption key={size} value={`${size}px`}>{size}</NativeSelectOption>)}</NativeSelect>
           <ComposeToolButton label="插入链接" disabled={disabled} onClick={() => composer.setLinkOpen(true)}><Link2 /></ComposeToolButton>
           <ComposeToolButton label="插入图片" disabled={disabled} onClick={() => imageInput.current?.click()}><ImagePlus /></ComposeToolButton>
         </div>
         <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={event => { track({ component: "mail", name: "image selected", eventKey: "mail.image.select", action: "change" }); if (event.target.files) void composer.insertImages([...event.target.files]); event.target.value = "" }} />
       </div></TooltipProvider>
       <EditorContent className="min-h-0 flex-1 overflow-auto [&>.tiptap]:min-h-full" editor={composer.editor} />
-      {(draft && model.error || composer.error || attachments.error) && <p role="alert" className="px-4 py-3 text-sm text-destructive">{model.error ?? composer.error ?? attachments.error}</p>}
       {draft?.state === "conflict" && <p role="alert" className="px-4 py-3 text-sm text-destructive">草稿存在冲突，内容已保留，可另存为新草稿。</p>}
       {model.receipt && <div role="status" className="space-y-1 border-t p-4 text-sm"><p className="font-medium">{receiptStates[model.receipt.state]}</p>{model.receipt.accepted.length > 0 && <p className="break-all">已接受：{model.receipt.accepted.join(", ")}</p>}{model.receipt.rejected.length > 0 && <p className="break-all">已拒绝：{model.receipt.rejected.join(", ")}</p>}<p className="text-muted-foreground">已发送副本：{model.receipt.sentCopyState === "saved" ? "已保存" : model.receipt.sentCopyState === "pending" ? "待核验" : "未确认"}</p>{(model.receipt.state === "unknown" || ["accepted", "partial"].includes(model.receipt.state) && model.receipt.sentCopyState !== "saved") && <Button variant="outline" disabled={model.reconciling} onClick={() => void model.reconcile()}>{model.reconciling ? "核验中…" : model.receipt.state === "unknown" ? "核验发送结果" : "核验已发送副本"}</Button>}</div>}
       {draft && (draft.state !== "editing" || model.receipt) && <div className="p-3"><Button variant="outline" onClick={() => void model.copyDraft()} disabled={model.sending}>另存为新草稿</Button></div>}

@@ -19,8 +19,15 @@ function composeContent(draft: Draft, addresses: { to: string; cc: string }) {
     hasContent: !!(addresses.to.trim() || addresses.cc.trim() || draft.subject.trim() || hasBody || draft.assetIds.length),
   }
 }
-export function parseMailAddresses(value: string, label = "收件人"): Draft["to"] {
-  const invalid = () => new Error(`${label}地址格式无效，请检查邮箱地址，并用逗号或分号分隔`)
+class ComposeAddressError extends Error {
+  readonly field: "to" | "cc"
+  constructor(label: "收件人" | "抄送") {
+    super(`${label}地址格式无效，请检查邮箱地址，并用逗号或分号分隔`)
+    this.field = label === "抄送" ? "cc" : "to"
+  }
+}
+export function parseMailAddresses(value: string, label: "收件人" | "抄送" = "收件人"): Draft["to"] {
+  const invalid = () => new ComposeAddressError(label)
   const parts: string[] = []
   let part = "", quoted = false, escaped = false, angle = false
   for (const char of value) {
@@ -48,6 +55,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const [closeRequested, setCloseRequested] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null), [addresses, setAddresses] = useState({ to: "", cc: "" })
   const [error, setError] = useState<string | null>(null), [saving, setSaving] = useState(false), [sending, setSending] = useState(false), [loading, setLoading] = useState(false), [reconciling, setReconciling] = useState(false)
+  const [addressError, setAddressError] = useState<ComposeAddressError | null>(null)
   const [dirty, setDirty] = useState(false), [editVersion, setEditVersion] = useState(0), [preview, setPreview] = useState<MailPreview | null>(null), [receipt, setReceipt] = useState<SendReceipt | null>(null)
   const value = useRef<Draft | null>(null), addressRef = useRef(addresses), changed = useRef(0), saved = useRef(0), epoch = useRef(0), active = useRef(true), ownerRef = useRef(owner)
   const baseline = useRef(""), unsavedContent = useRef(false)
@@ -56,6 +64,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const request = useRef<{ previewId: string; key: string } | null>(null)
   const reconciliation = useRef<string | null>(null)
   const replace = (next: Draft | null) => { value.current = next; setDraft(next) }
+  const reportError = (cause: unknown) => { if (cause instanceof ComposeAddressError) setAddressError(cause); setError(mailError(cause)) }
   const refreshDirty = () => {
     const current = value.current && composeContent(value.current, addressRef.current)
     const isDirty = !!current && current.key !== baseline.current
@@ -63,12 +72,13 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     setDirty(isDirty)
   }
   const initialize = (next: Draft) => {
+    setAddressError(null)
     replace(next); const a = { to: addressText(next.to), cc: addressText(next.cc) }; addressRef.current = a; setAddresses(a); changed.current = 0; saved.current = 0; setDirty(false); setPreview(null); setReceipt(null); request.current = null
     baseline.current = composeContent(next, a).key; unsavedContent.current = false
   }
   useEffect(() => {
     active.current = true; epoch.current++; replace(null); setDirty(false); setError(null); setPreview(null); setReceipt(null); sendLock.current = false; opening.current = false; savingTask.current = null; setSaving(false); setSending(false); setLoading(false); setCloseRequested(false); persisted.current = false; changed.current = 0; saved.current = 0
-    baseline.current = ""; unsavedContent.current = false; reconciliation.current = null; setReconciling(false)
+    baseline.current = ""; unsavedContent.current = false; reconciliation.current = null; setReconciling(false); setAddressError(null)
     return () => { active.current = false; epoch.current++ }
   }, [owner])
   const open = useCallback(async (intent: ComposeIntent) => {
@@ -88,13 +98,14 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const changeAddress = (key: keyof typeof addresses, text: string) => {
     if (sendLock.current || value.current?.state !== "editing") return
     addressRef.current = { ...addressRef.current, [key]: text }; setAddresses(addressRef.current); changed.current++; refreshDirty(); setPreview(null); request.current = null; setError(null); setEditVersion(changed.current)
+    setAddressError(current => current?.field === key ? null : current)
   }
   const save = useCallback(async (): Promise<void> => {
     if (savingTask.current) return savingTask.current
     const snapshot = value.current
     if (!snapshot || (persisted.current && changed.current === saved.current && snapshot.bcc.length === 0) || snapshot.state !== "editing") return
     const version = changed.current, e = epoch.current, identity = ownerRef.current, recipientSnapshot = { ...addressRef.current }, wasPersisted = persisted.current
-    setSaving(true); setError(null)
+    setSaving(true); setError(null); setAddressError(null)
     const task = Promise.resolve().then(async () => {
       try {
         const body = sanitizeComposeDocument(snapshot.html, snapshot.inlineImages)
@@ -105,7 +116,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
         baseline.current = composeContent(result, recipientSnapshot).key
         replace(changed.current === version ? result : { ...value.current!, id: result.id, revision: result.revision, localSaved: result.localSaved, syncState: result.syncState })
         refreshDirty()
-      } catch (cause) { if (active.current && e === epoch.current) setError(mailError(cause)); throw cause }
+      } catch (cause) { if (active.current && e === epoch.current) reportError(cause); throw cause }
       finally { if (e === epoch.current) { setSaving(false); savingTask.current = null } }
     })
     savingTask.current = task; return task
@@ -114,7 +125,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const finishClose = useCallback(() => {
     epoch.current++; opening.current = false; replace(null); setLoading(false); setPreview(null); setReceipt(null); setDirty(false); setError(null); setCloseRequested(false)
     changed.current = 0; saved.current = 0; persisted.current = false
-    baseline.current = ""; unsavedContent.current = false; reconciliation.current = null; setReconciling(false)
+    baseline.current = ""; unsavedContent.current = false; reconciliation.current = null; setReconciling(false); setAddressError(null)
     closedCallback.current?.()
     return true
   }, [])
@@ -174,7 +185,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     if (!value.current || sendLock.current) return
     const e = epoch.current
     try { const source = value.current, result = await mailApi().draftCreate({ accountId: source.accountId, ...fields(source), to: parseMailAddresses(addressRef.current.to), cc: parseMailAddresses(addressRef.current.cc, "抄送") }); if (active.current && e === epoch.current) { epoch.current++; reconciliation.current = null; setReconciling(false); persisted.current = true; initialize(result) } }
-    catch (cause) { if (e === epoch.current) setError(mailError(cause)) }
+    catch (cause) { if (e === epoch.current) reportError(cause) }
   }
   const attach = (assets: MailAsset[]) => { const current = value.current; if (current) edit({ assetIds: [...new Set([...current.assetIds, ...assets.map(a => a.id)])] }) }
   const pickAttachments = async () => { const current = value.current, session = epoch.current; if (!current) return; try { const assets = await mailApi().pickAttachments({ accountId: current.accountId }); if (active.current && epoch.current === session) attach(assets) } catch (cause) { setError(mailError(cause)) } }
@@ -201,6 +212,6 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
       edit({ inlineImages: [...value.current.inlineImages, image] }); return image
     } catch (cause) { setError(mailError(cause)); return null }
   }
-  return { sessionId: epoch.current, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, saving, sending, loading, reconciling, dirty, preview, receipt, editVersion, open, edit, changeAddress, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
+  return { sessionId: epoch.current, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, dirty, preview, receipt, editVersion, open, edit, changeAddress, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
 }
 export type ComposeModel = ReturnType<typeof useCompose>

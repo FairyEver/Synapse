@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除及实时进度、已发送只读状态和 Sent 副本核验；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除及实时进度、已发送只读状态和 Sent 副本核验；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -72,6 +72,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 - Mail 设置只在左下角提供入口，顶栏保留刷新和写邮件；内容区窄于 33rem、侧栏隐藏时，设置入口改在列表底部显示。沿用现有设置操作，注册数量、MCP schema 与系统 Skill 指南不变。
 - Mail 在 SMTP accepted / partial 且副本未确认时提供 Sent 核验，复用已有 `operation.get` 的有界只读对账；核验期间禁止重复点击，不重发 SMTP。consumed 草稿继续保留只读快照并明确标记已发送。刷新文件夹时将当前 folderId 交给既有 `sync.start`，优先同步所见文件夹。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及其它注册数量不变；公开动作和运行时参数契约不变。
 - Mail 的 `message.get`、`draft.create`、`attachment.list/get/download_file` MCP 发现 schema 使用顶层对象汇总候选字段，避免客户端拒绝顶层组合器；工具描述和系统 Skill 明确互斥输入，核心共享 schema 继续严格验证原分支。44 个邮箱动作及全局注册数量不变，不新增别名、IPC 或权限。
+- Mail 写信表单的 InputGroup、字段错误关联及格式工具栏间距属于已有动作的 UI 反馈调整；44 个邮箱动作及全局注册数量不变，MCP 描述/schema 和系统 Skill 的收发契约不变。
 
 - Connectors 的「企业微信」连接器只负责扫码绑定机器人、保存本地凭据、连接状态和连接信息弹窗，Connectors 的 2 个 MCP 仅用于 Portal 凭据，企业微信凭据不通过它们交付。它使用 `@wecom/cli`，凭据不上传 Synapse 服务端，也不向 Renderer 或 MCP 暴露。企业微信 CLI 不提供完整业务权限清单查询，因此连接信息弹窗只展示连接时间、最近检查时间及企业微信权限管理入口，不展示推测的逐项权限。WeCom 能力通过主进程 `core.wecom` 服务使用凭据，注册 2 个 MCP 工具：`app_wecom_connection_get` 只返回连接状态和时间；`app_wecom_cli_run` 接受官方 Skill 的规范参数数组并执行消息、消息所需的媒体上传、身份和 schema 命令。它不使用 shell 字符串，不允许 `auth`、`cache`，所有文件都限制在账号和 controller/client 隔离的临时工作目录。企业业务权限不足时不影响连接器状态，MCP 返回 `WECOM_PERMISSION_REQUIRED`、中文权限名和官方申请链接。筛选后的官方 2 个 Skill（`wecomcli-shared`、`wecomcli-message`）固定在 `synapse-skill/skill-package/wecom/`，同步关闭安装 CLI、登录和任意终端执行路径。永久排除原有 7 项及本次移除的通讯录、媒体、邮件、文档管理、在线表格和智能表格 Skill，共 13 项；相关参考、模板、Python 脚本和业务命令一并移除。`media upload` 作为消息发送的共用依赖保留，上传指引并入消息 Skill，`media download` 和所有 `mail`、`contact`、`doc`、`sheet`、`smartsheet` 命令拒绝执行。完整保留与排除清单见 `module-boundaries.md` 和 `wecom/UPSTREAM.md`。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
 
