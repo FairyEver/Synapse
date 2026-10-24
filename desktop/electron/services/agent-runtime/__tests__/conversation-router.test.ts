@@ -49,6 +49,22 @@ type RecordedAgentEmit = {
 type AgentResultEvent = Extract<AgentEvent, { type: "result" }>
 
 describe("ConversationRouter", () => {
+  it.each([undefined, "reported-model"])("persists the turn model in history and renderer results when the SDK reports %s", async (reportedModel) => {
+    const { eventBus, events } = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      eventBus,
+      env: { ANTHROPIC_MODEL: "deepseek-flash[1M]" },
+      session: new ScriptedSession([
+        { type: "result", content: "answer", done: true, metadata: reportedModel ? { model: reportedModel } : undefined },
+      ], "sdk-model"),
+    })
+    const result = await router.send(baseMessage("hello"))
+    const saved = await conversations.get(result.conversationId)
+    const expectedModel = reportedModel ?? "deepseek-flash[1M]"
+    expect(saved?.history.find((entry) => entry.role === "assistant")?.metadata?.model).toBe(expectedModel)
+    const event = events.find((entry) => entry.type === "result")?.payload?.event as AgentResultEvent | undefined
+    expect(event?.metadata?.model).toBe(expectedModel)
+  })
   it("does not use empty catch handlers that hide persistence failures", async () => {
     const source = await readFile(new URL("../conversation-router.ts", import.meta.url), "utf8")
 

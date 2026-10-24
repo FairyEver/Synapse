@@ -7,6 +7,7 @@ import { AgentShareSelectionContext, ShareMessageFrame } from "../selection-cont
 import { AgentShareSelectionBar } from "../selection-bar"
 import { AgentSharePreviewDialog } from "../preview-dialog"
 import { AgentMessageToolbar } from "../../components/agent-message-toolbar"
+import type { ShareMessage } from "../messages"
 const mocks = vi.hoisted(() => ({ getTimeline: vi.fn(), capture: vi.fn(), base64: vi.fn(), exportShareImage: vi.fn() }))
 vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => mocks }))
 vi.mock("@/app-shell/logging", () => ({ createRendererLogger: () => ({ warn: vi.fn(), error: vi.fn() }) }))
@@ -17,9 +18,9 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const target = { projectId: "p", conversationId: "c", sessionKey: "s" }
 const items = [1, 2, 3, 4].map((id) => ({ id: `m${id}`, historyIndex: id - 1, kind: "message" as const, role: id % 2 ? "user" as const : "assistant" as const, content: `message ${id} test@example.com`, timestamp: "2026-10-24T00:00:00Z", metadata: id === 2 ? { model: "Old Model" } : id === 4 ? { model: "New Model" } : undefined }))
 let root: Root, host: HTMLElement, share: AgentShareController
-function Driver() {
+function Driver({ timeline = items }: { timeline?: readonly ShareMessage[] }) {
   const viewport = useRef<HTMLDivElement>(null)
-  share = useAgentShare({ target, items, sending: false, viewport })
+  share = useAgentShare({ target, items: timeline, sending: false, viewport })
   return <AgentShareSelectionContext.Provider value={{ active: share.active, indexes: new Map(share.messages.map((item, index) => [item.id, index])), selected: share.selected, onShare: (id) => { void share.enter(id) }, onChoose: share.choose }}>
     <div ref={viewport}>{items.map((item) => <ShareMessageFrame key={item.id} item={item}><p data-source-message={item.id}>{item.content}</p><AgentMessageToolbar messageId={item.id} role={item.role} content={item.content} /></ShareMessageFrame>)}</div>
     {share.active && <AgentShareSelectionBar share={share} />}
@@ -171,6 +172,20 @@ describe("message selection and preview UI", () => {
     expect(exported.querySelector("header")!.textContent).toBe("Synapse")
     expect(exported.querySelector("footer")!.textContent).toBe("Old Model")
     expect(exported.querySelector("footer time")).toBeNull()
+  })
+  it.each([["复制", "copy"], ["下载", "save"]] as const)("includes SDK usage model names when directly exporting with %s", async (label, action) => {
+    const timeline: ShareMessage[] = [items[0]!, {
+      ...items[1]!,
+      metadata: { modelUsage: { "deepseek-flash[1M]": { inputTokens: 100, outputTokens: 20 } } },
+    }]
+    mocks.getTimeline.mockResolvedValue({ ...target, entries: timeline, total: 2, startIndex: 0, hasMore: false })
+    await act(async () => root.render(<Driver timeline={timeline} />))
+    await act(async () => share.enter("m1"))
+    await act(async () => button(label).click())
+    const exported = mocks.capture.mock.calls.at(-1)![0] as HTMLElement
+    expect(exported.querySelector("footer")!.textContent).toContain("deepseek-flash[1M]")
+    expect(exported.querySelector("footer time")).not.toBeNull()
+    expect(mocks.exportShareImage).toHaveBeenCalledWith(expect.objectContaining({ action }))
   })
   it("keeps only selection actions in the source messages and a compact toolbar", async () => {
     await act(async () => share.enter("m1"))

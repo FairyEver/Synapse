@@ -22,6 +22,17 @@ describe("conversation share snapshots", () => {
     expect(shareFooterMetadata([])).toEqual({ models: "", timestamp: undefined })
     expect(shareFooterMetadata([{ ...message(2), timestamp: "invalid", metadata: { model: " " } }])).toEqual({ models: "", timestamp: undefined })
   })
+  it("recovers model names from SDK usage metadata in existing replies without a model field", () => {
+    const metadata = {
+      providerName: "Private provider",
+      modelUsage: {
+        "deepseek-flash[1M]": { inputTokens: 100, outputTokens: 20 },
+        "other-model": { inputTokens: 10, outputTokens: 5 },
+      },
+    }
+    expect(shareFooterMetadata([{ ...message(2), metadata }]).models).toBe("deepseek-flash[1M] / other-model")
+    expect(shareFooterMetadata([{ ...message(2), metadata: { ...metadata, model: "main-model" } }]).models).toBe("main-model")
+  })
   it("includes image-only user messages and freezes their image attachments", () => {
     const input: SynapseAgentMessageTimelineItem = { ...message(1), content: "", attachments: [{ kind: "image", id: "photo", mimeType: "image/png", byteSize: 4, url: "synapse-agent-artifact://local/p/s/photo.png" }] }
     const result = shareMessages([input], false)

@@ -82,3 +82,9 @@
 - 分享专项 101 项通过，完整 desktop typecheck、相关 ESLint、hard constraints 与 diff 检查通过；未启动应用或浏览器，PNG 实际像素、剪贴板粘贴和保存文件仍未实机验收。
 - 全量 desktop：11,257 项通过、22 项失败、3 项跳过；失败分布于 `packaged-asar.test.ts`（4 项缺少 OpenUI 参考资源夹具）、bootstrap `descriptors.test.ts` / `registry.test.ts`（各 1 项依赖断言）、`agent-conversation-workspace.test.tsx`（2 项旧上下文文字断言）、`mobile-workspace-files-service.test.ts`（1 项）、`agent-runtime-state.test.ts`（7 项）和 `conversation-router.test.ts`（6 项）。分享专项均通过，未修改这些范围外断言或主进程实现。
 - 以 2 workers 复测后，移动端 Git 文件全部通过；Agent 状态与路由仍分别有 5 项失败（等待中的会话未创建及超时），3 个文件合计 163 项通过、10 项失败。未扩大分享任务范围修改 Agent 运行时。
+
+### 分享图缺少模型名称修复
+
+- 截图问题可由只有 `modelUsage`、没有独立 `model` 的 SDK 回复复现：旧分享逻辑仅读取后者，直接复制、下载和预览均会漏掉模型名称。分享侧补读旧回复的 SDK 模型记录；新回复完成时将本轮启动模型补入历史和 Renderer 结果，保留 SDK 明确报告的模型优先级，不加入供应商信息。
+- 先验证回归失败，再修复：分享 / 时间线 145 项通过，新增模型记录与直接导出测试全部通过；路由文件共 82 项通过、6 项此前已出现的侧会话 / 权限等待超时。hard constraints 通过。
+- Renderer / Electron / preload 类型检查通过；完整 typecheck 在另一项未提交的 `editor-install-staging-recovery.test.ts:150` 因访问私有 `events` 失败。ESLint 仍报告 `conversation-router.ts:1532` 既有 `prefer-const`，同样可在 HEAD 源码复现；未改动该行。未启动应用或浏览器，没有重新运行全量 desktop 测试。

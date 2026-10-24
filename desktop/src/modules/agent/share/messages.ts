@@ -13,8 +13,12 @@ const encoder = new TextEncoder()
 export function shareFooterMetadata(items: readonly ShareMessage[]): { models: string; timestamp: string | undefined } {
   const models = new Set<string>()
   for (const item of items) {
-    const model = item.role === "assistant" ? item.metadata?.model?.trim() : undefined
-    if (model) models.add(model)
+    if (item.role !== "assistant") continue
+    const model = item.metadata?.model?.trim()
+    const names = model ? [model] : Object.keys(item.metadata?.modelUsage ?? {})
+    for (const name of names) {
+      if (name.trim()) models.add(name.trim())
+    }
   }
   const timestamp = items.at(-1)?.timestamp
   return { models: [...models].join(" / "), timestamp: timestamp && Number.isFinite(Date.parse(timestamp)) ? timestamp : undefined }

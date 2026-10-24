@@ -2125,6 +2125,7 @@ export class ConversationRouter {
     )
     let metadata = resultHistoryMetadata(input.event)
     metadata = mergeHistoryMetadata(
+      { model: input.state.effectiveModel },
       metadata,
       turnUsage.modelUsage && turnUsage.summary ? { turnUsage: turnUsage.summary } : undefined,
     )
