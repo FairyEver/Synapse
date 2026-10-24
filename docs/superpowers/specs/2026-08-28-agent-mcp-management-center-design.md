@@ -4,6 +4,8 @@
 状态：待实施  
 适用版本：`@anthropic-ai/claude-agent-sdk@0.3.245`
 
+> 2026-10-24 入口修订：用户确认在“设置 → MCP”增加仅 SY 生效的上游 MCP 默认策略、配置清单与刷新，见 [设置中的 Agent MCP 管理](2026-10-24-agent-mcp-settings-design.md)。本稿“不进入系统设置”的限制被该方案取代；下文会话实时控制、动态 Server、OAuth 等仍为后续范围，不视作已实施。
+
 ## 1. 决策摘要
 
 本功能设计为 **Agent 当前会话的上游 MCP 管理面板**，入口位于 `AgentConversationWorkspace` 顶栏，并复用现有 `Workspace Auxiliary Panel`。它不进入系统设置，不注册新的 System App、Dock、Capability、MCP Tool、Workflow、Automation 或 Deep Link。

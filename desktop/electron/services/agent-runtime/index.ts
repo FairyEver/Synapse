@@ -282,6 +282,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           path.join(app.getPath("userData"), "mail-assets"),
         ],
         workDir: ctx.projectMeta.workspacePath,
+        getDisabledMcpServers: async () => configService ? (await configService.load()).agent.disabledMcpServers ?? [] : [],
         managedKnowledgeBase: isManagedKnowledgeBase,
         validateWorkspacePath: validateWorkspaceDirectory,
         getAllowedWriteDirectories: async () => (

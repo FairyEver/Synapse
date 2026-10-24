@@ -1241,6 +1241,10 @@ const synapseBridge: SynapseBridge = {
     },
   },
   mcp: {
+    agent: {
+      list: (input) => invoke(MCP_CHANNELS.agentList)(input),
+      setEnabled: (input) => invoke(MCP_CHANNELS.agentSetEnabled)(input),
+    },
     server: {
       get: invoke(MCP_CHANNELS.serverGet),
     },

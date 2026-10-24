@@ -148,6 +148,7 @@ export interface ClaudeSDKSessionOptions {
 
 export interface ClaudeSDKRuntimeSettings {
   readonly skipWebFetchPreflight?: boolean
+  readonly deniedMcpServers?: { serverName: string }[]
 }
 
 interface PendingPermission {

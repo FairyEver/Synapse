@@ -31,6 +31,7 @@ import {
   coreCheatCodeStateDescriptor,
   coreClientTelemetryDescriptor,
   coreConfigDescriptor,
+  coreAgentMcpSettingsDescriptor,
   coreDataRepositoryDescriptor,
   coreDataMaintenanceDescriptor,
   coreDatabaseDescriptor,
@@ -130,6 +131,7 @@ export function buildServiceRegistry(
   registry.register(coreProcessEnvironmentDescriptor)
   registry.register(coreScriptRuntimeDescriptor)
   registry.register(coreConfigDescriptor)
+  registry.register(coreAgentMcpSettingsDescriptor)
   registry.register(coreDataRepositoryDescriptor)
   registry.register(coreClientTelemetryDescriptor)
   registry.register(corePermissionGuardDescriptor)

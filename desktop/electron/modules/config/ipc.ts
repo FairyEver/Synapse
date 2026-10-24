@@ -63,6 +63,7 @@ const configSchema = z.object({
     defaultProviderModel: providerModelSchema,
     recentSlashSkills: z.array(z.string()),
     allowedWriteDirectories: z.array(z.string()),
+    disabledMcpServers: z.array(z.string()).optional(),
   }),
 })
 

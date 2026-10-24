@@ -137,6 +137,14 @@ describe("preload bridge", () => {
     expect(listener).toHaveBeenCalledWith({ table: "notes" })
   })
 
+  it("maps SY-only Agent MCP settings to dedicated channels", async () => {
+    const bridge = await loadPreloadBridge()
+    await bridge.mcp.agent.list({ projectId: "project" })
+    await bridge.mcp.agent.setEnabled({ name: "rea", enabled: false })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:mcp:agent:list", { projectId: "project" })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:mcp:agent:set_enabled", { name: "rea", enabled: false })
+  })
+
   it("maps the MCP bridge to dedicated channels without database aliases", async () => {
     const bridge = await loadPreloadBridge()
 

@@ -32,14 +32,30 @@ describe("mcpIpcModule", () => {
     mocks.registerMcp.mockResolvedValue({ success: true })
   })
 
-  it("declares the four canonical MCP operations", () => {
+  it("declares canonical MCP operations including UI-only Agent settings", () => {
     expect(mcpIpcModule.id).toBe("mcp")
     expect(Object.values(mcpIpcModule.methods).map((method) => method.operationId)).toEqual([
+      "app.mcp.agent.list",
+      "app.mcp.agent.set_enabled",
       "app.mcp.server.get",
       "app.mcp.registration.list",
       "app.mcp.registration.open_settings",
       "app.mcp.registration.register",
     ])
+  })
+
+  it("gates Agent settings, validates narrow inputs and does not call the global registrar", async () => {
+    const service = { list: vi.fn(async () => ({ items: [], projects: [], warnings: [], disabledServerNames: [] })), setEnabled: vi.fn() }
+    const guard = { check: vi.fn(async () => ({ allowed: true })) }, audit = { record: vi.fn() }
+    const ctx = { ...context(), resolve: <T,>(id: string): T => ({ "core.agent-mcp-settings": service, "core.permission-guard": guard, "core.audit-sink": audit })[id] as T }
+    await mcpIpcModule.methods.agentList.handler(ctx, {})
+    await mcpIpcModule.methods.agentSetEnabled.handler(ctx, { name: "rea", enabled: false })
+    expect(service.setEnabled).toHaveBeenCalledWith({ name: "rea", enabled: false })
+    expect(mocks.registerMcp).not.toHaveBeenCalled()
+    expect(mcpIpcModule.methods.agentList.request.safeParse({ path: "/arbitrary" }).success).toBe(false)
+    expect(mcpIpcModule.methods.agentSetEnabled.request.safeParse({ name: "rea", enabled: false, config: {} }).success).toBe(false)
+    guard.check.mockResolvedValue({ allowed: false })
+    await expect(mcpIpcModule.methods.agentList.handler(ctx, {})).rejects.toThrow("没有权限")
   })
 
   it("returns the global MCP server status and client registrations", async () => {

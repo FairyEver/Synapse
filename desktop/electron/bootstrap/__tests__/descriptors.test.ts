@@ -114,6 +114,18 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreLoggingDescriptor.create(fakeCtx)).toBe(instance)
   })
 
+  it("registers Agent MCP settings with local preference storage and lazy connector discovery", { timeout: bootstrapImportTimeoutMs }, async () => {
+    const { coreAgentMcpSettingsDescriptor } = await importBootstrap()
+    const config = { load: vi.fn(), update: vi.fn() }
+    const get = vi.fn(() => config)
+    const service = await coreAgentMcpSettingsDescriptor.create({ registry: { get } } as never)
+    expect(coreAgentMcpSettingsDescriptor.id).toBe("core.agent-mcp-settings")
+    expect(coreAgentMcpSettingsDescriptor.dependsOn).toEqual(["core.config"])
+    expect(service.list).toBeTypeOf("function")
+    expect(get).toHaveBeenCalledOnce()
+    expect(get).toHaveBeenCalledWith("core.config")
+  })
+
   it("coreConfigDescriptor has fatal criticality and id 'core.config'", async () => {
     const { coreConfigDescriptor } = await importBootstrap()
     expect(coreConfigDescriptor.id).toBe("core.config")

@@ -18,6 +18,14 @@ import {
 import type { AgentMessage } from "../types"
 
 describe("ClaudeSDKSession", () => {
+  it("passes local MCP restrictions to native SDK settings without dropping user/project/local discovery", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, { sdkSettings: { deniedMcpServers: [{ serverName: "rea" }] } })
+    expect(getOptions()).toMatchObject({
+      settingSources: ["user", "project", "local"],
+      settings: { deniedMcpServers: [{ serverName: "rea" }] },
+    })
+  })
   it.each(["default", "bypassPermissions"])("requires a fail-closed private-storage sandbox in %s mode", (mode) => {
     const { factory, getOptions } = createQueryFactory()
     const root = mkdtempSync(path.join(tmpdir(), "synapse-private-storage-"))

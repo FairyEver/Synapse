@@ -20,6 +20,8 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 
 ## SDK 原生上下文生命周期
 
+- 设置中的“Agent 使用的 MCP”只读发现本机配置、所选项目、已安装插件与 SY 连接器；不连接 MCP 或发起模型请求，不把配置清单报成实际连接。`agent.disabledMcpServers` 仅保存 SY 的额外禁用名，不修改用户 Claude Code 配置；原生 `settings.deniedMcpServers` 在 discovery、官方查询与第三方 strict 查询启动前施加，保留原有 settingSources、规则、Skill 和受管策略。策略变化在下一轮通过停止屏障关闭 live session 并 resume 原 SDK session，不中断任务、不重放请求、不清除历史；启用只能撤销 SY 自己的禁用。`synapse-mcp` / `synapse-tool-router` 是内部保留名。入口与清单限制见 `docs/superpowers/specs/2026-10-24-agent-mcp-settings-design.md`。
+
 - 所有 Agent、Relay、Workflow 与 Automation 的 Claude Agent SDK 查询使用持久 Streaming Input；已有 `sdkSessionId` 通过 SDK `resume` 延续。不得为上下文容量创建隐藏 query、交接会话或自动重放用户请求与工具调用。
 - 不向 SDK 传 `maxTurns`、宿主自动整理开关/窗口、预计算整理开关、请求体预算或工具输出预算。百炼与其它 Anthropic 兼容 Provider 使用同一路径。
 - Read、Bash、MCP、`structuredContent`、数组及图片工具结果不得由 Synapse 截断、替换或因结构完整性检查阻断；SDK 对工具结果和上下文的处理是唯一运行权威。

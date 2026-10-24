@@ -33,6 +33,7 @@ import type {
 } from "./project-contributions"
 import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
 import { appendGeneratedUiPrompt } from "./generated-ui-prompt"
+import { normalizeDisabledMcpServers } from "../../../src/lib/agent-mcp-policy"
 import { resolveTierModelFromEnv } from "./provider-model-tier"
 import {
   SYNAPSE_MCP_TOOL_PREFIX,
@@ -109,6 +110,7 @@ export interface SessionManagerDeps {
   readonly createSession?: AgentLiveSessionFactory
   readonly validateWorkspacePath?: (cwd: string) => void | Promise<void>
   readonly getAllowedWriteDirectories?: () => readonly string[] | Promise<readonly string[]>
+  readonly getDisabledMcpServers?: () => readonly string[] | Promise<readonly string[]>
   readonly getReplyTargetEnv?: (
     projectId: string,
     sessionKey: string,
@@ -322,7 +324,12 @@ export class SessionManager {
     const synapseToolRouterEnabled = isThirdPartyAnthropicCompatibleProvider(provider, env.ANTHROPIC_BASE_URL)
       && Boolean(this.deps.executeSynapseTool)
     const synapseToolRouterMatches = input.state.synapseToolRouterEnabled === synapseToolRouterEnabled
-    const sdkSettings = resolveProviderSdkSettings(provider, env)
+    const disabledMcpServers = normalizeDisabledMcpServers(await this.deps.getDisabledMcpServers?.() ?? [])
+    const providerSettings = resolveProviderSdkSettings(provider, env)
+    const sdkSettings = disabledMcpServers.length ? {
+      ...providerSettings,
+      deniedMcpServers: disabledMcpServers.map(serverName => ({ serverName })),
+    } : providerSettings
     const sdkSettingsMatch = sdkSettingsEqual(input.state.sdkSettings, sdkSettings)
     const contributionAgents = await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {})
     const agents = { ...contributionAgents, ...personaConfig.agents }
@@ -385,7 +392,7 @@ export class SessionManager {
         || !modelMatches
         || !contextWindowMatches
         || !synapseToolRouterMatches
-        || !sdkSettingsMatch
+        || input.state.sdkSettings?.skipWebFetchPreflight !== sdkSettings?.skipWebFetchPreflight
         || !personaDefinitionsMatch
       ),
     )
@@ -861,6 +868,7 @@ function sdkSettingsEqual(
   right: ClaudeSDKRuntimeSettings | undefined,
 ): boolean {
   return left?.skipWebFetchPreflight === right?.skipWebFetchPreflight
+    && JSON.stringify(left?.deniedMcpServers ?? []) === JSON.stringify(right?.deniedMcpServers ?? [])
 }
 
 function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {

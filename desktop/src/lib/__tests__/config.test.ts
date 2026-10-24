@@ -11,6 +11,11 @@ import {
 import type { SynapseConfigPatch } from "../../types/config"
 
 describe("Synapse config Agent defaults", () => {
+  it("preserves SY-only MCP preferences across patches and rejects internal names", () => {
+    const config = applySynapseConfigPatch(createDefaultConfig(), { agent: { disabledMcpServers: ["rea", "rea", "synapse-mcp", "synapse-tool-router", "bad\nname"] } })
+    expect(config.agent.disabledMcpServers).toEqual(["rea"])
+    expect(applySynapseConfigPatch(config, { agent: { allowedWriteDirectories: [] } }).agent.disabledMcpServers).toEqual(["rea"])
+  })
   it("marks Dock migrations as applied for new installations", () => {
     expect(createDefaultConfig().global.dockMigrationIds).toEqual([...DEFAULT_DOCK_MIGRATION_IDS])
   })

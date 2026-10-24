@@ -13,6 +13,7 @@ import type {
   DatabaseWhereClause,
 } from "./database"
 import type { McpRegistrationInfo, McpServerStatus, McpTarget } from "./mcp"
+import type { AgentMcpInventory, AgentMcpListInput, AgentMcpToggleInput } from "./agent-mcp"
 import type {
   AgentReferenceActionInput,
   AgentReferenceActionResult,
@@ -1821,6 +1822,10 @@ export type SynapseBridge = {
     }
   }
   mcp: {
+    agent: {
+      list: (input: AgentMcpListInput) => Promise<AgentMcpInventory>
+      setEnabled: (input: AgentMcpToggleInput) => Promise<void>
+    }
     server: {
       get: () => Promise<McpServerStatus>
     }

@@ -40,6 +40,7 @@ import { KnowledgeBaseStoragePanel } from "@/modules/settings/components/knowled
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { DockPanel } from "@/modules/settings/components/dock-panel"
 import { McpSettingsPanel } from "@/modules/settings/components/mcp-settings-panel"
+import { AgentMcpSettingsPanel } from "@/modules/settings/components/agent-mcp-settings-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
 import type { SynapseRepositoryConfig } from "@/types/config"
@@ -310,7 +311,7 @@ function SettingsModule({ workflowEntryVisible = false }: SettingsModuleProps) {
           <DockPanel workflowEntryVisible={workflowEntryVisible} />
         ) : null}
 
-        {isReady && activeCategory === "mcp" ? <McpSettingsPanel /> : null}
+        {isReady && activeCategory === "mcp" ? <><AgentMcpSettingsPanel /><McpSettingsPanel /></> : null}
 
         {isReady && activeCategory === "repositories" ? (
           <RepositoryListEditor onSave={handleSaveRepositories} />

@@ -20,6 +20,7 @@ import { SYNAPSE_AGENT_PERMISSION_MODES } from "../types/agent"
 import { MODEL_TIERS } from "../types/provider-model"
 import { normalizeDockAppIds, normalizeDockMigrationIds } from "../modules/apps/dock"
 import { normalizeAgentProjectOrder } from "../modules/agent/project-order"
+import { normalizeDisabledMcpServers } from "./agent-mcp-policy"
 import type { ModelTier } from "../types/provider-model"
 import type { SynapseContentType } from "../types/content"
 import type {
@@ -681,6 +682,7 @@ function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
     defaultProviderModel,
     recentSlashSkills,
     allowedWriteDirectories,
+    ...(Array.isArray(value.disabledMcpServers) ? { disabledMcpServers: normalizeDisabledMcpServers(value.disabledMcpServers) } : {}),
   }
 }
 

@@ -119,7 +119,7 @@ describe("Synapse tool router strict MCP reconstruction", () => {
 
     const result = await createRoutedQuery(sdk as never, {
       prompt,
-      options: { settingSources: ["user", "project", "local"] },
+      options: { settingSources: ["user", "project", "local"], settings: { deniedMcpServers: [{ serverName: "rea" }] } },
       router: {
         cwd: "/tmp/project",
         settingSources: ["user", "project", "local"],
@@ -132,6 +132,9 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     expect(discovery.mcpServerStatus).toHaveBeenCalledOnce()
     expect(discovery.close).toHaveBeenCalledOnce()
     expect(query).toHaveBeenCalledTimes(2)
+    for (const [call] of query.mock.calls) {
+      expect(call.options.settings.deniedMcpServers).toEqual([{ serverName: "rea" }])
+    }
     expect(query.mock.calls[1]?.[0]).toMatchObject({
       prompt,
       options: {

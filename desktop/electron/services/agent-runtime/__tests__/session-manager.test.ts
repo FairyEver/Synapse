@@ -34,6 +34,31 @@ vi.mock("../claude-sdk-session", () => ({
 }))
 
 describe("SessionManager", () => {
+  it.each([false, true])("applies SY-only MCP denial and resumes the same SDK session (persona=%s)", async (persona) => {
+    let disabled: string[] = ["rea"]
+    const sessions: FakeLiveSession[] = []
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => { const session = new FakeLiveSession(); sessions.push(session); return session })
+    const manager = new SessionManager({
+      projectId: "project-1", workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: { buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "test" })), getActiveProvider: vi.fn() } as unknown as ProviderService,
+      states: new Map(), pendingPermissions: new Map(), createSession,
+      getDisabledMcpServers: async () => disabled,
+      ...(persona ? { sdkPersonaConfig: async () => ({ activePersonaId: "persona", activeAgentName: "persona-agent", providerModel: null, agents: {}, definitionsHash: "same-persona" }) } : {}),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+    const conversation = { ...baseConversation(), sdkSessionId: "original-sdk-session" }
+    await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
+    expect(createSession).toHaveBeenLastCalledWith(expect.objectContaining({ sdkSettings: { deniedMcpServers: [{ serverName: "rea" }] } }))
+    await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
+    expect(createSession).toHaveBeenCalledTimes(1)
+    disabled = []
+    await manager.getOrCreateSession({ state, conversation, message: baseMessage("default") })
+    expect(sessions[0]?.close).toHaveBeenCalledOnce()
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(createSession).toHaveBeenLastCalledWith(expect.objectContaining({ sdkSessionId: "original-sdk-session" }))
+    expect(createSession.mock.calls.at(-1)?.[0]?.sdkSettings?.deniedMcpServers).toBeUndefined()
+  })
   it("passes configured allowed write directories to the SDK and recreates after removal", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const sessions: FakeLiveSession[] = []

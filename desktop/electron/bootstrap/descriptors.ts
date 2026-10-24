@@ -25,6 +25,8 @@ import { readClipboardRawFormat } from "../runtime/clipboard/native-reader"
  */
 
 import { MailService } from "../../app-capabilities/mail/main/service"
+import { AgentMcpSettingsService } from "../services/agent-mcp-settings-service"
+import { getDefaultAgentWorkspacePath } from "../modules/agent/default-agent-workspace"
 import { MAIL_SERVICE_ID } from "../../app-capabilities/mail/shared/manifest"
 import { createMailCapabilityDispatcher } from "../../app-capabilities/mail/main/dispatcher"
 import { createMailNotificationAdapter } from "../../app-capabilities/mail/main/notification-adapter"
@@ -498,6 +500,22 @@ export const coreConfigDescriptor: ServiceDescriptor<typeof configStore> = {
     await configStore.initialize()
     await configStore.load()
     return configStore
+  },
+}
+
+export const coreAgentMcpSettingsDescriptor: ServiceDescriptor<AgentMcpSettingsService> = {
+  id: "core.agent-mcp-settings",
+  criticality: "degraded",
+  dependsOn: ["core.config"],
+  create(ctx) {
+    return new AgentMcpSettingsService({
+      config: ctx.registry.get<typeof configStore>("core.config"),
+      defaultCwd: getDefaultAgentWorkspacePath(),
+      connectorServers: async () => {
+        const connectors = ctx.registry.get<ReturnTypeOfConnectorsService>("core.connectors")
+        return connectors.createAgentContribution(await connectors.getEnabledConnectorIds()).mcpServers.map(server => ({ name: server.name, config: { ...server.config } }))
+      },
+    })
   },
 }
 

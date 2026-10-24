@@ -99,6 +99,7 @@ export type SynapseAgentGlobalConfig = {
   defaultProviderModel: { providerId: string; modelTier: ModelTier } | null
   recentSlashSkills: string[]
   allowedWriteDirectories: string[]
+  disabledMcpServers?: string[]
 }
 
 export type SynapseConfig = {

@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-24：设置新增“Agent 使用的 MCP”，只读配置清单与 SY 独立禁用策略。新增 2 项 UI 专用 IPC：`app.mcp.agent.list`、`app.mcp.agent.set_enabled`；不注册为 capability/MCP tool。340 项全局 capability、336 项 MCP 索引、22 个 System App，以及 Dock、Workflow、Automation、Deep Link 数量均不变。内置 Synapse 路由不可在此关闭；SY 对外 MCP 注册接口不变，系统 Skill 的工具契约不变。详见 `docs/superpowers/specs/2026-10-24-agent-mcp-settings-design.md`。
+
 - Agent OpenUI 是既有 Agent 对话内的展示与交互能力，不新增 System App、Dock、Workflow、Automation、Deep Link 或 MCP 工具；Agent Conversation 仍为 11 项。新增三个 UI 专用 IPC operation：`app.agent.generated_ui.get_state`、`app.agent.generated_ui.save_state`、`app.agent.generated_ui.submit_action`。它们只处理当前桌面对话的状态和用户提交，不提供通用业务工具执行能力。
 
 本文件记录 Synapse 当前运行时代码的真实产品表面。声明文件、目录名、测试夹具或计划文档不能单独作为“已注册”的证据。

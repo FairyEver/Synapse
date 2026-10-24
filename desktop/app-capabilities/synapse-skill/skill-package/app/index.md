@@ -33,6 +33,8 @@ Use `app_account_state_get` and `app_account_login_start` when the account may n
 
 ## Agent Conversation Creation, Models and Groups
 
+Agent 上游 MCP 的本机配置清单与 SY 独立开关位于“设置 → MCP → Agent 使用的 MCP”，属于 UI 专用功能，没有对应公开 MCP 工具。不要通过编辑 Claude Code 全局或项目配置来模拟“只在 SY 中关闭”；设置开关不改变外部 CLI 的 MCP、规则或 Skill。
+
 - Discover available providers/models -> `app_agent_provider_list` with optional `query` (provider or model name) or `providerId`; page with `nextOffset`. It lists the same non-archived providers and selectable configured tiers as “创建自定义对话”, not the vendor's remote model catalog. Use returned `providerId` and `models[].modelTier` together when creating with a requested model. Resolve ambiguous matches with the user; never guess IDs or silently substitute another model. A local Claude Code default can have `modelName: null`; use its returned default tier without inventing a concrete name.
 - Create a conversation -> `app_agent_conversation_create`. With no requested group, omit all selectors; Synapse defaults to **本地对话** even if Codex has a working directory or Synapse has another conversation selected.
 - Find a named group -> `app_agent_group_list` with `query`, paging with `nextOffset` when present. Use the matching `projectId` to create, or pass an exact `projectName`. If several groups have the same name, ask the user to choose; never pick the first or silently fall back to 本地对话.

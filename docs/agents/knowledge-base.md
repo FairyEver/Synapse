@@ -24,6 +24,8 @@
 
 ## Runtime 与 Agent
 
+- 设置中的 Agent MCP 禁用策略同样适用于 Knowledge Base 的 Agent Runtime 查询，保留 Knowledge Base plugin、全局/项目规则和 Skill。禁用只作用于 SY 的 SDK 查询，不改本机 Claude Code 或知识库文件；设置清单只对可解析的本机项目展示，实际 MCP 可用范围仍由 SDK 决定。
+
 - 托管 Knowledge Base 的 renderer Agent 必须把 backing directory 作为 Claude Code SDK local plugin 加载，并允许模板中已启用的 hooks。
 - 普通项目不得加载 Knowledge Base plugin、skill、hook、prompt 或快捷动作。Scheduler、Workflow 等非 renderer Agent 入口也不默认获得该 runtime；只有明确绑定托管 Knowledge Base 且策略允许时才加载。
 - `settingSources` 必须包含 `['user', 'project', 'local']`，以保持与用户本机 Claude Code 的 MCP 可见性一致。不得因启用 plugin hooks 删除 `user` settings。

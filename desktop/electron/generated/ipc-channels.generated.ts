@@ -352,6 +352,8 @@ export const IPC_CHANNELS = {
     "todoOpenRequest": "synapse:app:apps:operation:todo_open_request",
   },
   "mcp": {
+    "agentList": "synapse:app:mcp:agent:list",
+    "agentSetEnabled": "synapse:app:mcp:agent:set_enabled",
     "serverGet": "synapse:app:mcp:server:get",
     "registrationList": "synapse:app:mcp:registration:list",
     "registrationOpenSettings": "synapse:app:mcp:registration:open_settings",
