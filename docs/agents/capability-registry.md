@@ -261,3 +261,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-23 草稿箱提供与收件箱一致的多选、全选和计数，最多 100 封，确认后逐项调用已有 `draft.delete` 并校验各自 revision。删除按钮显示加载状态，弹窗实时显示剩余待处理数量，每项成功或失败后更新，全部处理后显示列表刷新状态；进度仅在 Renderer 内传递。删除失败保留草稿及选择，刷新仅重读已加载的草稿页；不新增批量 IPC 或公开动作。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及 Dock、Workflow、Automation、Deep Link 数量均不变；MCP schema 保持逐封删除，系统 Skill 的逐封删除契约不变。
 
 2026-10-23 写信窗口移除密送入口与顶栏关闭按钮，仅保留收件人/抄送和原生关闭；窗口显式保存或发送会清空已有草稿的密送地址。共享 MCP schema、系统 Skill 的 Bcc 契约保留兼容，不新增注册表面，邮箱 44 项公开动作、全局 340 capability / 336 MCP 索引和 22 个 System App 均不变。
+
+2026-10-24 邮箱远程图片兼容系统 DNS 的 IPv4 Fake-IP：经受控 HTTPS DNS 重新解析并固定真实公网 IP，保留逐跳私网拦截；阅读区逐张加载、保留成功项和报告失败数量。沿用私有图片 IPC，44 个邮箱公开动作、340 个全局 capability / 336 个 MCP 索引及 22 个 System App 数量不变；Dock、Workflow、Automation 和 Deep Link 无增量，公开 MCP schema 无变化。

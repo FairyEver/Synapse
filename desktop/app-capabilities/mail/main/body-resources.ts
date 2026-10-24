@@ -11,6 +11,7 @@ import { MailError, type MailContext } from "../shared/types"
 import { MailRepository } from "./repository"
 import { MailAssets, type MailAccess, type StoredMailAsset } from "./assets"
 import { resolveMessage } from "./sync"
+import { isImageFakeIp, resolveImageFakeIp } from "./remote-image-dns"
 
 export function rasterMime(bytes: Buffer): string | null {
   if (bytes.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) return "image/png"
@@ -61,7 +62,11 @@ export async function fetchRemoteImage(input: string, options: RemoteImageOption
       if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || isLocalOrPrivateHost(url.hostname)) throw new MailError("IMAGE_BLOCKED", "不允许访问此图片地址")
       await options.authorize(url.origin)
       const host = url.hostname.replace(/^\[|\]$/gu, "")
-      const addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await resolveImageHost(host, signal, options.lookup ?? (hostname => dnsLookup(hostname, { all: true })))
+      let addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await resolveImageHost(host, signal, options.lookup ?? (hostname => dnsLookup(hostname, { all: true })))
+      if (!isIP(host) && addresses.some(a => isImageFakeIp(a.address))) {
+        if (addresses.some(a => !publicIp(a.address) && !isImageFakeIp(a.address))) throw new MailError("IMAGE_BLOCKED", "不允许访问本机或内网图片")
+        addresses = await resolveImageFakeIp(host, signal, options.authorize)
+      }
       signal.throwIfAborted()
       if (!addresses.length || addresses.some(a => !publicIp(a.address))) throw new MailError("IMAGE_BLOCKED", "不允许访问本机或内网图片")
       const response = await requestPinned(url, addresses[0].address, signal)

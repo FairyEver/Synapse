@@ -8,6 +8,7 @@ const emptyResources = (): MailHtmlResources => ({ cid: {}, remote: {} })
 export function useMailBody(detail: MailDetail | null, owner: string | null, onInvalidated?: () => void) {
   const [body, setBody] = useState<MailBody | null>(null), [resources, setResources] = useState<MailHtmlResources>(emptyResources)
   const [error, setError] = useState<string | null>(null), [loading, setLoading] = useState(false)
+  const remoteLoading = useRef<number | null>(null)
   const epoch = useRef(0), blobs = useRef<string[]>([]), current = useRef({ id: detail?.id, owner }); current.current = { id: detail?.id, owner }
   const reset = () => { for (const blob of blobs.current) URL.revokeObjectURL(blob); blobs.current = [] }
   const makeBlob = async (messageId: string, token: string, e: number) => {
@@ -52,17 +53,31 @@ export function useMailBody(detail: MailDetail | null, owner: string | null, onI
   }, [detail?.id, owner, onInvalidated])
   const loadRemote = async (urls: string[]) => {
     if (!detail) return
-    const e = epoch.current, id = detail.id, remote: Record<string, string> = {}
-    setLoading(true)
+    const e = epoch.current, id = detail.id, identity = owner
+    const valid = () => e === epoch.current && current.current.owner === identity && current.current.id === id
+    if (!valid() || remoteLoading.current === e) return
+    remoteLoading.current = e
+    setLoading(true); setError(null)
+    let failed = 0, firstError = ""
     try {
-      for (const url of urls.slice(0, 100)) {
-        const grant = await mailApi().imageRemote({ messageId: id, url, allowed: true })
-        if (e !== epoch.current) return
-        remote[url] = await makeBlob(id, grant.token, e)
+      for (const url of [...new Set(urls)].filter(url => !Object.hasOwn(resources.remote, url)).slice(0, 100)) {
+        if (!valid()) return
+        try {
+          const grant = await mailApi().imageRemote({ messageId: id, url, allowed: true })
+          if (!valid()) return
+          const blob = await makeBlob(id, grant.token, e)
+          if (!valid()) return
+          setResources(previous => valid() ? { cid: previous.cid, remote: { ...previous.remote, [url]: blob } } : previous)
+        } catch (cause) {
+          if (!valid()) return
+          failed++; firstError ||= mailError(cause)
+          setError(`${failed} 张图片加载失败：${firstError}`)
+        }
       }
-      if (e === epoch.current) setResources(previous => ({ cid: previous.cid, remote: { ...previous.remote, ...remote } }))
-    } catch (cause) { if (e === epoch.current) setError(mailError(cause)) }
-    finally { if (e === epoch.current) setLoading(false) }
+    } finally {
+      if (remoteLoading.current === e) remoteLoading.current = null
+      if (valid()) setLoading(false)
+    }
   }
   return { body, resources, loading, error, loadRemote }
 }
