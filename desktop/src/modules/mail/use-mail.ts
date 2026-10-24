@@ -4,6 +4,7 @@ import { useAccount } from "@/app-shell/account"
 import type { AccountSummary, Folder, MailSummary, MailDetail, Coverage, Draft, BatchResult } from "../../../app-capabilities/mail/shared/types"
 import type { MailScope } from "../../../app-capabilities/mail/shared/private-schema"
 import { runMailUiOperation } from "../../../app-capabilities/mail/renderer/tracking"
+import { MAIL_INPUT_SCHEMAS } from "../../../app-capabilities/mail/shared/schema"
 import { mailApi, mailError } from "./api"
 import { useMailSync } from "./use-mail-sync"
 export type MailView = { folderId?: string; starredOnly?: boolean; drafts?: boolean }
@@ -105,6 +106,26 @@ export function useMail() {
     epoch.current++; sequence.current++; selection.current++; draftPages.current = 1; viewRef.current = next; searchJob.current = null
     setView(next); setItems([]); setDrafts([]); setDetail(null); setCoverage(null); setCursor(null); setCanContinue(false); void refreshRef.current()
   }, [])
+  const changeFolder = useCallback(async (action: "rename" | "delete", folderId: string, name?: string) => {
+    const id = accountRef.current, e = epoch.current
+    if (!id || !owner || ownerRef.current !== owner) throw new Error("请选择邮箱")
+    const folder = folders.find(item => item.id === folderId && item.accountId === id)
+    if (!folder) throw new Error("文件夹已变化，请重新选择")
+    if (folder.role !== "none" || folder.path.toUpperCase() === "INBOX") throw new Error("系统文件夹不能改名或删除")
+    await runMailUiOperation("mutate", async () => {
+      if (action === "rename") {
+        const parsed = MAIL_INPUT_SCHEMAS["folder.rename"].shape.name.safeParse(name?.trim())
+        if (!parsed.success) throw new Error("文件夹名称须为 1–255 个字符，且不能包含换行")
+        await mailApi().folderRename({ accountId: id, folderId, name: parsed.data })
+      } else {
+        const result = await mailApi().folderDelete({ accountId: id, folderId })
+        if (!result.success) throw new Error("删除文件夹失败，请重试")
+      }
+    })
+    if (!current(e, id)) return
+    if (action === "delete" && viewRef.current.folderId === folderId) selectView({})
+    await loadFolders()
+  }, [owner, folders, selectView, loadFolders])
   const selectMessage = useCallback(async (id: string) => {
     const account = accountRef.current, e = epoch.current, seq = ++selection.current
     setDetail(null)
@@ -177,6 +198,6 @@ export function useMail() {
   const visible = loadedOwner === owner
   const syncStatus = useMailSync(visible ? owner : null, visible ? accounts.find(account => account.id === accountId) : undefined, scope.current?.generation)
   return { accounts: visible ? accounts : [], accountId: visible ? accountId : null, folders: visible ? folders : [], items: visible ? items : [], drafts: visible ? drafts : [], detail: visible ? detail : null, view, coverage, cursor, canContinue, loading, error, authenticated: !!owner, scope: scope.current, owner,
-    syncStatus, selectAccount, selectView, selectMessage, clearDetail, refresh, loadAccounts, loadMore: () => refresh(true, cursor ?? undefined), search, continueSearch, mutate, deleteDrafts, sync }
+    syncStatus, selectAccount, selectView, selectMessage, clearDetail, refresh, loadAccounts, loadMore: () => refresh(true, cursor ?? undefined), search, continueSearch, mutate, deleteDrafts, changeFolder, sync }
 }
 export type MailViewModel = ReturnType<typeof useMail>
