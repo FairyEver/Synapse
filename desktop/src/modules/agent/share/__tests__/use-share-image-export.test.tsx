@@ -19,16 +19,16 @@ function mount() { root = createRoot(document.createElement("div")); act(() => r
 afterEach(() => { act(() => root?.unmount()); root = undefined; vi.resetAllMocks() })
 
 describe("native share output lifecycle", () => {
-  it("serializes duplicate clicks, awaits real output, and redacts the filename", async () => {
+  it("serializes duplicate clicks, awaits real output, and uses a fixed filename without the conversation title", async () => {
     let complete!: (value: { success: boolean }) => void
     mocks.capture.mockResolvedValue(new Blob()); mocks.base64.mockResolvedValue("png")
     mocks.export.mockImplementation(() => new Promise((resolve) => { complete = resolve }))
     mount(); const paper = document.createElement("article")
     let pending!: Promise<void>
-    await act(async () => { pending = output.run(paper, { ...settings, title: "test@example.com" }, "copy"); void output.run(paper, settings, "save") })
+    await act(async () => { pending = output.run(paper, settings, "copy"); void output.run(paper, settings, "save") })
     expect(mocks.capture).toHaveBeenCalledTimes(1)
     expect(output.busy).toBe("copy"); expect(mocks.toast).not.toHaveBeenCalled()
-    expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ action: "copy", pngBase64: "png", fileName: "［邮箱已隐藏］-2x.png" }))
+    expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ action: "copy", pngBase64: "png", fileName: "Synapse 对话-2x.png" }))
     await act(async () => { complete({ success: true }); await pending })
     expect(output.busy).toBeNull(); expect(mocks.toast).toHaveBeenCalledWith("图片已复制")
   })

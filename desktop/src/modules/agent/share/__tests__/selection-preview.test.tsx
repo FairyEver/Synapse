@@ -19,7 +19,7 @@ const items = [1, 2, 3, 4].map((id) => ({ id: `m${id}`, historyIndex: id - 1, ki
 let root: Root, host: HTMLElement, share: AgentShareController
 function Driver() {
   const viewport = useRef<HTMLDivElement>(null)
-  share = useAgentShare({ target, title: "selected conversation", items, sending: false, viewport })
+  share = useAgentShare({ target, items, sending: false, viewport })
   return <AgentShareSelectionContext.Provider value={{ active: share.active, indexes: new Map(share.messages.map((item, index) => [item.id, index])), selected: share.selected, onShare: (id) => { void share.enter(id) }, onChoose: share.choose }}>
     <div ref={viewport}>{items.map((item) => <ShareMessageFrame key={item.id} item={item}><p data-source-message={item.id}>{item.content}</p><AgentMessageToolbar messageId={item.id} role={item.role} content={item.content} /></ShareMessageFrame>)}</div>
     {share.active && <AgentShareSelectionBar share={share} />}
@@ -133,17 +133,44 @@ describe("message selection and preview UI", () => {
     expect(document.querySelector('[role="dialog"]')).not.toBeNull()
     expect(share.preview?.map((item) => item.id)).toEqual(["m3", "m4"])
   })
-  it("shows the editable title and message bodies without identity or metadata rows", async () => {
+  it("always brands the header and defaults to selected models and time in the footer", async () => {
     await act(async () => share.enter()); act(() => share.preset("all")); await act(async () => share.openPreview())
     const paper = document.querySelector<HTMLElement>("[data-agent-share-paper]")!
-    expect(paper.querySelector("header")!.textContent).toBe("selected conversation")
+    expect(paper.querySelector("header")!.textContent).toBe("Synapse")
+    expect(paper.querySelector('header img[alt="Synapse"]')).not.toBeNull()
+    expect(paper.textContent).not.toContain("selected conversation")
     for (const message of items) {
       expect(paper.querySelector(`[data-share-export-message="${message.id}"]`)!.textContent).toBe(message.content.replace("test@example.com", "［邮箱已隐藏］"))
     }
-    expect(document.querySelector("#agent-share-model")).toBeNull()
-    expect(document.querySelector("#agent-share-time")).toBeNull()
-    act(() => document.querySelector<HTMLButtonElement>("#agent-share-title")!.click())
-    expect(paper.querySelector("header")).toBeNull()
+    expect(document.querySelector("#agent-share-title")).toBeNull()
+    expect(document.querySelector("#agent-share-brand")).toBeNull()
+    expect(document.querySelector('[aria-label="分享图片标题"]')).toBeNull()
+    expect(paper.querySelector("footer")!.textContent).toContain("Old Model / New Model")
+    expect(paper.querySelector("footer time")!.getAttribute("datetime")).toBe("2026-10-24T00:00:00Z")
+    expect(document.querySelector("#agent-share-model")!.getAttribute("aria-checked")).toBe("true")
+    expect(document.querySelector("#agent-share-time")!.getAttribute("aria-checked")).toBe("true")
+    act(() => document.querySelector<HTMLButtonElement>("#agent-share-model")!.click())
+    expect(paper.querySelector("footer")!.textContent).not.toContain("Model")
+    expect(paper.querySelector("footer time")).not.toBeNull()
+    act(() => document.querySelector<HTMLButtonElement>("#agent-share-time")!.click())
+    expect(paper.querySelector("footer")).toBeNull()
+    expect(paper.querySelector("header")!.textContent).toBe("Synapse")
+    act(() => document.querySelector<HTMLButtonElement>("#agent-share-model")!.click())
+    expect(paper.querySelector("footer")!.textContent).toBe("Old Model / New Model")
+    expect(paper.querySelector("footer time")).toBeNull()
+  })
+  it("uses only selected reply models and keeps footer switches for direct export", async () => {
+    await act(async () => share.enter("m1")); await act(async () => share.openPreview())
+    const paper = document.querySelector<HTMLElement>("[data-agent-share-paper]")!
+    expect(paper.querySelector("footer")!.textContent).toContain("Old Model")
+    expect(paper.querySelector("footer")!.textContent).not.toContain("New Model")
+    act(() => document.querySelector<HTMLButtonElement>("#agent-share-time")!.click())
+    act(() => button("返回选择").click())
+    await act(async () => button("下载").click())
+    const exported = mocks.capture.mock.calls.at(-1)![0] as HTMLElement
+    expect(exported.querySelector("header")!.textContent).toBe("Synapse")
+    expect(exported.querySelector("footer")!.textContent).toBe("Old Model")
+    expect(exported.querySelector("footer time")).toBeNull()
   })
   it("keeps only selection actions in the source messages and a compact toolbar", async () => {
     await act(async () => share.enter("m1"))

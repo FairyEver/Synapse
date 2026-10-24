@@ -13,7 +13,7 @@ let root: Root | undefined
 let controller: ReturnType<typeof useAgentShare>
 function Driver({ conversationId = "c", timeline = items, sending = false }: { conversationId?: string; timeline?: readonly SynapseAgentTimelineItem[]; sending?: boolean }) {
   const viewport = useRef<HTMLDivElement>(null)
-  controller = useAgentShare({ target: { projectId: "p", sessionKey: "s", conversationId }, title: "test", items: timeline, sending, viewport })
+  controller = useAgentShare({ target: { projectId: "p", sessionKey: "s", conversationId }, items: timeline, sending, viewport })
   return <div ref={viewport} />
 }
 afterEach(() => { act(() => root?.unmount()); root = undefined; vi.clearAllMocks() })

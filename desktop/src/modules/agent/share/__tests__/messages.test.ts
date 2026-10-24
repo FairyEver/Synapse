@@ -1,13 +1,27 @@
 import { describe, expect, it, vi } from "vitest"
 import type { SynapseAgentMessageTimelineItem, SynapseAgentTimelineItem } from "@/types/agent"
-import { loadShareContent, loadShareHistory, selectShareRange, shareMessageRounds, shareMessages } from "../messages"
+import { loadShareContent, loadShareHistory, selectShareRange, shareFooterMetadata, shareMessageRounds, shareMessages, type ShareMessage } from "../messages"
 
 const target = { projectId: "p", conversationId: "c", sessionKey: "s" }
-function message(id: number, role: "user" | "assistant" = id % 2 ? "user" : "assistant"): SynapseAgentMessageTimelineItem {
+function message(id: number, role: "user" | "assistant" = id % 2 ? "user" : "assistant"): ShareMessage {
   return { kind: "message", id: `m${id}`, role, content: `content-${id}`, historyIndex: id - 1, timestamp: "2026-10-24T00:00:00Z" }
 }
 
 describe("conversation share snapshots", () => {
+  it("derives deduplicated model names and the last selected message time without provider labels", () => {
+    const metadata = { model: " Model A ", providerName: "Private provider" }
+    const result = shareFooterMetadata([
+      { ...message(1), metadata: { model: "ignored-user-model" } },
+      { ...message(2), metadata },
+      { ...message(4), metadata: { model: "Model A" } },
+      { ...message(6), timestamp: "2026-10-24T02:30:00Z", metadata: { model: "Model B" } },
+    ])
+    expect(result).toEqual({ models: "Model A / Model B", timestamp: "2026-10-24T02:30:00Z" })
+  })
+  it("does not invent footer metadata when selected messages lack models or valid timestamps", () => {
+    expect(shareFooterMetadata([])).toEqual({ models: "", timestamp: undefined })
+    expect(shareFooterMetadata([{ ...message(2), timestamp: "invalid", metadata: { model: " " } }])).toEqual({ models: "", timestamp: undefined })
+  })
   it("includes image-only user messages and freezes their image attachments", () => {
     const input: SynapseAgentMessageTimelineItem = { ...message(1), content: "", attachments: [{ kind: "image", id: "photo", mimeType: "image/png", byteSize: 4, url: "synapse-agent-artifact://local/p/s/photo.png" }] }
     const result = shareMessages([input], false)

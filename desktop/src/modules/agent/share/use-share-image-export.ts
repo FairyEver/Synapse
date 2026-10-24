@@ -5,7 +5,6 @@ import { requireBridgeDomain } from "@/lib/electron-bridge"
 import type { AgentShareSettings } from "@/types/agent-share"
 import { track } from "@/lib/ui-tracking"
 import { captureShareImage, shareBlobBase64 } from "./image"
-import { redactShareText } from "./redaction"
 
 const logger = createRendererLogger("agent.share.image")
 export function useShareImageExport(scope: string) {
@@ -28,7 +27,7 @@ export function useShareImageExport(scope: string) {
       const blob = await captureShareImage(paper, settings.scale, action, controller.signal)
       const pngBase64 = await shareBlobBase64(blob)
       controller.signal.throwIfAborted()
-      const fileName = `${redactShareText(settings.title.trim() || "Synapse 对话", settings.redact).replace(/[<>:"/\\|?*]/g, "_").replace(/\p{Cc}/gu, "_").slice(0, 80)}-${settings.scale}x.png`
+      const fileName = `Synapse 对话-${settings.scale}x.png`
       const result = await agent.exportShareImage({ action, pngBase64, fileName })
       if (controller.signal.aborted) return
       if (result.success) toast(action === "copy" ? "图片已复制" : "图片已保存")

@@ -10,7 +10,7 @@ import { useShareImageExport } from "./use-share-image-export"
 const logger = createRendererLogger("agent.share")
 type ScrollAnchor = { readonly id?: string; readonly offset: number; readonly top: number }
 
-export function useAgentShare(input: { target: AgentConversationTarget; title: string; items: readonly SynapseAgentTimelineItem[]; sending: boolean; viewport: RefObject<HTMLDivElement | null> }) {
+export function useAgentShare(input: { target: AgentConversationTarget; items: readonly SynapseAgentTimelineItem[]; sending: boolean; viewport: RefObject<HTMLDivElement | null> }) {
   const key = `${input.target.projectId}:${input.target.conversationId}:${input.target.sessionKey}`
   const [owner, setOwner] = useState(key)
   const [enabled, setEnabled] = useState(false)
@@ -91,7 +91,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     defaultRoundId.current = id && eligible.has(id) ? id : null
     setSelected(new Set(id ? shareMessageRounds(initialMessages).find((ids) => ids.includes(id)) ?? [] : [])); anchor.current = null
     setFocusedId(id && eligible.has(id) ? id : null)
-    setSettings({ ...DEFAULT_AGENT_SHARE_SETTINGS, title: input.title.slice(0, 60) || "对话摘录" })
+    setSettings(DEFAULT_AGENT_SHARE_SETTINGS)
     return fetchHistory(initial, next.signal)
   }
   function exit() {

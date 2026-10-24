@@ -10,6 +10,16 @@ const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024
 const encoder = new TextEncoder()
 
+export function shareFooterMetadata(items: readonly ShareMessage[]): { models: string; timestamp: string | undefined } {
+  const models = new Set<string>()
+  for (const item of items) {
+    const model = item.role === "assistant" ? item.metadata?.model?.trim() : undefined
+    if (model) models.add(model)
+  }
+  const timestamp = items.at(-1)?.timestamp
+  return { models: [...models].join(" / "), timestamp: timestamp && Number.isFinite(Date.parse(timestamp)) ? timestamp : undefined }
+}
+
 export function shareMessages(items: readonly SynapseAgentTimelineItem[], sending: boolean): ShareMessage[] {
   return groupTimelineDisplayEntries(timelineDisplayEntries(items), { pendingPermissionRequestIds: new Set(), sending })
     .flatMap((node) => {

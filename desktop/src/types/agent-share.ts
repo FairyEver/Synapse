@@ -12,15 +12,14 @@ export type AgentShareImageRequest = {
 export type AgentShareImageResult = { readonly success: boolean; readonly filePath?: string }
 
 export type AgentShareSettings = {
-  readonly title: string
   readonly width: 720 | 960
   readonly scale: 2 | 3
   readonly redact: boolean
-  readonly showTitle: boolean
-  readonly showBrand: boolean
+  readonly showModel: boolean
+  readonly showTime: boolean
 }
 
 export const DEFAULT_AGENT_SHARE_SETTINGS: AgentShareSettings = {
-  title: "对话摘录", width: 720, scale: 2, redact: true,
-  showTitle: true, showBrand: true,
+  width: 720, scale: 2, redact: true,
+  showModel: true, showTime: true,
 }

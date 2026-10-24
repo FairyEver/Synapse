@@ -204,7 +204,7 @@ function AgentConversationWorkspace({
   const pinnedSelectionKeyRef = useRef<string | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
   const shareViewport = useRef<HTMLDivElement>(null)
-  const share = useAgentShare({ target, title: sessionLabel(session), items: chat.timeline, sending: chat.sending, viewport: shareViewport })
+  const share = useAgentShare({ target, items: chat.timeline, sending: chat.sending, viewport: shareViewport })
   const latestEntry = chat.timeline.at(-1)
   const stick = useStickToBottom({
     contentSignal: [

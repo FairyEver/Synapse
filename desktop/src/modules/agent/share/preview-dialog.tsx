@@ -2,14 +2,16 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ArrowLeft, Copy, Download, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFrame, DialogFrameBody, DialogFrameFooter, DialogFrameHeader } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import appIcon from "@/assets/icon.png"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { AgentShareSettings } from "@/types/agent-share"
+import { formatDateTime } from "@/lib/date-time"
 import { AgentShareMessageBody } from "../components/agent-message-event"
 import { GeneratedUiTheme } from "../openui/generated-ui-theme"
 import { redactShareText } from "./redaction"
+import { shareFooterMetadata } from "./messages"
 import type { AgentShareController } from "./use-agent-share"
 
 function Toggle({ label, id, checked, onChange }: { label: string; id: string; checked: boolean; onChange: (checked: boolean) => void }) {
@@ -27,6 +29,9 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
   const { run } = output
   const { closePreview, exportAction } = share
   const settings = share.settings
+  const metadata = shareFooterMetadata(share.preview ?? [])
+  const models = settings.showModel ? metadata.models : ""
+  const timestamp = settings.showTime ? metadata.timestamp : undefined
   const zoom = fullSize ? 1 : Math.min(1, Math.max(0.1, (size.available - 64) / settings.width))
   const indexes = new Map(share.messages.map((item, index) => [item.id, index]))
   const change = <K extends keyof AgentShareSettings>(key: K, value: AgentShareSettings[K]) => share.setSettings((current) => ({ ...current, [key]: value }))
@@ -53,7 +58,7 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
   }, [paper, exportAction, run, settings, closePreview])
 
   const sharePaper = <article ref={setPaper} data-agent-share-paper className="overflow-hidden rounded-lg bg-background p-10 text-sm text-foreground [&_[data-streamdown=code-block-copy-button]]:hidden [&_[data-slot=scroll-area-scrollbar]]:hidden" style={{ width: settings.width }}>
-    {settings.showTitle && <header className="mb-8 border-b pb-7"><h2 className="break-words text-2xl leading-snug font-semibold">{redactShareText(settings.title.trim() || "对话摘录", settings.redact)}</h2></header>}
+    <header className="mb-8 flex items-center gap-3 border-b pb-7"><img src={appIcon} alt="Synapse" className="size-8 shrink-0" /><span className="text-lg font-semibold">Synapse</span></header>
     <div className="space-y-8">{share.preview?.map((message, index, all) => {
       const previous = index > 0 ? indexes.get(all[index - 1]!.id) : undefined
       const current = indexes.get(message.id)
@@ -66,7 +71,7 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
         </section>
       </Fragment>
     })}</div>
-    {settings.showBrand && <footer className="mt-10 flex items-center justify-between border-t pt-5 text-xs text-muted-foreground"><span className="font-medium">Synapse</span><span>对话摘录</span></footer>}
+    {(models || timestamp) && <footer className="mt-10 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t pt-5 text-right text-xs text-muted-foreground">{models && <span className="min-w-0 break-words">{redactShareText(models, settings.redact)}</span>}{timestamp && <time dateTime={timestamp} className="shrink-0 tabular-nums">{formatDateTime(timestamp)}</time>}</footer>}
   </article>
   if (share.active && share.preview && exportAction) {
     return <div aria-hidden="true" inert className="pointer-events-none fixed -left-[20000px] top-0"><GeneratedUiTheme>{sharePaper}</GeneratedUiTheme></div>
@@ -89,8 +94,7 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
             <h2 className="text-sm font-semibold">图片设置</h2>
             <div className="space-y-2"><p className="text-sm font-medium">清晰度</p><div role="group" aria-label="清晰度" className="flex gap-1 rounded-lg bg-muted p-1">{([2, 3] as const).map((scale) => <Button key={scale} type="button" className="flex-1" variant={settings.scale === scale ? "outline" : "ghost"} aria-pressed={settings.scale === scale} onClick={() => change("scale", scale)}>{scale === 2 ? "高清 2×" : "超清 3×"}</Button>)}</div></div>
             <div className="space-y-2"><p className="text-sm font-medium">版式宽度</p><div role="group" aria-label="版式宽度" className="flex gap-1 rounded-lg bg-muted p-1">{([720, 960] as const).map((width) => <Button key={width} type="button" className="flex-1" variant={settings.width === width ? "outline" : "ghost"} aria-pressed={settings.width === width} onClick={() => change("width", width)}>{width === 720 ? "标准" : "宽版"}</Button>)}</div></div>
-            <div><Toggle label="显示标题" id="agent-share-title" checked={settings.showTitle} onChange={(value) => change("showTitle", value)} />{settings.showTitle && <Input aria-label="分享图片标题" maxLength={60} className="mt-2" value={settings.title} onChange={(event) => change("title", event.target.value)} />}</div>
-            <div className="border-t pt-4"><Toggle label="隐藏邮箱" id="agent-share-email" checked={settings.redact} onChange={(value) => change("redact", value)} /><Toggle label="底部标识" id="agent-share-brand" checked={settings.showBrand} onChange={(value) => change("showBrand", value)} /></div>
+            <div className="border-t pt-4"><Toggle label="显示模型" id="agent-share-model" checked={settings.showModel} onChange={(value) => change("showModel", value)} /><Toggle label="显示时间" id="agent-share-time" checked={settings.showTime} onChange={(value) => change("showTime", value)} /><Toggle label="隐藏邮箱" id="agent-share-email" checked={settings.redact} onChange={(value) => change("redact", value)} /></div>
           </fieldset></aside>
         </DialogFrameBody>
         {output.error && <div role="alert" className="border-t px-5 py-3 text-sm text-destructive">{output.error}</div>}
