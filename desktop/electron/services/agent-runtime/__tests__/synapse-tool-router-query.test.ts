@@ -147,6 +147,28 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     })
   })
 
+  it.each([false, true])("does not report an intentionally disabled connector as unavailable (explicit names: %s)", async (explicitNames) => {
+    const discovery = { initializationResult: vi.fn(async () => ({})), mcpServerStatus: vi.fn(async () => []), close: vi.fn() }
+    const final = { close: vi.fn() }
+    const query = vi.fn().mockReturnValueOnce(discovery).mockReturnValueOnce(final)
+    const sdk = {
+      query, resolveSettings: vi.fn(async () => ({ effective: {} })),
+      tool: vi.fn((name) => ({ name })), createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })),
+    }
+    const logger = { info: vi.fn(), warn: vi.fn() }
+    const deniedMcpServers = [{ serverName: "figma" }]
+    await createRoutedQuery(sdk as never, {
+      prompt: promptThatMustNotBeRead(),
+      ...(explicitNames ? { expectedMcpServerNames: ["figma"] } : {}),
+      options: { mcpServers: { figma: { type: "http", url: "http://127.0.0.1:3845/mcp" } }, settings: { deniedMcpServers } },
+      router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() }, logger,
+    })
+    expect(logger.warn).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith("MCP discovery completed for Synapse tool router.", expect.objectContaining({ expectedServerNames: [] }))
+    expect(query.mock.calls[1]?.[0]).toMatchObject({ options: { strictMcpConfig: true, settings: { deniedMcpServers } } })
+    expect(query.mock.calls[1]?.[0].options.mcpServers).not.toHaveProperty("figma")
+  })
+
   it("waits for pending MCP servers before rebuilding the strict configuration", async () => {
     const discovery = {
       initializationResult: vi.fn(async () => ({})),

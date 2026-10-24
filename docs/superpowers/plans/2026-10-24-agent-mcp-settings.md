@@ -6,7 +6,7 @@
 
 ## 约束
 
-- 当前分支开发；不修改 Claude Code 配置，不启动应用或真实 MCP。
+- 当前分支开发；不修改 Claude Code 配置。首轮仅离线测试；后续用户明确授权启动应用和真实 MCP 进行端到端验收。
 - 配置清单只读解析，不能把配置存在报成连接成功；失败明确显示。
 - 禁用在 SDK 查询启动前生效，同时覆盖 discovery、正式查询和恢复；策略变化在下一轮重建 live session，沿用 SDK session。
 - 不改变规则、Skill、Provider、权限与 SDK 原生上下文生命周期。
@@ -24,3 +24,5 @@
 - 硬约束、IPC codegen 一致性和暂存 diff 空白检查通过。
 - 基于本次暂存内容与 HEAD 的隔离类型检查：Renderer、主进程、preload 和本次 10 个测试文件均无错误。全工作区类型检查受其他任务未提交的 controlled-runner 和 private-storage-policy 测试类型错误阻塞，未宣称全量通过。
 - 未启动桌面应用或执行视觉验收；本次只提交 Agent MCP 功能及配套测试、设计、规则和发布说明。
+
+后续已按用户授权完成真实窗口操作与实际 Provider HTTP 请求验收，并修复主动关闭连接器的诊断误报，详见 [实机验收记录](../acceptance/2026-10-24-agent-mcp-settings.md)。上方“未启动”仅记录首轮交付时的状态。

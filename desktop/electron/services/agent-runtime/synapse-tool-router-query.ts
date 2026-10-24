@@ -135,9 +135,13 @@ export class SynapseToolRouterQuery implements QueryLike {
 export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryInput): Promise<Query> {
   // Storage-policy failure must never enter the MCP fallback, which also starts a query.
   await assertPrivateStorageSettings(sdk, input)
+  const deniedMcpServers = asRecord(input.options.settings)?.deniedMcpServers
+  const disabledNames = new Set(Array.isArray(deniedMcpServers)
+    ? deniedMcpServers.map(rule => asRecord(rule)?.serverName).filter((name): name is string => typeof name === "string")
+    : [])
   const expectedServerNames = [...new Set(
     input.expectedMcpServerNames ?? configuredMcpServerNames(input.options),
-  )]
+  )].filter(name => !disabledNames.has(name))
   input.logger?.info?.("Starting MCP discovery for Synapse tool router.", {
     boundary: "claude-sdk.synapse-tool-router.discovery",
     expectedServerNames,
