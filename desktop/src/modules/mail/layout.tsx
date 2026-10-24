@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Settings } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -55,6 +56,7 @@ export function MailLayout({ mail, onSettings, onCompose }: { mail: MailViewMode
 
         </div>
         <div className="min-h-0 flex-1"><MailList key={`${mail.owner}:${mail.scope?.generation}:${mail.accountId}:${JSON.stringify(mail.view)}`} busy={busy} onSearch={query => void mail.search(query, "body")} coverage={mail.coverage} canContinue={mail.canContinue} onContinue={() => void mail.continueSearch().catch(cause => toast.error(mailError(cause)))} items={mail.items} drafts={mail.drafts} draftView={mail.view.drafts} selected={mail.detail?.id} loading={mail.loading} more={!!mail.cursor} onSelect={id => void mail.selectMessage(id)} onDraft={draftId => onCompose({ draftId })} onMore={() => void mail.loadMore()} onBatch={onBatch} folders={mail.folders} onMove={(ids, target) => void performBatch("move", ids, target)} /></div>
+        <div className="border-t p-3 @min-[33rem]/mail-client:hidden"><Button variant="ghost" className="w-full justify-start" onClick={onSettings} data-track="mail.settings"><Settings />邮箱设置</Button></div>
       </div>
       <div className={cn("min-h-0 min-w-0 flex-1", !mail.detail && "hidden @min-[53rem]/mail-client:block")}>
         {mail.detail ? <MailDetail detail={mail.detail} {...body} onBack={mail.clearDetail} onResource={urls => void body.loadRemote(urls)} onDownload={id => void download(id)} onLink={url => void openLink(url)} onReply={mode => onCompose({ accountId: mail.detail!.accountId, sourceMessageId: mail.detail!.id, mode })} onCopy={target => void copy(target)} /> : <div className="flex h-full items-center justify-center text-sm text-muted-foreground">选择一封邮件</div>}

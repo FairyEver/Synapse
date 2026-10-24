@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react"
-import { RefreshCw, PenSquare, Settings } from "lucide-react"
+import { RefreshCw, PenSquare } from "lucide-react"
 import { toast } from "sonner"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
@@ -26,7 +26,7 @@ export function ExternalMailModule({ openRequest, onOpenRequestConsumed }: { ope
     if (openRequest.messageId) void mail.selectMessage(openRequest.messageId)
     onOpenRequestConsumed?.(openRequest.requestId)
   }, [openRequest, mail.accountId, mail.owner, mail.scope, mail.authenticated, onOpenRequestConsumed])
-  return <SystemAppWindowShell actions={<><SystemAppTopBarActionButton iconOnly aria-label="刷新邮箱" disabled={!mail.accountId || mail.loading} onClick={() => void mail.sync().catch(cause => toast.error(mailError(cause)))}><RefreshCw /></SystemAppTopBarActionButton><SystemAppTopBarActionButton iconOnly aria-label="邮箱设置" disabled={!mail.authenticated} onClick={settings}><Settings /></SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={!mail.accountId} onClick={() => compose({ accountId: mail.accountId! })}><PenSquare />写邮件</SystemAppTopBarActionButton></>}>
+  return <SystemAppWindowShell actions={<><SystemAppTopBarActionButton iconOnly aria-label="刷新邮箱" disabled={!mail.accountId || mail.loading} onClick={() => void mail.sync().catch(cause => toast.error(mailError(cause)))}><RefreshCw /></SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={!mail.accountId} onClick={() => compose({ accountId: mail.accountId! })}><PenSquare />写邮件</SystemAppTopBarActionButton></>}>
     <MailLayout mail={mail} onSettings={settings} onCompose={compose} />
     <MailAccountDialog model={accountModel} />
     <MailSettings model={accountModel} mail={mail} />
