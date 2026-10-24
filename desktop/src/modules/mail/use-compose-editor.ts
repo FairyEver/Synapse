@@ -53,7 +53,7 @@ export function useComposeEditor(model: ComposeModel) {
         latest.current.edit(safe)
       } catch (cause) { setError(mailError(cause)) }
     },
-    onSelectionUpdate({ editor }) { setActiveMarks(["bold", "italic", "underline", "bulletList", "orderedList"].filter(mark => editor.isActive(mark))) },
+    onTransaction({ editor }) { setActiveMarks(["bold", "italic", "underline", "bulletList", "orderedList"].filter(mark => editor.isActive(mark))) },
   })
   useEffect(() => {
     const draft = model.draft

@@ -55,3 +55,15 @@ it("keeps basic formats and has a single link/underline extension while strippin
   expect(model.currentDraft()?.html).toContain("<strong>粗体</strong>"); expect(model.currentDraft()?.html).toContain("<u>下划线</u>")
   expect(model.currentDraft()?.html).toContain("font-size: 18px")
 })
+it("updates active format controls when a toolbar command changes stored marks without moving the caret", async () => {
+  const draft = { id: "md_one", accountId: "ma_one", revision: 1, to: [], cc: [], bcc: [], subject: "", html: "<p>正文</p>", text: "正文", assetIds: [], inlineImages: [], state: "editing", mode: "new", sourceMessageId: null, remoteLocator: null, localSaved: true, syncState: "pending", updatedAt: "2026-10-23T00:00:00Z" }
+  mocks.api.draftGet = vi.fn().mockResolvedValue(draft)
+  mount(<Harness />); await flush(); await act(async () => { await model.open({ draftId: draft.id }) }); await flush()
+  act(() => { rich.editor!.commands.setTextSelection(2) })
+  act(() => { rich.editor!.commands.toggleBold() })
+  expect(rich.activeMarks).toContain("bold")
+  act(() => { rich.editor!.commands.insertContent("B") })
+  expect(model.draft?.html).toContain("<strong>B</strong>")
+  act(() => { rich.editor!.commands.toggleBold() })
+  expect(rich.activeMarks).not.toContain("bold")
+})

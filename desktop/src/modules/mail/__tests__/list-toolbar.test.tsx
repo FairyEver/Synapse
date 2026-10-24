@@ -17,3 +17,10 @@ it("opens search on demand and keeps selection controls in one toolbar", () => {
   expect(document.querySelectorAll('select')).toHaveLength(0)
   expect(document.querySelector('[aria-label="已选 1 封邮件"]')?.textContent).toBe("1")
 })
+it("labels consumed drafts as sent instead of merely synced", () => {
+  const draft = { id: "md_sent", accountId: "ma_one", revision: 1, to: [], cc: [], bcc: [], subject: "已发送测试信", assetIds: [], inlineImages: [], state: "consumed" as const, mode: "new" as const, sourceMessageId: null, remoteLocator: null, localSaved: true, syncState: "synced" as const, updatedAt: "2026-10-24T00:00:00Z" }
+  mount(<MailList items={[]} drafts={[draft]} draftView loading={false} more={false} onSelect={vi.fn()} onDraft={vi.fn()} onMore={vi.fn()} onBatch={vi.fn()} folders={[]} onMove={vi.fn()} />)
+  const row = [...document.querySelectorAll("button")].find(node => node.textContent?.includes("已发送测试信"))
+  expect(row?.textContent).toContain("已发送（只读）")
+  expect(row?.textContent).not.toContain("已同步")
+})

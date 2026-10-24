@@ -30,6 +30,10 @@ MCP 公开入口仍为 `search`、`invoke`。先按意图或精确 `app_mail_*` 
 
 `accepted` 表示 SMTP 服务器接受，不保证收件方最终投递。`partial` 必须逐组说明 accepted / rejected，不自动重试已接受者。`unknown` 保留原 draft revision、预览和 clientRequestId，先 operation.get；Sent 副本的存在不证明丢失的逐收件人 SMTP 结果，副本不存在也不证明未发。需要再次发送时先解决不确定性并取得对应新发送授权，再显式创建新草稿，不能编辑原稿绕过去重。
 
+`accepted` / `partial` 且 sentCopyState 尚未 saved 时，也可沿用原 operationId 调 operation.get 核验副本，不重新提交 SMTP。桌面提供同一核验入口，并将已消费草稿标为已发送只读快照；文件夹刷新优先同步当前所见文件夹。
+
 只发送用户要求发送的内容；明确仅起草或先审阅时停在草稿或预览。`confirmed:true` 声明已核对授权，不要求每封邮件额外询问确认；存在收件人歧义、附件版本不确定或越出授权范围时仍须先解决。
 
 准确输入及权限见 [api-reference.md](api-reference.md)，阿里特性与真实验收边界见 [aliyun-compatibility.md](aliyun-compatibility.md)。
+
+工具发现为兼容客户端使用顶层对象列出可选字段；互斥输入仍由运行时严格校验。message.get 的 messageId/reference、attachment.list 的 messageId/draftId 必须二选一；附件定位使用 assetId，或 messageId 加 attachmentId，不混用。draft.create 的新信内容字段与 sourceMessageId/mode 回复转发形式不能混用。

@@ -73,6 +73,16 @@ it("can correct an invalid address after a failed save", async () => {
   await act(async () => { await editor.save() })
   expect(mocks.api.draftUpdate).toHaveBeenCalledWith(expect.objectContaining({ patch: expect.objectContaining({ to: [{ address: "valid@example.com" }] }) }))
 })
+it("explains invalid recipients without exposing schema internals and clears the error on correction", async () => {
+  await setup(); act(() => editor.changeAddress("cc", "not-an-email"))
+  await act(async () => { await expect(editor.save()).rejects.toThrow("抄送地址格式无效") })
+  expect(editor.error).toBe("抄送地址格式无效，请检查邮箱地址，并用逗号或分号分隔")
+  expect(mocks.api.draftUpdate).not.toHaveBeenCalled()
+  act(() => editor.changeAddress("cc", "copy@example.com"))
+  expect(editor.error).toBeNull()
+  await act(async () => { await editor.save() })
+  expect(editor.draft?.cc).toEqual([{ address: "copy@example.com" }])
+})
 it("keeps unknown send results for read-only reconciliation without resubmission", async () => {
   await setup(); const unknown = { operationId: "mo_unknown", state: "unknown", accepted: [], rejected: [], sentCopyState: "unknown", errorCode: "NETWORK_ERROR" }
   mocks.api.messageSend.mockResolvedValue(unknown); mocks.api.operationGet.mockResolvedValue(unknown)

@@ -172,7 +172,7 @@ export function useMail() {
     if (!current(e, id)) throw new Error("邮箱账号已变化")
     return result
   }, [owner, drafts])
-  const sync = useCallback(async () => { if (accountRef.current) { await mailApi().syncStart({ accountId: accountRef.current }); await refreshRef.current() } }, [])
+  const sync = useCallback(async () => { if (accountRef.current) { await mailApi().syncStart({ accountId: accountRef.current, folderId: viewRef.current.folderId }); await refreshRef.current() } }, [])
   const visible = loadedOwner === owner
   return { accounts: visible ? accounts : [], accountId: visible ? accountId : null, folders: visible ? folders : [], items: visible ? items : [], drafts: visible ? drafts : [], detail: visible ? detail : null, view, coverage, cursor, canContinue, loading, error, authenticated: !!owner, scope: scope.current, owner,
     selectAccount, selectView, selectMessage, clearDetail, refresh, loadAccounts, loadMore: () => refresh(true, cursor ?? undefined), search, continueSearch, mutate, deleteDrafts, sync }

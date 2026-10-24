@@ -23,7 +23,7 @@ const descriptions: Record<MailAction, string> = {
   "sync.get": "Get a synchronization job's progress, actual coverage and diagnostic status.",
   "sync.cancel": "Cancel historical synchronization for this job while leaving normal new-mail monitoring enabled.",
   "message.list": "List indexed external email; omit folderId for this account's folders. Filters and coverage are explicit; reading does not mark mail read.",
-  "message.get": "Read metadata and attachment references for one external email ID or full synapse://mail/<id> reference; does not mark it read or fetch every body.",
+  "message.get": "Read metadata and attachment references for one external email ID or full synapse://mail/<id> reference; provide exactly one of messageId or reference. Does not mark it read or fetch every body.",
   "message.count": "Return indexed, unread and server-reported counts separately with actual index coverage.",
   "message.update": "Set read or star flags for 1–100 explicit email IDs; returns individual results.",
   "message.move": "Move explicit emails with a stable request ID. Provider-specific semantics are checked; uncertain operations are not blindly repeated.",
@@ -35,13 +35,13 @@ const descriptions: Record<MailAction, string> = {
   "search.cancel": "Cancel remaining search work and keep the results already found.",
   "draft.list": "List local and indexed remote email draft summaries for one account.",
   "draft.get": "Read a draft and its revision, content and independent local/server save states.",
-  "draft.create": "Create a draft, or prepare reply, reply-all or forward from a known email; creating a draft never authorizes sending.",
+  "draft.create": "Create a draft using accountId and content fields, or prepare reply, reply-all or forward using accountId, sourceMessageId, mode and optional forwardMode. The two input forms are mutually exclusive and validated at runtime; creating a draft never authorizes sending.",
   "draft.update": "Save email draft fields and asset references with expectedRevision; concurrent edits are rejected without overwriting.",
   "draft.delete": "Discard one exact draft revision and its associated remote copy; never deletes unrelated drafts.",
   "attachment.import_local": "Import a local file into this account's controlled email assets. Does not upload it to Drive.",
-  "attachment.list": "List email or draft attachment metadata without downloading all attachment bytes.",
-  "attachment.get": "Read attachment name, type, size, CID and hash metadata. Does not parse attachment text.",
-  "attachment.download_file": "Download one owned attachment to an absolute local path without overwriting an existing file.",
+  "attachment.list": "List email or draft attachment metadata without downloading all attachment bytes. Provide exactly one of messageId or draftId.",
+  "attachment.get": "Read attachment name, type, size, CID and hash metadata. Provide assetId, or messageId together with attachmentId; the forms are mutually exclusive. Does not parse attachment text.",
+  "attachment.download_file": "Download one owned attachment to an absolute outputPath without overwriting an existing file. Provide assetId, or messageId together with attachmentId; the forms are mutually exclusive.",
   "attachment.delete": "Delete only an unreferenced local staged email asset; never modifies a server message.",
   "message.extract_to_file": "Export one external email's original MIME to an absolute local EML file.",
   "body.read_chunk": "Fetch and read a bounded body chunk for one external email; reports completeness and continuation. Never marks it read.",
@@ -116,6 +116,15 @@ export const MAIL_MCP_TOOL_ACTIONS = Object.fromEntries(MAIL_ACTIONS.map((a) => 
 export function buildMailTools(): McpToolDefinition[] {
   return MAIL_ACTIONS.map((a) => {
     const schema = z.toJSONSchema(MAIL_INPUT_SCHEMAS[a], { io: "input" })
-    return { name: `app_mail_${a.replaceAll(".", "_")}`, description: MAIL_DEFINITIONS[a].description, inputSchema: { ...schema, type: "object", properties: schema.properties ?? {}, additionalProperties: typeof schema.additionalProperties === "boolean" ? schema.additionalProperties : true } }
+    // Some MCP clients reject top-level combinators. Discovery exposes all fields;
+    // the shared runtime schema still enforces the strict alternative branches.
+    const branches = schema.anyOf as { properties?: Record<string, unknown>; required?: string[] }[] | undefined
+    const inputSchema = branches ? {
+      type: "object" as const,
+      properties: Object.assign({}, ...branches.map(branch => branch.properties)),
+      required: (branches[0].required ?? []).filter(field => branches.every(branch => branch.required?.includes(field))),
+      additionalProperties: false,
+    } : { ...schema, type: "object" as const, properties: schema.properties ?? {}, additionalProperties: typeof schema.additionalProperties === "boolean" ? schema.additionalProperties : true }
+    return { name: `app_mail_${a.replaceAll(".", "_")}`, description: MAIL_DEFINITIONS[a].description, inputSchema }
   })
 }

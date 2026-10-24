@@ -646,44 +646,25 @@
 
 ### app_mail_message_get
 
-查看邮件详情、读取邮件链接。Read metadata and attachment references for one external email ID or full synapse://mail/<id> reference; does not mark it read or fetch every body.
+查看邮件详情、读取邮件链接。Read metadata and attachment references for one external email ID or full synapse://mail/<id> reference; provide exactly one of messageId or reference. Does not mark it read or fetch every body.
 
 权限：content.read；风险：normal。
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "messageId": {
-          "type": "string",
-          "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        }
-      },
-      "required": [
-        "messageId"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "reference": {
-          "type": "string",
-          "maxLength": 2048
-        }
-      },
-      "required": [
-        "reference"
-      ],
-      "additionalProperties": false
-    }
-  ],
   "type": "object",
-  "properties": {},
-  "additionalProperties": true
+  "properties": {
+    "messageId": {
+      "type": "string",
+      "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "reference": {
+      "type": "string",
+      "maxLength": 2048
+    }
+  },
+  "required": [],
+  "additionalProperties": false
 }
 ```
 
@@ -1084,189 +1065,166 @@
 
 ### app_mail_draft_create
 
-起草邮件、回复、回复全部和转发。Create a draft, or prepare reply, reply-all or forward from a known email; creating a draft never authorizes sending.
+起草邮件、回复、回复全部和转发。Create a draft using accountId and content fields, or prepare reply, reply-all or forward using accountId, sourceMessageId, mode and optional forwardMode. The two input forms are mutually exclusive and validated at runtime; creating a draft never authorizes sending.
 
 权限：content.mutate；风险：normal。
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "accountId": {
-          "type": "string",
-          "pattern": "^ma_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "to": {
-          "default": [],
-          "maxItems": 500,
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "address": {
-                "type": "string",
-                "maxLength": 320,
-                "format": "email",
-                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
-              },
-              "name": {
-                "type": "string",
-                "maxLength": 1000,
-                "pattern": "^[^\\r\\n\\x00]*$"
-              }
-            },
-            "required": [
-              "address"
-            ],
-            "additionalProperties": false
+  "type": "object",
+  "properties": {
+    "accountId": {
+      "type": "string",
+      "pattern": "^ma_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "to": {
+      "default": [],
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 320,
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 1000,
+            "pattern": "^[^\\r\\n\\x00]*$"
           }
         },
-        "cc": {
-          "default": [],
-          "maxItems": 500,
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "address": {
-                "type": "string",
-                "maxLength": 320,
-                "format": "email",
-                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
-              },
-              "name": {
-                "type": "string",
-                "maxLength": 1000,
-                "pattern": "^[^\\r\\n\\x00]*$"
-              }
-            },
-            "required": [
-              "address"
-            ],
-            "additionalProperties": false
+        "required": [
+          "address"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "cc": {
+      "default": [],
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 320,
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 1000,
+            "pattern": "^[^\\r\\n\\x00]*$"
           }
         },
-        "bcc": {
-          "default": [],
-          "maxItems": 500,
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "address": {
-                "type": "string",
-                "maxLength": 320,
-                "format": "email",
-                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
-              },
-              "name": {
-                "type": "string",
-                "maxLength": 1000,
-                "pattern": "^[^\\r\\n\\x00]*$"
-              }
-            },
-            "required": [
-              "address"
-            ],
-            "additionalProperties": false
+        "required": [
+          "address"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "bcc": {
+      "default": [],
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "maxLength": 320,
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 1000,
+            "pattern": "^[^\\r\\n\\x00]*$"
           }
         },
-        "subject": {
-          "default": "",
-          "type": "string",
-          "maxLength": 998,
-          "pattern": "^[^\\r\\n\\x00]*$"
-        },
-        "html": {
-          "default": "",
-          "type": "string"
-        },
-        "text": {
-          "default": "",
-          "type": "string"
-        },
-        "assetIds": {
-          "default": [],
-          "maxItems": 100,
-          "type": "array",
-          "items": {
+        "required": [
+          "address"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "subject": {
+      "default": "",
+      "type": "string",
+      "maxLength": 998,
+      "pattern": "^[^\\r\\n\\x00]*$"
+    },
+    "html": {
+      "default": "",
+      "type": "string"
+    },
+    "text": {
+      "default": "",
+      "type": "string"
+    },
+    "assetIds": {
+      "default": [],
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^mas_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      }
+    },
+    "inlineImages": {
+      "default": [],
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "assetId": {
             "type": "string",
             "pattern": "^mas_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "cid": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\r\\n\\x00]*$"
           }
         },
-        "inlineImages": {
-          "default": [],
-          "maxItems": 100,
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "assetId": {
-                "type": "string",
-                "pattern": "^mas_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-              },
-              "cid": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200,
-                "pattern": "^[^\\r\\n\\x00]*$"
-              }
-            },
-            "required": [
-              "assetId",
-              "cid"
-            ],
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "accountId"
-      ],
-      "additionalProperties": false
+        "required": [
+          "assetId",
+          "cid"
+        ],
+        "additionalProperties": false
+      }
     },
-    {
-      "type": "object",
-      "properties": {
-        "accountId": {
-          "type": "string",
-          "pattern": "^ma_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "sourceMessageId": {
-          "type": "string",
-          "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "mode": {
-          "type": "string",
-          "enum": [
-            "reply",
-            "reply_all",
-            "forward"
-          ]
-        },
-        "forwardMode": {
-          "default": "inline",
-          "type": "string",
-          "enum": [
-            "inline",
-            "eml"
-          ]
-        }
-      },
-      "required": [
-        "accountId",
-        "sourceMessageId",
-        "mode"
-      ],
-      "additionalProperties": false
+    "sourceMessageId": {
+      "type": "string",
+      "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "reply",
+        "reply_all",
+        "forward"
+      ]
+    },
+    "forwardMode": {
+      "default": "inline",
+      "type": "string",
+      "enum": [
+        "inline",
+        "eml"
+      ]
     }
+  },
+  "required": [
+    "accountId"
   ],
-  "type": "object",
-  "properties": {},
-  "additionalProperties": true
+  "additionalProperties": false
 }
 ```
 
@@ -1481,175 +1439,101 @@
 
 ### app_mail_attachment_list
 
-列出邮件或草稿附件。List email or draft attachment metadata without downloading all attachment bytes. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
+列出邮件或草稿附件。List email or draft attachment metadata without downloading all attachment bytes. Provide exactly one of messageId or draftId. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
 
 权限：content.read；风险：normal。
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "messageId": {
-          "type": "string",
-          "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "cursor": {
-          "type": "string",
-          "maxLength": 4096
-        },
-        "limit": {
-          "default": 50,
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100
-        }
-      },
-      "required": [
-        "messageId"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "draftId": {
-          "type": "string",
-          "pattern": "^md_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "cursor": {
-          "type": "string",
-          "maxLength": 4096
-        },
-        "limit": {
-          "default": 50,
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 100
-        }
-      },
-      "required": [
-        "draftId"
-      ],
-      "additionalProperties": false
-    }
-  ],
   "type": "object",
-  "properties": {},
-  "additionalProperties": true
+  "properties": {
+    "messageId": {
+      "type": "string",
+      "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "limit": {
+      "default": 50,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "draftId": {
+      "type": "string",
+      "pattern": "^md_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
 }
 ```
 
 ### app_mail_attachment_get
 
-读取邮件附件信息。Read attachment name, type, size, CID and hash metadata. Does not parse attachment text.
+读取邮件附件信息。Read attachment name, type, size, CID and hash metadata. Provide assetId, or messageId together with attachmentId; the forms are mutually exclusive. Does not parse attachment text.
 
 权限：content.read；风险：normal。
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "assetId": {
-          "type": "string",
-          "pattern": "^mas_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        }
-      },
-      "required": [
-        "assetId"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "messageId": {
-          "type": "string",
-          "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "attachmentId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200
-        }
-      },
-      "required": [
-        "messageId",
-        "attachmentId"
-      ],
-      "additionalProperties": false
-    }
-  ],
   "type": "object",
-  "properties": {},
-  "additionalProperties": true
+  "properties": {
+    "assetId": {
+      "type": "string",
+      "pattern": "^mas_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "messageId": {
+      "type": "string",
+      "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "attachmentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "required": [],
+  "additionalProperties": false
 }
 ```
 
 ### app_mail_attachment_download_file
 
-下载邮件附件到本机。Download one owned attachment to an absolute local path without overwriting an existing file.
+下载邮件附件到本机。Download one owned attachment to an absolute outputPath without overwriting an existing file. Provide assetId, or messageId together with attachmentId; the forms are mutually exclusive.
 
 权限：fs.write.outside-userdata；风险：normal。
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "anyOf": [
-    {
-      "type": "object",
-      "properties": {
-        "assetId": {
-          "type": "string",
-          "pattern": "^mas_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "outputPath": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 4096
-        }
-      },
-      "required": [
-        "assetId",
-        "outputPath"
-      ],
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "messageId": {
-          "type": "string",
-          "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        },
-        "attachmentId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200,
-          "pattern": "^[^\\r\\n\\x00]*$"
-        },
-        "outputPath": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 4096
-        }
-      },
-      "required": [
-        "messageId",
-        "attachmentId",
-        "outputPath"
-      ],
-      "additionalProperties": false
-    }
-  ],
   "type": "object",
-  "properties": {},
-  "additionalProperties": true
+  "properties": {
+    "assetId": {
+      "type": "string",
+      "pattern": "^mas_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "outputPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "messageId": {
+      "type": "string",
+      "pattern": "^em_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "attachmentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\r\\n\\x00]*$"
+    }
+  },
+  "required": [
+    "outputPath"
+  ],
+  "additionalProperties": false
 }
 ```
 

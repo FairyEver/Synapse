@@ -6,6 +6,15 @@ import { MailDetail } from "../message-detail"
 import { useMail } from "../use-mail"
 let current: ReturnType<typeof useMail>
 function Harness() { current = useMail(); return null }
+it("refreshes the selected server folder instead of waiting for the background folder sweep", async () => {
+  mount(<Harness />); await flush()
+  act(() => current.selectView({ folderId: "mf_sent" })); await flush()
+  await act(async () => { await current.sync() })
+  expect(mocks.api.syncStart).toHaveBeenLastCalledWith({ accountId: "ma_one", folderId: "mf_sent" })
+  act(() => current.selectView({})); await flush()
+  await act(async () => { await current.sync() })
+  expect(mocks.api.syncStart).toHaveBeenLastCalledWith({ accountId: "ma_one" })
+})
 it("preserves individual restore results and ignores old identity events", async () => {
   mount(<Harness />); await flush()
   mocks.api.messageRestore.mockResolvedValue({ items: [{ id: summary.id, status: "unknown", code: "UNCONFIRMED" }] })
