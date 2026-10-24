@@ -1940,3 +1940,7 @@
   "additionalProperties": false
 }
 ```
+
+## 部门收件地址查询
+
+外部邮件复用 `app_mail_internal_organization_list({query})` 与 `app_mail_internal_organization_members_list({organizationId,cursor?})`。成员响应为 `{items:[{userId,nickname,handle,contactEmail}],nextCursor}`，contactEmail 可空；必须读完所有页、检查每人联系邮箱，缺失默认阻止，用户明确排除后才能展开实际 To/Cc。具体步骤见 [index.md](index.md#按部门发送外部邮件)。这些查询不授权站内信发送。

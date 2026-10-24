@@ -7,6 +7,7 @@ import { runMailUiOperation } from "../../../app-capabilities/mail/renderer/trac
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { mailApi, mailError } from "./api"
 import { registerNavigationGuard } from "@/app-shell/navigation-guard"
+import { mergeDepartmentAddresses, type DepartmentMember } from "./department-recipients"
 import type { ComposeIntent } from "./layout"
 const fields = (draft: Draft): Omit<DraftInput, "accountId"> => ({ to: draft.to, cc: draft.cc, bcc: [], subject: draft.subject, html: draft.html, text: draft.text, assetIds: draft.assetIds, inlineImages: draft.inlineImages })
 const addressText = (addresses: Draft["to"]) => addresses.map(a => a.name ? `${JSON.stringify(a.name)} <${a.address}>` : a.address).join(", ")
@@ -99,6 +100,11 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     if (sendLock.current || value.current?.state !== "editing") return
     addressRef.current = { ...addressRef.current, [key]: text }; setAddresses(addressRef.current); changed.current++; refreshDirty(); setPreview(null); request.current = null; setError(null); setEditVersion(changed.current)
     setAddressError(current => current?.field === key ? null : current)
+  }
+  const addDepartmentRecipients = (field: "to" | "cc", members: DepartmentMember[], excludeMissing: boolean) => {
+    if (sendLock.current || value.current?.state !== "editing") throw new Error("当前草稿不可编辑")
+    const next = mergeDepartmentAddresses(parseMailAddresses(addressRef.current.to), parseMailAddresses(addressRef.current.cc, "抄送"), field, members, excludeMissing)
+    changeAddress("to", addressText(next.to)); changeAddress("cc", addressText(next.cc))
   }
   const save = useCallback(async (): Promise<void> => {
     if (savingTask.current) return savingTask.current
@@ -212,6 +218,6 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
       edit({ inlineImages: [...value.current.inlineImages, image] }); return image
     } catch (cause) { setError(mailError(cause)); return null }
   }
-  return { sessionId: epoch.current, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, dirty, preview, receipt, editVersion, open, edit, changeAddress, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
+  return { sessionId: epoch.current, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, dirty, preview, receipt, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
 }
 export type ComposeModel = ReturnType<typeof useCompose>

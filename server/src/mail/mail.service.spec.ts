@@ -66,6 +66,31 @@ describe("MailService", () => {
     expect(await service.searchRecipients("outsider", "王明")).toEqual({ items: [], nextCursor: null })
   })
 
+  it("returns department contact emails with descendant scope and without login addresses", async () => {
+    const { service, prisma, teammate } = harness()
+    const findFirst = vi.fn().mockResolvedValue({ id: "root", teamId: "team-1" })
+    Object.assign(prisma.organization, { findFirst })
+    prisma.organization.findMany.mockResolvedValue([
+      { id: "root", parentId: null, teamId: "team-1", name: "Root" },
+      { id: "child", parentId: "root", teamId: "team-1", name: "Child" },
+    ])
+    prisma.user.findMany.mockResolvedValue([{ ...teammate, contactEmail: null, email: "login@example.com" }] as never)
+    const result = await service.listOrganizationMembers("sender", "root")
+    expect(result.items).toEqual([{ userId: teammate.id, nickname: teammate.nickname, handle: teammate.handle, contactEmail: null }])
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 51, select: { id: true, nickname: true, handle: true, contactEmail: true },
+      where: { status: "active", organizationMemberships: { some: { organizationId: { in: ["root", "child"] } } } },
+    }))
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "root", team: { members: { some: { userId: "sender" } } } } }))
+    prisma.user.findMany.mockResolvedValueOnce(Array.from({ length: 51 }, (_, i) => ({ ...teammate, id: `member-${i}`, contactEmail: `member${i}@example.com` })) as never)
+    const page = await service.listOrganizationMembers("sender", "root")
+    expect(page.items).toHaveLength(50)
+    expect(page.nextCursor).toBe("member-49")
+    expect(page.items[0]?.contactEmail).toBe("member0@example.com")
+    findFirst.mockResolvedValueOnce(null)
+    await expect(service.listOrganizationMembers("outsider", "root")).rejects.toThrow("组织不存在")
+  })
+
   it("combines sender filtering with inbox visibility, unread state and search before pagination", async () => {
     const { service, prisma } = harness()
     await service.listMessages("reader", "inbox", "报告", undefined, true, "user:writer")

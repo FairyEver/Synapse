@@ -8,7 +8,7 @@
 |---|---|---|
 | `app_mail_internal_recipient_list` | `query`（可传空字符串浏览），可选 `cursor` | `userId`、昵称、handle、`contactEmail`（可空，用户自填，非登录邮箱）、匹配类型、共同团队、`nextCursor` |
 | `app_mail_internal_organization_list` | `query`（可传空字符串浏览） | 当前用户所在团队的组织 ID、名称、所属团队和成员数 |
-| `app_mail_internal_organization_members_list` | `organizationId`，可选 `cursor` | 组织及下级的有效成员，按 `nextCursor` 续页 |
+| `app_mail_internal_organization_members_list` | `organizationId`，可选 `cursor` | 组织及下级的活跃成员（userId、nickname、handle、可空 contactEmail，不含登录邮箱），按 `nextCursor` 续页；外部部门邮件必须读完全部页并处理缺失邮箱 |
 | `app_mail_internal_contact_list` | `box: inbox \| sent` | 完整可见信箱的历史发件人或收件/抄送地址，含 `key`、`kind`、`name`、`handle`、`teamName`、`unread`、`lastSentAt`，最近相关信件倒序 |
 | `app_mail_internal_message_list` | `box: inbox \| sent` | 当前用户分页列表；可选 `query`、`cursor`、`unreadOnly`、`contactKey` |
 | `app_mail_internal_message_count` | 无 | 精确的 `inboxTotal`、`sentTotal`、`unread` |

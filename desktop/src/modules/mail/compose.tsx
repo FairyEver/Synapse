@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { track } from "@/lib/ui-tracking"
 import type { AccountSummary } from "../../../app-capabilities/mail/shared/types"
 import type { ComposeModel } from "./use-compose"
+import { DepartmentPicker } from "./department-picker"
 import { useComposeEditor } from "./use-compose-editor"
 import { useComposeAssets } from "./use-compose-assets"
 const toolGroups = [
@@ -32,6 +33,7 @@ function ComposeToolButton({ label, ...props }: ComponentProps<typeof Button> & 
 }
 
 function ComposeRecipients({ model, disabled }: { model: ComposeModel; disabled: boolean }) {
+  const [departmentField, setDepartmentField] = useState<"to" | "cc" | null>(null)
   const [expanded, setExpanded] = useState({ cc: false })
   const visible = { to: true, cc: expanded.cc || !!model.addresses.cc }
   return <>
@@ -39,10 +41,12 @@ function ComposeRecipients({ model, disabled }: { model: ComposeModel; disabled:
       <InputGroup>
         <InputGroupAddon><Label className="w-12 shrink-0" htmlFor={`mail-compose-${key}`}>{label}</Label></InputGroupAddon>
         <InputGroupInput id={`mail-compose-${key}`} value={model.addresses[key]} disabled={disabled} autoComplete="off" aria-invalid={model.addressError?.field === key || undefined} aria-describedby={model.addressError?.field === key ? `mail-compose-${key}-error` : undefined} autoFocus={key !== "to" && expanded[key]} onFocus={() => { if (key !== "to") setExpanded(current => ({ ...current, [key]: true })) }} onChange={event => model.changeAddress(key, event.target.value)} data-track={`mail.compose.${key}`} />
+        <InputGroupAddon align="inline-end"><InputGroupButton disabled={disabled} aria-label={`为${label}选择部门`} onClick={() => setDepartmentField(key)}>选择部门</InputGroupButton></InputGroupAddon>
         {key === "to" && !visible.cc && <InputGroupAddon align="inline-end"><InputGroupButton disabled={disabled} aria-label="添加抄送" aria-controls="mail-compose-cc" onClick={() => setExpanded(current => ({ ...current, cc: true }))}>抄送</InputGroupButton></InputGroupAddon>}
       </InputGroup>
       {model.addressError?.field === key && <FieldError id={`mail-compose-${key}-error`}>{model.addressError.message}</FieldError>}
     </div>)}
+    {departmentField && <DepartmentPicker disabled={disabled} onClose={() => setDepartmentField(null)} onApply={(members, excludeMissing) => model.addDepartmentRecipients(departmentField, members, excludeMissing)} />}
   </>
 }
 const receiptStates = { prepared: "待发送", submitting: "发送中", accepted: "服务器已接受", partial: "部分收件人被拒绝", failed: "发送失败", unknown: "发送结果待核验" }

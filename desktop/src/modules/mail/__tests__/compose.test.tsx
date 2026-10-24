@@ -255,3 +255,15 @@ it("retains an image arriving after first save without saving it implicitly", as
   expect(mocks.api.draftCommit).toHaveBeenCalledTimes(1)
   expect(mocks.api.draftUpdate).not.toHaveBeenCalled()
 })
+
+it("adds reviewed department addresses to the latest draft, requiring explicit exclusions", async () => {
+  await setup()
+  const members = [{ userId: "one", name: "成员", address: { name: "成员", address: "member@example.com" }, issue: null }, { userId: "two", name: "新人", address: null, issue: "未设置联系邮箱" }]
+  act(() => editor.changeAddress("cc", "member@example.com,manual@example.com"))
+  expect(() => editor.addDepartmentRecipients("to", members, false)).toThrow("请先处理")
+  expect(editor.addresses.cc).toContain("member@example.com")
+  act(() => editor.addDepartmentRecipients("to", members, true))
+  expect(editor.addresses.cc).toBe("manual@example.com")
+  await act(async () => { await editor.save() })
+  expect(mocks.api.draftUpdate).toHaveBeenCalledWith(expect.objectContaining({ patch: expect.objectContaining({ to: [draft.to[0], members[0].address], cc: [{ address: "manual@example.com" }] }) }))
+})

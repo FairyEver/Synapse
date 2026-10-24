@@ -126,8 +126,8 @@ export class MailService {
     const tree = await this.prisma.organization.findMany({ where: { teamId: organization.teamId }, select: { id: true, parentId: true } })
     const where = { status: "active" as const, organizationMemberships: { some: { organizationId: { in: descendantIds(tree, organization.id) } } } }
     if (cursor && !await this.prisma.user.findFirst({ where: { id: cursor, ...where }, select: { id: true } })) throw new BadRequestException("无效的成员分页位置。")
-    const rows = await this.prisma.user.findMany({ where, orderBy: { id: "asc" }, take: 51, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), select: { id: true, nickname: true, handle: true } })
-    return { items: rows.slice(0, 50).map(exposedUser), nextCursor: rows.length > 50 ? rows[49]!.id : null }
+    const rows = await this.prisma.user.findMany({ where, orderBy: { id: "asc" }, take: 51, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), select: { id: true, nickname: true, handle: true, contactEmail: true } })
+    return { items: rows.slice(0, 50).map(user => ({ ...exposedUser(user), contactEmail: user.contactEmail })), nextCursor: rows.length > 50 ? rows[49]!.id : null }
   }
 
   async prepareLocalAttachment(userId: string, fileName: string, mimeType: string | null, body: Buffer) {

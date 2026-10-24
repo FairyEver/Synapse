@@ -45,7 +45,7 @@ export type MailOperation =
 export type MailOperationResult = {
   recipientSearch: { items: (MailPerson & { contactEmail?: string | null; matchKind: "exact" | "prefix" | "partial" | "fuzzy" | "browse"; similarity: number; sharedTeamIds: string[] })[]; nextCursor: string | null }
   organizationSearch: { items: MailOrganization[] }
-  organizationMembers: { items: MailPerson[]; nextCursor: string | null }
+  organizationMembers: { items: (MailPerson & { contactEmail?: string | null })[]; nextCursor: string | null }
   messageList: { items: MailSummary[]; nextCursor: string | null; contactKey?: string }
   contactList: { items: MailContact[] }
   messageCount: { inboxTotal: number; sentTotal: number; unread: number }
