@@ -13,7 +13,7 @@ export interface StoredMessage extends Record<string, unknown> {
 }
 interface FolderCheckpoint extends Record<string, unknown> {
   kind: "folder"; folderId: string; uidValidity: string; baselineUid: number; metadataComplete: boolean; updatedAt: number;
-  firstPageDone?: boolean; flagsOffset?: number; flagsCheckedAt?: number; uidDigest?: string; indexedCount?: number
+  firstPageDone?: boolean; flagsOffset?: number; flagsCheckedAt?: number; uidDigest?: string; indexedCount?: number; headersIndexedCount?: number; totalCount?: number
 }
 interface StoredJob extends Record<string, unknown> { kind: "job"; job: MailJob }
 export interface MailChanged { ownerId: string; generation: number; accountId: string; ids: string[]; revision: number }
@@ -137,6 +137,11 @@ export class MailSync {
     const missing = allMissing.filter(uid => !newMailOnly || uid > baselineUid)
     let indexed = 0
     if (missing.length) {
+      checkpoint = await this.repo.save(ctx, "sync-state", checkpointId, accountId, {
+        ...checkpoint.data, metadataComplete: false, headersIndexedCount: uids.length - allMissing.length,
+        totalCount: uids.length, flagsOffset, uidDigest, updatedAt: Date.now(),
+      }, checkpoint.revision)
+      this.emit(ctx, accountId, [folder.id])
       const batch = missing.slice(0, checkpoint.data.firstPageDone ? MAIL_HISTORY_BATCH_SIZE : MAIL_PAGE_SIZE)
       const headers = await session.fetchHeaders(folder.data.folder.path, batch, ctx.signal)
       const allowed = new Set(batch), seen = new Set<number>()
@@ -188,6 +193,13 @@ export class MailSync {
       this.emit(ctx, accountId, [saved.id], saved.revision)
     }
     const headersComplete = indexed === missing.length
+    // Publish the completed header work before waiting for a flag batch. Counts
+    // describe verified server UIDs, not the number of cached message records.
+    checkpoint = await this.repo.save(ctx, "sync-state", checkpointId, accountId, {
+      ...checkpoint.data, metadataComplete: false, headersIndexedCount: uids.length - allMissing.length + indexed,
+      totalCount: uids.length, flagsOffset, uidDigest, updatedAt: Date.now(),
+    }, checkpoint.revision)
+    this.emit(ctx, accountId, [folder.id])
     if (headersComplete && (flagsOffset < uids.length || flagsDue)) {
       const flags = await session.fetchFlags(folder.data.folder.path, uids.slice(flagsOffset, flagsOffset + MAIL_HISTORY_BATCH_SIZE), ctx.signal)
       for (const value of flags) {
@@ -321,9 +333,28 @@ export class MailSync {
       while (!ctx.signal.aborted) { await session.idle(inbox.path, ctx.signal, () => { runner.hint = true }); await wait(50, ctx.signal) }
     } finally { await session.close(); if (runner.idle === session) runner.idle = undefined }
   }
+  private async syncProgress(ctx: MailContext, accountId: string): Promise<NonNullable<MailJob["syncProgress"]>> {
+    let cursor: string | undefined, total = 0, indexed = 0, checked = 0, known = true, folders = 0
+    do {
+      const page = await this.repo.page<StoredFolder>(ctx, "folders", { accountId, cursor, limit: 100 })
+      for (const row of page.items) {
+        if (!row.data.folder.selectable) continue
+        folders++
+        const checkpoint = await this.repo.find<FolderCheckpoint>(ctx, "sync-state", `folder:${row.id}`)
+        const data = checkpoint?.data
+        if (!data || data.uidValidity !== row.data.folder.uidValidity || data.totalCount === undefined || data.headersIndexedCount === undefined) { known = false; continue }
+        total += data.totalCount
+        indexed += data.headersIndexedCount
+        checked += Math.min(data.flagsOffset ?? 0, data.totalCount)
+      }
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    const reconciling = known && folders > 0 && indexed === total
+    return { phase: reconciling ? "reconciling" : "indexing", completed: reconciling ? checked : indexed, total: known && folders > 0 ? total : null }
+  }
   private async updateJob(ctx: MailContext, jobId: string, state: MailJob["state"], coverage: Coverage, errorCode: string | null): Promise<MailJob> {
     const row = await this.repo.get<StoredJob>(ctx, "sync-state", jobId)
-    const job = { ...row.data.job, state, coverage, errorCode }
+    const job = { ...row.data.job, state, coverage, errorCode, syncProgress: await this.syncProgress(ctx, row.accountId) }
     await this.repo.save(ctx, "sync-state", jobId, row.accountId, { kind: "job", job }, row.revision)
     this.emit(ctx, row.accountId, [jobId]); return job
   }
@@ -339,7 +370,7 @@ export class MailSync {
     const job = (await this.repo.get<StoredJob>(ctx, "sync-state", jobId)).data.job
     const runner = this.runners.get(`${ctx.ownerId}:${job.accountId}`)
     const running = runner?.jobId === job.jobId && runner.ctx.generation === ctx.generation && !runner.ctx.signal.aborted && !this.suspended
-    if (job.state === "completed" && running && runner.foreground && !runner.historyPaused) return { ...job, state: "running" }
+    if (running && !runner.historyPaused && (job.state === "running" || job.state === "completed" && runner.foreground)) return { ...job, state: "running", syncProgress: await this.syncProgress(ctx, job.accountId) }
     return job.state === "running" && !running ? { ...job, state: "paused" } : job
   }
   async cancel(ctx: MailContext, input: MailInputs["sync.cancel"]): Promise<MailJob> {

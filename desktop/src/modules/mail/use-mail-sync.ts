@@ -11,7 +11,7 @@ export interface MailSyncStatus {
   progress: string | null
   error: string | null
 }
-const labels: Record<MailJob["state"], string> = { running: "同步中", paused: "同步已暂停", completed: "同步已完成", cancelled: "历史同步已取消", failed: "同步失败" }
+const labels: Record<MailJob["state"], string> = { running: "索引中", paused: "同步已暂停", completed: "同步已完成", cancelled: "历史同步已取消", failed: "同步失败" }
 function syncError(code: string | null | undefined): string | null {
   if (!code) return null
   if (code === "AUTH_FAILED") return "邮箱认证失败，请检查密码或客户端授权码"
@@ -58,14 +58,18 @@ export function useMailSync(owner: string | null, account: AccountSummary | unde
   if (!owner || !account) return null
   const current = snapshot?.key === key ? snapshot : null
   const counts = current?.counts
-  const count = counts ? counts.serverReported === null ? `${counts.indexed}` : `${counts.indexed}/${counts.serverReported}` : null
-  const progress = counts ? counts.serverReported === null ? `已索引 ${counts.indexed} 封` : `已索引 ${counts.indexed} / ${counts.serverReported} 封` : null
+  const syncProgress = current?.job?.syncProgress
+  const completed = syncProgress?.completed ?? counts?.indexed
+  const total = syncProgress ? syncProgress.total : counts?.serverReported
+  const reconciling = syncProgress?.phase === "reconciling"
+  const count = completed === undefined ? null : total == null ? `${completed}` : `${completed}/${total}`
+  const progress = completed === undefined ? null : `${reconciling ? "已校对" : "已索引"} ${total == null ? completed : `${completed} / ${total}`} 封`
   const base = { count, progress, error: null }
   if (account.paused || account.state === "paused") return { ...base, state: "paused", label: labels.paused }
   if (account.state === "auth_failed") return { ...base, state: "failed", label: labels.failed, error: syncError("AUTH_FAILED") }
   if (current?.error) return { ...base, state: "failed", label: "同步状态不可用", error: current.error }
   if (!current) return { ...base, state: null, label: "正在读取同步状态" }
-  if (current.job) return { ...base, state: current.job.state, label: labels[current.job.state], error: syncError(current.job.errorCode) }
+  if (current.job) return { ...base, state: current.job.state, label: current.job.state === "running" && reconciling ? "校对状态中" : labels[current.job.state], error: syncError(current.job.errorCode) }
   if (account.state === "offline" || account.state === "error") return { ...base, state: "failed", label: labels.failed, error: syncError(account.errorCode) }
   if (account.state === "unverified") return { ...base, state: null, label: "等待连接验证" }
   return counts?.coverage.metadataComplete ? { ...base, state: "completed", label: labels.completed } : { ...base, state: null, label: "等待同步" }

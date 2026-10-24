@@ -264,3 +264,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-23 写信窗口移除密送入口与顶栏关闭按钮，仅保留收件人/抄送和原生关闭；窗口显式保存或发送会清空已有草稿的密送地址。共享 MCP schema、系统 Skill 的 Bcc 契约保留兼容，不新增注册表面，邮箱 44 项公开动作、全局 340 capability / 336 MCP 索引和 22 个 System App 均不变。
 
 2026-10-24 邮箱远程图片兼容系统 DNS 的 IPv4 Fake-IP：经受控 HTTPS DNS 重新解析并固定真实公网 IP，保留逐跳私网拦截；阅读区逐张加载、保留成功项和报告失败数量。沿用私有图片 IPC，44 个邮箱公开动作、340 个全局 capability / 336 个 MCP 索引及 22 个 System App 数量不变；Dock、Workflow、Automation 和 Deep Link 无增量，公开 MCP schema 无变化。
+
+2026-10-24 邮箱同步任务新增可选 syncProgress 返回字段，区分索引与状态校对并上报已确认批次进度；sync.get 描述与系统 Skill 同步。44 个邮箱 MCP、340 个全局 capability / 336 个索引工具、22 个 System App 及既有 IPC、Dock、Workflow、Automation、Deep Link 数量均不变。

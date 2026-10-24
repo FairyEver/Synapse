@@ -137,3 +137,76 @@ it("reports a real background failure and its retry instead of hiding it with co
     expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed" })
   } finally { release(); await r.sync.dispose(); await r.close() }
 })
+
+it("reports real indexing and flag reconciliation progress, including an in-flight batch", async () => {
+  vi.useFakeTimers()
+  const r = await syncRig()
+  let releaseHeaders!: () => void, releaseFlags!: () => void
+  const headers = new Promise<void>(resolve => { releaseHeaders = resolve })
+  const flags = new Promise<void>(resolve => { releaseFlags = resolve })
+  vi.mocked(r.session.fetchHeaders).mockImplementationOnce(async (_path, uids) => uids.map(remoteHeader))
+    .mockImplementationOnce(async (_path, uids) => { await headers; return uids.map(remoteHeader) })
+  vi.mocked(r.session.fetchFlags).mockImplementationOnce(async (_path, uids) => uids.map(uid => ({ uid, flags: [] })))
+    .mockImplementationOnce(async (_path, uids) => { await flags; return uids.map(uid => ({ uid, flags: [] })) })
+  try {
+    const { jobId } = await r.sync.startAccount(r.ctx, r.account.id)
+    await vi.advanceTimersByTimeAsync(20)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "running", syncProgress: { phase: "indexing", completed: 50, total: 251 } })
+    releaseHeaders()
+    await vi.advanceTimersByTimeAsync(20)
+    expect(await r.sync.get(r.ctx, { accountId: r.account.id })).toMatchObject({ state: "running", syncProgress: { phase: "reconciling", completed: 100, total: 251 } })
+    releaseFlags()
+    await vi.advanceTimersByTimeAsync(20)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed", syncProgress: { phase: "reconciling", completed: 251, total: 251 } })
+  } finally { releaseHeaders(); releaseFlags(); await r.sync.dispose(); await r.close() }
+})
+
+it("preserves confirmed flag progress when the next batch fails", async () => {
+  vi.useFakeTimers()
+  const r = await syncRig()
+  vi.mocked(r.session.fetchFlags).mockImplementationOnce(async (_path, uids) => uids.map(uid => ({ uid, flags: [] })))
+    .mockRejectedValueOnce(new MailError("NETWORK_ERROR", "连接失败"))
+  try {
+    const { jobId } = await r.sync.startAccount(r.ctx, r.account.id)
+    await vi.advanceTimersByTimeAsync(20)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "failed", syncProgress: { phase: "reconciling", completed: 100, total: 251 } })
+  } finally { await r.sync.dispose(); await r.close() }
+})
+
+it("returns to indexing when a new UID is discovered before its header fetch finishes", async () => {
+  vi.useFakeTimers()
+  const r = await syncRig()
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1])
+    const { jobId } = await r.sync.startAccount(r.ctx, r.account.id)
+    await vi.advanceTimersByTimeAsync(20)
+    vi.mocked(r.session.searchUids).mockResolvedValue([1, 2])
+    vi.mocked(r.session.fetchHeaders).mockImplementationOnce(async (_path, uids) => { await gate; return uids.map(remoteHeader) })
+    await r.sync.start(r.ctx, { accountId: r.account.id })
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "running", syncProgress: { phase: "indexing", completed: 1, total: 2 } })
+  } finally { release(); await r.sync.dispose(); await r.close() }
+})
+
+it("keeps indexing while another folder still has headers pending", async () => {
+  vi.useFakeTimers()
+  const r = await syncRig()
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  vi.mocked(r.session.listFolders).mockResolvedValue([
+    { path: "INBOX", name: "INBOX", delimiter: "/", flags: [], specialUse: null, count: 1 },
+    { path: "Sent", name: "Sent", delimiter: "/", flags: [], specialUse: "\\Sent", count: 1 },
+  ])
+  vi.mocked(r.session.searchUids).mockResolvedValue([1])
+  vi.mocked(r.session.fetchHeaders).mockImplementation(async (path, uids) => { if (path === "Sent") await gate; return uids.map(remoteHeader) })
+  try {
+    const { jobId } = await r.sync.startAccount(r.ctx, r.account.id)
+    await vi.advanceTimersByTimeAsync(20)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "running", syncProgress: { phase: "indexing", completed: 1, total: 2 } })
+    release()
+    await vi.advanceTimersByTimeAsync(20)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed", syncProgress: { phase: "reconciling", completed: 2, total: 2 } })
+  } finally { release(); await r.sync.dispose(); await r.close() }
+})
