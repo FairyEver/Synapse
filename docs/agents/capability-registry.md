@@ -68,6 +68,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 固定例外：
 
+- Mail 复合提示词发现区分“回复/转发刚才的邮件并创建草稿”和“打开/编辑已有草稿”；前者优先 draft.create，后者保持 draft.get。仅调整 search 预路由并同步系统 Skill，不改变44项 Mail 工具、schema、权限或其他注册数量；仅预览不授权发送。
 - Mail 的 AI 路由将普通邮件请求固定到 mail，仅显式站内信或其类型引用进入 mail_internal；单一邮箱直接选用。既有 message.list/count/search.start 增加发件人、收件人、主题、附件、独立收件时间过滤，摘要增加 receivedAt；旧数据在既有同步批次内补齐。系统 Skill 新增41条场景配方，API 参考随 schema 生成。不新增公开动作、IPC、权限、System App、Dock、Workflow、Automation 或 Deep Link；Mail 仍为44项、站内信17项，全局340 capability / 336 MCP 索引及22个 System App 不变。
 - Mail 写信窗口使用独立尺寸：默认 800×640，最小 640×480，保留原生缩放；阅读窗口和其他 System App 继续使用通用尺寸。邮箱仍为 44 个公开动作，System App、Dock、Workflow、Automation、Deep Link 数量及 MCP schema、系统 Skill 指南均不变。
 - Mail 的 sync.get 支持 jobId / accountId 二选一；按账号只读当前运行时任务，无任务返回 null，不隐式启动或恢复同步。UI 复用 message.count 的账号级 indexed / serverReported 展示进度，只有运行中转圈，失败保留完成批次进度。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及其他注册数量不变；不新增 IPC、工具或权限，系统 Skill 与输入 schema 同步更新。

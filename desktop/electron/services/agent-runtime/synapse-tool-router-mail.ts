@@ -57,7 +57,11 @@ export function mailSearchIntent(query: string): MailSearchIntent | null {
   if (/(?:导出|export).*(?:eml|邮件)|邮件.*(?:导出|export)/u.test(text)) return route("message_extract_to_file")
   if (/正文.*(?:提到|包含)|(?:搜|检索).*正文|search.*body/u.test(text)) return route("search_start", "search_get", "search_resume")
   if (/附件.*(?:合同|总结|内容)|(?:读|查看).*附件/u.test(text)) return route("attachment_list", "attachment_get", "attachment_download_file")
-  if (/草稿/u.test(text) && /继续编辑|刚才|读取|打开/u.test(text)) return route("draft_get", "draft_list", "draft_update")
+  // “刚才” may refer to the source mail; an explicit new reply/forward draft
+  // must not be mistaken for an already saved draft.
+  const creatingReplyDraft = !internal && /回复|回信|转发|reply|forward/u.test(text)
+    && /(?:创建|新建|生成)(?:一封|一个|个)?(?:回复|转发)?草稿/u.test(text)
+  if (!creatingReplyDraft && /草稿/u.test(text) && /继续编辑|刚才|读取|打开/u.test(text)) return route("draft_get", "draft_list", "draft_update")
   if (/草稿/u.test(text) && /删除|丢弃/u.test(text)) return route("draft_list", "draft_delete")
   if (/草稿/u.test(text) && /列表|哪些|列出/u.test(text)) return route("draft_list")
   if (/标记|设为|设已读|加星标|star|mark.*read/u.test(text)) {

@@ -43,6 +43,30 @@ describe("mail natural-language routing", () => {
     }
   })
 
+  it.each([
+    "回复刚才这封邮件，先只创建草稿和预览",
+    "转发刚才这封邮件，先只创建草稿和预览",
+    "回复全部，针对刚才那封邮件只新建草稿并预览，不要发送",
+    "把刚才那封邮件转发给张三，先生成一个草稿并预览，不要发送",
+    "先创建草稿和预览，用来回复刚才那封邮件，不要发送",
+    "先新建一封草稿并预览，转发刚才那封邮件，不要发送",
+  ])("creates a new reply/forward draft despite references to earlier mail: %s", async query => {
+    const result = await searchSynapseTools({ query, limit: 5 })
+    expect(result.tools[0]?.name).toBe("app_mail_draft_create")
+    expect(result.tools.every(tool => tool.domain === "mail")).toBe(true)
+    expect(result.tools.some(tool => /_(?:message_send|draft_get|draft_list)$/.test(tool.name))).toBe(false)
+  })
+
+  it.each([
+    "继续编辑刚才那封草稿",
+    "打开刚才的回复草稿，先预览，不要发送",
+    "读取刚才的转发草稿，先预览，不要发送",
+  ])("keeps existing draft operations distinct from new composition: %s", async query => {
+    const result = await searchSynapseTools({ query, limit: 5 })
+    expect(result.tools[0]?.name).toBe("app_mail_draft_get")
+    expect(result.tools.some(tool => /_(?:draft_create|message_send)$/.test(tool.name))).toBe(false)
+  })
+
   it("keeps email body/subject words and other-channel replies out of unsupported mail routing", async () => {
     for (const query of ["帮我发邮件，内容是明天上午九点发货", "给张三发邮件，主题是如何撤回邮件", "转发那封关于下周发货的邮件", "给张三发邮件，正文是把这些邮件删掉", "给张三发邮件，主题是站内信操作指南"]) {
       const result = await searchSynapseTools({ query, limit: 1 })
