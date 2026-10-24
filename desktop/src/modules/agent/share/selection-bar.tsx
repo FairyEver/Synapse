@@ -17,10 +17,10 @@ export function AgentShareSelectionBar({ share }: { readonly share: AgentShareCo
             <Button type="button" variant="ghost" className={actionHitArea}>选择范围<ChevronDown data-icon="inline-end" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start">
-            <DropdownMenuItem className="min-h-10" disabled={share.loading || !share.complete} onSelect={() => share.preset("all")}>全选</DropdownMenuItem>
-            <DropdownMenuItem className="min-h-10" disabled={share.loading || !share.complete} onSelect={() => share.preset("ai")}>仅 AI</DropdownMenuItem>
-            <DropdownMenuItem className="min-h-10" onSelect={() => share.preset("latest")}>最近一轮</DropdownMenuItem>
-            <DropdownMenuItem className="min-h-10" onSelect={() => share.preset("clear")}>清空</DropdownMenuItem>
+            <DropdownMenuItem disabled={share.loading || !share.complete} onSelect={() => share.preset("all")}>全选</DropdownMenuItem>
+            <DropdownMenuItem disabled={share.loading || !share.complete} onSelect={() => share.preset("ai")}>仅 AI</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => share.preset("latest")}>最近一轮</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => share.preset("clear")}>清空</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <Button type="button" variant="ghost" className={actionHitArea} disabled={!share.currentRound.length} onClick={() => share.toggleRound(share.currentRound)}>{roundSelected ? "取消本轮" : "选择本轮"}</Button>
