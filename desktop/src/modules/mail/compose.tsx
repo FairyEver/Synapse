@@ -52,7 +52,7 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
   const disabled = !draft || draft.state !== "editing" || model.sending || model.receipt?.state === "unknown" || model.receipt?.state === "failed"
   const sendDisabled = disabled || model.saving || !model.addresses.to.trim() && !model.addresses.cc.trim()
   const operationError = model.error === model.addressError?.message ? null : model.error
-  const contentError = operationError ?? (composer.linkOpen ? null : composer.error) ?? attachments.error
+  const contentError = operationError ?? composer.error ?? attachments.error
   const save = () => { void model.save().catch(() => undefined) }
   return <><SystemAppWindowShell left={<div className="flex items-center">
     <SystemAppTopBarActionButton disabled={sendDisabled} onClick={() => void model.send()} data-track="mail.send"><Send />{model.sending ? "发送中…" : "发送"}</SystemAppTopBarActionButton>
@@ -88,6 +88,6 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
     </div></div>
   </SystemAppWindowShell>
   <AlertDialog open={model.closeRequested} onOpenChange={open => { if (!open) void model.resolveClose("cancel") }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>保存修改？</AlertDialogTitle><AlertDialogDescription>邮件包含未保存的修改。</AlertDialogDescription></AlertDialogHeader>{model.error && <p role="alert" className="text-sm text-destructive">{model.error}</p>}<AlertDialogFooter><Button variant="ghost" disabled={model.saving} onClick={() => void model.resolveClose("cancel")}>取消</Button><Button variant="outline" disabled={model.saving} onClick={() => void model.resolveClose("discard")}>不保存</Button><Button disabled={model.saving} onClick={() => void model.resolveClose("save")}>保存并关闭</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
-  <Dialog open={composer.linkOpen} onOpenChange={composer.setLinkOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>插入链接</DialogTitle></DialogHeader><Label htmlFor="mail-compose-link">地址</Label><Input id="mail-compose-link" value={composer.link} onChange={event => composer.changeLink(event.target.value)} autoFocus />{composer.error && <p role="alert" className="text-sm text-destructive">{composer.error}</p>}<DialogFooter><Button onClick={composer.applyLink}>应用</Button></DialogFooter></DialogContent></Dialog>
+  <Dialog open={composer.linkOpen} onOpenChange={composer.setLinkOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>插入链接</DialogTitle></DialogHeader><Label htmlFor="mail-compose-link">地址</Label><Input id="mail-compose-link" value={composer.link} onChange={event => composer.changeLink(event.target.value)} aria-invalid={!!composer.linkError || undefined} aria-describedby={composer.linkError ? "mail-compose-link-error" : undefined} autoFocus />{composer.linkError && <FieldError id="mail-compose-link-error">{composer.linkError}</FieldError>}<DialogFooter><Button onClick={composer.applyLink}>应用</Button></DialogFooter></DialogContent></Dialog>
   </>
 }

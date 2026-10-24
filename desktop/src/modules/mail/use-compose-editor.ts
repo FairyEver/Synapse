@@ -10,7 +10,9 @@ const empty = { to: "", cc: "" }
 export function useComposeEditor(model: ComposeModel) {
   const latest = useRef(model); latest.current = model
   const [error, setError] = useState<string | null>(null), [activeMarks, setActiveMarks] = useState<string[]>([])
-  const [linkOpen, setLinkOpen] = useState(false), [link, changeLink] = useState("")
+  const [linkOpen, updateLinkOpen] = useState(false), [link, setLink] = useState(""), [linkError, setLinkError] = useState<string | null>(null)
+  const setLinkOpen = (open: boolean) => { updateLinkOpen(open); setLinkError(null); if (!open) setLink("") }
+  const changeLink = (value: string) => { setLink(value); setLinkError(null) }
   const initialBody = useRef<{ json: string; html: string; text: string } | null>(null)
   const currentSession = useRef(model.sessionId); currentSession.current = model.sessionId
   const imageExtension = useRef(Image.extend({
@@ -58,6 +60,7 @@ export function useComposeEditor(model: ComposeModel) {
   useEffect(() => {
     const draft = model.draft
     setError(null)
+    updateLinkOpen(false); setLink(""); setLinkError(null)
     if (editor) {
       const body = draft ? sanitizeComposeDocument(draft.html || draft.text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/\n/gu, "<br>"), draft.inlineImages) : { html: "", text: "" }
       editor.commands.setContent(body.html, { emitUpdate: false })
@@ -95,8 +98,8 @@ export function useComposeEditor(model: ComposeModel) {
         if (!["http:", "https:", "mailto:"].includes(url.protocol) || url.username || url.password) throw new Error("请输入有效的网页或邮箱链接")
         editor.chain().focus().extendMarkRange("link").setLink({ href: url.toString() }).run()
       }
-      setLinkOpen(false); setError(null)
-    } catch (cause) { setError(mailError(cause)) }
+      setLinkOpen(false)
+    } catch (cause) { setLinkError(cause instanceof TypeError ? "请输入有效的网页或邮箱链接" : mailError(cause)) }
   }
-  return { editor, error, activeMarks, format, fontSize, linkOpen, setLinkOpen, link, changeLink, applyLink, insertImages, addresses: model.addresses ?? empty }
+  return { editor, error, activeMarks, format, fontSize, linkOpen, setLinkOpen, link, linkError, changeLink, applyLink, insertImages, addresses: model.addresses ?? empty }
 }

@@ -21,6 +21,28 @@ it("retains configurable custom endpoints and clears a rejected secret without c
   expect(accounts.dialogOpen).toBe(true); expect(accounts.error).toBe("认证失败"); expect(accounts.form.credential).toBe("")
   expect(mocks.api.accountConfigure.mock.calls[0][0].smtp.port).toBe(587)
 })
+it.each([
+  [{ email: "invalid-address" }, "邮箱地址格式无效"],
+  [{ imap: { host: "imap.example.com", port: 0, security: "tls" as const } }, "IMAP 端口须为 1–65535 的整数"],
+] as const)("explains invalid account fields before connecting", async (patch, message) => {
+  mocks.api.accountConfigure = vi.fn()
+  mount(<Harness />); await flush()
+  act(() => { accounts.begin(); accounts.change({ email: "me@example.com", credential: "test-secret", ...patch }) })
+  await act(async () => { await accounts.connect() })
+  expect(accounts.error).toBe(message)
+  expect(mocks.api.accountConfigure).not.toHaveBeenCalled()
+  expect(accounts.form.credential).toBe("")
+  act(() => accounts.change({ email: "corrected@example.com" }))
+  expect(accounts.error).toBeNull()
+})
+it("rejects invalid aliases before submitting account settings", async () => {
+  mocks.api.accountUpdate = vi.fn().mockResolvedValue({})
+  mount(<Harness />); await flush()
+  const account = { id: "ma_one", revision: 2 } as import("../../../../app-capabilities/mail/shared/types").AccountSummary
+  await act(async () => { await accounts.update(account, { aliases: ["invalid-alias"] }) })
+  expect(accounts.error).toBe("其他邮箱地址格式无效，多个地址用逗号或分号分隔")
+  expect(mocks.api.accountUpdate).not.toHaveBeenCalled()
+})
 it("keeps pause, resume and removal acknowledgements explicit", async () => {
   const account = { id: "ma_one", revision: 2, paused: false } as import("../../../../app-capabilities/mail/shared/types").AccountSummary
   mocks.api.accountPause = vi.fn().mockResolvedValue(account); mocks.api.accountResume = vi.fn().mockResolvedValue({ jobId: "mj_sync" }); mocks.api.accountDelete = vi.fn().mockRejectedValue(Object.assign(new Error("需要核对草稿"), { code: "REMOVAL_REVIEW_REQUIRED" }))

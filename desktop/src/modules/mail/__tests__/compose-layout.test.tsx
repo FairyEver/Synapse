@@ -103,3 +103,21 @@ it("identifies a reopened consumed draft as sent and keeps its controls read-onl
   expect(document.querySelector('[role="status"]')?.textContent).toBe("已发送")
   expect([...document.querySelectorAll("button")].find(node => node.textContent === "发送")?.disabled).toBe(true)
 })
+it.each(["javascript:alert(1)", "not-a-url"])("keeps link validation for %s inside the dialog and discards it when cancelled", async invalidLink => {
+  await setup()
+  act(() => button("插入链接").click())
+  const link = input("link")!
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(link, invalidLink)
+    link.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  act(() => [...document.querySelectorAll("button")].find(node => node.textContent === "应用")!.click())
+  expect(link.getAttribute("aria-invalid")).toBe("true")
+  const dialog = document.querySelector('[role="dialog"]')!
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toBe("请输入有效的网页或邮箱链接")
+  act(() => [...dialog.querySelectorAll("button")].find(node => node.textContent === "关闭")!.click())
+  expect(document.querySelector('[role="alert"]')).toBeNull()
+  act(() => button("插入链接").click())
+  expect(input("link")?.value).toBe("")
+  expect(document.querySelector('[role="alert"]')).toBeNull()
+})
