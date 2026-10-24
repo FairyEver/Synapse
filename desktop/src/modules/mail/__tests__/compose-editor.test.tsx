@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { mocks, mount, flush } from "./harness"
+import { mocks, mount, flush, deferred } from "./harness"
 import { act } from "react"
 import { afterEach, expect, it, vi } from "vitest"
 import { EditorContent } from "@tiptap/react"
@@ -8,6 +8,30 @@ import { useComposeEditor } from "../use-compose-editor"
 let model: ReturnType<typeof useCompose>, rich: ReturnType<typeof useComposeEditor>
 function Harness() { model = useCompose("user"); rich = useComposeEditor(model); return <EditorContent editor={rich.editor} /> }
 afterEach(() => vi.useRealTimers())
+it.each(["reply", "reply_all"] as const)("focuses the body start after %s finishes loading without resetting focus on edits", async mode => {
+  const draft = { id: "md_one", accountId: "ma_one", revision: 1, to: [{ address: "sender@example.com" }], cc: [], bcc: [], subject: "Re: 主题", html: "<p></p><blockquote><p>原邮件正文</p></blockquote>", text: "原邮件正文", assetIds: [], inlineImages: [], state: "editing", mode, sourceMessageId: "em_one", remoteLocator: null, localSaved: false, syncState: "pending", updatedAt: "2026-10-23T00:00:00Z" }
+  const pending = deferred<typeof draft>()
+  mocks.api.draftPrepare = vi.fn().mockReturnValue(pending.promise)
+  mount(<Harness />); await flush()
+  let opening!: Promise<void>
+  act(() => { opening = model.open({ accountId: draft.accountId, sourceMessageId: draft.sourceMessageId, mode }) })
+  expect(document.activeElement).not.toBe(rich.editor!.view.dom)
+  await act(async () => { pending.resolve(draft); await opening }); await flush()
+  await act(async () => { await new Promise(requestAnimationFrame) })
+  expect(document.activeElement).toBe(rich.editor!.view.dom)
+  expect(rich.editor!.state.selection.from).toBe(1)
+  expect(rich.editor!.state.selection.empty).toBe(true)
+  expect(model.dirty).toBe(false)
+  act(() => { rich.editor!.commands.insertContent("回复内容") })
+  expect(model.draft?.html).toContain("<p>回复内容</p><blockquote>")
+  const caret = rich.editor!.state.selection.from
+  const subject = document.createElement("input")
+  document.body.append(subject)
+  act(() => { subject.focus(); model.edit({ subject: "Re: 新主题" }) })
+  await act(async () => { await new Promise(requestAnimationFrame) })
+  expect(document.activeElement).toBe(subject)
+  expect(rich.editor!.state.selection.from).toBe(caret)
+})
 it.each([
   { name: "empty new mail", html: "", text: "", localSaved: false },
   { name: "an existing draft", html: "<p>正文</p>", text: "正文", localSaved: true },

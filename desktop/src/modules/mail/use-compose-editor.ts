@@ -65,6 +65,9 @@ export function useComposeEditor(model: ComposeModel) {
       const body = draft ? sanitizeComposeDocument(draft.html || draft.text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/\n/gu, "<br>"), draft.inlineImages) : { html: "", text: "" }
       editor.commands.setContent(body.html, { emitUpdate: false })
       initialBody.current = { ...body, json: JSON.stringify(editor.getJSON()) }
+      if (draft?.state === "editing" && (draft.mode === "reply" || draft.mode === "reply_all")) {
+        editor.commands.focus("start", { scrollIntoView: false })
+      }
     }
   }, [editor, model.sessionId, !!model.draft])
   useEffect(() => { editor?.setEditable(model.draft?.state === "editing" && !model.sending && !["unknown", "failed"].includes(model.receipt?.state ?? ""), false) }, [editor, model.draft?.state, model.sending, model.receipt?.state])
