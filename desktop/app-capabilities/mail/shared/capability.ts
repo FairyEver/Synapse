@@ -6,7 +6,7 @@ import { MAIL_INPUT_SCHEMAS } from "./schema"
 import type { MailAction } from "./types"
 
 const descriptions: Record<MailAction, string> = {
-  "account.list": "List external email accounts configured on this computer for the current SY identity; never returns credentials. If exactly one account exists and nextCursor is null, use it directly without asking which sender. Honor an explicit account; replies and existing drafts inherit their accountId. Ask only when multiple accounts remain ambiguous.",
+  "account.list": "List external email accounts configured on this computer for the current signed-in SY identity only; never returns credentials or another identity's accounts. This result is the authority for account selection. If mail tools are unavailable, stop and report the blocker; never read Synapse private databases or caches through shell, file, script or database tools. If exactly one account exists and nextCursor is null, use it directly without asking which sender. Honor an explicit account; replies and existing drafts inherit their accountId. Ask only when multiple accounts remain ambiguous.",
   "account.get": "Get one local email account configuration, connection state and available capabilities; no credentials.",
   "account.open": "Open the local email account setup UI. The user enters credentials on this computer; this tool never accepts secrets.",
   "account.update": "Update non-secret email settings with expectedRevision. Endpoint changes require connection revalidation.",

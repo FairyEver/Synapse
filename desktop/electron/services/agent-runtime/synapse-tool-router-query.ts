@@ -133,6 +133,8 @@ export class SynapseToolRouterQuery implements QueryLike {
 }
 
 export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryInput): Promise<Query> {
+  // Storage-policy failure must never enter the MCP fallback, which also starts a query.
+  await assertPrivateStorageSettings(sdk, input)
   const expectedServerNames = [...new Set(
     input.expectedMcpServerNames ?? configuredMcpServerNames(input.options),
   )]
@@ -208,7 +210,40 @@ export async function createDirectValidatedQuery(
   sdk: AgentSdkModule,
   input: DirectQueryInput,
 ): Promise<Query> {
+  await assertPrivateStorageSettings(sdk, input)
   return sdk.query({ prompt: input.prompt, options: input.options as Options })
+}
+
+async function assertPrivateStorageSettings(sdk: AgentSdkModule, input: DirectQueryInput): Promise<void> {
+  const managed = asRecord(input.options.managedSettings)
+  const expectedSandbox = asRecord(managed?.sandbox)
+  const expectedFs = asRecord(expectedSandbox?.filesystem)
+  const roots = expectedFs?.denyRead
+  if (!Array.isArray(roots) || roots.length === 0) return
+  const failure = "无法确认 Agent 私有存储保护，请检查 SDK 沙箱与受管设置；本轮已停止，不能无保护继续。"
+  try {
+    const resolved = await withDiscoveryDeadline(sdk.resolveSettings({
+      cwd: typeof input.options.cwd === "string" ? input.options.cwd : undefined,
+      settingSources: input.options.settingSources as Options["settingSources"],
+      managedSettings: managed as Options["managedSettings"],
+    }))
+    const effective = resolved.effective as Record<string, unknown>
+    const sandbox = asRecord(effective.sandbox), filesystem = asRecord(sandbox?.filesystem)
+    const permissions = asRecord(effective.permissions)
+    const expectedDenies = asRecord(managed?.permissions)?.deny
+    const containsAll = (actual: unknown, expected: unknown): boolean =>
+      Array.isArray(actual) && Array.isArray(expected) && expected.every(item => actual.includes(item))
+    const hasEntries = (value: unknown): boolean => Array.isArray(value) && value.length > 0
+    if (sandbox?.enabled !== true || sandbox.failIfUnavailable !== true || sandbox.allowUnsandboxedCommands !== false
+      || hasEntries(sandbox.excludedCommands) || filesystem?.disabled !== false || filesystem.allowManagedReadPathsOnly !== true
+      || hasEntries(filesystem.allowRead) || !containsAll(filesystem.denyRead, roots)
+      || !containsAll(filesystem.denyWrite, expectedFs?.denyWrite) || !containsAll(permissions?.deny, expectedDenies)) {
+      throw new Error(failure)
+    }
+  } catch {
+    // resolveSettings can drop parent policy under an IT-controlled managed tier. Fail closed.
+    throw new Error(failure)
+  }
 }
 
 async function waitForMcpServerStatuses(

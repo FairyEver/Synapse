@@ -3,6 +3,28 @@ import { createMailTestRig } from "./helpers"
 import { aliyunConfig } from "../protocol/aliyun-policy"
 
 describe("local mail account lifecycle", () => {
+  it("lists only the logged-in owner's accounts and rejects old contexts and foreign IDs", async () => {
+    const rig = await createMailTestRig()
+    try {
+      const first = await rig.accounts.configure(rig.ctx, { ...aliyunConfig("first@example.com", "First"), credential: "test-secret" })
+      rig.setOwner("second-owner")
+      const secondCtx = rig.context.current("mcp")
+      const second = await rig.accounts.configure(secondCtx, { ...aliyunConfig("second@example.com", "Second"), credential: "test-secret" })
+      const secondPage = await rig.accounts.execute(secondCtx, "account.list", { limit: 20 })
+      expect(secondPage.items.map(account => account.email)).toEqual(["second@example.com"])
+      expect(secondPage.nextCursor).toBeNull()
+      await expect(rig.accounts.execute(secondCtx, "account.get", { accountId: first.id })).rejects.toMatchObject({ code: "UNAVAILABLE" })
+      await expect(rig.accounts.execute(rig.ctx, "account.list", { limit: 20 })).rejects.toMatchObject({ name: "AbortError" })
+      rig.setOwner("test-owner")
+      const firstCtx = rig.context.current("mcp")
+      expect((await rig.accounts.execute(firstCtx, "account.list", { limit: 20 })).items.map(account => account.email)).toEqual(["first@example.com"])
+      await expect(rig.accounts.execute(firstCtx, "account.get", { accountId: second.id })).rejects.toMatchObject({ code: "UNAVAILABLE" })
+      rig.setOwner(null)
+      expect(() => rig.context.current("mcp")).toThrow("请先登录")
+      await expect(rig.accounts.execute(firstCtx, "account.list", { limit: 20 })).rejects.toMatchObject({ name: "AbortError" })
+    } finally { await rig.close() }
+  })
+
   it("checks both protocols without sending and never returns a credential", async () => {
     const rig = await createMailTestRig()
     try {

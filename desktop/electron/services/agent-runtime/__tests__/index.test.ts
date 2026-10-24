@@ -261,6 +261,7 @@ describe("createAgentRuntimeProjectService", () => {
       ]))
       expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
         cwd: workspacePath,
+        privateStorageRoots: ["/tmp/synapse-userData/data-v1", "/tmp/synapse-userData/mail-assets"],
         plugins: [],
         allowPluginHooks: false,
         agents: {},

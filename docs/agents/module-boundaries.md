@@ -261,6 +261,8 @@
 
 ## 外部邮箱（桌面）
 
+- 账号数量以当前登录用户的 `app_mail_account_list` 结果为准；不能合并不同 ownerId 的本机记录。工具不可用时停止并报告，不允许经文件、SQL、脚本、数据库或终端旁路读取共享数据库和邮件缓存。Agent Runtime 的 SDK 文件工具预检与强制 Bash 沙箱保护私有存储，具体边界和平台失败策略见 `agent-runtime-security.md`。
+
 - AI 的普通“邮件、邮箱、收件箱、给谁发邮件、看我的邮件”默认使用 mail；只有明确站内信/internal mail 或带类型的 mail-internal 引用才进入站内信。唯一已配置账号直接使用，不询问发件邮箱；回复/草稿继承所属账号，显式账号优先，真实多账号歧义才询问。
 - message.list/count/search.start 支持 sender/recipient（实际地址精确或显示名子串）、subject、附件条件和 receivedAfter/receivedBefore，组合取交集；附件筛选只读已索引 MIME，不下载内容。from/to 仍是邮件头日期，不是邮箱地址。receivedAt 保存服务器 INTERNALDATE，缺失不猜测；旧索引在既有有界同步批次中补齐，保留邮件 ID、缓存和通知基线。排序优先收件时间，未知时退到邮件头日期；未知时间/附件结构必须在 coverage 说明。结构化计数的 serverReported 为 null。不新增通讯录同步、定时发送或撤回能力。
 - `mail` 是桌面邮箱客户端，站内信 `mail-internal` / `mail_internal` 独立保留；两类 ID、payload、API 和深链不兼容。外部链接严格为 `synapse://mail/em_<uuid>`，不支持手机端外部邮箱。

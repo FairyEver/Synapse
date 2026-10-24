@@ -46,6 +46,9 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 
 ## Claude SDK 配置
 
+- 所有由 Agent Runtime 创建的 SDK 会话都由宿主注入当前 `userData/data-v1` 与 `userData/mail-assets` 私有根，不接受模型或 Renderer 提供/移除这些根。PreToolUse 和 canUseTool 在普通模式、免确认模式、额外目录授权及子 Agent 中拒绝直接文件读写和包含私有根的递归检索，同时检查词法路径与 realpath；SDK Read/Edit deny rules 补充文件工具限制。Bash 必须使用 SDK 操作系统沙箱，固定 enabled、failIfUnavailable、allowUnsandboxedCommands=false、空 excludedCommands 和 filesystem.disabled=false，拒绝私有根读写及显式脱离沙箱；依赖或平台不支持时不得无沙箱降级。私有目录尚未建立时仍保护其规范化目标，包含 SQLite 辅助文件与邮件资产。限制同时放入 SDK 受管设置与 flag settings，查询启动前通过 resolveSettings 核验实际生效值；父策略被 IT 管理层丢弃、存在脱离沙箱的命令排除项或读取豁免时停止，错误不得进入 MCP fallback 后重新启动查询。该边界不等于对任意外部 MCP 服务、插件、独立终端或已转交 CLI 的全系统隔离；这些入口不能被描述为受 SDK Bash 沙箱保护。
+- 邮箱账号与数据只通过当前登录身份的邮箱服务查询，工具缺失或失败必须停止该操作，禁止改用只读 SQL、文件、脚本、其他数据库或终端能力作为备用邮箱接口。不能依据跨用户本机记录推断当前用户的账号数量，也不能以相同 UID 推断两个账号连接同一服务器邮箱。
+
 - 修改 SDK 参数前核对官方文档和当前安装包类型。`Options.env` 是子进程环境；`Options.settings` 是更高优先级 inline/flag settings，两者不能混用。
 - Provider 隔离必须同时写两层：顶层 `Options.env`，以及 `Options.settings.env` 中当前 provider 的 `ANTHROPIC_*` 覆盖（至少 base URL、model、auth token/API key 和默认模型变量）。
 - `Options.settings.env` 只能放 provider 的 `ANTHROPIC_*` 以及 Provider 显式配置的 `CLAUDE_CODE_MAX_CONTEXT_TOKENS`，不得放 task namespace、`SYNAPSE_SIDE_CHANNEL_TOKEN`、data-server token、普通 shell env 或其它 runtime secret。未显式配置上下文环境变量时必须保持未设置。

@@ -8,7 +8,42 @@ import {
   rebuildMcpServers,
 } from "../synapse-tool-router-query"
 
+function privateStorageQueryOptions() {
+  return { cwd: "/tmp/project", settingSources: ["user"], managedSettings: {
+    sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, excludedCommands: [] as string[],
+      filesystem: { disabled: false, allowManagedReadPathsOnly: true, denyRead: ["/private-store"], denyWrite: ["/private-store"] } },
+    permissions: { deny: ["Read(//private-store/**)", "Edit(//private-store/**)"] },
+  } }
+}
+
 describe("Synapse tool router strict MCP reconstruction", () => {
+  it.each(["direct", "routed"])("does not start a %s query if effective settings remove private-storage protection", async (mode) => {
+    const query = vi.fn(() => ({}))
+    const sdk = { query, resolveSettings: vi.fn(async () => ({ effective: {}, provenance: {}, sources: [] })) }
+    const options = privateStorageQueryOptions()
+    const input = { prompt: promptThatMustNotBeRead(), options }
+    const result = mode === "direct"
+      ? createDirectValidatedQuery(sdk as never, input)
+      : createRoutedQuery(sdk as never, { ...input, router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() } })
+    await expect(result).rejects.toThrow("私有存储保护")
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it("refuses inherited unsandboxed command exclusions before starting the SDK", async () => {
+    const options = privateStorageQueryOptions(), query = vi.fn(() => ({}))
+    const effective = structuredClone(options.managedSettings)
+    effective.sandbox.excludedCommands = ["python *"]
+    const sdk = { query, resolveSettings: vi.fn(async () => ({ effective })) }
+    await expect(createDirectValidatedQuery(sdk as never, { prompt: promptThatMustNotBeRead(), options })).rejects.toThrow("私有存储保护")
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it("starts a query only after private-storage restrictions survive settings resolution", async () => {
+    const options = privateStorageQueryOptions(), final = { close: vi.fn() }
+    const sdk = { query: vi.fn(() => final), resolveSettings: vi.fn(async () => ({ effective: structuredClone(options.managedSettings) })) }
+    expect(await createDirectValidatedQuery(sdk as never, { prompt: promptThatMustNotBeRead(), options })).toBe(final)
+  })
+
   it("removes Synapse MCP and preserves serializable non-Synapse servers", () => {
     const servers = rebuildMcpServers([
       status("synapse-mcp", { type: "http", url: "http://127.0.0.1/mcp" }),

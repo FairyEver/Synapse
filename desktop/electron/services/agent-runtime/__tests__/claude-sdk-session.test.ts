@@ -6,7 +6,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { createHash } from "node:crypto"
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
@@ -18,6 +18,106 @@ import {
 import type { AgentMessage } from "../types"
 
 describe("ClaudeSDKSession", () => {
+  it.each(["default", "bypassPermissions"])("requires a fail-closed private-storage sandbox in %s mode", (mode) => {
+    const { factory, getOptions } = createQueryFactory()
+    const root = mkdtempSync(path.join(tmpdir(), "synapse-private-storage-"))
+    try {
+      createSession(factory, { mode, privateStorageRoots: [root] })
+      expect(getOptions().sandbox).toMatchObject({
+        enabled: true,
+        failIfUnavailable: true,
+        autoAllowBashIfSandboxed: false,
+        allowUnsandboxedCommands: false,
+        excludedCommands: [],
+        filesystem: { disabled: false, denyRead: expect.arrayContaining([root]), denyWrite: expect.arrayContaining([root]) },
+      })
+      expect(getOptions().managedSettings).toMatchObject({
+        sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false,
+          filesystem: { disabled: false, allowManagedReadPathsOnly: true, denyRead: expect.arrayContaining([root]) } },
+        permissions: { deny: expect.arrayContaining([expect.stringMatching(/^Read\(\/\//), expect.stringMatching(/^Edit\(\/\//)]) },
+      })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it("blocks private database reads and recursive searches even inside an authorized workspace", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const root = mkdtempSync(path.join(tmpdir(), "synapse-private-storage-"))
+    const privateRoot = path.join(root, "data-v1")
+    mkdirSync(privateRoot)
+    writeFileSync(path.join(privateRoot, "runtime.sqlite"), "private mail")
+    try {
+      createSession(factory, { cwd: root, mode: "bypassPermissions", additionalDirectories: [privateRoot], privateStorageRoots: [privateRoot] })
+      const guard = preToolUseHook(getOptions(), "*")
+      for (const [toolName, toolInput] of [
+        ["Read", { file_path: path.join(privateRoot, "runtime.sqlite") }],
+        ["Grep", { path: root, pattern: "mail" }],
+        ["Glob", { path: root, pattern: "**/*" }],
+        ["Write", { file_path: path.join(privateRoot, "runtime.sqlite-wal"), content: "overwrite" }],
+        ["Bash", { command: "python3 read_mail.py", dangerouslyDisableSandbox: true }],
+      ] as const) {
+        expect(await guard({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput }))
+          .toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } })
+      }
+      expect(await guard({ hook_event_name: "PreToolUse", tool_name: "Read", tool_input: { file_path: path.join(root, "public.md") } })).toEqual({})
+      expect(await guard({ hook_event_name: "PreToolUse", tool_name: "mcp__synapse-tool-router__invoke", tool_input: { toolName: "app_mail_account_list", arguments: {} } })).toEqual({})
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === "win32")("blocks reads through symlinks into private storage", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const root = mkdtempSync(path.join(tmpdir(), "synapse-private-storage-"))
+    const privateRoot = path.join(root, "mail-assets")
+    mkdirSync(privateRoot)
+    writeFileSync(path.join(privateRoot, "body.txt"), "private mail")
+    symlinkSync(privateRoot, path.join(root, "alias"), "dir")
+    try {
+      createSession(factory, { cwd: root, privateStorageRoots: [privateRoot] })
+      const guard = preToolUseHook(getOptions(), "*")
+      for (const [toolName, toolInput] of [
+        ["Read", { file_path: path.join(root, "alias", "body.txt") }],
+        ["Write", { file_path: path.join(root, "alias", "new-body.txt"), content: "overwrite" }],
+      ] as const) {
+        expect(await guard({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput }))
+          .toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } })
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it("rechecks an edited permission input before letting the SDK read it", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const root = mkdtempSync(path.join(tmpdir(), "synapse-private-storage-"))
+    try {
+      const session = createSession(factory, { privateStorageRoots: [root] })
+      const result = canUseTool(getOptions())("Read", { file_path: "/tmp/public.md" }, { signal: new AbortController().signal })
+      const event = await session.nextEvent()
+      if (event?.type !== "permissionRequest") throw new Error("Expected a permission request")
+      await session.respondPermission(event.requestId, { behavior: "allow", updatedInput: { file_path: path.join(root, "runtime.sqlite") } })
+      await expect(result).resolves.toMatchObject({ behavior: "deny" })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it("denies home-relative paths and absolute Glob patterns into private storage", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const privateRoot = path.join(homedir(), ".synapse-private-storage-test")
+    createSession(factory, { privateStorageRoots: [privateRoot] })
+    const guard = preToolUseHook(getOptions(), "*")
+    for (const [toolName, toolInput] of [
+      ["Read", { file_path: "~/.synapse-private-storage-test/runtime.sqlite" }],
+      ["Glob", { path: "/tmp/project", pattern: path.join(privateRoot, "**", "*.sqlite") }],
+    ] as const) {
+      expect(await guard({ hook_event_name: "PreToolUse", tool_name: toolName, tool_input: toolInput }))
+        .toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } })
+    }
+  })
+
   it("send yields user messages into the SDK input stream", async () => {
     const { factory, getPrompt } = createQueryFactory()
     const session = createSession(factory)

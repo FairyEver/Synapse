@@ -99,6 +99,7 @@ export type AgentConnectorRuntimeContribution = {
 export interface SessionManagerDeps {
   readonly projectId: string
   readonly workDir?: string
+  readonly privateStorageRoots?: readonly string[]
   readonly repository: AgentSessionRepository
   readonly providerService: ProviderService
   readonly states: Map<string, RuntimeSessionState>
@@ -200,6 +201,7 @@ export class SessionManager {
         personaToolPolicy: input.personaToolPolicy,
         subagentToolPolicies: input.subagentToolPolicies,
         additionalDirectories: input.additionalDirectories,
+        privateStorageRoots: deps.privateStorageRoots,
         sdkSettings: input.sdkSettings,
         mcpServers: input.mcpServers,
         expectedMcpServerNames: input.expectedMcpServerNames,
