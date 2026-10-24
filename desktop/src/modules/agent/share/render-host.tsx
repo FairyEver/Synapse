@@ -1,4 +1,4 @@
-import { Component, useEffect, useState, type ReactNode } from "react"
+import { Component, useEffect, useMemo, useState, type ReactNode } from "react"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { createRendererLogger } from "@/app-shell/logging"
 import type { ShareRenderRequest, ShareRenderResponse } from "../../../../app-capabilities/agent/shared/share"
@@ -21,10 +21,10 @@ export function AgentShareRenderHost() {
 
 function ShareRenderJob({ request, onDone }: { request: ShareRenderRequest; onDone: () => void }) {
   const [paper, setPaper] = useState<HTMLElement | null>(null)
+  const identity: ShareRenderResponse = useMemo(() => ({ requestId: request.requestId, nonce: request.nonce, projectId: request.projectId, conversationId: request.conversationId }), [request])
   useEffect(() => {
     if (!paper) return
     const controller = new AbortController()
-    const identity: ShareRenderResponse = { requestId: request.requestId, nonce: request.nonce, projectId: request.projectId, conversationId: request.conversationId }
     async function render() {
       let result: ShareRenderResponse
       try {
@@ -48,10 +48,10 @@ function ShareRenderJob({ request, onDone }: { request: ShareRenderRequest; onDo
     return () => controller.abort()
     // onDone changes as sibling jobs complete; a running capture must keep its lease.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paper, request])
+  }, [paper, request, identity])
   return <div aria-hidden="true" inert className="pointer-events-none fixed -left-[20000px] top-0">
     <GeneratedUiTheme><AgentShareSnapshotsContext.Provider value={request.generatedUi}>
-      <AgentSharePaper paperRef={setPaper} target={request} messages={request.messages} settings={request.settings} indexes={new Map(request.messages.map(m => [m.id, m.ordinal]))} />
+      <AgentSharePaper paperRef={setPaper} target={request} messages={request.messages} settings={request.settings} indexes={new Map(request.messages.map(m => [m.id, m.ordinal]))} renderContext={identity} />
     </AgentShareSnapshotsContext.Provider></GeneratedUiTheme>
   </div>
 }

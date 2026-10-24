@@ -124,7 +124,8 @@ export async function loadShareContent(bridge: ContentPort, target: AgentConvers
     const size = encoder.encode(content).byteLength
     totalBytes += size
     if (size > MAX_MESSAGE_BYTES || totalBytes > MAX_SNAPSHOT_BYTES) throw new Error("所选内容过长，请缩小分享范围。")
-    full.push({ ...structuredClone(item), content, contentTruncated: false, attachments: undefined, streaming: false })
+    const snapshot = structuredClone(item)
+    full.push({ ...snapshot, content, contentTruncated: false, attachments: snapshot.attachments?.filter(attachment => attachment.kind === "image"), streaming: false })
   }
   return full
 }

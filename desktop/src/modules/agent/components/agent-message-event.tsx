@@ -2,6 +2,7 @@ import {
   isValidElement,
   lazy,
   Suspense,
+  useContext,
   useMemo,
   type ComponentProps,
   type MouseEvent,
@@ -28,6 +29,7 @@ import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
 import { AgentMessageAttachments } from "./agent-message-attachments"
 import { displayableImageUrl } from "./agent-tool-image-artifacts"
+import { AgentShareImage, AgentShareImageContext } from "../share/guarded-image"
 import { AgentUsageCard } from "./agent-usage-card"
 import {
   createAgentLocalReferenceLink,
@@ -199,6 +201,7 @@ function AssistantMessageBody({
   readonly hideEmails?: boolean
 }) {
   const streaming = item.streaming === true
+  const shareImageReader = useContext(AgentShareImageContext)
   const selecting = useAgentShareSelection()?.active === true && !shareMode
   const fullContent = useGeneratedUiContent(item, projectId, conversationId)
   const generatedUiEnabled = Boolean(item.metadata?.generatedUi || (streaming && item.generatedUiEnabled))
@@ -231,7 +234,11 @@ function AssistantMessageBody({
   const streamdownComponents = useMemo(() => ({
     ...STREAMDOWN_COMPONENTS,
     a: selecting ? SelectionMessageLink : referenceLink,
-  }) satisfies Components, [referenceLink, selecting])
+    ...(shareMode && shareImageReader ? {
+      img: AgentShareImage,
+      source: () => null,
+    } : {}),
+  }) satisfies Components, [referenceLink, selecting, shareMode, shareImageReader])
 
   const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target
@@ -361,7 +368,7 @@ export function AgentShareMessageBody({ item, projectId, conversationId, hideEma
   if (item.role === "user") {
     const images = item.attachments?.filter((attachment) => attachment.kind === "image") ?? []
     return <div className="flex justify-end"><AgentMessageBubble role="user">
-      {images.length > 0 && <div className="space-y-3">{images.map((image, index) => <img key={image.id} src={displayableImageUrl(image.url)} alt={`图片 ${index + 1}`} loading="eager" className="h-auto w-full object-contain" />)}</div>}
+      {images.length > 0 && <div className="space-y-3">{images.map((image, index) => <AgentShareImage key={image.id} src={displayableImageUrl(image.url)} alt={`图片 ${index + 1}`} className="h-auto w-full object-contain" />)}</div>}
       {item.content.trim() && <span className={images.length ? "mt-3 block" : undefined}>{redactSensitiveText(item.content)}</span>}
     </AgentMessageBubble></div>
   }

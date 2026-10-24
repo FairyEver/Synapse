@@ -4,6 +4,19 @@ import { createHash } from "node:crypto"
 import { expect, it, vi } from "vitest"
 import { parseMailStream, MailContent } from "../mime"
 import { syncRig } from "./sync-fixtures"
+it("preserves named group members and standalone addresses in every recipient header", async () => {
+  const raw = [
+    "From: Sender <sender@example.com>",
+    "To: Team: Alice <alice@example.com>, Bob <bob@example.com>; , Solo <solo@example.com>",
+    "Cc: Reviewers: Carol <carol@example.com>;",
+    "Bcc: Hidden: Dana <dana@example.com>; , undisclosed-recipients:;",
+    "Subject: Group recipients", "", "Text",
+  ].join("\r\n")
+  const parsed = await parseMailStream(Readable.from([raw]), { signal: new AbortController().signal })
+  expect(parsed.to).toEqual([{ address: "alice@example.com", name: "Alice" }, { address: "bob@example.com", name: "Bob" }, { address: "solo@example.com", name: "Solo" }])
+  expect(parsed.cc).toEqual([{ address: "carol@example.com", name: "Carol" }])
+  expect(parsed.bcc).toEqual([{ address: "dana@example.com", name: "Dana" }])
+})
 it("streams nested MIME, encoded words and GB18030 without conflating repeated Message-IDs or CIDs", async () => {
   const bytes = await readFile(new URL("./fixtures/nested.eml", import.meta.url))
   const attachments: Buffer[] = []

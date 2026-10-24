@@ -228,6 +228,7 @@ export class MailSync {
   }
   async runOnce(ctx: MailContext, accountId: string, folderId?: string, refreshFolders = true, newMailOnly = false): Promise<Coverage> {
     return this.slots.run(ctx.signal, () => this.accounts.exclusive(ctx, accountId, async () => {
+      if ((await this.accounts.get(ctx, accountId)).paused) throw new MailError("ACCOUNT_PAUSED", "邮箱已暂停，请先恢复同步")
       const { config, credential } = await this.accounts.credential(ctx, accountId)
       const session = await this.accounts.protocols.imap(ctx, config, credential)
       try {
@@ -263,7 +264,7 @@ export class MailSync {
   }
   async start(ctx: MailContext, input: MailInputs["sync.start"]): Promise<{ jobId: string }> { return this.startAccount(ctx, input.accountId, input.folderId) }
   async startAccount(ctx: MailContext, accountId: string, folderId?: string): Promise<{ jobId: string }> {
-    await this.accounts.get(ctx, accountId)
+    if ((await this.accounts.get(ctx, accountId)).paused) throw new MailError("ACCOUNT_PAUSED", "邮箱已暂停，请先恢复同步")
     const key = `${ctx.ownerId}:${accountId}`
     const existing = this.runners.get(key)
     if (folderId) {
@@ -315,6 +316,7 @@ export class MailSync {
       } catch (error) {
         if (ctx.signal.aborted) break
         const code = normalizeProtocolError(error).code
+        if (code === "ACCOUNT_PAUSED") { await this.updateJob(ctx, runner.jobId, "paused", coverage, code); break }
         runner.foreground = true
         if (!runner.historyPaused) await this.updateJob(ctx, runner.jobId, code === "AUTH_FAILED" ? "paused" : "failed", coverage, code)
         const row = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)

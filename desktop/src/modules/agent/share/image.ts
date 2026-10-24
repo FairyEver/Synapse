@@ -28,13 +28,13 @@ function bounded<T>(promise: Promise<T>, signal: AbortSignal, milliseconds: numb
   })
 }
 
-async function waitForContent(paper: HTMLElement, signal: AbortSignal): Promise<void> {
+async function waitForContent(paper: HTMLElement, signal: AbortSignal, milliseconds: number): Promise<void> {
   signal.throwIfAborted()
   if (paper.querySelector("[data-agent-render-error]")) throw new Error("图表未能完整显示，请返回对话检查后重试。")
   if (paper.querySelector("iframe, video, object, embed")) throw new Error("所选内容包含无法导出的嵌入网页或视频，请取消该条消息。")
   if (document.fonts) await bounded(document.fonts.ready, signal, 10_000)
   let stable = 0, previousSize = ""
-  const end = Date.now() + 15_000
+  const end = Date.now() + milliseconds
   while (Date.now() < end) {
     signal.throwIfAborted()
     if (paper.querySelector("[data-agent-render-error]")) throw new Error("图表未能完整显示，请返回对话检查后重试。")
@@ -62,7 +62,7 @@ async function waitForContent(paper: HTMLElement, signal: AbortSignal): Promise<
 }
 
 export async function captureShareImage(paper: HTMLElement, scale: 2 | 3, action: "copy" | "save", signal: AbortSignal, renderContext?: ShareRenderResponse): Promise<Blob> {
-  await waitForContent(paper, signal)
+  await waitForContent(paper, signal, renderContext ? 60_000 : 15_000)
   const host = document.createElement("div")
   host.dataset.agentShareCapture = ""
   host.setAttribute("aria-hidden", "true")

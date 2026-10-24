@@ -30,6 +30,22 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLImageElement.prototype, "decode")
 })
 describe("share PNG generation", () => {
+  it("allows bounded automatic image loading to continue beyond the manual preview wait", async () => {
+    vi.useFakeTimers()
+    try {
+      const node = paper(); node.innerHTML = '<span data-agent-render-pending>加载中</span>'
+      let outcome: { error?: unknown; blob?: Blob } | undefined
+      const renderContext = { requestId: "request-1", nonce: "nonce-1", projectId: "project-1", conversationId: "conversation-1" }
+      const task = captureShareImage(node, 2, "save", new AbortController().signal, renderContext)
+        .then(blob => { outcome = { blob } }, error => { outcome = { error } })
+      await vi.advanceTimersByTimeAsync(16_000)
+      expect(outcome).toBeUndefined()
+      node.innerHTML = "authorized content"
+      await vi.advanceTimersByTimeAsync(200)
+      await task
+      expect(outcome).toMatchObject({ blob: expect.objectContaining({ type: "image/png" }) })
+    } finally { vi.useRealTimers() }
+  })
   it("calibrates inline text layout so ordinary Markdown can be exported", async () => {
     engine.capture.mockImplementation(async (_node, options) => ({
       toBlob: engine.toBlob,

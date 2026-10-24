@@ -2,6 +2,8 @@ import { expect, it, vi } from "vitest"
 import { Readable } from "node:stream"
 import { draftRig } from "./draft-fixtures"
 import type { StoredFolder } from "../sync"
+import { MailSend } from "../send"
+import { MailSendOperations } from "../send-reconcile"
 
 it("CAS saves content once and keeps editor revisions independent from sync metadata", async () => {
   const r = await draftRig()
@@ -47,12 +49,19 @@ it("indexes remote drafts without downloading bodies and hydrates the original e
     const folderId = (r.source.data.summary as { locator: { folderId: string } }).locator.folderId
     const folder = await r.repo.get<StoredFolder>(r.ctx, "folders", folderId)
     await r.repo.save(r.ctx, "folders", folderId, r.account.id, { ...folder.data, folder: { ...folder.data.folder, role: "drafts" } }, folder.revision, folder.sortKey)
-    vi.mocked(r.session.fetchPart).mockImplementation(async () => Readable.from(["From: me@example.com\r\nTo: recipient@example.com\r\nBcc: hidden@example.com\r\nSubject: Remote\r\nMessage-ID: <remote@example.com>\r\n\r\nEditable original"]))
+    vi.mocked(r.session.fetchPart).mockImplementation(async () => Readable.from(["From: me@example.com\r\nTo: Team: Alice <alice@example.com>, Bob <bob@example.com>;\r\nCc: Reviewers: Carol <carol@example.com>;\r\nBcc: Hidden: hidden@example.com;\r\nSubject: Remote\r\nMessage-ID: <remote@example.com>\r\n\r\nEditable original"]))
     const id = await r.drafts.indexRemote(r.ctx, r.source.id)
     expect(r.session.fetchPart).not.toHaveBeenCalled()
     const draft = await r.drafts.execute(r.ctx, "draft.get", { draftId: id! })
     expect(draft.text).toContain("Editable original"); expect(draft.bcc[0].address).toBe("hidden@example.com")
     expect(draft.localSaved).toBe(true); expect(draft.remoteLocator).toMatchObject({ uid: 1 })
+    expect(draft.to.map(address => address.address)).toEqual(["alice@example.com", "bob@example.com"])
+    expect(draft.cc).toEqual([{ address: "carol@example.com", name: "Carol" }])
+    const saved = await r.drafts.execute(r.ctx, "draft.update", { draftId: draft.id, expectedRevision: draft.revision, patch: { subject: "Saved remote draft" } })
+    const send = new MailSend(r.repo, r.accounts, r.assets, r.drafts, new MailSendOperations(r.repo, r.accounts, r.assets, r.drafts))
+    const preview = await send.preview(r.ctx, { draftId: saved.id, expectedRevision: saved.revision })
+    expect(preview.draft).toMatchObject({ to: draft.to, cc: draft.cc, bcc: draft.bcc })
+    expect(r.smtp.submit).not.toHaveBeenCalled()
   } finally { await r.sync.dispose(); await r.close() }
 })
 

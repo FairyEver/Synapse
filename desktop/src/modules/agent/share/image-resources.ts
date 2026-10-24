@@ -8,6 +8,11 @@ const XLINK_NAMESPACE = "http://www.w3.org/1999/xlink"
 const IMAGE_STYLE_PROPERTIES = ["background-image", "mask-image", "border-image-source", "list-style-image", "content"] as const
 const CSS_IMAGE_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/g
 
+export function shareImageDataByteSize(data: string): number {
+  const payload = data.slice(data.indexOf(",") + 1).split("#", 1)[0]!
+  return data.includes(";base64,") ? Math.floor(payload.length * 3 / 4) - (payload.match(/=+$/)?.[0].length ?? 0) : data.length
+}
+
 class ShareImageResourceLimitError extends Error {
   constructor() { super("图片资源过大，请缩小分享范围。"); this.name = "ShareImageResourceLimitError" }
 }
@@ -82,8 +87,7 @@ export async function freezeShareImages(paper: HTMLElement, clone: HTMLElement, 
   const cache = new Map<string, Promise<string>>()
   let totalBytes = 0
   function reserve(data: string): string {
-    const payload = data.slice(data.indexOf(",") + 1).split("#", 1)[0]!
-    const size = data.includes(";base64,") ? Math.floor(payload.length * 3 / 4) - (payload.match(/=+$/)?.[0].length ?? 0) : data.length
+    const size = shareImageDataByteSize(data)
     totalBytes += size
     if (size > AGENT_SHARE_MAX_PNG_BYTES || totalBytes > AGENT_SHARE_MAX_PNG_BYTES * 4) throw new ShareImageResourceLimitError()
     return data

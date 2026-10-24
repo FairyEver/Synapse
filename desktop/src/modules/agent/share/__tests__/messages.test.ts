@@ -41,6 +41,16 @@ describe("conversation share snapshots", () => {
     expect(result[0]?.attachments).not.toBe(input.attachments)
     expect(shareMessages([{ ...input, attachments: [{ kind: "path", path: "/private/report.pdf", name: "report.pdf", entryType: "file" }] }], false)).toHaveLength(0)
   })
+  it("retains image-only attachments through content loading while excluding local path attachments", async () => {
+    const image = { kind: "image" as const, id: "photo", mimeType: "image/png" as const, byteSize: 4, url: "synapse-agent-artifact://local/p/s/photo.png" }
+    const input = { ...message(1), content: "", attachments: [image, { kind: "path" as const, path: "/private/report.pdf", name: "report.pdf", entryType: "file" as const }] }
+    const getTimelineContentChunk = vi.fn()
+    const full = await loadShareContent({ getTimelineContentChunk }, target, shareMessages([input], false), new AbortController().signal)
+    expect(full[0]?.attachments).toEqual([image])
+    expect(full[0]?.attachments?.[0]).not.toBe(image)
+    expect(getTimelineContentChunk).not.toHaveBeenCalled()
+    expect(input.attachments).toHaveLength(2)
+  })
   it("only selects completed mainline questions and final replies, excluding tools and intermediate reasoning", () => {
     const items: SynapseAgentTimelineItem[] = [message(1), message(2), { kind: "toolCall", id: "tool", toolName: "Read", timestamp: "" }, message(4)]
     expect(shareMessages(items, false).map((item) => item.id)).toEqual(["m1", "m4"])

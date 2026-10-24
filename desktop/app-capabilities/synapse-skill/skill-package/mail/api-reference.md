@@ -520,7 +520,7 @@
 
 ### app_mail_sync_start
 
-同步邮箱索引和历史邮件摘要。Request bounded metadata synchronization. Returns a job ID; historical bodies and attachments are not mirrored.
+同步邮箱索引和历史邮件摘要。Request bounded metadata synchronization. Returns a job ID; historical bodies and attachments are not mirrored. Paused accounts require explicit account.resume; refreshing never resumes them.
 
 权限：content.mutate；风险：normal。
 

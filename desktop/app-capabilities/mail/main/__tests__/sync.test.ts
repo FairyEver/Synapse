@@ -14,6 +14,31 @@ async function completeSync(r: Awaited<ReturnType<typeof syncRig>>) {
 describe("mail metadata synchronization", () => {
   const close: (() => Promise<void>)[] = []
   afterEach(async () => { vi.useRealTimers(); for (const fn of close.splice(0)) await fn() })
+  it("does not restart a paused account on refresh and allows explicit account resume", async () => {
+    const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
+    await r.accounts.execute(r.ctx, "account.pause", { accountId: r.account.id })
+    vi.mocked(r.protocols.imap).mockClear()
+    await expect(r.sync.start(r.ctx, { accountId: r.account.id })).rejects.toMatchObject({ code: "ACCOUNT_PAUSED" })
+    await expect(r.sync.runOnce(r.ctx, r.account.id)).rejects.toMatchObject({ code: "ACCOUNT_PAUSED" })
+    expect(r.protocols.imap).not.toHaveBeenCalled()
+    expect((await r.repo.page(r.ctx, "sync-state", { accountId: r.account.id })).items).toEqual([])
+    await r.accounts.execute(r.ctx, "account.resume", { accountId: r.account.id })
+    await expect(r.sync.start(r.ctx, { accountId: r.account.id })).resolves.toHaveProperty("jobId")
+    await vi.waitFor(() => { expect(r.protocols.imap).toHaveBeenCalled() })
+  })
+  it("settles a runner when the account is paused between registration and its first turn", async () => {
+    const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
+    vi.mocked(r.protocols.imap).mockClear()
+    const runOnce = r.sync.runOnce.bind(r.sync)
+    vi.spyOn(r.sync, "runOnce").mockImplementationOnce(async (...args) => {
+      await r.accounts.execute(r.ctx, "account.pause", { accountId: r.account.id })
+      return runOnce(...args)
+    })
+    const job = await r.sync.start(r.ctx, { accountId: r.account.id })
+    await vi.waitFor(async () => { expect((await r.sync.get(r.ctx, job))?.state).toBe("paused") })
+    expect(r.protocols.imap).not.toHaveBeenCalled()
+    expect(await r.accounts.get(r.ctx, r.account.id)).toMatchObject({ paused: true, state: "paused" })
+  })
   it("reconciles removed drafts before Inbox history finishes, releasing each bounded turn", async () => {
     const r = await syncRig(); close.push(async () => { await r.sync.dispose(); await r.close() })
     vi.mocked(r.session.close).mockClear()

@@ -55,7 +55,7 @@ export async function parseMailStream(source: Readable, options: { signal: Abort
     const rawDate = parser.headerLines && parser.headerLines.find(line => line.key === "date")?.line.replace(/^date:\s*/iu, "")
     const parsedDate = rawDate ? new Date(rawDate) : null
     const cids = attachments.flatMap(a => a.cid ? [a.cid] : [])
-    const addresses = (value?: AddressObject | AddressObject[]) => (Array.isArray(value) ? value : value ? [value] : []).flatMap(group => group.value).flatMap(address => {
+    const addresses = (value?: AddressObject | AddressObject[]) => (Array.isArray(value) ? value : value ? [value] : []).flatMap(group => group.value).flatMap(address => address.group ?? [address]).flatMap(address => {
       const result = addressSchema.safeParse({ address: address.address, ...(address.name ? { name: address.name } : {}) })
       return result.success ? [result.data] : []
     })

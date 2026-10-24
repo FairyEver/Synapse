@@ -242,6 +242,8 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 同步硬规则
 
+2026-10-25 第二轮审查修复：自动分享在内容图片挂载前完成原调用者校验，手动分享保留图片附件；邮箱正确展开 MIME 组地址，暂停账号拒绝刷新触发的持续同步，恢复复用显式 account.resume。sync.start 描述与生成的系统 Skill 参考已同步；44 项邮箱工具、343 项全局 capability / 339 项 MCP 索引和其余注册表面均不变。
+
 2026-10-25 审查修复：Agent 自动分享携带渲染上下文时，HTTP(S) 图片始终通过既有受控资源 IPC，保留原调用者权限与审计；拒绝后不回退 Renderer 下载或缓存像素。手动分享继续沿用已有读取流程。PNG 输入的失败诊断不记录图片字节。邮箱内部敏感 IO 保留原 MCP 调用者，草稿删除覆盖尚未完成本地提交的远端追加，唤醒恢复未同步草稿；搜索覆盖率排除不可选目录。上述均为内部修复，System App、Dock、Workflow、Automation、Deep Link、343 项 capability / 339 项 MCP 索引及两个公开路由工具数量不变；既有 schema 与系统 Skill 调用方式不变。
 
 - 新增、删除、重命名或改变任意 System App、默认 Dock、Workflow Node、Automation Action、MCP capability/tool、Deep Link 或 `desktop/app-capabilities/<id>` 能力包时，同一次改动必须更新本文件的表格、数量、例外和默认 Dock 顺序。
