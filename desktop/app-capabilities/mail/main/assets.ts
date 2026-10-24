@@ -19,14 +19,22 @@ export interface StoredMailAsset extends Record<string, unknown> {
 
 export class MailAssets {
   private readonly leases = new Map<string, { ownerId: string; ids: Set<string> }>()
-  private cacheCleanup: Promise<unknown> = Promise.resolve()
-  async hold(ctx: MailContext, key: string, accountId: string, ids: string[]): Promise<void> {
-    for (const id of ids) {
-      const asset = await this.info(ctx, id)
-      if (asset.accountId !== accountId || asset.state !== "ready") throw new MailError("ASSET_UNAVAILABLE", "写信附件不可用")
-    }
-    ctx.signal.throwIfAborted()
-    this.leases.set(key, { ownerId: ctx.ownerId, ids: new Set([...(this.leases.get(key)?.ids ?? []), ...ids]) })
+  private mutations: Promise<unknown> = Promise.resolve()
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const task = this.mutations.then(operation)
+    this.mutations = task.catch(() => undefined)
+    return task
+  }
+
+  hold(ctx: MailContext, key: string, accountId: string, ids: string[]): Promise<void> {
+    return this.serialize(async () => {
+      for (const id of ids) {
+        const asset = await this.info(ctx, id)
+        if (asset.accountId !== accountId || asset.state !== "ready") throw new MailError("ASSET_UNAVAILABLE", "写信附件不可用")
+      }
+      ctx.signal.throwIfAborted()
+      this.leases.set(key, { ownerId: ctx.ownerId, ids: new Set([...(this.leases.get(key)?.ids ?? []), ...ids]) })
+    })
   }
   release(key: string): void { this.leases.delete(key) }
   private leased(ctx: MailContext, id: string): boolean { return [...this.leases.values()].some(lease => lease.ownerId === ctx.ownerId && lease.ids.has(id)) }
@@ -117,12 +125,15 @@ export class MailAssets {
     throw new MailError("VERSION_CONFLICT", "附件状态正在变化，请重试")
   }
 
-  async pin(ctx: MailContext, id: string, delta: number): Promise<void> {
-    const row = await this.repo.get<StoredMailAsset>(ctx, "assets", id)
-    if (row.data.asset.state === "delete-pending") throw new MailError("ASSET_IN_USE", "附件正在清理")
-    const pins = row.data.pins + delta
-    if (pins < 0) throw new MailError("VERSION_CONFLICT", "附件引用状态已变化")
-    await this.repo.save(ctx, "assets", id, row.accountId, { ...row.data, pins }, row.revision, row.sortKey)
+  pin(ctx: MailContext, id: string, delta: number): Promise<void> {
+    return this.serialize(async () => {
+      const row = await this.repo.get<StoredMailAsset>(ctx, "assets", id)
+      if (row.data.asset.state === "delete-pending") throw new MailError("ASSET_IN_USE", "附件正在清理")
+      if (delta > 0 && (row.data.asset.state !== "ready" || !row.data.key)) throw new MailError("ASSET_UNAVAILABLE", "附件尚未下载或缓存已清理")
+      const pins = row.data.pins + delta
+      if (pins < 0) throw new MailError("VERSION_CONFLICT", "附件引用状态已变化")
+      await this.repo.save(ctx, "assets", id, row.accountId, { ...row.data, pins }, row.revision, row.sortKey)
+    })
   }
 
   /** Call under the account queue before cache maintenance or resuming jobs. */
@@ -149,7 +160,11 @@ export class MailAssets {
     } while (cursor)
   }
 
-  async remove(ctx: MailContext, id: string, eviction = false): Promise<void> {
+  remove(ctx: MailContext, id: string, eviction = false): Promise<void> {
+    return this.serialize(() => this.removeNow(ctx, id, eviction))
+  }
+
+  private async removeNow(ctx: MailContext, id: string, eviction: boolean): Promise<void> {
     const row = await this.repo.get<StoredMailAsset>(ctx, "assets", id)
     if (!eviction && row.data.asset.messageId) throw new MailError("ASSET_IN_USE", "服务端邮件附件只能清理缓存")
     if (this.leased(ctx, id) || row.data.pins > 0 || (eviction && !row.data.cache)) throw new MailError("ASSET_IN_USE", "附件仍被草稿或发送操作使用")
@@ -176,9 +191,7 @@ export class MailAssets {
     } while (cursor)
   }
   clearCache(ctx: MailContext, accountId?: string, budget = 0): Promise<{ removed: number; bytes: number }> {
-    const cleanup = this.cacheCleanup.then(() => this.clearCacheNow(ctx, accountId, budget))
-    this.cacheCleanup = cleanup.catch(() => undefined)
-    return cleanup
+    return this.serialize(() => this.clearCacheNow(ctx, accountId, budget))
   }
 
   private async clearCacheNow(ctx: MailContext, accountId: string | undefined, budget: number): Promise<{ removed: number; bytes: number }> {
@@ -196,7 +209,7 @@ export class MailAssets {
       for (const row of page.items) {
         if (remaining <= budget) break
         if (this.leased(ctx, row.id) || !row.data.cache || row.data.pins > 0 || row.data.asset.state !== "ready") continue
-        await this.remove(ctx, row.id, true)
+        await this.removeNow(ctx, row.id, true)
         remaining -= row.data.asset.size
         bytes += row.data.asset.size
         removed++
