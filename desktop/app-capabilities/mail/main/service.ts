@@ -72,7 +72,7 @@ export class MailService {
     this.contexts = new MailContextProvider(() => this.identityChanging ? null : deps.resolveOwner())
     const access = createMailAccess(this.contexts, deps.permissionGuard, deps.auditSink)
     this.repo = new MailRepository(deps.storage, ctx => this.contexts.assertCurrent(ctx))
-    this.assets = new MailAssets(this.repo, deps.files, access)
+    this.assets = new MailAssets(this.repo, deps.files, access, deps.diagnostic)
     this.accounts = new MailAccounts(this.repo, this.contexts, deps.protocols ?? createMailProtocols(access), access, {
       start: (ctx, id) => this.sync.startAccount(this.scoped({ ...ctx, actor: "sync" }, id), id),
       stop: async (ctx, id) => { this.accountScopes.get(id)?.abort(); this.accountScopes.delete(id); await this.sync.stopAccount(id); await this.draftSync.stopAccount(ctx, id) },

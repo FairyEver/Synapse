@@ -19,6 +19,7 @@ export interface StoredMailAsset extends Record<string, unknown> {
 
 export class MailAssets {
   private readonly leases = new Map<string, { ownerId: string; ids: Set<string> }>()
+  private cacheCleanup: Promise<unknown> = Promise.resolve()
   async hold(ctx: MailContext, key: string, accountId: string, ids: string[]): Promise<void> {
     for (const id of ids) {
       const asset = await this.info(ctx, id)
@@ -30,7 +31,8 @@ export class MailAssets {
   release(key: string): void { this.leases.delete(key) }
   private leased(ctx: MailContext, id: string): boolean { return [...this.leases.values()].some(lease => lease.ownerId === ctx.ownerId && lease.ids.has(id)) }
 
-  constructor(private readonly repo: MailRepository, private readonly files: ManagedAssetStore, private readonly access: MailAccess) {}
+  constructor(private readonly repo: MailRepository, private readonly files: ManagedAssetStore, private readonly access: MailAccess,
+    private readonly diagnostic?: (code: string, accountId: string) => void) {}
 
   async put(ctx: MailContext, source: Readable, metadata: {
     accountId: string; name: string; mime: string; cid?: string; messageId?: string; attachmentId?: string; cache?: boolean; pinned?: boolean
@@ -173,7 +175,13 @@ export class MailAssets {
       cursor = page.nextCursor ?? undefined
     } while (cursor)
   }
-  async clearCache(ctx: MailContext, accountId?: string, budget = 0): Promise<{ removed: number; bytes: number }> {
+  clearCache(ctx: MailContext, accountId?: string, budget = 0): Promise<{ removed: number; bytes: number }> {
+    const cleanup = this.cacheCleanup.then(() => this.clearCacheNow(ctx, accountId, budget))
+    this.cacheCleanup = cleanup.catch(() => undefined)
+    return cleanup
+  }
+
+  private async clearCacheNow(ctx: MailContext, accountId: string | undefined, budget: number): Promise<{ removed: number; bytes: number }> {
     let remaining = 0
     let cursor: string | undefined
     do {
@@ -199,8 +207,13 @@ export class MailAssets {
     return { removed, bytes }
   }
 
-  trim(ctx: MailContext): Promise<{ removed: number; bytes: number }> {
-    return this.clearCache(ctx, undefined, MAIL_CACHE_BYTES)
+  async trim(ctx: MailContext): Promise<{ removed: number; bytes: number }> {
+    try { return await this.clearCache(ctx, undefined, MAIL_CACHE_BYTES) }
+    catch (error) {
+      if (ctx.signal.aborted || !this.diagnostic) throw error
+      this.diagnostic("MAIL_CACHE_CLEANUP_FAILED", "mail")
+      return { removed: 0, bytes: 0 }
+    }
   }
 
   /** One bounded maintenance batch, scheduled after window creation, never on its critical path. */
