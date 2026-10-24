@@ -1,3 +1,4 @@
+import type { ShareImageSource } from "../../agent/shared/share"
 import { createHash } from "node:crypto"
 import path from "node:path"
 import { Readable, Transform } from "node:stream"
@@ -94,7 +95,7 @@ function attachmentAssetId(messageId: string, part: string): string {
 }
 type AttachmentAction = Extract<MailAction, `attachment.${string}`> | "message.extract_to_file"
 export class MailContent {
-  constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly assets: MailAssets, private readonly access: MailAccess, private readonly onChanged: (event: MailChanged) => void = () => undefined) {}
+  constructor(private readonly repo: MailRepository, private readonly accounts: MailAccounts, private readonly assets: MailAssets, private readonly access: MailAccess, private readonly onChanged: (event: MailChanged) => void = () => undefined, private readonly resolveShareImage?: (ref: string, ctx: MailContext) => Promise<ShareImageSource>) {}
   private async withMessage<T>(ctx: MailContext, id: string, task: (row: Awaited<ReturnType<typeof resolveMessage>>, folder: StoredFolder, session: MailImapSession) => Promise<T>): Promise<T> {
     const target = await resolveMessage(this.repo, ctx, id)
     return this.accounts.exclusive(ctx, target.accountId, async () => {
@@ -281,13 +282,19 @@ export class MailContent {
     if (action === "attachment.import_local") {
       const params = MAIL_INPUT_SCHEMAS["attachment.import_local"].parse(input)
       await this.repo.get(ctx, "accounts", params.accountId)
-      const filePath = await externalAssetPath(params.filePath)
+      if (params.shareImageRef) {
+        if (!this.resolveShareImage) throw new MailError("NOT_FOUND", "分享图片服务不可用")
+        const source = await this.resolveShareImage(params.shareImageRef, ctx)
+        result = await this.assets.put(ctx, Readable.from([source.bytes]), { accountId: params.accountId, name: source.fileName, mime: source.mimeType })
+      } else {
+      const filePath = await externalAssetPath(params.filePath!)
       await this.access(ctx, "fs.read.outside-userdata", filePath)
       const source = await openExternalAsset(filePath, MAIL_MAX_ATTACHMENT_BYTES, ctx.signal).catch(error => {
         if (error instanceof AssetSizeLimitError) throw new MailError("LIMIT_EXCEEDED", "附件超过大小上限")
         throw error
       })
       result = await this.assets.put(ctx, source, { accountId: params.accountId, name: filename(filePath), mime: "application/octet-stream" })
+      }
       await this.repo.get(ctx, "accounts", params.accountId)
     } else if (action === "attachment.list") {
       const params = MAIL_INPUT_SCHEMAS["attachment.list"].parse(input)

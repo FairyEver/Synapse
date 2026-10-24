@@ -30,6 +30,8 @@ const CAPABILITY_ACTIONS = [
   "upload",
   "restore",
   "generate",
+  "messages",
+  "output",
   "play",
   "start",
   "stop",

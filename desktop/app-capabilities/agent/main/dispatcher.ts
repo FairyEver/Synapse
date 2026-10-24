@@ -1,3 +1,4 @@
+import type { AgentShareService } from "./share-service"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../../../electron/runtime/security"
 import type { DispatchContext, DispatchResult } from "../../../synapse-capabilities/shared/types"
 import {
@@ -37,6 +38,7 @@ const permissionActionByCapability: Readonly<Record<string, PermissionAction>> =
 
 export function createAgentConversationCapabilityDispatcher(deps: {
   readonly service: AgentConversationNavigationService
+  readonly shareService?: AgentShareService
   readonly controlService?: AgentConversationControlService
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
@@ -56,6 +58,15 @@ export function createAgentConversationCapabilityDispatcher(deps: {
         const schema = agentConversationInputSchemaForCapability(action)
         const parsed = schema?.parse(params) as Record<string, unknown> | undefined
         if (!parsed) throw new AgentConversationCapabilityError("invalid_input")
+        if (action.startsWith("app.agent.share.")) {
+          if (!context.clientId || !context.actor) throw new Error("缺少调用者身份。")
+          enforceRateLimit(rateWindows, context.clientId, metadata.mutates)
+          if (!deps.shareService) throw new Error("分享服务不可用。")
+          const data = action === "app.agent.share.messages" ? await deps.shareService.messages(parsed, context)
+            : action === "app.agent.share.generate" ? await deps.shareService.generate(parsed, context)
+            : await deps.shareService.output(parsed, context)
+          return { ok: true, data }
+        }
         if (action === AGENT_CONVERSATION_OPEN_CAPABILITY_ID) {
           const result = await deps.service.open(parsed as AgentConversationOpenInput)
           return { ok: true, data: result, affected: 1 }
@@ -120,6 +131,7 @@ export function createAgentConversationCapabilityDispatcher(deps: {
         })
         return { ok: true, data: result, affected: 1 }
       } catch (error) {
+        if (action.startsWith("app.agent.share.")) return { ok: false, code: "share_failed", error: error instanceof Error ? error.message : "图片分享失败。" }
         if (audit) {
           const actor = context.actor ?? deps.actor
           if (actor) {

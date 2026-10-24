@@ -1,3 +1,5 @@
+import { AGENT_SHARE_SERVICE_ID } from "../../../app-capabilities/agent/shared/share"
+import type { AgentShareService } from "../../../app-capabilities/agent/main/share-service"
 /**
  * Phase 0.3 — Config IpcModule.
  * SPEC §6 Step 3.
@@ -116,6 +118,7 @@ export const configIpcModule: IpcModule = {
         logger.info(`Handling config.update request. patch: ${JSON.stringify(sanitizeConfigPatchForLog(patch))}`)
         const variableAudits = await authorizeVariablePatch(ctx, patch)
         try {
+          const previousProjects = patch.global?.projects !== undefined ? (await configStore.load()).global.projects : []
           const config = await configStore.update(patch)
           if (patch.repositories !== undefined) {
             repositoryStore.reconcileRepositories(config.repositories)
@@ -123,6 +126,11 @@ export const configIpcModule: IpcModule = {
           // The terminal's groups are the projects' to decide, so a saved project list
           // is followed here rather than left to the terminal to notice.
           if (patch.global?.projects !== undefined) {
+            const retained = new Set(config.global.projects.map(project => project.id))
+            for (const project of previousProjects) if (!retained.has(project.id)) {
+              try { await ctx.resolve<AgentShareService>(AGENT_SHARE_SERVICE_ID).removeProject(project.id) }
+              catch (cause) { logger.warn("Agent share project cleanup deferred to recovery.", { errorName: cause instanceof Error ? cause.name : typeof cause }) }
+            }
             await syncTerminalProjectGroupsSafely(
               () => ctx.resolve<TerminalService>("core.terminal"),
               "config.update",

@@ -33,7 +33,15 @@ Use `app_account_state_get` and `app_account_login_start` when the account may n
 
 ## Agent Conversation Creation, Models and Groups
 
-对话图片分享属于桌面 UI 操作：点击对话顶栏或单条消息的分享按钮，选择用户消息 / AI 最终回复后预览、复制或保存高清 PNG；默认隐藏邮箱，只在本机生成。它没有公开 MCP 工具，不要猜测图片导出工具、把本机对话链接当成公开分享链接，或自动上传原对话。
+对话图片分享支持手动 UI 与当前桌面 Agent 回合的受控能力。先 search 取得以下工具 schema，再 invoke；只能使用宿主注入的本回合 shareContextRef，不能猜测或用聚焦窗口推断来源。
+
+- app_agent_share_messages：按 offset / limit 分页查询真实历史，query 为原文子串。返回 messageRef、turnRef、角色、时间和有界摘录；完整性明确且 nextOffset 为 null 才能说已查全。images 为已有分享图片引用，后续可复用。多个合理候选需询问用户。
+- app_agent_share_generate：传 shareContextRef、selection 和 UUID idempotencyKey。latest_turn 是当前指令前最近完整问答；all 是此前全部可分享消息；assistant 仅上一条最终回复；messages 必须传查询得到的 messageRefs，支持不连续选择。整条真实原文制图，不用摘要或重写的内容替代。默认 720px / 2×、隐藏邮箱、显示模型与时间；单张长 PNG，超限让用户缩小范围，不自行拆图、截断或降清晰度。
+- 返回 shareImageRef 与实际消息范围、尺寸、字节数、摘要。图片会持久显示在源对话，用户要“把图片给我”时生成即完成，不必让用户展开工具日志。不要将 PNG Base64 放进回复或上下文。生成同键同输入可重试；已经生成则复用图片，交付失败只重试交付。
+- app_agent_share_output：shareImageRef + action=copy 写图片剪贴板；action=save 可指定绝对 `.png` outputPath，拒绝覆盖同名文件；省略路径弹系统保存框。success=false 为取消，不要报告成功。
+- 发站内信时将 shareImageRef 交给 app_mail_internal_attachment_create（最大 20 MiB），然后按 mail-internal/index.md 完成收件人、预览及发送；发邮件交给 app_mail_attachment_import_local（加 accountId），按 mail/index.md 创建草稿、预览、发送。filePath 与 shareImageRef 二选一。图片是普通 PNG 附件，导入后邮件保留独立副本。
+- 用户已明确内容、渠道及收件人则完成授权内发送，不重复询问；有歧义或用户要求审阅才暂停。发送使用稳定请求 ID，未知结果核验而非自动重发；SMTP accepted 不代表最终送达。生成成功不能说成复制/保存/发送成功。
+- 首期仅当前桌面普通用户回合，不支持跨会话检索、未打开会话渲染、手机端或公开分享链接。手动 UI 的“仅 AI”是全部 AI 消息，与工具 assistant 的上一条最终回复不同。
 
 Agent 上游 MCP 的本机配置清单与 SY 独立开关位于“设置 → MCP → Agent 使用的 MCP”，属于 UI 专用功能，没有对应公开 MCP 工具。不要通过编辑 Claude Code 全局或项目配置来模拟“只在 SY 中关闭”；设置开关不改变外部 CLI 的 MCP、规则或 Skill。
 

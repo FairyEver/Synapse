@@ -1,3 +1,4 @@
+import type { DispatchContext } from "../../../synapse-capabilities/shared/types"
 import type { z } from "zod"
 import type {
   MAIL_INPUT_SCHEMAS, MAIL_RESULT_SCHEMAS, accountConfigSchema, accountSummarySchema, folderSchema,
@@ -39,6 +40,7 @@ export type DraftSyncResult = { draftId: string; syncState: Draft["syncState"]; 
 export type InboxDelta = { accountId: string; messages: MailSummary[]; baseline: boolean }
 
 export interface MailContext {
+  readonly shareCaller?: Pick<DispatchContext, "actor" | "clientId" | "source">
   readonly ownerId: string
   readonly generation: number
   readonly signal: AbortSignal

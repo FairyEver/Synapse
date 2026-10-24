@@ -1,5 +1,5 @@
-import type { SynapseAgentMessageTimelineItem, SynapseAgentTimelineItem, SynapseAgentTimelineResult } from "@/types/agent"
-import type { AgentConversationTarget } from "@/types/agent-conversation-window"
+import type { SynapseAgentMessageTimelineItem, SynapseAgentTimelineItem, SynapseAgentTimelineResult } from "../../../types/agent"
+import type { AgentConversationTarget } from "../../../types/agent-conversation-window"
 import { groupTimelineDisplayEntries, timelineDisplayEntries } from "../components/agent-timeline-display"
 
 export type ShareMessage = SynapseAgentMessageTimelineItem & { readonly role: "user" | "assistant" }

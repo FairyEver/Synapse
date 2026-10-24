@@ -38,7 +38,7 @@ const descriptions: Record<MailAction, string> = {
   "draft.create": "Create a draft using accountId and content fields, or prepare reply, reply-all or forward using accountId, sourceMessageId, mode and optional forwardMode. The two input forms are mutually exclusive and validated at runtime; creating a draft never authorizes sending.",
   "draft.update": "Save email draft fields and asset references with expectedRevision; concurrent edits are rejected without overwriting.",
   "draft.delete": "Discard one exact draft revision and its associated remote copy; never deletes unrelated drafts.",
-  "attachment.import_local": "Import a local file into this account's controlled email assets. Does not upload it to Drive.",
+  "attachment.import_local": "Import exactly one local filePath or app.agent.share.generate shareImageRef (PNG) into this account's independent controlled email assets. Does not upload it to Drive.",
   "attachment.list": "List email or draft attachment metadata without downloading all attachment bytes. Provide exactly one of messageId or draftId.",
   "attachment.get": "Read attachment name, type, size, CID and hash metadata. Provide assetId, or messageId together with attachmentId; the forms are mutually exclusive. Does not parse attachment text.",
   "attachment.download_file": "Download one owned attachment to an absolute outputPath without overwriting an existing file. Provide assetId, or messageId together with attachmentId; the forms are mutually exclusive.",

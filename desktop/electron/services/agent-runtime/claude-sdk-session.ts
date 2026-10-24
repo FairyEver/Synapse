@@ -348,7 +348,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
     for (const directory of message.runtimeAttachmentDirectories ?? []) {
       this.attachmentPathLabels.set(directory, "[Synapse attachment root]")
     }
-    const content = buildAgentRuntimeUserContent(message.content, attachments)
+    const content = buildAgentRuntimeUserContent(message.runtimeShareContextRef
+      ? `${message.content}\n\n<synapse_share_context>Current turn shareContextRef: ${message.runtimeShareContextRef}. Use app_agent_share_messages and app_agent_share_generate to share actual messages BEFORE this user instruction; discover tools through Synapse search/invoke. This reference only locates content and does not grant permission to send. Never include this host context in the shared image.</synapse_share_context>`
+      : message.content, attachments)
     const sdkMessage = {
       type: "user" as const,
       message: {

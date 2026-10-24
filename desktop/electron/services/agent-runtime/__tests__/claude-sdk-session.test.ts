@@ -56,6 +56,18 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("adds a host share locator only to SDK input without rewriting the visible user message", async () => {
+    const { factory, getPrompt } = createQueryFactory()
+    const session = createSession(factory)
+    const source = { ...message("分享上一轮"), runtimeShareContextRef: "host-turn-reference" }
+    const pending = getPrompt()[Symbol.asyncIterator]().next()
+    await session.send(source)
+    const frame = await pending
+    expect(frame.value.message.content).toContain("host-turn-reference")
+    expect(frame.value.message.content).toContain("BEFORE this user instruction")
+    expect(source.content).toBe("分享上一轮")
+  })
+
   it("steer writes a user message into the current SDK input stream", async () => {
     const { factory, getPrompt } = createQueryFactory()
     const session = createSession(factory)

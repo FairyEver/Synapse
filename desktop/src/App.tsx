@@ -1,3 +1,4 @@
+import { AgentShareRenderHost } from "@/modules/agent/share/render-host"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
@@ -404,6 +405,7 @@ function App() {
     return (
       <IdentityGate>
         <ErrorBoundary fallbackTitle="对话窗口出现问题">
+          <AgentShareRenderHost />
           <AgentConversationWindowPage request={agentConversationWindowRequest} />
         </ErrorBoundary>
       </IdentityGate>
@@ -440,7 +442,7 @@ function App() {
     )
   }
 
-  return <MainApp key={resetKey} />
+  return <><AgentShareRenderHost /><MainApp key={resetKey} /></>
 }
 
 export default App

@@ -1,3 +1,4 @@
+import { agentShareImagesSchema } from "./agent-share"
 import { mailSchemas } from "./mail"
 export { mailSchemas, type MailRecord, type MailEntity } from "./mail"
 import { agentGeneratedUiStateSchema } from "./agent-generated-ui"
@@ -329,6 +330,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   agentPersonaRemoteCacheSchema,
   agentFileCheckpointsSchema,
   agentGeneratedUiStateSchema,
+  agentShareImagesSchema,
   agentTaskProgressSchema,
   systemNotifierSettingsSchemaDefinition,
   updateInstallRecoverySchema,

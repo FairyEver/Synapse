@@ -151,3 +151,9 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 - Agent 回复 Outbox 只保存已有外部 dispatcher 接管的投递事件；本地 Renderer 通过 EventBus 接收事件，不得为其复制 Outbox 记录。已发送记录按回复目标保留最近 500 条，清理必须覆盖先前进程留下的数据，待发送和失败记录不得随已发送记录一起删除。
 - `agent.events` 中 `sdkEvent` / `streamDiagnostics` 是原始诊断层，保留 30 天后可由后台维护删除；历史 `sdkEvent + system/thinking_tokens` 可立即分批删除。Conversation history、语义事件、usage、artifact 与 file checkpoint 不得混入该清理。已删除 conversation 的孤儿 `agent.events` 可分批清理。
 - 运行数据维护只能在主窗口创建后调度，通过独立 Worker 对 `DataRepository` 内部 SQLite 表执行最多十万行一轮、五百行一批的短事务；中断、超时或锁冲突保留已提交批次并自动重试，不执行启动期 `VACUUM`，不得阻塞 Renderer。权限仅允许 `system:data-maintenance` 对 `runtime-data` 执行 `database.mutate`，结果写入结构化日志、AuditSink 和诊断页。
+
+## 当前回合对话图片分享
+
+宿主的 runtimeShareContextRef 只定位本次桌面普通用户消息之前的历史与来源窗口，不能由模型选择聚焦窗口、改写正文或扩大权限。注入 SDK 输入而不进入可见历史，原生 HTTP MCP 与第三方 router 共用 Agent capability dispatcher。消息查询只有有界摘录，制图从真实历史读取；引用与内容版本绑定。所有 share 操作仍经过调用者身份、限流、PermissionGuard 和审计，Persona / 子 Agent 的工具策略不添加自动允许例外。
+
+分享图片使用 app.agent.share-images 与专用 ManagedAssetStore，不能借此读取 agent.artifacts 的大型私有文本。渲染只读且经一次性 nonce / request / renderer / project / conversation 验证；来源窗口关闭、取消、超时与迟到结果拒绝。PNG 不进入模型上下文；复制、指定路径保存及远端资源读取保留调用身份。邮件通过窄解析接口导入独立附件，遵守原有账号范围、权限与发送授权，生成成功不等于发送成功。

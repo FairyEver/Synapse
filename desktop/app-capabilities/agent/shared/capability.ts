@@ -93,6 +93,9 @@ export const AGENT_CONVERSATION_CAPABILITY_CATALOG = [
     description: "List non-archived local Agent model providers and their selectable model tiers and names, matching custom conversation creation. Supports provider ID filtering, provider/model name search and pagination. Returns no credentials or connection settings.",
     mutates: false,
   }),
+  capability({ id: "app.agent.share.messages", title: "选择当前对话分享消息", description: "List shareable user messages and final replies before the current share instruction.", mutates: false, risk: "high" }),
+  capability({ id: "app.agent.share.generate", title: "将当前对话分享为图片", description: "Generate a faithful PNG from real conversation messages and display the image in the source conversation.", mutates: true, risk: "high" }),
+  capability({ id: "app.agent.share.output", title: "复制或保存对话分享图片", description: "Copy a generated share image to the clipboard or save it to a local PNG file.", mutates: true, risk: "high" }),
 ] as const
 
 export const AGENT_CONVERSATION_CAPABILITY_IDS = AGENT_CONVERSATION_CAPABILITY_CATALOG.map((item) => item.id)

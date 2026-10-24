@@ -1,3 +1,4 @@
+import type { ShareRenderResponse } from "../../../../app-capabilities/agent/shared/share"
 import { AGENT_SHARE_COPY_MAX_PIXELS, AGENT_SHARE_MAX_HEIGHT, AGENT_SHARE_MAX_PIXELS, AGENT_SHARE_MAX_PNG_BYTES } from "@/types/agent-share"
 import { createRendererLogger } from "@/app-shell/logging"
 import { decodeShareImages, freezeShareImages } from "./image-resources"
@@ -60,7 +61,7 @@ async function waitForContent(paper: HTMLElement, signal: AbortSignal): Promise<
   throw new Error("内容仍在加载，请稍后再试。")
 }
 
-export async function captureShareImage(paper: HTMLElement, scale: 2 | 3, action: "copy" | "save", signal: AbortSignal): Promise<Blob> {
+export async function captureShareImage(paper: HTMLElement, scale: 2 | 3, action: "copy" | "save", signal: AbortSignal, renderContext?: ShareRenderResponse): Promise<Blob> {
   await waitForContent(paper, signal)
   const host = document.createElement("div")
   host.dataset.agentShareCapture = ""
@@ -72,7 +73,7 @@ export async function captureShareImage(paper: HTMLElement, scale: 2 | 3, action
   const captureSignal = AbortSignal.any([signal, resources.signal])
   let stage = "resources"
   try {
-    await bounded(freezeShareImages(paper, clone, captureSignal), captureSignal, 30_000)
+    await bounded(freezeShareImages(paper, clone, captureSignal, renderContext), captureSignal, 30_000)
     stage = "canvas"
     const canvases = Array.from(clone.querySelectorAll("canvas"))
     // cloneNode does not copy bitmap pixels. Freeze canvases before cloning can lose them.

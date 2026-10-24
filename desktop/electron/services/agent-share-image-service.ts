@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { link, lstat, open, realpath, rename, rm } from "node:fs/promises"
 import path from "node:path"
 import { AGENT_SHARE_COPY_MAX_PIXELS, AGENT_SHARE_MAX_HEIGHT, AGENT_SHARE_MAX_PIXELS, AGENT_SHARE_MAX_PNG_BYTES, type AgentShareImageRequest, type AgentShareImageResult } from "../../src/types/agent-share"
-import type { AuditSink, PermissionGuard } from "../runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { hasSameFileSnapshot, isFileNotFoundError } from "./fs-utils"
 
 export class AgentShareImageService {
@@ -14,9 +14,9 @@ export class AgentShareImageService {
     logger?: { warn(message: string, metadata: Record<string, unknown>): void }
   }) {}
 
-  async readRemoteImage(input: string, signal: AbortSignal): Promise<{ dataUrl: string }> {
+  async readRemoteImage(input: string, signal: AbortSignal, caller?: ActorIdentity): Promise<{ dataUrl: string }> {
     signal.throwIfAborted()
-    const actor = { kind: "user" as const, id: "renderer" }, action = "network.connect", metadata = { source: "agent.share.image" }
+    const actor = caller ?? { kind: "user" as const, id: "renderer" }, action = "network.connect", metadata = { source: "agent.share.image" }
     const validate = (url: URL) => {
       if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) throw new Error("图片地址不受支持。")
     }
@@ -40,16 +40,18 @@ export class AgentShareImageService {
     } finally { response.discardBody?.() }
   }
 
-  async exportImage(request: AgentShareImageRequest): Promise<AgentShareImageResult> {
+  async exportImage(request: AgentShareImageRequest, options: { outputPath?: string; actor?: ActorIdentity; signal?: AbortSignal } = {}): Promise<AgentShareImageResult> {
+    options.signal?.throwIfAborted()
     const { bytes, width, height } = validateSharePng(request.pngBase64)
     if (request.action === "copy" && (width * height > AGENT_SHARE_COPY_MAX_PIXELS || height > 32_767)) {
       throw new Error("图片过长，无法复制，请保存图片后分享。")
     }
-    const chosen = request.action === "save" ? await this.deps.chooseSavePath(shareImageFileName(request.fileName)) : null
+    const chosen = request.action === "save" ? options.outputPath ?? await this.deps.chooseSavePath(shareImageFileName(request.fileName)) : null
+    options.signal?.throwIfAborted()
     if (request.action === "save" && !chosen) return { success: false }
     const action = request.action === "save" ? "fs.write.outside-userdata" : "clipboard.write"
     let resource = chosen ?? "agent.share.image"
-    const actor = { kind: "user" as const, id: "renderer" }
+    const actor = options.actor ?? { kind: "user" as const, id: "renderer" }
     const metadata = { source: "agent.share.image", width, height, byteSize: bytes.length }
     let denied = false
     try {
@@ -63,8 +65,9 @@ export class AgentShareImageService {
         this.deps.auditSink.record({ action, actor, resource, outcome: "denied", metadata })
         throw new Error("没有权限导出图片。")
       }
+      options.signal?.throwIfAborted()
       if (request.action === "copy") await this.deps.copyPng(bytes)
-      else await this.writeAtomic(resource, bytes)
+      else await this.writeAtomic(resource, bytes, !options.outputPath, options.signal)
       this.deps.auditSink.record({ action, actor, resource, outcome: "allowed", metadata })
       return { success: true, ...(chosen ? { filePath: resource } : {}) }
     } catch (cause) {
@@ -73,8 +76,10 @@ export class AgentShareImageService {
     }
   }
 
-  private async writeAtomic(output: string, bytes: Buffer): Promise<void> {
+  private async writeAtomic(output: string, bytes: Buffer, overwrite = true, signal?: AbortSignal): Promise<void> {
     const initial = await targetSnapshot(output)
+    if (initial && !overwrite) throw new Error("目标文件已存在，请选择其他路径。")
+    signal?.throwIfAborted()
     const temporary = path.join(path.dirname(output), `.synapse-share-${randomUUID()}.tmp`)
     let created = false
     try {
@@ -84,6 +89,7 @@ export class AgentShareImageService {
       finally { await handle.close() }
       const current = await targetSnapshot(output)
       if (initial ? !current || !hasSameFileSnapshot(initial, current) : current !== null) throw new Error("目标文件已变化，请重新保存。")
+      signal?.throwIfAborted()
       if (initial) await rename(temporary, output)
       else await link(temporary, output) // exclusive creation, never overwrite a newly appeared target
     } finally {

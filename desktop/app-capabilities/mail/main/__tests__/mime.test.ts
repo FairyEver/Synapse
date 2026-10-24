@@ -58,3 +58,18 @@ it("rejects a cached attachment export after UIDVALIDITY invalidates its source"
     expect((await r.assets.read(r.ctx, asset.id)).toString()).toBe("saved attachment")
   } finally { await r.sync.dispose(); await r.close() }
 })
+
+it("copies shared PNG bytes into account-owned mail assets independently of the source", async () => {
+  const r = await syncRig()
+  try {
+    const bytes = Buffer.from("shared PNG bytes")
+    const resolveShareImage = vi.fn(async () => ({ bytes, fileName: "share.png", mimeType: "image/png" as const }))
+    const content = new MailContent(r.repo, r.accounts, r.assets, r.access, undefined, resolveShareImage)
+    const shareImageRef = "ca8ce19e-ec42-4d08-90c9-19a887a89805"
+    const asset = await content.executeAttachment(r.ctx, "attachment.import_local", { accountId: r.account.id, shareImageRef })
+    resolveShareImage.mockRejectedValue(new Error("source deleted"))
+    expect(await r.assets.read(r.ctx, asset.id)).toEqual(bytes)
+    await expect(content.executeAttachment(r.ctx, "attachment.import_local", { accountId: r.account.id, shareImageRef, filePath: "/tmp/x" })).rejects.toThrow()
+    expect(resolveShareImage).toHaveBeenCalledTimes(1)
+  } finally { await r.sync.dispose(); await r.close() }
+})

@@ -111,3 +111,26 @@ describe("mail capability dispatcher", () => {
     expect(executeMailOperation).toHaveBeenCalledWith({ kind: "messageContext", messageId: "mail-1" })
   })
 })
+
+it("imports a share reference with the original caller and rejects ambiguous sources and oversized PNGs", async () => {
+  const executeMailOperation = vi.fn(), uploadMailAttachment = vi.fn(async () => ({ attachmentToken: "token" }))
+  const resolveShareImage = vi.fn(async () => ({ bytes: Buffer.from("png"), fileName: "share.png", mimeType: "image/png" as const }))
+  const dispatcher = createMailInternalCapabilityDispatcher({ accountService: { executeMailOperation, uploadMailAttachment }, resolveShareImage })
+  const context = { actor: { kind: "agent" as const, id: "origin" } }
+  const shareImageRef = "ca8ce19e-ec42-4d08-90c9-19a887a89805"
+  await expect(dispatcher.dispatch("app.mail_internal.attachment.create", { shareImageRef }, context)).resolves.toMatchObject({ ok: true })
+  expect(resolveShareImage).toHaveBeenCalledWith(shareImageRef, context)
+  expect(uploadMailAttachment).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "image/png" }), undefined)
+  await expect(dispatcher.dispatch("app.mail_internal.attachment.create", { shareImageRef, filePath: "/tmp/a" }, context)).rejects.toThrow()
+  resolveShareImage.mockResolvedValueOnce({ bytes: Buffer.alloc(20 * 1024 * 1024 + 1), fileName: "large.png", mimeType: "image/png" })
+  await expect(dispatcher.dispatch("app.mail_internal.attachment.create", { shareImageRef }, context)).rejects.toThrow("20")
+  expect(uploadMailAttachment).toHaveBeenCalledTimes(1)
+  expect(executeMailOperation).not.toHaveBeenCalled()
+})
+
+it("does not upload when cancellation happens during share image resolution", async () => {
+  const controller = new AbortController(), uploadMailAttachment = vi.fn()
+  const dispatcher = createMailInternalCapabilityDispatcher({ accountService: { executeMailOperation: vi.fn(), uploadMailAttachment }, resolveShareImage: async () => { controller.abort(); return { bytes: Buffer.from("png"), fileName: "share.png", mimeType: "image/png" } } })
+  await expect(dispatcher.dispatch("app.mail_internal.attachment.create", { shareImageRef: "ca8ce19e-ec42-4d08-90c9-19a887a89805" }, { abortSignal: controller.signal })).rejects.toThrow()
+  expect(uploadMailAttachment).not.toHaveBeenCalled()
+})

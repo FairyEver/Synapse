@@ -1,3 +1,4 @@
+import { shareDeliveryMethods } from "../../../app-capabilities/agent/main/share-ipc"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
@@ -104,6 +105,7 @@ export const agentIpcModule: IpcModule = {
     ...claudeCodeTerminalMethods,
     ...messageMethods,
     ...shareMethods,
+    ...shareDeliveryMethods,
     ...toolMethods,
     ...generatedUiMethods,
     ...agentWorkspaceTreeMethods,

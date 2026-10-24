@@ -43,3 +43,7 @@
 `app_mail_internal_recipient_list` 也返回共同团队活跃成员的 `contactEmail`（可空）；它是用户在个人资料里自行维护的地址，不是登录邮箱。只读查询不改变邮件发送领域；外部发送仍遵循 [外部邮箱](../mail/index.md)。缺失字段或空值表示没有可用联系邮箱，不从 handle、用户 ID 或登录账号推断。此字段只随当前成员查询返回，不添加到历史站内信地址快照。
 
 外部邮箱可只读复用 organization_list 与 organization_members_list 解析部门及子部门的 contactEmail；完整分页、缺失邮箱处理和外部发送流程见 [邮箱指南](../mail/index.md#按部门发送外部邮件)，不因此使用本章发送工具。
+
+## 对话分享图片附件
+
+使用 `app_agent_share_generate` 返回的 `shareImageRef`，与 `filePath` 必须且只能提供一个。站内信 `app_mail_internal_attachment_create` 校验单附件 20 MiB，超限要求缩小对话分享范围；继续预览及发送。导入后的附件是独立副本，删除来源对话不会删除邮件附件。生成成功不等于已发送；失败保留图片，只重试失败的交付步骤。

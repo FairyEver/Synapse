@@ -1,3 +1,4 @@
+import type { ShareDomainEvent } from "../app-capabilities/agent/shared/share"
 /**
  * Phase 0.3 — Minimal preload bridge.
  *
@@ -1315,6 +1316,13 @@ const synapseBridge: SynapseBridge = {
     prepareFileCheckpointRewind: (args) => invoke(IPC_CHANNELS.agent.prepareFileCheckpointRewind)(args),
     confirmFileCheckpointRewind: (args) => invoke(IPC_CHANNELS.agent.confirmFileCheckpointRewind)(args),
     exportConversationBundle: (args) => invoke(IPC_CHANNELS.agent.exportConversationBundle)(args),
+    completeShareRender: (args) => invoke(IPC_CHANNELS.agent.completeShareRender)(args),
+    listShareImages: (args) => invoke(IPC_CHANNELS.agent.listShareImages)(args),
+    readShareImage: (args) => invoke(IPC_CHANNELS.agent.readShareImage)(args),
+    outputShareImage: (args) => invoke(IPC_CHANNELS.agent.outputShareImage)(args),
+    onShareEvent: (listener) => createRawPayloadSubscription<ShareDomainEvent>(subscribe, channelForDomain("agent"))((event) => {
+      if (event.type === "shareRender" || event.type === "shareImagesChanged" || event.type === "shareRenderCancelled") listener(event)
+    }),
     exportShareImage: (args) => invoke(IPC_CHANNELS.agent.exportShareImage)(args),
     readShareImageResource: (args) => invoke(IPC_CHANNELS.agent.readShareImageResource)(args),
     createSession: (args) => invoke(IPC_CHANNELS.agent.createSession)(args),
@@ -1378,10 +1386,9 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       OPEN_AGENT_SESSION_EVENT,
     ),
-    onEvent: createRawPayloadSubscription<SynapseAgentDomainEvent>(
-      subscribe,
-      channelForDomain("agent"),
-    ),
+    onEvent: (listener) => createRawPayloadSubscription<SynapseAgentDomainEvent | ShareDomainEvent>(subscribe, channelForDomain("agent"))(event => {
+      if (event.type !== "shareRender" && event.type !== "shareImagesChanged" && event.type !== "shareRenderCancelled") listener(event)
+    }),
     onDetachedConversationWindowsChanged: createRawPayloadSubscription<AgentDetachedConversation[]>(
       subscribe,
       EVENT_CHANNELS.agent.detachedConversationsChanged,

@@ -1,17 +1,13 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { AgentSharePaper } from "./share-paper"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ArrowLeft, Copy, Download, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFrame, DialogFrameBody, DialogFrameFooter, DialogFrameHeader } from "@/components/ui/dialog"
-import appIcon from "@/assets/icon.png"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import type { AgentConversationTarget } from "@/types/agent-conversation-window"
 import type { AgentShareSettings } from "@/types/agent-share"
-import { formatDateTime } from "@/lib/date-time"
-import { AgentShareMessageBody } from "../components/agent-message-event"
 import { GeneratedUiTheme } from "../openui/generated-ui-theme"
-import { redactShareText } from "./redaction"
-import { shareFooterMetadata } from "./messages"
 import type { AgentShareController } from "./use-agent-share"
 
 function Toggle({ label, id, checked, onChange }: { label: string; id: string; checked: boolean; onChange: (checked: boolean) => void }) {
@@ -29,9 +25,6 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
   const { run } = output
   const { closePreview, exportAction } = share
   const settings = share.settings
-  const metadata = shareFooterMetadata(share.preview ?? [])
-  const models = settings.showModel ? metadata.models : ""
-  const timestamp = settings.showTime ? metadata.timestamp : undefined
   const zoom = fullSize ? 1 : Math.min(1, Math.max(0.1, (size.available - 64) / settings.width))
   const indexes = new Map(share.messages.map((item, index) => [item.id, index]))
   const change = <K extends keyof AgentShareSettings>(key: K, value: AgentShareSettings[K]) => share.setSettings((current) => ({ ...current, [key]: value }))
@@ -57,22 +50,7 @@ export function AgentSharePreviewDialog({ share, target }: { readonly share: Age
     return () => { current = false }
   }, [paper, exportAction, run, settings, closePreview])
 
-  const sharePaper = <article ref={setPaper} data-agent-share-paper className="overflow-hidden rounded-lg bg-background p-10 text-sm text-foreground [&_[data-streamdown=code-block-copy-button]]:hidden [&_[data-slot=scroll-area-scrollbar]]:hidden" style={{ width: settings.width }}>
-    <header className="mb-8 flex items-center gap-3 border-b pb-7"><img src={appIcon} alt="Synapse" className="size-8 shrink-0" /><span className="text-lg font-semibold">Synapse</span></header>
-    <div className="space-y-8">{share.preview?.map((message, index, all) => {
-      const previous = index > 0 ? indexes.get(all[index - 1]!.id) : undefined
-      const current = indexes.get(message.id)
-      const omitted = previous !== undefined && current !== undefined && current > previous + 1
-      const item = { ...message, content: redactShareText(message.content, settings.redact) }
-      return <Fragment key={message.id}>
-        {omitted && <div data-share-omission className="flex items-center gap-4 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />已省略内容<span className="h-px flex-1 bg-border" /></div>}
-        <section data-share-export-message={message.id}>
-          <AgentShareMessageBody item={item} projectId={target.projectId} conversationId={target.conversationId} hideEmails={settings.redact} />
-        </section>
-      </Fragment>
-    })}</div>
-    {(models || timestamp) && <footer className="mt-10 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t pt-5 text-right text-xs text-muted-foreground">{models && <span className="min-w-0 break-words">{redactShareText(models, settings.redact)}</span>}{timestamp && <time dateTime={timestamp} className="shrink-0 tabular-nums">{formatDateTime(timestamp)}</time>}</footer>}
-  </article>
+  const sharePaper = <AgentSharePaper paperRef={setPaper} messages={share.preview ?? []} settings={settings} target={target} indexes={indexes} />
   if (share.active && share.preview && exportAction) {
     return <div aria-hidden="true" inert className="pointer-events-none fixed -left-[20000px] top-0"><GeneratedUiTheme>{sharePaper}</GeneratedUiTheme></div>
   }

@@ -201,7 +201,7 @@
 
 ## Agent 与 Knowledge Base
 
-- Agent 对话图片分享只作用于 Renderer 中冻结的用户消息与 AI 最终回复；分页读取完整历史和所选正文，包含消息中已显示图片（含纯图片用户消息），不包含过程、工具结果、费用或非图片附件原文件。预览中的 Generated UI 只能读取状态，不能保存、提交或打开外链；图片仅在本机生成，系统输出和公开远端图片读取通过窄类型化 IPC、PermissionGuard 和 AuditSink，不扩展 MCP 或云端分享。高清尺寸、资源和失败处理约束见 `docs/agent-guides/agent-conversation-sharing.md`。
+- Agent 对话图片分享作用于手动选择或宿主当前回合定位后冻结的用户消息与 AI 最终回复；分页读取完整历史和所选正文，包含消息中已显示图片（含纯图片用户消息），不包含过程、工具结果、费用或非图片附件原文件。预览中的 Generated UI 只能读取状态，不能保存、提交或打开外链；图片仅在本机生成，系统输出和公开远端图片读取通过窄类型化 IPC、PermissionGuard 和 AuditSink，Agent 通过 share.messages / share.generate / share.output 三个受控能力调用；独立 app.agent.share-images 元数据与 PNG 资产可供会话预览和两类邮件导入，不创建公开链接，也不扩大私有文本 artifact 读取范围。删除会话或项目清理图片，已导入邮件保留独立副本。高清尺寸、资源和失败处理约束见 `docs/agent-guides/agent-conversation-sharing.md`。
 
 - Agent Conversation MCP 新建默认进入“本地对话”，也可指定项目 ID、唯一精确分组名称或已有对话所属分组；分组查询只返回可创建的项目标识和名称，不返回路径或归档分组。创建通过现有 Agent Runtime，未指定模型时复用快捷创建默认模型，也支持成对指定 providerId/modelTier；显式模型不可用时失败且不回退。供应商模型查询复用 ProviderService 与自定义创建选择规则，只返回未归档供应商名称、标识与可选档位模型，不返回密钥或连接配置。创建复用默认权限模式，固定普通智能体和本地来源；不复制旧对话内容/身份、不自动发送、不打开窗口，成功后通过 EventBus 刷新会话列表。
 

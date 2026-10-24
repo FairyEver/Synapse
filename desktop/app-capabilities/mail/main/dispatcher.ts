@@ -21,7 +21,7 @@ export function createMailCapabilityDispatcher(deps: { service: Service; permiss
       const permission = await deps.permissionGuard.check({ action: definition.permission, actor, resource: definition.id, context: { domain: "mail", source: context.source ?? "api" } })
       deps.auditSink.record({ action: definition.permission, actor, resource: definition.id, outcome: permission.allowed ? "allowed" : "denied", metadata: { domain: "mail" } })
       if (!permission.allowed) throw new MailError("PERMISSION_DENIED", "此邮箱操作未获授权")
-      const operationCtx = context.abortSignal ? { ...ctx, signal: AbortSignal.any([ctx.signal, context.abortSignal]) } : ctx
+      const operationCtx = { ...ctx, shareCaller: { actor, clientId: context.clientId, source: context.source }, signal: context.abortSignal ? AbortSignal.any([ctx.signal, context.abortSignal]) : ctx.signal }
       const value = await deps.service.execute(operationCtx, key, input)
       return { ok: true, data: { externalData: true, value } }
     } catch (error) { const failure = mailFailure(error); return { ok: false, code: failure.code, error: failure.message, data: failure.details } }

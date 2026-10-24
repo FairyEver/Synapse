@@ -10,3 +10,7 @@ export const mailMessageListInputSchema = mailBoxInputSchema.extend({
     ctx.addIssue({ code: "custom", path: ["contactKey"], message: "Invalid contact filter for this mailbox." })
   }
 })
+
+export const mailAttachmentSourceSchema = z.object({
+  filePath: z.string().min(1).max(4096).optional(), shareImageRef: z.string().uuid().optional(),
+}).strict().refine(input => (input.filePath === undefined) !== (input.shareImageRef === undefined), "Provide exactly one of filePath or shareImageRef.")

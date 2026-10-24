@@ -3,7 +3,7 @@ import { agentConversationCapabilityManifest } from "../manifest"
 import { buildAgentConversationDeepLink } from "../schema"
 
 describe("Agent conversation capability manifest", () => {
-  it("declares eleven MCP tools and only one open deep link without another app surface", () => {
+  it("declares fourteen MCP tools and only one open deep link without another app surface", () => {
     expect(agentConversationCapabilityManifest).toMatchObject({
       id: "agent",
       app: null,
@@ -11,7 +11,7 @@ describe("Agent conversation capability manifest", () => {
       deepLinks: [],
       protocolRoutes: [{ hostname: "threads", action: "open", capabilityId: "app.agent.conversation.open" }],
     })
-    expect(agentConversationCapabilityManifest.capabilities).toHaveLength(11)
+    expect(agentConversationCapabilityManifest.capabilities).toHaveLength(14)
     expect(agentConversationCapabilityManifest.mcpTools).toEqual([
       "app_agent_conversation_open",
       "app_agent_conversation_inspect",
@@ -24,6 +24,9 @@ describe("Agent conversation capability manifest", () => {
       "app_agent_group_list",
       "app_agent_conversation_create",
       "app_agent_provider_list",
+      "app_agent_share_messages",
+      "app_agent_share_generate",
+      "app_agent_share_output",
     ])
   })
 

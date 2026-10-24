@@ -495,6 +495,13 @@ export class AccountService {
     )
   }
 
+  async uploadMailAttachment(source: { bytes: Buffer; fileName: string; mimeType: string }, signal?: AbortSignal): Promise<MailOperationResult["attachmentLocal"]> {
+    signal?.throwIfAborted()
+    if (!source.bytes.length || source.bytes.length > 20 * 1024 * 1024) throw new Error("附件必须是 20 MiB 以内的文件。")
+    const response = await this.fetchAuthenticated(`${apiBaseUrl()}/mail-internal/attachments/local?fileName=${encodeURIComponent(path.basename(source.fileName))}`, { method: "PUT", headers: { "Content-Type": source.mimeType }, body: new Uint8Array(source.bytes), signal }, "附件上传失败。")
+    return await response.json() as MailOperationResult["attachmentLocal"]
+  }
+
   async executeMailOperation<K extends MailOperation["kind"]>(operation: Extract<MailOperation, { kind: K }>): Promise<MailOperationResult[K]>
   async executeMailOperation(operation: MailOperation): Promise<unknown> {
     const base = `${apiBaseUrl()}/mail-internal`

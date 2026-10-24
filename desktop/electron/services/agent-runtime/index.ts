@@ -1,3 +1,5 @@
+import { AGENT_SHARE_SERVICE_ID } from "../../../app-capabilities/agent/shared/share"
+import type { AgentShareService } from "../../../app-capabilities/agent/main/share-service"
 import type { GeneratedUiStateEntry } from "../../runtime/data-repo/schemas/agent-generated-ui"
 import type {
   AgentArtifactEntry,
@@ -360,10 +362,20 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         allowAgentNativeSlash: (name, message) =>
           isManagedKnowledgeBaseRuntimeMessage(message)
           && MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS.has(name),
-        prepareMessage: (message, context) =>
-          isManagedKnowledgeBaseRuntimeMessage(message) && knowledgeBaseIngest
-            ? knowledgeBaseIngest.prepareTurn(message, context)
-            : message,
+        prepareMessage: async (message, context) => {
+          const prepared = isManagedKnowledgeBaseRuntimeMessage(message) && knowledgeBaseIngest
+            ? await knowledgeBaseIngest.prepareTurn(message, context) : message
+          if (message.platform !== "local-renderer" || message.originRendererId === undefined) return prepared
+          try {
+            const runtimeShareContextRef = await ctx.globalRegistry.get<AgentShareService>(AGENT_SHARE_SERVICE_ID).createContext({
+              projectId: message.projectId, conversationId: context.conversationId, turnId: context.turnId, rendererId: message.originRendererId,
+            })
+            return { ...prepared, runtimeShareContextRef }
+          } catch (cause) {
+            ctx.logger.warn("Agent share context unavailable.", { errorName: cause instanceof Error ? cause.name : typeof cause })
+            return prepared
+          }
+        },
         afterTurn: (input) =>
           isManagedKnowledgeBaseRuntimeMessage(input.message) && knowledgeBaseIngest
             ? knowledgeBaseIngest.finalizeTurn(input)

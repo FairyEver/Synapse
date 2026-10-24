@@ -1,4 +1,7 @@
-import { useState, type ReactNode, type Ref } from "react"
+import { AgentShareResult } from "../share/share-result"
+import { useShareResults } from "../share/use-share-results"
+import { shareHistoryIndex } from "../share/messages"
+import { Fragment, useState, type ReactNode, type Ref } from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -66,6 +69,8 @@ function AgentTimeline({
   readonly conversationId?: string
   readonly footer?: ReactNode
 }) {
+  const shares = useShareResults(projectId, conversationId)
+  const shareAnchor = (image: (typeof shares.images)[number]) => (items.find(item => item.kind === "message" && item.role === "user" && shareHistoryIndex(item) === image.sourceHistoryIndex) ?? items.find(item => item.kind === "message" && item.role === "user" && item.timestamp === image.sourceTimestamp))?.id
   const selecting = useAgentShareSelection()?.active === true
   const now = Date.now()
   const visibleItems = visibleTimelineItems(items, now)
@@ -159,8 +164,7 @@ function AgentTimeline({
               return entry.item.kind === "phase" ? (
                 <AgentPhaseRow key={entry.item.id} item={entry.item} />
               ) : (
-                <AgentTimelineItem
-                  key={entry.item.id}
+                <Fragment key={entry.item.id}><AgentTimelineItem
                   item={entry.item}
                   {...(entry.result ? { toolResult: entry.result } : {})}
                   {...(entry.cancelled ? { toolCancelled: true } : {})}
@@ -176,8 +180,12 @@ function AgentTimeline({
                   conversationId={conversationId}
                   generatedUiDisabled={sending || readOnly}
                 />
+                {!selecting && shares.images.filter(image => shareAnchor(image) === entry.item.id).map(image => <AgentShareResult key={image.shareImageRef} image={image} />)}
+                </Fragment>
               )
             })}
+            {!selecting && shares.images.filter(image => !shareAnchor(image)).map(image => <AgentShareResult key={image.shareImageRef} image={image} />)}
+            {shares.error ? <p role="alert" className="text-sm text-destructive">{shares.error}</p> : null}
           </div>
         )}
         {footer ? (

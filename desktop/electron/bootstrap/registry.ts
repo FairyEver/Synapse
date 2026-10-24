@@ -1,3 +1,4 @@
+import { coreAgentShareDescriptor, coreAgentShareMaintenanceDescriptor } from "./agent-share"
 /**
  * Phase 0.1 — Build the global ServiceRegistry by registering all bootstrap
  * descriptors in dependency order.
@@ -149,6 +150,8 @@ export function buildServiceRegistry(
   registry.register(coreCheatCodeStateDescriptor)
   registry.register(coreProjectContainerRegistryDescriptor)
   registry.register(coreAgentConversationControlDescriptor)
+  registry.register(coreAgentShareDescriptor)
+  registry.register(coreAgentShareMaintenanceDescriptor)
   registry.register(coreExecutionIsolationDescriptor)
   registry.register(coreSideChannelDescriptor)
   registry.register(coreTerminalAgentNotificationsDescriptor)

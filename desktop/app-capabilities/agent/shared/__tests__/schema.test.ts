@@ -175,9 +175,9 @@ describe("Agent conversation public schemas", () => {
     }).success).toBe(false)
   })
 
-  it("publishes strict top-level object schemas for all eleven tools", () => {
+  it("publishes strict top-level object schemas for all fourteen tools", () => {
     const tools = buildAgentConversationMcpTools()
-    expect(tools).toHaveLength(11)
+    expect(tools).toHaveLength(14)
     for (const tool of tools) {
       expect(tool.inputSchema.type).toBe("object")
       expect(tool.inputSchema.additionalProperties).toBe(false)

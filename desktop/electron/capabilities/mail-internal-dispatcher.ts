@@ -1,21 +1,22 @@
+import type { ShareImageSource } from "../../app-capabilities/agent/shared/share"
 import path from "node:path"
 import { z } from "zod"
 import type { MailOperation } from "../../src/types/mail"
 import { parseMailMessageReference } from "../../synapse-capabilities/shared/message-reference"
-import { mailBoxInputSchema, mailMessageListInputSchema } from "../../synapse-capabilities/shared/mail-internal-input"
+import { mailAttachmentSourceSchema, mailBoxInputSchema, mailMessageListInputSchema } from "../../synapse-capabilities/shared/mail-internal-input"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import { checkCapabilityPermission } from "./permission-audit"
 
-type MailAccount = { executeMailOperation: (operation: MailOperation) => Promise<unknown> }
-type MailDeps = { accountService: MailAccount; permissionGuard?: PermissionGuard; auditSink?: AuditSink }
+type MailAccount = { uploadMailAttachment?: (source: ShareImageSource, signal?: AbortSignal) => Promise<unknown>; executeMailOperation: (operation: MailOperation) => Promise<unknown> }
+type MailDeps = { resolveShareImage?: (ref: string, context: DispatchContext) => Promise<ShareImageSource>; accountService: MailAccount; permissionGuard?: PermissionGuard; auditSink?: AuditSink }
 const actor: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 const id = z.string().min(1)
 const content = z.object({ formatVersion: z.literal(3), toIds: z.array(id), ccIds: z.array(id), toOrganizationIds: z.array(id), ccOrganizationIds: z.array(id), subject: z.string().max(120), body: z.string().max(100_000), attachmentIds: z.array(id).max(10), forwardAttachmentIds: z.array(id).max(10), relation: z.object({ kind: z.enum(["reply", "forward"]), messageId: id }).strict().optional() }).strict()
 const getInput = z.object({ messageId: id.optional(), reference: z.string().optional() }).strict()
   .refine((input) => (input.messageId === undefined) !== (input.reference === undefined), "Provide exactly one mail locator.")
 
-function parseOperation(action: string, params: Record<string, unknown>): MailOperation {
+function parseOperation(action: string, params: Record<string, unknown>): MailOperation | { kind: "attachmentShare"; shareImageRef: string } {
   switch (action) {
     case "app.mail_internal.recipient.list": return { kind: "recipientSearch", ...z.object({ query: z.string().max(100), cursor: id.optional() }).strict().parse(params) }
     case "app.mail_internal.organization.list": return { kind: "organizationSearch", ...z.object({ query: z.string().max(100) }).strict().parse(params) }
@@ -36,7 +37,10 @@ function parseOperation(action: string, params: Record<string, unknown>): MailOp
     case "app.mail_internal.context.list": return { kind: "messageContext", ...z.object({ messageId: id, cursor: id.optional() }).strict().parse(params) }
     case "app.mail_internal.message.update": return { kind: "messageSetRead", ...z.object({ messageId: id, read: z.boolean() }).strict().parse(params) }
     case "app.mail_internal.message.delete": return { kind: "messageDelete", ...z.object({ messageId: id, box: z.enum(["inbox", "sent"]).optional() }).strict().parse(params) }
-    case "app.mail_internal.attachment.create": return { kind: "attachmentLocal", ...z.object({ filePath: z.string().min(1) }).strict().parse(params) }
+    case "app.mail_internal.attachment.create": {
+      const source = mailAttachmentSourceSchema.parse(params)
+      return source.shareImageRef ? { kind: "attachmentShare", shareImageRef: source.shareImageRef } : { kind: "attachmentLocal", filePath: source.filePath! }
+    }
     case "app.mail_internal.attachment.download_file": return { kind: "attachmentDownload", ...z.object({ messageId: id, attachmentId: id, outputPath: z.string().min(1) }).strict().parse(params) }
     case "app.mail_internal.send.preview": return { kind: "sendPreview", content: content.parse(params) }
     case "app.mail_internal.message.send": {
@@ -66,7 +70,14 @@ export function createMailInternalCapabilityDispatcher(deps: MailDeps) {
         if (writePermission && !writePermission.allowed) throw new Error(writePermission.reason)
       }
       try {
-        const data = await deps.accountService.executeMailOperation(operation)
+        let data: unknown
+        if (operation.kind === "attachmentShare") {
+          if (!deps.resolveShareImage || !deps.accountService.uploadMailAttachment) throw new Error("分享图片附件服务不可用。")
+          const source = await deps.resolveShareImage(operation.shareImageRef, context)
+          if (!source.bytes.length || source.bytes.length > 20 * 1024 * 1024) throw new Error("站内信附件必须在 20 MiB 以内，请缩小分享范围。")
+          context.abortSignal?.throwIfAborted()
+          data = await deps.accountService.uploadMailAttachment(source, context.abortSignal)
+        } else data = await deps.accountService.executeMailOperation(operation)
         deps.auditSink?.record({ action: "network.connect", actor: currentActor, resource: "synapse-mail", outcome: "allowed", metadata })
         return { ok: true, data }
       } catch (error) {

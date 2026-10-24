@@ -1,3 +1,6 @@
+import { mailAttachmentSourceSchema } from "../../../synapse-capabilities/shared/mail-internal-input"
+import { AGENT_SHARE_SERVICE_ID } from "../../../app-capabilities/agent/shared/share"
+import type { AgentShareService } from "../../../app-capabilities/agent/main/share-service"
 import type { DriveSyncService } from "../../services/drive-sync-service"
 import path from "node:path"
 import { app, BrowserWindow, dialog } from "electron"
@@ -105,7 +108,7 @@ const mailMessageBatchInputSchema = z.object({ messageIds: z.array(mailIdSchema)
 const mailMessageDeleteInputSchema = mailIdInputSchema.extend({ box: z.enum(["inbox", "sent"]).optional() })
 const mailMessageContextInputSchema = mailIdInputSchema.extend({ cursor: mailIdSchema.optional() })
 const mailMessageUpdateInputSchema = mailIdInputSchema.extend({ read: z.boolean() })
-const mailAttachmentCreateInputSchema = z.object({ filePath: z.string().min(1) }).strict()
+const mailAttachmentCreateInputSchema = mailAttachmentSourceSchema
 const mailAttachmentLocalInputSchema = z.object({ filePath: z.string().min(1) }).strict()
 const mailAttachmentDownloadInputSchema = mailIdInputSchema.extend({ attachmentId: mailIdSchema, outputPath: z.string().min(1).optional() })
 const mailMessageSendInputSchema = z.object({ previewId: mailIdSchema, clientRequestId: mailIdSchema }).strict()
@@ -1222,8 +1225,14 @@ export const accountIpcModule: IpcModule = {
       response: mailAttachmentSchema.extend({ attachmentToken: z.string(), state: z.literal("ready") }),
       handler: async (ctx, input) => {
         const parsed = mailAttachmentCreateInputSchema.parse(input)
-        await checkAccountPermission({ ctx, action: "fs.read.outside-userdata", resource: parsed.filePath, source: "account.mail.attachmentCreate", context: { kind: "attachmentLocal" } })
-        return accountService.executeMailOperation({ kind: "attachmentLocal", ...parsed })
+        if (parsed.shareImageRef) {
+          if (!ctx.sender) throw new Error("窗口不可用。")
+          await checkAccountPermission({ ctx, action: "network.connect", resource: "synapse-mail", source: "account.mail.attachmentCreate" })
+          const source = await ctx.resolve<AgentShareService>(AGENT_SHARE_SERVICE_ID).readImage(parsed.shareImageRef, { actor: { kind: "user", id: `renderer:${ctx.sender.id}` }, clientId: `renderer:${ctx.sender.id}` })
+          return accountService.uploadMailAttachment(source)
+        }
+        await checkAccountPermission({ ctx, action: "fs.read.outside-userdata", resource: parsed.filePath!, source: "account.mail.attachmentCreate", context: { kind: "attachmentLocal" } })
+        return accountService.executeMailOperation({ kind: "attachmentLocal", filePath: parsed.filePath! })
       },
     },
     mailAttachmentLocalCreate: {

@@ -29,3 +29,19 @@ it("share rendering can restore state but never persist normalization, submit, o
   }
   expect(bridge.saveGeneratedUiState).not.toHaveBeenCalled()
 })
+
+it("uses the frozen generated UI state without reading current live state", async () => {
+  const { AgentShareSnapshotsContext } = await import("../../share/privacy-context")
+  bridge.getGeneratedUiState.mockClear()
+  let controller: ReturnType<typeof useGeneratedUi>
+  function Driver() { controller = useGeneratedUi({ projectId: "p", conversationId: "c", blockId: "b" }, true); return null }
+  const root = createRoot(document.createElement("div"))
+  try {
+    await act(async () => root.render(<AgentShareSnapshotsContext.Provider value={{ b: { revision: 4, state: { filter: "frozen" }, readOnly: true } }}><Driver /></AgentShareSnapshotsContext.Provider>))
+    expect(controller!.snapshot.state).toEqual({ filter: "frozen" })
+    expect(bridge.getGeneratedUiState).not.toHaveBeenCalled()
+    await act(async () => root.render(<AgentShareSnapshotsContext.Provider value={{}}><Driver /></AgentShareSnapshotsContext.Provider>))
+    expect(controller!.error).toContain("快照缺失")
+    expect(bridge.getGeneratedUiState).not.toHaveBeenCalled()
+  } finally { act(() => root.unmount()) }
+})

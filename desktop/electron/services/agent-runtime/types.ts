@@ -68,6 +68,7 @@ export interface AgentMessage {
   /** Main-process only ownership used to stop a turn if its Renderer disappears. */
   readonly originRendererId?: number
   /** Main-process only turn identity for lifecycle and persistence correlation. */
+  readonly runtimeShareContextRef?: string
   readonly runtimeTurnId?: string
 }
 

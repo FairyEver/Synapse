@@ -1446,7 +1446,7 @@ export type SynapseBridge = {
     }
     context: { list: (input: { messageId: string; cursor?: string }) => Promise<import("./mail").MailOperationResult["messageContext"]> }
     attachment: {
-      create: (input: { filePath: string }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>
+      create: (input: { filePath: string; shareImageRef?: never } | { shareImageRef: string; filePath?: never }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>
       localCreate: (input: { filePath: string }) => Promise<import("./mail").MailOperationResult["attachmentLocal"]>
       downloadFile: (input: { messageId: string; attachmentId: string; outputPath?: string }) => Promise<import("./mail").MailOperationResult["attachmentDownload"]>
     }
@@ -1915,7 +1915,12 @@ export type SynapseBridge = {
     exportShareImage: (
       args: import("./agent-share").AgentShareImageRequest,
     ) => Promise<import("./agent-share").AgentShareImageResult>
-    readShareImageResource: (args: { url: string }) => Promise<{ dataUrl: string }>
+    onShareEvent: (listener: (event: import("../../app-capabilities/agent/shared/share").ShareDomainEvent) => void) => () => void
+    completeShareRender: (args: import("../../app-capabilities/agent/shared/share").ShareRenderResponse) => Promise<{ success: boolean }>
+    listShareImages: (args: { projectId: string; conversationId: string; offset?: number }) => Promise<import("../../app-capabilities/agent/shared/share").ShareImageSummary[]>
+    readShareImage: (args: { projectId: string; conversationId: string; shareImageRef: string }) => Promise<{ pngBase64: string }>
+    outputShareImage: (args: { projectId: string; conversationId: string; shareImageRef: string; action: "copy" | "save" }) => Promise<import("./agent-share").AgentShareImageResult>
+    readShareImageResource: (args: { url: string; renderContext?: import("../../app-capabilities/agent/shared/share").ShareRenderResponse }) => Promise<{ dataUrl: string }>
     createSession: (
       args: {
         projectId: string

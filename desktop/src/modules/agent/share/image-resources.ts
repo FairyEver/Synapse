@@ -1,3 +1,4 @@
+import type { ShareRenderResponse } from "../../../../app-capabilities/agent/shared/share"
 import { createRendererLogger } from "@/app-shell/logging"
 import { AGENT_SHARE_MAX_PIXELS, AGENT_SHARE_MAX_PNG_BYTES } from "@/types/agent-share"
 import { getSynapseBridge } from "@/lib/electron-bridge"
@@ -77,7 +78,7 @@ function imagePixels(image: HTMLImageElement): string {
 }
 
 /** Freeze preview resources; public HTTP fallback stays behind permission-checked IPC. */
-export async function freezeShareImages(paper: HTMLElement, clone: HTMLElement, signal: AbortSignal): Promise<void> {
+export async function freezeShareImages(paper: HTMLElement, clone: HTMLElement, signal: AbortSignal, renderContext?: ShareRenderResponse): Promise<void> {
   const cache = new Map<string, Promise<string>>()
   let totalBytes = 0
   function reserve(data: string): string {
@@ -114,7 +115,7 @@ export async function freezeShareImages(paper: HTMLElement, clone: HTMLElement, 
           }
           const agent = getSynapseBridge()?.agent
           if (/^https?:/i.test(src) && typeof agent?.readShareImageResource === "function") {
-            const result = await agent.readShareImageResource({ url: src })
+            const result = await agent.readShareImageResource({ url: src, ...(renderContext ? { renderContext } : {}) })
             signal.throwIfAborted()
             return embed(result.dataUrl)
           }

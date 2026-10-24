@@ -1,3 +1,4 @@
+import type { ShareImageSource } from "../../agent/shared/share"
 import { randomUUID } from "node:crypto"
 import { Readable } from "node:stream"
 import type { DataRepository } from "../../../electron/runtime/data-repo"
@@ -29,6 +30,7 @@ import { createMailProtocols } from "./protocol"
 import type { MailProtocols } from "./protocol/types"
 
 export interface MailServiceDeps {
+  resolveShareImage?: (ref: string, ctx: MailContext) => Promise<ShareImageSource>
   storage: DataRepository; files: ManagedAssetStore; permissionGuard: PermissionGuard; auditSink: AuditSink
   resolveOwner(): string | null
   events(change: MailChanged, rendererIds: number[]): void
@@ -77,7 +79,7 @@ export class MailService {
       remove: (ctx, id) => this.assets.removeAccount(ctx, id),
       open: (ctx, accountId) => this.open(ctx, { accountId, configure: true }),
     })
-    this.content = new MailContent(this.repo, this.accounts, this.assets, access, event => this.changed(event))
+    this.content = new MailContent(this.repo, this.accounts, this.assets, access, event => this.changed(event), deps.resolveShareImage)
     this.resources = new MailBodyResources(this.repo, this.assets, access)
     this.search = new MailSearch(this.repo, (ctx, id, budget) => this.content.readSearchText(ctx, id, budget), (ctx, accountId, id) => this.changed({ ownerId: ctx.ownerId, generation: ctx.generation, accountId, ids: [id], revision: 1 }))
     this.mutations = new MailMutations(this.repo, this.accounts, event => this.changed(event))

@@ -101,7 +101,7 @@ export const MAIL_INPUT_SCHEMAS = {
   "draft.create": z.union([draftInputSchema, z.object({ ...account, sourceMessageId: messageIdSchema, mode: z.enum(["reply", "reply_all", "forward"]), forwardMode: z.enum(["inline", "eml"]).default("inline") }).strict()]),
   "draft.update": z.object({ draftId: draftIdSchema, expectedRevision: revisionSchema, patch: draftPatchSchema }).strict(),
   "draft.delete": z.object({ draftId: draftIdSchema, expectedRevision: revisionSchema }).strict(),
-  "attachment.import_local": z.object({ ...account, filePath: z.string().min(1).max(4096) }).strict(),
+  "attachment.import_local": z.object({ ...account, filePath: z.string().min(1).max(4096).optional(), shareImageRef: z.string().uuid().optional() }).strict().refine(input => (input.filePath === undefined) !== (input.shareImageRef === undefined), "Provide exactly one of filePath or shareImageRef."),
   "attachment.list": z.union([z.object({ messageId: messageIdSchema, ...pageInput }).strict(), z.object({ draftId: draftIdSchema, ...pageInput }).strict()]),
   "attachment.get": assetReference,
   "attachment.download_file": z.union([z.object({ assetId: assetIdSchema, outputPath: z.string().min(1).max(4096) }).strict(), z.object({ messageId: messageIdSchema, attachmentId: line.min(1).max(200), outputPath: z.string().min(1).max(4096) }).strict()]),

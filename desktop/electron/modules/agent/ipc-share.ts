@@ -1,3 +1,7 @@
+import { shareRenderIdentitySchema } from "../../../app-capabilities/agent/main/share-ipc"
+import { AGENT_SHARE_SERVICE_ID } from "../../../app-capabilities/agent/shared/share"
+import type { ShareRenderResponse } from "../../../app-capabilities/agent/shared/share"
+import type { AgentShareService } from "../../../app-capabilities/agent/main/share-service"
 import { BrowserWindow, ClipboardItem, clipboard, dialog, webContents } from "electron"
 import { z } from "zod"
 import { AGENT_SHARE_MAX_PNG_BYTES, type AgentShareImageRequest } from "../../../src/types/agent-share"
@@ -15,7 +19,7 @@ export const shareImageRequestSchema = z.object({
 export const shareImageResourceRequestSchema = z.object({ url: z.url().max(8192).refine((value) => {
   const url = new URL(value)
   return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password
-}) }).strict()
+}) , renderContext: shareRenderIdentitySchema.optional() }).strict()
 
 function createShareService(ctx: IpcHandlerContext): AgentShareImageService {
   const sender = ctx.sender ? webContents.fromId(ctx.sender.id) : undefined
@@ -44,11 +48,15 @@ export const shareMethods: IpcModule["methods"] = {
     request: shareImageResourceRequestSchema,
     response: z.object({ dataUrl: z.string().max(Math.ceil(AGENT_SHARE_MAX_PNG_BYTES / 3) * 4 + 128) }).strict(),
     maxResponseBytes: Math.ceil(AGENT_SHARE_MAX_PNG_BYTES / 3) * 4 + 1024,
-    handler: async (ctx, input: { url: string }) => {
+    handler: async (ctx, input: { url: string; renderContext?: ShareRenderResponse }) => {
       const service = createShareService(ctx)
       const controller = new AbortController()
       const detach = ctx.sender?.onDestroyed?.(() => controller.abort())
-      try { return await service.readRemoteImage(input.url, controller.signal) }
+      try {
+        const actor = input.renderContext ? ctx.resolve<AgentShareService>(AGENT_SHARE_SERVICE_ID).renderActor(ctx.sender!.id, input.renderContext) : undefined
+        const signal = input.renderContext ? AbortSignal.any([controller.signal, ctx.resolve<AgentShareService>(AGENT_SHARE_SERVICE_ID).renderSignal(ctx.sender!.id, input.renderContext)]) : controller.signal
+        return await service.readRemoteImage(input.url, signal, actor)
+      }
       catch (cause) {
         logger.warn("Agent share remote image read failed.", { errorName: cause instanceof Error ? cause.name : typeof cause })
         throw new Error("远端图片无法读取，请检查图片是否可访问后重试。", { cause })

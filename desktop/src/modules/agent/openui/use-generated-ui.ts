@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useReducer } from "react"
+import { AgentShareSnapshotsContext } from "../share/privacy-context"
+import { useContext, useEffect, useMemo, useReducer } from "react"
 import type { ActionEvent } from "@openuidev/react-lang"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -21,7 +22,7 @@ class GeneratedUiController {
   private disposed = false
   private generation = 0
 
-  constructor(readonly target: GeneratedUiTarget, private readonly notify: () => void, private readonly readOnly = false, private readonly hideEmails = false) {}
+  constructor(readonly target: GeneratedUiTarget, private readonly notify: () => void, private readonly readOnly = false, private readonly hideEmails = false, private readonly frozen?: GeneratedUiSnapshot, private readonly frozenRequired = false) {}
   private changed() { if (!this.disposed) this.notify() }
   private failed(cause: unknown) {
     this.error = cause instanceof Error ? cause.message : "界面操作失败，请重试。"
@@ -33,7 +34,8 @@ class GeneratedUiController {
     const generation = ++this.generation
     this.loading = true; this.error = null; this.changed()
     try {
-      const snapshot = await requireBridgeDomain("agent").getGeneratedUiState(this.target)
+      if (this.frozenRequired && !this.frozen) throw new Error("分享界面快照缺失，请重新生成。")
+      const snapshot = this.frozen ?? await requireBridgeDomain("agent").getGeneratedUiState(this.target)
       if (this.disposed || generation !== this.generation) return
       this.snapshot = this.readOnly ? { ...snapshot, state: this.hideEmails ? redactShareState(snapshot.state) : snapshot.state, readOnly: true } : snapshot
       this.draft = this.snapshot.state; this.saved = JSON.stringify(this.snapshot.state)
@@ -98,9 +100,11 @@ class GeneratedUiController {
 }
 
 export function useGeneratedUi(target?: GeneratedUiTarget, readOnly = false, hideEmails = false) {
+  const snapshots = useContext(AgentShareSnapshotsContext)
+  const frozen = readOnly && target ? snapshots?.[target.blockId] : undefined
   const [, update] = useReducer((value: number) => value + 1, 0)
-  const controller = useMemo(() => target ? new GeneratedUiController(target, update, readOnly, hideEmails) : undefined,
-    [target?.projectId, target?.conversationId, target?.blockId, readOnly, hideEmails])
+  const controller = useMemo(() => target ? new GeneratedUiController(target, update, readOnly, hideEmails, frozen, snapshots !== undefined) : undefined,
+    [target?.projectId, target?.conversationId, target?.blockId, readOnly, hideEmails, frozen, snapshots])
   useEffect(() => {
     if (controller) void controller.restore()
     return () => controller?.dispose()

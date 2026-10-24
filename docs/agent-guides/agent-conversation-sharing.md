@@ -41,8 +41,21 @@
 - Renderer 仅传 `action + pngBase64 + fileName`，不能指定写入路径。私有 IPC 绑定实际调用窗口，系统保存对话框由该窗口持有；取消返回 `success: false`。
 - 主进程校验 PNG 类型、字节和尺寸预算，再经 PermissionGuard / AuditSink 使用 Electron ClipboardItem 或原子文件保存。审计只记录尺寸、字节数、动作和错误类型，不含消息或图片正文。
 - 写入失败保留选择和设置，可重试；输出期间锁定设置和重复点击。已开始的系统写入不保证能取消，切换会话只抑制旧界面的后续反馈。
-- 不上传、不创建公开链接，不新增公开 MCP、capability、System App、Dock、Workflow、Automation 或 Deep Link。新增 preload 接口需完整重启客户端后生效。
+- 手动输出不上传、不创建公开链接。Agent 可通过下述受控 capability 生成及交付；不新增 System App、Dock、Workflow、Automation 或 Deep Link。新增 preload 接口需完整重启客户端后生效。
 
 ## 验证边界
 
 自动测试覆盖选择 / 预览、只读状态、历史及正文分页、游标变化、取消 / 失败 / 旧请求、PNG 倍率 / 降级 / 资源错误，以及主进程真实临时文件写入和系统接口载荷。真实桌面剪贴板粘贴、保存后打开 PNG 和不同图表的像素效果需在启动客户端后人工验收；未运行应用时不能宣称已完成该项。
+
+## Agent 发起分享与交付
+
+- 仅当前桌面普通用户消息获得宿主 `runtimeShareContextRef`；它只注入 SDK 输入，不写入可见正文或历史。主进程绑定 project/conversation/turn、来源 renderer、当前用户消息之前的历史索引和内容摘要。原生 HTTP MCP 和第三方进程内 router 复用同一 capability dispatcher；引用不替代 Persona、子 Agent、PermissionGuard 或发送授权。
+- `app.agent.share.messages` 返回稳定 messageRef / turnRef、角色、时间、有界摘录、图片存在标志和 nextOffset。完整正文只在主进程快照内读取，不能将 inspect 的截断片段当作制图正文。查询按原文子串匹配；有歧义先确认。消息列表同时返回已有分享图片引用，供后续交付复用。
+- `app.agent.share.generate` 支持 `latest_turn`（此前最近完整问答）、`all`（全部此前可分享消息）、`assistant`（上一条最终回复）、`messages`（明确引用，按原顺序）。指令与后续过程不进入图片；引用对应内容变化时拒绝。单张 PNG、默认 720px / 2× / 隐藏邮箱 / 显示模型与时间，超限明确失败。
+- 手动和 Agent 共用 AgentSharePaper、图片静态化和 SnapDOM。主进程经 EventBus 向精确来源窗口发送任务；禁止事件合并丢失任务。窗口稳定根节点在屏幕外渲染冻结正文及 Generated UI 状态，不改变页面、草稿和滚动。回传校验 requestId、nonce、project、conversation 和 rendererId，最多 8 个任务，60 秒超时；取消、窗口关闭和迟到回传均不能交付。远端图片 IPC 沿用实际 Agent 身份。
+- `app.agent.share-images` 保存本机元数据（DataRepository）；PNG 存在独立 ManagedAssetStore，不扩大 `agent.artifacts` 私有文本读取边界。staged → ready / delete-pending，失败清理，启动后台恢复。图片显示在源消息旁，可预览、复制、保存；元数据分页读取，图片接近可见区域才加载。删除会话或移除项目清理图片，失败清理在重启后续跑。
+- 幂等请求同键同输入合并；成功结果可复用。生成与输出分别报告：复制、保存或发送失败时保留图片，重试交付即可。图片字节仅经受控 UI IPC 或附件服务流转，不写入模型上下文。
+- `app.agent.share.output` 的 copy 写入 PNG；save 可传绝对 `.png` 路径，经过权限审计、PNG 校验和排他原子写入，默认禁止覆盖；省略路径使用来源窗口保存框。取消返回 `success:false`，不报告保存成功。保存框之后的已开始系统写入不保证能取消。
+- 两类附件入口分别为 `app.mail_internal.attachment.create` 和 `app.mail.attachment.import_local`，`filePath` 与 `shareImageRef` 必须且只能有一个。主进程解析受控图片、可信文件名及 image/png；保留账号、权限、大小与审计校验，邮件持有独立副本。站内信每附件上限 20 MiB，邮箱沿用既有附件/邮件总预算，默认 PNG 附件，不嵌入正文。
+- 站内信走收件人查询→附件→send.preview→message.send；邮箱走账号/地址→附件→草稿→send.preview→send。用户已明确内容、渠道和收件人即在授权内发送；歧义或要求先审阅才询问。稳定发送标识、回执与未知结果核验沿用各邮件领域规则，不自动重发，不将 SMTP accepted 说成最终送达。
+- 不支持跨会话搜索、未打开历史会话独立渲染、移动端、公开链接、自动拆图或任意正文重新生成。

@@ -3,7 +3,7 @@ import type {
   SynapseAgentTimelineItem,
   SynapseAgentToolCallTimelineItem,
   SynapseAgentToolResultTimelineItem,
-} from "@/types/agent"
+} from "../../../types/agent"
 
 export type TimelineDisplayEntry = {
   readonly item: SynapseAgentTimelineItem

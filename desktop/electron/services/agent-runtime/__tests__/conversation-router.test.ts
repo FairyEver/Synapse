@@ -2719,19 +2719,19 @@ describe("ConversationRouter", () => {
   })
 
   it("returns streamed SDK text as side session partial text when the relay times out", async () => {
-    const session = new ControlledSession("sdk-1")
-    const { router } = createRouter({ session })
-
-    const pending = router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
-    await waitFor(() => session.sent.includes("relay"))
-    session.emitStreamText("partial")
-    const result = await pending
-
-    expect(result).toMatchObject({
-      timedOut: true,
-      partialText: "partial",
-      resultText: "partial",
-    })
+    vi.useFakeTimers()
+    try {
+      const session = new ControlledSession("sdk-1")
+      const { router } = createRouter({ session })
+      const pending = router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
+      // Exercise the timeout after the input was accepted, not a race with admission.
+      for (let i = 0; i < 100 && !session.sent.includes("relay"); i++) await vi.advanceTimersByTimeAsync(0)
+      expect(session.sent).toContain("relay")
+      session.emitStreamText("partial")
+      await vi.advanceTimersByTimeAsync(1)
+      const result = await pending
+      expect(result).toMatchObject({ timedOut: true, partialText: "partial", resultText: "partial" })
+    } finally { vi.useRealTimers() }
   })
 
   it("uses a one-hour default live event timeout for foreground turns", async () => {
@@ -2758,9 +2758,12 @@ describe("ConversationRouter", () => {
           sdkSessionId: "sdk-1",
         },
       ], "sdk-1")
-      const { router } = createRouter({ session })
+      const { router, pendingPermissions } = createRouter({ session })
 
       const pending = router.send(baseMessage("needs permission"))
+      // Start the timeout measurement only after async admission installs its timer.
+      for (let i = 0; i < 100 && !pendingPermissions.has("permission-1"); i++) await vi.advanceTimersByTimeAsync(0)
+      expect(pendingPermissions.has("permission-1")).toBe(true)
       await vi.advanceTimersByTimeAsync(60 * 60 * 1000 - 1)
 
       expect(session.responses).toEqual([])
@@ -2932,6 +2935,8 @@ describe("ConversationRouter", () => {
   })
 
   it("persists a terminal error when a side session relay times out", async () => {
+    vi.useFakeTimers()
+    try {
     const session = new ControlledSession("sdk-timeout")
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const { eventBus, events } = createEventBusRecorder()
@@ -2942,8 +2947,10 @@ describe("ConversationRouter", () => {
     })
 
     const pending = router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
-    await waitFor(() => session.sent.includes("relay"))
+    for (let i = 0; i < 100 && !session.sent.includes("relay"); i++) await vi.advanceTimersByTimeAsync(0)
+    expect(session.sent).toContain("relay")
     session.emitStreamText("partial")
+    await vi.advanceTimersByTimeAsync(1)
     const result = await pending
     const persisted = await agentEvents.list()
     const saved = await conversations.get(result.conversationId)
@@ -2984,6 +2991,7 @@ describe("ConversationRouter", () => {
         }),
       }),
     ])
+    } finally { vi.useRealTimers() }
   })
 
   it("persists the default product agent type for timeout side sessions", async () => {
@@ -3185,13 +3193,18 @@ describe("ConversationRouter", () => {
   })
 
   it("closes the SDK session when a side session times out", async () => {
-    const session = new TimeoutSession()
-    const { router } = createRouter({ session })
-
-    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
-
-    expect(result.timedOut).toBe(true)
-    expect(session.closed).toBe(true)
+    vi.useFakeTimers()
+    try {
+      const session = new TimeoutSession(), send = vi.spyOn(session, "send")
+      const { router } = createRouter({ session })
+      const pending = router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 1)
+      for (let i = 0; i < 100 && !send.mock.calls.length; i++) await vi.advanceTimersByTimeAsync(0)
+      expect(send).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(1)
+      const result = await pending
+      expect(result.timedOut).toBe(true)
+      expect(session.closed).toBe(true)
+    } finally { vi.useRealTimers() }
   })
 
   it("does not create an SDK session for a queued turn that already aborted", async () => {

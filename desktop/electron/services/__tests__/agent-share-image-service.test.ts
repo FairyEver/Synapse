@@ -17,6 +17,14 @@ function setup(chooseSavePath = vi.fn<() => Promise<string | null>>().mockResolv
 const request = { action: "save" as const, pngBase64, fileName: "分享.png" }
 
 describe("Agent share PNG output", () => {
+  it("saves to an explicit path without a dialog and never overwrites it", async () => {
+    const dir = await directory(), outputPath = path.join(dir, "direct.png"), deps = setup()
+    await expect(deps.service.exportImage(request, { outputPath, actor: { kind: "agent", id: "share" } })).resolves.toEqual({ success: true, filePath: outputPath })
+    expect(deps.chooseSavePath).not.toHaveBeenCalled()
+    expect(deps.check).toHaveBeenCalledWith(expect.objectContaining({ actor: { kind: "agent", id: "share" } }))
+    await expect(deps.service.exportImage(request, { outputPath })).rejects.toThrow("已存在")
+    expect(await readFile(outputPath)).toEqual(Buffer.from(pngBase64, "base64"))
+  })
   it("cancels without permissions, clipboard changes, or writing files", async () => {
     const deps = setup()
     await expect(deps.service.exportImage(request)).resolves.toEqual({ success: false })
@@ -65,4 +73,15 @@ describe("Agent share PNG output", () => {
     const excessive = Buffer.from(pngBase64, "base64"); excessive.writeUInt32BE(64_001, 20)
     await expect(deps.service.exportImage({ ...request, pngBase64: excessive.toString("base64") })).rejects.toThrow("过长")
   })
+  it("does not write when cancellation arrives while the save dialog or permission check is pending", async () => {
+    const dir = await directory(), controller = new AbortController()
+    const deps = setup(vi.fn(async () => { controller.abort(); return path.join(dir, "cancelled.png") }))
+    await expect(deps.service.exportImage(request, { signal: controller.signal })).rejects.toThrow()
+    expect(await readdir(dir)).toEqual([])
+    const copyAbort = new AbortController(), copy = setup()
+    copy.check.mockImplementation(async () => { copyAbort.abort(); return { allowed: true } })
+    await expect(copy.service.exportImage({ ...request, action: "copy" }, { signal: copyAbort.signal })).rejects.toThrow()
+    expect(copy.copyPng).not.toHaveBeenCalled()
+  })
+
 })

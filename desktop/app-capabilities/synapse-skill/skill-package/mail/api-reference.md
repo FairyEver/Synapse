@@ -24,7 +24,7 @@
 
 ### app_mail_account_list
 
-列出本机邮箱账号、选择邮箱。List external email accounts configured on this computer for the current SY identity; never returns credentials. If exactly one account exists and nextCursor is null, use it directly without asking which sender. Honor an explicit account; replies and existing drafts inherit their accountId. Ask only when multiple accounts remain ambiguous. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
+列出本机邮箱账号、选择邮箱。List external email accounts configured on this computer for the current signed-in SY identity only; never returns credentials or another identity's accounts. This result is the authority for account selection. If mail tools are unavailable, stop and report the blocker; never read Synapse private databases or caches through shell, file, script or database tools. If exactly one account exists and nextCursor is null, use it directly without asking which sender. Honor an explicit account; replies and existing drafts inherit their accountId. Ask only when multiple accounts remain ambiguous. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
 
 权限：content.read；风险：normal。
 
@@ -1578,7 +1578,7 @@
 
 ### app_mail_attachment_import_local
 
-添加本机文件为邮件附件。Import a local file into this account's controlled email assets. Does not upload it to Drive.
+添加本机文件为邮件附件。Import exactly one local filePath or app.agent.share.generate shareImageRef (PNG) into this account's independent controlled email assets. Does not upload it to Drive.
 
 权限：fs.read.outside-userdata；风险：normal。
 
@@ -1595,11 +1595,15 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 4096
+    },
+    "shareImageRef": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
     }
   },
   "required": [
-    "accountId",
-    "filePath"
+    "accountId"
   ],
   "additionalProperties": false
 }
@@ -1940,7 +1944,3 @@
   "additionalProperties": false
 }
 ```
-
-## 部门收件地址查询
-
-外部邮件复用 `app_mail_internal_organization_list({query})` 与 `app_mail_internal_organization_members_list({organizationId,cursor?})`。成员响应为 `{items:[{userId,nickname,handle,contactEmail}],nextCursor}`，contactEmail 可空；必须读完所有页、检查每人联系邮箱，缺失默认阻止，用户明确排除后才能展开实际 To/Cc。具体步骤见 [index.md](index.md#按部门发送外部邮件)。这些查询不授权站内信发送。

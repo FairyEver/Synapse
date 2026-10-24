@@ -1,12 +1,15 @@
 # 能力注册清单
 
+- 2026-10-24 Agent 图片分享：新增 app.agent.share.messages / share.generate / share.output 三项能力，Agent 11→14；全局 capability 343、MCP 索引 339（app domain 98 / 94），公开工具仍仅 search / invoke。两类邮件附件增加与 filePath 互斥的 shareImageRef，数量不变。新增 4 条 UI 私有 IPC：share_render.complete、share_images.list/read/output；原有 read_share_image_resource 可携带生成任务身份。System App 22、Dock、Workflow、Automation、Deep Link 均无新增。历史条目中的 11 / 340 / 336 为当次基线，当前数量以本条及汇总表为准。
+
+
 - 2026-10-24：设置新增“Agent 使用的 MCP”，只读配置清单与 SY 独立禁用策略。新增 2 项 UI 专用 IPC：`app.mcp.agent.list`、`app.mcp.agent.set_enabled`；不注册为 capability/MCP tool。340 项全局 capability、336 项 MCP 索引、22 个 System App，以及 Dock、Workflow、Automation、Deep Link 数量均不变。内置 Synapse 路由不可在此关闭；SY 对外 MCP 注册接口不变，系统 Skill 的工具契约不变。详见 `docs/superpowers/specs/2026-10-24-agent-mcp-settings-design.md`。
 
 - Agent OpenUI 是既有 Agent 对话内的展示与交互能力，不新增 System App、Dock、Workflow、Automation、Deep Link 或 MCP 工具；Agent Conversation 仍为 11 项。新增三个 UI 专用 IPC operation：`app.agent.generated_ui.get_state`、`app.agent.generated_ui.save_state`、`app.agent.generated_ui.submit_action`。它们只处理当前桌面对话的状态和用户提交，不提供通用业务工具执行能力。
 
 本文件记录 Synapse 当前运行时代码的真实产品表面。声明文件、目录名、测试夹具或计划文档不能单独作为“已注册”的证据。
 
-- Agent 对话图片分享复用既有对话 UI，`app.agent.operation.export_share_image` 私有 IPC 接收有界 PNG 并通过权限与审计复制到系统剪贴板或保存到用户选择的本机路径；`app.agent.operation.read_share_image_resource` 私有 IPC 仅为浏览器无法读取的公开 HTTP(S) 图片提供有界、逐跳公网校验和权限审计的读取，不开放本机文件或内网代理。不上传、不创建分享链接、不新增 MCP、System App、Dock、Workflow、Automation 或 Deep Link。Agent Conversation 仍为 11 项，全局 capability / MCP 数量保持不变；MCP schema 与系统 Skill 的公开契约不变。
+- 手动 Agent 对话图片分享复用既有对话 UI，`app.agent.operation.export_share_image` 私有 IPC 接收有界 PNG 并通过权限与审计复制到系统剪贴板或保存到用户选择的本机路径；`app.agent.operation.read_share_image_resource` 私有 IPC 仅为浏览器无法读取的公开 HTTP(S) 图片提供有界、逐跳公网校验和权限审计的读取，不开放本机文件或内网代理。手动入口不上传、不创建分享链接；Agent 分享与交付已按本页顶部 2026-10-24 条目扩展为受控能力，并同步系统 Skill。
 
 ## 注册表面与权威入口
 
@@ -40,7 +43,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
-| Agent Conversation | 是（既有） | 是（既有） | — | — | 11 | `open` |
+| Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
 | Connectors | 是 | 否 | — | — | 2 | 2 个私有授权回调 |
@@ -193,7 +196,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 
 | Domain | Capability 数 | MCP Tool 数 |
 |---|---:|---:|
-| `app` | 95 | 91 |
+| `app` | 98 | 94 |
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
@@ -206,13 +209,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `mail` | 44 | 44 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
-| 合计 | 340 | 336 |
+| 合计 | 343 | 339 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 336 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 339 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
