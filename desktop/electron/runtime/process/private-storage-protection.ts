@@ -35,7 +35,9 @@ export class PrivateStorageProtection {
         + `(deny file-write-unlink ${[...ancestors].map(parent => `(literal ${JSON.stringify(parent)})`).join(" ")})`
         + '(deny mach-lookup (require-not (require-any (global-name "com.apple.system.opendirectoryd.libinfo") (global-name "com.apple.trustd.agent"))))'
         + "(deny appleevent-send)(deny lsopen)(deny mach-priv-task-port)"
-        + "(deny network-outbound (remote unix-socket))(deny process-info* (require-not (target same-sandbox)))"
+        // getaddrinfo uses this root-owned socket; localhost only exercises /etc/hosts.
+        + '(deny network-outbound (require-all (remote unix-socket) (require-not (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))))'
+        + "(deny process-info* (require-not (target same-sandbox)))"
       return { command: "/usr/bin/sandbox-exec", args: ["-p", profile, launch.command, ...launch.args] }
     }
     // A plain Linux mount mask leaves host IPC brokers reachable. Until that boundary

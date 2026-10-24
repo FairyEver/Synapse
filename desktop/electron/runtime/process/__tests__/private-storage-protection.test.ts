@@ -8,8 +8,23 @@ import { describe, expect, it } from "vitest"
 import { PrivateStorageProtection } from "../private-storage-protection"
 
 describe("private storage OS process boundary", () => {
+  it.runIf(process.platform === "darwin" && process.env.SYNAPSE_RUN_DNS_TEST === "1")("retains system DNS resolution for protected MCP package startup", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "sy-dns-"))
+    const protection = new PrivateStorageProtection([path.join(root, "private")])
+    const source = "require('node:dns').lookup('registry.npmjs.org', {family:4}, e => { if(e) { process.stderr.write(e.code); process.exitCode=1 } else process.stdout.write('DNS_OK') })"
+    const launch = protection.protectProcess({ command: process.execPath, args: ["-e", source] })
+    try {
+      // Explicit opt-in: exercises the OS resolver rather than /etc/hosts' localhost shortcut.
+      const result = await promisify(execFile)(launch.command, [...launch.args], { timeout: 10_000 })
+      expect(result.stdout).toBe("DNS_OK")
+      expect(result.stderr).toBe("")
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it.runIf(process.platform === "darwin")("blocks Unix socket delegation while retaining public TCP tool connections", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "sy-ipc-")), socketPath = path.join(root, "host.sock")
+    const root = mkdtempSync(path.join(tmpdir(), "sy-ipc-")), socketPath = path.join(root, "mDNSResponder")
     let brokerReached = false
     const broker = createServer(socket => { brokerReached = true; socket.end("private-canary") })
     const publicServer = createServer(socket => socket.end("public-api"))

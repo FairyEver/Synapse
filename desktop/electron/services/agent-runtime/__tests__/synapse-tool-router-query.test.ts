@@ -6,6 +6,7 @@ import {
   createDirectValidatedQuery,
   createRoutedQuery,
   rebuildMcpServers,
+  SynapseToolRouterQuery,
 } from "../synapse-tool-router-query"
 
 function privateStorageQueryOptions() {
@@ -327,6 +328,134 @@ describe("Synapse tool router strict MCP reconstruction", () => {
     expect(onFallback).not.toHaveBeenCalled()
   })
 
+  it.each(["settings", "pending", "failure"])("cancels startup during %s without sending a prompt or starting fallback", async (phase) => {
+    vi.useFakeTimers()
+    const discovery = {
+      initializationResult: vi.fn(async () => ({})),
+      mcpServerStatus: vi.fn(() => phase === "failure" ? Promise.reject(new Error("discovery failed")) : new Promise(() => {})),
+      close: vi.fn(async () => {}),
+    }
+    const query = vi.fn(() => discovery)
+    const sdk = { query, resolveSettings: vi.fn(() => phase === "settings" ? new Promise(() => {}) : Promise.resolve({ effective: {} })) }
+    vi.resetModules()
+    vi.doMock("@anthropic-ai/claude-agent-sdk", () => sdk)
+    try {
+      const routed = new SynapseToolRouterQuery({ prompt: promptThatMustNotBeRead(), options: {},
+        router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() } })
+      const next = routed.next()
+      if (phase === "failure") await routed.interrupt()
+      else { await vi.dynamicImportSettled(); await vi.advanceTimersByTimeAsync(100); await routed.interrupt() }
+      await expect(next).resolves.toEqual({ done: true, value: undefined })
+      await routed.close()
+      expect(query.mock.calls.length).toBeLessThanOrEqual(1)
+      if (phase === "pending") expect(discovery.close).toHaveBeenCalledOnce()
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(query.mock.calls.length).toBeLessThanOrEqual(1)
+    } finally { vi.doUnmock("@anthropic-ai/claude-agent-sdk"); vi.useRealTimers() }
+  })
+
+  it.each([false, true])("does not fall back when cancellation races a discovery failure (close fails: %s)", async (closeFails) => {
+    const controller = new AbortController()
+    const discovery = { initializationResult: vi.fn(async () => ({})),
+      mcpServerStatus: vi.fn(async () => { controller.abort(); throw new Error("discovery failed") }),
+      close: vi.fn(async () => { if (closeFails) throw new Error("close failed") }),
+    }
+    const sdk = { query: vi.fn(() => discovery), resolveSettings: vi.fn(async () => ({ effective: {} })) }
+    await expect(createRoutedQuery(sdk as never, { startupSignal: controller.signal, prompt: promptThatMustNotBeRead(), options: {},
+      router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() } })).rejects.toThrow(closeFails ? "close failed" : /cancelled|discovery failed/)
+    expect(discovery.close).toHaveBeenCalledOnce()
+    expect(sdk.query).toHaveBeenCalledOnce()
+  })
+
+  it("keeps native interrupt and close after the formal query starts", async () => {
+    const discovery = { initializationResult: vi.fn(async () => ({})), mcpServerStatus: vi.fn(async () => []), close: vi.fn() }
+    const final = { next: vi.fn(async () => ({ done: true, value: undefined })), interrupt: vi.fn(async () => {}), close: vi.fn(async () => {}) }
+    const sdk = { query: vi.fn().mockReturnValueOnce(discovery).mockReturnValueOnce(final), resolveSettings: vi.fn(async () => ({ effective: {} })),
+      tool: vi.fn(name => ({ name })), createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })) }
+    vi.resetModules()
+    vi.doMock("@anthropic-ai/claude-agent-sdk", () => sdk)
+    try {
+      const routed = new SynapseToolRouterQuery({ prompt: promptThatMustNotBeRead(), options: {},
+        router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() } })
+      await routed.next()
+      await routed.interrupt()
+      await routed.close()
+      expect(final.interrupt).toHaveBeenCalledOnce()
+      expect(final.close).toHaveBeenCalledOnce()
+    } finally { vi.doUnmock("@anthropic-ai/claude-agent-sdk") }
+  })
+
+  it("retains connected servers when the final status RPC exhausts the startup budget", async () => {
+    vi.useFakeTimers()
+    try {
+      const startedAt = Date.now()
+      const discovery = { initializationResult: vi.fn(async () => ({})), close: vi.fn(),
+        mcpServerStatus: vi.fn(() => Date.now() - startedAt >= 9_900 ? new Promise(() => {}) : Promise.resolve([
+          status("ready", { command: "ready" }), statusWithState("rea", "pending", { command: "rea" }),
+        ])) }
+      const final = {}
+      const query = vi.fn().mockReturnValueOnce(discovery).mockReturnValueOnce(final)
+      const sdk = { query, resolveSettings: vi.fn(async () => ({ effective: {} })), tool: vi.fn(name => ({ name })),
+        createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })) }
+      const result = createRoutedQuery(sdk as never, { prompt: promptThatMustNotBeRead(), options: {},
+        router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() } })
+      await vi.advanceTimersByTimeAsync(10_100)
+      expect(await result).toBe(final)
+      expect(query.mock.calls[1]?.[0].options.mcpServers).toHaveProperty("ready")
+      expect(query.mock.calls[1]?.[0].options.mcpServers).toHaveProperty("synapse-tool-router")
+    } finally { vi.useRealTimers() }
+  })
+
+  it("keeps a cold MCP that connects after the old five-second cutoff", async () => {
+    vi.useFakeTimers()
+    try {
+      const startedAt = Date.now()
+      const discovery = {
+        initializationResult: vi.fn(async () => ({})),
+        mcpServerStatus: vi.fn(async () => [statusWithState("rea", Date.now() - startedAt < 6_000 ? "pending" : "connected", { command: "npx", args: ["rea", "mcp"] })]),
+        close: vi.fn(),
+      }
+      const final = { close: vi.fn() }
+      const query = vi.fn().mockReturnValueOnce(discovery).mockReturnValueOnce(final)
+      const sdk = {
+        query, resolveSettings: vi.fn(async () => ({ effective: {} })), tool: vi.fn((name) => ({ name })),
+        createSdkMcpServer: vi.fn(() => ({ type: "sdk", name: "synapse-tool-router" })),
+      }
+      const result = createRoutedQuery(sdk as never, {
+        prompt: promptThatMustNotBeRead(), options: {},
+        router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() },
+      })
+      await vi.advanceTimersByTimeAsync(5_100)
+      expect(query).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1_000)
+      await expect(result).resolves.toBe(final)
+      expect(query.mock.calls[1]?.[0]).toMatchObject({ options: { strictMcpConfig: true, mcpServers: { rea: { command: "npx", args: ["rea", "mcp"] } } } })
+      expect(discovery.close).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("still bounds an unresponsive discovery control request to five seconds", async () => {
+    vi.useFakeTimers()
+    try {
+      const discovery = { initializationResult: vi.fn(() => new Promise(() => undefined)), close: vi.fn() }
+      const final = { close: vi.fn() }
+      const query = vi.fn().mockReturnValueOnce(discovery).mockReturnValueOnce(final)
+      const sdk = { query, resolveSettings: vi.fn(async () => ({ effective: {} })) }
+      const result = createRoutedQuery(sdk as never, {
+        prompt: promptThatMustNotBeRead(), options: {},
+        router: { cwd: "/tmp/project", settingSources: ["user"], executeTool: vi.fn() },
+      })
+      await vi.advanceTimersByTimeAsync(5_100)
+      await expect(result).resolves.toBe(final)
+      expect(query.mock.calls[1]?.[0]).toMatchObject({ options: { strictMcpConfig: true, mcpServers: {} } })
+      expect(discovery.close).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("retains the router when an optional server stays pending past the deadline", async () => {
     vi.useFakeTimers()
     try {
@@ -365,6 +494,8 @@ describe("Synapse tool router strict MCP reconstruction", () => {
 
       await vi.advanceTimersByTimeAsync(5_100)
 
+      expect(query).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(5_000)
       await expect(resultPromise).resolves.toBe(fallback)
       expect(onFallback).not.toHaveBeenCalled()
     } finally {

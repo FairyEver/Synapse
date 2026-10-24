@@ -49,7 +49,7 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 ## Synapse 管理的执行与私有存储
 
 - 宿主统一保护 `userData/data-v1` 与 `userData/mail-assets`，包括 SQLite/WAL/SHM、凭据及邮件正文/附件。登录 shell 环境探测、整棵 SDK CLI/stdio MCP 进程树、PTY 和内置/接续 CLI、Node 脚本、Workflow/Automation shell 与 EJS Worker 均使用同一 OS 拒绝边界；会话权限模式、用户允许和额外目录不能撤销它。
-- macOS 使用系统 `sandbox-exec`；词法路径与 realpath 同时保护，阻止重命名私有根的祖先目录、任意 Mach/Apple Events/LaunchServices 委托、新 Unix socket 连接和跨沙箱进程窥探（仅例外保留系统 DNS/TLS 服务）。普通项目文件和 IP 网络仍按既有权限使用。这是私有存储边界，不是通用工作区、网络或资源沙箱。Windows/Linux 尚无等效验证实现，相关执行入口必须失败，不得降级为裸进程；缺少系统隔离器亦然。
+- macOS 使用系统 `sandbox-exec`；词法路径与 realpath 同时保护，阻止重命名私有根的祖先目录、任意 Mach/Apple Events/LaunchServices 委托、新 Unix socket 连接和跨沙箱进程窥探（仅例外保留系统 DNS/TLS 服务；DNS 的 Unix socket 只允许 root 所有的精确路径 `/private/var/run/mDNSResponder`，其它路径即使同名也不得放行）。普通项目文件和 IP 网络仍按既有权限使用。这是私有存储边界，不是通用工作区、网络或资源沙箱。Windows/Linux 尚无等效验证实现，相关执行入口必须失败，不得降级为裸进程；缺少系统隔离器亦然。
 - EJS 保留原有编译、输出及 Worker 资源上限，但一次性 Worker 置于受保护子进程；超时、取消和停止终止整个进程组。此决定取代旧设计“不创建 OS 子进程”的限制，不改变两项公开工具或模板语义。
 - Action Router 在任何公开传输/域分发前递归校验文件参数，包括数组、file URL、相对路径、别名和祖先目录；PermissionGuard 的宿主约束在用户允许策略之前执行。读取、写入、上传或导出私有存储必须拒绝并审计，不能依赖调用者声称的 source。邮箱只通过当前登录用户的 MailService 读取。
 - 范围限于 Synapse 管理的执行进程与工具接口。用户另行启动、拥有完整 OS 文件权限的独立程序和非 Synapse 启动的远端/本地 MCP 服务不受此进程边界控制；不声称本机邮箱已加密到能抵御系统用户。既有进程须在更新后重新创建，不能追溯为旧进程安装沙箱。
@@ -102,6 +102,7 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 
 - 第三方 Anthropic-compatible 端点固定使用进程内 Synapse 工具 router；Anthropic 官方端点继续使用 SDK 原生工具模式。旧全局配置与对话快照中的实验开关不再生效；对话切换 Provider/端点时重新计算模式。
 - 第三方会话必须先用正常 `settingSources` 做一次不消费用户 prompt、不发送模型请求的 MCP discovery，再以 `strictMcpConfig: true` 重建其它可序列化 MCP，移除 `synapse-mcp` 并注入进程内 `synapse-tool-router`。不得用 `disallowedTools`、运行时 toggle 或同名 server 覆盖模拟隔离。该 router 模块同时是 `/mcp` 公开表面的实现来源，两条路径共用同一份工具定义与 instructions，不得各自维护一份。
+- MCP discovery 的控制请求各限 5 秒；初始化后的 pending 启动等待总计最多 10 秒，总期限耗尽时保留最后状态中的已连接服务。启动期 interrupt/close 必须取消等待并关闭 discovery，禁止随后发送用户 prompt 或创建 fallback；清理失败继续报告停止未确认。正式 query 就绪后仍使用 SDK 原生停止协议。
 - 路由模式中任何异常都不得回退完整 MCP：可选连接器缺失、失败、待授权或 pending 超时，只排除该连接器并保留路由器及其它可重建 MCP；不可重建的可选配置也只排除该项。discovery 整体失败、重名、显式原始 Synapse 权限规则、policy helper、Synapse server 工具策略或路由器创建失败时，使用 `strictMcpConfig: true` 和空 MCP 集合，保留受现有权限限制的内置工具，不能绕过原权限策略。诊断仅记录名称、安全 reason 与状态，禁止配置、header、env 或凭据正文。
 - `search` 与 `invoke` 是所有 MCP 客户端的**仅有两个**公开工具；内置 Agent 会话与 `/mcp` 共用同一实现、同一份工具定义和同一 instructions。`search` 只读且可自动允许；`invoke` 必须把原始 Synapse 工具名和参数投影回 Persona、子 Agent allowlist、permission mode、权限卡片、toolUse/toolResult、history 与导出，并以 `toolUseId` 关联。底层执行仍走同一 action router、`PermissionGuard`、`AuditSink` 和公共 MCP 结果归一化。两个表面都必须随 `initialize` 返回说明两段式调用流程的 instructions；新增第三个公开工具必须先修订本条。
 - 自动注册/清理 Synapse MCP 时移除旧 server：`synapse-data`、`synapse-database`、`synapse-services`，以及旧权限 allowlist 工具名；不得自动新增 `mcp__synapse-mcp__*` allowlist。

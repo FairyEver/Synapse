@@ -42,10 +42,13 @@ interface QueryLike {
   rewindFiles?(userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult>
 }
 
-const MCP_DISCOVERY_PENDING_TIMEOUT_MS = 5_000
+const MCP_DISCOVERY_CONTROL_TIMEOUT_MS = 5_000
+// Concurrent npx startup can outlive the control-RPC budget even with working DNS.
+const MCP_DISCOVERY_STARTUP_TIMEOUT_MS = 10_000
 const MCP_DISCOVERY_POLL_INTERVAL_MS = 50
 
 interface RoutedQueryInput {
+  readonly startupSignal?: AbortSignal
   readonly prompt: AsyncIterable<SDKUserMessage>
   readonly options: Record<string, unknown>
   readonly expectedMcpServerNames?: readonly string[]
@@ -70,14 +73,25 @@ class ToolRouterFallbackError extends Error {
   }
 }
 
+class McpStartupCancelledError extends Error {
+  constructor() { super("MCP startup cancelled"); this.name = "McpStartupCancelledError" }
+}
+
+function assertStartupActive(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new McpStartupCancelledError()
+}
+
 export class SynapseToolRouterQuery implements QueryLike {
   private readonly query: Promise<Query>
+  private readonly startupController = new AbortController()
+  private queryReady = false
   private failed = false
   private failure: unknown
 
   constructor(input: RoutedQueryInput) {
     this.query = import("@anthropic-ai/claude-agent-sdk")
-      .then((sdk) => createRoutedQuery(sdk, input))
+      .then((sdk) => createRoutedQuery(sdk, { ...input, startupSignal: this.startupController.signal }))
+      .then(query => { this.queryReady = true; return query })
       .catch((error) => {
         this.failed = true
         this.failure = error
@@ -86,18 +100,25 @@ export class SynapseToolRouterQuery implements QueryLike {
   }
 
   async next(): Promise<IteratorResult<SDKMessage, void>> {
-    this.throwIfFailed()
-    return (await this.query).next()
+    try {
+      this.throwIfFailed()
+      return (await this.query).next()
+    } catch (error) {
+      if (error instanceof McpStartupCancelledError) return { done: true, value: undefined }
+      throw error
+    }
   }
 
   async interrupt(): Promise<void> {
-    if (this.failed) return
-    await (await this.query).interrupt()
+    if (!this.queryReady) this.startupController.abort()
+    try { await (await this.query).interrupt() }
+    catch (error) { if (!(error instanceof McpStartupCancelledError)) throw error }
   }
 
   async close(): Promise<void> {
-    if (this.failed) return
-    await (await this.query).close()
+    if (!this.queryReady) this.startupController.abort()
+    try { await (await this.query).close() }
+    catch (error) { if (!(error instanceof McpStartupCancelledError)) throw error }
   }
 
   async streamInput(stream: AsyncIterable<SDKUserMessage>): Promise<void> {
@@ -134,7 +155,10 @@ export class SynapseToolRouterQuery implements QueryLike {
 
 export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryInput): Promise<Query> {
   // Storage-policy failure must never enter the MCP fallback, which also starts a query.
-  await assertPrivateStorageSettings(sdk, input)
+  const signal = input.startupSignal
+  assertStartupActive(signal)
+  await withDiscoveryDeadline(assertPrivateStorageSettings(sdk, input), MCP_DISCOVERY_CONTROL_TIMEOUT_MS, signal)
+  assertStartupActive(signal)
   const deniedMcpServers = asRecord(input.options.settings)?.deniedMcpServers
   const disabledNames = new Set(Array.isArray(deniedMcpServers)
     ? deniedMcpServers.map(rule => asRecord(rule)?.serverName).filter((name): name is string => typeof name === "string")
@@ -150,7 +174,8 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
     const resolved = await withDiscoveryDeadline(sdk.resolveSettings({
       cwd: input.router.cwd,
       settingSources: [...input.router.settingSources],
-    }))
+    }), MCP_DISCOVERY_CONTROL_TIMEOUT_MS, signal)
+    assertStartupActive(signal)
     assertCompatibleSettings(resolved.effective as Record<string, unknown>)
     const discovery = sdk.query({
       prompt: pendingPrompt(),
@@ -158,11 +183,12 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
     })
     let statuses: McpServerStatus[]
     try {
-      await withDiscoveryDeadline(discovery.initializationResult())
-      statuses = await waitForMcpServerStatuses(discovery)
+      await withDiscoveryDeadline(discovery.initializationResult(), MCP_DISCOVERY_CONTROL_TIMEOUT_MS, signal)
+      statuses = await waitForMcpServerStatuses(discovery, signal)
     } finally {
       await withDiscoveryDeadline(Promise.resolve(discovery.close()))
     }
+    assertStartupActive(signal)
     if (hasUnavailableExpectedServers(statuses, expectedServerNames)) {
       input.logger?.warn("Optional MCP servers unavailable; retaining the tool router.", {
         boundary: "claude-sdk.synapse-tool-router.discovery",
@@ -195,6 +221,9 @@ export async function createRoutedQuery(sdk: AgentSdkModule, input: RoutedQueryI
       } as Options,
     })
   } catch (error) {
+    // Cancellation must never create a formal query, including the strict fallback.
+    // A failed discovery close still propagates so the stop barrier cannot claim success.
+    if (signal?.aborted || error instanceof McpStartupCancelledError) throw error
     const reason = fallbackReason(error)
     input.router.onFallback?.(reason)
     input.logger?.warn("Synapse tool router unavailable; using a minimal strict MCP configuration.", {
@@ -252,30 +281,48 @@ async function assertPrivateStorageSettings(sdk: AgentSdkModule, input: DirectQu
 
 async function waitForMcpServerStatuses(
   query: Pick<Query, "mcpServerStatus">,
+  signal?: AbortSignal,
 ): Promise<McpServerStatus[]> {
-  const deadline = Date.now() + MCP_DISCOVERY_PENDING_TIMEOUT_MS
-  let statuses = await withDiscoveryDeadline(query.mcpServerStatus())
+  const deadline = Date.now() + MCP_DISCOVERY_STARTUP_TIMEOUT_MS
+  let statuses = await withDiscoveryDeadline(query.mcpServerStatus(), MCP_DISCOVERY_CONTROL_TIMEOUT_MS, signal)
   while (statuses.some((status) => status.status === "pending")) {
+    assertStartupActive(signal)
     if (Date.now() >= deadline) {
       return statuses
     }
     await new Promise((resolve) => setTimeout(resolve, MCP_DISCOVERY_POLL_INTERVAL_MS))
-    statuses = await withDiscoveryDeadline(query.mcpServerStatus(), Math.max(1, deadline - Date.now()))
+    const remainingMs = deadline - Date.now()
+    if (remainingMs <= 0) return statuses
+    assertStartupActive(signal)
+    try {
+      statuses = await withDiscoveryDeadline(query.mcpServerStatus(), Math.min(MCP_DISCOVERY_CONTROL_TIMEOUT_MS, remainingMs), signal)
+    } catch (error) {
+      assertStartupActive(signal)
+      if (Date.now() >= deadline && error instanceof ToolRouterFallbackError) return statuses
+      throw error
+    }
   }
   return statuses
 }
 
-async function withDiscoveryDeadline<T>(operation: Promise<T>, timeoutMs = MCP_DISCOVERY_PENDING_TIMEOUT_MS): Promise<T> {
+async function withDiscoveryDeadline<T>(operation: Promise<T>, timeoutMs = MCP_DISCOVERY_CONTROL_TIMEOUT_MS, signal?: AbortSignal): Promise<T> {
+  let onAbort: (() => void) | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
       operation,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(new McpStartupCancelledError())
+        if (signal?.aborted) onAbort()
+        else signal?.addEventListener("abort", onAbort, { once: true })
+      }),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new ToolRouterFallbackError("discovery-failed")), timeoutMs)
       }),
     ])
   } finally {
     if (timer) clearTimeout(timer)
+    if (onAbort) signal?.removeEventListener("abort", onAbort)
   }
 }
 

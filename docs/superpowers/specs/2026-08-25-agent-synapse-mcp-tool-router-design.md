@@ -19,7 +19,7 @@
 
 1. 以 `user`、`project`、`local` 正常 setting sources 解析 SDK 设置。
 2. 创建不读取真实用户 prompt 的 discovery query，只等待初始化与 `mcpServerStatus()`，随后关闭。
-3. 把会话显式注入的非 Synapse Server 记录为预期集合；等待 pending 最多 5 秒。缺失、离线、待授权或超时只记录安全诊断并排除该项。
+3. 把会话显式注入的非 Synapse Server 记录为预期集合；初始化后的 pending 启动等待总计最多 10 秒，单个控制请求仍限 5 秒；总期限耗尽保留最后状态中的已连接服务。启动取消必须关闭 discovery，且不能创建正式查询或 fallback；关闭失败不能报告停止成功。缺失、离线、待授权或超时只记录安全诊断并排除该项。
 4. 从有效配置移除 `synapse-mcp`，保留其它可重建且已连接的 stdio、HTTP 或 SSE server；可选配置不支持时只排除该项。
 5. 以 `strictMcpConfig: true` 创建正式 query，注入进程内 `synapse-tool-router`。可选连接器失败不能恢复全量 Synapse schema。
 
