@@ -15,7 +15,6 @@ export type SynapseActionRouter = {
 }
 
 export type SynapseActionRouterDeps = {
-  readonly assertFileAccess?: (params: Record<string, unknown>) => Promise<void>
   readonly appDispatch: DomainDispatch
   readonly automationDispatch: DomainDispatch
   readonly contentDispatch: DomainDispatch
@@ -34,9 +33,6 @@ export type SynapseActionRouterDeps = {
 export function createSynapseActionRouter(deps: SynapseActionRouterDeps): SynapseActionRouter {
   return {
     async dispatch(action, params, context) {
-      try { await deps.assertFileAccess?.(params) } catch {
-        return { ok: false, code: "PERMISSION_DENIED", error: "Synapse 私有存储不允许直接访问，请使用当前登录用户的邮箱工具。" }
-      }
       const domainId = resolveActionDomainId(action)
       if (domainId === "app") return deps.appDispatch(action, params, context)
       if (domainId === "automation") return deps.automationDispatch(action, params, context)

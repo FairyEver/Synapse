@@ -2,7 +2,7 @@
 
 ## 本地 Agent 生成界面
 
-- 新建本地 Renderer 会话常驻 OpenUI 短入口，首次生成聊天 UI 前通过 Read 读取随包完整参考；同会话已有完整参考可复用，参考不可用或整理后缺失时不得猜测语法。保留 Claude Code preset、Persona、项目规则和原有 SDK 会话，不注入非 Renderer 入口。资源缺失、Read 被会话排除或 dontAsk 模式时回退完整提示；旧会话不强行改写 SDK system prompt snapshot。参考读取只精确自动允许宿主资源文件，仍服从私有存储、Persona、自定义工具和子 Agent 策略，不扩大其它读写权限。
+- 新建本地 Renderer 会话常驻 OpenUI 短入口，首次生成聊天 UI 前通过 Read 读取随包完整参考；同会话已有完整参考可复用，参考不可用或整理后缺失时不得猜测语法。保留 Claude Code preset、Persona、项目规则和原有 SDK 会话，不注入非 Renderer 入口。资源缺失、Read 被会话排除或 dontAsk 模式时回退完整提示；旧会话不强行改写 SDK system prompt snapshot。参考读取只精确自动允许宿主资源文件，仍服从 Persona、自定义工具和子 Agent 策略，不扩大其它读写权限。
 - OpenUI 只用于聊天内展示，不得替代编写、修改、保存、构建或调试网页、应用、组件和代码文件的交付。短入口与完整参考必须明确聊天 UI 作用域，组件、语法、资源、布局与最终校验规则不约束用户项目代码、文件或普通代码示例，现有工具权限与安全检查继续生效；未经明确要求不向用户项目添加 OpenUI 依赖。
 - 仅带宿主 `generatedUi` 元数据的主会话 Assistant 正文或本地受标记流式草稿可以渲染 `openui` / 官方 `openui-lang` 围栏。旧历史、工具结果、子 Agent 和普通代码示例保持原样。宿主负责完整程序的混合消息提示，不启用上游 inlineMode 的增量语句规则；每个块必须独立完整。
 - 生成界面不得直接执行工具：不提供 toolProvider，拒绝 Query、Mutation、@Run、主动加载外部资源及覆盖宿主的弹窗。表单和按钮回到来源会话，继续经过既有权限；模型生成的内容不构成额外授权。
@@ -44,21 +44,20 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 - 只读对话仅在历史滚动内容末尾居中显示「打开 Claude Code」按钮，底部增加留白以平衡消息工具栏占位造成的视觉间距，不固定占用窗口底部；按钮复用同一接续入口，转交未完成时显示「重试转交」。
 - 交接与写入共享会话级准入。运行中、排队、权限等待或其它写入尚未结束时拒绝交接；所有发送、排队、steer、重置和文件撤销入口必须拒绝已转交或正在转交的会话。
 - SDK query 必须经过停止屏障并确认结束，停止失败保留句柄和持久化锁。终端关联在 PTY 启动前保存；`failed` 不能视为启动成功。只有确认未启动新进程才允许撤销首次交接；已有转交记录和状态不确定时保留只读，重试检查关联终端，不重复启动。
-- 保留实际工作目录、供应商、模型与权限模式，不套用全局默认选择。CLI 启动采用原生配置，不迁移 UI 专属 Persona、连接器、SDK 进程内 router 或宿主 PreToolUse 文件写入边界；CLI 继续服从自己的 permission mode 与本机配置；同时由 Terminal 的宿主私有存储进程保护拒绝邮箱存储访问，不继承 UI 的结构化路径预检。
+- 保留实际工作目录、供应商、模型与权限模式，不套用全局默认选择。CLI 启动采用原生配置，不迁移 UI 专属 Persona、连接器、SDK 进程内 router 或宿主 PreToolUse 文件写入边界；CLI 继续服从自己的 permission mode 与本机配置，不继承 UI 的结构化路径预检。
 - 保存 SDK 会话 ID 时一并记录实际供应商、目录、模型和权限选择；不保存密钥或进程环境。接续时优先使用运行中的选择，其次使用已保存选择，不能因供应商默认模型变化而替换原模型。停止未确认的句柄不得被后台空闲回收丢弃。
 - `resumeClaudeCodeTerminal` 是 UI 专用 IPC，仅接收 project/conversation 标识，不接受 Renderer 的凭据、路径或 SDK 会话 ID，不新增 MCP 工具。MCP inspect 对持久化交接记录返回 `controllable=false`，控制接口返回 `control_not_supported`；历史仍可读取。
 
-## Synapse 管理的执行与私有存储
+## Synapse 管理的执行与本机存储
 
-- 宿主统一保护 `userData/data-v1` 与 `userData/mail-assets`，包括 SQLite/WAL/SHM、凭据及邮件正文/附件。登录 shell 环境探测、整棵 SDK CLI/stdio MCP 进程树、PTY 和内置/接续 CLI、Node 脚本、Workflow/Automation shell 与 EJS Worker 均使用同一 OS 拒绝边界；会话权限模式、用户允许和额外目录不能撤销它。
-- macOS 使用系统 `sandbox-exec`；词法路径与 realpath 同时保护，阻止重命名私有根的祖先目录、任意 Mach/Apple Events/LaunchServices 委托、新 Unix socket 连接和跨沙箱进程窥探（仅例外保留系统 DNS/TLS 服务；DNS 的 Unix socket 只允许 root 所有的精确路径 `/private/var/run/mDNSResponder`，其它路径即使同名也不得放行）。普通项目文件和 IP 网络仍按既有权限使用。这是私有存储边界，不是通用工作区、网络或资源沙箱。Windows/Linux 尚无等效验证实现，相关执行入口必须失败，不得降级为裸进程；缺少系统隔离器亦然。
-- EJS 保留原有编译、输出及 Worker 资源上限，但一次性 Worker 置于受保护子进程；超时、取消和停止终止整个进程组。此决定取代旧设计“不创建 OS 子进程”的限制，不改变两项公开工具或模板语义。
-- Action Router 在任何公开传输/域分发前递归校验文件参数，包括数组、file URL、相对路径、别名和祖先目录；PermissionGuard 的宿主约束在用户允许策略之前执行。读取、写入、上传或导出私有存储必须拒绝并审计，不能依赖调用者声称的 source。邮箱只通过当前登录用户的 MailService 读取。
-- 范围限于 Synapse 管理的执行进程与工具接口。用户另行启动、拥有完整 OS 文件权限的独立程序和非 Synapse 启动的远端/本地 MCP 服务不受此进程边界控制；不声称本机邮箱已加密到能抵御系统用户。既有进程须在更新后重新创建，不能追溯为旧进程安装沙箱。
+- 2026-10-24 用户明确决定移除 Synapse 私有存储保护，取代此前强制隔离要求。SDK CLI/stdio MCP、PTY/内置 CLI、登录 shell 探测、Node 脚本和 Workflow/Automation 命令不再由 Synapse 包装 `sandbox-exec`，不因缺少此隔离器阻止 Windows/Linux 执行。
+- 不再注入 `data-v1` / `mail-assets` 路径拒绝规则、SDK 强制 sandbox / managedSettings，或在 Action Router / PermissionGuard 增加私有存储专用拦截。SDK 保留用户、项目及本地配置来源，原生沙箱由其自身配置决定；不得为移除此保护修改用户配置或强制关闭用户沙箱。
+- 工具审批、Persona/子 Agent 限制、项目写入边界、PermissionGuard 和 AuditSink 继续生效。邮箱服务仍按当前登录身份过滤，凭据原有加密与日志脱敏不变；操作系统用户权限范围内的本机文件不再有 Synapse 额外隔离。
+- EJS 恢复一次性 Worker Thread 执行，保留原有输入输出限制、内存上限、超时、取消及权限审计；Worker 不是安全沙箱。
+- 更新后需重建执行进程才能生效。已有 PTY/CLI/SDK 进程继承的 OS 限制无法原地撤销；不自动终止用户任务。
 
 ## Claude SDK 配置
 
-- 所有由 Agent Runtime 创建的 SDK 会话都由宿主注入当前 `userData/data-v1` 与 `userData/mail-assets` 私有根，不接受模型或 Renderer 提供/移除这些根。PreToolUse 和 canUseTool 在普通模式、免确认模式、额外目录授权及子 Agent 中拒绝直接文件读写和包含私有根的递归检索，同时检查词法路径与 realpath；SDK Read/Edit deny rules 补充文件工具限制。Bash 必须使用 SDK 操作系统沙箱，固定 enabled、failIfUnavailable、allowUnsandboxedCommands=false、空 excludedCommands 和 filesystem.disabled=false，拒绝私有根读写及显式脱离沙箱；依赖或平台不支持时不得无沙箱降级。私有目录尚未建立时仍保护其规范化目标，包含 SQLite 辅助文件与邮件资产。限制同时放入 SDK 受管设置与 flag settings，查询启动前通过 resolveSettings 核验实际生效值；父策略被 IT 管理层丢弃、存在脱离沙箱的命令排除项或读取豁免时停止，错误不得进入 MCP fallback 后重新启动查询。SDK Bash 沙箱之外，还必须对整个 SDK CLI 进程施加宿主私有存储保护，使其启动的 stdio MCP、插件命令、hooks 与后代进程继承同一拒绝规则。不得通过切换工具规避。
 - 邮箱账号与数据只通过当前登录身份的邮箱服务查询，工具缺失或失败必须停止该操作，禁止改用只读 SQL、文件、脚本、其他数据库或终端能力作为备用邮箱接口。不能依据跨用户本机记录推断当前用户的账号数量，也不能以相同 UID 推断两个账号连接同一服务器邮箱。
 
 - 修改 SDK 参数前核对官方文档和当前安装包类型。`Options.env` 是子进程环境；`Options.settings` 是更高优先级 inline/flag settings，两者不能混用。

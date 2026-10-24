@@ -1,3 +1,4 @@
+import type { Worker } from "node:worker_threads"
 import {
   HTML_GENERATION_MAX_CONCURRENCY,
   HTML_GENERATION_MAX_QUEUED,
@@ -14,7 +15,7 @@ import {
 import { HtmlGenerationError, normalizeHtmlGenerationError } from "../shared/errors"
 import type { HtmlGenerationInput, HtmlGenerationResult } from "../shared/schema"
 import { normalizeHtmlGenerationInput, validateHtmlGenerationOutput, type NormalizedHtmlGenerationInput } from "./normalization"
-import { launchHtmlGenerationWorker, type HtmlGenerationWorker, type HtmlGenerationWorkerFactory } from "./worker-launch"
+import { launchHtmlGenerationWorker, type HtmlGenerationWorkerFactory } from "./worker-launch"
 import { parseHtmlGenerationWorkerMessage } from "./worker-protocol"
 
 const EXECUTE_ACTION = "shell.exec" as const
@@ -195,7 +196,7 @@ export class HtmlGenerationService {
 
   private runWorker(input: NormalizedHtmlGenerationInput, signal: AbortSignal): Promise<HtmlGenerationResult> {
     if (signal.aborted) return Promise.reject(new HtmlGenerationError("RENDER_CANCELLED"))
-    let worker: HtmlGenerationWorker
+    let worker: Worker
     try {
       worker = launchHtmlGenerationWorker({
         baseDir: this.deps.workerBaseDir ?? __dirname,

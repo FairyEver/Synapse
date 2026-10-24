@@ -1,7 +1,6 @@
 import os from "node:os"
 import path from "node:path"
 import { statSync } from "node:fs"
-import type { ProtectProcess } from "../../../electron/runtime/process/private-storage-protection"
 
 import { findEnvEntry, resolveCachedLoginShellPath } from "../../../electron/runtime/process/shell-environment"
 import type { TerminalEnvironment, TerminalLaunchLayer } from "../shared/schema"
@@ -156,7 +155,6 @@ export function mergeTerminalEnvironment(
 }
 
 export function resolveTerminalEnvironment(input: {
-  readonly protectProcess?: ProtectProcess
   readonly baseEnv?: NodeJS.ProcessEnv
   readonly platform?: NodeJS.Platform
   readonly effectivePath?: string | null
@@ -181,7 +179,7 @@ export function resolveTerminalEnvironment(input: {
     if (entry?.value !== undefined) env[key] = entry.value
   }
   env.PATH = input.effectivePath
-    ?? resolveCachedLoginShellPath(baseEnv, input.protectProcess)
+    ?? resolveCachedLoginShellPath(baseEnv)
     ?? findEnvEntry(baseEnv, "PATH", platform)?.value
     ?? ""
   env.TERM = "xterm-256color"

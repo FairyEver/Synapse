@@ -308,7 +308,7 @@ async function dispatchAuthorizedCore(
   const service = deps.service
   if (action === "app.terminal.capabilities.get") {
     terminalRequestBaseSchema.parse(params)
-    return buildCapabilities(deps.platform ?? process.platform, service.persistenceProtection, service.privateStorageProtection)
+    return buildCapabilities(deps.platform ?? process.platform, service.persistenceProtection)
   }
   if (action === "app.terminal.diagnostics.get") {
     // No pagination: this returns one fixed snapshot and has no collection to page through.
@@ -672,7 +672,7 @@ async function dispatchAuthorizedCore(
   throw terminalContractError("unsupported", "capability")
 }
 
-function buildCapabilities(platform: NodeJS.Platform, persistenceProtection: "available" | "unavailable" | "degraded", privateStorageProtection: "required" | "unavailable") {
+function buildCapabilities(platform: NodeJS.Platform, persistenceProtection: "available" | "unavailable" | "degraded") {
   return {
     generatedAt: new Date().toISOString(),
     capabilities: TERMINAL_CAPABILITY_CATALOG.map((item) => ({
@@ -700,7 +700,6 @@ function buildCapabilities(platform: NodeJS.Platform, persistenceProtection: "av
     view: { support: "supported", emulator: "xterm-headless", emulatorVersion: "6.0.0" },
     attention: { support: "degraded", defaultState: "unknown", detector: "passive-terminal-v1" },
     persistenceProtection,
-    privateStorageProtection,
     executionIsolation: "none",
     executionIdentity: "current_os_user",
     processResourceIsolation: "none",

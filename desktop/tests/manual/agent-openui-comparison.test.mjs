@@ -177,7 +177,7 @@ for (const file of replayFiles) {
   })
 }
 
-it.runIf(process.env.SYNAPSE_OPENUI_PRODUCTION_SMOKE === "1")("production session: hi retains native tools, rules and private storage protection", async () => {
+it.runIf(process.env.SYNAPSE_OPENUI_PRODUCTION_SMOKE === "1")("production session: hi retains native tools and rules", async () => {
   const { ClaudeSDKSession } = await import("../../electron/services/agent-runtime/claude-sdk-session")
   const { discoverStagingSkillOverrides } = await import("../../electron/services/agent-runtime/staging-skill-overrides")
   const home = process.env.HOME, rootDirectory = path.resolve(process.cwd(), "..")
@@ -186,7 +186,6 @@ it.runIf(process.env.SYNAPSE_OPENUI_PRODUCTION_SMOKE === "1")("production sessio
   const cwd = path.join(home,"Library/Application Support/Synapse/agent-workspaces/default")
   const referencePath = path.join(rootDirectory,"desktop/resources/agent-openui-reference.md")
   const session = new ClaudeSDKSession({ projectId:"openui-production-smoke", conversationId:"openui-production-smoke", providerId:"deepseek", cwd, env:settings.env, mode:"default", systemPrompt:appendGeneratedUiPrompt(undefined,mode === "candidate" ? referencePath : undefined), generatedUiReferencePath:mode === "candidate" ? referencePath : undefined,
-    privateStorageRoots:[path.join(home,"Library/Application Support/Synapse/data-v1"),path.join(home,"Library/Application Support/Synapse/mail-assets")],
     sdkSettings:{ deniedMcpServers:Object.keys(config.mcpServers ?? {}).filter(name => name !== "synapse-mcp").map(serverName => ({serverName})), skillOverrides:mode === "candidate" ? await discoverStagingSkillOverrides(cwd) : {} },
     synapseToolRouter:{cwd,settingSources:["user","project","local"],executeTool:async () => {throw new Error("Fixture must not invoke business tools")}} })
   const evidence={tools:[],mcpServers:[],usage:null,toolCalls:[],reply:""}, timer=setTimeout(() => { void session.close() },120_000)

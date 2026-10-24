@@ -72,7 +72,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 固定例外：
 
-- 邮箱私有存储保护扩展到受管 stdio MCP、CLI/PTY、脚本、Workflow/Automation shell、EJS 子进程及公开文件参数。Terminal capabilities 新增 `privateStorageProtection` 状态；`executionIsolation=none` 仍指无通用工作区沙箱。Mail 44、Terminal 49、HTML Generator 2 及全局 340 capability / 336 MCP 索引、22 个 System App 和其他注册数量不变；不新增工具、输入字段或权限开关。系统 Skill 与安全规范同步。
+- 2026-10-24 按用户决定移除 Synapse 私有存储沙箱及专用路径拦截。Terminal capabilities 移除 `privateStorageProtection` 字段，继续报告 `executionIsolation=none`、当前 OS 用户身份和原有终端持久化保护。Mail 44、Terminal 49、HTML Generator 2 及全局 340 capability / 336 MCP 索引、22 个 System App 和其他注册数量不变；不新增动作、输入字段或权限开关。MCP 描述、系统 Skill 与安全规范同步。
 
 - Mail 复合提示词发现区分“回复/转发刚才的邮件并创建草稿”和“打开/编辑已有草稿”；前者优先 draft.create，后者保持 draft.get。仅调整 search 预路由并同步系统 Skill，不改变44项 Mail 工具、schema、权限或其他注册数量；仅预览不授权发送。
 - Mail 的 AI 路由将普通邮件请求固定到 mail，仅显式站内信或其类型引用进入 mail_internal；单一邮箱直接选用。既有 message.list/count/search.start 增加发件人、收件人、主题、附件、独立收件时间过滤，摘要增加 receivedAt；旧数据在既有同步批次内补齐。系统 Skill 新增41条场景配方，API 参考随 schema 生成。不新增公开动作、IPC、权限、System App、Dock、Workflow、Automation 或 Deep Link；Mail 仍为44项、站内信17项，全局340 capability / 336 MCP 索引及22个 System App 不变。
@@ -279,7 +279,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-24 外部邮箱地址显示修复：既有 message.get 输出增加可选 headers.sender，补充原始名称与代发说明；不新增动作、IPC、权限或注册入口，邮箱仍为 44 项。
 
-2026-10-24 邮箱身份隔离加固：account.list 描述与系统 Skill 明确账号只能来自当前登录身份，工具不可用时不得读取私有数据库或缓存兜底；Agent Runtime 的 SDK 文件工具预检与强制 Bash 沙箱保护私有存储。不新增动作、IPC、权限或注册入口，邮箱仍为 44 项，能力表及总数不变。
+2026-10-24 邮箱身份范围：account.list 与系统 Skill 仍以当前登录身份的结果为准，工具不可用时不以本机缓存推断账号。后续按用户决定移除 Agent 私有路径预检与宿主强制沙箱，邮箱服务身份过滤保持不变。不新增动作、IPC 或注册入口，邮箱仍为 44 项。
 
 2026-10-24：邮箱写信新增按部门选择实际 To/Cc，复用 `app_mail_internal_organization_list` / `app_mail_internal_organization_members_list`（成员返回可空 contactEmail）作外部邮件只读地址解析。无新增工具、App、深链或注册项，mail 44 / mail_internal 17 数量不变。缺失联系邮箱必须提示并由用户明确排除，组织 ID 不进入外部发送 payload。
 

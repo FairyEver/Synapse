@@ -296,7 +296,7 @@ All mutations have caller-scoped idempotency, operation id, before and after rev
 
 ## Execution environment and resource limits
 
-Terminal runs as the current OS user with `executionIsolation=none` and `processResourceIsolation=none`. Since 2026-10-24, `privateStorageProtection=required` adds a host-owned OS deny boundary for Synapse private stores to all PTYs and descendants, including managed CLI. Missing protection blocks launch. This does not add a general workspace, IP network, CPU, memory, or process sandbox. See `docs/agents/agent-runtime-security.md` for platform and scope limits.
+Terminal runs as the current OS user with `executionIsolation=none` and `processResourceIsolation=none`. On 2026-10-24 the user explicitly removed the private-storage OS deny boundary and its capability field. PTYs and managed CLI descendants use normal OS permissions; tool authorization, audit and terminal persistence encryption remain in effect.
 
 UI and MCP share `TerminalEnvironmentResolver`. Implementation first searches for existing safe Shell or login-environment utilities. The resolver positively constructs the environment from platform-tested base sources and allowed variables and does not copy all Electron process environment. A shared sensitive-variable source boundary excludes Synapse internal authentication, provider, update, and debug material. Explicit extra variables are encrypted, separately authorized, and audited by key or category only. Shell profiles may still load user credentials.
 
@@ -448,7 +448,7 @@ The implementation task synchronizes:
 - No permanent complete history promise.
 - No arbitrary binary raw-input promise.
 - No Shell integration injection by default.
-- No general workspace, CPU, memory, network, or process-count isolation. The mandatory Synapse private-storage OS deny boundary is the narrow exception (2026-10-24).
+- No general workspace, CPU, memory, network, process-count or Synapse private-storage isolation. The user explicitly removed the private-storage exception on 2026-10-24.
 - No guarantee that detached daemons or external services terminate with the PTY.
 - No ordinary backup of Terminal output, checkpoints, or plaintext command bodies.
 - No Terminal-specific authentication or grant UI for the local MCP path.

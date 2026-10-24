@@ -13,8 +13,6 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { lstat, realpath } from "node:fs/promises"
-import { spawn } from "node:child_process"
-import { PrivateStorageProtection } from "../../runtime/process/private-storage-protection"
 import path from "node:path"
 
 import {
@@ -85,7 +83,6 @@ import {
   isReplayedUserMessage,
 } from "./agent-file-checkpoint-tracker"
 import { stopQueryAtBoundary } from "./query-stop-barrier"
-import { AgentPrivateStoragePolicy, PRIVATE_STORAGE_DENIED_MESSAGE } from "./private-storage-policy"
 
 export interface QueryLike {
   next(): Promise<IteratorResult<SDKMessage, void>>
@@ -133,7 +130,6 @@ export interface ClaudeSDKSessionOptions {
   readonly toolPolicy?: ClaudeSDKToolPolicy
   readonly abortSignal?: AbortSignal
   readonly additionalDirectories?: readonly string[]
-  readonly privateStorageRoots?: readonly string[]
   readonly sdkSettings?: ClaudeSDKRuntimeSettings
   readonly mcpServers?: Options["mcpServers"]
   readonly expectedMcpServerNames?: readonly string[]
@@ -231,7 +227,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly routerSubagentToolAccess: NonNullable<ClaudeSDKSessionOptions["routerSubagentToolAccess"]>
   private readonly generatedUiReferencePath: string | undefined
   private readonly cwd: string
-  private readonly privateStoragePolicy: AgentPrivateStoragePolicy
   private readonly query: QueryLike
   private additionalDirectories: readonly string[]
   private readonly abortController: AbortController | undefined
@@ -276,7 +271,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.providerId = options.providerId
     this.cwd = path.resolve(options.cwd)
     this.generatedUiReferencePath = options.generatedUiReferencePath
-    this.privateStoragePolicy = new AgentPrivateStoragePolicy(options.privateStorageRoots ?? [])
     this.contextUsageTracker = new AgentContextUsageTracker()
     this.fileCheckpointTracker = new AgentFileCheckpointTracker({
       cwd: this.cwd,
@@ -536,13 +530,11 @@ export class ClaudeSDKSession implements AgentLiveSession {
     options: ClaudeSDKSessionOptions,
     packagedRuntime: PackagedClaudeRuntimeStatus,
   ): Record<string, unknown> {
-    const protectProcess = this.privateStoragePolicy.roots.length
-      ? new PrivateStorageProtection(this.privateStoragePolicy.roots).protectProcess : undefined
     const hostEnv = buildHostEnvironment({
       baseEnv: options.hostEnv ?? process.env,
       shellPath: options.resolveShellPath
         ? options.resolveShellPath()
-        : resolveCachedLoginShellPath(options.hostEnv ?? process.env, protectProcess),
+        : resolveCachedLoginShellPath(options.hostEnv ?? process.env),
       appendPathEntries: [
         options.nodeRuntimeBinPath ?? process.env.SYNAPSE_NODE_RUNTIME_BIN ?? "",
       ],
@@ -564,26 +556,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
         disableAllHooks: options.allowPluginHooks === true ? false : true,
         ...options.sdkSettings,
         env: providerSettingsEnv(options.env),
-        ...(this.privateStoragePolicy.roots.length
-          ? { permissions: { deny: this.privateStoragePolicy.permissionRules() } }
-          : {}),
       },
       env: sdkEnv,
       includePartialMessages: true,
       canUseTool: (toolName, input, context) => this.canUseTool(toolName, input, context),
-      sandbox: this.privateStoragePolicy.sandbox(),
-      managedSettings: this.privateStoragePolicy.managedSettings(),
-    }
-    if (protectProcess) {
-      queryOptions.spawnClaudeCodeProcess = launch => {
-        const protectedLaunch = protectProcess(launch)
-        const child = spawn(protectedLaunch.command, [...protectedLaunch.args], {
-          cwd: launch.cwd, env: launch.env, signal: launch.signal, stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
-        })
-        if (queryOptions.stderr) child.stderr.on("data", chunk => queryOptions.stderr?.(String(chunk)))
-        else child.stderr.resume()
-        return child
-      }
     }
     if (options.mcpServers && Object.keys(options.mcpServers).length > 0) queryOptions.mcpServers = options.mcpServers
     if (options.onElicitation) queryOptions.onElicitation = options.onElicitation
@@ -597,8 +573,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       ;(queryOptions as Record<string, unknown>).agent = options.agent
     }
     if (options.agents && Object.keys(options.agents).length > 0) queryOptions.agents = options.agents
-    queryOptions.systemPrompt = withConfiguredWorkspaceRoot(options.systemPrompt, this.cwd,
-      this.privateStoragePolicy.roots.length ? PRIVATE_STORAGE_DENIED_MESSAGE : undefined)
+    queryOptions.systemPrompt = withConfiguredWorkspaceRoot(options.systemPrompt, this.cwd)
     if (options.tools !== undefined) queryOptions.tools = options.tools
     if (options.disallowedTools?.length) queryOptions.disallowedTools = [...options.disallowedTools]
     const queryDirectories = this.additionalDirectories
@@ -626,11 +601,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
         matcher: "*",
         hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
           if (this.closed || this.abortRequested) return { continue: false }
-          const record = input as unknown as Record<string, unknown>
-          if (record.hook_event_name === "PreToolUse" && typeof record.tool_name === "string"
-            && await this.privateStoragePolicy.denies(record.tool_name, asRecord(record.tool_input) ?? {}, this.cwd)) {
-            return denyToolUse(PRIVATE_STORAGE_DENIED_MESSAGE)
-          }
           const workspaceBoundaryResult = await this.guardConfiguredWorkspaceWrite(input)
           if (workspaceBoundaryResult) return workspaceBoundaryResult
           await this.fileCheckpointTracker.captureBeforeTool(input)
@@ -723,9 +693,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
   ): Promise<PermissionResult> {
     if (this.closed) return { behavior: "deny", message: AGENT_SESSION_CLOSED_MESSAGE }
     if (context.signal.aborted) return permissionCancelledResult()
-    if (await this.privateStoragePolicy.denies(toolName, input, this.cwd)) {
-      return { behavior: "deny", message: PRIVATE_STORAGE_DENIED_MESSAGE }
-    }
     if (toolName === ASK_USER_QUESTION_TOOL_NAME) {
       return this.requestUserQuestion(input, context)
     }
@@ -781,7 +748,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (policyResult) return policyResult
 
     // This host-owned, bundled reference is the sole additional automatic read.
-    // Private storage, Persona and subagent restrictions have already run above.
+    // Persona and subagent restrictions have already run above.
     if (!context.agentID && effectiveToolName === "Read" && this.generatedUiReferencePath
       && typeof effectiveInput.file_path === "string"
       && path.resolve(this.cwd, effectiveInput.file_path) === this.generatedUiReferencePath) {
@@ -822,10 +789,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
         ? (updatedInput) => ({ toolName: routedInvoke.toolName, arguments: updatedInput })
         : undefined,
     )
-    if (result.behavior === "allow"
-      && await this.privateStoragePolicy.denies(toolName, result.updatedInput ?? input, this.cwd)) {
-      return { behavior: "deny", message: PRIVATE_STORAGE_DENIED_MESSAGE }
-    }
     return result
   }
 
@@ -1307,7 +1270,6 @@ const WORKSPACE_WRITE_BOUNDARY_MESSAGE = "文件写入仅允许当前项目或�
 function withConfiguredWorkspaceRoot(
   systemPrompt: Options["systemPrompt"],
   cwd: string,
-  privateStorageBoundary?: string,
 ): NonNullable<Options["systemPrompt"]> {
   const workspaceBoundary = [
     "Synapse configured the exact workspace root for this session as",
@@ -1315,7 +1277,6 @@ function withConfiguredWorkspaceRoot(
     "Treat that exact directory as the project root.",
     "Resolve relative file paths and project commands from it.",
     "Do not substitute an ancestor repository root.",
-    ...(privateStorageBoundary ? [privateStorageBoundary] : []),
   ].join(" ")
 
   if (!systemPrompt) {

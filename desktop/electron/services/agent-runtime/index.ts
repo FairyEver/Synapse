@@ -277,10 +277,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       )
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
-        privateStorageRoots: [
-          path.join(app.getPath("userData"), "data-v1"),
-          path.join(app.getPath("userData"), "mail-assets"),
-        ],
         workDir: ctx.projectMeta.workspacePath,
         getDisabledMcpServers: async () => configService ? (await configService.load()).agent.disabledMcpServers ?? [] : [],
         managedKnowledgeBase: isManagedKnowledgeBase,

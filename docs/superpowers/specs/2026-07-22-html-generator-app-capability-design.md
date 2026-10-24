@@ -85,7 +85,7 @@ Every `size` is a UTF-8 byte count. String generation returns the complete rende
 - No App deep link, template/data picker, drag and drop, clipboard auto-read, remote import, template asset, history, autosave, crash recovery, or DataRepository namespace.
 - No CodeMirror, syntax highlighting, completion, formatting, line numbers, or editor-specific dependency.
 - No caller-selectable timeout, memory, concurrency, queue, or encoding setting.
-- No general JavaScript security sandbox. Updated 2026-10-24 by the user-delegated implementation decision: preserve EJS in a one-shot Worker inside an OS-protected child process that denies Synapse private storage; unavailable protection fails closed. This supersedes the former no-OS-child-process constraint.
+- No JavaScript security sandbox or OS child process. On 2026-10-24 the user explicitly removed Synapse private-storage protection; EJS returns to a one-shot Worker Thread with the existing resource limits and permission/audit boundary.
 - No first-version Linux release commitment.
 
 ## EJS execution contract
@@ -182,7 +182,7 @@ core.html-generator-file
 
 `core.html-generator-file` is a stateless singleton created by `createHtmlGenerationToFileService`. It depends on `core.html-generator` and `core.text-file-writer`, owns no queue, Worker, permission system, file concurrency, or stop behavior, and releases the render slot after the checked result before calling Writer. Only the core service cancels queued work and terminates Workers during shutdown.
 
-Every render launches a protected child process hosting a new Worker Thread with `resourceLimits.maxOldGenerationSizeMb = 128`. The host sends Worker input over IPC, drains child stdout/stderr, and terminates the child process group on cancellation, timeout or shutdown. The shared private-storage OS boundary and platform fail-closed rules are defined in `docs/agents/agent-runtime-security.md`. Workers are never reused and no automatic retry or main-process fallback exists. `ERR_WORKER_OUT_OF_MEMORY`, in the absence of an earlier terminal state, becomes `RENDER_MEMORY_LIMIT`. The limit covers the Worker V8 old-generation heap, not complete process memory or security isolation.
+Every render launches a new Worker Thread with `resourceLimits.maxOldGenerationSizeMb = 128`. The host drains Worker stdout/stderr and terminates the Worker on cancellation, timeout or shutdown. Workers are never reused and no automatic retry or main-process execution fallback exists. `ERR_WORKER_OUT_OF_MEMORY`, in the absence of an earlier terminal state, becomes `RENDER_MEMORY_LIMIT`. The limit covers the Worker V8 old-generation heap, not complete process memory or security isolation.
 
 Workers use separate stdout and stderr pipes. The main process immediately drains and discards both streams; console or standard-stream content never enters logs, audit, HTML, or errors. Stream failures produce content-free diagnostics only. This is a log-confidentiality measure, not a general exfiltration boundary.
 

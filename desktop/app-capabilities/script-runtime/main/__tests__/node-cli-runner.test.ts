@@ -15,14 +15,6 @@ afterEach(async () => {
 })
 
 describe("runNodeCliScript", () => {
-  it("does not start an unprotected process if the host protection fails", async () => {
-    const root = await createRoot(), spawnProcess = vi.fn()
-    const result = await runNodeCliScript(requestFor(root), { executablePath: process.execPath, baseEnv: process.env,
-      spawnProcess: spawnProcess as never, protectProcess: () => { throw new Error("Protection unavailable") },
-    })
-    expect(result).toMatchObject({ status: "failed", code: "RUNNER_START_FAILED" })
-    expect(spawnProcess).not.toHaveBeenCalled()
-  })
   it("rejects non-strict input without invoking toJSON or spawning Node.js", async () => {
     let toJsonCalls = 0
     const input = { retained: true }
