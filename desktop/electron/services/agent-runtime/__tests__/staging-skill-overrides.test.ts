@@ -9,10 +9,10 @@ describe("SY staging Skill overrides", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sy-skill-overrides-"))
     try {
       const config = path.join(root, "config"), project = path.join(root, "project"), cwd = path.join(project, "nested")
-      const entries = [path.join(config, "skills/.synapse-install-dir-Ab1234"), path.join(config, "skills/synapse-skill"), path.join(config, "skills/.custom-hidden"), path.join(project, ".claude/skills/.synapse-install-dir-Zz9876")]
+      const entries = [path.join(config, "skills/.synapse-install-dir-Ab1234"), path.join(config, "skills/synapse-skill"), path.join(config, "skills/.custom-hidden"), path.join(project, ".claude/skills/.synapse-install-dir-Zz9876"), path.join(config, "skills/.synapse-install-dir-p123-Ab1234")]
       for (const dir of entries) { await fs.mkdir(dir, { recursive: true }); await fs.writeFile(path.join(dir, "SKILL.md"), "---\nname: synapse-skill\n---\nFixture") }
       await fs.mkdir(cwd, { recursive: true })
-      expect(await discoverStagingSkillOverrides(cwd, config)).toEqual({ ".synapse-install-dir-Ab1234": "off", ".synapse-install-dir-Zz9876": "off" })
+      expect(await discoverStagingSkillOverrides(cwd, config)).toEqual({ ".synapse-install-dir-Ab1234": "off", ".synapse-install-dir-Zz9876": "off", ".synapse-install-dir-p123-Ab1234": "off" })
       for (const dir of entries) expect(await fs.readFile(path.join(dir, "SKILL.md"), "utf8")).toBe("---\nname: synapse-skill\n---\nFixture")
     } finally { await fs.rm(root, { recursive: true, force: true }) }
   })

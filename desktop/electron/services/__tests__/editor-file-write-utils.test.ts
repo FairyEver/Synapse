@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
+import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -110,6 +110,41 @@ describe("editor file write utils", () => {
       "Failed to safely restore atomic swap backup",
       expect.objectContaining({ errorName: "Error", targetName: "skill" }),
     )
+  })
+
+  it("keeps an in-progress Skill out of the editor's top-level Skill discovery", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-write-"))
+    tempDirs.push(tempDir)
+    const targetPath = path.join(tempDir, "skill")
+
+    await replaceDirectoryAtomically(targetPath, async (stagingDirectoryPath) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "new skill")
+      const entries = await readdir(tempDir)
+      for (const entry of entries) {
+        await expect(lstat(path.join(tempDir, entry, "SKILL.md")))
+          .rejects.toMatchObject({ code: "ENOENT" })
+      }
+    })
+
+    expect(await readdir(tempDir)).toEqual(["skill"])
+    expect(await readdir(targetPath)).toEqual(["SKILL.md"])
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("new skill")
+  })
+
+  it("removes the entire staging container after population fails and preserves the installed Skill", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-editor-write-"))
+    tempDirs.push(tempDir)
+    const targetPath = path.join(tempDir, "skill")
+    await mkdir(targetPath)
+    await writeFile(path.join(targetPath, "SKILL.md"), "installed")
+
+    await expect(replaceDirectoryAtomically(targetPath, async (stagingDirectoryPath) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "partial")
+      throw new Error("attachment copy interrupted")
+    })).rejects.toThrow("attachment copy interrupted")
+
+    expect(await readdir(tempDir)).toEqual(["skill"])
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("installed")
   })
 
   it("rejects a target directory that appears during pre-swap validation", async () => {

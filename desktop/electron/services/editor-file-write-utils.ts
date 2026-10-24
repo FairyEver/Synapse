@@ -166,15 +166,23 @@ async function replaceDirectoryAtomically(
 
   await mkdir(parentDirectoryPath, { recursive: true })
 
-  const stagingDirectoryPath = await mkdtemp(path.join(parentDirectoryPath, ".synapse-install-dir-"))
+  // Keep SKILL.md one level below the editor's discoverable Skill entries. The
+  // container survives a killed process so startup recovery can identify it.
+  const stagingContainerPath = await mkdtemp(path.join(parentDirectoryPath, `.synapse-install-dir-p${process.pid}-`))
+  const stagingDirectoryPath = path.join(stagingContainerPath, "payload")
 
   try {
+    await writeFile(path.join(stagingContainerPath, "transaction.json"), JSON.stringify({
+      version: 1,
+      ownerPid: process.pid,
+      targetName: path.basename(targetPath),
+    }), { encoding: "utf8", flag: "wx", mode: 0o600 })
+    await mkdir(stagingDirectoryPath)
     await populate(stagingDirectoryPath)
     await swapPathAtomically(stagingDirectoryPath, targetPath, options)
-  } catch (error) {
-    await rm(stagingDirectoryPath, { recursive: true, force: true })
+  } finally {
+    await rm(stagingContainerPath, { recursive: true, force: true })
       .catch((err) => logger.warn("Failed to clean up staging directory", createEditorWriteErrorLogMeta(err)))
-    throw error
   }
 }
 

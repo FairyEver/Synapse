@@ -63,7 +63,7 @@ vi.mock("electron", () => {
     },
     dialog: {},
     ipcMain: { handle: () => {}, on: () => {} },
-    shell: {},
+    shell: { trashItem: vi.fn() },
     Tray: class {},
     Menu: { buildFromTemplate: () => ({}) },
     Notification,
@@ -145,6 +145,43 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreSynapseSkillDescriptor.criticality).toBe("degraded")
     expect(coreSynapseSkillDescriptor.dependsOn).toBeUndefined()
     expect(coreSynapseSkillDescriptor.create(makeFakeContext())).toBeDefined()
+  })
+
+  it("runs abandoned editor installation recovery in the background with filesystem security", { timeout: bootstrapImportTimeoutMs }, async () => {
+    const { coreEditorInstallRecoveryDescriptor } = await importBootstrap()
+    expect(coreEditorInstallRecoveryDescriptor.startupPhase).toBe("background")
+    expect(coreEditorInstallRecoveryDescriptor.dependsOn).toEqual([
+      "core.config", "core.permission-guard", "core.audit-sink",
+    ])
+    const fs = await import("node:fs/promises")
+    const path = await import("node:path")
+    const os = await import("node:os")
+    const { shell } = await import("electron")
+    const { createPermissionGuard, InMemoryAuditSink } = await import("../../runtime/security")
+    const scanRoots = await import("../../services/editor-scan-roots")
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sy-bootstrap-install-recovery-"))
+    const skills = path.join(root, "skills")
+    const staging = path.join(skills, ".synapse-install-dir-Ab1234")
+    const recovered = path.join(root, "recovered")
+    try {
+      for (const directory of [staging, path.join(skills, "synapse-skill")]) {
+        await fs.mkdir(directory, { recursive: true })
+        await fs.writeFile(path.join(directory, ".synapse.json"), JSON.stringify({ id: "synapse-skill" }))
+      }
+      const old = new Date(Date.now() - 48 * 60 * 60 * 1000)
+      await fs.utimes(staging, old, old)
+      vi.spyOn(scanRoots, "listTrustedSkillRoots").mockResolvedValue([{ scope: "global", path: skills, editors: [] }])
+      vi.mocked(shell.trashItem).mockImplementation(async directory => fs.rename(directory, recovered))
+      const ports = { "core.permission-guard": createPermissionGuard(), "core.audit-sink": new InMemoryAuditSink() }
+      const context = { ...makeFakeContext(), registry: { get: (id: keyof typeof ports) => ports[id] } } as never
+      const instance = await coreEditorInstallRecoveryDescriptor.create(context)
+      await coreEditorInstallRecoveryDescriptor.start?.(instance, context)
+      await expect(fs.lstat(staging)).rejects.toMatchObject({ code: "ENOENT" })
+      await expect(fs.readFile(path.join(recovered, ".synapse.json"), "utf8")).resolves.toContain("synapse-skill")
+      expect(ports["core.audit-sink"].list().some(event => event.resource === staging && event.outcome === "allowed")).toBe(true)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
   })
 
   it("coreTextExtractorDescriptor owns the shared extraction service", async () => {

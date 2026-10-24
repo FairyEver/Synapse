@@ -3,9 +3,10 @@ import os from "node:os"
 import path from "node:path"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import { isFileNotFoundError } from "../fs-utils"
+import { parseInstallStagingName } from "../editor-install-staging-name"
 
 export function isStagingSkillName(name: string): boolean {
-  return /^\.synapse-install-dir-[A-Za-z0-9]{6}$/.test(name)
+  return parseInstallStagingName(name) !== null
 }
 
 /** Session-local visibility only; never mutate or delete the user's Skill files. */

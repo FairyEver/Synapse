@@ -20,7 +20,7 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 
 ## SDK 原生上下文生命周期
 
-- SY 会话通过 SDK `settings.skillOverrides` 隐藏已发现的 `.synapse-install-dir-` 加 6 位字母数字暂存目录别名；正式 Skill 与其它来源保持可见，SY slash 索引同样忽略暂存目录。不改写、删除用户全局 Skill/config，不把其它隐藏目录一起排除。设计与前后模拟见 `docs/superpowers/specs/2026-10-24-agent-openui-on-demand-design.md`。
+- SY 会话通过 SDK `settings.skillOverrides` 隐藏已发现的安装暂存别名：旧 `.synapse-install-dir-<6位字母数字>` 与新 `.synapse-install-dir-p<PID>-<6位字母数字>`；正式 Skill 与其它来源保持可见，SY slash 索引同样忽略暂存目录。Agent 过滤不改写、删除用户全局 Skill/config，不把其它隐藏目录一起排除。设计与前后模拟见 `docs/superpowers/specs/2026-10-24-agent-openui-on-demand-design.md`。安装器另有后台暂存回收，只将确认遗弃的安装材料移入废纸篓，不修改正式 Skill 或全局配置；边界见 `docs/superpowers/specs/2026-10-24-skill-install-staging-recovery-design.md`。
 
 - 设置中的“Agent 使用的 MCP”只读发现本机配置、所选项目、已安装插件与 SY 连接器；不连接 MCP 或发起模型请求，不把配置清单报成实际连接。`agent.disabledMcpServers` 仅保存 SY 的额外禁用名，不修改用户 Claude Code 配置；原生 `settings.deniedMcpServers` 在 discovery、官方查询与第三方 strict 查询启动前施加，保留原有 settingSources、规则、Skill 和受管策略。策略变化在下一轮通过停止屏障关闭 live session 并 resume 原 SDK session，不中断任务、不重放请求、不清除历史；启用只能撤销 SY 自己的禁用。`synapse-mcp` / `synapse-tool-router` 是内部保留名。入口与清单限制见 `docs/superpowers/specs/2026-10-24-agent-mcp-settings-design.md`。
 

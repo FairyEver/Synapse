@@ -8,13 +8,16 @@ describe.skipIf(process.env.SYNAPSE_RUN_NATIVE_MCP_TEST !== "1")("native SDK sta
   it("excludes staging aliases while retaining canonical and ordinary skills without edits", async () => {
     const sdk = await import("@anthropic-ai/claude-agent-sdk")
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sy-native-skills-"))
-    const names = [".synapse-install-dir-Ab1234", ".synapse-install-dir-Zz9876", "synapse-skill", "ordinary"]
+    const names = [".synapse-install-dir-Ab1234", ".synapse-install-dir-Zz9876", ".synapse-install-dir-p123-Ab1234", "synapse-skill", "ordinary"]
     const body = (name: string) => `---\nname: ${name.startsWith(".synapse") ? "synapse-skill" : name}\ndescription: Read only fixture skill.\n---\nFixture instructions.\n`
     try {
       for (const name of names) {
         const dir = path.join(root, "skills", name)
         await fs.mkdir(dir, { recursive: true }); await fs.writeFile(path.join(dir, "SKILL.md"), body(name))
       }
+      const payload = path.join(root, "skills", ".synapse-install-dir-p123-Pay123", "payload")
+      await fs.mkdir(payload, { recursive: true })
+      await fs.writeFile(path.join(payload, "SKILL.md"), body("nested-never-leak"))
       const overrides = await discoverStagingSkillOverrides(root, root)
       for (const filtered of [false, true]) {
         let release: (() => void) | undefined
@@ -28,7 +31,8 @@ describe.skipIf(process.env.SYNAPSE_RUN_NATIVE_MCP_TEST !== "1")("native SDK sta
           const commands = (await query.supportedCommands()).map(command => command.name)
           expect(commands).toContain("synapse-skill")
           expect(commands).toContain("ordinary")
-          expect(commands.filter(name => name === "synapse-skill")).toHaveLength(filtered ? 1 : 3)
+          expect(commands).not.toContain("nested-never-leak")
+          expect(commands.filter(name => name === "synapse-skill")).toHaveLength(filtered ? 1 : 4)
         } finally { clearTimeout(timer); release?.(); query.close() }
       }
       for (const name of names) expect(await fs.readFile(path.join(root, "skills", name, "SKILL.md"), "utf8")).toBe(body(name))

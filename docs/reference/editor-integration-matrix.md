@@ -12,6 +12,7 @@
 
 - Skill 目录名优先使用显式 `name`，只有旧数据缺少 `name` 时才回退为标题 slug，再不行才回退到 `contentId`
 - 安装 Skill 时，Synapse 会统一写出 `SKILL.md`，并额外写入 `.synapse.json` 作为自身替换追踪文件
+- Skill 安装先写入同文件系统的 `.synapse-install-dir-p<PID>-<6位随机字符>/payload/`，容器根不放 `SKILL.md`；成功或普通失败都在 finally 清理容器。后台启动维护只扫描适配器声明的全局与已配置项目 Skill 根：新容器须确认所属 PID 不存在，旧六位暂存目录须至少 24 小时且有与正式安装匹配的 SY 身份，才移入系统废纸篓；活进程、未知条目、符号链接与恢复备份保留。空的旧容器可在 24 小时后回收。操作经过权限检查、审计与执行前复查；失败保留，下次启动重试。详见 `docs/superpowers/specs/2026-10-24-skill-install-staging-recovery-design.md`。
 - Synapse 当前写出的 `SKILL.md` 一律包含 YAML frontmatter，至少写 `name` 和 `description`
 - Skill 附件保留原相对路径，例如 `scripts/deploy.sh`、`references/guide.md`
 

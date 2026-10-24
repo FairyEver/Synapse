@@ -188,6 +188,7 @@ import { configStore } from "../services/config-store"
 import { createClaudeCodeTerminalSession } from "../modules/agent/claude-code-terminal"
 import { createLocalAgentConversation } from "../modules/agent/conversation-creation"
 import { listTrustedSkillRoots } from "../services/editor-scan-roots"
+import { EditorInstallStagingRecovery } from "../services/editor-install-staging-recovery"
 import { logStore, createMainLogger } from "../services/log-store"
 import {
   assertKnowledgeBaseStorageMigrationInactive,
@@ -723,6 +724,28 @@ export const coreSynapseSkillDescriptor: ServiceDescriptor<SynapseSkillService> 
   criticality: "degraded",
   create() {
     return createSynapseSkillService()
+  },
+}
+
+export const coreEditorInstallRecoveryDescriptor: ServiceDescriptor<EditorInstallStagingRecovery> = {
+  id: "core.editor-install-recovery",
+  startupPhase: "background",
+  criticality: "degraded",
+  dependsOn: ["core.config", "core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return new EditorInstallStagingRecovery({
+      listSkillDirectories: async () => (await listTrustedSkillRoots()).map(root => root.path),
+      trashItem: directory => shell.trashItem(directory),
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      logger: ctx.logger.child("editor-install-recovery"),
+    })
+  },
+  async start(instance) {
+    await instance.recover()
+  },
+  stop(instance) {
+    instance.stop()
   },
 }
 

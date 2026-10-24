@@ -132,6 +132,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.secrets",
         "core.side-channel",
         "core.synapse-skill",
+        "core.editor-install-recovery",
         "core.system-app-window",
         "core.system-notifier",
         "core.system-notifier.integration",
