@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs"
 import { readFile, stat } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -28,7 +29,11 @@ export class AgentMcpSettingsService {
     const cwd = path.resolve(project?.path ?? this.deps.defaultCwd)
     const customConfigDir = this.deps.configDir ?? process.env.CLAUDE_CONFIG_DIR
     const configDir = customConfigDir ?? path.join(homedir(), ".claude")
-    const userFile = path.join(customConfigDir ?? homedir(), ".claude.json")
+    // Match the bundled SDK's global-file selection, including legacy config roots.
+    const preferredUserFile = path.join(configDir, ".config.json")
+    const oauthSuffix = process.env.CLAUDE_CODE_CUSTOM_OAUTH_URL ? "-custom-oauth" : ""
+    const userFile = existsSync(preferredUserFile) ? preferredUserFile
+      : path.join(customConfigDir || homedir(), `.claude${oauthSuffix}.json`)
     const warnings: string[] = []
     const read = async (file: string, label: string): Promise<Json> => {
       try {

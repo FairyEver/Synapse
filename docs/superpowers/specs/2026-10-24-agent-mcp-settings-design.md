@@ -6,6 +6,7 @@
 
 - 设置 → MCP 分开显示“Agent 使用的 MCP”和现有 SY 对外注册。
 - 页面进入及刷新时重新读取本机 Claude Code 用户 MCP、所选项目 MCP、本地项目覆盖、启用插件和 SY 连接器；不连接服务器、不发模型请求。默认范围为默认 Agent 工作区，可选择已配置的普通项目。
+- 用户配置来源与随包 SDK 一致：优先读取 Claude 配置目录下存在的 `.config.json`，否则读取自定义配置目录或用户主目录下的 `.claude.json`；自定义 OAuth 使用 `.claude-custom-oauth.json`。已选文件不可读时显示警告，不合并或回退到另一份用户配置；所有来源只读。
 - 配置清单显示名称、来源和在 SY 中的启用状态。配置存在不代表连接成功；读取失败不能当成空列表。来源与策略受 SDK 的作用域/原生策略约束；未知或未解析的插件/受管来源必须说明，不能宣称完整。
 - 开关保存到 SY 的本机配置，只记录禁用的服务器名。对所有由 SY Agent Runtime 启动的查询生效，不编辑 ~/.claude.json、.claude/settings.json、.mcp.json 或插件文件，不影响外部 CLI。
 - 启用表示移除 SY 的额外禁用，不能越过 Claude Code 原有拒绝或企业策略。内部 synapse-mcp / synapse-tool-router 合并为 Synapse，只读显示为内置。

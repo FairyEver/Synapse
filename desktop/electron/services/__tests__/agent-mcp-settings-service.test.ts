@@ -6,9 +6,13 @@ import { createDefaultConfig } from "../../../src/lib/config"
 import { AgentMcpSettingsService } from "../agent-mcp-settings-service"
 
 const roots: string[] = []
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }) })
+afterEach(async () => {
+  vi.unstubAllEnvs()
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true })
+})
 
 async function fixture() {
+  vi.stubEnv("CLAUDE_CODE_CUSTOM_OAUTH_URL", "")
   const root = await mkdtemp(path.join(tmpdir(), "synapse-mcp-settings-")); roots.push(root)
   const configDir = path.join(root, ".claude"), cwd = path.join(root, "workspace")
   await mkdir(configDir); await mkdir(cwd)
@@ -25,6 +29,62 @@ async function fixture() {
 }
 
 describe("Agent MCP settings", () => {
+  it("discovers the SDK global config and project-local overrides without changing either source", async () => {
+    const f = await fixture()
+    const source = path.join(f.configDir, ".config.json")
+    const raw = JSON.stringify({ mcpServers: { global: {}, shared: {} }, projects: { [f.cwd]: { mcpServers: { shared: {}, local: {} }, disabledMcpServers: ["local"] } } })
+    await writeFile(source, raw)
+    const result = await f.service.list({ projectId: "project" })
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "global", source: "user" }),
+      expect.objectContaining({ name: "shared", source: "local" }),
+      expect.objectContaining({ name: "local", source: "local", enabled: false, configurable: false }),
+    ]))
+    expect(result.warnings).toEqual([])
+    await f.service.setEnabled({ name: "global", enabled: false })
+    expect(await readFile(source, "utf8")).toBe(raw)
+  })
+
+  it("prefers .config.json over .claude.json and reselects the source on refresh", async () => {
+    const f = await fixture()
+    const source = path.join(f.configDir, ".config.json")
+    const fallback = JSON.stringify({ mcpServers: { fallback: {} } })
+    const preferred = JSON.stringify({ mcpServers: { preferred: {} } })
+    await writeFile(f.source, fallback)
+    expect((await f.service.list({})).items.some(x => x.name === "fallback")).toBe(true)
+    await writeFile(source, preferred)
+    const result = await f.service.list({})
+    expect(result.items.some(x => x.name === "preferred")).toBe(true)
+    expect(result.items.some(x => x.name === "fallback")).toBe(false)
+    expect(await readFile(f.source, "utf8")).toBe(fallback)
+    expect(await readFile(source, "utf8")).toBe(preferred)
+    await rm(source)
+    expect((await f.service.list({})).items.some(x => x.name === "fallback")).toBe(true)
+  })
+
+  it("reports an unreadable selected source instead of silently using the fallback", async () => {
+    const f = await fixture()
+    await writeFile(path.join(f.configDir, ".config.json"), '{"secret-token": broken')
+    await writeFile(f.source, JSON.stringify({ mcpServers: { fallback: {} } }))
+    const result = await f.service.list({})
+    expect(result.warnings).toContain("用户 MCP 配置读取失败，请检查配置后刷新。")
+    expect(result.items.some(x => x.name === "fallback")).toBe(false)
+    expect(JSON.stringify(result)).not.toContain("secret-token")
+  })
+
+  it("uses the SDK custom OAuth filename when the preferred source is absent", async () => {
+    const f = await fixture()
+    vi.stubEnv("CLAUDE_CODE_CUSTOM_OAUTH_URL", "https://auth.invalid")
+    await writeFile(f.source, JSON.stringify({ mcpServers: { production: {} } }))
+    const source = path.join(f.configDir, ".claude-custom-oauth.json")
+    const raw = JSON.stringify({ mcpServers: { custom: {} } })
+    await writeFile(source, raw)
+    const result = await f.service.list({})
+    expect(result.items.some(x => x.name === "custom")).toBe(true)
+    expect(result.items.some(x => x.name === "production")).toBe(false)
+    expect(await readFile(source, "utf8")).toBe(raw)
+  })
+
   it("refreshes user, project and local sources without exposing config or changing source files", async () => {
     const f = await fixture()
     const raw = JSON.stringify({ mcpServers: { rea: { command: "secret-command", env: { TOKEN: "secret-token" } }, shared: {} }, projects: { [f.cwd]: { mcpServers: { shared: { url: "https://secret.invalid?token=private" } } } } })
