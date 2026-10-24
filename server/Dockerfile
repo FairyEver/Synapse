@@ -43,7 +43,10 @@ RUN APP_PUBLIC_URL=$APP_PUBLIC_URL pnpm --filter @synapse/document build
 
 FROM base AS production
 ENV NODE_ENV=production
-RUN apk add --no-cache nginx postgresql16-client
+# 默认 CDN 不可达时使用镜像节点，保留 APK 签名校验，并限制每轮安装总耗时。
+RUN timeout -k 5 90 apk add --no-cache --timeout 30 nginx postgresql16-client \
+  || (sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+      && timeout -k 5 180 apk add --no-cache --timeout 30 nginx postgresql16-client)
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/node_modules ./server/node_modules
 COPY --from=build /app/server/dist ./server/dist

@@ -72,6 +72,8 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 
 ## 服务端 Node 安全基线
 
+- 服务端镜像安装 Alpine 系统包时保留签名校验，APK 网络超时设为 30 秒，首轮安装总超时 90 秒；默认 CDN 失败后回退到 `mirrors.aliyun.com` 的同版本 Alpine 镜像，总超时 180 秒，终止宽限 5 秒。软件包列表和 Alpine 版本不变，不跳过签名校验。
+
 - API 镜像固定 Node `22.23.4-alpine`，PDF 构建阶段固定 `22.23.4-bookworm-slim`；PDF 最终运行阶段保留 Playwright 的 Chromium 与系统依赖，使用 `24.22.1-bookworm-slim` 提供的 Node 二进制替换 `/usr/bin/node`。不能只更新 PDF 的构建阶段。
 - 两个最终镜像都运行 `scripts/deploy/check-node-runtime.mjs`，仅接受 Node 22（至少 `22.23.4`）或 Node 24（至少 `24.22.1`）。更新安全基线时同步调整 Dockerfile、检查器及测试。
 - 部署构建使用 `--pull`，切换前在候选镜像中再次执行运行时检查；上线后核对实际容器版本和 API/PDF 请求，不能以宿主机 Node 版本或旧容器健康代替验证。
