@@ -13,22 +13,45 @@ const logger = createMainLogger("source-acquisition.guarded-fetch")
 
 type GuardedFetchResponse = Awaited<ReturnType<FetchUrl>> & {
   readonly discardBody: () => void
+  readonly bytes: (maxBytes: number) => Promise<Buffer>
 }
 
 export interface CreateGuardedFetchUrlOptions {
   readonly timeoutMs?: number
   readonly allowLocalOrPrivateHosts?: boolean
   readonly beforeRequest?: (url: URL) => Promise<void> | void
+  readonly accept?: string
+  readonly redactUrlDetails?: boolean
 }
 
 export function createGuardedFetchUrl(options: CreateGuardedFetchUrlOptions = {}): FetchUrl {
-  return async (url, init) => fetchWithRedirects(new URL(url), {
-    allowLocalOrPrivateHosts: options.allowLocalOrPrivateHosts === true,
-    redirectsRemaining: MAX_REDIRECTS,
-    signal: init.signal,
-    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    beforeRequest: options.beforeRequest,
-  })
+  return createGuardedFetchResource(options)
+}
+
+/** The same pinned public-network boundary, with a bounded binary body for images. */
+export function createGuardedFetchResource(options: CreateGuardedFetchUrlOptions = {}): (url: string, init: { readonly signal: AbortSignal }) => Promise<GuardedFetchResponse> {
+  return async (url, init) => {
+    init.signal.throwIfAborted()
+    const parsed = new URL(url)
+    return new Promise((resolve, reject) => {
+      const abort = () => reject(init.signal.reason ?? new Error("URL fetch was aborted."))
+      const cleanup = () => init.signal.removeEventListener("abort", abort)
+      init.signal.addEventListener("abort", abort, { once: true })
+      void fetchWithRedirects(parsed, {
+        allowLocalOrPrivateHosts: options.allowLocalOrPrivateHosts === true,
+        redirectsRemaining: MAX_REDIRECTS,
+        signal: init.signal,
+        timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        beforeRequest: options.beforeRequest,
+        accept: options.accept,
+        redactUrlDetails: options.redactUrlDetails,
+      }).then((response) => {
+        cleanup()
+        if (init.signal.aborted) { response.discardBody(); reject(init.signal.reason) }
+        else resolve(response)
+      }, (cause) => { cleanup(); reject(cause) })
+    })
+  }
 }
 
 async function fetchWithRedirects(
@@ -39,14 +62,16 @@ async function fetchWithRedirects(
     readonly signal: AbortSignal
     readonly timeoutMs: number
     readonly beforeRequest?: (url: URL) => Promise<void> | void
+    readonly accept?: string
+    readonly redactUrlDetails?: boolean
   },
-): ReturnType<FetchUrl> {
+): Promise<GuardedFetchResponse> {
   const response = await requestUrl(url, options)
   if (isRedirect(response.status)) {
     if (options.redirectsRemaining <= 0) {
       response.discardBody()
       logger.warn("Guarded URL fetch redirect limit exceeded.", {
-        url: safeUrlForLog(url),
+        url: safeUrlForLog(url, options.redactUrlDetails),
         maxRedirects: MAX_REDIRECTS,
       })
       throw new Error("URL redirect limit exceeded.")
@@ -55,7 +80,7 @@ async function fetchWithRedirects(
     if (!location) {
       response.discardBody()
       logger.warn("Guarded URL fetch redirect missing location.", {
-        url: safeUrlForLog(url),
+        url: safeUrlForLog(url, options.redactUrlDetails),
         status: response.status,
       })
       throw new Error("URL redirect response did not include a Location header.")
@@ -76,17 +101,20 @@ async function requestUrl(
     readonly signal: AbortSignal
     readonly timeoutMs: number
     readonly beforeRequest?: (url: URL) => Promise<void> | void
+    readonly accept?: string
+    readonly redactUrlDetails?: boolean
   },
 ): Promise<GuardedFetchResponse> {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     logger.warn("Guarded URL fetch rejected unsupported protocol.", {
-      url: safeUrlForLog(url),
+      url: safeUrlForLog(url, options.redactUrlDetails),
       protocol: url.protocol,
     })
     throw new Error(`URL protocol is not supported: ${url.protocol}`)
   }
   await options.beforeRequest?.(url)
-  const resolvedAddress = await resolvePublicAddress(url, options.allowLocalOrPrivateHosts)
+  const resolvedAddress = await resolvePublicAddress(url, options.allowLocalOrPrivateHosts, options.redactUrlDetails)
+  options.signal.throwIfAborted()
   const transport = url.protocol === "https:" ? https : http
 
   const requestOptions: RequestOptions = {
@@ -95,7 +123,7 @@ async function requestUrl(
     port: url.port,
     path: `${url.pathname}${url.search}`,
     method: "GET",
-    headers: { Accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.1" },
+    headers: { Accept: options.accept ?? "text/html,text/plain,application/json;q=0.9,*/*;q=0.1" },
     timeout: options.timeoutMs,
     lookup: (_hostname, _lookupOptions, callback) => {
       callback(null, resolvedAddress.address, resolvedAddress.family)
@@ -117,16 +145,16 @@ async function requestUrl(
     options.signal.addEventListener("abort", abort, { once: true })
     request.on("timeout", () => {
       logger.warn("Guarded URL fetch timed out.", {
-        url: safeUrlForLog(url),
+        url: safeUrlForLog(url, options.redactUrlDetails),
         timeoutMs: options.timeoutMs,
       })
       request.destroy(new Error("URL fetch timed out."))
     })
     request.on("error", (error) => {
       logger.warn("Guarded URL fetch request failed.", {
-        url: safeUrlForLog(url),
+        url: safeUrlForLog(url, options.redactUrlDetails),
         errorName: error.name,
-        message: error.message,
+        ...(options.redactUrlDetails ? {} : { message: error.message }),
       })
       reject(error)
     })
@@ -140,6 +168,7 @@ async function requestUrl(
 async function resolvePublicAddress(
   url: URL,
   allowLocalOrPrivateHosts: boolean,
+  redactUrlDetails = false,
 ): Promise<{ readonly address: string; readonly family: 4 | 6 }> {
   const hostname = url.hostname
   const addresses = await lookup(hostname, { all: true, verbatim: false })
@@ -148,7 +177,7 @@ async function resolvePublicAddress(
   ))
   if (!publicAddress) {
     logger.warn("Guarded URL fetch blocked local or private host.", {
-      url: safeUrlForLog(url),
+      url: safeUrlForLog(url, redactUrlDetails),
       hostname,
       addresses: addresses.map((entry) => entry.address),
     })
@@ -160,8 +189,8 @@ async function resolvePublicAddress(
   }
 }
 
-function safeUrlForLog(url: URL): string {
-  return sanitizeUrl(url.toString())
+function safeUrlForLog(url: URL, redactDetails = false): string {
+  return redactDetails ? url.origin : sanitizeUrl(url.toString())
 }
 
 function responseFromMessage(url: string, message: IncomingMessage): GuardedFetchResponse {
@@ -175,7 +204,8 @@ function responseFromMessage(url: string, message: IncomingMessage): GuardedFetc
       },
     },
     discard: () => discardResponseBody(message),
-    text: (options) => readResponseText(message, options?.maxBytes),
+    text: async (options) => (await readResponseBytes(message, options?.maxBytes)).toString("utf8"),
+    bytes: (maxBytes) => readResponseBytes(message, maxBytes),
     discardBody: () => discardResponseBody(message),
   }
 }
@@ -192,7 +222,7 @@ function normalizeHeaders(headers: IncomingMessage["headers"]): Map<string, stri
   return normalized
 }
 
-function readResponseText(message: IncomingMessage, maxBytes?: number): Promise<string> {
+function readResponseBytes(message: IncomingMessage, maxBytes?: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let totalBytes = 0
@@ -214,7 +244,7 @@ function readResponseText(message: IncomingMessage, maxBytes?: number): Promise<
       if (!rejected) reject(error)
     })
     message.on("end", () => {
-      if (!rejected) resolve(Buffer.concat(chunks).toString("utf8"))
+      if (!rejected) resolve(Buffer.concat(chunks))
     })
   })
 }

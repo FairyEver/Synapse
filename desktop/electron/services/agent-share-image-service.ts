@@ -14,6 +14,32 @@ export class AgentShareImageService {
     logger?: { warn(message: string, metadata: Record<string, unknown>): void }
   }) {}
 
+  async readRemoteImage(input: string, signal: AbortSignal): Promise<{ dataUrl: string }> {
+    signal.throwIfAborted()
+    const actor = { kind: "user" as const, id: "renderer" }, action = "network.connect", metadata = { source: "agent.share.image" }
+    const validate = (url: URL) => {
+      if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) throw new Error("图片地址不受支持。")
+    }
+    validate(new URL(input))
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(12_000)])
+    const { createGuardedFetchResource } = await import("./source-acquisition/guarded-fetch-url.js")
+    const fetchImage = createGuardedFetchResource({ timeoutMs: 12_000, accept: "image/*", redactUrlDetails: true, beforeRequest: async (url) => {
+      deadline.throwIfAborted(); validate(url)
+      const permission = await this.deps.permissionGuard.check({ action, actor, resource: url.origin, context: metadata })
+      this.deps.auditSink.record({ action, actor, resource: url.origin, outcome: permission.allowed ? "allowed" : "denied", metadata })
+      if (!permission.allowed) throw new Error("没有权限读取此图片。")
+    } })
+    const response = await fetchImage(input, { signal: deadline })
+    try {
+      const mime = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase().replace(/^image\/jpg$/, "image/jpeg")
+      if (response.status < 200 || response.status >= 300 || !mime || !/^image\/(?:png|apng|jpeg|gif|webp|svg\+xml|avif|bmp|x-icon|vnd\.microsoft\.icon)$/.test(mime)) throw new Error("远端地址未返回可用图片。")
+      const bytes = await response.bytes(AGENT_SHARE_MAX_PNG_BYTES)
+      deadline.throwIfAborted()
+      if (!bytes.length) throw new Error("远端图片内容为空。")
+      return { dataUrl: `data:${mime};base64,${bytes.toString("base64")}` }
+    } finally { response.discardBody?.() }
+  }
+
   async exportImage(request: AgentShareImageRequest): Promise<AgentShareImageResult> {
     const { bytes, width, height } = validateSharePng(request.pngBase64)
     if (request.action === "copy" && (width * height > AGENT_SHARE_COPY_MAX_PIXELS || height > 32_767)) {

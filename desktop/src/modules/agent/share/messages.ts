@@ -15,7 +15,7 @@ export function shareMessages(items: readonly SynapseAgentTimelineItem[], sendin
     .flatMap((node) => {
       if (node.kind !== "item") return []
       const item = node.entry.item
-      return item.kind === "message" && (item.role === "user" || item.role === "assistant") && !item.streaming && item.content.trim()
+      return item.kind === "message" && (item.role === "user" || item.role === "assistant") && !item.streaming && (item.content.trim() || (item.role === "user" && item.attachments?.some((attachment) => attachment.kind === "image")))
         ? [structuredClone(item) as ShareMessage] : []
     })
 }

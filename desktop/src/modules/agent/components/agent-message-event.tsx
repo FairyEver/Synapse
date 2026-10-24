@@ -27,6 +27,7 @@ import { AgentMessageHeader } from "./agent-message-header"
 import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
 import { AgentMessageAttachments } from "./agent-message-attachments"
+import { displayableImageUrl } from "./agent-tool-image-artifacts"
 import { AgentUsageCard } from "./agent-usage-card"
 import {
   createAgentLocalReferenceLink,
@@ -357,7 +358,13 @@ export function AgentShareMessageBody({ item, projectId, conversationId, hideEma
   readonly conversationId: string
   readonly hideEmails: boolean
 }) {
-  if (item.role === "user") return <div className="flex justify-end"><AgentMessageBubble role="user">{redactSensitiveText(item.content)}</AgentMessageBubble></div>
+  if (item.role === "user") {
+    const images = item.attachments?.filter((attachment) => attachment.kind === "image") ?? []
+    return <div className="flex justify-end"><AgentMessageBubble role="user">
+      {images.length > 0 && <div className="space-y-3">{images.map((image, index) => <img key={image.id} src={displayableImageUrl(image.url)} alt={`图片 ${index + 1}`} loading="eager" className="h-auto w-full object-contain" />)}</div>}
+      {item.content.trim() && <span className={images.length ? "mt-3 block" : undefined}>{redactSensitiveText(item.content)}</span>}
+    </AgentMessageBubble></div>
+  }
   return <AssistantMessageBody item={item} projectId={projectId} conversationId={conversationId} generatedUiDisabled shareMode hideEmails={hideEmails} onOpenReference={() => undefined} referenceActions={unavailableReferenceActions} />
 }
 

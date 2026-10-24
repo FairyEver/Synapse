@@ -1915,6 +1915,7 @@ export type SynapseBridge = {
     exportShareImage: (
       args: import("./agent-share").AgentShareImageRequest,
     ) => Promise<import("./agent-share").AgentShareImageResult>
+    readShareImageResource: (args: { url: string }) => Promise<{ dataUrl: string }>
     createSession: (
       args: {
         projectId: string

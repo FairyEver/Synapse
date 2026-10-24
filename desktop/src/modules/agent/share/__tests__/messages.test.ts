@@ -8,6 +8,14 @@ function message(id: number, role: "user" | "assistant" = id % 2 ? "user" : "ass
 }
 
 describe("conversation share snapshots", () => {
+  it("includes image-only user messages and freezes their image attachments", () => {
+    const input: SynapseAgentMessageTimelineItem = { ...message(1), content: "", attachments: [{ kind: "image", id: "photo", mimeType: "image/png", byteSize: 4, url: "synapse-agent-artifact://local/p/s/photo.png" }] }
+    const result = shareMessages([input], false)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.attachments).toEqual(input.attachments)
+    expect(result[0]?.attachments).not.toBe(input.attachments)
+    expect(shareMessages([{ ...input, attachments: [{ kind: "path", path: "/private/report.pdf", name: "report.pdf", entryType: "file" }] }], false)).toHaveLength(0)
+  })
   it("only selects completed mainline questions and final replies, excluding tools and intermediate reasoning", () => {
     const items: SynapseAgentTimelineItem[] = [message(1), message(2), { kind: "toolCall", id: "tool", toolName: "Read", timestamp: "" }, message(4)]
     expect(shareMessages(items, false).map((item) => item.id)).toEqual(["m1", "m4"])

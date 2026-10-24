@@ -295,6 +295,7 @@ export const IPC_CHANNELS = {
     "setPermissionMode": "synapse:app:agent:operation:set_permission_mode",
     "cancelTurn": "synapse:app:agent:operation:cancel_turn",
     "forceKillTurn": "synapse:app:agent:operation:force_kill_turn",
+    "readShareImageResource": "synapse:app:agent:operation:read_share_image_resource",
     "exportShareImage": "synapse:app:agent:operation:export_share_image",
     "getProviders": "synapse:app:agent:operation:get_providers",
     "listProviders": "synapse:app:agent:operation:list_providers",

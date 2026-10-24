@@ -3,7 +3,8 @@ import type { IpcHandlerContext } from "../../../runtime/ipc/types"
 const native = vi.hoisted(() => ({ window: { isDestroyed: vi.fn() }, fromId: vi.fn(), fromWebContents: vi.fn(), showSaveDialog: vi.fn(), write: vi.fn(), record: vi.fn(), check: vi.fn() }))
 vi.mock("electron", () => ({ BrowserWindow: { fromWebContents: native.fromWebContents }, webContents: { fromId: native.fromId }, dialog: { showSaveDialog: native.showSaveDialog }, clipboard: { write: native.write }, ClipboardItem: class { constructor(readonly data: Record<string, Blob>) {} } }))
 vi.mock("../../../services/log-store", () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
-import { shareMethods, shareImageRequestSchema } from "../ipc-share"
+import { shareMethods, shareImageRequestSchema, shareImageResourceRequestSchema } from "../ipc-share"
+import { AgentShareImageService } from "../../../services/agent-share-image-service"
 const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nV8AAAAASUVORK5CYII="
 const input = { action: "copy" as const, pngBase64, fileName: "test.png" }
 function context(sender = true) {
@@ -14,6 +15,16 @@ beforeEach(() => {
   native.check.mockResolvedValue({ allowed: true }); native.write.mockResolvedValue(undefined)
 })
 describe("private conversation PNG IPC", () => {
+  it("keeps resource reads window-bound and remote-only without exposing arbitrary file reads", async () => {
+    for (const url of ["file:///etc/passwd", "synapse-agent-artifact://local/p/s/a.png", "https://user:secret@images.example/photo", "data:image/png;base64,AA=="]) expect(shareImageResourceRequestSchema.safeParse({ url }).success).toBe(false)
+    expect(shareImageResourceRequestSchema.safeParse({ url: "https://images.example/photo", path: "/private/file" }).success).toBe(false)
+    const read = vi.spyOn(AgentShareImageService.prototype, "readRemoteImage").mockResolvedValue({ dataUrl: "data:image/png;base64,AA==" })
+    try {
+      await expect(shareMethods.readShareImageResource!.handler(context(false), { url: "https://images.example/photo" })).rejects.toThrow("窗口")
+      expect(read).not.toHaveBeenCalled()
+      await expect(shareMethods.readShareImageResource!.handler(context(), { url: "https://images.example/photo" })).resolves.toEqual({ dataUrl: "data:image/png;base64,AA==" })
+    } finally { read.mockRestore() }
+  })
   it("requires bounded PNG actions and rejects unrecognized privileged inputs", () => {
     expect(shareImageRequestSchema.safeParse(input).success).toBe(true)
     for (const invalid of [{ ...input, path: "/tmp/bypass.png" }, { ...input, action: "upload" }, { ...input, fileName: "x".repeat(121) }]) expect(shareImageRequestSchema.safeParse(invalid).success).toBe(false)

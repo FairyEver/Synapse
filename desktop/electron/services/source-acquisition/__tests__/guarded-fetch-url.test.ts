@@ -16,12 +16,56 @@ vi.mock("../../log-store", () => ({
   createMainLogger: () => logger,
 }))
 
-import { createGuardedFetchUrl } from "../guarded-fetch-url"
+import { createGuardedFetchResource, createGuardedFetchUrl } from "../guarded-fetch-url"
 
 describe("createGuardedFetchUrl", () => {
   beforeEach(() => {
     lookup.mockReset()
     logger.warn.mockClear()
+  })
+
+  it("preserves binary image bytes and limits binary streams", async () => {
+    lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }])
+    const pixels = Buffer.from([137, 80, 78, 71, 0, 255, 128, 13])
+    const server = http.createServer((request, response) => {
+      expect(request.headers.accept).toBe("image/*")
+      response.setHeader("content-type", "image/png")
+      response.end(pixels)
+    })
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    try {
+      const address = server.address()
+      if (!address || typeof address === "string") throw new Error("Missing test port")
+      const fetchImage = createGuardedFetchResource({ allowLocalOrPrivateHosts: true, accept: "image/*" })
+      const url = `http://127.0.0.1:${address.port}/image`
+      const response = await fetchImage(url, { signal: new AbortController().signal })
+      await expect(response.bytes(8)).resolves.toEqual(pixels)
+      const oversized = await fetchImage(url, { signal: new AbortController().signal })
+      await expect(oversized.bytes(7)).rejects.toThrow("7 byte limit")
+    } finally { server.close(); await once(server, "close") }
+  })
+
+  it("cancels a stalled DNS lookup without connecting after it eventually resolves", async () => {
+    let finish!: (addresses: { address: string; family: number }[]) => void
+    lookup.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    const request = vi.spyOn(http, "request").mockImplementation(() => { throw new Error("Unexpected network request") })
+    try {
+      const controller = new AbortController()
+      const pending = createGuardedFetchResource()("http://images.example/photo", { signal: controller.signal })
+      await vi.waitFor(() => expect(lookup).toHaveBeenCalled())
+      controller.abort()
+      await expect(pending).rejects.toThrow()
+      finish([{ address: "8.8.8.8", family: 4 }])
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(request).not.toHaveBeenCalled()
+    } finally { request.mockRestore() }
+  })
+
+  it("omits image paths and unrecognized signed query fields from guarded diagnostics", async () => {
+    lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }])
+    await expect(createGuardedFetchResource({ redactUrlDetails: true })("https://images.example/private-path?X-Amz-Signature=signed-secret&X-Amz-Credential=credential-secret", { signal: new AbortController().signal })).rejects.toThrow()
+    expect(logger.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ url: "https://images.example" }))
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toMatch(/private-path|signed-secret|credential-secret|X-Amz/)
   })
 
   it("rejects private literal hosts before opening a request", async () => {

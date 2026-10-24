@@ -6,7 +6,7 @@
 
 本文件记录 Synapse 当前运行时代码的真实产品表面。声明文件、目录名、测试夹具或计划文档不能单独作为“已注册”的证据。
 
-- Agent 对话图片分享复用既有对话 UI，仅新增 `app.agent.operation.export_share_image` 私有 IPC，接收有界 PNG 并通过权限与审计复制到系统剪贴板或保存到用户选择的本机路径；不上传、不创建分享链接、不新增 MCP、System App、Dock、Workflow、Automation 或 Deep Link。Agent Conversation 仍为 11 项，全局 capability / MCP 数量保持不变。
+- Agent 对话图片分享复用既有对话 UI，`app.agent.operation.export_share_image` 私有 IPC 接收有界 PNG 并通过权限与审计复制到系统剪贴板或保存到用户选择的本机路径；`app.agent.operation.read_share_image_resource` 私有 IPC 仅为浏览器无法读取的公开 HTTP(S) 图片提供有界、逐跳公网校验和权限审计的读取，不开放本机文件或内网代理。不上传、不创建分享链接、不新增 MCP、System App、Dock、Workflow、Automation 或 Deep Link。Agent Conversation 仍为 11 项，全局 capability / MCP 数量保持不变；MCP schema 与系统 Skill 的公开契约不变。
 
 ## 注册表面与权威入口
 
