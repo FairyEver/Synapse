@@ -46,6 +46,8 @@ function AgentMessageToolbar({
     }
   }, [])
 
+  if (share?.active) return null
+
   const handleCopy = () => {
     const metadata = {
       boundary: "renderer.agent.message-toolbar",

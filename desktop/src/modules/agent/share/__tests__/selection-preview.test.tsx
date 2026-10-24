@@ -7,7 +7,6 @@ import { AgentShareSelectionContext, ShareMessageFrame } from "../selection-cont
 import { AgentShareSelectionBar } from "../selection-bar"
 import { AgentSharePreviewDialog } from "../preview-dialog"
 import { AgentMessageToolbar } from "../../components/agent-message-toolbar"
-import { shareMessageRounds } from "../messages"
 const mocks = vi.hoisted(() => ({ getTimeline: vi.fn(), run: vi.fn() }))
 vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => mocks }))
 vi.mock("@/app-shell/logging", () => ({ createRendererLogger: () => ({ warn: vi.fn(), error: vi.fn() }) }))
@@ -21,7 +20,7 @@ let root: Root, host: HTMLElement, share: AgentShareController
 function Driver() {
   const viewport = useRef<HTMLDivElement>(null)
   share = useAgentShare({ target, title: "selected conversation", items, sending: false, viewport })
-  return <AgentShareSelectionContext.Provider value={{ active: share.active, indexes: new Map(share.messages.map((item, index) => [item.id, index])), rounds: new Map(shareMessageRounds(share.messages).map((ids) => [ids[0]!, ids])), selected: share.selected, onShare: (id) => { void share.enter(id) }, onChoose: share.choose, onRound: share.toggleRound }}>
+  return <AgentShareSelectionContext.Provider value={{ active: share.active, indexes: new Map(share.messages.map((item, index) => [item.id, index])), selected: share.selected, onShare: (id) => { void share.enter(id) }, onChoose: share.choose }}>
     <div ref={viewport}>{items.map((item) => <ShareMessageFrame key={item.id} item={item}><p data-source-message={item.id}>{item.content}</p><AgentMessageToolbar messageId={item.id} role={item.role} content={item.content} /></ShareMessageFrame>)}</div>
     {share.active && <AgentShareSelectionBar share={share} />}
     <AgentSharePreviewDialog share={share} target={target} />
@@ -43,11 +42,13 @@ describe("message selection and preview UI", () => {
     expect(host.querySelector('[data-source-message="m1"]')).toBe(original)
     await act(async () => button("选择本轮").click())
     expect([...share.selected]).toEqual(["m1", "m2"])
-    act(() => { button("清空").click() })
+    act(() => share.preset("clear"))
     const choices = host.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')
     act(() => choices[0]!.click())
     act(() => choices[3]!.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })))
     expect(share.selected.size).toBe(4)
+    act(() => button("取消本轮").click())
+    expect([...share.selected]).toEqual(["m1", "m2"])
     act(() => button("取消").click()); expect(share.active).toBe(false)
     expect(host.querySelector('[data-source-message="m1"]')).toBe(original)
   })
@@ -72,5 +73,21 @@ describe("message selection and preview UI", () => {
     act(() => document.querySelector<HTMLButtonElement>("#agent-share-model")!.click())
     expect(document.querySelector('[data-share-export-message="m2"]')!.textContent).toContain("Old Model")
     expect(document.querySelector('[data-share-export-message="m4"]')!.textContent).toContain("New Model")
+  })
+  it("keeps only selection actions in the source messages and a compact toolbar", async () => {
+    await act(async () => share.enter("m1"))
+    expect(host.querySelector('[aria-label="复制"]')).toBeNull()
+    expect(host.querySelector('[role="toolbar"][aria-label="分享消息操作"]')).not.toBeNull()
+    expect(host.querySelector('[data-share-message="m1"] button:not([role="checkbox"])')).toBeNull()
+  })
+  it("keeps batch selection and clearing available in the range menu", async () => {
+    await act(async () => share.enter())
+    await act(async () => button("选择范围").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })))
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((node) => node.textContent === "仅 AI")!.click())
+    expect([...share.selected]).toEqual(["m2", "m4"])
+    await act(async () => button("选择范围").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })))
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((node) => node.textContent === "清空")!.click())
+    expect(share.selected.size).toBe(0)
+    expect(button("预览图片").disabled).toBe(true)
   })
 })

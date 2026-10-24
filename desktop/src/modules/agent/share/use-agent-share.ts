@@ -20,6 +20,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
   const [preparing, setPreparing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [focusedId, setFocusedId] = useState<string | null>(null)
   const [preview, setPreview] = useState<readonly ShareMessage[] | null>(null)
   const [settings, setSettings] = useState<AgentShareSettings>(DEFAULT_AGENT_SHARE_SETTINGS)
   const controller = useRef<AbortController | null>(null)
@@ -49,7 +50,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     viewport.scrollTop = node ? viewport.scrollTop + (node.querySelector("article") ?? node.firstElementChild ?? node).getBoundingClientRect().top - viewport.getBoundingClientRect().top - saved.offset : saved.top
   }, [items, active, input.viewport])
   useEffect(() => {
-    setEnabled(false); setOwner(key); setSnapshot([]); setCachedHistory([]); setSelected(new Set()); setPreview(null); setLoading(false); setPreparing(false); setComplete(false); setError(null)
+    setEnabled(false); setOwner(key); setSnapshot([]); setCachedHistory([]); setSelected(new Set()); setFocusedId(null); setPreview(null); setLoading(false); setPreparing(false); setComplete(false); setError(null)
     preparingRef.current = false
     return () => { controller.current?.abort(); preparingRef.current = false }
   }, [key])
@@ -76,28 +77,32 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     const initial = frozen.map((item) => item.kind === "message" && item.role === "assistant" && !eligible.has(item.id) ? { ...item, streaming: true } : item)
     saveScroll(); setOwner(key); setSnapshot(initial); setEnabled(true); setComplete(false); setLoading(true); setError(null); setPreview(null)
     setSelected(new Set(id && eligible.has(id) ? [id] : [])); anchor.current = null
+    setFocusedId(id && eligible.has(id) ? id : null)
     setSettings({ ...DEFAULT_AGENT_SHARE_SETTINGS, title: input.title.slice(0, 60) || "对话摘录" })
     return fetchHistory(initial, next.signal)
   }
   function exit() {
     controller.current?.abort(); preparingRef.current = false
-    saveScroll(); setEnabled(false); setSelected(new Set()); setPreview(null); setLoading(false); setPreparing(false); setError(null)
+    saveScroll(); setEnabled(false); setSelected(new Set()); setFocusedId(null); setPreview(null); setLoading(false); setPreparing(false); setError(null)
   }
   function choose(id: string, range: boolean) {
     if (!messages.some((item) => item.id === id)) return
     const rangeAnchor = range ? anchor.current : null
     setSelected((current) => selectShareRange(messages, current, id, rangeAnchor, !current.has(id)))
     anchor.current = id
+    setFocusedId(id)
   }
   function toggleRound(ids: readonly string[]) {
     setSelected((current) => { const next = new Set(current); const remove = ids.every((id) => next.has(id)); for (const id of ids) { if (remove) next.delete(id); else next.add(id) } return next })
     anchor.current = null
+    setFocusedId(ids[0] ?? null)
   }
   function preset(kind: "all" | "ai" | "latest" | "clear") {
     if ((kind === "all" || kind === "ai") && !complete) return
     const latestComplete = kind === "latest" ? shareMessageRounds(messages).filter((ids) => ids.some((id) => messages.find((item) => item.id === id)?.role === "assistant")).at(-1) : undefined
     const ids = kind === "clear" ? [] : kind === "latest" ? latestComplete ?? [] : messages.filter((item) => kind !== "ai" || item.role === "assistant").map((item) => item.id)
     setSelected(new Set(ids)); anchor.current = null
+    setFocusedId(kind === "latest" ? ids[0] ?? null : null)
   }
   async function openPreview() {
     if (preparingRef.current || !controller.current || !selected.size) return
@@ -115,7 +120,8 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
       }
     } finally { if (!signal.aborted) { preparingRef.current = false; setPreparing(false) } }
   }
-  return { active, items, messages, selected, loading, preparing, complete, error, preview, settings, setSettings, enter, exit, choose, toggleRound, preset, openPreview,
+  const currentRound = shareMessageRounds(messages).find((ids) => focusedId !== null && ids.includes(focusedId)) ?? []
+  return { active, items, messages, selected, currentRound, loading, preparing, complete, error, preview, settings, setSettings, enter, exit, choose, toggleRound, preset, openPreview,
     closePreview: () => setPreview(null),
     retryHistory: () => { if (controller.current && !controller.current.signal.aborted) { setLoading(true); void fetchHistory(snapshot, controller.current.signal) } },
   }

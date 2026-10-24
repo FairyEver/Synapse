@@ -19,6 +19,7 @@ import {
 } from "./agent-timeline-display"
 import { AgentTimelineItem } from "./agent-timeline-item"
 import { GeneratedUiTheme } from "../openui/generated-ui-theme"
+import { useAgentShareSelection } from "../share/selection-context"
 
 function AgentTimeline({
   items,
@@ -65,6 +66,7 @@ function AgentTimeline({
   readonly conversationId?: string
   readonly footer?: ReactNode
 }) {
+  const selecting = useAgentShareSelection()?.active === true
   const now = Date.now()
   const visibleItems = visibleTimelineItems(items, now)
   const latestPendingItemIds = latestPendingTimelineItemIds(visibleItems, pendingPermissions)
@@ -100,7 +102,7 @@ function AgentTimeline({
             )}
           </div>
         ) : (
-          <div data-allow-select="true" className={cn("mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pt-4", !footer && "pb-34")}>
+          <div data-allow-select="true" data-agent-share-layout={selecting || undefined} className={cn("mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pt-4", selecting ? "gap-4 pt-6 pr-6 pb-6 pl-20" : !footer && "pb-34")}>
             {loadingOlder ? (
               <p className="py-2 text-center text-sm text-muted-foreground">加载中</p>
             ) : historyError || hasMore ? (

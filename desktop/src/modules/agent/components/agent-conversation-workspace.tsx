@@ -81,7 +81,6 @@ import { AgentGitCommitDialog } from "./agent-git-commit-dialog"
 import { AgentWorkspaceShell } from "./agent-workspace-shell"
 import { AgentFileCheckpointPanel } from "./agent-file-checkpoint-panel"
 import { useAgentShare } from "../share/use-agent-share"
-import { shareMessageRounds } from "../share/messages"
 import { AgentShareSelectionContext, type AgentShareSelection } from "../share/selection-context"
 import { AgentShareSelectionBar } from "../share/selection-bar"
 import { AgentSharePreviewDialog } from "../share/preview-dialog"
@@ -230,11 +229,9 @@ function AgentConversationWorkspace({
   const shareSelection: AgentShareSelection = {
     active: share.active,
     indexes: new Map(share.messages.map((item, index) => [item.id, index])),
-    rounds: new Map(shareMessageRounds(share.messages).map((ids) => [ids[0]!, ids])),
     selected: share.selected,
     onShare: (id) => { void share.enter(id) },
     onChoose: share.choose,
-    onRound: share.toggleRound,
   }
   useEffect(() => {
     if (!share.active || share.preview) return
@@ -886,7 +883,7 @@ function AgentConversationWorkspace({
         onRetryHistory={() => void chat.loadOlderTimeline()}
         projectId={target.projectId}
         conversationId={target.conversationId}
-        footer={continuation.readOnly ? (
+        footer={!share.active && continuation.readOnly ? (
           <Button
             type="button"
             variant="outline"

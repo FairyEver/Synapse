@@ -13,6 +13,7 @@ import {
 } from "@/lib/agent-timeline"
 import type { SynapseAgentDisplayProfile, SynapseAgentTimelineItem } from "@/types/agent"
 import { AgentTimeline } from "../agent-timeline"
+import { AgentShareSelectionContext, type AgentShareSelection } from "../../share/selection-context"
 import { AgentWorkspaceShell } from "../agent-workspace-shell"
 import {
   defaultProcessGroupOpen,
@@ -55,8 +56,9 @@ const profile: SynapseAgentDisplayProfile = {
   },
 }
 
-function renderTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>> = {}) {
+function renderTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>> = {}, selection: AgentShareSelection | null = null) {
   return renderToStaticMarkup(
+    <AgentShareSelectionContext.Provider value={selection}>
     <AgentTimeline
       items={[]}
       profile={profile}
@@ -69,7 +71,8 @@ function renderTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>>
       historyError={null}
       onRetryHistory={vi.fn()}
       {...overrides}
-    />,
+    />
+    </AgentShareSelectionContext.Provider>,
   )
 }
 
@@ -113,6 +116,26 @@ function renderInteractiveTimeline(overrides: Partial<ComponentProps<typeof Agen
 }
 
 describe("AgentTimeline", () => {
+  it("reserves one list gutter for messages and process rows without selected message surfaces", () => {
+    const container = document.createElement("div")
+    container.innerHTML = renderTimeline({ items: [
+      { id: "question", kind: "message", role: "user", content: "question", timestamp: "2026-10-24T00:00:00Z" },
+      { id: "tool", kind: "toolCall", toolUseId: "call", toolName: "Read", timestamp: "2026-10-24T00:00:01Z" },
+      { id: "tool-result", kind: "toolResult", toolUseId: "call", toolName: "Read", content: "result", success: true, timestamp: "2026-10-24T00:00:02Z" },
+      { id: "answer", kind: "message", role: "assistant", content: "[reference](https://example.com)", timestamp: "2026-10-24T00:00:03Z" },
+    ] }, { active: true, indexes: new Map([["question", 0], ["answer", 1]]), selected: new Set(["question"]), onChoose: vi.fn(), onShare: vi.fn() })
+    const list = container.querySelector("[data-agent-share-layout]")!
+    expect(list).not.toBeNull()
+    expect(list.classList.contains("pl-20")).toBe(true)
+    expect(list.textContent).toContain("已处理")
+    expect(list.querySelectorAll('[role="checkbox"]')).toHaveLength(2)
+    for (const row of list.querySelectorAll<HTMLElement>("[data-share-message]")) {
+      expect(row.className).not.toMatch(/bg-|shadow|pl-/)
+    }
+    expect(list.querySelector("a")).toBeNull()
+    expect(list.querySelector('[aria-label="复制"]')).toBeNull()
+    expect(list.textContent).not.toContain("选择本轮")
+  })
   it.each([false, true])("places the footer after history inside the scroll viewport (has messages: %s)", (hasMessages) => {
     const items: SynapseAgentTimelineItem[] = hasMessages ? [{
       id: "last-message", kind: "message", role: "user", content: "最后一条消息",

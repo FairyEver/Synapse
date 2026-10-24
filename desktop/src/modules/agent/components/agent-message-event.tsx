@@ -38,7 +38,7 @@ import { errorLogMeta } from "../utils"
 import { AgentLongContentDialog } from "./agent-long-content-dialog"
 import { splitGeneratedUiContent } from "@/lib/agent-generated-ui"
 import { useGeneratedUiContent } from "../openui/use-generated-ui-content"
-import { ShareMessageFrame } from "../share/selection-context"
+import { ShareMessageFrame, useAgentShareSelection } from "../share/selection-context"
 
 const GeneratedUiView = lazy(() => import("../openui/generated-ui-view").then((module) => ({ default: module.GeneratedUiView })))
 
@@ -98,6 +98,7 @@ function AgentMessageEvent({
   generatedUiDisabled,
 }: AgentMessageEventProps) {
   const outgoing = item.role === "user"
+  const selecting = useAgentShareSelection()?.active === true
 
   if (outgoing) {
     // Toolbar sits OUTSIDE the bubble so it does not contribute to the
@@ -135,7 +136,7 @@ function AgentMessageEvent({
           showCopy={item.content.trim().length > 0}
           className="mt-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100"
         />
-        {item.contentTruncated && item.historyIndex !== undefined && projectId && conversationId ? (
+        {!selecting && item.contentTruncated && item.historyIndex !== undefined && projectId && conversationId ? (
           <AgentLongContentDialog
             projectId={projectId}
             conversationId={conversationId}
@@ -151,7 +152,7 @@ function AgentMessageEvent({
       <AgentMessageHeader
         agentIcon={agentIcon}
         timestamp={item.timestamp}
-        className="mb-1"
+        className={selecting ? "mb-2 min-h-10" : "mb-1"}
       />
       <AssistantMessageBody
         item={item}
@@ -161,7 +162,7 @@ function AgentMessageEvent({
         onOpenReference={onOpenReference}
         referenceActions={referenceActions}
       />
-      {item.contentTruncated && item.historyIndex !== undefined && projectId && conversationId ? (
+      {!selecting && item.contentTruncated && item.historyIndex !== undefined && projectId && conversationId ? (
         <AgentLongContentDialog
           projectId={projectId}
           conversationId={conversationId}
@@ -197,13 +198,14 @@ function AssistantMessageBody({
   readonly hideEmails?: boolean
 }) {
   const streaming = item.streaming === true
+  const selecting = useAgentShareSelection()?.active === true && !shareMode
   const fullContent = useGeneratedUiContent(item, projectId, conversationId)
   const generatedUiEnabled = Boolean(item.metadata?.generatedUi || (streaming && item.generatedUiEnabled))
   const contentParts = useMemo(() => generatedUiEnabled
     ? splitGeneratedUiContent(fullContent.content ?? "", streaming).filter((part) => part.kind === "openui" || part.content.trim())
     : [{ kind: "markdown" as const, content: fullContent.content ?? "" }], [generatedUiEnabled, fullContent.content, streaming])
-  const referenceMenuEnabled = item.role === "assistant" && !streaming
-  const suppressNativeReferenceMenu = item.role === "assistant" && streaming
+  const referenceMenuEnabled = item.role === "assistant" && !streaming && !selecting
+  const suppressNativeReferenceMenu = item.role === "assistant" && (streaming || selecting)
   const { safeContent, preprocessed } = useMemo(() => {
     const safeContent = redactSensitiveText(item.content)
     return {
@@ -227,8 +229,8 @@ function AssistantMessageBody({
   ])
   const streamdownComponents = useMemo(() => ({
     ...STREAMDOWN_COMPONENTS,
-    a: referenceLink,
-  }) satisfies Components, [referenceLink])
+    a: selecting ? SelectionMessageLink : referenceLink,
+  }) satisfies Components, [referenceLink, selecting])
 
   const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target
@@ -295,11 +297,11 @@ function AssistantMessageBody({
   }
 
   return (
-    <div className={cn("group/message w-full min-w-0 px-1 py-2", !generatedUiEnabled && "max-w-[76ch]")}>
+    <div className={cn("group/message w-full min-w-0", selecting ? "py-0" : "px-1 py-2", !generatedUiEnabled && "max-w-[76ch]")}>
       <div
         data-allow-select="true"
         className={cn("min-w-0 max-w-full overflow-hidden", generatedUiEnabled && "flex flex-col gap-6")}
-        onClick={shareMode ? undefined : handleClick}
+        onClick={shareMode || selecting ? undefined : handleClick}
         inert={shareMode || undefined}
       >
         {fullContent.loading ? <p data-agent-render-pending className="text-sm text-muted-foreground">加载中</p> : fullContent.error ? <p data-agent-render-error className="text-sm text-muted-foreground">{fullContent.error}</p> : contentParts.map((part, index) => part.kind === "openui" ? (
@@ -343,6 +345,10 @@ function AssistantMessageBody({
       />}
     </div>
   )
+}
+
+const SelectionMessageLink: Components["a"] = ({ children }) => {
+  return <span className="underline underline-offset-2">{children}</span>
 }
 
 export function AgentShareMessageBody({ item, projectId, conversationId, hideEmails }: {

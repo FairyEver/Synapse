@@ -1,17 +1,41 @@
-import { ChevronRight, LoaderCircle } from "lucide-react"
+import { ChevronDown, ChevronRight, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { AgentComposerInputBox } from "../components/agent-composer-input-box"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { AgentShareController } from "./use-agent-share"
 
+const actionHitArea = "relative after:absolute after:inset-x-0 after:-inset-y-1"
+
 export function AgentShareSelectionBar({ share }: { readonly share: AgentShareController }) {
-  return <div className="absolute inset-x-4 bottom-5 z-10 mx-auto max-w-2xl md:inset-x-20" data-agent-share-selection-bar>
-    <AgentComposerInputBox
-      editor={<div className="px-2 py-1">
-        <div className="flex min-h-9 items-center justify-between gap-2"><span className="text-sm font-medium" aria-live="polite">已选择 {share.selected.size} 条消息</span><div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">{share.loading ? "正在加载历史消息" : "Shift 连选"}</span><Button type="button" variant="ghost" onClick={share.exit}>取消</Button></div></div>
-        {share.error && <div role="alert" className="flex items-center justify-between gap-2 text-sm text-destructive"><span>{share.error}</span>{!share.complete && <Button type="button" variant="ghost" disabled={share.loading} onClick={share.retryHistory}>重试</Button>}</div>}
-      </div>}
-      leadingActions={<div className="flex flex-wrap gap-0.5"><Button type="button" variant="ghost" disabled={share.loading || !share.complete} onClick={() => share.preset("all")}>全选</Button><Button type="button" variant="ghost" disabled={share.loading || !share.complete} onClick={() => share.preset("ai")}>仅 AI</Button><Button type="button" variant="ghost" onClick={() => share.preset("latest")}>最近一轮</Button><Button type="button" variant="ghost" onClick={() => share.preset("clear")}>清空</Button></div>}
-      trailingActions={<Button type="button" disabled={!share.selected.size || share.preparing} onClick={() => void share.openPreview()}>{share.preparing ? <LoaderCircle className="animate-spin" /> : null}预览图片<ChevronRight /></Button>}
-    />
-  </div>
+  const roundSelected = share.currentRound.length > 0 && share.currentRound.every((id) => share.selected.has(id))
+  return (
+    <div className="mx-auto my-2 w-full max-w-2xl shrink-0 px-4" data-agent-share-selection-bar>
+      <div role="toolbar" aria-label="分享消息操作" className="flex flex-wrap items-center gap-x-1 gap-y-2 rounded-xl border border-border bg-card p-2">
+        <span className="px-2 text-sm font-medium whitespace-nowrap tabular-nums" aria-live="polite">已选 {share.selected.size} 条</span>
+        {share.loading && <LoaderCircle className="size-4 animate-spin text-muted-foreground" aria-label="正在加载历史消息" />}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="ghost" className={actionHitArea}>选择范围<ChevronDown data-icon="inline-end" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start">
+            <DropdownMenuItem className="min-h-10" disabled={share.loading || !share.complete} onSelect={() => share.preset("all")}>全选</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-10" disabled={share.loading || !share.complete} onSelect={() => share.preset("ai")}>仅 AI</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-10" onSelect={() => share.preset("latest")}>最近一轮</DropdownMenuItem>
+            <DropdownMenuItem className="min-h-10" onSelect={() => share.preset("clear")}>清空</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button type="button" variant="ghost" className={actionHitArea} disabled={!share.currentRound.length} onClick={() => share.toggleRound(share.currentRound)}>{roundSelected ? "取消本轮" : "选择本轮"}</Button>
+        <div className="ml-auto flex items-center gap-1">
+          <Button type="button" variant="ghost" className={actionHitArea} onClick={share.exit}>取消</Button>
+          <Button type="button" className={actionHitArea} disabled={!share.selected.size || share.preparing} onClick={() => void share.openPreview()}>
+            {share.preparing && <LoaderCircle className="animate-spin" />}
+            预览图片<ChevronRight data-icon="inline-end" />
+          </Button>
+        </div>
+        {share.error && <div role="alert" className="flex w-full items-center justify-between gap-2 border-t px-2 pt-2 text-sm text-destructive">
+          <span>{share.error}</span>
+          {!share.complete && <Button type="button" variant="ghost" className={actionHitArea} disabled={share.loading} onClick={share.retryHistory}>重试</Button>}
+        </div>}
+      </div>
+    </div>
+  )
 }
