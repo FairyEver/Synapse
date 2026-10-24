@@ -67,7 +67,8 @@ describe("AgentSlashMenu", () => {
     const viewport = container.querySelector<HTMLElement>('[data-slot="scroll-area-viewport"]')
     const item = container.querySelector<HTMLElement>('[role="option"]')
 
-    expect(html).toContain("h-8")
+    expect(item?.classList.contains("h-8")).toBe(false)
+    expect(item?.classList.contains("py-1")).toBe(true)
     expect(html).toContain("whitespace-nowrap")
     expect(html).toContain("truncate")
     expect(html).not.toContain("break-words")

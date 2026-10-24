@@ -72,7 +72,7 @@ function AgentSlashMenu({
                       key={`${candidate.kind}:${candidate.name}`}
                       type="button"
                       className={cn(
-                        "flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-sm px-2 text-left text-sm",
+                        "flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-sm px-2 py-1 text-left text-sm",
                         selected ? "bg-muted text-foreground" : "text-popover-foreground",
                       )}
                       role="option"
