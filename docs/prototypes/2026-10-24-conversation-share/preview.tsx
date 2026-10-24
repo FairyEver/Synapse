@@ -1,13 +1,25 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, Copy, Download, Folder, Image, Info, LoaderCircle, MessageSquare, PanelLeft, Plus, Share2, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowLeft, ArrowDown, ArrowUp, Bell, Check, ChevronDown, ChevronRight, ChevronUp, CircleUserRound, Copy, Download, EllipsisVertical, ExternalLink, Folder, FolderOpen, Info, LoaderCircle, Mic, Plus, Share2, Terminal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogFrame, DialogFrameHeader, DialogFrameBody } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFrame, DialogFrameHeader, DialogFrameBody, DialogFrameFooter } from '@/components/ui/dialog'
+import { AgentMessageBubble } from '@/modules/agent/components/agent-message-bubble'
+import { AgentComposerInputBox } from '@/modules/agent/components/agent-composer-input-box'
 import { cn } from '@/lib/utils'
+import agentIcon from '@/modules/agent/assets/icon.png'
+import driveIcon from '@/modules/drive/assets/icon.png'
+import settingsIcon from '@/modules/settings/assets/icon.png'
+import workflowIcon from '@/modules/workflow/assets/icon.png'
+import automationIcon from '@/modules/automation/assets/icon.png'
+import repositoryIcon from '@/modules/resource-repository/assets/icon.png'
+import mailInternalIcon from '@/modules/mail-internal/assets/icon.png'
+import mailIcon from '@/modules/mail/assets/icon.png'
+import appsIcon from '@/modules/apps/assets/icon.png'
+import terminalIcon from '@capabilities/terminal/renderer/assets/icon.png'
 // @ts-expect-error Virtual, pinned at build time; not an application dependency.
 import { snapdom } from 'prototype-snapdom'
 
@@ -43,10 +55,13 @@ function MailChart() {
 function MessageBody({ id, redact = false }: { id: number; redact?: boolean }) {
   if (id === 1) return <p>你去看一看我的邮箱，把我最近一个月收到的邮件数量按天做一个图形化分析，看看我哪一天收到的邮件最多。</p>
   if (id === 2) return <>
-    <p>我已经查完了。邮箱 <span className={cn('break-all', redact && 'rounded bg-muted px-1 text-muted-foreground')}>{redact ? '［邮箱已隐藏］' : 'demo@example.com'}</span> 最近一个月共收到 <strong>111 封</strong>邮件。</p>
-    <p className="mt-4">收件最多的一天是 <strong>10 月 21 日，19 封</strong>，约为日均的 5 倍；其次是 10 月 20 日，共 12 封。</p>
-    <h3 className="mt-6 text-xl font-semibold">收件箱每日收件量 · 最近一个月</h3>
-    <p className="mt-1 text-sm text-muted-foreground">2026/09/24 – 2026/10/24 · 共 111 封</p>
+    <p>我已经查完了。用你的阿里企业邮箱（<span className={cn('break-all', redact ? 'rounded bg-muted px-1 text-muted-foreground' : 'underline underline-offset-4')}>{redact ? '［邮箱已隐藏］' : 'demo@example.com'}</span>）统计了收件箱 <strong>2026-09-24 ~ 2026-10-24</strong> 共 31 天的收件情况，合计 <strong>111 封</strong>（垃圾邮件箱里的 7 封没有算进去）。</p>
+    <p className="mt-4"><strong>收件最多的一天是 10 月 21 日，19 封</strong>，大约是日均（3.6 封）的 5 倍。次高是 10 月 20 日 12 封，10 月 13 日和 10 月 22 日各有 10 封。</p>
+    <h3 className="mt-6 text-base font-semibold">收件箱每日收件量 · 最近一个月</h3>
+    <p className="mt-1 text-sm text-muted-foreground">2026-09-24 ~ 2026-10-24（本地时区）· 共 111 封</p>
+    <div className="mt-5 grid grid-cols-3 gap-4">
+      {[['收件最多的一天', '10 月 21 日', '19 封'], ['次高', '10 月 20 日', '12 封'], ['日均收件', '3.6 封', '31 天口径']].map(([label, value, detail]) => <div key={label}><p className="text-sm">{label}</p><p className="mt-3 text-xl font-medium">{value}</p><span className="mt-2 inline-block rounded-md bg-muted px-1.5 py-0.5 text-xs">{detail}</span></div>)}
+    </div>
     <MailChart />
     <p className="mt-4">高峰集中在 10 月 20 日至 22 日，这三天合计 <strong>41 封</strong>，占本月总收件量的 36.9%。</p>
   </>
@@ -76,7 +91,8 @@ function DesignNotes({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
     <DialogFrameHeader title="方案与技术选型" description="评审原型 · 2026 年 10 月 24 日 · 使用模拟对话" bordered />
     <DialogFrameBody className="overflow-y-auto p-6 text-sm leading-7">
       <h2 className="text-lg font-semibold">从消息出发，分享一段对话</h2>
-      <p className="mt-2">顶栏「分享」默认选中最近一轮完整问答。单条消息旁的分享图标仅选中该消息。左侧选择、右侧预览；可以独立选择用户消息或 AI 回复，始终按原对话顺序输出。</p>
+      <p className="mt-2">保留真实 SY 的侧栏、单行顶栏、原始对话排版、悬浮输入框和底部 Dock。顶栏增加分享图标，进入后在原消息旁勾选；底部输入框原位切换为选择操作栏。选择完成才打开图片预览弹窗，不再压缩成多栏工作台。</p>
+      <p className="mt-2">顶栏入口不自动选择内容；单条消息的分享图标只预选该消息。支持「最近一轮」快捷选择。关闭预览返回原位置，选择和设置均保留；预览返回和取消分享是两个独立操作。</p>
       <h3 className="mt-6 font-semibold">选择与上下文</h3>
       <p className="mt-2">支持逐条勾选、按轮选择、全选、仅 AI、清空及 Shift 连续选择。跳过消息时保留「已省略内容」标记，避免误读。默认不含工具调用、思考过程、权限卡和日志；被引用的文件内容不自动附带。</p>
       <h3 className="mt-6 font-semibold">图片与清晰度</h3>
@@ -104,20 +120,22 @@ function DesignNotes({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
 }
 
 function App() {
-  const [sharing, setSharing] = useState(true)
-  const [selected, setSelected] = useState<Set<number>>(new Set([1, 2]))
+  const [sharing, setSharing] = useState(false)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
   const [settings, setSettings] = useState(defaults)
   const [notes, setNotes] = useState(false)
-  const [mobilePane, setMobilePane] = useState<'select' | 'preview'>('preview')
-  const [showSettings, setShowSettings] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(240)
+  const timeline = useRef<HTMLDivElement>(null)
+  const resizeCleanup = useRef<(() => void) | null>(null)
   const [fullSize, setFullSize] = useState(false)
   const [availableWidth, setAvailableWidth] = useState(620)
   const [paperHeight, setPaperHeight] = useState(0)
   const [busy, setBusy] = useState<'copy' | 'save' | null>(null)
   const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null)
   const anchor = useRef<number | null>(null)
-  const paper = useRef<HTMLElement>(null)
-  const viewport = useRef<HTMLDivElement>(null)
+  const [paperElement, setPaperElement] = useState<HTMLElement | null>(null)
+  const [viewportElement, setViewportElement] = useState<HTMLDivElement | null>(null)
   const active = messages.filter((message) => selected.has(message.id))
   const zoom = fullSize ? 1 : Math.min(1, Math.max(0.1, (availableWidth - 64) / settings.width))
   const change = <K extends keyof Settings>(key: K, value: Settings[K]) => setSettings((previous) => ({ ...previous, [key]: value }))
@@ -129,28 +147,26 @@ function App() {
   }, [notice])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && sharing && !notes && !busy) {
-        if (showSettings) setShowSettings(false)
-        else setSharing(false)
-      }
+      if (event.key === 'Escape' && !event.defaultPrevented && sharing && !previewOpen && !notes && !busy) setSharing(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [sharing, notes, busy, showSettings])
+  }, [sharing, notes, busy, previewOpen])
+  useEffect(() => () => resizeCleanup.current?.(), [])
   useLayoutEffect(() => {
     const measure = () => {
-      if (viewport.current) setAvailableWidth(viewport.current.clientWidth || 620)
-      if (paper.current) setPaperHeight(paper.current.offsetHeight)
+      if (viewportElement) setAvailableWidth(viewportElement.clientWidth || 620)
+      if (paperElement) setPaperHeight(paperElement.offsetHeight)
     }
     const observer = new ResizeObserver(measure)
-    if (viewport.current) observer.observe(viewport.current)
-    if (paper.current) observer.observe(paper.current)
+    if (viewportElement) observer.observe(viewportElement)
+    if (paperElement) observer.observe(paperElement)
     measure()
     return () => observer.disconnect()
-  }, [sharing, selected, settings, mobilePane])
+  }, [viewportElement, paperElement])
 
-  function enterShare(ids = [5, 6]) {
-    setSelected(new Set(ids)); anchor.current = null; setSharing(true); setMobilePane('preview')
+  function enterShare(ids: number[] = []) {
+    setSelected(new Set(ids)); anchor.current = null; setSharing(true)
   }
   function choose(id: number, checked: boolean, range = false) {
     setSelected((previous) => {
@@ -165,11 +181,11 @@ function App() {
   function preset(ids: number[]) { setSelected(new Set(ids)); anchor.current = null }
 
   async function renderImage(): Promise<Blob> {
-    if (!paper.current || !active.length) throw new Error('请先选择消息')
+    if (!paperElement || !active.length) throw new Error('请先选择消息')
     const host = document.createElement('div')
     host.className = 'fixed -left-[20000px] top-0 pointer-events-none'
     host.setAttribute('aria-hidden', 'true')
-    const clone = paper.current.cloneNode(true) as HTMLElement
+    const clone = paperElement.cloneNode(true) as HTMLElement
     clone.removeAttribute('id')
     host.append(clone)
     document.body.append(host)
@@ -215,75 +231,149 @@ function App() {
     } finally { setBusy(null) }
   }
 
+  function startSidebarResize(event: { preventDefault: () => void; clientX: number }) {
+    event.preventDefault()
+    resizeCleanup.current?.()
+    const start = event.clientX
+    const width = sidebarWidth
+    const move = (pointer: PointerEvent) => setSidebarWidth(Math.max(220, Math.min(420, width + pointer.clientX - start)))
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      resizeCleanup.current = null
+    }
+    resizeCleanup.current = stop
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop, { once: true })
+  }
+  function toggleRound(round: number) {
+    const ids = [round * 2 + 1, round * 2 + 2]
+    const all = ids.every((id) => selected.has(id))
+    setSelected((previous) => {
+      const next = new Set(previous)
+      ids.forEach((id) => all ? next.delete(id) : next.add(id))
+      return next
+    })
+    anchor.current = null
+  }
+  function existingAction() { setNotice({ text: '此原型仅演示对话分享' }) }
+  const projects = ['本地对话', 'AI协作', '知刻', 'Synapse', 'BrickLab', 'Projects_Js', 'JS_01 小慧', 'JS_02 养鸡工厂', 'JS_03 人力', 'JS_04 规范', 'JS_05 流程', '公司文档仓库', '演示知识库', '私人知识库', 'headless', '芋道', 'Mall_Platform_Java', '06 代码审核']
+  const dock = [
+    ['用户对话', agentIcon], ['云盘', driveIcon], ['设置', settingsIcon], ['工作流', workflowIcon], ['终端', terminalIcon],
+    ['自动化', automationIcon], ['资源仓库', repositoryIcon], ['站内信', mailInternalIcon], ['邮箱', mailIcon], ['应用', appsIcon],
+  ]
+
   return <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background text-foreground">
-    <div className="flex h-10 shrink-0 items-center justify-between border-b bg-muted/50 px-5 text-xs">
-      <div className="flex items-center gap-2"><span className="font-medium">对话分享</span><span className="text-muted-foreground">/ 交互原型 · 示例数据</span></div>
-      <Button variant="ghost" size="sm" onClick={() => setNotes(true)}><Info />方案与选型</Button>
-    </div>
+    <header aria-label="桌面窗口标题栏" className="flex h-8 shrink-0 items-center gap-4 border-b px-3">
+      <div aria-hidden="true" className="flex items-center gap-2"><span className="size-3 rounded-full bg-destructive" /><span className="size-3 rounded-full bg-chart-4" /><span className="size-3 rounded-full bg-chart-3" /></div>
+      <span className="truncate text-sm font-semibold text-foreground/70">Synapse AI Studio 1.0.79 dev</span>
+      <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setNotes(true)}><Info className="size-3.5" />原型说明</Button>
+    </header>
     <div className="flex min-h-0 flex-1">
-      <aside aria-label="项目侧栏" className={cn('hidden w-48 shrink-0 flex-col border-r bg-sidebar md:flex', sharing && 'md:hidden 2xl:flex')}>
-        <div className="flex h-16 items-center gap-2 px-4"><Brand small /><span className="text-sm font-semibold">Synapse</span></div>
-        <div className="px-3"><div className="flex h-8 items-center justify-between rounded-lg border bg-background px-3 text-sm">用户对话<ChevronDown className="size-4 text-muted-foreground" /></div></div>
-        <div className="mt-5 space-y-1 px-3 text-sm">
-          <div className="flex h-8 items-center gap-2 px-1"><Folder className="size-4 text-muted-foreground" />本地对话<Plus className="ml-auto size-4 text-muted-foreground" /></div>
-          <div className="ml-3 flex min-h-10 items-center gap-2 rounded-lg bg-sidebar-accent px-3 font-medium"><MessageSquare className="size-4 shrink-0" /><span className="truncate">邮箱收件分析</span></div>
-          {['AI 协作', 'Synapse', 'BrickLab', '公司文档仓库'].map((name) => <div key={name} className="flex h-10 items-center gap-2 px-1"><Folder className="size-4 text-muted-foreground" />{name}<ChevronRight className="ml-auto size-3 text-muted-foreground" /></div>)}
+      <aside aria-label="项目侧栏" data-desktop-sidebar className="relative hidden shrink-0 bg-background p-2 md:block" style={{ width: sidebarWidth }}>
+        <div className="h-full overflow-y-auto py-0.5">
+          <div className="px-2 pb-2"><div className="flex h-7 items-center justify-between rounded-lg border border-input px-2.5 text-sm">用户对话<ChevronDown className="size-4 text-muted-foreground" /></div></div>
+          <div className="space-y-0.5">{projects.map((name, index) => <Fragment key={name}>
+            <div className="flex h-8 shrink-0 items-center rounded-lg px-2 text-sm font-medium text-foreground/80">
+              {index === 0 ? <FolderOpen className="mr-2 size-4 shrink-0 text-muted-foreground" /> : <Folder className="mr-2 size-4 shrink-0 text-muted-foreground" />}
+              <span className="min-w-0 flex-1 truncate">{name}</span>
+              <Button variant="ghost" size="icon-xs" aria-label={`在${name}中新建对话`} onClick={existingAction}><Plus /></Button><Button variant="ghost" size="icon-xs" aria-label={`${name}菜单`} onClick={existingAction}><EllipsisVertical /></Button>
+            </div>
+            {index === 0 && <div className="pt-0.5 pl-3"><div className="flex h-8 items-center gap-2 rounded-lg bg-selected px-2 text-xs"><span className="min-w-0 flex-1 truncate">你去看一看我的邮箱，…</span><span className="shrink-0 text-muted-foreground">18 分钟前</span></div></div>}
+          </Fragment>)}</div>
         </div>
-        <div className="mt-auto flex items-center gap-2 border-t p-4 text-xs text-muted-foreground"><PanelLeft className="size-4" />Synapse AI Studio</div>
+        <div role="separator" aria-label="调整项目侧栏宽度" aria-orientation="vertical" className="absolute inset-y-0 right-0 z-10 w-px cursor-col-resize bg-border before:absolute before:inset-y-0 before:-inset-x-1" onPointerDown={startSidebarResize} />
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b px-4 lg:px-6">
-          <div className="flex min-w-0 items-center gap-3">{sharing && <Button variant="ghost" size="icon" aria-label="返回对话" disabled={!!busy} onClick={() => setSharing(false)}><ArrowLeft /></Button>}<div className="min-w-0"><h1 className="truncate text-base font-semibold">{sharing ? '分享对话' : '邮箱收件分析'}</h1><p className="mt-0.5 truncate text-xs text-muted-foreground">{sharing ? '邮箱收件分析' : 'DeepSeek · deepseek-flash'}</p></div></div>
-          <div className="flex shrink-0 items-center gap-2">{sharing ? <><span className="hidden text-xs text-muted-foreground sm:block">仅在本机生成</span><Button variant="outline" disabled={!!busy} onClick={() => setSharing(false)}>取消</Button></> : <Button onClick={() => enterShare()}><Share2 />分享</Button>}</div>
-        </header>
-        {sharing ? <>
-          <div className="flex shrink-0 border-b p-2 lg:hidden"><Button className="flex-1" variant={mobilePane === 'select' ? 'secondary' : 'ghost'} onClick={() => setMobilePane('select')}>选择消息 · {active.length}</Button><Button className="flex-1" variant={mobilePane === 'preview' ? 'secondary' : 'ghost'} onClick={() => setMobilePane('preview')}>图片预览</Button></div>
-          <div className="flex min-h-0 flex-1">
-            <section aria-label="选择消息" className={cn('flex min-h-0 w-full shrink-0 flex-col border-r lg:w-[360px] xl:w-[390px]', mobilePane !== 'select' && 'hidden lg:flex')}>
-              <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b px-5"><h2 className="text-sm font-medium">选择消息 <span className="ml-1 text-muted-foreground">{active.length} / 6</span></h2><span className="text-xs text-muted-foreground">Shift 连选</span></div>
-              <fieldset disabled={!!busy} className="flex shrink-0 gap-1 border-b px-3 py-2"><Button variant="ghost" onClick={() => preset(messages.map((m) => m.id))}>全选</Button><Button variant="ghost" onClick={() => preset([2, 4, 6])}>仅 AI</Button><Button variant="ghost" onClick={() => preset([5, 6])}>最近一轮</Button><Button variant="ghost" onClick={() => preset([])}>清空</Button></fieldset>
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6" tabIndex={0} aria-label="可选择的对话消息">
-                {[0, 1, 2].map((round) => <div key={round}>
-                  <div className="flex items-center justify-between px-2 pt-4 pb-2"><span className="text-xs text-muted-foreground">第 {round + 1} 轮</span><Button variant="ghost" size="xs" disabled={!!busy} onClick={() => { const ids = [round * 2 + 1, round * 2 + 2]; const all = ids.every((id) => selected.has(id)); setSelected((previous) => { const next = new Set(previous); ids.forEach((id) => all ? next.delete(id) : next.add(id)); return next }) }}>{[round * 2 + 1, round * 2 + 2].every((id) => selected.has(id)) ? '取消本轮' : '选择本轮'}</Button></div>
-                  {messages.slice(round * 2, round * 2 + 2).map((message) => <article key={message.id} data-message={message.id} className={cn('mb-2 rounded-lg border p-4 transition-colors', selected.has(message.id) ? 'border-primary/30 bg-muted/70' : 'border-border bg-background')}>
-                    <div className="flex items-start gap-3"><Checkbox aria-label={`选择第 ${message.id} 条消息：${message.summary}`} checked={selected.has(message.id)} disabled={!!busy} onClick={(event) => { event.preventDefault(); choose(message.id, !selected.has(message.id), event.shiftKey) }} /><div className="min-w-0 flex-1"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-medium">{message.role === 'user' ? '我' : 'Synapse'}</span><time className="text-xs text-muted-foreground">{message.time}</time></div><div className="text-sm leading-7"><MessageBody id={message.id} /></div></div></div>
-                  </article>)}
-                </div>)}
-              </div>
-            </section>
-            <section aria-label="图片预览及设置" className={cn('flex min-w-0 flex-1 flex-col', mobilePane !== 'preview' && 'hidden lg:flex')}>
-              <div className="flex h-14 shrink-0 items-center justify-between border-b px-5"><div className="flex items-center gap-2"><Image className="size-4 text-muted-foreground" /><h2 className="text-sm font-medium">图片预览</h2></div><div className="flex gap-1"><Button variant="ghost" disabled={!active.length || !!busy} onClick={() => setFullSize((value) => !value)} aria-pressed={fullSize} className="tabular-nums">{fullSize ? '100% · 适应宽度' : `${Math.round(zoom * 100)}%`}</Button><Button variant="ghost" size="icon" aria-label="图片设置" aria-expanded={showSettings} onClick={() => setShowSettings((value) => !value)} className="xl:hidden"><SlidersHorizontal /></Button></div></div>
-              <div className="flex min-h-0 flex-1">
-                <div ref={viewport} className="min-h-0 min-w-0 flex-1 overflow-auto bg-surface p-5 sm:p-8" tabIndex={0} aria-label="可滚动的长图预览">
-                  {active.length ? <div className="mx-auto" style={{ width: settings.width * zoom, height: paperHeight * zoom }}>
-                    <div className="origin-top-left" style={{ width: settings.width, transform: `scale(${zoom})` }}>
-                      <article ref={paper} id="share-paper" aria-label="待分享图片内容" className="overflow-hidden rounded-lg bg-background p-10 text-foreground" style={{ width: settings.width }}>
-                        {settings.showTitle && <header className="mb-8 border-b pb-7"><p className="mb-3 text-sm text-muted-foreground">对话摘录</p><h2 className="break-words text-2xl leading-snug font-semibold">{settings.title.trim() || '对话摘录'}</h2>{settings.showTime && <p className="mt-3 text-sm text-muted-foreground">2026 年 10 月 24 日</p>}</header>}
-                        <div className="space-y-8">{active.map((message, index) => <Fragment key={message.id}>
-                          {index > 0 && message.id > active[index - 1].id + 1 && <div className="flex items-center gap-4 text-xs text-muted-foreground" data-omission><span className="h-px flex-1 bg-border" /><span>已省略内容</span><span className="h-px flex-1 bg-border" /></div>}
-                          <section data-export-message={message.id}><div className="mb-3 flex items-center gap-2">{message.role === 'assistant' ? <Brand small /> : <span className="flex size-6 items-center justify-center rounded-md bg-muted text-xs font-medium">我</span>}<span className="text-sm font-medium">{message.role === 'assistant' ? 'Synapse' : '我'}</span>{settings.showModel && message.role === 'assistant' && <span className="ml-1 text-xs text-muted-foreground">DeepSeek</span>}{settings.showTime && <time className="ml-auto text-xs text-muted-foreground">{message.time}</time>}</div><div className={cn('text-lg leading-8 break-words', message.role === 'user' && 'rounded-lg bg-muted px-5 py-4')}><MessageBody id={message.id} redact={settings.redact} /></div></section>
-                        </Fragment>)}</div>
-                        {settings.showBrand && <footer className="mt-10 flex items-center justify-between border-t pt-5 text-xs text-muted-foreground"><span className="flex items-center gap-2"><Brand small /><span>Synapse</span></span><span>对话摘录</span></footer>}
-                      </article>
-                    </div>
-                  </div> : <div className="flex h-full min-h-64 flex-col items-center justify-center text-center"><MessageSquare className="mb-4 size-8 text-muted-foreground" /><h3 className="font-medium">选择要分享的消息</h3><p className="mt-2 text-sm text-muted-foreground">可以只选一条，也可以组合多轮对话</p><Button className="mt-5" variant="outline" onClick={() => { preset([5, 6]); setMobilePane('select') }}>选择最近一轮</Button></div>}
-                </div>
-                <aside aria-label="图片设置" className={cn('w-60 shrink-0 overflow-y-auto border-l bg-background p-5', !showSettings && 'hidden xl:block', showSettings && 'w-52 sm:w-60')}>
-                  <fieldset disabled={!!busy} className="space-y-6"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">图片设置</h2><Button variant="ghost" size="icon-xs" className="xl:hidden" aria-label="关闭图片设置" onClick={() => setShowSettings(false)}><X /></Button></div>
-                    <Segment label="清晰度" value={settings.scale} options={[{value:2,label:'高清 2×'},{value:3,label:'超清 3×'}]} onChange={(value) => change('scale', value)} />
-                    <Segment label="版式宽度" value={settings.width} options={[{value:720,label:'标准'},{value:960,label:'宽版'}]} onChange={(value) => change('width', value)} />
-                    <div><Toggle label="显示标题" id="show-title" checked={settings.showTitle} onChange={(value) => change('showTitle', value)} />{settings.showTitle && <Input aria-label="分享图片标题" maxLength={60} className="mt-2" value={settings.title} onChange={(event) => change('title', event.target.value)} />}</div>
-                    <div className="border-t pt-4"><Toggle label="隐藏邮箱" id="redact-email" checked={settings.redact} onChange={(value) => change('redact', value)} /><Toggle label="显示时间" id="show-time" checked={settings.showTime} onChange={(value) => change('showTime', value)} /><Toggle label="显示模型" id="show-model" checked={settings.showModel} onChange={(value) => change('showModel', value)} /><Toggle label="底部标识" id="show-brand" checked={settings.showBrand} onChange={(value) => change('showBrand', value)} /></div>
-                    <div className="border-t pt-4 text-xs leading-6 text-muted-foreground"><p className="flex items-center gap-1.5"><ShieldCheck className="size-3.5" />PNG · 本机生成</p><p className="mt-1 tabular-nums" data-resolution>{active.length ? `${settings.width * settings.scale} × ${Math.round(paperHeight * settings.scale)} px` : '等待选择内容'}</p></div>
-                  </fieldset>
-                </aside>
-              </div>
-              <footer className="flex min-h-20 shrink-0 flex-wrap items-center justify-between gap-3 border-t bg-background px-5 py-4"><div><p className="text-sm font-medium" aria-live="polite">已选择 {active.length} 条消息</p><p className="mt-1 text-xs text-muted-foreground">{settings.redact ? '邮箱已隐藏' : '包含邮箱地址'} · PNG · {settings.scale}×</p></div><div className="flex items-center gap-2"><Button variant="outline" disabled={!active.length || !!busy} onClick={() => void exportImage('copy')}>{busy === 'copy' ? <LoaderCircle className="animate-spin" /> : <Copy />}复制图片</Button><Button disabled={!active.length || !!busy} onClick={() => void exportImage('save')}>{busy === 'save' ? <LoaderCircle className="animate-spin" /> : <Download />}保存图片</Button></div></footer>
-            </section>
+      <main aria-label="对话工作区" className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background px-2 py-2.5">
+        <div aria-label="对话顶栏" data-conversation-header className="flex shrink-0 items-center justify-between gap-2">
+          <h1 className="min-w-0 flex-1 truncate text-sm font-medium">你去看一看我的邮箱，把我最近一个月收到的邮件数量按天做一个图形化分析，看看我哪一天收到的邮件最多。</h1>
+          <div className="flex shrink-0 items-center gap-0">
+            <span className="hidden px-1 text-xs text-muted-foreground sm:block">DeepSeek deepseek-flash[1M]</span>
+            <div aria-label="上下文使用量" className="mx-1 hidden h-1 w-16 overflow-hidden rounded-full bg-muted lg:block"><div className="h-full w-1 bg-primary" /></div>
+            <Button variant="ghost" size="icon" aria-label="在 Claude Code 中继续" title="在 Claude Code 中继续" onClick={existingAction}><Terminal /></Button>
+            <Button variant="ghost" size="icon" aria-label="复制对话" title="复制对话" onClick={existingAction}><Copy /></Button>
+            <Button variant="ghost" size="icon" aria-label="导出对话调试包" title="导出对话调试包" onClick={existingAction}><Download /></Button>
+            <Button variant={sharing ? 'secondary' : 'ghost'} size="icon" aria-label="分享对话" title="分享对话" aria-pressed={sharing} onClick={() => sharing ? setSharing(false) : enterShare()}><Share2 /></Button>
+            <Button variant="ghost" size="icon" aria-label="新窗口打开" title="新窗口打开" onClick={existingAction}><ExternalLink /></Button>
           </div>
-        </> : <div className="flex min-h-0 flex-1 flex-col"><div className="min-h-0 flex-1 overflow-y-auto px-5 py-8"><div className="mx-auto max-w-3xl space-y-10">{messages.map((message) => <section key={message.id} className={message.role === 'user' ? 'ml-auto max-w-xl' : ''}><div className="mb-3 flex items-center gap-2">{message.role === 'assistant' && <Brand small />}<span className="text-sm font-medium">{message.role === 'user' ? '我' : 'Synapse'}</span><time className="text-xs text-muted-foreground">{message.time}</time><Button variant="ghost" size="icon-xs" aria-label={`分享第 ${message.id} 条消息`} className="ml-auto" onClick={() => enterShare([message.id])}><Share2 /></Button></div><div className={cn('text-base leading-8', message.role === 'user' && 'rounded-xl bg-muted px-5 py-4')}><MessageBody id={message.id} /></div></section>)}</div></div><div className="shrink-0 px-5 pt-3 pb-5"><div className="mx-auto flex max-w-3xl items-center justify-between rounded-xl border bg-background px-4 py-3"><span className="text-sm text-muted-foreground">输入消息</span><Button variant="secondary" size="icon" disabled aria-label="原型不发送消息"><ArrowUp /></Button></div></div></div>}
+        </div>
+        <div className="relative flex min-h-0 min-w-0 flex-1">
+          <div ref={timeline} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden" tabIndex={0} aria-label="对话消息">
+            <div data-timeline-content className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 px-4 pt-4 pb-40">
+              {messages.map((message, index) => <Fragment key={message.id}>
+                {sharing && index % 2 === 0 && <div className="flex h-7 items-center justify-between px-1"><span className="text-xs text-muted-foreground">第 {index / 2 + 1} 轮</span><Button variant="ghost" size="xs" onClick={() => toggleRound(index / 2)}>{[message.id, message.id + 1].every((id) => selected.has(id)) ? '取消本轮' : '选择本轮'}</Button></div>}
+                {message.id === 2 && <div className="mt-5 flex h-7 items-center gap-1.5 text-xs text-muted-foreground"><span>已处理</span><span>48s</span><ChevronRight className="size-3.5" /></div>}
+                <article id={`source-message-${message.id}`} data-message={message.id} className={cn('group/message relative min-w-0', sharing && 'rounded-lg pl-8', sharing && selected.has(message.id) && 'bg-muted/50')}>
+                  {sharing && <Checkbox className="absolute top-4 left-1" aria-label={`选择第 ${message.id} 条消息：${message.summary}`} checked={selected.has(message.id)} onClick={(event) => { event.preventDefault(); choose(message.id, !selected.has(message.id), event.shiftKey) }} />}
+                  {message.role === 'user' ? <div className="flex min-w-0 flex-col items-end">
+                    <AgentMessageBubble role="user"><MessageBody id={message.id} /></AgentMessageBubble>
+                    <div className="mt-1 flex h-6 items-center gap-2 text-xs text-muted-foreground opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100"><time>{message.time}</time>{!sharing && <><Button variant="ghost" size="icon-xs" aria-label={`复制第 ${message.id} 条消息`} onClick={existingAction}><Copy /></Button><Button variant="ghost" size="icon-xs" aria-label={`分享第 ${message.id} 条消息`} onClick={() => enterShare([message.id])}><Share2 /></Button></>}</div>
+                  </div> : <div className="flex w-full min-w-0 flex-col items-start">
+                    <div className="mb-1 flex h-6 items-center gap-2"><span aria-label="Synapse" className="inline-flex size-5 items-center justify-center rounded bg-primary text-xs font-semibold tracking-tighter text-primary-foreground">Sy</span><time className="text-xs text-muted-foreground">{message.time}</time></div>
+                    <div className="w-full min-w-0 px-1 py-2 text-sm leading-7 break-words"><MessageBody id={message.id} /></div>
+                    {!sharing && <div className="flex h-6 w-full justify-end gap-1 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100"><Button variant="ghost" size="icon-xs" aria-label={`复制第 ${message.id} 条消息`} onClick={existingAction}><Copy /></Button><Button variant="ghost" size="icon-xs" aria-label={`分享第 ${message.id} 条消息`} onClick={() => enterShare([message.id])}><Share2 /></Button></div>}
+                  </div>}
+                </article>
+              </Fragment>)}
+            </div>
+          </div>
+          <div data-composer-position className="absolute inset-x-4 bottom-2.5 z-10 mx-auto max-w-2xl md:inset-x-20">
+            {sharing ? <AgentComposerInputBox
+              editor={<div className="flex min-h-9 items-center justify-between gap-2 px-2"><span className="text-sm font-medium" aria-live="polite">已选择 {active.length} 条消息</span><div className="flex items-center gap-2"><span className="hidden text-xs text-muted-foreground sm:inline">Shift 连选</span><Button variant="ghost" onClick={() => setSharing(false)}>取消</Button></div></div>}
+              leadingActions={<div className="flex flex-wrap gap-0.5"><Button variant="ghost" onClick={() => preset(messages.map((m) => m.id))}>全选</Button><Button variant="ghost" onClick={() => preset([2, 4, 6])}>仅 AI</Button><Button variant="ghost" onClick={() => preset([5, 6])}>最近一轮</Button><Button variant="ghost" onClick={() => preset([])}>清空</Button></div>}
+              trailingActions={<Button disabled={!active.length} onClick={() => { setFullSize(false); setPreviewOpen(true) }}>预览图片<ChevronRight /></Button>}
+            /> : <>
+              <Button variant="outline" size="icon" aria-label="滚动到底部" className="absolute -top-11 left-1/2 -translate-x-1/2 rounded-full" onClick={() => timeline.current?.scrollTo({ top: timeline.current.scrollHeight, behavior: 'smooth' })}><ArrowDown /></Button>
+              <AgentComposerInputBox
+                editor={<div className="min-h-9 px-2 py-2 text-sm text-muted-foreground">输入消息</div>}
+                leadingActions={<><Button variant="ghost" size="icon" aria-label="打开文件树" onClick={existingAction}><Folder /></Button><Button variant="ghost" size="icon" aria-label="添加附件" onClick={existingAction}><Plus /></Button><Button variant="ghost" onClick={existingAction}>快捷输入<ChevronUp /></Button></>}
+                trailingActions={<><Button variant="ghost" className="hidden text-muted-foreground sm:inline-flex" onClick={existingAction}>跳过权限确认<ChevronDown /></Button><Button variant="ghost" size="icon" aria-label="语音输入" onClick={existingAction}><Mic /></Button><Button variant="secondary" size="icon" className="rounded-full" aria-label="发送" onClick={existingAction}><ArrowUp /></Button></>}
+              />
+            </>}
+          </div>
+        </div>
       </main>
     </div>
+    <footer aria-label="应用 Dock" data-desktop-dock className="grid min-h-12 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 border-t border-sidebar-border/50 bg-muted/30 px-3">
+      <div />
+      <nav aria-label="系统应用" className="flex min-w-0 items-center justify-center overflow-x-auto">{dock.map(([name, icon], index) => <Button key={name} variant="ghost" size="icon" className="relative size-12 shrink-0 hover:bg-transparent" aria-label={name} aria-current={index === 0 ? 'page' : undefined} onClick={existingAction}><img src={icon} alt="" className="size-10 object-contain" />{index === 0 && <span className="absolute bottom-0 left-1/2 size-1 -translate-x-1/2 rounded-full bg-chart-1" />}</Button>)}</nav>
+      <div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" aria-label="消息中心" onClick={existingAction}><Bell /></Button><Button variant="ghost" size="icon" aria-label="账户" onClick={existingAction}><CircleUserRound /></Button></div>
+    </footer>
+
+    <Dialog open={previewOpen} onOpenChange={(open) => { if (!busy) setPreviewOpen(open) }}>
+      <DialogContent showCloseButton={false} className="h-[min(860px,90dvh)] w-[calc(100%-3rem)] max-w-6xl gap-0 p-0 sm:max-w-6xl" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); event.stopPropagation() }} onPointerDownOutside={(event) => { if (busy) event.preventDefault() }}>
+        <DialogFrame>
+          <DialogFrameHeader bordered title="预览分享图片" description={`已选择 ${active.length} 条消息`} showCloseButton={!busy} leading={<Button variant="ghost" size="icon" aria-label="返回选择" disabled={!!busy} onClick={() => setPreviewOpen(false)}><ArrowLeft /></Button>} actions={<Button variant="ghost" disabled={!!busy} aria-pressed={fullSize} onClick={() => setFullSize((value) => !value)} className="tabular-nums">{fullSize ? '100% · 适应宽度' : `${Math.round(zoom * 100)}%`}</Button>} />
+          <DialogFrameBody className="flex overflow-hidden">
+            <div ref={setViewportElement} className="min-h-0 min-w-0 flex-1 overflow-auto bg-surface p-8" tabIndex={0} aria-label="可滚动的长图预览">
+              <div className="mx-auto" style={{ width: settings.width * zoom, height: paperHeight * zoom }}><div className="origin-top-left" style={{ width: settings.width, transform: `scale(${zoom})` }}>
+                <article ref={setPaperElement} id="share-paper" aria-label="待分享图片内容" className="overflow-hidden rounded-lg bg-background p-10 text-foreground" style={{ width: settings.width }}>
+                  {settings.showTitle && <header className="mb-8 border-b pb-7"><p className="mb-3 text-sm text-muted-foreground">对话摘录</p><h2 className="break-words text-2xl leading-snug font-semibold">{settings.title.trim() || '对话摘录'}</h2>{settings.showTime && <p className="mt-3 text-sm text-muted-foreground">2026 年 10 月 24 日</p>}</header>}
+                  <div className="space-y-8">{active.map((message, index) => <Fragment key={message.id}>
+                    {index > 0 && message.id > active[index - 1].id + 1 && <div className="flex items-center gap-4 text-xs text-muted-foreground" data-omission><span className="h-px flex-1 bg-border" /><span>已省略内容</span><span className="h-px flex-1 bg-border" /></div>}
+                    <section data-export-message={message.id}><div className="mb-3 flex items-center gap-2">{message.role === 'assistant' ? <Brand small /> : <span className="flex size-6 items-center justify-center rounded-md bg-muted text-xs font-medium">我</span>}<span className="text-sm font-medium">{message.role === 'assistant' ? 'Synapse' : '我'}</span>{settings.showModel && message.role === 'assistant' && <span className="ml-1 text-xs text-muted-foreground">DeepSeek</span>}{settings.showTime && <time className="ml-auto text-xs text-muted-foreground">{message.time}</time>}</div><div className={cn('text-lg leading-8 break-words', message.role === 'user' && 'rounded-lg bg-muted px-5 py-4')}><MessageBody id={message.id} redact={settings.redact} /></div></section>
+                  </Fragment>)}</div>
+                  {settings.showBrand && <footer className="mt-10 flex items-center justify-between border-t pt-5 text-xs text-muted-foreground"><span className="flex items-center gap-2"><Brand small /><span>Synapse</span></span><span>对话摘录</span></footer>}
+                </article>
+              </div></div>
+            </div>
+            <aside aria-label="图片设置" className="w-56 shrink-0 overflow-y-auto border-l bg-background p-5 sm:w-60">
+              <fieldset disabled={!!busy} className="space-y-6">
+                <h2 className="text-sm font-semibold">图片设置</h2>
+                <Segment label="清晰度" value={settings.scale} options={[{value:2,label:'高清 2×'},{value:3,label:'超清 3×'}]} onChange={(value) => change('scale', value)} />
+                <Segment label="版式宽度" value={settings.width} options={[{value:720,label:'标准'},{value:960,label:'宽版'}]} onChange={(value) => change('width', value)} />
+                <div><Toggle label="显示标题" id="show-title" checked={settings.showTitle} onChange={(value) => change('showTitle', value)} />{settings.showTitle && <Input aria-label="分享图片标题" maxLength={60} className="mt-2" value={settings.title} onChange={(event) => change('title', event.target.value)} />}</div>
+                <div className="border-t pt-4"><Toggle label="隐藏邮箱" id="redact-email" checked={settings.redact} onChange={(value) => change('redact', value)} /><Toggle label="显示时间" id="show-time" checked={settings.showTime} onChange={(value) => change('showTime', value)} /><Toggle label="显示模型" id="show-model" checked={settings.showModel} onChange={(value) => change('showModel', value)} /><Toggle label="底部标识" id="show-brand" checked={settings.showBrand} onChange={(value) => change('showBrand', value)} /></div>
+              </fieldset>
+            </aside>
+          </DialogFrameBody>
+          <DialogFrameFooter className="flex-row items-center justify-between gap-3 border-t bg-background px-5 py-4 sm:justify-between">
+            <div className="text-xs leading-5 text-muted-foreground"><p className="tabular-nums" data-resolution>{settings.width * settings.scale} × {Math.round(paperHeight * settings.scale)} px · PNG</p><p>{settings.redact ? '邮箱已隐藏' : '包含邮箱地址'} · 仅在本机生成</p></div>
+            <div className="flex items-center gap-2"><Button variant="outline" disabled={!active.length || !!busy} onClick={() => void exportImage('copy')}>{busy === 'copy' ? <LoaderCircle className="animate-spin" /> : <Copy />}复制图片</Button><Button disabled={!active.length || !!busy} onClick={() => void exportImage('save')}>{busy === 'save' ? <LoaderCircle className="animate-spin" /> : <Download />}保存图片</Button></div>
+          </DialogFrameFooter>
+        </DialogFrame>
+      </DialogContent>
+    </Dialog>
     {notice && <div role={notice.error ? 'alert' : 'status'} className={cn('fixed right-5 bottom-5 z-50 flex max-w-[calc(100vw-40px)] items-start gap-3 rounded-lg border bg-popover p-4 text-sm text-popover-foreground', notice.error && 'border-destructive text-destructive')}>{notice.error ? <Info className="mt-0.5 size-4 shrink-0" /> : <Check className="mt-0.5 size-4 shrink-0" />}<span>{notice.text}</span><button aria-label="关闭提示" className="shrink-0 rounded focus-visible:ring-2" onClick={() => setNotice(null)}><X className="size-4" /></button></div>}
     <DesignNotes open={notes} onOpenChange={setNotes} />
   </div>

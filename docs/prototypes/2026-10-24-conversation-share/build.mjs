@@ -41,6 +41,8 @@ const css = [
   '@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }',
   `@source "${path.join(directory, 'preview.tsx')}";`,
   ...['button', 'checkbox', 'switch', 'input', 'label', 'dialog'].map((name) => `@source "./src/components/ui/${name}.tsx";`),
+  '@source "./src/modules/agent/components/agent-message-bubble.tsx";',
+  '@source "./src/modules/agent/components/agent-composer-input-box.tsx";',
 ].join('\n')
 const result = await build({
   configFile: false,
@@ -64,6 +66,7 @@ const result = await build({
   ],
   resolve: { alias: [
     { find: '@/lib/ui-tracking', replacement: '\0prototype-tracking' },
+    { find: '@capabilities', replacement: path.join(desktop, 'app-capabilities') },
     { find: '@', replacement: path.join(desktop, 'src') },
   ] },
   build: { write: false, cssCodeSplit: false, lib: { entry: entryId, formats: ['iife'], name: 'SynapseSharePrototype' }, minify: true },
