@@ -3,12 +3,12 @@ import { account, coverage, deferred, flush, mocks, mount } from "./harness"
 import { act } from "react"
 import { afterEach, expect, it, vi } from "vitest"
 import { useMail } from "../use-mail"
-import { MailListToolbar } from "../list-toolbar"
+import { MailRefreshControl } from "../refresh-control"
 
 let current: ReturnType<typeof useMail>
 function Harness() {
   current = useMail()
-  return <MailListToolbar count={0} all={false} disabled={false} onToggle={vi.fn()} onBatch={vi.fn()} onMove={vi.fn()} folders={[]} canPermanentlyDelete={false} coverage={current.coverage} syncStatus={current.syncStatus} />
+  return <MailRefreshControl disabled={!current.accountId} loading={current.loading} syncStatus={current.syncStatus} onRefresh={current.sync} />
 }
 const job = { jobId: "mj_sync", accountId: account.id, state: "running", coverage: { ...coverage, metadataComplete: false, indexedCount: 50 }, errorCode: null }
 const counts = { indexed: 50, unread: 0, serverReported: 251, coverage: job.coverage }

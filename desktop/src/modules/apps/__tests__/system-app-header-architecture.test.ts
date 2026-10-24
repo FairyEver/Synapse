@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises"
 import { URL as FileURL } from "node:url"
 import { act, createElement } from "react"
 import { describe, expect, it } from "vitest"
-import { account, flush, mocks, mount } from "../../mail/__tests__/harness"
+import { account, coverage, deferred, flush, mocks, mount } from "../../mail/__tests__/harness"
 import { ExternalMailModule } from "../../mail"
 import { EmbeddedSystemAppShell } from "../components/embedded-system-app-shell"
 import type { SynapseSystemAppId } from "../types"
@@ -89,4 +89,41 @@ describe("system app header architecture", () => {
     await flush()
     expect(header.querySelector('[aria-label="邮箱账号"]')?.textContent).toContain("个人")
   })
+})
+
+it.each(["window", "dock", "launcher"] as const)("shows automatic mail progress only in the %s header without replacing list actions", async host => {
+  mocks.api.accountList.mockResolvedValue({ items: [{ ...account, aliases: [] }], nextCursor: null })
+  const job = { jobId: "mj_sync", accountId: account.id, state: "running", coverage, errorCode: null, syncProgress: { phase: "indexing", completed: 50, total: 100 } }
+  mocks.api.syncGet.mockResolvedValue(job)
+  const mail = createElement(ExternalMailModule)
+  mount(host === "window" ? mail : createElement(EmbeddedSystemAppShell, { appName: "邮箱", mode: host, children: mail }))
+  await flush()
+  const header = document.querySelector("[data-system-app-top-bar-actions]")!
+  const toolbar = document.querySelector('[aria-label="邮件列表工具栏"]')!
+  expect(header.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("50")
+  expect(header.querySelector('[aria-label="刷新邮箱"]')).toBeNull()
+  expect(toolbar.querySelector('[role="progressbar"]')).toBeNull()
+  expect(toolbar.querySelector('[aria-label="选择当前页邮件"]')).not.toBeNull()
+  act(() => toolbar.querySelector<HTMLButtonElement>('[aria-label="搜索邮件"]')!.click())
+  const input = toolbar.querySelector('input[aria-label="搜索邮件"]')!
+  expect(input).not.toBeNull()
+  expect(document.activeElement).toBe(input)
+  expect(header.querySelector('[role="progressbar"]')).not.toBeNull()
+})
+
+it.each(["success", "failure"] as const)("immediately replaces refresh until a manual request settles with %s", async outcome => {
+  mocks.api.accountList.mockResolvedValue({ items: [{ ...account, aliases: [] }], nextCursor: null })
+  const request = deferred<unknown>()
+  mocks.api.syncStart.mockReturnValue(request.promise)
+  mount(createElement(ExternalMailModule)); await flush()
+  const header = document.querySelector("[data-system-app-top-bar-actions]")!
+  const toolbar = document.querySelector('[aria-label="邮件列表工具栏"]')!
+  act(() => header.querySelector<HTMLButtonElement>('[aria-label="刷新邮箱"]')!.click())
+  expect(header.querySelector('[aria-label="刷新邮箱"]')).toBeNull()
+  expect(header.querySelector('[role="progressbar"]')).not.toBeNull()
+  expect(toolbar.querySelector('[aria-label="搜索邮件"]')).not.toBeNull()
+  await act(async () => { request.resolve(outcome === "success" ? null : Promise.reject(new Error("刷新失败"))) })
+  await flush()
+  expect(header.querySelector('[role="progressbar"]')).toBeNull()
+  expect(header.querySelector<HTMLButtonElement>('[aria-label="刷新邮箱"]')?.disabled).toBe(false)
 })

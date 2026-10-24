@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧，刷新/索引进度与刷新按钮原位互斥，列表工具栏常驻；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -71,16 +71,16 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 - Mail 复合提示词发现区分“回复/转发刚才的邮件并创建草稿”和“打开/编辑已有草稿”；前者优先 draft.create，后者保持 draft.get。仅调整 search 预路由并同步系统 Skill，不改变44项 Mail 工具、schema、权限或其他注册数量；仅预览不授权发送。
 - Mail 的 AI 路由将普通邮件请求固定到 mail，仅显式站内信或其类型引用进入 mail_internal；单一邮箱直接选用。既有 message.list/count/search.start 增加发件人、收件人、主题、附件、独立收件时间过滤，摘要增加 receivedAt；旧数据在既有同步批次内补齐。系统 Skill 新增41条场景配方，API 参考随 schema 生成。不新增公开动作、IPC、权限、System App、Dock、Workflow、Automation 或 Deep Link；Mail 仍为44项、站内信17项，全局340 capability / 336 MCP 索引及22个 System App 不变。
 - Mail 写信窗口使用独立尺寸：默认 800×640，最小 640×480，保留原生缩放；阅读窗口和其他 System App 继续使用通用尺寸。邮箱仍为 44 个公开动作，System App、Dock、Workflow、Automation、Deep Link 数量及 MCP schema、系统 Skill 指南均不变。
-- Mail 的 sync.get 支持 jobId / accountId 二选一；按账号只读当前运行时任务，无任务返回 null，不隐式启动或恢复同步。UI 复用 message.count 的账号级 indexed / serverReported 展示进度，只有运行中转圈，失败保留完成批次进度。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及其他注册数量不变；不新增 IPC、工具或权限，系统 Skill 与输入 schema 同步更新。
+- Mail 的 sync.get 支持 jobId / accountId 二选一；按账号只读当前运行时任务，无任务返回 null，不隐式启动或恢复同步。UI 复用 message.count 的账号级 indexed / serverReported 展示进度，运行中在顶栏以短进度条替换刷新按钮，失败保留完成批次进度。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及其他注册数量不变；不新增 IPC、工具或权限，系统 Skill 与输入 schema 同步更新。
 - Mail 设置只在左下角提供入口，顶栏保留刷新和写邮件；内容区窄于 33rem、侧栏隐藏时，设置入口改在列表底部显示。沿用现有设置操作，注册数量、MCP schema 与系统 Skill 指南不变。
 - Mail 账号切换统一放在应用顶栏左侧，独立窗口、Dock 与启动台内嵌共用现有壳层插槽；侧栏与窄窗口内容区不重复显示账号选择，右侧仍为刷新和写邮件。只调整 UI 入口，邮箱 44 项公开动作、全局 340 capability / 336 MCP 索引、22 个 System App 及其余注册数量不变，MCP schema 与系统 Skill 契约不变。
 - Mail 普通文件夹在侧栏右键提供重命名和确认删除，新建保留在设置；沿用 `folder.rename/delete`，主进程继续保护系统文件夹并仅允许删除没有邮件和子文件夹的普通文件夹。删除当前文件夹后返回全部邮件。邮箱仍为 44 项公开动作、全局 340 capability / 336 MCP 索引、22 个 System App，不新增 IPC、权限或注册项；MCP schema、系统 Skill 的文件夹操作契约不变。
 - Mail 在 SMTP accepted / partial 且副本未确认时提供 Sent 核验，复用已有 `operation.get` 的有界只读对账；核验期间禁止重复点击，不重发 SMTP。consumed 草稿继续保留只读快照并明确标记已发送。刷新文件夹时将当前 folderId 交给既有 `sync.start`，优先同步所见文件夹。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及其它注册数量不变；公开动作和运行时参数契约不变。
 - Mail 的 `message.get`、`draft.create`、`attachment.list/get/download_file` MCP 发现 schema 使用顶层对象汇总候选字段，避免客户端拒绝顶层组合器；工具描述和系统 Skill 明确互斥输入，核心共享 schema 继续严格验证原分支。44 个邮箱动作及全局注册数量不变，不新增别名、IPC 或权限。
 - Mail 写信表单的 InputGroup、字段错误关联及格式工具栏间距，以及设置错误固定可见、链接弹窗错误独立清理，属于已有动作的 UI 反馈调整；账号表单复用共享 schema 提前校验，主进程校验保留。44 个邮箱动作及全局注册数量不变，MCP 描述/schema 和系统 Skill 的收发契约不变。
-- Mail 同步完成后收起列表工具栏中的状态及数量，重新同步或异常时仍显示；仅调整既有状态的展示，不改变 sync.get / message.count、44 个邮箱动作、MCP / Skill 契约或全局注册数量。
+- Mail 的手动刷新请求、列表加载和索引进度统一在顶栏替换刷新按钮，两者互斥；完成后恢复刷新按钮，暂停或异常也在顶栏展示。列表工具栏始终保留搜索、选择和批量操作，不再做悬停/焦点保护切换；仅调整既有状态的展示，不改变 sync.get / message.count、44 个邮箱动作、MCP / Skill 契约或全局注册数量。
 - Mail 自动校对在首次或手动同步完成后保留 completed，手动刷新和真实失败后的重试仍报告状态；当前 coverage 通过 message.count / message.list 读取。IDLE 等待独立于普通请求超时，取消与真实断线仍释放资源；同步更新 sync.get 描述和系统 Skill，不新增 schema 字段、IPC 或权限，邮箱 44 项及上表数量不变。
-- Mail 列表主操作固定在右侧，搜索中的同步状态使用图标入口；写信关闭确认默认聚焦取消并在取消后恢复编辑焦点。均属于现有工具栏与弹窗的 UI 调整，44 个邮箱动作及 MCP / Skill 契约、全局注册数量不变。
+- Mail 列表主操作固定在右侧，搜索覆盖范围入口留在列表，同步状态移至顶栏；写信关闭确认默认聚焦取消并在取消后恢复编辑焦点。均属于现有工具栏与弹窗的 UI 调整，44 个邮箱动作及 MCP / Skill 契约、全局注册数量不变。
 
 - Connectors 的「企业微信」连接器只负责扫码绑定机器人、保存本地凭据、连接状态和连接信息弹窗，Connectors 的 2 个 MCP 仅用于 Portal 凭据，企业微信凭据不通过它们交付。它使用 `@wecom/cli`，凭据不上传 Synapse 服务端，也不向 Renderer 或 MCP 暴露。企业微信 CLI 不提供完整业务权限清单查询，因此连接信息弹窗只展示连接时间、最近检查时间及企业微信权限管理入口，不展示推测的逐项权限。WeCom 能力通过主进程 `core.wecom` 服务使用凭据，注册 2 个 MCP 工具：`app_wecom_connection_get` 只返回连接状态和时间；`app_wecom_cli_run` 接受官方 Skill 的规范参数数组并执行消息、消息所需的媒体上传、身份和 schema 命令。它不使用 shell 字符串，不允许 `auth`、`cache`，所有文件都限制在账号和 controller/client 隔离的临时工作目录。企业业务权限不足时不影响连接器状态，MCP 返回 `WECOM_PERMISSION_REQUIRED`、中文权限名和官方申请链接。筛选后的官方 2 个 Skill（`wecomcli-shared`、`wecomcli-message`）固定在 `synapse-skill/skill-package/wecom/`，同步关闭安装 CLI、登录和任意终端执行路径。永久排除原有 7 项及本次移除的通讯录、媒体、邮件、文档管理、在线表格和智能表格 Skill，共 13 项；相关参考、模板、Python 脚本和业务命令一并移除。`media upload` 作为消息发送的共用依赖保留，上传指引并入消息 Skill，`media download` 和所有 `mail`、`contact`、`doc`、`sheet`、`smartsheet` 命令拒绝执行。完整保留与排除清单见 `module-boundaries.md` 和 `wecom/UPSTREAM.md`。Connectors 的 2 条私有授权回调不变，System App、Dock、Workflow、Automation 和 Deep Link 数量不变。
 
