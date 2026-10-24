@@ -11,7 +11,7 @@ const inbox: Folder = { ...custom, id: "mf_one", name: "INBOX", path: "INBOX", r
 let folders: Folder[], mail: ReturnType<typeof useMail>
 function Harness() {
   mail = useMail()
-  return <MailNavigation {...mail} onAccount={mail.selectAccount} onView={mail.selectView} onSettings={() => undefined} onFolderChange={mail.changeFolder} />
+  return <MailNavigation {...mail} onView={mail.selectView} onSettings={() => undefined} onFolderChange={mail.changeFolder} />
 }
 function button(label: string) {
   const element = [...document.querySelectorAll<HTMLButtonElement>("button")].find(item => item.textContent === label)

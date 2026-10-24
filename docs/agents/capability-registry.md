@@ -47,7 +47,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
-| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
+| Mail（邮箱） | 是（含 800×640 独立写信窗口、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
@@ -71,6 +71,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 - Mail 写信窗口使用独立尺寸：默认 800×640，最小 640×480，保留原生缩放；阅读窗口和其他 System App 继续使用通用尺寸。邮箱仍为 44 个公开动作，System App、Dock、Workflow、Automation、Deep Link 数量及 MCP schema、系统 Skill 指南均不变。
 - Mail 的 sync.get 支持 jobId / accountId 二选一；按账号只读当前运行时任务，无任务返回 null，不隐式启动或恢复同步。UI 复用 message.count 的账号级 indexed / serverReported 展示进度，只有运行中转圈，失败保留完成批次进度。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及其他注册数量不变；不新增 IPC、工具或权限，系统 Skill 与输入 schema 同步更新。
 - Mail 设置只在左下角提供入口，顶栏保留刷新和写邮件；内容区窄于 33rem、侧栏隐藏时，设置入口改在列表底部显示。沿用现有设置操作，注册数量、MCP schema 与系统 Skill 指南不变。
+- Mail 账号切换统一放在应用顶栏左侧，独立窗口、Dock 与启动台内嵌共用现有壳层插槽；侧栏与窄窗口内容区不重复显示账号选择，右侧仍为刷新和写邮件。只调整 UI 入口，邮箱 44 项公开动作、全局 340 capability / 336 MCP 索引、22 个 System App 及其余注册数量不变，MCP schema 与系统 Skill 契约不变。
 - Mail 普通文件夹在侧栏右键提供重命名和确认删除，新建保留在设置；沿用 `folder.rename/delete`，主进程继续保护系统文件夹并仅允许删除没有邮件和子文件夹的普通文件夹。删除当前文件夹后返回全部邮件。邮箱仍为 44 项公开动作、全局 340 capability / 336 MCP 索引、22 个 System App，不新增 IPC、权限或注册项；MCP schema、系统 Skill 的文件夹操作契约不变。
 - Mail 在 SMTP accepted / partial 且副本未确认时提供 Sent 核验，复用已有 `operation.get` 的有界只读对账；核验期间禁止重复点击，不重发 SMTP。consumed 草稿继续保留只读快照并明确标记已发送。刷新文件夹时将当前 folderId 交给既有 `sync.start`，优先同步所见文件夹。邮箱仍为 44 项公开动作，全局 340 capability / 336 MCP 索引、22 个 System App 及其它注册数量不变；公开动作和运行时参数契约不变。
 - Mail 的 `message.get`、`draft.create`、`attachment.list/get/download_file` MCP 发现 schema 使用顶层对象汇总候选字段，避免客户端拒绝顶层组合器；工具描述和系统 Skill 明确互斥输入，核心共享 schema 继续严格验证原分支。44 个邮箱动作及全局注册数量不变，不新增别名、IPC 或权限。

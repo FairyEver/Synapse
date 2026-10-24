@@ -1,5 +1,11 @@
+/** @vitest-environment jsdom */
 import { readFile } from "node:fs/promises"
+import { URL as FileURL } from "node:url"
+import { act, createElement } from "react"
 import { describe, expect, it } from "vitest"
+import { account, flush, mocks, mount } from "../../mail/__tests__/harness"
+import { ExternalMailModule } from "../../mail"
+import { EmbeddedSystemAppShell } from "../components/embedded-system-app-shell"
 import type { SynapseSystemAppId } from "../types"
 
 type HeaderMode = "none" | "module-page" | "window-shell"
@@ -33,7 +39,7 @@ const appEntrypoints = {
 describe("system app header architecture", () => {
   for (const [appId, entrypoint] of Object.entries(appEntrypoints)) {
     it(`${appId} declares its app header through the shared slot shell`, async () => {
-      const source = await readFile(new URL(entrypoint.path, import.meta.url), "utf8")
+      const source = await readFile(new FileURL(entrypoint.path, import.meta.url), "utf8")
 
       expect(source).not.toMatch(/<SystemAppTopBar(?:\s|>)/)
       if (entrypoint.header === "window-shell") {
@@ -48,16 +54,39 @@ describe("system app header architecture", () => {
   }
 
   it("keeps the dedicated mail composer on the shared window shell", async () => {
-    const source = await readFile(new URL("../../mail/compose.tsx", import.meta.url), "utf8")
+    const source = await readFile(new FileURL("../../mail/compose.tsx", import.meta.url), "utf8")
     expect(source).toContain("<SystemAppWindowShell")
     expect(source).toContain("<SystemAppTopBarActionButton")
     expect(source).not.toMatch(/<Sheet(?:\s|>)/)
   })
 
   it("keeps terminal header controls on the shared action button", async () => {
-    const source = await readFile(new URL(appEntrypoints.terminal.path, import.meta.url), "utf8")
+    const source = await readFile(new FileURL(appEntrypoints.terminal.path, import.meta.url), "utf8")
 
     expect(source).toContain("<SystemAppTopBarActionButton")
     expect(source).toContain("embeddedLeftAddon={headerNavigation}")
+  })
+
+  it.each(["window", "dock", "launcher"] as const)("keeps mailbox switching in the %s header while changing the visible account", async (host) => {
+    mocks.api.accountList.mockResolvedValue({ items: [{ ...account, aliases: [] }, { ...account, id: "ma_two", name: "个人", aliases: [] }], nextCursor: null })
+    const mail = createElement(ExternalMailModule)
+    mount(host === "window" ? mail : createElement(EmbeddedSystemAppShell, { appName: "邮箱", mode: host, children: mail }))
+    await flush()
+
+    const header = document.querySelector("[data-system-app-window-toolbar], [data-embedded-system-app-header]")!
+    const selector = header.querySelector<HTMLButtonElement>('button[aria-label="邮箱账号"]')
+    expect(selector).not.toBeNull()
+    expect(document.querySelectorAll('[aria-label="邮箱账号"]')).toHaveLength(1)
+    expect(selector!.closest("[data-system-app-top-bar-left]")).not.toBeNull()
+    expect(header.querySelector('[data-system-app-top-bar-actions] [aria-label="刷新邮箱"]')).not.toBeNull()
+    expect(header.querySelector("[data-system-app-top-bar-actions]")?.textContent).toContain("写邮件")
+
+    act(() => selector!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })))
+    await flush()
+    const personal = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(item => item.textContent?.includes("个人"))
+    expect(personal).toBeTruthy()
+    act(() => personal!.click())
+    await flush()
+    expect(header.querySelector('[aria-label="邮箱账号"]')?.textContent).toContain("个人")
   })
 })

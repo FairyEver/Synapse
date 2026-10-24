@@ -1,9 +1,8 @@
 import { useRef } from "react"
 import { Inbox, Send, FilePen, Trash2, Archive, ShieldAlert, Folder as FolderIcon, Star, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { cn } from "@/lib/utils"
-import type { AccountSummary, Folder } from "../../../app-capabilities/mail/shared/types"
+import type { Folder } from "../../../app-capabilities/mail/shared/types"
 import type { MailView } from "./use-mail"
 import { MailFolderMenu, type MailFolderChange } from "./folder-menu"
 const labels: Record<string, string> = { inbox: "收件箱", sent: "已发送", drafts: "草稿箱", trash: "回收站", junk: "垃圾邮件", archive: "归档" }
@@ -20,15 +19,11 @@ export function mailNavigationItems(folders: Folder[]): MailNavigationItem[] {
   )
   return items.sort((a, b) => a.order - b.order)
 }
-export function MailNavigation({ accounts, accountId, folders, view, onAccount, onView, onSettings, onFolderChange }: { accounts: AccountSummary[]; accountId: string | null; folders: Folder[]; view: MailView; onAccount(id: string): void; onView(view: MailView): void; onSettings(): void; onFolderChange: MailFolderChange }) {
+export function MailNavigation({ folders, view, onView, onSettings, onFolderChange }: { folders: Folder[]; view: MailView; onView(view: MailView): void; onSettings(): void; onFolderChange: MailFolderChange }) {
   const navigation = useRef<HTMLElement>(null)
   const restoreSelectedFocus = () => navigation.current?.querySelector<HTMLButtonElement>('button[aria-current="page"]')?.focus()
   const selected = view.drafts ? "drafts" : view.starredOnly ? "starred" : view.folderId ?? "all"
   return <nav ref={navigation} aria-label="邮箱导航" className="flex h-full min-h-0 flex-col gap-3 border-r bg-background p-3">
-    <NativeSelect aria-label="邮箱账号" className="w-full" value={accountId ?? ""} onChange={event => onAccount(event.target.value)} data-track="mail.account.select">
-      {!accounts.length && <NativeSelectOption value="">选择邮箱</NativeSelectOption>}
-      {accounts.map(account => <NativeSelectOption key={account.id} value={account.id}>{account.name}</NativeSelectOption>)}
-    </NativeSelect>
     <div className="min-h-0 flex-1 space-y-1 overflow-auto">
       {mailNavigationItems(folders).map(item => {
         const Icon = item.icon, folder = folders.find(candidate => candidate.id === item.view.folderId)

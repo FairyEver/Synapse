@@ -7,6 +7,7 @@ import type { MailOpenRequest } from "../../../app-capabilities/mail/shared/priv
 import { useMail } from "./use-mail"
 import { MailLayout, type ComposeIntent } from "./layout"
 import { MailAccountDialog } from "./account-dialog"
+import { MailAccountSelect } from "./account-select"
 import { MailSettings } from "./settings"
 import { useMailAccounts } from "./use-mail-accounts"
 import { mailError, openMailCompose } from "./api"
@@ -17,6 +18,7 @@ export function ExternalMailModule({ openRequest, onOpenRequestConsumed }: { ope
   const accountModel = useMailAccounts(identity, saved)
   const settings = () => { if (!mail.accounts.length) accountModel.begin(); else accountModel.setSettingsOpen(true) }
   const compose = (intent: ComposeIntent) => { void openMailCompose(intent).catch(cause => toast.error(mailError(cause))) }
+  const accountSelector = <MailAccountSelect accounts={mail.accounts} accountId={mail.accountId} onAccount={mail.selectAccount} />
   useEffect(() => {
     if (!openRequest || !mail.scope || handled.current === openRequest.requestId || !mail.authenticated) return
     if (openRequest.ownerId !== mail.owner || openRequest.generation !== mail.scope.generation) { handled.current = openRequest.requestId; onOpenRequestConsumed?.(openRequest.requestId); return }
@@ -26,7 +28,7 @@ export function ExternalMailModule({ openRequest, onOpenRequestConsumed }: { ope
     if (openRequest.messageId) void mail.selectMessage(openRequest.messageId)
     onOpenRequestConsumed?.(openRequest.requestId)
   }, [openRequest, mail.accountId, mail.owner, mail.scope, mail.authenticated, onOpenRequestConsumed])
-  return <SystemAppWindowShell actions={<><SystemAppTopBarActionButton iconOnly aria-label="刷新邮箱" disabled={!mail.accountId || mail.loading} onClick={() => void mail.sync().catch(cause => toast.error(mailError(cause)))}><RefreshCw /></SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={!mail.accountId} onClick={() => compose({ accountId: mail.accountId! })}><PenSquare />写邮件</SystemAppTopBarActionButton></>}>
+  return <SystemAppWindowShell left={accountSelector} embeddedLeftAddon={accountSelector} actions={<><SystemAppTopBarActionButton iconOnly aria-label="刷新邮箱" disabled={!mail.accountId || mail.loading} onClick={() => void mail.sync().catch(cause => toast.error(mailError(cause)))}><RefreshCw /></SystemAppTopBarActionButton><SystemAppTopBarActionButton disabled={!mail.accountId} onClick={() => compose({ accountId: mail.accountId! })}><PenSquare />写邮件</SystemAppTopBarActionButton></>}>
     <MailLayout mail={mail} onSettings={settings} onCompose={compose} />
     <MailAccountDialog model={accountModel} />
     <MailSettings model={accountModel} mail={mail} />
