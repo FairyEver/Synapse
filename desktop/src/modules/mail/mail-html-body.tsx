@@ -16,6 +16,18 @@ export function MailHtmlBody({ projection, onLink }: { projection: ReturnType<ty
       disconnect?.()
       const doc = iframe.contentDocument
       if (!doc?.body) return
+      // Isolated documents do not inherit the application's theme tokens.
+      const themeRoot = iframe.ownerDocument.documentElement
+      const syncTheme = () => {
+        const theme = getComputedStyle(themeRoot)
+        for (const token of ["--link", "--link-hover", "--foreground", "--background"]) {
+          doc.documentElement.style.setProperty(token, theme.getPropertyValue(token))
+        }
+        doc.documentElement.style.colorScheme = themeRoot.classList.contains("dark") ? "dark" : "light"
+      }
+      const themeObserver = new MutationObserver(syncTheme)
+      themeObserver.observe(themeRoot, { attributes: true, attributeFilter: ["class", "style"] })
+      syncTheme()
       let pendingFrame: number | undefined
       const measure = () => {
         pendingFrame = undefined
@@ -42,6 +54,7 @@ export function MailHtmlBody({ projection, onLink }: { projection: ReturnType<ty
       observer.observe(doc.body)
       measure()
       disconnect = () => {
+        themeObserver.disconnect()
         observer.disconnect()
         if (pendingFrame !== undefined) cancelAnimationFrame(pendingFrame)
         doc.removeEventListener("click", openLink)

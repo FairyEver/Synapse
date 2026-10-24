@@ -39,6 +39,40 @@ it("opens a body link through the controlled handler without duplicating it abov
   expect(onLink).toHaveBeenCalledTimes(2)
 })
 
+it("keeps the isolated reading colors in sync with the app theme and stops syncing after unmount", async () => {
+  const root = document.documentElement
+  const originalStyle = root.getAttribute("style")
+  const originalClass = root.getAttribute("class")
+  try {
+    root.classList.remove("dark")
+    root.style.setProperty("--link", "steelblue")
+    root.style.setProperty("--link-hover", "navy")
+    root.style.setProperty("--foreground", "black")
+    root.style.setProperty("--background", "white")
+    const { iframe, doc } = renderDetail('<a href="https://example.com/doc">文档</a>')
+    expect(doc.documentElement.style.getPropertyValue("--link")).toBe("steelblue")
+    expect(doc.documentElement.style.getPropertyValue("--link-hover")).toBe("navy")
+    expect(doc.documentElement.style.getPropertyValue("--foreground")).toBe("black")
+    expect(doc.documentElement.style.getPropertyValue("--background")).toBe("white")
+    expect(doc.documentElement.style.colorScheme).toBe("light")
+    await act(async () => {
+      root.classList.add("dark")
+      root.style.setProperty("--link", "lightskyblue")
+    })
+    expect(iframe.contentDocument).toBe(doc)
+    expect(doc.documentElement.style.getPropertyValue("--link")).toBe("lightskyblue")
+    expect(doc.documentElement.style.colorScheme).toBe("dark")
+    mount(<div>已关闭</div>)
+    await act(async () => { root.style.setProperty("--link", "steelblue") })
+    expect(doc.documentElement.style.getPropertyValue("--link")).toBe("lightskyblue")
+  } finally {
+    if (originalStyle === null) root.removeAttribute("style")
+    else root.setAttribute("style", originalStyle)
+    if (originalClass === null) root.removeAttribute("class")
+    else root.setAttribute("class", originalClass)
+  }
+})
+
 it("fits body growth and shrinkage and releases measurements and handlers when replaced", async () => {
   const onLink = vi.fn()
   const { iframe, doc } = renderDetail('<a href="https://example.com/old">旧链接</a>', onLink)

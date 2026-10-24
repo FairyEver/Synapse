@@ -58,6 +58,7 @@ primitive: radix-ui  # 组件底座，通过 package.json 依赖和组件实现�
 - `--card-foreground`
 - `--primary`
 - `--primary-foreground`
+- `--link`、`--link-hover`：正文链接的蓝色及交互色，复用 Tailwind Sky 色阶并适配深浅主题
 - `--secondary`
 - `--secondary-foreground`
 - `--muted`
