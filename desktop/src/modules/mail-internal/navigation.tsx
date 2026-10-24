@@ -40,9 +40,9 @@ function ContactList({ contacts, ready, error, box, selected, onSelect, onRetry,
     })
   }, [contacts, query])
   return <div className="flex min-h-0 flex-1 flex-col gap-3">
-    <Input className="shrink-0" type="search" value={query} aria-label={`查找${label}`} placeholder={`查找${label}`} onChange={event => onQueryChange(event.target.value)} />
+    <div className="shrink-0 group-data-[wide=true]/mail:px-3"><Input type="search" value={query} aria-label={`查找${label}`} placeholder={`查找${label}`} onChange={event => onQueryChange(event.target.value)} /></div>
     <ScrollArea className="min-h-0 min-w-0 flex-1" viewportClassName="[&>div]:!block">
-      <div className="space-y-1">
+      <div className="space-y-1 group-data-[wide=true]/mail:px-3">
         <Button variant="ghost" className={cn("w-full justify-start", !selected && "bg-selected hover:bg-selected dark:hover:bg-selected")} aria-pressed={!selected} onClick={() => onSelect(null)}><UsersRound />全部{label}</Button>
         {rows.map(({ contact, identity }) => {
           const Icon = contact.kind === "platform" ? ShieldCheck : contact.kind === "organization" ? Building2 : UserRound
@@ -68,12 +68,12 @@ export function MailNavigation(props: Props) {
   const label = props.box === "inbox" ? "发件人" : "收件人"
   function select(contact: MailContact | null) { props.onSelect(contact); setOpen(false) }
   const content = <ContactList {...props} onSelect={select} query={query} onQueryChange={setQuery} />
-  return <aside className="flex shrink-0 flex-col border-b bg-sidebar p-2 group-data-[wide=true]/mail:h-full group-data-[wide=true]/mail:min-h-0 group-data-[wide=true]/mail:border-b-0 group-data-[wide=true]/mail:p-3">
-    <nav aria-label="信箱" className="flex shrink-0 gap-1 group-data-[wide=true]/mail:flex-col">
+  return <aside className="flex shrink-0 flex-col border-b bg-sidebar p-2 group-data-[wide=true]/mail:h-full group-data-[wide=true]/mail:min-h-0 group-data-[wide=true]/mail:border-b-0 group-data-[wide=true]/mail:px-0 group-data-[wide=true]/mail:py-3">
+    <nav aria-label="信箱" className="flex shrink-0 gap-1 group-data-[wide=true]/mail:mx-3 group-data-[wide=true]/mail:flex-col">
       <Button variant="ghost" aria-current={props.box === "inbox" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start group-data-[wide=true]/mail:flex-none", props.box === "inbox" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("inbox")}><Inbox />收件箱{props.unread > 0 && <span className="ml-auto text-xs tabular-nums" aria-label={`${props.unread} 封未读`}>{countLabel(props.unread)}</span>}</Button>
       <Button variant="ghost" aria-current={props.box === "sent" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start group-data-[wide=true]/mail:flex-none", props.box === "sent" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("sent")}><Send />已发送</Button>
     </nav>
-    <section aria-label={label} className="mt-7 hidden min-h-0 flex-1 flex-col gap-3 group-data-[wide=true]/mail:flex"><h2 className="px-2.5 text-xs font-medium text-muted-foreground">{label}</h2>{content}</section>
+    <section aria-label={label} className="mt-7 hidden min-h-0 flex-1 flex-col gap-3 group-data-[wide=true]/mail:flex"><h2 className="mx-3 px-2.5 text-xs font-medium text-muted-foreground">{label}</h2>{content}</section>
     <div className="mt-3 group-data-[wide=true]/mail:hidden"><Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild><Button variant="outline" className="w-full justify-between" aria-label={`选择${label}：${props.selected?.name ?? `全部${label}`}`}><span className="truncate">{props.selected?.name ?? `全部${label}`}</span><ChevronDown /></Button></PopoverTrigger>
       <PopoverContent align="start" className="max-h-(--radix-popover-content-available-height) max-w-(--radix-popover-content-available-width)">

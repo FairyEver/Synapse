@@ -35,8 +35,8 @@ function ModuleSidebar({
       {...asideProps}
       data-layout={dataLayout}
       className={cn(
-        "flex h-full min-h-0 min-w-0 flex-col gap-2 p-2",
-        variant === "card" && "rounded-2xl bg-background p-2 ring-1 ring-foreground/10",
+        "flex h-full min-h-0 min-w-0 flex-col gap-2 py-2",
+        variant === "card" && "rounded-2xl bg-background ring-1 ring-foreground/10",
         className,
       )}
     >
@@ -90,7 +90,7 @@ function ModuleSidebarHeader({
   )
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="mx-2 flex items-center gap-2">
       {showSearch ? (
         <InputGroup className="min-w-0 flex-1">
           <InputGroupInput
@@ -133,6 +133,7 @@ type ModuleSidebarListProps = {
   className?: string
   "data-track"?: string
   onScroll?: UIEventHandler<HTMLDivElement>
+  trackScroll?: boolean
 }
 
 function ModuleSidebarList({
@@ -140,14 +141,17 @@ function ModuleSidebarList({
   className,
   "data-track": dataTrack,
   onScroll,
+  trackScroll,
 }: ModuleSidebarListProps) {
   return (
     <ScrollArea
       className={cn("min-h-0 min-w-0 w-full max-w-full flex-1", className)}
+      viewportClassName="overflow-x-hidden"
       data-track={dataTrack}
       onViewportScroll={onScroll}
+      trackScroll={trackScroll}
     >
-      <div className="flex min-w-0 w-full max-w-full flex-col overflow-hidden px-0.5 py-0.5">{children}</div>
+      <div className="flex min-w-0 w-full max-w-full flex-col overflow-hidden px-2.5 py-0.5">{children}</div>
     </ScrollArea>
   )
 }

@@ -90,7 +90,7 @@ function EditorScanSidebar({
         ))}
       </ModuleSidebarList>
       {controls ? (
-        <div data-editor-scan-sidebar-controls className="flex shrink-0 flex-col gap-3 border-t px-2 py-2">
+        <div data-editor-scan-sidebar-controls className="mx-2 flex shrink-0 flex-col gap-3 border-t px-2 py-2">
           {controls}
         </div>
       ) : null}

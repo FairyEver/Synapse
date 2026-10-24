@@ -23,14 +23,14 @@ export function MailNavigation({ folders, view, onView, onSettings, onFolderChan
   const navigation = useRef<HTMLElement>(null)
   const restoreSelectedFocus = () => navigation.current?.querySelector<HTMLButtonElement>('button[aria-current="page"]')?.focus()
   const selected = view.drafts ? "drafts" : view.starredOnly ? "starred" : view.folderId ?? "all"
-  return <nav ref={navigation} aria-label="邮箱导航" className="flex h-full min-h-0 flex-col gap-3 border-r bg-background p-3">
-    <div className="min-h-0 flex-1 space-y-1 overflow-auto">
+  return <nav ref={navigation} aria-label="邮箱导航" className="flex h-full min-h-0 flex-col gap-3 border-r bg-background py-3">
+    <div className="min-h-0 flex-1 space-y-1 overflow-auto px-3">
       {mailNavigationItems(folders).map(item => {
         const Icon = item.icon, folder = folders.find(candidate => candidate.id === item.view.folderId)
         const button = <Button key={item.value} variant="ghost" aria-current={selected === item.value ? "page" : undefined} className={cn("w-full justify-start", selected === item.value && "bg-selected hover:bg-selected")} onClick={() => onView(item.view)} data-track={item.view.folderId ? "mail.folder.select" : `mail.folder.${item.value}`}><Icon /><span className="truncate">{item.label}</span></Button>
         return folder?.role === "none" && folder.path.toUpperCase() !== "INBOX" ? <MailFolderMenu key={folder.id} folder={folder} onChange={onFolderChange} onRestoreFocus={restoreSelectedFocus}>{button}</MailFolderMenu> : button
       })}
     </div>
-    <Button variant="ghost" className="w-full justify-start" onClick={onSettings} data-track="mail.settings"><Settings />邮箱设置</Button>
+    <div className="shrink-0 px-3"><Button variant="ghost" className="w-full justify-start" onClick={onSettings} data-track="mail.settings"><Settings />邮箱设置</Button></div>
   </nav>
 }

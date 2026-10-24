@@ -484,7 +484,9 @@ describe("AgentSessionSidebar", () => {
     expect(sidebarList?.getAttribute("data-scrollbars")).toBe("vertical")
     expect(sidebarList?.className).toContain("min-w-0")
     expect(sidebarViewport?.className).toContain("overflow-x-hidden")
-    expect(sidebarViewport?.className).toContain("px-0.5")
+    expect(sidebarViewport?.className).not.toContain("px-0.5")
+    expect(list?.className).toContain("px-2.5")
+    expect(wrapper.querySelector("aside")?.classList.contains("p-2")).toBe(false)
     expect(list?.className).toContain("w-full")
 
     const indentedSessionList = [...wrapper.querySelectorAll("div")]

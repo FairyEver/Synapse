@@ -42,7 +42,7 @@ function DatabaseSidebarToolbar({
 
   return (
     <TooltipProvider>
-    <div className="flex items-center gap-0.5 px-1">
+    <div className="mx-2 flex items-center gap-0.5 px-1">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

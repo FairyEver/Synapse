@@ -1626,7 +1626,7 @@ export function TerminalModule({
       variant="bare"
       className="min-h-0 bg-background"
     >
-      <div className="flex items-center justify-start">
+      <div className="mx-2 flex items-center justify-start">
         <Button ref={createGroupActionRef} type="button" size="default" variant="outline" onClick={openCreateGroupDialog}>
           <Plus data-icon="inline-start" />
           新建分组
