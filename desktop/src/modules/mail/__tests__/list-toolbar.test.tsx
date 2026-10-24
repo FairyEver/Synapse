@@ -33,18 +33,28 @@ it("does not treat incomplete search coverage as an active synchronization job",
   expect(resume).toHaveBeenCalledTimes(1)
 })
 
-it.each(["loading", "syncing"] as const)("makes %s exclusive with toolbar actions and restores search and selection afterward", state => {
+it.each(["loading", "syncing"] as const)("preserves an active search during %s and restores idle progress and selection afterward", state => {
   const props = { items: [summary], drafts: [], loading: false, more: false, onSelect: vi.fn(), onDraft: vi.fn(), onMore: vi.fn(), onBatch: vi.fn(), folders: [], onMove: vi.fn(), onSearch: vi.fn(), coverage: { ...coverage, metadataComplete: false }, canContinue: true, onContinue: vi.fn() }
   const pending = state === "loading" ? { loading: true } : { syncStatus: { state: "running" as const, label: "索引中", count: "50/251", progress: "已索引 50 / 251 封", percentage: 50 / 251 * 100, error: null } }
   const toolbar = () => document.querySelector('[aria-label="邮件列表工具栏"]')!
   mount(<MailList {...props} />)
   act(() => toolbar().querySelector<HTMLButtonElement>('button[aria-label="搜索邮件"]')!.click())
-  expect(toolbar().querySelector('input[aria-label="搜索邮件"]')).not.toBeNull()
+  const input = toolbar().querySelector<HTMLInputElement>('input[aria-label="搜索邮件"]')!
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "季度报告")
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  act(() => toolbar().querySelector('form')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))
+  expect(props.onSearch).toHaveBeenLastCalledWith("季度报告")
 
-  mount(<MailList {...props} {...pending} />)
-  expect(toolbar().querySelectorAll("button, input")).toHaveLength(0)
-  expect(toolbar().querySelector('[role="progressbar"]')).not.toBeNull()
-  expect(toolbar().textContent).toBe("")
+  for (let refresh = 0; refresh < 3; refresh++) {
+    mount(<MailList {...props} {...pending} />)
+    expect(toolbar().querySelector('input[aria-label="搜索邮件"]')).toBe(input)
+    expect(document.activeElement).toBe(input)
+    expect(input.value).toBe("季度报告")
+    expect(toolbar().querySelector('[role="progressbar"]')).toBeNull()
+    mount(<MailList {...props} />)
+  }
 
   mount(<MailList {...props} />)
   expect(toolbar().querySelector('input[aria-label="搜索邮件"]')).not.toBeNull()
@@ -60,3 +70,53 @@ it.each(["loading", "syncing"] as const)("makes %s exclusive with toolbar action
   expect(toolbar().querySelector('[aria-label="已选 1 封邮件"]')).not.toBeNull()
   expect(toolbar().querySelector('[role="progressbar"]')).toBeNull()
 })
+
+for (const state of ["loading", "syncing"] as const) {
+  const pending = state === "loading" ? { loading: true } : { syncStatus: { state: "running" as const, label: "索引中", count: "50/251", progress: "已索引 50 / 251 封", percentage: 20, error: null } }
+  const props = { items: [summary], drafts: [], loading: false, more: false, onSelect: vi.fn(), onDraft: vi.fn(), onMore: vi.fn(), onBatch: vi.fn(), folders: [], onMove: vi.fn(), onSearch: vi.fn() }
+  const toolbar = () => document.querySelector<HTMLElement>('[aria-label="邮件列表工具栏"]')!
+  const searchButton = () => toolbar().querySelector<HTMLButtonElement>('button[aria-label="搜索邮件"]')
+
+  it.each(["hover", "focus"] as const)(`keeps search clickable when ${state} starts during %s`, interaction => {
+    mount(<MailList {...props} />)
+    const button = searchButton()!
+    act(() => {
+      if (interaction === "hover") button.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
+      else button.focus()
+    })
+    mount(<MailList {...props} {...pending} />)
+    expect(searchButton()).toBe(button)
+    expect(toolbar().querySelector('[role="progressbar"]')).toBeNull()
+    act(() => button.click())
+    const input = toolbar().querySelector<HTMLInputElement>('input[aria-label="搜索邮件"]')!
+    expect(input).not.toBeNull()
+    act(() => input.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body })))
+    expect(toolbar().querySelector('input[aria-label="搜索邮件"]')).toBe(input)
+    act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })))
+    expect(toolbar().querySelector('[role="progressbar"]')).not.toBeNull()
+  })
+
+  it(`restores ${state} progress after leaving the toolbar without searching`, () => {
+    mount(<MailList {...props} />)
+    const button = searchButton()!
+    act(() => {
+      button.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
+      button.focus()
+    })
+    mount(<MailList {...props} {...pending} />)
+    expect(searchButton()).toBe(button)
+    act(() => button.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body })))
+    expect(searchButton()).toBe(button)
+    act(() => button.blur())
+    expect(toolbar().querySelector('[role="progressbar"]')).not.toBeNull()
+  })
+
+  it(`reveals search when hovering an existing ${state} progress indicator`, () => {
+    mount(<MailList {...props} {...pending} />)
+    expect(toolbar().querySelector('[role="progressbar"]')).not.toBeNull()
+    act(() => toolbar().dispatchEvent(new MouseEvent("mouseover", { bubbles: true })))
+    expect(searchButton()).not.toBeNull()
+    act(() => searchButton()!.click())
+    expect(toolbar().querySelector('input[aria-label="搜索邮件"]')).not.toBeNull()
+  })
+}
