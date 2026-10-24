@@ -124,6 +124,7 @@ export interface ClaudeSDKSessionOptions {
   readonly agent?: string
   readonly agentDefinitionsHash?: string
   readonly agents?: AgentSdkAgentDefinitions
+  readonly generatedUiReferencePath?: string
   readonly systemPrompt?: Options["systemPrompt"]
   readonly tools?: Options["tools"]
   readonly disallowedTools?: readonly string[]
@@ -151,6 +152,7 @@ export interface ClaudeSDKSessionOptions {
 export interface ClaudeSDKRuntimeSettings {
   readonly skipWebFetchPreflight?: boolean
   readonly deniedMcpServers?: { serverName: string }[]
+  readonly skillOverrides?: Record<string, "on" | "name-only" | "user-invocable-only" | "off">
 }
 
 interface PendingPermission {
@@ -227,6 +229,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly toolPolicy: ClaudeSDKToolPolicy | undefined
   private readonly synapseToolRouterEnabled: boolean
   private readonly routerSubagentToolAccess: NonNullable<ClaudeSDKSessionOptions["routerSubagentToolAccess"]>
+  private readonly generatedUiReferencePath: string | undefined
   private readonly cwd: string
   private readonly privateStoragePolicy: AgentPrivateStoragePolicy
   private readonly query: QueryLike
@@ -272,6 +275,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.conversationId = options.conversationId
     this.providerId = options.providerId
     this.cwd = path.resolve(options.cwd)
+    this.generatedUiReferencePath = options.generatedUiReferencePath
     this.privateStoragePolicy = new AgentPrivateStoragePolicy(options.privateStorageRoots ?? [])
     this.contextUsageTracker = new AgentContextUsageTracker()
     this.fileCheckpointTracker = new AgentFileCheckpointTracker({
@@ -775,6 +779,14 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
     const policyResult = this.evaluateSubagentToolPolicy(effectiveToolName, effectiveInput, context)
     if (policyResult) return policyResult
+
+    // This host-owned, bundled reference is the sole additional automatic read.
+    // Private storage, Persona and subagent restrictions have already run above.
+    if (!context.agentID && effectiveToolName === "Read" && this.generatedUiReferencePath
+      && typeof effectiveInput.file_path === "string"
+      && path.resolve(this.cwd, effectiveInput.file_path) === this.generatedUiReferencePath) {
+      return { behavior: "allow", updatedInput: input }
+    }
 
     const requestId = this.nextPermissionRequestId()
     const timestamp = this.now().toISOString()

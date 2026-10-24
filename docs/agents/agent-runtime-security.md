@@ -2,8 +2,8 @@
 
 ## 本地 Agent 生成界面
 
-- 本地 Renderer 会话追加 OpenUI 官方组件协议；保留 Claude Code preset、Persona、项目规则和原有 SDK 会话。协议仅是系统提示，不显示为聊天消息，不注入非 Renderer 的 Agent 入口。
-- OpenUI 只用于聊天内展示，不得替代编写、修改、保存、构建或调试网页、应用、组件和代码文件的交付。提示词必须将完整官方参考置于聊天 UI 作用域内，组件、语法、资源、布局与最终校验规则不约束用户项目代码、文件或普通代码示例，现有工具权限与安全检查继续生效；未经明确要求不向用户项目添加 OpenUI 依赖。
+- 新建本地 Renderer 会话常驻 OpenUI 短入口，首次生成聊天 UI 前通过 Read 读取随包完整参考；同会话已有完整参考可复用，参考不可用或整理后缺失时不得猜测语法。保留 Claude Code preset、Persona、项目规则和原有 SDK 会话，不注入非 Renderer 入口。资源缺失、Read 被会话排除或 dontAsk 模式时回退完整提示；旧会话不强行改写 SDK system prompt snapshot。参考读取只精确自动允许宿主资源文件，仍服从私有存储、Persona、自定义工具和子 Agent 策略，不扩大其它读写权限。
+- OpenUI 只用于聊天内展示，不得替代编写、修改、保存、构建或调试网页、应用、组件和代码文件的交付。短入口与完整参考必须明确聊天 UI 作用域，组件、语法、资源、布局与最终校验规则不约束用户项目代码、文件或普通代码示例，现有工具权限与安全检查继续生效；未经明确要求不向用户项目添加 OpenUI 依赖。
 - 仅带宿主 `generatedUi` 元数据的主会话 Assistant 正文或本地受标记流式草稿可以渲染 `openui` / 官方 `openui-lang` 围栏。旧历史、工具结果、子 Agent 和普通代码示例保持原样。宿主负责完整程序的混合消息提示，不启用上游 inlineMode 的增量语句规则；每个块必须独立完整。
 - 生成界面不得直接执行工具：不提供 toolProvider，拒绝 Query、Mutation、@Run、主动加载外部资源及覆盖宿主的弹窗。表单和按钮回到来源会话，继续经过既有权限；模型生成的内容不构成额外授权。
 - UI 状态通过 DataRepository 的 `agent.generated-ui-state` 保存。主进程校验项目/会话/块身份与内容摘要，revision 防止多窗口覆盖，submissionId 与持久化收据防重复接收；状态不明禁止自动重发。
@@ -19,6 +19,8 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 长运行性能相关的持久化与显示容量实施状态见 `docs/superpowers/specs/2026-09-13-agent-long-running-capacity-design.md`。历史追加、记录元数据和问题响应须与标题共享会话级读改写串行队列；摘要保存不得将读到的旧 history 回写覆盖新记录。当前整历史 JSON 存储仍未完成分块改造，不能把局部缓存、诊断或计时优化描述为长期稳定性保证。
 
 ## SDK 原生上下文生命周期
+
+- SY 会话通过 SDK `settings.skillOverrides` 隐藏已发现的 `.synapse-install-dir-` 加 6 位字母数字暂存目录别名；正式 Skill 与其它来源保持可见，SY slash 索引同样忽略暂存目录。不改写、删除用户全局 Skill/config，不把其它隐藏目录一起排除。设计与前后模拟见 `docs/superpowers/specs/2026-10-24-agent-openui-on-demand-design.md`。
 
 - 设置中的“Agent 使用的 MCP”只读发现本机配置、所选项目、已安装插件与 SY 连接器；不连接 MCP 或发起模型请求，不把配置清单报成实际连接。`agent.disabledMcpServers` 仅保存 SY 的额外禁用名，不修改用户 Claude Code 配置；原生 `settings.deniedMcpServers` 在 discovery、官方查询与第三方 strict 查询启动前施加，保留原有 settingSources、规则、Skill 和受管策略。策略变化在下一轮通过停止屏障关闭 live session 并 resume 原 SDK session，不中断任务、不重放请求、不清除历史；启用只能撤销 SY 自己的禁用。`synapse-mcp` / `synapse-tool-router` 是内部保留名。入口与清单限制见 `docs/superpowers/specs/2026-10-24-agent-mcp-settings-design.md`。
 

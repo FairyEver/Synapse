@@ -325,6 +325,7 @@ const textExtractionSmokeFixtures = [
   },
 ]
 const requiredExtraResourceFiles = [
+  { relativePath: "agent-openui-reference.md", label: "OpenUI on-demand reference" },
   {
     relativePath: "synapse-skill/SKILL.md",
     label: "Synapse Skill package",

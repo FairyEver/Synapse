@@ -237,6 +237,10 @@
     },
     "extraResources": [
       {
+        "from": "resources/agent-openui-reference.md",
+        "to": "agent-openui-reference.md"
+      },
+      {
         "from": "app-capabilities/synapse-skill/skill-package",
         "to": "synapse-skill"
       },

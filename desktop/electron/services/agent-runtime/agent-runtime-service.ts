@@ -192,6 +192,7 @@ export interface AgentRuntimeServiceDeps {
   readonly knowledgeBaseLintPreflight?: Pick<KnowledgeBaseLintPreflightService, "run">
   readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
+  readonly generatedUiReferencePath?: string
   readonly sdkPlugins?: (
     message: AgentMessage,
     conversation: ConversationEntryV1,
@@ -289,6 +290,7 @@ export class AgentRuntimeService {
       logger: deps.logger,
       now: deps.now,
       createSession: deps.createSession,
+      generatedUiReferencePath: deps.generatedUiReferencePath,
       validateWorkspacePath: deps.validateWorkspacePath,
       getAllowedWriteDirectories: deps.getAllowedWriteDirectories,
       getDisabledMcpServers: deps.getDisabledMcpServers,

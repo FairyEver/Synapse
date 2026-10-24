@@ -1452,6 +1452,27 @@ describe("ClaudeSDKSession", () => {
     expect(session.alive()).toBe(false)
   })
 
+  it("automatically reads only the host OpenUI reference while retaining Persona denial", async () => {
+    const allowed = createQueryFactory()
+    const session = createSession(allowed.factory, { generatedUiReferencePath: "/app/reference.md" })
+    const context = { signal: new AbortController().signal, toolUseID: "reference-read" }
+    await expect(canUseTool(allowed.getOptions())("Read", { file_path: "/app/reference.md" }, context)).resolves.toMatchObject({ behavior: "allow" })
+    await session.close()
+    const denied = createQueryFactory()
+    const restricted = createSession(denied.factory, { generatedUiReferencePath: "/app/reference.md", personaToolPolicy: { mode: "allowlist", allowedTools: ["Bash"] } })
+    await expect(canUseTool(denied.getOptions())("Read", { file_path: "/app/reference.md" }, context)).resolves.toMatchObject({ behavior: "deny" })
+    await restricted.close()
+  })
+  it.each(["Read", "Write"])("does not automatically approve another path or writing the reference (%s)", async (tool) => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, { generatedUiReferencePath: "/app/reference.md" })
+    const permission = canUseTool(getOptions())(tool, { file_path: tool === "Read" ? "/app/other.md" : "/app/reference.md" }, { signal: new AbortController().signal })
+    const event = await session.nextEvent()
+    expect(event).toMatchObject({ type: "permissionRequest", toolName: tool })
+    if (event?.type === "permissionRequest") await session.respondPermission(event.requestId, { behavior: "deny" })
+    await expect(permission).resolves.toMatchObject({ behavior: "deny" })
+    await session.close()
+  })
   it("canUseTool enqueues a pending permission and resolves after respondPermission", async () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory)

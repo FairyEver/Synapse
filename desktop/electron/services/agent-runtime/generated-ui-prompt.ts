@@ -1,3 +1,6 @@
+import { access, stat } from "node:fs/promises"
+import { constants } from "node:fs"
+import type { Options } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { generateSystemPrompt, type LibrarySpec } from "@openuidev/lang-core"
 import library from "../../../src/lib/generated-ui-library.json"
 import type { AgentSdkSystemPrompt } from "./project-contributions"
@@ -38,7 +41,33 @@ const instructions = [
   "</openui_chat_reference>",
 ].join("\n\n")
 
-export function appendGeneratedUiPrompt(prompt: AgentSdkSystemPrompt): NonNullable<AgentSdkSystemPrompt> {
+export function fullGeneratedUiReference(): string { return instructions }
+
+export async function resolveGeneratedUiReferencePath(
+  referencePath: string | undefined,
+  tools: Options["tools"],
+  disallowedTools: readonly string[] = [],
+): Promise<string | undefined> {
+  if (!referencePath || (Array.isArray(tools) && !tools.includes("Read"))
+    || disallowedTools.some(rule => rule === "Read" || rule === "*" || rule.startsWith("Read("))) return undefined
+  try {
+    if (!(await stat(referencePath)).isFile()) return undefined
+    await access(referencePath, constants.R_OK)
+    return referencePath
+  } catch (error) {
+    if (["ENOENT", "ENOTDIR", "EACCES", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) return undefined
+    throw error
+  }
+}
+
+export function appendGeneratedUiPrompt(prompt: AgentSdkSystemPrompt, referencePath?: string): NonNullable<AgentSdkSystemPrompt> {
+  const instructions = referencePath ? [
+    "## SY optional chat UI",
+    "Use Markdown for ordinary answers. When an in-chat interactive chart, table, filter, or form improves the user's answer, use OpenUI; users need not know its name. Never replace requested project code/files with a chat widget.",
+    `BEFORE generating or updating any OpenUI, use Read to read the COMPLETE reference at ${JSON.stringify(referencePath)}. It contains the exact component signatures, examples and safety rules. Read all of it, without truncation; do not guess syntax. If unavailable, explain that the interactive UI cannot be generated and use prose, without claiming success.`,
+    "After reading, put each COMPLETE standalone program in an unindented ```openui fence, starting root = Stack(...). Updates resend all declarations/data. Keep ordinary prose outside the fence. Use @ToAssistant for form submissions to this same conversation; retrieve real data with existing tools. No Query, Mutation, @Run, remote resources or host popups. Follow Persona/project instructions; the reference applies only to in-chat UI.",
+  ].join("\n\n") : fullGeneratedUiReference()
+
   if (!prompt) return { type: "preset", preset: "claude_code", append: instructions }
   if (typeof prompt === "string") return `${prompt}\n\n${instructions}`
   if (Array.isArray(prompt)) return [...prompt, instructions]

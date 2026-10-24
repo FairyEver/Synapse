@@ -32,7 +32,8 @@ import type {
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
 import type { ResolvedPersonaSdkConfig } from "./persona-runtime"
-import { appendGeneratedUiPrompt } from "./generated-ui-prompt"
+import { discoverStagingSkillOverrides } from "./staging-skill-overrides"
+import { appendGeneratedUiPrompt, resolveGeneratedUiReferencePath } from "./generated-ui-prompt"
 import { normalizeDisabledMcpServers } from "../../../src/lib/agent-mcp-policy"
 import { resolveTierModelFromEnv } from "./provider-model-tier"
 import {
@@ -67,6 +68,7 @@ export interface CreateAgentLiveSessionInput {
   readonly agent?: string
   readonly agentDefinitionsHash?: string
   readonly agents?: AgentSdkAgentDefinitions
+  readonly generatedUiReferencePath?: string
   readonly systemPrompt?: AgentSdkSystemPrompt
   readonly tools?: string[]
   readonly disallowedTools?: readonly string[]
@@ -99,6 +101,7 @@ export type AgentConnectorRuntimeContribution = {
 
 export interface SessionManagerDeps {
   readonly projectId: string
+  readonly generatedUiReferencePath?: string
   readonly workDir?: string
   readonly privateStorageRoots?: readonly string[]
   readonly repository: AgentSessionRepository
@@ -198,6 +201,7 @@ export class SessionManager {
         agentDefinitionsHash: input.agentDefinitionsHash,
         agents: input.agents,
         systemPrompt: input.systemPrompt,
+        generatedUiReferencePath: input.generatedUiReferencePath,
         tools: input.tools,
         disallowedTools: input.disallowedTools,
         personaToolPolicy: input.personaToolPolicy,
@@ -326,10 +330,13 @@ export class SessionManager {
     const synapseToolRouterMatches = input.state.synapseToolRouterEnabled === synapseToolRouterEnabled
     const disabledMcpServers = normalizeDisabledMcpServers(await this.deps.getDisabledMcpServers?.() ?? [])
     const providerSettings = resolveProviderSdkSettings(provider, env)
+    const stagingSkillOverrides = await discoverStagingSkillOverrides(cwd, env.CLAUDE_CONFIG_DIR, this.deps.logger)
+    const baseSettings = Object.keys(stagingSkillOverrides).length
+      ? { ...providerSettings, skillOverrides: stagingSkillOverrides } : providerSettings
     const sdkSettings = disabledMcpServers.length ? {
-      ...providerSettings,
+      ...baseSettings,
       deniedMcpServers: disabledMcpServers.map(serverName => ({ serverName })),
-    } : providerSettings
+    } : baseSettings
     const sdkSettingsMatch = sdkSettingsEqual(input.state.sdkSettings, sdkSettings)
     const contributionAgents = await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {})
     const agents = { ...contributionAgents, ...personaConfig.agents }
@@ -471,6 +478,15 @@ export class SessionManager {
       resolvedServerNames: Object.keys(resolvedMcpServers),
     })
 
+    const referencePath = input.message.platform === "local-renderer" && modeOverride !== "dontAsk"
+      ? await resolveGeneratedUiReferencePath(this.deps.generatedUiReferencePath, personaSdkToolOptions.tools, personaSdkToolOptions.disallowedTools)
+      : undefined
+    if (input.message.platform === "local-renderer" && this.deps.generatedUiReferencePath && !referencePath) {
+      this.deps.logger?.warn("OpenUI reference unavailable or Read excluded; retaining full prompt.", {
+        boundary: "agent-runtime.openui.reference", reason: "full-reference-fallback",
+      })
+    }
+
     const creationInput: CreateAgentLiveSessionInput = {
       projectId: this.deps.projectId,
       conversation: input.conversation,
@@ -487,8 +503,9 @@ export class SessionManager {
       agent: activeAgentName,
       agentDefinitionsHash,
       agents: routedAgents,
+      generatedUiReferencePath: referencePath,
       systemPrompt: input.message.platform === "local-renderer"
-        ? appendGeneratedUiPrompt(personaConfig.systemPrompt)
+        ? appendGeneratedUiPrompt(personaConfig.systemPrompt, referencePath)
         : personaConfig.systemPrompt,
       ...personaSdkToolOptions,
       personaToolPolicy: personaConfig.toolPolicy,
@@ -869,6 +886,7 @@ function sdkSettingsEqual(
 ): boolean {
   return left?.skipWebFetchPreflight === right?.skipWebFetchPreflight
     && JSON.stringify(left?.deniedMcpServers ?? []) === JSON.stringify(right?.deniedMcpServers ?? [])
+    && JSON.stringify(left?.skillOverrides ?? {}) === JSON.stringify(right?.skillOverrides ?? {})
 }
 
 function ordinaryPersonaSdkConfig(): ResolvedPersonaSdkConfig {

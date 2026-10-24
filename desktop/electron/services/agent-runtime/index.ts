@@ -289,6 +289,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           configService ? (await configService.load()).agent.allowedWriteDirectories : []
         ),
         conversations,
+        generatedUiReferencePath: app.isPackaged
+          ? path.join(process.resourcesPath, "agent-openui-reference.md")
+          : path.join(app.getAppPath(), "resources", "agent-openui-reference.md"),
         generatedUiStates: ctx.dataRepo.namespace<GeneratedUiStateEntry>("agent.generated-ui-state"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
         agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),

@@ -14,6 +14,19 @@ describe("SkillRegistry", () => {
     vi.restoreAllMocks()
   })
 
+  it("excludes managed staging folders from slash discovery while preserving ordinary hidden skills", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "sy-staging-slash-"))
+    try {
+      for (const name of [".synapse-install-dir-Ab1234", "synapse-skill", ".custom-hidden"]) {
+        const dir = path.join(workspace, ".claude/skills", name)
+        await fs.mkdir(dir, { recursive: true }); await fs.writeFile(path.join(dir, "SKILL.md"), "---\nname: fixture\n---\nRead only fixture")
+      }
+      const skills = await new SkillRegistry({ workspacePath: workspace }).list()
+      expect(skills.some(s => s.name === ".synapse-install-dir-ab1234")).toBe(false)
+      expect(skills.some(s => s.name === "synapse-skill")).toBe(true)
+      expect(skills.some(s => s.source.includes(".custom-hidden"))).toBe(true)
+    } finally { await fs.rm(workspace, { recursive: true, force: true }) }
+  })
   it("discovers SKILL.md files and builds invocation prompts", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
     const skillDir = path.join(workspace, ".agents", "skills", "reviewer")

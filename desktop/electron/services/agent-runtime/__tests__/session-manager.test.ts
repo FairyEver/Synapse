@@ -1,3 +1,4 @@
+import { discoverStagingSkillOverrides } from "../staging-skill-overrides"
 import type { ConversationEntryV1 } from "../../../runtime/data-repo"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { ProviderService } from "../../provider"
@@ -16,6 +17,7 @@ import type {
   AgentMessage,
   AgentPermissionDecision,
 } from "../types"
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("../claude-sdk-session", () => ({
@@ -32,6 +34,8 @@ vi.mock("../claude-sdk-session", () => ({
     }
   }),
 }))
+
+vi.mock("../staging-skill-overrides", () => ({ discoverStagingSkillOverrides: vi.fn(async () => ({})) }))
 
 describe("SessionManager", () => {
   it.each([false, true])("applies SY-only MCP denial and resumes the same SDK session (persona=%s)", async (persona) => {
@@ -58,6 +62,31 @@ describe("SessionManager", () => {
     expect(createSession).toHaveBeenCalledTimes(2)
     expect(createSession).toHaveBeenLastCalledWith(expect.objectContaining({ sdkSessionId: "original-sdk-session" }))
     expect(createSession.mock.calls.at(-1)?.[0]?.sdkSettings?.deniedMcpServers).toBeUndefined()
+  })
+  it("applies staging visibility changes at the next boundary without dropping MCP denial", async () => {
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
+    const manager = new SessionManager({ projectId: "project-1", workDir: "/tmp/project", repository: {} as AgentSessionRepository,
+      providerService: { buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "test" })), getActiveProvider: vi.fn() } as unknown as ProviderService,
+      states: new Map(), pendingPermissions: new Map(), createSession, getDisabledMcpServers: async () => ["rea"] })
+    const conversation = baseConversation(), message = baseMessage("default"), state = manager.stateForConversation(conversation.id, message)
+    vi.mocked(discoverStagingSkillOverrides).mockResolvedValueOnce({ ".synapse-install-dir-Ab1234": "off" })
+    await manager.getOrCreateSession({ state, conversation, message })
+    expect(createSession.mock.calls[0]?.[0]).toMatchObject({ sdkSettings: { deniedMcpServers: [{ serverName: "rea" }], skillOverrides: { ".synapse-install-dir-Ab1234": "off" } } })
+    await manager.getOrCreateSession({ state, conversation, message })
+    expect(createSession).toHaveBeenCalledTimes(2)
+    expect(createSession.mock.calls[1]?.[0]).toMatchObject({ sdkSettings: { deniedMcpServers: [{ serverName: "rea" }] } })
+  })
+  it.each(["local-renderer", "local"])("uses an available reference only for the desktop renderer (%s)", async (platform) => {
+    const createSession = vi.fn((_input: CreateAgentLiveSessionInput) => new FakeLiveSession())
+    const manager = new SessionManager({ projectId: "project-1", workDir: "/tmp/project", repository: {} as AgentSessionRepository,
+      providerService: { buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "test" })), getActiveProvider: vi.fn() } as unknown as ProviderService,
+      states: new Map(), pendingPermissions: new Map(), createSession,
+      generatedUiReferencePath: path.resolve(__dirname, "../../../../resources/agent-openui-reference.md") })
+    const message = { ...baseMessage("default"), platform } as ReturnType<typeof baseMessage>
+    await manager.getOrCreateSession({ state: manager.stateForConversation("conversation-1", message), conversation: baseConversation(), message })
+    const text = JSON.stringify(createSession.mock.calls[0]?.[0].systemPrompt)
+    if (platform === "local-renderer") { expect(text).toContain("Read"); expect(text).not.toContain("## Component Signatures") }
+    else expect(createSession.mock.calls[0]?.[0].systemPrompt).toBeUndefined()
   })
   it("passes configured allowed write directories to the SDK and recreates after removal", async () => {
     const states = new Map<string, RuntimeSessionState>()

@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
+import { isStagingSkillName } from "./staging-skill-overrides"
 import type { PublishedAgentCommand } from "./command-registry"
 import { normalizeCommandName } from "./command-registry"
 import type { StructuredLogger } from "../../runtime/logging"
@@ -197,6 +198,7 @@ async function listSkillFiles(
     for (const entry of entries) {
       if (result.length >= maxFiles) break
       const next = path.join(realDir, entry.name)
+      if (isStagingSkillName(entry.name)) continue
       if (entry.isDirectory()) {
         await walk(next, depth + 1)
       } else if (entry.isFile() && entry.name === "SKILL.md") {
