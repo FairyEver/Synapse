@@ -38,6 +38,12 @@ export function MailHtmlBody({ projection, onLink }: { projection: ReturnType<ty
       const observer = new ResizeObserver(() => {
         if (pendingFrame === undefined) pendingFrame = requestAnimationFrame(measure)
       })
+      // Frame events do not bubble to the parent document. Let its dismissable
+      // layers treat body interactions as clicks on the frame, including touch.
+      const forwardPointerDown = (event: PointerEvent) => {
+        iframe.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: event.pointerType, button: event.button, ctrlKey: event.ctrlKey }))
+      }
+      const forwardClick = () => iframe.dispatchEvent(new MouseEvent("click", { bubbles: true }))
       const openLink = (event: MouseEvent) => {
         const anchor = (event.target as Element | null)?.closest?.("a[data-mail-link]")
         if (!anchor) return
@@ -49,6 +55,8 @@ export function MailHtmlBody({ projection, onLink }: { projection: ReturnType<ty
         track({ component: "mail", name: "mail.link.open", eventKey: "mail.link.open", action: "click" })
         current.current.onLink(link.url)
       }
+      doc.addEventListener("pointerdown", forwardPointerDown)
+      doc.addEventListener("click", forwardClick)
       doc.addEventListener("click", openLink)
       doc.addEventListener("auxclick", openLink)
       observer.observe(doc.body)
@@ -57,6 +65,8 @@ export function MailHtmlBody({ projection, onLink }: { projection: ReturnType<ty
         themeObserver.disconnect()
         observer.disconnect()
         if (pendingFrame !== undefined) cancelAnimationFrame(pendingFrame)
+        doc.removeEventListener("pointerdown", forwardPointerDown)
+        doc.removeEventListener("click", forwardClick)
         doc.removeEventListener("click", openLink)
         doc.removeEventListener("auxclick", openLink)
       }

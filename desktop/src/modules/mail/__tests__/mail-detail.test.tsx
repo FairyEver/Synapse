@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { mount, detail } from "./harness"
-import { act } from "react"
+import { act, type ComponentProps } from "react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { MailDetail } from "../message-detail"
 
@@ -15,8 +15,8 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-function renderDetail(html: string, onLink = vi.fn()) {
-  mount(<MailDetail detail={detail} body={{ html, text: "正文", complete: true, truncated: false }} resources={{ cid: {}, remote: {} }} onBack={() => undefined} onResource={() => undefined} onDownload={() => undefined} onLink={onLink} onReply={() => undefined} onCopy={() => undefined} />)
+function renderDetail(html: string, onLink = vi.fn(), mail: ComponentProps<typeof MailDetail>["detail"] = detail) {
+  mount(<MailDetail detail={mail} body={{ html, text: "正文", complete: true, truncated: false }} resources={{ cid: {}, remote: {} }} onBack={() => undefined} onResource={() => undefined} onDownload={() => undefined} onLink={onLink} onReply={() => undefined} onCopy={() => undefined} />)
   const iframe = document.querySelector("iframe")!
   // jsdom does not load srcdoc. Populate the frame with the application's sanitized output.
   const doc = iframe.contentDocument!
@@ -24,6 +24,38 @@ function renderDetail(html: string, onLink = vi.fn()) {
   act(() => iframe.dispatchEvent(new Event("load")))
   return { iframe, doc }
 }
+
+it.each(["mouse", "touch"])("dismisses address popovers on %s interaction in the isolated body", async pointerType => {
+  const onLink = vi.fn()
+  const { doc } = renderDetail('<p>正文</p><a href="https://example.com/doc">文档</a>', onLink, {
+    ...detail, to: [{ name: "收件人", address: "recipient@example.com" }],
+  })
+  const openAddress = async () => {
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="收件人，查看邮箱地址"]')!.click())
+    // Radix installs outside pointer listeners on the next task.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  }
+  await openAddress()
+  const popover = document.querySelector('[role="dialog"]')!
+  act(() => popover.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType })))
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  for (const target of [doc.querySelector("p")!, doc.querySelector("a")!]) {
+    act(() => {
+      target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType }))
+      target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    if (target.tagName === "P") await openAddress()
+  }
+  expect(onLink).toHaveBeenCalledExactlyOnceWith("https://example.com/doc")
+  await openAddress()
+  act(() => {
+    document.querySelector("h2")!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType }))
+    document.querySelector("h2")!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+})
 
 it("opens a body link through the controlled handler without duplicating it above the message", () => {
   const onLink = vi.fn()
@@ -84,8 +116,13 @@ it("fits body growth and shrinkage and releases measurements and handlers when r
   await act(async () => { observer.callback(); await new Promise(resolve => requestAnimationFrame(resolve)) })
   expect(iframe.style.height).toBe("600px")
   const oldLink = doc.querySelector("a")!
+  const onFrameInteraction = vi.fn()
+  iframe.addEventListener("pointerdown", onFrameInteraction)
+  iframe.addEventListener("click", onFrameInteraction)
   mount(<div>已关闭</div>)
   expect(observer.disconnect).toHaveBeenCalled()
   act(() => oldLink.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })))
+  act(() => oldLink.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" })))
   expect(onLink).not.toHaveBeenCalled()
+  expect(onFrameInteraction).not.toHaveBeenCalled()
 })
