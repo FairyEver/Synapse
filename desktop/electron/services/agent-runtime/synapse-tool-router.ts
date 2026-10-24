@@ -217,10 +217,11 @@ export function buildSynapseToolRouterTools(): McpToolDefinition[] {
 }
 
 function toMcpInputSchema(shape: SynapseToolRouterInputShape): McpToolDefinition["inputSchema"] {
-  const { $schema: _schema, ...derived } = z.toJSONSchema(
+  const derived = z.toJSONSchema(
     z.object(shape),
     { io: "input" },
   ) as Record<string, unknown>
+  delete derived.$schema
   return { ...derived, additionalProperties: false } as McpToolDefinition["inputSchema"]
 }
 

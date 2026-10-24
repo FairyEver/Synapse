@@ -70,6 +70,7 @@ const CAPABILITY_ACTIONS = [
   "submit",
   "respond",
   "repair",
+  "run",
 ] as const
 
 export type CapabilityAction = typeof CAPABILITY_ACTIONS[number]
