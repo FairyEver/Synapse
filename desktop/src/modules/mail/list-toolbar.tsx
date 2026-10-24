@@ -16,8 +16,8 @@ export interface MailSearchControls { onSearch?(query: string): void; coverage?:
 function Hint({ label, children }: { label: string; children: ReactNode }) {
   return <Tooltip><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>
 }
-export function MailListToolbar({ count, all, disabled, busy, draftView, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, coverage, canContinue, onContinue, syncStatus }: MailSearchControls & {
-  count: number; all: boolean; disabled: boolean; busy?: boolean; draftView?: boolean; onToggle(value: boolean): void; onBatch(action: BatchAction): void; onMove(id: string): void; folders: Folder[]; canPermanentlyDelete: boolean
+export function MailListToolbar({ count, all, disabled, busy, loading, draftView, onToggle, onBatch, onMove, folders, canPermanentlyDelete, onSearch, coverage, canContinue, onContinue, syncStatus }: MailSearchControls & {
+  count: number; all: boolean; disabled: boolean; busy?: boolean; loading?: boolean; draftView?: boolean; onToggle(value: boolean): void; onBatch(action: BatchAction): void; onMove(id: string): void; folders: Folder[]; canPermanentlyDelete: boolean
 }) {
   const [searching, setSearching] = useState(false), [query, setQuery] = useState("")
   const searchActive = count === 0 && searching
@@ -26,13 +26,25 @@ export function MailListToolbar({ count, all, disabled, busy, draftView, onToggl
   const SyncIcon = syncStatus?.state === "paused" ? Pause : syncStatus?.state === "failed" ? CircleAlert : syncStatus?.state === "cancelled" ? CircleSlash : Clock
   const syncLabel = syncStatus ? [syncStatus.label, syncStatus.progress].filter(Boolean).join("，") : ""
   const exitSearch = () => { setSearching(false); setQuery(""); onSearch?.("") }
+  const syncing = syncStatus?.state === "running"
+  if (loading || syncing) {
+    const progressLabel = syncing ? syncLabel : "加载邮件中"
+    const percentage = syncing ? syncStatus.percentage : null
+    return <TooltipProvider><div className="flex h-10 shrink-0 items-center justify-end border-b bg-background px-3" aria-label="邮件列表工具栏" aria-busy="true">
+      <Hint label={progressLabel}>
+        <span tabIndex={0} className="flex h-8 shrink-0 items-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Progress className="w-16" value={percentage} aria-label={progressLabel} aria-valuenow={percentage ?? undefined} aria-valuetext={progressLabel} />
+        </span>
+      </Hint>
+    </div></TooltipProvider>
+  }
   return <TooltipProvider><div className="flex h-10 shrink-0 items-center border-b bg-background px-3" aria-label="邮件列表工具栏">
     {searchActive ? <SystemAppTopBarActionButton type="button" iconOnly aria-label="退出搜索" onClick={exitSearch}><ArrowLeft /></SystemAppTopBarActionButton> : <>
       <Checkbox aria-label={`选择当前页${itemName}`} checked={all ? true : count ? "indeterminate" : false} onCheckedChange={value => onToggle(value === true)} disabled={disabled || busy} />
       {count > 0 && <span className="ml-2 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground" aria-label={`已选 ${count} 封${itemName}`}>{count}</span>}
     </>}
     {status && <Popover><Hint label={status}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly aria-label={status}><Info /></SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="start" className="w-64"><p className="text-sm">{status}</p>{canContinue && <Button variant="ghost" className="mt-2" disabled={busy} onClick={onContinue}>继续检索</Button>}</PopoverContent></Popover>}
-    {syncStatus && syncStatus.state !== "completed" && syncStatus.state !== "running" && <Popover><Hint label={syncLabel}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly={searchActive} aria-label={syncLabel} className="min-w-0 shrink"><SyncIcon />{!searchActive && <><span className="truncate">{syncStatus.label}</span>{syncStatus.count && <span className="tabular-nums">{syncStatus.count}</span>}</>}</SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="start" className="w-64 space-y-2 text-sm"><p>{syncStatus.label}</p>{syncStatus.progress && <p className="tabular-nums text-muted-foreground">{syncStatus.progress}</p>}{syncStatus.error && <p className="text-destructive">{syncStatus.error}</p>}</PopoverContent></Popover>}
+    {syncStatus && syncStatus.state !== "completed" && <Popover><Hint label={syncLabel}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly={searchActive} aria-label={syncLabel} className="min-w-0 shrink"><SyncIcon />{!searchActive && <><span className="truncate">{syncStatus.label}</span>{syncStatus.count && <span className="tabular-nums">{syncStatus.count}</span>}</>}</SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="start" className="w-64 space-y-2 text-sm"><p>{syncStatus.label}</p>{syncStatus.progress && <p className="tabular-nums text-muted-foreground">{syncStatus.progress}</p>}{syncStatus.error && <p className="text-destructive">{syncStatus.error}</p>}</PopoverContent></Popover>}
     {searchActive ? <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={event => { event.preventDefault(); onSearch?.(query) }}>
       <InputGroup><InputGroupInput autoFocus aria-label="搜索邮件" placeholder="搜索邮件" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Escape") exitSearch() }} />
         <InputGroupAddon align="inline-end">{query && <InputGroupButton aria-label="清空搜索" size="icon-xs" onClick={() => { setQuery(""); onSearch?.("") }}><X /></InputGroupButton>}<InputGroupButton type="submit" size="icon-xs" aria-label="提交搜索"><Search /></InputGroupButton></InputGroupAddon>
@@ -46,10 +58,5 @@ export function MailListToolbar({ count, all, disabled, busy, draftView, onToggl
           </>}
         </DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
       : onSearch && <Hint label="搜索邮件"><SystemAppTopBarActionButton iconOnly aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></SystemAppTopBarActionButton></Hint>}</>}
-    {syncStatus?.state === "running" && <Hint label={syncLabel}>
-      <span tabIndex={0} className="ml-2 flex h-8 shrink-0 items-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <Progress className="w-16" value={syncStatus.percentage} aria-label={syncLabel} aria-valuenow={syncStatus.percentage ?? undefined} aria-valuetext={syncLabel} />
-      </span>
-    </Hint>}
   </div></TooltipProvider>
 }

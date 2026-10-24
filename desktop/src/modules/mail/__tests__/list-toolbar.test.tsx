@@ -32,3 +32,31 @@ it("does not treat incomplete search coverage as an active synchronization job",
   act(() => [...document.querySelectorAll("button")].find(button => button.textContent === "继续检索")!.click())
   expect(resume).toHaveBeenCalledTimes(1)
 })
+
+it.each(["loading", "syncing"] as const)("makes %s exclusive with toolbar actions and restores search and selection afterward", state => {
+  const props = { items: [summary], drafts: [], loading: false, more: false, onSelect: vi.fn(), onDraft: vi.fn(), onMore: vi.fn(), onBatch: vi.fn(), folders: [], onMove: vi.fn(), onSearch: vi.fn(), coverage: { ...coverage, metadataComplete: false }, canContinue: true, onContinue: vi.fn() }
+  const pending = state === "loading" ? { loading: true } : { syncStatus: { state: "running" as const, label: "索引中", count: "50/251", progress: "已索引 50 / 251 封", percentage: 50 / 251 * 100, error: null } }
+  const toolbar = () => document.querySelector('[aria-label="邮件列表工具栏"]')!
+  mount(<MailList {...props} />)
+  act(() => toolbar().querySelector<HTMLButtonElement>('button[aria-label="搜索邮件"]')!.click())
+  expect(toolbar().querySelector('input[aria-label="搜索邮件"]')).not.toBeNull()
+
+  mount(<MailList {...props} {...pending} />)
+  expect(toolbar().querySelectorAll("button, input")).toHaveLength(0)
+  expect(toolbar().querySelector('[role="progressbar"]')).not.toBeNull()
+  expect(toolbar().textContent).toBe("")
+
+  mount(<MailList {...props} />)
+  expect(toolbar().querySelector('input[aria-label="搜索邮件"]')).not.toBeNull()
+  act(() => toolbar().querySelector<HTMLButtonElement>('button[aria-label="退出搜索"]')!.click())
+  act(() => toolbar().querySelector<HTMLButtonElement>('[aria-label="选择当前页邮件"]')!.click())
+  expect(toolbar().textContent).toContain("操作")
+
+  mount(<MailList {...props} {...pending} />)
+  expect(toolbar().querySelectorAll("button, input")).toHaveLength(0)
+  expect(toolbar().querySelector('[role="progressbar"]')).not.toBeNull()
+  mount(<MailList {...props} />)
+  expect(toolbar().textContent).toContain("操作")
+  expect(toolbar().querySelector('[aria-label="已选 1 封邮件"]')).not.toBeNull()
+  expect(toolbar().querySelector('[role="progressbar"]')).toBeNull()
+})
