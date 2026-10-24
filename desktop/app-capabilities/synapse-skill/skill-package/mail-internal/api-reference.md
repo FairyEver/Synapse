@@ -6,7 +6,7 @@
 
 | 工具 | 必填参数 | 返回或作用 |
 |---|---|---|
-| `app_mail_internal_recipient_list` | `query`（可传空字符串浏览），可选 `cursor` | `userId`、昵称、handle、匹配类型、共同团队、`nextCursor` |
+| `app_mail_internal_recipient_list` | `query`（可传空字符串浏览），可选 `cursor` | `userId`、昵称、handle、`contactEmail`（可空，用户自填，非登录邮箱）、匹配类型、共同团队、`nextCursor` |
 | `app_mail_internal_organization_list` | `query`（可传空字符串浏览） | 当前用户所在团队的组织 ID、名称、所属团队和成员数 |
 | `app_mail_internal_organization_members_list` | `organizationId`，可选 `cursor` | 组织及下级的有效成员，按 `nextCursor` 续页 |
 | `app_mail_internal_contact_list` | `box: inbox \| sent` | 完整可见信箱的历史发件人或收件/抄送地址，含 `key`、`kind`、`name`、`handle`、`teamName`、`unread`、`lastSentAt`，最近相关信件倒序 |

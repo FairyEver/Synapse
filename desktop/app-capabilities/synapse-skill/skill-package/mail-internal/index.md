@@ -15,7 +15,7 @@
 用户已明确要求发送（包括回复或转发），且收件人、内容和附件都明确，没有疑惑、不确定或确需用户检查的内容时，直接发送，不再要求用户确认。用户只要求起草、查看或明确要求先审阅时，不得直接发送。AI 生成正文或文档本身不是必须确认的理由。
 
 1. 如用户要求生成文档并作为附件发送，先在本机生成完整文件，再用 `app_mail_internal_attachment_create` 的 `filePath` 直接上传为站内信附件，不经云盘。如用户要求分享已有云盘文件，取得该文件的分享链接，放入信件正文；不要将云盘文件转存为附件。
-2. 对个人调用 `app_mail_internal_recipient_list`，对组织调用 `app_mail_internal_organization_list`；重名或模糊结果必须让用户选定。可用 `app_mail_internal_organization_members_list` 分页核对组织及下级成员。不要猜测组织 ID，不要把跨团队组织放在同一封信里。
+2. 对个人调用 `app_mail_internal_recipient_list`，对组织调用 `app_mail_internal_organization_list`；结合上下文和候选判断姓名；仅在仍有歧义或不确定时让用户选定，不单凭匹配分数决定。可用 `app_mail_internal_organization_members_list` 分页核对组织及下级成员。不要猜测组织 ID，不要把跨团队组织放在同一封信里。
 3. 调用 `app_mail_internal_send_preview`，传 `formatVersion: 3`、`toIds`、`ccIds`、`toOrganizationIds`、`ccOrganizationIds`、主题、完整正文及附件 ID；回复或转发传 `relation: {kind, messageId}`。检查预览返回的 To/Cc 地址、当前可投递人数、主题、完整正文及原信引用、每个附件的文件名，确保符合用户指令。成员变化时最终人数可能不同；预览接口始终调用，但无需为没有疑惑的发送额外展示全文并等待确认。
 4. 只有收件人或组织存在歧义、内容含无法核实的关键事实、附件内容或版本不确定、待发内容超出授权范围，或用户明确要求先审阅等确需用户判断的情况，才说明具体疑惑或检查理由并询问用户。需要检查完整信件时，展示 To/Cc 地址、人数、主题、完整正文及原信引用、附件名；AI 生成文档还需提供完整内容或准确可打开的预览。等待用户明确答复并解决疑惑；模糊回应不算确认。用户改动任何一项或预览过期时，重新预览并检查；内容仍明确且在授权范围内时直接发送，不因重新预览本身再次确认。
 5. 用户已授权发送且预览检查无待解决问题后，调用 `app_mail_internal_message_send`，`confirmed` 填 `true`，表示调用者已核对发送授权与待发内容，不要求每次都有额外的用户确认回复。AI 在后台以当前登录用户身份直发，不打开写信界面，也不让用户在界面里点发送。重试同一次请求沿用原幂等键。
@@ -36,3 +36,8 @@
 单封设已读或未读用 `app_mail_internal_message_update`；收件箱全部设已读用 `app_mail_internal_message_read_all`。单封删除用 `app_mail_internal_message_delete`，最多 100 个确定 ID 用 `app_mail_internal_message_delete_batch`；从收件箱或已发送操作时传对应 `box`，自发信只隐藏这一侧副本；检查返回的 `skippedIds`，不能把未处理项报告成已删除。`app_mail_internal_message_delete_all` 按 `box` 清空完整收件箱或已发送箱，与当前搜索词和已加载页无关。下载附件走 `app_mail_internal_attachment_download_file`，目的地为绝对本地路径。
 
 普通来信回复原发件人；自己发出的信回复时保留原 To 收件人（其中可以包含当前用户）。转发重新选择 To/Cc，默认把原附件 ID 放入 `forwardAttachmentIds`，用户可要求移除。两种操作都通过新预览执行上述流程，无疑惑时直接发送，需要用户判断时才确认。不提供回复全部。
+
+
+## 为外部邮件查询联系邮箱
+
+`app_mail_internal_recipient_list` 也返回共同团队活跃成员的 `contactEmail`（可空）；它是用户在个人资料里自行维护的地址，不是登录邮箱。只读查询不改变邮件发送领域；外部发送仍遵循 [外部邮箱](../mail/index.md)。缺失字段或空值表示没有可用联系邮箱，不从 handle、用户 ID 或登录账号推断。此字段只随当前成员查询返回，不添加到历史站内信地址快照。

@@ -381,6 +381,7 @@ export type DashboardDeviceRow = {
 
 export type DashboardMe = {
   user: {
+    contactEmail?: string | null
     id: string
     email: string
     status: 'active' | 'disabled'
@@ -954,7 +955,7 @@ export const dashboardApi = {
   logout: () =>
     request<{ ok: true }>(`${consoleApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${consoleApiBasePath}/me`),
-  updateMe: (input: { handle?: string; nickname?: string }) =>
+  updateMe: (input: { handle?: string; nickname?: string; contactEmail?: string | null }) =>
     request<DashboardMe>(`${consoleApiBasePath}/me`, {
       method: 'PATCH',
       body: JSON.stringify(input),

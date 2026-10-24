@@ -2,7 +2,7 @@ import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import type { CapabilityId } from "./naming"
 
 const definitions = [
-  ["app_mail_internal_recipient_list", "app.mail_internal.recipient.list", "Browse or search active users sharing a team with the current user. Use an exact unique match; ask the user to choose when names are ambiguous."],
+  ["app_mail_internal_recipient_list", "app.mail_internal.recipient.list", "Browse or search active users sharing a team with the current user. Returns contactEmail (nullable, never the login email) for external email address lookup as well as internal recipients. Resolve names using context and candidates; ask only when uncertainty remains."],
   ["app_mail_internal_organization_list", "app.mail_internal.organization.list", "Search organizations in the current user's teams; selecting a parent includes all descendant members. Pagination: none; returns all matching organizations."],
   ["app_mail_internal_organization_members_list", "app.mail_internal.organization_members.list", "List active direct and descendant members of one organization visible to the current user. Pagination: cursor-based. Continue with nextCursor."],
   ["app_mail_internal_contact_list", "app.mail_internal.contact.list", "List historical senders for inbox or explicit To/Cc users and organizations for sent mail, newest related message first. Returns contact keys and inbox unread counts across the entire visible mailbox. Does not expand organization members. Pagination: none; returns all distinct contacts."],

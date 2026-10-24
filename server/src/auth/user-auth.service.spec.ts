@@ -1375,6 +1375,27 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("saves, clears and preserves contact email independently of authentication", async () => {
+    const prisma = createPrismaMock()
+    let row = { id: "user-1", email: "login@example.com", status: "active", handle: "person", nickname: "Person", contactEmail: null as string | null }
+    prisma.__tx.user.findUniqueOrThrow.mockImplementation(async () => ({ ...row }))
+    prisma.__tx.user.update.mockImplementation(async ({ where, data }) => {
+      expect(where).toEqual({ id: "user-1" })
+      expect(Object.keys(data).every((key) => ["nickname", "contactEmail"].includes(key))).toBe(true)
+      row = { ...row, ...data }
+      return row
+    })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+    const saved = await service.updateMyProfile("user-1", { contactEmail: " work@example.com " })
+    expect(saved.user).toMatchObject({ email: "login@example.com", contactEmail: "work@example.com" })
+    expect((await service.updateMyProfile("user-1", { nickname: "New" })).user.contactEmail).toBe("work@example.com")
+    expect((await service.updateMyProfile("user-1", { contactEmail: " " })).user.contactEmail).toBeNull()
+    await expect(service.updateMyProfile("user-1", { contactEmail: "bad" })).rejects.toThrow()
+    expect(prisma.__tx.userSession.updateMany).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({ detail: { fields: ["contactEmail"] } }))
+  })
+
   it("returns the current user profile", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUniqueOrThrow.mockResolvedValue({
@@ -1383,11 +1404,12 @@ describe("UserAuthService", () => {
       status: "active",
       handle: "ada",
       nickname: "Ada L.",
+      contactEmail: null,
     })
     const service = createService(prisma)
 
     const expected: UserMeResponse = {
-      user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada", nickname: "Ada L." },
+      user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada", nickname: "Ada L.", contactEmail: null },
     }
 
     await expect(service.getMe("user-1")).resolves.toEqual(expected)
@@ -1400,6 +1422,7 @@ describe("UserAuthService", () => {
         status: true,
         handle: true,
         nickname: true,
+        contactEmail: true,
       },
     })
   })
@@ -1509,6 +1532,7 @@ describe("UserAuthService", () => {
         status: true,
         handle: true,
         nickname: true,
+        contactEmail: true,
       },
     })
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -1561,6 +1585,7 @@ describe("UserAuthService", () => {
         status: true,
         handle: true,
         nickname: true,
+        contactEmail: true,
       },
     })
     expect(prisma.__tx.userHandleRedirect.upsert).not.toHaveBeenCalled()

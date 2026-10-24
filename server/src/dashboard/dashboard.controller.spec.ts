@@ -4,6 +4,19 @@ import { userNicknameMaxLength } from "@synapse/shared"
 import { DashboardController } from "./dashboard.controller"
 
 describe("DashboardController", () => {
+  it("accepts a contact-only update for the authenticated user and rejects identity overrides", async () => {
+    const auth = { updateMyProfile: vi.fn().mockResolvedValue({}) }
+    const controller = new DashboardController(auth as never)
+    const request = { user: { id: "self" }, ip: "test" } as never
+    await controller.updateMe({ contactEmail: "work@example.com" }, request)
+    expect(auth.updateMyProfile).toHaveBeenCalledWith("self", { contactEmail: "work@example.com" }, "test")
+    await controller.updateMe({ contactEmail: null }, request)
+    for (const body of [{ contactEmail: "bad" }, { contactEmail: "a@b.com", userId: "other" }, { email: "other@b.com" }]) {
+      await expect(controller.updateMe(body, request)).rejects.toThrow()
+    }
+    expect(auth.updateMyProfile).toHaveBeenCalledTimes(2)
+  })
+
   it("mounts console and legacy dashboard profile routes", () => {
     expect(Reflect.getMetadata(PATH_METADATA, DashboardController)).toEqual([
       "/api/console",

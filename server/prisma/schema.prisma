@@ -39,6 +39,8 @@ model User {
   /// 用户自填的展示昵称，只在控制台个人资料和桌面端账号区显示。
   /// 不参与公开身份与 URL（那部分是 handle），允许重复，注册时默认取 handle。
   nickname                       String                          @db.VarChar(24)
+  /// 用户自填的联系邮箱，同团队活跃成员可查询；不用于认证，默认空。
+  contactEmail                   String?                         @db.VarChar(320)
   adminNote                      String?                         @db.VarChar(500)
   passwordHash                   String
   passwordChangedAt              DateTime?

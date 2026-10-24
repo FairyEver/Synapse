@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Header, Patch, Post, Req, UseGuards } from "@nestjs/common"
-import { normalizeUserNickname } from "@synapse/shared"
+import { normalizeUserNickname, normalizeUserContactEmail } from "@synapse/shared"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
@@ -7,6 +7,13 @@ import { resolvePublicAppUrl } from "../common/public-app-url"
 import { badRequestFromZodError } from "../common/zod-validation"
 
 const updateMeSchema = z.object({
+  contactEmail: z.string().nullable().superRefine((value, ctx) => {
+    try {
+      normalizeUserContactEmail(value)
+    } catch (error) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : "联系邮箱无效。" })
+    }
+  }).optional(),
   handle: z.string().trim().min(1).max(64).optional(),
   nickname: z.string().trim().superRefine((value, ctx) => {
     try {
@@ -19,7 +26,7 @@ const updateMeSchema = z.object({
     }
   }).optional(),
 }).strict().refine(
-  (value) => value.handle !== undefined || value.nickname !== undefined,
+  (value) => value.handle !== undefined || value.nickname !== undefined || value.contactEmail !== undefined,
   "Profile update request is empty.",
 )
 

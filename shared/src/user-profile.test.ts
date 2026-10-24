@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildDefaultUserNickname,
   normalizeUserNickname,
+  normalizeUserContactEmail,
   userNicknameMaxLength,
 } from "./user-profile.js"
 
@@ -40,5 +41,17 @@ describe("user profile shared helpers", () => {
   it("builds the default nickname from a handle by code point truncation", () => {
     expect(buildDefaultUserNickname("liyang")).toBe("liyang")
     expect(buildDefaultUserNickname("h".repeat(userNicknameMaxLength + 6))).toBe("h".repeat(userNicknameMaxLength))
+  })
+})
+
+
+describe("contact email", () => {
+  it("trims one address and allows clearing without defaulting to login", () => {
+    expect(normalizeUserContactEmail("  Person+work@example.com  ")).toBe("Person+work@example.com")
+    expect(normalizeUserContactEmail(null)).toBeNull()
+    expect(normalizeUserContactEmail("  ")).toBeNull()
+  })
+  it.each(["not-email", "a@example.com,b@example.com", "Name <a@example.com>", "a@b", "a\n@example.com", "a\u200b@example.com", "a..b@example.com", `${"a".repeat(310)}@example.com`])("rejects invalid single addresses: %s", (value) => {
+    expect(() => normalizeUserContactEmail(value)).toThrow()
   })
 })

@@ -72,7 +72,7 @@ export class MailService {
     const teamIds = memberships.map((row) => row.teamId)
     if (!teamIds.length) return { items: [], nextCursor: null }
     const where = { status: "active" as const, teamMemberships: { some: { teamId: { in: teamIds } } } }
-    const select = { id: true, nickname: true, handle: true, teamMemberships: { where: { teamId: { in: teamIds } }, select: { teamId: true } } } as const
+    const select = { id: true, nickname: true, handle: true, contactEmail: true, teamMemberships: { where: { teamId: { in: teamIds } }, select: { teamId: true } } } as const
     if (!term) {
       if (cursor && !await this.prisma.user.findFirst({ where: { AND: [where, { id: cursor }] }, select: { id: true } })) throw new BadRequestException("无效的收件人分页位置。")
       const users = await this.prisma.user.findMany({
@@ -83,17 +83,26 @@ export class MailService {
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       })
       const page = users.slice(0, 50)
-      return { items: page.map((user) => ({ ...exposedUser(user), matchKind: "browse", similarity: 1, sharedTeamIds: user.teamMemberships.map((row) => row.teamId) })), nextCursor: users.length > 50 ? page.at(-1)?.id ?? null : null }
+      return { items: page.map((user) => ({ ...exposedUser(user), contactEmail: user.contactEmail, matchKind: "browse", similarity: 1, sharedTeamIds: user.teamMemberships.map((row) => row.teamId) })), nextCursor: users.length > 50 ? page.at(-1)?.id ?? null : null }
     }
-    const users = await this.prisma.user.findMany({
-      where,
-      select,
-    })
-    const items = users.map((user) => {
-      const match = recipientMatch(term, [user.id, user.nickname, user.handle])
-      return match ? { ...exposedUser(user), ...match, sharedTeamIds: user.teamMemberships.map((row) => row.teamId) } : null
-    }).filter((item): item is NonNullable<typeof item> => item !== null).sort((a, b) => b.similarity - a.similarity || (a.nickname ?? a.handle ?? "").localeCompare(b.nickname ?? b.handle ?? ""))
-    return { items: items.slice(0, 50), nextCursor: null }
+    // 分批扫描共同团队成员以保留模糊匹配完整性，每次读取和内存候选均有界。
+    const items: Array<ReturnType<typeof exposedUser> & NonNullable<ReturnType<typeof recipientMatch>> & { contactEmail: string | null; sharedTeamIds: string[] }> = []
+    let scanCursor: string | undefined
+    while (true) {
+      const users = await this.prisma.user.findMany({
+        where, select, orderBy: { id: "asc" }, take: 1000,
+        ...(scanCursor ? { cursor: { id: scanCursor }, skip: 1 } : {}),
+      })
+      for (const user of users) {
+        const match = recipientMatch(term, [user.id, user.nickname, user.handle])
+        if (match) items.push({ ...exposedUser(user), contactEmail: user.contactEmail, ...match, sharedTeamIds: user.teamMemberships.map((row) => row.teamId) })
+      }
+      items.sort((a, b) => b.similarity - a.similarity || (a.nickname ?? a.handle ?? "").localeCompare(b.nickname ?? b.handle ?? ""))
+      if (items.length > 50) items.length = 50
+      if (users.length < 1000) break
+      scanCursor = users.at(-1)!.id
+    }
+    return { items, nextCursor: null }
   }
 
   async searchOrganizations(userId: string, query: string) {

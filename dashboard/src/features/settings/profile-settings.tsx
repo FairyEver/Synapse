@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import {
   normalizeUserHandle,
   normalizeUserNickname,
+  normalizeUserContactEmail,
+  userContactEmailMaxLength,
   userHandleMaxLength,
 } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -41,12 +43,22 @@ function getNicknameError(value: string): string | null {
   }
 }
 
+function getContactEmailError(value: string): string | null {
+  try {
+    normalizeUserContactEmail(value)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : '联系邮箱无效。'
+  }
+}
+
 export function ProfileSettings() {
   const queryClient = useQueryClient()
   const authUser = useAuthStore((state) => state.auth.user)
   const setAuthUser = useAuthStore((state) => state.auth.setUser)
   const [handle, setHandle] = useState('')
   const [nickname, setNickname] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['dashboard-me'],
     queryFn: dashboardApi.getMe,
@@ -72,6 +84,7 @@ export function ProfileSettings() {
     if (data) {
       setHandle(data.user.handle ?? '')
       setNickname(data.user.nickname ?? '')
+      setContactEmail(data.user.contactEmail ?? '')
     }
   }, [data])
 
@@ -115,8 +128,11 @@ export function ProfileSettings() {
   const nicknameChanged =
     trimmedNickname !== data.user.nickname
 
-  const isInvalid = isHandleInvalid || isNicknameInvalid
-  const hasChanged = handleChanged || nicknameChanged
+  const contactEmailError = getContactEmailError(contactEmail)
+  const nextContactEmail = contactEmail.trim() || null
+  const contactEmailChanged = nextContactEmail !== (data.user.contactEmail ?? null)
+  const isInvalid = isHandleInvalid || isNicknameInvalid || contactEmailError !== null
+  const hasChanged = handleChanged || nicknameChanged || contactEmailChanged
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -124,6 +140,7 @@ export function ProfileSettings() {
     updateProfile.mutate({
       ...(handleChanged ? { handle: trimmedHandle } : {}),
       ...(nicknameChanged ? { nickname: trimmedNickname } : {}),
+      ...(contactEmailChanged ? { contactEmail: nextContactEmail } : {}),
     })
   }
 
@@ -137,7 +154,7 @@ export function ProfileSettings() {
         <div className='max-w-xl space-y-6'>
           <div className='grid gap-3 text-sm'>
             <div className='grid gap-1 sm:grid-cols-3 sm:items-center'>
-              <span className='text-muted-foreground'>邮箱</span>
+              <span className='text-muted-foreground'>登录邮箱</span>
               <span className='truncate sm:col-span-2'>{data.user.email}</span>
             </div>
             <div className='grid gap-1 sm:grid-cols-3 sm:items-center'>
@@ -177,6 +194,19 @@ export function ProfileSettings() {
               />
               {nicknameError ? (
                 <p className='text-sm text-destructive'>{nicknameError}</p>
+              ) : null}
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='user-contact-email'>联系邮箱</Label>
+              <Input
+                id='user-contact-email'
+                type='email'
+                value={contactEmail}
+                maxLength={userContactEmailMaxLength}
+                onChange={(event) => setContactEmail(event.target.value)}
+              />
+              {contactEmailError ? (
+                <p className='text-sm text-destructive'>{contactEmailError}</p>
               ) : null}
             </div>
             <Button

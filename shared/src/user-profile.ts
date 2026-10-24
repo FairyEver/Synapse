@@ -22,3 +22,22 @@ export function normalizeUserNickname(value: string): string {
 export function buildDefaultUserNickname(handle: string): string {
   return [...handle.trim()].slice(0, userNicknameMaxLength).join("")
 }
+
+
+export const userContactEmailMaxLength = 320
+
+/** 联系邮箱是用户自填的单个地址，不作为认证身份，也不推断默认值。 */
+export function normalizeUserContactEmail(value: string | null): string | null {
+  const normalized = value?.trim() ?? ""
+  if (!normalized) return null
+  if (normalized.length > userContactEmailMaxLength) throw new Error("联系邮箱不能超过 320 个字符。")
+  const parts = normalized.split("@")
+  const local = parts[0] ?? ""
+  const domain = parts[1] ?? ""
+  if (parts.length !== 2 || !/^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~.-]+$/.test(local)
+    || local.startsWith(".") || local.endsWith(".") || local.includes("..")
+    || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(domain)) {
+    throw new Error("请输入有效的联系邮箱地址。")
+  }
+  return normalized
+}

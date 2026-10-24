@@ -1,3 +1,4 @@
+import { createMailInternalCapabilityDispatcher } from "../../capabilities/mail-internal-dispatcher"
 import { mkdir, mkdtemp, readFile, readdir, rm, truncate, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -300,6 +301,19 @@ describe("AccountService", () => {
     await expect(service.getDriveItem("item")).rejects.toMatchObject({ status: 503 })
     await expect(service.getDriveItem("item")).resolves.toMatchObject({ name: "after.md" })
     expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it("preserves new contact email through the existing recipient bridge and accepts older servers", async () => {
+    const { service } = await createTestAccountService()
+    const person = { userId: "reader", nickname: "Reader", handle: "reader", matchKind: "exact", similarity: 1, sharedTeamIds: ["team"] }
+    vi.spyOn(service as unknown as { requestAuthenticatedJson: (...args: unknown[]) => Promise<unknown> }, "requestAuthenticatedJson")
+      .mockResolvedValueOnce({ items: [{ ...person, contactEmail: "contact@example.com" }], nextCursor: null })
+      .mockResolvedValueOnce({ items: [person], nextCursor: null })
+    const dispatcher = createMailInternalCapabilityDispatcher({ accountService: service })
+    const updated = await dispatcher.dispatch("app.mail_internal.recipient.list", { query: "Reader" }, {})
+    expect(updated).toMatchObject({ ok: true, data: { items: [{ contactEmail: "contact@example.com" }] } })
+    const legacy = await service.executeMailOperation({ kind: "recipientSearch", query: "Reader" })
+    expect(legacy.items[0]).not.toHaveProperty("contactEmail")
   })
 
   it("reads a legacy mail page and detail from a server that has not upgraded", async () => {

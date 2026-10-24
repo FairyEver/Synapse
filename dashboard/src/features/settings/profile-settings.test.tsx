@@ -47,6 +47,22 @@ afterEach(() => {
 })
 
 describe('ProfileSettings', () => {
+  it('saves and clears contact email without submitting login identity', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+    mockedDashboardApi.updateMe.mockResolvedValue(profile({ user: { ...profile().user, contactEmail: 'work@example.com' } }))
+    renderProfileSettings()
+    await waitFor(() => inputById('user-contact-email'))
+    expect(inputById('user-contact-email').value).toBe('')
+    await inputValue(inputById('user-contact-email'), 'bad')
+    expect(saveButton().disabled).toBe(true)
+    await inputValue(inputById('user-contact-email'), 'work@example.com')
+    await click(saveButton())
+    await waitFor(() => expect(mockedDashboardApi.updateMe).toHaveBeenCalledWith({ contactEmail: 'work@example.com' }, expect.anything()))
+    await inputValue(inputById('user-contact-email'), '')
+    await click(saveButton())
+    await waitFor(() => expect(mockedDashboardApi.updateMe.mock.calls[1]?.[0]).toEqual({ contactEmail: null }))
+  })
+
   it('saves a normalized username', async () => {
     mockedDashboardApi.getMe.mockResolvedValue(profile())
     mockedDashboardApi.updateMe.mockResolvedValue(profile({

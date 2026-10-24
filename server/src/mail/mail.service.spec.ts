@@ -48,6 +48,24 @@ function harness() {
 }
 
 describe("MailService", () => {
+  it("returns contact email for shared-team candidates without exposing login email", async () => {
+    const { service, prisma, teammate } = harness()
+    prisma.user.findMany.mockResolvedValue([{ ...teammate, nickname: "王益明", contactEmail: "contact@example.com", email: "private@example.com" }] as never)
+    for (const query of ["王益明", "王艺明", ""]) {
+      const result = await service.searchRecipients("sender", query)
+      expect(result.items[0]).toMatchObject({ userId: "teammate", contactEmail: "contact@example.com" })
+      expect(result.items[0]).not.toHaveProperty("email")
+    }
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { status: "active", teamMemberships: { some: { teamId: { in: ["team-1"] } } } },
+      select: expect.objectContaining({ contactEmail: true }),
+    }))
+    prisma.user.findMany.mockResolvedValue([{ ...teammate, contactEmail: null }] as never)
+    expect((await service.searchRecipients("sender", "王明")).items[0]?.contactEmail).toBeNull()
+    prisma.teamMembership.findMany.mockResolvedValueOnce([])
+    expect(await service.searchRecipients("outsider", "王明")).toEqual({ items: [], nextCursor: null })
+  })
+
   it("combines sender filtering with inbox visibility, unread state and search before pagination", async () => {
     const { service, prisma } = harness()
     await service.listMessages("reader", "inbox", "报告", undefined, true, "user:writer")
@@ -194,6 +212,7 @@ describe("MailService", () => {
     prisma.user.findMany.mockImplementationOnce(async (query?: { take?: number }) => [...users, teammate].slice(0, query?.take ?? Infinity) as never)
     const result = await service.searchRecipients("sender", "王明")
     expect(result.items[0]).toMatchObject({ userId: "teammate", matchKind: "exact" })
+    expect(prisma.user.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 1000, cursor: { id: "person-999" }, skip: 1 }))
   })
 
   it("browses only active teammates in stable pages without a search term", async () => {

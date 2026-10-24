@@ -18,6 +18,7 @@ import {
   buildDefaultUserNickname,
   normalizeUserHandle,
   normalizeUserNickname,
+  normalizeUserContactEmail,
 } from "@synapse/shared"
 import { AuditLogService, auditActors } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
@@ -51,7 +52,7 @@ export interface UserRegistrationResult {
 }
 
 export interface UserMeResponse {
-  readonly user: Pick<User, "id" | "email" | "status" | "handle" | "nickname">
+  readonly user: Pick<User, "id" | "email" | "status" | "handle" | "nickname" | "contactEmail">
 }
 
 export type PasswordResetValidationResult =
@@ -151,7 +152,7 @@ function isUsablePasswordResetRecord(
   return Boolean(record && !record.usedAt && record.expiresAt > now && record.user.status === "active")
 }
 
-function toProfileBadRequest(normalize: () => string): string {
+function toProfileBadRequest<T>(normalize: () => T): T {
   try {
     return normalize()
   } catch (error) {
@@ -174,6 +175,7 @@ function toUserMeResponse(user: {
   readonly status: User["status"]
   readonly handle: string
   readonly nickname: string
+  readonly contactEmail: string | null
 }): UserMeResponse {
   return {
     user: {
@@ -182,6 +184,7 @@ function toUserMeResponse(user: {
       status: user.status,
       handle: user.handle,
       nickname: user.nickname,
+      contactEmail: user.contactEmail,
     },
   }
 }
@@ -764,6 +767,7 @@ export class UserAuthService {
         status: true,
         handle: true,
         nickname: true,
+        contactEmail: true,
       },
     })
 
@@ -785,10 +789,10 @@ export class UserAuthService {
 
   async updateMyProfile(
     userId: string,
-    input: { readonly handle?: string; readonly nickname?: string },
+    input: { readonly handle?: string; readonly nickname?: string; readonly contactEmail?: string | null },
     ipAddress = "system",
   ): Promise<UserMeResponse> {
-    if (input.handle === undefined && input.nickname === undefined) {
+    if (input.handle === undefined && input.nickname === undefined && input.contactEmail === undefined) {
       throw new BadRequestException("profile update is empty.")
     }
     const auditFields: string[] = []
@@ -802,6 +806,7 @@ export class UserAuthService {
           status: true,
           handle: true,
           nickname: true,
+          contactEmail: true,
         },
       })
       const data: Prisma.UserUpdateInput = {}
@@ -843,6 +848,14 @@ export class UserAuthService {
         }
       }
 
+      if (input.contactEmail !== undefined) {
+        const nextContactEmail = toProfileBadRequest(() => normalizeUserContactEmail(input.contactEmail ?? null))
+        if (nextContactEmail !== current.contactEmail) {
+          data.contactEmail = nextContactEmail
+          auditFields.push("contactEmail")
+        }
+      }
+
       try {
         return await tx.user.update({
           where: { id: userId },
@@ -853,6 +866,7 @@ export class UserAuthService {
             status: true,
             handle: true,
             nickname: true,
+            contactEmail: true,
           },
         })
       } catch (error) {
