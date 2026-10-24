@@ -54,6 +54,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
   const closedCallback = useRef(onClosed); closedCallback.current = onClosed
   const persisted = useRef(false)
   const [closeRequested, setCloseRequested] = useState(false)
+  const [focusBodyOnOpen, setFocusBodyOnOpen] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null), [addresses, setAddresses] = useState({ to: "", cc: "" })
   const [error, setError] = useState<string | null>(null), [saving, setSaving] = useState(false), [sending, setSending] = useState(false), [loading, setLoading] = useState(false), [reconciling, setReconciling] = useState(false)
   const [addressError, setAddressError] = useState<ComposeAddressError | null>(null)
@@ -86,6 +87,7 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
     if (!owner || opening.current || sendLock.current) return
     if (value.current) throw new Error("请先关闭当前写信窗口")
     opening.current = true; const e = ++epoch.current; setError(null); setLoading(true)
+    setFocusBodyOnOpen("draftId" in intent || "sourceMessageId" in intent || !!intent.recipient)
     try {
       const next = "draftId" in intent ? await mailApi().draftGet({ draftId: intent.draftId }) : await mailApi().draftPrepare("sourceMessageId" in intent ? { accountId: intent.accountId, sourceMessageId: intent.sourceMessageId, mode: intent.mode!, forwardMode: "inline" } : { accountId: intent.accountId, ...(intent.recipient ? { to: [intent.recipient] } : {}) })
       if (active.current && epoch.current === e && ownerRef.current === owner) { persisted.current = "draftId" in intent; initialize(next) }
@@ -218,6 +220,6 @@ export function useCompose(owner: string | null, onClosed?: () => void) {
       edit({ inlineImages: [...value.current.inlineImages, image] }); return image
     } catch (cause) { setError(mailError(cause)); return null }
   }
-  return { sessionId: epoch.current, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, dirty, preview, receipt, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
+  return { sessionId: epoch.current, focusBodyOnOpen, closeRequested, resolveClose, draft, currentDraft: () => value.current, addresses, error, addressError, saving, sending, loading, reconciling, dirty, preview, receipt, editVersion, open, edit, changeAddress, addDepartmentRecipients, save, close, preparePreview, send, reconcile, copyDraft, pickAttachments, importFiles, importImage }
 }
 export type ComposeModel = ReturnType<typeof useCompose>

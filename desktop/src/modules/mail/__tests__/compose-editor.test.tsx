@@ -8,6 +8,29 @@ import { useComposeEditor } from "../use-compose-editor"
 let model: ReturnType<typeof useCompose>, rich: ReturnType<typeof useComposeEditor>
 function Harness() { model = useCompose("user"); rich = useComposeEditor(model); return <EditorContent editor={rich.editor} /> }
 afterEach(() => vi.useRealTimers())
+it.each([
+  { name: "mail from a contact address", mode: "new", recipient: true, localSaved: false, state: "editing", focused: true },
+  { name: "forward without recipients", mode: "forward", recipient: false, localSaved: false, state: "editing", focused: true },
+  { name: "saved draft without recipients", mode: "new", recipient: false, localSaved: true, state: "editing", focused: true },
+  { name: "blank new mail", mode: "new", recipient: false, localSaved: false, state: "editing", focused: false },
+  { name: "sent draft", mode: "new", recipient: true, localSaved: true, state: "consumed", focused: false },
+] as const)("sets initial body focus for $name", async ({ mode, recipient, localSaved, state, focused }) => {
+  const address = { address: "contact@example.com" }
+  const draft = { id: "md_one", accountId: "ma_one", revision: 1, to: recipient ? [address] : [], cc: [], bcc: [], subject: "", html: "<p>已有正文</p>", text: "已有正文", assetIds: [], inlineImages: [], state, mode, sourceMessageId: mode === "forward" ? "em_one" : null, remoteLocator: null, localSaved, syncState: "pending", updatedAt: "2026-10-23T00:00:00Z" }
+  mocks.api.draftPrepare = vi.fn().mockResolvedValue(draft)
+  mocks.api.draftGet = vi.fn().mockResolvedValue(draft)
+  mount(<Harness />); await flush()
+  await act(async () => {
+    await model.open(localSaved ? { draftId: draft.id } : mode === "forward" ? { accountId: draft.accountId, sourceMessageId: "em_one", mode } : { accountId: draft.accountId, ...(recipient ? { recipient: address } : {}) })
+  }); await flush()
+  await act(async () => { await new Promise(requestAnimationFrame) })
+  expect(document.activeElement === rich.editor!.view.dom).toBe(focused)
+  if (focused) {
+    expect(rich.editor!.state.selection.from).toBe(1)
+    expect(rich.editor!.state.selection.empty).toBe(true)
+  }
+  expect(model.dirty).toBe(false)
+})
 it.each(["reply", "reply_all"] as const)("focuses the body start after %s finishes loading without resetting focus on edits", async mode => {
   const draft = { id: "md_one", accountId: "ma_one", revision: 1, to: [{ address: "sender@example.com" }], cc: [], bcc: [], subject: "Re: 主题", html: "<p></p><blockquote><p>原邮件正文</p></blockquote>", text: "原邮件正文", assetIds: [], inlineImages: [], state: "editing", mode, sourceMessageId: "em_one", remoteLocator: null, localSaved: false, syncState: "pending", updatedAt: "2026-10-23T00:00:00Z" }
   const pending = deferred<typeof draft>()

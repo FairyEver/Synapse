@@ -65,7 +65,7 @@ export function useComposeEditor(model: ComposeModel) {
       const body = draft ? sanitizeComposeDocument(draft.html || draft.text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/\n/gu, "<br>"), draft.inlineImages) : { html: "", text: "" }
       editor.commands.setContent(body.html, { emitUpdate: false })
       initialBody.current = { ...body, json: JSON.stringify(editor.getJSON()) }
-      if (draft?.state === "editing" && (draft.mode === "reply" || draft.mode === "reply_all")) {
+      if (draft?.state === "editing" && model.focusBodyOnOpen) {
         editor.commands.focus("start", { scrollIntoView: false })
       }
     }
