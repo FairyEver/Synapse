@@ -21,16 +21,18 @@ export function useMail() {
   const [loading, setLoading] = useState(false), [error, setError] = useState<string | null>(null)
   const scope = useRef<MailScope | null>(null), active = useRef(true), epoch = useRef(0), sequence = useRef(0), selection = useRef(0)
   const draftPages = useRef(1)
+  const defaultInboxPending = useRef(true)
   const accountRef = useRef<string | null>(null), viewRef = useRef<MailView>({}), searchJob = useRef<string | null>(null), searchSequence = useRef(0), retries = useRef(new Map<string, string>())
   const current = (e: number, id: string | null, identity = owner) => active.current && epoch.current === e && ownerRef.current === identity && accountRef.current === id
   const selectAccount = useCallback((id: string) => {
     if (accountRef.current === id) return
+    defaultInboxPending.current = true
     epoch.current++; sequence.current++; selection.current++; draftPages.current = 1; accountRef.current = id; viewRef.current = {}; searchJob.current = null; retries.current.clear()
     setAccountId(id); setView({}); setItems([]); setDrafts([]); setDetail(null); setFolders([]); setCoverage(null); setCursor(null); setCanContinue(false); setError(null)
   }, [])
   const refresh = useCallback(async (more = false, nextCursor?: string) => {
     const id = accountRef.current
-    if (!id || !owner) return
+    if (!id || !owner || defaultInboxPending.current) return
     const e = epoch.current, seq = ++sequence.current, selected = viewRef.current, job = searchJob.current
     setLoading(true)
     const valid = () => current(e, id) && sequence.current === seq
@@ -57,7 +59,15 @@ export function useMail() {
     if (!id || !identity) return
     const all: Folder[] = []; let next: string | undefined
     do { const page = await mailApi().folderList({ accountId: id, cursor: next, limit: 100 }); all.push(...page.items); next = page.nextCursor ?? undefined } while (next && active.current && accountRef.current === id && ownerRef.current === identity)
-    if (active.current && accountRef.current === id && ownerRef.current === identity) setFolders(all)
+    if (active.current && accountRef.current === id && ownerRef.current === identity) {
+      setFolders(all)
+      const inbox = all.find(folder => folder.accountId === id && folder.role === "inbox" && folder.selectable)
+      if (defaultInboxPending.current && inbox) {
+        defaultInboxPending.current = false
+        viewRef.current = { folderId: inbox.id }; setView(viewRef.current)
+        void refreshRef.current()
+      }
+    }
   }, [owner])
   const loadAccounts = useCallback(async () => {
     const identity = owner
@@ -74,8 +84,7 @@ export function useMail() {
       if (!result.some(a => a.id === accountRef.current)) {
         if (result[0]) selectAccount(result[0].id)
         else { accountRef.current = null; setAccountId(null); setItems([]); setDetail(null); setFolders([]) }
-      }
-      await loadFolders()
+      } else await loadFolders()
       if (resetGeneration) void refreshRef.current()
     } catch (cause) { if (active.current && ownerRef.current === identity) setError(mailError(cause)) }
   }, [owner, selectAccount, loadFolders])
@@ -87,8 +96,9 @@ export function useMail() {
   }, [owner, loadAccounts])
   useEffect(() => {
     if (!accountId) return
-    void refreshRef.current()
-  }, [accountId, owner])
+    const e = epoch.current
+    void loadFolders().catch(cause => { if (current(e, accountId)) setError(mailError(cause)) })
+  }, [accountId, owner, loadFolders])
   useEffect(() => {
     if (!owner) return
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -103,6 +113,7 @@ export function useMail() {
     return () => { off(); offIdentity?.(); clearTimeout(timer); window.removeEventListener("focus", focus) }
   }, [owner, loadAccounts])
   const selectView = useCallback((next: MailView) => {
+    defaultInboxPending.current = false
     epoch.current++; sequence.current++; selection.current++; draftPages.current = 1; viewRef.current = next; searchJob.current = null
     setView(next); setItems([]); setDrafts([]); setDetail(null); setCoverage(null); setCursor(null); setCanContinue(false); void refreshRef.current()
   }, [])

@@ -1,11 +1,56 @@
 /** @vitest-environment jsdom */
-import { mocks, mount, flush, detail, summary } from "./harness"
+import { mocks, mount, flush, detail, summary, deferred } from "./harness"
 import { act } from "react"
 import { expect, it } from "vitest"
 import { MailDetail } from "../message-detail"
 import { useMail } from "../use-mail"
 let current: ReturnType<typeof useMail>
 function Harness() { current = useMail(); return null }
+it("opens the inbox after folders load without first fetching all mail", async () => {
+  const folders = deferred<unknown>()
+  mocks.api.folderList.mockReturnValue(folders.promise)
+  mount(<Harness />); await flush()
+  expect(mocks.api.messageList).not.toHaveBeenCalled()
+  folders.resolve({ items: [{ id: "mf_one", accountId: "ma_one", role: "inbox", selectable: true }], nextCursor: null })
+  await flush()
+  expect(current.view).toEqual({ folderId: "mf_one" })
+  expect(mocks.api.messageList).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "ma_one", folderId: "mf_one" }))
+})
+it("loads the new account's inbox when switching accounts", async () => {
+  mocks.api.folderList.mockImplementation(async ({ accountId }) => ({ items: [{ id: `inbox_${accountId}`, accountId, role: "inbox", selectable: true }], nextCursor: null }))
+  mount(<Harness />); await flush()
+  act(() => current.selectView({ drafts: true })); await flush()
+  act(() => current.selectAccount("ma_two")); await flush()
+  expect(current.view).toEqual({ folderId: "inbox_ma_two" })
+  expect(mocks.api.messageList).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: "ma_two", folderId: "inbox_ma_two" }))
+})
+it("preserves an explicit all-mail selection when folders refresh", async () => {
+  mount(<Harness />); await flush()
+  act(() => current.selectView({})); await flush()
+  await act(async () => { await current.loadAccounts() })
+  expect(current.view).toEqual({})
+  expect(mocks.api.messageList).toHaveBeenLastCalledWith(expect.objectContaining({ folderId: undefined }))
+})
+it("selects the inbox when initial synchronization discovers it later", async () => {
+  mocks.api.folderList.mockResolvedValueOnce({ items: [], nextCursor: null })
+  mount(<Harness />); await flush()
+  expect(mocks.api.messageList).not.toHaveBeenCalled()
+  await act(async () => { await current.loadAccounts() })
+  expect(current.view).toEqual({ folderId: "mf_one" })
+  expect(mocks.api.messageList).toHaveBeenLastCalledWith(expect.objectContaining({ folderId: "mf_one" }))
+})
+it("keeps a manual selection and a directly opened message when folders arrive", async () => {
+  const folders = deferred<unknown>()
+  mocks.api.folderList.mockReturnValue(folders.promise)
+  mount(<Harness />); await flush()
+  act(() => current.selectView({ starredOnly: true })); await flush()
+  await act(async () => { await current.selectMessage(summary.id) })
+  folders.resolve({ items: [{ id: "mf_one", accountId: "ma_one", role: "inbox", selectable: true }], nextCursor: null })
+  await flush()
+  expect(current.view).toEqual({ starredOnly: true })
+  expect(current.folders).toHaveLength(1)
+  expect(current.detail?.id).toBe(summary.id)
+})
 it("refreshes the selected server folder instead of waiting for the background folder sweep", async () => {
   mount(<Harness />); await flush()
   act(() => current.selectView({ folderId: "mf_sent" })); await flush()

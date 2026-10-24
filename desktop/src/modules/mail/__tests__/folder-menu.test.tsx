@@ -47,7 +47,7 @@ beforeEach(() => {
 it("renames an ordinary folder from its context menu without selecting it or exposing creation", async () => {
   mount(<Harness />); await flush()
   await context(custom.name)
-  expect(mail.view).toEqual({})
+  expect(mail.view).toEqual({ folderId: inbox.id })
   expect([...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent)).toEqual(["重命名", "删除文件夹"])
   expect(document.body.textContent).not.toContain("新建文件夹")
   await choose("重命名")
