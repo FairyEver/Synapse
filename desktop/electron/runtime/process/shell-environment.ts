@@ -2,12 +2,14 @@ import { execFileSync } from "node:child_process"
 import { statSync } from "node:fs"
 import { chmod, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import type { ProtectProcess } from "./private-storage-protection"
 
 export type PathStrategy = "merge" | "replace"
 
 const DEFAULT_WINDOWS_EXECUTABLE_EXTENSIONS = [".exe", ".cmd", ".bat", ""]
 
 type BuildHostEnvironmentInput = {
+  readonly protectProcess?: ProtectProcess
   readonly baseEnv?: NodeJS.ProcessEnv
   readonly shellPath?: string | null
   readonly appendPathEntries?: readonly string[]
@@ -49,11 +51,11 @@ const SHELL_PATH_RETRY_MS = 30_000
 const PATH_MARKER_BEGIN = "__SYNAPSE_PATH_BEGIN__"
 const PATH_MARKER_END = "__SYNAPSE_PATH_END__"
 
-export function resolveCachedLoginShellPath(env: NodeJS.ProcessEnv = process.env): string | null {
+export function resolveCachedLoginShellPath(env: NodeJS.ProcessEnv = process.env, protectProcess?: ProtectProcess): string | null {
   if (cachedShellPath) return cachedShellPath
   if (lastShellPathFailedAt > 0 && Date.now() - lastShellPathFailedAt < SHELL_PATH_RETRY_MS) return null
 
-  const resolved = resolveLoginShellPath({ env })
+  const resolved = resolveLoginShellPath({ env, protectProcess })
   if (resolved) {
     cachedShellPath = resolved
     return resolved
@@ -64,6 +66,7 @@ export function resolveCachedLoginShellPath(env: NodeJS.ProcessEnv = process.env
 }
 
 export function resolveLoginShellPath(input: {
+  readonly protectProcess?: ProtectProcess
   readonly env?: NodeJS.ProcessEnv
   readonly platform?: NodeJS.Platform
   readonly execFileSyncImpl?: LoginShellPathExec
@@ -77,12 +80,14 @@ export function resolveLoginShellPath(input: {
     const shellEnv: Record<string, string> = { SHELL: shell, PATH: env.PATH ?? "" }
     if (env.HOME) shellEnv.HOME = env.HOME
     const execImpl = input.execFileSyncImpl ?? execLoginShellPathCommand
-    const stdout = execImpl(shell, [
+    const args = [
       "-i",
       "-l",
       "-c",
       `printf '%s%s%s\\n' '${PATH_MARKER_BEGIN}' "$PATH" '${PATH_MARKER_END}'`,
-    ], {
+    ]
+    const launch = input.protectProcess?.({ command: shell, args }) ?? { command: shell, args }
+    const stdout = execImpl(launch.command, launch.args, {
       timeout: 5000,
       encoding: "utf-8",
       env: shellEnv,
@@ -100,7 +105,7 @@ export function buildHostEnvironment(input: BuildHostEnvironmentInput = {}): Nod
   const baseEnv = input.baseEnv ?? process.env
   const shellPath = input.shellPath !== undefined
     ? input.shellPath
-    : resolveCachedLoginShellPath(baseEnv)
+    : resolveCachedLoginShellPath(baseEnv, input.protectProcess)
   const nextEnv: NodeJS.ProcessEnv = { ...baseEnv }
   const pathEntry = findEnvEntry(baseEnv, "PATH", platform)
   const basePath = pathEntry?.value
@@ -223,6 +228,7 @@ function getWindowsExecutableExtensions(pathext: string | null | undefined): str
 }
 
 export function collectShellEnvironmentSnapshot(input: {
+  readonly protectProcess?: ProtectProcess
   readonly baseEnv?: NodeJS.ProcessEnv
   readonly shellPath?: string | null
   readonly nodeRuntimeBinPath?: string | null
@@ -235,7 +241,7 @@ export function collectShellEnvironmentSnapshot(input: {
   const pathext = findEnvEntry(baseEnv, "PATHEXT", platform)?.value
   const shellPath = input.shellPath !== undefined
     ? input.shellPath
-    : resolveCachedLoginShellPath(baseEnv)
+    : resolveCachedLoginShellPath(baseEnv, input.protectProcess)
   const nodeRuntimeBinPath = input.nodeRuntimeBinPath ?? findEnvEntry(baseEnv, "SYNAPSE_NODE_RUNTIME_BIN", platform)?.value ?? null
   const effectivePath = buildHostEnvironment({
     baseEnv,

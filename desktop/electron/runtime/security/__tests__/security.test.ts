@@ -39,6 +39,11 @@ const systemMcpAutoRegisterReq: PermissionRequest = {
 }
 
 describe("PermissionGuard (T6.6)", () => {
+  it("enforces host constraints before user allow policies", async () => {
+    const guard = createPermissionGuard({ constraints: [{ id: "private-storage", decide: () => "deny" }] })
+    guard.registerPolicy(userInitiatedAllowPolicy)
+    expect(await guard.check(userReq)).toMatchObject({ allowed: false, policyId: "private-storage" })
+  })
   it("user actions are allowed by default (no policies registered)", async () => {
     const guard = createPermissionGuard()
     expect((await guard.check(userReq)).allowed).toBe(true)

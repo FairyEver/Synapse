@@ -13,6 +13,8 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 import { lstat, realpath } from "node:fs/promises"
+import { spawn } from "node:child_process"
+import { PrivateStorageProtection } from "../../runtime/process/private-storage-protection"
 import path from "node:path"
 
 import {
@@ -530,11 +532,13 @@ export class ClaudeSDKSession implements AgentLiveSession {
     options: ClaudeSDKSessionOptions,
     packagedRuntime: PackagedClaudeRuntimeStatus,
   ): Record<string, unknown> {
+    const protectProcess = this.privateStoragePolicy.roots.length
+      ? new PrivateStorageProtection(this.privateStoragePolicy.roots).protectProcess : undefined
     const hostEnv = buildHostEnvironment({
       baseEnv: options.hostEnv ?? process.env,
       shellPath: options.resolveShellPath
         ? options.resolveShellPath()
-        : resolveCachedLoginShellPath(options.hostEnv ?? process.env),
+        : resolveCachedLoginShellPath(options.hostEnv ?? process.env, protectProcess),
       appendPathEntries: [
         options.nodeRuntimeBinPath ?? process.env.SYNAPSE_NODE_RUNTIME_BIN ?? "",
       ],
@@ -565,6 +569,17 @@ export class ClaudeSDKSession implements AgentLiveSession {
       canUseTool: (toolName, input, context) => this.canUseTool(toolName, input, context),
       sandbox: this.privateStoragePolicy.sandbox(),
       managedSettings: this.privateStoragePolicy.managedSettings(),
+    }
+    if (protectProcess) {
+      queryOptions.spawnClaudeCodeProcess = launch => {
+        const protectedLaunch = protectProcess(launch)
+        const child = spawn(protectedLaunch.command, [...protectedLaunch.args], {
+          cwd: launch.cwd, env: launch.env, signal: launch.signal, stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+        })
+        if (queryOptions.stderr) child.stderr.on("data", chunk => queryOptions.stderr?.(String(chunk)))
+        else child.stderr.resume()
+        return child
+      }
     }
     if (options.mcpServers && Object.keys(options.mcpServers).length > 0) queryOptions.mcpServers = options.mcpServers
     if (options.onElicitation) queryOptions.onElicitation = options.onElicitation

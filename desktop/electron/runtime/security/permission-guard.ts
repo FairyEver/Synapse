@@ -111,6 +111,7 @@ export interface PermissionGuard {
 
 export class PermissionGuardImpl implements PermissionGuard {
   private readonly policies: PermissionPolicy[] = []
+  constructor(private readonly options: { readonly constraints?: readonly PermissionPolicy[] } = {}) {}
   private readonly revocationListeners = new Set<(event: { readonly actorId?: string; readonly resource?: string }) => void>()
 
   registerPolicy(policy: PermissionPolicy): () => void {
@@ -125,6 +126,11 @@ export class PermissionGuardImpl implements PermissionGuard {
   }
 
   async check(request: PermissionRequest): Promise<PermissionResult> {
+    for (const constraint of this.options.constraints ?? []) {
+      if (await constraint.decide(request) !== "defer-to-next") {
+        return { allowed: false, reason: `denied by ${constraint.id}`, policyId: constraint.id }
+      }
+    }
     for (const policy of this.policies) {
       const decision = await Promise.resolve(policy.decide(request))
       switch (decision) {
@@ -160,8 +166,8 @@ export class PermissionGuardImpl implements PermissionGuard {
   }
 }
 
-export function createPermissionGuard(): PermissionGuardImpl {
-  return new PermissionGuardImpl()
+export function createPermissionGuard(options: { readonly constraints?: readonly PermissionPolicy[] } = {}): PermissionGuardImpl {
+  return new PermissionGuardImpl(options)
 }
 
 /** The single actor allowed to run the terminal working-directory probe. */

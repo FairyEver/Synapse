@@ -1,4 +1,5 @@
 import type {
+  Options,
   PermissionResult,
   PermissionUpdate,
   SDKMessage,
@@ -18,6 +19,22 @@ import {
 import type { AgentMessage } from "../types"
 
 describe("ClaudeSDKSession", () => {
+  it.runIf(process.platform === "darwin")("starts the complete SDK process behind the private storage OS boundary", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "synapse-sdk-storage-")), privateRoot = path.join(root, "data-v1")
+    mkdirSync(privateRoot); writeFileSync(path.join(privateRoot, "runtime.sqlite"), "private-canary")
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, { privateStorageRoots: [privateRoot] })
+    const spawnSdk = getOptions().spawnClaudeCodeProcess as NonNullable<Options["spawnClaudeCodeProcess"]>
+    try {
+      const child = spawnSdk({ command: process.execPath, args: ["-e", "try {process.stdout.write(require('node:fs').readFileSync(process.argv[1],'utf8'))} catch {process.stdout.write('BLOCKED')}", path.join(privateRoot, "runtime.sqlite")], cwd: root, env: process.env, signal: new AbortController().signal })
+      const result = await new Promise<string>((resolve, reject) => {
+        let output = ""
+        child.stdout.on("data", chunk => { output += String(chunk) })
+        child.on("error", reject); child.on("exit", () => resolve(output))
+      })
+      expect(result).toBe("BLOCKED")
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
   it("passes local MCP restrictions to native SDK settings without dropping user/project/local discovery", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, { sdkSettings: { deniedMcpServers: [{ serverName: "rea" }] } })

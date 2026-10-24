@@ -48,6 +48,17 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 describe("ControlledProcessRunner (Phase 0.7)", () => {
+  it.each(["run", "start"] as const)("fails closed and audits when %s cannot establish private storage protection", async method => {
+    const auditSink = new InMemoryAuditSink()
+    const spawnImpl = vi.fn()
+    const runner = createControlledProcessRunner({ permissionGuard: createPermissionGuard(), auditSink, spawnImpl,
+      protectProcess: () => { throw new Error("private storage unavailable") },
+    })
+    await expect(runner[method]({ actor: { kind: "user" }, action: "shell.exec", command: process.execPath })).rejects.toThrow("private storage unavailable")
+    expect(spawnImpl).not.toHaveBeenCalled()
+    expect(auditSink.list()).toEqual([expect.objectContaining({ outcome: "failed" })])
+  })
+
   it.skipIf(process.platform === "win32")("checks permission before resolving login shell PATH", async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-runner-"))
     const markerPath = path.join(tempDir, "shell-was-run")

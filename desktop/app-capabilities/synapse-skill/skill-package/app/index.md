@@ -98,7 +98,7 @@ Use `app_html_generator_ejs_generate` to render a trusted EJS template and retur
 
 Rules:
 
-- EJS templates execute JavaScript in a one-shot Worker that shares the application's permission domain; it is a reliability boundary, not a security sandbox. Use only trusted template content.
+- EJS templates execute JavaScript in a one-shot Worker inside a protected child process. It denies Synapse private databases and mail caches; unavailable protection fails closed. This is not a general JavaScript or network sandbox. Use only trusted template content; never use EJS as a mailbox-file fallback.
 - Pass the template string as `template` and a JSON-compatible top-level object as `data`. Templates access values through the explicit `data` root, such as `<%= data.title %>`.
 - EJS include and template file loading are disabled. Do not pass a template path, EJS options, custom delimiters, encoding, or a mode field.
 - String generation returns the complete HTML and UTF-8 byte size. It does not automatically save, open, preview, sanitize, or validate the HTML.

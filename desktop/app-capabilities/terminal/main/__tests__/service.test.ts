@@ -11,6 +11,19 @@ const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", acto
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
 describe("TerminalService core", () => {
+  it("never launches an unprotected shell when private-storage process protection fails", async () => {
+    const spawnPty = vi.fn(() => fakePty())
+    const service = createTerminalService({ store: memoryStore(), spawnPty,
+      resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir(),
+      protectProcess: () => { throw new Error("Private storage protection unavailable") },
+    })
+    await service.start()
+    const session = await service.createSessionWithEphemeralEnvironment({ shell: "/bin/zsh", cwd: os.tmpdir(), environment: {} })
+    expect(session.status).toBe("failed")
+    expect(spawnPty).not.toHaveBeenCalled()
+    await service.stop()
+  })
+
   it("retains an associated live CLI when terminal persistence fails after spawn", async () => {
     const store = memoryStore()
     const pty = fakePty()

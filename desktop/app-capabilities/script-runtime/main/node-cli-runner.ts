@@ -4,6 +4,7 @@ import { constants } from "node:fs"
 import { access, open, unlink } from "node:fs/promises"
 import { join } from "node:path"
 import { StringDecoder } from "node:string_decoder"
+import type { ProtectProcess } from "../../../electron/runtime/process/private-storage-protection"
 
 import {
   parseStrictJson,
@@ -34,6 +35,7 @@ type ScriptRuntimeDiagnosticLogger = {
 }
 
 export type NodeCliRunnerDeps = {
+  readonly protectProcess?: ProtectProcess
   readonly executablePath: string
   readonly baseEnv: NodeJS.ProcessEnv
   readonly platform?: NodeJS.Platform
@@ -102,6 +104,8 @@ export async function runNodeCliScript(
     stopSignal.throwIfStopped()
     assertByteLimit(request.source, SCRIPT_SOURCE_MAX_BYTES, "Script source is too large.")
     const inputText = serializeScriptInput(request.input)
+    // Validate before the host creates a script in the caller-selected working directory.
+    deps.protectProcess?.({ command: deps.executablePath, args: [], cwd: request.cwd })
 
     try {
       await stopSignal.race(
@@ -121,9 +125,10 @@ export async function runNodeCliScript(
     )
 
     try {
+      const launch = deps.protectProcess?.({ command: deps.executablePath, args: ["--import", NODE_RUNNER_PRELOAD_URL, tempPath], cwd: request.cwd })
       child = (deps.spawnProcess ?? spawn)(
-        deps.executablePath,
-        ["--import", NODE_RUNNER_PRELOAD_URL, tempPath],
+        launch?.command ?? deps.executablePath,
+        launch ? [...launch.args] : ["--import", NODE_RUNNER_PRELOAD_URL, tempPath],
         {
           cwd: request.cwd,
           env: {

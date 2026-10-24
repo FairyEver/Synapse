@@ -4,6 +4,7 @@ import {
   type SpawnOptionsWithoutStdio,
 } from "node:child_process"
 import { StringDecoder } from "node:string_decoder"
+import type { ProtectProcess } from "./private-storage-protection"
 
 import type {
   ActorIdentity,
@@ -135,6 +136,7 @@ export interface ControlledProcessSession {
 }
 
 export interface ControlledProcessRunnerDeps {
+  readonly protectProcess?: ProtectProcess
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly spawnImpl?: SpawnFn
@@ -214,6 +216,7 @@ export class ControlledProcessRunner {
   private readonly spawnImpl: SpawnFn
   private readonly platform: NodeJS.Platform
   private readonly fileExists: ((candidate: string) => boolean) | undefined
+  private readonly protectProcess: ProtectProcess | undefined
 
   constructor(deps: ControlledProcessRunnerDeps) {
     this.permissionGuard = deps.permissionGuard
@@ -222,6 +225,7 @@ export class ControlledProcessRunner {
       spawn(command, [...args], options) as ChildProcessWithoutNullStreams)
     this.platform = deps.platform ?? process.platform
     this.fileExists = deps.fileExists
+    this.protectProcess = deps.protectProcess
   }
 
   async start(request: ControlledProcessRunRequest): Promise<ControlledProcessSession> {
@@ -254,7 +258,7 @@ export class ControlledProcessRunner {
       throw new ControlledProcessPermissionError(permission)
     }
 
-    const launch = buildLaunch(request, { platform: this.platform, fileExists: this.fileExists })
+    const launch = this.prepareLaunch(request, startedAt)
     let child: ChildProcessWithoutNullStreams
     try {
       child = this.spawnImpl(launch.command, launch.args, {
@@ -311,7 +315,7 @@ export class ControlledProcessRunner {
       throw new ControlledProcessPermissionError(permission)
     }
 
-    const launch = buildLaunch(request, { platform: this.platform, fileExists: this.fileExists })
+    const launch = this.prepareLaunch(request, startedAt)
     const launchPathEntries = splitPath(launch.env.PATH ?? "", this.platform === "win32" ? ";" : ":")
     const launchDiagnostics: ControlledProcessDiagnostics = {
       envKeys: Object.keys(launch.env).sort(),
@@ -465,6 +469,16 @@ export class ControlledProcessRunner {
     }
 
     return result
+  }
+
+  private prepareLaunch(request: ControlledProcessRunRequest, startedAt: number): ControlledProcessLaunch {
+    try {
+      const launch = buildLaunch(request, { platform: this.platform, fileExists: this.fileExists, protectProcess: this.protectProcess })
+      return { ...launch, ...this.protectProcess?.({ ...launch, cwd: request.cwd }) }
+    } catch (error) {
+      this.recordFailed(request, startedAt, error instanceof Error ? error.message : String(error))
+      throw error
+    }
   }
 
   private recordFailed(
@@ -794,6 +808,7 @@ function buildAllowedEnv(
   envAllowlist: readonly string[] | undefined,
   pathStrategy: PathStrategy = "merge",
   platform: NodeJS.Platform = process.platform,
+  protectProcess?: ProtectProcess,
 ): NodeJS.ProcessEnv {
   const allowlist = new Set([...DEFAULT_ENV_ALLOWLIST, ...(envAllowlist ?? [])])
   const nextEnv: NodeJS.ProcessEnv = {}
@@ -802,7 +817,7 @@ function buildAllowedEnv(
     if (!key) continue
     if (key === "PATH") {
       const userEntry = findEnvEntry(env, "PATH", platform)
-      const shellPath = resolveCachedLoginShellPath()
+      const shellPath = resolveCachedLoginShellPath(process.env, protectProcess)
       const fallbackPath = findEnvEntry(process.env, "PATH", platform)?.value ?? ""
       const delim = platform === "win32" ? ";" : ":"
       const caseInsensitive = platform === "win32"
@@ -942,11 +957,12 @@ function buildLaunch(
   options: {
     readonly platform?: NodeJS.Platform
     readonly fileExists?: (candidate: string) => boolean
+    readonly protectProcess?: ProtectProcess
   } = {},
 ): ControlledProcessLaunch {
   const platform = options.platform ?? process.platform
   const args = request.args ?? []
-  const env = buildAllowedEnv(request.env, request.envAllowlist, request.pathStrategy ?? "merge", platform)
+  const env = buildAllowedEnv(request.env, request.envAllowlist, request.pathStrategy ?? "merge", platform, options.protectProcess)
   const isolation = request.isolation
   if (!isolation) {
     return {

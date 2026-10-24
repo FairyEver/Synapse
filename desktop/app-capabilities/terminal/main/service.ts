@@ -1,6 +1,7 @@
 import type { MobileGroupCommandsEntry, MobileToolbarButton } from "@synapse/shared" with { "resolution-mode": "import" }
 import { createHash, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
+import type { ProtectProcess } from "../../../electron/runtime/process/private-storage-protection"
 import { chmodSync, existsSync, statSync } from "node:fs"
 import { createRequire } from "node:module"
 import os from "node:os"
@@ -339,6 +340,7 @@ export function createTerminalService(deps: {
   readonly resolveEffectivePath?: () => string | null
   readonly appVersion?: string
   readonly spawnPty?: (input: SpawnPtyInput) => PtyLike
+  readonly protectProcess?: ProtectProcess
   readonly logger?: TerminalServiceLogger
   readonly agentNotifications?: Pick<TerminalAgentNotificationService,
     "prepareSession" | "renameSession" | "handleUserInput" | "unregisterSession"
@@ -1219,6 +1221,7 @@ export function createTerminalService(deps: {
     })
     const sessionId = randomUUID()
     const environment = resolveTerminalEnvironment({
+      protectProcess: deps.protectProcess,
       shell: resolvedLaunch.shell ?? deps.resolveDefaultShell?.(),
       cwd: resolvedLaunch.cwd ?? deps.resolveDefaultCwd?.() ?? os.homedir(),
       effectivePath: deps.resolveEffectivePath?.(),
@@ -1303,9 +1306,10 @@ export function createTerminalService(deps: {
         env: launchEnvironment,
         defaultShellArgs,
       })
+      const protectedLaunch = deps.protectProcess?.({ command: environment.shell, args: integration?.shellArgs ?? defaultShellArgs, cwd: environment.cwd })
       const child = (deps.spawnPty ?? spawnNodePty)({
-        shell: environment.shell,
-        shellArgs: integration?.shellArgs ?? defaultShellArgs,
+        shell: protectedLaunch?.command ?? environment.shell,
+        shellArgs: protectedLaunch?.args ?? integration?.shellArgs ?? defaultShellArgs,
         cwd: environment.cwd,
         cols: session.cols,
         rows: session.rows,
@@ -3645,6 +3649,7 @@ export function createTerminalService(deps: {
     get terminalDomainRevision() { return terminalDomainRevision },
     get lastPersistError() { return lastPersistError },
     get persistenceProtection() { return deps.store.persistenceProtection ?? "unavailable" },
+    get privateStorageProtection() { return deps.protectProcess ? "required" as const : "unavailable" as const },
     runIdempotentOperation,
     flushPersistQueue: waitForPersistIdle,
     getLastPersistError: () => lastPersistError,

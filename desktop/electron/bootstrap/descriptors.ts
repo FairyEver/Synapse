@@ -37,6 +37,8 @@ import { createPortalCredentialDispatcher } from "../../app-capabilities/connect
 import { app, BrowserWindow, clipboard, dialog, Notification, powerMonitor, safeStorage, shell } from "electron"
 import os from "node:os"
 import path from "node:path"
+import { PrivateStorageProtection } from "../runtime/process/private-storage-protection"
+import { createPrivateStorageConstraint, assertPrivateStorageArguments } from "../runtime/security/private-storage-policy"
 import { randomUUID } from "node:crypto"
 import { readFile, realpath, stat, statfs } from "node:fs/promises"
 
@@ -70,6 +72,7 @@ import { TEXT_FILE_WRITER_SERVICE_ID } from "../../app-capabilities/text-file-wr
 import { createHtmlGeneratorCapabilityDispatcher } from "../../app-capabilities/html-generator/main/dispatcher"
 import { createHtmlGenerationToFileService, type HtmlGenerationToFileService } from "../../app-capabilities/html-generator/main/file-service"
 import { HtmlGenerationService } from "../../app-capabilities/html-generator/main/service"
+import { createProtectedHtmlWorkerFactory } from "../../app-capabilities/html-generator/main/protected-worker"
 import {
   HTML_GENERATOR_FILE_SERVICE_ID,
   HTML_GENERATOR_SERVICE_ID,
@@ -448,6 +451,7 @@ export const coreProcessEnvironmentDescriptor: ServiceDescriptor<ProcessEnvironm
     }
 
     const nextEnv = buildHostEnvironment({
+      protectProcess: createPrivateStorageProtection().protectProcess,
       baseEnv: process.env,
       appendPathEntries: shimError ? [] : [runtimeBinPath],
     })
@@ -457,12 +461,17 @@ export const coreProcessEnvironmentDescriptor: ServiceDescriptor<ProcessEnvironm
       nodeRuntimeBinPath: shimError ? undefined : runtimeBinPath,
       nodePath,
       shell: collectShellEnvironmentSnapshot({
+        protectProcess: createPrivateStorageProtection().protectProcess,
         baseEnv: process.env,
         nodeRuntimeBinPath: shimError ? null : runtimeBinPath,
       }),
       shimError,
     }
   },
+}
+
+function createPrivateStorageProtection(): PrivateStorageProtection {
+  return new PrivateStorageProtection([path.join(app.getPath("userData"), "data-v1"), path.join(app.getPath("userData"), "mail-assets")])
 }
 
 export const coreScriptRuntimeDescriptor: ServiceDescriptor<ScriptRuntimeService> = {
@@ -474,8 +483,10 @@ export const coreScriptRuntimeDescriptor: ServiceDescriptor<ScriptRuntimeService
     return new ScriptRuntimeService({
       defaultWorkingDirectory: app.getPath("userData"),
       node: {
+        protectProcess: createPrivateStorageProtection().protectProcess,
         executablePath: app.getPath("exe"),
         baseEnv: buildHostEnvironment({
+          protectProcess: createPrivateStorageProtection().protectProcess,
           baseEnv: process.env,
           shellPath: environment.shell.shellPath,
           appendPathEntries: environment.nodeRuntimeBinPath
@@ -562,6 +573,7 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
       logger: ctx.logger.child("terminal-persistence"),
     })
     return createTerminalService({
+      protectProcess: createPrivateStorageProtection().protectProcess,
       store: withLegacyTerminalMigration({
         baseDir,
         target: dataStore,
@@ -1075,6 +1087,7 @@ export const coreHtmlGenerationDescriptor: ServiceDescriptor<HtmlGenerationServi
   dependsOn: ["core.permission-guard", "core.audit-sink"],
   create(ctx) {
     return new HtmlGenerationService({
+      workerFactory: createProtectedHtmlWorkerFactory({ executablePath: app.getPath("exe"), protectProcess: createPrivateStorageProtection().protectProcess }),
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("html-generator"),
@@ -1268,7 +1281,7 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     configureGitCommandSecurity({
-      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink, protectProcess: createPrivateStorageProtection().protectProcess }),
       actor: { kind: "system", id: "repository-git" },
     })
     const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
@@ -1279,7 +1292,7 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
     const runCompletions = new Map<string, Promise<unknown>>()
     const capabilityLogger = createMainLogger("bootstrap.workflow-action")
     return createBuiltinMainActionRegistry({
-      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink, protectProcess: createPrivateStorageProtection().protectProcess }),
       scriptRuntime: ctx.registry.get<ScriptRuntimeService>(SCRIPT_RUNTIME_SERVICE_ID),
       secrets: ctx.registry.get<SecretsService>("core.secrets"),
       builtinCapabilityRegistrations: {
@@ -1884,6 +1897,12 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     })
 
     const actionRouter = createSynapseActionRouter({
+      assertFileAccess: async params => {
+        try { await assertPrivateStorageArguments(createPrivateStorageProtection(), params) } catch (error) {
+          auditSink.record({ action: "content.read", actor: { kind: "system", id: "private-storage-boundary" }, resource: "private-storage", outcome: "denied" })
+          throw error
+        }
+      },
       appDispatch: (action, params, context) => {
         if (action.startsWith("app.terminal.")) {
           return terminalDispatcher.dispatch(action, params, context)
@@ -2507,7 +2526,7 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
   id: "core.permission-guard",
   criticality: "fatal",
   create() {
-    const guard = createPermissionGuard()
+    const guard = createPermissionGuard({ constraints: [createPrivateStorageConstraint(createPrivateStorageProtection())] })
     guard.registerPolicy(userInitiatedAllowPolicy)
     guard.registerPolicy(systemShellExecPolicy)
     guard.registerPolicy(systemTerminalCwdProbePolicy)
@@ -2741,7 +2760,7 @@ export const coreAutomationIngressDescriptor: ServiceDescriptor<AutomationIngres
       networkRegistry: ctx.registry.get<NetworkServiceRegistry>("core.network-registry"),
       configs: dataRepository.namespace("webhook.config"),
       runs: dataRepository.namespace("webhook.runs"),
-      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink, protectProcess: createPrivateStorageProtection().protectProcess }),
       listProjects: listConfiguredProjects,
       permissionGuard,
       auditSink,
@@ -3363,7 +3382,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     // eslint-disable-next-line prefer-const -- Nested workflow runtime closes over this before assignment.
     let workflowEngine: WorkflowEngine
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
-      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink, protectProcess: createPrivateStorageProtection().protectProcess }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
       permissionGuard,
       auditSink,

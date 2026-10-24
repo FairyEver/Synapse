@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   appendPathEntries,
@@ -13,6 +13,16 @@ import {
 } from "../shell-environment"
 
 describe("shell environment helpers", () => {
+  it("protects login shell startup scripts and never retries an unavailable boundary unprotected", () => {
+    const execFileSyncImpl = vi.fn(() => "__SYNAPSE_PATH_BEGIN__/usr/bin__SYNAPSE_PATH_END__")
+    const protectProcess = vi.fn((launch: { command: string; args: readonly string[] }) => ({ command: "/protected-launcher", args: [launch.command, ...launch.args] }))
+    expect(resolveLoginShellPath({ platform: "darwin", env: { SHELL: "/bin/zsh" }, protectProcess, execFileSyncImpl })).toBe("/usr/bin")
+    expect(execFileSyncImpl).toHaveBeenCalledWith("/protected-launcher", expect.any(Array), expect.any(Object))
+    execFileSyncImpl.mockClear()
+    expect(resolveLoginShellPath({ platform: "darwin", protectProcess: () => { throw new Error("unavailable") }, execFileSyncImpl })).toBeNull()
+    expect(execFileSyncImpl).not.toHaveBeenCalled()
+  })
+
   it("merges login shell PATH and appends Synapse runtime bin after user tools", () => {
     const env = buildHostEnvironment({
       baseEnv: {
