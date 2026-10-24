@@ -118,12 +118,28 @@ export class ImapSession implements MailImapSession {
     })
   }
   async idle(path: string, signal: AbortSignal, onChange = () => undefined): Promise<void> {
-    await this.inFolder(path, signal, async () => {
+    if (this.failure) throw this.failure
+    let active = true
+    let lock: Awaited<ReturnType<ImapFlow["getMailboxLock"]>> | undefined
+    try {
+      await protocolCall(signal, () => this.client.close(), async () => {
+        const result = await this.client.getMailboxLock(path)
+        if (!active) { result.release(); throw new MailError("CANCELLED", "邮箱监听已取消") }
+        lock = result
+      })
       this.client.on("exists", onChange); this.client.on("flags", onChange); this.client.on("expunge", onChange)
-      try { await this.client.idle() } finally {
-        this.client.off("exists", onChange); this.client.off("flags", onChange); this.client.off("expunge", onChange)
-      }
-    })
+      // IDLE is a persistent subscription. The SDK bounds its handshake and
+      // renews it; only acquiring the mailbox uses our request deadline.
+      await protocolCall(signal, () => this.client.close(), async () => {
+        await this.client.idle()
+        if (this.failure) throw this.failure
+        if (!this.client.usable) throw new MailError("NETWORK_ERROR", "邮箱监听连接已断开")
+      }, null)
+    } finally {
+      active = false
+      this.client.off("exists", onChange); this.client.off("flags", onChange); this.client.off("expunge", onChange)
+      lock?.release()
+    }
   }
   async copy(path: string, uids: number[], target: string, signal: AbortSignal) {
     const range = uidRange(uids)

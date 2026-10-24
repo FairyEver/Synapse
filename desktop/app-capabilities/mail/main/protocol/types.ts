@@ -51,7 +51,7 @@ export function normalizeProtocolError(error: unknown): MailError {
   const beforeData = auth || ["CONN", "EHLO", "HELO", "STARTTLS", "MAIL FROM", "RCPT TO"].includes(command) || /^AUTH(?: |$)/u.test(command)
   return new MailError(auth ? "AUTH_FAILED" : "NETWORK_ERROR", auth ? "邮箱认证失败，请检查密码或客户端授权码" : "邮箱连接失败，请稍后重试", beforeData ? { definitelyNotSubmitted: true } : undefined)
 }
-export async function protocolCall<T>(signal: AbortSignal, cancel: () => void, operation: () => Promise<T>, milliseconds = 30_000): Promise<T> {
+export async function protocolCall<T>(signal: AbortSignal, cancel: () => void, operation: () => Promise<T>, milliseconds: number | null = 30_000): Promise<T> {
   signal.throwIfAborted()
   let timer: ReturnType<typeof setTimeout> | undefined
   let abort: (() => void) | undefined
@@ -60,7 +60,7 @@ export async function protocolCall<T>(signal: AbortSignal, cancel: () => void, o
       abort = () => { cancel(); reject(new MailError("CANCELLED", "邮箱操作已取消")) }
       signal.addEventListener("abort", abort, { once: true })
       if (signal.aborted) abort()
-      timer = setTimeout(() => { cancel(); reject(new MailError("NETWORK_TIMEOUT", "邮箱操作超时，请先核验结果")) }, milliseconds)
+      if (milliseconds !== null) timer = setTimeout(() => { cancel(); reject(new MailError("NETWORK_TIMEOUT", "邮箱操作超时，请先核验结果")) }, milliseconds)
     })])
   } catch (error) { throw normalizeProtocolError(error) } finally {
     if (timer) clearTimeout(timer)

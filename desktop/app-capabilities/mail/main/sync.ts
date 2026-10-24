@@ -67,7 +67,7 @@ class WorkSlots {
     }
   }
 }
-interface Runner { ctx: MailContext; accountId: string; controller: AbortController; task: Promise<void>; idle?: MailImapSession; idleTask?: Promise<void>; hint: boolean; jobId: string; folderId?: string; lastFolders: number; historyPaused?: boolean }
+interface Runner { ctx: MailContext; accountId: string; controller: AbortController; task: Promise<void>; idle?: MailImapSession; idleTask?: Promise<void>; hint: boolean; jobId: string; folderId?: string; lastFolders: number; historyPaused?: boolean; foreground: boolean; requestVersion: number }
 
 export class MailSync {
   private runners = new Map<string, Runner>()
@@ -236,11 +236,11 @@ export class MailSync {
       const folder = await this.repo.get<StoredFolder>(ctx, "folders", folderId)
       if (folder.accountId !== accountId) throw new MailError("UNAVAILABLE", "文件夹不属于此账号")
     }
-    if (existing && !existing.controller.signal.aborted && !existing.ctx.signal.aborted && !existing.historyPaused) { existing.hint = true; existing.folderId = folderId; return { jobId: existing.jobId } }
+    if (existing && !existing.controller.signal.aborted && !existing.ctx.signal.aborted && !existing.historyPaused) { existing.hint = true; existing.folderId = folderId; existing.foreground = true; existing.requestVersion++; return { jobId: existing.jobId } }
     if (existing) { existing.controller.abort(); await existing.idle?.close() }
     const controller = new AbortController(), signal = AbortSignal.any([ctx.signal, controller.signal])
     const jobId = `mj_${randomUUID()}`
-    const runner: Runner = { ctx: { ...ctx, actor: "sync", signal }, accountId, controller, jobId, task: Promise.resolve(), hint: false, folderId, lastFolders: -Infinity }
+    const runner: Runner = { ctx: { ...ctx, actor: "sync", signal }, accountId, controller, jobId, task: Promise.resolve(), hint: false, folderId, lastFolders: -Infinity, foreground: true, requestVersion: 0 }
     await this.repo.save<StoredJob>(ctx, "sync-state", jobId, accountId, { kind: "job", job: { jobId, accountId, state: "running", coverage: emptyCoverage(), errorCode: null } }, 0)
     this.runners.set(key, runner)
     runner.task = Promise.resolve().then(() => this.loop(runner)).catch(error => {
@@ -254,7 +254,8 @@ export class MailSync {
     let coverage = emptyCoverage()
     while (!ctx.signal.aborted && !this.suspended) {
       try {
-        if (!runner.historyPaused) {
+        const foreground = runner.foreground, requestVersion = runner.requestVersion
+        if (!runner.historyPaused && foreground) {
           const previous = (await this.repo.get<StoredJob>(ctx, "sync-state", runner.jobId)).data.job
           if (previous.state !== "running") await this.updateJob(ctx, runner.jobId, "running", previous.coverage, null)
         }
@@ -265,7 +266,12 @@ export class MailSync {
         if (runner.folderId === requestedFolder) runner.folderId = undefined
         if (refresh) runner.lastFolders = Date.now()
         failures = 0
-        if (!runner.historyPaused) await this.updateJob(ctx, runner.jobId, coverage.metadataComplete ? "completed" : "running", coverage, null)
+        // Periodic reconciliation keeps the last completed job quiet. A manual
+        // request arriving during this turn must finish in a subsequent turn.
+        if (!runner.historyPaused && requestVersion === runner.requestVersion && (foreground || coverage.metadataComplete)) {
+          await this.updateJob(ctx, runner.jobId, coverage.metadataComplete ? "completed" : "running", coverage, null)
+          if (coverage.metadataComplete && requestVersion === runner.requestVersion) runner.foreground = false
+        }
         if (!runner.idleTask) runner.idleTask = this.watchInbox(runner).catch(error => {
           if (!ctx.signal.aborted) this.events.error(normalizeProtocolError(error).code, accountId)
         }).finally(() => { runner.idleTask = undefined })
@@ -275,6 +281,7 @@ export class MailSync {
       } catch (error) {
         if (ctx.signal.aborted) break
         const code = normalizeProtocolError(error).code
+        runner.foreground = true
         if (!runner.historyPaused) await this.updateJob(ctx, runner.jobId, code === "AUTH_FAILED" ? "paused" : "failed", coverage, code)
         const row = await this.repo.get<StoredAccount>(ctx, "accounts", accountId)
         await this.repo.save(ctx, "accounts", accountId, accountId, { ...row.data, state: code === "AUTH_FAILED" ? "auth_failed" : "offline", errorCode: code }, row.revision)
@@ -317,6 +324,7 @@ export class MailSync {
     const job = (await this.repo.get<StoredJob>(ctx, "sync-state", jobId)).data.job
     const runner = this.runners.get(`${ctx.ownerId}:${job.accountId}`)
     const running = runner?.jobId === job.jobId && runner.ctx.generation === ctx.generation && !runner.ctx.signal.aborted && !this.suspended
+    if (job.state === "completed" && running && runner.foreground && !runner.historyPaused) return { ...job, state: "running" }
     return job.state === "running" && !running ? { ...job, state: "paused" } : job
   }
   async cancel(ctx: MailContext, input: MailInputs["sync.cancel"]): Promise<MailJob> {

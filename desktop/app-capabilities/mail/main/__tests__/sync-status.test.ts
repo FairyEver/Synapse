@@ -61,3 +61,79 @@ it("keeps account coverage incomplete when only a prioritized folder has finishe
     expect((await r.repo.get<StoredFolder>(r.ctx, "folders", sent.id)).data.folder).toMatchObject({ metadataComplete: true, serverCount: 1 })
   } finally { await r.sync.dispose(); await r.close() }
 })
+
+it("keeps a completed job quiet while periodic flag batches still reconcile remote changes", async () => {
+  vi.useFakeTimers()
+  const r = await syncRig()
+  let release!: () => void, releaseNext!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const nextGate = new Promise<void>(resolve => { releaseNext = resolve })
+  let batches = 0
+  try {
+    const { jobId } = await r.sync.startAccount(r.ctx, r.account.id)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed" })
+    vi.mocked(r.session.fetchFlags).mockImplementation(async (_path, uids) => { await (batches++ === 0 ? gate : nextGate); return uids.map(uid => ({ uid, flags: ["\\Seen", "\\Flagged"] })) })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed" })
+    release()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed" })
+    releaseNext()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed", coverage: { metadataComplete: true, indexedCount: 251 } })
+    let cursor: string | undefined, checked = 0
+    do {
+      const rows = await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id, cursor, limit: 100 })
+      expect(rows.items.every(row => row.data.summary.read && row.data.summary.star)).toBe(true)
+      checked += rows.items.length; cursor = rows.nextCursor ?? undefined
+    } while (cursor)
+    expect(checked).toBe(251)
+  } finally { release(); releaseNext(); await r.sync.dispose(); await r.close() }
+})
+
+it("shows a manual refresh requested during a quiet background turn until its own work finishes", async () => {
+  vi.useFakeTimers()
+  const r = await syncRig()
+  let releaseBackground!: () => void, releaseManual!: () => void
+  const background = new Promise<void>(resolve => { releaseBackground = resolve })
+  const manual = new Promise<void>(resolve => { releaseManual = resolve })
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1])
+    const { jobId } = await r.sync.startAccount(r.ctx, r.account.id)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed" })
+    vi.mocked(r.session.searchUids).mockImplementationOnce(async () => { await background; return [1] })
+      .mockImplementationOnce(async () => { await manual; return [1] })
+    await vi.advanceTimersByTimeAsync(60_000)
+    await r.sync.start(r.ctx, { accountId: r.account.id })
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "running" })
+    releaseBackground()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "running" })
+    releaseManual()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed" })
+  } finally { releaseBackground(); releaseManual(); await r.sync.dispose(); await r.close() }
+})
+
+it("reports a real background failure and its retry instead of hiding it with completed status", async () => {
+  vi.useFakeTimers()
+  const r = await syncRig()
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1])
+    const { jobId } = await r.sync.startAccount(r.ctx, r.account.id)
+    await vi.advanceTimersByTimeAsync(10)
+    vi.mocked(r.session.searchUids).mockRejectedValueOnce(new MailError("NETWORK_ERROR", "连接失败"))
+      .mockImplementationOnce(async () => { await gate; return [1] })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "failed", errorCode: "NETWORK_ERROR" })
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "running", errorCode: null })
+    release()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await r.sync.get(r.ctx, { jobId })).toMatchObject({ state: "completed" })
+  } finally { release(); await r.sync.dispose(); await r.close() }
+})

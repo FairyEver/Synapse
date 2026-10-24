@@ -1,9 +1,104 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { ImapFlow } from "imapflow"
 import { ImapSession, imapOptions } from "../protocol/imap"
 import { smtpOptions } from "../protocol/smtp"
 import { aliyunConfig, providerPolicy } from "../protocol/aliyun-policy"
 import { normalizeProtocolError } from "../protocol/types"
+
+afterEach(() => vi.useRealTimers())
+
+function idleRig() {
+  const client = new ImapFlow(imapOptions(aliyunConfig("me@example.com", "Work"), "fixture"))
+  client.usable = true
+  const controller = new AbortController(), release = vi.fn(), changed = vi.fn()
+  let finish!: (value: boolean) => void
+  const pending = new Promise<boolean>(resolve => { finish = resolve })
+  vi.spyOn(client, "getMailboxLock").mockResolvedValue({ path: "INBOX", release })
+  vi.spyOn(client, "idle").mockImplementation(() => pending)
+  const close = vi.spyOn(client, "close").mockImplementation(() => { client.usable = false; finish(false); client.emit("close") })
+  const session = new ImapSession(client)
+  return { client, controller, release, changed, close, session, finish }
+}
+
+it("keeps a quiet IDLE listener alive beyond ordinary request deadlines and cancels it cleanly", async () => {
+  vi.useFakeTimers()
+  const r = idleRig()
+  const result = r.session.idle("INBOX", r.controller.signal, r.changed).then(() => "completed", error => error.code)
+  let settled = false
+  void result.then(() => { settled = true })
+  try {
+    await vi.advanceTimersByTimeAsync(90_000)
+    expect(settled).toBe(false)
+    r.client.emit("exists", { path: "INBOX", count: 2, prevCount: 1 })
+    expect(r.changed).toHaveBeenCalledTimes(1)
+    expect(r.close).not.toHaveBeenCalled()
+  } finally { r.controller.abort(); await result }
+  expect(await result).toBe("CANCELLED")
+  expect(r.release).toHaveBeenCalledTimes(1)
+  for (const event of ["exists", "flags", "expunge"]) expect(r.client.listenerCount(event)).toBe(0)
+})
+
+it.each(["error", "close"] as const)("surfaces a real IDLE %s and releases its listeners and lock", async event => {
+  const r = idleRig()
+  const result = r.session.idle("INBOX", r.controller.signal, r.changed).catch(error => error.code)
+  await vi.waitFor(() => expect(r.client.listenerCount("exists")).toBe(1))
+  if (event === "error") r.client.emit("error", new Error("socket failed"))
+  else r.client.close()
+  expect(await result).toBe("NETWORK_ERROR")
+  expect(r.release).toHaveBeenCalledTimes(1)
+  for (const name of ["exists", "flags", "expunge"]) expect(r.client.listenerCount(name)).toBe(0)
+})
+
+it("releases IDLE resources on cancellation even if the SDK has not settled its wait", async () => {
+  const r = idleRig()
+  r.close.mockImplementation(() => { r.client.usable = false })
+  const result = r.session.idle("INBOX", r.controller.signal).catch(error => error.code)
+  try {
+    await vi.waitFor(() => expect(r.client.listenerCount("exists")).toBe(1))
+    r.controller.abort()
+    expect(await result).toBe("CANCELLED")
+    expect(r.release).toHaveBeenCalledTimes(1)
+    for (const event of ["exists", "flags", "expunge"]) expect(r.client.listenerCount(event)).toBe(0)
+  } finally { r.controller.abort(); r.finish(false); await result }
+})
+
+it("still times out when selecting the mailbox for IDLE gets stuck", async () => {
+  vi.useFakeTimers()
+  const r = idleRig()
+  let unlock!: (lock: { path: string; release: () => void }) => void
+  vi.mocked(r.client.getMailboxLock).mockImplementation(() => new Promise(resolve => { unlock = resolve }))
+  const result = r.session.idle("INBOX", r.controller.signal).catch(error => error.code)
+  await vi.advanceTimersByTimeAsync(30_000)
+  expect(await result).toBe("NETWORK_TIMEOUT")
+  unlock({ path: "INBOX", release: r.release })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(r.release).toHaveBeenCalledTimes(1)
+})
+
+it("releases a just-acquired IDLE mailbox lock when cancellation wins the same turn", async () => {
+  const r = idleRig()
+  let unlock!: (lock: { path: string; release: () => void }) => void
+  vi.mocked(r.client.getMailboxLock).mockImplementation(() => new Promise(resolve => { unlock = resolve }))
+  const result = r.session.idle("INBOX", r.controller.signal).catch(error => error.code)
+  unlock({ path: "INBOX", release: r.release })
+  r.controller.abort()
+  expect(await result).toBe("CANCELLED")
+  expect(r.release).toHaveBeenCalledTimes(1)
+  for (const event of ["exists", "flags", "expunge"]) expect(r.client.listenerCount(event)).toBe(0)
+})
+
+it("keeps ordinary IMAP requests bounded by their deadline", async () => {
+  vi.useFakeTimers()
+  const r = idleRig()
+  let finish!: () => void
+  vi.spyOn(r.client, "search").mockImplementation(() => new Promise(resolve => { finish = () => resolve([]) }))
+  const result = r.session.searchUids("INBOX", { all: true }, r.controller.signal).catch(error => error.code)
+  await vi.advanceTimersByTimeAsync(30_000)
+  expect(await result).toBe("NETWORK_TIMEOUT")
+  finish()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(r.release).toHaveBeenCalledTimes(1)
+})
 
 for (const exists of [true, false]) it(`checks whether the UID still exists when a part download is empty (${exists})`, async () => {
   const client = new ImapFlow(imapOptions(aliyunConfig("me@example.com", "Work"), "fixture"))

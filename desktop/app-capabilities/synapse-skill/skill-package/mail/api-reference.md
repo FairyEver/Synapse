@@ -18,7 +18,7 @@
 
 ## 返回值
 
-列表为 items / nextCursor。邮件头异常或超过索引预算时 metadataTruncated:true，地址等信息不可用，不能据此回复或转发；原始 MIME 可显式导出核对。message.list 和 search.get 附带 coverage；search.get 还返回 canContinue，get 不驱动扫描，resume 才续查。coverage 包含 metadataComplete、serverHistoryComplete（未知为 null）、indexedCount、bodyScannedCount、bodyPendingCount 和 reason。sync.start 返回 jobId；sync.get 必须且只能传 jobId 或 accountId，按账号只读当前运行时任务，无任务时返回 null，不会启动或恢复同步。任务返回 state / coverage / errorCode，已停止的任务不显示 running；失败保留上次完成批次的 coverage。进度数量通过同一 accountId 的 message.count 读取 indexed / serverReported，总数未知为 null，不估算百分比。draft 包含内容、逻辑 revision、localSaved、syncState、state；成功或 partial 发送后 consumed，只读保留。send.preview 返回 previewId / expiresAt / from / draft / attachments / messageId。发送回执含 operationId、state、accepted、rejected、sentCopyState、retryStage、errorCode；operation.get 是有界只读核验，不重复 SMTP。attachment 返回 name / mime / size / sha256 / cid / state，下载返回 outputPath / size / sha256。body 返回 html / text / nextCursor / complete / truncated；完整 HTML 才能统一清洗显示。
+列表为 items / nextCursor。邮件头异常或超过索引预算时 metadataTruncated:true，地址等信息不可用，不能据此回复或转发；原始 MIME 可显式导出核对。message.list 和 search.get 附带 coverage；search.get 还返回 canContinue，get 不驱动扫描，resume 才续查。coverage 包含 metadataComplete、serverHistoryComplete（未知为 null）、indexedCount、bodyScannedCount、bodyPendingCount 和 reason。sync.start 返回 jobId；sync.get 必须且只能传 jobId 或 accountId，按账号只读当前运行时任务，无任务时返回 null，不会启动或恢复同步。任务返回 state / coverage / errorCode，已停止的任务不显示 running；首次或手动同步完成后的自动校对保留 completed，手动刷新和真实失败后的恢复重试仍报告运行状态。后台校对期间保留已完成任务的进度，当前 coverage 通过 message.count / message.list 读取；失败保留上次完成批次的 coverage。进度数量通过同一 accountId 的 message.count 读取 indexed / serverReported，总数未知为 null，不估算百分比。draft 包含内容、逻辑 revision、localSaved、syncState、state；成功或 partial 发送后 consumed，只读保留。send.preview 返回 previewId / expiresAt / from / draft / attachments / messageId。发送回执含 operationId、state、accepted、rejected、sentCopyState、retryStage、errorCode；operation.get 是有界只读核验，不重复 SMTP。attachment 返回 name / mime / size / sha256 / cid / state，下载返回 outputPath / size / sha256。body 返回 html / text / nextCursor / complete / truncated；完整 HTML 才能统一清洗显示。
 
 ## 输入定义
 
@@ -547,7 +547,7 @@
 
 ### app_mail_sync_get
 
-查看邮箱同步进度和覆盖范围。Read synchronization state without starting work. Provide exactly one of jobId or accountId; accountId returns the current runtime job or null when none exists. Stopped jobs are not reported as running. Use message.count for indexed and server-reported totals.
+查看邮箱同步进度和覆盖范围。Read synchronization state without starting work. Provide exactly one of jobId or accountId; accountId returns the current runtime job or null when none exists. After completion, automatic reconciliation keeps the job completed; manual refresh and failure recovery report active progress. Stopped jobs are not reported as running. Use message.count for indexed and server-reported totals and current coverage.
 
 权限：content.read；风险：normal。
 
