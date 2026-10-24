@@ -26,6 +26,15 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); document.documentElement.classList.remove("dark"); vi.clearAllMocks(); vi.restoreAllMocks() })
 
 describe("GeneratedUiView", () => {
+  it("redacts evaluated email expressions and restored state only in a share snapshot", async () => {
+    bridge.getGeneratedUiState.mockResolvedValue({ revision: 1, state: { $text: "saved@example.com" }, readOnly: false })
+    const source = '$text = "initial"\nroot = Stack([TextContent($text), TextContent("computed" + "@" + "example.com")])'
+    await act(async () => root.render(<GeneratedUiView source={source} streaming={false} block={block} projectId="p" conversationId="c" snapshotOnly hideEmails />))
+    expect(host.textContent).not.toMatch(/saved@example.com|computed@example.com/)
+    expect(host.textContent).toContain("［邮箱已隐藏］")
+    expect(host.querySelector("[inert]")).not.toBeNull()
+    expect(bridge.saveGeneratedUiState).not.toHaveBeenCalled(); expect(bridge.submitGeneratedUiAction).not.toHaveBeenCalled()
+  })
   it("renders the reported reversed Text labels and updates KPIs and table when switching datasets", async () => {
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
     vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))

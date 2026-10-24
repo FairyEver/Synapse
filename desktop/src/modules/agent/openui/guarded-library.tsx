@@ -3,6 +3,8 @@ import type { ComponentRenderProps } from "@openuidev/react-lang"
 import { openuiLibrary } from "@openuidev/react-ui"
 import { hasUnsafeGeneratedUiResource } from "@/lib/agent-generated-ui"
 import { redactSensitiveValue } from "@/lib/agent-redaction"
+import { AgentSharePrivacyContext } from "../share/privacy-context"
+import { redactShareState } from "../share/redaction"
 
 export const GeneratedUiFailureContext = createContext<(error: Error) => void>(() => undefined)
 
@@ -20,8 +22,10 @@ export const guardedOpenuiLibrary = {
   ...openuiLibrary,
   components: Object.fromEntries(Object.entries(openuiLibrary.components).map(([name, definition]) => {
     function CheckedOfficialComponent(input: ComponentRenderProps) {
+      const hideEmails = useContext(AgentSharePrivacyContext)
       if (hasUnsafeGeneratedUiResource({ typeName: name, props: input.props })) throw new Error("界面包含不支持的资源。")
-      return createElement(definition.component, { ...input, props: redactSensitiveValue(input.props) as Record<string, unknown> })
+      const props = redactSensitiveValue(input.props) as Record<string, unknown>
+      return createElement(definition.component, { ...input, props: hideEmails ? redactShareState(props) : props })
     }
     function GuardedOfficialComponent(input: ComponentRenderProps) {
       const onFailure = useContext(GeneratedUiFailureContext)

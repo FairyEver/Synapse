@@ -4,6 +4,7 @@ import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import type { GeneratedUiSnapshot, GeneratedUiTarget } from "@/types/agent-generated-ui"
+import { redactShareState } from "../share/redaction"
 
 const logger = createRendererLogger("agent.generated-ui")
 const SAVE_DELAY_MS = 400
@@ -20,7 +21,7 @@ class GeneratedUiController {
   private disposed = false
   private generation = 0
 
-  constructor(readonly target: GeneratedUiTarget, private readonly notify: () => void) {}
+  constructor(readonly target: GeneratedUiTarget, private readonly notify: () => void, private readonly readOnly = false, private readonly hideEmails = false) {}
   private changed() { if (!this.disposed) this.notify() }
   private failed(cause: unknown) {
     this.error = cause instanceof Error ? cause.message : "界面操作失败，请重试。"
@@ -34,12 +35,13 @@ class GeneratedUiController {
     try {
       const snapshot = await requireBridgeDomain("agent").getGeneratedUiState(this.target)
       if (this.disposed || generation !== this.generation) return
-      this.snapshot = snapshot; this.draft = snapshot.state; this.saved = JSON.stringify(snapshot.state)
+      this.snapshot = this.readOnly ? { ...snapshot, state: this.hideEmails ? redactShareState(snapshot.state) : snapshot.state, readOnly: true } : snapshot
+      this.draft = this.snapshot.state; this.saved = JSON.stringify(this.snapshot.state)
     } catch (cause) { if (!this.disposed && generation === this.generation) this.failed(cause) }
     finally { if (generation === this.generation) { this.loading = false; this.changed() } }
   }
   stateChanged = (state: Record<string, unknown>) => {
-    if (this.disposed || this.loading || this.snapshot.readOnly || this.busy) return
+    if (this.readOnly || this.disposed || this.loading || this.snapshot.readOnly || this.busy) return
     this.draft = state
     if (this.timer) clearTimeout(this.timer)
     this.timer = setTimeout(() => { void this.persist().catch((cause) => this.failed(cause)) }, SAVE_DELAY_MS)
@@ -57,7 +59,7 @@ class GeneratedUiController {
     return save
   }
   action = async (event: ActionEvent) => {
-    if (this.disposed || this.loading || this.snapshot.readOnly || this.busy || this.error) return
+    if (this.readOnly || this.disposed || this.loading || this.snapshot.readOnly || this.busy || this.error) return
     if (event.type === "open_url") {
       try {
         const url = new URL(String(event.params?.url ?? ""))
@@ -90,15 +92,15 @@ class GeneratedUiController {
   dispose() {
     this.disposed = true
     this.generation++
-    if (!this.loading && !this.snapshot.readOnly) void this.persist().catch((cause) => this.failed(cause))
+    if (!this.readOnly && !this.loading && !this.snapshot.readOnly) void this.persist().catch((cause) => this.failed(cause))
     else if (this.timer) clearTimeout(this.timer)
   }
 }
 
-export function useGeneratedUi(target?: GeneratedUiTarget) {
+export function useGeneratedUi(target?: GeneratedUiTarget, readOnly = false, hideEmails = false) {
   const [, update] = useReducer((value: number) => value + 1, 0)
-  const controller = useMemo(() => target ? new GeneratedUiController(target, update) : undefined,
-    [target?.projectId, target?.conversationId, target?.blockId])
+  const controller = useMemo(() => target ? new GeneratedUiController(target, update, readOnly, hideEmails) : undefined,
+    [target?.projectId, target?.conversationId, target?.blockId, readOnly, hideEmails])
   useEffect(() => {
     if (controller) void controller.restore()
     return () => controller?.dispose()

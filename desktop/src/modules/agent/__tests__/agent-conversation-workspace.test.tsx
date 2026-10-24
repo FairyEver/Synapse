@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   }>,
   composerProps: [] as Array<{
     readonly draft: string
+    readonly disabled?: boolean
     readonly pendingMessages?: readonly { readonly id: string; readonly content: string; readonly status: string }[]
     readonly onSteerPendingMessage?: (id: string) => void
     readonly onDraftChange: (value: string) => void
@@ -156,6 +157,25 @@ afterEach(() => {
 })
 
 describe("AgentConversationWorkspace", () => {
+  it.each(["embedded", "window"] as const)("keeps the composer and draft mounted while sharing in %s mode", async (mode) => {
+    const timeline = [{ id: "question", kind: "message" as const, role: "user" as const, content: "share this", timestamp: "2026-10-24T00:00:00Z", historyIndex: 0 }]
+    Object.assign(window.synapse!.agent, { getTimeline: vi.fn().mockResolvedValue({ projectId: session.projectId, conversationId: session.id, entries: timeline, total: 1, startIndex: 0, hasMore: false }) })
+    const sendMessage = vi.fn().mockResolvedValue(true)
+    const container = renderWorkspace({ mode, chat: createController({ timeline, sendMessage }) })
+    const originalComposer = container.querySelector('[data-testid="agent-composer"]')!
+    act(() => mocks.composerProps.at(-1)!.onDraftChange("keep this draft"))
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="分享对话"]')!.click())
+    expect(container.querySelector('[data-testid="agent-composer"]')).toBe(originalComposer)
+    expect(originalComposer.parentElement!.className).toBe("hidden")
+    expect(mocks.composerProps.at(-1)).toMatchObject({ draft: "keep this draft", disabled: true })
+    expect(container.querySelector("[data-agent-share-selection-bar]")).not.toBeNull()
+    await act(async () => mocks.composerProps.at(-1)!.onSubmit({ preventDefault: vi.fn() }, [], () => () => undefined))
+    expect(sendMessage).not.toHaveBeenCalled()
+    act(() => [...container.querySelectorAll<HTMLButtonElement>("[data-agent-share-selection-bar] button")].find((button) => button.textContent === "取消")!.click())
+    expect(container.querySelector('[data-testid="agent-composer"]')).toBe(originalComposer)
+    expect(originalComposer.parentElement!.className).toBe("contents")
+    expect(mocks.composerProps.at(-1)).toMatchObject({ draft: "keep this draft", disabled: false })
+  })
   it("makes the conversation read-only after continuing in Claude Code", async () => {
     const container = renderWorkspace({ mode: "embedded", session: { ...session, agentSessionId: "sdk-original", hasNativeSession: true, historyCount: 2 } })
     await act(async () => {

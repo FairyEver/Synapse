@@ -38,6 +38,7 @@ import { errorLogMeta } from "../utils"
 import { AgentLongContentDialog } from "./agent-long-content-dialog"
 import { splitGeneratedUiContent } from "@/lib/agent-generated-ui"
 import { useGeneratedUiContent } from "../openui/use-generated-ui-content"
+import { ShareMessageFrame } from "../share/selection-context"
 
 const GeneratedUiView = lazy(() => import("../openui/generated-ui-view").then((module) => ({ default: module.GeneratedUiView })))
 
@@ -104,7 +105,7 @@ function AgentMessageEvent({
     // has a trailing blank line because the invisible toolbar still reserves
     // space inside the bubble.
     return (
-      <article className="group/message flex min-w-0 flex-col items-end">
+      <ShareMessageFrame item={item}><article className="group/message flex min-w-0 flex-col items-end">
         <AgentMessageBubble role="user">
           {item.messageKind === "steer" ? (
             <div className="mb-2">
@@ -132,7 +133,7 @@ function AgentMessageEvent({
           messageId={item.id}
           role={item.role}
           showCopy={item.content.trim().length > 0}
-          className="mt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
+          className="mt-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100"
         />
         {item.contentTruncated && item.historyIndex !== undefined && projectId && conversationId ? (
           <AgentLongContentDialog
@@ -141,12 +142,12 @@ function AgentMessageEvent({
             historyIndex={item.historyIndex}
           />
         ) : null}
-      </article>
+      </article></ShareMessageFrame>
     )
   }
 
   return (
-    <article className="flex w-full min-w-0 flex-col items-start">
+    <ShareMessageFrame item={item}><article className="flex w-full min-w-0 flex-col items-start">
       <AgentMessageHeader
         agentIcon={agentIcon}
         timestamp={item.timestamp}
@@ -167,7 +168,7 @@ function AgentMessageEvent({
           historyIndex={item.historyIndex}
         />
       ) : null}
-    </article>
+    </article></ShareMessageFrame>
   )
 }
 
@@ -183,6 +184,8 @@ function AssistantMessageBody({
   generatedUiDisabled,
   onOpenReference,
   referenceActions,
+  shareMode = false,
+  hideEmails = false,
 }: {
   readonly item: SynapseAgentMessageTimelineItem
   readonly projectId?: string
@@ -190,6 +193,8 @@ function AssistantMessageBody({
   readonly generatedUiDisabled?: boolean
   readonly onOpenReference: (reference: string) => void
   readonly referenceActions: AgentReferenceActions
+  readonly shareMode?: boolean
+  readonly hideEmails?: boolean
 }) {
   const streaming = item.streaming === true
   const fullContent = useGeneratedUiContent(item, projectId, conversationId)
@@ -294,13 +299,14 @@ function AssistantMessageBody({
       <div
         data-allow-select="true"
         className={cn("min-w-0 max-w-full overflow-hidden", generatedUiEnabled && "flex flex-col gap-6")}
-        onClick={handleClick}
+        onClick={shareMode ? undefined : handleClick}
+        inert={shareMode || undefined}
       >
-        {fullContent.loading ? <p className="text-sm text-muted-foreground">加载中</p> : fullContent.error ? <p className="text-sm text-muted-foreground">{fullContent.error}</p> : contentParts.map((part, index) => part.kind === "openui" ? (
-          <Suspense key={`openui:${part.ordinal}`} fallback={<p className="text-sm text-muted-foreground">加载中</p>}>
+        {fullContent.loading ? <p data-agent-render-pending className="text-sm text-muted-foreground">加载中</p> : fullContent.error ? <p data-agent-render-error className="text-sm text-muted-foreground">{fullContent.error}</p> : contentParts.map((part, index) => part.kind === "openui" ? (
+          <Suspense key={`openui:${part.ordinal}`} fallback={<p data-agent-render-pending className="text-sm text-muted-foreground">加载中</p>}>
             <GeneratedUiView source={part.content} streaming={streaming}
               block={item.metadata?.generatedUi?.blocks.find((block) => block.ordinal === part.ordinal)}
-              projectId={projectId} conversationId={conversationId} disabled={generatedUiDisabled} />
+              projectId={projectId} conversationId={conversationId} disabled={generatedUiDisabled || shareMode} snapshotOnly={shareMode} hideEmails={hideEmails} />
           </Suspense>
         ) : <Streamdown
           key={`markdown:${index}`}
@@ -316,7 +322,7 @@ function AssistantMessageBody({
           {generatedUiEnabled ? wrapLocalReferences(renderLocalMarkdownImagesAsReferences(renderObsidianWikilinksAsBoldText(redactSensitiveText(part.content)))) : preprocessed}
         </Streamdown>)}
       </div>
-      {hasUsage ? (
+      {hasUsage && !shareMode ? (
         <AgentUsageCard
           totalUsage={item.metadata?.usage}
           turnUsage={item.metadata?.turnUsage}
@@ -328,15 +334,25 @@ function AssistantMessageBody({
           timestamp={item.timestamp}
         />
       ) : null}
-      <AgentMessageToolbar
+      {!shareMode && <AgentMessageToolbar
         timestamp={item.timestamp}
         content={safeContent}
         messageId={item.id}
         role={item.role === "user" || item.role === "assistant" ? item.role : undefined}
-        className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
-      />
+        className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100"
+      />}
     </div>
   )
+}
+
+export function AgentShareMessageBody({ item, projectId, conversationId, hideEmails }: {
+  readonly item: SynapseAgentMessageTimelineItem
+  readonly projectId: string
+  readonly conversationId: string
+  readonly hideEmails: boolean
+}) {
+  if (item.role === "user") return <div className="flex justify-end"><AgentMessageBubble role="user">{redactSensitiveText(item.content)}</AgentMessageBubble></div>
+  return <AssistantMessageBody item={item} projectId={projectId} conversationId={conversationId} generatedUiDisabled shareMode hideEmails={hideEmails} onOpenReference={() => undefined} referenceActions={unavailableReferenceActions} />
 }
 
 function AgentMessageCode({

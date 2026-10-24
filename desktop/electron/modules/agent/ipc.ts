@@ -10,6 +10,7 @@ import {
 import { sessionMethods } from "./ipc-sessions"
 import { claudeCodeTerminalMethods } from "./ipc-claude-code-terminal"
 import { messageMethods } from "./ipc-messages"
+import { shareMethods } from "./ipc-share"
 import { toolMethods } from "./ipc-tools"
 import { generatedUiMethods } from "./ipc-generated-ui"
 import { agentWorkspaceTreeEvents, agentWorkspaceTreeMethods } from "./ipc-workspace-tree"
@@ -102,6 +103,7 @@ export const agentIpcModule: IpcModule = {
     ...sessionMethods,
     ...claudeCodeTerminalMethods,
     ...messageMethods,
+    ...shareMethods,
     ...toolMethods,
     ...generatedUiMethods,
     ...agentWorkspaceTreeMethods,

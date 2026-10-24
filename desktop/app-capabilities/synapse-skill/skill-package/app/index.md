@@ -33,6 +33,8 @@ Use `app_account_state_get` and `app_account_login_start` when the account may n
 
 ## Agent Conversation Creation, Models and Groups
 
+对话图片分享属于桌面 UI 操作：点击对话顶栏或单条消息的分享按钮，选择用户消息 / AI 最终回复后预览、复制或保存高清 PNG；默认隐藏邮箱，只在本机生成。它没有公开 MCP 工具，不要猜测图片导出工具、把本机对话链接当成公开分享链接，或自动上传原对话。
+
 Agent 上游 MCP 的本机配置清单与 SY 独立开关位于“设置 → MCP → Agent 使用的 MCP”，属于 UI 专用功能，没有对应公开 MCP 工具。不要通过编辑 Claude Code 全局或项目配置来模拟“只在 SY 中关闭”；设置开关不改变外部 CLI 的 MCP、规则或 Skill。
 
 - Discover available providers/models -> `app_agent_provider_list` with optional `query` (provider or model name) or `providerId`; page with `nextOffset`. It lists the same non-archived providers and selectable configured tiers as “创建自定义对话”, not the vendor's remote model catalog. Use returned `providerId` and `models[].modelTier` together when creating with a requested model. Resolve ambiguous matches with the user; never guess IDs or silently substitute another model. A local Claude Code default can have `modelName: null`; use its returned default tier without inventing a concrete name.

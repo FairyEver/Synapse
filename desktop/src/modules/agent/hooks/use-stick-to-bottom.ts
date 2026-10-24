@@ -118,6 +118,7 @@ export function useStickToBottom(input: {
   hasOlderEntries?: boolean
   loadingOlderEntries?: boolean
   historyLoadBlocked?: boolean
+  suspended?: boolean
   onLoadOlder?: () => Promise<void>
 }): UseStickToBottomReturn {
   const { contentSignal, latestEntryId } = input
@@ -125,6 +126,8 @@ export function useStickToBottom(input: {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const [viewportNode, setViewportNode] = useState<HTMLDivElement | null>(null)
   const autoFollowRef = useRef(true)
+  const suspendedRef = useRef(input.suspended ?? false)
+  suspendedRef.current = input.suspended ?? false
   const isPinnedRef = useRef(true)
   const previousLatestIdRef = useRef<string | undefined>(undefined)
   const programmaticScrollUntilRef = useRef(0)
@@ -163,6 +166,10 @@ export function useStickToBottom(input: {
     }
   }, [])
 
+  useLayoutEffect(() => {
+    if (input.suspended) pauseFollowing()
+  }, [input.suspended, pauseFollowing])
+
   const recordScrollPosition = useCallback((viewport: HTMLElement, metrics: ScrollMetrics) => {
     const previous = lastScrollPositionRef.current
     const maxScrollTop = Math.max(0, metrics.scrollHeight - metrics.clientHeight)
@@ -200,7 +207,7 @@ export function useStickToBottom(input: {
   }, [])
 
   const followContent = useCallback(() => {
-    if (!autoFollowRef.current || suppressNextContentChangeRef.current) return
+    if (suspendedRef.current || !autoFollowRef.current || suppressNextContentChangeRef.current) return
     const viewport = viewportRef.current
     if (!viewport) return
     const metrics = readScrollMetrics(viewport)

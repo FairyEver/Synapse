@@ -382,6 +382,9 @@ importers:
       '@xyflow/react':
         specifier: ^12.10.2
         version: 12.10.2(@types/react@19.2.14)(immer@11.1.4)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@zumer/snapdom':
+        specifier: 3.3.7
+        version: 3.3.7
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -5697,6 +5700,9 @@ packages:
   '@zone-eu/mailsplit@5.4.29':
     resolution: {integrity: sha512-CCUNycmUjrV5M0wNf23waWAt9eOHczhjLbUQS7k0FNJvR0py9VSqHFt+tSl/D0+XI73VLG0U+PwYtq9R0zsm9Q==}
     engines: {node: '>=20.0.0'}
+
+  '@zumer/snapdom@3.3.7':
+    resolution: {integrity: sha512-32gUTSVJ8wCRLjJO2FiHhDGq5W6Z8bs7oMdKLF3LnBvsr6DOEEQtshOQ5QIV2hTszhBruo97st1CriS4ytXrOA==}
 
   abbrev@3.0.1:
     resolution: {integrity: sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg==}
@@ -16679,6 +16685,8 @@ snapshots:
       libbase64: 1.4.1
       libmime: 5.6.3
       libqp: 3.0.1
+
+  '@zumer/snapdom@3.3.7': {}
 
   abbrev@3.0.1: {}
 

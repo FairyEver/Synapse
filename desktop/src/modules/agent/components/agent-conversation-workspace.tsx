@@ -1,6 +1,6 @@
 import { useAgentClaudeCodeContinuation } from "../hooks/use-agent-claude-code-continuation"
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, CircleHelp, Copy, Download, ExternalLink, LoaderCircle, ShieldAlert, Terminal } from "lucide-react"
+import { AlertTriangle, CircleHelp, Copy, Download, ExternalLink, LoaderCircle, Share2, ShieldAlert, Terminal } from "lucide-react"
 import { toast } from "sonner"
 
 import { createRendererLogger } from "@/app-shell/logging"
@@ -80,6 +80,11 @@ import { AgentTimeline } from "./agent-timeline"
 import { AgentGitCommitDialog } from "./agent-git-commit-dialog"
 import { AgentWorkspaceShell } from "./agent-workspace-shell"
 import { AgentFileCheckpointPanel } from "./agent-file-checkpoint-panel"
+import { useAgentShare } from "../share/use-agent-share"
+import { shareMessageRounds } from "../share/messages"
+import { AgentShareSelectionContext, type AgentShareSelection } from "../share/selection-context"
+import { AgentShareSelectionBar } from "../share/selection-bar"
+import { AgentSharePreviewDialog } from "../share/preview-dialog"
 
 const logger = createRendererLogger("agent")
 
@@ -199,6 +204,8 @@ function AgentConversationWorkspace({
   const recentSlashSkillsRef = useRef(config.agent.recentSlashSkills)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
+  const shareViewport = useRef<HTMLDivElement>(null)
+  const share = useAgentShare({ target, title: sessionLabel(session), items: chat.timeline, sending: chat.sending, viewport: shareViewport })
   const latestEntry = chat.timeline.at(-1)
   const stick = useStickToBottom({
     contentSignal: [
@@ -209,11 +216,34 @@ function AgentConversationWorkspace({
       chat.sending,
     ],
     latestEntryId: latestEntry?.id,
-    hasOlderEntries: chat.timelineHasMore,
+    hasOlderEntries: !share.active && !share.complete && chat.timelineHasMore,
     loadingOlderEntries: chat.loadingOlder,
-    historyLoadBlocked: Boolean(chat.timelineHistoryError),
+    historyLoadBlocked: share.active || Boolean(chat.timelineHistoryError),
+    suspended: share.active,
     onLoadOlder: chat.loadOlderTimeline,
   })
+  const timelineViewportRef = useCallback((node: HTMLDivElement | null) => {
+    shareViewport.current = node
+    if (typeof stick.viewportRef === "function") stick.viewportRef(node)
+    else if (stick.viewportRef) stick.viewportRef.current = node
+  }, [stick.viewportRef])
+  const shareSelection: AgentShareSelection = {
+    active: share.active,
+    indexes: new Map(share.messages.map((item, index) => [item.id, index])),
+    rounds: new Map(shareMessageRounds(share.messages).map((ids) => [ids[0]!, ids])),
+    selected: share.selected,
+    onShare: (id) => { void share.enter(id) },
+    onChoose: share.choose,
+    onRound: share.toggleRound,
+  }
+  useEffect(() => {
+    if (!share.active || share.preview) return
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) share.exit()
+    }
+    document.addEventListener("keydown", escape)
+    return () => document.removeEventListener("keydown", escape)
+  }, [share.active, share.preview, share.exit])
   const showJumpToBottom = !stick.isPinned && stick.hasUnread
   const showIdleJumpToBottom = !stick.isPinned && !stick.hasUnread && !chat.sending
   const fileTreeDataSource = useMemo<WorkspaceFileTreeDataSource | undefined>(() =>
@@ -348,7 +378,7 @@ function AgentConversationWorkspace({
       preserveDraft?: boolean
     } = {},
   ): Promise<boolean> => {
-    if (continuation.readOnly || continuation.continuing) return false
+    if (share.active || continuation.readOnly || continuation.continuing) return false
     const attachments = options.attachments ?? []
     if (!content.trim() && attachments.length === 0) return false
     if (!options.preserveDraft) setDraft("")
@@ -655,6 +685,7 @@ function AgentConversationWorkspace({
   }], [chat.refresh, target.conversationId, target.projectId])
 
   return (
+    <AgentShareSelectionContext.Provider value={shareSelection}>
     <AgentWorkspaceShell
       conversationKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
       mode={mode}
@@ -781,6 +812,15 @@ function AgentConversationWorkspace({
               <TooltipContent>导出对话</TooltipContent>
             </Tooltip>
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" aria-label={share.active ? "取消分享" : "分享对话"} aria-pressed={share.active} disabled={!share.active && !share.messages.length} onClick={() => { if (share.active) share.exit(); else void share.enter() }}>
+                  <Share2 />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{share.active ? "取消分享" : "分享对话"}</TooltipContent>
+            </Tooltip>
+
             {mode === "embedded" && onOpenDetached ? (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -828,21 +868,21 @@ function AgentConversationWorkspace({
       ) : null}
 
       <AgentTimeline
-        readOnly={continuation.readOnly || continuation.continuing}
-        items={chat.timeline}
+        readOnly={share.active || continuation.readOnly || continuation.continuing}
+        items={share.items}
         profile={displayProfile}
         agentIcon={agentIcon}
-        sending={chat.sending}
-        pendingPermissions={currentPendingPermissions}
+        sending={chat.sending && !share.active}
+        pendingPermissions={share.active ? [] : currentPendingPermissions}
         onOpenReference={openReference}
         referenceActions={referenceActions}
         onRespondPermission={(requestId, behavior, updatedInput, message, scope) =>
           chat.respondPermission({ projectId: target.projectId, requestId }, behavior, updatedInput, message, scope)}
-        onContinue={continuation.readOnly ? undefined : () => void submitContent("继续", { preserveDraft: true })}
-        viewportRef={stick.viewportRef}
-        loadingOlder={chat.loadingOlder}
-        hasMore={chat.timelineHasMore}
-        historyError={chat.timelineHistoryError}
+        onContinue={share.active || continuation.readOnly ? undefined : () => void submitContent("继续", { preserveDraft: true })}
+        viewportRef={timelineViewportRef}
+        loadingOlder={!share.active && chat.loadingOlder}
+        hasMore={!share.active && !share.complete && chat.timelineHasMore}
+        historyError={share.active ? null : chat.timelineHistoryError}
         onRetryHistory={() => void chat.loadOlderTimeline()}
         projectId={target.projectId}
         conversationId={target.conversationId}
@@ -861,14 +901,14 @@ function AgentConversationWorkspace({
         ) : undefined}
       />
 
-      {continuation.readOnly ? null : <AgentComposer
+      {continuation.readOnly ? null : <div className={share.active ? "hidden" : "contents"}><AgentComposer
         key={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         projectId={target.projectId}
         focusInputKey={`${target.projectId}:${target.conversationId}:${target.sessionKey}`}
         dropTargetRef={workspaceRef}
         draft={draft}
-        disabled={!target.projectId || personaUnavailable || continuation.continuing}
-        canSend={Boolean(draft.trim() && target.projectId && !personaUnavailable && !continuation.continuing)}
+        disabled={share.active || !target.projectId || personaUnavailable || continuation.continuing}
+        canSend={Boolean(!share.active && draft.trim() && target.projectId && !personaUnavailable && !continuation.continuing)}
         sending={chat.sending}
         creatingConversation={creatingConversation}
         cancelPhase={chat.cancelPhase}
@@ -910,7 +950,8 @@ function AgentConversationWorkspace({
         onSteerPendingMessage={handleSteerPendingMessage}
         onRemovePendingMessage={handleRemovePendingMessage}
         onRetryPendingMessage={handleRetryPendingMessage}
-      />}
+      /></div>}
+      {share.active && <AgentShareSelectionBar share={share} />}
       <AgentGitCommitDialog
         pending={projectGit.pendingCommit}
         error={projectGit.commitError}
@@ -951,7 +992,9 @@ function AgentConversationWorkspace({
           startClaudeCodeTerminal({ id: session.projectId, selection })}
       />
       </div>
+      <AgentSharePreviewDialog share={share} target={target} />
     </AgentWorkspaceShell>
+    </AgentShareSelectionContext.Provider>
   )
 }
 

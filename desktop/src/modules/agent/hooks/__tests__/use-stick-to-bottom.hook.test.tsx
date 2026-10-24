@@ -60,6 +60,17 @@ afterEach(() => {
 })
 
 describe("useStickToBottom", () => {
+  it("preserves the reading position through sharing and does not resume following on exit", async () => {
+    const { rerender, scrollTo } = await renderStickHarness({ signal: "before", latestEntryId: "last", viewportMetrics: { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 } })
+    const viewport = document.querySelector<HTMLElement>("[data-testid='viewport']")!
+    scrollTo.mockClear()
+    await act(async () => rerender({ signal: "sharing", latestEntryId: "last", suspended: true, viewportMetrics: { scrollTop: 1400, scrollHeight: 2600, clientHeight: 600 } }))
+    await triggerResize(viewport.firstElementChild)
+    expect(scrollTo).not.toHaveBeenCalled(); expect(viewport.scrollTop).toBe(1400)
+    await act(async () => rerender({ signal: "returned", latestEntryId: "last", suspended: false }))
+    await triggerResize(viewport.firstElementChild)
+    expect(scrollTo).not.toHaveBeenCalled(); expect(viewport.scrollTop).toBe(1400)
+  })
   it.each([
     { scrollHeight: 1800, clientHeight: 600 },
     { scrollHeight: 2000, clientHeight: 800 },
@@ -921,6 +932,7 @@ function StickHarness({
   hasOlderEntries,
   loadingOlderEntries,
   historyLoadBlocked,
+  suspended,
   onLoadOlder,
 }: {
   readonly latestEntryId: string | undefined
@@ -932,6 +944,7 @@ function StickHarness({
   readonly hasOlderEntries?: boolean
   readonly loadingOlderEntries?: boolean
   readonly historyLoadBlocked?: boolean
+  readonly suspended?: boolean
   readonly onLoadOlder?: () => Promise<void>
 }) {
   const stick = useStickToBottom({
@@ -940,6 +953,7 @@ function StickHarness({
     hasOlderEntries,
     loadingOlderEntries,
     historyLoadBlocked,
+    suspended,
     onLoadOlder,
   })
   useEffect(() => {
@@ -971,6 +985,7 @@ async function renderStickHarness(initialProps: {
   readonly hasOlderEntries?: boolean
   readonly loadingOlderEntries?: boolean
   readonly historyLoadBlocked?: boolean
+  readonly suspended?: boolean
   readonly onLoadOlder?: () => Promise<void>
 }) {
   const container = document.createElement("div")
@@ -1000,6 +1015,7 @@ async function renderStickHarness(initialProps: {
         hasOlderEntries={props.hasOlderEntries}
         loadingOlderEntries={props.loadingOlderEntries}
         historyLoadBlocked={props.historyLoadBlocked}
+        suspended={props.suspended}
         onLoadOlder={props.onLoadOlder}
         onStick={(stick) => {
           controls.current = stick

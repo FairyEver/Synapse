@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
-import { Check, Clipboard } from "lucide-react"
+import { Check, Clipboard, Share2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useAgentShareSelection } from "../share/selection-context"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { TokenUsageSummary } from "@/components/token-usage-summary"
@@ -34,6 +36,7 @@ function AgentMessageToolbar({
   showCopy = true,
 }: AgentMessageToolbarProps) {
   const [copied, setCopied] = useState(false)
+  const share = useAgentShareSelection()
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const formattedTimestamp = timestamp ? formatTime(timestamp) : undefined
 
@@ -95,6 +98,7 @@ function AgentMessageToolbar({
           ? <Check className="size-3.5" />
           : <Clipboard className="size-3.5" />}
       </button> : null}
+      {messageId && share?.indexes.has(messageId) && !share.active ? <Button type="button" variant="ghost" size="icon-xs" aria-label="分享这条消息" title="分享这条消息" onClick={() => share.onShare(messageId)}><Share2 /></Button> : null}
     </div>
   )
 }

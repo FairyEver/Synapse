@@ -1315,6 +1315,7 @@ const synapseBridge: SynapseBridge = {
     prepareFileCheckpointRewind: (args) => invoke(IPC_CHANNELS.agent.prepareFileCheckpointRewind)(args),
     confirmFileCheckpointRewind: (args) => invoke(IPC_CHANNELS.agent.confirmFileCheckpointRewind)(args),
     exportConversationBundle: (args) => invoke(IPC_CHANNELS.agent.exportConversationBundle)(args),
+    exportShareImage: (args) => invoke(IPC_CHANNELS.agent.exportShareImage)(args),
     createSession: (args) => invoke(IPC_CHANNELS.agent.createSession)(args),
     switchSession: (args) => invoke(IPC_CHANNELS.agent.switchSession)(args),
     deleteSession: (args) => invoke(IPC_CHANNELS.agent.deleteSession)(args),

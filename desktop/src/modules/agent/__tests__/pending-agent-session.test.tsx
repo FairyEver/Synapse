@@ -710,8 +710,7 @@ describe("AgentModule pending prompt sessions", () => {
       root.render(<AgentModule />)
     })
 
-    expect(mocks.timelineProps?.viewportRef).toBe(mocks.viewportRef)
-    expect(mocks.viewportRef.mock.calls.at(-1)?.[0]).toBeInstanceOf(HTMLElement)
+    expect(mocks.viewportRef).toHaveBeenLastCalledWith(container.querySelector("section"))
 
     await act(async () => {
       mocks.sidebarProps?.onSourceFilterChange?.("workflow")
@@ -725,8 +724,7 @@ describe("AgentModule pending prompt sessions", () => {
     })
 
     expect(container.textContent).not.toContain("请创建新的会话")
-    expect(mocks.timelineProps?.viewportRef).toBe(mocks.viewportRef)
-    expect(mocks.viewportRef.mock.calls.at(-1)?.[0]).toBeInstanceOf(HTMLElement)
+    expect(mocks.viewportRef).toHaveBeenLastCalledWith(container.querySelector("section"))
   })
 
   it("switches source filter before selecting a pending workflow session", async () => {

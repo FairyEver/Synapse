@@ -1912,6 +1912,9 @@ export type SynapseBridge = {
     exportConversationBundle: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
     ) => Promise<SynapseAgentConversationExportResult>
+    exportShareImage: (
+      args: import("./agent-share").AgentShareImageRequest,
+    ) => Promise<import("./agent-share").AgentShareImageResult>
     createSession: (
       args: {
         projectId: string

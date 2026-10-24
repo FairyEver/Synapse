@@ -1250,6 +1250,13 @@ describe("preload bridge", () => {
     )
   })
 
+  it("passes share PNG output through the private Agent IPC without exposing a path argument", async () => {
+    const bridge = await loadPreloadBridge()
+    const input = { action: "save" as const, pngBase64: "png-bytes", fileName: "分享.png" }
+    await bridge.agent.exportShareImage(input)
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:agent:operation:export_share_image", input)
+  })
+
   it("omits Todo content from renderer IPC failure logs", async () => {
     const bridge = await loadPreloadBridge()
     electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => channel.includes(":todos:")
