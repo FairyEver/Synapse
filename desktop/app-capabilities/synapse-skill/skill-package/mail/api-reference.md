@@ -697,7 +697,7 @@
 
 ### app_mail_message_get
 
-查看邮件详情、读取邮件链接。Read metadata and attachment references for one external email ID or full synapse://mail/<id> reference; provide exactly one of messageId or reference. Does not mark it read or fetch every body.
+查看邮件详情、读取邮件链接。Read metadata and attachment references for one external email ID or full synapse://mail/<id> reference; provide exactly one of messageId or reference. Includes original address display names and optional headers.sender for delegation display only; never substitute Sender for reply recipients. Does not mark it read or fetch every body.
 
 权限：content.read；风险：normal。
 

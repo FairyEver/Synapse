@@ -195,3 +195,41 @@ it("keeps malformed envelope addresses from breaking the public message list", a
     expect(page.items[0].data.summary).toMatchObject({ metadataTruncated: true, from: [] })
   } finally { await r.sync.dispose(); await r.close() }
 })
+
+it("backfills Sender alone while preserving cached mail and never notifying or refetching old mail again", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1])
+    await r.sync.runOnce(r.ctx, r.account.id)
+    const row = (await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id })).items[0]
+    const headers = { ...row.data.headers }; delete headers.sender
+    await r.repo.save(r.ctx, "messages", row.id, r.account.id, { ...row.data, headers, searchTextRef: "cached-body" }, row.revision, row.sortKey)
+    const sender = [{ name: "作者", address: "relay@example.com" }]
+    vi.mocked(r.session.fetchHeaders).mockResolvedValue([{ ...remoteHeader(1), sender }])
+    r.delta.mockClear()
+    await r.sync.runOnce(r.ctx, r.account.id)
+    const saved = await r.repo.get<import("../sync").StoredMessage>(r.ctx, "messages", row.id)
+    expect(saved.data.headers.sender).toEqual(sender)
+    expect(saved.data.searchTextRef).toBe("cached-body")
+    expect(saved.data.summary).toEqual(row.data.summary)
+    expect(r.delta).not.toHaveBeenCalled()
+    const count = vi.mocked(r.session.fetchHeaders).mock.calls.length
+    await r.sync.runOnce(r.ctx, r.account.id)
+    expect(r.session.fetchHeaders).toHaveBeenCalledTimes(count)
+  } finally { await r.sync.dispose(); await r.close() }
+})
+
+it.each([[{ address: "not-an-address" }], Array.from({ length: 101 }, () => ({ address: "relay@example.com" }))])("ignores invalid or oversized Sender metadata without losing recipients", async (...values) => {
+  const sender = values as { address: string }[]
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1])
+    const to = [{ address: "recipient@example.com", name: "收件人" }]
+    vi.mocked(r.session.fetchHeaders).mockResolvedValue([{ ...remoteHeader(1), to, sender }])
+    await r.sync.runOnce(r.ctx, r.account.id)
+    const row = (await r.repo.page<import("../sync").StoredMessage>(r.ctx, "messages", { accountId: r.account.id })).items[0]
+    expect(row.data.headers.sender).toEqual([])
+    expect(row.data.summary.to).toEqual(to)
+    expect(row.data.summary.metadataTruncated).not.toBe(true)
+  } finally { await r.sync.dispose(); await r.close() }
+})

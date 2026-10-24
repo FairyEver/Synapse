@@ -7,7 +7,7 @@ export type MailSearchQuery = SearchObject
 export interface RemoteFolder { path: string; name: string; delimiter: string; flags: string[]; specialUse: string | null; count: number | null }
 export interface MailboxState { uidValidity: string; count: number; uidNext: number }
 export interface RemoteHeader {
-  uid: number; subject: string; from: Address[]; to: Address[]; cc: Address[]; replyTo: Address[];
+  uid: number; subject: string; from: Address[]; to: Address[]; cc: Address[]; sender?: Address[]; replyTo: Address[];
   date: string | null; receivedAt?: string | null; size: number; flags: string[]; messageId: string | null; references: string[]; structure: MailBodyStructure | null
 }
 export interface UidMapping { uidValidity: string; uids: Map<number, number> }

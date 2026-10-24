@@ -19,7 +19,7 @@ function header(value: FetchMessageObject): RemoteHeader {
   const parsed = date ? new Date(date) : null
   const received = value.internalDate ? new Date(value.internalDate) : null
   const references = value.headers?.toString().replace(/\r?\n[ \t]+/gu, " ").match(/^references:\s*(.+)$/imu)?.[1].match(/<[^<>\r\n]+>/gu) ?? []
-  return { uid: value.uid, subject: envelope?.subject ?? "", from: addresses(envelope?.from), to: addresses(envelope?.to), cc: addresses(envelope?.cc), replyTo: addresses(envelope?.replyTo), date: parsed && Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null,
+  return { uid: value.uid, subject: envelope?.subject ?? "", from: addresses(envelope?.from), to: addresses(envelope?.to), cc: addresses(envelope?.cc), sender: addresses(envelope?.sender), replyTo: addresses(envelope?.replyTo), date: parsed && Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null,
     receivedAt: received && Number.isFinite(received.getTime()) ? received.toISOString() : null,
     size: value.size ?? 0, flags: [...(value.flags ?? [])], messageId: envelope?.messageId ?? null, references, structure: value.bodyStructure ?? null }
 }

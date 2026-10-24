@@ -134,7 +134,7 @@ export const MAIL_RESULT_SCHEMAS = {
   "folder.list": page(folderSchema), "folder.create": folderSchema, "folder.rename": folderSchema, "folder.delete": ok, "folder.update": folderSchema,
   "sync.start": job, "sync.get": jobSchema.nullable(), "sync.cancel": jobSchema,
   "message.list": page(summarySchema).extend({ coverage: coverageSchema }),
-  "message.get": summarySchema.extend({ attachments: z.array(assetSchema), bodyRef: assetIdSchema.nullable(), headers: z.object({ replyTo: z.array(addressSchema), messageId: z.string().nullable(), references: z.array(z.string()) }).strict() }),
+  "message.get": summarySchema.extend({ attachments: z.array(assetSchema), bodyRef: assetIdSchema.nullable(), headers: z.object({ sender: z.array(addressSchema).max(100).optional(), replyTo: z.array(addressSchema), messageId: z.string().nullable(), references: z.array(z.string()) }).strict() }),
   "message.count": z.object({ indexed: z.number().int().nonnegative(), unread: z.number().int().nonnegative(), serverReported: z.number().nullable(), coverage: coverageSchema }).strict(),
   "message.update": batchSchema, "message.move": batchSchema, "message.delete": batchSchema, "message.restore": batchSchema,
   "search.start": job, "search.get": page(summarySchema).extend({ coverage: coverageSchema, canContinue: z.boolean() }), "search.resume": jobSchema, "search.cancel": jobSchema,

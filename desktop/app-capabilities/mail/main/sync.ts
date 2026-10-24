@@ -119,7 +119,7 @@ export class MailSync {
     const flagsDue = checkpoint.data.uidDigest !== uidDigest || checkpoint.data.metadataComplete && Date.now() - (checkpoint.data.flagsCheckedAt ?? 0) >= (folder.data.folder.role === "inbox" ? MAIL_POLL_INTERVAL_MS : MAIL_FOLDER_REFRESH_MS)
     let flagsOffset = flagsDue ? 0 : checkpoint.data.flagsOffset ?? 0
     folder = await this.repo.save(ctx, "folders", folder.id, accountId, { ...folder.data, folder: { ...folder.data.folder, uidValidity: selected.uidValidity, serverCount: uids.length, metadataComplete: false } }, folder.revision, folder.sortKey)
-    const existing = new Map<number, { id: string; stale: boolean; needsReceivedAt: boolean }>()
+    const existing = new Map<number, { id: string; stale: boolean; needsMetadata: boolean }>()
     let cursor: string | undefined
     do {
       const page = await this.repo.page<StoredMessage>(ctx, "messages", { accountId, cursor, limit: 100 })
@@ -128,11 +128,11 @@ export class MailSync {
         if (locator.folderId !== folder.id) continue
         if (locator.uidValidity !== selected.uidValidity) {
           if (!row.data.summary.stale) await this.repo.save(ctx, "messages", row.id, accountId, { ...row.data, summary: { ...row.data.summary, stale: true } }, row.revision, row.sortKey)
-        } else if (!row.data.summary.stale) existing.set(locator.uid, { id: row.id, stale: false, needsReceivedAt: row.data.summary.receivedAt === undefined })
+        } else if (!row.data.summary.stale) existing.set(locator.uid, { id: row.id, stale: false, needsMetadata: row.data.summary.receivedAt === undefined || row.data.headers.sender === undefined })
       }
       cursor = page.nextCursor ?? undefined
     } while (cursor)
-    const allMissing = uids.filter(uid => !existing.has(uid) || existing.get(uid)?.needsReceivedAt)
+    const allMissing = uids.filter(uid => !existing.has(uid) || existing.get(uid)?.needsMetadata)
     const baselineUid = checkpoint.data.baselineUid
     const missing = allMissing.filter(uid => !newMailOnly || uid > baselineUid)
     let indexed = 0
@@ -150,15 +150,21 @@ export class MailSync {
         if (!allowed.has(header.uid) || seen.has(header.uid)) throw new MailError("SEARCH_INCOMPLETE", "服务端返回无效邮件摘要")
         seen.add(header.uid)
         const receivedAt = header.receivedAt && Number.isFinite(Date.parse(header.receivedAt)) ? new Date(header.receivedAt).toISOString() : null
+        // Sender is display metadata only; invalid or oversized values must not
+        // replace recipients or block synchronization of an otherwise valid message.
+        const rawSender = header.sender ?? []
+        const sender = rawSender.length <= 100 && rawSender.every(value => addressSchema.safeParse(value).success) && Buffer.byteLength(JSON.stringify(rawSender)) <= 8 * 1024 ? rawSender : []
         const prior = existing.get(header.uid)
         if (prior) {
           // Upgrade metadata in the same bounded header batches; preserve identity,
           // cached assets, flags and old-mail notification baseline.
           const row = await this.repo.get<StoredMessage>(ctx, "messages", prior.id)
+          const upgraded = { ...row.data, headers: { ...row.data.headers, sender }, summary: { ...row.data.summary, receivedAt: row.data.summary.receivedAt === undefined ? receivedAt : row.data.summary.receivedAt } }
+          if (Buffer.byteLength(JSON.stringify(upgraded)) > 48 * 1024) upgraded.headers.sender = []
           const saved = await this.repo.save<StoredMessage>(ctx, "messages", row.id, accountId,
-            { ...row.data, summary: { ...row.data.summary, receivedAt } }, row.revision,
-            messageSortKey(receivedAt, row.data.summary.date, header.uid))
-          prior.needsReceivedAt = false
+            upgraded, row.revision,
+            messageSortKey(upgraded.summary.receivedAt, row.data.summary.date, header.uid))
+          prior.needsMetadata = false
           this.emit(ctx, accountId, [row.id], saved.revision)
           continue
         }
@@ -166,12 +172,13 @@ export class MailSync {
         const date = header.date && Number.isFinite(Date.parse(header.date)) ? header.date : null
         const mime = indexedStructure(header.structure)
         const summary: StoredMessage["summary"] = { id, accountId, locator: { accountId, folderId: folder.id, uidValidity: selected.uidValidity, uid: header.uid }, subject: header.subject, from: header.from, to: header.to, cc: header.cc, date, receivedAt, snippet: "", read: header.flags.includes("\\Seen"), star: header.flags.includes("\\Flagged"), attachmentCount: mime.attachments, bodyState: "remote", stale: false }
-        let data: StoredMessage = { summary, headers: { replyTo: header.replyTo, messageId: header.messageId, references: header.references }, structure: mime.structure, bodyRef: null }
+        let data: StoredMessage = { summary, headers: { sender, replyTo: header.replyTo, messageId: header.messageId, references: header.references }, structure: mime.structure, bodyRef: null }
+        if (Buffer.byteLength(JSON.stringify(data)) > 48 * 1024) data.headers.sender = []
         // A single malformed/oversized envelope must not block newer mail. The original
         // MIME remains available on demand; never guess recipients from partial headers.
-        if (Buffer.byteLength(JSON.stringify(data)) > 48 * 1024 || !summarySchema.safeParse({ ...summary, revision: 1 }).success || !header.replyTo.every(address => addressSchema.safeParse(address).success)) data = { summary: { ...summary, subject: "（邮件头异常或过大，部分信息不可用）", from: [], to: [], cc: [], metadataTruncated: true }, headers: { replyTo: [], messageId: null, references: [] }, structure: null, bodyRef: null }
+        if (Buffer.byteLength(JSON.stringify(data)) > 48 * 1024 || !summarySchema.safeParse({ ...summary, revision: 1 }).success || !header.replyTo.every(address => addressSchema.safeParse(address).success)) data = { summary: { ...summary, subject: "（邮件头异常或过大，部分信息不可用）", from: [], to: [], cc: [], metadataTruncated: true }, headers: { sender: [], replyTo: [], messageId: null, references: [] }, structure: null, bodyRef: null }
         const saved = await this.repo.save<StoredMessage>(ctx, "messages", id, accountId, data, 0, messageSortKey(receivedAt, date, header.uid))
-        existing.set(header.uid, { id, stale: false, needsReceivedAt: false }); this.emit(ctx, accountId, [id], saved.revision)
+        existing.set(header.uid, { id, stale: false, needsMetadata: false }); this.emit(ctx, accountId, [id], saved.revision)
         if (folder.data.folder.role === "drafts") await this.events.draft?.(ctx, id)
         if (header.uid > checkpoint.data.baselineUid && folder.data.folder.role === "inbox") notifications.push(messageSummary(saved))
       }

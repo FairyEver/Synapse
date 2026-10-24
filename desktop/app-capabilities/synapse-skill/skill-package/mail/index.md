@@ -91,3 +91,7 @@ search.start.query 是一个普通字面子串，不支持“张三 合同”的
 准确输入及权限见 [api-reference.md](api-reference.md)，阿里特性与真实验收边界见 [aliyun-compatibility.md](aliyun-compatibility.md)。
 
 工具发现为兼容客户端使用顶层对象列出可选字段；互斥输入仍由运行时严格校验。message.get 的 messageId/reference、attachment.list 的 messageId/draftId 必须二选一；附件定位使用 assetId，或 messageId 加 attachmentId，不混用。draft.create 的新信内容字段与 sourceMessageId/mode 回复转发形式不能混用。
+
+## 邮件地址与代发显示
+
+To/Cc 的 name 来自当前邮件头，可包含部门名称和发送时名称中的人数；不能据此推断实时成员或永久部门邮箱。message.get 的 headers.sender 可选，仅用于与 From 不同时显示代发地址；旧索引在有界同步中补齐，缺省表示尚未采集，空数组表示未取得有效 Sender。Sender 不替换回复目标，名称展示不改变原始 To/Cc/Reply-To；不从地址样式猜测部门成员，也不新增通讯录同步。

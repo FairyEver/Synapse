@@ -270,3 +270,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 
 个人联系邮箱：`app_mail_internal_recipient_list` 的候选 DTO 新增可空 `contactEmail`，供外部邮箱按姓名查地址；仍仅可查询共同团队的活跃成员，不返回登录邮箱，不扩大站内信投递权限。现有工具与路由数量不变，旧桌面透传响应即可读取新字段；本机 Skill 需同步新查询流程，其他客户端随内置 Skill 更新生效。
+
+2026-10-24 外部邮箱地址显示修复：既有 message.get 输出增加可选 headers.sender，补充原始名称与代发说明；不新增动作、IPC、权限或注册入口，邮箱仍为 44 项。

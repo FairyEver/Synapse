@@ -9,9 +9,11 @@ import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-ap
 import type { MailDetail as Detail } from "../../../app-capabilities/mail/shared/types"
 import { sanitizeMailHtml, type MailHtmlResources } from "../../../app-capabilities/mail/renderer/sanitize-body"
 import type { MailBody } from "./use-mail-body"
+import { MailAddresses, mailDelegates } from "./mail-addresses"
 import { MailHtmlBody } from "./mail-html-body"
 export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(target: "id" | "body"): void }) {
   const projection = useMemo(() => body?.complete && body.html ? sanitizeMailHtml(body.html, resources) : null, [body, resources])
+  const delegates = mailDelegates(detail.from, detail.headers.sender)
   return <article aria-label="邮件详情" className="flex h-full min-h-0 min-w-0 flex-col bg-background" key={detail.id}>
     <div className="flex h-10 shrink-0 items-center border-b bg-background px-3">
       <SystemAppTopBarActionButton iconOnly className="@min-[53rem]/mail-client:hidden" aria-label="返回邮件列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
@@ -39,11 +41,15 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
                 {from.name && <span className="text-xs"> {`<${from.address}>`}</span>}
               </span>)}
             </dd>
+            {delegates.length > 0 && <>
+              <dt>代发</dt>
+              <dd className="min-w-0"><MailAddresses addresses={delegates} showAddress /></dd>
+            </>}
             <dt>收件人</dt>
-            <dd className="min-w-0 [overflow-wrap:anywhere]">{detail.to.map(to => to.address).join(", ")}</dd>
+            <dd className="min-w-0"><MailAddresses addresses={detail.to} /></dd>
             {detail.cc.length > 0 && <>
               <dt>抄送</dt>
-              <dd className="min-w-0 [overflow-wrap:anywhere]">{detail.cc.map(cc => cc.address).join(", ")}</dd>
+              <dd className="min-w-0"><MailAddresses addresses={detail.cc} /></dd>
             </>}
             {detail.date && <>
               <dt>时间</dt>

@@ -142,3 +142,14 @@ it("retains only static pre-DATA rejection evidence without raw server transcrip
   expect(error.details).toEqual({ definitelyNotSubmitted: true })
   expect(String(error)).not.toContain("secret")
 })
+
+it("preserves Sender separately from From and recipient display names", async () => {
+  const client = new ImapFlow(imapOptions(aliyunConfig("me@example.com", "Work"), "fixture"))
+  vi.spyOn(client, "getMailboxLock").mockResolvedValue({ path: "INBOX", release: vi.fn() })
+  const from = [{ name: "作者", address: "author@example.com" }], sender = [{ name: "作者", address: "relay@wecom.work" }]
+  const cc = [{ name: "设计中心 · 16", address: "opaque_party_rd_dm@wecom.work" }]
+  vi.spyOn(client, "fetchAll").mockResolvedValue([{ uid: 1, seq: 1, envelope: { from, sender, cc } }, { uid: 2, seq: 2 }])
+  const result = await new ImapSession(client).fetchHeaders("INBOX", [1, 2], new AbortController().signal)
+  expect(result[0]).toMatchObject({ from, sender, cc })
+  expect(result[1].sender).toEqual([])
+})
