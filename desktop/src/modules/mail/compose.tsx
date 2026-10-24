@@ -3,7 +3,7 @@ import { EditorContent } from "@tiptap/react"
 import { Bold, Italic, Underline, List, ListOrdered, Undo2, Redo2, Link2, ImagePlus, Paperclip, X, Send, Save } from "lucide-react"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter } from "@/components/ui/alert-dialog"
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -47,7 +47,7 @@ function ComposeRecipients({ model, disabled }: { model: ComposeModel; disabled:
 }
 const receiptStates = { prepared: "待发送", submitting: "发送中", accepted: "服务器已接受", partial: "部分收件人被拒绝", failed: "发送失败", unknown: "发送结果待核验" }
 export function MailCompose({ model, accounts, onRetry, unavailable }: { model: ComposeModel; accounts: AccountSummary[]; onRetry?(): void; unavailable?: string | null }) {
-  const composer = useComposeEditor(model), attachments = useComposeAssets(model.draft), imageInput = useRef<HTMLInputElement>(null)
+  const composer = useComposeEditor(model), attachments = useComposeAssets(model.draft), imageInput = useRef<HTMLInputElement>(null), closeReturnFocus = useRef<HTMLElement | null>(null)
   const draft = model.draft, account = accounts.find(a => a.id === draft?.accountId)
   const disabled = !draft || draft.state !== "editing" || model.sending || model.receipt?.state === "unknown" || model.receipt?.state === "failed"
   const sendDisabled = disabled || model.saving || !model.addresses.to.trim() && !model.addresses.cc.trim()
@@ -87,7 +87,7 @@ export function MailCompose({ model, accounts, onRetry, unavailable }: { model: 
       {draft && (draft.state !== "editing" || model.receipt) && <div className="p-3"><Button variant="outline" onClick={() => void model.copyDraft()} disabled={model.sending}>另存为新草稿</Button></div>}
     </div></div>
   </SystemAppWindowShell>
-  <AlertDialog open={model.closeRequested} onOpenChange={open => { if (!open) void model.resolveClose("cancel") }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>保存修改？</AlertDialogTitle><AlertDialogDescription>邮件包含未保存的修改。</AlertDialogDescription></AlertDialogHeader>{model.error && <p role="alert" className="text-sm text-destructive">{model.error}</p>}<AlertDialogFooter><Button variant="ghost" disabled={model.saving} onClick={() => void model.resolveClose("cancel")}>取消</Button><Button variant="outline" disabled={model.saving} onClick={() => void model.resolveClose("discard")}>不保存</Button><Button disabled={model.saving} onClick={() => void model.resolveClose("save")}>保存并关闭</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  <AlertDialog open={model.closeRequested} onOpenChange={open => { if (!open) void model.resolveClose("cancel") }}><AlertDialogContent onOpenAutoFocus={() => { closeReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null }} onCloseAutoFocus={event => { event.preventDefault(); if (closeReturnFocus.current?.isConnected) closeReturnFocus.current.focus() }}><AlertDialogHeader><AlertDialogTitle>保存修改？</AlertDialogTitle><AlertDialogDescription>邮件包含未保存的修改。</AlertDialogDescription></AlertDialogHeader>{model.error && <p role="alert" className="text-sm text-destructive">{model.error}</p>}<AlertDialogFooter><AlertDialogCancel disabled={model.saving}>取消</AlertDialogCancel><Button variant="outline" disabled={model.saving} onClick={() => void model.resolveClose("discard")}>不保存</Button><Button disabled={model.saving} onClick={() => void model.resolveClose("save")}>保存并关闭</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
   <Dialog open={composer.linkOpen} onOpenChange={composer.setLinkOpen}><DialogContent aria-describedby={undefined}><DialogHeader><DialogTitle>插入链接</DialogTitle></DialogHeader><Label htmlFor="mail-compose-link">地址</Label><Input id="mail-compose-link" value={composer.link} onChange={event => composer.changeLink(event.target.value)} aria-invalid={!!composer.linkError || undefined} aria-describedby={composer.linkError ? "mail-compose-link-error" : undefined} autoFocus />{composer.linkError && <FieldError id="mail-compose-link-error">{composer.linkError}</FieldError>}<DialogFooter><Button onClick={composer.applyLink}>应用</Button></DialogFooter></DialogContent></Dialog>
   </>
 }

@@ -103,6 +103,19 @@ it("identifies a reopened consumed draft as sent and keeps its controls read-onl
   expect(document.querySelector('[role="status"]')?.textContent).toBe("已发送")
   expect([...document.querySelectorAll("button")].find(node => node.textContent === "发送")?.disabled).toBe(true)
 })
+it("focuses cancel when closing an edited draft and preserves the edits on cancellation", async () => {
+  await setup({ ...draft, subject: "原主题" })
+  act(() => { input("subject")!.focus(); model.edit({ subject: "未保存的主题" }) })
+  await act(async () => { await model.close() }); await flush()
+  const dialog = document.querySelector('[role="alertdialog"]')!
+  const cancel = [...dialog.querySelectorAll<HTMLButtonElement>("button")].find(node => node.textContent === "取消")!
+  expect(document.activeElement).toBe(cancel)
+  act(() => cancel.click()); await flush()
+  expect(model.closeRequested).toBe(false)
+  await vi.waitFor(() => expect(document.activeElement).toBe(input("subject")))
+  expect(input("subject")?.value).toBe("未保存的主题")
+  expect(mocks.api.draftUpdate).not.toHaveBeenCalled()
+})
 it.each(["javascript:alert(1)", "not-a-url"])("keeps link validation for %s inside the dialog and discards it when cancelled", async invalidLink => {
   await setup()
   act(() => button("插入链接").click())
