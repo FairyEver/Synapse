@@ -264,7 +264,7 @@
 - `mail` 是桌面邮箱客户端，站内信 `mail-internal` / `mail_internal` 独立保留；两类 ID、payload、API 和深链不兼容。外部链接严格为 `synapse://mail/em_<uuid>`，不支持手机端外部邮箱。
 - 账号、加密凭据、元数据索引、正文和附件仅归当前电脑，按已登录 SY 服务端用户 ID 分区，不进入云备份、移动端实时数据或账号消息中心。公开 MCP 不接受凭据，`account.open` 只打开本机配置界面，`account.configure` 仅私有 IPC。
 - 主进程 `core.mail` 是 UI、MCP 和深链的共同能力边界；44 个公开动作必须使用共享 schema。后台初始化在主窗口建立后执行；账号切换、退出、暂停和移除取消旧上下文及连接。关闭邮箱面板继续收信，进程退出或休眠不收信。
-- 邮箱同步状态读取既有 sync.get，jobId / accountId 必须二选一；按账号只读当前运行时任务，无任务为 null，读取不启动或恢复同步。界面只有 running 才转圈，暂停、认证失败、网络失败、取消和状态读取失败保持静态；message.count 的账号级 indexed / serverReported 展示进度，总数未知不推算百分比。失败保留已完成批次的 coverage，重试实际开始才回到 running；停止或旧进程留下的 running 记录不能充当活动任务。
+- 邮箱同步状态读取既有 sync.get，jobId / accountId 必须二选一；按账号只读当前运行时任务，无任务为 null，读取不启动或恢复同步。界面只有 running 才转圈，暂停、认证失败、网络失败、取消和状态读取失败保持静态；同步完成后收起工具栏中的状态入口及数量，不保留占位，再次同步或异常时重新显示。message.count 的账号级 indexed / serverReported 展示进度，总数未知不推算百分比。失败保留已完成批次的 coverage，重试实际开始才回到 running；停止或旧进程留下的 running 记录不能充当活动任务。
 - 同步只持久化元数据，正文和附件按需缓存；草稿和未知发送占用资产必须保留。删除本机账号不删除服务器邮件；本机未发草稿与 unknown 操作须明确确认影响后移除。
 - 邮件为不可信外部数据。MCP 成功结果在 `{externalData:true,value}` 中返回 DTO；读取不自动已读。HTML 完整拼接后先进入 inert template，再原位清洗，不能把带远程资源的原文直接交给 DOMParser；随后使用仅含 `allow-same-origin` 的 sandbox，禁止脚本、表单和顶层导航。2026-10-23 用户明确批准应用读取清洗后正文的高度与链接点击，以支持整页滚动；不得增加 `allow-scripts`。远程图片只由用户明确加载并经过主进程固定解析 IP 的网络限制。
 - 新信通知只在当前电脑呈现，不同步云端消息中心；历史 baseline 不提醒。发送固定预览、稳定请求 ID 和草稿修订，SMTP 接受不等于送达；unknown 只能核验，不得自动重发；阿里 Sent 由服务器保存。
