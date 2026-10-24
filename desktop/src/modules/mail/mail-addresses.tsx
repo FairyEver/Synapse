@@ -11,7 +11,7 @@ export function mailDelegates(from: Address[], sender: Address[] = []) {
 
 export function MailAddresses({ addresses, showAddress = false }: { addresses: Address[]; showAddress?: boolean }) {
   const copy = useCopyMailAddress()
-  return <div className="flex min-w-0 flex-wrap items-center gap-1">
+  return <div className="-ml-2 flex min-w-0 flex-wrap items-center gap-1">
     {addresses.map((value, index) => <Popover key={`${value.address}-${index}`} data-track="mail.address">
       <PopoverTrigger asChild>
         <Button variant="ghost" size="xs" className="max-w-full" aria-label={`${value.name?.trim() || value.address}，查看邮箱地址`}>

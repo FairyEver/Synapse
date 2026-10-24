@@ -34,7 +34,7 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
           <h2 className="text-xl font-semibold leading-snug text-balance break-words">{detail.subject || "（无主题）"}</h2>
           {detail.metadataTruncated && <p role="alert" className="text-sm text-destructive">邮件头异常或过大，地址等信息不完整，不能直接回复或转发。</p>}
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 text-xs leading-5 text-muted-foreground">
-            <dt>发件人</dt>
+            <dt className="text-right">发件人</dt>
             <dd className="min-w-0 text-sm [overflow-wrap:anywhere]">
               {detail.from.map((from, index) => <span key={`${from.address}-${index}`}>
                 {index > 0 && ", "}<span className="font-medium text-foreground">{from.name || from.address}</span>
@@ -42,17 +42,17 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
               </span>)}
             </dd>
             {delegates.length > 0 && <>
-              <dt>代发</dt>
+              <dt className="text-right">代发</dt>
               <dd className="min-w-0"><MailAddresses addresses={delegates} showAddress /></dd>
             </>}
-            <dt>收件人</dt>
+            <dt className="text-right">收件人</dt>
             <dd className="min-w-0"><MailAddresses addresses={detail.to} /></dd>
             {detail.cc.length > 0 && <>
-              <dt>抄送</dt>
+              <dt className="text-right">抄送</dt>
               <dd className="min-w-0"><MailAddresses addresses={detail.cc} /></dd>
             </>}
             {detail.date && <>
-              <dt>时间</dt>
+              <dt className="text-right">时间</dt>
               <dd><time dateTime={detail.date}>{formatDateTime(detail.date)}</time></dd>
             </>}
           </dl>
