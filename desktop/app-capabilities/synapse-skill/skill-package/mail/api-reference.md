@@ -18,13 +18,13 @@
 
 ## 返回值
 
-列表为 items / nextCursor。邮件头异常或超过索引预算时 metadataTruncated:true，地址等信息不可用，不能据此回复或转发；原始 MIME 可显式导出核对。message.list 和 search.get 附带 coverage；search.get 还返回 canContinue，get 不驱动扫描，resume 才续查。coverage 包含 metadataComplete、serverHistoryComplete（未知为 null）、indexedCount、bodyScannedCount、bodyPendingCount 和 reason。sync.start 返回 jobId；sync.get 必须且只能传 jobId 或 accountId，按账号只读当前运行时任务，无任务时返回 null，不会启动或恢复同步。任务返回 state / coverage / errorCode，已停止的任务不显示 running；首次或手动同步完成后的自动校对保留 completed，手动刷新和真实失败后的恢复重试仍报告运行状态。后台校对期间保留已完成任务的进度，当前 coverage 通过 message.count / message.list 读取；失败保留上次完成批次的 coverage。进度数量通过同一 accountId 的 message.count 读取 indexed / serverReported，总数未知为 null，不估算百分比。draft 包含内容、逻辑 revision、localSaved、syncState、state；成功或 partial 发送后 consumed，只读保留。send.preview 返回 previewId / expiresAt / from / draft / attachments / messageId。发送回执含 operationId、state、accepted、rejected、sentCopyState、retryStage、errorCode；operation.get 是有界只读核验，不重复 SMTP。attachment 返回 name / mime / size / sha256 / cid / state，下载返回 outputPath / size / sha256。body 返回 html / text / nextCursor / complete / truncated；完整 HTML 才能统一清洗显示。
+列表为 items / nextCursor，按服务器 INTERNALDATE（receivedAt）倒序，未知时退到邮件头 date；receivedAt 不等于本机首次发现时间。旧索引通过既有同步批次补齐，不改变邮件 ID。message.list/count/search.start 支持 sender/recipient（地址精确或显示名子串）、subject、附件条件及 receivedAfter/receivedBefore（含下界、不含上界）；from/to 仍是邮件头时间，不是邮箱地址。未知收件时间/附件结构在 coverage.reason 中返回 received_time_unavailable / attachment_metadata_unavailable；不下载附件来完成筛选，组合附件条件必须命中同一附件。带业务过滤的 count.serverReported 为 null。邮件头异常或超过索引预算时 metadataTruncated:true，地址等信息不可用，不能据此回复或转发；原始 MIME 可显式导出核对。message.list 和 search.get 附带 coverage；search.get 还返回 canContinue，get 不驱动扫描，resume 才续查。coverage 包含 metadataComplete、serverHistoryComplete（未知为 null）、indexedCount、bodyScannedCount、bodyPendingCount 和 reason。sync.start 返回 jobId；sync.get 必须且只能传 jobId 或 accountId，按账号只读当前运行时任务，无任务时返回 null，不会启动或恢复同步。任务返回 state / coverage / errorCode，已停止的任务不显示 running；首次或手动同步完成后的自动校对保留 completed，手动刷新和真实失败后的恢复重试仍报告运行状态。后台校对期间保留已完成任务的进度，当前 coverage 通过 message.count / message.list 读取；失败保留上次完成批次的 coverage。进度数量通过同一 accountId 的 message.count 读取 indexed / serverReported，总数未知为 null，不估算百分比。draft 包含内容、逻辑 revision、localSaved、syncState、state；成功或 partial 发送后 consumed，只读保留。send.preview 返回 previewId / expiresAt / from / draft / attachments / messageId。发送回执含 operationId、state、accepted、rejected、sentCopyState、retryStage、errorCode；operation.get 是有界只读核验，不重复 SMTP。attachment 返回 name / mime / size / sha256 / cid / state，下载返回 outputPath / size / sha256。body 返回 html / text / nextCursor / complete / truncated；完整 HTML 才能统一清洗显示。
 
 ## 输入定义
 
 ### app_mail_account_list
 
-列出本机邮箱账号、选择邮箱。List external email accounts configured on this computer for the current SY identity; never returns credentials. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
+列出本机邮箱账号、选择邮箱。List external email accounts configured on this computer for the current SY identity; never returns credentials. If exactly one account exists and nextCursor is null, use it directly without asking which sender. Honor an explicit account; replies and existing drafts inherit their accountId. Ask only when multiple accounts remain ambiguous. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
 
 权限：content.read；风险：normal。
 
@@ -594,7 +594,7 @@
 
 ### app_mail_message_list
 
-收件箱和已发送等邮件列表、未读和星标筛选。List indexed external email; omit folderId for this account's folders. Filters and coverage are explicit; reading does not mark mail read. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
+收件箱和已发送等邮件列表、按发件人收件人姓名地址主题附件和收件时间查信。List indexed external email, newest server receipt time first (unknown times fall back to header date). Use Inbox role folderId for received mail; omission includes Sent and Trash. Combine sender/recipient, subject, attachment and receivedAfter/receivedBefore filters. Address filters use exact emails or display names, not body mentions. Call sync.start/get first for latest mail; listing alone does not refresh. Coverage discloses unknown receipt/attachment metadata; reading never marks mail read. Pagination: cursor-based. Continue with nextCursor; reset when filters change.
 
 权限：content.read；风险：normal。
 
@@ -608,6 +608,7 @@
       "pattern": "^ma_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
     "folderId": {
+      "description": "Use the folder with role=inbox for received mail; omission includes all account folders.",
       "type": "string",
       "pattern": "^mf_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
@@ -618,14 +619,63 @@
       "type": "boolean"
     },
     "from": {
+      "description": "Inclusive sender/header date lower bound (ISO UTC), NOT a sender address. Use sender for addresses.",
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
     },
     "to": {
+      "description": "Inclusive sender/header date upper bound (ISO UTC), NOT a recipient address. Use recipient for addresses.",
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "receivedAfter": {
+      "description": "Inclusive server INTERNALDATE lower bound (ISO UTC). Use for today/recently received mail; missing receipt times are excluded and reported in coverage.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "receivedBefore": {
+      "description": "Exclusive server INTERNALDATE upper bound (ISO UTC). Convert the user's local day to UTC first.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "sender": {
+      "description": "Match From only: exact email address or display-name substring; multiple matches require disambiguation before sending.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "recipient": {
+      "description": "Match To or Cc only: exact email address or display-name substring. Does not reveal Bcc.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "subject": {
+      "description": "Case-insensitive Unicode-normalized subject substring.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 998
+    },
+    "hasAttachments": {
+      "description": "Filter attachment presence using indexed MIME metadata; no attachment bytes are downloaded.",
+      "type": "boolean"
+    },
+    "attachmentName": {
+      "description": "Attachment filename substring, e.g. .pdf. Combined with attachmentMime on the SAME attachment.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "attachmentMime": {
+      "description": "Exact MIME type, e.g. application/pdf. Missing indexed MIME metadata is reported in coverage.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 127,
+      "pattern": "^[a-zA-Z0-9!#$&^_.+-]+\\/[a-zA-Z0-9!#$&^_.+-]+$"
     },
     "cursor": {
       "type": "string",
@@ -671,7 +721,7 @@
 
 ### app_mail_message_count
 
-统计邮件和未读数量。Return indexed, unread and server-reported counts separately with actual index coverage.
+统计邮件和未读数量。Count matching indexed/unread mail with the same structured filters as message.list, without fetching bodies. Server-reported totals are null for filtered queries; coverage discloses unknown receipt/attachment metadata.
 
 权限：content.read；风险：normal。
 
@@ -685,8 +735,74 @@
       "pattern": "^ma_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
     "folderId": {
+      "description": "Use the folder with role=inbox for received mail; omission includes all account folders.",
       "type": "string",
       "pattern": "^mf_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "unreadOnly": {
+      "type": "boolean"
+    },
+    "starredOnly": {
+      "type": "boolean"
+    },
+    "from": {
+      "description": "Inclusive sender/header date lower bound (ISO UTC), NOT a sender address. Use sender for addresses.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "to": {
+      "description": "Inclusive sender/header date upper bound (ISO UTC), NOT a recipient address. Use recipient for addresses.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "receivedAfter": {
+      "description": "Inclusive server INTERNALDATE lower bound (ISO UTC). Use for today/recently received mail; missing receipt times are excluded and reported in coverage.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "receivedBefore": {
+      "description": "Exclusive server INTERNALDATE upper bound (ISO UTC). Convert the user's local day to UTC first.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "sender": {
+      "description": "Match From only: exact email address or display-name substring; multiple matches require disambiguation before sending.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "recipient": {
+      "description": "Match To or Cc only: exact email address or display-name substring. Does not reveal Bcc.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "subject": {
+      "description": "Case-insensitive Unicode-normalized subject substring.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 998
+    },
+    "hasAttachments": {
+      "description": "Filter attachment presence using indexed MIME metadata; no attachment bytes are downloaded.",
+      "type": "boolean"
+    },
+    "attachmentName": {
+      "description": "Attachment filename substring, e.g. .pdf. Combined with attachmentMime on the SAME attachment.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "attachmentMime": {
+      "description": "Exact MIME type, e.g. application/pdf. Missing indexed MIME metadata is reported in coverage.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 127,
+      "pattern": "^[a-zA-Z0-9!#$&^_.+-]+\\/[a-zA-Z0-9!#$&^_.+-]+$"
     }
   },
   "required": [
@@ -874,7 +990,7 @@
 
 ### app_mail_search_start
 
-搜索邮件主题、地址和正文。Start a bounded local metadata or body search. Server text search is not assumed reliable; returned coverage may be incomplete.
+搜索邮件主题、地址和正文、按字段组合筛选。Start a bounded local literal-substring metadata/body search with structured sender, recipient, subject, attachment and receipt-time filters. query is not a natural-language or AND expression. Use message.list for structured-only searches and name/address lookup. Body search starts with cached text; explicitly resume for bounded remote scans. Returned coverage may be incomplete.
 
 权限：content.mutate；风险：normal。
 
@@ -888,6 +1004,7 @@
       "pattern": "^ma_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
     "folderId": {
+      "description": "Use the folder with role=inbox for received mail; omission includes all account folders.",
       "type": "string",
       "pattern": "^mf_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
@@ -898,19 +1015,69 @@
       "type": "boolean"
     },
     "from": {
+      "description": "Inclusive sender/header date lower bound (ISO UTC), NOT a sender address. Use sender for addresses.",
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
     },
     "to": {
+      "description": "Inclusive sender/header date upper bound (ISO UTC), NOT a recipient address. Use recipient for addresses.",
       "type": "string",
       "format": "date-time",
       "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
     },
+    "receivedAfter": {
+      "description": "Inclusive server INTERNALDATE lower bound (ISO UTC). Use for today/recently received mail; missing receipt times are excluded and reported in coverage.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "receivedBefore": {
+      "description": "Exclusive server INTERNALDATE upper bound (ISO UTC). Convert the user's local day to UTC first.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+    },
+    "sender": {
+      "description": "Match From only: exact email address or display-name substring; multiple matches require disambiguation before sending.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "recipient": {
+      "description": "Match To or Cc only: exact email address or display-name substring. Does not reveal Bcc.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 320
+    },
+    "subject": {
+      "description": "Case-insensitive Unicode-normalized subject substring.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 998
+    },
+    "hasAttachments": {
+      "description": "Filter attachment presence using indexed MIME metadata; no attachment bytes are downloaded.",
+      "type": "boolean"
+    },
+    "attachmentName": {
+      "description": "Attachment filename substring, e.g. .pdf. Combined with attachmentMime on the SAME attachment.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "attachmentMime": {
+      "description": "Exact MIME type, e.g. application/pdf. Missing indexed MIME metadata is reported in coverage.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 127,
+      "pattern": "^[a-zA-Z0-9!#$&^_.+-]+\\/[a-zA-Z0-9!#$&^_.+-]+$"
+    },
     "query": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 500
+      "maxLength": 500,
+      "description": "One literal substring, not a natural-language query, AND expression or Gmail search syntax. Use structured filters for sender/recipient/subject."
     },
     "fields": {
       "default": "metadata",

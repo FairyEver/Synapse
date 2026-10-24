@@ -1,0 +1,209 @@
+[
+  {
+    "id": "S01",
+    "prompt": "帮我给张三发个邮件",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "S02",
+    "prompt": "帮我给 alice@example.com 发个邮件，告诉她明天下午三点开会",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "S03",
+    "prompt": "用 sy 给客户发邮件",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "S04",
+    "prompt": "帮我写封邮件给 alice@example.com，先别发",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "S05",
+    "prompt": "把这个报价单发邮件给王总，抄送李四",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "S06",
+    "prompt": "继续编辑刚才那封草稿",
+    "expected": "app_mail_draft_get"
+  },
+  {
+    "id": "R01",
+    "prompt": "看看我收件箱",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "R02",
+    "prompt": "去拉一下最新的邮件",
+    "expected": "app_mail_sync_start"
+  },
+  {
+    "id": "R03",
+    "prompt": "我收到了哪些邮件",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "R04",
+    "prompt": "我最近收到了什么邮件",
+    "expected": "app_mail_sync_start"
+  },
+  {
+    "id": "R05",
+    "prompt": "我刚刚收到了什么邮件",
+    "expected": "app_mail_sync_start"
+  },
+  {
+    "id": "R06",
+    "prompt": "今天有哪些未读邮件",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "R07",
+    "prompt": "我还有多少封没读的邮件",
+    "expected": "app_mail_message_count"
+  },
+  {
+    "id": "R08",
+    "prompt": "把最新五封邮件总结一下",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "R09",
+    "prompt": "看一下第二封",
+    "expected": "app_mail_message_get",
+    "context": "正在查看外部邮箱列表，上一页包含编号和 nextCursor"
+  },
+  {
+    "id": "R10",
+    "prompt": "还有呢，继续看下一页",
+    "expected": "app_mail_message_list",
+    "context": "正在查看外部邮箱列表，上一页包含编号和 nextCursor"
+  },
+  {
+    "id": "Q01",
+    "prompt": "找一下张三给我发的邮件",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "Q02",
+    "prompt": "查找 alice@example.com 昨天发给我的邮件",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "Q03",
+    "prompt": "找一下上周主题包含合同的邮件",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "Q04",
+    "prompt": "搜一下正文提到验收的邮件",
+    "expected": "app_mail_search_start"
+  },
+  {
+    "id": "Q05",
+    "prompt": "找出有 PDF 附件的邮件",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "Q06",
+    "prompt": "看看我发给王总的邮件",
+    "expected": "app_mail_message_list"
+  },
+  {
+    "id": "P01",
+    "prompt": "回复张三给我的那封邮件，说已经收到",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "P02",
+    "prompt": "回复刚才这封邮件",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "P03",
+    "prompt": "回复全部，告诉大家周五交付",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "P04",
+    "prompt": "把这封邮件转发给 alice@example.com",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "P05",
+    "prompt": "帮我拟一段回复，先不要发",
+    "expected": "app_mail_draft_create"
+  },
+  {
+    "id": "A01",
+    "prompt": "把这封邮件的附件下载到桌面",
+    "expected": "app_mail_attachment_download_file"
+  },
+  {
+    "id": "A02",
+    "prompt": "读一下附件里的合同，总结重点",
+    "expected": "app_mail_attachment_list"
+  },
+  {
+    "id": "A03",
+    "prompt": "把这封邮件导出成 eml",
+    "expected": "app_mail_message_extract_to_file"
+  },
+  {
+    "id": "M01",
+    "prompt": "把这些邮件标记为已读",
+    "expected": "app_mail_message_update"
+  },
+  {
+    "id": "M02",
+    "prompt": "把这封邮件加星标",
+    "expected": "app_mail_message_update"
+  },
+  {
+    "id": "M03",
+    "prompt": "把这些垃圾邮件删掉",
+    "expected": "app_mail_message_delete"
+  },
+  {
+    "id": "M04",
+    "prompt": "恢复刚才删掉的邮件",
+    "expected": "app_mail_message_restore"
+  },
+  {
+    "id": "M05",
+    "prompt": "把这些邮件移到合同文件夹",
+    "expected": "app_mail_message_move"
+  },
+  {
+    "id": "C01",
+    "prompt": "我只有一个邮箱，直接用它发送",
+    "expected": "app_mail_account_list"
+  },
+  {
+    "id": "C02",
+    "prompt": "用我的工作邮箱发送",
+    "expected": "app_mail_account_list"
+  },
+  {
+    "id": "C03",
+    "prompt": "看看这封邮件发出去了吗，刚才超时了",
+    "expected": "app_mail_operation_get"
+  },
+  {
+    "id": "C04",
+    "prompt": "帮我添加一个阿里邮箱",
+    "expected": "app_mail_account_open"
+  },
+  {
+    "id": "C05",
+    "prompt": "明天上午九点发这封邮件",
+    "expected": null
+  },
+  {
+    "id": "B01",
+    "prompt": "帮我给张三发站内信",
+    "expected": "app_mail_internal_send_preview"
+  }
+]

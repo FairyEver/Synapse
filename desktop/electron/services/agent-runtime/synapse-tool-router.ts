@@ -14,6 +14,7 @@ import {
 } from "../../../synapse-capabilities/shared/registry"
 import type { McpToolDefinition } from "../../../synapse-capabilities/shared/types"
 import { excludedSearchDomains, lexiconTokens } from "./synapse-tool-router-lexicon"
+import { mailSearchIntent } from "./synapse-tool-router-mail"
 
 export const SYNAPSE_TOOL_ROUTER_SERVER_NAME = "synapse-tool-router"
 export const SYNAPSE_TOOL_ROUTER_SEARCH_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVER_NAME}__search`
@@ -188,15 +189,16 @@ export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Example: search {\"query\":\"list drive files\"} returns app_drive_item_list with its",
   "inputSchema; then call invoke {\"toolName\":\"app_drive_item_list\",\"arguments\":{\"limit\":20}}.",
   "",
-  "Enterprise WeChat uses the `wecom` domain. `app_wecom_connection_get` reports connector status",
-  "and `app_wecom_cli_run` executes the canonical WeCom Skill command arguments without exposing credentials.",
+  "WeCom: `app_wecom_connection_get` checks status; `app_wecom_cli_run` runs canonical Skill commands without exposing credentials.",
+  "邮件/邮箱/收件箱/email use `mail`; only explicit 站内信/internal mail or typed internal references use `mail_internal`.",
+  "Use a sole configured email account without asking.",
   "",
   "Rules:",
   "- Never call a name that `search` did not return, and never guess arguments.",
   "- Calling `search` with no `query` returns a one-line index of a `domain`; read it before",
   "  searching word by word. `domains` are top-level namespaces: Terminal's tools are `app_*`.",
   "- Prefer a small `limit` (for example 20) and continue with the returned `nextOffset` or",
-  "  `nextCursor` rather than asking for one large page; big results are slow and costly.",
+  "  `nextCursor`.",
   "- Retired `database_*`, `drive_*`, `workflow_*`, `content_*`, `automation_*`,",
   "  `model_price_*`, `repository_*` names are not supported.",
   "- `invoke` runs with the original tool's permissions, permission prompts, and audit. A",
@@ -309,17 +311,34 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
   // No query is not a mistake: it is the caller saying "I do not know the names yet".
   if (!query) return toolIndex(domain, normalizeIndexLimit(input.limit))
   const limit = normalizeLimit(input.limit)
+  const mailIntent = mailSearchIntent(query)
+  if (mailIntent?.guidance) return { mode: "search", tools: [], domains: availableDomains, guidance: mailIntent.guidance }
 
   const excludedDomains = [
     ...new Set([
       ...excludedSearchDomains(query),
+      ...(!domain && !/^app_mail_internal_[a-z_]+$/u.test(query)
+        && mailIntent?.domain !== "mail_internal" ? ["mail_internal"] : []),
       ...(/(?:站内信|通知中心|synapse\s*邮件)/iu.test(query)
         && !/(?:企业微信|企微|\bwecom\b)/iu.test(query)
         ? ["wecom"]
         : []),
     ]),
   ]
-  const matchesScope = (entry: SynapseToolCatalogEntry) => (!domain || entry.domain === domain) && !excludedDomains.includes(entry.domain)
+  const matchesScope = (entry: SynapseToolCatalogEntry) => (!domain || entry.domain === domain)
+    && (!mailIntent || entry.domain === mailIntent.domain) && !excludedDomains.includes(entry.domain)
+  if (mailIntent?.actions) {
+    const entries = mailIntent.actions.flatMap(action => {
+      const entry = catalogByName.get(`app_${mailIntent.domain}_${action}`)
+      return entry && matchesScope(entry) ? [entry] : []
+    }).slice(0, limit)
+    return {
+      mode: "search",
+      tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({ name, domain: entryDomain, description, inputSchema })),
+      domains: availableDomains,
+      guidance: "普通邮件、邮箱、收件箱默认使用 mail；只有明确站内信或其带类型引用才使用 mail_internal。单一已配置邮箱直接使用，不要询问选择账号。先读邮箱 Skill，发现工具不等于授权执行。",
+    }
+  }
   const exact = catalogByName.get(query)
   const exactChinesePhrase = containsHan(query) && [...query].length >= 4
     ? catalog.filter((entry) => matchesScope(entry) && entry.description.includes(query))

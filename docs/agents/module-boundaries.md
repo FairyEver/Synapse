@@ -261,6 +261,8 @@
 
 ## 外部邮箱（桌面）
 
+- AI 的普通“邮件、邮箱、收件箱、给谁发邮件、看我的邮件”默认使用 mail；只有明确站内信/internal mail 或带类型的 mail-internal 引用才进入站内信。唯一已配置账号直接使用，不询问发件邮箱；回复/草稿继承所属账号，显式账号优先，真实多账号歧义才询问。
+- message.list/count/search.start 支持 sender/recipient（实际地址精确或显示名子串）、subject、附件条件和 receivedAfter/receivedBefore，组合取交集；附件筛选只读已索引 MIME，不下载内容。from/to 仍是邮件头日期，不是邮箱地址。receivedAt 保存服务器 INTERNALDATE，缺失不猜测；旧索引在既有有界同步批次中补齐，保留邮件 ID、缓存和通知基线。排序优先收件时间，未知时退到邮件头日期；未知时间/附件结构必须在 coverage 说明。结构化计数的 serverReported 为 null。不新增通讯录同步、定时发送或撤回能力。
 - `mail` 是桌面邮箱客户端，站内信 `mail-internal` / `mail_internal` 独立保留；两类 ID、payload、API 和深链不兼容。外部链接严格为 `synapse://mail/em_<uuid>`，不支持手机端外部邮箱。
 - 账号、加密凭据、元数据索引、正文和附件仅归当前电脑，按已登录 SY 服务端用户 ID 分区，不进入云备份、移动端实时数据或账号消息中心。公开 MCP 不接受凭据，`account.open` 只打开本机配置界面，`account.configure` 仅私有 IPC。
 - 主进程 `core.mail` 是 UI、MCP 和深链的共同能力边界；44 个公开动作必须使用共享 schema。后台初始化在主窗口建立后执行；账号切换、退出、暂停和移除取消旧上下文及连接。关闭邮箱面板继续收信，进程退出或休眠不收信。

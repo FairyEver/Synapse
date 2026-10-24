@@ -103,14 +103,20 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["补丁", "patch"],
 
   // ---------------- 名词：mail ----------------
-  // 站内信的正式说法是「站内信」，口语里也叫「邮件」「信件」；「信箱 / 收件箱」指装信的
-  // 那一侧。四个词都只给 `mail`，不给 `message`：`message` 段的归属见「消息」那条。
+  // 普通邮件默认外部邮箱；只有明确站内信才展开 internal。具体场景由 mailSearchIntent 分流。
+  ["邮件", "mail"],
+  ["邮箱", "mail"],
+  ["站内信", "internal"],
   ["站内信", "mail"],
   ["信箱", "mail"],
   ["收件箱", "mail"],
   ["邮件", "mail"],
   ["信件", "mail"],
   ["草稿", "draft"],
+  ["正文", "body"],
+  ["缓存", "cache"],
+  ["检索", "search"],
+  ["取消", "cancel"],
   ["附件", "attachment"],
   ["收件人", "recipient"],
   ["收信人", "recipient"],

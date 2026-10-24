@@ -7,6 +7,14 @@ import { normalizeProtocolError } from "../protocol/types"
 
 afterEach(() => vi.useRealTimers())
 
+it("preserves server receipt time separately from the sender date", async () => {
+  const client = new ImapFlow(imapOptions(aliyunConfig("me@example.com", "Work"), "fixture"))
+  vi.spyOn(client, "getMailboxLock").mockResolvedValue({ path: "INBOX", release: vi.fn() })
+  vi.spyOn(client, "fetchAll").mockResolvedValue([{ uid: 1, seq: 1, envelope: { date: new Date("2026-10-20T00:00:00Z") }, internalDate: new Date("2026-10-24T03:00:00Z") }])
+  const result = await new ImapSession(client).fetchHeaders("INBOX", [1], new AbortController().signal)
+  expect(result[0]).toMatchObject({ date: "2026-10-20T00:00:00.000Z", receivedAt: "2026-10-24T03:00:00.000Z" })
+})
+
 function idleRig() {
   const client = new ImapFlow(imapOptions(aliyunConfig("me@example.com", "Work"), "fixture"))
   client.usable = true

@@ -1,18 +1,38 @@
 import { createHash, randomUUID } from "node:crypto"
 import { MAIL_SEARCH_BATCH_BYTES, MAIL_SEARCH_BATCH_MS, MAIL_SEARCH_TTL_MS, MAIL_MAX_BODY_BYTES } from "../shared/limits"
-import { matchesMailFilters, matchesMailText } from "../shared/search"
+import { matchesMailFilters, matchesMailText, normalizeMailText, type MailFilters } from "../shared/search"
 import { MAIL_INPUT_SCHEMAS } from "../shared/schema"
 import { MailError, type Coverage, type MailContext, type MailInputs, type MailJob, type MailResults, type SearchAction } from "../shared/types"
 import { MailRepository } from "./repository"
 import { emptyCoverage, messageSummary, type StoredFolder, type StoredMessage } from "./sync"
+import { describeMimeParts } from "./mime"
 
 export interface SearchText { text: string; bytes: number; available: boolean; truncated?: boolean }
 export type ReadSearchText = (ctx: MailContext, messageId: string, options: { cachedOnly: boolean; maxBytes: number }) => Promise<SearchText>
 interface SearchTask extends Record<string, unknown> {
   input: MailInputs["search.start"]; job: MailJob; expiresAt: number; phase: "local" | "remote" | "complete";
-  scanCursor?: string; indexToken: string; remotePending: number; bodyComplete: boolean
+  scanCursor?: string; indexToken: string; remotePending: number; bodyComplete: boolean; filterReasons?: string[]
 }
 interface SearchResult extends Record<string, unknown> { jobId: string; messageId: string; sourceRevision: number; matched: boolean; bodyScanned: boolean }
+
+function matchQuery(message: StoredMessage, filters: MailFilters): { matches: boolean; reason?: string } {
+  // Evaluate known fields first so unrelated mail does not make the query incomplete.
+  if (!matchesMailFilters(message.summary, { ...filters, receivedAfter: undefined, receivedBefore: undefined })) return { matches: false }
+  if ((filters.receivedAfter || filters.receivedBefore) && !message.summary.receivedAt) return { matches: false, reason: "received_time_unavailable" }
+  if (!matchesMailFilters(message.summary, filters)) return { matches: false }
+  if (filters.hasAttachments === undefined && !filters.attachmentName && !filters.attachmentMime) return { matches: true }
+  if (!message.structure) return { matches: false, reason: "attachment_metadata_unavailable" }
+  try {
+    const attachments = describeMimeParts(message.structure).attachments
+    if (filters.hasAttachments !== undefined && (attachments.length > 0) !== filters.hasAttachments) return { matches: false }
+    return { matches: (!filters.attachmentName && !filters.attachmentMime) || attachments.some(part =>
+      (!filters.attachmentName || normalizeMailText(part.name).includes(normalizeMailText(filters.attachmentName)))
+      && (!filters.attachmentMime || part.mime.toLowerCase() === filters.attachmentMime.toLowerCase())) }
+  } catch (error) {
+    if (!(error instanceof MailError)) throw error
+    return { matches: false, reason: "attachment_metadata_unavailable" }
+  }
+}
 
 export class MailSearch {
   private running = new Map<string, { task: Promise<void>; controller: AbortController }>()
@@ -39,23 +59,30 @@ export class MailSearch {
     const items: MailResults["message.list"]["items"] = []
     do {
       const page = await this.repo.page<StoredMessage>(ctx, "messages", { accountId: input.accountId, cursor, limit: limit - items.length, binding: JSON.stringify(filters) })
-      for (const row of page.items) if (matchesMailFilters(row.data.summary, filters)) items.push(messageSummary(row))
+      for (const row of page.items) if (matchQuery(row.data, filters).matches) items.push(messageSummary(row))
       cursor = page.nextCursor ?? undefined
       if (!cursor) break
     } while (items.length < limit)
-    const state = await this.countMessages(ctx, { accountId: input.accountId, folderId: input.folderId })
+    const state = await this.countMessages(ctx, filters)
     return { items, nextCursor: cursor ?? null, coverage: state.coverage }
   }
   async countMessages(ctx: MailContext, input: MailInputs["message.count"]): Promise<MailResults["message.count"]> {
     await this.repo.get(ctx, "accounts", input.accountId)
     let indexed = 0, unread = 0, cursor: string | undefined
+    const reasons = new Set<string>()
     do {
       const page = await this.repo.page<StoredMessage>(ctx, "messages", { accountId: input.accountId, cursor, limit: 100 })
-      for (const row of page.items) if (matchesMailFilters(row.data.summary, input)) { indexed++; if (!row.data.summary.read) unread++ }
+      for (const row of page.items) {
+        const match = matchQuery(row.data, input)
+        if (match.reason) reasons.add(match.reason)
+        if (match.matches) { indexed++; if (!row.data.summary.read) unread++ }
+      }
       cursor = page.nextCursor ?? undefined
     } while (cursor)
     const state = await this.indexState(ctx, input.accountId, input.folderId)
-    return { indexed, unread, serverReported: state.serverReported, coverage: { ...state.coverage, indexedCount: indexed } }
+    const filtered = Object.entries(input).some(([key, value]) => !["accountId", "folderId"].includes(key) && value !== undefined)
+    return { indexed, unread, serverReported: filtered ? null : state.serverReported, coverage: { ...state.coverage, indexedCount: indexed,
+      ...(reasons.size ? { metadataComplete: false, reason: [...reasons, state.coverage.reason].filter(Boolean).join(",") } : {}) } }
   }
   private async task(ctx: MailContext, id: string) {
     const row = await this.repo.get<SearchTask>(ctx, "search-tasks", id)
@@ -81,10 +108,13 @@ export class MailSearch {
     const started = Date.now(), remote = data.phase === "remote", body = data.input.fields === "body"
     if (data.phase === "complete" || data.job.state === "cancelled") return
     let ended = false, limited = !data.bodyComplete
+    const filterReasons = new Set(data.filterReasons)
     while (scanned < (body ? 100 : 1000) && Date.now() - started < MAIL_SEARCH_BATCH_MS && bytes <= MAIL_SEARCH_BATCH_BYTES - (body ? MAIL_MAX_BODY_BYTES : 1)) {
       const page = await this.repo.page<StoredMessage>(ctx, "messages", { accountId: row.accountId, cursor, limit: body ? 1 : 100, binding: id })
       for (const message of page.items) {
-        if (!matchesMailFilters(message.data.summary, data.input)) continue
+        const match = matchQuery(message.data, data.input)
+        if (match.reason) filterReasons.add(match.reason)
+        if (!match.matches) continue
         const resultId = `${id}:${message.id}`
         const existing = await this.repo.find<SearchResult>(ctx, "search-results", resultId)
         if (remote && existing?.data.bodyScanned) continue
@@ -114,9 +144,9 @@ export class MailSearch {
     if (ended) { phase = body && !remote && data.remotePending > 0 ? "remote" : "complete"; cursor = undefined }
     const state = await this.indexState(ctx, row.accountId, data.input.folderId)
     const reason = state.token !== data.indexToken ? "index_changed" : limited ? "body_truncated" : phase === "complete" ? state.coverage.reason : phase === "remote" && ended ? "body_not_scanned" : "scan_budget"
-    const coverage = { ...data.job.coverage, metadataComplete: state.coverage.metadataComplete, serverHistoryComplete: null, bodyPendingCount: body ? (phase === "local" ? null : phase === "complete" ? 0 : data.remotePending) : null, reason }
+    const coverage = { ...data.job.coverage, metadataComplete: state.coverage.metadataComplete && !filterReasons.size, serverHistoryComplete: null, bodyPendingCount: body ? (phase === "local" ? null : phase === "complete" ? 0 : data.remotePending) : null, reason: [...filterReasons, reason].filter(Boolean).join(",") || null }
     const current = await this.task(ctx, id)
-    await this.repo.save<SearchTask>(ctx, "search-tasks", id, row.accountId, { ...data, phase, scanCursor: cursor, bodyComplete: !limited, job: { ...data.job, state: phase === "complete" ? "completed" : "paused", coverage, errorCode: null } }, current.revision)
+    await this.repo.save<SearchTask>(ctx, "search-tasks", id, row.accountId, { ...data, filterReasons: [...filterReasons], phase, scanCursor: cursor, bodyComplete: !limited, job: { ...data.job, state: phase === "complete" ? "completed" : "paused", coverage, errorCode: null } }, current.revision)
     this.onChanged(ctx, row.accountId, id)
   }
   async execute<K extends SearchAction>(ctx: MailContext, action: K, input: MailInputs[K]): Promise<MailResults[K]> {
@@ -137,7 +167,7 @@ export class MailSearch {
           if (entry.data.jobId !== params.jobId || !entry.data.matched) continue
           const message = await this.repo.find<StoredMessage>(ctx, "messages", entry.data.messageId)
           if (!message || message.revision !== entry.data.sourceRevision) changed = true
-          if (message && matchesMailFilters(message.data.summary, row.data.input) && (row.data.input.fields === "body" || matchesMailText(message.data.summary, row.data.input.query))) items.push(messageSummary(message))
+          if (message && matchQuery(message.data, row.data.input).matches && (row.data.input.fields === "body" || matchesMailText(message.data.summary, row.data.input.query))) items.push(messageSummary(message))
         }
         cursor = page.nextCursor ?? undefined
         if (!cursor) break

@@ -8,7 +8,7 @@ export interface RemoteFolder { path: string; name: string; delimiter: string; f
 export interface MailboxState { uidValidity: string; count: number; uidNext: number }
 export interface RemoteHeader {
   uid: number; subject: string; from: Address[]; to: Address[]; cc: Address[]; replyTo: Address[];
-  date: string | null; size: number; flags: string[]; messageId: string | null; references: string[]; structure: MailBodyStructure | null
+  date: string | null; receivedAt?: string | null; size: number; flags: string[]; messageId: string | null; references: string[]; structure: MailBodyStructure | null
 }
 export interface UidMapping { uidValidity: string; uids: Map<number, number> }
 export interface AppendReceipt { uidValidity: string; uid: number }
