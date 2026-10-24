@@ -25,6 +25,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
   const [settings, setSettings] = useState<AgentShareSettings>(DEFAULT_AGENT_SHARE_SETTINGS)
   const controller = useRef<AbortController | null>(null)
   const anchor = useRef<string | null>(null)
+  const defaultRoundId = useRef<string | null>(null)
   const preparingRef = useRef(false)
   const scroll = useRef<ScrollAnchor | null>(null)
   const active = owner === key && enabled
@@ -52,6 +53,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
   useEffect(() => {
     setEnabled(false); setOwner(key); setSnapshot([]); setCachedHistory([]); setSelected(new Set()); setFocusedId(null); setPreview(null); setLoading(false); setPreparing(false); setComplete(false); setError(null)
     preparingRef.current = false
+    defaultRoundId.current = null
     return () => { controller.current?.abort(); preparingRef.current = false }
   }, [key])
 
@@ -62,6 +64,11 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
       const prefix = shareHistoryPrefix(history, initial)
       const frozen = [...prefix, ...initial]
       saveScroll(); setSnapshot(frozen); setCachedHistory(frozen.filter((item) => shareHistoryIndex(item) !== undefined)); setComplete(true); setError(null)
+      if (defaultRoundId.current !== null) {
+        const id = defaultRoundId.current
+        setSelected(new Set(shareMessageRounds(shareMessages(frozen, false)).find((ids) => ids.includes(id)) ?? []))
+        defaultRoundId.current = null
+      }
     } catch (cause) {
       if (signal.aborted) return
       logger.warn("Agent share history failed.", { errorName: cause instanceof Error ? cause.name : typeof cause })
@@ -73,32 +80,38 @@ export function useAgentShare(input: { target: AgentConversationTarget; title: s
     const next = new AbortController(); controller.current = next
     const frozen = structuredClone(liveItems)
     // A running turn's assistant text is never made selectable by freezing it.
-    const eligible = new Set(shareMessages(frozen, input.sending).map((item) => item.id))
+    const initialMessages = shareMessages(frozen, input.sending)
+    const eligible = new Set(initialMessages.map((item) => item.id))
     const initial = frozen.map((item) => item.kind === "message" && item.role === "assistant" && !eligible.has(item.id) ? { ...item, streaming: true } : item)
     saveScroll(); setOwner(key); setSnapshot(initial); setEnabled(true); setComplete(false); setLoading(true); setError(null); setPreview(null)
-    setSelected(new Set(id && eligible.has(id) ? [id] : [])); anchor.current = null
+    defaultRoundId.current = id && eligible.has(id) ? id : null
+    setSelected(new Set(id ? shareMessageRounds(initialMessages).find((ids) => ids.includes(id)) ?? [] : [])); anchor.current = null
     setFocusedId(id && eligible.has(id) ? id : null)
     setSettings({ ...DEFAULT_AGENT_SHARE_SETTINGS, title: input.title.slice(0, 60) || "对话摘录" })
     return fetchHistory(initial, next.signal)
   }
   function exit() {
     controller.current?.abort(); preparingRef.current = false
+    defaultRoundId.current = null
     saveScroll(); setEnabled(false); setSelected(new Set()); setFocusedId(null); setPreview(null); setLoading(false); setPreparing(false); setError(null)
   }
   function choose(id: string, range: boolean) {
     if (!messages.some((item) => item.id === id)) return
+    defaultRoundId.current = null
     const rangeAnchor = range ? anchor.current : null
     setSelected((current) => selectShareRange(messages, current, id, rangeAnchor, !current.has(id)))
     anchor.current = id
     setFocusedId(id)
   }
   function toggleRound(ids: readonly string[]) {
+    defaultRoundId.current = null
     setSelected((current) => { const next = new Set(current); const remove = ids.every((id) => next.has(id)); for (const id of ids) { if (remove) next.delete(id); else next.add(id) } return next })
     anchor.current = null
     setFocusedId(ids[0] ?? null)
   }
   function preset(kind: "all" | "ai" | "latest" | "clear") {
     if ((kind === "all" || kind === "ai") && !complete) return
+    defaultRoundId.current = null
     const latestComplete = kind === "latest" ? shareMessageRounds(messages).filter((ids) => ids.some((id) => messages.find((item) => item.id === id)?.role === "assistant")).at(-1) : undefined
     const ids = kind === "clear" ? [] : kind === "latest" ? latestComplete ?? [] : messages.filter((item) => kind !== "ai" || item.role === "assistant").map((item) => item.id)
     setSelected(new Set(ids)); anchor.current = null

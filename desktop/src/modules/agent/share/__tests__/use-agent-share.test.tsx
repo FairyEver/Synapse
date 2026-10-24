@@ -21,6 +21,58 @@ function mount() { root = createRoot(document.createElement("div")); act(() => r
 function history() { return { projectId: "p", conversationId: "c", sessionKey: "s", entries: items, total: 4, startIndex: 0, hasMore: false } }
 
 describe("Agent sharing lifecycle", () => {
+  it.each([
+    ["m1", ["m1", "m2"]], ["m2", ["m1", "m2"]],
+    ["m3", ["m3", "m4"]], ["m4", ["m3", "m4"]],
+    ["m5", ["m5", "m6"]], ["m6", ["m5", "m6"]],
+  ])("defaults to the matching question and reply when entering from %s", async (id, expected) => {
+    const timeline = [...items, { ...items[0]!, id: "m5", historyIndex: 4 }, { ...items[1]!, id: "m6", historyIndex: 5 }]
+    bridge.getTimeline.mockResolvedValue({ ...history(), entries: timeline, total: 6 })
+    mount(); act(() => root!.render(<Driver timeline={timeline} />))
+    let entered!: Promise<void>
+    act(() => { entered = controller.enter(id) })
+    expect([...controller.selected]).toEqual(expected)
+    await act(() => entered)
+    expect([...controller.selected]).toEqual(expected)
+    expect(controller.currentRound).toEqual(expected)
+    await act(() => controller.openPreview())
+    expect(controller.preview?.map((item) => item.id)).toEqual(expected)
+  })
+
+  it("completes the default round when its question is in older history", async () => {
+    let resolve!: (result: ReturnType<typeof history>) => void
+    bridge.getTimeline.mockImplementation(() => new Promise((done) => { resolve = done }))
+    mount(); act(() => root!.render(<Driver timeline={items.slice(3)} />))
+    act(() => { void controller.enter("m4") })
+    expect([...controller.selected]).toEqual(["m4"])
+    await act(async () => resolve(history()))
+    expect([...controller.selected]).toEqual(["m3", "m4"])
+  })
+
+  it.each(["choose", "round", "clear", "latest"] as const)("preserves manual %s selection while older history loads", async (action) => {
+    let resolve!: (result: ReturnType<typeof history>) => void
+    bridge.getTimeline.mockImplementation(() => new Promise((done) => { resolve = done }))
+    mount(); act(() => root!.render(<Driver timeline={items.slice(3)} />))
+    act(() => { void controller.enter("m4") })
+    act(() => {
+      if (action === "choose") controller.choose("m4", false)
+      else if (action === "round") controller.toggleRound(controller.currentRound)
+      else controller.preset(action)
+    })
+    const chosen = [...controller.selected]
+    await act(async () => resolve(history()))
+    expect([...controller.selected]).toEqual(chosen)
+  })
+
+  it("completes the default round after retrying failed history", async () => {
+    bridge.getTimeline.mockRejectedValueOnce(new Error("synthetic unavailable")).mockResolvedValueOnce(history())
+    mount(); act(() => root!.render(<Driver timeline={items.slice(3)} />))
+    await act(() => controller.enter("m4"))
+    expect([...controller.selected]).toEqual(["m4"])
+    await act(async () => controller.retryHistory())
+    expect([...controller.selected]).toEqual(["m3", "m4"])
+  })
+
   it("selects in place, previews only chosen content, and preserves choices on returning", async () => {
     bridge.getTimeline.mockResolvedValue(history()); mount()
     await act(async () => controller.enter())
@@ -45,8 +97,8 @@ describe("Agent sharing lifecycle", () => {
     bridge.getTimeline.mockRejectedValue(new Error("synthetic unavailable")); mount()
     await act(async () => controller.enter("m2"))
     expect(controller.complete).toBe(false); expect(controller.error).toBeTruthy()
-    act(() => controller.preset("all")); expect([...controller.selected]).toEqual(["m2"])
-    await act(() => controller.openPreview()); expect(controller.preview?.[0]?.id).toBe("m2")
+    act(() => controller.preset("all")); expect([...controller.selected]).toEqual(["m1", "m2"])
+    await act(() => controller.openPreview()); expect(controller.preview?.map((item) => item.id)).toEqual(["m1", "m2"])
   })
   it("keeps live IDs selected when persisted IDs differ and freezes later messages out", async () => {
     const live = [{ ...items[0]!, id: "local:question", historyIndex: undefined, timestamp: "2026-10-24T01:00:00Z" }, { ...items[1]!, id: "event:answer", historyIndex: undefined, timestamp: "2026-10-24T01:01:00Z" }]
@@ -55,8 +107,8 @@ describe("Agent sharing lifecycle", () => {
     mount(); act(() => root!.render(<Driver timeline={live} />))
     await act(() => controller.enter("event:answer"))
     expect(controller.messages.map((item) => item.id)).toEqual(["c:history:0", "c:history:1", "local:question", "event:answer"])
-    expect([...controller.selected]).toEqual(["event:answer"])
-    await act(() => controller.openPreview()); expect(controller.preview?.map((item) => item.id)).toEqual(["event:answer"])
+    expect([...controller.selected]).toEqual(["local:question", "event:answer"])
+    await act(() => controller.openPreview()); expect(controller.preview?.map((item) => item.id)).toEqual(["local:question", "event:answer"])
     act(() => controller.exit()); expect(controller.items.map((item) => item.id)).toEqual(["c:history:0", "c:history:1", "local:question", "event:answer"])
     act(() => root!.render(<Driver timeline={persisted} />))
     expect(controller.items.map((item) => item.id)).toEqual(persisted.map((item) => item.id))

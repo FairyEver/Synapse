@@ -38,8 +38,10 @@ describe("message selection and preview UI", () => {
   it("enters from a message toolbar, preserves message DOM, and supports round and Shift selection", async () => {
     const original = host.querySelector('[data-source-message="m1"]')
     await act(async () => button("分享这条消息").click())
-    expect([...share.selected]).toEqual(["m1"])
+    expect([...share.selected]).toEqual(["m1", "m2"])
     expect(host.querySelector('[data-source-message="m1"]')).toBe(original)
+    await act(async () => button("取消本轮").click())
+    expect(share.selected.size).toBe(0)
     await act(async () => button("选择本轮").click())
     expect([...share.selected]).toEqual(["m1", "m2"])
     act(() => share.preset("clear"))
@@ -51,6 +53,12 @@ describe("message selection and preview UI", () => {
     expect([...share.selected]).toEqual(["m1", "m2"])
     act(() => button("取消").click()); expect(share.active).toBe(false)
     expect(host.querySelector('[data-source-message="m1"]')).toBe(original)
+  })
+  it("enters from an AI reply toolbar with only its matching question selected alongside it", async () => {
+    const trigger = host.querySelector<HTMLButtonElement>('[data-share-message="m4"] [aria-label="分享这条消息"]')!
+    await act(async () => trigger.click())
+    expect([...share.selected]).toEqual(["m3", "m4"])
+    expect(button("取消本轮").disabled).toBe(false)
   })
   it("previews only selected messages with omissions and privacy controls, then returns without losing selection", async () => {
     await act(async () => share.enter())
