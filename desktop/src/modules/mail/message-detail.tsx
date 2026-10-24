@@ -14,7 +14,7 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
   const projection = useMemo(() => body?.complete && body.html ? sanitizeMailHtml(body.html, resources) : null, [body, resources])
   return <article aria-label="邮件详情" className="flex h-full min-h-0 min-w-0 flex-col bg-background" key={detail.id}>
     <div className="flex h-10 shrink-0 items-center border-b bg-background px-3">
-      <SystemAppTopBarActionButton iconOnly className="lg:hidden" aria-label="返回邮件列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
+      <SystemAppTopBarActionButton iconOnly className="@min-[53rem]/mail-client:hidden" aria-label="返回邮件列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
       <SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("reply")} data-track="mail.reply"><Reply />回复</SystemAppTopBarActionButton>
       <SystemAppTopBarActionButton disabled={detail.metadataTruncated} onClick={() => onReply("forward")}><Forward />转发</SystemAppTopBarActionButton>
       <SystemAppTopBarActionButton onClick={() => onCopy("id")}><Copy />复制ID</SystemAppTopBarActionButton>

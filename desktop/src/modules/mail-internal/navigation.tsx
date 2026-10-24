@@ -68,13 +68,13 @@ export function MailNavigation(props: Props) {
   const label = props.box === "inbox" ? "发件人" : "收件人"
   function select(contact: MailContact | null) { props.onSelect(contact); setOpen(false) }
   const content = <ContactList {...props} onSelect={select} query={query} onQueryChange={setQuery} />
-  return <aside className="flex shrink-0 flex-col border-b bg-sidebar p-2 @3xl/mail:h-full @3xl/mail:min-h-0 @3xl/mail:border-b-0 @3xl/mail:p-3">
-    <nav aria-label="信箱" className="flex shrink-0 gap-1 @3xl/mail:flex-col">
-      <Button variant="ghost" aria-current={props.box === "inbox" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start @3xl/mail:flex-none", props.box === "inbox" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("inbox")}><Inbox />收件箱{props.unread > 0 && <span className="ml-auto text-xs tabular-nums" aria-label={`${props.unread} 封未读`}>{countLabel(props.unread)}</span>}</Button>
-      <Button variant="ghost" aria-current={props.box === "sent" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start @3xl/mail:flex-none", props.box === "sent" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("sent")}><Send />已发送</Button>
+  return <aside className="flex shrink-0 flex-col border-b bg-sidebar p-2 group-data-[wide=true]/mail:h-full group-data-[wide=true]/mail:min-h-0 group-data-[wide=true]/mail:border-b-0 group-data-[wide=true]/mail:p-3">
+    <nav aria-label="信箱" className="flex shrink-0 gap-1 group-data-[wide=true]/mail:flex-col">
+      <Button variant="ghost" aria-current={props.box === "inbox" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start group-data-[wide=true]/mail:flex-none", props.box === "inbox" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("inbox")}><Inbox />收件箱{props.unread > 0 && <span className="ml-auto text-xs tabular-nums" aria-label={`${props.unread} 封未读`}>{countLabel(props.unread)}</span>}</Button>
+      <Button variant="ghost" aria-current={props.box === "sent" ? "page" : undefined} className={cn("min-w-0 flex-1 justify-start group-data-[wide=true]/mail:flex-none", props.box === "sent" && "bg-selected hover:bg-selected dark:hover:bg-selected")} onClick={() => props.onBoxChange("sent")}><Send />已发送</Button>
     </nav>
-    <section aria-label={label} className="mt-7 hidden min-h-0 flex-1 flex-col gap-3 @3xl/mail:flex"><h2 className="px-2.5 text-xs font-medium text-muted-foreground">{label}</h2>{content}</section>
-    <div className="mt-3 @3xl/mail:hidden"><Popover open={open} onOpenChange={setOpen}>
+    <section aria-label={label} className="mt-7 hidden min-h-0 flex-1 flex-col gap-3 group-data-[wide=true]/mail:flex"><h2 className="px-2.5 text-xs font-medium text-muted-foreground">{label}</h2>{content}</section>
+    <div className="mt-3 group-data-[wide=true]/mail:hidden"><Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild><Button variant="outline" className="w-full justify-between" aria-label={`选择${label}：${props.selected?.name ?? `全部${label}`}`}><span className="truncate">{props.selected?.name ?? `全部${label}`}</span><ChevronDown /></Button></PopoverTrigger>
       <PopoverContent align="start" className="max-h-(--radix-popover-content-available-height) max-w-(--radix-popover-content-available-width)">
         <div className="flex min-h-0 max-h-96 flex-col">{content}</div>

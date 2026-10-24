@@ -1,9 +1,13 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 
-const WIDE_LAYOUT_MIN_REM = 48
 const NAV_DEFAULT_WIDTH = 176
 const LIST_DEFAULT_WIDTH = 384
+const NAV_MIN_WIDTH = 144
+const LIST_MIN_WIDTH = 288
+const DETAIL_MIN_WIDTH = 240
+// 列表收至最小宽度后再折叠；导航仍有余量容纳分隔线。
+const WIDE_LAYOUT_MIN_WIDTH = NAV_DEFAULT_WIDTH + LIST_MIN_WIDTH + DETAIL_MIN_WIDTH
 
 type MailLayoutProps = {
   navigation: ReactNode
@@ -23,9 +27,8 @@ export function MailLayout({ navigation, list, detail, showDetail }: MailLayoutP
     const container = containerRef.current
     if (!container) return
 
-    const minimumWidth = WIDE_LAYOUT_MIN_REM * Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
     const updateLayout = (width: number) => setWide((current) => {
-      const next = width >= minimumWidth
+      const next = width >= WIDE_LAYOUT_MIN_WIDTH
       return current === next ? current : next
     })
     updateLayout(container.getBoundingClientRect().width)
@@ -47,19 +50,19 @@ export function MailLayout({ navigation, list, detail, showDetail }: MailLayoutP
     }
   }, [])
 
-  return <div ref={containerRef} className="@container/mail h-full min-h-0 min-w-0 bg-background">
+  return <div ref={containerRef} data-wide={wide} className="group/mail h-full min-h-0 min-w-0 bg-background">
     {wide ? <ResizablePanelGroup orientation="horizontal" className="min-h-0 overflow-hidden">
-      <ResizablePanel defaultSize={navWidthRef.current} minSize={144} maxSize={320} groupResizeBehavior="preserve-pixel-size" onResize={(size) => { navWidthRef.current = size.inPixels }}>
+      <ResizablePanel defaultSize={navWidthRef.current} minSize={NAV_MIN_WIDTH} maxSize={320} groupResizeBehavior="preserve-pixel-size" onResize={(size) => { navWidthRef.current = size.inPixels }}>
         {navigation}
       </ResizablePanel>
       <ResizableHandle withHandle aria-label="调整信箱宽度" />
-      <ResizablePanel className="flex min-h-0 min-w-0 flex-col" minSize={528}>
+      <ResizablePanel className="flex min-h-0 min-w-0 flex-col" minSize={LIST_MIN_WIDTH + DETAIL_MIN_WIDTH}>
         {showDetail ? <ResizablePanelGroup orientation="horizontal" className="min-h-0 overflow-hidden">
-          <ResizablePanel className="flex min-h-0 min-w-0 flex-col" defaultSize={listWidthRef.current} minSize={288} maxSize={560} groupResizeBehavior="preserve-pixel-size" onResize={(size) => { listWidthRef.current = size.inPixels }}>
+          <ResizablePanel className="flex min-h-0 min-w-0 flex-col" defaultSize={listWidthRef.current} minSize={LIST_MIN_WIDTH} maxSize={560} groupResizeBehavior="preserve-pixel-size" onResize={(size) => { listWidthRef.current = size.inPixels }}>
             {list}
           </ResizablePanel>
           <ResizableHandle withHandle aria-label="调整信件列表宽度" />
-          <ResizablePanel className="flex min-h-0 min-w-0 flex-col" minSize={240}>
+          <ResizablePanel className="flex min-h-0 min-w-0 flex-col" minSize={DETAIL_MIN_WIDTH}>
             {detail}
           </ResizablePanel>
         </ResizablePanelGroup> : list}
