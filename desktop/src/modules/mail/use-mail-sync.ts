@@ -9,6 +9,7 @@ export interface MailSyncStatus {
   label: string
   count: string | null
   progress: string | null
+  percentage: number | null
   error: string | null
 }
 const labels: Record<MailJob["state"], string> = { running: "索引中", paused: "同步已暂停", completed: "同步已完成", cancelled: "历史同步已取消", failed: "同步失败" }
@@ -64,7 +65,8 @@ export function useMailSync(owner: string | null, account: AccountSummary | unde
   const reconciling = syncProgress?.phase === "reconciling"
   const count = completed === undefined ? null : total == null ? `${completed}` : `${completed}/${total}`
   const progress = completed === undefined ? null : `${reconciling ? "已校对" : "已索引"} ${total == null ? completed : `${completed} / ${total}`} 封`
-  const base = { count, progress, error: null }
+  const percentage = completed !== undefined && total != null && total > 0 ? Math.min(100, Math.max(0, completed / total * 100)) : null
+  const base = { count, progress, percentage, error: null }
   if (account.paused || account.state === "paused") return { ...base, state: "paused", label: labels.paused }
   if (account.state === "auth_failed") return { ...base, state: "failed", label: labels.failed, error: syncError("AUTH_FAILED") }
   if (current?.error) return { ...base, state: "failed", label: "同步状态不可用", error: current.error }

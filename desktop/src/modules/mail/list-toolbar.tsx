@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react"
-import { ArrowLeft, Search, X, LoaderCircle, Info, ChevronDown, Pause, CircleAlert, CircleSlash, Clock } from "lucide-react"
+import { ArrowLeft, Search, X, Info, ChevronDown, Pause, CircleAlert, CircleSlash, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
+import { Progress } from "@/components/ui/progress"
 import { Checkbox } from "@/components/ui/checkbox"
 import { InputGroup, InputGroupInput, InputGroupAddon, InputGroupButton } from "@/components/ui/input-group"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from "@/components/ui/dropdown-menu"
@@ -22,7 +23,7 @@ export function MailListToolbar({ count, all, disabled, busy, draftView, onToggl
   const searchActive = count === 0 && searching
   const itemName = draftView ? "草稿" : "邮件"
   const status = coverage?.reason === "body_truncated" ? "部分正文未完整检索" : canContinue ? "部分邮件尚未检索" : !syncStatus && coverage && !coverage.metadataComplete ? "部分邮件尚未同步" : null
-  const SyncIcon = syncStatus?.state === "running" ? LoaderCircle : syncStatus?.state === "paused" ? Pause : syncStatus?.state === "failed" ? CircleAlert : syncStatus?.state === "cancelled" ? CircleSlash : Clock
+  const SyncIcon = syncStatus?.state === "paused" ? Pause : syncStatus?.state === "failed" ? CircleAlert : syncStatus?.state === "cancelled" ? CircleSlash : Clock
   const syncLabel = syncStatus ? [syncStatus.label, syncStatus.progress].filter(Boolean).join("，") : ""
   const exitSearch = () => { setSearching(false); setQuery(""); onSearch?.("") }
   return <TooltipProvider><div className="flex h-10 shrink-0 items-center border-b bg-background px-3" aria-label="邮件列表工具栏">
@@ -31,7 +32,7 @@ export function MailListToolbar({ count, all, disabled, busy, draftView, onToggl
       {count > 0 && <span className="ml-2 shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground" aria-label={`已选 ${count} 封${itemName}`}>{count}</span>}
     </>}
     {status && <Popover><Hint label={status}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly aria-label={status}><Info /></SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="start" className="w-64"><p className="text-sm">{status}</p>{canContinue && <Button variant="ghost" className="mt-2" disabled={busy} onClick={onContinue}>继续检索</Button>}</PopoverContent></Popover>}
-    {syncStatus && syncStatus.state !== "completed" && <Popover><Hint label={syncLabel}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly={searchActive} aria-label={syncLabel} className="min-w-0 shrink" aria-busy={syncStatus.state === "running"}><SyncIcon className={syncStatus.state === "running" ? "animate-spin motion-reduce:animate-none" : undefined} />{!searchActive && <><span className="truncate">{syncStatus.label}</span>{syncStatus.count && <span className="tabular-nums">{syncStatus.count}</span>}</>}</SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="start" className="w-64 space-y-2 text-sm"><p>{syncStatus.label}</p>{syncStatus.progress && <p className="tabular-nums text-muted-foreground">{syncStatus.progress}</p>}{syncStatus.error && <p className="text-destructive">{syncStatus.error}</p>}</PopoverContent></Popover>}
+    {syncStatus && syncStatus.state !== "completed" && syncStatus.state !== "running" && <Popover><Hint label={syncLabel}><PopoverTrigger asChild><SystemAppTopBarActionButton iconOnly={searchActive} aria-label={syncLabel} className="min-w-0 shrink"><SyncIcon />{!searchActive && <><span className="truncate">{syncStatus.label}</span>{syncStatus.count && <span className="tabular-nums">{syncStatus.count}</span>}</>}</SystemAppTopBarActionButton></PopoverTrigger></Hint><PopoverContent align="start" className="w-64 space-y-2 text-sm"><p>{syncStatus.label}</p>{syncStatus.progress && <p className="tabular-nums text-muted-foreground">{syncStatus.progress}</p>}{syncStatus.error && <p className="text-destructive">{syncStatus.error}</p>}</PopoverContent></Popover>}
     {searchActive ? <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={event => { event.preventDefault(); onSearch?.(query) }}>
       <InputGroup><InputGroupInput autoFocus aria-label="搜索邮件" placeholder="搜索邮件" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Escape") exitSearch() }} />
         <InputGroupAddon align="inline-end">{query && <InputGroupButton aria-label="清空搜索" size="icon-xs" onClick={() => { setQuery(""); onSearch?.("") }}><X /></InputGroupButton>}<InputGroupButton type="submit" size="icon-xs" aria-label="提交搜索"><Search /></InputGroupButton></InputGroupAddon>
@@ -45,5 +46,10 @@ export function MailListToolbar({ count, all, disabled, busy, draftView, onToggl
           </>}
         </DropdownMenuGroup></DropdownMenuContent></DropdownMenu>
       : onSearch && <Hint label="搜索邮件"><SystemAppTopBarActionButton iconOnly aria-label="搜索邮件" onClick={() => setSearching(true)}><Search /></SystemAppTopBarActionButton></Hint>}</>}
+    {syncStatus?.state === "running" && <Hint label={syncLabel}>
+      <span tabIndex={0} className="ml-2 flex h-8 shrink-0 items-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <Progress className="w-16" value={syncStatus.percentage} aria-label={syncLabel} aria-valuenow={syncStatus.percentage ?? undefined} aria-valuetext={syncLabel} />
+      </span>
+    </Hint>}
   </div></TooltipProvider>
 }
