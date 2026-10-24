@@ -115,6 +115,46 @@ describe("share PNG generation", () => {
     expect((engine.capture.mock.calls[0]![0] as HTMLElement).querySelector("img")?.src).toBe("data:image/png;base64,bmF0aXZl")
   })
 
+  it.each([false, true])("preserves the automatic render caller when remote image access is denied (cached pixels: %s)", async (cached) => {
+    const fetchImage = vi.fn().mockResolvedValue(resourceResponse("unguarded"))
+    vi.stubGlobal("fetch", fetchImage)
+    if (cached) {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D)
+      vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,Y2FjaGVk")
+    }
+    engine.readResource.mockRejectedValue(new Error("没有网络权限。"))
+    const renderContext = { requestId: "request-1", nonce: "nonce-1", projectId: "project-1", conversationId: "conversation-1" }
+    const node = paper(); node.innerHTML = '<img src="https://images.example/photo.png">'
+    await expect(captureShareImage(node, 2, "save", new AbortController().signal, renderContext)).rejects.toThrow("没有网络权限")
+    expect(engine.readResource).toHaveBeenCalledExactlyOnceWith({ url: "https://images.example/photo.png", renderContext })
+    expect(fetchImage).not.toHaveBeenCalled()
+    expect(engine.capture).not.toHaveBeenCalled()
+  })
+
+  it("uses permission-checked bytes for an automatic render even when browser fetch would succeed", async () => {
+    const fetchImage = vi.fn().mockResolvedValue(resourceResponse("unguarded"))
+    vi.stubGlobal("fetch", fetchImage)
+    engine.readResource.mockResolvedValue({ dataUrl: "data:image/png;base64,bmF0aXZl" })
+    const renderContext = { requestId: "request-1", nonce: "nonce-1", projectId: "project-1", conversationId: "conversation-1" }
+    const node = paper(); node.innerHTML = '<img src="https://images.example/photo.png">'
+    await captureShareImage(node, 2, "save", new AbortController().signal, renderContext)
+    expect(engine.readResource).toHaveBeenCalledExactlyOnceWith({ url: "https://images.example/photo.png", renderContext })
+    expect(fetchImage).not.toHaveBeenCalled()
+    expect((engine.capture.mock.calls[0]![0] as HTMLElement).querySelector("img")?.src).toBe("data:image/png;base64,bmF0aXZl")
+  })
+
+  it("checks relative remote SVG images against the automatic render caller's permissions", async () => {
+    vi.spyOn(document, "baseURI", "get").mockReturnValue("https://images.example/conversation/")
+    const fetchImage = vi.fn().mockResolvedValue(resourceResponse("unguarded"))
+    vi.stubGlobal("fetch", fetchImage)
+    engine.readResource.mockRejectedValue(new Error("没有网络权限。"))
+    const renderContext = { requestId: "request-1", nonce: "nonce-1", projectId: "project-1", conversationId: "conversation-1" }
+    const node = paper(); node.innerHTML = '<svg><image href="photo.png"/></svg>'
+    await expect(captureShareImage(node, 2, "save", new AbortController().signal, renderContext)).rejects.toThrow("没有网络权限")
+    expect(engine.readResource).toHaveBeenCalledWith({ url: "https://images.example/conversation/photo.png", renderContext })
+    expect(fetchImage).not.toHaveBeenCalled()
+  })
+
   it("aborts image fetching without capturing or leaving a clone behind", async () => {
     const controller = new AbortController()
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => { controller.abort(); throw controller.signal.reason }))

@@ -224,7 +224,7 @@ export class MailDrafts {
         const row = await this.stored(ctx, params.draftId)
         if (row.data.contentRevision !== params.expectedRevision) throw new MailError("VERSION_CONFLICT", "草稿已被修改，请重新读取")
         if (action === "draft.delete") {
-          if (row.data.remoteLocator) {
+          if (row.data.remoteLocator || row.data.pendingAppend && row.data.pendingAppend.state !== "prepared") {
             if (!this.hooks.removeRemote) throw new MailError("UNAVAILABLE", "远端草稿删除暂不可用")
             await this.hooks.removeRemote(ctx, row)
           }

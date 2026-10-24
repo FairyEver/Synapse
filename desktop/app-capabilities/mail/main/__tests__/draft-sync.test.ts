@@ -11,11 +11,52 @@ async function setup() {
   const r = await createMailTestRig(), account = await r.accounts.configure(r.ctx, { ...aliyunConfig("me@example.com", "Work"), credential: "secret" })
   const id = `mf_${randomUUID()}`
   await r.repo.save<StoredFolder>(r.ctx, "folders", id, account.id, { folder: { id, accountId: account.id, path: "Drafts", name: "Drafts", role: "drafts", uidValidity: "1", serverCount: 0, metadataComplete: true, selectable: true }, flags: [], delimiter: "/" }, 0)
-  const content = new MailContent(r.repo, r.accounts, r.assets, r.access), drafts = new MailDrafts(r.repo, r.accounts, r.assets, content)
-  const sync = new MailDraftSync(r.repo, r.accounts, r.assets, drafts)
+  const content = new MailContent(r.repo, r.accounts, r.assets, r.access), drafts = new MailDrafts(r.repo, r.accounts, r.assets, content, { removeRemote: (ctx, row) => sync.removeRemote(ctx, row) })
+  const sync: MailDraftSync = new MailDraftSync(r.repo, r.accounts, r.assets, drafts)
   const draft = await drafts.execute(r.ctx, "draft.create", { accountId: account.id, to: [{ address: "to@example.com" }], cc: [], bcc: [{ address: "hidden@example.com" }], subject: "Test", html: "<p>original</p>", text: "original", assetIds: [], inlineImages: [] })
   return { ...r, account, drafts, draft, sync }
 }
+it("retains a first unknown APPEND draft and its reconciliation snapshot when deletion is requested", async () => {
+  const r = await setup()
+  try {
+    await r.sync.sync(r.ctx, r.draft.id)
+    const row = await r.drafts.stored(r.ctx, r.draft.id)
+    expect(row.data.remoteLocator).toBeNull()
+    expect(row.data.pendingAppend?.state).toBe("unknown")
+    await expect(r.drafts.execute(r.ctx, "draft.delete", { draftId: row.id, expectedRevision: row.data.contentRevision })).rejects.toMatchObject({ code: "OPERATION_UNKNOWN" })
+    expect(await r.drafts.stored(r.ctx, row.id)).toEqual(row)
+    await expect(r.assets.read(r.ctx, row.data.pendingAppend!.rawAssetId)).resolves.toBeInstanceOf(Buffer)
+    expect(r.session.uidExpunge).not.toHaveBeenCalled()
+  } finally { await r.close() }
+})
+
+it("deletes a confirmed first APPEND receipt even before its locator is committed to the draft", async () => {
+  const r = await setup()
+  try {
+    await r.sync.sync(r.ctx, r.draft.id)
+    const row = await r.drafts.stored(r.ctx, r.draft.id), pending = row.data.pendingAppend!
+    const locator = { accountId: row.accountId, folderId: pending.targetFolderId, uidValidity: "1", uid: 99 }
+    await r.repo.save(r.ctx, "drafts", row.id, row.accountId, { ...row.data, pendingAppend: { ...pending, state: "accepted", newLocator: locator } }, row.revision, row.sortKey)
+    vi.mocked(r.session.fetchPart).mockImplementation(async () => Readable.from([vi.mocked(r.session.append).mock.calls[0][1]]))
+    vi.mocked(r.session.searchUids).mockResolvedValueOnce([99]).mockResolvedValueOnce([])
+    await r.drafts.execute(r.ctx, "draft.delete", { draftId: row.id, expectedRevision: row.data.contentRevision })
+    expect(r.session.uidExpunge).toHaveBeenCalledExactlyOnceWith("Drafts", [99], r.ctx.signal)
+    expect(await r.repo.find(r.ctx, "drafts", row.id)).toBeNull()
+  } finally { await r.close() }
+})
+
+it("allows offline deletion when a first APPEND snapshot was prepared but never submitted", async () => {
+  const r = await setup()
+  try {
+    await r.sync.sync(r.ctx, r.draft.id)
+    const row = await r.drafts.stored(r.ctx, r.draft.id)
+    await r.repo.save(r.ctx, "drafts", row.id, row.accountId, { ...row.data, pendingAppend: { ...row.data.pendingAppend!, state: "prepared" } }, row.revision, row.sortKey)
+    vi.mocked(r.protocols.imap).mockClear().mockRejectedValue(new Error("offline"))
+    await expect(r.drafts.execute(r.ctx, "draft.delete", { draftId: row.id, expectedRevision: row.data.contentRevision })).resolves.toEqual({ success: true })
+    expect(r.protocols.imap).not.toHaveBeenCalled()
+    expect(await r.repo.find(r.ctx, "drafts", row.id)).toBeNull()
+  } finally { await r.close() }
+})
 it("does not append again after unknown APPEND and retains the old draft until confirmation", async () => {
   const r = await setup()
   try {

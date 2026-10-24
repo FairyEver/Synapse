@@ -185,6 +185,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["参数", "param"],
   ["布局", "layout"],
   ["消息", "message"],
+  ["历史消息", "messages"],
   ["轮次", "turn"],
   ["权限", "permission"],
   ["通知", "notifier"],

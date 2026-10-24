@@ -36,11 +36,11 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
 
     // First conversation is busy, second should be queued independently
     // Resolve first
-    sessions.resolveNext("reply-a", "thread-a")
+    await sessions.resolveNext("reply-a", "thread-a")
     const r1 = await p1
 
     // Second should still be pending (different conversation, independent state)
-    sessions.resolveNext("reply-b", "thread-b")
+    await sessions.resolveNext("reply-b", "thread-b")
     const r2 = await p2
 
     expect(r1.resultText).toBe("reply-a")
@@ -62,7 +62,7 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
     // Send a message to create a conversation
     const p1 = service.send(baseMessage("first"))
     await tick()
-    sessions.resolveNext("done-1", "thread-1")
+    await sessions.resolveNext("done-1", "thread-1")
     await p1
 
     // The conversation should exist in the repository
@@ -87,12 +87,12 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
     // Create two conversations via different workspace keys
     const p1 = service.send(baseMessage("msg-a", "ws-a"))
     await tick()
-    sessions.resolveNext("reply-a", "thread-a")
+    await sessions.resolveNext("reply-a", "thread-a")
     await p1
 
     const p2 = service.send(baseMessage("msg-b", "ws-b"))
     await tick()
-    sessions.resolveNext("reply-b", "thread-b")
+    await sessions.resolveNext("reply-b", "thread-b")
     await p2
 
     // Find the actual conversation IDs from the namespace
@@ -109,7 +109,7 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
     // Second conversation should still work
     const p3 = service.send(baseMessage("msg-c", "ws-b"))
     await tick()
-    sessions.resolveNext("reply-c", "thread-c")
+    await sessions.resolveNext("reply-c", "thread-c")
     const r3 = await p3
     expect(r3.resultText).toBe("reply-c")
   })
@@ -131,7 +131,7 @@ describe("AgentRuntimeService — SDK session factory", () => {
 
     const p = service.send(baseMessage("hello"))
     await tick()
-    sessions.resolveNext("reply", "thread-1")
+    await sessions.resolveNext("reply", "thread-1")
     const result = await p
 
     expect(result.resultText).toBe("reply")
@@ -223,7 +223,8 @@ class BlockingSessionFactory {
     return session
   }
 
-  resolveNext(resultText: string, agentSessionId: string): void {
+  async resolveNext(resultText: string, agentSessionId: string): Promise<void> {
+    await vi.waitFor(() => { expect(this.sessions.some((candidate) => candidate.pending)).toBe(true) })
     const session = this.sessions.find((candidate) => candidate.pending)
     if (!session) throw new Error("No pending session")
     session.emitResult(resultText, agentSessionId)
@@ -356,7 +357,7 @@ describe("AgentRuntimeService — idle session reclaim", () => {
     // Create a conversation by sending a message
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    sessions.resolveNext("done", "thread-1")
+    await sessions.resolveNext("done", "thread-1")
     await p
 
     // Inject a mock liveSession into the state
@@ -382,7 +383,7 @@ describe("AgentRuntimeService — idle session reclaim", () => {
 
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    sessions.resolveNext("done", "thread-1")
+    await sessions.resolveNext("done", "thread-1")
     await p
 
     const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states
@@ -403,7 +404,7 @@ describe("AgentRuntimeService — idle session reclaim", () => {
 
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    sessions.resolveNext("done", "thread-1")
+    await sessions.resolveNext("done", "thread-1")
     await p
 
     const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states

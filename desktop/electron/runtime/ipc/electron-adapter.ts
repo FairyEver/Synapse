@@ -37,6 +37,10 @@ const SECRETS_MUTATION_CHANNELS = new Set([
   "synapse:app:secrets:item:update",
   "synapse:app:secrets:item:upsert",
 ])
+const IMAGE_INPUT_CHANNELS = new Set([
+  "synapse:app:agent:share_render:complete",
+  "synapse:app:agent:operation:export_share_image",
+])
 
 type IpcErrorEnvelope = {
   readonly [IPC_ERROR_ENVELOPE_KEY]: true
@@ -84,6 +88,7 @@ function sensitiveMapSummary(value: unknown): unknown {
 }
 
 function sanitizeIpcRequest(channel: string, request: unknown): unknown {
+  if (IMAGE_INPUT_CHANNELS.has(channel)) return { inputType: typeof request }
   if ((channel.startsWith("synapse:app:todos:item:") || channel.startsWith("synapse:app:mail:"))) return { inputType: typeof request }
   if (!SECRETS_MUTATION_CHANNELS.has(channel)) return sanitizeIpcValue("request", request)
   if (!request || typeof request !== "object" || Array.isArray(request)) {

@@ -2,6 +2,24 @@ import { expect, it, vi } from "vitest"
 import { syncRig, remoteHeader } from "./sync-fixtures"
 import { MailSearch } from "../search"
 import { MailError } from "../../shared/types"
+import { randomUUID } from "node:crypto"
+import type { StoredFolder } from "../sync"
+
+it.each([null, 999])("ignores nonselectable containers and removed folders in account coverage (reported count: %s)", async (serverCount) => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([])
+    vi.mocked(r.session.select).mockResolvedValue({ uidValidity: "1", count: 0, uidNext: 1 })
+    await r.sync.runOnce(r.ctx, r.account.id)
+    const folderId = `mf_${randomUUID()}`
+    await r.repo.save<StoredFolder>(r.ctx, "folders", folderId, r.account.id, { folder: { id: folderId, accountId: r.account.id, path: "Parent", name: "Parent", role: "none", uidValidity: null, serverCount, metadataComplete: false, selectable: false }, flags: ["\\Noselect"], delimiter: "/" }, 0)
+    const search = new MailSearch(r.repo, async () => ({ text: "", bytes: 0, available: false }))
+    const counts = await search.countMessages(r.ctx, { accountId: r.account.id })
+    expect(counts).toMatchObject({ serverReported: 0, coverage: { metadataComplete: true } })
+    await expect(search.countMessages(r.ctx, { accountId: r.account.id, folderId })).rejects.toMatchObject({ code: "UNAVAILABLE" })
+    await expect(search.listMessages(r.ctx, { accountId: r.account.id, folderId, limit: 50 })).rejects.toMatchObject({ code: "UNAVAILABLE" })
+  } finally { await r.sync.dispose(); await r.close() }
+})
 
 it("normalizes Unicode and case locally, paginates stably, and binds cursors to filters and identity", async () => {
   const r = await syncRig()

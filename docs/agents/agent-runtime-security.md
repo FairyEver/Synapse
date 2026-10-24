@@ -157,3 +157,5 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 宿主的 runtimeShareContextRef 只定位本次桌面普通用户消息之前的历史与来源窗口，不能由模型选择聚焦窗口、改写正文或扩大权限。注入 SDK 输入而不进入可见历史；提示必须明确其为内部元数据，只在用户要求分享或交付已有分享图片时使用，普通回复不介绍分享上下文、引用或能力。原生 HTTP MCP 与第三方 router 共用 Agent capability dispatcher。消息查询只有有界摘录，制图从真实历史读取；引用与内容版本绑定。所有 share 操作仍经过调用者身份、限流、PermissionGuard 和审计，Persona / 子 Agent 的工具策略不添加自动允许例外。
 
 分享图片使用 app.agent.share-images 与专用 ManagedAssetStore，不能借此读取 agent.artifacts 的大型私有文本。渲染只读且经一次性 nonce / request / renderer / project / conversation 验证；来源窗口关闭、取消、超时与迟到结果拒绝。PNG 不进入模型上下文；复制、指定路径保存及远端资源读取保留调用身份。邮件通过窄解析接口导入独立附件，遵守原有账号范围、权限与发送授权，生成成功不等于发送成功。
+
+自动分享携带 renderContext 时，HTTP(S) 资源必须直接通过主进程受控读取；权限拒绝不得退回 Renderer fetch 或缓存像素。PNG 输入的 IPC 失败日志只保留输入类型，不记录 Base64 全文或截断前缀。邮箱通过 MCP 发起的嵌套文件、凭据和网络操作须沿用原 caller actor，后台同步仍使用当前身份对应的 system actor。

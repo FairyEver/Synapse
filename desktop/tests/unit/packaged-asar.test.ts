@@ -874,6 +874,7 @@ describe("packaged asar verification", () => {
   }
 
   async function writeRequiredExtraResourceFixtures(resourcesPath: string) {
+    await writeUnpackedFixture(resourcesPath, ["agent-openui-reference.md"], "# OpenUI reference\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "SKILL.md"], "# Synapse Skill\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "database", "index.md"], "# Database\n")
     await writeUnpackedFixture(resourcesPath, ["synapse-skill", "todos", "index.md"], "# Todos\n")

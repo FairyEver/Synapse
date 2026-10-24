@@ -232,6 +232,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreDatabaseDescriptor.id).toBe("core.database")
     expect(coreDatabaseDescriptor.criticality).toBe("degraded")
     expect(coreDatabaseDescriptor.dependsOn).toEqual([
+      "core.mail",
       "app.todos.cloud",
       "core.wecom",
       "core.config",
@@ -254,6 +255,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.json-repair",
       "core.text-extractor",
       "core.agent-conversation-control",
+      "core.agent-share",
       "core.agent-conversation-navigation",
       "core.file-opener",
       "core.text-file-writer",

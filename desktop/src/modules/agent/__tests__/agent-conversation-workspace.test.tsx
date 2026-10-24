@@ -417,7 +417,7 @@ describe("AgentConversationWorkspace", () => {
         }),
       })
 
-      expect(container.textContent).toContain("上下文 58K / 200K · 29%")
+      expect(container.querySelector('[role="progressbar"][aria-label="上下文占用 29%"]')).not.toBeNull()
       expect(container.querySelector("[data-agent-context-usage]")).not.toBeNull()
     },
   )

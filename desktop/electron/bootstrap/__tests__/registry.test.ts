@@ -92,6 +92,11 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.agent-conversation-control",
         "core.agent-conversation-navigation",
         "core.agent-reference-actions",
+        "core.agent-mcp-settings",
+        "core.agent-share",
+        "core.agent-share.maintenance",
+        "core.mail",
+        "core.mail.background",
         "core.audit-sink",
         "core.app-icon",
         "core.agent-personas",
@@ -394,6 +399,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.execution-isolation",
     ])
     expect(byId.get("core.database")?.dependsOn).toEqual([
+      "core.mail",
       "app.todos.cloud",
       "core.wecom",
       "core.config",
@@ -416,6 +422,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.json-repair",
       "core.text-extractor",
       "core.agent-conversation-control",
+      "core.agent-share",
       "core.agent-conversation-navigation",
       "core.file-opener",
       "core.text-file-writer",

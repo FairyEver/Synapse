@@ -18,6 +18,16 @@ vi.mock("electron", () => ({
 }))
 
 describe("createElectronTransportInstall", () => {
+  it.each(["synapse:app:agent:share_render:complete", "synapse:app:agent:operation:export_share_image"])("omits PNG bytes from failed %s requests", async (channel) => {
+    const logger = { error: vi.fn() }
+    const { createElectronTransportInstall } = await import("../electron-adapter")
+    createElectronTransportInstall({ logger })(channel, async () => { throw new Error("rejected") })
+    for (const pngBase64 of ["PRIVATE_PNG_CANARY", "PRIVATE_PNG_CANARY".repeat(100)]) {
+      await electronMock.handlers.get(channel)?.({ senderFrame: { url: "http://localhost:5173/" } }, { pngBase64 })
+    }
+    expect(logger.error).toHaveBeenCalledTimes(2)
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("PRIVATE_PNG_CANARY")
+  })
   it("omits Todo content even when invalid requests fail before dispatch", async () => {
     const logger = { error: vi.fn() }
     const { createElectronTransportInstall } = await import("../electron-adapter")

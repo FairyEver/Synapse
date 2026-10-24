@@ -33,6 +33,8 @@ describe("AgentRuntimeService cancelTurn", () => {
     const sendPromise = service.send(baseMessage("hello"))
     await waitForBusy(service, "hello")
 
+    await vi.waitFor(() => { expect(factory.lastCreatedSession).toBe(session) })
+
     const cancel = await service.cancelTurn(
       conversationId("local", "s1", "active"),
     )

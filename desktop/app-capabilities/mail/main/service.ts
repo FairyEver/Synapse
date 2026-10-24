@@ -19,7 +19,7 @@ import { MailSync, resolveMessage } from "./sync"
 import { MailContent } from "./mime"
 import { MailSearch } from "./search"
 import { MailMutations } from "./mutations"
-import { MailDrafts } from "./drafts"
+import { MailDrafts, type StoredDraft } from "./drafts"
 import { MailDraftSync } from "./draft-sync"
 import { MailSend } from "./send"
 import { MailSendOperations } from "./send-reconcile"
@@ -158,10 +158,17 @@ export class MailService {
       this.contexts.assertCurrent(ctx)
       await this.accounts.recover(ctx); await this.mutations.recover(ctx); await this.operations.recover(ctx); await this.drafts.recover(ctx)
       await this.accounts.recoverCredentials(ctx); await this.assets.recover(ctx); await this.send.expire(ctx)
-      if (!this.suspended) { await this.sync.resume(ctx); this.startMaintenance(ctx) }
-      let cursor: string | undefined
-      do { const page = await this.repo.page(ctx, "drafts", { cursor, limit: 100 }); for (const row of page.items) if (row.data.state === "editing" && row.data.syncState !== "synced") this.draftSync.enqueue(ctx, row.id); cursor = page.nextCursor ?? undefined } while (cursor)
+      if (!this.suspended) { await this.sync.resume(ctx); await this.resumeDraftSync(ctx); this.startMaintenance(ctx) }
     }).catch(() => { if (!ctx.signal.aborted) this.deps.diagnostic("MAIL_RECOVERY_FAILED", "mail") })
+  }
+  private async resumeDraftSync(ctx: MailContext): Promise<void> {
+    let cursor: string | undefined
+    do {
+      if (this.suspended) return
+      const page = await this.repo.page<StoredDraft>(ctx, "drafts", { cursor, limit: 100 })
+      for (const row of page.items) if (row.data.state === "editing" && row.data.syncState !== "synced") this.draftSync.enqueue(ctx, row.id)
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
   }
   private stopMaintenance(): void { clearInterval(this.maintenanceTimer); this.maintenanceTimer = undefined }
   private startMaintenance(ctx: MailContext): void {
@@ -179,7 +186,7 @@ export class MailService {
   }
   startBackground(): void { this.enabled = true; this.initializeBackground() }
   async suspend(): Promise<void> { this.suspended = true; this.stopMaintenance(); await Promise.all([this.sync.suspend(), this.draftSync.dispose(), this.maintenanceTask]) }
-  async resume(): Promise<void> { this.suspended = false; if (this.contexts.status().ownerId) { const ctx = this.context("sync"); await this.sync.resume(ctx); this.startMaintenance(ctx) } }
+  async resume(): Promise<void> { this.suspended = false; if (this.contexts.status().ownerId) { const ctx = this.context("sync"); await this.sync.resume(ctx); await this.resumeDraftSync(ctx); this.startMaintenance(ctx) } }
   async dispose(): Promise<void> { this.enabled = false; await this.beforeIdentityChange(); await this.initialization; this.notifications.dispose(); this.contexts.dispose() }
   async imageGrant(messageId: string, assetId: string) { const ctx = await this.actionContext(this.context("ui"), { messageId }), message = await resolveMessage(this.repo, ctx, messageId), asset = await this.assets.info(ctx, assetId); if (asset.messageId !== messageId || asset.accountId !== message.accountId) throw new MailError("UNAVAILABLE", "图片不属于当前邮件"); await this.content.ensureAsset(ctx, assetId, MAIL_MAX_IMAGE_BYTES); return { token: await this.resources.issue(ctx, messageId, assetId) } }
   async imageRead(messageId: string, token: string) { const ctx = await this.actionContext(this.context("ui"), { messageId }); return this.resources.read(ctx, messageId, token) }

@@ -4,6 +4,35 @@ import { InMemoryAuditSink } from "../../../../electron/runtime/security"
 import { createMailTestRig } from "./helpers"
 import { MailService } from "../service"
 import { aliyunConfig } from "../protocol/aliyun-policy"
+import { randomUUID } from "node:crypto"
+import { MailDrafts, type StoredDraft } from "../drafts"
+import { MailDraftSync } from "../draft-sync"
+import { MailContent } from "../mime"
+import type { StoredFolder } from "../sync"
+
+it.each(["pending", "unknown"] as const)("resumes %s draft synchronization after sleep without repeating an unknown APPEND", async (syncState) => {
+  const r = await createMailTestRig()
+  const service = new MailService({ storage: r.storage, files: new ManagedAssetStore(`${r.root}/assets`), permissionGuard: { registerPolicy: vi.fn(() => () => undefined), check: vi.fn(async () => ({ allowed: true as const })) }, auditSink: new InMemoryAuditSink(), resolveOwner: () => "test-owner", events: vi.fn(), open: vi.fn(), notifications: { show: vi.fn() }, diagnostic: vi.fn(), protocols: r.protocols })
+  try {
+    const account = await r.accounts.configure(r.ctx, { ...aliyunConfig("me@example.com", "Work"), credential: "test-only" })
+    const folderId = `mf_${randomUUID()}`
+    await r.repo.save<StoredFolder>(r.ctx, "folders", folderId, account.id, { folder: { id: folderId, accountId: account.id, path: "Drafts", name: "Drafts", role: "drafts", uidValidity: "1", serverCount: 0, metadataComplete: true, selectable: true }, flags: [], delimiter: "/" }, 0)
+    vi.mocked(r.session.listFolders).mockResolvedValue([{ path: "Drafts", name: "Drafts", flags: [], delimiter: "/", specialUse: "\\Drafts", count: 0 }])
+    const drafts = new MailDrafts(r.repo, r.accounts, r.assets, new MailContent(r.repo, r.accounts, r.assets, r.access))
+    const draft = await drafts.execute(r.ctx, "draft.create", { accountId: account.id, to: [{ address: "to@example.com" }], subject: "Sleep recovery", html: "<p>saved</p>", text: "saved", cc: [], bcc: [], assetIds: [], inlineImages: [] })
+    if (syncState === "unknown") {
+      await new MailDraftSync(r.repo, r.accounts, r.assets, drafts).sync(r.ctx, draft.id)
+      expect((await r.repo.get<StoredDraft>(r.ctx, "drafts", draft.id)).data.syncState).toBe("unknown")
+      expect(r.session.append).toHaveBeenCalledTimes(1)
+    }
+    await service.suspend()
+    const sync = vi.spyOn(MailDraftSync.prototype, "sync")
+    await service.resume()
+    await vi.waitFor(() => { expect(sync).toHaveBeenCalledWith(expect.any(Object), draft.id) })
+    await vi.waitFor(() => { expect(r.session.append).toHaveBeenCalledTimes(1) })
+    expect(r.session.append).toHaveBeenCalledTimes(1)
+  } finally { await service.dispose(); vi.restoreAllMocks(); await r.close() }
+})
 it("isolates server users and invalidates old contexts/events without emitting stale events", async () => {
   const r = await createMailTestRig()
   let owner: string | null = "test-owner"

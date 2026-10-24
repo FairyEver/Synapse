@@ -44,12 +44,17 @@ export class MailSearch {
       const page = await this.repo.page<StoredFolder>(ctx, "folders", { accountId, cursor, limit: 100 })
       for (const row of page.items) {
         if (folderId && row.id !== folderId) continue
+        if (!row.data.folder.selectable) {
+          if (folderId) throw new MailError("UNAVAILABLE", "邮件文件夹不可用")
+          continue
+        }
         found = true; complete &&= row.data.folder.metadataComplete
         token.update(`${row.id}:${row.revision};`)
         if (row.data.folder.serverCount === null) reported = null; else if (reported !== null) reported += row.data.folder.serverCount
       }
       cursor = page.nextCursor ?? undefined
     } while (cursor)
+    if (folderId && !found) throw new MailError("UNAVAILABLE", "邮件文件夹不可用")
     return { coverage: { ...emptyCoverage(), metadataComplete: complete && found, reason: complete && found ? "server_visible_history_only" : "metadata_indexing" }, serverReported: reported, token: token.digest("hex") }
   }
   async listMessages(ctx: MailContext, input: MailInputs["message.list"]): Promise<MailResults["message.list"]> {

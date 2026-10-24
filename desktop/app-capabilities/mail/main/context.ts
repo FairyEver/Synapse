@@ -32,7 +32,7 @@ export class MailContextProvider {
 export function createMailAccess(context: MailContextProvider, guard: PermissionGuard, audit: AuditSink): MailAccess {
   return async (ctx, action, resource) => {
     context.assertCurrent(ctx)
-    const actor = ctx.actor === "sync" ? { kind: "system" as const, id: ctx.ownerId } : { kind: "user" as const, id: ctx.ownerId }
+    const actor = ctx.actor === "sync" ? { kind: "system" as const, id: ctx.ownerId } : ctx.shareCaller?.actor ?? { kind: "user" as const, id: ctx.ownerId }
     const result = await guard.check({ action, actor, resource, context: { domain: "mail", source: ctx.actor, ownerId: ctx.ownerId } })
     audit.record({ action, actor, resource: action === "fs.read.outside-userdata" || action === "fs.write.outside-userdata" ? "mail-local-file" : resource, outcome: result.allowed ? "allowed" : "denied", metadata: { domain: "mail", source: ctx.actor } })
     context.assertCurrent(ctx)

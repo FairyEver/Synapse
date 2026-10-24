@@ -1108,17 +1108,12 @@ describe("AgentRuntimeService", () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const first = new PermissionSession("conversation-a-permission-1", "first allowed")
     const second = new PermissionSession("conversation-b-permission-1", "second denied")
-    const sessions = [first, second]
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
       providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
-      createSession: () => {
-        const session = sessions.shift()
-        if (!session) throw new Error("unexpected session")
-        return session
-      },
+      createSession: ({ conversation }) => conversation.workspaceKey === "workspace-a" ? first : second,
       now: fixedNow,
     })
 

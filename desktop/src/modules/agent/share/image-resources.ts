@@ -95,6 +95,14 @@ export async function freezeShareImages(paper: HTMLElement, clone: HTMLElement, 
     if (!pending) {
       pending = (async () => {
         if (/^data:image\//i.test(src)) return reserve(src)
+        const resolved = renderContext ? new URL(src, document.baseURI) : undefined
+        if (renderContext && resolved && /^https?:$/.test(resolved.protocol)) {
+          const agent = getSynapseBridge()?.agent
+          if (typeof agent?.readShareImageResource !== "function") throw new Error("图片读取暂不可用，请重试。")
+          const result = await agent.readShareImageResource({ url: resolved.href, renderContext })
+          signal.throwIfAborted()
+          return embed(result.dataUrl)
+        }
         let blob: Blob
         try {
           const response = await fetch(src, { signal, credentials: "same-origin" })
