@@ -12,10 +12,12 @@ import { pipeline } from "node:stream/promises"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { parse as parseYaml } from "yaml"
 import { nativeInstallExpression, observeNativeInstaller } from "./windows-installer-observer.mjs"
+import { guardPtyWorkerInspector } from "./windows-pty-worker-inspector.mjs"
 
 const desktopRoot = fileURLToPath(new URL("../..", import.meta.url))
 const cdnBase = "https://desktop.release.synapse.d2.pub/"
 const maximumInstallerBytes = 2 * 1024 ** 3
+const installedInspectorArgument = "--inspect-brk=127.0.0.1:19798"
 
 export function parseAcceptanceMode(args) {
   if (args.length === 0) return "full"
@@ -60,6 +62,10 @@ export function candidateUpdateExpression(version) {
 export function installedPtyExpression() {
   return `(async()=>{
       const req=process.mainModule.require.bind(process.mainModule);const r=globalThis.__updateAcceptanceRegistry;const ctx=r.getContext();const t=r.get('core.terminal');
+      const path=req('node:path');const ptyEntry=req('node:module').createRequire(path.join(req('electron').app.getAppPath(),'package.json')).resolve('node-pty');
+      const workerFile=path.join(path.dirname(ptyEntry).replace('node_modules.asar','node_modules.asar.unpacked'),'worker/conoutSocketWorker.js');
+      const restoreWorker=(${guardPtyWorkerInspector.toString()})(req('node:worker_threads'),workerFile,process.execArgv,${JSON.stringify(installedInspectorArgument)});
+      try{
       const mark=stage=>process.stderr.write(JSON.stringify({acceptance:'installed-pty',stage})+'\\n');
       mark('permission_check');
       const actor={kind:'user',id:'release-windows-acceptance'};const resource='release-acceptance:owned-pty';
@@ -69,6 +75,7 @@ export function installedPtyExpression() {
       let s;const live=()=>s?t.listSessions().find(x=>x.id===s.id):undefined;const wait=async test=>{const end=Date.now()+6000;while(Date.now()<end){if(test())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error('Actual Windows PTY IO timed out')};
       try{mark('create_session');s=await t.createSessionWithEphemeralEnvironment({title:'Windows upgrade acceptance',cwd:req('electron').app.getPath('userData'),shell:process.env.ComSpec||process.env.COMSPEC||'C:\\\\Windows\\\\System32\\\\cmd.exe',args:['/Q','/D'],environment:{},cols:80,rows:24});mark('create_session_returned');if(s.status!=='running')throw new Error('Actual Windows PTY failed to start');const output=()=>t.readSession({sessionId:s.id,limitBytes:16384}).chunks.map(c=>c.data).join('');mark('input_output');t.writeSession({sessionId:s.id,data:'echo SYNAPSE_WINDOWS_PTY_OK\\r'});await wait(()=>output().includes('SYNAPSE_WINDOWS_PTY_OK'));mark('resize');await t.resizeSession({sessionId:s.id,cols:100,rows:30});const resized=t.getSession({sessionId:s.id});if(resized.cols!==100||resized.rows!==30)throw new Error('PTY size mismatch');mark('natural_exit');t.writeSession({sessionId:s.id,data:'exit\\r'});await wait(()=>!live());return{actualInputOutput:true,naturalExit:true,cols:100,rows:30};}
       finally{mark('cleanup');if(live()){mark('stop_session');await t.stopSession({sessionId:s.id});await wait(()=>!live());}mark('flush_persistence');await t.flushPersistQueue();mark('flushed');}
+      }finally{restoreWorker();}
     })()`
 }
 
@@ -203,7 +210,7 @@ export function isOwnedInspectorAddress(url, startupLog) {
 
 async function launchInstalledApp(executable, outputRoot, phase) {
   const log = createWriteStream(path.join(outputRoot, `${phase}-app.log`))
-  const child = spawn(executable, ["--inspect-brk=127.0.0.1:19798"], { env: appEnvironment(), windowsHide: false, stdio: ["ignore", "pipe", "pipe"] })
+  const child = spawn(executable, [installedInspectorArgument], { env: appEnvironment(), windowsHide: false, stdio: ["ignore", "pipe", "pipe"] })
   let startupLog = ""
   child.stderr.on("data", (chunk) => { startupLog = (startupLog + chunk.toString("utf8")).slice(-8192) })
   child.stdout.pipe(log, { end: false })

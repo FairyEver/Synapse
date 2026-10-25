@@ -121,6 +121,8 @@ test("settles the old automatic check before changing feed and checking the cand
 
 test("records the pending installed PTY step without changing its failure guard", async () => {
   const stages = []
+  const workerThreads = { Worker: class AcceptanceWorker {} }
+  const originalWorker = workerThreads.Worker
   let finishCreate
   let notifyCreate
   const createStarted = new Promise((resolve) => { notifyCreate = resolve })
@@ -135,8 +137,15 @@ test("records the pending installed PTY step without changing its failure guard"
   const completion = vm.runInNewContext(installedPtyExpression(), {
     process: {
       env: { ComSpec: "cmd.exe" },
+      execArgv: ["--inspect-brk=127.0.0.1:19798"],
       stderr: { write: (line) => stages.push(JSON.parse(line).stage) },
-      mainModule: { require: () => ({ app: { getPath: () => "/owned/user-data" } }) },
+      mainModule: { require: (name) => {
+        if (name === "node:worker_threads") return workerThreads
+        if (name === "node:path") return path
+        if (name === "node:module") return { createRequire: () => ({ resolve: () => "/owned/node-pty/lib/index.js" }) }
+        if (name === "electron") return { app: { getPath: () => "/owned/user-data", getAppPath: () => "/owned/app" } }
+        throw new Error(`Unexpected PTY fixture module: ${name}`)
+      } },
     },
     __updateAcceptanceRegistry: {
       get: () => terminal,
@@ -150,10 +159,12 @@ test("records the pending installed PTY step without changing its failure guard"
   await Promise.race([createStarted, completion.then(({ error }) => { throw error ?? new Error("PTY check finished before creation") })])
   try {
     assert.equal(stages.at(-1), "create_session")
+    assert.notEqual(workerThreads.Worker, originalWorker)
   } finally {
     finishCreate({ id: "owned", status: "failed" })
   }
   assert.match((await completion).error.message, /Actual Windows PTY failed to start/)
+  assert.equal(workerThreads.Worker, originalWorker)
 })
 
 test("binds the inspector URL to the exact endpoint emitted by the spawned child", () => {

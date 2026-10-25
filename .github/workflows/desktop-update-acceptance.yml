@@ -61,7 +61,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Test acceptance metadata and installer integrity gates
-        run: node --test desktop/scripts/checks/__tests__/windows-update-acceptance.test.mjs desktop/scripts/checks/__tests__/windows-installer-observer.test.mjs
+        run: node --test desktop/scripts/checks/__tests__/windows-update-acceptance.test.mjs desktop/scripts/checks/__tests__/windows-installer-observer.test.mjs desktop/scripts/checks/__tests__/windows-pty-worker-inspector.test.mjs
       - name: Verify Windows process and version observation before installation
         if: ${{ inputs.mode != 'candidate-runtime' }}
         run: node desktop/scripts/checks/windows-update-acceptance.mjs --observe-processes
