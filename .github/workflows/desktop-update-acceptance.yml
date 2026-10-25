@@ -1,0 +1,66 @@
+name: Desktop update acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      previous_tag:
+        description: Published Windows version to install before the candidate
+        required: true
+        default: v1.0.79
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  windows-native-update:
+    name: Windows installed app, native update, PTY and script runtime
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      PREVIOUS_TAG: ${{ inputs.previous_tag }}
+      SYNAPSE_DESKTOP_PUBLIC_APP_URL: https://synapse.d2.pub
+      SYNAPSE_DESKTOP_REQUIRE_PUBLIC_APP_URL: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.22.0 --activate
+      - name: Locate pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test acceptance metadata and installer integrity gates
+        run: node --test desktop/scripts/checks/__tests__/windows-update-acceptance.test.mjs
+      - name: Build candidate
+        run: pnpm --filter @synapse/desktop run build
+      - name: Package candidate Windows installer without publishing
+        run: pnpm --filter @synapse/desktop run package:win:compiled
+      - name: Verify actual installed cross-version update
+        run: node desktop/scripts/checks/windows-update-acceptance.mjs
+      - name: Preserve acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-update-acceptance-${{ github.sha }}
+          path: desktop/release/windows-update-acceptance/
+          if-no-files-found: warn
+          retention-days: 7
