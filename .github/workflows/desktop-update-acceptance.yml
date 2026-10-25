@@ -1,5 +1,5 @@
 name: Desktop update acceptance
-run-name: ${{ inputs.mode == 'observer' && 'Windows process and version observer diagnostics' || inputs.mode == 'previous-startup' && 'Windows previous installed app startup diagnostics' || inputs.mode == 'candidate-runtime' && 'Windows packaged script runtime diagnostics' || 'Windows installed update acceptance' }}
+run-name: ${{ inputs.mode == 'observer' && 'Windows process and version observer diagnostics' || inputs.mode == 'previous-startup' && 'Windows previous installed app startup diagnostics' || inputs.mode == 'candidate-runtime' && 'Windows packaged script runtime diagnostics' || inputs.mode == 'candidate-installed' && 'Windows installed candidate diagnostics' || 'Windows installed update acceptance' }}
 
 on:
   workflow_dispatch:
@@ -19,6 +19,7 @@ on:
           - observer
           - previous-startup
           - candidate-runtime
+          - candidate-installed
 
 permissions:
   contents: read
@@ -60,15 +61,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Test acceptance metadata and installer integrity gates
-        run: node --test desktop/scripts/checks/__tests__/windows-update-acceptance.test.mjs
+        run: node --test desktop/scripts/checks/__tests__/windows-update-acceptance.test.mjs desktop/scripts/checks/__tests__/windows-installer-observer.test.mjs
       - name: Verify Windows process and version observation before installation
         if: ${{ inputs.mode != 'candidate-runtime' }}
         run: node desktop/scripts/checks/windows-update-acceptance.mjs --observe-processes
       - name: Build candidate
-        if: ${{ inputs.mode == 'full' || inputs.mode == 'candidate-runtime' }}
+        if: ${{ inputs.mode == 'full' || inputs.mode == 'candidate-runtime' || inputs.mode == 'candidate-installed' }}
         run: pnpm --filter @synapse/desktop run build
       - name: Package candidate Windows installer without publishing
-        if: ${{ inputs.mode == 'full' }}
+        if: ${{ inputs.mode == 'full' || inputs.mode == 'candidate-installed' }}
         run: pnpm --filter @synapse/desktop run package:win:compiled
       - name: Package candidate runtime without an installer
         if: ${{ inputs.mode == 'candidate-runtime' }}
@@ -83,6 +84,9 @@ jobs:
       - name: Diagnose previous installed app startup without building a candidate
         if: ${{ inputs.mode == 'previous-startup' }}
         run: node desktop/scripts/checks/windows-update-acceptance.mjs --previous-startup-only
+      - name: Diagnose installed candidate without a cross-version update
+        if: ${{ inputs.mode == 'candidate-installed' }}
+        run: node desktop/scripts/checks/windows-update-acceptance.mjs --candidate-installed-only
       - name: Verify actual installed cross-version update
         if: ${{ inputs.mode == 'full' }}
         run: node desktop/scripts/checks/windows-update-acceptance.mjs

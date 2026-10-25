@@ -1,10 +1,11 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import vm from "node:vm"
+import { parse as parseYaml } from "yaml"
 import { test } from "node:test"
 import { candidateUpdateExpression, installedPtyExpression, Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, readWindowsProductVersion, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
@@ -169,8 +170,20 @@ test("selects explicit diagnostic stages and rejects misspelled or combined mode
   assert.equal(parseAcceptanceMode([]), "full")
   assert.equal(parseAcceptanceMode(["--observe-processes"]), "observer")
   assert.equal(parseAcceptanceMode(["--previous-startup-only"]), "previous-startup")
+  assert.equal(parseAcceptanceMode(["--candidate-installed-only"]), "candidate-installed")
   assert.throws(() => parseAcceptanceMode(["--previous-startpu-only"]), /mode/i)
   assert.throws(() => parseAcceptanceMode(["--observe-processes", "--previous-startup-only"]), /mode/i)
+})
+
+test("keeps installed candidate diagnostics separate from the full update workflow gate", async () => {
+  const workflow = parseYaml(await readFile(new URL("../../../../.github/workflows/desktop-update-acceptance.yml", import.meta.url), "utf8"))
+  assert.deepEqual(Object.keys(workflow.on), ["workflow_dispatch"])
+  assert.equal(workflow.on.workflow_dispatch.inputs.mode.default, "full")
+  assert.ok(workflow.on.workflow_dispatch.inputs.mode.options.includes("candidate-installed"))
+  const steps = workflow.jobs["windows-native-update"].steps
+  assert.equal(steps.find((step) => step.name === "Verify actual installed cross-version update").if, "${{ inputs.mode == 'full' }}")
+  assert.equal(steps.find((step) => step.name === "Diagnose installed candidate without a cross-version update").if, "${{ inputs.mode == 'candidate-installed' }}")
+  assert.match(steps.find((step) => step.name === "Preserve acceptance evidence").with.name, /github.run_attempt/)
 })
 
 test("preserves the failing inspector method and installed startup stage", async () => {

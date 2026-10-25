@@ -11,6 +11,7 @@ import { Readable, Transform } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { parse as parseYaml } from "yaml"
+import { nativeInstallExpression, observeNativeInstaller } from "./windows-installer-observer.mjs"
 
 const desktopRoot = fileURLToPath(new URL("../..", import.meta.url))
 const cdnBase = "https://desktop.release.synapse.d2.pub/"
@@ -21,6 +22,7 @@ export function parseAcceptanceMode(args) {
   assert.equal(args.length, 1, "Choose exactly one Windows acceptance mode")
   if (args[0] === "--observe-processes") return "observer"
   if (args[0] === "--previous-startup-only") return "previous-startup"
+  if (args[0] === "--candidate-installed-only") return "candidate-installed"
   throw new Error("Unknown Windows acceptance mode")
 }
 
@@ -324,8 +326,9 @@ function assertDisposableWindowsRunner() {
   assert.equal(process.env.RUNNER_ENVIRONMENT, "github-hosted", "Refusing installation on a persistent runner")
 }
 
-export async function runWindowsAcceptance({ previousStartupOnly = false } = {}) {
+export async function runWindowsAcceptance({ previousStartupOnly = false, candidateInstalledOnly = false } = {}) {
   assertDisposableWindowsRunner()
+  assert.ok(!(previousStartupOnly && candidateInstalledOnly), "Choose exactly one installed diagnostic stage")
   const previousVersion = (process.env.PREVIOUS_TAG ?? "v1.0.79").replace(/^v/, "")
   const version = JSON.parse(await readFile(path.join(desktopRoot, "package.json"), "utf8")).version
   assert.match(version, /^\d+\.\d+\.\d+$/)
@@ -337,70 +340,79 @@ export async function runWindowsAcceptance({ previousStartupOnly = false } = {})
   const installDirectory = path.join(temporaryRoot, "Synapse")
   const executable = path.join(installDirectory, "Synapse.exe")
   const releaseRoot = path.join(desktopRoot, "release")
-  const evidence = { sourceSha: process.env.GITHUB_SHA, previousVersion, candidateVersion: version, syntheticCredentialOnly: true, diagnosticOnly: previousStartupOnly, checks: {} }
+  const evidence = { sourceSha: process.env.GITHUB_SHA, previousVersion, candidateVersion: version, syntheticCredentialOnly: true, diagnosticOnly: previousStartupOnly || candidateInstalledOnly, checks: {} }
   const record = async (name, value) => {
     evidence.checks[name] = value
     await writeFile(path.join(outputRoot, "evidence.json"), JSON.stringify(evidence, null, 2))
     process.stdout.write(`${name}: ${JSON.stringify(value)}\n`)
   }
-  let server, inspector
+  let server, inspector, installSubmission
   try {
-    const previous = parseWindowsMetadata(await readVendorMetadata(), previousVersion)
-    const installer = path.join(temporaryRoot, previous.file)
-    await downloadInstaller(new URL(`v${previousVersion}/${previous.file}`, cdnBase), installer, previous.sha512)
-    await run(installer, ["/S", "/currentuser", `/D=${installDirectory}`], { env: appEnvironment() })
-    await waitFor("old installed executable", async () => { try { await readFile(executable); return true } catch (error) { if (error.code === "ENOENT") return false; throw error } })
-    stopOwnedApp(executable)
-    let launched = await launchInstalledApp(executable, outputRoot, "old")
-    inspector = launched.inspector
-    const old = await inspector.evaluate(`(() => {
-      const req=process.mainModule.require.bind(process.mainModule);const e=req('electron');
-      const fixture=req('node:path').join(e.app.getPath('userData'),'upgrade-acceptance-synthetic.bin');
-      if(!e.safeStorage.isEncryptionAvailable())throw new Error('Old DPAPI unavailable');
-      req('node:fs').writeFileSync(fixture,e.safeStorage.encryptString('synapse-update-acceptance-not-a-secret'),{flag:'wx'});
-      return {version:e.app.getVersion(),platform:process.platform,arch:process.arch,isPackaged:e.app.isPackaged,window:e.BrowserWindow.getAllWindows().some(w=>w.isVisible())};
-    })()`)
-    assert.equal(old.version, previousVersion); assert.ok(old.isPackaged && old.window)
-    await record("oldInstalledStartup", old)
-    if (previousStartupOnly) {
-      await record("previousStartupDiagnostic", { passed: true, installedRendererIpc: true })
-      return
+    let launched
+    if (candidateInstalledOnly) {
+      const candidate = parseWindowsMetadata(await readFile(path.join(releaseRoot, "latest.yml"), "utf8"), version)
+      const installer = path.join(releaseRoot, candidate.file)
+      await verifyFileSha512(installer, candidate.sha512)
+      await run(installer, ["/S", "/currentuser", `/D=${installDirectory}`], { env: appEnvironment() })
+      await waitFor("candidate installed executable", async () => { try { await readFile(executable); return true } catch (error) { if (error.code === "ENOENT") return false; throw error } })
+      await record("candidateInstalledDiagnostic", { version, sha512Verified: true, crossVersionUpdateTested: false })
+    } else {
+      const previous = parseWindowsMetadata(await readVendorMetadata(), previousVersion)
+      const installer = path.join(temporaryRoot, previous.file)
+      await downloadInstaller(new URL(`v${previousVersion}/${previous.file}`, cdnBase), installer, previous.sha512)
+      await run(installer, ["/S", "/currentuser", `/D=${installDirectory}`], { env: appEnvironment() })
+      await waitFor("old installed executable", async () => { try { await readFile(executable); return true } catch (error) { if (error.code === "ENOENT") return false; throw error } })
+      stopOwnedApp(executable)
+      launched = await launchInstalledApp(executable, outputRoot, "old")
+      inspector = launched.inspector
+      const old = await inspector.evaluate(`(() => {
+        const req=process.mainModule.require.bind(process.mainModule);const e=req('electron');
+        const fixture=req('node:path').join(e.app.getPath('userData'),'upgrade-acceptance-synthetic.bin');
+        if(!e.safeStorage.isEncryptionAvailable())throw new Error('Old DPAPI unavailable');
+        req('node:fs').writeFileSync(fixture,e.safeStorage.encryptString('synapse-update-acceptance-not-a-secret'),{flag:'wx'});
+        return {version:e.app.getVersion(),platform:process.platform,arch:process.arch,isPackaged:e.app.isPackaged,window:e.BrowserWindow.getAllWindows().some(w=>w.isVisible())};
+      })()`)
+      assert.equal(old.version, previousVersion); assert.ok(old.isPackaged && old.window)
+      await record("oldInstalledStartup", old)
+      if (previousStartupOnly) {
+        await record("previousStartupDiagnostic", { passed: true, installedRendererIpc: true })
+        return
+      }
+      const metadata = await readFile(path.join(releaseRoot, "latest.yml"), "utf8")
+      const candidate = parseWindowsMetadata(metadata, version)
+      await verifyFileSha512(path.join(releaseRoot, candidate.file), candidate.sha512)
+      server = await serveCandidate(releaseRoot, metadata, candidate.file)
+      await inspector.evaluate(candidateUpdateExpression(version), "candidate update check and download", true)
+      await waitFor("actual candidate download", async () => {
+        const state = await inspector.evaluate("process.mainModule.require('./services/update-service.js').updateService.getState()")
+        if (state.error) throw new Error(state.error)
+        return state.status === "downloaded"
+      }, 180_000)
+      await record("candidateDownloaded", { version, sha512Verified: true })
+      installSubmission = await inspector.evaluate(nativeInstallExpression(), "native installer submission")
+      await record("nativeInstallSubmitted", {
+        isAdminRightsRequired: installSubmission.isAdminRightsRequired,
+        process: installSubmission.process ? { pid: installSubmission.process.pid, startedAt: installSubmission.process.startedAt, kind: installSubmission.process.kind } : null,
+      })
+      inspector.close(); inspector = null
+      await waitFor("old main process exit", () => launched.child.exitCode !== null, 60_000)
+      await waitFor("new installed app version", async () => {
+        const startedAt = new Date().toISOString()
+        const observedVersion = readWindowsProductVersion(executable)
+        const finishedAt = new Date().toISOString()
+        await writeFile(path.join(outputRoot, "installed-version-observation.json"), JSON.stringify({ startedAt, finishedAt, durationMs: Date.parse(finishedAt) - Date.parse(startedAt), observedVersion, expectedVersion: version }, null, 2))
+        return [version, `${version}.0`].includes(observedVersion)
+      }, 180_000)
+      await waitFor("native installer relaunch", () => ownedProcessIds(executable, true).length > 0, 60_000)
+      await record("nativeCrossVersionUpdate", { from: previousVersion, to: version, oldProcessExited: true, installerRelaunched: true, silentNativeInstaller: true, interactiveWizardTested: false })
     }
-    const metadata = await readFile(path.join(releaseRoot, "latest.yml"), "utf8")
-    const candidate = parseWindowsMetadata(metadata, version)
-    await verifyFileSha512(path.join(releaseRoot, candidate.file), candidate.sha512)
-    server = await serveCandidate(releaseRoot, metadata, candidate.file)
-    await inspector.evaluate(candidateUpdateExpression(version), "candidate update check and download", true)
-    await waitFor("actual candidate download", async () => {
-      const state = await inspector.evaluate("process.mainModule.require('./services/update-service.js').updateService.getState()")
-      if (state.error) throw new Error(state.error)
-      return state.status === "downloaded"
-    }, 180_000)
-    await record("candidateDownloaded", { version, sha512Verified: true })
-    await inspector.evaluate(`(()=>{
-      const u=process.mainModule.require('./services/update-service.js').updateService;
-      if(u.getState().status!=='downloaded'||!u.installQuitHandlers?.canQuit())throw new Error('Production safe-quit gate rejected installation');
-      u.installQuitHandlers.allowQuit();
-      process.mainModule.require('electron-updater').autoUpdater.quitAndInstall(true,true);
-      return true;
-    })()`)
-    inspector.close(); inspector = null
-    await waitFor("old main process exit", () => launched.child.exitCode !== null, 60_000)
-    await waitFor("new installed app version", async () => {
-      const observedVersion = readWindowsProductVersion(executable)
-      await writeFile(path.join(outputRoot, "installed-version-observation.json"), JSON.stringify({ observedVersion, expectedVersion: version }, null, 2))
-      return [version, `${version}.0`].includes(observedVersion)
-    }, 180_000)
-    await waitFor("native installer relaunch", () => ownedProcessIds(executable, true).length > 0, 60_000)
-    await record("nativeCrossVersionUpdate", { from: previousVersion, to: version, oldProcessExited: true, installerRelaunched: true, silentNativeInstaller: true, interactiveWizardTested: false })
     stopOwnedApp(executable)
     launched = await launchInstalledApp(executable, outputRoot, "new")
     inspector = launched.inspector
     const upgraded = await inspector.evaluate(`(() => {
       const req=process.mainModule.require.bind(process.mainModule);const e=req('electron');const fixture=req('node:path').join(e.app.getPath('userData'),'upgrade-acceptance-synthetic.bin');
-      const decrypted=e.safeStorage.decryptString(req('node:fs').readFileSync(fixture));
-      if(decrypted!=='synapse-update-acceptance-not-a-secret')throw new Error('Old synthetic DPAPI fixture changed');
-      return {version:e.app.getVersion(),electron:process.versions.electron,platform:process.platform,arch:process.arch,isPackaged:e.app.isPackaged,window:e.BrowserWindow.getAllWindows().some(w=>w.isVisible()),oldSyntheticCipherReadable:true};
+      if(!${candidateInstalledOnly}){const decrypted=e.safeStorage.decryptString(req('node:fs').readFileSync(fixture));if(decrypted!=='synapse-update-acceptance-not-a-secret')throw new Error('Old synthetic DPAPI fixture changed');}
+      return {version:e.app.getVersion(),electron:process.versions.electron,platform:process.platform,arch:process.arch,isPackaged:e.app.isPackaged,window:e.BrowserWindow.getAllWindows().some(w=>w.isVisible()),oldSyntheticCipherReadable:!${candidateInstalledOnly}};
     })()`)
     assert.equal(upgraded.version, version); assert.equal(upgraded.electron, "44.9.3"); assert.ok(upgraded.isPackaged && upgraded.window)
     assert.equal(upgraded.platform, "win32"); assert.equal(upgraded.arch, "x64")
@@ -413,9 +425,17 @@ export async function runWindowsAcceptance({ previousStartupOnly = false } = {})
     await run(process.execPath, [path.join(desktopRoot, "scripts/checks/verify-packaged-asar.mjs"), installDirectory], { env: appEnvironment() })
     await run(process.execPath, [path.join(desktopRoot, "scripts/checks/verify-packaged-script-runtime.mjs"), executable], { env: appEnvironment() })
     await record("installedPackageAndScriptRuntime", { passed: true })
-    await record("complete", true)
+    await record(candidateInstalledOnly ? "candidateInstalledDiagnosticComplete" : "complete", true)
   } catch (error) {
     await record("failure", { message: error.message })
+    if (installSubmission) {
+      try {
+        await record("nativeInstallerObservation", observeNativeInstaller(installSubmission, executable, appEnvironment()))
+      } catch (observationError) {
+        const code = observationError.cause?.code
+        await record("nativeInstallerObservation", { unavailable: true, code: typeof code === "string" && /^[A-Z_]{1,40}$/.test(code) ? code : "SNAPSHOT_UNAVAILABLE" })
+      }
+    }
     throw error
   } finally {
     inspector?.close()
@@ -433,5 +453,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.stdout.write(`Windows executable version observer: ${version}\n`)
     const target = path.join(os.tmpdir(), "synapse-process-observer-preflight", "Synapse.exe")
     process.stdout.write(`Windows process observer: ${JSON.stringify(ownedProcessIds(target))}\n`)
-  } else runWindowsAcceptance({ previousStartupOnly: mode === "previous-startup" }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })
+  } else runWindowsAcceptance({ previousStartupOnly: mode === "previous-startup", candidateInstalledOnly: mode === "candidate-installed" }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })
 }
