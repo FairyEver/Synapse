@@ -249,6 +249,17 @@ export function ownedProcessIds(executable, mainOnly = false, execute = spawnSyn
   return Array.isArray(parsed) ? parsed : [parsed]
 }
 
+export function readWindowsProductVersion(executable, execute = spawnSync) {
+  const script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; if (Test-Path -LiteralPath $env:SYNAPSE_ACCEPTANCE_EXE -PathType Leaf) { (Get-Item -LiteralPath $env:SYNAPSE_ACCEPTANCE_EXE).VersionInfo.ProductVersion } else { 'missing' }"
+  const result = execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", timeout: 10_000, env: { ...appEnvironment(), SYNAPSE_ACCEPTANCE_EXE: executable } })
+  assert.equal(result.status, 0, `Cannot observe installed executable version: ${JSON.stringify({ status: result.status, signal: result.signal, code: result.error?.code, message: result.error?.message, stderr: result.stderr?.trim().slice(0, 1000) })}`)
+  assert.ok(!result.stderr?.trim(), `Windows version observer reported an error: ${result.stderr?.trim().slice(0, 1000)}`)
+  const version = result.stdout.trim()
+  if (version === "missing") return null
+  assert.ok(version.length > 0 && version.length <= 100, "Installed executable version is empty or malformed")
+  return version
+}
+
 function stopOwnedApp(executable) {
   const ids = ownedProcessIds(executable)
   for (const id of ids) {
@@ -350,8 +361,9 @@ export async function runWindowsAcceptance({ previousStartupOnly = false } = {})
     inspector.close(); inspector = null
     await waitFor("old main process exit", () => launched.child.exitCode !== null, 60_000)
     await waitFor("new installed app version", async () => {
-      const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "(Get-Item -LiteralPath $env:SYNAPSE_ACCEPTANCE_EXE).VersionInfo.ProductVersion"], { encoding: "utf8", timeout: 10_000, env: { ...appEnvironment(), SYNAPSE_ACCEPTANCE_EXE: executable } })
-      return result.status === 0 && [version, `${version}.0`].includes(result.stdout.trim())
+      const observedVersion = readWindowsProductVersion(executable)
+      await writeFile(path.join(outputRoot, "installed-version-observation.json"), JSON.stringify({ observedVersion, expectedVersion: version }, null, 2))
+      return [version, `${version}.0`].includes(observedVersion)
     }, 180_000)
     await waitFor("native installer relaunch", () => ownedProcessIds(executable, true).length > 0, 60_000)
     await record("nativeCrossVersionUpdate", { from: previousVersion, to: version, oldProcessExited: true, installerRelaunched: true, silentNativeInstaller: true, interactiveWizardTested: false })
@@ -398,6 +410,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const mode = parseAcceptanceMode(process.argv.slice(2))
   if (mode === "observer") {
     assertDisposableWindowsRunner()
+    const version = readWindowsProductVersion(process.execPath)
+    assert.ok(version, "Running Node executable version not found")
+    process.stdout.write(`Windows executable version observer: ${version}\n`)
     const target = path.join(os.tmpdir(), "synapse-process-observer-preflight", "Synapse.exe")
     process.stdout.write(`Windows process observer: ${JSON.stringify(ownedProcessIds(target))}\n`)
   } else runWindowsAcceptance({ previousStartupOnly: mode === "previous-startup" }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })

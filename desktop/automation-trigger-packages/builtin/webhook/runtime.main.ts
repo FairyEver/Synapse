@@ -4,11 +4,9 @@ import type {
 } from "../../types.shared"
 import type { WebhookTriggerConfig } from "./schema"
 
-const liveProtocolPromise = import("@synapse/shared")
-
 export const webhookTriggerRuntime: AutomationTriggerRuntime<WebhookTriggerConfig> = {
   async shouldAcceptEvent(input: AutomationEventInput<WebhookTriggerConfig>): Promise<boolean> {
-    const { LIVE_MESSAGE_TYPES } = await liveProtocolPromise
+    const { LIVE_MESSAGE_TYPES } = await import("@synapse/shared")
     const webhookPublicId = webhookPublicIdFromEvent(input.event.payload)
     return input.event.source === "webhook" &&
       input.event.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived &&

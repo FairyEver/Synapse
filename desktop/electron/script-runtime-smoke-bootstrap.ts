@@ -1,5 +1,37 @@
 import { writeFile } from "node:fs/promises"
 
+const SMOKE_CHECKS = [
+  "smoke_root_create", "smoke_root_cleanup",
+  "worker_result", "worker_host_contract", "worker_console_log", "worker_script_error",
+  "worker_output_limit", "worker_timeout", "worker_cancellation",
+  "node_fixture_prepare", "node_commonjs_result", "node_commonjs_contract", "node_stderr_log",
+  "node_esm_result", "node_esm_contract", "node_output_limit",
+  "node_timeout_result", "node_timeout_pid_read", "node_timeout_process_stopped",
+  "node_cancel_start", "node_cancel_result", "node_cancel_pid_read", "node_cancel_process_stopped",
+  "node_temp_list", "node_temp_cleanup",
+] as const
+const SMOKE_OUTCOMES = [
+  "SUCCESS", "INVALID_INPUT", "SCRIPT_CONFIRMATION_REQUIRED", "CAPABILITY_UNAVAILABLE",
+  "RUNNER_BUSY", "RUNNER_START_FAILED", "SCRIPT_FAILED", "INVALID_RESULT",
+  "OUTPUT_TOO_LARGE", "TIMEOUT", "CANCELLED",
+] as const
+
+export type ScriptRuntimeSmokeCheck = typeof SMOKE_CHECKS[number]
+type ScriptRuntimeSmokeOutcome = typeof SMOKE_OUTCOMES[number]
+type SmokeDiagnostic = {
+  readonly check?: ScriptRuntimeSmokeCheck
+  readonly outcome?: ScriptRuntimeSmokeOutcome
+}
+
+export class ScriptRuntimeSmokeCheckFailure extends Error {
+  constructor(
+    readonly check: ScriptRuntimeSmokeCheck,
+    readonly outcome?: ScriptRuntimeSmokeOutcome,
+  ) {
+    super("Script runtime smoke check failed.")
+  }
+}
+
 export type ScriptRuntimeSmokeBootstrapConfig = {
   readonly resultPath: string
 }
@@ -11,7 +43,7 @@ type SmokeStage =
   | "result_complete"
 
 type SmokeLogger = {
-  warn(message: string, details: { readonly stage: SmokeStage; readonly reason: string }): void
+  warn(message: string, details: { readonly stage: SmokeStage; readonly reason: string } & SmokeDiagnostic): void
 }
 
 export function resolveScriptRuntimeSmokeBootstrap(
@@ -58,10 +90,11 @@ export async function startScriptRuntimeSmokeBootstrap(options: {
     options.exit(0)
   } catch (error) {
     const reason = smokeFailureReason(stage, error)
-    options.logger.warn("Packaged script runtime smoke failed.", { stage, reason })
+    const result = { stage, reason, ...(stage === "runtime" ? smokeDiagnostic(error) : {}) }
+    options.logger.warn("Packaged script runtime smoke failed.", result)
     if (resultCreated) {
       try {
-        await writeSmokeResult(writeResult, options.config.resultPath, { stage, reason }, "a")
+        await writeSmokeResult(writeResult, options.config.resultPath, result, "a")
       } catch (resultError) {
         options.logger.warn("Packaged script runtime smoke result write failed.", {
           stage: "result_complete",
@@ -73,6 +106,17 @@ export async function startScriptRuntimeSmokeBootstrap(options: {
     stderr.write("Packaged script runtime smoke failed.\n")
     options.exit(1)
   }
+}
+
+function smokeDiagnostic(error: unknown): SmokeDiagnostic {
+  if (!(error instanceof ScriptRuntimeSmokeCheckFailure)) return {}
+  const check = error.check
+  const outcome = error.outcome
+  if (
+    !SMOKE_CHECKS.includes(check)
+    || (outcome !== undefined && !SMOKE_OUTCOMES.includes(outcome))
+  ) return {}
+  return { check, ...(outcome !== undefined ? { outcome } : {}) }
 }
 
 async function writeSmokeResult(

@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
-import { Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
+import { Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, readWindowsProductVersion, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
 const digest = createHash("sha512").update("installer").digest("base64")
 const metadata = (overrides = {}) => JSON.stringify({
@@ -69,6 +69,14 @@ test("retains the Windows process observer startup or timeout cause", () => {
 test("refuses observer stderr even when PowerShell reports a successful exit", () => {
   const execute = () => ({ status: 0, stdout: "", stderr: "Get-CimInstance: query failed" })
   assert.throws(() => ownedProcessIds("C:\\owned\\Synapse.exe", false, execute), /query failed/)
+})
+
+test("distinguishes missing executable from a failed installed-version observation", () => {
+  assert.equal(readWindowsProductVersion("C:\\owned\\Synapse.exe", () => ({ status: 0, stdout: "1.0.81\r\n", stderr: "" })), "1.0.81")
+  assert.equal(readWindowsProductVersion("C:\\owned\\Synapse.exe", () => ({ status: 0, stdout: "missing\r\n", stderr: "" })), null)
+  assert.throws(() => readWindowsProductVersion("C:\\owned\\Synapse.exe", () => ({ status: 0, stdout: "", stderr: "" })), /empty/)
+  assert.throws(() => readWindowsProductVersion("C:\\owned\\Synapse.exe", () => ({ status: null, signal: "SIGTERM", error: Object.assign(new Error("spawnSync powershell.exe ETIMEDOUT"), { code: "ETIMEDOUT" }), stdout: "", stderr: "" })), /ETIMEDOUT/)
+  assert.throws(() => readWindowsProductVersion("C:\\owned\\Synapse.exe", () => ({ status: 0, stdout: "", stderr: "Get-Item: access denied" })), /access denied/)
 })
 
 test("binds the inspector URL to the exact endpoint emitted by the spawned child", () => {
