@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
@@ -96,4 +97,56 @@ test("preserves the failing inspector method and installed startup stage", async
   const inspector = new Inspector(socket)
   await assert.rejects(inspector.evaluate("process.pid", "old main PID"), (error) =>
     error.message.includes("old main PID") && error.message.includes("Runtime.evaluate") && error.message.includes("Promise was collected"))
+})
+
+test("reads actual V8 startup snapshots without a collectible Promise wrapper and still awaits async work", { timeout: 20_000 }, async () => {
+  const child = spawn(process.execPath, ["--inspect=127.0.0.1:0", "-e", `
+    const vm = require('node:vm');
+    globalThis.startupContext = vm.createContext({}, {name:'synapse-startup-pending',microtaskMode:'afterEvaluate'});
+    vm.runInContext('globalThis.answer=42', globalThis.startupContext);
+    setInterval(()=>{},1000);
+  `], { stdio: ["ignore", "ignore", "pipe"] })
+  let socket
+  let startupTimer
+  try {
+    const address = await new Promise((resolve, reject) => {
+      let startup = ""
+      startupTimer = setTimeout(() => reject(new Error("Inspector fixture startup timed out")), 10_000)
+      child.stderr.on("data", (chunk) => {
+        startup += chunk.toString()
+        const match = /Debugger listening on (ws:\/\/[^\s]+)/.exec(startup)
+        if (match) resolve(match[1])
+      })
+      child.once("error", reject)
+      child.once("exit", () => reject(new Error("Inspector fixture exited during startup")))
+    })
+    clearTimeout(startupTimer)
+    socket = new WebSocket(address)
+    await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject })
+    const inspector = new Inspector(socket)
+    const contexts = []
+    inspector.listeners.add((message) => {
+      if (message.method === "Runtime.executionContextCreated") contexts.push(message.params.context)
+    })
+    await inspector.command("Runtime.enable")
+    assert.equal(await inspector.evaluate("new Promise(resolve=>setTimeout(()=>resolve(7),5))", "async fixture", true), 7)
+    await assert.rejects(inspector.evaluate("Promise.reject(new Error('controlled async rejection'))", "async rejection", true), /controlled async rejection/)
+    await assert.rejects(inspector.evaluate("Promise.resolve(1)", "unexpected async result"), /requires explicit Promise waiting/)
+    const deadline = Date.now() + 5000
+    while (!contexts.some((context) => context.name === "synapse-startup-pending") && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    const context = contexts.find((value) => value.name === "synapse-startup-pending")
+    assert.ok(context, "Actual V8 fixture context missing")
+    const command = inspector.command.bind(inspector)
+    inspector.command = (method, params = {}) => command(method, method === "Runtime.evaluate" ? { ...params, contextId: context.id } : params)
+    const result = inspector.evaluate("answer", "startup snapshot").then((value) => ({ value }), (error) => ({ error: error.message }))
+    await inspector.command("HeapProfiler.collectGarbage")
+    const outcome = await result
+    assert.equal(outcome.value, 42, outcome.error)
+  } finally {
+    clearTimeout(startupTimer)
+    socket?.close()
+    child.kill()
+  }
 })

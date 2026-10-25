@@ -151,9 +151,11 @@ export class Inspector {
     }
   }
 
-  async evaluate(expression, stage = "evaluation") {
+  async evaluate(expression, stage = "evaluation", awaitPromise = false) {
     try {
-      const result = await this.command("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, timeout: 25_000 })
+      // Startup contexts may not drain microtasks yet; synchronous snapshots must stay synchronous.
+      const inspectedExpression = awaitPromise ? expression : `(()=>{const inspectionValue=(${expression});if(inspectionValue&&typeof inspectionValue.then==='function')throw new Error('Asynchronous result requires explicit Promise waiting');return inspectionValue;})()`
+      const result = await this.command("Runtime.evaluate", { expression: inspectedExpression, awaitPromise, returnByValue: true, timeout: 25_000 })
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
       return result.result.value
     } catch (error) {
@@ -234,7 +236,7 @@ async function launchInstalledApp(executable, outputRoot, phase) {
   await inspector.evaluate(`(async()=>{
     const e=process.mainModule.require('electron');const w=e.BrowserWindow.getAllWindows().find(w=>!w.isDestroyed()&&w.isVisible());
     return w.webContents.executeJavaScript('window.synapse.config.get().then(() => true)');
-  })()`, `${phase} real renderer IPC`)
+  })()`, `${phase} real renderer IPC`, true)
   return { inspector, child }
 }
 
@@ -331,7 +333,7 @@ export async function runWindowsAcceptance({ previousStartupOnly = false } = {})
     const candidate = parseWindowsMetadata(metadata, version)
     await verifyFileSha512(path.join(releaseRoot, candidate.file), candidate.sha512)
     server = await serveCandidate(releaseRoot, metadata, candidate.file)
-    await inspector.evaluate(`(async()=>{process.mainModule.require('electron-updater').autoUpdater.setFeedURL({provider:'generic',url:'http://127.0.0.1:19797/'});const u=process.mainModule.require('./services/update-service.js').updateService;const s=await u.checkForUpdates();if(s.releaseVersion!==${JSON.stringify(version)}||s.status!=='available')throw new Error('Candidate not available');await u.downloadUpdate();return true})()`)
+    await inspector.evaluate(`(async()=>{process.mainModule.require('electron-updater').autoUpdater.setFeedURL({provider:'generic',url:'http://127.0.0.1:19797/'});const u=process.mainModule.require('./services/update-service.js').updateService;const s=await u.checkForUpdates();if(s.releaseVersion!==${JSON.stringify(version)}||s.status!=='available')throw new Error('Candidate not available');await u.downloadUpdate();return true})()`, "candidate update check and download", true)
     await waitFor("actual candidate download", async () => {
       const state = await inspector.evaluate("process.mainModule.require('./services/update-service.js').updateService.getState()")
       if (state.error) throw new Error(state.error)
@@ -373,7 +375,7 @@ export async function runWindowsAcceptance({ previousStartupOnly = false } = {})
       let s;const live=()=>s?t.listSessions().find(x=>x.id===s.id):undefined;const wait=async test=>{const end=Date.now()+6000;while(Date.now()<end){if(test())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error('Actual Windows PTY IO timed out')};
       try{s=await t.createSessionWithEphemeralEnvironment({title:'Windows upgrade acceptance',cwd:req('electron').app.getPath('userData'),shell:process.env.ComSpec||process.env.COMSPEC||'C:\\\\Windows\\\\System32\\\\cmd.exe',args:['/Q','/D'],environment:{},cols:80,rows:24});if(s.status!=='running')throw new Error('Actual Windows PTY failed to start');const output=()=>t.readSession({sessionId:s.id,limitBytes:16384}).chunks.map(c=>c.data).join('');t.writeSession({sessionId:s.id,data:'echo SYNAPSE_WINDOWS_PTY_OK\\r'});await wait(()=>output().includes('SYNAPSE_WINDOWS_PTY_OK'));await t.resizeSession({sessionId:s.id,cols:100,rows:30});const resized=t.getSession({sessionId:s.id});if(resized.cols!==100||resized.rows!==30)throw new Error('PTY size mismatch');t.writeSession({sessionId:s.id,data:'exit\\r'});await wait(()=>!live());return{actualInputOutput:true,naturalExit:true,cols:100,rows:30};}
       finally{if(live()){await t.stopSession({sessionId:s.id});await wait(()=>!live());}await t.flushPersistQueue();}
-    })()`)
+    })()`, "installed native PTY", true)
     await record("installedNativePty", pty)
     await inspector.evaluate("(()=>{process.mainModule.require('electron').app.quit();return true})()")
     inspector.close(); inspector = null
