@@ -6,7 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import vm from "node:vm"
 import { test } from "node:test"
-import { candidateUpdateExpression, Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, readWindowsProductVersion, verifyFileSha512 } from "../windows-update-acceptance.mjs"
+import { candidateUpdateExpression, installedPtyExpression, Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, readWindowsProductVersion, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
 const digest = createHash("sha512").update("installer").digest("base64")
 const metadata = (overrides = {}) => JSON.stringify({
@@ -116,6 +116,43 @@ test("settles the old automatic check before changing feed and checking the cand
   assert.equal(calls[1][0], "check")
   assert.equal(calls[1][1].refreshAvailable, true)
   assert.equal(calls[2][0], "download")
+})
+
+test("records the pending installed PTY step without changing its failure guard", async () => {
+  const stages = []
+  let finishCreate
+  let notifyCreate
+  const createStarted = new Promise((resolve) => { notifyCreate = resolve })
+  const terminal = {
+    createSessionWithEphemeralEnvironment: () => new Promise((resolve) => {
+      finishCreate = resolve
+      notifyCreate()
+    }),
+    listSessions: () => [],
+    flushPersistQueue: async () => undefined,
+  }
+  const completion = vm.runInNewContext(installedPtyExpression(), {
+    process: {
+      env: { ComSpec: "cmd.exe" },
+      stderr: { write: (line) => stages.push(JSON.parse(line).stage) },
+      mainModule: { require: () => ({ app: { getPath: () => "/owned/user-data" } }) },
+    },
+    __updateAcceptanceRegistry: {
+      get: () => terminal,
+      getContext: () => ({
+        permissionGuard: { check: async () => ({ allowed: true }) },
+        auditSink: { record: () => undefined },
+      }),
+    },
+    setTimeout,
+  }).then((value) => ({ value }), (error) => ({ error }))
+  await Promise.race([createStarted, completion.then(({ error }) => { throw error ?? new Error("PTY check finished before creation") })])
+  try {
+    assert.equal(stages.at(-1), "create_session")
+  } finally {
+    finishCreate({ id: "owned", status: "failed" })
+  }
+  assert.match((await completion).error.message, /Actual Windows PTY failed to start/)
 })
 
 test("binds the inspector URL to the exact endpoint emitted by the spawned child", () => {

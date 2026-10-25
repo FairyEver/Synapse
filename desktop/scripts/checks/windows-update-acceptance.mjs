@@ -55,6 +55,21 @@ export function candidateUpdateExpression(version) {
   })()`
 }
 
+export function installedPtyExpression() {
+  return `(async()=>{
+      const req=process.mainModule.require.bind(process.mainModule);const r=globalThis.__updateAcceptanceRegistry;const ctx=r.getContext();const t=r.get('core.terminal');
+      const mark=stage=>process.stderr.write(JSON.stringify({acceptance:'installed-pty',stage})+'\\n');
+      mark('permission_check');
+      const actor={kind:'user',id:'release-windows-acceptance'};const resource='release-acceptance:owned-pty';
+      const permission=await ctx.permissionGuard.check({action:'terminal.session.create',actor,resource,context:{source:'release.windows-acceptance'}});if(!permission.allowed)throw new Error('PTY permission denied');
+      mark('audit_record');
+      ctx.auditSink.record({action:'terminal.session.create',actor,resource,outcome:'allowed',metadata:{source:'release.windows-acceptance'}});
+      let s;const live=()=>s?t.listSessions().find(x=>x.id===s.id):undefined;const wait=async test=>{const end=Date.now()+6000;while(Date.now()<end){if(test())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error('Actual Windows PTY IO timed out')};
+      try{mark('create_session');s=await t.createSessionWithEphemeralEnvironment({title:'Windows upgrade acceptance',cwd:req('electron').app.getPath('userData'),shell:process.env.ComSpec||process.env.COMSPEC||'C:\\\\Windows\\\\System32\\\\cmd.exe',args:['/Q','/D'],environment:{},cols:80,rows:24});mark('create_session_returned');if(s.status!=='running')throw new Error('Actual Windows PTY failed to start');const output=()=>t.readSession({sessionId:s.id,limitBytes:16384}).chunks.map(c=>c.data).join('');mark('input_output');t.writeSession({sessionId:s.id,data:'echo SYNAPSE_WINDOWS_PTY_OK\\r'});await wait(()=>output().includes('SYNAPSE_WINDOWS_PTY_OK'));mark('resize');await t.resizeSession({sessionId:s.id,cols:100,rows:30});const resized=t.getSession({sessionId:s.id});if(resized.cols!==100||resized.rows!==30)throw new Error('PTY size mismatch');mark('natural_exit');t.writeSession({sessionId:s.id,data:'exit\\r'});await wait(()=>!live());return{actualInputOutput:true,naturalExit:true,cols:100,rows:30};}
+      finally{mark('cleanup');if(live()){mark('stop_session');await t.stopSession({sessionId:s.id});await wait(()=>!live());}mark('flush_persistence');await t.flushPersistQueue();mark('flushed');}
+    })()`
+}
+
 async function waitFor(label, probe, timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -390,15 +405,7 @@ export async function runWindowsAcceptance({ previousStartupOnly = false } = {})
     assert.equal(upgraded.version, version); assert.equal(upgraded.electron, "44.9.3"); assert.ok(upgraded.isPackaged && upgraded.window)
     assert.equal(upgraded.platform, "win32"); assert.equal(upgraded.arch, "x64")
     await record("newInstalledStartup", upgraded)
-    const pty = await inspector.evaluate(`(async()=>{
-      const req=process.mainModule.require.bind(process.mainModule);const r=globalThis.__updateAcceptanceRegistry;const ctx=r.getContext();const t=r.get('core.terminal');
-      const actor={kind:'user',id:'release-windows-acceptance'};const resource='release-acceptance:owned-pty';
-      const permission=await ctx.permissionGuard.check({action:'terminal.session.create',actor,resource,context:{source:'release.windows-acceptance'}});if(!permission.allowed)throw new Error('PTY permission denied');
-      ctx.auditSink.record({action:'terminal.session.create',actor,resource,outcome:'allowed',metadata:{source:'release.windows-acceptance'}});
-      let s;const live=()=>s?t.listSessions().find(x=>x.id===s.id):undefined;const wait=async test=>{const end=Date.now()+6000;while(Date.now()<end){if(test())return;await new Promise(resolve=>setTimeout(resolve,50));}throw new Error('Actual Windows PTY IO timed out')};
-      try{s=await t.createSessionWithEphemeralEnvironment({title:'Windows upgrade acceptance',cwd:req('electron').app.getPath('userData'),shell:process.env.ComSpec||process.env.COMSPEC||'C:\\\\Windows\\\\System32\\\\cmd.exe',args:['/Q','/D'],environment:{},cols:80,rows:24});if(s.status!=='running')throw new Error('Actual Windows PTY failed to start');const output=()=>t.readSession({sessionId:s.id,limitBytes:16384}).chunks.map(c=>c.data).join('');t.writeSession({sessionId:s.id,data:'echo SYNAPSE_WINDOWS_PTY_OK\\r'});await wait(()=>output().includes('SYNAPSE_WINDOWS_PTY_OK'));await t.resizeSession({sessionId:s.id,cols:100,rows:30});const resized=t.getSession({sessionId:s.id});if(resized.cols!==100||resized.rows!==30)throw new Error('PTY size mismatch');t.writeSession({sessionId:s.id,data:'exit\\r'});await wait(()=>!live());return{actualInputOutput:true,naturalExit:true,cols:100,rows:30};}
-      finally{if(live()){await t.stopSession({sessionId:s.id});await wait(()=>!live());}await t.flushPersistQueue();}
-    })()`, "installed native PTY", true)
+    const pty = await inspector.evaluate(installedPtyExpression(), "installed native PTY", true)
     await record("installedNativePty", pty)
     await inspector.evaluate("(()=>{process.mainModule.require('electron').app.quit();return true})()")
     inspector.close(); inspector = null
