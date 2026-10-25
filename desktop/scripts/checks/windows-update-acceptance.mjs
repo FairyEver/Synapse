@@ -210,9 +210,10 @@ async function launchInstalledApp(executable, outputRoot, phase) {
 }
 
 export function ownedProcessIds(executable, mainOnly = false, execute = spawnSync) {
-  const script = "@(Get-CimInstance Win32_Process -Filter \"Name = 'Synapse.exe'\" | Where-Object { $_.ExecutablePath -eq $env:SYNAPSE_ACCEPTANCE_EXE -and ($env:SYNAPSE_ACCEPTANCE_MAIN_ONLY -ne '1' -or $_.CommandLine -notmatch '(?:^|\\s)--type=') } | ForEach-Object { $_.ProcessId }) | ConvertTo-Json -Compress"
+  const script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; @(Get-CimInstance Win32_Process -Filter \"Name = 'Synapse.exe'\" | Where-Object { $_.ExecutablePath -eq $env:SYNAPSE_ACCEPTANCE_EXE -and ($env:SYNAPSE_ACCEPTANCE_MAIN_ONLY -ne '1' -or $_.CommandLine -notmatch '(?:^|\\s)--type=') } | ForEach-Object { $_.ProcessId }) | ConvertTo-Json -Compress"
   const result = execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", timeout: 60_000, env: { ...appEnvironment(), SYNAPSE_ACCEPTANCE_EXE: executable, SYNAPSE_ACCEPTANCE_MAIN_ONLY: mainOnly ? "1" : "0" } })
   assert.equal(result.status, 0, `Cannot inspect owned installer app processes: ${JSON.stringify({ status: result.status, signal: result.signal, code: result.error?.code, message: result.error?.message, stderr: result.stderr?.trim().slice(0, 1000) })}`)
+  assert.ok(!result.stderr?.trim(), `Windows process observer reported an error: ${result.stderr?.trim().slice(0, 1000)}`)
   const parsed = JSON.parse(result.stdout.trim() || "[]")
   return Array.isArray(parsed) ? parsed : [parsed]
 }

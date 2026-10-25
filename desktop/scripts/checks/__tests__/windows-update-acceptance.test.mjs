@@ -64,3 +64,8 @@ test("retains the Windows process observer startup or timeout cause", () => {
     assert.throws(() => ownedProcessIds("C:\\owned\\Synapse.exe", false, execute), (error) => error.message.includes(code) && error.message.includes("observer diagnostic"))
   }
 })
+
+test("refuses observer stderr even when PowerShell reports a successful exit", () => {
+  const execute = () => ({ status: 0, stdout: "", stderr: "Get-CimInstance: query failed" })
+  assert.throws(() => ownedProcessIds("C:\\owned\\Synapse.exe", false, execute), /query failed/)
+})
