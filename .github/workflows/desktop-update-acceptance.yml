@@ -1,4 +1,5 @@
 name: Desktop update acceptance
+run-name: ${{ inputs.observe_processes_only && 'Windows process observer diagnostics' || 'Windows installed update acceptance' }}
 
 on:
   workflow_dispatch:
@@ -8,6 +9,11 @@ on:
         required: true
         default: v1.0.79
         type: string
+      observe_processes_only:
+        description: Diagnose process observation without building or installing an app
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -50,11 +56,16 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Test acceptance metadata and installer integrity gates
         run: node --test desktop/scripts/checks/__tests__/windows-update-acceptance.test.mjs
+      - name: Verify Windows process observation before installation
+        run: node desktop/scripts/checks/windows-update-acceptance.mjs --observe-processes
       - name: Build candidate
+        if: ${{ !inputs.observe_processes_only }}
         run: pnpm --filter @synapse/desktop run build
       - name: Package candidate Windows installer without publishing
+        if: ${{ !inputs.observe_processes_only }}
         run: pnpm --filter @synapse/desktop run package:win:compiled
       - name: Verify actual installed cross-version update
+        if: ${{ !inputs.observe_processes_only }}
         run: node desktop/scripts/checks/windows-update-acceptance.mjs
       - name: Preserve acceptance evidence
         if: always()

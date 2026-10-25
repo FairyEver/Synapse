@@ -87,6 +87,7 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 - 生产部署必须确认稳定 URL 返回 2xx 独立更新页。macOS/Windows 正式包必须通过协议注册、冷启动和热启动 smoke。
 - 用户可感知改动和发版风险必须即时写入 `RELEASE_NOTES_PENDING.md`，不要等发版时从提交记录补猜。
 - `Desktop update acceptance` 工作流仅接受手动触发，在 GitHub 托管 Windows 2022 运行器的临时目录安装旧版并执行真实 NSIS 跨版本升级、窗口启动、PTY 和脚本运行时检查，不发布或部署。入口为 `desktop/scripts/checks/windows-update-acceptance.mjs`；它拒绝在本机或持久化运行器安装。Windows 加密兼容检查只使用合成夹具，实际用户凭据只在本机验收；无人值守安装使用原生静默模式，不能据此宣称安装向导的人机交互已验收。
+- Windows 验收会先检查进程观察能力；`observe_processes_only=true` 仅诊断观察器，不构建、安装或更新应用，该运行不能作为跨版本验收成功的依据。
 
 ## Electron 打包边界
 

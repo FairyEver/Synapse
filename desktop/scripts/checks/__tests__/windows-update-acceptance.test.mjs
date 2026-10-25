@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
-import { parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
+import { ownedProcessIds, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
 const digest = createHash("sha512").update("installer").digest("base64")
 const metadata = (overrides = {}) => JSON.stringify({
@@ -55,5 +55,12 @@ test("checks actual file bytes and rejects a corrupted downloaded installer", as
     await assert.rejects(verifyFileSha512(file, digest), /SHA512/i)
   } finally {
     await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("retains the Windows process observer startup or timeout cause", () => {
+  for (const code of ["ENOENT", "ETIMEDOUT"]) {
+    const execute = () => ({ status: null, signal: "SIGTERM", error: Object.assign(new Error(`spawnSync powershell.exe ${code}`), { code }), stderr: "observer diagnostic" })
+    assert.throws(() => ownedProcessIds("C:\\owned\\Synapse.exe", false, execute), (error) => error.message.includes(code) && error.message.includes("observer diagnostic"))
   }
 })

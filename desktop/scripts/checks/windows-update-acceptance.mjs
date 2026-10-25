@@ -209,10 +209,10 @@ async function launchInstalledApp(executable, outputRoot, phase) {
   return { inspector, child }
 }
 
-function ownedProcessIds(executable, mainOnly = false) {
+export function ownedProcessIds(executable, mainOnly = false, execute = spawnSync) {
   const script = "@(Get-CimInstance Win32_Process -Filter \"Name = 'Synapse.exe'\" | Where-Object { $_.ExecutablePath -eq $env:SYNAPSE_ACCEPTANCE_EXE -and ($env:SYNAPSE_ACCEPTANCE_MAIN_ONLY -ne '1' -or $_.CommandLine -notmatch '(?:^|\\s)--type=') } | ForEach-Object { $_.ProcessId }) | ConvertTo-Json -Compress"
-  const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", timeout: 10_000, env: { ...appEnvironment(), SYNAPSE_ACCEPTANCE_EXE: executable, SYNAPSE_ACCEPTANCE_MAIN_ONLY: mainOnly ? "1" : "0" } })
-  assert.equal(result.status, 0, "Cannot inspect owned installer app processes")
+  const result = execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", timeout: 10_000, env: { ...appEnvironment(), SYNAPSE_ACCEPTANCE_EXE: executable, SYNAPSE_ACCEPTANCE_MAIN_ONLY: mainOnly ? "1" : "0" } })
+  assert.equal(result.status, 0, `Cannot inspect owned installer app processes: ${JSON.stringify({ status: result.status, signal: result.signal, code: result.error?.code, message: result.error?.message, stderr: result.stderr?.trim().slice(0, 1000) })}`)
   const parsed = JSON.parse(result.stdout.trim() || "[]")
   return Array.isArray(parsed) ? parsed : [parsed]
 }
@@ -249,10 +249,14 @@ async function serveCandidate(releaseRoot, metadata, filename) {
   return server
 }
 
-export async function runWindowsAcceptance() {
+function assertDisposableWindowsRunner() {
   assert.equal(process.platform, "win32", "Actual installer acceptance is Windows-only")
   assert.equal(process.env.GITHUB_ACTIONS, "true", "Run only on a disposable GitHub Actions runner")
   assert.equal(process.env.RUNNER_ENVIRONMENT, "github-hosted", "Refusing installation on a persistent runner")
+}
+
+export async function runWindowsAcceptance() {
+  assertDisposableWindowsRunner()
   const previousVersion = (process.env.PREVIOUS_TAG ?? "v1.0.79").replace(/^v/, "")
   const version = JSON.parse(await readFile(path.join(desktopRoot, "package.json"), "utf8")).version
   assert.match(version, /^\d+\.\d+\.\d+$/)
@@ -355,5 +359,9 @@ export async function runWindowsAcceptance() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runWindowsAcceptance().catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })
+  if (process.argv.includes("--observe-processes")) {
+    assertDisposableWindowsRunner()
+    const target = path.join(os.tmpdir(), "synapse-process-observer-preflight", "Synapse.exe")
+    process.stdout.write(`Windows process observer: ${JSON.stringify(ownedProcessIds(target))}\n`)
+  } else runWindowsAcceptance().catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })
 }
