@@ -44,6 +44,17 @@ export async function verifyFileSha512(file, expected) {
   assert.equal(hash.digest("base64"), expected, "Installer SHA512 mismatch")
 }
 
+export function candidateUpdateExpression(version) {
+  return `(async()=>{
+    const u=process.mainModule.require('./services/update-service.js').updateService;
+    if(u.autoCheckPromise)await u.autoCheckPromise;
+    process.mainModule.require('electron-updater').autoUpdater.setFeedURL({provider:'generic',url:'http://127.0.0.1:19797/'});
+    const s=await u.checkForUpdates({refreshAvailable:true});
+    if(s.releaseVersion!==${JSON.stringify(version)}||s.status!=='available')throw new Error('Candidate not available: '+JSON.stringify({status:s.status,releaseVersion:s.releaseVersion,activeUpdateMode:u.activeUpdateMode,autoCheckInFlight:Boolean(u.autoCheckPromise)}));
+    await u.downloadUpdate();return true;
+  })()`
+}
+
 async function waitFor(label, probe, timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -344,7 +355,7 @@ export async function runWindowsAcceptance({ previousStartupOnly = false } = {})
     const candidate = parseWindowsMetadata(metadata, version)
     await verifyFileSha512(path.join(releaseRoot, candidate.file), candidate.sha512)
     server = await serveCandidate(releaseRoot, metadata, candidate.file)
-    await inspector.evaluate(`(async()=>{process.mainModule.require('electron-updater').autoUpdater.setFeedURL({provider:'generic',url:'http://127.0.0.1:19797/'});const u=process.mainModule.require('./services/update-service.js').updateService;const s=await u.checkForUpdates();if(s.releaseVersion!==${JSON.stringify(version)}||s.status!=='available')throw new Error('Candidate not available');await u.downloadUpdate();return true})()`, "candidate update check and download", true)
+    await inspector.evaluate(candidateUpdateExpression(version), "candidate update check and download", true)
     await waitFor("actual candidate download", async () => {
       const state = await inspector.evaluate("process.mainModule.require('./services/update-service.js').updateService.getState()")
       if (state.error) throw new Error(state.error)

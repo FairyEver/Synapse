@@ -4,8 +4,9 @@ import { createHash } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import vm from "node:vm"
 import { test } from "node:test"
-import { Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, readWindowsProductVersion, verifyFileSha512 } from "../windows-update-acceptance.mjs"
+import { candidateUpdateExpression, Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, readWindowsProductVersion, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
 const digest = createHash("sha512").update("installer").digest("base64")
 const metadata = (overrides = {}) => JSON.stringify({
@@ -86,6 +87,35 @@ test("gives the read-only Windows version observer a bounded cold-start budget",
     return { status: 0, stdout: "1.0.81\r\n", stderr: "" }
   })
   assert.equal(options.timeout, 60_000)
+})
+
+test("settles the old automatic check before changing feed and checking the candidate afresh", async () => {
+  let settle
+  const calls = []
+  const service = {
+    autoCheckPromise: new Promise((resolve) => { settle = resolve }),
+    async checkForUpdates(options) {
+      calls.push(["check", options])
+      return this.autoCheckPromise
+        ? { status: "idle", releaseVersion: null }
+        : { status: "available", releaseVersion: "1.0.82" }
+    },
+    async downloadUpdate() { calls.push(["download"]) },
+  }
+  const completion = vm.runInNewContext(candidateUpdateExpression("1.0.82"), {
+    process: { mainModule: { require: (name) => name === "electron-updater"
+      ? { autoUpdater: { setFeedURL: () => calls.push(["feed"]) } }
+      : { updateService: service } } },
+  }).then((value) => ({ value }), (error) => ({ error }))
+  await Promise.resolve()
+  assert.deepEqual(calls, [])
+  service.autoCheckPromise = null
+  settle()
+  assert.deepEqual(await completion, { value: true })
+  assert.equal(calls[0][0], "feed")
+  assert.equal(calls[1][0], "check")
+  assert.equal(calls[1][1].refreshAvailable, true)
+  assert.equal(calls[2][0], "download")
 })
 
 test("binds the inspector URL to the exact endpoint emitted by the spawned child", () => {
