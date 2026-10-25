@@ -175,7 +175,7 @@ export function isOwnedInspectorAddress(url, startupLog) {
 
 async function launchInstalledApp(executable, outputRoot, phase) {
   const log = createWriteStream(path.join(outputRoot, `${phase}-app.log`))
-  const child = spawn(executable, ["--inspect-brk=127.0.0.1:19798"], { env: appEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+  const child = spawn(executable, ["--inspect-brk=127.0.0.1:19798"], { env: appEnvironment(), windowsHide: false, stdio: ["ignore", "pipe", "pipe"] })
   let startupLog = ""
   child.stderr.on("data", (chunk) => { startupLog = (startupLog + chunk.toString("utf8")).slice(-8192) })
   child.stdout.pipe(log, { end: false })

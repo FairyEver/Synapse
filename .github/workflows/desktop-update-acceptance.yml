@@ -78,7 +78,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-update-acceptance-${{ github.sha }}
+          name: windows-update-acceptance-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: desktop/release/windows-update-acceptance/
           if-no-files-found: warn
           retention-days: 7
