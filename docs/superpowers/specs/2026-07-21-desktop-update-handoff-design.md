@@ -627,7 +627,11 @@ macOS 与 Windows runner 必须在上传安装包前验证正式打包产物的�
 
 macOS 更新下载完成不等于 ShipIt 已经接管安装。客户端在调用安装前持久化目标版本和安装尝试，并在 Electron 原生 `before-quit-for-update` 事件到达后才放开退出门；原生交接超时则保留当前进程和已下载状态。
 
-`before-quit-for-update` 也不再单独视为安装接管成功。原生更新器提交 ShipIt job 后，客户端必须读取当前用户 launchd domain，观察到 ShipIt 的 `state = running` 和有效 `pid` 才允许退出。如果 job 只是 `waiting` 或出现 `pended nondemand spawn`，客户端通过受控进程执行器请求一次 `launchctl kickstart`，并在 10 秒硬超时内继续验证；仍未启动则回滚本次安装记录、保留主窗口和已下载更新。该校验必须记录 kickstart 是否发生、最终 `state`、`pid`、`runs`、退出码和超时状态。
+`before-quit-for-update` 也不再单独视为安装接管成功。原生更新器提交 ShipIt job 后，客户端必须读取当前用户 launchd domain，观察到 ShipIt 的 `state = running` 和有效 `pid` 才允许退出。如果 job 只是 `waiting` / `not running`，只有完整快照同时证明 `runs = 0` 且尚无 PID 时，客户端才通过受控进程执行器请求一次 `launchctl kickstart`，并在 10 秒硬超时内继续验证。已经运行过的历史 job、无法验证的快照和截断输出不得触发兜底启动；原生更新器可能选用了系统级 ShipIt，重新启动遗留用户级 job 会造成两个安装进程争用同一份状态。仍未启动则回滚本次安装记录、保留主窗口和已下载更新。该校验必须记录 kickstart 是否发生、最终 `state`、`pid`、`runs`、退出码和超时状态。
+
+原生安装交接前记录当前 UID、应用 bundle 及其父目录的 UID/GID、权限模式与可写性，区分文件归属变化和父目录限制。该只读诊断最多等待 1 秒，失败只记录警告，不阻断安装，不修改权限、不请求提权，也不替代原生 Squirrel 的权限判断。实机验收不得在原生暂存完成前手工调用 `ensureShipItStarted`；授权弹窗等待时间必须与下载、解压和暂存耗时分开记录。
+
+兜底 kickstart 前还必须通过受控执行器只读确认 `system/com.fairyever.synapse.ShipIt` 不存在。系统级任务已登记（包括尚未运行）或查询失败时，拒绝再启动用户级任务，沿用交接失败的回滚与保留主窗口行为；不得借此启动、卸载系统任务或以系统级 PID 放宽用户级退出门。
 
 下次启动时，客户端以当前版本是否达到目标版本作为安装后置条件：
 

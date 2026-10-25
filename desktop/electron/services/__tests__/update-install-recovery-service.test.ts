@@ -1,10 +1,13 @@
+import { mkdtemp, mkdir, chmod, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import type { DataNamespace } from "../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { ControlledProcessRunner } from "../../runtime/process"
 import type { UpdateInstallRecoveryEntryV1 } from "../../runtime/data-repo/schemas/update-install-recovery"
-import { UpdateInstallRecoveryService } from "../update-install-recovery-service"
+import { readMacUpdateInstallPermissions, UpdateInstallRecoveryService } from "../update-install-recovery-service"
 
 const DMG_URL = "https://desktop.release.synapse.d2.pub/v0.2.32/Synapse-0.2.32-mac-arm64.dmg"
 
@@ -21,7 +24,10 @@ vi.mock("../log-store", () => ({
 
 function createFixture(
   initial: UpdateInstallRecoveryEntryV1["pendingAttempt"] = null,
-  options: { readonly useControlledRemoval?: boolean } = {},
+  options: {
+    readonly useControlledRemoval?: boolean
+    readonly getInstallPermissions?: () => ReturnType<typeof readMacUpdateInstallPermissions>
+  } = {},
 ) {
   let entry: UpdateInstallRecoveryEntryV1 = {
     schemaVersion: 1,
@@ -60,6 +66,7 @@ function createFixture(
     auditSink,
     cacheDirectory: "/Users/test/Library/Caches",
     getUid: () => 501,
+    getInstallPermissions: options.getInstallPermissions,
     permissionGuard,
     processRunner,
     removePath: options.useControlledRemoval ? undefined : removePath,
@@ -80,6 +87,95 @@ function createFixture(
 }
 
 describe("UpdateInstallRecoveryService", () => {
+  it.each([
+    "state = not running\nruns = 2\nlast exit code = 0\n",
+    "state = waiting\nruns = 1\n",
+    "state = waiting\n",
+  ])("does not restart a historical or unverified ShipIt job: %s", async (stdout) => {
+    const fixture = createFixture()
+    fixture.runProcess.mockResolvedValueOnce({
+      durationMs: 1, exitCode: 0, signal: null, stdout, timedOut: false,
+    }).mockResolvedValue({
+      durationMs: 1, exitCode: 1, signal: null, timedOut: false,
+    })
+
+    await expect(fixture.service.ensureShipItStarted()).resolves.toBe(false)
+
+    expect(fixture.runProcess).toHaveBeenCalledTimes(1)
+    expect(fixture.runProcess.mock.calls.some(([request]) => request.args?.[0] === "kickstart")).toBe(false)
+  })
+
+  it("does not trust a truncated running ShipIt snapshot", async () => {
+    const fixture = createFixture()
+    fixture.runProcess.mockResolvedValue({
+      durationMs: 1, exitCode: 0, signal: null, timedOut: false, stdoutTruncated: true,
+      stdout: "state = running\npid = 99123\nruns = 1\n",
+    })
+
+    await expect(fixture.service.ensureShipItStarted()).resolves.toBe(false)
+    expect(fixture.runProcess).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    { exitCode: 0, stdout: "state = waiting\nruns = 0\n" },
+    { exitCode: 0, stdout: "state = running\npid = 88123\nruns = 1\n" },
+    { exitCode: 1, stderr: "Permission denied" },
+    { exitCode: null, signal: "SIGTERM" as const, stderr: "Could not find service" },
+    { exitCode: 113, stderrTruncated: true, stderr: "Could not find service" },
+  ])("does not kickstart a user job when the system job is present or unverifiable: %s", async (systemJob) => {
+    const fixture = createFixture()
+    fixture.runProcess
+      .mockResolvedValueOnce({
+        durationMs: 1, exitCode: 0, signal: null, timedOut: false,
+        stdout: "state = waiting\nruns = 0\n",
+      })
+      .mockResolvedValueOnce({ durationMs: 1, signal: null, timedOut: false, ...systemJob })
+      .mockResolvedValue({
+        durationMs: 1, exitCode: 0, signal: null, timedOut: false,
+        stdout: "state = running\npid = 99123\nruns = 1\n",
+      })
+
+    await expect(fixture.service.ensureShipItStarted()).resolves.toBe(false)
+
+    expect(fixture.runProcess).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      args: ["print", "system/com.fairyever.synapse.ShipIt"],
+    }))
+    expect(fixture.runProcess.mock.calls.some(([request]) => request.args?.[0] === "kickstart")).toBe(false)
+  })
+
+  it("records install permissions before persisting the install request", async () => {
+    const permissions = {
+      bundle: { uid: 0, gid: 0, mode: "755", writable: false },
+      parent: { uid: 0, gid: 80, mode: "775", writable: true },
+    }
+    const getInstallPermissions = vi.fn(async () => permissions)
+    const fixture = createFixture(null, { getInstallPermissions })
+
+    await fixture.service.recordInstallAttempt("0.2.32", DMG_URL)
+
+    expect(getInstallPermissions).toHaveBeenCalledTimes(1)
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "Captured macOS update install permissions before native handoff.",
+      expect.objectContaining({ permissions, uid: 501 }),
+    )
+    expect(getInstallPermissions.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(fixture.stateStore.setSingleton).mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it("keeps permission diagnostics failures from blocking an install request", async () => {
+    const fixture = createFixture(null, {
+      getInstallPermissions: async () => { throw new Error("permission probe failed") },
+    })
+
+    await fixture.service.recordInstallAttempt("0.2.32", DMG_URL)
+
+    expect(fixture.current().pendingAttempt?.targetVersion).toBe("0.2.32")
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "Unable to inspect macOS update install permissions.", expect.anything(),
+    )
+  })
+
   it("does not treat a pending launchd job as a running ShipIt process", async () => {
     const fixture = createFixture()
     fixture.runProcess
@@ -89,6 +185,10 @@ describe("UpdateInstallRecoveryService", () => {
         signal: null,
         stdout: "state = waiting\nruns = 0\npended nondemand spawn = semaphore\n",
         timedOut: false,
+      })
+      .mockResolvedValueOnce({
+        durationMs: 1, exitCode: 113, signal: null, timedOut: false,
+        stderr: "Could not find service",
       })
       .mockResolvedValueOnce({
         durationMs: 1,
@@ -107,7 +207,7 @@ describe("UpdateInstallRecoveryService", () => {
 
     await expect(fixture.service.ensureShipItStarted()).resolves.toBe(true)
 
-    expect(fixture.runProcess).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(fixture.runProcess).toHaveBeenNthCalledWith(3, expect.objectContaining({
       args: ["kickstart", "gui/501/com.fairyever.synapse.ShipIt"],
     }))
     expect(loggerMock.info).toHaveBeenCalledWith(
@@ -125,6 +225,10 @@ describe("UpdateInstallRecoveryService", () => {
         signal: null,
         stdout: "state = waiting\nruns = 0\npended nondemand spawn = semaphore\n",
         timedOut: false,
+      })
+      .mockResolvedValueOnce({
+        durationMs: 1, exitCode: 113, signal: null, timedOut: false,
+        stderr: "Could not find service",
       })
       .mockResolvedValueOnce({
         durationMs: 1,
@@ -387,5 +491,27 @@ describe("UpdateInstallRecoveryService", () => {
         state: "waiting",
       }),
     )
+  })
+})
+
+describe("readMacUpdateInstallPermissions", () => {
+  it.skipIf(process.platform === "win32")("distinguishes an unwritable bundle from its writable parent", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "synapse-update-permissions-"))
+    const bundle = path.join(root, "Synapse.app")
+    await mkdir(bundle, { mode: 0o755 })
+    try {
+      await chmod(bundle, 0o555)
+      const result = await readMacUpdateInstallPermissions(bundle)
+      expect(result.bundle).toMatchObject({ uid: process.getuid?.(), mode: "555", writable: false })
+      expect(result.parent).toMatchObject({ uid: process.getuid?.(), writable: true })
+    } finally {
+      await chmod(bundle, 0o755)
+      await rm(root, { recursive: true })
+    }
+  })
+
+  it("reports a missing bundle as a diagnostic failure", async () => {
+    await expect(readMacUpdateInstallPermissions("/missing-synapse-update-bundle/Synapse.app"))
+      .rejects.toMatchObject({ code: "ENOENT" })
   })
 })

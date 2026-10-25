@@ -1,4 +1,6 @@
 import path from "node:path"
+import { constants } from "node:fs"
+import { access, stat } from "node:fs/promises"
 
 import type {
   DataNamespace,
@@ -48,6 +50,7 @@ type UpdateInstallRecoveryServiceDeps = {
   readonly auditSink: AuditSink
   readonly cacheDirectory: string
   readonly getUid: () => number | undefined
+  readonly getInstallPermissions?: () => ReturnType<typeof readMacUpdateInstallPermissions>
   readonly permissionGuard: PermissionGuard
   readonly processRunner: ControlledProcessRunner
   readonly removePath?: RemovePath
@@ -59,6 +62,7 @@ export class UpdateInstallRecoveryService {
   private readonly auditSink: AuditSink
   private readonly cacheDirectory: string
   private readonly getUid: () => number | undefined
+  private readonly getInstallPermissions: UpdateInstallRecoveryServiceDeps["getInstallPermissions"]
   private readonly permissionGuard: PermissionGuard
   private readonly processRunner: ControlledProcessRunner
   private readonly removePath: RemovePath | null
@@ -69,6 +73,7 @@ export class UpdateInstallRecoveryService {
     this.auditSink = deps.auditSink
     this.cacheDirectory = path.resolve(deps.cacheDirectory)
     this.getUid = deps.getUid
+    this.getInstallPermissions = deps.getInstallPermissions
     this.permissionGuard = deps.permissionGuard
     this.processRunner = deps.processRunner
     this.removePath = deps.removePath ?? null
@@ -85,11 +90,44 @@ export class UpdateInstallRecoveryService {
 
     const serviceTarget = `gui/${String(uid)}/${SHIPIT_SERVICE_LABEL}`
     const deadline = Date.now() + DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS
-    let snapshot = await this.inspectShipItLaunchService(uid, "verify-shipit-start", abortSignal)
+    let snapshot = await this.inspectShipItLaunchService(serviceTarget, "verify-shipit-start", abortSignal)
     if (abortSignal?.aborted || Date.now() >= deadline) return false
     if (isShipItRunning(snapshot)) {
       this.logVerifiedShipItStart(snapshot, false)
       return true
+    }
+
+    // Squirrel replaces the job in its selected launchd domain on each submit.
+    // A dormant job that already ran can belong to an older user-domain install
+    // while the native updater has selected a privileged system-domain job.
+    if (!isUnstartedShipItJob(snapshot)) {
+      logger.error("Refusing to restart a historical or unverified ShipIt launch service.", {
+        ...summarizeLaunchService(snapshot),
+        serviceLabel: SHIPIT_SERVICE_LABEL,
+      })
+      return false
+    }
+
+    const systemSnapshot = await this.inspectShipItLaunchService(
+      `system/${SHIPIT_SERVICE_LABEL}`,
+      "inspect-system-shipit-before-kickstart",
+      abortSignal,
+    )
+    if (abortSignal?.aborted || Date.now() >= deadline) return false
+    if (
+      systemSnapshot.exitCode === 0
+      || systemSnapshot.exitCode === null
+      || systemSnapshot.signal !== null
+      || systemSnapshot.timedOut
+      || systemSnapshot.stdoutTruncated
+      || systemSnapshot.stderrTruncated
+      || !isMissingLaunchServiceError(systemSnapshot.stderr)
+    ) {
+      logger.error("Refusing to start a second ShipIt while the system launch service is present or unverified.", {
+        ...summarizeLaunchService(systemSnapshot),
+        serviceLabel: SHIPIT_SERVICE_LABEL,
+      })
+      return false
     }
 
     logger.warn("ShipIt launch service is registered but not running; requesting explicit start.", {
@@ -121,7 +159,7 @@ export class UpdateInstallRecoveryService {
       if (abortSignal?.aborted) return false
       await this.wait(Math.min(SHIPIT_START_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())))
       if (abortSignal?.aborted) return false
-      snapshot = await this.inspectShipItLaunchService(uid, "verify-shipit-start", abortSignal)
+      snapshot = await this.inspectShipItLaunchService(serviceTarget, "verify-shipit-start", abortSignal)
       if (isShipItRunning(snapshot)) {
         this.logVerifiedShipItStart(snapshot, true)
         return true
@@ -140,6 +178,21 @@ export class UpdateInstallRecoveryService {
     targetVersion: string,
     manualInstallerUrl: string | null,
   ): Promise<UpdateInstallRecoveryEntryV1> {
+    if (this.getInstallPermissions) {
+      try {
+        const permissions = await withTimeout(
+          this.getInstallPermissions(),
+          1_000,
+          "macOS update permission inspection timed out.",
+        )
+        logger.info("Captured macOS update install permissions before native handoff.", {
+          permissions,
+          uid: this.getUid(),
+        })
+      } catch (error) {
+        logger.warn("Unable to inspect macOS update install permissions.", { error })
+      }
+    }
     const previous = await this.readState()
     const pending = previous.pendingAttempt
     const isRecoveredRetry = pending?.installAttempts === 1 && pending.recoveryPhase === "prepared"
@@ -289,7 +342,10 @@ export class UpdateInstallRecoveryService {
 
   private async logShipItLaunchServiceState(uid: number): Promise<void> {
     try {
-      const result = await this.inspectShipItLaunchService(uid, "inspect-shipit-launch-service")
+      const result = await this.inspectShipItLaunchService(
+        `gui/${String(uid)}/${SHIPIT_SERVICE_LABEL}`,
+        "inspect-shipit-launch-service",
+      )
       logger.info("Captured ShipIt launch service state before recovery.", {
         ...summarizeLaunchService(result),
         serviceLabel: SHIPIT_SERVICE_LABEL,
@@ -300,14 +356,14 @@ export class UpdateInstallRecoveryService {
   }
 
   private async inspectShipItLaunchService(
-    uid: number,
+    serviceTarget: string,
     operation: string,
     abortSignal?: AbortSignal,
   ): Promise<ControlledProcessResult> {
     return await this.processRunner.run({
       action: "shell.exec",
       actor: recoveryActor,
-      args: ["print", `gui/${String(uid)}/${SHIPIT_SERVICE_LABEL}`],
+      args: ["print", serviceTarget],
       command: "/bin/launchctl",
       metadata: { operation, source: UPDATE_RECOVERY_SOURCE },
       output: {
@@ -455,10 +511,39 @@ export class UpdateInstallRecoveryService {
 }
 
 function isShipItRunning(result: ControlledProcessResult): boolean {
-  if (result.exitCode !== 0 || result.timedOut) return false
+  if (result.exitCode !== 0 || result.timedOut || result.stdoutTruncated) return false
   const pid = readLaunchctlValue(result.stdout ?? "", "pid")
   const state = readLaunchctlValue(result.stdout ?? "", "state")
   return state === "running" && pid !== null && /^\d+$/.test(pid) && Number(pid) > 0
+}
+
+function isUnstartedShipItJob(result: ControlledProcessResult): boolean {
+  if (result.exitCode !== 0 || result.timedOut || result.stdoutTruncated) return false
+  const stdout = result.stdout ?? ""
+  const state = readLaunchctlValue(stdout, "state")
+  return (state === "waiting" || state === "not running")
+    && readLaunchctlValue(stdout, "runs") === "0"
+    && readLaunchctlValue(stdout, "pid") === null
+}
+
+export async function readMacUpdateInstallPermissions(appBundlePath: string) {
+  const readDirectory = async (directoryPath: string) => {
+    const info = await stat(directoryPath)
+    let writable = true
+    try {
+      await access(directoryPath, constants.W_OK)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== "EACCES" && code !== "EPERM") throw error
+      writable = false
+    }
+    return { uid: info.uid, gid: info.gid, mode: (info.mode & 0o777).toString(8), writable }
+  }
+  const [bundle, parent] = await Promise.all([
+    readDirectory(appBundlePath),
+    readDirectory(path.dirname(appBundlePath)),
+  ])
+  return { bundle, parent }
 }
 
 function wait(delayMs: number): Promise<void> {

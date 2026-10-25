@@ -196,7 +196,7 @@ import {
 } from "../modules/agent/ipc-shared"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
-import { UpdateInstallRecoveryService } from "../services/update-install-recovery-service"
+import { readMacUpdateInstallPermissions, UpdateInstallRecoveryService } from "../services/update-install-recovery-service"
 import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
 import { KnowledgeBaseTransferService } from "../services/knowledge-base/transfer-service"
@@ -1979,6 +1979,9 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
           auditSink,
           cacheDirectory: path.join(app.getPath("home"), "Library", "Caches"),
           getUid: () => process.getuid?.(),
+          getInstallPermissions: () => readMacUpdateInstallPermissions(
+            path.dirname(path.dirname(path.dirname(app.getPath("exe")))),
+          ),
           permissionGuard,
           processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
           stateStore: ctx.registry
