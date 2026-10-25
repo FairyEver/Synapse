@@ -7,10 +7,12 @@ import { track } from "@/lib/ui-tracking"
 import { captureShareImage, shareBlobBase64 } from "./image"
 
 const logger = createRendererLogger("agent.share.image")
-export function useShareImageExport(scope: string) {
+export function useShareImageExport(scope: string, onSuccess?: () => void) {
   const [busy, setBusy] = useState<"copy" | "save" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const operation = useRef<AbortController | null>(null)
+  const onSuccessRef = useRef(onSuccess)
+  useEffect(() => { onSuccessRef.current = onSuccess }, [onSuccess])
   useEffect(() => {
     setBusy(null); setError(null)
     return () => { operation.current?.abort(); operation.current = null }
@@ -30,7 +32,10 @@ export function useShareImageExport(scope: string) {
       const fileName = `Synapse 对话-${settings.scale}x.png`
       const result = await agent.exportShareImage({ action, pngBase64, fileName })
       if (controller.signal.aborted) return
-      if (result.success) toast(action === "copy" ? "图片已复制" : "图片已保存")
+      if (result.success) {
+        toast(action === "copy" ? "图片已复制" : "图片已保存")
+        onSuccessRef.current?.()
+      }
     } catch (cause) {
       if (controller.signal.aborted) return
       logger.warn("Agent share image failed.", { action, errorName: cause instanceof Error ? cause.name : typeof cause })

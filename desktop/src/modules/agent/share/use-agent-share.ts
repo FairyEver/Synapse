@@ -31,7 +31,7 @@ export function useAgentShare(input: { target: AgentConversationTarget; items: r
   const preparingRef = useRef(false)
   const scroll = useRef<ScrollAnchor | null>(null)
   const active = owner === key && enabled
-  const output = useShareImageExport(`${key}:${active}`)
+  const output = useShareImageExport(`${key}:${active}`, exit)
   const closePreview = useCallback(() => { setPreview(null); setExportAction(null) }, [])
   const liveItems = useMemo(() => {
     if (owner !== key || !cachedHistory.length) return input.items
