@@ -92,6 +92,27 @@ export class UpdateInstallRecoveryService {
     const deadline = Date.now() + DESKTOP_UPDATE_SHIPIT_START_TIMEOUT_MS
     let snapshot = await this.inspectShipItLaunchService(serviceTarget, "verify-shipit-start", abortSignal)
     if (abortSignal?.aborted || Date.now() >= deadline) return false
+    if (isShipItStarting(snapshot)) {
+      logger.info("ShipIt launch service is starting; waiting for a running process.", {
+        ...summarizeLaunchService(snapshot),
+        serviceLabel: SHIPIT_SERVICE_LABEL,
+      })
+    }
+    // launchd can publish the PID while xpcproxy is still handing execution to
+    // ShipIt. Observe that transition without restarting the submitted job.
+    while (isShipItStarting(snapshot)) {
+      await this.wait(Math.min(SHIPIT_START_POLL_INTERVAL_MS, Math.max(0, deadline - Date.now())))
+      if (abortSignal?.aborted) return false
+      if (Date.now() >= deadline) {
+        logger.error("ShipIt launch service did not finish starting before the verification deadline.", {
+          ...summarizeLaunchService(snapshot),
+          serviceLabel: SHIPIT_SERVICE_LABEL,
+        })
+        return false
+      }
+      snapshot = await this.inspectShipItLaunchService(serviceTarget, "verify-shipit-start", abortSignal)
+      if (abortSignal?.aborted || Date.now() >= deadline) return false
+    }
     if (isShipItRunning(snapshot)) {
       this.logVerifiedShipItStart(snapshot, false)
       return true
@@ -515,6 +536,13 @@ function isShipItRunning(result: ControlledProcessResult): boolean {
   const pid = readLaunchctlValue(result.stdout ?? "", "pid")
   const state = readLaunchctlValue(result.stdout ?? "", "state")
   return state === "running" && pid !== null && /^\d+$/.test(pid) && Number(pid) > 0
+}
+
+function isShipItStarting(result: ControlledProcessResult): boolean {
+  if (result.exitCode !== 0 || result.signal !== null || result.timedOut || result.stdoutTruncated || result.stderrTruncated) return false
+  const pid = readLaunchctlValue(result.stdout ?? "", "pid")
+  return readLaunchctlValue(result.stdout ?? "", "state") === "xpcproxy"
+    && pid !== null && /^\d+$/.test(pid) && Number(pid) > 0
 }
 
 function isUnstartedShipItJob(result: ControlledProcessResult): boolean {

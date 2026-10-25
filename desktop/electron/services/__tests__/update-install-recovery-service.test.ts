@@ -27,6 +27,7 @@ function createFixture(
   options: {
     readonly useControlledRemoval?: boolean
     readonly getInstallPermissions?: () => ReturnType<typeof readMacUpdateInstallPermissions>
+    readonly wait?: (delayMs: number) => Promise<void>
   } = {},
 ) {
   let entry: UpdateInstallRecoveryEntryV1 = {
@@ -71,7 +72,7 @@ function createFixture(
     processRunner,
     removePath: options.useControlledRemoval ? undefined : removePath,
     stateStore,
-    wait: async () => undefined,
+    wait: options.wait ?? (async () => undefined),
   })
 
   return {
@@ -87,10 +88,70 @@ function createFixture(
 }
 
 describe("UpdateInstallRecoveryService", () => {
+  it("waits for an xpcproxy process to become running without restarting ShipIt", async () => {
+    const fixture = createFixture()
+    const starting = {
+      durationMs: 1, exitCode: 0, signal: null, timedOut: false,
+      stdout: "state = xpcproxy\npid = 99123\nruns = 1\n",
+    }
+    fixture.runProcess.mockResolvedValueOnce(starting).mockResolvedValueOnce(starting).mockResolvedValue({
+      ...starting, stdout: "state = running\npid = 99123\nruns = 1\n",
+    })
+
+    await expect(fixture.service.ensureShipItStarted()).resolves.toBe(true)
+
+    expect(fixture.runProcess.mock.calls.map(([request]) => request.args)).toEqual([
+      ["print", "gui/501/com.fairyever.synapse.ShipIt"],
+      ["print", "gui/501/com.fairyever.synapse.ShipIt"],
+      ["print", "gui/501/com.fairyever.synapse.ShipIt"],
+    ])
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "Verified that the ShipIt process is running before app quit.",
+      expect.objectContaining({ kickstarted: false, pid: "99123", state: "running" }),
+    )
+  })
+
+  it("fails within the startup deadline when xpcproxy never becomes running", async () => {
+    let now = 1_000
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now)
+    try {
+      const fixture = createFixture(null, { wait: async delayMs => { now += delayMs } })
+      fixture.runProcess.mockResolvedValue({
+        durationMs: 1, exitCode: 0, signal: null, timedOut: false,
+        stdout: "state = xpcproxy\npid = 99123\nruns = 1\n",
+      })
+
+      await expect(fixture.service.ensureShipItStarted()).resolves.toBe(false)
+
+      expect(now).toBe(11_000)
+      expect(fixture.runProcess.mock.calls.every(([request]) => request.args?.[0] === "print")).toBe(true)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it("stops observing xpcproxy when startup verification is cancelled", async () => {
+    const controller = new AbortController()
+    const fixture = createFixture(null, { wait: async () => { controller.abort() } })
+    fixture.runProcess.mockResolvedValue({
+      durationMs: 1, exitCode: 0, signal: null, timedOut: false,
+      stdout: "state = xpcproxy\npid = 99123\nruns = 1\n",
+    })
+
+    await expect(fixture.service.ensureShipItStarted(controller.signal)).resolves.toBe(false)
+
+    expect(controller.signal.aborted).toBe(true)
+    expect(fixture.runProcess).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      args: ["print", "gui/501/com.fairyever.synapse.ShipIt"], abortSignal: controller.signal,
+    }))
+  })
+
   it.each([
     "state = not running\nruns = 2\nlast exit code = 0\n",
     "state = waiting\nruns = 1\n",
     "state = waiting\n",
+    "state = xpcproxy\nruns = 1\n",
+    "state = xpcproxy\npid = 0\nruns = 1\n",
   ])("does not restart a historical or unverified ShipIt job: %s", async (stdout) => {
     const fixture = createFixture()
     fixture.runProcess.mockResolvedValueOnce({
@@ -105,11 +166,11 @@ describe("UpdateInstallRecoveryService", () => {
     expect(fixture.runProcess.mock.calls.some(([request]) => request.args?.[0] === "kickstart")).toBe(false)
   })
 
-  it("does not trust a truncated running ShipIt snapshot", async () => {
+  it.each(["running", "xpcproxy"])("does not trust a truncated %s ShipIt snapshot", async (state) => {
     const fixture = createFixture()
     fixture.runProcess.mockResolvedValue({
       durationMs: 1, exitCode: 0, signal: null, timedOut: false, stdoutTruncated: true,
-      stdout: "state = running\npid = 99123\nruns = 1\n",
+      stdout: `state = ${state}\npid = 99123\nruns = 1\n`,
     })
 
     await expect(fixture.service.ensureShipItStarted()).resolves.toBe(false)
