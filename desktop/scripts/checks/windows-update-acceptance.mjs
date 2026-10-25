@@ -111,7 +111,7 @@ function readRegistryCaptureLine(archivePath) {
   return line
 }
 
-class Inspector {
+export class Inspector {
   sequence = 0
   pending = new Map()
   listeners = new Set()
@@ -124,7 +124,7 @@ class Inspector {
         const pending = this.pending.get(message.id)
         if (!pending) return
         this.pending.delete(message.id)
-        message.error ? pending.reject(new Error(message.error.message)) : pending.resolve(message.result)
+        message.error ? pending.reject(new Error(`Inspector ${pending.method} failed: ${message.error.message}`)) : pending.resolve(message.result)
       } else for (const listener of this.listeners) listener(message)
     }
     socket.onclose = () => {
@@ -140,7 +140,7 @@ class Inspector {
       return await Promise.race([
         new Promise((resolve, reject) => {
           id = ++this.sequence
-          this.pending.set(id, { resolve, reject })
+          this.pending.set(id, { resolve, reject, method })
           this.socket.send(JSON.stringify({ id, method, params }))
         }),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Inspector ${method} timed out`)), 30_000) }),
@@ -151,10 +151,14 @@ class Inspector {
     }
   }
 
-  async evaluate(expression) {
-    const result = await this.command("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, timeout: 25_000 })
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
-    return result.result.value
+  async evaluate(expression, stage = "evaluation") {
+    try {
+      const result = await this.command("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, timeout: 25_000 })
+      if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text)
+      return result.result.value
+    } catch (error) {
+      throw new Error(`Installed app ${stage}: ${error.message}`, { cause: error })
+    }
   }
 
   close() { this.socket.close() }
@@ -217,19 +221,20 @@ async function launchInstalledApp(executable, outputRoot, phase) {
     inspector.listeners.delete(listener)
     await inspector.command("Debugger.disable")
   }
-  assert.equal(await inspector.evaluate("process.pid"), child.pid, "Inspector belongs to a different process")
+  assert.equal(await inspector.evaluate("process.pid", `${phase} main PID`), child.pid, "Inspector belongs to a different process")
+  process.stdout.write(`${phase}: captured actual registry and verified owned main PID\n`)
   await waitFor("running terminal service and visible loaded app window", async () => {
     const startup = await inspector.evaluate(`(() => {
       const req=process.mainModule.require.bind(process.mainModule);const e=req('electron');const r=globalThis.__updateAcceptanceRegistry;
       return {version:e.app.getVersion(),isPackaged:e.app.isPackaged,appPath:e.app.getAppPath(),expectedRendererUrl:req('node:url').pathToFileURL(req('node:path').join(e.app.getAppPath(),'dist/index.html')).href,terminalRunning:r.inspect().some(s=>s.id==='core.terminal'&&s.status==='running'),windows:e.BrowserWindow.getAllWindows().filter(w=>!w.isDestroyed()).map(w=>({url:w.webContents.getURL(),visible:w.isVisible(),loading:w.webContents.isLoading()}))};
-    })()`)
+    })()`, `${phase} startup snapshot`)
     await writeFile(path.join(outputRoot, `${phase}-startup.json`), JSON.stringify(startup, null, 2))
     return startup.terminalRunning && startup.windows.some((window) => window.visible && !window.loading)
   })
   await inspector.evaluate(`(async()=>{
     const e=process.mainModule.require('electron');const w=e.BrowserWindow.getAllWindows().find(w=>!w.isDestroyed()&&w.isVisible());
     return w.webContents.executeJavaScript('window.synapse.config.get().then(() => true)');
-  })()`)
+  })()`, `${phase} real renderer IPC`)
   return { inspector, child }
 }
 

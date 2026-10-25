@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
-import { isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
+import { Inspector, isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
 const digest = createHash("sha512").update("installer").digest("base64")
 const metadata = (overrides = {}) => JSON.stringify({
@@ -86,4 +86,14 @@ test("selects explicit diagnostic stages and rejects misspelled or combined mode
   assert.equal(parseAcceptanceMode(["--previous-startup-only"]), "previous-startup")
   assert.throws(() => parseAcceptanceMode(["--previous-startpu-only"]), /mode/i)
   assert.throws(() => parseAcceptanceMode(["--observe-processes", "--previous-startup-only"]), /mode/i)
+})
+
+test("preserves the failing inspector method and installed startup stage", async () => {
+  const socket = { send(message) {
+    const { id } = JSON.parse(message)
+    queueMicrotask(() => this.onmessage({ data: JSON.stringify({ id, error: { message: "Promise was collected" } }) }))
+  } }
+  const inspector = new Inspector(socket)
+  await assert.rejects(inspector.evaluate("process.pid", "old main PID"), (error) =>
+    error.message.includes("old main PID") && error.message.includes("Runtime.evaluate") && error.message.includes("Promise was collected"))
 })
