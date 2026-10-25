@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
-import { isOwnedInspectorAddress, ownedProcessIds, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
+import { isOwnedInspectorAddress, ownedProcessIds, parseAcceptanceMode, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
 const digest = createHash("sha512").update("installer").digest("base64")
 const metadata = (overrides = {}) => JSON.stringify({
@@ -78,4 +78,12 @@ test("binds the inspector URL to the exact endpoint emitted by the spawned child
     assert.equal(isOwnedInspectorAddress(other, startup), false)
   }
   assert.equal(isOwnedInspectorAddress(owned, ""), false)
+})
+
+test("selects explicit diagnostic stages and rejects misspelled or combined modes before installation", () => {
+  assert.equal(parseAcceptanceMode([]), "full")
+  assert.equal(parseAcceptanceMode(["--observe-processes"]), "observer")
+  assert.equal(parseAcceptanceMode(["--previous-startup-only"]), "previous-startup")
+  assert.throws(() => parseAcceptanceMode(["--previous-startpu-only"]), /mode/i)
+  assert.throws(() => parseAcceptanceMode(["--observe-processes", "--previous-startup-only"]), /mode/i)
 })

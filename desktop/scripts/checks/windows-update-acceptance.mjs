@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import { spawn, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import { createReadStream, createWriteStream, readFileSync } from "node:fs"
+import { createReadStream, createWriteStream, readFileSync, realpathSync } from "node:fs"
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import http from "node:http"
 import os from "node:os"
@@ -15,6 +15,14 @@ import { parse as parseYaml } from "yaml"
 const desktopRoot = fileURLToPath(new URL("../..", import.meta.url))
 const cdnBase = "https://desktop.release.synapse.d2.pub/"
 const maximumInstallerBytes = 2 * 1024 ** 3
+
+export function parseAcceptanceMode(args) {
+  if (args.length === 0) return "full"
+  assert.equal(args.length, 1, "Choose exactly one Windows acceptance mode")
+  if (args[0] === "--observe-processes") return "observer"
+  if (args[0] === "--previous-startup-only") return "previous-startup"
+  throw new Error("Unknown Windows acceptance mode")
+}
 
 export function parseWindowsMetadata(text, expectedVersion) {
   const metadata = parseYaml(text)
@@ -210,10 +218,18 @@ async function launchInstalledApp(executable, outputRoot, phase) {
     await inspector.command("Debugger.disable")
   }
   assert.equal(await inspector.evaluate("process.pid"), child.pid, "Inspector belongs to a different process")
-  await waitFor("running terminal service and real app window", () => inspector.evaluate(`(() => {
-    const r=globalThis.__updateAcceptanceRegistry;const e=process.mainModule.require('electron');
-    return r?.inspect().some(s=>s.id==='core.terminal'&&s.status==='running')&&e.BrowserWindow.getAllWindows().some(w=>!w.isDestroyed()&&!w.webContents.isLoading());
-  })()`))
+  await waitFor("running terminal service and visible loaded app window", async () => {
+    const startup = await inspector.evaluate(`(() => {
+      const req=process.mainModule.require.bind(process.mainModule);const e=req('electron');const r=globalThis.__updateAcceptanceRegistry;
+      return {version:e.app.getVersion(),isPackaged:e.app.isPackaged,appPath:e.app.getAppPath(),expectedRendererUrl:req('node:url').pathToFileURL(req('node:path').join(e.app.getAppPath(),'dist/index.html')).href,terminalRunning:r.inspect().some(s=>s.id==='core.terminal'&&s.status==='running'),windows:e.BrowserWindow.getAllWindows().filter(w=>!w.isDestroyed()).map(w=>({url:w.webContents.getURL(),visible:w.isVisible(),loading:w.webContents.isLoading()}))};
+    })()`)
+    await writeFile(path.join(outputRoot, `${phase}-startup.json`), JSON.stringify(startup, null, 2))
+    return startup.terminalRunning && startup.windows.some((window) => window.visible && !window.loading)
+  })
+  await inspector.evaluate(`(async()=>{
+    const e=process.mainModule.require('electron');const w=e.BrowserWindow.getAllWindows().find(w=>!w.isDestroyed()&&w.isVisible());
+    return w.webContents.executeJavaScript('window.synapse.config.get().then(() => true)');
+  })()`)
   return { inspector, child }
 }
 
@@ -264,7 +280,7 @@ function assertDisposableWindowsRunner() {
   assert.equal(process.env.RUNNER_ENVIRONMENT, "github-hosted", "Refusing installation on a persistent runner")
 }
 
-export async function runWindowsAcceptance() {
+export async function runWindowsAcceptance({ previousStartupOnly = false } = {}) {
   assertDisposableWindowsRunner()
   const previousVersion = (process.env.PREVIOUS_TAG ?? "v1.0.79").replace(/^v/, "")
   const version = JSON.parse(await readFile(path.join(desktopRoot, "package.json"), "utf8")).version
@@ -273,11 +289,11 @@ export async function runWindowsAcceptance() {
   assert.ok(new Intl.Collator("en", { numeric: true }).compare(version, previousVersion) > 0, "Real cross-version acceptance requires a newer candidate")
   const outputRoot = path.join(desktopRoot, "release", "windows-update-acceptance")
   await mkdir(outputRoot, { recursive: true })
-  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "synapse-update-acceptance-"))
+  const temporaryRoot = realpathSync.native(await mkdtemp(path.join(os.tmpdir(), "synapse-update-acceptance-")))
   const installDirectory = path.join(temporaryRoot, "Synapse")
   const executable = path.join(installDirectory, "Synapse.exe")
   const releaseRoot = path.join(desktopRoot, "release")
-  const evidence = { sourceSha: process.env.GITHUB_SHA, previousVersion, candidateVersion: version, syntheticCredentialOnly: true, checks: {} }
+  const evidence = { sourceSha: process.env.GITHUB_SHA, previousVersion, candidateVersion: version, syntheticCredentialOnly: true, diagnosticOnly: previousStartupOnly, checks: {} }
   const record = async (name, value) => {
     evidence.checks[name] = value
     await writeFile(path.join(outputRoot, "evidence.json"), JSON.stringify(evidence, null, 2))
@@ -302,6 +318,10 @@ export async function runWindowsAcceptance() {
     })()`)
     assert.equal(old.version, previousVersion); assert.ok(old.isPackaged && old.window)
     await record("oldInstalledStartup", old)
+    if (previousStartupOnly) {
+      await record("previousStartupDiagnostic", { passed: true, installedRendererIpc: true })
+      return
+    }
     const metadata = await readFile(path.join(releaseRoot, "latest.yml"), "utf8")
     const candidate = parseWindowsMetadata(metadata, version)
     await verifyFileSha512(path.join(releaseRoot, candidate.file), candidate.sha512)
@@ -368,9 +388,10 @@ export async function runWindowsAcceptance() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (process.argv.includes("--observe-processes")) {
+  const mode = parseAcceptanceMode(process.argv.slice(2))
+  if (mode === "observer") {
     assertDisposableWindowsRunner()
     const target = path.join(os.tmpdir(), "synapse-process-observer-preflight", "Synapse.exe")
     process.stdout.write(`Windows process observer: ${JSON.stringify(ownedProcessIds(target))}\n`)
-  } else runWindowsAcceptance().catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })
+  } else runWindowsAcceptance({ previousStartupOnly: mode === "previous-startup" }).catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1 })
 }

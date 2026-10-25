@@ -1,5 +1,5 @@
 name: Desktop update acceptance
-run-name: ${{ inputs.observe_processes_only && 'Windows process observer diagnostics' || 'Windows installed update acceptance' }}
+run-name: ${{ inputs.mode == 'observer' && 'Windows process observer diagnostics' || inputs.mode == 'previous-startup' && 'Windows previous installed app startup diagnostics' || 'Windows installed update acceptance' }}
 
 on:
   workflow_dispatch:
@@ -9,11 +9,15 @@ on:
         required: true
         default: v1.0.79
         type: string
-      observe_processes_only:
-        description: Diagnose process observation without building or installing an app
+      mode:
+        description: Full update acceptance or a diagnostic stage
         required: false
-        default: false
-        type: boolean
+        default: full
+        type: choice
+        options:
+          - full
+          - observer
+          - previous-startup
 
 permissions:
   contents: read
@@ -59,13 +63,16 @@ jobs:
       - name: Verify Windows process observation before installation
         run: node desktop/scripts/checks/windows-update-acceptance.mjs --observe-processes
       - name: Build candidate
-        if: ${{ !inputs.observe_processes_only }}
+        if: ${{ inputs.mode == 'full' }}
         run: pnpm --filter @synapse/desktop run build
       - name: Package candidate Windows installer without publishing
-        if: ${{ !inputs.observe_processes_only }}
+        if: ${{ inputs.mode == 'full' }}
         run: pnpm --filter @synapse/desktop run package:win:compiled
+      - name: Diagnose previous installed app startup without building a candidate
+        if: ${{ inputs.mode == 'previous-startup' }}
+        run: node desktop/scripts/checks/windows-update-acceptance.mjs --previous-startup-only
       - name: Verify actual installed cross-version update
-        if: ${{ !inputs.observe_processes_only }}
+        if: ${{ inputs.mode == 'full' }}
         run: node desktop/scripts/checks/windows-update-acceptance.mjs
       - name: Preserve acceptance evidence
         if: always()
