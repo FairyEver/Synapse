@@ -89,6 +89,7 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 - `Desktop update acceptance` 工作流仅接受手动触发，在 GitHub 托管 Windows 2022 运行器的临时目录安装旧版并执行真实 NSIS 跨版本升级、窗口启动、PTY 和脚本运行时检查，不发布或部署。入口为 `desktop/scripts/checks/windows-update-acceptance.mjs`；它拒绝在本机或持久化运行器安装。Windows 加密兼容检查只使用合成夹具，实际用户凭据只在本机验收；无人值守安装使用原生静默模式，不能据此宣称安装向导的人机交互已验收。
 - Windows 安装与升级验收会先检查进程和可执行文件版本观察能力。`mode=observer` 仅诊断观察器，不构建或安装；`mode=previous-startup` 只安装并验证旧版窗口和真实 Renderer IPC，不构建候选或执行更新；`mode=candidate-runtime` 独立构建候选目录并运行打包脚本检查，不安装或升级；`mode=candidate-installed` 只安装当前候选并检查启动、PTY 与脚本，不验证跨版本更新或旧加密数据读取。诊断模式都不能作为跨版本验收成功的依据，只有 `mode=full` 且完整证据通过才能放行。
 - Windows 验收以普通 GUI 方式启动已安装应用，不设置隐藏窗口启动标志；证据制品名包含提交和运行尝试号，重跑时必须核对对应尝试的制品，不能读取前次同提交的旧结果。
+- 托管 Windows 上的 NSIS 安装与旧版卸载会串行执行冷启动 PowerShell 查询。验收对原生安装使用 10 分钟观察预算，单次版本查询仍限制为 60 秒；超时不重启安装，旧进程退出或安装器仍在运行均不能代替安装后版本、重新启动和完整功能校验。生产更新时限保持独立。
 - 验收捕获服务注册表时使用的 `--inspect-brk` 会暂停继承该参数的 Worker。PTY 检查只为当前包中 node-pty 的精确输出管道 Worker 显式设置空调试参数，结束后恢复；遇到额外父进程参数必须拒绝，其他 Worker 和显式参数原样保留。此处理仅消除验收注入的调试影响，不改变生产终端或超时。
 
 ## Electron 打包边界

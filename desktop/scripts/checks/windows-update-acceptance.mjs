@@ -409,7 +409,7 @@ export async function runWindowsAcceptance({ previousStartupOnly = false, candid
         const finishedAt = new Date().toISOString()
         await writeFile(path.join(outputRoot, "installed-version-observation.json"), JSON.stringify({ startedAt, finishedAt, durationMs: Date.parse(finishedAt) - Date.parse(startedAt), observedVersion, expectedVersion: version }, null, 2))
         return [version, `${version}.0`].includes(observedVersion)
-      }, 180_000)
+      }, 600_000)
       await waitFor("native installer relaunch", () => ownedProcessIds(executable, true).length > 0, 60_000)
       await record("nativeCrossVersionUpdate", { from: previousVersion, to: version, oldProcessExited: true, installerRelaunched: true, silentNativeInstaller: true, interactiveWizardTested: false })
     }
