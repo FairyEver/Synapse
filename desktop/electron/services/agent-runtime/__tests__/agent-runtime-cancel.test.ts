@@ -19,6 +19,26 @@ import type {
 } from "../types"
 
 describe("AgentRuntimeService cancelTurn", () => {
+  it("waits for the SDK turn instead of the earlier busy state", async () => {
+    let releaseCreation!: () => void
+    const creation = new Promise<void>((resolve) => { releaseCreation = resolve })
+    const session = new CancellableLiveSession({ graceful: true })
+    const service = createService(new CancellableSessionFactory(session), undefined, () => creation)
+    const turn = service.send(baseMessage("hello"))
+    await vi.waitFor(() => { expect(service.getStatus().busySessions).toBe(1) })
+
+    const ready = waitForLiveTurn(service, session)
+    const returnedDuringStartup = await Promise.race([
+      ready.then(() => true),
+      new Promise<boolean>((resolve) => { setImmediate(() => resolve(false)) }),
+    ])
+    releaseCreation()
+    await ready
+    session.emitResult("done")
+    await turn
+    expect(returnedDuringStartup).toBe(false)
+  })
+
   it("returns no-active-turn when conversation has no busy state", async () => {
     const service = createService(new NeverResolveSession())
     const result = await service.cancelTurn("nonexistent")
@@ -31,7 +51,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     await vi.waitFor(() => { expect(factory.lastCreatedSession).toBe(session) })
 
@@ -51,7 +71,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     const cancel = await service.cancelTurn(
       conversationId("local", "s1", "active"),
@@ -70,7 +90,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(new CancellableSessionFactory(session))
     const convId = conversationId("local", "s1", "active")
     const sendPromise = service.send(baseMessage("hello"), { turnId: "turn-current" })
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     await expect(service.cancelExpectedTurn(convId, "turn-stale")).resolves.toEqual({
       status: "turn-changed",
@@ -93,7 +113,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     const convId = conversationId("local", "s1", "active")
     const state = runtimeState(service, convId)
@@ -117,7 +137,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     const convId = conversationId("local", "s1", "active")
     let cancelIntentAtClose: TurnLifecycle["cancelIntent"] | undefined
@@ -147,7 +167,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const turn = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     const convId = conversationId("local", "s1", "active")
     await service.cancelTurn(convId)
@@ -187,7 +207,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     const convId = conversationId("local", "s1", "active")
     await service.cancelTurn(convId)
@@ -203,7 +223,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const sendPromise = service.send(baseMessage("hello"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     const convId = conversationId("local", "s1", "active")
     await service.cancelTurn(convId)
@@ -223,7 +243,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory, logger)
 
     const sendPromise = service.send(baseMessage("hello token=sk-test"))
-    await waitForBusy(service, "hello")
+    await waitForLiveTurn(service, session)
 
     const convId = conversationId("local", "s1", "active")
     await service.cancelTurn(convId)
@@ -270,7 +290,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const firstTurn = service.send(baseMessage("first"))
-    await waitForBusy(service, "first")
+    await waitForLiveTurn(service, session)
     const secondTurn = service.send(baseMessage("second"))
     await waitForQueued(service)
 
@@ -298,7 +318,7 @@ describe("AgentRuntimeService cancelTurn", () => {
     const service = createService(factory)
 
     const send1 = service.send(baseMessage("first"))
-    await waitForBusy(service, "first")
+    await waitForLiveTurn(service, session)
     const send2 = service.send(baseMessage("second"))
 
     const convId = conversationId("local", "s1", "active")
@@ -322,7 +342,7 @@ describe("AgentRuntimeService cancelTurn", () => {
       platform: "local-renderer",
       originRendererId: 42,
     })
-    await waitForBusy(service, "renderer turn")
+    await waitForLiveTurn(service, session)
 
     await expect(service.interruptRendererTurns(7)).resolves.toBe(0)
     expect(session.closed).toBe(false)
@@ -359,6 +379,7 @@ function baseMessage(content: string): AgentMessage {
 function createService(
   factory: CancellableSessionFactory | AgentLiveSession,
   logger?: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; debug: ReturnType<typeof vi.fn> },
+  beforeCreate?: () => Promise<void>,
 ): AgentRuntimeService {
   const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
   return new AgentRuntimeService({
@@ -366,7 +387,10 @@ function createService(
     workDir: "/repo",
     conversations,
     providerService: new FakeProviderService() as unknown as ProviderService,
-    createSession: () => factory instanceof CancellableSessionFactory ? factory.create() : factory,
+    createSession: async () => {
+      if (beforeCreate) await beforeCreate()
+      return factory instanceof CancellableSessionFactory ? factory.create() : factory
+    },
     now: fixedNow,
     logger: logger as never,
   })
@@ -385,13 +409,11 @@ async function waitForNewSession(
   throw new Error("Timed out waiting for new session")
 }
 
-async function waitForBusy(service: AgentRuntimeService, _hint: string): Promise<void> {
-  for (let i = 0; i < 100; i++) {
-    const status = service.getStatus()
-    if (status.busySessions > 0) return
-    await new Promise((r) => setTimeout(r, 5))
-  }
-  throw new Error("Timed out waiting for busy state")
+async function waitForLiveTurn(service: AgentRuntimeService, session: CancellableLiveSession): Promise<void> {
+  await vi.waitFor(() => {
+    expect(service.getStatus().busySessions).toBe(1)
+    expect(session.sendCalled).toBe(true)
+  })
 }
 
 async function waitForQueued(service: AgentRuntimeService): Promise<void> {
@@ -413,6 +435,7 @@ class CancellableLiveSession implements AgentLiveSession {
   readonly agentType = "claude-code"
   closed = false
   cancelCalled = false
+  sendCalled = false
   cancelCurrentTurn?: () => Promise<boolean>
   onClose?: () => void
   private readonly queue: Array<(v: AgentEvent | null) => void> = []
@@ -428,6 +451,7 @@ class CancellableLiveSession implements AgentLiveSession {
   }
 
   async send(): Promise<boolean> {
+    this.sendCalled = true
     return true
   }
 
