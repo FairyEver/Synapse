@@ -16,35 +16,56 @@ import type {
 } from "../types"
 
 describe("AgentRuntimeService — per-conversation state isolation", () => {
-  it("two conversations get independent state objects", async () => {
+  it.each([
+    ["ws-a", "hello", "world"],
+    ["ws-b", "world", "hello"],
+  ])("two conversations get independent state objects (%s starts first)", async (firstWorkspaceKey, firstContent, secondContent) => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const sessions = new BlockingSessionFactory()
+    let releaseSecondCreation!: () => void
+    const secondCreationReleased = new Promise<void>((resolve) => { releaseSecondCreation = resolve })
     const service = new AgentRuntimeService({
       projectId: "project-1",
       workDir: "/repo",
       conversations,
       providerService: new FakeProviderService() as unknown as ProviderService,
-      createSession: () => sessions.create(),
+      createSession: async ({ conversation }) => {
+        if (conversation.workspaceKey !== firstWorkspaceKey) {
+          await secondCreationReleased
+        }
+        return sessions.create()
+      },
       now: fixedNow,
     })
 
-    // Send two messages with different workspace keys to create two conversations
     const p1 = service.send(baseMessage("hello", "ws-a"))
-    await tick()
     const p2 = service.send(baseMessage("world", "ws-b"))
-    await tick()
+    try {
+      // SDK startup can finish in either order; match replies to the actual input.
+      await vi.waitFor(() => expect(sessions.started).toEqual([firstContent]))
+      releaseSecondCreation()
+      await vi.waitFor(() => expect(sessions.started).toEqual([firstContent, secondContent]))
 
-    // First conversation is busy, second should be queued independently
-    // Resolve first
-    await sessions.resolveNext("reply-a", "thread-a")
-    const r1 = await p1
+      await sessions.resolveFor("hello", "reply-a", "thread-a")
+      const r1 = await p1
+      expect(r1.resultText).toBe("reply-a")
 
-    // Second should still be pending (different conversation, independent state)
-    await sessions.resolveNext("reply-b", "thread-b")
-    const r2 = await p2
+      const allConversations = await conversations.list()
+      const convA = allConversations.find((conversation) => conversation.workspaceKey === "ws-a")!
+      const convB = allConversations.find((conversation) => conversation.workspaceKey === "ws-b")!
+      expect(r1.conversationId).toBe(convA.id)
+      expect(service.getConversationRuntimeSnapshot(convA.id).lifecycle).toBe("idle")
+      expect(service.getConversationRuntimeSnapshot(convB.id).lifecycle).toBe("running")
 
-    expect(r1.resultText).toBe("reply-a")
-    expect(r2.resultText).toBe("reply-b")
+      await sessions.resolveFor("world", "reply-b", "thread-b")
+      const r2 = await p2
+      expect(r2.resultText).toBe("reply-b")
+      expect(r2.conversationId).toBe(convB.id)
+    } finally {
+      releaseSecondCreation()
+      await service.shutdown()
+      await Promise.allSettled([p1, p2])
+    }
   })
 
   it("state is keyed by conversationId, not composite key", async () => {
@@ -62,7 +83,7 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
     // Send a message to create a conversation
     const p1 = service.send(baseMessage("first"))
     await tick()
-    await sessions.resolveNext("done-1", "thread-1")
+    await sessions.resolveFor("first", "done-1", "thread-1")
     await p1
 
     // The conversation should exist in the repository
@@ -87,12 +108,12 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
     // Create two conversations via different workspace keys
     const p1 = service.send(baseMessage("msg-a", "ws-a"))
     await tick()
-    await sessions.resolveNext("reply-a", "thread-a")
+    await sessions.resolveFor("msg-a", "reply-a", "thread-a")
     await p1
 
     const p2 = service.send(baseMessage("msg-b", "ws-b"))
     await tick()
-    await sessions.resolveNext("reply-b", "thread-b")
+    await sessions.resolveFor("msg-b", "reply-b", "thread-b")
     await p2
 
     // Find the actual conversation IDs from the namespace
@@ -109,7 +130,7 @@ describe("AgentRuntimeService — per-conversation state isolation", () => {
     // Second conversation should still work
     const p3 = service.send(baseMessage("msg-c", "ws-b"))
     await tick()
-    await sessions.resolveNext("reply-c", "thread-c")
+    await sessions.resolveFor("msg-c", "reply-c", "thread-c")
     const r3 = await p3
     expect(r3.resultText).toBe("reply-c")
   })
@@ -131,7 +152,7 @@ describe("AgentRuntimeService — SDK session factory", () => {
 
     const p = service.send(baseMessage("hello"))
     await tick()
-    await sessions.resolveNext("reply", "thread-1")
+    await sessions.resolveFor("hello", "reply", "thread-1")
     const result = await p
 
     expect(result.resultText).toBe("reply")
@@ -223,17 +244,18 @@ class BlockingSessionFactory {
     return session
   }
 
-  async resolveNext(resultText: string, agentSessionId: string): Promise<void> {
-    await vi.waitFor(() => { expect(this.sessions.some((candidate) => candidate.pending)).toBe(true) })
-    const session = this.sessions.find((candidate) => candidate.pending)
-    if (!session) throw new Error("No pending session")
+  async resolveFor(messageContent: string, resultText: string, agentSessionId: string): Promise<void> {
+    const matchesMessage = (candidate: BlockingSession) => candidate.pendingMessage?.content === messageContent
+    await vi.waitFor(() => expect(this.sessions.some(matchesMessage)).toBe(true))
+    const session = this.sessions.find(matchesMessage)
+    if (!session) throw new Error(`No pending session for message: ${messageContent}`)
     session.emitResult(resultText, agentSessionId)
   }
 }
 
 class BlockingSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
-  pending = false
+  pendingMessage?: AgentMessage
   private readonly events: AgentEvent[] = []
   private readonly waiters: Array<(event: AgentEvent | null) => void> = []
   private closed = false
@@ -242,7 +264,7 @@ class BlockingSession implements AgentLiveSession {
 
   async send(message: AgentMessage): Promise<boolean> {
     this.factory.started.push(message.content)
-    this.pending = true
+    this.pendingMessage = message
     return true
   }
 
@@ -275,7 +297,7 @@ class BlockingSession implements AgentLiveSession {
   }
 
   emitResult(resultText: string, sdkSessionId: string): void {
-    this.pending = false
+    this.pendingMessage = undefined
     this.push({ type: "text", content: resultText, sdkSessionId })
     this.push({ type: "result", content: resultText, done: true, sdkSessionId })
   }
@@ -357,7 +379,7 @@ describe("AgentRuntimeService — idle session reclaim", () => {
     // Create a conversation by sending a message
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    await sessions.resolveNext("done", "thread-1")
+    await sessions.resolveFor("hello", "done", "thread-1")
     await p
 
     // Inject a mock liveSession into the state
@@ -383,7 +405,7 @@ describe("AgentRuntimeService — idle session reclaim", () => {
 
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    await sessions.resolveNext("done", "thread-1")
+    await sessions.resolveFor("hello", "done", "thread-1")
     await p
 
     const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states
@@ -404,7 +426,7 @@ describe("AgentRuntimeService — idle session reclaim", () => {
 
     const p = service.send(baseMessage("hello"))
     await vi.advanceTimersByTimeAsync(0)
-    await sessions.resolveNext("done", "thread-1")
+    await sessions.resolveFor("hello", "done", "thread-1")
     await p
 
     const states = (service as never as { states: Map<string, { liveSession?: unknown; lastActivity: number; busy: boolean; activeTurns: number; queue: unknown[] }> }).states
