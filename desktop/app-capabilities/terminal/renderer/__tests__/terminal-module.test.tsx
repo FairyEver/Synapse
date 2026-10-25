@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, useState, type ReactNode } from "react"
+import { act, useEffect, useState, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type {
@@ -127,8 +127,11 @@ const voiceState = vi.hoisted(() => ({
     try {
       await consume(voiceState.confirmResult, controller.signal)
     } finally {
-      voiceState.phase = "idle"
-      voiceState.notify?.()
+      if (!controller.signal.aborted) {
+        controller.abort()
+        voiceState.phase = "idle"
+        voiceState.notify?.()
+      }
     }
   }),
   retry: vi.fn(),
@@ -138,6 +141,10 @@ vi.mock("../../../../src/modules/voice/use-voice-input", () => ({
   useVoiceInput: () => {
     const [, render] = useState(0)
     voiceState.notify = () => render((value) => value + 1)
+    useEffect(() => () => {
+      voiceState.controller?.abort()
+      voiceState.notify = null
+    }, [])
     return {
       state: {
         phase: voiceState.phase,
@@ -989,6 +996,7 @@ beforeEach(() => {
   voiceState.failure = null
   voiceState.confirmResult = ""
   voiceState.controller = null
+  voiceState.notify = null
   voiceState.start.mockClear()
   voiceState.cancel.mockClear()
   voiceState.confirm.mockClear()
@@ -1063,7 +1071,7 @@ beforeEach(() => {
   terminalBridge.attachSession.mockClear()
   terminalBridge.readSession.mockClear()
   terminalBridge.renameSession.mockClear()
-  terminalBridge.writeSession.mockClear()
+  terminalBridge.writeSession.mockReset().mockResolvedValue(undefined)
   terminalBridge.resizeSession.mockClear()
   terminalBridge.releaseSizeOwnership.mockClear()
   terminalBridge.deleteSession.mockClear()
@@ -2198,7 +2206,7 @@ describe("TerminalModule", () => {
 
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await voiceState.confirm.mock.results.at(-1)!.value
     })
 
     expect(inputHandler).not.toHaveBeenCalled()
@@ -2237,7 +2245,7 @@ describe("TerminalModule", () => {
     expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
     await act(async () => {
       finishWrite()
-      await new Promise((resolve) => setTimeout(resolve, 30))
+      await voiceState.confirm.mock.results.at(-1)!.value
     })
     expect(terminalBridge.writeSession.mock.calls).toEqual([
       [{ sessionId: "session-1", data: "\x1b[200~第一行\n第二行\x1b[201~" }],
@@ -2255,8 +2263,10 @@ describe("TerminalModule", () => {
     await renderModule()
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      await expect(voiceState.confirm.mock.results.at(-1)!.value).rejects.toThrow("write failed")
     })
     expect(terminalBridge.writeSession.mock.calls).toEqual([[{ sessionId: "session-1", data: "git status" }]])
+    expect(toastState.error).toHaveBeenCalledWith("写入终端失败")
     expect(document.querySelector("[data-voice-toolbar]")).toBeNull()
   })
 
@@ -2274,10 +2284,56 @@ describe("TerminalModule", () => {
     await clickButtonByAriaLabel("取消语音输入")
     await act(async () => {
       finishWrite()
-      await new Promise((resolve) => setTimeout(resolve, 30))
+      await voiceState.confirm.mock.results.at(-1)!.value
     })
     expect(terminalBridge.writeSession).toHaveBeenCalledTimes(1)
     expect(document.querySelector("[data-voice-toolbar]")).toBeNull()
+  })
+
+  it("语音文字写入中卸载，不在迟到的写入完成后补回车", async () => {
+    voiceState.phase = "recording"
+    voiceState.confirmResult = "git status"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1" })]
+    const write = createDeferred<undefined>()
+    terminalBridge.writeSession.mockImplementationOnce(() => write.promise)
+    await renderModule()
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+    })
+    const completion = voiceState.confirm.mock.results.at(-1)!.value
+    act(() => roots.pop()!.unmount())
+    await act(async () => {
+      write.resolve()
+      await completion
+    })
+
+    expect(terminalBridge.writeSession.mock.calls).toEqual([[{ sessionId: "session-1", data: "git status" }]])
+  })
+
+  it("语音提交等待回车间隔时卸载，不再补回车", async () => {
+    voiceState.phase = "recording"
+    voiceState.confirmResult = "git status"
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1" })]
+    await renderModule()
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+    try {
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+      })
+      const completion = voiceState.confirm.mock.results.at(-1)!.value
+      expect(terminalBridge.writeSession.mock.calls).toEqual([[{ sessionId: "session-1", data: "git status" }]])
+      act(() => roots.pop()!.unmount())
+      await act(async () => {
+        await vi.runAllTimersAsync()
+        await completion
+      })
+
+      expect(terminalBridge.writeSession.mock.calls).toEqual([[{ sessionId: "session-1", data: "git status" }]])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   /**
