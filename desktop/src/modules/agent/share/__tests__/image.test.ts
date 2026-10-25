@@ -307,8 +307,48 @@ describe("share PNG generation", () => {
     vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(720)
     vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(100)
     const node = paper(); const content = document.createElement("div"); content.dataset.agentGeneratedUi = ""; content.style.overflowX = "auto"; node.append(content)
-    Object.defineProperties(content, { clientWidth: { value: 600 }, scrollWidth: { value: 1200 } })
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-agent-generated-ui") ? 600 : 0 })
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-agent-generated-ui") ? 1200 : 0 })
     await expect(captureShareImage(node, 2, "save", new AbortController().signal)).rejects.toThrow("宽版")
     expect(engine.capture).not.toHaveBeenCalled()
+  })
+
+  it.each(["copy", "save"] as const)("expands nested vertical chart clipping only in the %s snapshot", async (action) => {
+    const node = paper()
+    // HorizontalBarChart reserves 40px for its axis; padding and the border
+    // make the rendered axis 45px, leaving only 355px for a 360px SVG.
+    node.innerHTML = '<div class="chart-frame" style="height:400px;overflow:hidden"><div class="chart-body" style="height:100%;overflow-y:auto"><svg height="360"><text>淘宝</text><text>BrickPark</text><text>大大屋</text><text>乐木屋</text></svg></div><div class="chart-axis" style="height:45px"></div></div>'
+    const original = node.innerHTML
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+      if (this.className === "chart-body") return this.style.height === "auto" ? 360 : 355
+      if (this.className === "chart-frame") return this.style.height === "auto" ? this.querySelector(".chart-body")!.clientHeight + 45 : 400
+      return 0
+    })
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      if (this.className === "chart-body") return 360
+      if (this.className === "chart-frame") return this.querySelector(".chart-body")!.clientHeight + 45
+      return 0
+    })
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.tagName === "ARTICLE" ? this.querySelector(".chart-frame")!.clientHeight + 100 : 100
+    })
+    engine.toBlob.mockResolvedValue(png(1440, 1010))
+    await expect(captureShareImage(node, 2, action, new AbortController().signal)).resolves.toHaveProperty("type", "image/png")
+    const snapshot = engine.capture.mock.calls[0]![0] as HTMLElement
+    expect(snapshot.offsetHeight).toBe(505)
+    expect(snapshot.querySelector(".chart-frame")!.clientHeight).toBe(405)
+    expect(snapshot.querySelector(".chart-body")!.clientHeight).toBe(360)
+    expect(snapshot.querySelector(".chart-body")!.textContent).toBe("淘宝BrickPark大大屋乐木屋")
+    expect(node.innerHTML).toBe(original)
+    expect(document.querySelector("[data-agent-share-capture]")).toBeNull()
+  })
+
+  it("still rejects vertical content that cannot be fully expanded", async () => {
+    const node = paper(); node.innerHTML = '<div style="overflow-y:hidden">clipped content</div>'
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(100)
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(200)
+    await expect(captureShareImage(node, 2, "save", new AbortController().signal)).rejects.toThrow("滚动")
+    expect(engine.capture).not.toHaveBeenCalled()
+    expect(document.querySelector("[data-agent-share-capture]")).toBeNull()
   })
 })

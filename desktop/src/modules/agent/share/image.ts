@@ -49,16 +49,29 @@ async function waitForContent(paper: HTMLElement, signal: AbortSignal, milliseco
       for (const animation of paper.getAnimations?.({ subtree: true }) ?? []) {
         if (animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity) animation.finish()
       }
-      for (const node of [paper, ...paper.querySelectorAll<HTMLElement>("div, pre")]) {
-        const style = getComputedStyle(node)
-        if (node.clientWidth > 0 && node.scrollWidth > node.clientWidth + 2 && /auto|scroll|hidden|clip/.test(style.overflowX)) throw new Error("内容超出图片宽度，请改用宽版或取消该条消息。")
-        if (node.clientHeight > 0 && node.scrollHeight > node.clientHeight + 2 && /auto|scroll|hidden|clip/.test(style.overflowY)) throw new Error("所选图表包含滚动内容，请展开完整内容或取消该条消息。")
-      }
       return
     }
     await bounded(new Promise<void>((resolve) => setTimeout(resolve, 40)), signal, 1000)
   }
   throw new Error("内容仍在加载，请稍后再试。")
+}
+
+function prepareShareLayout(paper: HTMLElement): void {
+  const nodes = [paper, ...paper.querySelectorAll<HTMLElement>("div, pre")]
+  // Expand from the inside out so a fixed-height chart frame can grow with
+  // its scroll body. Only mutate the mounted export clone; SVG geometry stays fixed.
+  for (const node of [...nodes].reverse()) {
+    if (node.closest("svg") || node.clientHeight <= 0 || node.scrollHeight <= node.clientHeight + 2) continue
+    node.style.height = "auto"
+    node.style.maxHeight = "none"
+    node.style.overflowY = "visible"
+    node.style.flexShrink = "0"
+  }
+  for (const node of nodes) {
+    const style = getComputedStyle(node)
+    if (node.clientWidth > 0 && node.scrollWidth > node.clientWidth + 2 && /auto|scroll|hidden|clip/.test(style.overflowX)) throw new Error("内容超出图片宽度，请改用宽版或取消该条消息。")
+    if (node.clientHeight > 0 && node.scrollHeight > node.clientHeight + 2) throw new Error("所选图表包含滚动内容，请展开完整内容或取消该条消息。")
+  }
 }
 
 export async function captureShareImage(paper: HTMLElement, scale: 2 | 3, action: "copy" | "save", signal: AbortSignal, renderContext?: ShareRenderResponse): Promise<Blob> {
@@ -92,6 +105,8 @@ export async function captureShareImage(paper: HTMLElement, scale: 2 | 3, action
     host.append(clone); document.body.append(host)
     stage = "decode"
     await bounded(decodeShareImages(clone, captureSignal), captureSignal, 15_000)
+    stage = "layout"
+    prepareShareLayout(clone)
     const width = clone.offsetWidth * scale, height = clone.offsetHeight * scale
     if (!width || !height || width > 2880 || height > AGENT_SHARE_MAX_HEIGHT || width * height > AGENT_SHARE_MAX_PIXELS) throw new Error("图片过长，请缩小分享范围。")
     if (action === "copy" && (width * height > AGENT_SHARE_COPY_MAX_PIXELS || height > 32_767)) throw new Error("图片过长，无法复制，请保存图片后分享。")
