@@ -152,9 +152,18 @@ class Inspector {
   close() { this.socket.close() }
 }
 
+export function isOwnedInspectorAddress(url, startupLog) {
+  if (!URL.canParse(url)) return false
+  const address = new URL(url)
+  return address.protocol === "ws:" && address.hostname === "127.0.0.1" && address.port === "19798"
+    && startupLog.split(/\r?\n/).includes(`Debugger listening on ${address.href}`)
+}
+
 async function launchInstalledApp(executable, outputRoot, phase) {
   const log = createWriteStream(path.join(outputRoot, `${phase}-app.log`))
   const child = spawn(executable, ["--inspect-brk=127.0.0.1:19798"], { env: appEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+  let startupLog = ""
+  child.stderr.on("data", (chunk) => { startupLog = (startupLog + chunk.toString("utf8")).slice(-8192) })
   child.stdout.pipe(log, { end: false })
   child.stderr.pipe(log, { end: false })
   child.once("close", () => log.end())
@@ -168,12 +177,10 @@ async function launchInstalledApp(executable, outputRoot, phase) {
       return null
     }
   }, 30_000)
-  const address = new URL(target.webSocketDebuggerUrl)
-  assert.equal(address.hostname, "127.0.0.1", "Unexpected inspector host")
-  const socket = new WebSocket(address)
+  await waitFor("inspector address emitted by the owned child", () => isOwnedInspectorAddress(target.webSocketDebuggerUrl, startupLog), 10_000)
+  const socket = new WebSocket(target.webSocketDebuggerUrl)
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject })
   const inspector = new Inspector(socket)
-  assert.equal(await inspector.evaluate("process.pid"), child.pid, "Inspector belongs to a different process")
   const captureLine = readRegistryCaptureLine(path.join(path.dirname(executable), "resources", "app.asar"))
   const scripts = new Map()
   let resolveCapture, rejectCapture
@@ -202,6 +209,7 @@ async function launchInstalledApp(executable, outputRoot, phase) {
     inspector.listeners.delete(listener)
     await inspector.command("Debugger.disable")
   }
+  assert.equal(await inspector.evaluate("process.pid"), child.pid, "Inspector belongs to a different process")
   await waitFor("running terminal service and real app window", () => inspector.evaluate(`(() => {
     const r=globalThis.__updateAcceptanceRegistry;const e=process.mainModule.require('electron');
     return r?.inspect().some(s=>s.id==='core.terminal'&&s.status==='running')&&e.BrowserWindow.getAllWindows().some(w=>!w.isDestroyed()&&!w.webContents.isLoading());

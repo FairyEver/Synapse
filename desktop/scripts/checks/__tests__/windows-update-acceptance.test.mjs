@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
-import { ownedProcessIds, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
+import { isOwnedInspectorAddress, ownedProcessIds, parseWindowsMetadata, verifyFileSha512 } from "../windows-update-acceptance.mjs"
 
 const digest = createHash("sha512").update("installer").digest("base64")
 const metadata = (overrides = {}) => JSON.stringify({
@@ -68,4 +68,14 @@ test("retains the Windows process observer startup or timeout cause", () => {
 test("refuses observer stderr even when PowerShell reports a successful exit", () => {
   const execute = () => ({ status: 0, stdout: "", stderr: "Get-CimInstance: query failed" })
   assert.throws(() => ownedProcessIds("C:\\owned\\Synapse.exe", false, execute), /query failed/)
+})
+
+test("binds the inspector URL to the exact endpoint emitted by the spawned child", () => {
+  const owned = "ws://127.0.0.1:19798/256978e1-bbb9-47f4-a0dd-517461f6fae3"
+  const startup = `\r\nDebugger listening on ${owned}\r\nFor help, see: https://nodejs.org/en/docs/inspector\r\n`
+  assert.equal(isOwnedInspectorAddress(owned, startup), true)
+  for (const other of ["ws://127.0.0.1:19798/another-process", "ws://0.0.0.0:19798/other", "ws://127.0.0.1:19799/other", "invalid"]) {
+    assert.equal(isOwnedInspectorAddress(other, startup), false)
+  }
+  assert.equal(isOwnedInspectorAddress(owned, ""), false)
 })
