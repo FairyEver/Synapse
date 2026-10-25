@@ -79,6 +79,15 @@ test("distinguishes missing executable from a failed installed-version observati
   assert.throws(() => readWindowsProductVersion("C:\\owned\\Synapse.exe", () => ({ status: 0, stdout: "", stderr: "Get-Item: access denied" })), /access denied/)
 })
 
+test("gives the read-only Windows version observer a bounded cold-start budget", () => {
+  let options
+  readWindowsProductVersion("C:\\owned\\Synapse.exe", (_command, _args, supplied) => {
+    options = supplied
+    return { status: 0, stdout: "1.0.81\r\n", stderr: "" }
+  })
+  assert.equal(options.timeout, 60_000)
+})
+
 test("binds the inspector URL to the exact endpoint emitted by the spawned child", () => {
   const owned = "ws://127.0.0.1:19798/256978e1-bbb9-47f4-a0dd-517461f6fae3"
   const startup = `\r\nDebugger listening on ${owned}\r\nFor help, see: https://nodejs.org/en/docs/inspector\r\n`

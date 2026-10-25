@@ -251,7 +251,7 @@ export function ownedProcessIds(executable, mainOnly = false, execute = spawnSyn
 
 export function readWindowsProductVersion(executable, execute = spawnSync) {
   const script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; if (Test-Path -LiteralPath $env:SYNAPSE_ACCEPTANCE_EXE -PathType Leaf) { (Get-Item -LiteralPath $env:SYNAPSE_ACCEPTANCE_EXE).VersionInfo.ProductVersion } else { 'missing' }"
-  const result = execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", timeout: 10_000, env: { ...appEnvironment(), SYNAPSE_ACCEPTANCE_EXE: executable } })
+  const result = execute("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8", timeout: 60_000, env: { ...appEnvironment(), SYNAPSE_ACCEPTANCE_EXE: executable } })
   assert.equal(result.status, 0, `Cannot observe installed executable version: ${JSON.stringify({ status: result.status, signal: result.signal, code: result.error?.code, message: result.error?.message, stderr: result.stderr?.trim().slice(0, 1000) })}`)
   assert.ok(!result.stderr?.trim(), `Windows version observer reported an error: ${result.stderr?.trim().slice(0, 1000)}`)
   const version = result.stdout.trim()
