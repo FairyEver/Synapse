@@ -582,15 +582,22 @@ print_manual_database_restore_instructions() {
   cd $REMOTE_DIR/server
   postgres_user=\$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
   postgres_db=\$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
-  docker compose --env-file .env stop server pdf-renderer
-  docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-  docker compose --env-file .env exec -T postgres psql -U "\$postgres_user" -d "\$postgres_db" < $FINAL_BACKUP_FILE
-  rollback_pdf_renderer_state=\$(cat $PDF_RENDERER_ROLLBACK_STATE_FILE)
-  if [ "\$rollback_pdf_renderer_state" = "present" ]; then
-    SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build pdf-renderer server
+  if docker compose --env-file .env stop server pdf-renderer &&
+    docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "\$postgres_user" -d "\$postgres_db" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' </dev/null &&
+    docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "\$postgres_user" -d "\$postgres_db" < $FINAL_BACKUP_FILE; then
+    rollback_pdf_renderer_state=\$(cat $PDF_RENDERER_ROLLBACK_STATE_FILE)
+    if [ "\$rollback_pdf_renderer_state" = "present" ]; then
+      SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build pdf-renderer server
+    elif [ "\$rollback_pdf_renderer_state" = "absent" ]; then
+      docker compose --env-file .env rm -f -s pdf-renderer &&
+        SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build --no-deps server
+    else
+      echo 'PDF 渲染器回滚状态无效，服务保持停止。' >&2
+      false
+    fi
   else
-    docker compose --env-file .env rm -f -s pdf-renderer
-    SYNAPSE_SERVER_IMAGE_TAG=$ROLLBACK_IMAGE_TAG docker compose --env-file .env up -d --no-build --no-deps server
+    echo '数据库恢复失败，服务保持停止；请检查恢复错误后重试。' >&2
+    false
   fi
 
 最终切换前备份：$FINAL_BACKUP_FILE

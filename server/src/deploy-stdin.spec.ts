@@ -20,6 +20,20 @@ function remoteScript(functionName: string): string {
   return body!
 }
 
+function manualRestoreScript(env: NodeJS.ProcessEnv): string {
+  const start = deployScript.indexOf("\nprint_manual_database_restore_instructions() {")
+  expect(start).toBeGreaterThan(-1)
+  const definition = deployScript.slice(start).match(/^[\s\S]*?\nEOF\n\}/u)?.[0]
+  expect(definition).toBeDefined()
+  const rendered = spawnSync("bash", ["-c", `${definition}\nprint_manual_database_restore_instructions`], {
+    env, encoding: "utf8", timeout: 5_000,
+  })
+  expect(rendered.status).toBe(0)
+  const commands = rendered.stdout.split("\n\n").find((block) => block.startsWith("  ssh "))
+  expect(commands).toBeDefined()
+  return commands!.split("\n").slice(1).join("\n")
+}
+
 function runRemote(functionName: string, env: NodeJS.ProcessEnv = {}) {
   const dir = mkdtempSync(join(tmpdir(), "synapse-deploy-stdin-"))
   workspaces.push(dir)
@@ -34,7 +48,8 @@ function runRemote(functionName: string, env: NodeJS.ProcessEnv = {}) {
 const fs = require('node:fs')
 const args = process.argv.slice(2)
 // Compose exec/run attach stdin by default, even when the command does not read it.
-const stdin = fs.readFileSync(0, 'utf8')
+const attached = args[0] === 'compose' && (args.includes('exec') || args.includes('run'))
+const stdin = attached ? fs.readFileSync(0, 'utf8') : ''
 fs.appendFileSync(process.env.DOCKER_CALLS, JSON.stringify({ args, stdin }) + '\\n')
 if (args.includes('pg_dump') || args.includes('pg_dumpall')) process.stdout.write('synthetic backup\\n')
 if (process.env.FAIL_MIGRATION === '1' && args.includes('run')) process.exit(9)
@@ -45,25 +60,33 @@ if (process.env.FAIL_RESTORE === '1' && args.includes('psql') && stdin.includes(
 `)
   chmodSync(docker, 0o755)
   const backup = join(dir, "backup.sql")
+  const rendererState = join(dir, "pdf-renderer.state")
+  writeFileSync(rendererState, env.SYNTHETIC_RENDERER_STATE ?? "present\n")
+  const environment = {
+    ...process.env,
+    PATH: `${join(dir, "bin")}:${process.env.PATH}`,
+    DOCKER_CALLS: log,
+    SERVER: "synthetic-host",
+    REMOTE_DIR: dir,
+    BACKUP_FILE: backup,
+    GLOBALS_BACKUP_FILE: backup,
+    ONLINE_BACKUP_FILE: dump,
+    FINAL_BACKUP_FILE: dump,
+    ENV_BACKUP_FILE: join(dir, "synthetic.env"),
+    PDF_RENDERER_ROLLBACK_STATE_FILE: rendererState,
+    ROLLBACK_IMAGE_TAG: "synthetic-rollback",
+    DEPLOY_ID: "synthetic_stdin_test",
+    NEW_IMAGE_TAG: "synthetic-candidate",
+    MAIL_LEGACY_CUTOVER: "",
+    ...env,
+  }
+  const manual = functionName === "print_manual_database_restore_instructions"
   const result = spawnSync("bash", ["-s"], {
     cwd: join(dir, "server"),
-    input: `${remoteScript(functionName)}\nprintf 'REMOTE_SCRIPT_COMPLETE\\n'\n`,
+    input: manual ? manualRestoreScript(environment) : `${remoteScript(functionName)}\nprintf 'REMOTE_SCRIPT_COMPLETE\\n'\n`,
     encoding: "utf8",
     timeout: 5_000,
-    env: {
-      ...process.env,
-      PATH: `${join(dir, "bin")}:${process.env.PATH}`,
-      DOCKER_CALLS: log,
-      REMOTE_DIR: dir,
-      BACKUP_FILE: backup,
-      GLOBALS_BACKUP_FILE: backup,
-      ONLINE_BACKUP_FILE: dump,
-      FINAL_BACKUP_FILE: dump,
-      DEPLOY_ID: "synthetic_stdin_test",
-      NEW_IMAGE_TAG: "synthetic-candidate",
-      MAIL_LEGACY_CUTOVER: "",
-      ...env,
-    },
+    env: environment,
   })
   expect(result.error).toBeUndefined()
   const calls = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { args: string[], stdin: string })
@@ -130,5 +153,32 @@ describe.skipIf(process.platform === "win32")("deployment commands preserve the 
     expect(result.status).toBe(0)
     expect(result.stdout).toContain("REMOTE_SCRIPT_COMPLETE")
     expect(calls[0]?.stdin).toBe("SELECT to_regclass('public._prisma_migrations');\n")
+  })
+
+  it("starts the rollback image only after the printed manual restore commands succeed", () => {
+    const { result, calls } = runRemote("print_manual_database_restore_instructions")
+    expect(result.status).toBe(0)
+    expect(calls.some((call) => call.stdin === fixtureSql && call.args.includes("ON_ERROR_STOP=1"))).toBe(true)
+    expect(calls.some((call) => call.args.includes("up"))).toBe(true)
+  })
+
+  it("keeps the service stopped when the printed manual restore encounters a SQL error", () => {
+    const { result, calls } = runRemote("print_manual_database_restore_instructions", { FAIL_RESTORE: "1" })
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain("synthetic SQL restore error")
+    expect(calls.some((call) => call.args.includes("stop"))).toBe(true)
+    expect(calls.some((call) => call.args.includes("up"))).toBe(false)
+  })
+
+  it("restores only the API when the previous renderer was absent", () => {
+    const { result, calls } = runRemote("print_manual_database_restore_instructions", { SYNTHETIC_RENDERER_STATE: "absent\n" })
+    expect(result.status).toBe(0)
+    expect(calls.find((call) => call.args.includes("up"))?.args).toContain("--no-deps")
+  })
+
+  it("keeps services stopped for an unknown renderer rollback state", () => {
+    const { result, calls } = runRemote("print_manual_database_restore_instructions", { SYNTHETIC_RENDERER_STATE: "invalid\n" })
+    expect(result.status).not.toBe(0)
+    expect(calls.some((call) => call.args.includes("up"))).toBe(false)
   })
 })
