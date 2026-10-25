@@ -1,6 +1,6 @@
 # Windows 实际升级验收 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在独立 Windows 运行器上证明已发布的 1.0.79 能实际安装并升级到当前候选，且新版可启动、运行 PTY 与脚本。
 
@@ -42,12 +42,12 @@
 - Consumes: 公开 `latest-windows.yml`、当前构建的 `desktop/release/latest.yml` 与实际 NSIS 安装包。
 - Produces: 运行器 `windows-update-acceptance/evidence.json` 和日志，明确旧/新版本、原生更新、窗口、PTY、脚本与合成加密夹具结果。
 
-- [ ] 先写元数据版本、路径、摘要与文件损坏的拒绝测试并确认失败。
-- [ ] 实现 `parseWindowsMetadata(text, expectedVersion)` 与 `verifyFileSha512(file, expected)`，使用现有 yaml 解析器。
-- [ ] 实现仅 Windows 可执行的真实安装、进程观察、回环源、升级和受限清理。
-- [ ] 在实际安装的新版进程中检查窗口、PTY 与旧版生成的合成加密夹具，并执行既有打包脚本运行时检查。
-- [ ] 添加仅手动触发的工作流，保留证据；同步仓库验证入口说明。
-- [ ] 运行 Node 测试、语法与工作流 YAML 检查，审查并提交；推送后执行 Windows 验收和针对同一提交的 CI。
+- [x] 先写元数据版本、路径、摘要与文件损坏的拒绝测试并确认失败。
+- [x] 实现 `parseWindowsMetadata(text, expectedVersion)` 与 `verifyFileSha512(file, expected)`，使用现有 yaml 解析器。
+- [x] 实现仅 Windows 可执行的真实安装、进程观察、回环源、升级和受限清理。
+- [x] 在实际安装的新版进程中检查窗口、PTY 与旧版生成的合成加密夹具，并执行既有打包脚本运行时检查。
+- [x] 添加仅手动触发的工作流，保留证据；同步仓库验证入口说明。
+- [x] 运行 Node 测试、语法与工作流 YAML 检查，审查并提交；推送后执行 Windows 验收和针对同一提交的 CI。
 
 ### Task 2: 归档真实 macOS 证据并继续发布
 
@@ -59,7 +59,7 @@
 - Consumes: 本机实际安装、ShipIt 故障注入与恢复、账号和终端摘要、实际 PTY/脚本记录。
 - Produces: 如实区分人工恢复与全自动路径的验收说明，以及旧版安装超时的用户说明。
 
-- [ ] 记录旧版暂存约 200 秒超过交接上限、已有受控恢复入口的人工介入，以及原生签名安装和数据验收结果。
-- [ ] 保留已验证的失败场景；不将候选构建或模拟断言写成实机成功。
-- [ ] 更新待发布说明并重新检查目标版本的完整信文；单纯补验收不重复升版，如 CI 或 Release 失败后修复则按发布流程递增版本并重新执行门禁。
+- [x] 记录旧版暂存约 200 秒超过交接上限、已有受控恢复入口的人工介入，以及原生签名安装和数据验收结果。
+- [x] 保留已验证的失败场景；不将候选构建或模拟断言写成实机成功。
+- [x] 更新待发布说明并重新检查目标版本的完整信文；单纯补验收不重复升版，如 CI 或 Release 失败后修复则按发布流程递增版本并重新执行门禁。
 - [ ] Windows 验收、最新提交 CI 和最终审查通过后，继续 Release、说明归档、TestFlight、服务端部署与站内信。

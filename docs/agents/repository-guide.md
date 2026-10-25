@@ -77,6 +77,7 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 - API 镜像固定 Node `22.23.4-alpine`，PDF 构建阶段固定 `22.23.4-bookworm-slim`；PDF 最终运行阶段保留 Playwright 的 Chromium 与系统依赖，使用 `24.22.1-bookworm-slim` 提供的 Node 二进制替换 `/usr/bin/node`。不能只更新 PDF 的构建阶段。
 - 两个最终镜像都运行 `scripts/deploy/check-node-runtime.mjs`，仅接受 Node 22（至少 `22.23.4`）或 Node 24（至少 `24.22.1`）。更新安全基线时同步调整 Dockerfile、检查器及测试。
 - 部署构建使用 `--pull`，切换前在候选镜像中再次执行运行时检查；上线后核对实际容器版本和 API/PDF 请求，不能以宿主机 Node 版本或旧容器健康代替验证。
+- 通过 SSH 标准输入执行部署脚本时，不需要输入的 Docker Compose `exec` / `run` 必须将标准输入重定向到 `/dev/null`，避免吞掉后续脚本而假报成功。SQL 恢复必须显式提供备份文件并启用 `ON_ERROR_STOP=1`；数据库恢复预演与最终备份恢复必须实际执行并输出完成标记，不能仅以 SSH 退出码判断通过。
 
 ## 桌面更新与发布
 

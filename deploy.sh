@@ -202,7 +202,7 @@ if [ -z "$postgres_user" ] || [ -z "$postgres_db" ] || [ -z "$postgres_password"
 fi
 
 if docker compose --env-file .env exec -T -e PGPASSWORD="$postgres_password" postgres \
-  psql -h postgres -p 5432 -U "$postgres_user" -d "$postgres_db" -Atc 'select 1' >/dev/null; then
+  psql -h postgres -p 5432 -U "$postgres_user" -d "$postgres_db" -Atc 'select 1' </dev/null >/dev/null; then
   echo "database tcp auth ok"
 else
   echo "database tcp auth failed: .env Postgres identity does not match the existing database"
@@ -269,7 +269,7 @@ postgres_db=$(sed -n 's/^POSTGRES_DB=//p' .env | tail -n 1)
 
 docker compose --env-file .env exec -T postgres pg_dump \
   --exclude-table-data='public."ProblemFeedback"' \
-  -U "$postgres_user" "$postgres_db" > "$BACKUP_FILE"
+  -U "$postgres_user" "$postgres_db" </dev/null > "$BACKUP_FILE"
 test -s "$BACKUP_FILE"
 chmod 600 "$BACKUP_FILE"
 
@@ -286,7 +286,7 @@ cd "$REMOTE_DIR/server"
 
 postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 
-docker compose --env-file .env exec -T postgres pg_dumpall -U "$postgres_user" --globals-only > "$GLOBALS_BACKUP_FILE"
+docker compose --env-file .env exec -T postgres pg_dumpall -U "$postgres_user" --globals-only </dev/null > "$GLOBALS_BACKUP_FILE"
 test -s "$GLOBALS_BACKUP_FILE"
 chmod 600 "$GLOBALS_BACKUP_FILE"
 
@@ -458,18 +458,18 @@ postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 postgres_password=$(sed -n 's/^POSTGRES_PASSWORD=//p' .env | tail -n 1)
 
 cleanup_preflight_database() {
-  docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${preflight_db}';" >/dev/null 2>&1 || true
-  docker compose --env-file .env exec -T postgres dropdb -U "$postgres_user" --if-exists "$preflight_db" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${preflight_db}';" </dev/null >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres dropdb -U "$postgres_user" --if-exists "$preflight_db" </dev/null >/dev/null 2>&1 || true
 }
 
 trap cleanup_preflight_database EXIT
 
 cleanup_preflight_database
-docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$preflight_db"
-docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$preflight_db" < "$ONLINE_BACKUP_FILE"
+docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$preflight_db" </dev/null
+docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$preflight_db" < "$ONLINE_BACKUP_FILE"
 
 database_url="postgresql://${postgres_user}:${postgres_password}@postgres:5432/${preflight_db}"
-SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps --entrypoint sh -e DATABASE_URL="$database_url" server -c "cd /app/server && npx prisma migrate deploy"
+SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps --entrypoint sh -e DATABASE_URL="$database_url" server -c "cd /app/server && npx prisma migrate deploy" </dev/null
 
 if [ "$MAIL_LEGACY_CUTOVER" = 1 ]; then
   docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$preflight_db" < scripts/purge-legacy-mail.sql
@@ -481,7 +481,7 @@ REMOTE_SCRIPT
 }
 
 deploy_remote_migrations() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env run --rm -T --no-deps --entrypoint sh server -c 'cd /app/server && npx prisma migrate deploy'" || return 1
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env run --rm -T --no-deps --entrypoint sh server -c 'cd /app/server && npx prisma migrate deploy' </dev/null" || return 1
   if [ "${MAIL_LEGACY_CUTOVER:-}" = 1 ]; then
     ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT' || return 1
 set -euo pipefail
@@ -501,16 +501,16 @@ verify_db="synapse_final_verify_${DEPLOY_ID}"
 postgres_user=$(sed -n 's/^POSTGRES_USER=//p' .env | tail -n 1)
 
 cleanup_verify_database() {
-  docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${verify_db}';" >/dev/null 2>&1 || true
-  docker compose --env-file .env exec -T postgres dropdb -U "$postgres_user" --if-exists "$verify_db" >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${verify_db}';" </dev/null >/dev/null 2>&1 || true
+  docker compose --env-file .env exec -T postgres dropdb -U "$postgres_user" --if-exists "$verify_db" </dev/null >/dev/null 2>&1 || true
 }
 
 trap cleanup_verify_database EXIT
 
 cleanup_verify_database
-docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$verify_db"
-docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$verify_db" < "$FINAL_BACKUP_FILE"
-docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$verify_db" -Atc 'select 1' >/dev/null
+docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$verify_db" </dev/null
+docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$verify_db" < "$FINAL_BACKUP_FILE"
+docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$verify_db" -Atc 'select 1' </dev/null >/dev/null
 
 printf "final backup restore verified: %s\n" "$verify_db"
 REMOTE_SCRIPT
@@ -840,7 +840,7 @@ PDF_RENDERER_NODE
 run_checks_once() {
   failed=0
   if [ "$CHECK_PDF_RENDERER" = "true" ]; then
-    if docker compose --env-file .env exec -T pdf-renderer node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+    if docker compose --env-file .env exec -T pdf-renderer node -e "fetch('http://127.0.0.1:3010/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))" </dev/null; then
       echo "pdf renderer ok"
     else
       echo "pdf renderer FAILED"

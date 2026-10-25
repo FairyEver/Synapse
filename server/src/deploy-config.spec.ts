@@ -109,7 +109,7 @@ describe("server deployment configuration", () => {
 
     expect(deployScript).toContain("verify_final_backup_restore")
     expect(deployScript).toContain("synapse_final_verify_${DEPLOY_ID}")
-    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres psql -U "$postgres_user" -d "$verify_db" < "$FINAL_BACKUP_FILE"')
+    expect(deployScript).toContain('docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$verify_db" < "$FINAL_BACKUP_FILE"')
 
     const finalBackupStep = deployScript.indexOf('"最终备份远程数据库"')
     const finalVerifyStep = deployScript.indexOf('"恢复验证最终数据库备份"')
