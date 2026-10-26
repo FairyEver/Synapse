@@ -487,7 +487,7 @@ struct TerminalScreen: View {
     /// 录音中途断网和来电打断也走这里。它们**不给控制器加方法** —— `confirm()` 本来
     /// 就返回「要落进输入框的文本」，`.failed` 和 `.interrupted` 两种状态下都会把已经
     /// 识别到的字交出来，所以视图只需要按原因浮一条提示（§5.2、§5.5）。
-    private func settleVoice() async {
+    private func settleVoice(silent: Bool = false) async {
         guard !settlingVoice else { return }
         settlingVoice = true
         defer {
@@ -507,7 +507,7 @@ struct TerminalScreen: View {
 
         // 原因要在收尾之前读出来 —— `confirm()` 会把 `phase` 抹回 idle，那之后就看
         // 不出刚才是断网还是说完了。
-        let notice = voiceInterruption()
+        let notice = silent ? nil : voiceInterruption()
         let heard = await voice.confirm()
         // 这一格**不动**。说完一句是这一轮走完了，不是用户选了别的模式：他选的语音态
         // 就是用来连着说话的，每次说完把他打回键盘态，等于每句都要再按一次切换键。
@@ -717,6 +717,19 @@ struct TerminalScreen: View {
             // `noSpeech` 不在此列：它只是把「没有听到声音」摆出来，麦克风还开着，用户
             // 接着说就能接上。
             switch phase {
+            case .interrupted(let reason)
+                where !HoldToTalkPresentation.InterruptionNotice.applies(
+                    to: reason,
+                    holdStillLatched: holdLatched
+                ):
+                // 场景离开前台，把还按着的那一次触摸也收走了 —— `onEnded` 不会再回来，
+                // 这一按没有「松手」。它不是被打断，是一个没走完的手势：收回这一轮，
+                // 但什么都不说（判定与理由见 `HoldToTalkPresentation.InterruptionNotice`）。
+                //
+                // 闩也得在这儿放下：手指已经不在了，留着它下一次按住会被当成「还按着」，
+                // 那一下什么都不会发生。
+                holdLatched = false
+                Task { await settleVoice(silent: true) }
             case .failed(.network), .failed(.notConfigured), .interrupted:
                 Task { await settleVoice() }
             case .idle:

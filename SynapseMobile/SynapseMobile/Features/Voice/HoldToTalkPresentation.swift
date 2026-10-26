@@ -120,6 +120,27 @@ struct HoldToTalkPresentation: Equatable {
     /// 来电或切后台把这次识别打断了。
     static let interruptedNotice = "识别被打断"
 
+    /// 这一次中断要不要在提示条上说明。
+    ///
+    /// **只有一种情况不该说：切后台时手指还按在「按住 说话」上。** 场景离开前台会把
+    /// 正在进行的触摸一起收走，SwiftUI 也就不会再给 `onEnded` —— 那一按从头到尾没有
+    /// 「松手」，它不是被打断，是一个没走完的手势（手指可能只是经过那一格）。等它
+    /// 变成一条「识别被打断」，用户会以为自己刚刚发出去的那句话出了事。
+    ///
+    /// 反过来，来电（`audioSession`）照旧要说：那一次识别确实被外力掐断了；固定态下
+    /// 切后台也要说，那是用户明确让它继续录的一段。
+    enum InterruptionNotice {
+        static func applies(
+            to interruption: AudioCapture.Interruption,
+            holdStillLatched: Bool
+        ) -> Bool {
+            switch interruption {
+            case .audioSession: return true
+            case .background: return !holdStillLatched
+            }
+        }
+    }
+
     /// 一个字都还没认出来时，面板正文里那句话。
     ///
     /// **与 `recordingState` 是两件事，不能复用**：状态行已经在说「识别中」，正文再写一遍

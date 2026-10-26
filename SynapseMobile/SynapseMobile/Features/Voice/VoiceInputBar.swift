@@ -44,7 +44,10 @@ final class VoiceInputController {
         /// 出错了，但文本还在，用户可以重试或者直接完成。
         case failed(Failure)
         /// 被来电或切后台打断：不录了，已经定稿的文本留着等用户处置。
-        case interrupted
+        ///
+        /// 带着原因走，因为两种打断不是同一件事：来电是外力掐断，切后台是场景把手指
+        /// 也一起收走了（见 `HoldToTalkPresentation.InterruptionNotice`）。
+        case interrupted(AudioCapture.Interruption)
 
         /// 麦克风还开着、音频还在送。
         ///
@@ -250,7 +253,9 @@ final class VoiceInputController {
             return
         }
         let capture = AudioCapture()
-        capture.onInterrupted = { [weak self] in self?.handleInterruption() }
+        capture.onInterrupted = { [weak self] interruption in
+            self?.handleInterruption(interruption)
+        }
         do {
             // 起引擎是阻塞的，放在主线程之外做 —— 这一步正好落在「按住 说话」按下
             // 的那一刻，占着主线程会把面板浮上来那一下冻住。
@@ -551,7 +556,7 @@ final class VoiceInputController {
         warming = false
     }
 
-    private func handleInterruption() {
+    private func handleInterruption(_ interruption: AudioCapture.Interruption) {
         // 只打断还在录的那一段。收尾的那 1.2 秒里麦克风已经关了、连接也已经在关，
         // 这时候把用户刚说完的话丢掉才是真的损失。
         guard phase.isListening else { return }
@@ -563,7 +568,7 @@ final class VoiceInputController {
         loop = nil
         teardown()
         // 来电和切后台不是用户的取消：已经定稿的文本留着。
-        phase = .interrupted
+        phase = .interrupted(interruption)
     }
 
     /// 只放资源，不动 `phase` 和 `transcript` —— 文本该留还是该丢，调用方比这里清楚。

@@ -208,7 +208,26 @@ struct HoldToTalkPresentationTests {
     }
 
     @Test func anInterruptionDoesNotKeepThePanelUpEither() {
-        #expect(presentation(.interrupted, spoken).panelVisible == false)
+        #expect(presentation(.interrupted(.audioSession), spoken).panelVisible == false)
+    }
+
+    // MARK: - 什么时候才说「识别被打断」
+
+    /// 来电掐断的那一次，用户没松手也知道发生了什么，要说。
+    @Test func aCallIsWorthTellingEvenWithAFingerDown() {
+        #expect(HoldToTalkPresentation.InterruptionNotice.applies(to: .audioSession, holdStillLatched: true))
+    }
+
+    /// 固定态下切后台：手指早就走了，录音是用户明确让它继续的，也要说。
+    @Test func backgroundingALockedRecordingIsWorthTelling() {
+        #expect(HoldToTalkPresentation.InterruptionNotice.applies(to: .background, holdStillLatched: false))
+    }
+
+    /// 手指还按着时场景把触摸收走了：那一按没有「松手」，不是被打断。这条是这次的真凶
+    /// —— 松手发出去之后手指只是经过「按住 说话」那一格、随即切走，回来就会看到一条
+    /// 本来不存在的「识别被打断」。
+    @Test func backgroundingAHoldThatNeverReleasedIsNotAnInterruption() {
+        #expect(HoldToTalkPresentation.InterruptionNotice.applies(to: .background, holdStillLatched: true) == false)
     }
 
     // MARK: - 固定

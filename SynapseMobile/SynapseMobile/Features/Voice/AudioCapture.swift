@@ -83,9 +83,21 @@ nonisolated final class AudioCapture: @unchecked Sendable {
     /// tap 往里写，送包循环按 200ms 取。
     let pcm = AsrPcmBuffer()
 
+    /// 采集为什么停了。
+    ///
+    /// 两种停法对用户是两件事，所以分开报：来电是**这一次识别被外力掐断**；切后台是
+    /// **场景把手指连同触摸一起收走了** —— 后者如果发生在手指还按着的时候，那一按本来
+    /// 就没有「松手」，把它当成「被打断」会凭空造出一条提示。
+    enum Interruption: Equatable {
+        /// 来电、闹钟、别的 App 抢走了麦克风。
+        case audioSession
+        /// App 离开了前台。
+        case background
+    }
+
     /// 来电、切后台把采集打断了。不处理的话 tap 不再回调，送包循环会一直补静音：
     /// 引擎那边看起来一切正常，用户这边一个字都不会有。
-    var onInterrupted: (@MainActor () -> Void)?
+    var onInterrupted: (@MainActor (Interruption) -> Void)?
 
     private let engine = AVAudioEngine()
     private var tapInstalled = false
@@ -223,7 +235,7 @@ nonisolated final class AudioCapture: @unchecked Sendable {
             guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                   let type = AVAudioSession.InterruptionType(rawValue: raw),
                   type == .began else { return }
-            MainActor.assumeIsolated { self?.onInterrupted?() }
+            MainActor.assumeIsolated { self?.onInterrupted?(.audioSession) }
         })
         // 没有后台音频权限，切后台时系统会把会话摘走。这不会走中断通知，得自己看。
         observers.append(center.addObserver(
@@ -231,7 +243,7 @@ nonisolated final class AudioCapture: @unchecked Sendable {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.onInterrupted?() }
+            MainActor.assumeIsolated { self?.onInterrupted?(.background) }
         })
     }
 }
