@@ -3,12 +3,23 @@ import { Star, Paperclip } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
+import { RelativeTime } from "@/components/relative-time"
 import { MailMessageMenu } from "./message-menu"
 import { MailListToolbar, type BatchAction, type MailSearchControls } from "./list-toolbar"
 import { cn } from "@/lib/utils"
 import type { MailSummary, Draft, Folder } from "../../../app-capabilities/mail/shared/types"
 export function MailList({ items, drafts, draftView, selected, loading, more, onSelect, onDraft, onMore, onBatch, folders, onMove, busy, ...search }: MailSearchControls & { busy?: boolean; items: MailSummary[]; drafts: Omit<Draft, "html" | "text">[]; draftView?: boolean; selected?: string; loading: boolean; more: boolean; onSelect(id: string): void; onDraft(id: string): void; onMore(): void; folders: Folder[]; onMove(ids: string[], folderId: string): void; onBatch(action: BatchAction, ids: string[]): void }) {
   const [checked, setChecked] = useState<string[]>([])
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const refresh = () => setNow(new Date())
+    const timer = window.setInterval(refresh, 60_000)
+    window.addEventListener("focus", refresh)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+    }
+  }, [])
   const rows = draftView ? drafts : items
   useEffect(() => { setChecked(current => current.filter(id => rows.some(item => item.id === id))) }, [rows])
   const trashFolders = new Set(folders.filter(folder => folder.role === "trash").map(folder => folder.id))
@@ -23,7 +34,7 @@ export function MailList({ items, drafts, draftView, selected, loading, more, on
       </div></MailMessageMenu>) : items.map(item => <MailMessageMenu key={item.id} id={item.id} folders={folders} busy={busy} canPermanentlyDelete={trashFolders.has(item.locator.folderId)} onBatch={onBatch} onMove={onMove}><div className={cn("flex items-start border-b px-3", selected === item.id ? "bg-selected" : "hover:bg-accent")}>
         <Checkbox className="mt-5" data-track="mail.message.select" aria-label={`选择 ${item.subject || "无主题"}`} checked={checked.includes(item.id)} disabled={checked.length >= 100 && !checked.includes(item.id)} onCheckedChange={value => toggle(item.id, value === true)} />
         <button type="button" className="min-w-0 flex-1 px-3 py-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => onSelect(item.id)} data-track="mail.message.open"><span className="flex w-full min-w-0 flex-col gap-1">
-          <span className={cn("flex items-center justify-between gap-2", !item.read && "font-semibold")}><span className="truncate">{item.from.map(from => from.name || from.address).join(", ") || "未知发件人"}</span><span className="shrink-0 text-xs font-normal text-muted-foreground">{item.date ? new Date(item.date).toLocaleDateString() : ""}</span></span>
+          <span className={cn("flex items-center justify-between gap-2", !item.read && "font-semibold")}><span className="truncate">{item.from.map(from => from.name || from.address).join(", ") || "未知发件人"}</span><RelativeTime value={item.date} mode="calendar" now={now} fallback="" className="shrink-0 text-xs font-normal text-muted-foreground" /></span>
           <span className={cn("flex items-center gap-1", !item.read && "font-semibold")}>{item.star && <Star className="size-3 shrink-0" aria-label="已加星标" />}<span className="truncate">{item.subject || "（无主题）"}</span>{item.attachmentCount > 0 && <Paperclip className="size-3 shrink-0" aria-label="含附件" />}</span>
           {item.snippet && <span className="truncate text-xs text-muted-foreground">{item.snippet}</span>}
         </span></button>
