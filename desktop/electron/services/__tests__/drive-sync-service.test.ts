@@ -18,6 +18,94 @@ import { createDriveSyncService, type DriveSyncAccountService } from "../drive-s
 import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
+  it("completes two simultaneous sync remappings without exhausting work slots", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "drive-remap-concurrency-"))
+    const contents = new Map([["file-a", "cloud"], ["file-b", "cloud"]])
+    let uploadCount = 0
+    let releaseUploads: () => void = () => {}
+    const uploadsReady = new Promise<void>((resolve) => { releaseUploads = resolve })
+    const harness = createHarness({ accountService: {
+      downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
+        await writeFile(outputPath, contents.get(itemId)!)
+        return { ok: true as const, path: outputPath }
+      }),
+      uploadDriveSyncFile: vi.fn(async (input: { path: string; expectedItemId: string }) => {
+        const data = await readFile(input.path, "utf8")
+        if (++uploadCount === 2) releaseUploads()
+        await uploadsReady
+        contents.set(input.expectedItemId, data)
+        return { ...mockDriveItem(input.expectedItemId), size: String(Buffer.byteLength(data)) }
+      }),
+    } })
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const inputs = await Promise.all(["a", "b"].map(async (suffix) => {
+        const localPath = path.join(directory, `${suffix}.md`)
+        await writeFile(localPath, `local-${suffix}`)
+        const base = { driveItemId: `file-${suffix}`, driveItemName: "spec.md", kind: "file" as const, localPath, direction: "bind_existing" as const, authority: "local" as const }
+        const old = await service.createBinding({ ...base, deferWatcher: true })
+        return { ...base, replaceBindingId: old.id }
+      }))
+      const previews = await Promise.all(inputs.map((input) => service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })))
+      expect(previews.map((preview) => preview.status)).toEqual(["ready", "ready"])
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      try {
+        const result = await Promise.race([
+          Promise.all(inputs.map((input, index) => service.createSafeBinding({ ...input, confirmationToken: previews[index].confirmationToken }))),
+          new Promise<"timed out">((resolve) => { timeout = setTimeout(() => resolve("timed out"), 1500) }),
+        ])
+        expect(result).not.toBe("timed out")
+        if (result === "timed out") return
+        expect(result.map((binding) => binding.status)).toEqual(["active", "active"])
+        expect((await Promise.all(inputs.map((input) => harness.bindings.get(input.replaceBindingId)))).map((binding) => binding?.status)).toEqual(["removed", "removed"])
+      } finally {
+        clearTimeout(timeout)
+      }
+    } finally {
+      await service.stopRemotePolling()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it.each(["local", "remote"] as const)("finishes root delete conflict when only the %s side remains", async (remaining) => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "drive-root-delete-conflict-"))
+    const localPath = path.join(directory, "spec.md")
+    let remoteExists = remaining === "remote"
+    const harness = createHarness({ accountService: {
+      getDriveItem: vi.fn(async (id: string) => {
+        if (!remoteExists) throw Object.assign(new Error("HTTP 404 NOT_FOUND"), { status: 404 })
+        return mockDriveItem(id)
+      }),
+      deleteDriveItem: vi.fn(async () => { remoteExists = false; return { ok: true as const } }),
+    } })
+    const service = createDriveSyncService({ ...harness.deps, trashLocalPath: async (target) => { await rename(target, `${target}.trash`) } })
+    try {
+      if (remaining === "local") await writeFile(localPath, "local content")
+      const binding = await service.createBinding({ driveItemId: "remote-file", driveItemName: "spec.md", kind: "file", localPath, deferWatcher: true })
+      await seedFileRootBaseline(harness, binding.id, "remote-file")
+      const conflict = await service.recordConflict({ bindingId: binding.id, driveItemId: "remote-file", relativePath: "", localPath, type: "delete_vs_modify" })
+
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      try {
+        const result = await Promise.race([
+          service.resolveConflict({ conflictId: conflict.id, action: "confirm_delete" }).then(() => "completed"),
+          new Promise<string>((resolve) => { timeout = setTimeout(() => resolve("timed out"), 500) }),
+        ])
+        expect(result).toBe("completed")
+      } finally {
+        clearTimeout(timeout)
+      }
+      expect(remoteExists).toBe(false)
+      if (remaining === "local") expect(await readFile(`${localPath}.trash`, "utf8")).toBe("local content")
+      expect((await harness.bindings.get(binding.id))?.status).toBe("removed")
+      expect(await harness.baseline.list({ bindingId: binding.id })).toEqual([])
+      expect(await harness.conflicts.list({ bindingId: binding.id })).toEqual([])
+    } finally {
+      await service.stopRemotePolling()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it.each(["file", "folder"] as const)("resumes a %s binding when another binding's remote root has been deleted", async (kind) => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "drive-resume-missing-other-"))
     const harness = createHarness()
@@ -6702,6 +6790,37 @@ describe("Drive sync authority confirmation", () => {
       expect(binding.status).toBe("paused")
       expect((await f.harness.bindings.get(old.id))?.status).toBe("removed")
     } finally { f.service.stopLocalWatcher(); f.service.stopRemotePolling(); await rm(f.directory, { recursive: true, force: true }) }
+  })
+  it("keeps the old sync when it is paused during replacement", async () => {
+    const f = await setup()
+    let releaseUpload: () => void = () => {}
+    let signalUpload: () => void = () => {}
+    const uploadStarted = new Promise<void>((resolve) => { signalUpload = resolve })
+    const uploadGate = new Promise<void>((resolve) => { releaseUpload = resolve })
+    const originalUpload = f.harness.deps.accountService.uploadDriveSyncFile.getMockImplementation()!
+    try {
+      const old = await f.service.createBinding({ ...f.input, deferWatcher: true })
+      const input = { ...f.input, replaceBindingId: old.id }
+      const preview = await f.service.previewBinding({ ...input, remoteExists: true, directionHint: "bind_existing" })
+      f.harness.deps.accountService.uploadDriveSyncFile.mockImplementation(async (request) => {
+        signalUpload()
+        await uploadGate
+        return originalUpload(request)
+      })
+      const replacement = f.service.createSafeBinding({ ...input, confirmationToken: preview.confirmationToken })
+      await uploadStarted
+      const paused = f.service.pauseBinding(old.id)
+      releaseUpload()
+
+      expect((await replacement).status).toBe("paused")
+      expect((await paused).status).toBe("paused")
+      expect((await f.harness.bindings.get(old.id))?.status).toBe("paused")
+    } finally {
+      releaseUpload()
+      await f.service.stopLocalWatcher()
+      await f.service.stopRemotePolling()
+      await rm(f.directory, { recursive: true, force: true })
+    }
   })
 })
 

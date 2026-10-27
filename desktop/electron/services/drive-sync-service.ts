@@ -755,12 +755,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     verifiedRootHintChecks.delete(id)
     return workCoordinator.cancelAndRun(id, async () => {
       if (disposition === "keep_both") {
-        const binding = await removalBinding(id, false)
-        await clearBindingState(id)
-        await deps.bindings.upsert({ ...binding, status: "removed", removalCleanup: undefined, lastError: null, updatedAt: timestamp() })
-        await reconcileLocalWatcher()
-        await emitChanged()
-        return { bindingId: binding.id, local: "retained", remote: "retained", errors: [] }
+        return detachBindingKeepingFiles(id)
       }
       const captured = await removalCapture({ id, disposition })
       requireReview(reviewedRemovals, options.confirmationToken, captured.fingerprint)
@@ -813,6 +808,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           remote: disposition === "keep_remote" ? "retained" : cleanup.remote.some((entry) => !entry.done) ? "failed" : "trashed", errors: cleanup.errors }
       } finally { cleaningBindings.delete(id) }
     })
+  }
+
+  // The caller must already own this binding's work queue.
+  async function detachBindingKeepingFiles(id: string): Promise<DriveSyncRemovalResultDto> {
+    const binding = await removalBinding(id, false)
+    await clearBindingState(id)
+    await deps.bindings.upsert({ ...binding, status: "removed", removalCleanup: undefined, lastError: null, updatedAt: timestamp() })
+    await reconcileLocalWatcher()
+    await emitChanged()
+    return { bindingId: binding.id, local: "retained", remote: "retained", errors: [] }
   }
 
   async function discardBinding(id: string): Promise<void> {
@@ -1682,7 +1687,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       initialCursor, initialStatus: "initializing", deferWatcher: true, skipLocalAuthorization: true,
       replacingId: previous?.id,
     })
-    return await runBindingActionSingleFlight(created.id, async () => {
+    return await runBindingsActionSingleFlight(previous ? [created.id, previous.id] : [created.id], async () => {
       try {
         const binding = await requireBinding(created.id)
         const remoteByPath = new Map(captured.remote.map((entry) => [entry.relativePath, entry]))
@@ -1764,7 +1769,11 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
             driveItemName: input.driveItemName, drivePathHint: input.drivePathHint, localPath: input.localPath, excludeRules: rules })
         await baselineStore.removeBinding(binding.id)
         for (const entry of prepared) await baselineStore.upsert({ ...entry, bindingId: binding.id })
-        if (previous) await removeBinding(previous.id)
+        activeWorkSignals.get(binding.id)?.throwIfAborted()
+        if (previous) {
+          workCoordinator.cancelQueued(previous.id)
+          await detachBindingKeepingFiles(previous.id)
+        }
         await updateBindingInitialization(binding.id, "replay", initialCursor)
         await replayInitialRemoteChanges(binding.id, initialCursor)
         const result = await activateBindingAfterInitialReplay(binding.id)
@@ -3074,7 +3083,8 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
       await executeConflictResolutionOperations([plannedConflictOperation(binding, conflict, "delete_remote", localPath)])
     }
     if (conflict.relativePath === "") {
-      await removeBinding(binding.id)
+      workCoordinator.cancelQueued(binding.id)
+      await detachBindingKeepingFiles(binding.id)
       return true
     }
     return false
@@ -4778,13 +4788,22 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     bindingId: string,
     action: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    if (replacingBindings.has(bindingId)) throw new Error("文件正在更新，请稍后修改同步。")
-    return workCoordinator.run(bindingId, async (signal) => {
-      activeWorkSignals.set(bindingId, signal)
+    return runBindingsActionSingleFlight([bindingId], action)
+  }
+
+  async function runBindingsActionSingleFlight<T>(
+    bindingIds: readonly string[],
+    action: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    if (bindingIds.some((bindingId) => replacingBindings.has(bindingId))) throw new Error("文件正在更新，请稍后修改同步。")
+    return workCoordinator.runMany(bindingIds, async (signal) => {
+      for (const bindingId of bindingIds) activeWorkSignals.set(bindingId, signal)
       try {
         return await action(signal)
       } finally {
-        if (activeWorkSignals.get(bindingId) === signal) activeWorkSignals.delete(bindingId)
+        for (const bindingId of bindingIds) {
+          if (activeWorkSignals.get(bindingId) === signal) activeWorkSignals.delete(bindingId)
+        }
       }
     })
   }

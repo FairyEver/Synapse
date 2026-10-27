@@ -11,7 +11,9 @@ export function isDriveSyncWorkCancelledError(error: unknown): error is DriveSyn
 
 export interface DriveSyncWorkCoordinator {
   run<T>(bindingId: string, work: (signal: AbortSignal) => Promise<T>): Promise<T>
+  runMany<T>(bindingIds: readonly string[], work: (signal: AbortSignal) => Promise<T>): Promise<T>
   cancelAndRun<T>(bindingId: string, work: () => Promise<T>): Promise<T>
+  cancelQueued(bindingId: string): void
   cancelAllAndWait(): Promise<void>
   isBusy(bindingId: string): boolean
   waitForIdle(): Promise<void>
@@ -26,34 +28,37 @@ export function createDriveSyncWorkCoordinator(): DriveSyncWorkCoordinator {
   const activeControllers = new Map<string, AbortController>()
 
   async function runAtGeneration<T>(
-    bindingId: string,
-    generation: number,
+    bindingIds: readonly string[],
+    bindingGenerations: ReadonlyMap<string, number>,
     work: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> {
-    const previous = tails.get(bindingId)
+    const previous = bindingIds.map((bindingId) => tails.get(bindingId)).filter((tail): tail is Promise<void> => Boolean(tail))
     let release: () => void = () => {}
     const tail = new Promise<void>((resolve) => {
       release = resolve
     })
-    tails.set(bindingId, tail)
-    if (previous) await previous.catch(() => undefined)
+    for (const bindingId of bindingIds) tails.set(bindingId, tail)
+    if (previous.length) await Promise.all(previous)
     // Reserve a shared slot only after this binding reaches the front of its queue.
     if (activeCount >= 2) await new Promise<void>((resolve) => slotWaiters.push(resolve))
     else activeCount += 1
-    if (generation !== currentGeneration(bindingId)) {
+    const cancelled = bindingIds.find((bindingId) => bindingGenerations.get(bindingId) !== currentGeneration(bindingId))
+    if (cancelled) {
       releaseSlot()
-      releaseTail(bindingId, tail, release)
-      throw new DriveSyncWorkCancelledError(bindingId)
+      releaseTails(bindingIds, tail, release)
+      throw new DriveSyncWorkCancelledError(cancelled)
     }
 
     const controller = new AbortController()
-    activeControllers.set(bindingId, controller)
+    for (const bindingId of bindingIds) activeControllers.set(bindingId, controller)
     try {
       return await work(controller.signal)
     } finally {
-      if (activeControllers.get(bindingId) === controller) activeControllers.delete(bindingId)
+      for (const bindingId of bindingIds) {
+        if (activeControllers.get(bindingId) === controller) activeControllers.delete(bindingId)
+      }
       releaseSlot()
-      releaseTail(bindingId, tail, release)
+      releaseTails(bindingIds, tail, release)
     }
   }
 
@@ -64,17 +69,27 @@ export function createDriveSyncWorkCoordinator(): DriveSyncWorkCoordinator {
   }
 
   function run<T>(bindingId: string, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
-    return runAtGeneration(bindingId, currentGeneration(bindingId), work)
+    return runMany([bindingId], work)
+  }
+
+  function runMany<T>(ids: readonly string[], work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const bindingIds = [...new Set(ids)]
+    if (bindingIds.length === 0) throw new Error("同步任务至少需要一个同步关系。")
+    return runAtGeneration(bindingIds, new Map(bindingIds.map((id) => [id, currentGeneration(id)])), work)
   }
 
   async function cancelAndRun<T>(bindingId: string, work: () => Promise<T>): Promise<T> {
     const generation = cancel(bindingId)
-    return runAtGeneration(bindingId, generation, async () => work())
+    return runAtGeneration([bindingId], new Map([[bindingId, generation]]), async () => work())
+  }
+
+  function cancelQueued(bindingId: string): void {
+    generations.set(bindingId, currentGeneration(bindingId) + 1)
   }
 
   function cancel(bindingId: string): number {
-    const generation = currentGeneration(bindingId) + 1
-    generations.set(bindingId, generation)
+    cancelQueued(bindingId)
+    const generation = currentGeneration(bindingId)
     activeControllers.get(bindingId)?.abort(new DriveSyncWorkCancelledError(bindingId))
     return generation
   }
@@ -92,14 +107,18 @@ export function createDriveSyncWorkCoordinator(): DriveSyncWorkCoordinator {
     return generations.get(bindingId) ?? 0
   }
 
-  function releaseTail(bindingId: string, tail: Promise<void>, release: () => void): void {
+  function releaseTails(bindingIds: readonly string[], tail: Promise<void>, release: () => void): void {
     release()
-    if (tails.get(bindingId) === tail) tails.delete(bindingId)
+    for (const bindingId of bindingIds) {
+      if (tails.get(bindingId) === tail) tails.delete(bindingId)
+    }
   }
 
   return {
     run,
+    runMany,
     cancelAndRun,
+    cancelQueued,
     cancelAllAndWait,
     isBusy: (bindingId) => tails.has(bindingId),
     waitForIdle,

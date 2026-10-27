@@ -91,4 +91,42 @@ describe("DriveSyncWorkCoordinator", () => {
     await lifecycle
     expect(order).toEqual(["active", "lifecycle"])
   })
+
+  it("serializes multi-binding work with both bindings and cancels it from either one", async () => {
+    const coordinator = createDriveSyncWorkCoordinator()
+    const order: string[] = []
+    const active = coordinator.runMany(["new", "old"], async (signal) => {
+      order.push("remapping")
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true })
+      })
+    })
+    const next = coordinator.run("new", async () => { order.push("new work") })
+    const removeOld = coordinator.cancelAndRun("old", async () => { order.push("remove old") })
+
+    await expect(active).rejects.toMatchObject({ name: "DriveSyncWorkCancelledError" })
+    await Promise.all([next, removeOld])
+    expect(order[0]).toBe("remapping")
+    expect(order.slice(1)).toEqual(expect.arrayContaining(["new work", "remove old"]))
+    await coordinator.waitForIdle()
+  })
+
+  it("cancels queued work without interrupting the current binding action", async () => {
+    const coordinator = createDriveSyncWorkCoordinator()
+    let release: () => void = () => {}
+    let cancelQueued: () => void = () => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const active = coordinator.run("binding", async (signal) => {
+      cancelQueued = () => coordinator.cancelQueued("binding")
+      await gate
+      expect(signal.aborted).toBe(false)
+    })
+    const queued = coordinator.run("binding", async () => "unexpected")
+    cancelQueued()
+    release()
+
+    await active
+    await expect(queued).rejects.toMatchObject({ name: "DriveSyncWorkCancelledError" })
+    await expect(coordinator.run("binding", async () => "new work")).resolves.toBe("new work")
+  })
 })
