@@ -230,7 +230,7 @@ export class MailContent {
     }
     const chunk: ParsedBody = { html: "", text: "" }
     for (const field of ["html", "text"] as const) {
-      let end = Math.min(content.body[field].length, positions[field] + MAIL_BODY_CHUNK_BYTES / 6)
+      let end = Math.min(content.body[field].length, positions[field] + Math.floor(MAIL_BODY_CHUNK_BYTES / 6))
       if (end > positions[field] && /[\uD800-\uDBFF]/u.test(content.body[field][end - 1])) end--
       chunk[field] = content.body[field].slice(positions[field], end); positions[field] = end
     }

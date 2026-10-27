@@ -52,6 +52,28 @@ it("fetches only text MIME parts, returns bounded chunks and preserves downloade
     await expect(content.executeAttachment(r.ctx, "attachment.download_file", { assetId: list.items[0].id, outputPath })).rejects.toMatchObject({ code: "OUTPUT_EXISTS" })
   } finally { await r.sync.dispose(); await r.close() }
 })
+it("reads every chunk of a long body without losing Unicode characters at chunk boundaries", async () => {
+  const r = await syncRig()
+  try {
+    vi.mocked(r.session.searchUids).mockResolvedValue([1]); await r.sync.runOnce(r.ctx, r.account.id)
+    const message = (await r.repo.page(r.ctx, "messages", { accountId: r.account.id })).items[0]
+    const html = "a".repeat(10_921) + "😀" + "中".repeat(25_000)
+    const text = "b".repeat(10_921) + "😀" + "文".repeat(23_000)
+    vi.mocked(r.session.fetchBodyStructure).mockResolvedValue({ type: "multipart/alternative", childNodes: [{ type: "text/html", part: "1" }, { type: "text/plain", part: "2" }] })
+    vi.mocked(r.session.fetchPart).mockImplementation(async (_path, _uid, part) => Readable.from([Buffer.from(part === "1" ? html : text)]))
+    const content = new MailContent(r.repo, r.accounts, r.assets, r.access)
+    let cursor: string | undefined, bodyRef: string | undefined, resultHtml = "", resultText = "", complete = false, chunks = 0, splitSurrogate = false
+    do {
+      const chunk = await content.readChunk(r.ctx, { messageId: message.id, cursor, bodyRef })
+      expect(Buffer.byteLength(chunk.html) + Buffer.byteLength(chunk.text)).toBeLessThanOrEqual(65_536)
+      splitSurrogate ||= /[\uD800-\uDBFF]$/u.test(chunk.html) || /[\uD800-\uDBFF]$/u.test(chunk.text)
+      resultHtml += chunk.html; resultText += chunk.text; bodyRef = chunk.bodyRef; cursor = chunk.nextCursor ?? undefined; complete = chunk.complete
+      expect(++chunks).toBeLessThan(10)
+    } while (cursor)
+    expect(chunks).toBeGreaterThan(2); expect(complete).toBe(true); expect(splitSurrogate).toBe(false)
+    expect(resultHtml).toBe(html); expect(resultText).toBe(text)
+  } finally { await r.sync.dispose(); await r.close() }
+})
 it("contains corrupt source streams without leaking raw error contents", async () => {
   const source = Readable.from((async function* () { yield "From: sender@example.com\r\n\r\n"; throw new Error("secret protocol failure") })())
   await expect(parseMailStream(source, { signal: new AbortController().signal })).rejects.toMatchObject({ code: "MIME_INVALID", message: "邮件格式无法解析" })
