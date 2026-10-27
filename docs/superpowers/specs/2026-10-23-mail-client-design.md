@@ -308,6 +308,10 @@ Skill 在权威目录 `desktop/app-capabilities/synapse-skill/skill-package/` �
 
 添加向导提供 QQ 邮箱选项，按[腾讯云邮件连接器文档](https://main.qcloudimg.com/raw/document/product/pdf/1270_46586_cn.pdf)预填 IMAP `imap.qq.com:993`、SMTP `smtp.qq.com:465`，均使用 TLS；界面提示开启 IMAP/SMTP、使用授权码。账号使用通用协议策略，默认服务器保存已发送副本，用户可在高级设置更改，并须确认 QQ 邮箱的 SMTP 保存开关与之匹配。真实 QQ 账号收发、移动及副本行为尚待验收。
 
+## 2026-10-27：163 个人邮箱快捷配置
+
+添加向导提供 163 个人邮箱选项，预填 IMAP `imap.163.com:993`、SMTP `smtp.163.com:465`，均使用 TLS；界面按[网易邮箱帮助](https://help.mail.126.com/faqDetail.do?code=d7a5dc8471cd0c0e8b4b8f4f8e49998b374173cfe9171305fa1ce630d7f67ac286624f309a1a7089)提示开启 IMAP/SMTP、生成客户端授权码。账号使用通用协议策略，默认服务器保存已发送副本，用户可在高级设置更改；真实 163 账号的收发、移动和副本行为尚待验收。
+
 2026-10-24 邮件地址展示：To/Cc 优先显示当前邮件头 name，点击查看并复制原始地址；人数仅为原始显示名称的一部分，不表示实时组织人数，不解析或维护部门成员。独立保留 Sender（message.get 的可选 headers.sender），与 From 地址不同时显示代发；不得替换原始 To/Cc/Reply-To 或改变回复、转发行为。旧索引在既有有界头同步中补齐 Sender，保留 ID、缓存、标志与历史通知基线；未采集为缺省、已采集无有效值为 []。
 
 ## 2026-10-24：复用组织选择部门收件人
