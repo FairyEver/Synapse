@@ -46,12 +46,11 @@ export function useMailAccounts(owner: string | null, onSaved: () => void | Prom
   }
   const connect = async () => {
     const current = formRef.current, identity = ownerRef.current
-    formRef.current = { ...current, credential: "" }; setForm(formRef.current)
     const result = await run(async () => {
       const parsed = parseAccountFields(configureAccountSchema, { ...current, name: current.name.trim() || current.email })
       return runMailUiOperation("configure", () => mailApi().accountConfigure(parsed))
     })
-    if (identity === ownerRef.current) { formRef.current = { ...formRef.current, credential: "" }; setForm(formRef.current); if (result) setDialogOpen(false) }
+    if (result && identity === ownerRef.current) { formRef.current = { ...formRef.current, credential: "" }; setForm(formRef.current); setDialogOpen(false) }
   }
   const update = (account: AccountSummary, patch: Partial<AccountConfig>) => run(() => mailApi().accountUpdate({ accountId: account.id, expectedRevision: account.revision, patch: parseAccountFields(MAIL_INPUT_SCHEMAS["account.update"].shape.patch, patch) }))
   const pause = (account: AccountSummary) => run(async () => account.paused ? mailApi().accountResume({ accountId: account.id }) : mailApi().accountPause({ accountId: account.id }))
