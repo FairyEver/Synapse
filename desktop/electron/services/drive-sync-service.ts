@@ -1793,10 +1793,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (active.some((binding) => binding.driveItemId === driveItemId)) return "云盘上这个条目已经在同步了。"
     if (active.length === 0) return null
 
-    const candidateAncestors = await collectRemoteAncestorIds(driveItemId)
+    const candidate = await getDriveItemFromAccountService(deps.accountService, driveItemId)
+    const candidateAncestors = await collectRemoteAncestorIds(driveItemId, { root: candidate })
     if (active.some((binding) => candidateAncestors.has(binding.driveItemId))) {
       return "云盘条目位于已同步的云盘文件夹内。"
     }
+
+    // A file cannot contain another root. Its actual parent chain above is sufficient to detect overlap.
+    if (candidate.type === "file") return null
 
     for (const binding of active) {
       const boundAncestors = await collectRemoteAncestorIds(binding.driveItemId, { allowMissingRoot: true })
@@ -1815,14 +1819,14 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return false
   }
 
-  async function collectRemoteAncestorIds(driveItemId: string, options?: { readonly allowMissingRoot: boolean }): Promise<ReadonlySet<string>> {
+  async function collectRemoteAncestorIds(driveItemId: string, options?: { readonly allowMissingRoot?: boolean; readonly root?: DriveItemDto }): Promise<ReadonlySet<string>> {
     const ancestors = new Set<string>()
     let currentId: string | null = driveItemId
     while (currentId && !ancestors.has(currentId)) {
       ancestors.add(currentId)
       let item: DriveItemDto
       try {
-        item = await getDriveItemFromAccountService(deps.accountService, currentId)
+        item = currentId === driveItemId && options?.root ? options.root : await getDriveItemFromAccountService(deps.accountService, currentId)
       } catch (error) {
         // A deleted root cannot contain a live target; leave its binding intact for conflict handling.
         if (options?.allowMissingRoot && currentId === driveItemId && isRemoteNotFoundError(error)) return new Set()
@@ -4005,6 +4009,10 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     if (!isCurrentAccountOnline()) return
     const errored = (await listOwnerBindings()).filter((binding) => binding.status === "error")
     for (const binding of errored) {
+      const pendingUploadError = (await deps.operations.list({ bindingId: binding.id })).some((operation) =>
+        operation.kind === "upload" && operation.status === "error" && operation.snapshotPath && operation.message === binding.lastError,
+      )
+      if (pendingUploadError) continue
       await resumeBinding(binding.id).catch(async (error) => {
         await markBindingError(binding.id, errorMessage(error), { emitChanged: true }).catch(() => undefined)
       })
@@ -4349,11 +4357,16 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
           continue
         }
       }
-      if (
-        online
-        && (operation.status === "running" || operation.status === "retry_wait")
-        && await recoverCompletedUpload(operation)
-      ) continue
+      if (online && (operation.status === "running" || operation.status === "retry_wait")) {
+        try {
+          if (await recoverCompletedUpload(operation)) continue
+        } catch (error) {
+          if (!isRetryableSyncError(error)) {
+            await markRecoveredUploadTerminalError(operation, `恢复上传失败：${errorMessage(error)}`)
+            continue
+          }
+        }
+      }
       if (operation.status === "running") {
         await deps.operations.upsert({
           ...operation,

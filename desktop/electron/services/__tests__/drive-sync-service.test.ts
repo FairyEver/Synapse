@@ -6525,6 +6525,122 @@ describe("DriveSyncService", () => {
   })
 })
 
+describe("Drive sync isolation for stale bindings", () => {
+  it.each(["missing upload", "failed candidate lookup"] as const)("starts unrelated watchers when recovering an old %s fails", async (failure) => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "drive-recovery-isolation-"))
+    const stagingRootPath = path.join(directory, "staging")
+    const watched: string[] = []
+    const harness = createHarness({
+      stagingRootPath,
+      watch: (rootPath) => {
+        watched.push(rootPath)
+        return Object.assign(new EventEmitter(), { close() {} }) as unknown as ReturnType<DriveSyncWatchFactory>
+      },
+      accountService: {
+        downloadDriveFile: vi.fn(async () => { throw Object.assign(new Error("HTTP 404 NOT_FOUND"), { status: 404 }) }),
+        listDriveItemTree: vi.fn(async () => { throw Object.assign(new Error("HTTP 503"), { status: 503 }) }),
+      },
+    })
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const oldPath = path.join(directory, "old.md")
+      const goodPath = path.join(directory, "good", "good.md")
+      await mkdir(path.dirname(goodPath))
+      await writeFile(oldPath, "old")
+      await writeFile(goodPath, "good")
+      const old = await service.createBinding({ driveItemId: "old-file", remoteParentId: "parent", driveItemName: "old.md", kind: "file", localPath: oldPath, deferWatcher: true })
+      const good = await service.createBinding({ driveItemId: "good-file", driveItemName: "good.md", kind: "file", localPath: goodPath, deferWatcher: true })
+      await seedFileBaseline(harness, good.id, goodPath, "good-file")
+      const snapshotPath = path.join(stagingRootPath, old.id, "upload", "content")
+      await mkdir(path.dirname(snapshotPath), { recursive: true })
+      await writeFile(snapshotPath, "old")
+      const snapshotStats = await lstat(snapshotPath)
+      await harness.operations.upsert({
+        id: "old-upload", schemaVersion: 2, bindingId: old.id, kind: "upload", status: "running",
+        driveItemId: failure === "missing upload" ? "old-file" : null, relativePath: "", localPath: oldPath,
+        remotePathHint: null, message: null, createdAt: "2026-06-28T00:00:00.000Z", updatedAt: "2026-06-28T00:00:00.000Z",
+        startedAt: "2026-06-28T00:00:00.000Z", completedAt: null, attemptCount: 0, nextRetryAt: null,
+        completedBytes: snapshotStats.size, totalBytes: snapshotStats.size, remoteItemKind: "file", source: "local",
+        snapshotPath, snapshotHash: await hashDriveSyncFile(snapshotPath), snapshotSize: snapshotStats.size, snapshotMtimeMs: snapshotStats.mtimeMs,
+      })
+
+      await expect(service.startLocalWatcher()).resolves.toBeUndefined()
+      expect(watched).toContain(path.dirname(goodPath))
+      await expect(harness.bindings.get(good.id)).resolves.toMatchObject({ status: "active" })
+      await expect(readFile(goodPath, "utf8")).resolves.toBe("good")
+      await expect(readFile(snapshotPath, "utf8")).resolves.toBe("old")
+      await expect(harness.operations.get("old-upload")).resolves.toMatchObject({ status: failure === "missing upload" ? "error" : "retry_wait" })
+      if (failure === "missing upload") {
+        await expect(harness.bindings.get(old.id)).resolves.toMatchObject({ status: "error" })
+        await service.stopLocalWatcher()
+        await service.startLocalWatcher()
+        await expect(harness.bindings.get(old.id)).resolves.toMatchObject({ status: "error" })
+        await expect(readFile(snapshotPath, "utf8")).resolves.toBe("old")
+      }
+      expect(harness.deps.accountService.uploadDriveSyncFile).not.toHaveBeenCalled()
+    } finally {
+      await service.stopLocalWatcher()
+      await service.stopRemotePolling()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it("resumes a normal file when an unrelated old root has a temporary server error", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "drive-file-overlap-isolation-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const file = path.join(directory, "good.md")
+      const oldPath = path.join(directory, "old")
+      await writeFile(file, "good")
+      await mkdir(oldPath)
+      const target = await service.createBinding({ driveItemId: "good-file", driveItemName: "good.md", kind: "file", localPath: file, deferWatcher: true })
+      await seedFileBaseline(harness, target.id, file, "good-file")
+      const old = await service.createBinding({ driveItemId: "old-folder", driveItemName: "Old", kind: "folder", localPath: oldPath, deferWatcher: true })
+      await service.pauseBinding(old.id)
+      await service.pauseBinding(target.id)
+      harness.deps.accountService.getDriveItem.mockImplementation(async (id: string) => {
+        if (id === "old-folder") throw Object.assign(new Error("HTTP 503"), { status: 503 })
+        return mockDriveItem(id)
+      })
+      await expect(service.resumeBinding(target.id)).resolves.toMatchObject({ status: "active" })
+      await expect(readFile(file, "utf8")).resolves.toBe("good")
+      await expect(harness.bindings.get(old.id)).resolves.toMatchObject({ status: "paused" })
+    } finally {
+      await service.stopLocalWatcher()
+      await service.stopRemotePolling()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  it("does not resume a file when its real parent is another binding that cannot be checked", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "drive-file-parent-unavailable-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const file = path.join(directory, "good.md")
+      const oldPath = path.join(directory, "old")
+      await writeFile(file, "good")
+      await mkdir(oldPath)
+      const target = await service.createBinding({ driveItemId: "good-file", driveItemName: "good.md", kind: "file", localPath: file, deferWatcher: true })
+      const old = await service.createBinding({ driveItemId: "old-folder", driveItemName: "Old", kind: "folder", localPath: oldPath, deferWatcher: true })
+      await service.pauseBinding(old.id)
+      await service.pauseBinding(target.id)
+      harness.deps.accountService.getDriveItem.mockImplementation(async (id: string) => {
+        if (id === "old-folder") throw Object.assign(new Error("HTTP 503"), { status: 503 })
+        return { ...mockDriveItem(id), parentId: "old-folder" }
+      })
+      await expect(service.resumeBinding(target.id)).rejects.toThrow("HTTP 503")
+      await expect(harness.bindings.get(target.id)).resolves.toMatchObject({ status: "paused" })
+      await expect(readFile(file, "utf8")).resolves.toBe("good")
+    } finally {
+      await service.stopLocalWatcher()
+      await service.stopRemotePolling()
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+})
+
 async function seedFileBaseline(
   harness: ReturnType<typeof createHarness>,
   bindingId: string,

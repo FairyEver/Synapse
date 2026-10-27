@@ -42,6 +42,7 @@ export async function findContainedDriveBindings(
   const requests = new Map<string, Promise<DriveItemAncestorDto>>()
   const batchedNodes = new Map<string, DriveItemAncestorDto>()
   const batchedFailures = new Set<string>()
+  const missingRoots = new Set<string>()
   let failed = false
   if (!folders.size) return { bindings: contained, failed }
   const get = (id: string) => {
@@ -59,6 +60,7 @@ export async function findContainedDriveBindings(
     try {
       const response = await getRemoteBatch(candidates.map((binding) => binding.driveItemId))
       for (const result of response.results) {
+        if (result.error?.status === 404 && result.error.code === "NOT_FOUND") { missingRoots.add(result.itemId); continue }
         if (result.error || !result.data) { batchedFailures.add(result.itemId); continue }
         for (const node of [...result.data.ancestors, result.data.item]) batchedNodes.set(node.id, node)
       }
@@ -68,6 +70,7 @@ export async function findContainedDriveBindings(
   }
   for (let offset = 0; offset < candidates.length && !signal?.aborted; offset += 4) {
     await Promise.all(candidates.slice(offset, offset + 4).map(async (binding) => {
+      if (missingRoots.has(binding.driveItemId)) return
       const visited = new Set<string>()
       let id: string | null = binding.driveItemId
       try {
@@ -84,12 +87,19 @@ export async function findContainedDriveBindings(
           if (knownRoots.has(parentId)) break
           id = parentId
         }
-      } catch {
+      } catch (error) {
+        if (!getRemoteBatch && id === binding.driveItemId && isMissingDriveRoot(error)) return
         failed = true
       }
     }))
   }
   return { bindings: contained, failed }
+}
+
+function isMissingDriveRoot(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const details = error as Error & { readonly status?: unknown; readonly statusCode?: unknown }
+  return details.status === 404 || details.statusCode === 404 || /HTTP 404\b/u.test(error.message)
 }
 
 export interface DriveItemSyncStatus { readonly label: string; readonly detail: string; readonly attention?: boolean }

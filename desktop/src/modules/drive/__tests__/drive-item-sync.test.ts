@@ -44,6 +44,40 @@ describe("Drive item sync relationships", () => {
     expect(getRemote).not.toHaveBeenCalled()
   })
 
+  it("ignores a deleted binding root when finding other folders' sync relationships", async () => {
+    const getBatch = vi.fn(async () => ({ results: [
+      { itemId: "root", error: null, data: { item: item("root", "Root", "container", "folder"), ancestors: [item("container", "Parent", null, "folder")], currentVersionId: null, etag: null } },
+      { itemId: "deleted", data: null, error: { status: 404, code: "NOT_FOUND", message: "missing" } },
+    ] }))
+    const result = await findContainedDriveBindings(
+      [item("container", "Parent", null, "folder"), item("other", "Other", null, "folder")],
+      [binding, { ...binding, id: "deleted", driveItemId: "deleted" }], [], vi.fn(), undefined, getBatch,
+    )
+    expect(result.bindings.get("container")).toEqual(["binding"])
+    expect(result.bindings.has("other")).toBe(false)
+    expect(result.failed).toBe(false)
+  })
+
+  it("still reports an unconfirmed ancestor or a batch-level failure as unknown", async () => {
+    const folders = [item("container", "Parent", null, "folder")]
+    const incomplete = vi.fn(async () => ({ results: [{ itemId: "root", data: null, error: { status: 409, code: "ANCESTRY_INCOMPLETE", message: "missing parent" } }] }))
+    expect((await findContainedDriveBindings(folders, [binding], [], vi.fn(), undefined, incomplete)).failed).toBe(true)
+    const batchFailure = vi.fn(async () => { throw Object.assign(new Error("HTTP 404"), { status: 404 }) })
+    expect((await findContainedDriveBindings(folders, [binding], [], vi.fn(), undefined, batchFailure)).failed).toBe(true)
+  })
+
+  it("only ignores a direct missing root in the single-item fallback", async () => {
+    const folders = [item("container", "Parent", null, "folder")]
+    const missing = Object.assign(new Error("HTTP 404"), { status: 404 })
+    const rootMissing = await findContainedDriveBindings(folders, [binding], [], async () => { throw missing })
+    expect(rootMissing.failed).toBe(false)
+    const parentMissing = await findContainedDriveBindings(folders, [binding], [], async (id) => {
+      if (id === "root") return item("root", "Root", "missing-parent", "folder")
+      throw missing
+    })
+    expect(parentMissing.failed).toBe(true)
+  })
+
   it("limits conflict and progress states to the item's actual subtree", () => {
     const relation = getDriveItemSyncRelation(item("child", "notes.md"), path, [{ ...binding, status: "conflict" }])!
     const state = snapshot({ conflicts: [{ id: "conflict", bindingId: binding.id, relativePath: "other.md", type: "both_modified", availableActions: [], localSummary: null, remoteSummary: null, createdAt: "" }] })
