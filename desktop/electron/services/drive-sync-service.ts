@@ -1790,7 +1790,7 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     }
 
     for (const binding of active) {
-      const boundAncestors = await collectRemoteAncestorIds(binding.driveItemId)
+      const boundAncestors = await collectRemoteAncestorIds(binding.driveItemId, { allowMissingRoot: true })
       if (boundAncestors.has(driveItemId)) return "云盘条目包含已同步的云盘条目。"
     }
     return null
@@ -1806,12 +1806,19 @@ export function createDriveSyncService(deps: DriveSyncServiceDeps) {
     return false
   }
 
-  async function collectRemoteAncestorIds(driveItemId: string): Promise<ReadonlySet<string>> {
+  async function collectRemoteAncestorIds(driveItemId: string, options?: { readonly allowMissingRoot: boolean }): Promise<ReadonlySet<string>> {
     const ancestors = new Set<string>()
     let currentId: string | null = driveItemId
     while (currentId && !ancestors.has(currentId)) {
       ancestors.add(currentId)
-      const item = await getDriveItemFromAccountService(deps.accountService, currentId)
+      let item: DriveItemDto
+      try {
+        item = await getDriveItemFromAccountService(deps.accountService, currentId)
+      } catch (error) {
+        // A deleted root cannot contain a live target; leave its binding intact for conflict handling.
+        if (options?.allowMissingRoot && currentId === driveItemId && isRemoteNotFoundError(error)) return new Set()
+        throw error
+      }
       currentId = item.parentId ?? null
     }
     return ancestors

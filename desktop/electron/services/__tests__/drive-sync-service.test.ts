@@ -3,7 +3,7 @@ import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, w
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
-import type { DriveChangeListPageDto } from "@synapse/shared" with { "resolution-mode": "import" }
+import type { DriveChangeListPageDto, DriveItemDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DataNamespace,
   DriveSyncBaselineEntryV1,
@@ -18,6 +18,124 @@ import { createDriveSyncService, type DriveSyncAccountService } from "../drive-s
 import type { DriveSyncWatchFactory } from "../drive-sync-watcher"
 
 describe("DriveSyncService", () => {
+  it.each(["file", "folder"] as const)("resumes a %s binding when another binding's remote root has been deleted", async (kind) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-resume-missing-other-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const localPath = path.join(dir, kind === "file" ? "spec.md" : "docs")
+      if (kind === "file") await writeFile(localPath, "unchanged")
+      else await mkdir(localPath)
+      const oldPath = path.join(dir, "old")
+      await mkdir(oldPath)
+      const binding = await service.createBinding({ driveItemId: kind === "file" ? "remote-file" : "drive-root", driveItemName: kind === "file" ? "spec.md" : "Docs", drivePathHint: kind === "file" ? "/spec.md" : "/Docs", kind, localPath, deferWatcher: true })
+      if (kind === "file") await seedFileBaseline(harness, binding.id, localPath, "remote-file")
+      else await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      const old = await service.createBinding({ driveItemId: "old-folder", driveItemName: "Old", kind: "folder", localPath: oldPath, deferWatcher: true })
+      await service.pauseBinding(old.id)
+      await service.pauseBinding(binding.id)
+      harness.deps.accountService.getDriveItem.mockImplementation(async (id: string) => {
+        if (id === "old-folder") throw Object.assign(new Error("HTTP 404 NOT_FOUND"), { status: 404 })
+        return mockDriveItem(id)
+      })
+
+      await expect(service.resumeBinding(binding.id)).resolves.toMatchObject({ status: "active" })
+      await expect(harness.bindings.get(old.id)).resolves.toMatchObject({ status: "paused", driveItemId: "old-folder" })
+      if (kind === "file") await expect(readFile(localPath, "utf8")).resolves.toBe("unchanged")
+      else expect((await lstat(localPath)).isDirectory()).toBe(true)
+    } finally {
+      await service.stopLocalWatcher()
+      await service.stopRemotePolling()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps the overlap check closed when another root has a temporary server error", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-resume-other-error-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const localPath = path.join(dir, "docs")
+      const oldPath = path.join(dir, "old")
+      await mkdir(localPath)
+      await mkdir(oldPath)
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", kind: "folder", localPath, deferWatcher: true })
+      await seedFolderRootBaseline(harness, binding.id, "drive-root")
+      const old = await service.createBinding({ driveItemId: "old-folder", driveItemName: "Old", kind: "folder", localPath: oldPath, deferWatcher: true })
+      await service.pauseBinding(old.id)
+      await service.pauseBinding(binding.id)
+      harness.deps.accountService.getDriveItem.mockImplementation(async (id: string) => {
+        if (id === "old-folder") throw Object.assign(new Error("HTTP 503"), { status: 503 })
+        return mockDriveItem(id)
+      })
+
+      await expect(service.resumeBinding(binding.id)).rejects.toThrow("HTTP 503")
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "paused" })
+    } finally {
+      await service.stopLocalWatcher()
+      await service.stopRemotePolling()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("does not skip an existing binding when one of its ancestors cannot be found", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-resume-missing-ancestor-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const localPath = path.join(dir, "docs")
+      const otherPath = path.join(dir, "other")
+      await mkdir(localPath)
+      await mkdir(otherPath)
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", kind: "folder", localPath, deferWatcher: true })
+      const other = await service.createBinding({ driveItemId: "other-folder", driveItemName: "Other", kind: "folder", localPath: otherPath, deferWatcher: true })
+      await service.pauseBinding(other.id)
+      await service.pauseBinding(binding.id)
+      harness.deps.accountService.getDriveItem.mockImplementation(async (id: string) => {
+        if (id === "missing-parent") throw Object.assign(new Error("HTTP 404 NOT_FOUND"), { status: 404 })
+        return { ...mockDriveItem(id), parentId: id === "other-folder" ? "missing-parent" : null }
+      })
+
+      await expect(service.resumeBinding(binding.id)).rejects.toThrow("HTTP 404")
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "paused" })
+    } finally {
+      await service.stopLocalWatcher()
+      await service.stopRemotePolling()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("still blocks overlapping remote bindings after a deleted binding", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "drive-resume-overlap-after-missing-"))
+    const harness = createHarness()
+    const service = createDriveSyncService(harness.deps)
+    try {
+      const localPath = path.join(dir, "docs")
+      const oldPath = path.join(dir, "old")
+      const childPath = path.join(dir, "child.md")
+      await mkdir(localPath)
+      await mkdir(oldPath)
+      await writeFile(childPath, "child")
+      const binding = await service.createBinding({ driveItemId: "drive-root", driveItemName: "Docs", kind: "folder", localPath, deferWatcher: true })
+      const old = await service.createBinding({ driveItemId: "old-folder", driveItemName: "Old", kind: "folder", localPath: oldPath, deferWatcher: true })
+      const child = await service.createBinding({ driveItemId: "child-file", driveItemName: "child.md", kind: "file", localPath: childPath, deferWatcher: true })
+      await service.pauseBinding(old.id)
+      await service.pauseBinding(child.id)
+      await service.pauseBinding(binding.id)
+      harness.deps.accountService.getDriveItem.mockImplementation(async (id: string) => {
+        if (id === "old-folder") throw Object.assign(new Error("HTTP 404 NOT_FOUND"), { status: 404 })
+        return { ...mockDriveItem(id), parentId: id === "child-file" ? "drive-root" : null }
+      })
+
+      await expect(service.resumeBinding(binding.id)).rejects.toThrow("重叠")
+      await expect(harness.bindings.get(binding.id)).resolves.toMatchObject({ status: "paused" })
+    } finally {
+      await service.stopLocalWatcher()
+      await service.stopRemotePolling()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("completes an expired remote catch-up retry after a successful poll", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "drive-retry-recovery-"))
     const harness = createHarness()
@@ -6679,7 +6797,7 @@ function createHarness(overrides: {
   const remoteContents = new Map<string, Buffer>()
   const accountService = {
     listDriveFileVersions: vi.fn(async (itemId: string) => ({ items: [{ id: `version:${itemId}`, isCurrent: true }], page: { nextOffset: null } })),
-    getDriveItem: vi.fn(async (itemId: string) => mockDriveItem(itemId)),
+    getDriveItem: vi.fn(async (itemId: string): Promise<DriveItemDto> => mockDriveItem(itemId)),
     downloadDriveFile: vi.fn(async ({ itemId, outputPath }: { itemId: string; outputPath: string }) => {
       await writeFile(outputPath, remoteContents.get(itemId) ?? Buffer.from("remote"))
       return { ok: true as const, path: outputPath }
