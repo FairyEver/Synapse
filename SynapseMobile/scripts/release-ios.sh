@@ -185,6 +185,7 @@ echo
 # rather than dying on "No profiles for 'com.liy.SynapseMobile' were found"
 # after a successful archive. The credential it does that with is the API key
 # loaded at the top of this file.
+sed 's|<string>upload</string>|<string>export</string>|' "$EXPORT_OPTIONS" > "$BUILD_DIR/ExportOptions.export.plist"
 attempt=1
 while :; do
   record_build "$BUILD_NUMBER"
@@ -192,17 +193,26 @@ while :; do
 
   if [ "$UPLOAD" = true ]; then
     echo
-    echo "==> uploading to App Store Connect (this is the outward-facing step)"
-    # tee so the collision can be read back out of an output that is otherwise
-    # trimmed to the last few lines.
+    echo "==> exporting App Store signed ipa"
     if xcodebuild -exportArchive \
          -archivePath "$ARCHIVE_PATH" \
-         -exportOptionsPlist "$EXPORT_OPTIONS" \
+         -exportOptionsPlist "$BUILD_DIR/ExportOptions.export.plist" \
          -exportPath "$BUILD_DIR/export" \
          -allowProvisioningUpdates \
          -authenticationKeyPath "$ASC_KEY_PATH" \
          -authenticationKeyID "$ASC_KEY_ID" \
          -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee "$UPLOAD_LOG" | tail -n 20; then
+      echo "==> uploading to App Store Connect (this is the outward-facing step)"
+    else
+      echo "export failed; see $UPLOAD_LOG" >&2
+      exit 1
+    fi
+
+    # Upload separately: Xcode's upload-account lookup can reject a valid API
+    # key even when signing and the App Store Connect API both work.
+    if xcrun altool --upload-app -f "$BUILD_DIR/export/SynapseMobile.ipa" \
+         --api-key "$ASC_KEY_ID" --api-issuer "$ASC_ISSUER_ID" \
+         --p8-file-path "$ASC_KEY_PATH" 2>&1 | tee "$UPLOAD_LOG" | tail -n 20; then
       echo
       echo "uploaded. processing takes 10-30 minutes; the build then appears in TestFlight."
       echo "reminder: the phone now talks to the production APNs gateway, so the server needs"
@@ -226,7 +236,6 @@ while :; do
 
   echo
   echo "==> exporting ipa without uploading"
-  sed 's|<string>upload</string>|<string>export</string>|' "$EXPORT_OPTIONS" > "$BUILD_DIR/ExportOptions.export.plist"
   xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportOptionsPlist "$BUILD_DIR/ExportOptions.export.plist" \

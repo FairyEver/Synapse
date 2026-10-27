@@ -81,6 +81,8 @@ DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明
 
 ## 桌面更新与发布
 
+- iOS TestFlight 发布通过 `pnpm mobile:release` 先导出正式签名 IPA，再用 Apple `altool` 和同一 App Store Connect API 密钥上传；导出或上传失败时命令必须失败，构建号冲突仍按 Apple 返回的已用号重试。不要依赖 Xcode 的一步上传账户查询。
+
 - 服务端桌面更新凭证使用独立 `DESKTOP_UPDATE_INTENT_SECRET`；生产必须使用至少 32 个随机字节生成的未填充 Base64URL 高熵值，不得与管理员或用户 JWT 密钥相同。
 - 签发只接受与 `APP_PUBLIC_URL` 精确相同的 Origin；凭证表达更新到当前最新版，120 秒过期、不落库，签发与验证接口独立严格限流并返回 `Cache-Control: no-store`。
 - 日志不得记录原始 token、完整更新深链或验证请求体。
