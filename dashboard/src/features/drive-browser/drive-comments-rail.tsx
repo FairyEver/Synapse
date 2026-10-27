@@ -675,7 +675,7 @@ function ThreadView({
       className={cn(
         'relative cursor-default overflow-hidden rounded-lg border p-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring contain-inline-size',
         emphasized ? 'border-ring' : 'border-border',
-        active ? 'bg-ring/15' : 'bg-card'
+        active ? 'bg-chart-3/5' : 'bg-card'
       )}
       onClick={(event) => {
         if (isInteractiveCommentTarget(event.target) || hasSelectionWithin(event.currentTarget)) return
