@@ -13,7 +13,7 @@
 - 公开 ID 是带前缀 UUID：ma_账号、mf_文件夹、em_邮件、md_草稿、mas_资产、mj_任务、mp_预览、mo_发送操作。链接 synapse://mail/em_<uuid> 只定位外部邮件；mail-internal 属站内信且没有兼容别名。
 - expectedRevision 是先读到的修订，冲突时保留内容并重新核对，不覆盖。preview 冻结快照10分钟，发送使用稳定 UUID clientRequestId；同一 draft revision 只消费一次。
 - 仅用户明确授权发送且内容无歧义时 confirmed:true；草稿不授权发送。accepted 是 SMTP 接受，非最终送达；partial 按 accepted/rejected 报告，unknown 先 operation.get，不能换 key 或改草稿规避未知结果去重。
-- 初期发件人仅认证主地址；aliases 只用于 reply_all 排除自己。阿里 Sent 自动保存，不再 APPEND。正文总上限5MiB，单附件/EML100MiB，图片10MiB，最多100附件；资源超限明确失败。路径必须本机绝对路径且不可覆盖已有目标文件。
+- 初期发件人仅认证主地址；aliases 只用于 reply_all 排除自己。阿里企业邮箱由服务器保存 Sent，个人邮箱按账号的已发送副本设置处理。正文总上限5MiB，单附件/EML100MiB，图片10MiB，最多100附件；资源超限明确失败。路径必须本机绝对路径且不可覆盖已有目标文件。
 - 暂停停止该账号后台连接；sync.cancel 只停当前历史索引，继续监测新 Inbox；account.delete 只移除本机数据，草稿和 unknown 操作须显式确认影响。cache.clear 保留草稿、凭据及待核验发送资产。
 
 ## 返回值

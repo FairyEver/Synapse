@@ -6,6 +6,33 @@ import { useMailAccounts } from "../use-mail-accounts"
 import { MailAccountDialog } from "../account-dialog"
 let accounts: ReturnType<typeof useMailAccounts>
 function Harness({ dialog = false }: { dialog?: boolean }) { accounts = useMailAccounts("user", () => undefined); return dialog ? <MailAccountDialog model={accounts} /> : null }
+it("configures personal Alibaba mail with its own encrypted endpoints and standard provider behavior", async () => {
+  mocks.api.accountConfigure = vi.fn().mockResolvedValue({ id: "ma_one", revision: 1 })
+  mount(<Harness dialog />); await flush()
+  act(() => accounts.begin())
+  const personal = document.querySelector<HTMLButtonElement>("#mail-provider-aliyun-personal")
+  expect(personal).not.toBeNull()
+  act(() => personal!.click())
+  act(() => { accounts.setStep("details"); accounts.change({ email: "me@aliyun.com", credential: "private-password" }) })
+  expect(document.querySelector("#mail-IMAP-host")).toBeNull()
+  await act(async () => { await accounts.connect() })
+  expect(mocks.api.accountConfigure).toHaveBeenCalledWith(expect.objectContaining({
+    provider: "custom", email: "me@aliyun.com",
+    imap: { host: "imap.aliyun.com", port: 993, security: "tls" },
+    smtp: { host: "smtp.aliyun.com", port: 465, security: "tls" },
+  }))
+})
+it("switches between personal, other, and enterprise presets without losing the selected behavior", async () => {
+  mount(<Harness dialog />); await flush()
+  act(() => accounts.begin())
+  act(() => document.querySelector<HTMLButtonElement>("#mail-provider-aliyun-personal")!.click())
+  act(() => document.querySelector<HTMLButtonElement>("#mail-provider-custom")!.click())
+  act(() => accounts.setStep("details"))
+  expect(document.querySelector<HTMLInputElement>("#mail-IMAP-host")?.value).toBe("imap.aliyun.com")
+  act(() => accounts.setStep("provider"))
+  act(() => document.querySelector<HTMLButtonElement>("#mail-provider-aliyun")!.click())
+  expect(accounts.form).toMatchObject({ provider: "aliyun", imap: { host: "imap.qiye.aliyun.com" }, smtp: { host: "smtp.qiye.aliyun.com" } })
+})
 it("defaults Alibaba to verified TLS settings and clears submitted credentials", async () => {
   mocks.api.accountConfigure = vi.fn().mockResolvedValue({ id: "ma_one", revision: 1 })
   mount(<Harness />); await flush()

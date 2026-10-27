@@ -1,6 +1,6 @@
 # 阿里邮箱兼容性
 
-默认 IMAP `imap.qiye.aliyun.com:993` TLS、SMTP `smtp.qiye.aliyun.com:465` TLS；证书必须验证。用户的组织若使用其他接入地址，在高级设置中按其实际配置填写；需要邮箱管理员开启客户端访问或使用应用专用密码时，由用户处理。不要要求用户把密码发给 Agent。
+阿里企业邮箱预设 IMAP `imap.qiye.aliyun.com:993` TLS、SMTP `smtp.qiye.aliyun.com:465` TLS。阿里个人邮箱预设 IMAP `imap.aliyun.com:993` TLS、SMTP `smtp.aliyun.com:465` TLS；按通用 IMAP / SMTP 账号处理，默认由服务器保存已发送副本，可在高级设置调整。两者均验证证书。个人邮箱尚未进行真实账号兼容性验收，不能将以下企业邮箱实测行为套用于个人邮箱。用户的组织若使用其他接入地址，在高级设置中按其实际配置填写；需要邮箱管理员开启客户端访问或使用应用专用密码时，由用户处理。不要要求用户把密码发给 Agent。
 
 此前独立实验观察到 IDLE、UIDPLUS 可用，MOVE 未声明，COPY 实际具有移动行为；FROM / SUBJECT / BODY 搜索曾返回 BAD，HEADER 查询也出现过错误的空结果；STATUS 与 SELECT 计数存在差异。这些是设计依据，不能替代当前实现的正式账号验收。
 
