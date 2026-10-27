@@ -673,9 +673,9 @@ function ThreadView({
   return (
     <section
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border p-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring contain-inline-size',
+        'relative cursor-default overflow-hidden rounded-lg border bg-card p-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring contain-inline-size',
         emphasized ? 'border-ring' : 'border-border',
-        active ? 'bg-chart-3/5' : 'bg-card'
+        active && 'ring-2 ring-inset ring-amber-500/90'
       )}
       onClick={(event) => {
         if (isInteractiveCommentTarget(event.target) || hasSelectionWithin(event.currentTarget)) return
