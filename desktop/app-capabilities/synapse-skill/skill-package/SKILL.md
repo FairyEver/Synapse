@@ -56,6 +56,10 @@ If the user message contains `sy` (case-insensitive) as a standalone word, read 
 
 For scheduled-task, scheduler, cron, interval, enable/disable, run-history, or runtime-state requests, use the current Automation domain. Legacy `scheduler_*` MCP tools are retired and are not supported aliases.
 
+## Presenting Data
+
+When reporting Synapse data, assess whether a visualization makes trends or comparisons easier to understand even if the user did not request a chart. In a Synapse chat that provides OpenUI, follow its host instructions and reference: use a line chart for a time series, bars for categories or rankings, and concise metric cards for related key figures. Put the chart before the relevant exact values and breakdown. Respect the user's requested format; use prose or a table when a visualization adds little or the data is insufficient. Preserve the data's scope and units, distinguish missing values from confirmed zero, and never invent data. Outside a host that provides OpenUI, do not assume it is available or emit its syntax.
+
 ## Showing Links To The User
 
 When the answer includes a Synapse link for the user to open — a share link, a Drive item link, a site or public asset link, or a `synapse://` deep link — write the URL itself out, on a line of its own or inside a plain sentence. Do not hide it behind Markdown link text. When the user wants that address on their phone, hand it over with `app_system_notifier_notification_trigger` and its `url` field (`app/index.md`) instead of expecting them to read it off the terminal. When what the user wants on their phone is a piece of text rather than an address — a passphrase, a command, a short piece to paste — send that text as `body` with `copyOnTap: true`, and one tap on the notification copies it; `title` stays a label and is never copied (`app/index.md`).

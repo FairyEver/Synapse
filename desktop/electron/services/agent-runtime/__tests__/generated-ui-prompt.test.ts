@@ -21,6 +21,16 @@ describe("OpenUI host prompt", () => {
     expect(result.append).not.toContain("## Component Signatures")
     expect(result.append.length).toBeLessThan(2400)
   })
+  it("guides visualization decisions in both on-demand and full-reference modes", () => {
+    for (const prompt of [appendGeneratedUiPrompt(undefined, "/app/reference.md"), appendGeneratedUiPrompt(undefined)]) {
+      const text = (prompt as { append: string }).append
+      expect(text).toContain("without an explicit chart request")
+      expect(text).toContain("time series")
+      expect(text).toContain("exact values")
+      expect(text).toContain("missing")
+      expect(text).toContain("user's requested output format")
+    }
+  })
   it("falls back when the reference is absent or Read is excluded", async () => {
     expect(await resolveGeneratedUiReferencePath("/missing-openui-reference.md", undefined, [])).toBeUndefined()
     expect(await resolveGeneratedUiReferencePath(__filename, [], [])).toBeUndefined()

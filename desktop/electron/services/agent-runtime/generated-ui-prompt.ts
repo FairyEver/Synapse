@@ -5,6 +5,8 @@ import { generateSystemPrompt, type LibrarySpec } from "@openuidev/lang-core"
 import library from "../../../src/lib/generated-ui-library.json"
 import type { AgentSdkSystemPrompt } from "./project-contributions"
 
+const visualizationGuidance = "DATA PRESENTATION: Even without an explicit chart request, default to an OpenUI line chart for a multi-point time series with reliable, comparable data, including daily code activity; read the OpenUI reference first when using the short bootstrap. Put the chart before the exact values and relevant breakdown, and label units. For meaningful category comparisons or rankings use bars; use a pie chart only for a few non-negative parts of a meaningful whole. Use concise metric cards for related key figures when they aid scanning. Follow the user's requested output format. Prefer concise prose or a simple table for a single fact, small lookup, unsuitable or insufficient data. Never invent values, turn missing data into zero, mix incompatible units, or imply unobserved continuity; distinguish confirmed zero from missing data. Charts complement the exact values, scope and caveats, not replace them."
+
 const chatReference = generateSystemPrompt({
   library: library as unknown as LibrarySpec,
   promptOptions: {
@@ -14,7 +16,7 @@ const chatReference = generateSystemPrompt({
     preamble: "This reference applies only when you choose to emit an OpenUI chat block. When an in-chat table, chart or form improves an answer, optionally use the components below. It defines no restrictions for project code or file deliverables.",
     additionalRules: [
       "SY MESSAGE FORMAT: ordinary answers are Markdown. Put each interactive UI program in an unindented ```openui fenced block; openui-lang is also recognized. Text before and after a block is normal Markdown. Never use these fences for quoted code examples. On EVERY UI creation or update, emit a COMPLETE standalone program starting with root = Stack(...), including ALL referenced declarations and data. Blocks do not share state or statements with previous replies. Never output only changed statements, patches, ellipses or placeholders. A question about a UI can be answered in prose without a new UI block.",
-      "Use existing agent tools to retrieve real data before rendering it. Never invent query results. Do not generate UI when prose is sufficient; respect the user's requested output format and Persona instructions.",
+      "Use existing agent tools to retrieve real data before rendering it. Never invent query results. Follow the data presentation guidance above and respect the user's requested output format and Persona instructions.",
       "Never use Query, Mutation, @Run, Modal, MarkDownRenderer, InlineMarkdownRenderer, image galleries or image cards. Do not load remote images, favicons or other external resources. Images may only use host-provided synapse-agent-artifact://local/ references.",
       "Use @ToAssistant for submissions and follow-ups. Form values will be sent as the next user turn in this same conversation. Use $variables, @Set and @Reset for local filtering. Do not invent custom actions or tool providers.",
       "Use exact positional component signatures. Stack has children, direction, gap, align, justify, wrap in that order: wrap is argument SIX, never argument five. Prefer omitting optional layout arguments; when wrapping, use Stack(items, \"row\", \"m\", \"stretch\", \"start\", true). Do not invent enum values or functions.",
@@ -34,6 +36,7 @@ const chatReference = generateSystemPrompt({
 const instructions = [
   "## SY optional chat UI scope",
   "OpenUI is an optional presentation format inside SY chat messages. Continue the normal Claude Code workflow and respect the user's requested output format, Persona and project instructions.",
+  visualizationGuidance,
   "DEVELOPMENT TASKS: When the user asks to create, edit, save, build or debug websites, applications, components or code files (including HTML, CSS, JavaScript, TypeScript and React), use the existing tools as appropriate to produce the requested code or files. Never replace those deliverables with an OpenUI chat block. Building a dashboard or a form page in a project is a development task, not a request for an in-chat widget. Do not add OpenUI or its dependencies to a user project unless explicitly requested. Use ordinary language-tagged code fences for code examples.",
   "REFERENCE SCOPE: ALL component signatures, syntax, actions, resource restrictions, layout rules and final-verification requirements in the OpenUI reference below apply ONLY to OpenUI programs embedded in chat. They do not constrain project code, files, code examples, website resources or application architecture. Existing tools, permissions and safety checks remain in force. A chat UI may supplement a development result when requested, but never replaces the requested work.",
   "<openui_chat_reference>",
@@ -63,7 +66,8 @@ export async function resolveGeneratedUiReferencePath(
 export function appendGeneratedUiPrompt(prompt: AgentSdkSystemPrompt, referencePath?: string): NonNullable<AgentSdkSystemPrompt> {
   const instructions = referencePath ? [
     "## SY optional chat UI",
-    "Use Markdown for ordinary answers. When an in-chat interactive chart, table, filter, or form improves the user's answer, use OpenUI; users need not know its name. Never replace requested project code/files with a chat widget.",
+    "Use Markdown for ordinary answers. When an in-chat chart, card, table, filter, or form improves the user's answer, use OpenUI; users need not know its name. Never replace requested project code/files with a chat widget.",
+    visualizationGuidance,
     `BEFORE generating or updating any OpenUI, use Read to read the COMPLETE reference at ${JSON.stringify(referencePath)}. It contains the exact component signatures, examples and safety rules. Read all of it, without truncation; do not guess syntax. If unavailable, explain that the interactive UI cannot be generated and use prose, without claiming success.`,
     "After reading, put each COMPLETE standalone program in an unindented ```openui fence, starting root = Stack(...). Updates resend all declarations/data. Keep ordinary prose outside the fence. Use @ToAssistant for form submissions to this same conversation; retrieve real data with existing tools. No Query, Mutation, @Run, remote resources or host popups. Follow Persona/project instructions; the reference applies only to in-chat UI.",
   ].join("\n\n") : fullGeneratedUiReference()
