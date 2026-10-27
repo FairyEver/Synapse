@@ -304,6 +304,10 @@ Skill 在权威目录 `desktop/app-capabilities/synapse-skill/skill-package/` �
 
 添加向导提供阿里个人邮箱选项，按[阿里云官方个人邮箱服务器信息](https://help.aliyun.com/zh/document_detail/465307.html)预填 IMAP `imap.aliyun.com:993`、SMTP `smtp.aliyun.com:465`，均使用 TLS。个人邮箱作为通用账号保存，不继承仅在企业邮箱验证过的 COPY 移动与搜索策略。已发送副本默认由服务器保存，用户可在高级设置更改；个人邮箱的真实连接、移动和副本行为尚待账号验收，不能视为已验证。
 
+## 2026-10-27：QQ 邮箱快捷配置
+
+添加向导提供 QQ 邮箱选项，按[腾讯云邮件连接器文档](https://main.qcloudimg.com/raw/document/product/pdf/1270_46586_cn.pdf)预填 IMAP `imap.qq.com:993`、SMTP `smtp.qq.com:465`，均使用 TLS；界面提示开启 IMAP/SMTP、使用授权码。账号使用通用协议策略，默认服务器保存已发送副本，用户可在高级设置更改，并须确认 QQ 邮箱的 SMTP 保存开关与之匹配。真实 QQ 账号收发、移动及副本行为尚待验收。
+
 2026-10-24 邮件地址展示：To/Cc 优先显示当前邮件头 name，点击查看并复制原始地址；人数仅为原始显示名称的一部分，不表示实时组织人数，不解析或维护部门成员。独立保留 Sender（message.get 的可选 headers.sender），与 From 地址不同时显示代发；不得替换原始 To/Cc/Reply-To 或改变回复、转发行为。旧索引在既有有界头同步中补齐 Sender，保留 ID、缓存、标志与历史通知基线；未采集为缺省、已采集无有效值为 []。
 
 ## 2026-10-24：复用组织选择部门收件人

@@ -6,6 +6,33 @@ import { useMailAccounts } from "../use-mail-accounts"
 import { MailAccountDialog } from "../account-dialog"
 let accounts: ReturnType<typeof useMailAccounts>
 function Harness({ dialog = false }: { dialog?: boolean }) { accounts = useMailAccounts("user", () => undefined); return dialog ? <MailAccountDialog model={accounts} /> : null }
+it("configures QQ mail with encrypted endpoints and prompts for its authorization code", async () => {
+  mocks.api.accountConfigure = vi.fn().mockResolvedValue({ id: "ma_one", revision: 1 })
+  mount(<Harness dialog />); await flush()
+  act(() => accounts.begin())
+  const qq = document.querySelector<HTMLButtonElement>("#mail-provider-qq")
+  expect(qq).not.toBeNull()
+  act(() => qq!.click())
+  act(() => { accounts.setStep("details"); accounts.change({ email: "me@qq.com", credential: "authorization-code" }) })
+  expect(document.querySelector('label[for="mail-credential"]')?.textContent).toContain("授权码")
+  expect(document.body.textContent).toContain("开启 IMAP/SMTP")
+  expect(document.body.textContent).toContain("SMTP 发信后保存到服务器")
+  expect(document.querySelector("#mail-IMAP-host")).toBeNull()
+  act(() => [...document.querySelectorAll("button")].find(button => button.textContent === "高级设置")!.click())
+  expect(document.querySelector<HTMLSelectElement>("#mail-sent-policy")?.disabled).toBe(false)
+  await act(async () => { await accounts.connect() })
+  expect(mocks.api.accountConfigure).toHaveBeenCalledWith(expect.objectContaining({
+    provider: "custom", email: "me@qq.com", credential: "authorization-code", sentPolicy: "server",
+    imap: { host: "imap.qq.com", port: 993, security: "tls" },
+    smtp: { host: "smtp.qq.com", port: 465, security: "tls" },
+  }))
+})
+it("keeps QQ authorization guidance when reconnecting an existing account", async () => {
+  mount(<Harness dialog />); await flush()
+  const account = { id: "ma_qq", revision: 1, provider: "custom", name: "QQ", email: "me@qq.com", imap: { host: "imap.qq.com", port: 993, security: "tls" }, smtp: { host: "smtp.qq.com", port: 465, security: "tls" }, sentPolicy: "server", aliases: [], notify: true, paused: false, state: "connected", errorCode: null, capabilities: [] } as import("../../../../app-capabilities/mail/shared/types").AccountSummary
+  act(() => accounts.begin(account))
+  expect(document.querySelector('label[for="mail-credential"]')?.textContent).toBe("QQ 邮箱授权码")
+})
 it("configures personal Alibaba mail with its own encrypted endpoints and standard provider behavior", async () => {
   mocks.api.accountConfigure = vi.fn().mockResolvedValue({ id: "ma_one", revision: 1 })
   mount(<Harness dialog />); await flush()
