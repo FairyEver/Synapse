@@ -8,12 +8,13 @@ import { PlatformMediaModule } from "../platform-media/platform-media.module"
 import { NotificationController, OpenNotificationController } from "./notification.controller"
 import { NotificationApiKeyGuard } from "./notification-api-key.guard"
 import { NotificationService } from "./notification.service"
+import { NotificationImageService } from "./notification-image.service"
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 
 @Module({
   imports: [PrismaModule, UserAuthModule, ApiKeyModule, LiveModule, MobileLiveModule, PlatformMediaModule],
   controllers: [NotificationController, OpenNotificationController],
-  providers: [NotificationService, NotificationApiKeyGuard, OpenApiExceptionFilter],
-  exports: [NotificationService],
+  providers: [NotificationService, NotificationImageService, NotificationApiKeyGuard, OpenApiExceptionFilter],
+  exports: [NotificationService, NotificationImageService],
 })
 export class NotificationModule {}
