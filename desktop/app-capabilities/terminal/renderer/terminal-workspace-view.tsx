@@ -1043,6 +1043,12 @@ function TerminalPane({
     let requestedResize = { cols: sessionRef.current.cols, rows: sessionRef.current.rows }
     const pendingChunks: SynapseTerminalOutputChunk[] = []
     const resizeBarriers = new Map<number, SynapseTerminalResizedEvent>()
+    const openWebLink = (_event: MouseEvent, uri: string) => {
+      void shellBridge.openExternal(uri).catch((error) => {
+        logger.error("Failed to open terminal web link.", error)
+        toast.error("打开链接失败")
+      })
+    }
     const xterm = new Terminal({
       ...createTerminalRenderingOptions({
         appearanceSize: appearanceSizeRef.current,
@@ -1054,6 +1060,14 @@ function TerminalPane({
       }),
       cols: sessionRef.current.cols,
       rows: sessionRef.current.rows,
+      linkHandler: {
+        activate: (event, uri) => {
+          // OSC 8 links bypass WebLinksAddon; keep their confirmation before opening externally.
+          if (window.confirm(`Do you want to navigate to ${uri}?\n\nWARNING: This link could potentially be dangerous`)) {
+            openWebLink(event, uri)
+          }
+        },
+      },
     })
     const unicodeWidthStatus = installTerminalUnicodeWidth(xterm)
     if (unicodeWidthStatus !== "patched") {
@@ -1061,12 +1075,7 @@ function TerminalPane({
     }
     xtermRef.current = xterm
     const fitAddon = new FitAddon()
-    const webLinksAddon = new WebLinksAddon((_event, uri) => {
-      void shellBridge.openExternal(uri).catch((error) => {
-        logger.error("Failed to open terminal web link.", error)
-        toast.error("打开链接失败")
-      })
-    })
+    const webLinksAddon = new WebLinksAddon(openWebLink)
     xterm.loadAddon(fitAddon)
     xterm.loadAddon(webLinksAddon)
     xterm.open(container)

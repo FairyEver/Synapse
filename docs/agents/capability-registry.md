@@ -130,6 +130,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 - Workflow/Automation 的 `discovery: "visible" | "hidden"` 只控制创建选择器；`hidden` 不注销类型，已有配置仍可加载和执行。
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
 - Terminal 的 49 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
+- 桌面 Terminal 的普通网页链接和 OSC 8 超链接统一复用既有 Shell 外部打开 IPC，由系统默认浏览器打开；OSC 8 保留确认。该修复不新增注册表面，上表数量、Terminal 的 49 个 MCP 工具及 MCP schema／系统 Skill 操作契约均不变。
 - 桌面 Terminal 与 Agent 对话的语音 Enter 在识别收尾后直接执行／发送，对勾仍只填入；完成后恢复焦点，终端不再显示重复的待执行条。仅调整桌面录音交互与提交互斥，复用既有终端输入和 Agent 发送链路；Terminal 仍为 49、Agent 仍为 11 个 MCP 工具，System App、Dock、Workflow、Automation、Deep Link 数量和 MCP schema／系统 Skill 操作契约均不变。
 - Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 49。
 - 桌面 Terminal 的全局主题选择、预览与保存是既有设置页的 UI 表面，共 9 款内置主题（含默认主题）；新增浅色主题复用相同设置表面。终端顶栏与底栏通过局部 shadcn token 复用主题的 background／foreground，栏背景额外叠加 5% 黑色，与画布同步预览和恢复，不新增用户操作或主题配置字段。主题偏好复用 `config.get` / `config.update`；`config.onTerminalThemeChanged` 只订阅 EventBus，用于桌面多窗口同步，不注册新 IPC operation、MCP capability/tool、Workflow、Automation 或 Deep Link。上表 Terminal 仍为 49 个 MCP 工具，所有注册数量保持不变。社区颜色只作为集中管理的终端主题数据；手机端不跟随此次主题设置。

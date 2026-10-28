@@ -625,7 +625,7 @@ const xtermState = vi.hoisted(() => ({
     dispose: ReturnType<typeof vi.fn>
     cols: number
     rows: number
-    options: { disableStdin?: boolean; fontSize?: number; lineHeight?: number; theme?: ITheme }
+    options: { disableStdin?: boolean; fontSize?: number; lineHeight?: number; theme?: ITheme; linkHandler?: { activate: (event: MouseEvent, uri: string) => void } }
     /** 前台应用通过 DECSET 2004 打开的 bracketed paste；默认关。 */
     modes: { bracketedPasteMode: boolean }
     emitInput: (data: string) => void
@@ -795,6 +795,7 @@ vi.mock("@xterm/xterm", () => ({
     cols?: number
     rows?: number
     disableStdin?: boolean
+    linkHandler?: { activate: (event: MouseEvent, uri: string) => void }
   } = {}) {
     const instance = {
       open: vi.fn((container: HTMLElement) => {
@@ -4628,6 +4629,57 @@ describe("TerminalModule", () => {
     })
 
     expect(shellBridge.openExternal).toHaveBeenCalledWith("http://localhost:5173/")
+  })
+
+  it("opens confirmed OSC 8 hyperlinks in the default browser without creating an Electron window", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    vi.spyOn(window, "confirm").mockReturnValue(true)
+    const openWindow = vi.spyOn(window, "open").mockReturnValue(null)
+
+    await renderModule()
+
+    await act(async () => {
+      xtermState.instances[0]?.options.linkHandler?.activate(new MouseEvent("click", { metaKey: true }), "https://synapse.d2.pub/share/test")
+      await Promise.resolve()
+    })
+
+    expect(shellBridge.openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/share/test")
+    expect(openWindow).not.toHaveBeenCalled()
+  })
+
+  it("does not open an OSC 8 hyperlink when confirmation is cancelled", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false)
+    const openWindow = vi.spyOn(window, "open").mockReturnValue(null)
+
+    await renderModule()
+
+    await act(async () => {
+      xtermState.instances[0]?.options.linkHandler?.activate(new MouseEvent("click", { metaKey: true }), "https://synapse.d2.pub/share/test")
+    })
+
+    expect(confirm).toHaveBeenCalled()
+    expect(shellBridge.openExternal).not.toHaveBeenCalled()
+    expect(openWindow).not.toHaveBeenCalled()
+  })
+
+  it("shows a user-visible error when an OSC 8 hyperlink cannot be opened", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
+    vi.spyOn(window, "confirm").mockReturnValue(true)
+    shellBridge.openExternal.mockRejectedValueOnce(new Error("open failed"))
+
+    await renderModule()
+
+    await act(async () => {
+      xtermState.instances[0]?.options.linkHandler?.activate(new MouseEvent("click", { metaKey: true }), "https://synapse.d2.pub/share/test")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(toastState.error).toHaveBeenCalledWith("打开链接失败")
   })
 
   it("shows a user-visible error when a terminal web link cannot be opened", async () => {

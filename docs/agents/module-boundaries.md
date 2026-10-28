@@ -76,6 +76,7 @@
 ### Terminal
 
 - app id `terminal`，capability 使用 `app.terminal.<subdomain>.<action>`，tool 名严格点转下划线。
+- 桌面终端的普通网页链接与 OSC 8 超链接均通过既有 Shell bridge 使用系统默认浏览器打开，不创建 Electron 网页窗口；OSC 8 保留打开前确认及 xterm 默认的 HTTP/HTTPS 协议限制，取消不打开，失败显示错误提示。
 - 桌面终端的全局主题通过现有 `config.update` 保存到 `core.config` 的 `global.terminalTheme`，未配置或无效值使用当前默认配色。外观页用草稿实时预览，取消／放弃恢复已保存主题；保存后由 EventBus 的 `system` 域 `config.terminal-theme.changed` 事件同步所有桌面窗口。预览组件仅绘制本地样例，不创建 PTY。切换主题不得重建会话、写入终端或触发网格 resize。手机端配色与帧协议不受影响。
 - 分屏顶栏与底部命令条的背景以当前终端主题的 background 为基底叠加 5% 黑色，普通文字和图标复用 foreground；语音与待执行条共享相同局部 token，随主题草稿预览、保存、取消和跨窗口同步更新，不改变应用侧栏、Dock 或弹层的主题。
 - 分层叫法固定为：应用是「终端」，文件夹是「终端分组」，文件夹下那一行是「终端标签」（代码里的 workspace），标签内部可分成最多 8 个「分屏」，每个分屏里的那一个才叫「终端会话」（代码里的 session，也就是 `sessionId` 寻址的对象）。界面文案与文档一律按这套叫法，不得再把标签叫成「终端」或把会话叫成「对话」。代码标识符（`TerminalGroup` / `TerminalWorkspace` / `TerminalPaneLeaf` / `TerminalSession`）保持不变。
