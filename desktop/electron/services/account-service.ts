@@ -117,6 +117,8 @@ import { assertDriveBatchKeys, driveItemBatchResponseSchema, driveChangeBatchRes
 import { DRIVE_ITEM_BATCH_LIMIT, DRIVE_CHANGE_BATCH_LIMIT } from "@synapse/shared/drive-sync-constants"
 import type { DriveItemBatchResponse, DriveChangeBatchRequest, DriveChangeBatchResponse } from "@synapse/shared" with { "resolution-mode": "import" }
 import { redactSensitiveText } from "../../src/lib/agent-redaction"
+import { mapNotificationImageUploadResponse } from "../../app-capabilities/system-notifier/main/upload-outcome"
+import type { NotificationImageUploadOutcome } from "../../app-capabilities/system-notifier/shared/schema"
 
 const logger = createMainLogger("service.account")
 const CORE_ACCOUNT_NAMESPACE = "core.account"
@@ -587,6 +589,27 @@ export class AccountService {
     if (this.state.connectivity !== "online") return "offline"
     await this.requestAuthenticatedJson<{ id: string }>("POST", `${apiBaseUrl()}/notifications/desktop`, input, "通知同步失败。")
     return "sent"
+  }
+
+  /**
+   * 把通知图片暂存到服务端，拿到之后能挂到消息上的图片 id。
+   *
+   * 401/403 已被 `fetchAuthenticated` 刷新重试过，所以到这里仍是凭证失败就是真的没登录；
+   * 其余每一条失败都以结果返回，不抛错。
+   */
+  async uploadNotificationImage(input: { bytes: Buffer; mimeType: string }): Promise<NotificationImageUploadOutcome> {
+    if (this.state.status !== "authenticated") return { status: "not_signed_in" }
+    if (this.state.connectivity !== "online") return { status: "offline" }
+    try {
+      const response = await this.fetchAuthenticated(`${apiBaseUrl()}/notifications/desktop/image`, {
+        method: "PUT",
+        headers: { "Content-Type": input.mimeType },
+        body: new Uint8Array(input.bytes),
+      }, "图片上传失败。")
+      return mapNotificationImageUploadResponse(response.status, await response.json())
+    } catch (error) {
+      return mapNotificationImageUploadResponse((error as { status?: number }).status ?? 0, undefined)
+    }
   }
 
   async getNotification(id: string) {

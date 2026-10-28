@@ -946,7 +946,9 @@ export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readon
   id: SYSTEM_NOTIFIER_INTEGRATION_SERVICE_ID,
   criticality: "degraded",
   dependsOn: [SYSTEM_NOTIFIER_SERVICE_ID],
-  startAfter: ["core.data-repository", "core.audit-sink"],
+  // 图片要读 userData 之外的文件，`permissionGuard` 必须已经在注册表里：
+  // 它在 `create()` 里被解析一次，晚到一步就会静默退化成「没有守卫」。
+  startAfter: ["core.data-repository", "core.audit-sink", "core.permission-guard"],
   async create(ctx) {
     const service = ctx.registry.get<SystemNotifierService>(SYSTEM_NOTIFIER_SERVICE_ID)
     const settings = optionalSystemNotifierPort(
@@ -959,6 +961,7 @@ export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readon
     )
     await service.initialize({
       settings,
+      uploadImage: (input) => accountService.uploadNotificationImage(input),
       // 不带 `deviceId`：这条消息不属于「某台机器的本机通知」，它属于账号。带上它反而会让
       // 发起的那台电脑在回显时把自己挡掉（`live-connection-service` 用它做本机去重），
       // 于是不得不在触发路径上再弹一次 —— 触发路径只负责发，本机弹窗由收到消息产生。
@@ -966,6 +969,7 @@ export const coreSystemNotifierIntegrationDescriptor: ServiceDescriptor<{ readon
       auditSink: optionalSystemNotifierPort(
         () => ctx.registry.get<AuditSink>("core.audit-sink"),
       ),
+      permissionGuard: optionalSystemNotifierPort(() => ctx.registry.get<PermissionGuard>("core.permission-guard")),
       adapter,
     })
     return { initialized: true }

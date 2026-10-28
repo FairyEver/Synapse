@@ -49,6 +49,15 @@ export interface SystemNotificationInput {
   readonly imageId?: string
 }
 
+/**
+ * 上传通知图片的结果。`not_signed_in` / `offline` 在发出请求前按账号状态判定，
+ * 其余来自服务端响应；它们都不抛错，让调用方用同一张表决定提示。
+ */
+export type NotificationImageUploadOutcome =
+  | { readonly status: "uploaded"; readonly imageId: string }
+  | { readonly status: "not_signed_in" } | { readonly status: "offline" }
+  | { readonly status: "service_outdated" } | { readonly status: "failed" }
+
 export interface SystemNotificationInvalidInput {
   readonly ok: false
   readonly code: "INVALID_INPUT"

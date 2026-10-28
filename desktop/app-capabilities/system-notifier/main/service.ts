@@ -1,6 +1,6 @@
 import type { DataNamespace } from "../../../electron/runtime/data-repo"
 import type { DesktopNotificationOutcome } from "@synapse/shared" with { "resolution-mode": "import" }
-import type { ActorIdentity, AuditSink } from "../../../electron/runtime/security"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { StructuredLogger } from "../../../electron/runtime/service-registry"
 import type { SystemNotifierSettingsEntryV3 } from "../../../electron/runtime/data-repo/schemas/system-notifier"
 import {
@@ -12,6 +12,7 @@ import {
   systemNotifierSettingsSchema,
   systemNotifierTestNotification,
   validateSystemNotificationInput,
+  type NotificationImageUploadOutcome,
   type SystemNotificationInput,
   type SystemNotificationResult,
   type SystemNotifierSettings,
@@ -65,6 +66,9 @@ export interface SystemNotifierServicePorts {
    * 把通知发到账号消息中心。返回它为什么没发出去（未登录、离线）或已经发出；请求失败抛错。
    */
   readonly sync?: (input: SystemNotificationInput) => Promise<DesktopNotificationOutcome>
+  /** 把 `imagePath` 指向的图片暂存到服务端；缺省表示这条能力没有上传通道。 */
+  readonly uploadImage?: (input: { bytes: Buffer; mimeType: string }) => Promise<NotificationImageUploadOutcome>
+  readonly permissionGuard?: PermissionGuard
 }
 
 /** 「发送测试通知」用的固定 UI 身份，与任何触发来源都不共用配额。 */
