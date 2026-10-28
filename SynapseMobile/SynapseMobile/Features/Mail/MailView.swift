@@ -101,6 +101,11 @@ struct MailView: View {
                             } else {
                                 NavigationLink(value: message.messageId) { messageRow(message) }
                                     .tag(message.messageId)
+                                    .contextMenu {
+                                        Button("复制 ID", systemImage: "doc.on.doc") {
+                                            Clipboard.copy(message.messageId, saying: "已复制 ID", id: "mail.copy-id", on: model)
+                                        }
+                                    }
                             }
                         }
                         .onAppear {
@@ -342,6 +347,9 @@ private struct MailDetailView: View {
                                 Button("转发", systemImage: "arrowshape.turn.up.right") { onReply(.forward, message) }
                             }
                             if isInbox { Button(message.readAt == nil ? "设为已读" : "设为未读") { onRead(message.readAt == nil) } }
+                            Button("复制 ID", systemImage: "doc.on.doc") {
+                                Clipboard.copy(message.messageId, saying: "已复制 ID", id: "mail.copy-id", on: model)
+                            }
                             Button("删除", systemImage: "trash", role: .destructive, action: onDelete)
                         } label: { Image(systemName: "ellipsis.circle") }
                         .accessibilityLabel("信件操作")
