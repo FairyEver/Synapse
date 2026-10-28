@@ -44,7 +44,7 @@ import {
   EncryptedJsonNamespace,
   type SafeStorage,
 } from "../../runtime/data-repo/backends/encrypted-json"
-import type { SynapseAccountProfile } from "../../../src/types/account"
+import type { SynapseAccountProfile, SynapseAccountState } from "../../../src/types/account"
 import { DRIVE_MAX_FILE_BYTES, DRIVE_PUBLIC_ASSET_IMAGE_UNSUPPORTED_FORMAT_MESSAGE, DRIVE_PUBLIC_ASSET_UNSUPPORTED_FORMAT_MESSAGE, type DashboardWebhookDto, type DriveItemDto, type DrivePublicAssetDto, type DriveSiteDto, type DriveUploadPrepareResult } from "@synapse/shared"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../generated/deployment-config.generated"
 import { AccountService } from "../account-service"
@@ -150,6 +150,63 @@ async function createTestAccountService(input: {
 }
 
 describe("AccountService", () => {
+  it.each(["list", "clear"] as const)("does not retry history %s with a different account or a new login session", async (operation) => {
+    for (const nextId of ["u2", "u1"]) {
+      let finish!: (response: Response) => void
+      const fetch = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve })).mockResolvedValue(jsonResponse({ ok: true, items: [], nextCursor: null }))
+      const { service } = await createTestAccountService({ fetch })
+      const internal = service as unknown as { accessToken: string | null; state: SynapseAccountState; authRevision: number }
+      internal.accessToken = "old-token"; internal.state = { status: "authenticated", connectivity: "online", profile: storedProfile }
+      const pending = operation === "list" ? service.listDriveBrowsingHistory() : service.clearDriveBrowsingHistory()
+      const rejected = expect(pending).rejects.toThrow()
+      internal.authRevision += 1; internal.accessToken = "new-token"
+      internal.state = { status: "authenticated", connectivity: "online", profile: { ...storedProfile, user: { ...storedProfile.user, id: nextId } } }
+      const refresh = vi.spyOn(service, "refreshFromStorage").mockResolvedValue(internal.state)
+      finish(jsonResponse({ message: "expired" }, 401)); await rejected
+      expect(fetch).toHaveBeenCalledTimes(1); expect(refresh).not.toHaveBeenCalled()
+    }
+  })
+
+  it("retries a history clear after refreshing the same account and login session", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(jsonResponse({ message: "expired" }, 401)).mockResolvedValueOnce(jsonResponse({ ok: true }))
+    const { service } = await createTestAccountService({ fetch })
+    const internal = service as unknown as { accessToken: string | null; state: SynapseAccountState }
+    internal.accessToken = "old-token"; internal.state = { status: "authenticated", connectivity: "online", profile: storedProfile }
+    vi.spyOn(service, "refreshFromStorage").mockImplementation(async () => { internal.accessToken = "fresh-token"; return internal.state })
+    await expect(service.clearDriveBrowsingHistory()).resolves.toEqual({ ok: true })
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls[1][1].headers.Authorization).toBe("Bearer fresh-token")
+  })
+
+  it("does not send a queued history clear after refresh changes the account", async () => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    const { service } = await createTestAccountService({ fetch })
+    const internal = service as unknown as { accessToken: string | null; state: SynapseAccountState }
+    internal.state = { status: "authenticated", connectivity: "online", profile: storedProfile }
+    vi.spyOn(service, "refreshFromStorage").mockImplementation(async () => {
+      internal.accessToken = "other-token"
+      internal.state = { status: "authenticated", connectivity: "online", profile: { ...storedProfile, user: { ...storedProfile.user, id: "other" } } }
+      return internal.state
+    })
+    await expect(service.clearDriveBrowsingHistory()).rejects.toThrow()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("lists and clears only authenticated browsing history, preserving query and errors", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(jsonResponse({ items: [], nextCursor: "next" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true })).mockResolvedValueOnce(jsonResponse({ message: "history unavailable" }, 503))
+    const { service } = await createTestAccountService({ fetch })
+    ;(service as unknown as { accessToken: string }).accessToken = "access-1"
+    expect(await service.listDriveBrowsingHistory({ query: "文档 & author", kind: "document", cursor: "cursor/1", limit: 25 })).toEqual({ items: [], nextCursor: "next" })
+    const url = new URL(fetch.mock.calls[0][0])
+    expect(url.pathname).toBe("/api/drive/browsing-history")
+    expect(Object.fromEntries(url.searchParams)).toEqual({ query: "文档 & author", kind: "document", cursor: "cursor/1", limit: "25" })
+    expect(fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer access-1")
+    await service.clearDriveBrowsingHistory()
+    expect(fetch.mock.calls[1][1].method).toBe("DELETE")
+    await expect(service.listDriveBrowsingHistory()).rejects.toThrow("history unavailable")
+  })
+
   it("chunks batch item reads, preserves per-item failures and sends no single-item requests", async () => {
     const fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
       const { itemIds } = JSON.parse(String(init?.body)) as { itemIds: string[] }

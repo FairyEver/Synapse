@@ -58,6 +58,7 @@ model User {
   openApiDownloadGrants          OpenApiDownloadGrant[]
   openApiUsageLogs               OpenApiUsageLog[]
   devices                        UserDevice[]
+  driveBrowsingHistory           DriveBrowsingHistory[]
   driveItems                     DriveItem[]
   driveUsage                     DriveUsage?
   driveUploadSessions            DriveUploadSession[]
@@ -445,6 +446,25 @@ model WebhookDeliveryReceipt {
 
   @@unique([deliveryId, clientInstanceId])
   @@index([deliveryId, sentAt])
+}
+
+/// Immutable successful browser visits. Private searchIndex is never returned in public DTOs.
+model DriveBrowsingHistory {
+  id           String   @id @default(cuid())
+  viewerId     String
+  viewer       User     @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+  visitId      String   @db.Uuid
+  title        String   @db.VarChar(255)
+  authorHandle String   @db.VarChar(64)
+  kind         String   @db.VarChar(16)
+  path         String   @db.VarChar(4096)
+  searchIndex  String   @db.Text
+  cleared      Boolean  @default(false)
+  visitedAt    DateTime @default(now())
+
+  @@unique([viewerId, visitId])
+  @@index([viewerId, cleared, visitedAt(sort: Desc), id(sort: Desc)])
+  @@index([viewerId, cleared, kind, visitedAt(sort: Desc), id(sort: Desc)])
 }
 
 model DriveItem {

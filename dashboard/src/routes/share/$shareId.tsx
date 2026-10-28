@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useLocation } from '@tanstack/react-router'
 import { useCallback } from 'react'
 import { DriveBrowserPage } from '@/features/drive-browser/drive-browser-page'
 
@@ -8,6 +8,7 @@ export const Route = createFileRoute('/share/$shareId')({
 })
 
 function RouteComponent() {
+  const navigationKey = useLocation({ select: (location) => location.state.__TSR_index })
   const { shareId } = Route.useParams()
   const { password } = Route.useSearch()
   const navigate = Route.useNavigate()
@@ -24,6 +25,7 @@ function RouteComponent() {
   return (
     <DriveBrowserPage
       context='share'
+      navigationKey={navigationKey}
       shareId={shareId}
       initialPassword={password}
       onInitialPasswordConsumed={clearPasswordSearch}

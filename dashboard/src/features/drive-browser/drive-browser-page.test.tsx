@@ -30,6 +30,7 @@ const driveAnnotationsMock = vi.hoisted(() => ({
 vi.mock('./use-drive-browser', () => ({
   useDriveBrowser: vi.fn(),
 }))
+vi.mock('./use-drive-browsing-history-visit', () => ({ useDriveBrowsingHistoryVisit: vi.fn() }))
 
 vi.mock('./use-drive-annotations', () => ({
   useDriveAnnotations: () => driveAnnotationsMock.value,

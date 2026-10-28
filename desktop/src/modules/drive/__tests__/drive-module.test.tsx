@@ -320,7 +320,7 @@ describe("DriveModule", () => {
   it("opens filename search before sync management and preserves the existing three columns", async () => {
     await render(<DriveModule />)
     const toolbar = document.querySelector('[data-testid="drive-toolbar-actions"]')!
-    expect([...toolbar.querySelectorAll("button")].map(button => button.textContent?.trim()).slice(0, 2)).toEqual(["搜索", "同步管理"])
+    expect([...toolbar.querySelectorAll("button")].map(button => button.textContent?.trim()).slice(0, 3)).toEqual(["搜索", "浏览历史", "同步管理"])
     expect(document.querySelector('[role="searchbox"]')).toBeNull()
     await clickButtonByLabel("搜索文件")
     const input = document.querySelector('[role="searchbox"]') as HTMLInputElement
@@ -765,7 +765,7 @@ describe("DriveModule", () => {
     await render(<DriveModule />)
     await flushAct()
 
-    expect(driveToolbarActionLabels()).toEqual(["搜索文件", "同步管理", "新建", "刷新", "更多"])
+    expect(driveToolbarActionLabels()).toEqual(["搜索文件", "浏览历史", "同步管理", "新建", "刷新", "更多"])
     expect(getButtonByLabel("刷新").querySelector(".lucide-refresh-cw")).not.toBeNull()
     expect(getButtonByLabel("更多").querySelector(".lucide-ellipsis")).not.toBeNull()
   })

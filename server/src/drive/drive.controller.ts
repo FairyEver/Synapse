@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Delete, Get, Head, Header, HttpStatus, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Head, Header, HttpStatus, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import { Buffer } from "node:buffer"
+import { randomUUID } from "node:crypto"
 import { Readable, Writable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"
@@ -30,6 +31,8 @@ import {
   type DriveBrowserSnapshotDto,
 } from "@synapse/shared"
 import { DriveService } from "./drive.service"
+import { DriveBrowsingHistoryService, isDriveHistoryNavigation } from "./drive-browsing-history.service"
+import { appendDriveHistoryRestoreScript, buildDriveHistoryRestoreScript } from "./drive-history-restore"
 import { DriveAnnotationService } from "./drive-annotation.service"
 import { DriveMessageService, parseDriveMessageBody } from "./drive-message.service"
 import { DriveChangeLogService } from "./drive-change-log"
@@ -226,6 +229,14 @@ const driveLinkAnnotationThreadDeleteSchema = driveLinkAnnotationBaseSchema.exte
 const driveLinkAnnotationThreadStatusUpdateSchema = driveLinkAnnotationThreadDeleteSchema.extend({
   status: z.enum(["open", "resolved"]),
 }).strict()
+const driveBrowsingHistoryQuerySchema = z.object({
+  query: z.string().max(500).refine((value) => !value.includes("\0")).optional(),
+  kind: z.enum(["web", "document", "folder", "other"]).optional(),
+  cursor: z.string().min(1).max(1024).optional(),
+  limit: z.union([z.number(), z.string().regex(/^\d+$/u).transform(Number)]).pipe(z.number().int().positive()).optional(),
+}).strict()
+const driveBrowsingHistoryVisitSchema = z.object({ visitId: z.string().uuid() }).strict()
+const driveBrowsingHistorySiteVisitSchema = driveBrowsingHistoryVisitSchema.extend({ relativePath: z.string().max(4096) }).strict()
 const driveMessageBodySchema = z.object({ body: z.string() }).strict()
 const driveMessageReplySchema = driveMessageBodySchema.extend({ parentCommentId: z.string().min(1).nullable().optional() }).strict()
 const driveMessageAgentTargetSchema = z.discriminatedUnion("kind", [
@@ -283,7 +294,21 @@ export class DriveUserController {
     @Optional() private readonly changes?: DriveChangeLogService,
     @Optional() private readonly pdfExports?: DriveMarkdownPdfExportService,
     @Optional() private readonly messages?: DriveMessageService,
+    @Optional() private readonly browsingHistory?: DriveBrowsingHistoryService,
   ) {}
+
+  @Get("/browsing-history")
+  @Header("Cache-Control", "no-store")
+  listBrowsingHistory(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {
+    return requireBrowsingHistoryService(this.browsingHistory).list(request.user!.id,
+      parseBody(driveBrowsingHistoryQuerySchema, query, "浏览历史查询条件无效。"))
+  }
+
+  @Delete("/browsing-history")
+  @Header("Cache-Control", "no-store")
+  clearBrowsingHistory(@Req() request: AuthenticatedUserRequest) {
+    return requireBrowsingHistoryService(this.browsingHistory).clear(request.user!.id)
+  }
 
   @Get("/browser/owner/items/:itemId/messages")
   @Header("Cache-Control", "no-store")
@@ -1390,6 +1415,7 @@ async function runDrivePdfExport(
 
 @Controller()
 export class DrivePublicController {
+  private readonly historyLogger = new Logger(DrivePublicController.name)
   constructor(
     private readonly drive: DriveService,
     @Inject("DriveStoragePort") private readonly storage: DriveStoragePort,
@@ -1401,7 +1427,71 @@ export class DrivePublicController {
     @Optional() private readonly linkIntake?: DriveLinkIntakeService,
     @Optional() private readonly pdfExports?: DriveMarkdownPdfExportService,
     @Optional() private readonly messages?: DriveMessageService,
+    @Optional() private readonly browsingHistory?: DriveBrowsingHistoryService,
   ) {}
+
+  @Post(["/api/drive/browser/shares/:shareId/visits", "/api/drive/browser/shares/:shareId/items/:itemId/visits"])
+  @Header("Cache-Control", "no-store")
+  async recordShareVisit(
+    @Param("shareId") shareId: string,
+    @Param("itemId") itemId: string | undefined,
+    @Body() body: unknown,
+    @Req() request: Request,
+  ): Promise<{ readonly ok: true }> {
+    const { visitId } = parseBody(driveBrowsingHistoryVisitSchema, body, "浏览访问事件无效。")
+    this.assertHistoryVisitOrigin(request)
+    const viewerId = await this.resolveBrowserUserId(request)
+    if (viewerId) await requireBrowsingHistoryService(this.browsingHistory).recordShare(viewerId, visitId, {
+      shareId, itemId, cookie: readDriveAccessCookie(request, { kind: "share", publicId: shareId }),
+    })
+    return { ok: true }
+  }
+
+  @Post("/api/drive/browser/sites/:siteId/visits")
+  @Header("Cache-Control", "no-store")
+  async recordSiteVisit(@Param("siteId") siteId: string, @Body() body: unknown, @Req() request: Request): Promise<{ readonly ok: true }> {
+    const { visitId, relativePath } = parseBody(driveBrowsingHistorySiteVisitSchema, body, "浏览访问事件无效。")
+    this.assertHistoryVisitOrigin(request)
+    const viewerId = await this.resolveBrowserUserId(request)
+    if (!viewerId) return { ok: true }
+    const access = await requireDriveSiteService(this.sites).resolvePublicSite(siteId, {
+      cookie: readDriveAccessCookie(request, { kind: "site", publicId: siteId }) ?? null, relativePath,
+    })
+    if (access.status !== "ok") throw new NotFoundException("站点不可访问。")
+    await requireBrowsingHistoryService(this.browsingHistory).recordSite(viewerId, visitId, siteId, access.asset.relativePath)
+    return { ok: true }
+  }
+
+  private assertHistoryVisitOrigin(request: Request): void {
+    const origin = readHeaderString(request.headers.origin)
+    const expectedOrigin = new URL(resolveRequestPublicAppUrl(request)).origin
+    if ((origin && origin !== expectedOrigin) || request.headers["sec-fetch-site"] === "cross-site"
+      || (!origin && request.headers["sec-fetch-site"] !== "same-origin")) {
+      throw new ForbiddenException("浏览访问事件来源无效。")
+    }
+  }
+
+  private async resolveBrowserUserId(request: Request): Promise<string | null> {
+    const token = readRequestCookie(request, userSessionCookieName)
+    if (!token || !this.userAuth) return null
+    return (await this.userAuth.verifyWebSession(token))?.userId ?? null
+  }
+
+  private async captureHistoryNavigation(request: Request, record: (history: DriveBrowsingHistoryService, viewerId: string, visitId: string) => Promise<void>): Promise<void> {
+    if (!this.browsingHistory || !isDriveHistoryNavigation(request)) return
+    try {
+      const viewerId = await this.resolveBrowserUserId(request)
+      if (viewerId) await record(this.browsingHistory, viewerId, randomUUID())
+    } catch (error) {
+      this.historyLogger.warn({ message: "Drive browsing history capture failed", errorName: error instanceof Error ? error.name : "UnknownError" })
+    }
+  }
+
+  private captureShareNavigation(request: Request, input: { readonly shareId: string; readonly itemId?: string }): Promise<void> {
+    return this.captureHistoryNavigation(request, (history, viewerId, visitId) => history.recordShare(viewerId, visitId, {
+      ...input, cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
+    }))
+  }
 
   @Get(["/api/drive/browser/shares/:shareId/messages", "/api/drive/browser/shares/:shareId/items/:itemId/messages"])
   @Header("Cache-Control", "no-store")
@@ -1617,6 +1707,7 @@ export class DrivePublicController {
   @Head("/files/:assetId")
   async sendPublicAsset(@Param("assetId") assetId: string, @Req() request: Request, @Res() response: Response): Promise<void> {
     response.setHeader("Cross-Origin-Resource-Policy", PUBLIC_ASSET_CROSS_ORIGIN_RESOURCE_POLICY)
+    response.setHeader("Vary", "Sec-Fetch-Dest, Sec-Fetch-Mode")
     const publicAssets = requirePublicAssetService(this.publicAssets)
     const method = request.method.toUpperCase()
     const accessBase = {
@@ -1634,9 +1725,10 @@ export class DrivePublicController {
       return
     }
     if (resolved.status === "not_modified") {
-      response.setHeader("Cache-Control", PUBLIC_ASSET_CACHE_CONTROL)
+      response.setHeader("Cache-Control", isDriveHistoryNavigation(request) ? "private, no-store" : PUBLIC_ASSET_CACHE_CONTROL)
       response.setHeader("ETag", resolved.etag)
       response.status(304).end()
+      await this.captureHistoryNavigation(request, (history, viewerId, visitId) => history.recordPublicAsset(viewerId, visitId, assetId))
       void publicAssets.recordAccessSafely({
         ...accessBase,
         publicAssetId: resolved.publicAssetId,
@@ -1647,7 +1739,7 @@ export class DrivePublicController {
       return
     }
 
-    response.setHeader("Cache-Control", PUBLIC_ASSET_CACHE_CONTROL)
+    response.setHeader("Cache-Control", isDriveHistoryNavigation(request) ? "private, no-store" : PUBLIC_ASSET_CACHE_CONTROL)
     response.setHeader("Content-Type", resolved.mimeType)
     const contentKind = drivePublicAssetContentKind(resolved.mimeType)
     response.setHeader(
@@ -1676,6 +1768,7 @@ export class DrivePublicController {
     try {
       const object = await this.storage.getObjectStream({ key: resolved.storageKey })
       await pipeline(object.stream as Readable, response)
+      await this.captureHistoryNavigation(request, (history, viewerId, visitId) => history.recordPublicAsset(viewerId, visitId, assetId))
       void publicAssets.recordAccessSafely({
         ...accessBase,
         publicAssetId: resolved.publicAssetId,
@@ -1838,15 +1931,19 @@ export class DrivePublicController {
     }
     const object = await this.storage.getObjectStream({ key: access.asset.storageKey })
     response.setHeader("Content-Type", driveSiteContentType(access.asset.relativePath, object.contentType ?? access.asset.contentType))
-    response.setHeader("Cache-Control", driveSiteCacheControl(access.asset.relativePath, { accessMode: access.site.accessMode }))
-    if (access.site.accessMode === "password") response.setHeader("Vary", "Cookie")
+    response.setHeader("Cache-Control", isDriveHistoryNavigation(request) ? "private, no-store" : driveSiteCacheControl(access.asset.relativePath, { accessMode: access.site.accessMode }))
+    response.setHeader("Vary", access.site.accessMode === "password" ? "Cookie, Sec-Fetch-Dest, Sec-Fetch-Mode" : "Sec-Fetch-Dest, Sec-Fetch-Mode")
     response.setHeader("X-Content-Type-Options", "nosniff")
     if (isDriveSiteHtmlPath(access.asset.relativePath)) {
       response.setHeader("Content-Security-Policy", DRIVE_SITE_HTML_RENDER_CSP)
       response.setHeader("Referrer-Policy", "no-referrer")
     }
-    if (object.size !== undefined) response.setHeader("Content-Length", object.size.toString())
-    await pipeline(object.stream as Readable, response)
+    const restoreScript = isDriveHistoryNavigation(request) && isDriveSiteHtmlPath(access.asset.relativePath)
+      ? buildDriveHistoryRestoreScript({ kind: "site", siteId, relativePath: access.asset.relativePath }) : null
+    if (object.size !== undefined && !restoreScript) response.setHeader("Content-Length", object.size.toString())
+    const stream = restoreScript ? appendDriveHistoryRestoreScript(object.stream, restoreScript) : object.stream
+    await pipeline(stream as Readable, response)
+    await this.captureHistoryNavigation(request, (history, viewerId, visitId) => history.recordSite(viewerId, visitId, siteId, access.asset.relativePath))
   }
 
   @Get("/api/drive/browser/shares/:shareId")
@@ -2494,7 +2591,11 @@ export class DrivePublicController {
           limit: DRIVE_SHARE_READER_CHILDREN_LIMIT,
         },
       })
-      input.response.status(200).type("html").send(renderDriveShareReaderPage({ shareId: input.shareId, snapshot }))
+      const restoreScript = isDriveHistoryNavigation(input.request)
+        ? buildDriveHistoryRestoreScript({ kind: "share", shareId: input.shareId, itemId: input.itemId }) : null
+      if (restoreScript) input.response.setHeader("Content-Security-Policy", `${DRIVE_SHARE_READER_CSP}; script-src '${restoreScript.cspHash}'; connect-src 'self'`)
+      input.response.status(200).type("html").send(`${renderDriveShareReaderPage({ shareId: input.shareId, snapshot })}${restoreScript?.html ?? ""}`)
+      await this.captureShareNavigation(input.request, { shareId: input.shareId, itemId: input.itemId })
     } catch (error) {
       if (isNotFoundException(error)) {
         sendDriveInvalidShareReaderPage(input.response)
@@ -2617,6 +2718,7 @@ export class DrivePublicController {
         cookie: readDriveAccessCookie(request, { kind: "share", publicId: input.shareId }),
       })
       await sendDriveTransfer(response, transfer, this.storage)
+      await this.captureShareNavigation(request, input)
     } catch (error) {
       if (isNotFoundException(error)) {
         sendDriveInvalidSharePage(response)
@@ -2668,7 +2770,12 @@ export class DrivePublicController {
         setDriveAccessCookie(response, access.cookie, { kind: "share", publicId: input.shareId })
       }
       if (access.value.passwordProtected) setProtectedShareContentCacheHeaders(response)
-      await sendDriveHtmlRenderedAsset(response, access.value)
+      const restoreScript = isDriveHistoryNavigation(request)
+        ? buildDriveHistoryRestoreScript({ kind: "share", shareId: input.shareId, itemId: input.itemId }) : null
+      await sendDriveHtmlRenderedAsset(response, restoreScript
+        ? { ...access.value, stream: appendDriveHistoryRestoreScript(access.value.stream, restoreScript), size: undefined }
+        : access.value)
+      await this.captureShareNavigation(request, input)
     } catch (error) {
       if (isNotFoundException(error)) {
         sendDriveInvalidSharePage(response)
@@ -3381,4 +3488,9 @@ body {
   }
 }
 `
+}
+
+function requireBrowsingHistoryService(history: DriveBrowsingHistoryService | undefined): DriveBrowsingHistoryService {
+  if (!history) throw new Error("DriveBrowsingHistoryService is not available.")
+  return history
 }

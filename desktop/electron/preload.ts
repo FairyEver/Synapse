@@ -814,6 +814,7 @@ const synapseBridge: SynapseBridge = {
     send: { preview: invoke(IPC_CHANNELS.account.mailSendPreview) },
   },
   drive: {
+    browsingHistory: { list: invoke(IPC_CHANNELS.account.listDriveBrowsingHistory), clear: invoke(IPC_CHANNELS.account.clearDriveBrowsingHistory) },
     itemTree: { list: invoke(IPC_CHANNELS.account.listDriveItemTree) },
     item: {
       list: invoke(IPC_CHANNELS.account.listDriveItems),

@@ -21,6 +21,8 @@ import {
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { mailBoxInputSchema, mailMessageListInputSchema } from "../../../synapse-capabilities/shared/mail-internal-input"
 
+const driveBrowsingHistoryInputSchema = z.object({ query: z.string().max(500).optional(), kind: z.enum(["web", "document", "folder", "other"]).optional(), cursor: z.string().min(1).max(1024).optional(), limit: z.number().int().min(1).max(100).optional() }).strict().optional()
+
 const accountUserSchema = z.object({
   id: z.string(),
   email: z.string(),
@@ -1277,6 +1279,20 @@ export const accountIpcModule: IpcModule = {
       request: driveItemListInputSchema,
       response: drivePublicLinksPageSchema(driveItemSchema),
       handler: async (_ctx, input) => accountService.listDriveItemsPage(driveItemListInputSchema.parse(input) ?? {}),
+    },
+    listDriveBrowsingHistory: {
+      kind: "invoke",
+      operationId: "app.drive.browsing_history.list",
+      request: driveBrowsingHistoryInputSchema,
+      response: z.object({ items: z.array(z.object({ id: z.string(), title: z.string(), author: z.string(), kind: z.enum(["web", "document", "folder", "other"]), url: z.string().url(), visitedAt: z.string() })), nextCursor: z.string().nullable() }),
+      handler: async (_ctx, input) => accountService.listDriveBrowsingHistory(driveBrowsingHistoryInputSchema.parse(input)),
+    },
+    clearDriveBrowsingHistory: {
+      kind: "invoke",
+      operationId: "app.drive.browsing_history.clear",
+      request: z.void(),
+      response: z.object({ ok: z.literal(true) }),
+      handler: async () => accountService.clearDriveBrowsingHistory(),
     },
     listDriveItemTree: {
       kind: "invoke",

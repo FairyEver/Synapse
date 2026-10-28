@@ -23,6 +23,7 @@ import { DriveLifecycleService } from "./drive-lifecycle.service"
 import { DrivePublicAssetService } from "./drive-public-asset.service"
 import { DriveSiteService } from "./drive-site.service"
 import { DriveService } from "./drive.service"
+import { DriveBrowsingHistoryService } from "./drive-browsing-history.service"
 import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
 import { PlatformMediaStorage } from "./platform-media-storage"
 
@@ -47,6 +48,7 @@ import { PlatformMediaStorage } from "./platform-media-storage"
     DrivePublicAssetService,
     DriveSiteService,
     DriveService,
+    DriveBrowsingHistoryService,
     {
       provide: DriveLinkIntakeService,
       useFactory: (

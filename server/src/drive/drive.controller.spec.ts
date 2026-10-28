@@ -600,7 +600,7 @@ describe("DriveController", () => {
 
     expect(response.headers["content-type"]).toContain("text/javascript")
     expect(response.headers["cache-control"]).toBe("private, no-store")
-    expect(response.headers.vary).toBe("Cookie")
+    expect(response.headers.vary).toBe("Cookie, Sec-Fetch-Dest, Sec-Fetch-Mode")
     expect(response.text).toBe("console.log(1)")
   })
 

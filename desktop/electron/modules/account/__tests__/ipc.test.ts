@@ -158,6 +158,16 @@ function createAccountSecurityContext(permissionResult: PermissionResultForTest 
 }
 
 describe("accountIpcModule", () => {
+  it("validates private browsing history filters and bounded pagination", () => {
+    const operation = accountIpcModule.methods.listDriveBrowsingHistory
+    expect(operation.request.parse({ query: "title", kind: "web", cursor: "next", limit: 100 })).toEqual({ query: "title", kind: "web", cursor: "next", limit: 100 })
+    for (const invalid of [{ limit: 0 }, { limit: 101 }, { limit: 1.5 }, { kind: "image" }, { query: "x".repeat(501) }, { cursor: "" }, { accountId: "other" }]) {
+      expect(() => operation.request.parse(invalid)).toThrow()
+    }
+    expect(operation.response?.parse({ items: [{ id: "visit-1", title: "Title", author: "author", kind: "web", url: "https://example.com/share", visitedAt: "2026-10-28T00:00:00Z" }], nextCursor: null })).toMatchObject({ nextCursor: null })
+    expect(() => accountIpcModule.methods.clearDriveBrowsingHistory.request.parse({ accountId: "other" })).toThrow()
+  })
+
   it("declares account invoke channels", () => {
     expect(accountIpcModule.id).toBe("account")
     // Reading the state and starting a login are capabilities, so they carry capability

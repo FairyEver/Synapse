@@ -17,6 +17,14 @@ When the user says “云文档”, “在线文档”, “云盘”, “云存�
 
 These names alone do not authorize publishing a share or site, creating a public asset, or binding persistent local sync. If the user explicitly names another platform, do not route that request to Synapse Drive.
 
+## Personal Browsing History
+
+Desktop Drive's “浏览历史” drawer is a private UI feature, separate from owned-file search, share management and version history. It lists successful browser visits belonging to the account signed into that browser; repeated opens remain separate records. Its unified search matches title, link and available author identity, with an optional content-type filter. Clicking an entry opens its original link in the system default browser and rechecks its access permissions there.
+
+Browsing-history list and clear operations are UI-private IPC, not MCP tools. Do not invent history tools, use administrator access logs, or enumerate other users' files to reconstruct browsing history. Existing `app_drive_item_tree_list` searches owned files, not the user's browsing history.
+
+Clearing history erases its title, link and author search snapshots. A detail-free event receipt remains only to prevent a delayed retry from restoring a cleared record; a real new visit always receives a new event identity.
+
 ## Finding Files
 
 ### Choose the operation

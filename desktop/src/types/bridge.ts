@@ -199,6 +199,8 @@ import type {
   DriveItemDto,
   DriveItemListInput,
   DriveItemListPageDto,
+  DriveBrowsingHistoryListInput,
+  DriveBrowsingHistoryPageDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
@@ -1453,6 +1455,7 @@ export type SynapseBridge = {
     send: { preview: (input: { content: import("./mail").MailContent }) => Promise<import("./mail").MailOperationResult["sendPreview"]> }
   }
   drive: {
+    browsingHistory: { list: (input?: DriveBrowsingHistoryListInput) => Promise<DriveBrowsingHistoryPageDto>; clear: () => Promise<{ ok: true }> }
     itemTree: { list: (input?: DriveItemTreeListInput) => Promise<DriveItemTreeListPageDto> }
     item: {
       list: (input?: DriveItemListInput) => Promise<DriveItemListPageDto>

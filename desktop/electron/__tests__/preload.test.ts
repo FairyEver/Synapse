@@ -806,6 +806,14 @@ describe("preload bridge", () => {
     )
   })
 
+  it("routes private browsing history reads and clears to their own IPC operations", async () => {
+    const bridge = await loadPreloadBridge()
+    await bridge.drive.browsingHistory.list({ query: "author", kind: "web", cursor: "next", limit: 50 })
+    await bridge.drive.browsingHistory.clear()
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive:browsing_history:list", { query: "author", kind: "web", cursor: "next", limit: 50 })
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith("synapse:app:drive:browsing_history:clear", undefined)
+  })
+
   it("maps account drive methods to account IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 

@@ -91,6 +91,7 @@ function DriveToolbarActions({
 }
 
 function DrivePublicAssetToolbarActions({
+  historyAction,
   uploadDisabled,
   refreshDisabled,
   onUpload,
@@ -98,11 +99,13 @@ function DrivePublicAssetToolbarActions({
 }: {
   readonly uploadDisabled: boolean
   readonly refreshDisabled: boolean
+  readonly historyAction?: ReactNode
   readonly onUpload: () => void
   readonly onRefresh: () => void
 }) {
   return (
     <div className="flex items-center justify-end gap-0">
+      {historyAction}
       <SystemAppTopBarActionButton type="button" disabled={uploadDisabled} onClick={onUpload}>
         上传公开素材
       </SystemAppTopBarActionButton>
@@ -112,14 +115,17 @@ function DrivePublicAssetToolbarActions({
 }
 
 function DriveTrashToolbarActions({
+  historyAction,
   refreshDisabled,
   onRefresh,
 }: {
+  readonly historyAction?: ReactNode
   readonly refreshDisabled: boolean
   readonly onRefresh: () => void
 }) {
   return (
     <div className="flex items-center justify-end gap-0">
+      {historyAction}
       <DriveRefreshToolbarAction disabled={refreshDisabled} onRefresh={onRefresh} />
     </div>
   )

@@ -56,6 +56,8 @@ import type {
   DriveItemDto,
   DriveItemListInput,
   DriveItemListPageDto,
+  DriveBrowsingHistoryListInput,
+  DriveBrowsingHistoryPageDto,
   DriveItemTreeListInput,
   DriveItemTreeListPageDto,
   DriveLinkDownloadFileDto,
@@ -371,6 +373,8 @@ async function unavailableExternalUrlOpener(): Promise<void> {
   throw new Error("Account external opener is unavailable.")
 }
 
+type AccountRequestScope = { readonly accountId: string | null; readonly authRevision: number }
+
 export class AccountService {
   private readonly namespace: EncryptedJsonNamespace<PersistedAccount>
   private readonly fetchImpl: typeof fetch
@@ -437,7 +441,14 @@ export class AccountService {
     pathOrUrl: string,
     init: RequestInit = {},
     errorMessage = "请求失败。",
+    accountScope?: AccountRequestScope,
   ): Promise<Response> {
+    const assertAccountScope = () => {
+      if (!accountScope) return
+      const accountId = this.state.status === "authenticated" ? this.state.profile.user.id : null
+      if (accountScope.authRevision !== this.authRevision || accountScope.accountId !== accountId) throw new AccountAuthenticationRequiredError()
+    }
+    assertAccountScope()
     const url = pathOrUrl.startsWith("/") ? `${apiBaseUrl()}${pathOrUrl}` : pathOrUrl
     let token = this.accessToken
     if (!token) {
@@ -445,11 +456,13 @@ export class AccountService {
         throw new AccountAuthenticationRequiredError()
       }
       await this.refreshFromStorage({ reason: "api-auth-failure" })
+      assertAccountScope()
       token = this.accessToken
     }
     if (!token) throw new AccountAuthenticationRequiredError()
 
     const request = () => {
+      assertAccountScope()
       const headers = toMutableHeadersRecord(init.headers)
       headers.Authorization = `Bearer ${token}`
       return this.fetchImpl(url, { ...init, headers })
@@ -457,7 +470,9 @@ export class AccountService {
 
     let response = await request()
     if (response.status === 401 || response.status === 403) {
+      assertAccountScope()
       await this.refreshFromStorage({ reason: "api-auth-failure" })
+      assertAccountScope()
       token = this.accessToken
       if (!token) {
         throw await createHttpError(init.method ?? "GET", url, response, errorMessage)
@@ -1380,6 +1395,22 @@ export class AccountService {
       `${apiBaseUrl()}/drive/changes${query ? `?${query}` : ""}`,
       "云盘变更加载失败。",
     )
+  }
+
+  async listDriveBrowsingHistory(input: DriveBrowsingHistoryListInput = {}): Promise<DriveBrowsingHistoryPageDto> {
+    const params = new URLSearchParams()
+    if (input.query) params.set("query", input.query)
+    if (input.kind) params.set("kind", input.kind)
+    if (input.cursor) params.set("cursor", input.cursor)
+    if (input.limit !== undefined) params.set("limit", String(input.limit))
+    const query = params.toString()
+    const accountScope = { accountId: this.state.status === "authenticated" ? this.state.profile.user.id : null, authRevision: this.authRevision }
+    return this.requestAuthenticatedJson<DriveBrowsingHistoryPageDto>("GET", `${apiBaseUrl()}/drive/browsing-history${query ? `?${query}` : ""}`, undefined, "浏览历史加载失败。", { accountScope })
+  }
+
+  async clearDriveBrowsingHistory(): Promise<{ ok: true }> {
+    const accountScope = { accountId: this.state.status === "authenticated" ? this.state.profile.user.id : null, authRevision: this.authRevision }
+    return this.requestAuthenticatedJson<{ ok: true }>("DELETE", `${apiBaseUrl()}/drive/browsing-history`, undefined, "浏览历史清空失败。", { accountScope })
   }
 
   async listDriveItemTree(input: DriveItemTreeListInput): Promise<DriveItemTreeListPageDto> {
@@ -2693,7 +2724,7 @@ export class AccountService {
     url: string,
     body: unknown,
     errorMessage: string,
-    options: { readonly signal?: AbortSignal } = {},
+    options: { readonly signal?: AbortSignal; readonly accountScope?: AccountRequestScope } = {},
   ): Promise<T> {
     const response = await this.fetchAuthenticated(url, {
       method,
@@ -2702,7 +2733,7 @@ export class AccountService {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-    }, errorMessage)
+    }, errorMessage, options.accountScope)
     const text = await response.text()
     return (text ? JSON.parse(text) : undefined) as T
   }

@@ -1349,6 +1349,11 @@ export const driveApi = {
 }
 
 export const driveBrowserApi = {
+  recordShareVisit: (shareId: string, itemId: string | undefined, input: { visitId: string }, signal?: AbortSignal) =>
+    request<{ ok: true }>(
+      `${driveBrowserApiBasePath}/shares/${encodeURIComponent(shareId)}${itemId ? `/items/${encodeURIComponent(itemId)}` : ''}/visits`,
+      { method: 'POST', body: JSON.stringify(input), signal }
+    ),
   getOwnerItem: (
     itemId: string,
     surface: DriveBrowserSurface = 'standalone',

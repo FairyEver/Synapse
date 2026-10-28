@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   FolderOpen,
   Search,
+  History,
   CircleUserRound,
   Copy,
   ExternalLink,
@@ -43,6 +44,7 @@ import { RelativeTime } from "@/components/relative-time"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { startTrackedOperation, track } from "@/lib/ui-tracking"
 import { FormDialog } from "@/components/form-dialog"
+import { DriveBrowsingHistorySheet } from "./drive-browsing-history-sheet"
 import { DrivePublicAssetsView, type DrivePublicAssetsViewActionState, type DrivePublicAssetsViewHandle } from "./drive-public-assets-view"
 import { DriveSiteCreateDialog } from "./drive-site-create-dialog"
 import { DriveSitesPanel } from "./drive-sites-dialog"
@@ -340,6 +342,7 @@ function DriveModuleContent() {
   const deleteFallbackItemIdRef = useRef<string | null>(null)
   const [deleteFocusTargetId, setDeleteFocusTargetId] = useState<string | null>(null)
   const [publicLinksOpen, setPublicLinksOpen] = useState(false)
+  const [browsingHistoryOpen, setBrowsingHistoryOpen] = useState(false)
   const [siteCreateTarget, setSiteCreateTarget] = useState<DriveItemDto | null>(null)
   const [shareSuccess, setShareSuccess] = useState<DriveShareSuccessState | null>(null)
   const [managedShareTarget, setManagedShareTarget] = useState<DriveShareListItemDto | null>(null)
@@ -1018,10 +1021,13 @@ function DriveModuleContent() {
   })()
   const uploadStatusBadge = getDriveUploadStatusBadge(activeView === "files" ? uploadTask : null)
 
+  const historyAction = <SystemAppTopBarActionButton disabled={!accountAuthenticated} aria-expanded={browsingHistoryOpen} onClick={() => setBrowsingHistoryOpen(true)}><History data-icon="inline-start" />浏览历史</SystemAppTopBarActionButton>
+
   const toolbarActions = (() => {
     if (activeView === "public-assets") {
       return (
         <DrivePublicAssetToolbarActions
+          historyAction={historyAction}
           uploadDisabled={!accountAuthenticated || publicAssetActionState.uploading}
           refreshDisabled={!accountAuthenticated || publicAssetActionState.loading}
           onUpload={() => publicAssetsViewRef.current?.openUploadDialog()}
@@ -1032,6 +1038,7 @@ function DriveModuleContent() {
     if (activeView === "trash") {
       return (
         <DriveTrashToolbarActions
+          historyAction={historyAction}
           refreshDisabled={!accountAuthenticated || trashActionState.loading}
           onRefresh={() => trashViewRef.current?.refresh()}
         />
@@ -1066,6 +1073,7 @@ function DriveModuleContent() {
         <SystemAppTopBarActionButton aria-label="搜索文件" aria-pressed={search.expanded} disabled={!accountAuthenticated} onClick={search.expanded ? search.close : search.start}>
           <Search data-icon="inline-start" />搜索
         </SystemAppTopBarActionButton>
+        {historyAction}
         <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelected} />
         <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFolderSelected} {...{ webkitdirectory: "" }} />
       </DriveToolbarActions>
@@ -1214,6 +1222,7 @@ function DriveModuleContent() {
         actions={toolbarActions}
         afterContent={(
           <>
+            <DriveBrowsingHistorySheet open={browsingHistoryOpen} accountId={accountAuthenticated ? accountState.profile.user.id : null} onOpenChange={setBrowsingHistoryOpen} />
             <DriveUploadReviewDialog controller={uploadReview} onManageSync={(bindingId) => setSyncDialog({ mode: "center", bindingId })} />
             <DriveUploadTaskPanel
               task={uploadTask}

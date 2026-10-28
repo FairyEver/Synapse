@@ -22,6 +22,7 @@ import { DriveTelemetryBoundary } from './shared/drive-telemetry-boundary'
 import { shouldRenderDriveBodyRenderer } from './shared/drive-view-model'
 import type { DriveAnnotationContext } from './use-drive-annotations'
 import { useDriveBrowser } from './use-drive-browser'
+import { useDriveBrowsingHistoryVisit } from './use-drive-browsing-history-visit'
 
 export type DriveBrowserPageProps =
   | {
@@ -32,6 +33,7 @@ export type DriveBrowserPageProps =
     }
   | {
       context: 'share'
+      navigationKey?: number
       shareId: string
       itemId?: string
       initialPassword?: string
@@ -52,6 +54,13 @@ export function DriveBrowserPage(props: DriveBrowserPageProps) {
 
 function DriveBrowserPageContent(props: DriveBrowserPageProps) {
   const state = useDriveBrowser(props)
+  useDriveBrowsingHistoryVisit({
+    context: props.context,
+    shareId: props.context === 'share' ? props.shareId : undefined,
+    itemId: props.context === 'share' ? props.itemId : undefined,
+    navigationKey: props.context === 'share' ? props.navigationKey : undefined,
+    ready: state.status === 'ready',
+  })
   const initialPassword = props.context === 'share' ? props.initialPassword : undefined
   const onInitialPasswordConsumed = props.context === 'share'
     ? props.onInitialPasswordConsumed
