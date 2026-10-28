@@ -19,24 +19,55 @@ describe("readNotificationImageFile", () => {
     })
     expect(result).toMatchObject({ ok: true, mimeType: "image/png" })
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({ action: "fs.read.outside-userdata", resource: file }))
-    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain(file)
+    expect(auditSink.record).toHaveBeenCalledTimes(1)
+    const [event] = auditSink.record.mock.calls[0] as [{
+      outcome: string
+      resource: string
+      metadata: Record<string, unknown>
+    }]
+    expect(event).toMatchObject({
+      outcome: "allowed",
+      resource: "a.png",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        mimeType: "image/png",
+        byteSize: png.byteLength,
+      }),
+    })
+    expect(JSON.stringify(event)).not.toContain(file)
+    expect(event.metadata).not.toHaveProperty("path")
   })
 
   it("rejects relative, missing, unsupported and denied inputs", async () => {
     expect(await readNotificationImageFile({ filePath: "a.png", actor: { kind: "system" }, metadata: {} }))
       .toEqual({ ok: false, reason: "not_absolute" })
-    expect(await readNotificationImageFile({ filePath: "/definitely/missing.png", actor: { kind: "system" }, metadata: {} }))
+    const auditSink = { record: vi.fn() }
+    expect(await readNotificationImageFile({ filePath: "/definitely/missing.png", actor: { kind: "system" }, auditSink: auditSink as never, metadata: {} }))
       .toEqual({ ok: false, reason: "not_found" })
+    expect(auditSink.record).toHaveBeenCalledTimes(1)
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "failed",
+      resource: "missing.png",
+      metadata: expect.objectContaining({ reason: "not_found" }),
+    }))
     const dir = await mkdtemp(path.join(os.tmpdir(), "notify-image-"))
     const text = path.join(dir, "a.png")
     await writeFile(text, "hello")
     expect(await readNotificationImageFile({ filePath: text, actor: { kind: "system" }, metadata: {} }))
       .toEqual({ ok: false, reason: "unsupported_type" })
+    const deniedSink = { record: vi.fn() }
     expect(await readNotificationImageFile({
       filePath: text, actor: { kind: "system" },
       permissionGuard: { check: async () => ({ allowed: false, reason: "policy" }) } as never,
+      auditSink: deniedSink as never,
       metadata: {},
     })).toEqual({ ok: false, reason: "permission_denied" })
+    expect(deniedSink.record).toHaveBeenCalledTimes(1)
+    expect(deniedSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "denied",
+      resource: "a.png",
+      metadata: expect.objectContaining({ reason: "permission_denied" }),
+    }))
   })
 
   it("rejects directories and symlinks instead of following them", async () => {

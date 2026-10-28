@@ -16,13 +16,34 @@ export function detectNotificationImageMime(bytes: Buffer): string | null {
   return null
 }
 
+export type NotificationImageReadResult =
+  | { ok: true; bytes: Buffer; mimeType: string }
+  | { ok: false; reason: NotificationImageReadFailure }
+
 export async function readNotificationImageFile(input: {
   filePath: string
   actor: ActorIdentity
   permissionGuard?: PermissionGuard
   auditSink?: AuditSink
   metadata: Record<string, unknown>
-}): Promise<{ ok: true; bytes: Buffer; mimeType: string } | { ok: false; reason: NotificationImageReadFailure }> {
+}): Promise<NotificationImageReadResult> {
+  const audit = (
+    outcome: "allowed" | "denied" | "failed",
+    metadata: Record<string, unknown>,
+  ): void => {
+    input.auditSink?.record({
+      action: "fs.read.outside-userdata",
+      actor: input.actor,
+      resource: path.basename(input.filePath),
+      outcome,
+      metadata,
+    })
+  }
+  const fail = (reason: NotificationImageReadFailure): NotificationImageReadResult => {
+    audit("failed", { ...input.metadata, reason })
+    return { ok: false, reason }
+  }
+
   if (!path.isAbsolute(input.filePath)) return { ok: false, reason: "not_absolute" }
 
   if (input.permissionGuard) {
@@ -32,32 +53,29 @@ export async function readNotificationImageFile(input: {
       resource: input.filePath,
       context: input.metadata,
     })
-    input.auditSink?.record({
-      action: "fs.read.outside-userdata",
-      actor: input.actor,
-      resource: path.basename(input.filePath),
-      outcome: permission.allowed ? "allowed" : "denied",
-      metadata: permission.allowed ? input.metadata : { ...input.metadata, reason: "permission_denied" },
-    })
-    if (!permission.allowed) return { ok: false, reason: "permission_denied" }
+    if (!permission.allowed) {
+      audit("denied", { ...input.metadata, reason: "permission_denied" })
+      return { ok: false, reason: "permission_denied" }
+    }
   }
 
   let info
   try {
     info = await lstat(input.filePath)
   } catch (error) {
-    return { ok: false, reason: (error as NodeJS.ErrnoException).code === "ENOENT" ? "not_found" : "unreadable" }
+    return fail((error as NodeJS.ErrnoException).code === "ENOENT" ? "not_found" : "unreadable")
   }
-  if (!info.isFile()) return { ok: false, reason: "not_regular_file" }
-  if (info.size > NOTIFICATION_IMAGE_MAX_BYTES) return { ok: false, reason: "too_large" }
+  if (!info.isFile()) return fail("not_regular_file")
+  if (info.size > NOTIFICATION_IMAGE_MAX_BYTES) return fail("too_large")
 
   let bytes: Buffer
   try {
     bytes = await readFile(input.filePath)
   } catch {
-    return { ok: false, reason: "unreadable" }
+    return fail("unreadable")
   }
   const mimeType = detectNotificationImageMime(bytes)
-  if (!mimeType) return { ok: false, reason: "unsupported_type" }
+  if (!mimeType) return fail("unsupported_type")
+  audit("allowed", { ...input.metadata, mimeType, byteSize: bytes.byteLength })
   return { ok: true, bytes, mimeType }
 }
