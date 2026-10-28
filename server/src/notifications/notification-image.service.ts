@@ -29,10 +29,15 @@ export class NotificationImageService {
     if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) throw new NotificationImageInvalidTypeError()
     const objectKey = `notification-images/${randomBytes(24).toString("base64url")}`
     await this.storage.putObject(objectKey, bytes, mimeType)
-    return this.prisma.notificationImage.create({
-      data: { userId, objectKey, mimeType, byteSize: bytes.length, state: "pending", expiresAt: new Date(Date.now() + pendingTtlMs) },
-      select: { id: true, mimeType: true, byteSize: true },
-    })
+    try {
+      return await this.prisma.notificationImage.create({
+        data: { userId, objectKey, mimeType, byteSize: bytes.length, state: "pending", expiresAt: new Date(Date.now() + pendingTtlMs) },
+        select: { id: true, mimeType: true, byteSize: true },
+      })
+    } catch (error) {
+      await this.storage.deleteObject(objectKey).catch(() => undefined)
+      throw error
+    }
   }
 
   async claimInTransaction(tx: Prisma.TransactionClient, userId: string, imageId: string): Promise<void> {

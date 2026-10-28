@@ -32,6 +32,22 @@ describe("NotificationImageService", () => {
     expect(storage.putObject).not.toHaveBeenCalled()
   })
 
+  it("deletes the staged object when the record insert fails", async () => {
+    const failure = new Error("insert failed")
+    const putObject = vi.fn(async (_key: string, _bytes: Buffer, _contentType: string) => undefined)
+    const deleteObject = vi.fn(async (_key: string) => undefined)
+    const prisma = {
+      notificationImage: {
+        create: vi.fn(async () => { throw failure }),
+      },
+    }
+    const service = new NotificationImageService(prisma as never, { putObject, deleteObject } as never)
+    await expect(service.stage("user-1", png)).rejects.toBe(failure)
+    const [objectKey] = putObject.mock.calls[0]
+    expect(objectKey).toMatch(/^notification-images\//u)
+    expect(deleteObject).toHaveBeenCalledWith(objectKey)
+  })
+
   it("claims only a pending image owned by the caller", async () => {
     const updateMany = vi.fn(async () => ({ count: 1 }))
     const service = new NotificationImageService({ notificationImage: { updateMany } } as never, {} as never)
