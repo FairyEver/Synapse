@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, Post, Query, Req, UseFilters, UseGuards, type ExecutionContext } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, UseFilters, UseGuards, type ExecutionContext } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request } from "express"
 import { createHash } from "node:crypto"
@@ -21,6 +21,7 @@ import {
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 import { OpenApiHttpError, requireOpenApiPrincipal, type OpenApiRequest } from "../open-api/open-api.types"
 import { NotificationApiKeyGuard } from "./notification-api-key.guard"
+import { NOTIFICATION_IMAGE_MAX_BYTES, NotificationImageService } from "./notification-image.service"
 import { NotificationService } from "./notification.service"
 
 const idempotencyKeyPattern = /^[A-Za-z0-9_-]{8,120}$/u
@@ -66,7 +67,10 @@ type AuthedRequest = Request & { readonly user: { readonly id: string } }
 @Controller("/api/notifications")
 @UseGuards(UserAuthGuard)
 export class NotificationController {
-  constructor(private readonly notifications: NotificationService) {}
+  constructor(
+    private readonly notifications: NotificationService,
+    private readonly images: NotificationImageService,
+  ) {}
 
   /**
    * 桌面端写自己账号的通知队列。
@@ -82,6 +86,21 @@ export class NotificationController {
     if (!parsed.success) throw badRequestFromZodError(parsed.error, "通知参数无效。")
     const item = await this.notifications.create({ ...parsed.data, userId: request.user.id })
     return { id: item.id }
+  }
+
+  @Put("desktop/image")
+  async uploadImage(@Req() request: AuthedRequest & Request) {
+    const chunks: Buffer[] = []
+    let size = 0
+    for await (const chunk of request) {
+      const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      size += part.length
+      if (size > NOTIFICATION_IMAGE_MAX_BYTES) throw new PayloadTooLargeException("图片不能超过 10 MB。")
+      chunks.push(part)
+    }
+    if (size === 0) throw new BadRequestException("图片为空。")
+    const staged = await this.images.stage(request.user.id, Buffer.concat(chunks))
+    return { imageId: staged.id, mimeType: staged.mimeType, byteSize: staged.byteSize }
   }
 
   @Get()

@@ -1,6 +1,7 @@
 import type { ExecutionContext } from "@nestjs/common"
 import { THROTTLER_KEY_GENERATOR } from "@nestjs/throttler/dist/throttler.constants"
 import { NOTIFICATION_SOURCES } from "@synapse/shared"
+import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationController, OpenNotificationController, notificationThrottleKey } from "./notification.controller"
 
@@ -19,7 +20,7 @@ describe("NotificationController", () => {
   it("accepts each existing notification source and rejects unknown categories", async () => {
     const page = { items: [], nextCursor: null }
     const service = { list: vi.fn(async () => page) }
-    const endpoint = new NotificationController(service as never)
+    const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "reader" } }
     for (const source of NOTIFICATION_SOURCES) {
       await expect(endpoint.list(request as never, { source, filter: "unread", cursor: "n1" })).resolves.toEqual(page)
@@ -31,7 +32,7 @@ describe("NotificationController", () => {
 
   it("keeps old mark-read calls working and accepts an explicit mark-unread request", async () => {
     const service = { markRead: vi.fn(async () => undefined) }
-    const endpoint = new NotificationController(service as never)
+    const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "reader" } }
     await endpoint.markRead(request as never, "n1", undefined)
     await endpoint.markRead(request as never, "n1", { read: false })
@@ -42,7 +43,7 @@ describe("NotificationController", () => {
 
   it("rejects a non-boolean copyOnTap on the desktop write path", async () => {
     const service = { create: vi.fn(async () => ({ id: "n1", createdAt: new Date("2026-10-15T08:00:00Z") })) }
-    const endpoint = new NotificationController(service as never)
+    const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "writer" } }
 
     await endpoint.createFromDesktop(request as never, {
@@ -192,7 +193,7 @@ describe("notification throttle key", () => {
 describe("NotificationController", () => {
   it("limits bulk deletion to all or pending messages for the signed-in user", async () => {
     const service = { deleteAll: vi.fn(async () => undefined) }
-    const endpoint = new NotificationController(service as never)
+    const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "user-1" } }
 
     await expect(endpoint.deleteAll(request as never, { filter: "pending" })).resolves.toEqual({ ok: true })
@@ -204,7 +205,7 @@ describe("NotificationController", () => {
   it("writes desktop-owned sources to the caller's own queue", async () => {
     for (const source of ["system-notifier", "terminal-complete"] as const) {
       const service = { create: vi.fn(async () => ({ id: "message-1" })) }
-      const endpoint = new NotificationController(service as never)
+      const endpoint = new NotificationController(service as never, {} as never)
       const request = { user: { id: "user-1" } }
 
       await expect(endpoint.createFromDesktop(request as never, { source, title: "标题", body: "正文" }))
@@ -215,7 +216,7 @@ describe("NotificationController", () => {
 
   it("carries an optional link and group without widening the desktop-owned sources", async () => {
     const service = { create: vi.fn(async () => ({ id: "message-1" })) }
-    const endpoint = new NotificationController(service as never)
+    const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "user-1" } }
 
     await expect(endpoint.createFromDesktop(request as never, {
@@ -237,7 +238,7 @@ describe("NotificationController", () => {
 
   it("refuses a link the desktop could not open on a phone", async () => {
     const service = { create: vi.fn(async () => ({ id: "message-1" })) }
-    const endpoint = new NotificationController(service as never)
+    const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "user-1" } }
 
     for (const url of ["http://example.com/x", "ftp://example.com/x", "not a url"]) {
@@ -253,7 +254,7 @@ describe("NotificationController", () => {
 
   it("refuses sources the desktop does not own", async () => {
     const service = { create: vi.fn(async () => ({ id: "message-1" })) }
-    const endpoint = new NotificationController(service as never)
+    const endpoint = new NotificationController(service as never, {} as never)
     const request = { user: { id: "user-1" } }
 
     for (const source of ["external", "terminal-attention", "meeting-transcription", "todo-reminder"]) {
@@ -268,4 +269,14 @@ describe("NotificationController", () => {
     expect(Reflect.getMetadata("path", NotificationController.prototype.createFromDesktop))
       .toEqual(["desktop", "internal"])
   })
+})
+
+it("uploads raw image bytes and rejects an unsupported payload", async () => {
+  const stage = vi.fn(async (_userId: string, bytes: Buffer) => ({ id: "img-1", mimeType: "image/png", byteSize: bytes.length }))
+  const endpoint = new NotificationController({} as never, { stage } as never)
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  await expect(endpoint.uploadImage(
+    Object.assign(Readable.from([png]), { user: { id: "u1" } }) as never,
+  )).resolves.toMatchObject({ imageId: "img-1", mimeType: "image/png" })
+  expect(stage).toHaveBeenLastCalledWith("u1", png)
 })
