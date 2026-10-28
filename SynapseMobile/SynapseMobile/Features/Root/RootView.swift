@@ -64,6 +64,9 @@ struct RootView: View {
         .fullScreenCover(item: $notificationWebLink) { target in
             LinkBrowser(url: target.url) { notificationWebLink = nil }
         }
+        .fullScreenCover(item: $notificationImageTarget) { target in
+            NotificationImageViewer(notificationId: target.id) { try await model.downloadNotificationImage(id: target.id) }
+        }
         .onChange(of: NotificationRouter.shared.pending) { _, _ in
             if model.authState == .signedIn { handleRoute(NotificationRouter.shared.consume()) }
         }
@@ -98,6 +101,7 @@ struct RootView: View {
                 notificationFilter = "all"
                 notificationRefreshRequest = UUID()
                 notificationWebLink = nil
+                notificationImageTarget = nil
                 isNewSessionPresented = false
                 // 一个等着判定的打开请求也是「按会话 id 记住的东西」，登出之后它连属于
                 // 哪台电脑都无从谈起。
@@ -127,6 +131,7 @@ struct RootView: View {
             notificationFilter = "all"
             notificationRefreshRequest = UUID()
             notificationWebLink = nil
+            notificationImageTarget = nil
             notificationOpenRequest = UUID()
         }
         .onChange(of: homePath) { old, current in

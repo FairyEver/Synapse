@@ -741,6 +741,10 @@ final class SynapseAppModel {
         await notifications.deleteAll(using: apiClient)
     }
 
+    func downloadNotificationImage(id: String) async throws -> URL {
+        try await apiClient.downloadNotificationImage(id: id)
+    }
+
     func loadMeetingDetail(_ meetingId: String) async {
         _ = await meetings.loadDetail(meetingId, using: apiClient)
     }

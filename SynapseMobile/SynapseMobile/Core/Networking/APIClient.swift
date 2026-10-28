@@ -431,6 +431,33 @@ actor APIClient {
         let _: EmptyResponse = try await send(path: "/notifications?filter=all", method: "DELETE")
     }
 
+    func downloadNotificationImage(id: String) async throws -> URL {
+        synchronizeStoredCredential()
+        let generation = credentialGeneration
+        let account = tokens.credentialVersion
+        if accessToken == nil || accessTokenIsStale {
+            _ = await refreshAccessTokenOutcome()
+        }
+        guard generation == credentialGeneration, account == tokens.credentialVersion,
+              accessToken == nil || accessTokenCredentialVersion == account else {
+            throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+        }
+        guard let token = accessToken else { throw APIError(status: 401, code: "unauthenticated", message: "登录已过期，请重新登录。") }
+        guard let url = URL(string: AppConfiguration.apiBaseURL.absoluteString + "/notifications/\(escaped(id))/image") else {
+            throw APIError(status: 0, code: "bad_url", message: "图片地址无效。")
+        }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (temporary, response) = try await downloadSession.download(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw APIError(status: (response as? HTTPURLResponse)?.statusCode ?? 0, code: "download", message: "图片没能下载下来。")
+        }
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("notification-\(UUID().uuidString).img")
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: temporary, to: destination)
+        return destination
+    }
+
     /// 平台有没有开语音识别。
     ///
     /// 这是服务端的部署事实——腾讯云密钥在服务端，不是每台设备的设置——所以麦克风
