@@ -7,6 +7,9 @@ import { PlatformMediaStorage } from "../drive/platform-media-storage"
 import { PrismaService } from "../prisma/prisma.service"
 
 export const NOTIFICATION_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+/** 单个账号同时挂着的待认领图片数量与字节上限：上传端点不限单张之外的总量，这里兜住。 */
+export const NOTIFICATION_IMAGE_MAX_PENDING_COUNT = 20
+export const NOTIFICATION_IMAGE_MAX_PENDING_BYTES = 50 * 1024 * 1024
 const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 const pendingTtlMs = 24 * 60 * 60 * 1000
 
@@ -15,6 +18,9 @@ export class NotificationImageInvalidTypeError extends Error {
 }
 export class NotificationImageUnavailableError extends Error {
   constructor() { super("Notification image is unavailable."); this.name = "NotificationImageUnavailableError" }
+}
+export class NotificationImageQuotaError extends Error {
+  constructor() { super("Notification image pending quota is exhausted."); this.name = "NotificationImageQuotaError" }
 }
 
 @Injectable()
@@ -27,6 +33,17 @@ export class NotificationImageService {
   async stage(userId: string, bytes: Buffer): Promise<{ id: string; mimeType: string; byteSize: number }> {
     const mimeType = detectPublicAssetImageType(bytes)
     if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) throw new NotificationImageInvalidTypeError()
+    // 上传端点每张只受 10 MiB 单张限制；没有这条，一个账号可以无限堆 pending 行与字节。
+    // 配额在写对象之前检查，被拒的请求不留下任何存储垃圾。
+    const pending = await this.prisma.notificationImage.aggregate({
+      where: { userId, state: "pending" },
+      _count: { _all: true },
+      _sum: { byteSize: true },
+    })
+    if (pending._count._all >= NOTIFICATION_IMAGE_MAX_PENDING_COUNT
+      || (pending._sum.byteSize ?? 0) + bytes.length > NOTIFICATION_IMAGE_MAX_PENDING_BYTES) {
+      throw new NotificationImageQuotaError()
+    }
     const objectKey = `notification-images/${randomBytes(24).toString("base64url")}`
     await this.storage.putObject(objectKey, bytes, mimeType)
     try {

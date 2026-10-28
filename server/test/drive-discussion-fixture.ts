@@ -24,7 +24,7 @@ export async function discussionFixture() {
       users.push((await prisma.user.create({ data: { email: `${suffix}-${role}@drive-discussion.invalid`, handle: `${suffix}-${role}`, nickname: "验收", passwordHash: "test-only" } })).id)
     }
     const item = await prisma.driveItem.create({ data: { userId: users[0]!, name: "验收.md", type: "file", mimeType: "text/markdown", storageStatus: "active", uploadStatus: "completed", storageKey: suffix } })
-    const notifications = new NotificationService(prisma as never, { broadcastToUser: () => ({ failedClientCount: 0 }) } as never, { sendToMobileClients: () => undefined } as never, { sendNotification: async () => ({ sent: 0, failed: 0, skipped: false }) } as never, {} as never)
+    const notifications = new NotificationService(prisma as never, { broadcastToUser: () => ({ failedClientCount: 0 }) } as never, { sendToMobileClients: () => undefined } as never, { sendNotification: async () => ({ sent: 0, failed: 0, skipped: false }) } as never, {} as never, { claimInTransaction: async () => undefined } as never)
     const discussion = new DriveDiscussionNotificationService(prisma as never, notifications)
     const share = await prisma.driveShare.create({ data: { userId: users[0]!, itemId: item.id, shareId: randomUUID(), type: item.type, enabled: true, accessMode: "link_read" } })
     const drive = Object.create(DriveService.prototype) as DriveService

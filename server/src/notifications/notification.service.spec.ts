@@ -2,6 +2,7 @@ import { Prisma, type UserNotification } from "@prisma/client"
 import { NOTIFICATION_SOURCES } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
+import { NotificationImageUnavailableError } from "./notification-image.service"
 import { NotificationService } from "./notification.service"
 
 const createdAt = new Date("2026-09-23T08:00:00.000Z")
@@ -16,11 +17,12 @@ const record: StoredNotification = {
 
 function harness() {
   const prisma = { userNotification: {
-    create: vi.fn(async (): Promise<StoredNotification> => record), findUnique: vi.fn(async () => record),
+    create: vi.fn(async (): Promise<StoredNotification> => record), upsert: vi.fn(async (): Promise<StoredNotification> => record), findUnique: vi.fn(async () => record),
     findMany: vi.fn(async () => [record]), findFirst: vi.fn(async (): Promise<StoredNotification | null> => record),
     count: vi.fn(async () => 1), updateMany: vi.fn(async () => ({ count: 1 })),
     deleteMany: vi.fn(async (_input: unknown) => ({ count: 1 })),
   }, mailMessage: { findMany: vi.fn(async (): Promise<{ id: string; subject: string }[]> => []) },
+  notificationImage: { findFirst: vi.fn(async (): Promise<{ id: string } | null> => ({ id: "img-1" })) },
   $transaction: vi.fn(async (run: (client: unknown) => Promise<unknown>) => run(prisma)) }
   const desktops = { broadcastToUser: vi.fn() }
   const mobiles = { sendToMobileClients: vi.fn() }
@@ -267,6 +269,13 @@ describe("NotificationService", () => {
       where: { userId: "user-1", deletedAt: null, source: "terminal-attention", resolvedAt: null },
       data: { deletedAt: expect.any(Date) },
     })
+    // 两次清空都只把带图的行读回来算对象键，删除条件本身仍是全范围。
+    for (const call of prisma.userNotification.findMany.mock.calls) {
+      expect(call[0]).toEqual(expect.objectContaining({
+        where: expect.objectContaining({ imageId: { not: null } }),
+      }))
+    }
+    expect(prisma.userNotification.findMany).toHaveBeenCalledTimes(2)
     expect(desktops.broadcastToUser).toHaveBeenCalledTimes(2)
   })
 
@@ -380,10 +389,11 @@ describe("NotificationService", () => {
   it("removes stored objects before pruning expired notification rows", async () => {
     const order: string[] = []
     const deleteByIds = vi.fn(async () => { order.push("objects") })
+    const findMany = vi.fn(async (_input: unknown) => [{ imageId: "img-1" }])
     const service = new NotificationService(
       {
         userNotification: {
-          findMany: async () => [{ imageId: "img-1" }],
+          findMany,
           deleteMany: async () => { order.push("rows"); return { count: 1 } },
         },
       } as never,
@@ -394,5 +404,24 @@ describe("NotificationService", () => {
     )
     await service.pruneExpired()
     expect(order).toEqual(["objects", "rows"])
+    // 只把带图的行读回来；删除条件本身仍要不带图的记录一起删。
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ imageId: { not: null } }) }))
+  })
+
+  it("checks image ownership inside createInTransaction instead of trusting the id", async () => {
+    const { service, prisma } = harness()
+    await expect(service.createInTransaction(prisma as never, {
+      userId: "user-1", source: "external", sourceKey: "test:image", title: "图", body: "看图", imageId: "img-1",
+    })).resolves.toMatchObject({ id: "message-1" })
+    expect(prisma.notificationImage.findFirst).toHaveBeenCalledWith({
+      where: { id: "img-1", userId: "user-1" }, select: { id: true },
+    })
+
+    prisma.notificationImage.findFirst.mockResolvedValueOnce(null)
+    await expect(service.createInTransaction(prisma as never, {
+      userId: "user-2", source: "external", sourceKey: "test:other", title: "图", body: "看图", imageId: "img-1",
+    })).rejects.toBeInstanceOf(NotificationImageUnavailableError)
+    // 只有前一次成功的写入；被拒的那一次不能留下通知行。
+    expect(prisma.userNotification.upsert).toHaveBeenCalledTimes(1)
   })
 })

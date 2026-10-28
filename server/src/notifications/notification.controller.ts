@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseFilters, UseGuards, type ExecutionContext } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, HttpException, HttpStatus, NotFoundException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseFilters, UseGuards, type ExecutionContext } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import { createHash } from "node:crypto"
@@ -22,7 +22,7 @@ import {
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 import { OpenApiHttpError, requireOpenApiPrincipal, type OpenApiRequest } from "../open-api/open-api.types"
 import { NotificationApiKeyGuard } from "./notification-api-key.guard"
-import { NOTIFICATION_IMAGE_MAX_BYTES, NotificationImageInvalidTypeError, NotificationImageService, NotificationImageUnavailableError } from "./notification-image.service"
+import { NOTIFICATION_IMAGE_MAX_BYTES, NotificationImageInvalidTypeError, NotificationImageQuotaError, NotificationImageService, NotificationImageUnavailableError } from "./notification-image.service"
 import { NotificationService } from "./notification.service"
 
 const idempotencyKeyPattern = /^[A-Za-z0-9_-]{8,120}$/u
@@ -62,7 +62,11 @@ const desktopWriteSchema = z.object({
   imageId: z.string().min(1).max(64).optional(),
   targetId: z.string().min(1).max(120).optional(),
   deviceId: z.string().min(1).max(120).optional(),
-}).strict()
+}).strict().refine(
+  // 图片只属于系统通知：服务端自有来源不传图，别的桌面来源也不该借此把图片挂到自己的消息上。
+  (value) => value.imageId === undefined || value.source === "system-notifier",
+  { path: ["imageId"], message: "只有系统通知可以携带图片。" },
+)
 
 type AuthedRequest = Request & { readonly user: { readonly id: string } }
 
@@ -113,6 +117,8 @@ export class NotificationController {
       return { imageId: staged.id, mimeType: staged.mimeType, byteSize: staged.byteSize }
     } catch (error) {
       if (error instanceof NotificationImageInvalidTypeError) throw new BadRequestException("图片格式不支持。")
+      // 配额是「稍后再来」而不是参数错误：桌面把它当暂时失败，不当坏输入。
+      if (error instanceof NotificationImageQuotaError) throw new HttpException("待认领图片过多，请稍后再试。", HttpStatus.TOO_MANY_REQUESTS)
       throw error
     }
   }

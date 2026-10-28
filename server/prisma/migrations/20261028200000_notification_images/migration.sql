@@ -1,3 +1,10 @@
+-- 部署注意：本迁移会给现有 "UserNotification" 表新增可空列 "imageId"，并立刻在其上
+-- 建唯一索引 "UserNotification_imageId_key"。这一列在本迁移完成前不存在，对现有行全部为
+-- NULL，但 PostgreSQL 建索引时仍会短暂阻塞该表的写入（获取 SHARE 级锁，等已有事务结束）。
+-- 因此发布前必须先确认 "UserNotification" 当前行数（SELECT count(*)），并在数据库窗口
+-- 允许短暂写入阻塞后再执行；部署脚本必须带 ALLOW_RISKY_MIGRATIONS=1 才能放行这一条。
+-- 不要为了绕开扫描把索引改成非唯一：一张图片只能挂一条通知，唯一性本来就是约束的一部分。
+
 CREATE TABLE "NotificationImage" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,

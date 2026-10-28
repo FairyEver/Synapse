@@ -4,7 +4,7 @@ import { NOTIFICATION_SOURCES } from "@synapse/shared"
 import { PassThrough, Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationController, OpenNotificationController, notificationThrottleKey } from "./notification.controller"
-import { NotificationImageInvalidTypeError, NotificationImageUnavailableError } from "./notification-image.service"
+import { NotificationImageInvalidTypeError, NotificationImageQuotaError, NotificationImageUnavailableError } from "./notification-image.service"
 
 /** 与 `createApiKeySecret()` 同形状的固定密钥，避免测试夹具被密钥格式校验挡下。 */
 const exampleKey = `syn_sk_${"a".repeat(43)}`
@@ -275,6 +275,16 @@ describe("NotificationController", () => {
       .rejects.toMatchObject({ status: 400 })
   })
 
+  it("refuses an imageId on any desktop source other than the system notifier", async () => {
+    const create = vi.fn(async (input: Record<string, unknown>) => ({ id: "n1", createdAt: new Date("2026-10-28T08:00:00Z"), ...input }))
+    const endpoint = new NotificationController({ create } as never, {} as never)
+    const request = { user: { id: "writer" } }
+    await expect(endpoint.createFromDesktop(request as never, {
+      source: "terminal-complete", title: "图", body: "看图", imageId: "img-1",
+    })).rejects.toMatchObject({ status: 400 })
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it("answers 400 when the claimed image is unavailable for this caller", async () => {
     // 认领失败有三种：不属于本人、已被别的通知认领、暂存过期。服务层统一抛这一种错误，
     // 这里转成 400；桌面拿到的必须是「图片不可用」，而不是一个 500。
@@ -367,5 +377,14 @@ it("rejects bytes the image service does not recognize as an image with a 400", 
   await expect(endpoint.uploadImage(
     Object.assign(Readable.from([Buffer.from("not an image")]), { user: { id: "u1" } }) as never,
   )).rejects.toMatchObject({ status: 400 })
+  expect(stage).toHaveBeenCalledOnce()
+})
+
+it("answers 429 when the caller's pending image quota is exhausted", async () => {
+  const stage = vi.fn(async () => { throw new NotificationImageQuotaError() })
+  const endpoint = new NotificationController({} as never, { stage } as never)
+  await expect(endpoint.uploadImage(
+    Object.assign(Readable.from([Buffer.from([0x89])]), { user: { id: "u1" } }) as never,
+  )).rejects.toMatchObject({ status: 429 })
   expect(stage).toHaveBeenCalledOnce()
 })

@@ -1,19 +1,27 @@
 import { describe, expect, it, vi } from "vitest"
-import { NotificationImageInvalidTypeError, NotificationImageService } from "./notification-image.service"
+import {
+  NOTIFICATION_IMAGE_MAX_PENDING_BYTES,
+  NOTIFICATION_IMAGE_MAX_PENDING_COUNT,
+  NotificationImageInvalidTypeError,
+  NotificationImageQuotaError,
+  NotificationImageService,
+} from "./notification-image.service"
 
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 function setup() {
   const created = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: "img-1", mimeType: data.mimeType, byteSize: data.byteSize }))
+  const aggregate = vi.fn(async () => ({ _count: { _all: 0 }, _sum: { byteSize: 0 } }))
   const prisma = {
     notificationImage: {
       create: created,
+      aggregate,
       findMany: vi.fn(async () => []),
       deleteMany: vi.fn(async () => ({ count: 0 })),
     },
   }
   const storage = { putObject: vi.fn(async () => undefined), getObjectStream: vi.fn(), deleteObject: vi.fn(async () => undefined) }
-  return { service: new NotificationImageService(prisma as never, storage as never), created, storage }
+  return { service: new NotificationImageService(prisma as never, storage as never), created, storage, aggregate }
 }
 
 describe("NotificationImageService", () => {
@@ -32,6 +40,24 @@ describe("NotificationImageService", () => {
     expect(storage.putObject).not.toHaveBeenCalled()
   })
 
+  it("rejects staging once the caller has too many pending images", async () => {
+    const { service, storage, aggregate } = setup()
+    aggregate.mockResolvedValueOnce({ _count: { _all: NOTIFICATION_IMAGE_MAX_PENDING_COUNT }, _sum: { byteSize: 0 } })
+    await expect(service.stage("user-1", png)).rejects.toBeInstanceOf(NotificationImageQuotaError)
+    expect(storage.putObject).not.toHaveBeenCalled()
+    expect(aggregate).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "user-1", state: "pending" } }))
+  })
+
+  it("rejects staging once the caller's pending bytes would exceed the quota", async () => {
+    const { service, storage, aggregate } = setup()
+    aggregate.mockResolvedValueOnce({
+      _count: { _all: 1 },
+      _sum: { byteSize: NOTIFICATION_IMAGE_MAX_PENDING_BYTES - png.length + 1 },
+    })
+    await expect(service.stage("user-1", png)).rejects.toBeInstanceOf(NotificationImageQuotaError)
+    expect(storage.putObject).not.toHaveBeenCalled()
+  })
+
   it("deletes the staged object when the record insert fails", async () => {
     const failure = new Error("insert failed")
     const putObject = vi.fn(async (_key: string, _bytes: Buffer, _contentType: string) => undefined)
@@ -39,6 +65,7 @@ describe("NotificationImageService", () => {
     const prisma = {
       notificationImage: {
         create: vi.fn(async () => { throw failure }),
+        aggregate: vi.fn(async () => ({ _count: { _all: 0 }, _sum: { byteSize: 0 } })),
       },
     }
     const service = new NotificationImageService(prisma as never, { putObject, deleteObject } as never)

@@ -32,7 +32,7 @@ describe("todo reminder real transaction races", () => {
     owner = (await prisma.user.create({ data: { email: suffix + "@todo-reminder.invalid", handle: suffix, nickname: "测试", passwordHash: "test-only" } })).id
     repository = new TodoRepository(prisma as never)
     service = new TodosService(repository, events as never)
-    notifications = new NotificationService(prisma as never, { broadcastToUser: () => ({ failedClientCount: 0 }) } as never, { sendToMobileClients: () => undefined } as never, push as never, {} as never)
+    notifications = new NotificationService(prisma as never, { broadcastToUser: () => ({ failedClientCount: 0 }) } as never, { sendToMobileClients: () => undefined } as never, push as never, {} as never, { claimInTransaction: async () => undefined } as never)
     worker = new TodoReminderWorker(prisma as never, repository, notifications, events as never)
     outbox = new TodoReminderOutbox(prisma as never, notifications)
   })

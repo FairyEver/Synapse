@@ -8,7 +8,7 @@ import { MobileLiveGateway } from "../mobile-live/mobile-live.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
 import { MobileLiveRelayService } from "../mobile-live/mobile-live-relay.service"
 import { PrismaService } from "../prisma/prisma.service"
-import { NotificationImageService } from "./notification-image.service"
+import { NotificationImageService, NotificationImageUnavailableError } from "./notification-image.service"
 
 export type NotificationLevel = "active" | "passive" | "timeSensitive"
 export type { NotificationSource } from "@synapse/shared"
@@ -48,7 +48,17 @@ export class NotificationService implements OnModuleInit {
   }
 
   /** Storage only. Caller owns the transaction and post-commit delivery. */
-  createInTransaction(tx: Prisma.TransactionClient, input: CreateNotificationInput & { sourceKey: string }): Promise<UserNotification> {
+  async createInTransaction(tx: Prisma.TransactionClient, input: CreateNotificationInput & { sourceKey: string }): Promise<UserNotification> {
+    // 这里不认领图片：认领与通知必须在同一个事务里完成，由调用方负责。若调用方仍然传了
+    // `imageId`，至少要在同一事务内确认这张图属于这个账号，否则一个 id 就能把别人的图
+    // 挂到自己的通知上。归属检查通过后写不写 `attached` 是认领方的事。
+    if (input.imageId !== undefined) {
+      const owned = await tx.notificationImage.findFirst({
+        where: { id: input.imageId, userId: input.userId },
+        select: { id: true },
+      })
+      if (!owned) throw new NotificationImageUnavailableError()
+    }
     return tx.userNotification.upsert({
       where: { userId_sourceKey: { userId: input.userId, sourceKey: input.sourceKey } },
       update: {},
@@ -234,8 +244,9 @@ export class NotificationService implements OnModuleInit {
       deletedAt: null,
       ...(filter === "pending" ? { source: "terminal-attention", resolvedAt: null } : {}),
     }
-    // 与 `delete` 同理：先记下对象键，再让这些行从可删范围里消失。
-    const rows = await this.prisma.userNotification.findMany({ where, select: { imageId: true } })
+    // 与 `delete` 同理：先记下对象键，再让这些行从可删范围里消失。只读带图的行，
+    // 免得为了一小组图片把整批通知的 `imageId` 都扫回来。
+    const rows = await this.prisma.userNotification.findMany({ where: { ...where, imageId: { not: null } }, select: { imageId: true } })
     await this.prisma.userNotification.updateMany({ where, data: { deletedAt: new Date() } })
     await this.images.deleteByIds(imageIdsOf(rows))
     this.publish(userId, "all")
@@ -293,8 +304,9 @@ export class NotificationService implements OnModuleInit {
   @Cron("0 0 3 * * *")
   async pruneExpired(): Promise<void> {
     const where: Prisma.UserNotificationWhereInput = { createdAt: { lt: new Date(Date.now() - retentionMs) } }
-    // 硬删之前先把对象处理掉：行一没，`imageId` 就再也读不出来了。
-    const rows = await this.prisma.userNotification.findMany({ where, select: { imageId: true } })
+    // 硬删之前先把对象处理掉：行一没，`imageId` 就再也读不出来了。只读带图的行；
+    // 删除条件本身不能加 `imageId`，否则没图的历史通知会永远留在这张表里。
+    const rows = await this.prisma.userNotification.findMany({ where: { ...where, imageId: { not: null } }, select: { imageId: true } })
     await this.images.deleteByIds(imageIdsOf(rows))
     await this.prisma.userNotification.deleteMany({ where })
   }
