@@ -53,6 +53,11 @@ enum NotificationDestination {
             guard let target = item.targetId, TodoReference.isValidID(target) else { return .none }
             return .route(.todo(id: target))
         }
+        // 带图的通知先看图。图片在这条通知里是比正文链接更具体的内容，链接只是它的出处；
+        // 放在 `url` 判断之前，否则一条「有链接的图片通知」会被送出去打开浏览器。
+        if item.image != nil {
+            return .route(.image(notificationId: item.id))
+        }
         // 只有 HTTPS 打开。这一条沿用的是详情页里那个判断，不是新加的限制。
         if let raw = item.url, let url = URL(string: raw), url.scheme == "https" {
             return .externalURL(url)
@@ -68,6 +73,7 @@ enum NotificationDestination {
             return meta.kind == "annotation" ? "查看评论" : "查看留言"
         }
         switch resolve(item) {
+        case .route(.image): return "查看图片"
         case .route(.terminal): return "打开终端"
         case .route(.meeting): return "查看转写"
         case .route(.mail): return "查看站内信"

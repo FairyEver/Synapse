@@ -47,6 +47,16 @@ struct DriveDiscussionNotificationSnapshot: Decodable {
     }
 }
 
+/// 一条通知附带的图片。
+///
+/// 只记服务端给出的三个事实，图片本身按 `id` 另取：通知列表不该为了显示一行而把
+/// 每张图的字节都拉下来。
+struct NotificationImage: Decodable, Equatable {
+    let id: String
+    let mimeType: String
+    let byteSize: Int
+}
+
 struct SynapseNotification: Decodable, Identifiable {
     let id: String
     let source: String
@@ -62,14 +72,16 @@ struct SynapseNotification: Decodable, Identifiable {
     let resolvedAt: String?
     let createdAt: String
     let driveDiscussion: DriveDiscussionNotificationMetadata?
+    let image: NotificationImage?
 
     init(id: String, source: String, title: String, body: String, group: String?, url: String?, copyOnTap: Bool? = nil,
          level: String, targetId: String?, deviceId: String?, readAt: String?, resolvedAt: String?, createdAt: String,
-         driveDiscussion: DriveDiscussionNotificationMetadata? = nil) {
+         driveDiscussion: DriveDiscussionNotificationMetadata? = nil, image: NotificationImage? = nil) {
         self.id = id; self.source = source; self.title = title; self.body = body
         self.group = group; self.url = url; self.copyOnTap = copyOnTap; self.level = level
         self.targetId = targetId; self.deviceId = deviceId; self.readAt = readAt
         self.resolvedAt = resolvedAt; self.createdAt = createdAt; self.driveDiscussion = driveDiscussion
+        self.image = image
     }
 }
 

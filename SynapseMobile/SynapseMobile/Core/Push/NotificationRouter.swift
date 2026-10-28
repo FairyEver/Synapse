@@ -24,6 +24,8 @@ final class NotificationRouter {
         case mail(messageId: String)
         case todo(id: String)
         case message(id: String)
+        /// 看这条通知附带的图片。带图的通知点下去先看图，而不是先读它的正文。
+        case image(notificationId: String)
         /// 开始一段新录音。目前只有主屏长按图标那条快捷操作会用它。
         case newRecording
         /// 看正在录的那一条。锁屏和灵动岛上那张卡点开时用它。

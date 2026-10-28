@@ -141,6 +141,20 @@ struct NotificationDestinationTests {
         #expect(NotificationDestination.resolve(notification(source: "todo-reminder", targetId: "a/b", deviceId: nil, url: nil)) == .none)
     }
 
+    /// 带图的通知先去图，图片优先于正文里的链接。
+    @Test func anImageNotificationOpensTheImageViewerBeforeItsLink() throws {
+        let raw = #"{"id":"n1","source":"system-notifier","title":"图","body":"看图","level":"active","createdAt":"2026-10-28T00:00:00Z","url":"https://example.com/x","image":{"id":"img-1","mimeType":"image/png","byteSize":8}}"#
+        let item = try JSONDecoder().decode(SynapseNotification.self, from: Data(raw.utf8))
+        #expect(item.image == NotificationImage(id: "img-1", mimeType: "image/png", byteSize: 8))
+        #expect(NotificationDestination.resolve(item) == .route(.image(notificationId: "n1")))
+        #expect(NotificationDestination.actionLabel(for: item) == "查看图片")
+    }
+
+    @Test func aNotificationWithoutAnImageKeepsItsExistingRoute() {
+        let item = notification(source: "system-notifier", targetId: nil, deviceId: nil, url: "https://example.com/x")
+        #expect(NotificationDestination.resolve(item) == .externalURL(URL(string: "https://example.com/x")!))
+    }
+
     // MARK: - Fixtures
 
     private func notification(

@@ -34,6 +34,8 @@ struct RootView: View {
     /// 等下一份列表到了再判 —— 丢掉它就等于把用户点的那一下当作没发生。
     @State private var pendingTerminalOpen: PendingTerminalOpen?
     @State private var notificationOpenRequest = UUID()
+    /// 正在看的通知图片。与全文选择分开：图片是盖在整屏上的另一层。
+    @State private var notificationImageTarget: NotificationImageTarget?
     @State private var todoNavigation = TodoNavigation()
 
     /// 底栏的四个顶层分区，顺序固定为主页、终端、通知、我的。
@@ -538,6 +540,8 @@ struct RootView: View {
             openTodoTarget(id)
         case .message(let id):
             openNotification(id)
+        case .image(let notificationId):
+            notificationImageTarget = NotificationImageTarget(id: notificationId)
         case .newRecording:
             // 主屏长按图标那一条。先把人带到录音列表，再让录音页自己浮出来——否则
             // 用户看到的是一片别的界面盖着一张录音页，退出之后不知道自己回到了哪。
@@ -759,4 +763,10 @@ struct RootView: View {
             pendingWidgetTarget = nil
         }
     }
+}
+
+/// 一条要看的通知图片。只有通知 id —— 图片本身按这条通知去取，这样点下去的那一刻
+/// 不必先假设列表里那一份还是新的。
+struct NotificationImageTarget: Identifiable {
+    let id: String
 }
