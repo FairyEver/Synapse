@@ -83,6 +83,31 @@ struct SynapseNotification: Decodable, Identifiable {
         self.resolvedAt = resolvedAt; self.createdAt = createdAt; self.driveDiscussion = driveDiscussion
         self.image = image
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, source, title, body, group, url, copyOnTap, level
+        case targetId, deviceId, readAt, resolvedAt, createdAt, driveDiscussion, image
+    }
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        source = try values.decode(String.self, forKey: .source)
+        title = try values.decode(String.self, forKey: .title)
+        body = try values.decode(String.self, forKey: .body)
+        group = try values.decodeIfPresent(String.self, forKey: .group)
+        url = try values.decodeIfPresent(String.self, forKey: .url)
+        copyOnTap = try values.decodeIfPresent(Bool.self, forKey: .copyOnTap)
+        level = try values.decode(String.self, forKey: .level)
+        targetId = try values.decodeIfPresent(String.self, forKey: .targetId)
+        deviceId = try values.decodeIfPresent(String.self, forKey: .deviceId)
+        readAt = try values.decodeIfPresent(String.self, forKey: .readAt)
+        resolvedAt = try values.decodeIfPresent(String.self, forKey: .resolvedAt)
+        createdAt = try values.decode(String.self, forKey: .createdAt)
+        driveDiscussion = try values.decodeIfPresent(DriveDiscussionNotificationMetadata.self, forKey: .driveDiscussion)
+        // 一张图的元数据形状不对，不该让整页通知一起失败：丢这一张图，其余照常可读。
+        image = try? values.decode(NotificationImage.self, forKey: .image)
+    }
 }
 
 struct NotificationPage: Decodable {

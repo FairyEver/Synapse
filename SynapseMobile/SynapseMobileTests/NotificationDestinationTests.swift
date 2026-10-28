@@ -155,6 +155,20 @@ struct NotificationDestinationTests {
         #expect(NotificationDestination.resolve(item) == .externalURL(URL(string: "https://example.com/x")!))
     }
 
+    /// 一张图的元数据坏了只该丢这张图，不该让整页通知解码失败。
+    @Test(arguments: [
+        #""not-an-image""#,
+        #"{"id":"img-1","mimeType":"image/png"}"#,
+        #"{"id":"img-1","mimeType":"image/png","byteSize":"8"}"#,
+        "null",
+    ])
+    func aMalformedImageLeavesTheNotificationReadable(value: String) throws {
+        let raw = "{\"id\":\"n1\",\"source\":\"system-notifier\",\"title\":\"图\",\"body\":\"看图\",\"level\":\"active\",\"createdAt\":\"2026-10-28T00:00:00Z\",\"url\":\"https://example.com/x\",\"image\":\(value)}"
+        let item = try JSONDecoder().decode(SynapseNotification.self, from: Data(raw.utf8))
+        #expect(item.image == nil)
+        #expect(NotificationDestination.resolve(item) == .externalURL(URL(string: "https://example.com/x")!))
+    }
+
     // MARK: - Fixtures
 
     private func notification(
