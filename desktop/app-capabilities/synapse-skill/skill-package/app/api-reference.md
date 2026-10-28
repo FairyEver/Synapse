@@ -263,8 +263,9 @@ Input:
 - `url` optional: single `https://` address, exactly equal to its trimmed value, at most 2048 UTF-16 code units, so an emoji or other astral character counts as two. Opening the notification opens this address directly. It must carry no credentials anywhere in the address, including a user name before the `@` — no schema, validator, or server check rejects `https://user:pass@host/`.
 - `group` optional: single-line label shown beside the title, exactly equal to its trimmed value, at most 64 UTF-16 code units, so an emoji or other astral character counts as two.
 - `copyOnTap` optional: boolean, defaults to false. Omitting the key and passing `false` are the same thing at every layer, and only the boolean `true` counts. When true, a plain tap on the phone's notification copies `body` to the clipboard. The title is never copied, and an action button on the notification never copies.
+- `imagePath` optional (可选): string, 本机图片绝对路径，PNG/JPEG/GIF/WebP，≤10 MB. It must be an absolute path, exactly equal to its trimmed value, at most 1024 UTF-16 code units, and point at a real readable regular file; the phone opens that image when the notification is tapped.
 
-All four text fields reject CR, LF, Tab, NUL, other Unicode control characters, Unicode line and paragraph separators, and unpaired UTF-16 surrogates. Valid Unicode is preserved without NFC/NFKC normalization or automatic truncation. `copyOnTap` is a switch rather than content, so none of that character validation applies to it. No input field beyond these five is accepted.
+All five text fields reject CR, LF, Tab, NUL, other Unicode control characters, Unicode line and paragraph separators, and unpaired UTF-16 surrogates. Valid Unicode is preserved without NFC/NFKC normalization or automatic truncation. `copyOnTap` is a switch rather than content, so none of that character validation applies to it. No input field beyond these six is accepted.
 
 Output:
 
@@ -272,7 +273,7 @@ Output:
 
 The fixed success result means only that a valid call crossed the System Notifier acceptance point. The message is not created when the user turned sending off, when the desktop is signed out or offline, when the process-local rate limit is reached, or when the request failed. Those cases return the same fixed success and produce nothing anywhere; Synapse records which one happened in its own local diagnostics (`notification_sync` with a fixed reason), and the caller cannot see it. Nothing that was not sent is backfilled later. The caller's own path never shows a local notification: each machine shows the message when the delivery reaches it, subject to its own local settings, which can suppress it entirely (notifications off, settings unreadable, Electron notifications unsupported, system permission off, or construction or `show()` failed synchronously). Success never proves delivery or display.
 
-Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`, `body`, `url`, `group`, or `copyOnTap`) and `data.reason` (`required`, `type`, `leading_or_trailing_whitespace`, `forbidden_character`, `invalid_unicode`, `too_long`, `not_https`, or `unknown_field`). The error never returns the rejected value, a snippet, or its actual length.
+Invalid input returns `INVALID_INPUT` with only `data.field` (`request`, `title`, `body`, `url`, `group`, `copyOnTap`, or `imagePath`) and `data.reason` (`required`, `type`, `leading_or_trailing_whitespace`, `forbidden_character`, `invalid_unicode`, `too_long`, `not_https`, `unknown_field`, `not_absolute`, `not_found`, `not_regular_file`, `unreadable`, `permission_denied`, `unsupported_type`, `too_large`, or `service_outdated`). The error never returns the rejected value, a snippet, or its actual length.
 
 ## `app_problem_feedback_report_submit`
 

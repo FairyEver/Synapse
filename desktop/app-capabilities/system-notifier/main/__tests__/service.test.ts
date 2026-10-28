@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
 import type { SystemNotifierSettingsEntryV3 } from "../../../../electron/runtime/data-repo/schemas/system-notifier"
+import { validateSystemNotificationInput } from "../../shared/schema"
 import {
   SystemNotifierService,
   systemNotificationAccountWrite,
@@ -439,6 +440,21 @@ describe("systemNotificationAccountWrite", () => {
       source: "system-notifier",
       title: "标题",
       body: "正文",
+    })
+  })
+})
+
+describe("system notification input validation", () => {
+  it("accepts an optional absolute imagePath and rejects relative paths", () => {
+    expect(validateSystemNotificationInput({ title: "图", body: "看图", imagePath: "/tmp/a.png" })).toMatchObject({
+      ok: true, data: { imagePath: "/tmp/a.png" },
+    })
+    expect(validateSystemNotificationInput({ title: "图", body: "看图", imagePath: "tmp/a.png" })).toEqual({
+      ok: false, code: "INVALID_INPUT", error: "Invalid system notification input.",
+      data: { field: "imagePath", reason: "not_absolute" },
+    })
+    expect(validateSystemNotificationInput({ title: "图", body: "看图", imagePath: 1 })).toMatchObject({
+      data: { field: "imagePath", reason: "type" },
     })
   })
 })

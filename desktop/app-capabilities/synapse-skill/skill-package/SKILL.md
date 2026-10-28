@@ -62,7 +62,7 @@ When reporting Synapse data, assess whether a visualization makes trends or comp
 
 ## Showing Links To The User
 
-When the answer includes a Synapse link for the user to open — a share link, a Drive item link, a site or public asset link, or a `synapse://` deep link — write the URL itself out, on a line of its own or inside a plain sentence. Do not hide it behind Markdown link text. When the user wants that address on their phone, hand it over with `app_system_notifier_notification_trigger` and its `url` field (`app/index.md`) instead of expecting them to read it off the terminal. When what the user wants on their phone is a piece of text rather than an address — a passphrase, a command, a short piece to paste — send that text as `body` with `copyOnTap: true`, and one tap on the notification copies it; `title` stays a label and is never copied (`app/index.md`).
+When the answer includes a Synapse link for the user to open — a share link, a Drive item link, a site or public asset link, or a `synapse://` deep link — write the URL itself out, on a line of its own or inside a plain sentence. Do not hide it behind Markdown link text. When the user wants that address on their phone, hand it over with `app_system_notifier_notification_trigger` and its `url` field (`app/index.md`) instead of expecting them to read it off the terminal. When what the user wants on their phone is a piece of text rather than an address — a passphrase, a command, a short piece to paste — send that text as `body` with `copyOnTap: true`, and one tap on the notification copies it; `title` stays a label and is never copied (`app/index.md`). 带图通知点开后进入图片查看器，可保存到相册。
 
 ## Boundaries
 

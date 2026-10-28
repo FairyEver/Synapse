@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path"
 import { z } from "zod"
 
 /** 标题按 UTF-16 码元计数，与服务端的 64 码元上限一致。 */
@@ -10,7 +11,7 @@ export const SYSTEM_NOTIFICATION_BODY_MAX_CODE_POINTS = 256
 export const SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH = 64
 export const SYSTEM_NOTIFICATION_URL_MAX_LENGTH = 2048
 
-export const SYSTEM_NOTIFICATION_INVALID_FIELDS = ["request", "title", "body", "url", "group", "copyOnTap"] as const
+export const SYSTEM_NOTIFICATION_INVALID_FIELDS = ["request", "title", "body", "url", "group", "copyOnTap", "imagePath"] as const
 export const SYSTEM_NOTIFICATION_INVALID_REASONS = [
   "required",
   "type",
@@ -21,6 +22,15 @@ export const SYSTEM_NOTIFICATION_INVALID_REASONS = [
   // 链接只允许 https：一个 http 地址到了手机上打不开或降级，不如在门口拦下。
   "not_https",
   "unknown_field",
+  // 图片路径与文件本身在暂存阶段才会被拒绝：桌面入口能给出的失败原因比语法检查更多。
+  "not_absolute",
+  "not_found",
+  "not_regular_file",
+  "unreadable",
+  "permission_denied",
+  "unsupported_type",
+  "too_large",
+  "service_outdated",
 ] as const
 
 export type SystemNotificationInvalidField = (typeof SYSTEM_NOTIFICATION_INVALID_FIELDS)[number]
@@ -33,6 +43,10 @@ export interface SystemNotificationInput {
   readonly url?: string
   /** 为真表示：用户点这条通知时把正文复制到剪贴板。缺省与 false 是同一件事。 */
   readonly copyOnTap?: boolean
+  /** 本机图片绝对路径；只由 MCP 直接调用传入。 */
+  readonly imagePath?: string
+  /** 暂存后的服务端图片 id；内部字段，不对外开放。 */
+  readonly imageId?: string
 }
 
 export interface SystemNotificationInvalidInput {
@@ -94,7 +108,7 @@ export type SystemNotificationResult = z.infer<typeof systemNotificationResultSc
 export type SystemNotifierSettings = z.infer<typeof systemNotifierSettingsSchema>
 export type SystemNotifierSettingsPatch = z.infer<typeof systemNotifierSettingsPatchSchema>
 
-const ACCEPTED_KEYS = new Set<string>(["title", "body", "url", "group", "copyOnTap"])
+const ACCEPTED_KEYS = new Set<string>(["title", "body", "url", "group", "copyOnTap", "imagePath"])
 
 export function validateSystemNotificationInput(request: unknown): SystemNotificationInputValidation {
   if (!isPlainObject(request)) return invalid("request", "type")
@@ -116,6 +130,8 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
   if (request.copyOnTap !== undefined && typeof request.copyOnTap !== "boolean") {
     return invalid("copyOnTap", "type")
   }
+  const imageError = validateImagePath(request)
+  if (imageError) return imageError
 
   return {
     ok: true,
@@ -125,6 +141,7 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
       ...(request.url !== undefined ? { url: request.url as string } : {}),
       ...(request.group !== undefined ? { group: request.group as string } : {}),
       ...(request.copyOnTap === true ? { copyOnTap: true as const } : {}),
+      ...(request.imagePath !== undefined ? { imagePath: request.imagePath as string } : {}),
     },
   }
 }
@@ -182,6 +199,18 @@ function validateOptionalField(
   // 而调用方早已被告知成功。码元数天然是码点数的上界，这一条同时覆盖两者，
   // 不需要再来一遍码点检查（那会是一行永远走不到的代码）。
   if (value.length > maxLength) return invalid(field, "too_long")
+  return null
+}
+
+function validateImagePath(request: Record<string, unknown>): SystemNotificationInvalidInput | null {
+  if (!("imagePath" in request) || request.imagePath === undefined) return null
+  const value = request.imagePath
+  if (typeof value !== "string") return invalid("imagePath", "type")
+  if (value === "") return invalid("imagePath", "required")
+  const shapeError = validateSingleLineShape(value, "imagePath")
+  if (shapeError) return shapeError
+  if (value.length > 1024) return invalid("imagePath", "too_long")
+  if (!isAbsolute(value)) return invalid("imagePath", "not_absolute")
   return null
 }
 

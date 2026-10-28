@@ -182,6 +182,16 @@ The same call hands a link to the user's phone. When the user wants an address t
 
 The same call also hands a piece of text to the user's phone. When the text itself is what the user wants to take away — a tongue twister, a passphrase, a command to paste elsewhere — put that text in `body` and set `copyOnTap: true`. One tap on the phone's notification then puts `body` into the clipboard, so the user does not have to open the app and select it by hand. `title` is only a label and is never copied. `copyOnTap` carries only the boolean `true`: an explicit `false` and an omitted key are the same thing at every layer, so there is nothing to say with `false`. The body limit stays 256 Unicode code points, so something longer needs a `url` instead.
 
+图片：用户想要的是一张图（截图、剪贴板图、生成图、网络图片）并且希望在手机上看到或保存时，先把任意来源归一化成绝对路径的本地文件，再传 `imagePath`。只支持 PNG / JPEG / GIF / WebP、≤10 MB；HEIC 用 `sips -s format png` 转换。归一化命令（macOS，已实测）：
+
+- 剪贴板：`osascript -e 'set pngData to the clipboard as «class PNGf»' -e 'set f to open for access POSIX file "/tmp/notify.png" with write permission' -e 'write pngData to f' -e 'close access f'`
+- 区域截图：`screencapture -i /tmp/notify.png`；或 `screencapture -x -R x,y,w,h /tmp/notify.png`
+- 网络图片：`curl -L --fail -o /tmp/notify.png "<url>"`，再用 `file` 确认是图片
+- 本地文件 / `file://`：取绝对路径、去掉 scheme
+- HEIC：`sips -s format png in.heic --out /tmp/notify.png`
+
+路径必须真实存在且可读；不要伪造路径，也不要把图片内容转成 base64 传进来。
+
 Pick the channel by what the user said, not by what is easiest to call:
 
 - 提醒 / 发送通知 / 推送 / 手机 / 别的设备 -> this tool. It is the only tool that sends a new account notification to the user's devices; there is no separate local-only sound tool. Reading or clearing existing notifications uses `notifications/index.md`.
@@ -199,7 +209,7 @@ Rules:
 - Keep Token values, passwords, verification codes, private keys, complete local paths, and other lock-screen-sensitive content out of `title` and `body` — the fields that reach a lock screen.
 - `{ success: true }` means Synapse accepted the fire-and-forget request. It does not mean the message was created, delivered, displayed, clicked, or read.
 - User settings are invisible to you. The send switch can be off, in which case nothing happens anywhere. Sending needs a signed-in, online desktop; when it cannot happen, nothing happens at all and nothing is backfilled later. Each machine also decides for itself whether to show account messages as native notifications. A call that sent nothing is indistinguishable from a successful one on your side: Synapse records why in its local diagnostics, so never assert that the user received anything.
-- Do not add any field beyond `title`, `body`, `url`, `group`, and `copyOnTap`. Do not add caller identity, a notification id, an idempotency key, or a retry loop.
+- Do not add any field beyond `title`, `body`, `url`, `group`, `copyOnTap`, and `imagePath`. Do not add caller identity, a notification id, an idempotency key, or a retry loop.
 - These proactive-call rules apply to direct Agent tool use. A Workflow author who explicitly places a System Notifier node has already chosen that node's notification behavior.
 
 ## 问题反馈

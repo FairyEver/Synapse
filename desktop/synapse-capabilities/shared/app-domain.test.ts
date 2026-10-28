@@ -285,6 +285,7 @@ describe("App capability domain", () => {
         properties: {
           title: expect.objectContaining({ type: "string", maxLength: 64 }),
           body: expect.objectContaining({ type: "string", maxLength: 256 }),
+          imagePath: expect.objectContaining({ type: "string", maxLength: 1024 }),
           copyOnTap: expect.objectContaining({ type: "boolean" }),
         },
       },

@@ -6,7 +6,7 @@
 
 用户从通知列表或正文菜单复制的 `synapse:notification:<id>` 是带类型的通知 ID，不是桌面深度链接。即使用户只说“看这个”，也由 `notification` 前缀选择通知工具；将完整标识原样传给 `app_account_notification_get` 的 `reference` 参数，不自行拆 ID。读取只受当前登录账号权限控制，不改变已读状态。
 
-通知详情里可以「复制正文」，拿到的是页面上显示的那一段文字；这与复制 `synapse:notification:<id>` 引用是两件事 —— 引用是给 Agent 用来定位这条通知的，正文是给用户拿去用的。
+通知详情里可以「复制正文」，拿到的是页面上显示的那一段文字；这与复制 `synapse:notification:<id>` 引用是两件事 —— 引用是给 Agent 用来定位这条通知的，正文是给用户拿去用的。带图通知点开后进入图片查看器，可保存到相册。
 
 - 用 `app_account_notification_count` 取得当前账号的精确未读数。`list` 按 `all`、`unread`、`pending` 筛选，也可按 `source` 筛选来源，两者取交集；有 `nextCursor` 就按相同条件继续翻页，改变筛选条件时不沿用旧游标，不能把第一页当作全部。
 - 用 `get` 阅读指定通知的完整标题、正文和目标信息；读取本身不标已读，需要时明确调用 `read` 或 `read_all`。
