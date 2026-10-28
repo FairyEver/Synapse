@@ -42,6 +42,15 @@ final class NotificationImageViewerModel: ObservableObject {
     }
 
     func clearNotice() { notice = nil }
+
+    /// 显示那一层没解出图。
+    ///
+    /// 状态机只有三个态：拿不到一张能画的图，对用户来说就是失败，不必再多一个第四态。
+    /// 从 `.loaded` 退回 `.failed` 之后，“重试”照常可用，保存按钮也随之禁用。
+    func markUnreadable() {
+        guard case .loaded = state else { return }
+        state = .failed
+    }
 }
 
 struct NotificationImageViewer: View {
@@ -64,7 +73,7 @@ struct NotificationImageViewer: View {
                         Button("重试") { Task { await model.load() } }
                     }
                 case .loaded(let url):
-                    ZoomableImage(url: url)
+                    ZoomableImage(url: url) { model.markUnreadable() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -89,13 +98,19 @@ struct NotificationImageViewer: View {
 /// 比手搓的好。
 private struct ZoomableImage: UIViewRepresentable {
     let url: URL
+    /// 解不出图时回报。这一层只管画，说不说得出口由状态机决定。
+    let onUnreadable: () -> Void
 
     func makeUIView(context: Context) -> UIScrollView {
         let scroll = UIScrollView()
         scroll.minimumZoomScale = 1
         scroll.maximumZoomScale = 4
         scroll.delegate = context.coordinator
-        let image = downsampledImage(at: url, maxPixelSize: 2048)
+        guard let image = downsampledImage(at: url, maxPixelSize: 2048) else {
+            // 不在视图更新中途改状态：等这一帧走完再报。
+            Task { @MainActor in onUnreadable() }
+            return scroll
+        }
         let view = UIImageView(image: image)
         view.contentMode = .scaleAspectFit
         view.frame = scroll.bounds
@@ -119,6 +134,7 @@ private func downsampledImage(at url: URL, maxPixelSize: CGFloat) -> UIImage? {
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
     let options: [CFString: Any] = [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
         kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
     ]
     guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }

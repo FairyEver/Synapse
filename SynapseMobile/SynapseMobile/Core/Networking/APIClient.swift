@@ -443,12 +443,17 @@ actor APIClient {
             throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
         }
         guard let token = accessToken else { throw APIError(status: 401, code: "unauthenticated", message: "登录已过期，请重新登录。") }
+        try Task.checkCancellation()
         guard let url = URL(string: AppConfiguration.apiBaseURL.absoluteString + "/notifications/\(escaped(id))/image") else {
             throw APIError(status: 0, code: "bad_url", message: "图片地址无效。")
         }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let (temporary, response) = try await downloadSession.download(for: request)
+        guard generation == credentialGeneration, account == tokens.credentialVersion else {
+            throw APIError(status: 0, code: "credential_changed", message: "账号已改变，请重新操作。")
+        }
+        try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw APIError(status: (response as? HTTPURLResponse)?.statusCode ?? 0, code: "download", message: "图片没能下载下来。")
         }
