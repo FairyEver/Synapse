@@ -1,5 +1,6 @@
 import { Prisma, type UserNotification } from "@prisma/client"
 import { NOTIFICATION_SOURCES } from "@synapse/shared"
+import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationService } from "./notification.service"
 
@@ -28,7 +29,7 @@ function harness() {
     sendTerminalApproval: vi.fn(async () => undefined),
   }
   const relay = { setNotificationSink: vi.fn() }
-  const images = { claimInTransaction: vi.fn(async () => undefined) }
+  const images = { claimInTransaction: vi.fn(async () => undefined), deleteByIds: vi.fn(async () => undefined) }
   const service = new NotificationService(prisma as never, desktops as never, mobiles as never, push as never, relay as never, images as never)
   return { service, prisma, desktops, mobiles, push, relay, images }
 }
@@ -327,5 +328,71 @@ describe("NotificationService", () => {
       expect.objectContaining({ copyOnTap: true }),
       undefined,
     )
+  })
+
+  it("resolves the image through the caller-owned notification row", async () => {
+    // 图片 ID 来自路由，光凭它不能证明归属；必须先用「这条通知属于谁」把范围收住。
+    const findFirst = vi.fn(async () => ({ imageId: "img-1" }))
+    const open = vi.fn(async () => ({ stream: Readable.from([Buffer.from([1])]), mimeType: "image/png", byteSize: 1 }))
+    const service = new NotificationService(
+      { userNotification: { findFirst } } as never,
+      { broadcastToUser: vi.fn() } as never,
+      { sendToMobileClients: vi.fn() } as never,
+      {} as never, {} as never,
+      { open } as never,
+    )
+    await expect(service.imageFor("u1", "n1")).resolves.toMatchObject({ mimeType: "image/png" })
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: "n1", userId: "u1", deletedAt: null }, select: { imageId: true } })
+    expect(open).toHaveBeenCalledWith("img-1")
+  })
+
+  it("answers null when the notification carries no image", async () => {
+    const open = vi.fn()
+    const service = new NotificationService(
+      { userNotification: { findFirst: async () => ({ imageId: null }) } } as never,
+      { broadcastToUser: vi.fn() } as never,
+      { sendToMobileClients: vi.fn() } as never,
+      {} as never, {} as never,
+      { open } as never,
+    )
+    await expect(service.imageFor("u1", "n1")).resolves.toBeNull()
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it("deletes the stored object when a notification is deleted", async () => {
+    const deleteByIds = vi.fn(async () => undefined)
+    const service = new NotificationService(
+      {
+        userNotification: {
+          findFirst: async () => ({ imageId: "img-1" }),
+          updateMany: async () => ({ count: 1 }),
+        },
+      } as never,
+      { broadcastToUser: vi.fn() } as never,
+      { sendToMobileClients: vi.fn() } as never,
+      {} as never, {} as never,
+      { deleteByIds } as never,
+    )
+    await service.delete("u1", "n1")
+    expect(deleteByIds).toHaveBeenCalledWith(["img-1"])
+  })
+
+  it("removes stored objects before pruning expired notification rows", async () => {
+    const order: string[] = []
+    const deleteByIds = vi.fn(async () => { order.push("objects") })
+    const service = new NotificationService(
+      {
+        userNotification: {
+          findMany: async () => [{ imageId: "img-1" }],
+          deleteMany: async () => { order.push("rows"); return { count: 1 } },
+        },
+      } as never,
+      { broadcastToUser: vi.fn() } as never,
+      { sendToMobileClients: vi.fn() } as never,
+      {} as never, {} as never,
+      { deleteByIds } as never,
+    )
+    await service.pruneExpired()
+    expect(order).toEqual(["objects", "rows"])
   })
 })

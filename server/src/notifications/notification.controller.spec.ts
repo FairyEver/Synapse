@@ -1,7 +1,7 @@
 import type { ExecutionContext } from "@nestjs/common"
 import { THROTTLER_KEY_GENERATOR } from "@nestjs/throttler/dist/throttler.constants"
 import { NOTIFICATION_SOURCES } from "@synapse/shared"
-import { Readable } from "node:stream"
+import { PassThrough, Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationController, OpenNotificationController, notificationThrottleKey } from "./notification.controller"
 import { NotificationImageInvalidTypeError, NotificationImageUnavailableError } from "./notification-image.service"
@@ -303,6 +303,25 @@ describe("NotificationController", () => {
     // 已发布的桌面构建仍在打 /internal，它必须和新名字落在同一个处理器上。
     expect(Reflect.getMetadata("path", NotificationController.prototype.createFromDesktop))
       .toEqual(["desktop", "internal"])
+  })
+
+  it("streams the notification image only when the record belongs to the caller", async () => {
+    const imageFor = vi.fn(async () => ({ stream: Readable.from([Buffer.from([1])]), mimeType: "image/png", byteSize: 1 }))
+    const endpoint = new NotificationController({ imageFor } as never, {} as never)
+    const headers: Record<string, string> = {}
+    // `PassThrough` 本身没有 `setHeader`；补一个只为记录响应头的同名方法。
+    const response = new PassThrough() as PassThrough & { setHeader(name: string, value: string): PassThrough }
+    response.setHeader = (name, value) => { headers[name] = value; return response }
+    await endpoint.notificationImage({ user: { id: "u1" } } as never, response as never, "n1")
+    expect(headers["Content-Type"]).toBe("image/png")
+    expect(headers["Cache-Control"]).toBe("private, no-store")
+    expect(imageFor).toHaveBeenCalledWith("u1", "n1")
+  })
+
+  it("returns 404 when the notification has no image", async () => {
+    const endpoint = new NotificationController({ imageFor: vi.fn(async () => null) } as never, {} as never)
+    await expect(endpoint.notificationImage({ user: { id: "u1" } } as never, {} as never, "n1"))
+      .rejects.toMatchObject({ status: 404 })
   })
 })
 

@@ -192,6 +192,16 @@ export class NotificationService implements OnModuleInit {
     })
   }
 
+  /** 只能经由「这条通知属于谁」取图：图片 ID 本身不构成访问凭据。 */
+  async imageFor(userId: string, id: string) {
+    const record = await this.prisma.userNotification.findFirst({
+      where: { id, userId, deletedAt: null },
+      select: { imageId: true },
+    })
+    if (!record?.imageId) return null
+    return this.images.open(record.imageId)
+  }
+
   async unreadCount(userId: string): Promise<number> {
     return this.prisma.userNotification.count({ where: { userId, readAt: null, deletedAt: null, createdAt: { gte: new Date(Date.now() - retentionMs) } } })
   }
@@ -210,19 +220,24 @@ export class NotificationService implements OnModuleInit {
   }
 
   async delete(userId: string, id: string): Promise<void> {
-    await this.prisma.userNotification.updateMany({ where: { id, userId, deletedAt: null }, data: { deletedAt: new Date() } })
+    const where = { id, userId, deletedAt: null }
+    // 图片 ID 只挂在通知行上；行删掉再取就找不到了，所以顺序不能反。
+    const record = await this.prisma.userNotification.findFirst({ where, select: { imageId: true } })
+    await this.prisma.userNotification.updateMany({ where, data: { deletedAt: new Date() } })
+    if (record?.imageId) await this.images.deleteByIds([record.imageId])
     this.publish(userId, id)
   }
 
   async deleteAll(userId: string, filter: "all" | "pending"): Promise<void> {
-    await this.prisma.userNotification.updateMany({
-      where: {
-        userId,
-        deletedAt: null,
-        ...(filter === "pending" ? { source: "terminal-attention", resolvedAt: null } : {}),
-      },
-      data: { deletedAt: new Date() },
-    })
+    const where: Prisma.UserNotificationWhereInput = {
+      userId,
+      deletedAt: null,
+      ...(filter === "pending" ? { source: "terminal-attention", resolvedAt: null } : {}),
+    }
+    // 与 `delete` 同理：先记下对象键，再让这些行从可删范围里消失。
+    const rows = await this.prisma.userNotification.findMany({ where, select: { imageId: true } })
+    await this.prisma.userNotification.updateMany({ where, data: { deletedAt: new Date() } })
+    await this.images.deleteByIds(imageIdsOf(rows))
     this.publish(userId, "all")
   }
 
@@ -277,8 +292,16 @@ export class NotificationService implements OnModuleInit {
 
   @Cron("0 0 3 * * *")
   async pruneExpired(): Promise<void> {
-    await this.prisma.userNotification.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - retentionMs) } } })
+    const where: Prisma.UserNotificationWhereInput = { createdAt: { lt: new Date(Date.now() - retentionMs) } }
+    // 硬删之前先把对象处理掉：行一没，`imageId` 就再也读不出来了。
+    const rows = await this.prisma.userNotification.findMany({ where, select: { imageId: true } })
+    await this.images.deleteByIds(imageIdsOf(rows))
+    await this.prisma.userNotification.deleteMany({ where })
   }
+}
+
+function imageIdsOf(rows: readonly { imageId: string | null }[]): string[] {
+  return rows.flatMap((row) => (row.imageId ? [row.imageId] : []))
 }
 
 function toNotificationProjection(record: UserNotification & {

@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, UseFilters, UseGuards, type ExecutionContext } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, NotFoundException, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseFilters, UseGuards, type ExecutionContext } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
-import type { Request } from "express"
+import type { Request, Response } from "express"
 import { createHash } from "node:crypto"
+import { pipeline } from "node:stream/promises"
 import { z } from "zod"
 import { DESKTOP_NOTIFICATION_SOURCES, NOTIFICATION_SOURCES } from "@synapse/shared"
 import { NOTIFICATION_SEND_SCOPE } from "../api-keys/api-key-capabilities"
@@ -133,6 +134,18 @@ export class NotificationController {
     const item = await this.notifications.get(request.user.id, id)
     if (!item) throw new NotFoundException("消息不存在。")
     return item
+  }
+
+  /** 图片按「这条通知属于谁」鉴权，不看图片 ID 本身。 */
+  @Get(":id/image")
+  async notificationImage(@Req() request: AuthedRequest, @Res() response: Response, @Param("id") id: string) {
+    const image = await this.notifications.imageFor(request.user.id, id)
+    if (!image) throw new NotFoundException("图片不存在。")
+    response.setHeader("Content-Type", image.mimeType)
+    response.setHeader("Content-Length", String(image.byteSize))
+    response.setHeader("Cache-Control", "private, no-store")
+    response.setHeader("Content-Disposition", "inline")
+    await pipeline(image.stream, response)
   }
 
   @Patch("read-all")
