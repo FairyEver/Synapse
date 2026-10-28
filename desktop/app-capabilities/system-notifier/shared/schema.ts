@@ -120,10 +120,10 @@ export type SystemNotifierSettingsPatch = z.infer<typeof systemNotifierSettingsP
 const ACCEPTED_KEYS = new Set<string>(["title", "body", "url", "group", "copyOnTap", "imagePath"])
 
 export function validateSystemNotificationInput(request: unknown): SystemNotificationInputValidation {
-  if (!isPlainObject(request)) return invalid("request", "type")
+  if (!isPlainObject(request)) return systemNotificationInvalid("request", "type")
 
   const keys = Object.keys(request)
-  if (keys.some((key) => !ACCEPTED_KEYS.has(key))) return invalid("request", "unknown_field")
+  if (keys.some((key) => !ACCEPTED_KEYS.has(key))) return systemNotificationInvalid("request", "unknown_field")
 
   const titleError = validateField(request, "title", SYSTEM_NOTIFICATION_TITLE_MAX_LENGTH)
   if (titleError) return titleError
@@ -132,12 +132,12 @@ export function validateSystemNotificationInput(request: unknown): SystemNotific
   // url 先于 group：链接是这条消息的目的，标签只是装饰，先报前者。
   const urlError = validateOptionalField(request, "url", SYSTEM_NOTIFICATION_URL_MAX_LENGTH)
   if (urlError) return urlError
-  if (typeof request.url === "string" && !isHttpsUrl(request.url)) return invalid("url", "not_https")
+  if (typeof request.url === "string" && !isHttpsUrl(request.url)) return systemNotificationInvalid("url", "not_https")
   const groupError = validateOptionalField(request, "group", SYSTEM_NOTIFICATION_GROUP_MAX_LENGTH)
   if (groupError) return groupError
   // 开关排在最后：它是一个布尔，不是内容，没有理由排在任何文本字段前面。
   if (request.copyOnTap !== undefined && typeof request.copyOnTap !== "boolean") {
-    return invalid("copyOnTap", "type")
+    return systemNotificationInvalid("copyOnTap", "type")
   }
   const imageError = validateImagePath(request)
   if (imageError) return imageError
@@ -160,14 +160,14 @@ function validateField(
   field: "title" | "body",
   maxLength: number,
 ): SystemNotificationInvalidInput | null {
-  if (!(field in request)) return invalid(field, "required")
+  if (!(field in request)) return systemNotificationInvalid(field, "required")
   const value = request[field]
-  if (typeof value !== "string") return invalid(field, "type")
+  if (typeof value !== "string") return systemNotificationInvalid(field, "type")
   const shapeError = validateSingleLineShape(value, field)
   if (shapeError) return shapeError
   // 标题与服务端同按码元计数；正文的 256 码点最多占 512 码元，保持既有范围。
   const length = field === "title" ? value.length : [...value].length
-  if (length > maxLength) return invalid(field, "too_long")
+  if (length > maxLength) return systemNotificationInvalid(field, "too_long")
   return null
 }
 
@@ -182,10 +182,10 @@ function validateSingleLineShape(
   value: string,
   field: SystemNotificationInvalidField,
 ): SystemNotificationInvalidInput | null {
-  if (value === "") return invalid(field, "required")
-  if (value !== value.trim()) return invalid(field, "leading_or_trailing_whitespace")
-  if (hasUnpairedSurrogate(value)) return invalid(field, "invalid_unicode")
-  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return invalid(field, "forbidden_character")
+  if (value === "") return systemNotificationInvalid(field, "required")
+  if (value !== value.trim()) return systemNotificationInvalid(field, "leading_or_trailing_whitespace")
+  if (hasUnpairedSurrogate(value)) return systemNotificationInvalid(field, "invalid_unicode")
+  if (/[\p{Cc}\u2028\u2029]/u.test(value)) return systemNotificationInvalid(field, "forbidden_character")
   return null
 }
 
@@ -200,26 +200,26 @@ function validateOptionalField(
 ): SystemNotificationInvalidInput | null {
   if (!(field in request) || request[field] === undefined) return null
   const value = request[field]
-  if (typeof value !== "string") return invalid(field, "type")
+  if (typeof value !== "string") return systemNotificationInvalid(field, "type")
   const shapeError = validateSingleLineShape(value, field)
   if (shapeError) return shapeError
   // 服务端 zod 的 `.max()` 数的是 UTF-16 码元，不是码点，所以这里也按码元卡：
   // 33 个 emoji 是 33 码点、66 码元，只数码点就会放行，然后在服务端被打回来，
   // 而调用方早已被告知成功。码元数天然是码点数的上界，这一条同时覆盖两者，
   // 不需要再来一遍码点检查（那会是一行永远走不到的代码）。
-  if (value.length > maxLength) return invalid(field, "too_long")
+  if (value.length > maxLength) return systemNotificationInvalid(field, "too_long")
   return null
 }
 
 function validateImagePath(request: Record<string, unknown>): SystemNotificationInvalidInput | null {
   if (!("imagePath" in request) || request.imagePath === undefined) return null
   const value = request.imagePath
-  if (typeof value !== "string") return invalid("imagePath", "type")
-  if (value === "") return invalid("imagePath", "required")
+  if (typeof value !== "string") return systemNotificationInvalid("imagePath", "type")
+  if (value === "") return systemNotificationInvalid("imagePath", "required")
   const shapeError = validateSingleLineShape(value, "imagePath")
   if (shapeError) return shapeError
-  if (value.length > 1024) return invalid("imagePath", "too_long")
-  if (!isAbsolute(value)) return invalid("imagePath", "not_absolute")
+  if (value.length > 1024) return systemNotificationInvalid("imagePath", "too_long")
+  if (!isAbsolute(value)) return systemNotificationInvalid("imagePath", "not_absolute")
   return null
 }
 
@@ -258,7 +258,7 @@ function hasUnpairedSurrogate(value: string): boolean {
   return false
 }
 
-function invalid(
+export function systemNotificationInvalid(
   field: SystemNotificationInvalidField,
   reason: SystemNotificationInvalidReason,
 ): SystemNotificationInvalidInput {

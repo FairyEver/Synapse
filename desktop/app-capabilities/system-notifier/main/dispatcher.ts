@@ -13,7 +13,7 @@ export type SystemNotifierCapabilityDispatcher = {
 }
 
 export function createSystemNotifierCapabilityDispatcher(deps: {
-  readonly service: Pick<SystemNotifierService, "trigger">
+  readonly service: Pick<SystemNotifierService, "trigger" | "prepare">
 }): SystemNotifierCapabilityDispatcher {
   return {
     async dispatch(action, params, context) {
@@ -28,13 +28,17 @@ export function createSystemNotifierCapabilityDispatcher(deps: {
       if (!validation.ok) return validation
 
       const actor = context.actor ?? mcpClientActorForSource(context.source)
-      const result = deps.service.trigger(validation.data, {
+      const triggerContext = {
         source: context.source,
         actor,
         identityKey: mcpIdentityKey(context.source, context.clientId, context.controllerInstanceId, actor),
         ...(context.clientId ? { clientId: context.clientId } : {}),
         ...(context.controllerInstanceId ? { controllerInstanceId: context.controllerInstanceId } : {}),
-      })
+      }
+      // 图片先暂存：`trigger` 保持同步，只有这条异步链路能碰文件系统。
+      const prepared = await deps.service.prepare(validation.data, triggerContext)
+      if (!prepared.ok) return prepared
+      const result = deps.service.trigger(prepared.data, triggerContext)
       return { ok: true, data: result }
     },
   }

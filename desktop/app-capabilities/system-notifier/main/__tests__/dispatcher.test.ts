@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
 import { SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID } from "../../shared/capability"
+import type { SystemNotificationInput } from "../../shared/schema"
 import { createSystemNotifierCapabilityDispatcher, mcpIdentityKey } from "../dispatcher"
+
+const passThroughPrepare = async (input: SystemNotificationInput) => ({ ok: true as const, data: input })
 
 describe("system notifier dispatcher", () => {
   it("returns the fixed success shape and forwards only trusted context", async () => {
     const trigger = vi.fn().mockReturnValue({ success: true })
-    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { trigger } })
+    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { trigger, prepare: passThroughPrepare } })
     await expect(dispatcher.dispatch(
       SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
       { title: "Title", body: "Body" },
@@ -28,7 +31,7 @@ describe("system notifier dispatcher", () => {
 
   it("returns the shared INVALID_INPUT result without entering the service", async () => {
     const trigger = vi.fn()
-    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { trigger } })
+    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { trigger, prepare: passThroughPrepare } })
     await expect(dispatcher.dispatch(
       SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
       { title: " Title", body: "Body" },
@@ -44,7 +47,7 @@ describe("system notifier dispatcher", () => {
 
   it("rejects non-MCP entry sources before validation", async () => {
     const trigger = vi.fn()
-    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { trigger } })
+    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { trigger, prepare: passThroughPrepare } })
     await expect(dispatcher.dispatch(
       SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
       { title: "Title", body: "Body" },
@@ -60,5 +63,18 @@ describe("system notifier dispatcher", () => {
     expect(mcpIdentityKey("mcp-http", undefined, undefined, actor)).toContain("agent-1")
     expect(mcpIdentityKey("mcp-stdio", undefined, undefined, { kind: "system" }))
       .toBe("mcp-stdio\u0000anonymous")
+  })
+
+  it("awaits image preparation before entering the service", async () => {
+    const order: string[] = []
+    const prepare = vi.fn(async () => { order.push("prepare"); return { ok: true as const, data: { title: "图", body: "看图", imageId: "img-1" } } })
+    const trigger = vi.fn(() => { order.push("trigger"); return { success: true as const } })
+    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { prepare, trigger } })
+    await dispatcher.dispatch(
+      SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+      { title: "图", body: "看图", imagePath: "/tmp/a.png" },
+      { source: "mcp-http" },
+    )
+    expect(order).toEqual(["prepare", "trigger"])
   })
 })

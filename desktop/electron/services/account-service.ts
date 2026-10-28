@@ -582,6 +582,7 @@ export class AccountService {
     group?: string
     url?: string
     copyOnTap?: boolean
+    imageId?: string
     targetId?: string
     deviceId?: string
   }): Promise<DesktopNotificationOutcome> {

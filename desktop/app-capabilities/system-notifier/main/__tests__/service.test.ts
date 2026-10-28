@@ -1,3 +1,6 @@
+import { mkdtemp, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
 import type { SystemNotifierSettingsEntryV3 } from "../../../../electron/runtime/data-repo/schemas/system-notifier"
@@ -403,6 +406,56 @@ describe("SystemNotifierService", () => {
     await expect(service.getSettings()).rejects.toThrow()
     service.presentAccountNotification(input)
     expect(show).toHaveBeenCalledWith({ ...input, silent: true })
+  })
+
+  it("stages an image and passes only imageId to the account write", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "notify-prepare-"))
+    const file = path.join(dir, "a.png")
+    await writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    const uploadImage = vi.fn(async () => ({ status: "uploaded" as const, imageId: "img-1" }))
+    const service = new SystemNotifierService(logger())
+    await service.initialize({
+      settings: settingsNamespace({ ...activeSettings }).port,
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true })) } as never,
+      uploadImage,
+      sync: vi.fn(async () => "sent" as const),
+    })
+    const result = await service.prepare(
+      { title: "图", body: "看图", imagePath: file },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )
+    expect(result).toMatchObject({ ok: true, data: { imageId: "img-1" } })
+    const write = systemNotificationAccountWrite(result.ok ? result.data : { title: "", body: "" })
+    expect(write).toMatchObject({ imageId: "img-1" })
+    expect(write).not.toHaveProperty("imagePath")
+    expect(JSON.stringify(uploadImage.mock.calls)).not.toContain(file)
+  })
+
+  it("maps an outdated server and a denied local read to INVALID_INPUT", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "notify-prepare-"))
+    const file = path.join(dir, "a.png")
+    await writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    const denied = new SystemNotifierService(logger())
+    await denied.initialize({
+      settings: settingsNamespace({ ...activeSettings }).port,
+      permissionGuard: { check: vi.fn(async () => ({ allowed: false, reason: "policy" })) } as never,
+      uploadImage: async () => ({ status: "service_outdated" }),
+    })
+    await expect(denied.prepare(
+      { title: "图", body: "看图", imagePath: file },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "permission_denied" } })
+
+    const outdated = new SystemNotifierService(logger())
+    await outdated.initialize({
+      settings: settingsNamespace({ ...activeSettings }).port,
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true })) } as never,
+      uploadImage: async () => ({ status: "service_outdated" }),
+    })
+    await expect(outdated.prepare(
+      { title: "图", body: "看图", imagePath: file },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "service_outdated" } })
   })
 })
 

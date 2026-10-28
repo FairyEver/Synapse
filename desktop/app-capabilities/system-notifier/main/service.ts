@@ -8,12 +8,16 @@ import {
 } from "../shared/capability"
 import {
   defaultSystemNotifierSettings,
+  systemNotificationInvalid,
   systemNotifierSettingsPatchSchema,
   systemNotifierSettingsSchema,
   systemNotifierTestNotification,
   validateSystemNotificationInput,
   type NotificationImageUploadOutcome,
   type SystemNotificationInput,
+  type SystemNotificationInputValidation,
+  type SystemNotificationInvalidInput,
+  type SystemNotificationInvalidReason,
   type SystemNotificationResult,
   type SystemNotifierSettings,
   type SystemNotifierSettingsPatch,
@@ -24,6 +28,7 @@ import {
   type SystemNotifierFailureReason,
   type SystemNotifierFailureStage,
 } from "./adapter"
+import { readNotificationImageFile } from "./image"
 import { SystemNotifierRateLimiter } from "./rate-limiter"
 
 type SystemNotifierLogStage =
@@ -45,6 +50,8 @@ type SystemNotifierLogReason =
   | "not_signed_in"
   | "offline"
   | "sync_failed"
+  // 图片暂存被服务端拒绝，消息本身仍然照常发出去（只是没有图）。
+  | "failed"
   | "suppressed"
 
 export interface SystemNotifierTriggerContext {
@@ -109,6 +116,7 @@ export function systemNotificationAccountWrite(input: SystemNotificationInput): 
   readonly group?: string
   readonly url?: string
   readonly copyOnTap?: boolean
+  readonly imageId?: string
 } {
   return {
     source: "system-notifier",
@@ -117,6 +125,7 @@ export function systemNotificationAccountWrite(input: SystemNotificationInput): 
     ...(input.url !== undefined ? { url: input.url } : {}),
     ...(input.group !== undefined ? { group: input.group } : {}),
     ...(input.copyOnTap === true ? { copyOnTap: true } : {}),
+    ...(input.imageId !== undefined ? { imageId: input.imageId } : {}),
   }
 }
 
@@ -125,6 +134,8 @@ export class SystemNotifierService {
   private auditSink?: AuditSink
   private adapter: SystemNotificationAdapter = createNoopSystemNotificationAdapter()
   private sync?: (input: SystemNotificationInput) => Promise<DesktopNotificationOutcome>
+  private uploadImage?: SystemNotifierServicePorts["uploadImage"]
+  private permissionGuard?: PermissionGuard
   private snapshot: Readonly<SystemNotifierSettings> | null = null
   private hasValidSnapshot = false
   private settingsQueue: Promise<void> = Promise.resolve()
@@ -147,6 +158,8 @@ export class SystemNotifierService {
     this.auditSink = ports.auditSink
     this.adapter = ports.adapter ?? createNoopSystemNotificationAdapter()
     this.sync = ports.sync
+    this.uploadImage = ports.uploadImage
+    this.permissionGuard = ports.permissionGuard
     if (this.adapter.kind === "electron") this.degradedReasons.delete("adapter_unavailable")
     else this.degradedReasons.add("adapter_unavailable")
 
@@ -155,6 +168,36 @@ export class SystemNotifierService {
       return
     }
     await this.loadInitialSettings()
+  }
+
+  /**
+   * 触发前的异步准备：把本机图片读出来、传到服务端，换成消息能挂的 `imageId`。
+   *
+   * 只有这里会碰文件系统，`trigger` 保持同步。成功时返回的输入里没有 `imagePath` ——
+   * 本机路径属于发起的那台电脑，没有任何理由往账号里写。
+   */
+  async prepare(input: SystemNotificationInput, context: SystemNotifierTriggerContext): Promise<SystemNotificationInputValidation> {
+    if (input.imagePath === undefined) return { ok: true, data: input }
+    const settings = this.snapshot
+    if (settings?.sendEnabled !== true) {
+      this.diagnostics.record("notification_sync", "disabled")
+      return { ok: true, data: withoutImagePath(input) }
+    }
+    const read = await readNotificationImageFile({
+      filePath: input.imagePath,
+      actor: context.actor,
+      permissionGuard: this.permissionGuard,
+      auditSink: this.auditSink,
+      metadata: { source: context.source, capabilityAction: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID },
+    })
+    if (!read.ok) return invalidImage(read.reason)
+    const uploaded = await this.uploadImage?.({ bytes: read.bytes, mimeType: read.mimeType })
+    if (!uploaded || uploaded.status === "failed" || uploaded.status === "not_signed_in" || uploaded.status === "offline") {
+      this.diagnostics.record("notification_sync", uploaded?.status ?? "sync_failed")
+      return { ok: true, data: withoutImagePath(input) }
+    }
+    if (uploaded.status === "service_outdated") return invalidImage("service_outdated")
+    return { ok: true, data: { ...withoutImagePath(input), imageId: uploaded.imageId } }
   }
 
   /**
@@ -374,6 +417,18 @@ export class SystemNotifierService {
       this.diagnostics.record("audit_record", "record_failed")
     }
   }
+}
+
+/** 图片相关的拒绝一律挂在 `imagePath` 上：调用方只需要知道「这张图用不了」。 */
+function invalidImage(reason: SystemNotificationInvalidReason): SystemNotificationInvalidInput {
+  return systemNotificationInvalid("imagePath", reason)
+}
+
+/** 暂存之后本机路径就没有意义了：消息只带服务端 id，账号里不写发起电脑的路径。 */
+function withoutImagePath(input: SystemNotificationInput): SystemNotificationInput {
+  const rest = { ...input }
+  delete rest.imagePath
+  return rest
 }
 
 function parseStoredSettings(value: unknown): SystemNotifierSettings | null {
