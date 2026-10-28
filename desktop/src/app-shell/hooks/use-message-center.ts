@@ -45,19 +45,22 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  /** 当前这个 object URL 属于哪条通知。详情据此判断能不能画缩略图，不能拿上一条的图顶替。 */
+  const [imagePreviewId, setImagePreviewId] = useState<string | null>(null)
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
   const refreshId = useRef(0)
   const pendingDeletes = useRef(new Map<string, number>())
   const imagePreviewRef = useRef<string | null>(null)
-  /** 当前这个 object URL 属于哪条通知。详情换一条时必须重新取，不能拿上一条的图顶替。 */
+  /** 已取到图的通知 id，同一张图只下载一次：详情预取和「查看图片」共用这份字节。 */
   const imagePreviewFor = useRef<string | null>(null)
   const imageRequestId = useRef(0)
 
-  const replaceImagePreview = useCallback((next: string | null) => {
+  const replaceImagePreview = useCallback((next: { readonly id: string; readonly url: string } | null) => {
     const previous = imagePreviewRef.current
-    imagePreviewRef.current = next
-    if (previous && previous !== next) URL.revokeObjectURL(previous)
-    setImagePreview(next)
+    imagePreviewRef.current = next?.url ?? null
+    if (previous && previous !== next?.url) URL.revokeObjectURL(previous)
+    setImagePreview(next?.url ?? null)
+    setImagePreviewId(next?.id ?? null)
   }, [])
 
   const clearNotificationImage = useCallback(() => {
@@ -86,7 +89,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
       const { mimeType, bytes } = await requireBridgeDomain("account").notifications.image({ id: item.id })
       if (requestId !== imageRequestId.current || identityRef.current !== expectedIdentity) return false
       imagePreviewFor.current = item.id
-      replaceImagePreview(URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType })))
+      replaceImagePreview({ id: item.id, url: URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType })) })
       return true
     } catch (cause) {
       if (requestId !== imageRequestId.current) return false
@@ -100,14 +103,11 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     if (await loadNotificationImage(item)) setImageViewerOpen(true)
   }, [loadNotificationImage])
 
+  // 只在换账号时丢图：换一条通知由详情的预取覆盖（并带上新的 `imagePreviewId`），
+  // 在这里提前作废会把详情刚发起的请求一起废掉，已读通知就再也拿不到图。
   useEffect(() => {
     clearNotificationImage()
   }, [clearNotificationImage, userId])
-
-  // 换一条通知就丢掉上一条的图：object URL 属于那条记录，不能跨记录复用。
-  useEffect(() => {
-    clearNotificationImage()
-  }, [clearNotificationImage, selected?.id])
 
   useEffect(() => () => {
     imageRequestId.current += 1
@@ -409,7 +409,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     open, filter, source, items: items.filter((item) => !hiddenIds.has(item.id)), cursor,
     unread: Math.max(0, unread - items.filter((item) => hiddenIds.has(item.id) && !item.readAt).length),
     selected, mail, mailLoading, mailError, loading, error,
-    imagePreview, imageViewerOpen, closeImagePreview, openNotificationImage, ensureNotificationImage: loadNotificationImage,
+    imagePreview, imagePreviewId, imageViewerOpen, closeImagePreview, openNotificationImage, ensureNotificationImage: loadNotificationImage,
     changeOpen, changeFilter, changeSource, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
     retryMail: () => setMailRevision((value) => value + 1),
     loadMailForReply, refreshAfterQuickReply,

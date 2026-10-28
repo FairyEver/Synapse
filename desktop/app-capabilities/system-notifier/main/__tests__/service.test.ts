@@ -464,6 +464,35 @@ describe("SystemNotifierService", () => {
     )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "service_outdated" } })
   })
 
+  it("degrades a temporarily rejected image upload to a text-only notification", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "notify-prepare-"))
+    const file = path.join(dir, "a.png")
+    await writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    const logs = logger()
+    let clock = 0
+    const service = new SystemNotifierService(logs, undefined, () => {
+      const value = clock
+      clock += 60_000
+      return value
+    })
+    await service.initialize({
+      settings: settingsNamespace({ ...activeSettings }).port,
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true })) } as never,
+      auditSink: { record: vi.fn() } as never,
+      // 服务端 429：图片这次暂存不了，但消息本身照常发，只是没有图。
+      uploadImage: async () => ({ status: "failed" }),
+    })
+    await expect(service.prepare(
+      { title: "图", body: "看图", imagePath: file },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )).resolves.toEqual({ ok: true, data: { title: "图", body: "看图" } })
+    expect(logs.warn).toHaveBeenCalledWith("System notifier diagnostic summary.", {
+      stage: "notification_sync",
+      reason: "failed",
+      count: 1,
+    })
+  })
+
   it("fails closed on image staging when the permission guard or the audit sink is missing", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "notify-prepare-"))
     const file = path.join(dir, "a.png")

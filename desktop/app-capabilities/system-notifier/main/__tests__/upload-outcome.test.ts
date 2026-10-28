@@ -13,6 +13,10 @@ describe("mapNotificationImageUploadResponse", () => {
     expect(mapNotificationImageUploadResponse(400, { message: "bad" })).toEqual({ status: "service_outdated" })
   })
 
+  it("treats the pending-image quota as a temporary failure so the text still goes out", () => {
+    expect(mapNotificationImageUploadResponse(429, { message: "待认领图片过多，请稍后再试。" })).toEqual({ status: "failed" })
+  })
+
   it("separates credential failures and transient failures", () => {
     expect(mapNotificationImageUploadResponse(401, undefined)).toEqual({ status: "not_signed_in" })
     expect(mapNotificationImageUploadResponse(403, undefined)).toEqual({ status: "not_signed_in" })

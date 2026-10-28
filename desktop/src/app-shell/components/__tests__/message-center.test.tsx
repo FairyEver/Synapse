@@ -28,7 +28,7 @@ const mockCenter = vi.hoisted(() => ({
   openApiGuide: vi.fn(), remove: vi.fn(), markAllRead: vi.fn(), setRead: vi.fn(),
   deleteAll: vi.fn(), loadMore: vi.fn(), refresh: vi.fn(), retryMail: vi.fn(), closeDetail: vi.fn(),
   loadMailForReply: vi.fn(), refreshAfterQuickReply: vi.fn(), accountId: "reader",
-  imagePreview: null as string | null, imageViewerOpen: false,
+  imagePreview: null as string | null, imagePreviewId: null as string | null, imageViewerOpen: false,
   openNotificationImage: vi.fn(), ensureNotificationImage: vi.fn(async () => true),
 }))
 
@@ -63,6 +63,7 @@ afterEach(() => {
   mockCenter.openNotificationImage.mockClear()
   mockCenter.ensureNotificationImage.mockClear()
   mockCenter.imagePreview = null
+  mockCenter.imagePreviewId = null
   mockCenter.imageViewerOpen = false
 })
 
@@ -346,6 +347,7 @@ describe("MessageCenter", () => {
       image: { id: "img-1", mimeType: "image/png", byteSize: 8 },
     } as SynapseNotification
     mockCenter.imagePreview = "blob:preview"
+    mockCenter.imagePreviewId = "n1"
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -354,6 +356,30 @@ describe("MessageCenter", () => {
       expect(document.querySelector('img[src="blob:preview"]')).toBeTruthy()
       expect([...document.querySelectorAll("button")].some((item) => item.textContent === "查看图片")).toBe(true)
       expect(mockCenter.ensureNotificationImage).toHaveBeenCalledWith(expect.objectContaining({ id: "n1" }))
+    } finally {
+      await act(async () => { root.unmount() })
+    }
+  })
+
+  it("never draws another notification's image as the detail thumbnail", async () => {
+    mockCenter.selected = {
+      ...mockCenter.selected,
+      source: "system-notifier",
+      title: "图片通知",
+      body: "看图",
+      targetId: null,
+      image: { id: "img-1", mimeType: "image/png", byteSize: 8 },
+    } as SynapseNotification
+    // 上一张图还没被换掉时，当前这条通知的详情不能拿它顶替；入口仍然在，点开时才重新取。
+    mockCenter.imagePreview = "blob:stale"
+    mockCenter.imagePreviewId = "n2"
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => { root.render(<MessageCenter />) })
+      expect(document.querySelector('img[src="blob:stale"]')).toBeNull()
+      expect([...document.querySelectorAll("button")].some((item) => item.textContent === "查看图片")).toBe(true)
     } finally {
       await act(async () => { root.unmount() })
     }

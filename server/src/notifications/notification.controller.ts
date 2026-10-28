@@ -117,7 +117,7 @@ export class NotificationController {
       return { imageId: staged.id, mimeType: staged.mimeType, byteSize: staged.byteSize }
     } catch (error) {
       if (error instanceof NotificationImageInvalidTypeError) throw new BadRequestException("图片格式不支持。")
-      // 配额是「稍后再来」而不是参数错误：桌面把它当暂时失败，不当坏输入。
+      // 配额是「稍后再来」而不是参数错误：桌面把 429 当暂时失败，这次只发正文、不挂图。
       if (error instanceof NotificationImageQuotaError) throw new HttpException("待认领图片过多，请稍后再试。", HttpStatus.TOO_MANY_REQUESTS)
       throw error
     }

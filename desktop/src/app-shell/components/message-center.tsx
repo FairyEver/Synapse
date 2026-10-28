@@ -168,7 +168,7 @@ function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; q
         {item.source === "drive-discussion"
           ? <DiscussionDetail item={item} />
           : <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />}
-        {item.image && center.imagePreview && (
+        {item.image && center.imagePreview && center.imagePreviewId === item.id && (
           <button
             type="button"
             aria-label="查看图片"
