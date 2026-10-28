@@ -44,8 +44,48 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   const [loading, setLoading] = useState(false)
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const refreshId = useRef(0)
   const pendingDeletes = useRef(new Map<string, number>())
+  const imagePreviewRef = useRef<string | null>(null)
+  const imageRequestId = useRef(0)
+
+  const replaceImagePreview = useCallback((next: string | null) => {
+    const previous = imagePreviewRef.current
+    imagePreviewRef.current = next
+    if (previous && previous !== next) URL.revokeObjectURL(previous)
+    setImagePreview(next)
+  }, [])
+
+  const closeImagePreview = useCallback(() => {
+    imageRequestId.current += 1
+    replaceImagePreview(null)
+  }, [replaceImagePreview])
+
+  const openNotificationImage = useCallback(async (item: SynapseNotification) => {
+    if (!item.image) return
+    const requestId = ++imageRequestId.current
+    const expectedIdentity = identityRef.current
+    try {
+      const { mimeType, bytes } = await requireBridgeDomain("account").notifications.image({ id: item.id })
+      if (requestId !== imageRequestId.current || identityRef.current !== expectedIdentity) return
+      replaceImagePreview(URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: mimeType })))
+    } catch (cause) {
+      if (requestId !== imageRequestId.current) return
+      logger.warn("Notification image could not be loaded.", { cause })
+      setError("图片加载失败")
+    }
+  }, [replaceImagePreview])
+
+  useEffect(() => {
+    closeImagePreview()
+  }, [closeImagePreview, userId])
+
+  useEffect(() => () => {
+    if (!imagePreviewRef.current) return
+    URL.revokeObjectURL(imagePreviewRef.current)
+    imagePreviewRef.current = null
+  }, [])
 
   useEffect(() => {
     refreshId.current += 1
@@ -339,6 +379,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     open, filter, source, items: items.filter((item) => !hiddenIds.has(item.id)), cursor,
     unread: Math.max(0, unread - items.filter((item) => hiddenIds.has(item.id) && !item.readAt).length),
     selected, mail, mailLoading, mailError, loading, error,
+    imagePreview, closeImagePreview, openNotificationImage,
     changeOpen, changeFilter, changeSource, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
     retryMail: () => setMailRevision((value) => value + 1),
     loadMailForReply, refreshAfterQuickReply,

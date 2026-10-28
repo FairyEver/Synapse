@@ -16,7 +16,7 @@ const mockCenter = vi.hoisted(() => ({
     id: "n1", source: "mail-internal", title: "新站内信", body: "来自 Synapse。", group: "mail-internal", url: null,
     level: "active", targetId: "broadcast-1", deviceId: null, readAt: "2026-09-29T10:00:00.000Z",
     resolvedAt: null, createdAt: "2026-09-29T10:00:00.000Z",
-  },
+  } as SynapseNotification,
   mail: {
     messageId: "broadcast-1", kind: "platform_broadcast", subject: "版本公告", body: "管理员发送的完整正文",
     sender: { userId: "synapse", nickname: "Synapse", handle: null },
@@ -28,7 +28,10 @@ const mockCenter = vi.hoisted(() => ({
   openApiGuide: vi.fn(), remove: vi.fn(), markAllRead: vi.fn(), setRead: vi.fn(),
   deleteAll: vi.fn(), loadMore: vi.fn(), refresh: vi.fn(), retryMail: vi.fn(), closeDetail: vi.fn(),
   loadMailForReply: vi.fn(), refreshAfterQuickReply: vi.fn(), accountId: "reader",
+  openNotificationImage: vi.fn(),
 }))
+
+const initialSelected = mockCenter.selected
 
 vi.mock("@/app-shell/hooks/use-message-center", () => ({ useMessageCenter: () => mockCenter }))
 
@@ -55,6 +58,8 @@ afterEach(() => {
   mockCenter.loadMailForReply.mockReset()
   mockCenter.refreshAfterQuickReply.mockReset()
   mockCenter.accountId = "reader"
+  mockCenter.selected = initialSelected
+  mockCenter.openNotificationImage.mockClear()
 })
 
 describe("MessageCenter", () => {
@@ -302,5 +307,28 @@ describe("MessageCenter", () => {
     await act(async () => { [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "复制 ID")?.click() })
     expect(writeText).toHaveBeenCalledWith("synapse:notification:n1")
     await act(async () => { root.unmount() })
+  })
+
+  it("shows the image entry in the detail and opens it on demand", async () => {
+    mockCenter.selected = {
+      ...mockCenter.selected,
+      source: "system-notifier",
+      title: "图片通知",
+      body: "看图",
+      targetId: null,
+      image: { id: "img-1", mimeType: "image/png", byteSize: 8 },
+    } as SynapseNotification
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => { root.render(<MessageCenter />) })
+      const button = [...document.querySelectorAll("button")].find((item) => item.textContent === "查看图片")
+      expect(button).toBeTruthy()
+      act(() => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })))
+      expect(mockCenter.openNotificationImage).toHaveBeenCalledWith(expect.objectContaining({ id: "n1" }))
+    } finally {
+      await act(async () => { root.unmount() })
+    }
   })
 })

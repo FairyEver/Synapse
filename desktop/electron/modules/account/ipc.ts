@@ -81,6 +81,7 @@ const notificationSchema = z.object({
   readAt: z.string().nullable(),
   resolvedAt: z.string().nullable(),
   createdAt: z.string(),
+  image: z.object({ id: z.string(), mimeType: z.string(), byteSize: z.number().int().nonnegative() }).nullable().optional(),
 })
 
 const notificationListRequestSchema = z.object({
@@ -1153,6 +1154,13 @@ export const accountIpcModule: IpcModule = {
       request: notificationDeleteAllRequestSchema,
       response: z.object({ ok: z.literal(true) }),
       handler: async (_ctx, input) => accountService.deleteAllNotifications(notificationDeleteAllRequestSchema.parse(input).filter),
+    },
+    notificationImage: {
+      kind: "invoke",
+      operationId: "app.account.notification.image",
+      request: notificationIdSchema,
+      response: z.object({ mimeType: z.string(), bytes: z.instanceof(Uint8Array) }),
+      handler: async (_ctx, input) => accountService.downloadNotificationImage(notificationIdSchema.parse(input).id),
     },
     mailRecipientList: {
       kind: "invoke", operationId: "app.mail_internal.recipient.list",

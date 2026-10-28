@@ -775,6 +775,7 @@ const synapseBridge: SynapseBridge = {
       readAll: invoke(IPC_CHANNELS.account.markAllNotificationsRead),
       delete: invoke(IPC_CHANNELS.account.deleteNotification),
       deleteAll: invoke(IPC_CHANNELS.account.deleteAllNotifications),
+      image: invoke(IPC_CHANNELS.account.notificationImage),
     },
   },
   mail: createMailBridge((channel, input) => invoke(channel)(input), createDomainEventPayloadSubscription(subscribe, "account", "mail.changed")),

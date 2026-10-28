@@ -1413,6 +1413,7 @@ export type SynapseBridge = {
       readAll: () => Promise<{ ok: true }>
       delete: (input: { id: string }) => Promise<{ ok: true }>
       deleteAll: (input: { filter: "all" | "pending" }) => Promise<{ ok: true }>
+      image: (input: { id: string }) => Promise<{ mimeType: string; bytes: Uint8Array }>
     }
   }
   mail: import("../../app-capabilities/mail/shared/bridge").MailBridge

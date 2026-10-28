@@ -3,6 +3,7 @@ import type { DriveDiscussionNotificationMetadata } from "@synapse/shared" with 
 export type SynapseNotification = {
   readonly driveDiscussion?: DriveDiscussionNotificationMetadata
   readonly mailSubject?: string
+  readonly image?: { id: string; mimeType: string; byteSize: number } | null
   readonly id: string
   readonly source: string
   readonly title: string

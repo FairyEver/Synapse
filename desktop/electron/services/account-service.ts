@@ -623,6 +623,18 @@ export class AccountService {
     return this.getAuthenticatedJson<{ unread: number }>(`${apiBaseUrl()}/notifications/count`, "未读数加载失败。")
   }
 
+  async downloadNotificationImage(id: string): Promise<{ mimeType: string; bytes: Uint8Array }> {
+    const response = await this.fetchAuthenticated(
+      `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}/image`,
+      {},
+      "图片加载失败。",
+    )
+    return {
+      mimeType: response.headers.get("Content-Type") ?? "application/octet-stream",
+      bytes: new Uint8Array(await response.arrayBuffer()),
+    }
+  }
+
   async markNotificationRead(id: string, read = true) {
     return this.requestAuthenticatedJson<{ ok: true }>("PATCH", `${apiBaseUrl()}/notifications/${encodeURIComponent(id)}/read`, read ? undefined : { read: false }, "更新已读状态失败。")
   }

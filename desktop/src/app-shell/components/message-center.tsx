@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type RefObject } from "react"
 import { getDriveDiscussionActionLabel, type NotificationSource } from "@synapse/shared"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
@@ -8,6 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { ImageLightbox } from "@/components/image-lightbox"
 import { MailQuickReplyDialog } from "@/components/mail-quick-reply-dialog"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -114,17 +115,22 @@ async function copyNotificationBody(item: SynapseNotification, mailBody: string 
   } catch { toast.error("复制失败") }
 }
 
+type NotificationAction = { id: string; label: string; run: () => void; destructive?: boolean }
+
 function notificationActions(center: Center, item: SynapseNotification, mailBody: string | null, quickReply?: (item: SynapseNotification) => void) {
-  return [
-    ...(quickReply && item.source === "mail-internal" && item.targetId ? [{ id: "quick-reply", label: "快速回复", run: () => quickReply(item) }] : []),
+  const actions: NotificationAction[] = []
+  if (item.image) actions.push({ id: "open-image", label: "查看图片", run: () => { void center.openNotificationImage(item) } })
+  if (quickReply && item.source === "mail-internal" && item.targetId) actions.push({ id: "quick-reply", label: "快速回复", run: () => quickReply(item) })
+  actions.push(
     { id: "read", label: item.readAt ? "标记为未读" : "标记为已读", run: () => { void center.setRead(item, !item.readAt) } },
     { id: "copy-body", label: "复制正文", run: () => { void copyNotificationBody(item, mailBody) } },
     { id: "copy-id", label: "复制 ID", run: () => { void copyNotificationId(item) } },
     { id: "delete", label: "删除通知", destructive: true, run: () => center.remove(item) },
-  ]
+  )
+  return actions
 }
 
-function MessageDetail({ center, quickReply }: { center: Center; quickReply: (item: SynapseNotification) => void }) {
+function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; quickReply: (item: SynapseNotification) => void; imageTrigger: RefObject<HTMLButtonElement | null> }) {
   const item = center.selected
   if (!item) return <div className="flex h-full min-h-48 items-center justify-center text-sm text-muted-foreground">选择一条通知查看内容</div>
   const isMail = item.source === "mail-internal" && !!item.targetId
@@ -159,7 +165,7 @@ function MessageDetail({ center, quickReply }: { center: Center; quickReply: (it
           : <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />}
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
-      {(action || (isMail && mail && canQuickReplyToMail(mail))) && <div className="mt-7 flex flex-wrap gap-2">{action && <Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button>}{isMail && mail && canQuickReplyToMail(mail) && <Button type="button" variant="outline" size="default" onClick={() => quickReply(item)}>快速回复</Button>}</div>}
+      {(action || item.image || (isMail && mail && canQuickReplyToMail(mail))) && <div className="mt-7 flex flex-wrap gap-2">{action && <Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button>}{isMail && mail && canQuickReplyToMail(mail) && <Button type="button" variant="outline" size="default" onClick={() => quickReply(item)}>快速回复</Button>}{item.image && <Button ref={imageTrigger} type="button" variant="outline" size="sm" onClick={() => { void center.openNotificationImage(item) }}>查看图片</Button>}</div>}
     </>}
   </article>
 }
@@ -168,6 +174,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
   const center = useMessageCenter(onOpenMeeting)
   const [clearScope, setClearScope] = useState<"all" | "pending" | null>(null)
   const [quickReply, setQuickReply] = useState<MailMessage | null>(null)
+  const imageTrigger = useRef<HTMLButtonElement | null>(null)
   const quickReplyRequest = useRef(0)
   const quickReplyAccount = useRef<string | null>(null)
   useEffect(() => {
@@ -247,12 +254,18 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
             </ScrollArea>
           </section>
           <section aria-label="通知内容" className={`${center.selected ? "block" : "hidden @3xl/message-center:block"} min-h-0 min-w-0 flex-1`}>
-            <ScrollArea className="h-full min-w-0 max-w-full" viewportClassName="min-w-0 max-w-full overflow-x-hidden px-6 py-7 @3xl/message-center:px-9 [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"><MessageDetail center={center} quickReply={(item) => { void openQuickReply(item) }} /></ScrollArea>
+            <ScrollArea className="h-full min-w-0 max-w-full" viewportClassName="min-w-0 max-w-full overflow-x-hidden px-6 py-7 @3xl/message-center:px-9 [&>div]:!block [&>div]:!min-w-0 [&>div]:!max-w-full"><MessageDetail center={center} quickReply={(item) => { void openQuickReply(item) }} imageTrigger={imageTrigger} /></ScrollArea>
           </section>
         </div>
       </SheetContent>
     </Sheet>
     <MailQuickReplyDialog source={quickReply} onClose={() => setQuickReply(null)} onSent={(receipt) => { void center.refreshAfterQuickReply(receipt.messageId) }} />
+    {center.imagePreview && (
+      <ImageLightbox
+        preview={{ images: [{ alt: center.selected?.title ?? "通知图片", src: center.imagePreview }], initialIndex: 0, trigger: imageTrigger.current ?? document.body }}
+        onClose={center.closeImagePreview}
+      />
+    )}
     <AlertDialog open={clearScope !== null} onOpenChange={(open) => { if (!open) setClearScope(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{clearScope === "pending" ? "忽略全部待处理通知？" : "清空全部通知？"}</AlertDialogTitle><AlertDialogDescription>{clearScope === "pending" ? "通知会从列表中移除，终端中的待处理状态不会改变。" : "这些通知会从当前账号的所有设备中移除，包括未加载的通知。"}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { if (clearScope) void center.deleteAll(clearScope) }}>{clearScope === "pending" ? "确认忽略" : "确认清空"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </>
 }
