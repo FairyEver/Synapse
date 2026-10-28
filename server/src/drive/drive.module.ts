@@ -25,10 +25,10 @@ import { DriveSiteService } from "./drive-site.service"
 import { DriveService } from "./drive.service"
 import { DriveBrowsingHistoryService } from "./drive-browsing-history.service"
 import { CosDriveStorage, LocalDriveStorage, shouldUseCosDriveStorage } from "./drive-storage"
-import { PlatformMediaStorage } from "./platform-media-storage"
+import { PlatformMediaModule } from "../platform-media/platform-media.module"
 
 @Module({
-  imports: [UserAuthModule, AdminAuthModule, PrismaModule, NotificationModule],
+  imports: [UserAuthModule, AdminAuthModule, PrismaModule, NotificationModule, PlatformMediaModule],
   controllers: [DriveUserController, DriveAdminController, DrivePublicController, DriveLocalStorageController, PlatformMediaLocalStorageController, DriveDiscussionNotificationTargetController],
   providers: [
     DriveDiscussionNotificationService,
@@ -44,7 +44,6 @@ import { PlatformMediaStorage } from "./platform-media-storage"
     DriveCollaborationGateway,
     LocalDriveCollaborationBus,
     DriveDocumentHostedImageService,
-    PlatformMediaStorage,
     DrivePublicAssetService,
     DriveSiteService,
     DriveService,

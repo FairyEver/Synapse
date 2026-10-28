@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common"
 import { randomUUID } from "node:crypto"
 import { createReadStream, createWriteStream } from "node:fs"
-import { mkdir, rm, stat } from "node:fs/promises"
+import { mkdir, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { Transform } from "node:stream"
@@ -66,6 +66,26 @@ export class PlatformMediaStorage implements PlatformMediaStoragePort {
     } finally {
       this.localUploads.delete(token)
     }
+  }
+
+  async putObject(key: string, bytes: Buffer, contentType: string): Promise<void> {
+    const env = loadEnv(process.env)
+    if (!isPlatformMediaCosConfigured(env)) {
+      const target = this.localPath(key)
+      await mkdir(path.dirname(target), { recursive: true })
+      await writeFile(target, bytes, { mode: 0o600 })
+      return
+    }
+    const client = this.getCosClient()
+    await new Promise<void>((resolve, reject) => {
+      client.cos.putObject({
+        Bucket: client.bucket,
+        Region: client.region,
+        Key: key,
+        Body: bytes,
+        ContentType: contentType,
+      }, (error) => (error ? reject(error) : resolve()))
+    })
   }
 
   async headObject(key: string): Promise<DriveStorageObjectInfo | null> {

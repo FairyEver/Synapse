@@ -4,13 +4,14 @@ import { ApiKeyModule } from "../api-keys/api-key.module"
 import { LiveModule } from "../live/live.module"
 import { MobileLiveModule } from "../mobile-live/mobile-live.module"
 import { PrismaModule } from "../prisma/prisma.module"
+import { PlatformMediaModule } from "../platform-media/platform-media.module"
 import { NotificationController, OpenNotificationController } from "./notification.controller"
 import { NotificationApiKeyGuard } from "./notification-api-key.guard"
 import { NotificationService } from "./notification.service"
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 
 @Module({
-  imports: [PrismaModule, UserAuthModule, ApiKeyModule, LiveModule, MobileLiveModule],
+  imports: [PrismaModule, UserAuthModule, ApiKeyModule, LiveModule, MobileLiveModule, PlatformMediaModule],
   controllers: [NotificationController, OpenNotificationController],
   providers: [NotificationService, NotificationApiKeyGuard, OpenApiExceptionFilter],
   exports: [NotificationService],
