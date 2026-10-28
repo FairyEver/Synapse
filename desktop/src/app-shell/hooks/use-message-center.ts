@@ -69,7 +69,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     try {
       const { mimeType, bytes } = await requireBridgeDomain("account").notifications.image({ id: item.id })
       if (requestId !== imageRequestId.current || identityRef.current !== expectedIdentity) return
-      replaceImagePreview(URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: mimeType })))
+      replaceImagePreview(URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType })))
     } catch (cause) {
       if (requestId !== imageRequestId.current) return
       logger.warn("Notification image could not be loaded.", { cause })
@@ -82,6 +82,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   }, [closeImagePreview, userId])
 
   useEffect(() => () => {
+    imageRequestId.current += 1
     if (!imagePreviewRef.current) return
     URL.revokeObjectURL(imagePreviewRef.current)
     imagePreviewRef.current = null

@@ -165,7 +165,7 @@ function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; q
           : <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />}
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
-      {(action || item.image || (isMail && mail && canQuickReplyToMail(mail))) && <div className="mt-7 flex flex-wrap gap-2">{action && <Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button>}{isMail && mail && canQuickReplyToMail(mail) && <Button type="button" variant="outline" size="default" onClick={() => quickReply(item)}>快速回复</Button>}{item.image && <Button ref={imageTrigger} type="button" variant="outline" size="sm" onClick={() => { void center.openNotificationImage(item) }}>查看图片</Button>}</div>}
+      {(action || item.image || (isMail && mail && canQuickReplyToMail(mail))) && <div className="mt-7 flex flex-wrap gap-2">{action && <Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button>}{isMail && mail && canQuickReplyToMail(mail) && <Button type="button" variant="outline" size="default" onClick={() => quickReply(item)}>快速回复</Button>}{item.image && <Button ref={imageTrigger} type="button" variant="outline" onClick={() => { void center.openNotificationImage(item) }}>查看图片</Button>}</div>}
     </>}
   </article>
 }
