@@ -21,7 +21,7 @@ import {
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 import { OpenApiHttpError, requireOpenApiPrincipal, type OpenApiRequest } from "../open-api/open-api.types"
 import { NotificationApiKeyGuard } from "./notification-api-key.guard"
-import { NOTIFICATION_IMAGE_MAX_BYTES, NotificationImageService } from "./notification-image.service"
+import { NOTIFICATION_IMAGE_MAX_BYTES, NotificationImageInvalidTypeError, NotificationImageService } from "./notification-image.service"
 import { NotificationService } from "./notification.service"
 
 const idempotencyKeyPattern = /^[A-Za-z0-9_-]{8,120}$/u
@@ -99,8 +99,13 @@ export class NotificationController {
       chunks.push(part)
     }
     if (size === 0) throw new BadRequestException("图片为空。")
-    const staged = await this.images.stage(request.user.id, Buffer.concat(chunks))
-    return { imageId: staged.id, mimeType: staged.mimeType, byteSize: staged.byteSize }
+    try {
+      const staged = await this.images.stage(request.user.id, Buffer.concat(chunks))
+      return { imageId: staged.id, mimeType: staged.mimeType, byteSize: staged.byteSize }
+    } catch (error) {
+      if (error instanceof NotificationImageInvalidTypeError) throw new BadRequestException("图片格式不支持。")
+      throw error
+    }
   }
 
   @Get()

@@ -4,6 +4,7 @@ import { NOTIFICATION_SOURCES } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationController, OpenNotificationController, notificationThrottleKey } from "./notification.controller"
+import { NotificationImageInvalidTypeError } from "./notification-image.service"
 
 /** 与 `createApiKeySecret()` 同形状的固定密钥，避免测试夹具被密钥格式校验挡下。 */
 const exampleKey = `syn_sk_${"a".repeat(43)}`
@@ -279,4 +280,13 @@ it("uploads raw image bytes and rejects an unsupported payload", async () => {
     Object.assign(Readable.from([png]), { user: { id: "u1" } }) as never,
   )).resolves.toMatchObject({ imageId: "img-1", mimeType: "image/png" })
   expect(stage).toHaveBeenLastCalledWith("u1", png)
+})
+
+it("rejects bytes the image service does not recognize as an image with a 400", async () => {
+  const stage = vi.fn(async () => { throw new NotificationImageInvalidTypeError() })
+  const endpoint = new NotificationController({} as never, { stage } as never)
+  await expect(endpoint.uploadImage(
+    Object.assign(Readable.from([Buffer.from("not an image")]), { user: { id: "u1" } }) as never,
+  )).rejects.toMatchObject({ status: 400 })
+  expect(stage).toHaveBeenCalledOnce()
 })
