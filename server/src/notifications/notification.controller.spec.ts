@@ -265,6 +265,16 @@ describe("NotificationController", () => {
     expect(service.create).not.toHaveBeenCalled()
   })
 
+  it("accepts an imageId on the desktop write path and rejects non-string values", async () => {
+    const create = vi.fn(async (input: Record<string, unknown>) => ({ id: "n1", createdAt: new Date("2026-10-28T08:00:00Z"), ...input }))
+    const endpoint = new NotificationController({ create } as never, {} as never)
+    const request = { user: { id: "writer" } }
+    await endpoint.createFromDesktop(request as never, { source: "system-notifier", title: "图", body: "看图", imageId: "img-1" })
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ imageId: "img-1" }))
+    await expect(endpoint.createFromDesktop(request as never, { source: "system-notifier", title: "图", body: "看图", imageId: 1 }))
+      .rejects.toMatchObject({ status: 400 })
+  })
+
   it("keeps the legacy path on the same handler", () => {
     // 已发布的桌面构建仍在打 /internal，它必须和新名字落在同一个处理器上。
     expect(Reflect.getMetadata("path", NotificationController.prototype.createFromDesktop))

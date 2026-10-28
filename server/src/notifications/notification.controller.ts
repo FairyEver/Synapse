@@ -58,6 +58,7 @@ const desktopWriteSchema = z.object({
   group: notificationGroupSchema.optional(),
   url: notificationUrlSchema.optional(),
   copyOnTap: z.boolean().optional(),
+  imageId: z.string().min(1).max(64).optional(),
   targetId: z.string().min(1).max(120).optional(),
   deviceId: z.string().min(1).max(120).optional(),
 }).strict()

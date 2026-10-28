@@ -4,19 +4,23 @@ import { describe, expect, it, vi } from "vitest"
 import { NotificationService } from "./notification.service"
 
 const createdAt = new Date("2026-09-23T08:00:00.000Z")
-const record: UserNotification = {
+type StoredNotification = UserNotification & { image: { id: string; mimeType: string; byteSize: number } | null }
+
+const record: StoredNotification = {
   id: "message-1", userId: "user-1", source: "external", sourceKey: "external:key:request",
   title: "部署完成", body: "已更新", group: null, url: null, copyOnTap: false, level: "active",
   targetId: null, deviceId: null, readAt: null, resolvedAt: null, deletedAt: null, createdAt,
+  imageId: null, image: null,
 }
 
 function harness() {
   const prisma = { userNotification: {
-    create: vi.fn(async (): Promise<UserNotification> => record), findUnique: vi.fn(async () => record),
-    findMany: vi.fn(async () => [record]), findFirst: vi.fn(async (): Promise<UserNotification | null> => record),
+    create: vi.fn(async (): Promise<StoredNotification> => record), findUnique: vi.fn(async () => record),
+    findMany: vi.fn(async () => [record]), findFirst: vi.fn(async (): Promise<StoredNotification | null> => record),
     count: vi.fn(async () => 1), updateMany: vi.fn(async () => ({ count: 1 })),
     deleteMany: vi.fn(async (_input: unknown) => ({ count: 1 })),
-  }, mailMessage: { findMany: vi.fn(async (): Promise<{ id: string; subject: string }[]> => []) } }
+  }, mailMessage: { findMany: vi.fn(async (): Promise<{ id: string; subject: string }[]> => []) },
+  $transaction: vi.fn(async (run: (client: unknown) => Promise<unknown>) => run(prisma)) }
   const desktops = { broadcastToUser: vi.fn() }
   const mobiles = { sendToMobileClients: vi.fn() }
   const push = {
@@ -24,8 +28,9 @@ function harness() {
     sendTerminalApproval: vi.fn(async () => undefined),
   }
   const relay = { setNotificationSink: vi.fn() }
-  const service = new NotificationService(prisma as never, desktops as never, mobiles as never, push as never, relay as never)
-  return { service, prisma, desktops, mobiles, push, relay }
+  const images = { claimInTransaction: vi.fn(async () => undefined) }
+  const service = new NotificationService(prisma as never, desktops as never, mobiles as never, push as never, relay as never, images as never)
+  return { service, prisma, desktops, mobiles, push, relay, images }
 }
 
 describe("NotificationService", () => {
@@ -63,7 +68,7 @@ describe("NotificationService", () => {
     prisma.userNotification.findFirst.mockResolvedValueOnce({
       ...record, source: "drive-discussion",
       driveDiscussionTarget: { kind: "annotation", action: "replied", sourceShareId: "private-share", snapshot: { detailTitle: "完整标题", content: "本次回复", original: { kind: "text", text: "原文", sourceShareId: "private-share" } } },
-    } as UserNotification)
+    } as StoredNotification)
     const result = await service.get("user-1", "message-1")
     expect(result).toMatchObject({ driveDiscussion: { kind: "annotation", action: "replied" } })
     expect(result).not.toHaveProperty("driveDiscussionTarget")
@@ -74,7 +79,7 @@ describe("NotificationService", () => {
   it("stops delivery when its lease is cancelled during the record read", async () => {
     const { service, prisma, desktops, mobiles, push } = harness()
     const controller = new AbortController()
-    let resolve!: (value: UserNotification) => void
+    let resolve!: (value: StoredNotification) => void
     prisma.userNotification.findFirst.mockReturnValueOnce(new Promise((done) => { resolve = done }))
     const delivery = service.deliverCommitted("user-1", "message-1", controller.signal)
     controller.abort(); resolve(record)
@@ -115,8 +120,29 @@ describe("NotificationService", () => {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 51,
-      include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } },
+      include: {
+        driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } },
+        image: { select: { id: true, mimeType: true, byteSize: true } },
+      },
     })
+  })
+
+  it("carries the claimed image into both the list and the detail projection", async () => {
+    const { service, prisma } = harness()
+    const image = { id: "img-1", mimeType: "image/png", byteSize: 4 }
+    prisma.userNotification.findMany.mockResolvedValueOnce([{ ...record, imageId: image.id, image }])
+    prisma.userNotification.findFirst.mockResolvedValueOnce({ ...record, imageId: image.id, image })
+
+    await expect(service.list("user-1", {})).resolves.toMatchObject({ items: [{ image }] })
+    await expect(service.get("user-1", record.id)).resolves.toMatchObject({ image })
+
+    // 图片不是读时拼出来的：查询本身就要把它带回来，投影只是原样展开。
+    expect(prisma.userNotification.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      include: expect.objectContaining({ image: { select: { id: true, mimeType: true, byteSize: true } } }),
+    }))
+    expect(prisma.userNotification.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({
+      include: expect.objectContaining({ image: { select: { id: true, mimeType: true, byteSize: true } } }),
+    }))
   })
 
   it("preserves all-source reads and restricts pending to unresolved terminal attention", async () => {
@@ -260,6 +286,23 @@ describe("NotificationService", () => {
       "user-1",
       expect.objectContaining({ copyOnTap: true }),
     )
+  })
+
+  it("claims the image inside the same transaction that creates the notification", async () => {
+    const claim = vi.fn(async () => undefined)
+    const created = vi.fn(async () => ({ id: "n1", imageId: "img-1" }))
+    const tx = { userNotification: { create: created } }
+    const service = new NotificationService(
+      { $transaction: async (run: (client: unknown) => Promise<unknown>) => run(tx) } as never,
+      { broadcastToUser: vi.fn() } as never,
+      { sendToMobileClients: vi.fn() } as never,
+      { sendNotification: vi.fn(async () => ({ failed: 0, skipped: false })) } as never,
+      {} as never,
+      { claimInTransaction: claim } as never,
+    )
+    await service.create({ userId: "u1", source: "system-notifier", title: "图", body: "看图", imageId: "img-1" })
+    expect(claim).toHaveBeenCalledWith(tx, "u1", "img-1")
+    expect(created).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ imageId: "img-1" }) }))
   })
 
   it("keeps a passive copyable message in the account without pushing it", async () => {

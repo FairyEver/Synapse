@@ -8,6 +8,7 @@ import { MobileLiveGateway } from "../mobile-live/mobile-live.gateway"
 import { MobilePushService } from "../mobile-live/mobile-push.service"
 import { MobileLiveRelayService } from "../mobile-live/mobile-live-relay.service"
 import { PrismaService } from "../prisma/prisma.service"
+import { NotificationImageService } from "./notification-image.service"
 
 export type NotificationLevel = "active" | "passive" | "timeSensitive"
 export type { NotificationSource } from "@synapse/shared"
@@ -21,6 +22,7 @@ export type CreateNotificationInput = {
   group?: string
   url?: string
   copyOnTap?: boolean
+  imageId?: string
   level?: NotificationLevel
   targetId?: string
   deviceId?: string
@@ -38,6 +40,7 @@ export class NotificationService implements OnModuleInit {
     private readonly mobiles: MobileLiveGateway,
     private readonly push: MobilePushService,
     private readonly relay: MobileLiveRelayService,
+    private readonly images: NotificationImageService,
   ) {}
 
   onModuleInit(): void {
@@ -51,7 +54,7 @@ export class NotificationService implements OnModuleInit {
       update: {},
       create: { userId: input.userId, source: input.source, sourceKey: input.sourceKey, title: input.title.slice(0, 64),
         body: input.body.slice(0, 512), group: input.group, url: input.url, copyOnTap: input.copyOnTap,
-        level: input.level ?? "active", targetId: input.targetId, deviceId: input.deviceId },
+        imageId: input.imageId, level: input.level ?? "active", targetId: input.targetId, deviceId: input.deviceId },
     })
   }
 
@@ -79,20 +82,24 @@ export class NotificationService implements OnModuleInit {
     }
     let record: UserNotification
     try {
-      record = await this.prisma.userNotification.create({
-        data: {
-          userId: input.userId,
-          source: input.source,
-          sourceKey: input.sourceKey,
-          title: input.title.slice(0, 64),
-          body: input.body.slice(0, 512),
-          group: input.group,
-          url: input.url,
-          copyOnTap: input.copyOnTap,
-          level: input.level ?? "active",
-          targetId: input.targetId,
-          deviceId: input.deviceId,
-        },
+      record = await this.prisma.$transaction(async (tx) => {
+        if (input.imageId) await this.images.claimInTransaction(tx, input.userId, input.imageId)
+        return tx.userNotification.create({
+          data: {
+            userId: input.userId,
+            source: input.source,
+            sourceKey: input.sourceKey,
+            title: input.title.slice(0, 64),
+            body: input.body.slice(0, 512),
+            group: input.group,
+            url: input.url,
+            copyOnTap: input.copyOnTap,
+            imageId: input.imageId,
+            level: input.level ?? "active",
+            targetId: input.targetId,
+            deviceId: input.deviceId,
+          },
+        })
       })
     } catch (error) {
       if (input.sourceKey && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -149,14 +156,23 @@ export class NotificationService implements OnModuleInit {
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 51,
-      include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } },
+      include: {
+        driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } },
+        image: { select: { id: true, mimeType: true, byteSize: true } },
+      },
     })
     const items = await this.withMailSubjects(userId, rows.slice(0, 50).map(toNotificationProjection))
     return { items, nextCursor: rows.length > 50 ? rows[49]?.id ?? null : null }
   }
 
   async get(userId: string, id: string) {
-    const record = await this.prisma.userNotification.findFirst({ where: { id, userId, deletedAt: null }, include: { driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } } } })
+    const record = await this.prisma.userNotification.findFirst({
+      where: { id, userId, deletedAt: null },
+      include: {
+        driveDiscussionTarget: { select: { kind: true, action: true, snapshot: true } },
+        image: { select: { id: true, mimeType: true, byteSize: true } },
+      },
+    })
     if (!record) return null
     const [item] = await this.withMailSubjects(userId, [toNotificationProjection(record)])
     return item ?? null
@@ -265,7 +281,10 @@ export class NotificationService implements OnModuleInit {
   }
 }
 
-function toNotificationProjection(record: UserNotification & { driveDiscussionTarget?: { kind: string; action: string; snapshot?: unknown } | null }) {
+function toNotificationProjection(record: UserNotification & {
+  driveDiscussionTarget?: { kind: string; action: string; snapshot?: unknown } | null
+  image?: { id: string; mimeType: string; byteSize: number } | null
+}) {
   const { driveDiscussionTarget: target, ...notification } = record
   if (record.source !== "drive-discussion" || !target || !["annotation", "message"].includes(target.kind) || !["created", "replied"].includes(target.action)) return notification
   const snapshot = parseDriveDiscussionNotificationSnapshot(target.snapshot)
