@@ -145,7 +145,14 @@ export class NotificationController {
     response.setHeader("Content-Length", String(image.byteSize))
     response.setHeader("Cache-Control", "private, no-store")
     response.setHeader("Content-Disposition", "inline")
-    await pipeline(image.stream, response)
+    try {
+      await pipeline(image.stream, response)
+    } catch (error: unknown) {
+      // 响应头一旦发出，就不能再让异常过滤器往同一个响应上写 JSON；客户端取消下载
+      // 或对象存储中途报错都在这里收尾，直接断开连接即可。
+      if (!response.headersSent) throw error
+      if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
+    }
   }
 
   @Patch("read-all")

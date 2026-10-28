@@ -323,6 +323,32 @@ describe("NotificationController", () => {
     await expect(endpoint.notificationImage({ user: { id: "u1" } } as never, {} as never, "n1"))
       .rejects.toMatchObject({ status: 404 })
   })
+
+  it("closes the connection instead of throwing when the stream fails after headers", async () => {
+    // 客户端取消下载或对象存储中途报错时，响应头已经发出；再让异常过滤器写 JSON
+    // 只会在已提交的响应上报 ERR_HTTP_HEADERS_SENT，所以这里必须自己断掉连接。
+    const stream = new Readable({ read() { this.destroy(new Error("storage unavailable")) } })
+    const imageFor = vi.fn(async () => ({ stream, mimeType: "image/png", byteSize: 4 }))
+    const endpoint = new NotificationController({ imageFor } as never, {} as never)
+    const response = new PassThrough() as PassThrough & { setHeader(name: string, value: string): PassThrough; readonly headersSent: boolean }
+    response.setHeader = () => response
+    Object.defineProperty(response, "headersSent", { value: true })
+
+    await expect(endpoint.notificationImage({ user: { id: "u1" } } as never, response as never, "n1"))
+      .resolves.toBeUndefined()
+    expect(response.destroyed).toBe(true)
+  })
+
+  it("still propagates a stream failure that happens before headers", async () => {
+    const stream = new Readable({ read() { this.destroy(new Error("storage unavailable")) } })
+    const imageFor = vi.fn(async () => ({ stream, mimeType: "image/png", byteSize: 4 }))
+    const endpoint = new NotificationController({ imageFor } as never, {} as never)
+    const response = new PassThrough() as PassThrough & { setHeader(name: string, value: string): PassThrough }
+    response.setHeader = () => response
+
+    await expect(endpoint.notificationImage({ user: { id: "u1" } } as never, response as never, "n1"))
+      .rejects.toThrow("storage unavailable")
+  })
 })
 
 it("uploads raw image bytes and rejects an unsupported payload", async () => {
