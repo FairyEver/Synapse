@@ -21,7 +21,7 @@ import {
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 import { OpenApiHttpError, requireOpenApiPrincipal, type OpenApiRequest } from "../open-api/open-api.types"
 import { NotificationApiKeyGuard } from "./notification-api-key.guard"
-import { NOTIFICATION_IMAGE_MAX_BYTES, NotificationImageInvalidTypeError, NotificationImageService } from "./notification-image.service"
+import { NOTIFICATION_IMAGE_MAX_BYTES, NotificationImageInvalidTypeError, NotificationImageService, NotificationImageUnavailableError } from "./notification-image.service"
 import { NotificationService } from "./notification.service"
 
 const idempotencyKeyPattern = /^[A-Za-z0-9_-]{8,120}$/u
@@ -85,8 +85,15 @@ export class NotificationController {
   async createFromDesktop(@Req() request: AuthedRequest, @Body() body: unknown) {
     const parsed = desktopWriteSchema.safeParse(body)
     if (!parsed.success) throw badRequestFromZodError(parsed.error, "通知参数无效。")
-    const item = await this.notifications.create({ ...parsed.data, userId: request.user.id })
-    return { id: item.id }
+    try {
+      const item = await this.notifications.create({ ...parsed.data, userId: request.user.id })
+      return { id: item.id }
+    } catch (error) {
+      // 图片不属于本人、已被别的通知认领、暂存过期，服务层统一抛这一种；桌面要的是
+      // 「这张图用不了」，不是 500。其余失败照旧抛出。
+      if (error instanceof NotificationImageUnavailableError) throw new BadRequestException("图片不可用或已过期。")
+      throw error
+    }
   }
 
   @Put("desktop/image")

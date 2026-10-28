@@ -4,7 +4,7 @@ import { NOTIFICATION_SOURCES } from "@synapse/shared"
 import { Readable } from "node:stream"
 import { describe, expect, it, vi } from "vitest"
 import { NotificationController, OpenNotificationController, notificationThrottleKey } from "./notification.controller"
-import { NotificationImageInvalidTypeError } from "./notification-image.service"
+import { NotificationImageInvalidTypeError, NotificationImageUnavailableError } from "./notification-image.service"
 
 /** 与 `createApiKeySecret()` 同形状的固定密钥，避免测试夹具被密钥格式校验挡下。 */
 const exampleKey = `syn_sk_${"a".repeat(43)}`
@@ -273,6 +273,30 @@ describe("NotificationController", () => {
     expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ imageId: "img-1" }))
     await expect(endpoint.createFromDesktop(request as never, { source: "system-notifier", title: "图", body: "看图", imageId: 1 }))
       .rejects.toMatchObject({ status: 400 })
+  })
+
+  it("answers 400 when the claimed image is unavailable for this caller", async () => {
+    // 认领失败有三种：不属于本人、已被别的通知认领、暂存过期。服务层统一抛这一种错误，
+    // 这里转成 400；桌面拿到的必须是「图片不可用」，而不是一个 500。
+    const create = vi.fn(async () => { throw new NotificationImageUnavailableError() })
+    const endpoint = new NotificationController({ create } as never, {} as never)
+    const request = { user: { id: "writer" } }
+
+    await expect(endpoint.createFromDesktop(request as never, {
+      source: "system-notifier", title: "图", body: "看图", imageId: "img-1",
+    })).rejects.toMatchObject({ status: 400 })
+  })
+
+  it("lets every other write failure through unchanged", async () => {
+    // 只有认领这一件事该被改写成 400；别的失败照旧抛出去，免得把真实故障伪装成参数问题。
+    const failure = new Error("database is down")
+    const create = vi.fn(async () => { throw failure })
+    const endpoint = new NotificationController({ create } as never, {} as never)
+    const request = { user: { id: "writer" } }
+
+    await expect(endpoint.createFromDesktop(request as never, {
+      source: "system-notifier", title: "图", body: "看图",
+    })).rejects.toBe(failure)
   })
 
   it("keeps the legacy path on the same handler", () => {
