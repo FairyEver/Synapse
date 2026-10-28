@@ -1747,6 +1747,20 @@ struct NotificationImageViewerTests {
         #expect(model.state == .loaded(url))
         #expect(model.notice == "没有相册写入权限")
     }
+
+    @Test func savingUsesTheDownloadedOriginalFile() async {
+        let url = URL(fileURLWithPath: "/tmp/x.png")
+        let saver = CapturingSaver()
+        let model = NotificationImageViewerModel(notificationId: "n1", loader: { url }, saver: saver)
+        await model.load()
+        await model.save()
+        #expect(saver.savedURLs == [url])
+    }
+}
+
+private final class CapturingSaver: PhotoLibrarySaving {
+    private(set) var savedURLs: [URL] = []
+    func save(originalFile: URL) async throws { savedURLs.append(originalFile) }
 }
 
 private struct StubSaver: PhotoLibrarySaving {
