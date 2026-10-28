@@ -132,6 +132,11 @@ function notificationActions(center: Center, item: SynapseNotification, mailBody
 
 function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; quickReply: (item: SynapseNotification) => void; imageTrigger: RefObject<HTMLButtonElement | null> }) {
   const item = center.selected
+  const ensureNotificationImage = center.ensureNotificationImage
+  // 详情一打开就把图取回来，先以小图呈现；点「查看图片」时不再重复下载。
+  useEffect(() => {
+    if (item?.image) void ensureNotificationImage(item)
+  }, [ensureNotificationImage, item])
   if (!item) return <div className="flex h-full min-h-48 items-center justify-center text-sm text-muted-foreground">选择一条通知查看内容</div>
   const isMail = item.source === "mail-internal" && !!item.targetId
   const mail = center.mail?.messageId === item.targetId ? center.mail : null
@@ -163,6 +168,16 @@ function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; q
         {item.source === "drive-discussion"
           ? <DiscussionDetail item={item} />
           : <MarkdownViewer content={mail?.body ?? item.body} showTabs={false} surface="plain" />}
+        {item.image && center.imagePreview && (
+          <button
+            type="button"
+            aria-label="查看图片"
+            className="mt-5 block max-w-full overflow-hidden rounded-md border"
+            onClick={() => { void center.openNotificationImage(item) }}
+          >
+            <img src={center.imagePreview} alt="" className="max-h-48 max-w-full object-contain" />
+          </button>
+        )}
         {mail && mail.attachments.length > 0 && <p className="mt-5 text-sm text-muted-foreground">{mail.attachments.length} 个附件，请在站内信中查看</p>}
       </div>
       {(action || item.image || (isMail && mail && canQuickReplyToMail(mail))) && <div className="mt-7 flex flex-wrap gap-2">{action && <Button type="button" size="default" onClick={() => { void center.navigate(item) }}>{action}<ArrowRight /></Button>}{isMail && mail && canQuickReplyToMail(mail) && <Button type="button" variant="outline" size="default" onClick={() => quickReply(item)}>快速回复</Button>}{item.image && <Button ref={imageTrigger} type="button" variant="outline" onClick={() => { void center.openNotificationImage(item) }}>查看图片</Button>}</div>}
@@ -260,7 +275,7 @@ function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) 
       </SheetContent>
     </Sheet>
     <MailQuickReplyDialog source={quickReply} onClose={() => setQuickReply(null)} onSent={(receipt) => { void center.refreshAfterQuickReply(receipt.messageId) }} />
-    {center.imagePreview && (
+    {center.imageViewerOpen && center.imagePreview && (
       <ImageLightbox
         preview={{ images: [{ alt: center.selected?.title ?? "通知图片", src: center.imagePreview }], initialIndex: 0, trigger: imageTrigger.current ?? document.body }}
         onClose={center.closeImagePreview}

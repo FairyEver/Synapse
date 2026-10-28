@@ -3,6 +3,13 @@ import path from "node:path"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 
 export const NOTIFICATION_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+/**
+ * 审计里的 `resource` 是固定标签，不是文件名。
+ *
+ * 调用方给的路径属于用户本机，文件名本身也可能带内容（截图名、下载名）；审计只该说明
+ * 「读了一张通知图片」，具体 mime 与字节数放在 metadata 里。
+ */
+export const NOTIFICATION_IMAGE_AUDIT_RESOURCE = "notification-image"
 
 export type NotificationImageReadFailure =
   | "not_absolute" | "not_found" | "not_regular_file" | "unreadable"
@@ -23,18 +30,18 @@ export type NotificationImageReadResult =
 export async function readNotificationImageFile(input: {
   filePath: string
   actor: ActorIdentity
-  permissionGuard?: PermissionGuard
-  auditSink?: AuditSink
+  permissionGuard: PermissionGuard
+  auditSink: AuditSink
   metadata: Record<string, unknown>
 }): Promise<NotificationImageReadResult> {
   const audit = (
     outcome: "allowed" | "denied" | "failed",
     metadata: Record<string, unknown>,
   ): void => {
-    input.auditSink?.record({
+    input.auditSink.record({
       action: "fs.read.outside-userdata",
       actor: input.actor,
-      resource: path.basename(input.filePath),
+      resource: NOTIFICATION_IMAGE_AUDIT_RESOURCE,
       outcome,
       metadata,
     })
@@ -46,17 +53,15 @@ export async function readNotificationImageFile(input: {
 
   if (!path.isAbsolute(input.filePath)) return fail("not_absolute")
 
-  if (input.permissionGuard) {
-    const permission = await input.permissionGuard.check({
-      action: "fs.read.outside-userdata",
-      actor: input.actor,
-      resource: input.filePath,
-      context: input.metadata,
-    })
-    if (!permission.allowed) {
-      audit("denied", { ...input.metadata, failureReason: "permission_denied" })
-      return { ok: false, reason: "permission_denied" }
-    }
+  const permission = await input.permissionGuard.check({
+    action: "fs.read.outside-userdata",
+    actor: input.actor,
+    resource: input.filePath,
+    context: input.metadata,
+  })
+  if (!permission.allowed) {
+    audit("denied", { ...input.metadata, failureReason: "permission_denied" })
+    return { ok: false, reason: "permission_denied" }
   }
 
   let info

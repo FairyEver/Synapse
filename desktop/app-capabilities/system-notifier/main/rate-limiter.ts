@@ -42,6 +42,22 @@ export class SystemNotifierRateLimiter {
     return true
   }
 
+  /**
+   * 只看现在还能不能拿到一个 token，不扣任何配额。
+   *
+   * 图片暂存要在读文件、传字节之前问一次：已经会被限流挡掉的调用不该先做一次高权限的
+   * 文件读取。真正扣额度仍由 `trigger` 里的 `acquire` 完成，诊断也仍记在那里。
+   */
+  canAcquire(identityKey: string): boolean {
+    const current = this.now()
+    const identity = this.identities.get(identityKey)
+    const identityTokens = identity
+      ? tokensAfterRefill(identity, current, IDENTITY_CAPACITY, IDENTITY_REFILL_INTERVAL_MS)
+      : IDENTITY_CAPACITY
+    return identityTokens >= 1
+      && tokensAfterRefill(this.global, current, GLOBAL_CAPACITY, GLOBAL_REFILL_INTERVAL_MS) >= 1
+  }
+
   clear(): void {
     this.identities.clear()
     const current = this.now()
@@ -58,9 +74,14 @@ export class SystemNotifierRateLimiter {
 }
 
 function refill(bucket: TokenBucket, now: number, capacity: number, intervalMs: number): void {
-  const elapsed = Math.max(0, now - bucket.lastRefillAt)
-  bucket.tokens = Math.min(capacity, bucket.tokens + elapsed / intervalMs)
+  bucket.tokens = tokensAfterRefill(bucket, now, capacity, intervalMs)
   bucket.lastRefillAt = now
+}
+
+/** 只算不写：`canAcquire` 不能因为被问了一次就替调用方把时间推进。 */
+function tokensAfterRefill(bucket: TokenBucket, now: number, capacity: number, intervalMs: number): number {
+  const elapsed = Math.max(0, now - bucket.lastRefillAt)
+  return Math.min(capacity, bucket.tokens + elapsed / intervalMs)
 }
 
 function monotonicNow(): number {

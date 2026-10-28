@@ -5,6 +5,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest"
 import type { DataNamespace } from "../../../../electron/runtime/data-repo"
 import type { SystemNotifierSettingsEntryV3 } from "../../../../electron/runtime/data-repo/schemas/system-notifier"
 import { validateSystemNotificationInput } from "../../shared/schema"
+import { SystemNotifierRateLimiter } from "../rate-limiter"
 import {
   SystemNotifierService,
   systemNotificationAccountWrite,
@@ -498,6 +499,76 @@ describe("SystemNotifierService", () => {
     )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "permission_denied" } })
 
     expect(uploadImage).not.toHaveBeenCalled()
+  })
+
+  it("does not read or upload the image when the caller is already out of rate budget", async () => {
+    const settings = settingsNamespace({ ...activeSettings })
+    const check = vi.fn(async () => ({ allowed: true }))
+    const uploadImage = vi.fn(async () => ({ status: "uploaded" as const, imageId: "img-1" }))
+    const limiter = new SystemNotifierRateLimiter(() => 0)
+    for (let index = 0; index < 5; index++) expect(limiter.acquire("k")).toBe(true)
+    const service = new SystemNotifierService(logger(), limiter)
+    await service.initialize({
+      settings: settings.port,
+      permissionGuard: { check } as never,
+      auditSink: { record: vi.fn() } as never,
+      uploadImage,
+    })
+    // 路径不存在：真的去读就会失败。返回成功但不带 imageId，说明文件与上传都没发生；
+    // 限流诊断留给紧接着的 `trigger`。
+    await expect(service.prepare(
+      { title: "图", body: "看图", imagePath: "/nonexistent/limited.png" },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )).resolves.toEqual({ ok: true, data: { title: "图", body: "看图" } })
+    expect(check).not.toHaveBeenCalled()
+    expect(uploadImage).not.toHaveBeenCalled()
+  })
+
+  it("refuses an image when this build has no upload port", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "notify-prepare-"))
+    const file = path.join(dir, "a.png")
+    await writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    const check = vi.fn(async () => ({ allowed: true }))
+    const service = new SystemNotifierService(logger())
+    await service.initialize({
+      settings: settingsNamespace({ ...activeSettings }).port,
+      permissionGuard: { check } as never,
+      auditSink: { record: vi.fn() } as never,
+    })
+    await expect(service.prepare(
+      { title: "图", body: "看图", imagePath: file },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "service_outdated" } })
+    // 旧装配缺的是上传通道，不是授权：在碰文件之前就拒绝。
+    expect(check).not.toHaveBeenCalled()
+  })
+
+  it("records the disabled diagnostic once for an image notification that is switched off", async () => {
+    const settings = settingsNamespace({ ...activeSettings, sendEnabled: false })
+    const logs = logger()
+    let clock = 0
+    const service = new SystemNotifierService(logs, undefined, () => {
+      const value = clock
+      clock += 60_000
+      return value
+    })
+    await service.initialize({
+      settings: settings.port,
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true })) } as never,
+      auditSink: { record: vi.fn() } as never,
+    })
+    const prepared = await service.prepare(
+      { title: "图", body: "看图", imagePath: "/nonexistent/disabled.png" },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )
+    if (!prepared.ok) throw new Error("expected a prepared notification")
+    service.trigger(prepared.data, { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" })
+    expect(logs.warn).toHaveBeenCalledTimes(1)
+    expect(logs.warn).toHaveBeenCalledWith("System notifier diagnostic summary.", {
+      stage: "notification_sync",
+      reason: "disabled",
+      count: 1,
+    })
   })
 
   it("skips the file entirely when sending is switched off", async () => {

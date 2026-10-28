@@ -28,6 +28,21 @@ describe("SystemNotifierRateLimiter", () => {
     expect(limiter.acquire("global-blocked")).toBe(true)
   })
 
+  it("answers capacity checks without consuming or refilling either bucket", () => {
+    let now = 0
+    const limiter = new SystemNotifierRateLimiter(() => now)
+    for (let index = 0; index < 5; index++) expect(limiter.acquire("caller")).toBe(true)
+    expect(limiter.canAcquire("caller")).toBe(false)
+    // 反复问不应把桶推进到可以再次拿 token，也不应扣掉任何人的 token。
+    for (let index = 0; index < 10; index++) expect(limiter.canAcquire("caller")).toBe(false)
+    expect(limiter.acquire("caller")).toBe(false)
+    now = 10_000
+    expect(limiter.canAcquire("caller")).toBe(true)
+    expect(limiter.canAcquire("caller")).toBe(true)
+    expect(limiter.acquire("caller")).toBe(true)
+    expect(limiter.acquire("caller")).toBe(false)
+  })
+
   it("removes identities lazily after ten idle minutes", () => {
     let now = 0
     const limiter = new SystemNotifierRateLimiter(() => now)

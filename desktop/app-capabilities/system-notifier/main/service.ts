@@ -180,23 +180,31 @@ export class SystemNotifierService {
     if (input.imagePath === undefined) return { ok: true, data: input }
     const settings = this.snapshot
     if (settings?.sendEnabled !== true) {
-      this.diagnostics.record("notification_sync", "disabled")
+      // 不在这里记诊断：紧接着的 `trigger` 本来就会记同一条，重复计数会把「关着」说成两倍。
       return { ok: true, data: withoutImagePath(input) }
     }
+    // 已经被限流挡掉的调用不会真的发出任何东西，也就不该先读文件、上传字节。
+    // 真正的扣额度与 `rate_limit` 诊断留给 `trigger`。
+    if (!this.limiter.canAcquire(context.identityKey)) return { ok: true, data: withoutImagePath(input) }
     // 读 userData 外的文件并把字节发出去，是这条链路上唯一的高权限动作：守卫与审计缺一不可。
     // 装配缺失时宁可拒绝图片，也不能在没有授权和留痕的情况下读调用方给的路径。
-    if (!this.permissionGuard || !this.auditSink) return invalidImage("permission_denied")
+    const permissionGuard = this.permissionGuard
+    const auditSink = this.auditSink
+    if (!permissionGuard || !auditSink) return invalidImage("permission_denied")
+    // 没有上传通道 = 这个桌面构建无法把图片交给服务端。静默只发正文会让调用方以为图到了。
+    const uploadImage = this.uploadImage
+    if (!uploadImage) return invalidImage("service_outdated")
     const read = await readNotificationImageFile({
       filePath: input.imagePath,
       actor: context.actor,
-      permissionGuard: this.permissionGuard,
-      auditSink: this.auditSink,
+      permissionGuard,
+      auditSink,
       metadata: { source: context.source, capabilityAction: SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID },
     })
     if (!read.ok) return invalidImage(read.reason)
-    const uploaded = await this.uploadImage?.({ bytes: read.bytes, mimeType: read.mimeType })
-    if (!uploaded || uploaded.status === "failed" || uploaded.status === "not_signed_in" || uploaded.status === "offline") {
-      this.diagnostics.record("notification_sync", uploaded?.status ?? "sync_failed")
+    const uploaded = await uploadImage({ bytes: read.bytes, mimeType: read.mimeType })
+    if (uploaded.status === "failed" || uploaded.status === "not_signed_in" || uploaded.status === "offline") {
+      this.diagnostics.record("notification_sync", uploaded.status)
       return { ok: true, data: withoutImagePath(input) }
     }
     if (uploaded.status === "service_outdated") return invalidImage("service_outdated")

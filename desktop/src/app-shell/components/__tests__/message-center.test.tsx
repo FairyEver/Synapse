@@ -28,7 +28,8 @@ const mockCenter = vi.hoisted(() => ({
   openApiGuide: vi.fn(), remove: vi.fn(), markAllRead: vi.fn(), setRead: vi.fn(),
   deleteAll: vi.fn(), loadMore: vi.fn(), refresh: vi.fn(), retryMail: vi.fn(), closeDetail: vi.fn(),
   loadMailForReply: vi.fn(), refreshAfterQuickReply: vi.fn(), accountId: "reader",
-  openNotificationImage: vi.fn(),
+  imagePreview: null as string | null, imageViewerOpen: false,
+  openNotificationImage: vi.fn(), ensureNotificationImage: vi.fn(async () => true),
 }))
 
 const initialSelected = mockCenter.selected
@@ -60,6 +61,9 @@ afterEach(() => {
   mockCenter.accountId = "reader"
   mockCenter.selected = initialSelected
   mockCenter.openNotificationImage.mockClear()
+  mockCenter.ensureNotificationImage.mockClear()
+  mockCenter.imagePreview = null
+  mockCenter.imageViewerOpen = false
 })
 
 describe("MessageCenter", () => {
@@ -327,6 +331,29 @@ describe("MessageCenter", () => {
       expect(button).toBeTruthy()
       act(() => button!.dispatchEvent(new MouseEvent("click", { bubbles: true })))
       expect(mockCenter.openNotificationImage).toHaveBeenCalledWith(expect.objectContaining({ id: "n1" }))
+    } finally {
+      await act(async () => { root.unmount() })
+    }
+  })
+
+  it("shows the image itself as a detail thumbnail next to the view action", async () => {
+    mockCenter.selected = {
+      ...mockCenter.selected,
+      source: "system-notifier",
+      title: "图片通知",
+      body: "看图",
+      targetId: null,
+      image: { id: "img-1", mimeType: "image/png", byteSize: 8 },
+    } as SynapseNotification
+    mockCenter.imagePreview = "blob:preview"
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => { root.render(<MessageCenter />) })
+      expect(document.querySelector('img[src="blob:preview"]')).toBeTruthy()
+      expect([...document.querySelectorAll("button")].some((item) => item.textContent === "查看图片")).toBe(true)
+      expect(mockCenter.ensureNotificationImage).toHaveBeenCalledWith(expect.objectContaining({ id: "n1" }))
     } finally {
       await act(async () => { root.unmount() })
     }

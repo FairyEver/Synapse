@@ -45,9 +45,12 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageViewerOpen, setImageViewerOpen] = useState(false)
   const refreshId = useRef(0)
   const pendingDeletes = useRef(new Map<string, number>())
   const imagePreviewRef = useRef<string | null>(null)
+  /** 当前这个 object URL 属于哪条通知。详情换一条时必须重新取，不能拿上一条的图顶替。 */
+  const imagePreviewFor = useRef<string | null>(null)
   const imageRequestId = useRef(0)
 
   const replaceImagePreview = useCallback((next: string | null) => {
@@ -57,32 +60,58 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     setImagePreview(next)
   }, [])
 
-  const closeImagePreview = useCallback(() => {
+  const clearNotificationImage = useCallback(() => {
     imageRequestId.current += 1
+    imagePreviewFor.current = null
+    setImageViewerOpen(false)
     replaceImagePreview(null)
   }, [replaceImagePreview])
 
-  const openNotificationImage = useCallback(async (item: SynapseNotification) => {
-    if (!item.image) return
+  /** 关闭全屏查看器。缩略图仍留在详情里，所以这里不回收 object URL。 */
+  const closeImagePreview = useCallback(() => {
+    setImageViewerOpen(false)
+  }, [])
+
+  /**
+   * 按通知取图并放到详情可见的 object URL 上。返回是否可用。
+   *
+   * 同一张图只下载一次：详情里先画缩略图、再点「查看图片」，不该为同一份字节走两趟 IPC。
+   */
+  const loadNotificationImage = useCallback(async (item: SynapseNotification): Promise<boolean> => {
+    if (!item.image) return false
+    if (imagePreviewFor.current === item.id && imagePreviewRef.current) return true
     const requestId = ++imageRequestId.current
     const expectedIdentity = identityRef.current
     try {
       const { mimeType, bytes } = await requireBridgeDomain("account").notifications.image({ id: item.id })
-      if (requestId !== imageRequestId.current || identityRef.current !== expectedIdentity) return
+      if (requestId !== imageRequestId.current || identityRef.current !== expectedIdentity) return false
+      imagePreviewFor.current = item.id
       replaceImagePreview(URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType })))
+      return true
     } catch (cause) {
-      if (requestId !== imageRequestId.current) return
+      if (requestId !== imageRequestId.current) return false
       logger.warn("Notification image could not be loaded.", { cause })
       setError("图片加载失败")
+      return false
     }
   }, [replaceImagePreview])
 
+  const openNotificationImage = useCallback(async (item: SynapseNotification) => {
+    if (await loadNotificationImage(item)) setImageViewerOpen(true)
+  }, [loadNotificationImage])
+
   useEffect(() => {
-    closeImagePreview()
-  }, [closeImagePreview, userId])
+    clearNotificationImage()
+  }, [clearNotificationImage, userId])
+
+  // 换一条通知就丢掉上一条的图：object URL 属于那条记录，不能跨记录复用。
+  useEffect(() => {
+    clearNotificationImage()
+  }, [clearNotificationImage, selected?.id])
 
   useEffect(() => () => {
     imageRequestId.current += 1
+    imagePreviewFor.current = null
     if (!imagePreviewRef.current) return
     URL.revokeObjectURL(imagePreviewRef.current)
     imagePreviewRef.current = null
@@ -380,7 +409,7 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     open, filter, source, items: items.filter((item) => !hiddenIds.has(item.id)), cursor,
     unread: Math.max(0, unread - items.filter((item) => hiddenIds.has(item.id) && !item.readAt).length),
     selected, mail, mailLoading, mailError, loading, error,
-    imagePreview, closeImagePreview, openNotificationImage,
+    imagePreview, imageViewerOpen, closeImagePreview, openNotificationImage, ensureNotificationImage: loadNotificationImage,
     changeOpen, changeFilter, changeSource, openItem, navigate, openApiGuide, remove, markAllRead, setRead, deleteAll, loadMore, refresh,
     retryMail: () => setMailRevision((value) => value + 1),
     loadMailForReply, refreshAfterQuickReply,
