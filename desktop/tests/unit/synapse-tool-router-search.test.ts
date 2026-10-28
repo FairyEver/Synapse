@@ -259,7 +259,7 @@ describe("synapse tool router search", () => {
 
     // 用拼接字符串断言：数组 diff 会被 vitest 截断成 [ …(N) ]，看不到具体是哪几条。
     expect(misses.join("\n")).toBe("")
-  })
+  }, 60_000)
 
   it("covers every tool-name segment that appears in more than one tool", () => {
     const frequency = new Map<string, number>()

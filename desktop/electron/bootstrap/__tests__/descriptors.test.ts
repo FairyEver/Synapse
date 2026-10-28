@@ -282,7 +282,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       id: "core.system-notifier.integration",
       criticality: "degraded",
       dependsOn: ["core.system-notifier"],
-      startAfter: ["core.data-repository", "core.audit-sink"],
+      startAfter: ["core.data-repository", "core.audit-sink", "core.permission-guard"],
     })
   })
 
@@ -313,6 +313,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       settings,
       auditSink,
       sync: expect.any(Function),
+      uploadImage: expect.any(Function),
+      permissionGuard: undefined,
       adapter: expect.objectContaining({ kind: "noop" }),
     })
   })
@@ -345,6 +347,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       settings: undefined,
       auditSink: undefined,
       sync: expect.any(Function),
+      uploadImage: expect.any(Function),
+      permissionGuard: undefined,
       adapter: expect.objectContaining({ kind: "noop" }),
     })
   })

@@ -265,6 +265,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.system-notifier.integration")?.startAfter).toEqual([
       "core.data-repository",
       "core.audit-sink",
+      "core.permission-guard",
     ])
     expect(byId.get("core.json-repair")?.dependsOn).toEqual([])
     expect(byId.get("core.json-repair")?.startAfter).toEqual(["core.audit-sink"])
