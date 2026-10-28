@@ -417,6 +417,7 @@ describe("SystemNotifierService", () => {
     await service.initialize({
       settings: settingsNamespace({ ...activeSettings }).port,
       permissionGuard: { check: vi.fn(async () => ({ allowed: true })) } as never,
+      auditSink: { record: vi.fn() } as never,
       uploadImage,
       sync: vi.fn(async () => "sent" as const),
     })
@@ -424,8 +425,10 @@ describe("SystemNotifierService", () => {
       { title: "图", body: "看图", imagePath: file },
       { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
     )
-    expect(result).toMatchObject({ ok: true, data: { imageId: "img-1" } })
-    const write = systemNotificationAccountWrite(result.ok ? result.data : { title: "", body: "" })
+    if (!result.ok) throw new Error("expected image staging to succeed")
+    expect(result.data).toMatchObject({ imageId: "img-1" })
+    expect(result.data).not.toHaveProperty("imagePath")
+    const write = systemNotificationAccountWrite(result.data)
     expect(write).toMatchObject({ imageId: "img-1" })
     expect(write).not.toHaveProperty("imagePath")
     expect(JSON.stringify(uploadImage.mock.calls)).not.toContain(file)
@@ -439,6 +442,7 @@ describe("SystemNotifierService", () => {
     await denied.initialize({
       settings: settingsNamespace({ ...activeSettings }).port,
       permissionGuard: { check: vi.fn(async () => ({ allowed: false, reason: "policy" })) } as never,
+      auditSink: { record: vi.fn() } as never,
       uploadImage: async () => ({ status: "service_outdated" }),
     })
     await expect(denied.prepare(
@@ -450,12 +454,69 @@ describe("SystemNotifierService", () => {
     await outdated.initialize({
       settings: settingsNamespace({ ...activeSettings }).port,
       permissionGuard: { check: vi.fn(async () => ({ allowed: true })) } as never,
+      auditSink: { record: vi.fn() } as never,
       uploadImage: async () => ({ status: "service_outdated" }),
     })
     await expect(outdated.prepare(
       { title: "图", body: "看图", imagePath: file },
       { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
     )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "service_outdated" } })
+  })
+
+  it("fails closed on image staging when the permission guard or the audit sink is missing", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "notify-prepare-"))
+    const file = path.join(dir, "a.png")
+    await writeFile(file, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    const prepareContext = {
+      source: "mcp-http",
+      actor: { kind: "agent", id: "a1" } as const,
+      identityKey: "k",
+    }
+    const uploadImage = vi.fn(async () => ({ status: "uploaded" as const, imageId: "img-1" }))
+
+    // 守卫与审计是这条路径唯一的授权与留痕：缺任一个都不读文件、不上传字节。
+    const withoutGuard = new SystemNotifierService(logger())
+    await withoutGuard.initialize({
+      settings: settingsNamespace({ ...activeSettings }).port,
+      auditSink: { record: vi.fn() } as never,
+      uploadImage,
+    })
+    await expect(withoutGuard.prepare(
+      { title: "图", body: "看图", imagePath: file },
+      prepareContext,
+    )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "permission_denied" } })
+
+    const withoutSink = new SystemNotifierService(logger())
+    await withoutSink.initialize({
+      settings: settingsNamespace({ ...activeSettings }).port,
+      permissionGuard: { check: vi.fn(async () => ({ allowed: true })) } as never,
+      uploadImage,
+    })
+    await expect(withoutSink.prepare(
+      { title: "图", body: "看图", imagePath: file },
+      prepareContext,
+    )).resolves.toMatchObject({ ok: false, data: { field: "imagePath", reason: "permission_denied" } })
+
+    expect(uploadImage).not.toHaveBeenCalled()
+  })
+
+  it("skips the file entirely when sending is switched off", async () => {
+    const settings = settingsNamespace({ ...activeSettings, sendEnabled: false })
+    const check = vi.fn(async () => ({ allowed: true }))
+    const record = vi.fn()
+    const service = new SystemNotifierService(logger())
+    await service.initialize({
+      settings: settings.port,
+      permissionGuard: { check } as never,
+      auditSink: { record } as never,
+    })
+    // 路径不存在：一旦真的去读就会失败，所以这条断言同时钉住「设置闸在文件之前」。
+    await expect(service.prepare(
+      { title: "图", body: "看图", imagePath: "/nonexistent/notify-gate.png" },
+      { source: "mcp-http", actor: { kind: "agent", id: "a1" }, identityKey: "k" },
+    )).resolves.toEqual({ ok: true, data: { title: "图", body: "看图" } })
+    expect(check).not.toHaveBeenCalled()
+    expect(record).not.toHaveBeenCalled()
   })
 })
 

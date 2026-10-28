@@ -183,6 +183,9 @@ export class SystemNotifierService {
       this.diagnostics.record("notification_sync", "disabled")
       return { ok: true, data: withoutImagePath(input) }
     }
+    // 读 userData 外的文件并把字节发出去，是这条链路上唯一的高权限动作：守卫与审计缺一不可。
+    // 装配缺失时宁可拒绝图片，也不能在没有授权和留痕的情况下读调用方给的路径。
+    if (!this.permissionGuard || !this.auditSink) return invalidImage("permission_denied")
     const read = await readNotificationImageFile({
       filePath: input.imagePath,
       actor: context.actor,

@@ -76,5 +76,28 @@ describe("system notifier dispatcher", () => {
       { source: "mcp-http" },
     )
     expect(order).toEqual(["prepare", "trigger"])
+    // 只钉顺序不够：把暂存结果丢掉、直接拿校验输入去 trigger 的实现同样有序。
+    expect(trigger).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "图", body: "看图", imageId: "img-1" }),
+      expect.anything(),
+    )
+  })
+
+  it("does not trigger when preparation is rejected", async () => {
+    const rejection = {
+      ok: false as const,
+      code: "INVALID_INPUT" as const,
+      error: "Invalid system notification input." as const,
+      data: { field: "imagePath" as const, reason: "service_outdated" as const },
+    }
+    const prepare = vi.fn(async () => rejection)
+    const trigger = vi.fn(() => ({ success: true as const }))
+    const dispatcher = createSystemNotifierCapabilityDispatcher({ service: { prepare, trigger } })
+    await expect(dispatcher.dispatch(
+      SYSTEM_NOTIFIER_TRIGGER_CAPABILITY_ID,
+      { title: "图", body: "看图", imagePath: "/tmp/a.png" },
+      { source: "mcp-http" },
+    )).resolves.toEqual(rejection)
+    expect(trigger).not.toHaveBeenCalled()
   })
 })
