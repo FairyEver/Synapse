@@ -117,6 +117,8 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 - System Notifier 的触发工具 2026-10-15 起增加可选 `copyOnTap`（布尔，缺省 false）：为真时用户在手机上点这条通知即把正文复制到剪贴板。桌面端另在消息中心详情提供「复制正文」，iOS 端在通知详情提供同一入口，两者对任何通知都可用、不读这个开关。开放 API 的两个请求体形状接受同名布尔，路径式用 `?copyOnTap=1`（只认字面量 `1`）。**MCP 工具数不变（仍 1）**，Workflow 节点仍为 1，Automation Action 与 Deep Link 无新增，三张表的注册数量都不动；能力版本仍为 `1.0.0`。
 
+- 2026-10-28：触发工具增加可选 `imagePath`（本机绝对路径，PNG/JPEG/GIF/WebP，≤10 MB）。图片不进入 APNs payload，桌面读取并上传到平台媒体存储，手机按通知 id 鉴权下载后展示并可保存到相册。**MCP 工具数仍为 1，Workflow 节点仍为 1，三张表数字不变**；开放 API 仍不支持图片。
+
 - Mail 是独立 System App，不默认固定 Dock；桌面与 iOS 都可人工收发、处理附件和批量整理信箱。桌面 IPC 按 `app.mail_internal.<resource>.<action>` 分开并在 preload 中按资源嵌套；本机文件附件另有不注册 MCP 的 UI 专用操作。17 个 MCP 工具包含组织搜索及成员分页、完整历史信箱的人员列表、当前账号可见往来、精确统计、全部已读和批量整理。Synapse Skill 引导 AI 搜索同团队个人或组织、分别确定收件人与抄送人、固定并检查完整预览；用户已授权发送且无疑惑、不确定或确需检查的内容时直接后台发送，仅有待解决问题或用户要求先审阅时取得明确答复。回复与转发遵循同一规则，组织成员在发送时按最新名单展开。当前 `confirmed: true` 是调用者已核对发送授权与预览、无待解决问题的声明，不构成服务端可验证的对话确认凭证。上述发送授权规则不增加 MCP 工具或路由。附件不从云盘复制；转发原信附件由站内信存储自行复制，云盘文件仍以分享链接放入正文。信件查看与下载只允许发件人或该信收件人。唯一跨团队入口是管理员保护的全站平台公告 API，公告进入活跃用户收件箱且只读，不新增 Mail MCP 工具或普通用户发送权限。桌面 `synapse://mail-internal/<message-id>` 与手机同形路由只定位信件，不放宽服务端鉴权。
 
 - Desktop Update / Restart 的 4 个 App MCP 能力为 `app.update.state.get`、`app.update.check.execute`、`app.update.install.execute`、`app.desktop.restart.execute`。后三者的规范 MCP 名称特例缩短为 `app_update_check`、`app_update_run`、`app_desktop_restart`，不是旧工具别名。它们复用桌面更新器与正常退出链路；远程重启保留未同步推送而不弹本机确认框。该入口不注册 System App、Dock、Workflow、Automation 或 Deep Link；与要求短时凭证的公开更新深链互不替代。
