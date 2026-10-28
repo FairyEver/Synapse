@@ -193,15 +193,13 @@
     input::-webkit-search-cancel-button { display: none; }
     .search-box .icon-button { width: 22px; height: 22px; }
     select { height: 32px; background: var(--background); border: 1px solid var(--input); border-radius: var(--radius); padding: 0 24px 0 10px; max-width: 100%; }
-    .result-summary { min-height: 34px; padding: 6px 16px; display: flex; align-items: center; justify-content: space-between; border-block: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; flex-shrink: 0; }
     .history-results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
     .date-heading { padding: 12px 16px 4px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); background: var(--popover); }
     .history-row { padding: 0 16px; }
     .history-row:hover, .history-row:focus-within { background: var(--accent); }
-    .list-columns, .row-main { display: grid; grid-template-columns: 62px minmax(0, 1fr) 80px; align-items: center; gap: 12px; }
-    .list-columns { padding: 8px 16px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12px; }
+    .row-main { display: grid; grid-template-columns: 16px minmax(0, 1fr) 80px; align-items: center; gap: 12px; }
     .row-main { width: 100%; min-height: 44px; padding: 10px 0; text-align: left; }
-    .item-type { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 12px; }
+    .item-type { display: flex; align-items: center; color: var(--muted-foreground); }
     .item-type svg { width: 14px; height: 14px; }
     .item-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .item-author { color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -245,7 +243,7 @@
       .dock-footer { grid-template-columns: 1fr; padding: 0; } .dock { justify-content: center; } .account, .footer-actions { display: none; }
       .topbar-left { flex: 1; } th:nth-child(2), td:nth-child(2) { width: 112px; }
       .search-line { gap: 6px; } .search-line select { width: 104px; }
-      .list-columns, .row-main { grid-template-columns: 52px minmax(0, 1fr) 56px; gap: 8px; }
+      .row-main { grid-template-columns: 16px minmax(0, 1fr) 56px; gap: 8px; }
       .sheet-footer { padding-inline: 12px; } .sheet-footer > span { max-width: 23ch; }
     }
   </style>
@@ -314,8 +312,7 @@
         <select id="kind" aria-label="内容类型"><option value="all">全部类型</option><option value="web">网页</option><option value="doc">文档</option><option value="folder">文件夹</option><option value="other">其他文件</option></select>
       </div>
     </div>
-    <div class="result-summary"><span id="result-count" role="status" aria-live="polite"></span><span>最近浏览优先</span></div>
-    <div class="list-columns" aria-hidden="true"><span>类型</span><span>名称</span><span>用户</span></div>
+    <span class="sr-only" id="result-count" role="status" aria-live="polite"></span>
     <div class="history-results" id="history-results" aria-label="浏览记录"></div>
     <footer class="sheet-footer"><span>仅本人可见</span><div class="actions"><button class="button" id="demo-notes" aria-label="查看原型方案说明">方案说明</button><button class="button" id="clear-history">清空历史</button></div></footer>
     <div class="toast" id="sheet-toast" role="status" hidden></div>
@@ -330,7 +327,7 @@
     <header class="notes-header"><h2 id="notes-title">方案说明</h2><button class="icon-button" id="close-notes" aria-label="关闭方案说明"><svg><use href="#i-close"/></svg></button></header>
     <div class="notes-body">
       <section><h3>顶栏入口 + 右侧抽屉</h3><p>在现有“搜索”旁新增“浏览历史”，继续使用紧凑 ghost 操作。右侧抽屉建议宽 560px，关闭后保留原目录、文件搜索和滚动位置。比居中模态框更适合反复查找链接，也不占用文件导航。</p></section>
-      <section><h3>找回链接</h3><ul><li>顶部仅一个搜索框和一个类型选择。用户直接输入任意关键词，统一匹配标题、链接以及作者名称、昵称、账号和邮箱；不选字段，不设时间范围。大小写与全半角归一，多词共同匹配。</li><li>列表只显示类型、文档名称和用户，按访问时间倒序，并用今天、昨天和日期分组。邮箱和链接参与搜索，不在列表中常驻展示。</li><li>点击整条记录，直接在用户的系统默认浏览器打开原链接。没有中间详情页，也不在桌面内嵌预览。</li><li>浏览历史按每次访问独立保存：昨天和今天打开同一链接，两条记录都保留；同一天重复打开也分别记录。原型已包含跨天和同日重复访问的示例。</li></ul></section>
+      <section><h3>找回链接</h3><ul><li>顶部仅一个搜索框和一个类型选择。用户直接输入任意关键词，统一匹配标题、链接以及作者名称、昵称、账号和邮箱；不选字段，不设时间范围。大小写与全半角归一，多词共同匹配。</li><li>列表只显示类型图标、文档名称和用户，按访问时间倒序，并用今天、昨天和日期分组。不显示记录数量、排序说明、表头和每行类型文字。邮箱和链接参与搜索，不在列表中常驻展示。</li><li>点击整条记录，直接在用户的系统默认浏览器打开原链接。没有中间详情页，也不在桌面内嵌预览。</li><li>浏览历史按每次访问独立保存：昨天和今天打开同一链接，两条记录都保留；同一天重复打开也分别记录。原型已包含跨天和同日重复访问的示例。</li></ul></section>
       <section><h3>记录归属与时机</h3><ul><li>以浏览器当前登录的 Synapse 账号为归属。该账号成功打开别人的云盘分享链接后，新增一条本人的浏览记录；桌面登录同一账号即可查看。</li><li>由网页访问成功后记录，范围包含 /share 分享及其中的具体文件、/sites 页面和 /files 资源。不能只监听桌面点击，也不能使用桌面登录账号替代浏览器访问者账号。</li><li>每次实际打开都是独立访问，不按链接、目标或日期去重，不覆盖旧记录。一次访问的上报重试只防止重复写入同一个访问事件，不能吞掉用户主动再次打开的记录。</li><li>匿名访问、MCP / AI 抓取、页面资源请求和打开失败不记入账号历史。记录只供本人查询，保存访问时的标题、作者和必要链接信息，不保存正文、密码及认证参数。</li><li>作者邮箱仅使用访问者已有权限获取的字段；缺失时不补查私人资料。建议保留至用户删除，先不设自动过期；正式实现的搜索和分页在服务端完成。</li></ul></section>
       <section><h3>权限与失效</h3><p>历史不授予访问权限，每次打开仍校验原分享、有效期与密码。失效链接由浏览器页面展示原因，不在历史列表增加状态字段。离线和加载失败保留搜索词并允许重试。旧浏览记录无法可靠补录，从功能上线后的成功访问开始累积。</p></section>
       <section><h3>演示状态</h3><div class="demo-states"><button class="button outline" data-scenario="normal">有浏览记录</button><button class="button outline" data-scenario="empty">首次使用</button><button class="button outline" data-scenario="loading">加载中</button><button class="button outline" data-scenario="error">加载失败</button><button class="button outline" data-scenario="nomatch">搜索无结果</button></div></section>
@@ -433,7 +430,7 @@
         const kindLabels = { web: '网页', doc: '文档', folder: '文件夹', other: '文件' };
         return `${heading}<article class="history-row" data-record-id="${record.id}">
           <button class="row-main" data-action="open" data-id="${record.id}" aria-label="在默认浏览器打开 ${escapeHtml(record.title)}，用户 ${escapeHtml(author)}" title="${escapeHtml(record.title)}">
-            <span class="item-type">${icon(kindIcons[record.kind])}${kindLabels[record.kind]}</span><span class="item-title">${highlight(record.title, true)}</span><span class="item-author">${highlight(author, true)}</span>
+            <span class="item-type" title="${kindLabels[record.kind]}" aria-label="${kindLabels[record.kind]}">${icon(kindIcons[record.kind])}</span><span class="item-title">${highlight(record.title, true)}</span><span class="item-author">${highlight(author, true)}</span>
           </button></article>`;
       }).join('');
     }
