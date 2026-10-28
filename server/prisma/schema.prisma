@@ -52,6 +52,7 @@ model User {
   webhooks                       UserWebhook[]
   apiKeys                        UserApiKey[]
   notifications                  UserNotification[]
+  notificationImages             NotificationImage[]
   todoItems                      TodoItem[]
   todoMutationReceipts            TodoMutationReceipt[]
   todoReminderDeliveries          TodoReminderDelivery[]
@@ -109,6 +110,8 @@ model UserNotification {
   resolvedAt  DateTime?
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
+  imageId     String?   @unique @db.VarChar(64)
+  image       NotificationImage? @relation(fields: [imageId], references: [id], onDelete: SetNull)
   todoDelivery TodoReminderDelivery?
   driveDiscussionTarget DriveDiscussionNotificationTarget?
   driveDiscussionDelivery DriveDiscussionNotificationDelivery?
@@ -1606,4 +1609,20 @@ model DriveDiscussionNotificationDelivery {
   updatedAt DateTime @updatedAt
   @@index([status, nextAttemptAt, leaseUntil], map: "DriveDiscussionNotificationDelivery_claim_idx")
   @@index([createdAt], map: "DriveDiscussionNotificationDelivery_createdAt_idx")
+}
+
+model NotificationImage {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  objectKey    String   @unique @db.VarChar(200)
+  mimeType     String   @db.VarChar(64)
+  byteSize     Int
+  state        String   @db.VarChar(20)
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime?
+  notification UserNotification?
+
+  @@index([userId])
+  @@index([state, expiresAt])
 }
