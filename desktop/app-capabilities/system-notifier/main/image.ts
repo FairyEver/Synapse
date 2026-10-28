@@ -40,11 +40,11 @@ export async function readNotificationImageFile(input: {
     })
   }
   const fail = (reason: NotificationImageReadFailure): NotificationImageReadResult => {
-    audit("failed", { ...input.metadata, reason })
+    audit("failed", { ...input.metadata, failureReason: reason })
     return { ok: false, reason }
   }
 
-  if (!path.isAbsolute(input.filePath)) return { ok: false, reason: "not_absolute" }
+  if (!path.isAbsolute(input.filePath)) return fail("not_absolute")
 
   if (input.permissionGuard) {
     const permission = await input.permissionGuard.check({
@@ -54,7 +54,7 @@ export async function readNotificationImageFile(input: {
       context: input.metadata,
     })
     if (!permission.allowed) {
-      audit("denied", { ...input.metadata, reason: "permission_denied" })
+      audit("denied", { ...input.metadata, failureReason: "permission_denied" })
       return { ok: false, reason: "permission_denied" }
     }
   }
