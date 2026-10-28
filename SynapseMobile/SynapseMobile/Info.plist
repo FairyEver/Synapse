@@ -145,6 +145,13 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>把刚拍的照片、刚截的图摆在输入栏上方，点一下发到电脑上的终端。</string>
 	<!--
+	  Add-only, and only for one thing: saving the picture a notification carried
+	  into the library. `.addOnly` deliberately cannot read the library, so the
+	  prompt above stays about the one photo it offers above the input bar.
+	-->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于把你查看的图片保存到相册。</string>
+	<!--
 	  The microphone, for three things now: turning speech into text in the terminal
 	  input bar, the sound on a video, and recording. The last one is why this
 	  sentence changed — this prompt is where a user meets recording for the first
