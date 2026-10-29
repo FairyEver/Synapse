@@ -8,8 +8,12 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { formatExactDateTime } from "@/components/relative-time"
+import { cn } from "@/lib/utils"
 import { useDriveBrowsingHistory } from "./use-drive-browsing-history"
 import { DriveSearchHighlight } from "./drive-search-highlight"
+import { formatDriveHistoryVisitTime } from "./drive-history-time"
 
 const icons = { web: Globe, document: FileText, folder: Folder, other: File }
 function groupHistory(items: readonly DriveBrowsingHistoryEntryDto[]) {
@@ -59,7 +63,7 @@ export function DriveBrowsingHistorySheet({ open, accountId, onOpenChange }: { o
               <h3 className="py-3 text-xs font-medium text-muted-foreground">{group.label}</h3>
               <ul className="-mx-2.5">{group.items.map(item => {
                 const Icon = icons[item.kind]
-                return <li key={item.id}><Button variant="ghost" aria-label={`打开 ${item.title}`} aria-description={item.author} className="h-auto min-h-11 w-full justify-start gap-3 py-2.5" onClick={() => { void history.openEntry(item) }}><Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 truncate text-left" title={item.title}><DriveSearchHighlight text={item.title} query={history.query} /></span><span className="w-20 shrink-0 truncate text-left font-normal text-muted-foreground" title={item.author}><DriveSearchHighlight text={item.author} query={history.query} /></span></Button></li>
+                return <li key={item.id}><Button variant="ghost" aria-label={`打开 ${item.title}`} aria-description={item.author} className="h-auto min-h-11 w-full justify-start gap-3 py-2.5" onClick={() => { void history.openEntry(item) }}><Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 flex-1 truncate text-left" title={item.title}><DriveSearchHighlight text={item.title} query={history.query} /></span><span className="w-20 shrink-0 truncate text-left font-normal text-muted-foreground" title={item.author}><DriveSearchHighlight text={item.author} query={history.query} /></span><VisitTime value={item.visitedAt} filtered={filtered} /></Button></li>
               })}</ul>
             </section>)}
             {history.items.length === 0 && <Empty>
@@ -84,6 +88,19 @@ export function DriveBrowsingHistorySheet({ open, accountId, onOpenChange }: { o
       </SheetContent>
     </Sheet>
   )
+}
+
+function VisitTime({ value, filtered }: { value: string; filtered: boolean }) {
+  const date = new Date(value)
+  const exact = Number.isNaN(date.getTime()) ? "-" : formatExactDateTime(date)
+  return <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <time dateTime={Number.isNaN(date.getTime()) ? undefined : date.toISOString()} aria-label={`访问时间 ${exact}`} className={cn("shrink-0 truncate text-right font-normal text-muted-foreground", filtered ? "w-28" : "w-14")}>{formatDriveHistoryVisitTime(value, { filtered })}</time>
+      </TooltipTrigger>
+      <TooltipContent>{exact}</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
 }
 
 function HistoryLoading() {

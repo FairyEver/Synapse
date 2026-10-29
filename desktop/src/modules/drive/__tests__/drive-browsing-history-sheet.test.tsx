@@ -28,6 +28,9 @@ afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi
 it("opens the entire history row in the default browser and confirms before clearing", async () => {
   expect(document.body.textContent).toContain("今天"); expect(document.body.textContent).toContain("author")
   expect(document.body.textContent).not.toContain("https://example.com/share")
+  const visitTime = document.querySelector('button[aria-label="打开 项目文档"] time')
+  expect(visitTime?.textContent).toBe("刚刚")
+  expect(visitTime?.getAttribute("aria-label")).toMatch(/^访问时间 \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u)
   const row = document.querySelector<HTMLButtonElement>('button[aria-label="打开 项目文档"]')!
   await act(async () => row.click()); expect(mocks.open).toHaveBeenCalledWith("https://example.com/share")
   await click("清空历史"); expect(mocks.clear).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("清空全部浏览历史？")
@@ -47,6 +50,7 @@ it("clears only the search words, keeps the selected type and returns focus to t
   const clear = document.querySelector<HTMLButtonElement>('button[aria-label="清除关键词"]')
   expect(clear).toBeTruthy()
   expect(document.querySelector("mark")?.textContent).toBe("项目")
+  expect(document.querySelector('button[aria-label="打开 项目文档"] time')?.textContent).toBe("今天 刚刚")
   await act(async () => { clear!.click(); await vi.advanceTimersByTimeAsync(260) })
   expect(input.value).toBe(""); expect(select.value).toBe("document"); expect(document.activeElement).toBe(input)
   expect(mocks.list).toHaveBeenLastCalledWith({ kind: "document", limit: 50 })
