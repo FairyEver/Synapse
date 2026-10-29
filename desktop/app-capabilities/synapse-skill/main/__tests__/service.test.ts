@@ -272,6 +272,22 @@ describe("SynapseSkillService", () => {
     expect(attachmentNames.filter((name) => /^wecom\/wecomcli-[^/]+\/SKILL\.md$/u.test(name))).toHaveLength(2)
   })
 
+  it("routes third-party reports to host presentation without requiring Synapse business tools", async () => {
+    const skill = await readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8")
+    const description = skill.split("\n").find(line => line.startsWith("description:"))!
+    expect(description).toContain("data analysis reports in a Synapse chat")
+    expect(skill).toContain("Before routing business operations")
+    expect(skill).toContain("regardless of data source")
+    expect(skill).toContain("does not require a Synapse MCP call")
+    expect(skill).toContain("Choose what to visualize and how")
+    expect(skill).toContain("HTML files or webpages")
+    expect(skill).toContain("A generic text-first default is not an explicit plain-text-only request")
+    expect(skill).toContain("explicit plain-text or Markdown-only")
+    expect(skill).toContain("reference length alone")
+    expect(skill).toContain("Outside a host that provides OpenUI")
+    expect(skill).not.toContain("use a line chart for a time series")
+  })
+
   it("documents local Skill authoring without taking over Synapse publishing", async () => {
     const [skillRoot, authoringGuide] = await Promise.all([
       readFile(path.join(systemPackageRoot, "SKILL.md"), "utf8"),

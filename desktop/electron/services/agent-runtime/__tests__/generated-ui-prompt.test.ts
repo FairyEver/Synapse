@@ -25,11 +25,22 @@ describe("OpenUI host prompt", () => {
     for (const prompt of [appendGeneratedUiPrompt(undefined, "/app/reference.md"), appendGeneratedUiPrompt(undefined)]) {
       const text = (prompt as { append: string }).append
       expect(text).toContain("without an explicit chart request")
-      expect(text).toContain("time series")
+      expect(text).toContain("regardless of data source")
+      expect(text).toContain("Choose what to visualize and how")
       expect(text).toContain("exact values")
       expect(text).toContain("missing")
       expect(text).toContain("user's requested output format")
+      expect(text).toContain("HTML files or webpages")
+      expect(text).toContain("A generic text-first default is not an explicit plain-text-only request")
+      expect(text).toContain("explicit plain-text or Markdown-only")
+      expect(text).not.toContain("default to an OpenUI line chart")
+      expect(text).not.toContain("For meaningful category comparisons or rankings use bars")
     }
+  })
+  it("does not require a business Skill or MCP call to apply chat presentation guidance", () => {
+    const text = (appendGeneratedUiPrompt(undefined, "/app/reference.md") as { append: string }).append
+    expect(text).toContain("even when synapse-skill was not loaded")
+    expect(text).toContain("reference length alone")
   })
   it("falls back when the reference is absent or Read is excluded", async () => {
     expect(await resolveGeneratedUiReferencePath("/missing-openui-reference.md", undefined, [])).toBeUndefined()

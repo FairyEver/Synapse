@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-29 OpenUI 报告展示：系统 Skill 增加聊天内第三方分析报告入口，宿主完整/按需提示同步区分网页生成与聊天 UI，由 AI 决定展示形式。仅调整指引，不新增注册表面；343 项全局 capability、339 项 MCP 索引、22 个 System App 及 Dock、Workflow、Automation、Deep Link、IPC 数量不变。
+
 - 2026-10-28 云盘浏览历史：新增 2 项 UI 私有 IPC `app.drive.browsing_history.list`、`app.drive.browsing_history.clear`，preload 为 `drive.browsingHistory.list/clear`；只读取与清空当前认证账号的历史，不注册 capability 或 MCP 工具。历史默认浏览器打开复用既有受控外链；Drive 仍为 76 个 MCP 工具，全局 capability / MCP 索引及 System App、Dock、Workflow、Automation、Deep Link 数量不变。系统 Skill 标明浏览历史不属于 MCP 表面。
 
 - 2026-10-25 审查修复：邮箱工具栏补齐当前范围的未读筛选，复用 `message.list` / `search.start` 的现有条件。发送副本明确失败时可复用原 `message.send` 请求安全补存；未知结果继续只读核验。同步 MCP 描述及系统 Skill。44 项邮箱动作、343 项全局 capability、339 项 MCP 索引、22 个 System App 与全部 IPC/注册数量不变。

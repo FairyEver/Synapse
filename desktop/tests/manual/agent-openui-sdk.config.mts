@@ -8,5 +8,5 @@ const root = fileURLToPath(new URL("../../", import.meta.url))
 export default defineConfig({
   root,
   resolve: { alias: { "@": path.join(root, "src") } },
-  test: { environment: "jsdom", include: ["tests/manual/agent-openui-sdk.test.mjs"], testTimeout: 180_000 },
+  test: { environment: "jsdom", include: ["tests/manual/agent-openui-sdk.test.mjs", "tests/manual/agent-openui-report.test.mjs"], testTimeout: 180_000 },
 })
