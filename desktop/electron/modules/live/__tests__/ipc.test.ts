@@ -1,22 +1,12 @@
-import os from "node:os"
-import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
-vi.mock("electron", () => ({
-  app: {
-    getPath: (name: string) => path.join(os.tmpdir(), `synapse-live-${name}`),
-    getAppPath: () => path.join(os.tmpdir(), "synapse-live-app"),
-    getName: () => "synapse-test",
-    getVersion: () => "0.0.0-test",
-    isPackaged: false,
-  },
-  safeStorage: {
-    isEncryptionAvailable: () => true,
-    encryptString: (plaintext: string) => Buffer.from(plaintext, "utf8"),
-    decryptString: (cipher: Buffer) => cipher.toString("utf8"),
-  },
-  shell: {
-    openExternal: vi.fn().mockResolvedValue(undefined),
+// Schema tests must not start the real services' asynchronous protocol imports.
+vi.mock("../../../services/live-connection-service-instance", () => ({
+  liveConnectionService: {
+    getDeviceSettings: vi.fn(),
+    setDeviceName: vi.fn(),
+    getState: vi.fn(),
+    retryNow: vi.fn(),
   },
 }))
 
