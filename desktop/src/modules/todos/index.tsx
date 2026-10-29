@@ -14,6 +14,7 @@ import { useTodoEditor } from "./use-todo-editor"
 import { useTodoTarget } from "./use-todo-target"
 import { TodoList } from "./todo-list"
 import { TodoEditor } from "./todo-editor"
+import { TodoDetail } from "./todo-detail"
 import { todoErrorMessage } from "./todo-state"
 
 const tabs = [{ id: "pending" as const, label: "未完成" }, { id: "all" as const, label: "全部" }]
@@ -21,14 +22,19 @@ export function TodosModule({ openRequest, onOpenRequestConsumed }: { openReques
   const { startLogin } = useAccount()
   const todos = useTodos()
   const editor = useTodoEditor({ generation: todos.generation, online: todos.online, onSaved: todos.refresh })
+  const [detail, setDetail] = useState<{ item: TodoItemDto; generation: number } | null>(null)
+  const showDetail = useCallback((item: TodoItemDto) => setDetail({ item, generation: todos.generation }), [todos.generation])
+  const listedDetail = todos.items.find((item) => item.id === detail?.item.id)
+  const detailItem = todos.authenticated && detail?.generation === todos.generation ? (listedDetail && listedDetail.version >= detail.item.version ? listedDetail : detail.item) : null
   const [deleting, setDeleting] = useState<TodoItemDto | null>(null), [deleteBusy, setDeleteBusy] = useState(false)
   const deleteLock = useRef(false), currentGeneration = useRef(todos.generation), deletingGeneration = useRef(todos.generation)
   currentGeneration.current = todos.generation
   const selectAll = useCallback(() => todos.setFilter("all"), [todos.setFilter])
-  const target = useTodoTarget({ request: openRequest, ready: todos.authenticated, generation: todos.generation, blocked: !!editor.draft || editor.saving, open: editor.open, selectAll, consumed: onOpenRequestConsumed })
-  useEffect(() => { deleteLock.current = false; setDeleting(null); setDeleteBusy(false) }, [todos.generation])
-  const create = () => { target.cancel(); editor.open() }
-  const open = (item: TodoItemDto) => { target.cancel(); editor.open(item) }
+  const target = useTodoTarget({ request: openRequest, ready: todos.authenticated, generation: todos.generation, blocked: !!editor.draft || editor.saving, open: showDetail, selectAll, consumed: onOpenRequestConsumed })
+  useEffect(() => { setDetail(null); deleteLock.current = false; setDeleting(null); setDeleteBusy(false) }, [todos.generation])
+  const create = () => { target.cancel(); setDetail(null); editor.open() }
+  const open = (item: TodoItemDto) => { target.cancel(); showDetail(item) }
+  const edit = (item: TodoItemDto) => { target.cancel(); setDetail(null); editor.open(item) }
   const complete = async (item: TodoItemDto) => { target.cancel(); try { await todos.setCompleted(item, !item.completedAt) } catch (cause) { toast.error(todoErrorMessage(cause)) } }
   const remove = async () => { if (!deleting || deleteLock.current) return; const identity = todos.generation; deleteLock.current = true; setDeleteBusy(true); try { await todos.remove(deleting); if (currentGeneration.current === identity) setDeleting(null) } catch (cause) { if (currentGeneration.current === identity) toast.error(todoErrorMessage(cause)) } finally { if (currentGeneration.current === identity) { deleteLock.current = false; setDeleteBusy(false) } } }
   const copy = async (item: TodoItemDto) => { try { await navigator.clipboard.writeText(`synapse://todos/${item.id}`); toast("ID 已复制") } catch { toast.error("复制失败") } }
@@ -38,9 +44,10 @@ export function TodosModule({ openRequest, onOpenRequestConsumed }: { openReques
       {!todos.authenticated ? <div className="flex items-center gap-3 text-sm"><span>登录后查看待办事项</span><Button type="button" onClick={() => void startLogin()}>登录</Button></div> : <>
         {(todos.error || target.error || !todos.online) && <div role="alert" className="flex items-center justify-between gap-3 text-sm text-destructive"><span>{target.error ?? todos.error ?? "连接失败，请重试"}</span><Button type="button" variant="outline" onClick={() => void (target.error ? target.retry() : todos.refresh())} disabled={todos.loading}>重试</Button></div>}
         {todos.undo && <div role="status" className="flex items-center justify-between gap-3 text-sm"><span>已完成</span><Button type="button" variant="ghost" onClick={() => void undo()} disabled={!todos.online}>撤销</Button></div>}
-        <TodoList emptyTitle={todos.filter === "all" ? "没有待办事项" : "没有未完成事项"} items={todos.items} loading={todos.loading} error={todos.error} more={todos.nextOffset !== null} disabled={!todos.online} writingIds={todos.writingIds} onNew={create} onOpen={open} onComplete={(item) => void complete(item)} onDelete={(item) => { target.cancel(); deletingGeneration.current = todos.generation; setDeleting(item) }} onCopy={(item) => void copy(item)} onMore={() => void todos.loadMore()} />
+        <TodoList emptyTitle={todos.filter === "all" ? "没有待办事项" : "没有未完成事项"} items={todos.items} loading={todos.loading} error={todos.error} more={todos.nextOffset !== null} disabled={!todos.online} writingIds={todos.writingIds} onNew={create} onOpen={open} onEdit={edit} onComplete={(item) => void complete(item)} onDelete={(item) => { target.cancel(); deletingGeneration.current = todos.generation; setDeleting(item) }} onCopy={(item) => void copy(item)} onMore={() => void todos.loadMore()} />
       </>}
     </div></ScrollArea>
+    <TodoDetail item={detailItem} disabled={!todos.online || !!detailItem && todos.writingIds.has(detailItem.id)} onClose={() => setDetail(null)} onEdit={edit} />
     <TodoEditor editor={editor} online={todos.online} />
     <AlertDialog open={!!deleting && deletingGeneration.current === todos.generation} onOpenChange={(open) => { if (!open && !deleteBusy) setDeleting(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除待办？</AlertDialogTitle><AlertDialogDescription>{deleting?.title}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={deleteBusy}>取消</AlertDialogCancel><Button type="button" variant="destructive" onClick={() => void remove()} disabled={deleteBusy || !todos.online}>{deleteBusy ? "删除中" : "删除"}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </SystemAppWindowShell>

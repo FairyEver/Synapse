@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { formatTodoInstant } from "./todo-time"
 
-export function TodoRow({ item, disabled, onOpen, onComplete, onDelete, onCopy }: { item: TodoItemDto; disabled: boolean; onOpen: () => void; onComplete: () => void; onDelete: () => void; onCopy: () => void }) {
+export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, onCopy }: { item: TodoItemDto; disabled: boolean; onOpen: () => void; onEdit: () => void; onComplete: () => void; onDelete: () => void; onCopy: () => void }) {
   const overdue = !item.completedAt && !!item.dueAt && new Date(item.dueAt).getTime() < Date.now()
   const handleOpen = (event: MouseEvent<HTMLButtonElement>) => {
     const selection = event.currentTarget.ownerDocument.getSelection()
@@ -26,7 +26,7 @@ export function TodoRow({ item, disabled, onOpen, onComplete, onDelete, onCopy }
     </button>
     <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" data-track="todos.menu" aria-label={`${item.title}的操作`} disabled={disabled}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
       <DropdownMenuGroup>
-        <DropdownMenuItem data-track="todos.edit" onSelect={onOpen}>编辑</DropdownMenuItem>
+        <DropdownMenuItem data-track="todos.edit" onSelect={onEdit}>编辑</DropdownMenuItem>
         <DropdownMenuItem data-track="todos.complete" onSelect={onComplete}>{item.completedAt ? "恢复" : "完成"}</DropdownMenuItem>
         <DropdownMenuItem data-track="todos.copy" onSelect={onCopy}>复制 ID</DropdownMenuItem>
         <DropdownMenuItem data-track="todos.delete" variant="destructive" onSelect={onDelete}>删除</DropdownMenuItem>

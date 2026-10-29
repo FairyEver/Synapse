@@ -3,6 +3,7 @@ import { act } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { mocks, mount, flush, item, deferred } from "./harness"
 import { TodosModule } from "../index"
+import { EmbeddedSystemAppShell } from "../../apps/components/embedded-system-app-shell"
 vi.mock("@/components/ui/scroll-area", () => ({ ScrollArea: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
 afterEach(() => window.getSelection()?.removeAllRanges())
 
@@ -15,6 +16,70 @@ function selectText(start: Node, end: Node = start) {
 }
 
 describe("Todo visible actions", () => {
+  it.each(["window", "dock", "launcher"] as const)("opens read-only details in %s with the complete note and edits only on request", async (host) => {
+    const note = "背景：升级评估已完成\n验收：核对所有业务入口"
+    mocks.list.mockResolvedValue({ items: [{ ...item, note, dueAt: "2026-11-01T08:00:00.000Z", remindAt: "2026-11-01T07:00:00.000Z", reminder: "before_due", offsetMinutes: 60, reminderStatus: "pending" }], nextOffset: null })
+    mount(host === "window" ? <TodosModule /> : <EmbeddedSystemAppShell appName="待办事项" mode={host}><TodosModule /></EmbeddedSystemAppShell>); await flush()
+    act(() => document.querySelector<HTMLButtonElement>('[data-track="todos.open"]')!.click()); await flush()
+    const sheet = document.querySelector('[data-slot="sheet-content"]')!
+    expect(sheet).not.toBeNull()
+    expect(sheet.getAttribute("data-side")).toBe("right")
+    expect(sheet.textContent).toContain(note)
+    expect(sheet.textContent).toContain("截止时间")
+    expect(sheet.textContent).toContain("提醒时间")
+    expect(sheet.querySelector("input,textarea,form")).toBeNull()
+    expect(mocks.update).not.toHaveBeenCalled(); expect(mocks.setCompleted).not.toHaveBeenCalled()
+    act(() => [...sheet.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "编辑")!.click()); await flush()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+    expect(document.querySelector<HTMLInputElement>('#todo-title')?.value).toBe("报销")
+    expect(document.querySelector<HTMLTextAreaElement>('#todo-note')?.value).toBe(note)
+  })
+
+  it("opens completed notification targets as details and closes with Escape", async () => {
+    mocks.get.mockResolvedValue({ ...item, id: "beyond-page", completedAt: item.createdAt, reminderStatus: "cancelled" })
+    mount(<TodosModule openRequest={{ requestId: "completed-target", id: "beyond-page" }} />); await flush()
+    const sheet = document.querySelector<HTMLElement>('[data-slot="sheet-content"]')!
+    expect(sheet.textContent).toContain("已完成")
+    expect(sheet.textContent).toContain("完成时间")
+    expect(document.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("全部")
+    expect(document.querySelector('#todo-title')).toBeNull()
+    expect(mocks.update).not.toHaveBeenCalled(); expect(mocks.setCompleted).not.toHaveBeenCalled()
+    act(() => sheet.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))); await flush()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+  })
+
+  it("refreshes visible details without opening an editor and permits reading offline", async () => {
+    mount(<TodosModule />); await flush()
+    act(() => document.querySelector<HTMLButtonElement>('[data-track="todos.open"]')!.click()); await flush()
+    mocks.list.mockResolvedValue({ items: [{ ...item, title: "更新后的报销", version: 2 }], nextOffset: null })
+    act(() => mocks.changed()); await flush()
+    expect(document.querySelector('[data-slot="sheet-content"]')?.textContent).toContain("更新后的报销")
+    mocks.online = false
+    mount(<TodosModule />); await flush()
+    const sheet = document.querySelector('[data-slot="sheet-content"]')!
+    expect(sheet.textContent).toContain("更新后的报销")
+    expect([...sheet.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "编辑")?.disabled).toBe(true)
+    expect(document.querySelector('#todo-title')).toBeNull()
+    act(() => sheet.querySelector<HTMLButtonElement>('[aria-label="关闭详情"]')!.click()); await flush()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+  })
+
+  it("keeps the menu edit action as a direct editor entry", async () => {
+    mount(<TodosModule />); await flush()
+    act(() => document.querySelector<HTMLButtonElement>('[aria-label="报销的操作"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))); await flush()
+    act(() => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(entry => entry.textContent === "编辑")!.click()); await flush()
+    expect(document.querySelector<HTMLInputElement>('#todo-title')?.value).toBe("报销")
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+  })
+
+  it("closes details on identity reset", async () => {
+    mount(<TodosModule />); await flush()
+    act(() => document.querySelector<HTMLButtonElement>('[data-track="todos.open"]')!.click()); await flush()
+    expect(document.querySelector('[data-slot="sheet-content"]')).not.toBeNull()
+    act(() => mocks.reset()); await flush()
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+  })
+
   it.each([false, true])("offers the completion action in the menu for completed=%s", async (completed) => {
     const initial = { ...item, completedAt: completed ? item.createdAt : null }
     mocks.list.mockResolvedValue({ items: [initial], nextOffset: null })
@@ -33,7 +98,7 @@ describe("Todo visible actions", () => {
     expect(mocks.setCompleted).toHaveBeenCalledWith("a", expect.objectContaining({ completed: !completed, expectedVersion: 1 }))
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
-  it("preserves selected title and note text without opening the editor, then allows a normal click", async () => {
+  it("preserves selected title and note text without opening details, then allows a normal click", async () => {
     mocks.list.mockResolvedValue({ items: [{ ...item, note: "保留收据" }], nextOffset: null })
     mount(<TodosModule />); await flush()
     const body = document.querySelector<HTMLButtonElement>('[data-track="todos.open"]')!
@@ -46,7 +111,8 @@ describe("Todo visible actions", () => {
     window.getSelection()!.removeAllRanges()
     act(() => body.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })))
     await flush()
-    expect(document.querySelector<HTMLInputElement>('#todo-title')?.value).toBe("报销")
+    expect(document.querySelector('[data-slot="sheet-content"]')?.textContent).toContain("报销")
+    expect(document.querySelector('#todo-title')).toBeNull()
   })
 
   it("preserves a selection across todo rows without opening the row where the drag ends", async () => {
@@ -68,13 +134,17 @@ describe("Todo visible actions", () => {
     selectText(bodies[0].children[0].firstChild!)
     act(() => bodies[target].dispatchEvent(new MouseEvent("click", { bubbles: true, detail })))
     await flush()
-    expect(document.querySelector<HTMLInputElement>('#todo-title')?.value).toBe(title)
+    expect(document.querySelector('[data-slot="sheet-content"]')?.textContent).toContain(title)
+    expect(document.querySelector('#todo-title')).toBeNull()
   })
 
   it("preserves an edited dialog when a new target arrives and opens it after cancellation", async () => {
     const consumed = vi.fn()
     mount(<TodosModule onOpenRequestConsumed={consumed} />); await flush()
     act(() => document.querySelector<HTMLButtonElement>('[data-track="todos.open"]')!.click())
+    await flush()
+    act(() => [...document.querySelectorAll<HTMLButtonElement>('[data-slot="sheet-content"] button')].find(button => button.textContent === "编辑")!.click())
+    await flush()
     const input = document.querySelector<HTMLInputElement>('#todo-title')!
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "未保存的标题")
@@ -87,7 +157,8 @@ describe("Todo visible actions", () => {
     expect(mocks.get).not.toHaveBeenCalled(); expect(consumed).not.toHaveBeenCalled()
     act(() => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(button => button.textContent === "取消")!.click())
     await flush()
-    expect(document.querySelector<HTMLInputElement>('#todo-title')?.value).toBe("另一事项")
+    expect(document.querySelector('[data-slot="sheet-content"]')?.textContent).toContain("另一事项")
+    expect(document.querySelector('#todo-title')).toBeNull()
     expect(consumed).toHaveBeenCalledWith("new-target")
   })
   it("shows two tabs and a completion control, then hides only the successfully completed row", async () => {
