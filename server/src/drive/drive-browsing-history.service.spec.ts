@@ -37,6 +37,14 @@ function fixture() {
       }),
       findMany: vi.fn(async ({ where, take }: { where: Row; take: number }) => rows.filter((row) => matches(row, where))
         .sort((a, b) => b.visitedAt - a.visitedAt || b.id.localeCompare(a.id)).slice(0, take)),
+      findFirst: vi.fn(async ({ where }: { where: Row }) => rows.filter((row) => matches(row, where))
+        .sort((a, b) => b.visitedAt - a.visitedAt || b.id.localeCompare(a.id))[0] ?? null),
+      update: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const row = rows.find((entry) => entry.id === where.id)
+        if (!row) throw new Error("record not found")
+        Object.assign(row, data)
+        return row
+      }),
       updateMany: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
         const affected = rows.filter((row) => matches(row, where))
         for (const row of affected) Object.assign(row, data)
@@ -58,7 +66,7 @@ function fixture() {
 
 afterEach(() => vi.unstubAllEnvs())
 describe("Drive browsing history", () => {
-  it("keeps every open but makes a retried visit ID idempotent within its viewer", async () => {
+  it("keeps one row per link and makes a retried visit ID idempotent within its viewer", async () => {
     vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
     const { visit, rows, drive } = fixture()
     const id = randomUUID()
@@ -66,8 +74,30 @@ describe("Drive browsing history", () => {
     await visit("reader", id)
     await visit()
     await visit("another", id)
-    expect(rows.map((row) => row.viewerId)).toEqual(["reader", "reader", "another"])
+    expect(rows.map((row) => row.viewerId)).toEqual(["reader", "another"])
     expect(drive.resolveShareAnnotationAccess).toHaveBeenCalledWith({ shareId: "public", cookie: "access", actorUserId: "reader" })
+  })
+
+  it("refreshes the single row with the latest title and visit time when a link is opened again", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
+    const { visit, service, rows, drive } = fixture()
+    await visit()
+    const first = await service.list("reader")
+    drive.resolveShareAnnotationAccess.mockResolvedValueOnce({ item: { ...item, name: "重命名后的文档.md" } } as never)
+    await visit()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.visitedAt.getTime()).toBeGreaterThan(first.items[0]!.visitedAt ? Date.parse(first.items[0]!.visitedAt) : 0)
+    const page = await service.list("reader")
+    expect(page.items).toHaveLength(1)
+    expect(page.items[0]).toMatchObject({ id: first.items[0]!.id, title: "重命名后的文档.md" })
+  })
+
+  it("keeps separate rows for different links of the same author", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
+    const { service, rows } = fixture()
+    await service.recordShare("reader", randomUUID(), { shareId: "first", cookie: "access" })
+    await service.recordShare("reader", randomUUID(), { shareId: "second", cookie: "access" })
+    expect(rows.map((row) => row.path)).toEqual(["/share/first", "/share/second"])
   })
 
   it("does not store inaccessible shares", async () => {
@@ -142,8 +172,8 @@ describe("Drive browsing history", () => {
 
   it("uses stable descending time/id boundaries and binds cursors to viewer and filters", async () => {
     vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
-    const { visit, service } = fixture()
-    await visit(); await visit(); await visit()
+    const { service } = fixture()
+    for (const shareId of ["one", "two", "three"]) await service.recordShare("reader", randomUUID(), { shareId, cookie: "access" })
     const first = await service.list("reader", { limit: 2 })
     expect(first.items.map((row) => row.id)).toEqual(["row-0002", "row-0001"])
     const next = await service.list("reader", { limit: 2, cursor: first.nextCursor! })

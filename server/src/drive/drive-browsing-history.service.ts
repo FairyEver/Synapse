@@ -95,14 +95,22 @@ export class DriveBrowsingHistoryService {
 
   private async save(viewerId: string, visitId: string, snapshot: HistorySnapshot): Promise<void> {
     try {
-      await this.prisma.driveBrowsingHistory.createMany({
-        data: {
-          viewerId, visitId, title: snapshot.title, kind: snapshot.kind, path: snapshot.path,
-          authorHandle: snapshot.author.handle,
-          searchIndex: normalizeDriveSearchText([snapshot.title, `${publicAppUrl()}${snapshot.path}`, snapshot.author.handle, snapshot.author.nickname, snapshot.author.email].join("\n")),
-        },
-        skipDuplicates: true,
+      // One row per viewer and target: a repeated open only refreshes the snapshot and its visit time.
+      const snapshotData = {
+        visitId, title: snapshot.title, kind: snapshot.kind, path: snapshot.path,
+        authorHandle: snapshot.author.handle,
+        searchIndex: normalizeDriveSearchText([snapshot.title, `${publicAppUrl()}${snapshot.path}`, snapshot.author.handle, snapshot.author.nickname, snapshot.author.email].join("\n")),
+      }
+      const previous = await this.prisma.driveBrowsingHistory.findFirst({
+        where: { viewerId, path: snapshot.path, cleared: false },
+        orderBy: [{ visitedAt: "desc" }, { id: "desc" }],
+        select: { id: true },
       })
+      if (previous) {
+        await this.prisma.driveBrowsingHistory.update({ where: { id: previous.id }, data: { ...snapshotData, visitedAt: new Date() } })
+        return
+      }
+      await this.prisma.driveBrowsingHistory.createMany({ data: { viewerId, ...snapshotData }, skipDuplicates: true })
     } catch (error) {
       // Driver errors can include parameters. Never log the error message or private search snapshot.
       this.logger.warn({ message: "Drive browsing history persistence failed", errorName: error instanceof Error ? error.name : "UnknownError" })
