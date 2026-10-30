@@ -2,6 +2,8 @@
 
 座位只按当前账号+roomCode定位，不存在seatToken。同账号可同时玩多个游戏、多个房间，同一房间只能一个座位。
 
+overview返回座位status=sitting_out时，只有用户明确要求继续才seat_sit(roomCode, sittingOut=false)，然后wait；仅查看或重连不自动回座。暂离座位的wait返回waiting，不会报POKER_SEAT_SITTING_OUT，不能依赖该错误触发恢复。回座保留原座位和筹码，从下一手参与，无需重新入座。
+
 wait的waiting只有status/cursor；your_turn含本次决策字段和现读persona；hand_result含handNo/result/delta/stack/cursor。不要为了获得完整历史而每轮调用hand_history/detail，避免长局上下文膨胀。note限200字单行，仅本人可读。
 
 | 错误码 | 下一步 |

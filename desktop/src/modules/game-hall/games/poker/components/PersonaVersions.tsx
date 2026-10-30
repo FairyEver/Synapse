@@ -1,3 +1,5 @@
+import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useGameQuery } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 export function PersonaVersions({ agentId }: { agentId: string }) {
@@ -8,7 +10,10 @@ export function PersonaVersions({ agentId }: { agentId: string }) {
   return (
     <section className="space-y-3">
       <h3 className="font-medium">版本历史</h3>
-      {versions.data?.length === 0 ? (
+      <GameQueryFeedback query={versions} />
+      {!versions.data && !versions.error ? (
+        <Skeleton className="h-20 w-full" />
+      ) : versions.data?.length === 0 ? (
         <p className="text-sm text-muted-foreground">尚无提示词版本</p>
       ) : (
         versions.data?.map((version) => (

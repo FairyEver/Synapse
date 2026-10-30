@@ -8,12 +8,45 @@ import { PokerApp } from "../PokerApp"
 vi.mock("../components/Lobby", () => ({ Lobby: () => <div>房间内容</div> }))
 vi.mock("../components/HandRecord", () => ({ HandRecord: () => <div>记录内容</div> }))
 vi.mock("../components/AgentProfiles", () => ({ AgentProfiles: () => <div>档案内容</div> }))
-vi.mock("../hooks/usePokerRoom", () => ({ usePokerRoom: vi.fn() }))
+vi.mock("../hooks/usePokerRoom", () => ({
+  usePokerRoom: (roomCode: string) => ({
+    table: { roomCode },
+    perspective: "owner",
+    setPerspective: vi.fn(),
+  }),
+}))
+vi.mock("../components/Table", () => ({
+  Table: ({ table }: { table: { roomCode: string } }) => <div>牌桌 {table.roomCode}</div>,
+}))
 vi.mock("../../../hooks/useGameQuery", () => ({ useGameMutation: vi.fn() }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 afterEach(() => document.body.replaceChildren())
 describe("游戏应用顶栏", () => {
+  it.each(["牌局记录", "选手档案"])("从%s收到房间深链后切回牌桌", async (label) => {
+    const host = document.createElement("div"),
+      root = createRoot(host),
+      onOpenRoom = vi.fn(),
+      onBack = vi.fn()
+    document.body.append(host)
+    await act(async () =>
+      root.render(<PokerApp roomCode={null} onOpenRoom={onOpenRoom} onBack={onBack} />),
+    )
+    const target = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (tab) => tab.textContent === label,
+    )!
+    await act(async () =>
+      target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+    )
+    expect(host.textContent).toContain(label === "牌局记录" ? "记录内容" : "档案内容")
+    await act(async () =>
+      root.render(<PokerApp roomCode="4821" onOpenRoom={onOpenRoom} onBack={onBack} />),
+    )
+    expect(host.textContent).toContain("牌桌 4821")
+    expect(host.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("房间")
+    await act(async () => root.unmount())
+  })
+
   it.each(["window", "dock", "launcher"] as const)(
     "%s 模式只显示统一顶栏和一个返回大厅入口",
     async (mode) => {

@@ -1,3 +1,4 @@
+import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import type { PokerSummaryView } from "@synapse/shared/game-contracts"
 import { gameApi } from "../../../lib/api"
 import { useGameQuery } from "../../../hooks/useGameQuery"
@@ -31,9 +32,18 @@ export function PokerPreview() {
     10000,
   )
   const last = history.data?.items[0]
-  return last ? (
-    <PokerHandPreview hand={last} />
-  ) : (
-    <p className="text-sm text-muted-foreground">暂无牌局记录</p>
+  return (
+    <>
+      <GameQueryFeedback query={history} />
+      {last ? (
+        <PokerHandPreview hand={last} />
+      ) : (
+        !history.error && (
+          <p className="text-sm text-muted-foreground">
+            {history.data ? "暂无牌局记录" : "正在读取记录…"}
+          </p>
+        )
+      )}
+    </>
   )
 }

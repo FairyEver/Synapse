@@ -63,28 +63,34 @@ export class PokerWaitService implements OnModuleDestroy {
             userId_gameKind_gameRoomId: { userId, gameKind: "poker", gameRoomId: c.room.id },
           },
         })
-        const auto = await c.tx.gamePokerAction.findFirst({
-          where: {
-            roomId: c.room.id,
-            userId,
-            isAuto: true,
-            ...(session ? { createdAt: { gte: session.startedAt } } : {}),
-          },
-          orderBy: { createdAt: "desc" },
-        })
+        // Timeout removal closes the session in the same transaction. Active polling
+        // need not expand archived hands; a fresh join also starts a new session epoch.
+        const [auto] =
+          session?.status === "closed"
+            ? await c.tx.$queryRaw<{ id: string; handNo: number; seq: number; action: string }[]>`
+            SELECT "id","handNo","seq","action" FROM (
+              SELECT action."id",hand."handNo",action."seq",action."action",action."createdAt"
+              FROM "GamePokerAction" action JOIN "GamePokerHand" hand ON hand."id"=action."handId"
+              WHERE action."roomId"=${c.room.id} AND action."userId"=${userId}
+                AND action."isAuto" AND action."createdAt">=${session.startedAt.toISOString()}::timestamp
+              UNION ALL
+              SELECT action->>'id',archive."handNo",(action->>'seq')::int,action->>'action',(action->>'createdAt')::timestamp
+              FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'actions') AS entry(action)
+              WHERE archive."roomId"=${c.room.id} AND archive."participantIds" @> ARRAY[${userId}]::text[]
+                AND archive."endedAt">=${session.startedAt.toISOString()}::timestamp
+                AND action->>'userId'=${userId} AND (action->>'isAuto')::boolean
+                AND (action->>'createdAt')::timestamp>=${session.startedAt.toISOString()}::timestamp
+            ) events ORDER BY "createdAt" DESC,"id" DESC LIMIT 1`
+            : []
         if (auto && session && session.lastEventId !== auto.id) {
           await c.tx.gameSession.update({
             where: { id: session.id },
             data: { lastEventId: auto.id },
           })
-          const hand = await c.tx.gamePokerHand.findUniqueOrThrow({
-            where: { id: auto.handId },
-            select: { handNo: true },
-          })
           return {
             status: "table_closed",
-            cursor: `${hand.handNo}:${auto.seq}`,
-            lastAutoAction: { handNo: hand.handNo, action: auto.action, reason: "timeout" },
+            cursor: `${auto.handNo}:${auto.seq}`,
+            lastAutoAction: { handNo: auto.handNo, action: auto.action, reason: "timeout" },
           }
         }
         if (!c.seats.some((s) => s.userId === userId) || c.room.status === "closed")

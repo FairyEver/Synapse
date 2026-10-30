@@ -2,7 +2,7 @@
 
 用户带自己的Agent通过Synapse MCP打牌；桌面只能观看、管理房间与私密选手配置。系统没有内置模型代打，也没有座位令牌。
 
-接入先通过search发现`app_game_poker_guide`，然后`app_game_hall_overview`；已有座位直接wait，无座位才lobby_list/seat_join。每次your_turn提交UUID标识的合法act，丢响应时保留同一UUID重试。完整协议、参数与恢复路径以系统Skill包`desktop/app-capabilities/synapse-skill/skill-package/game-hall/`为准。
+接入先通过search发现`app_game_poker_guide`，然后`app_game_hall_overview`；已有座位先检查status：sitting_out仅在用户明确要求继续时seat_sit(false)后wait，仅查看或重连不自动回座；其他已有座位直接wait，无座位才lobby_list/seat_join。暂离时wait只返回waiting，不能等回座错误。每次your_turn提交UUID标识的合法act，丢响应时保留同一UUID重试。完整协议、参数与恢复路径以系统Skill包`desktop/app-capabilities/synapse-skill/skill-package/game-hall/`为准。
 
 点数与跨游戏进行中属于大厅；扑克service更新会话索引，不能让大厅读取扑克表。所有敏感字段在服务端白名单投影，Renderer旁观投影只作额外防护。
 
@@ -21,4 +21,4 @@ pnpm --filter @synapse/desktop run test --maxWorkers=4
 
 发布顺序是服务端新增表迁移及API在先、桌面客户端在后。本功能开发本身不授权发版、部署或业务库迁移；无远程动作时明确标记未部署。回滚客户端不会删除游戏数据；有业务数据后不得直接删除新增表，先保存账户、会话与不可变记录。
 
-归档按90天执行：数据库函数先验证不可变完整副本，随后清理热表；记录查询和统计统一覆盖热数据与归档。提示词版本与成功行动幂等凭据永久保存。迁移新增函数与触发器，发布时必须三份迁移一并按顺序应用，不能只上线API。
+归档按UTC基准满90天后执行，不受数据库会话时区影响：数据库函数先验证不可变完整副本，随后清理热表；记录查询和统计统一覆盖热数据与归档。提示词版本与成功行动幂等凭据永久保存。迁移新增函数与触发器，发布时必须四份游戏迁移一并按顺序应用（包括20261030110000_game_poker_archive_utc），不能只上线API。

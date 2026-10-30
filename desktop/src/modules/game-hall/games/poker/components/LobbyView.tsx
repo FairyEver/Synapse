@@ -15,6 +15,7 @@ export function LobbyView({
   onConnect,
   onClose,
   pagination,
+  feedback,
 }: {
   rooms: PokerRoomView[] | null
   sessions: GameSessionView[]
@@ -24,6 +25,7 @@ export function LobbyView({
   onConnect: (code: string) => void
   onClose: (code: string) => void
   pagination?: ReactNode
+  feedback?: ReactNode
 }) {
   return (
     <main className="game-center gc-page">
@@ -46,8 +48,9 @@ export function LobbyView({
           <h2>房间</h2>
           {rooms && <span className="gc-meta">本页 {rooms.length} 间</span>}
         </div>
+        {feedback}
         {!rooms ? (
-          <Skeleton className="h-64 w-full" />
+          !feedback && <Skeleton className="h-64 w-full" />
         ) : rooms.length === 0 ? (
           <p className="gc-empty">
             <Spade aria-hidden="true" />

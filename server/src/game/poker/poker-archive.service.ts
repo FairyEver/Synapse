@@ -36,7 +36,7 @@ export class PokerArchiveService {
     const cutoff = new Date(now.getTime() - 90 * 86400000)
     const [result] = await this.prisma.$queryRaw<
       { archived: boolean }[]
-    >`SELECT "game_poker_archive_hand"(${handId},${cutoff}::timestamp) AS "archived"`
+    >`SELECT "game_poker_archive_hand"(${handId},${cutoff.toISOString()}::timestamp) AS "archived"`
     return result.archived
   }
   @Interval(60000)
@@ -47,7 +47,7 @@ export class PokerArchiveService {
       const cutoff = new Date(now.getTime() - 90 * 86400000)
       const rows = await this.prisma.$queryRaw<
         { id: string }[]
-      >`SELECT h."id" FROM "GamePokerHand" h JOIN "GamePokerRoom" r ON r."id"=h."roomId" WHERE h."status"='settled' AND h."endedAt"<=${cutoff} AND (r."status"<>'running' OR r."currentHandId" IS DISTINCT FROM h."id") ORDER BY h."endedAt",h."id" LIMIT 100`
+      >`SELECT h."id" FROM "GamePokerHand" h JOIN "GamePokerRoom" r ON r."id"=h."roomId" WHERE h."status"='settled' AND h."endedAt"<=${cutoff.toISOString()}::timestamp AND (r."status"<>'running' OR r."currentHandId" IS DISTINCT FROM h."id") ORDER BY h."endedAt",h."id" LIMIT 100`
       for (const row of rows)
         try {
           await this.archiveHand(row.id, now)

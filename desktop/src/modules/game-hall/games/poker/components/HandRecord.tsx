@@ -1,3 +1,4 @@
+import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -9,7 +10,10 @@ import { recordStreets } from "../lib/record-streets"
 import { actionLabel, amount } from "../lib/view"
 export function HandRecord() {
   const [offset, setOffset] = useState(0),
-    [selected, setSelected] = useState<{ roomCode: string; handNo: number } | null>(null)
+    [selected, setSelected] = useState<{
+      roomCode: string
+      handNo: number
+    } | null>(null)
   const history = useGameQuery(
     () => gameApi().poker.hand.history({ offset, limit: 50 }),
     `poker:history:${offset}`,
@@ -25,8 +29,9 @@ export function HandRecord() {
     <div className="grid min-h-full grid-cols-1 lg:grid-cols-3">
       <div className="space-y-3 border-r p-4">
         <h2 className="font-medium">牌局记录</h2>
+        <GameQueryFeedback query={history} />
         {!history.data ? (
-          <Skeleton className="h-32 w-full" />
+          !history.error && <Skeleton className="h-32 w-full" />
         ) : history.data.items.length === 0 ? (
           <p className="text-sm text-muted-foreground">暂无牌局记录</p>
         ) : (
@@ -68,10 +73,11 @@ export function HandRecord() {
         </div>
       </div>
       <div className="space-y-6 p-6 lg:col-span-2">
+        <GameQueryFeedback query={detail} />
         {!selected ? (
           <p className="text-sm text-muted-foreground">选择一手牌查看记录</p>
         ) : !detail.data ? (
-          <Skeleton className="h-40 w-full" />
+          !detail.error && <Skeleton className="h-40 w-full" />
         ) : (
           <>
             <h3 className="font-medium">

@@ -1,3 +1,4 @@
+import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
 import "../../../styles/hall.css"
 import { useState } from "react"
@@ -42,7 +43,11 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     mutation = useGameMutation()
   const create = async () => {
     const result = await mutation.run(() =>
-      gameApi().poker.room.create({ name, maxSeats: Number(maxSeats), buyIn: Number(buyIn) }),
+      gameApi().poker.room.create({
+        name,
+        maxSeats: Number(maxSeats),
+        buyIn: Number(buyIn),
+      }),
     )
     if (result) {
       setCreateOpen(false)
@@ -72,6 +77,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     <>
       <LobbyView
         rooms={lobby.data?.items ?? null}
+        feedback={lobby.error ? <GameQueryFeedback query={lobby} /> : null}
         sessions={(hall.data?.sessions ?? []).filter((s) => s.game === "poker")}
         userId={userId}
         onRoom={onRoom}

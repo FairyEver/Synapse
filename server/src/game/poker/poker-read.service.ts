@@ -220,6 +220,8 @@ export class PokerReadService {
     )
   }
   private async userStats(userId: string) {
+    // Reconstruct each street's public contributions, including actual posted blinds.
+    // An all-in is a raise only when its total exceeds the preceding table bet.
     const [s] = await this.poker.prisma.$queryRaw<
       {
         hands: number
@@ -237,15 +239,46 @@ export class PokerReadService {
         SELECT summary->>'handId',(summary->>'delta')::int,summary->>'result',(summary->>'createdAt')::timestamp
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'summaries') AS entry(summary)
         WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND summary->>'userId'=${userId}
-      ), played AS (SELECT "handId","delta","result" FROM user_hands), moves AS (
-        SELECT action."handId",action."street",action."action" FROM "GamePokerAction" action JOIN played ON played."handId"=action."handId" WHERE action."userId"=${userId} AND NOT action."isAuto"
+      ), played AS (SELECT "handId","delta","result" FROM user_hands), hand_seats AS (
+        SELECT seat."handId",seat."seatNo",seat."startingStack",hand."dealerSeat"
+        FROM "GamePokerHandSeat" seat JOIN "GamePokerHand" hand ON hand."id"=seat."handId" JOIN played ON played."handId"=hand."id"
         UNION ALL
-        SELECT action->>'handId',action->>'street',action->>'action' FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'actions') AS entry(action)
-        JOIN played ON played."handId"=action->>'handId' WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND action->>'userId'=${userId} AND NOT (action->>'isAuto')::boolean
+        SELECT seat->>'handId',(seat->>'seatNo')::int,(seat->>'startingStack')::int,(archive."data"->'hand'->>'dealerSeat')::int
+        FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'seats') AS entry(seat)
+        JOIN played ON played."handId"=archive."id" WHERE archive."participantIds" @> ARRAY[${userId}]::text[]
+      ), positions AS (
+        SELECT *,count(*) OVER(PARTITION BY "handId") AS seats,
+          row_number() OVER(PARTITION BY "handId" ORDER BY ("seatNo"-"dealerSeat"+10)%10) AS position
+        FROM hand_seats
+      ), blinds AS (
+        SELECT "handId","seatNo",LEAST("startingStack",CASE
+          WHEN position=CASE WHEN seats=2 THEN 1 ELSE 2 END THEN 1
+          WHEN position=CASE WHEN seats=2 THEN 2 ELSE 3 END THEN 2 ELSE 0 END) AS blind
+        FROM positions
+      ), all_moves AS (
+        SELECT action."handId",action."seq",action."seatNo",action."userId",action."street",action."action",action."amount",action."isAuto"
+        FROM "GamePokerAction" action JOIN played ON played."handId"=action."handId"
+        UNION ALL
+        SELECT action->>'handId',(action->>'seq')::int,(action->>'seatNo')::int,action->>'userId',action->>'street',action->>'action',(action->>'amount')::int,(action->>'isAuto')::boolean
+        FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'actions') AS entry(action)
+        JOIN played ON played."handId"=archive."id" WHERE archive."participantIds" @> ARRAY[${userId}]::text[]
+      ), contributions AS (
+        SELECT all_moves.*,sum("amount") OVER(PARTITION BY "handId","street","seatNo" ORDER BY "seq")
+          + CASE WHEN "street"='preflop' THEN COALESCE(blinds.blind,0) ELSE 0 END AS "streetBetAfter"
+        FROM all_moves LEFT JOIN blinds USING("handId","seatNo")
+      ), prior_bets AS (
+        SELECT *,GREATEST(CASE WHEN "street"='preflop' THEN 2 ELSE 0 END,
+          max("streetBetAfter") OVER(PARTITION BY "handId","street" ORDER BY "seq" ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)) AS "priorBet"
+        FROM contributions
+      ), moves AS (
+        SELECT "handId","street",CASE WHEN "action"='allin' THEN
+          CASE WHEN "streetBetAfter">"priorBet" THEN CASE WHEN "priorBet"=0 THEN 'bet' ELSE 'raise' END ELSE 'call' END
+          ELSE "action" END AS "action"
+        FROM prior_bets WHERE "userId"=${userId} AND NOT "isAuto"
       ) SELECT count(*)::int AS "hands",COALESCE(sum("delta"),0)::int AS "netProfit",count(*) FILTER(WHERE "result"='won')::int AS "wins",
-        (SELECT count(DISTINCT "handId")::int FROM moves WHERE "street"='preflop' AND "action" IN ('call','bet','raise','allin')) AS "vpipHands",
-        (SELECT count(DISTINCT "handId")::int FROM moves WHERE "street"='preflop' AND "action" IN ('raise','allin')) AS "pfrHands",
-        (SELECT count(*)::int FROM moves WHERE "action" IN ('bet','raise','allin')) AS "bets",
+        (SELECT count(DISTINCT "handId")::int FROM moves WHERE "street"='preflop' AND "action" IN ('call','bet','raise')) AS "vpipHands",
+        (SELECT count(DISTINCT "handId")::int FROM moves WHERE "street"='preflop' AND "action"='raise') AS "pfrHands",
+        (SELECT count(*)::int FROM moves WHERE "action" IN ('bet','raise')) AS "bets",
         (SELECT count(*)::int FROM moves WHERE "action"='call') AS "calls" FROM played`
     return {
       hands: s.hands,

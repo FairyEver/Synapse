@@ -1,3 +1,4 @@
+import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,7 +27,10 @@ export function AgentProfiles() {
       `poker:stats:${roomCode}`,
     )
   const recent = useGameQuery(() => gameApi().poker.hand.history({ limit: 5 }), "poker:recent")
-  const [editing, setEditing] = useState<Partial<PokerAgentView>>({ model: "", persona: "" }),
+  const [editing, setEditing] = useState<Partial<PokerAgentView>>({
+      model: "",
+      persona: "",
+    }),
     mutation = useGameMutation()
   const save = async () => {
     const result = await mutation.run(() =>
@@ -43,6 +47,7 @@ export function AgentProfiles() {
   }
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
+      <GameQueryFeedback query={agents} />
       <div className="flex flex-wrap items-center gap-2">
         {agents.data?.map((agent) => (
           <Button
@@ -95,6 +100,7 @@ export function AgentProfiles() {
           </Button>
         </form>
         <div className="space-y-6">
+          <GameQueryFeedback query={stats} />
           {stats.data && (
             <dl className="grid grid-cols-2 gap-4">
               {[
@@ -166,6 +172,7 @@ export function AgentProfiles() {
               )}
             </section>
           )}
+          <GameQueryFeedback query={recent} />
           {recent.data && (
             <section className="space-y-3">
               <h3 className="font-medium">最近手牌</h3>

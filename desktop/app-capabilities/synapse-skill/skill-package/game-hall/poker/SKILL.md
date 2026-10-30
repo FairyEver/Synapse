@@ -13,6 +13,9 @@ description: 用户要求德州扑克、德扑、打牌、打扑克、入座、�
 ```text
 overview()                         // 每次接手先重连，不保存座位令牌
 没有座位时才 seat_join(roomCode, agentId?, modelName?)
+已有座位且overview返回status=sitting_out:
+    只有用户明确要求继续时 seat_sit(roomCode, sittingOut=false)，再进入wait循环
+    仅查看、重连或没有继续指令时不自动回座，不进入出牌循环
 sessionStyle = 用户在当前会话口述的风格，未口述则为空
 cursor = ""
 while 用户没有叫停:
@@ -31,6 +34,8 @@ while 用户没有叫停:
     cursor = result.cursor
 用户主动休息或叫停循环: seat_sit(roomCode, sittingOut=true)
 ```
+
+暂离期间wait只会返回waiting，不会用POKER_SEAT_SITTING_OUT提醒回座；接手时必须按overview的座位status判断。回座保留原座位和筹码，从下一手参与，不要重新seat_join。
 
 每轮以wait现读persona为准，可能中途变更或为空，不沿用上下文旧版本。会话口述优先于游戏内设置；仅本会话生效，不自动写回。只有用户明确说“存到游戏里 / 记到我的选手里”，才agent_upsert。风格与合法规则冲突时服从规则。
 

@@ -7,6 +7,7 @@ import { SystemAppWindowShell } from "@/modules/apps/components/system-app-windo
 import { useHallOverview } from "./hooks/useHallOverview"
 import { useGameMutation } from "./hooks/useGameQuery"
 import { gameApi } from "./lib/api"
+import { GameQueryFeedback } from "./components/GameQueryFeedback"
 import { HallHome } from "./components/HallHome"
 import { GAME_RENDERERS } from "./game-registry"
 
@@ -29,9 +30,10 @@ export function GameHallApp({
   const hall = useHallOverview(),
     account = useAccount(),
     mutation = useGameMutation()
-  const [route, setRoute] = useState<{ entry: string; roomCode: string | null } | null>(
-    openRequest ? resolveTarget(openRequest.path) : null,
-  )
+  const [route, setRoute] = useState<{
+    entry: string
+    roomCode: string | null
+  } | null>(openRequest ? resolveTarget(openRequest.path) : null)
   useEffect(() => {
     if (openRequest) setRoute(resolveTarget(openRequest.path))
   }, [openRequest])
@@ -68,15 +70,18 @@ export function GameHallApp({
   return (
     <SystemAppWindowShell left={<span className="text-sm font-medium">游戏大厅</span>}>
       <ScrollArea className="game-hall game-center h-full">
-        <HallHome
-          overview={hall.data}
-          onEnter={enter}
-          onSession={session}
-          previews={previews}
-          icons={icons}
-          artwork={artwork}
-          onGrant={grant}
-        />
+        <GameQueryFeedback query={hall} />
+        {(hall.data || !hall.error) && (
+          <HallHome
+            overview={hall.data}
+            onEnter={enter}
+            onSession={session}
+            previews={previews}
+            icons={icons}
+            artwork={artwork}
+            onGrant={grant}
+          />
+        )}
       </ScrollArea>
     </SystemAppWindowShell>
   )
