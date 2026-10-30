@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-30 游戏大厅第三轮审核：wait描述同步离桌及归档后的终局补发和cursor边界，取消/超时覆盖认证与读取；仍为20个游戏MCP索引、18个IPC，所有注册数量不变，没有新增人类出牌入口。
+
 - 2026-10-30 游戏大厅第二轮审核：游戏请求在权限检查之前绑定发起账号，身份切换拒绝旧请求；seat_sit保留请求确认并返回pending/status，overview同步实际暂离状态。20个游戏MCP索引、18个IPC及所有注册数量保持不变，不新增入口或权限。
 
 - 2026-10-30 游戏中心内容区重设计：大厅与扑克房间继续使用现有入口和统一 App 顶栏，新增的 `Artwork` 仅为 renderer 注册项的展示插槽；房间网格不新增业务能力。System App、Dock、capability、MCP、IPC、Workflow、Automation 与 Deep Link 数量均不变，MCP/Skill 操作契约不变。

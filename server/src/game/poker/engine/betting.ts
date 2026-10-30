@@ -21,17 +21,27 @@ export interface BettingState {
   actionOnSeat: number | null
   street: string
 }
+/** With no opponent able to add chips, only the opponents' actual bet can be called. */
+export function betToMatch(h: BettingState, seatNo: number): number {
+  const opponents = h.seats.filter((s) => s.seatNo !== seatNo && !s.folded)
+  return opponents.some((s) => !s.allIn)
+    ? h.currentBet
+    : Math.min(h.currentBet, Math.max(0, ...opponents.map((s) => s.streetBet)))
+}
 export function legalActions(h: BettingState, seatNo: number) {
   const p = h.seats.find((s) => s.seatNo === seatNo)
   if (!p || p.folded || p.allIn || h.actionOnSeat !== seatNo || h.street === "settled")
     return { actions: [] as ActionKind[], toCall: 0, minRaiseTo: 0, maxRaiseTo: 0 }
-  const toCall = Math.max(0, h.currentBet - p.streetBet),
+  const toMatch = betToMatch(h, seatNo),
+    toCall = Math.max(0, toMatch - p.streetBet),
     maxRaiseTo = p.streetBet + p.stack
-  const canRaise = p.lastActedBet === null || h.currentBet - p.lastActedBet >= h.minRaise
+  const canRaise =
+    h.seats.some((s) => s.seatNo !== seatNo && !s.folded && !s.allIn) &&
+    (p.lastActedBet === null || h.currentBet - p.lastActedBet >= h.minRaise)
   const minRaiseTo = h.currentBet + h.minRaise
   const actions: ActionKind[] = ["fold", toCall ? "call" : "check"]
   if (canRaise && maxRaiseTo >= minRaiseTo) actions.push(h.currentBet ? "raise" : "bet")
-  if (maxRaiseTo <= h.currentBet || canRaise) actions.push("allin")
+  if (maxRaiseTo <= toMatch || canRaise) actions.push("allin")
   return { actions, toCall, minRaiseTo, maxRaiseTo }
 }
 export function applyBet<T extends BettingState>(state: T, seatNo: number, decision: Decision): T {
@@ -45,7 +55,7 @@ export function applyBet<T extends BettingState>(state: T, seatNo: number, decis
       decision.action === "allin"
         ? legal.maxRaiseTo
         : decision.action === "call"
-          ? Math.min(h.currentBet, legal.maxRaiseTo)
+          ? Math.min(p.streetBet + legal.toCall, legal.maxRaiseTo)
           : decision.to
     if (
       to === undefined ||

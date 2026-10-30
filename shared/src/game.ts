@@ -207,7 +207,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.table.wait",
-    "循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona。",
+    "循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed。",
     { ...room, cursor: str(64), timeoutMs: integer(0, 25000) },
     ["roomCode"],
     false,

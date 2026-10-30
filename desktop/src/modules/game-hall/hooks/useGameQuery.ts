@@ -27,14 +27,15 @@ export function useGameQuery<T>(
   useEffect(() => {
     let stopped = false,
       busy = false
+    let trailing: { promise: Promise<void>; resolve: () => void } | null = null
     setResult(null)
     setFailure(null)
     if (!identity || !online || !enabled) {
       setLoading(false)
       return
     }
-    const refresh = async () => {
-      if (stopped || busy) return
+    const readOnce = async () => {
+      if (stopped) return
       busy = true
       setLoading(true)
       try {
@@ -52,17 +53,37 @@ export function useGameQuery<T>(
       } finally {
         busy = false
         if (!stopped) setLoading(false)
+        const next = trailing
+        trailing = null
+        if (next) {
+          if (stopped) next.resolve()
+          else void readOnce().then(next.resolve)
+        }
       }
+    }
+    const refresh = () => {
+      if (stopped) return Promise.resolve()
+      if (!busy) return readOnce()
+      if (!trailing) {
+        let resolve!: () => void
+        const promise = new Promise<void>((done) => {
+          resolve = done
+        })
+        trailing = { promise, resolve }
+      }
+      return trailing.promise
     }
     refreshRef.current = refresh
     void refresh()
     const timer = intervalMs
       ? setInterval(() => {
-          if (document.visibilityState !== "hidden") void refresh()
+          if (!busy && document.visibilityState !== "hidden") void readOnce()
         }, intervalMs)
       : undefined
     return () => {
       stopped = true
+      trailing?.resolve()
+      trailing = null
       clearInterval(timer)
       refreshRef.current = async () => {}
     }

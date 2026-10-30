@@ -6,6 +6,8 @@ seat_sit返回的sittingOut是请求确认；pending表示当前手尚未结束�
 
 overview返回座位status=sitting_out时，只有用户明确要求继续才seat_sit(roomCode, sittingOut=false)，然后wait；仅查看或重连不自动回座。暂离座位的wait返回waiting，不会报POKER_SEAT_SITTING_OUT，不能依赖该错误触发恢复。回座保留原座位和筹码，从下一手参与，无需重新入座。
 
+游标是handNo:actionSeq，两段都为0至2147483647的整数；2147483647的动作序号标记该手结算已读。非法或越界游标返回POKER_ILLEGAL_ACTION，重新overview接回，不盲重试旧游标。带cursor可补发本次入座的未读结算（包含归档），离桌/输光/手后解散时先hand_result再table_closed；空cursor只恢复当前牌况。按返回cursor推进，同一cursor重试按handNo去重。
+
 wait的waiting只有status/cursor；your_turn含本次决策字段和现读persona；hand_result含handNo/result/delta/stack/cursor。不要为了获得完整历史而每轮调用hand_history/detail，避免长局上下文膨胀。note限200字单行，仅本人可读。
 
 | 错误码 | 下一步 |

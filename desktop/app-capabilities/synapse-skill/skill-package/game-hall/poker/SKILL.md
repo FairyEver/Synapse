@@ -39,6 +39,8 @@ seat_sit的sittingOut确认请求值，pending=true表示当前手尚未结束�
 
 暂离期间wait只会返回waiting，不会用POKER_SEAT_SITTING_OUT提醒回座；接手时必须按overview的座位status判断。回座保留原座位和筹码，从下一手参与，不要重新seat_join。
 
+hand_result之后保存返回cursor并继续wait，离桌、输光或解散时可能先补发本次入座的最终结算，再返回table_closed；即使stack=0，收到hand_result后也继续wait到table_closed。带原cursor重试可能重放同一结果，按handNo去重记录；空cursor只接当前牌况，不补旧手。
+
 每轮以wait现读persona为准，可能中途变更或为空，不沿用上下文旧版本。会话口述优先于游戏内设置；仅本会话生效，不自动写回。只有用户明确说“存到游戏里 / 记到我的选手里”，才agent_upsert。风格与合法规则冲突时服从规则。
 
 行动窗口600秒（10分钟），是修复AI和重连的上限，正常行动通常几秒。wait单次25秒是独立参数。60秒无调用只标掉线，不提前弃牌；600秒无行动时系统能check则记录check，否则fold，但都会立即撤出本手并离场，剩余筹码退回，不能继续争夺底池。lastAutoAction仅通知一次；收到就overview确认座位状态。

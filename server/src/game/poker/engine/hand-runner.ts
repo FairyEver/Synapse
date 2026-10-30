@@ -2,7 +2,7 @@ import { orderedDeck } from "./deck"
 import { compareHands } from "./hand"
 import { after, seatOrder } from "./seat-order"
 import { splitPots, distribute } from "./pots"
-import { applyBet, type Decision, type EngineSeat, type BettingState } from "./betting"
+import { applyBet, betToMatch, type Decision, type EngineSeat, type BettingState } from "./betting"
 export { legalActions } from "./betting"
 export interface HandState extends BettingState {
   street: "preflop" | "flop" | "turn" | "river" | "settled"
@@ -94,7 +94,7 @@ function progress(h: HandState, last: number): void {
   const pending = active.filter((s) => s.lastActedBet === null || s.streetBet < h.currentBet)
   if (
     (active.length > 1 && pending.length) ||
-    (active.length === 1 && active[0].streetBet < h.currentBet)
+    (active.length === 1 && active[0].streetBet < betToMatch(h, active[0].seatNo))
   ) {
     h.actionOnSeat =
       after(

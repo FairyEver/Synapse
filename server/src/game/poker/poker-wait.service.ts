@@ -1,6 +1,7 @@
 import { Injectable, type OnModuleDestroy } from "@nestjs/common"
 import { PokerActionService } from "./poker-action.service"
 import { reject } from "./poker-error"
+const MAX_CURSOR_VALUE = 2147483647
 @Injectable()
 export class PokerWaitService implements OnModuleDestroy {
   private readonly waiters = new Map<string, Set<() => void>>()
@@ -23,7 +24,12 @@ export class PokerWaitService implements OnModuleDestroy {
     signal?: AbortSignal,
     now?: Date,
   ): Promise<Record<string, any>> {
-    if (cursor && !/^\d+:\d+$/.test(cursor))
+    const match = /^(\d+):(\d+)$/.exec(cursor),
+      position = match ? ([Number(match[1]), Number(match[2])] as const) : null
+    if (
+      cursor &&
+      (!position || position.some((value) => !Number.isInteger(value) || value > MAX_CURSOR_VALUE))
+    )
       reject("POKER_ILLEGAL_ACTION", "游标无效，请从overview重新接回。")
     if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 25000)
       reject("POKER_ILLEGAL_ACTION", "wait须在0–25000毫秒之间。")
@@ -33,7 +39,7 @@ export class PokerWaitService implements OnModuleDestroy {
     try {
       do {
         signal?.throwIfAborted()
-        const result = await this.read(userId, code, cursor, now ?? new Date())
+        const result = await this.read(userId, code, cursor, now ?? new Date(), position)
         if (result.status !== "waiting" || Date.now() >= end) return result
         await this.pause(code, Math.min(500, end - Date.now()), signal)
       } while (Date.now() <= end)
@@ -49,6 +55,7 @@ export class PokerWaitService implements OnModuleDestroy {
     code: string,
     cursor: string,
     now: Date,
+    position: readonly [number, number] | null,
   ): Promise<Record<string, any>> {
     return this.actions.poker.withRoom(
       code,
@@ -93,34 +100,45 @@ export class PokerWaitService implements OnModuleDestroy {
             lastAutoAction: { handNo: auto.handNo, action: auto.action, reason: "timeout" },
           }
         }
-        if (!c.seats.some((s) => s.userId === userId) || c.room.status === "closed")
-          return { status: "table_closed", cursor }
-        const parsed = /^(\d+):(\d+)$/.exec(cursor)
-        if (parsed) {
-          const minimum = Math.max(
-            Number(parsed[1]) + (Number(parsed[2]) === 2147483647 ? 1 : 0),
-            seat?.joinedHandNo ?? 1,
-          )
-          const summary = await c.tx.gamePokerHandSummary.findFirst({
-            where: { userId, roomId: c.room.id, handNo: { gte: minimum } },
-            orderBy: { handNo: "asc" },
-            select: { handId: true, seatNo: true, handNo: true, result: true, delta: true },
-          })
+        if (position && session) {
+          const minimum = Math.max(position[0], seat?.joinedHandNo ?? 1),
+            includeCurrent = position[1] !== MAX_CURSOR_VALUE,
+            epoch = session.startedAt.toISOString()
+          // Departure and archival must not discard a result already earned in this
+          // session. Compare hand numbers without incrementing the int32 sentinel.
+          const [summary] = await c.tx.$queryRaw<
+            { handNo: number; result: string; delta: number; stack: number }[]
+          >`
+            SELECT "handNo","result","delta","stack" FROM (
+              SELECT summary."handNo",summary."result",summary."delta",participant."endingStack" AS stack
+              FROM "GamePokerHandSummary" summary JOIN "GamePokerHand" hand ON hand."id"=summary."handId"
+              JOIN "GamePokerHandSeat" participant ON participant."handId"=hand."id" AND participant."seatNo"=summary."seatNo"
+              WHERE summary."userId"=${userId} AND participant."userId"=${userId} AND summary."roomId"=${c.room.id}
+                AND hand."status"='settled' AND hand."startedAt">=${epoch}::timestamp
+                AND summary."handNo">=${minimum} AND (${includeCurrent} OR summary."handNo">${position[0]})
+              UNION ALL
+              SELECT archive."handNo",summary->>'result',(summary->>'delta')::int,(participant->>'endingStack')::int
+              FROM "GamePokerHandArchive" archive
+              CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'summaries') AS summaries(summary)
+              CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'seats') AS participants(participant)
+              WHERE archive."roomId"=${c.room.id} AND archive."participantIds" @> ARRAY[${userId}]::text[]
+                AND summary->>'userId'=${userId} AND participant->>'userId'=${userId}
+                AND participant->>'seatNo'=summary->>'seatNo'
+                AND (archive."data"->'hand'->>'startedAt')::timestamp>=${epoch}::timestamp
+                AND archive."handNo">=${minimum} AND (${includeCurrent} OR archive."handNo">${position[0]})
+            ) results ORDER BY "handNo" ASC LIMIT 1`
           if (summary) {
-            const participant = await c.tx.gamePokerHandSeat.findUniqueOrThrow({
-              where: { handId_seatNo: { handId: summary.handId, seatNo: summary.seatNo } },
-              select: { endingStack: true },
-            })
             return {
               status: "hand_result",
               handNo: summary.handNo,
               result: summary.result,
               delta: summary.delta,
-              stack: participant.endingStack,
-              cursor: `${summary.handNo}:2147483647`,
+              stack: summary.stack,
+              cursor: `${summary.handNo}:${MAX_CURSOR_VALUE}`,
             }
           }
         }
+        if (!seat || c.room.status === "closed") return { status: "table_closed", cursor }
         const view = await this.actions.view(c, userId, "owner", false)
         if (view.actionOnSeat === view.mySeatNo && view.mySeatNo !== null)
           return {
@@ -143,7 +161,7 @@ export class PokerWaitService implements OnModuleDestroy {
             cursor: view.cursor,
           }
         const current = view.cursor.split(":").map(Number),
-          previous = parsed ? [Number(parsed[1]), Number(parsed[2])] : [0, 0]
+          previous = position ?? [0, 0]
         return {
           status: "waiting",
           cursor:

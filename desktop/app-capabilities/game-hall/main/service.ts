@@ -2,6 +2,32 @@ import { GAME_UI_ROUTES } from "./ui-routes"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
 import type { AccountService } from "../../../electron/services/account-service"
 import { GAME_UI_OPERATIONS } from "../shared/capability"
+
+function waitForRequest<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    signal.throwIfAborted()
+    const abort = () => {
+      signal.removeEventListener("abort", abort)
+      reject(signal.reason)
+    }
+    signal.addEventListener("abort", abort, { once: true })
+    try {
+      void work().then(
+        (value) => {
+          signal.removeEventListener("abort", abort)
+          resolve(value)
+        },
+        (error: unknown) => {
+          signal.removeEventListener("abort", abort)
+          reject(error)
+        },
+      )
+    } catch (error) {
+      signal.removeEventListener("abort", abort)
+      reject(error)
+    }
+  })
+}
 export class GameCloudError extends Error {
   constructor(
     readonly code: string,
@@ -74,20 +100,25 @@ export class GameHallService {
     try {
       const route = ui ? GAME_UI_ROUTES[operation] : undefined
       const path = route ? route.path(params) : "/game/invoke"
-      const response = await this.account.fetchAuthenticated(
-        path,
-        route?.method === "GET"
-          ? { signal: controller.signal }
-          : {
-              method: "POST",
-              signal: controller.signal,
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ operation, params }),
-            },
-        "游戏请求失败。",
+      const response = await waitForRequest(controller.signal, () =>
+        this.account.fetchAuthenticated(
+          path,
+          route?.method === "GET"
+            ? { signal: controller.signal }
+            : {
+                method: "POST",
+                signal: controller.signal,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ operation, params }),
+              },
+          "游戏请求失败。",
+        ),
       )
       current()
-      const body = (await response.json()) as Record<string, unknown>
+      const body = (await waitForRequest(controller.signal, () => response.json())) as Record<
+        string,
+        unknown
+      >
       current()
       if (!response.ok || body.ok === false) {
         const failure = (body.failure ?? body) as Record<string, unknown>
