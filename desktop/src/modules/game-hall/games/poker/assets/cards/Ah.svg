@@ -1,2 +1,8 @@
-<?xml version='1.0' encoding='utf-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="card" face="AH" height="3.5in" preserveAspectRatio="none" viewBox="-120 -168 240 336" width="2.5in"><defs><symbol id="VHA" viewBox="-500 -500 1000 1000" preserveAspectRatio="xMinYMid"><path d="M-270 460L-110 460M-200 450L0 -460L200 450M110 460L270 460M-120 130L120 130" stroke="#bd263a" stroke-width="80" stroke-linecap="square" stroke-miterlimit="1.5" fill="none" /></symbol><symbol id="SHA" viewBox="-600 -600 1200 1200" preserveAspectRatio="xMinYMid"><path d="M0 -300C0 -400 100 -500 200 -500C300 -500 400 -400 400 -250C400 0 0 400 0 500C0 400 -400 0 -400 -250C-400 -400 -300 -500 -200 -500C-100 -500 0 -400 -0 -300Z" fill="#bd263a" /></symbol></defs><rect width="239" height="335" x="-119.5" y="-167.5" rx="12" ry="12" fill="white" stroke="#171b21" /><g transform="scale(0.7)"><use xlink:href="#SHA" height="140" width="140" x="-70" y="-70" /></g><g><use xlink:href="#VHA" height="64" width="64" x="-112" y="-156" /><use xlink:href="#SHA" height="40" width="40" x="-101" y="-88" /></g><g transform="rotate(180)"><use xlink:href="#VHA" height="64" width="64" x="-112" y="-156" /><use xlink:href="#SHA" height="40" width="40" x="-101" y="-88" /></g></svg>
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" class="card" face="AH" viewBox="-120 -168 240 336" width="240" height="336">
+  <rect x="-119.5" y="-167.5" width="239" height="335" rx="12" fill="white" stroke="#171b21" />
+  <g fill="#bd263a">
+    <path id="rank" d="M-62.395 -24 -16.243 -152H16.243L62.395 -24H33.983L24.536 -51.223H-24.645L-34.091 -24ZM-16.929 -73.722H16.929L0.054 -123.228Z" />
+    <path id="suit" d="M0 27.2C0 11.6 15.6 -4 31.2 -4C46.8 -4 62.4 11.6 62.4 35C62.4 74 0 136.4 0 152C0 136.4 -62.4 74 -62.4 35C-62.4 11.6 -46.8 -4 -31.2 -4C-15.6 -4 0 11.6 0 27.2Z" />
+  </g>
+</svg>
