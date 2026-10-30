@@ -6,7 +6,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
-import type { PokerAgentView } from "@synapse/shared/game-contracts"
+import { ModeFilter } from "./ModeFilter"
+import type { GameFunding, PokerAgentView } from "@synapse/shared/game-contracts"
 import {
   Select,
   SelectContent,
@@ -18,9 +19,9 @@ import { useHallOverview } from "../../../hooks/useHallOverview"
 import { amount } from "../lib/view"
 import { PersonaVersions } from "./PersonaVersions"
 export function AgentProfiles() {
-  const [roomCode, setRoomCode] = useState("all")
+  const [roomCode, setRoomCode] = useState("all"), [mode, setMode] = useState<GameFunding>("points")
   const hall = useHallOverview(),
-    rooms = (hall.data?.sessions ?? []).filter((s) => s.game === "poker" && s.roomCode)
+    rooms = (hall.data?.sessions ?? []).filter((s) => s.game === "poker" && s.roomCode && (s.funding ?? "points") === mode)
   useEffect(() => {
     if (
       hall.data &&
@@ -33,10 +34,10 @@ export function AgentProfiles() {
   }, [hall.data, roomCode])
   const agents = useGameQuery(() => gameApi().poker.agent.list(), "poker:agents"),
     stats = useGameQuery(
-      () => gameApi().poker.stats.get(roomCode === "all" ? {} : { roomCode }),
-      `poker:stats:${roomCode}`,
+      () => gameApi().poker.stats.get(roomCode === "all" ? (mode === "points" ? {} : { mode }) : { roomCode }),
+      `poker:stats:${mode}:${roomCode}`,
     )
-  const recent = useGameQuery(() => gameApi().poker.hand.history({ limit: 5 }), "poker:recent")
+  const recent = useGameQuery(() => gameApi().poker.hand.history({ limit: 5, mode }), `poker:recent:${mode}`)
   const [editing, setEditing] = useState<Partial<PokerAgentView>>({
       model: "",
       persona: "",
@@ -152,6 +153,7 @@ export function AgentProfiles() {
           </Button>
         </form>
         <div className="space-y-6">
+          <ModeFilter value={mode} label="战绩类型" onChange={(value) => { setMode(value); setRoomCode("all") }} />
           <GameQueryFeedback query={stats} />
           {stats.data && (
             <dl className="grid grid-cols-2 gap-4">

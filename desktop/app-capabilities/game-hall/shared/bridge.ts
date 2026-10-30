@@ -1,4 +1,5 @@
 import type {
+  GameFunding,
   HallOverview,
   GamePage,
   PokerRoomView,
@@ -19,7 +20,7 @@ export interface GameBridge {
   poker: {
     guide: () => Promise<unknown>
     lobby: {
-      list: (input?: { offset?: number; limit?: number }) => Promise<GamePage<PokerRoomView>>
+      list: (input?: { offset?: number; limit?: number; mode?: GameFunding }) => Promise<GamePage<PokerRoomView>>
     }
     room: {
       close: (input: Room) => Promise<{ pending?: boolean; closed?: boolean }>
@@ -28,8 +29,13 @@ export interface GameBridge {
         buyIn: number
         name?: string
         creationId?: string
+        mode?: GameFunding
       }) => Promise<{ roomCode: string }>
       get: (input: Room) => Promise<PokerTableView>
+    }
+    bot: {
+      add: (input: Room & { creationId: string }) => Promise<{ botId: string; seatNo: number }>
+      remove: (input: Room & { botId: string }) => Promise<{ pending: boolean }>
     }
     seat: {
       leave: (input: Room) => Promise<{ pending: boolean }>
@@ -50,10 +56,10 @@ export interface GameBridge {
       versions: (input: { agentId: string }) => Promise<PokerVersionView[]>
     }
     hand: {
-      history: (input?: { offset?: number; limit?: number }) => Promise<GamePage<PokerSummaryView>>
+      history: (input?: { offset?: number; limit?: number; mode?: GameFunding }) => Promise<GamePage<PokerSummaryView>>
       detail: (input: Room & { handNo: number }) => Promise<PokerDetailView>
     }
-    stats: { get: (input?: { roomCode?: string }) => Promise<PokerStats> }
+    stats: { get: (input?: { roomCode?: string; mode?: GameFunding }) => Promise<PokerStats> }
   }
 }
 export function unwrapGameResult<T>(value: unknown): T {

@@ -52,3 +52,11 @@ hand_result之后保存返回cursor并继续wait，离桌、输光或解散时�
 错误不盲目重试：按[协议与错误恢复](../references/protocol.md)处理。规则与安全边界见[规则](../references/rules.md)。
 
 GAME_INVALID_RESPONSE表示服务响应损坏，不表示写操作没有生效。读取可重试；写操作先overview或读取已保存对象核对，act重试保留原actionId，创建重试保留原creationId，不能另发新动作。
+
+## 程序机器人陪练房
+
+单人练习：room_create(mode=practice)→房主bot_add(roomCode,creationId=UUID)→真人按正常overview/join/wait/act循环。每个新机器人新UUID，同次丢响应重试复用；仅房主可管理，无须先入座。移除用bot_remove(roomCode,botId)，pending表示本手后移除。每次添加一个，至少留一位真人容量。删除后重试旧creationId不复活机器人，实际座位用room/table确认。
+
+整桌真人与机器人均使用练习筹码，不扣兑大厅点数、不计正式战绩。hand_result的练习delta不是点数收益；mode创建后固定，移除全部机器人仍是陪练房。lobby_list/hand_history/stats_get默认points，查练习明确传mode=practice；按roomCode比较采用房间模式。
+
+机器人不调用模型，不由真人或外部AI代其出牌、不催促、不读取其暗牌；没有可参与真人时不发新手，输光不自动补充。真人保持600秒规则与提示词/版本隐私。机器人主动行动actionSource=rules_bot，不是超时事件。

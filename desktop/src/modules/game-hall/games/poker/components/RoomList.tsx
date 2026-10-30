@@ -67,12 +67,13 @@ export function RoomList({
               </span>
               <span className="gc-room-code">
                 #{room.roomCode}
+                {room.mode === "practice" && " · 陪练"}
                 {mine && " · 我的牌桌"}
               </span>
               <RoomArtwork players={room.players} maxSeats={room.maxSeats} />
               <span className="gc-room-stakes">
                 <span>
-                  <small>带入</small>
+                  <small>{room.mode === "practice" ? "初始筹码" : "带入"}</small>
                   <b>{amount(room.buyIn)}</b>
                 </span>
                 <span>

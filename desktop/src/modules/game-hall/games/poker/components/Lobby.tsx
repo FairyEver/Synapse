@@ -2,6 +2,8 @@ import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
 import "../../../styles/hall.css"
 import { useRef, useState } from "react"
+import type { GameFunding } from "@synapse/shared/game-contracts"
+import { ModeFilter } from "./ModeFilter"
 import { useAccount } from "@/app-shell/account"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -31,19 +33,21 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     [closing, setClosing] = useState<string | null>(null),
     [name, setName] = useState(""),
     [maxSeats, setMaxSeats] = useState("6"),
-    [buyIn, setBuyIn] = useState("1000")
+    [buyIn, setBuyIn] = useState("1000"),
+    [mode, setMode] = useState<GameFunding>("points"),
+    [createMode, setCreateMode] = useState<GameFunding>("points")
   const creation = useRef<{ key: string; id: string } | null>(null)
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
   const lobby = useGameQuery(
-      () => gameApi().poker.lobby.list({ offset, limit: 50 }),
-      `poker:lobby:${offset}`,
+      () => gameApi().poker.lobby.list({ offset, limit: 50, mode }),
+      `poker:lobby:${mode}:${offset}`,
       5000,
     ),
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
-    const params = { name, maxSeats: Number(maxSeats), buyIn: Number(buyIn) },
+    const params = { name, maxSeats: Number(maxSeats), buyIn: Number(buyIn), mode: createMode },
       key = JSON.stringify(params)
     const result = await mutation.run(async () => {
       if (creation.current?.key !== key) creation.current = { key, id: crypto.randomUUID() }
@@ -79,12 +83,14 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     <>
       <LobbyView
         rooms={lobby.data?.items ?? null}
+        modeFilter={<ModeFilter value={mode} onChange={(value) => { setMode(value); setOffset(0) }} />}
         feedback={lobby.error ? <GameQueryFeedback query={lobby} /> : null}
         sessions={(hall.data?.sessions ?? []).filter((s) => s.game === "poker")}
         userId={userId}
         onRoom={onRoom}
         onCreate={() => {
           creation.current = null
+          setCreateMode(mode)
           setCreateOpen(true)
         }}
         onConnect={setConnect}
@@ -131,6 +137,14 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
             }}
           >
             <div className="space-y-2">
+              <Label htmlFor="poker-room-mode">房间类型</Label>
+              <Select value={createMode} onValueChange={(value) => setCreateMode(value as GameFunding)}>
+                <SelectTrigger id="poker-room-mode"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="points">点数房</SelectItem><SelectItem value="practice">陪练房</SelectItem></SelectContent>
+              </Select>
+              {createMode === "practice" && <p className="text-sm text-muted-foreground">不影响大厅点数</p>}
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="poker-room-name">房间名称</Label>
               <Input
                 id="poker-room-name"
@@ -155,7 +169,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="poker-buyin">带入点数</Label>
+              <Label htmlFor="poker-buyin">{createMode === "practice" ? "初始筹码" : "带入点数"}</Label>
               <Select value={buyIn} onValueChange={setBuyIn}>
                 <SelectTrigger id="poker-buyin">
                   <SelectValue />
@@ -184,7 +198,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>解散房间 #{closing}？</DialogTitle>
-            <DialogDescription>本手结束后退还所有玩家的剩余筹码。</DialogDescription>
+            <DialogDescription>{lobby.data?.items.find((r) => r.roomCode === closing)?.mode === "practice" ? "本手结束后解散，不兑换大厅点数。" : "本手结束后退还所有玩家的剩余筹码。"}</DialogDescription>
           </DialogHeader>
           <Button
             type="button"

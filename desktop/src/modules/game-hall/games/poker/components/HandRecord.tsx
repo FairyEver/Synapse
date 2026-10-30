@@ -1,5 +1,7 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { useState } from "react"
+import type { GameFunding } from "@synapse/shared/game-contracts"
+import { ModeFilter } from "./ModeFilter"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useGameQuery } from "../../../hooks/useGameQuery"
@@ -9,14 +11,15 @@ import { PersonaBadge } from "./PersonaBadge"
 import { recordStreets } from "../lib/record-streets"
 import { actionLabel, amount } from "../lib/view"
 export function HandRecord() {
+  const [mode, setMode] = useState<GameFunding>("points")
   const [offset, setOffset] = useState(0),
     [selected, setSelected] = useState<{
       roomCode: string
       handNo: number
     } | null>(null)
   const history = useGameQuery(
-    () => gameApi().poker.hand.history({ offset, limit: 50 }),
-    `poker:history:${offset}`,
+    () => gameApi().poker.hand.history({ offset, limit: 50, mode }),
+    `poker:history:${mode}:${offset}`,
   )
   const detail = useGameQuery(
     () => gameApi().poker.hand.detail(selected!),
@@ -29,6 +32,7 @@ export function HandRecord() {
     <div className="grid min-h-full grid-cols-1 lg:grid-cols-3">
       <div className="space-y-3 border-r p-4">
         <h2 className="font-medium">牌局记录</h2>
+        <ModeFilter value={mode} label="记录类型" onChange={(value) => { setMode(value); setOffset(0); setSelected(null) }} />
         <GameQueryFeedback query={history} />
         {!history.data ? (
           !history.error && <Skeleton className="h-32 w-full" />
@@ -81,7 +85,7 @@ export function HandRecord() {
         ) : (
           <>
             <h3 className="font-medium">
-              #{detail.data.roomCode} · 第 {detail.data.handNo} 手
+              #{detail.data.roomCode} · 第 {detail.data.handNo} 手{detail.data.mode === "practice" && " · 陪练"}
             </h3>
             <div className="flex gap-1" data-card-size="sm">
               {detail.data.board.map((card, i) => (
@@ -92,7 +96,7 @@ export function HandRecord() {
               {detail.data.seats.map((s) => (
                 <div key={s.seatNo} className="space-y-2">
                   <p className="text-sm">
-                    {s.displayName}
+                    {s.displayName}{s.participantKind === "bot" && " · 机器人"}
                     {s.endingStack !== null && (
                       <span className="ml-2 text-muted-foreground tabular-nums">
                         {s.endingStack > s.startingStack ? "赢 " : "净盈亏 "}
@@ -136,6 +140,7 @@ export function HandRecord() {
                       {Object.hasOwn(action, "personaVersion") && (
                         <PersonaBadge version={action.personaVersion} />
                       )}
+                      {action.actionSource === "rules_bot" && <span>机器人</span>}
                       <span>{action.note}</span>
                     </li>
                   ))}

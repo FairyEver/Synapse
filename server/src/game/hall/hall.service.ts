@@ -9,6 +9,7 @@ type JoinSession = {
   roomCode: string
   seatNo: number
   buyIn: number
+  funding?: "points" | "practice"
   startCursor?: string
 }
 @Injectable()
@@ -27,9 +28,10 @@ export class HallService {
   }
 
   async join(tx: Prisma.TransactionClient, userId: string, input: JoinSession, now: Date) {
-    if (!Number.isSafeInteger(input.buyIn) || input.buyIn <= 0)
+    const funding = input.funding ?? "points"
+    if (!Number.isSafeInteger(input.buyIn) || (funding === "practice" ? input.buyIn !== 0 : input.buyIn <= 0))
       throw new BadRequestException("带入额必须为正整数。")
-    const account = await this.lockAccount(tx, userId)
+    const account = funding === "points" ? await this.lockAccount(tx, userId) : null
     const where = {
       userId_gameKind_gameRoomId: {
         userId,
@@ -40,16 +42,17 @@ export class HallService {
     const existing = await tx.gameSession.findUnique({ where })
     if (existing && existing.status !== "closed")
       throw new BadRequestException({ code: "POKER_ALREADY_SEATED", message: "已在该房间入座。" })
-    if (account.points < input.buyIn)
+    if (account && account.points < input.buyIn)
       throw new BadRequestException({
         code: "POKER_INSUFFICIENT_BALANCE",
         message: "可用点数不足。",
       })
-    await tx.gameAccount.update({
+    if (account) await tx.gameAccount.update({
       where: { userId },
       data: { points: { increment: -input.buyIn } },
     })
     const data = {
+      funding,
       roomCode: input.roomCode,
       seatNo: input.seatNo,
       buyIn: input.buyIn,
@@ -79,15 +82,21 @@ export class HallService {
   ) {
     if (!Number.isSafeInteger(refund) || refund < 0)
       throw new BadRequestException("退款必须为非负整数。")
-    await this.lockAccount(tx, userId)
-    const session = await tx.gameSession.findUnique({
-      where: { userId_gameKind_gameRoomId: { userId, gameKind, gameRoomId } },
-    })
+    const where = { userId_gameKind_gameRoomId: { userId, gameKind, gameRoomId } }
+    let session = await tx.gameSession.findUnique({ where })
     if (!session || session.status === "closed") return
-    await tx.gameAccount.update({
-      where: { userId },
-      data: { points: { increment: refund }, netProfit: { increment: refund - session.buyIn } },
-    })
+    if (session.funding === "practice" && refund !== 0)
+      throw new BadRequestException("练习筹码不能退入点数账户。")
+    if (session.funding !== "practice") {
+      await this.lockAccount(tx, userId)
+      // A concurrent close may have committed while this transaction waited.
+      session = await tx.gameSession.findUnique({ where })
+      if (!session || session.status === "closed") return
+      await tx.gameAccount.update({
+        where: { userId },
+        data: { points: { increment: refund }, netProfit: { increment: refund - session.buyIn } },
+      })
+    }
     await tx.gameSession.update({
       where: { id: session.id },
       data: {
@@ -105,6 +114,7 @@ export class HallService {
     return this.prisma.$transaction(async (tx) => {
       const account = await this.lockAccount(tx, userId)
       type SessionRow = {
+        funding: string
         gameKind: string
         roomCode: string
         seatNo: number
@@ -116,7 +126,7 @@ export class HallService {
         { sessions: SessionRow[]; inPlay: number; activeProfit: number }[]
       >`
         SELECT COALESCE(jsonb_agg(jsonb_build_object(
-          'gameKind', "gameKind", 'roomCode', "roomCode", 'seatNo', "seatNo",
+          'gameKind', "gameKind", 'funding', "funding", 'roomCode', "roomCode", 'seatNo', "seatNo",
           'status', "status", 'needsAction', "needsAction", 'deadlineAt', "deadlineAt" AT TIME ZONE 'UTC'
         )), '[]'::jsonb) AS sessions,
         COALESCE(sum("inPlay"), 0)::float8 AS "inPlay",
@@ -125,6 +135,7 @@ export class HallService {
       const sessions = summary.sessions
         .map((s) => ({
           game: s.gameKind,
+          funding: s.funding ?? "points",
           gameName: GAME_REGISTRY.find((g) => g.id === s.gameKind)?.name ?? s.gameKind,
           roomCode: s.roomCode,
           seatNo: s.seatNo,
@@ -157,7 +168,7 @@ export class HallService {
   async grant(userId: string, now = new Date()) {
     return this.prisma.$transaction(async (tx) => {
       const account = await this.lockAccount(tx, userId)
-      const seated = await tx.gameSession.count({ where: { userId, status: { not: "closed" } } })
+      const seated = await tx.gameSession.count({ where: { userId, funding: "points", status: { not: "closed" } } })
       if (
         account.points !== 0 ||
         seated ||

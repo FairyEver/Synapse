@@ -16,6 +16,7 @@ export function LobbyView({
   onClose,
   pagination,
   feedback,
+  modeFilter,
 }: {
   rooms: PokerRoomView[] | null
   sessions: GameSessionView[]
@@ -26,6 +27,7 @@ export function LobbyView({
   onClose: (code: string) => void
   pagination?: ReactNode
   feedback?: ReactNode
+  modeFilter?: ReactNode
 }) {
   return (
     <main className="game-center gc-page">
@@ -40,6 +42,7 @@ export function LobbyView({
           创建房间
         </Button>
       </header>
+      {modeFilter}
       {sessions.length > 0 && (
         <MySessions sessions={sessions} onOpen={(s) => s.roomCode && onRoom(s.roomCode)} />
       )}

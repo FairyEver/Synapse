@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-30 程序机器人陪练房：新增app.game.poker.bot.add/remove两项房主管理能力（仅practice）及2项UI IPC；game索引22项（大厅3、扑克19），游戏IPC20项，全局365个capability/361个MCP索引。公开仍仅search/invoke；System App 23项，Dock、Workflow、Automation与Deep Link无增量。未增加真人act/join/wait桥接；共享命名新增设计已批准的add动作，模式筛选和机器人类型/来源同步schema与Skill。
+
 - 2026-10-30 游戏大厅第九轮审核：客户端按既有响应契约验证20个MCP操作及私有解散操作的数据，异常返回GAME_INVALID_RESPONSE并支持恢复；校验器属于内部协议边界，不新增能力。公开工具描述、输入schema、20个游戏MCP索引及18个IPC数量不变，正常附加响应字段继续保留。
 
 - 2026-10-30 游戏大厅第八轮审核：服务端新增可空内部startCursor确定入座事件边界，避免排队请求时间乱序串旧超时或漏结算。20个游戏MCP索引、18个IPC、所有输入/输出schema及权限数量不变，不返回或接受该字段作座位凭证；上线API前须完成新增会话游标迁移。
@@ -238,14 +240,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `mail` | 44 | 44 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
-| `game` | 20 | 20 |
-| 合计 | 363 | 359 |
+| `game` | 22 | 22 |
+| 合计 | 365 | 361 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 359 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 361 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

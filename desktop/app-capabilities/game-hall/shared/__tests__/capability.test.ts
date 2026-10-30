@@ -12,9 +12,9 @@ describe("游戏工具目录", () => {
     const result = await searchSynapseTools({ query, domain: "game", limit: 5 })
     expect(result.tools.some((t) => t.name.startsWith("app_game_poker_"))).toBe(true)
   })
-  it("20个工具全部注册到game域并保持规范名称与schema", () => {
+  it("22个工具全部注册到game域并保持规范名称与schema", () => {
     const tools = buildGameTools()
-    expect(tools).toHaveLength(20)
+    expect(tools).toHaveLength(22)
     for (const definition of GAME_TOOLS) {
       expect(isCanonicalCapabilityId(definition.id)).toBe(true)
       expect(getActionDomainId(definition.id)).toBe("game")

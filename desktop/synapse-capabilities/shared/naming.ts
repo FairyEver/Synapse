@@ -3,6 +3,7 @@ const CAPABILITY_ACTIONS = [
   "list",
   "get",
   "create",
+  "add",
   "update",
   "set_completed",
   "update_local",

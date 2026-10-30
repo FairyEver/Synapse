@@ -48,6 +48,7 @@ export function Table({
         </button>
         <div className="poker-room-heading">
           <strong>#{table.roomCode}</strong>
+          {table.mode === "practice" && <span>陪练</span>}
           <span>第 {table.handNo} 手</span>
         </div>
         <div className="poker-perspective">

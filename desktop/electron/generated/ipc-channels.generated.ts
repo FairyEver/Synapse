@@ -488,6 +488,8 @@ export const IPC_CHANNELS = {
     "pokerLobbyList": "synapse:app:game:poker:lobby:list",
     "pokerRoomCreate": "synapse:app:game:poker:room:create",
     "pokerRoomClose": "synapse:app:game:poker:room:close",
+    "pokerBotAdd": "synapse:app:game:poker:bot:add",
+    "pokerBotRemove": "synapse:app:game:poker:bot:remove",
     "pokerRoomGet": "synapse:app:game:poker:room:get",
     "pokerSeatLeave": "synapse:app:game:poker:seat:leave",
     "pokerSeatSit": "synapse:app:game:poker:seat:sit",

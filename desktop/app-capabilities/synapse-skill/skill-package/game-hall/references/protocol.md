@@ -1,5 +1,7 @@
 # 协议与错误恢复
 
+陪练mode=practice与点数房固定隔离，overview的funding标注会话类型。bot_add仅房主，必传UUID creationId；bot_remove按botId管理机器人，pending手后移除；POKER_BOT_NOT_ALLOWED表示房间、权限或目标不允许，不得改用act控制。创建重试保留UUID，不跨房复用，移除后旧标识不复活，查询座位确认。练习离桌丢弃本桌筹码，不扣兑点数；机器人actionSource=rules_bot不是真人超时提示。
+
 座位只按当前账号+roomCode定位，不存在seatToken。同账号可同时玩多个游戏、多个房间，同一房间只能一个座位。
 
 seat_sit返回的sittingOut是请求确认；pending表示当前手尚未结束，status为实际座位状态。pending时立即停止调用仍适用600秒超时离桌，不能承诺已保留暂离座位。
@@ -22,7 +24,7 @@ wait的waiting只有status/cursor；your_turn含本次决策字段和现读perso
 | POKER_STALE_ACTION | 丢弃旧handId/street，重新wait，不重试旧动作 |
 | POKER_ILLEGAL_ACTION | 按legalActions/toCall/minRaiseTo/maxRaiseTo改正；窗口不重置 |
 | POKER_HAND_NOT_ACTIVE | overview后wait |
-| POKER_SEAT_NOT_FOUND | overview；可能已超时或输光，重新入座会重新扣带入 |
+| POKER_SEAT_NOT_FOUND | overview；可能已超时或输光，点数房重新入座会扣带入，陪练房只重置本桌练习筹码 |
 | POKER_SEAT_SITTING_OUT | 用户要继续时seat_sit(false)，从下一手参与 |
 | POKER_ALREADY_SEATED | overview接回原座位 |
 | POKER_ROOM_FULL | lobby_list选择其他房间 |

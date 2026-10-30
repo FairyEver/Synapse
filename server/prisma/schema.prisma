@@ -1640,6 +1640,7 @@ model GameSession {
   id           String   @id @default(uuid())
   userId       String
   gameKind     String
+  funding      String @default("points")
   gameRoomId   String
   roomCode     String?
   seatNo       Int?
@@ -1663,6 +1664,8 @@ model GamePokerRoom {
   code             String @unique
   name             String?
   ownerUserId      String
+  mode             String @default("points")
+  botActionAt      DateTime?
   maxSeats         Int
   buyIn            Int
   smallBlind       Int @default(1)
@@ -1677,6 +1680,7 @@ model GamePokerRoom {
   createdAt        DateTime @default(now())
   closedAt         DateTime?
   @@index([status, actionDeadlineAt])
+  @@index([mode, status, botActionAt])
   @@index([status, lastMaintainedAt, createdAt], map:"GamePokerRoom_maintenance_idx")
 }
 model GamePokerSeat {
@@ -1684,6 +1688,7 @@ model GamePokerSeat {
   roomId       String
   seatNo       Int
   userId       String
+  participantKind String @default("human")
   agentId      String?
   modelName    String?
   displayName  String
@@ -1720,6 +1725,7 @@ model GamePokerHandSeat {
   handId        String
   seatNo        Int
   userId        String
+  participantKind String @default("human")
   displayName   String
   holeCards     Json
   startingStack Int
@@ -1741,6 +1747,7 @@ model GamePokerAction {
   amount           Int @default(0)
   potAfter         Int
   isAuto           Boolean @default(false)
+  actionSource     String?
   personaVersionId String?
   elapsedMs        Int?
   note             String?
@@ -1750,6 +1757,15 @@ model GamePokerAction {
   @@unique([handId, seq])
   @@index([roomId, createdAt])
   @@index([roomId, userId, isAuto, createdAt])
+}
+
+// Creation result survives seat removal so a lost-response retry never resurrects a bot.
+model GamePokerBot {
+  id        String @id
+  roomId    String
+  seatNo    Int
+  createdAt DateTime @default(now())
+  @@index([roomId])
 }
 model GamePokerAgent {
   id               String @id @default(uuid())
@@ -1775,6 +1791,7 @@ model GamePokerAgentVersion {
 model GamePokerHandSummary {
   id        String @id @default(uuid())
   roomId    String
+  mode      String @default("points")
   handId    String
   handNo    Int
   userId    String

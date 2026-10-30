@@ -18,7 +18,7 @@ export function Seat({
   deadlineMs: number | null
 }) {
   const stateLabel =
-    seat.aiState === "online" ? "在线" : seat.aiState === "offline" ? "掉线" : "暂离"
+    seat.participantKind === "bot" ? "机器人" : seat.aiState === "online" ? "在线" : seat.aiState === "offline" ? "掉线" : "暂离"
   const progress = 100 - Math.min(100, Math.max(0, deadlineMs ?? 0) / 6000)
   return (
     <div

@@ -34,6 +34,7 @@ export function SidePanel({
                     <small>
                       {streetLabel[action.street] ?? action.street}
                       {action.isAuto && " · 自动"}
+                      {action.actionSource === "rules_bot" && " · 机器人"}
                     </small>
                     {perspective === "owner" && action.personaVersion && (
                       <PersonaBadge version={action.personaVersion} />

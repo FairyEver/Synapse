@@ -147,6 +147,7 @@ export class GameController {
   }
   private page(q: Record<string, string>) {
     return {
+      ...(q.mode === undefined ? {} : { mode: q.mode }),
       ...(q.offset === undefined ? {} : { offset: Number(q.offset) }),
       ...(q.limit === undefined ? {} : { limit: Number(q.limit) }),
     }

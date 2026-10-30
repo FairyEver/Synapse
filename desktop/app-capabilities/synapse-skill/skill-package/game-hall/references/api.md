@@ -75,6 +75,13 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 100
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "points",
+        "practice"
+      ]
     }
   },
   "required": [],
@@ -84,12 +91,17 @@
 
 ## app_game_poker_room_create
 
-创建2–10人桌，盲注1/2。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+创建2–10人桌，盲注1/2；可传creationId(UUID)，同次创建重试复用，新开一桌更换。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
   "type": "object",
   "properties": {
+    "creationId": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
     "maxSeats": {
       "type": "integer",
       "minimum": 2,
@@ -107,6 +119,13 @@
     "name": {
       "type": "string",
       "maxLength": 48
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "points",
+        "practice"
+      ]
     }
   },
   "required": [
@@ -132,6 +151,57 @@
   },
   "required": [
     "roomCode"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_bot_add
+
+仅陪练房房主添加一个程序机器人，不调用模型、不影响大厅点数；同次重试复用creationId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "creationId": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    }
+  },
+  "required": [
+    "roomCode",
+    "creationId"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_bot_remove
+
+仅陪练房房主移除本房机器人；本手参与者手后移除，不能控制其动作或真人座位。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "botId": {
+      "type": "string",
+      "maxLength": 200
+    }
+  },
+  "required": [
+    "roomCode",
+    "botId"
   ],
   "additionalProperties": false
 }
@@ -167,7 +237,7 @@
 
 ## app_game_poker_seat_leave
 
-离桌退剩余筹码；参与中的手结束后离场。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -187,7 +257,7 @@
 
 ## app_game_poker_seat_sit
 
-主动暂离或回座；下一手起生效，保留筹码。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+主动暂离或回座；当前手结束后生效。sittingOut确认请求，pending表示尚未生效，status是实际座位状态。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -237,7 +307,7 @@
 
 ## app_game_poker_table_wait
 
-循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -369,7 +439,7 @@
 
 ## app_game_poker_agent_upsert
 
-新建/更新本人选手；内容变化生成不可变版本。口述风格未经明确要求不得写回。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+新建/更新本人选手；新建可传creationId(UUID)复用同一草稿，获得id后只传id。相同内容不重复版本，口述风格未经明确要求不得写回。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -378,6 +448,11 @@
     "id": {
       "type": "string",
       "maxLength": 200
+    },
+    "creationId": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
     },
     "model": {
       "type": "string",
@@ -430,6 +505,13 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 100
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "points",
+        "practice"
+      ]
     }
   },
   "required": [],
@@ -474,6 +556,13 @@
     "roomCode": {
       "type": "string",
       "pattern": "^[0-9]{4,6}$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "points",
+        "practice"
+      ]
     }
   },
   "required": [],

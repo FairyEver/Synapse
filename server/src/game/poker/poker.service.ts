@@ -13,7 +13,7 @@ export type RoomContext = {
   now: Date
 }
 export const json = (value: unknown) => value as Prisma.InputJsonValue
-function creationIdentity(userId: string, kind: "room" | "agent", creationId: string): string {
+export function creationIdentity(userId: string, kind: "room" | "agent" | "bot", creationId: string): string {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creationId))
     reject("POKER_ILLEGAL_ACTION", "创建标识须为UUID。")
   return `game-${kind}-${createHash("sha256")
@@ -44,7 +44,7 @@ export class PokerService {
           async (tx) => {
             const [room] = await tx.$queryRaw<
               GamePokerRoom[]
-            >`SELECT "id", "code", "name", "ownerUserId", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
+            >`SELECT "id", "code", "name", "ownerUserId", "mode", "botActionAt", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
             if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
             const seats = await tx.gamePokerSeat.findMany({
               where: { roomId: room.id },
@@ -70,13 +70,14 @@ export class PokerService {
   }
   async createRoom(
     userId: string,
-    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string },
+    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice" },
   ) {
     if (
       !Number.isInteger(input.maxSeats) ||
       input.maxSeats < 2 ||
       input.maxSeats > 10 ||
-      ![500, 1000, 2000, 5000].includes(input.buyIn)
+      ![500, 1000, 2000, 5000].includes(input.buyIn) ||
+      (input.mode !== undefined && !["points", "practice"].includes(input.mode))
     )
       reject("POKER_ILLEGAL_ACTION", "座位应为2–10，带入额仅支持500/1000/2000/5000。")
     const id =
@@ -89,6 +90,7 @@ export class PokerService {
           data: {
             ...(id ? { id } : {}),
             ownerUserId: userId,
+            mode: input.mode ?? "points",
             code: String(randomInt(1000, 1000000)),
             maxSeats: input.maxSeats,
             buyIn: input.buyIn,
@@ -143,7 +145,8 @@ export class PokerService {
             gameRoomId: room.id,
             roomCode: code,
             seatNo,
-            buyIn: room.buyIn,
+            buyIn: room.mode === "practice" ? 0 : room.buyIn,
+            funding: room.mode === "practice" ? "practice" : "points",
             startCursor: String(room.handNo + 1),
           },
           now,
@@ -189,7 +192,8 @@ export class PokerService {
     )
   }
   async refund(c: RoomContext, seat: GamePokerSeat) {
-    await this.hall.leave(c.tx, seat.userId, "poker", c.room.id, seat.stack, c.now)
+    if (seat.participantKind !== "bot")
+      await this.hall.leave(c.tx, seat.userId, "poker", c.room.id, c.room.mode === "practice" ? 0 : seat.stack, c.now)
     await c.tx.gamePokerSeat.delete({ where: { id: seat.id } })
     c.seats = c.seats.filter((s) => s.id !== seat.id)
   }
@@ -267,7 +271,8 @@ export class PokerService {
           if (hand && hand.status !== "settled") return
         }
         const cutoff = new Date(now.getTime() - 1800000)
-        const lastSession = !c.seats.length
+        const humans = c.seats.filter((s) => s.participantKind !== "bot")
+        const lastSession = !humans.length
           ? await c.tx.gameSession.findFirst({
               where: { gameKind: "poker", gameRoomId: c.room.id },
               orderBy: { lastActiveAt: "desc" },
@@ -277,8 +282,8 @@ export class PokerService {
         const emptySince = new Date(
           Math.max(c.room.createdAt.getTime(), lastSession?.lastActiveAt.getTime() ?? 0),
         )
-        const nobodyOnline = c.seats.length
-          ? c.seats.every((s) => s.lastSeenAt <= cutoff)
+        const nobodyOnline = humans.length
+          ? humans.every((s) => s.lastSeenAt <= cutoff)
           : emptySince <= cutoff
         const sessions = await c.tx.gameSession.findMany({
           where: { gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
@@ -392,11 +397,11 @@ export class PokerService {
           { personaVersionId: string; handCount: number; firstUsedAt: Date }[]
         >`
       WITH version_actions AS (
-        SELECT "personaVersionId","handId","createdAt" FROM "GamePokerAction" WHERE "userId"=${userId} AND "personaVersionId" IN (${Prisma.join(ids)})
+        SELECT "personaVersionId","handId","createdAt" FROM "GamePokerAction" a WHERE EXISTS (SELECT 1 FROM "GamePokerRoom" r WHERE r."id"=a."roomId" AND r."mode"='points') AND "userId"=${userId} AND "personaVersionId" IN (${Prisma.join(ids)})
         UNION ALL
         SELECT action->>'personaVersionId',action->>'handId',(action->>'createdAt')::timestamp
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'actions') AS entry(action)
-        WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND action->>'userId'=${userId} AND action->>'personaVersionId' IN (${Prisma.join(ids)})
+        WHERE EXISTS (SELECT 1 FROM "GamePokerRoom" r WHERE r."id"=archive."roomId" AND r."mode"='points') AND archive."participantIds" @> ARRAY[${userId}]::text[] AND action->>'userId'=${userId} AND action->>'personaVersionId' IN (${Prisma.join(ids)})
       ) SELECT "personaVersionId",count(DISTINCT "handId")::int AS "handCount",min("createdAt") AS "firstUsedAt" FROM version_actions GROUP BY "personaVersionId"`),
       )
     }

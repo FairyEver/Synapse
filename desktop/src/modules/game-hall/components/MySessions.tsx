@@ -43,6 +43,7 @@ export function MySessions({
               <span className="gc-session-bottom">
                 <span>
                   <strong>{session.gameName}</strong>
+                  {session.funding === "practice" && <span className="gc-meta"> · 陪练</span>}
                   <span className="gc-meta">
                     #{session.roomCode}
                     {session.seatNo !== null && ` · 座位 ${session.seatNo + 1}`}

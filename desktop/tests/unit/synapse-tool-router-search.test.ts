@@ -19,6 +19,8 @@ import { buildAllMcpTools } from "../../synapse-capabilities/shared/registry"
  * 所以第 6 名和没返回等价。
  */
 export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect: string }[] = [
+  { intent: "德州扑克陪练添加机器人", expect: "app_game_poker_bot_add" },
+  { intent: "德州扑克移除机器人", expect: "app_game_poker_bot_remove" },
   // ---- drive (16)：同前缀家族互相挤占的重灾区 ----
   { intent: "云盘里有哪些文件", expect: "app_drive_item_list" },
   { intent: "看下这个文件夹的目录树", expect: "app_drive_item_tree_list" },

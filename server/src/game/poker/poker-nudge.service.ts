@@ -16,6 +16,7 @@ export class PokerNudgeService {
         if (!c.seats.some((s) => s.userId === userId))
           reject("POKER_SEAT_NOT_FOUND", "只有同桌选手可以提醒。")
         const target = c.seats.find((s) => s.seatNo === seatNo)
+        if (target?.participantKind === "bot") reject("POKER_BOT_NOT_ALLOWED", "程序机器人不接收提醒。")
         if (!target || !c.room.currentHandId || !c.room.actionDeadlineAt)
           reject("POKER_SEAT_NOT_FOUND", "该座位不在等待行动。")
         const hand = await c.tx.gamePokerHand.findUniqueOrThrow({

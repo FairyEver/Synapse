@@ -3,6 +3,7 @@ import { z } from "zod"
 const version = z.object({ versionNo: z.number(), persona: z.string() }).passthrough()
 const action = z
   .object({
+    actionSource: z.enum(["mcp", "timeout", "rules_bot"]).optional(),
     seq: z.number(),
     seatNo: z.number(),
     displayName: z.string().optional(),
@@ -18,6 +19,9 @@ const action = z
   .passthrough()
 const seat = z
   .object({
+    participantKind: z.enum(["human", "bot"]).optional(),
+    botId: z.string().optional(),
+    leavePending: z.boolean().optional(),
     seatNo: z.number(),
     displayName: z.string(),
     stack: z.number(),
@@ -30,10 +34,12 @@ const seat = z
   .passthrough()
 const table = z
   .object({
+    mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),
     name: z.string().nullable(),
     status: z.string(),
     buyIn: z.number(),
+    ownerUserId: z.string().optional(),
     maxSeats: z.number(),
     handId: z.string().nullable(),
     handNo: z.number(),
@@ -77,6 +83,7 @@ const stats = z
   .passthrough()
 const room = z
   .object({
+    mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),
     name: z.string().nullable(),
     ownerUserId: z.string(),
@@ -91,6 +98,7 @@ const room = z
 const summary = z
   .object({
     handId: z.string(),
+    mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),
     handNo: z.number(),
     seatNo: z.number(),
@@ -174,6 +182,8 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     })
     .passthrough(),
   "app.game.poker.lobby.list": page(room),
+  "app.game.poker.bot.add": z.object({ botId: z.string(), seatNo: z.number() }).passthrough(),
+  "app.game.poker.bot.remove": z.object({ pending: z.boolean() }).passthrough(),
   "app.game.poker.room.create": z.object({ roomCode: z.string() }).passthrough(),
   "app.game.poker.room.get": table,
   "app.game.poker.seat.join": z.object({ roomCode: z.string(), seatNo: z.number() }).passthrough(),
@@ -206,7 +216,8 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     .object({
       handId: z.string(),
       handNo: z.number(),
-      roomCode: z.string(),
+      mode: z.enum(["points", "practice"]).optional(),
+    roomCode: z.string(),
       board: z.array(z.string()),
       street: z.string(),
       result: z.unknown(),
@@ -215,6 +226,7 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
           .object({
             seatNo: z.number(),
             displayName: z.string(),
+            participantKind: z.enum(["human", "bot"]).optional(),
             startingStack: z.number(),
             endingStack: z.number().nullable(),
             folded: z.boolean(),

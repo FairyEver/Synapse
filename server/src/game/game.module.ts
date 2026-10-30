@@ -11,6 +11,8 @@ import { PokerWaitService } from "./poker/poker-wait.service"
 import { PokerNudgeService } from "./poker/poker-nudge.service"
 import { PokerArchiveService } from "./poker/poker-archive.service"
 import { PokerDeadlineTask } from "./poker/poker-deadline.task"
+import { PokerBotService } from "./poker/poker-bot.service"
+import { PokerBotTask } from "./poker/poker-bot.task"
 @Module({
   imports: [UserAuthModule, NotificationModule, HallModule],
   controllers: [GameController],
@@ -23,6 +25,8 @@ import { PokerDeadlineTask } from "./poker/poker-deadline.task"
     PokerNudgeService,
     PokerDeadlineTask,
     PokerArchiveService,
+    PokerBotService,
+    PokerBotTask,
   ],
 })
 export class GameModule {}

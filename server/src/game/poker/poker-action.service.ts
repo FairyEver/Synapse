@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common"
-import { randomUUID } from "node:crypto"
+import { createHash, randomInt, randomUUID } from "node:crypto"
+import { chooseBotAction } from "./bot-policy"
 import type { ActionKind } from "./engine/betting"
 import { act, legalActions, removeFromHand } from "./engine/hand-runner"
 import { PokerService, json, type RoomContext } from "./poker.service"
@@ -18,125 +19,143 @@ export interface ActionInput {
 export class PokerActionService {
   constructor(readonly poker: PokerService) {}
   async act(userId: string, code: string, input: ActionInput, now = new Date()) {
-    return this.poker.withRoom(
-      code,
-      async (c) => {
-        const previous = await c.tx.gamePokerActionReceipt.findUnique({
-          where: { actionId: input.actionId },
-        })
-        if (previous && previous.userId === userId && previous.roomId === c.room.id)
-          return previous.response
-        const seat = c.seats.find((s) => s.userId === userId)
-        if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
-        if (c.room.status !== "running") reject("POKER_ROOM_CLOSED", "房间尚未开始或已暂停。")
-        const hand = c.room.currentHandId
-          ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } })
-          : null
-        if (!hand || hand.status === "settled")
-          reject("POKER_HAND_NOT_ACTIVE", "当前没有进行中的手牌。")
-        const h = engine(hand),
-          legal = legalActions(h, seat.seatNo)
-        const details = {
-          legalActions: legal.actions,
-          toCall: legal.toCall,
-          minRaiseTo: legal.minRaiseTo,
-          maxRaiseTo: legal.maxRaiseTo,
-          deadlineMs: Math.max(0, (c.room.actionDeadlineAt?.getTime() ?? 0) - now.getTime()),
-          handId: hand.id,
-          street: hand.street,
-        }
-        if (
-          input.handId !== hand.id ||
-          input.street !== hand.street ||
-          !c.room.actionDeadlineAt ||
-          now >= c.room.actionDeadlineAt
-        )
-          reject("POKER_STALE_ACTION", "行动已过期，请重新wait。", details)
-        if (h.actionOnSeat !== seat.seatNo)
-          reject(
-            seat.status === "sitting_out"
-              ? "POKER_SEAT_SITTING_OUT"
-              : h.seats.find((s) => s.seatNo === seat.seatNo)?.lastActedBet !== null
-                ? "POKER_STALE_ACTION"
-                : "POKER_NOT_YOUR_TURN",
-            "行动点已变更，请重新wait。",
-            details,
-          )
-        if (seat.status !== "active")
-          reject(
-            seat.status === "sitting_out" ? "POKER_SEAT_SITTING_OUT" : "POKER_NOT_YOUR_TURN",
-            "座位当前不能行动。",
-            details,
-          )
-        if (previous) reject("POKER_ILLEGAL_ACTION", "actionId已被使用。", details)
-        if (
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.actionId) ||
-          (input.note?.length ?? 0) > 200 ||
-          input.note?.includes("\n") ||
-          input.note?.includes("\r")
-        )
-          reject("POKER_ILLEGAL_ACTION", "actionId须为UUID，note限200字单行。", details)
-        let next
-        try {
-          next = act(h, seat.seatNo, input)
-        } catch {
-          reject("POKER_ILLEGAL_ACTION", "动作或数额不合法。", details)
-        }
-        const agent = seat.agentId
-          ? await c.tx.gamePokerAgent.findFirst({
-              where: { id: seat.agentId, userId },
-              select: { currentVersionId: true },
-            })
-          : null
-        const seq = hand.actionSeq + 1
-        const result = {
-          ok: true,
-          handId: hand.id,
-          actionSeq: seq,
-          cursor: `${hand.handNo}:${seq}`,
-        }
-        const before = h.seats.find((s) => s.seatNo === seat.seatNo)!,
-          after = next.seats.find((s) => s.seatNo === seat.seatNo)!
-        // Stack after settlement includes winnings; contribution delta remains the actual action amount.
-        await c.tx.gamePokerAction.create({
-          data: {
-            handId: hand.id,
-            roomId: c.room.id,
-            userId,
-            seq,
-            seatNo: seat.seatNo,
-            street: hand.street,
-            action: input.action,
-            amount: after.total - before.total,
-            potAfter: next.seats.reduce((sum, s) => sum + s.total, 0),
-            personaVersionId: input.personaSource === "session" ? null : agent?.currentVersionId,
-            note: input.note,
-            elapsedMs: Math.max(
-              0,
-              now.getTime() - (c.room.actionDeadlineAt.getTime() - ACTION_WINDOW_MS),
-            ),
-            actionId: input.actionId,
-            response: result,
-            createdAt: now,
-          },
-        })
-        await c.tx.gamePokerActionReceipt.create({
-          data: {
-            actionId: input.actionId,
-            userId,
-            roomId: c.room.id,
-            response: result,
-            createdAt: now,
-          },
-        })
-        await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: seq } })
-        await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { lastSeenAt: now } })
-        await saveHand(this.poker, c, hand, next)
-        if (next.street === "settled") await startNext(this.poker, c)
-        return result
-      },
-      now,
+    return this.poker.withRoom(code, (c) => this.submit(c, userId, input, "mcp"), now)
+  }
+  private async submit(c: RoomContext, userId: string, input: ActionInput, source: "mcp" | "rules_bot") {
+    const now = c.now
+    const previous = await c.tx.gamePokerActionReceipt.findUnique({
+      where: { actionId: input.actionId },
+    })
+    if (previous && previous.userId === userId && previous.roomId === c.room.id)
+      return previous.response
+    const seat = c.seats.find((s) => s.userId === userId)
+    if (!seat || (source === "rules_bot" ? seat.participantKind !== "bot" || c.room.mode !== "practice" : seat.participantKind === "bot")) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+    if (c.room.status !== "running") reject("POKER_ROOM_CLOSED", "房间尚未开始或已暂停。")
+    const hand = c.room.currentHandId
+      ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } })
+      : null
+    if (!hand || hand.status === "settled")
+      reject("POKER_HAND_NOT_ACTIVE", "当前没有进行中的手牌。")
+    const h = engine(hand),
+      legal = legalActions(h, seat.seatNo)
+    const details = {
+      legalActions: legal.actions,
+      toCall: legal.toCall,
+      minRaiseTo: legal.minRaiseTo,
+      maxRaiseTo: legal.maxRaiseTo,
+      deadlineMs: Math.max(0, (c.room.actionDeadlineAt?.getTime() ?? 0) - now.getTime()),
+      handId: hand.id,
+      street: hand.street,
+    }
+    if (
+      input.handId !== hand.id ||
+      input.street !== hand.street ||
+      !c.room.actionDeadlineAt ||
+      now >= c.room.actionDeadlineAt
     )
+      reject("POKER_STALE_ACTION", "行动已过期，请重新wait。", details)
+    if (h.actionOnSeat !== seat.seatNo)
+      reject(
+        seat.status === "sitting_out"
+          ? "POKER_SEAT_SITTING_OUT"
+          : h.seats.find((s) => s.seatNo === seat.seatNo)?.lastActedBet !== null
+            ? "POKER_STALE_ACTION"
+            : "POKER_NOT_YOUR_TURN",
+        "行动点已变更，请重新wait。",
+        details,
+      )
+    if (seat.status !== "active")
+      reject(
+        seat.status === "sitting_out" ? "POKER_SEAT_SITTING_OUT" : "POKER_NOT_YOUR_TURN",
+        "座位当前不能行动。",
+        details,
+      )
+    if (previous) reject("POKER_ILLEGAL_ACTION", "actionId已被使用。", details)
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.actionId) ||
+      (input.note?.length ?? 0) > 200 ||
+      input.note?.includes("\n") ||
+      input.note?.includes("\r")
+    )
+      reject("POKER_ILLEGAL_ACTION", "actionId须为UUID，note限200字单行。", details)
+    let next
+    try {
+      next = act(h, seat.seatNo, input)
+    } catch {
+      reject("POKER_ILLEGAL_ACTION", "动作或数额不合法。", details)
+    }
+    const agent = seat.agentId
+      ? await c.tx.gamePokerAgent.findFirst({
+          where: { id: seat.agentId, userId },
+          select: { currentVersionId: true },
+        })
+      : null
+    const seq = hand.actionSeq + 1
+    const result = {
+      ok: true,
+      handId: hand.id,
+      actionSeq: seq,
+      cursor: `${hand.handNo}:${seq}`,
+    }
+    const before = h.seats.find((s) => s.seatNo === seat.seatNo)!,
+      after = next.seats.find((s) => s.seatNo === seat.seatNo)!
+    // Stack after settlement includes winnings; contribution delta remains the actual action amount.
+    await c.tx.gamePokerAction.create({
+      data: {
+        handId: hand.id,
+        roomId: c.room.id,
+        userId,
+        seq,
+        seatNo: seat.seatNo,
+        street: hand.street,
+        action: input.action,
+        actionSource: source,
+        amount: after.total - before.total,
+        potAfter: next.seats.reduce((sum, s) => sum + s.total, 0),
+        personaVersionId: input.personaSource === "session" ? null : agent?.currentVersionId,
+        note: input.note,
+        elapsedMs: Math.max(
+          0,
+          now.getTime() - (c.room.actionDeadlineAt.getTime() - ACTION_WINDOW_MS),
+        ),
+        actionId: input.actionId,
+        response: result,
+        createdAt: now,
+      },
+    })
+    await c.tx.gamePokerActionReceipt.create({
+      data: {
+        actionId: input.actionId,
+        userId,
+        roomId: c.room.id,
+        response: result,
+        createdAt: now,
+      },
+    })
+    await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: seq } })
+    await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { lastSeenAt: now } })
+    await saveHand(this.poker, c, hand, next)
+    if (next.street === "settled") await startNext(this.poker, c)
+    return result
+  }
+  async actBot(code: string, expected: { handId: string; scheduledAt: Date }, now = new Date()) {
+    return this.poker.withRoom(code, async (c) => {
+      if (c.room.mode !== "practice" || c.room.status !== "running" ||
+          c.room.currentHandId !== expected.handId || !c.room.botActionAt ||
+          c.room.botActionAt.getTime() !== expected.scheduledAt.getTime() || c.room.botActionAt > now) return
+      const hand = await c.tx.gamePokerHand.findUniqueOrThrow({ where: { id: expected.handId } })
+      if (hand.status === "settled") return
+      const h = engine(hand), seat = c.seats.find((s) => s.seatNo === h.actionOnSeat && s.participantKind === "bot")
+      if (!seat) return
+      const me = h.seats.find((s) => s.seatNo === seat.seatNo)!
+      const decision = chooseBotAction({ hole: [...me.hole], board: [...h.board],
+        stack: me.stack, streetBet: me.streetBet, pot: h.seats.reduce((n, s) => n + s.total, 0),
+        legal: legalActions(h, seat.seatNo),
+      }, randomInt(1000000) / 1000000)
+      const key = createHash("sha256").update(JSON.stringify([hand.id, hand.actionSeq, seat.id])).digest("hex")
+      const actionId = `${key.slice(0,8)}-${key.slice(8,12)}-4${key.slice(13,16)}-a${key.slice(17,20)}-${key.slice(20,32)}`
+      return this.submit(c, seat.userId, { ...decision, handId: hand.id, street: hand.street, actionId }, "rules_bot")
+    }, now)
   }
   async expire(code: string, now = new Date()) {
     return this.poker.withRoom(
@@ -178,6 +197,7 @@ export class PokerActionService {
             action,
             potAfter: h.seats.reduce((sum, s) => sum + s.total, 0),
             isAuto: true,
+            actionSource: "timeout",
             personaVersionId: agent?.currentVersionId,
             elapsedMs: ACTION_WINDOW_MS,
             actionId: randomUUID(),
@@ -272,6 +292,7 @@ export class PokerActionService {
       amount: a.amount,
       potAfter: a.potAfter,
       isAuto: a.isAuto,
+      actionSource: a.actionSource ?? (a.isAuto ? "timeout" : "mcp"),
       ...(own && a.userId === userId
         ? {
             note: a.note,
@@ -294,6 +315,8 @@ export class PokerActionService {
       : null
     return {
       roomCode: c.room.code,
+      mode: c.room.mode,
+      ownerUserId: c.room.ownerUserId,
       name: c.room.name,
       status: c.room.status,
       buyIn: c.room.buyIn,
@@ -319,13 +342,15 @@ export class PokerActionService {
             (participating && h?.showdownSeats.includes(s.seatNo) && !p?.folded))
         return {
           seatNo: s.seatNo,
+          participantKind: s.participantKind,
+          ...(s.participantKind === "bot" ? { botId: s.id, leavePending: s.leavePending } : {}),
           displayName: s.displayName,
           stack: s.stack,
           status: s.status,
           isMe: s.userId === userId,
           streetBet: p?.streetBet ?? 0,
           aiState:
-            s.status === "sitting_out"
+            s.participantKind === "bot" ? "bot" : s.status === "sitting_out"
               ? "sitting_out"
               : c.now.getTime() - s.lastSeenAt.getTime() > 60000
                 ? "offline"

@@ -138,6 +138,8 @@ export const gameResponseFixtures: Record<string, unknown> = {
     errors: { POKER_NOT_YOUR_TURN: "重新wait" },
   },
   "app.game.poker.lobby.list": { items: [room], nextOffset: null },
+  "app.game.poker.bot.add": { botId: "bot", seatNo: 1 },
+  "app.game.poker.bot.remove": { pending: false },
   "app.game.poker.room.create": { roomCode: "4821" },
   "app.game.poker.room.get": {
     ...publicTable,

@@ -44,7 +44,7 @@ describe("游戏云响应协议", () => {
       service.dispose()
     }
   })
-  it("响应夹具覆盖20个MCP工具及私有解散操作", () => {
+  it("响应夹具覆盖22个MCP工具及私有解散操作", () => {
     expect(Object.keys(gameResponseFixtures).sort()).toEqual(
       [...GAME_TOOLS.map((tool) => tool.id), "app.game.poker.room.close"].sort(),
     )

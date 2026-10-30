@@ -32,10 +32,10 @@ export async function startNext(
   const eligible = c.seats.filter(
     (s) => s.stack > 0 && s.status !== "sitting_out" && !s.sitPending && !s.leavePending,
   )
-  if (eligible.length < 2) {
+  if (eligible.length < 2 || !eligible.some((s) => s.participantKind !== "bot")) {
     await c.tx.gamePokerRoom.update({
       where: { id: c.room.id },
-      data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null },
+      data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null, botActionAt: null },
     })
     await c.tx.gameSession.updateMany({
       where: { gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
@@ -77,6 +77,7 @@ export async function startNext(
       handId: hand.id,
       seatNo: s.seatNo,
       userId: eligible.find((p) => p.seatNo === s.seatNo)!.userId,
+      participantKind: eligible.find((p) => p.seatNo === s.seatNo)!.participantKind,
       displayName: eligible.find((p) => p.seatNo === s.seatNo)!.displayName,
       holeCards: s.hole,
       startingStack: s.startingStack,
@@ -117,7 +118,11 @@ export async function saveHand(
   const deadlineAt = settled ? null : new Date(c.now.getTime() + ACTION_WINDOW_MS)
   await c.tx.gamePokerRoom.update({
     where: { id: c.room.id },
-    data: { actionDeadlineAt: deadlineAt },
+    data: {
+      actionDeadlineAt: deadlineAt,
+      botActionAt: !settled && c.room.mode === "practice" && c.seats.some((s) => s.seatNo === state.actionOnSeat && s.participantKind === "bot")
+        ? new Date(c.now.getTime() + 1000) : null,
+    },
   })
   for (const s of c.seats) {
     const p = state.seats.find((p) => p.seatNo === s.seatNo)
@@ -136,7 +141,7 @@ export async function saveHand(
       where: { id: s.id },
       data: { stack: s.stack, status: s.status },
     })
-    await c.tx.gameSession.updateMany({
+    if (s.participantKind !== "bot") await c.tx.gameSession.updateMany({
       where: {
         userId: s.userId,
         gameKind: "poker",
@@ -144,7 +149,7 @@ export async function saveHand(
         status: { not: "closed" },
       },
       data: {
-        inPlay: p.stack + (settled ? 0 : p.total),
+        inPlay: c.room.mode === "practice" ? 0 : p.stack + (settled ? 0 : p.total),
         status: ["waiting", "sitting_out"].includes(s.status) ? s.status : "active",
         needsAction: !settled && state.actionOnSeat === s.seatNo,
         deadlineAt: !settled && state.actionOnSeat === s.seatNo ? deadlineAt : null,
@@ -168,6 +173,7 @@ export async function saveHand(
         data: {
           handId: hand.id,
           roomId: c.room.id,
+          mode: c.room.mode,
           handNo: hand.handNo,
           userId: participant.userId,
           seatNo: p.seatNo,

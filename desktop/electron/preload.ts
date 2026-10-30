@@ -801,6 +801,10 @@ const synapseBridge: SynapseBridge = {
           unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerRoomCreate)(input)),
         get: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerRoomGet)(input)),
       },
+      bot: {
+        add: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerBotAdd)(input)),
+        remove: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerBotRemove)(input)),
+      },
       seat: {
         leave: async (input) =>
           unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatLeave)(input)),

@@ -15,6 +15,7 @@ const game = z
   .passthrough()
 const session = z
   .object({
+    funding: z.enum(["points", "practice"]).optional(),
     game: z.string(),
     gameName: z.string(),
     roomCode: z.string().nullable(),

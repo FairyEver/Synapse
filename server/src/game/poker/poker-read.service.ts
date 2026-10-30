@@ -7,9 +7,9 @@ import { archiveData, type ArchivedHand } from "./poker-archive.service"
 @Injectable()
 export class PokerReadService {
   constructor(private readonly poker: PokerService) {}
-  async lobby(offset = 0, limit = 50) {
+  async lobby(offset = 0, limit = 50, mode: "points" | "practice" = "points") {
     const rooms = await this.poker.prisma.gamePokerRoom.findMany({
-      where: { status: { not: "closed" } },
+      where: { status: { not: "closed" }, mode },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: offset,
       take: limit + 1,
@@ -18,6 +18,7 @@ export class PokerReadService {
         code: true,
         name: true,
         ownerUserId: true,
+        mode: true,
         maxSeats: true,
         buyIn: true,
         status: true,
@@ -35,6 +36,7 @@ export class PokerReadService {
         roomCode: r.code,
         name: r.name,
         ownerUserId: r.ownerUserId,
+        mode: r.mode as "points" | "practice",
         maxSeats: r.maxSeats,
         buyIn: r.buyIn,
         status: r.status,
@@ -61,14 +63,14 @@ export class PokerReadService {
       cursorId = page.at(-1)!.id
     }
   }
-  async history(userId: string, offset = 0, limit = 50) {
+  async history(userId: string, offset = 0, limit = 50, mode: "points" | "practice" = "points") {
     const rows = await this.poker.prisma.$queryRaw<GamePokerHandSummary[]>`
       SELECT "id","roomId","handId","handNo","userId","seatNo","delta","result","holeCards","board","createdAt" FROM (
-        SELECT "id","roomId","handId","handNo","userId","seatNo","delta","result","holeCards","board","createdAt" FROM "GamePokerHandSummary" WHERE "userId"=${userId}
+        SELECT "id","roomId","handId","handNo","userId","seatNo","delta","result","holeCards","board","createdAt" FROM "GamePokerHandSummary" WHERE "userId"=${userId} AND "mode"=${mode}
         UNION ALL
         SELECT summary->>'id',summary->>'roomId',summary->>'handId',(summary->>'handNo')::int,summary->>'userId',(summary->>'seatNo')::int,(summary->>'delta')::int,summary->>'result',summary->'holeCards',summary->'board',(summary->>'createdAt')::timestamp
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'summaries') AS entry(summary)
-        WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND summary->>'userId'=${userId}
+        WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND summary->>'userId'=${userId} AND COALESCE(summary->>'mode','points')=${mode}
       ) records ORDER BY "createdAt" DESC,"id" DESC LIMIT ${limit + 1} OFFSET ${offset}`
     const rooms = await this.poker.prisma.gamePokerRoom.findMany({
       where: { id: { in: rows.map((r) => r.roomId) } },
@@ -77,6 +79,7 @@ export class PokerReadService {
     })
     return {
       items: rows.slice(0, limit).map((r) => ({
+        mode,
         handId: r.handId,
         roomCode: rooms.find((room) => room.id === r.roomId)!.code,
         handNo: r.handNo,
@@ -93,7 +96,7 @@ export class PokerReadService {
   async detail(userId: string, code: string, handNo: number) {
     return this.poker.prisma.$transaction(
       async (tx) => {
-        const room = await tx.gamePokerRoom.findUnique({ where: { code }, select: { id: true } })
+        const room = await tx.gamePokerRoom.findUnique({ where: { code }, select: { id: true, mode: true } })
         if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
         const hot = await tx.gamePokerHand.findUnique({
           where: { roomId_handNo: { roomId: room.id, handNo } },
@@ -155,6 +158,7 @@ export class PokerReadService {
         }
         const shown = Array.isArray(hand.showdownSeats) ? hand.showdownSeats : []
         return {
+          mode: room.mode,
           handId: hand.id,
           handNo: hand.handNo,
           roomCode: code,
@@ -164,6 +168,7 @@ export class PokerReadService {
           seats: participants.map((s) => ({
             seatNo: s.seatNo,
             displayName: s.displayName,
+            participantKind: s.participantKind ?? "human",
             startingStack: s.startingStack,
             endingStack: s.endingStack,
             folded: s.folded,
@@ -179,6 +184,7 @@ export class PokerReadService {
             amount: a.amount,
             potAfter: a.potAfter,
             isAuto: a.isAuto,
+            actionSource: a.actionSource ?? (a.isAuto ? "timeout" : "mcp"),
             elapsedMs: a.elapsedMs,
             ...(a.userId === userId
               ? {
@@ -197,20 +203,22 @@ export class PokerReadService {
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     )
   }
-  async stats(userId: string, roomCode?: string): Promise<PokerStats> {
-    const own = await this.userStats(userId)
-    if (!roomCode) return own
+  async stats(userId: string, roomCode?: string, mode?: "points" | "practice"): Promise<PokerStats> {
+    if (!roomCode) return this.userStats(userId, mode ?? "points")
     return this.poker.withRoom(
       roomCode,
       async (c) => {
         if (!c.seats.some((s) => s.userId === userId))
           reject("POKER_SEAT_NOT_FOUND", "只能对比本人所在的牌桌。")
+        if (mode && mode !== c.room.mode) reject("POKER_ILLEGAL_ACTION", "统计类型与房间不匹配。")
+        const actualMode = c.room.mode === "practice" ? "practice" : "points"
+        const own = await this.userStats(userId, actualMode)
         const comparison = await Promise.all(
-          c.seats.map(async (seat) => ({
+          c.seats.filter((s) => s.participantKind !== "bot").map(async (seat) => ({
             seatNo: seat.seatNo,
             displayName: seat.displayName,
             isMe: seat.userId === userId,
-            ...(await this.userStats(seat.userId)),
+            ...(await this.userStats(seat.userId, actualMode)),
           })),
         )
         return { ...own, comparison }
@@ -219,7 +227,7 @@ export class PokerReadService {
       false,
     )
   }
-  private async userStats(userId: string) {
+  private async userStats(userId: string, mode: "points" | "practice") {
     // Reconstruct each street's public contributions, including actual posted blinds.
     // An all-in is a raise only when its total exceeds the preceding table bet.
     const [s] = await this.poker.prisma.$queryRaw<
@@ -234,11 +242,11 @@ export class PokerReadService {
       }[]
     >`
       WITH user_hands AS (
-        SELECT "handId","delta","result","createdAt" FROM "GamePokerHandSummary" WHERE "userId"=${userId}
+        SELECT "handId","roomId","delta","result","createdAt" FROM "GamePokerHandSummary" WHERE "userId"=${userId} AND "mode"=${mode}
         UNION ALL
-        SELECT summary->>'handId',(summary->>'delta')::int,summary->>'result',(summary->>'createdAt')::timestamp
+        SELECT summary->>'handId',archive."roomId",(summary->>'delta')::int,summary->>'result',(summary->>'createdAt')::timestamp
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'summaries') AS entry(summary)
-        WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND summary->>'userId'=${userId}
+        WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND summary->>'userId'=${userId} AND COALESCE(summary->>'mode','points')=${mode}
       ), played AS (SELECT "handId","delta","result" FROM user_hands), hand_seats AS (
         SELECT seat."handId",seat."seatNo",seat."startingStack",hand."dealerSeat"
         FROM "GamePokerHandSeat" seat JOIN "GamePokerHand" hand ON hand."id"=seat."handId" JOIN played ON played."handId"=hand."id"

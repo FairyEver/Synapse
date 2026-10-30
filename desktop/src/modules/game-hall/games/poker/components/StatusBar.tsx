@@ -24,7 +24,7 @@ export function StatusBar({
           ? active.aiState === "offline"
             ? "你的 AI 已掉线"
             : "你的 AI 正在行动"
-          : `等待 ${active.displayName} 的 AI`
+          : active.participantKind === "bot" ? "机器人行动中" : `等待 ${active.displayName} 的 AI`
   const offline = mine && active?.aiState === "offline"
   const countdown = !active || watching ? null : remaining(table.deadlineMs)
   return (
@@ -56,7 +56,7 @@ export function StatusBar({
             )}
           </span>
         )}
-        {active && !mine && !watching && (
+        {active && active.participantKind !== "bot" && !mine && !watching && (
           <button
             type="button"
             className="poker-control"

@@ -57,6 +57,8 @@ export const gameIpcModule: IpcModule = {
       ...method("app.game.poker.room.close"),
       operationId: "app.game.poker.room.close",
     },
+    pokerBotAdd: { ...method("app.game.poker.bot.add"), operationId: "app.game.poker.bot.add" },
+    pokerBotRemove: { ...method("app.game.poker.bot.remove"), operationId: "app.game.poker.bot.remove" },
     pokerRoomGet: { ...method("app.game.poker.room.get"), operationId: "app.game.poker.room.get" },
     pokerSeatLeave: {
       ...method("app.game.poker.seat.leave"),

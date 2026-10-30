@@ -1,4 +1,5 @@
 /** Shared wire contracts: no game-specific logic in the hall. */
+export type GameFunding = "points" | "practice"
 export interface GameDefinition {
   id: string
   name: string
@@ -7,6 +8,7 @@ export interface GameDefinition {
   status: string
 }
 export interface GameSessionView {
+  funding?: GameFunding
   game: string
   gameName: string
   roomCode: string | null
@@ -22,6 +24,9 @@ export interface HallOverview {
   next: { game: string; roomCode: string | null } | null
 }
 export interface PokerSeatView {
+  participantKind?: "human" | "bot"
+  botId?: string
+  leavePending?: boolean
   seatNo: number
   displayName: string
   stack: number
@@ -32,6 +37,7 @@ export interface PokerSeatView {
   hole?: string[]
 }
 export interface PokerActionView {
+  actionSource?: "mcp" | "timeout" | "rules_bot"
   seq: number
   seatNo: number
   displayName?: string
@@ -45,6 +51,8 @@ export interface PokerActionView {
   personaVersion?: { versionNo: number; persona: string } | null
 }
 export interface PokerTableView {
+  mode?: GameFunding
+  ownerUserId?: string
   roomCode: string
   name: string | null
   status: string
@@ -71,6 +79,7 @@ export interface PokerTableView {
   deckRemaining: number
 }
 export interface PokerRoomView {
+  mode?: GameFunding
   roomCode: string
   name: string | null
   ownerUserId: string
@@ -97,6 +106,7 @@ export interface PokerVersionView {
   handCount: number
 }
 export interface PokerSummaryView {
+  mode?: GameFunding
   handId: string
   roomCode: string
   handNo: number
@@ -108,6 +118,7 @@ export interface PokerSummaryView {
   createdAt: string
 }
 export interface PokerDetailView {
+  mode?: GameFunding
   handId: string
   handNo: number
   roomCode: string
@@ -115,6 +126,7 @@ export interface PokerDetailView {
   street: string
   result: unknown
   seats: {
+    participantKind?: "human" | "bot"
     seatNo: number
     displayName: string
     startingStack: number
@@ -147,6 +159,7 @@ const str = (maxLength = 200): Field => ({ type: "string", maxLength })
 const integer = (minimum: number, maximum: number): Field => ({ type: "integer", minimum, maximum })
 const code: Field = { type: "string", pattern: "^[0-9]{4,6}$" }
 const room = { roomCode: code }
+const mode: Field = { type: "string", enum: ["points", "practice"] }
 const page = { offset: integer(0, 2147483647), limit: integer(1, 100) }
 const definitions: [string, string, Record<string, Field>, string[], boolean][] = [
   [
@@ -168,7 +181,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   [
     "poker.lobby.list",
     "列出房间。Pagination: offset-based. Continue with nextOffset until null.",
-    page,
+    { ...page, mode },
     [],
     false,
   ],
@@ -180,11 +193,14 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
       maxSeats: integer(2, 10),
       buyIn: { type: "integer", enum: [500, 1000, 2000, 5000] },
       name: str(48),
+      mode,
     },
     ["maxSeats", "buyIn"],
     true,
   ],
   ["poker.room.get", "只读旁观快照，不返回底牌、私密提示词或note。", room, ["roomCode"], false],
+  ["poker.bot.add", "仅陪练房房主添加一个程序机器人，不调用模型、不影响大厅点数；同次重试复用creationId。", { ...room, creationId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "creationId"], true],
+  ["poker.bot.remove", "仅陪练房房主移除本房机器人；本手参与者手后移除，不能控制其动作或真人座位。", { ...room, botId: str() }, ["roomCode", "botId"], true],
   [
     "poker.seat.join",
     "按当前账号+roomCode入座，无令牌。鼓励声明modelName，不确定留空，不校验模型身份。",
@@ -192,7 +208,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     ["roomCode"],
     true,
   ],
-  ["poker.seat.leave", "离桌退剩余筹码；参与中的手结束后离场。", room, ["roomCode"], true],
+  ["poker.seat.leave", "点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场。", room, ["roomCode"], true],
   [
     "poker.seat.sit",
     "主动暂离或回座；当前手结束后生效。sittingOut确认请求，pending表示尚未生效，status是实际座位状态。",
@@ -264,7 +280,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   [
     "poker.hand.history",
     "本人最近手牌结果。Pagination: offset-based. Continue with nextOffset until null.",
-    page,
+    { ...page, mode },
     [],
     false,
   ],
@@ -278,7 +294,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   [
     "poker.stats.get",
     "本人战绩及风格指标；可按roomCode比较本人所在牌桌的公开指标，不以自述模型参与统计。",
-    { roomCode: code },
+    { roomCode: code, mode },
     [],
     false,
   ],
