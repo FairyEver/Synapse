@@ -1,0 +1,66 @@
+/** @vitest-environment jsdom */
+import { act } from "react"
+import { createRoot } from "react-dom/client"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
+import { PokerApp } from "../PokerApp"
+
+vi.mock("../components/Lobby", () => ({ Lobby: () => <div>房间内容</div> }))
+vi.mock("../components/HandRecord", () => ({ HandRecord: () => <div>记录内容</div> }))
+vi.mock("../components/AgentProfiles", () => ({ AgentProfiles: () => <div>档案内容</div> }))
+vi.mock("../hooks/usePokerRoom", () => ({ usePokerRoom: vi.fn() }))
+vi.mock("../../../hooks/useGameQuery", () => ({ useGameMutation: vi.fn() }))
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+
+afterEach(() => document.body.replaceChildren())
+describe("游戏应用顶栏", () => {
+  it.each(["window", "dock", "launcher"] as const)(
+    "%s 模式只显示统一顶栏和一个返回大厅入口",
+    async (mode) => {
+      const host = document.createElement("div"),
+        root = createRoot(host)
+      document.body.append(host)
+      const onBack = vi.fn(),
+        onOpenRoom = vi.fn()
+      const page = <PokerApp roomCode={null} onOpenRoom={onOpenRoom} onBack={onBack} />
+      await act(async () =>
+        root.render(
+          mode === "window" ? (
+            page
+          ) : (
+            <EmbeddedSystemAppShell appName="游戏大厅" mode={mode}>
+              {page}
+            </EmbeddedSystemAppShell>
+          ),
+        ),
+      )
+      const headers = host.querySelectorAll("[data-system-app-top-bar]")
+      expect(headers).toHaveLength(1)
+      const header = headers[0]
+      if (mode === "window")
+        expect(header.querySelector("[data-system-app-top-bar-left]")?.textContent).toBe("德州扑克")
+      expect([...header.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
+        "房间",
+        "牌局记录",
+        "选手档案",
+      ])
+      const returns = [...header.querySelectorAll("button")].filter((button) =>
+        /^(返回大厅|游戏大厅)$/.test(button.textContent ?? ""),
+      )
+      expect(returns).toHaveLength(1)
+      expect(returns[0].closest("[data-system-app-top-bar-actions]")).not.toBeNull()
+      await act(async () => returns[0].click())
+      expect(onBack).toHaveBeenCalledOnce()
+      const records = header.querySelector<HTMLButtonElement>(
+        '[role="tab"][data-state="inactive"]',
+      )!
+      await act(async () =>
+        records.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+      )
+      expect(host.textContent).toContain("记录内容")
+      expect(onOpenRoom).toHaveBeenCalledWith(null)
+      expect(host.textContent).not.toMatch(/切换深色|切换浅色|查看大厅|房间列表|2 人|6 人|10 人/)
+      await act(async () => root.unmount())
+    },
+  )
+})

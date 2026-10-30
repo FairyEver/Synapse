@@ -95,6 +95,9 @@
 
 ## System App 顶栏与表单
 
+- 游戏大厅（`game-hall`）的应用顶栏遵守统一规范：独立窗口通过 `SystemAppWindowShell` 声明标题、居中标签与右侧操作；内嵌模式沿用宿主 header slot。返回大厅只保留一个入口，不放置主题切换、预览场景或测试人数控件。
+- 2026-10-30 用户确认的游戏内容区例外：游戏大厅内部和各游戏内部属于特殊界面，允许独立布局、组件外观与视觉语言，不要求套用其它 Synapse 业务页面的样式。自定义主题限定在游戏模块作用域，不污染应用顶栏、共享组件与其它模块；牌桌保持固定配色。此例外不改变权限、只读观看、可访问性与数据边界，也不扩展到其它 System App。
+
 - System App 入口不得直接渲染 `SystemAppTopBar`。有 tabs、actions 或顶栏信息时，统一通过 `SystemAppWindowShell` 声明；使用 `ModulePage` 的列表页由 `ModulePage` 代为接入该壳层。
 - 启动台内嵌模式只允许 `EmbeddedSystemAppShell` 渲染一条应用顶栏：左侧返回、应用名和可选信息，中间 tabs，右侧应用 actions 和新窗口入口。应用内容区不得再渲染第二条应用顶栏。
 - 用户确认的邮箱独立写信窗口例外：`SystemAppWindowShell.left` 放置发送、保存草稿、附件，复用共享 action button；右侧只显示发件账号和保存状态，关闭使用系统窗口按钮，不新增一条工具栏。收件区域仅提供收件人和可展开的抄送，不提供密送。

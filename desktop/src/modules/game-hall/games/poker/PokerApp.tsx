@@ -45,16 +45,14 @@ export function PokerApp({
   const [tab, setTab] = useState("rooms")
   return (
     <SystemAppWindowShell
+      left={<span className="text-sm font-medium">德州扑克</span>}
       tabs={tabs}
       value={tab}
       onValueChange={(value) => {
         setTab(value)
         onOpenRoom(null)
       }}
-      embeddedLeftAddon={
-        <SystemAppTopBarActionButton onClick={onBack}>返回大厅</SystemAppTopBarActionButton>
-      }
-      actions={<SystemAppTopBarActionButton onClick={onBack}>游戏大厅</SystemAppTopBarActionButton>}
+      actions={<SystemAppTopBarActionButton onClick={onBack}>返回大厅</SystemAppTopBarActionButton>}
     >
       <div className="game-hall h-full min-h-0 bg-background text-foreground">
         {tab === "rooms" && roomCode ? (
