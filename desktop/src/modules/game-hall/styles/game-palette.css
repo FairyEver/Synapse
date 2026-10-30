@@ -1,6 +1,7 @@
 /* Shared content palette; never applied to the System App shell. */
 .game-center,
-.poker-table {
+.poker-table,
+.poker-create-dialog {
   --gc-canvas: oklch(0.17 0.012 248);
   --gc-surface: oklch(0.215 0.015 248);
   --gc-raised: oklch(0.26 0.017 248);

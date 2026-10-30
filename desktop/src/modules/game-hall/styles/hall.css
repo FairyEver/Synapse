@@ -1,6 +1,6 @@
 @import "./game-palette.css";
 
-/* Game-center content only. The System App header and body portals keep Synapse tokens. */
+/* Game-center content only. The poker creation portal opts into its own scoped palette. */
 .game-center {
   --background: var(--gc-canvas);
   --foreground: var(--gc-ink);

@@ -2,20 +2,11 @@ import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
 import "../../../styles/hall.css"
 import { useRef, useState } from "react"
-import type { GameFunding, PokerVariant, PokerBlindPreset } from "@synapse/shared/game-contracts"
 import { pokerConnectInstruction } from "../lib/connect-instruction"
 import { useAccount } from "@/app-shell/account"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { CreateRoomDialog, type PokerRoomDraft } from "./CreateRoomDialog"
 import {
   Dialog,
   DialogContent,
@@ -31,12 +22,9 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     [createOpen, setCreateOpen] = useState(false),
     [connect, setConnect] = useState<string | null>(null),
     [closing, setClosing] = useState<string | null>(null),
-    [name, setName] = useState(""),
-    [maxSeats, setMaxSeats] = useState("6"),
-    [buyIn, setBuyIn] = useState("1000"),
-    [createMode, setCreateMode] = useState<GameFunding>("points"),
-    [variant, setVariant] = useState<PokerVariant>("standard52"),
-    [blindPreset, setBlindPreset] = useState<PokerBlindPreset>("1/2")
+    [draft, setDraft] = useState<PokerRoomDraft>({
+      name: "", mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000,
+    })
   const creation = useRef<{ key: string; id: string } | null>(null)
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
@@ -48,7 +36,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
-    const params = { name, maxSeats: Number(maxSeats), buyIn: Number(buyIn), mode: createMode, variant, blindPreset },
+    const params = draft,
       key = JSON.stringify(params)
     const result = await mutation.run(async () => {
       if (creation.current?.key !== key) creation.current = { key, id: crypto.randomUUID() }
@@ -98,7 +86,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         onRoom={onRoom}
         onCreate={() => {
           creation.current = null
-          setCreateMode("points")
+          setDraft((value) => ({ ...value, mode: "points" }))
           setCreateOpen(true)
         }}
         onConnect={setConnect}
@@ -126,92 +114,17 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
           ) : null
         }
       />
-      <Dialog
+      <CreateRoomDialog
         open={createOpen}
         onOpenChange={(open) => {
           if (!open) creation.current = null
           setCreateOpen(open)
         }}
-      >
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>创建房间</DialogTitle>
-          </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void create()
-            }}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="poker-room-mode">房间类型</Label>
-              <Select value={createMode} onValueChange={(value) => setCreateMode(value as GameFunding)}>
-                <SelectTrigger id="poker-room-mode"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="points">点数房</SelectItem><SelectItem value="practice">陪练房</SelectItem></SelectContent>
-              </Select>
-              {createMode === "practice" && <p className="text-sm text-muted-foreground">不影响大厅点数</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="poker-variant">牌局规则</Label>
-              <Select value={variant} onValueChange={v => setVariant(v as PokerVariant)}>
-                <SelectTrigger id="poker-variant"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="standard52">标准 52 张</SelectItem><SelectItem value="short32">短牌 32 张 · 7 至 A</SelectItem></SelectContent>
-              </Select>
-              {variant === "short32" && <p className="text-sm text-muted-foreground">同花大于葫芦，A789T 是最小顺子</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="poker-blinds">盲注</Label>
-              <Select value={blindPreset} onValueChange={v => setBlindPreset(v as PokerBlindPreset)}>
-                <SelectTrigger id="poker-blinds"><SelectValue /></SelectTrigger>
-                <SelectContent>{["1/2", "2/4", "5/10", "10/20"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="poker-room-name">房间名称</Label>
-              <Input
-                id="poker-room-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={48}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="poker-seats">座位数</Label>
-              <Select value={maxSeats} onValueChange={setMaxSeats}>
-                <SelectTrigger id="poker-seats">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 9 }, (_, i) => (
-                    <SelectItem key={i + 2} value={String(i + 2)}>
-                      {i + 2} 人
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="poker-buyin">{createMode === "practice" ? "初始筹码" : "带入点数"}</Label>
-              <Select value={buyIn} onValueChange={setBuyIn}>
-                <SelectTrigger id="poker-buyin">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[500, 1000, 2000, 5000].map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      {n.toLocaleString()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="submit" disabled={mutation.busy}>
-              创建
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+        value={draft}
+        onChange={setDraft}
+        onCreate={() => void create()}
+        busy={mutation.busy}
+      />
       <Dialog
         open={!!closing}
         onOpenChange={(open) => {
