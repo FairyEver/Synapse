@@ -30,21 +30,34 @@ export class PokerService {
     now = new Date(),
     changed = true,
   ): Promise<T> {
-    const result = await this.prisma.$transaction(
-      async (tx) => {
-        const [room] = await tx.$queryRaw<
-          GamePokerRoom[]
-        >`SELECT "id", "code", "name", "ownerUserId", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
-        if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
-        const seats = await tx.gamePokerSeat.findMany({
-          where: { roomId: room.id },
-          take: 10,
-          orderBy: { seatNo: "asc" },
-        })
-        return work({ tx, room, seats, now })
-      },
-      { timeout: 15000, maxWait: 15000 },
-    )
+    let result: T
+    for (let attempt = 1; ; attempt++) {
+      try {
+        result = await this.prisma.$transaction(
+          async (tx) => {
+            const [room] = await tx.$queryRaw<
+              GamePokerRoom[]
+            >`SELECT "id", "code", "name", "ownerUserId", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
+            if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
+            const seats = await tx.gamePokerSeat.findMany({
+              where: { roomId: room.id },
+              take: 10,
+              orderBy: { seatNo: "asc" },
+            })
+            return work({ tx, room, seats, now })
+          },
+          { timeout: 15000, maxWait: 15000 },
+        )
+        break
+      } catch (error) {
+        const retryable =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === "P2034" || (error.code === "P2010" && error.meta?.code === "40P01"))
+        // These errors confirm rollback; allow at most three whole-transaction
+        // attempts. Never include committed notifications or unrelated failures here.
+        if (!retryable || attempt >= 3) throw error
+      }
+    }
     if (changed) for (const listener of this.listeners) listener(code)
     return result
   }

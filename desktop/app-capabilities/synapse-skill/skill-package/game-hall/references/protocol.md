@@ -27,3 +27,5 @@ wait的waiting只有status/cursor；your_turn含本次决策字段和现读perso
 | 网络断开 | wait重发并保留cursor；act响应不明则原UUID原动作重试 |
 
 房间列表与手牌历史采用offset分页：nextOffset非null时继续，查询条件变动从0开始。提示词版本不可修改、删除；内容相同不生成新版本，清空会生成空版本。
+
+recentActions的displayName是本手行动人姓名快照；同一seatNo后来换人时仍表示原行动人，不要按当前seats姓名重写行动归属。

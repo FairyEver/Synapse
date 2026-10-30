@@ -25,9 +25,7 @@ export function SidePanel({
         ) : (
           <ol className="poker-action-list">
             {table.recentActions.map((action) => {
-              const displayName =
-                table.seats.find((s) => s.seatNo === action.seatNo)?.displayName ??
-                `座位 ${action.seatNo + 1}`
+              const displayName = action.displayName ?? `座位 ${action.seatNo + 1}`
               return (
                 <li key={action.seq}>
                   <span className="poker-action-seq">{String(action.seq).padStart(2, "0")}</span>

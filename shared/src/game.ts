@@ -34,6 +34,7 @@ export interface PokerSeatView {
 export interface PokerActionView {
   seq: number
   seatNo: number
+  displayName?: string
   street: string
   action: string
   amount: number

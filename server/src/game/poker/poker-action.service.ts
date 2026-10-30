@@ -241,6 +241,14 @@ export class PokerActionService {
           take: 30,
         })
       : []
+    const participants =
+      hand && records.length > 0
+        ? await c.tx.gamePokerHandSeat.findMany({
+            where: { handId: hand.id },
+            select: { seatNo: true, displayName: true },
+            take: 10,
+          })
+        : []
     const versions =
       includeVersions && own
         ? await c.tx.gamePokerAgentVersion.findMany({
@@ -258,6 +266,7 @@ export class PokerActionService {
     const recentActions = records.reverse().map((a) => ({
       seq: a.seq,
       seatNo: a.seatNo,
+      displayName: participants.find((s) => s.seatNo === a.seatNo)?.displayName,
       street: a.street,
       action: a.action,
       amount: a.amount,
