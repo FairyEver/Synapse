@@ -2,6 +2,7 @@ import { GAME_UI_ROUTES } from "./ui-routes"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
 import type { AccountService } from "../../../electron/services/account-service"
 import { GAME_UI_OPERATIONS } from "../shared/capability"
+import { GAME_RESPONSE_SCHEMAS } from "../shared/response-schemas"
 
 function waitForRequest<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -115,20 +116,35 @@ export class GameHallService {
         ),
       )
       current()
-      const body = (await waitForRequest(controller.signal, () => response.json())) as Record<
-        string,
-        unknown
-      >
+      let body: unknown
+      try {
+        body = await waitForRequest(controller.signal, () => response.json())
+      } catch (error) {
+        current()
+        controller.signal.throwIfAborted()
+        throw new GameCloudError("GAME_INVALID_RESPONSE", "游戏响应格式无效，请重试。")
+      }
       current()
-      if (!response.ok || body.ok === false) {
-        const failure = (body.failure ?? body) as Record<string, unknown>
+      controller.signal.throwIfAborted()
+      const record =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as Record<string, unknown>)
+          : null
+      if (!response.ok || record?.ok === false) {
+        const failure = (record?.failure ?? record ?? {}) as Record<string, unknown>
         throw new GameCloudError(
           String(failure.code ?? "GAME_REQUEST_FAILED"),
           String(failure.message ?? "游戏请求失败。"),
           failure,
         )
       }
-      return route?.bareResponse ? body : body.ok === true ? body.data : body
+      if (!route?.bareResponse && (record?.ok !== true || record.data == null))
+        throw new GameCloudError("GAME_INVALID_RESPONSE", "游戏响应格式无效，请重试。")
+      const data = route?.bareResponse ? body : record!.data
+      const parsed = GAME_RESPONSE_SCHEMAS[operation]?.safeParse(data)
+      if (!parsed?.success)
+        throw new GameCloudError("GAME_INVALID_RESPONSE", "游戏响应格式无效，请重试。")
+      return parsed.data
     } catch (error) {
       current()
       throw error

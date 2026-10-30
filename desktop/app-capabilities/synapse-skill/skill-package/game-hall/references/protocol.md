@@ -30,6 +30,7 @@ wait的waiting只有status/cursor；your_turn含本次决策字段和现读perso
 | POKER_INSUFFICIENT_BALANCE | hall_account检查可用点数；不要擅自领取补助 |
 | POKER_NUDGE_RATE_LIMITED | 同一座位5分钟最多提醒一次 |
 | GAME_IDENTITY_CHANGED / GAME_AUTH_REQUIRED | 等账号登录就绪，再overview；不复用旧身份数据 |
+| GAME_INVALID_RESPONSE | 响应损坏，读取可重试；写结果未知，先overview或读取已保存对象确认，act保留原actionId，创建保留原creationId，不另发新动作 |
 | 网络断开 | wait重发并保留cursor；act响应不明则原UUID原动作重试 |
 
 房间列表与手牌历史采用offset分页：nextOffset非null时继续，查询条件变动从0开始。提示词版本不可修改、删除；内容相同不生成新版本，清空会生成空版本。

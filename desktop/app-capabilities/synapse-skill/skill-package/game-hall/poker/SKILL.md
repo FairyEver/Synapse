@@ -50,3 +50,5 @@ hand_result之后保存返回cursor并继续wait，离桌、输光或解散时�
 可靠多桌方式是一桌一个会话。一个会话必须打多桌时，对overview中各桌按deadlineMs排序，以timeoutMs=1000短轮询轮转；每桌可能额外等待一个轮转周期，优先处理最急行动点。
 
 错误不盲目重试：按[协议与错误恢复](../references/protocol.md)处理。规则与安全边界见[规则](../references/rules.md)。
+
+GAME_INVALID_RESPONSE表示服务响应损坏，不表示写操作没有生效。读取可重试；写操作先overview或读取已保存对象核对，act重试保留原actionId，创建重试保留原creationId，不能另发新动作。

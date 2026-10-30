@@ -1,10 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common"
 import { Interval } from "@nestjs/schedule"
-import type {
-  GamePokerAction,
-  GamePokerHand,
-  GamePokerHandSeat,
-  GamePokerHandSummary,
+import {
+  type GamePokerAction,
+  type GamePokerHand,
+  type GamePokerHandSeat,
+  type GamePokerHandSummary,
   Prisma,
 } from "@prisma/client"
 import { PrismaService } from "../../prisma/prisma.service"
@@ -31,6 +31,8 @@ export function archiveData(data: Prisma.JsonValue): ArchivedHand {
 export class PokerArchiveService {
   private readonly logger = new Logger(PokerArchiveService.name)
   private running = false
+  private cutoff: Date | null = null
+  private cursor: { at: Date; id: string } | null = null
   constructor(private readonly prisma: PrismaService) {}
   async archiveHand(handId: string, now: Date): Promise<boolean> {
     const cutoff = new Date(now.getTime() - 90 * 86400000)
@@ -45,9 +47,24 @@ export class PokerArchiveService {
     this.running = true
     try {
       const cutoff = new Date(now.getTime() - 90 * 86400000)
-      const rows = await this.prisma.$queryRaw<
-        { id: string }[]
-      >`SELECT h."id" FROM "GamePokerHand" h JOIN "GamePokerRoom" r ON r."id"=h."roomId" WHERE h."status"='settled' AND h."endedAt"<=${cutoff.toISOString()}::timestamp AND (r."status"<>'running' OR r."currentHandId" IS DISTINCT FROM h."id") ORDER BY h."endedAt",h."id" LIMIT 100`
+      this.cutoff ??= cutoff
+      // A stable cutoff bounds each pass even while more hands become eligible.
+      const read = () =>
+        this.prisma.$queryRaw<{ id: string; endedAt: Date }[]>(Prisma.sql`
+        SELECT h."id", h."endedAt" FROM "GamePokerHand" h
+        JOIN "GamePokerRoom" r ON r."id"=h."roomId"
+        WHERE h."status"='settled'
+          AND h."endedAt"<=${new Date(Math.min(cutoff.getTime(), this.cutoff!.getTime())).toISOString()}::timestamp
+          AND (r."status"<>'running' OR r."currentHandId" IS DISTINCT FROM h."id")
+          ${this.cursor ? Prisma.sql`AND (h."endedAt",h."id") > (${this.cursor.at.toISOString()}::timestamp,${this.cursor.id})` : Prisma.empty}
+        ORDER BY h."endedAt",h."id" LIMIT 100
+      `)
+      let rows = await read()
+      if (!rows.length && this.cursor) {
+        this.cursor = null
+        this.cutoff = cutoff
+        rows = await read()
+      }
       for (const row of rows)
         try {
           await this.archiveHand(row.id, now)
@@ -56,7 +73,10 @@ export class PokerArchiveService {
             { errorName: error instanceof Error ? error.name : "Unknown" },
             "Poker archival failed",
           )
+        } finally {
+          this.cursor = { at: row.endedAt, id: row.id }
         }
+      if (rows.length < 100) this.cutoff = this.cursor = null
     } finally {
       this.running = false
     }

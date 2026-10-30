@@ -84,6 +84,8 @@ export class GameApiService {
             POKER_ROOM_CLOSED: "overview",
             POKER_INSUFFICIENT_BALANCE: "检查大厅账户",
             POKER_NUDGE_RATE_LIMITED: "5分钟后再提醒",
+            GAME_INVALID_RESPONSE:
+              "响应损坏，写结果未知；先overview或读取已保存对象核对，act重试保留原actionId，创建重试保留原creationId，不另发新动作。",
           },
         }
       case "app.game.poker.lobby.list":

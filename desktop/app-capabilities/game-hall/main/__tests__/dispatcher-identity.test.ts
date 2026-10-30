@@ -3,6 +3,7 @@ import type { AccountService } from "../../../../electron/services/account-servi
 import type { AuditSink, PermissionGuard } from "../../../../electron/runtime/security"
 import { createGameDispatcher } from "../dispatcher"
 import { GameHallService } from "../service"
+import { agentResponse } from "./response-fixtures"
 
 describe("游戏权限等待期间的账号隔离", () => {
   it.each(["switch", "same-account-relogin", "dispose"])(
@@ -15,7 +16,8 @@ describe("游戏权限等待期间的账号隔离", () => {
         allow = resolve
       })
       const fetch = vi.fn(
-        async () => new Response(JSON.stringify({ ok: true, data: { id: "saved" } })),
+        async () =>
+          new Response(JSON.stringify({ ok: true, data: { ...agentResponse, id: "saved" } })),
       )
       const account = {
         getState: () => ({
@@ -53,7 +55,8 @@ describe("游戏权限等待期间的账号隔离", () => {
   )
   it("身份未变化时权限通过后正常执行一次", async () => {
     const fetch = vi.fn(
-      async () => new Response(JSON.stringify({ ok: true, data: { id: "saved" } })),
+      async () =>
+        new Response(JSON.stringify({ ok: true, data: { ...agentResponse, id: "saved" } })),
     )
     const service = new GameHallService({
       getState: () => ({
@@ -75,7 +78,7 @@ describe("游戏权限等待期间的账号隔离", () => {
         { persona: "私密提示词" },
         { source: "mcp-stdio" },
       ),
-    ).toEqual({ ok: true, data: { id: "saved" } })
+    ).toEqual({ ok: true, data: { ...agentResponse, id: "saved" } })
     expect(fetch).toHaveBeenCalledOnce()
     service.dispose()
   })
