@@ -6,6 +6,9 @@ import { act, legalActions, removeFromHand } from "./engine/hand-runner"
 import { PokerService, json, type RoomContext } from "./poker.service"
 import { engine, saveHand, startNext, ACTION_WINDOW_MS } from "./poker-lifecycle"
 import { reject } from "./poker-error"
+import { assertController, type PokerCaller } from "./poker-control"
+import { resolveRules } from "./engine/rules"
+import { canSeeHole, projectSettlement, type PokerViewPolicy } from "./poker-projection"
 export interface ActionInput {
   handId: string
   street: string
@@ -14,14 +17,16 @@ export interface ActionInput {
   to?: number
   note?: string
   personaSource?: "game" | "session"
+  controlVersion?: number
+  expectedActionSeq?: number
 }
 @Injectable()
 export class PokerActionService {
   constructor(readonly poker: PokerService) {}
-  async act(userId: string, code: string, input: ActionInput, now = new Date()) {
-    return this.poker.withRoom(code, (c) => this.submit(c, userId, input, "mcp"), now)
+  async act(userId: string, code: string, input: ActionInput, now = new Date(), caller: PokerCaller = "mcp") {
+    return this.poker.withRoom(code, (c) => this.submit(c, userId, input, caller), now)
   }
-  private async submit(c: RoomContext, userId: string, input: ActionInput, source: "mcp" | "rules_bot") {
+  private async submit(c: RoomContext, userId: string, input: ActionInput, source: "mcp" | "rules_bot" | "human") {
     const now = c.now
     const previous = await c.tx.gamePokerActionReceipt.findUnique({
       where: { actionId: input.actionId },
@@ -30,6 +35,7 @@ export class PokerActionService {
       return previous.response
     const seat = c.seats.find((s) => s.userId === userId)
     if (!seat || (source === "rules_bot" ? seat.participantKind !== "bot" || c.room.mode !== "practice" : seat.participantKind === "bot")) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+    if (source !== "rules_bot") assertController(seat, source, input.controlVersion)
     if (c.room.status !== "running") reject("POKER_ROOM_CLOSED", "房间尚未开始或已暂停。")
     const hand = c.room.currentHandId
       ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } })
@@ -38,6 +44,9 @@ export class PokerActionService {
       reject("POKER_HAND_NOT_ACTIVE", "当前没有进行中的手牌。")
     const h = engine(hand),
       legal = legalActions(h, seat.seatNo)
+    if (source !== "rules_bot" && input.expectedActionSeq !== hand.actionSeq &&
+        !(source === "mcp" && input.expectedActionSeq === undefined && (seat.controlVersion ?? 0) === 0))
+      reject("POKER_STALE_ACTION", "行动序号已变更，请重新读取牌桌。")
     const details = {
       legalActions: legal.actions,
       toCall: legal.toCall,
@@ -84,7 +93,7 @@ export class PokerActionService {
     } catch {
       reject("POKER_ILLEGAL_ACTION", "动作或数额不合法。", details)
     }
-    const agent = seat.agentId
+    const agent = source !== "human" && seat.agentId
       ? await c.tx.gamePokerAgent.findFirst({
           where: { id: seat.agentId, userId },
           select: { currentVersionId: true },
@@ -113,7 +122,7 @@ export class PokerActionService {
         amount: after.total - before.total,
         potAfter: next.seats.reduce((sum, s) => sum + s.total, 0),
         personaVersionId: input.personaSource === "session" ? null : agent?.currentVersionId,
-        note: input.note,
+        note: source === "human" ? null : input.note,
         elapsedMs: Math.max(
           0,
           now.getTime() - (c.room.actionDeadlineAt.getTime() - ACTION_WINDOW_MS),
@@ -149,6 +158,7 @@ export class PokerActionService {
       if (!seat) return
       const me = h.seats.find((s) => s.seatNo === seat.seatNo)!
       const decision = chooseBotAction({ hole: [...me.hole], board: [...h.board],
+        variant: h.variant,
         stack: me.stack, streetBet: me.streetBet, pot: h.seats.reduce((n, s) => n + s.total, 0),
         legal: legalActions(h, seat.seatNo),
       }, randomInt(1000000) / 1000000)
@@ -179,7 +189,7 @@ export class PokerActionService {
         if (h.actionOnSeat === null) return
         const seat = c.seats.find((s) => s.seatNo === h.actionOnSeat)!
         const action = legalActions(h, seat.seatNo).toCall ? "fold" : "check"
-        const agent = seat.agentId
+        const agent = seat.controller !== "human" && seat.agentId
           ? await c.tx.gamePokerAgent.findFirst({
               where: { id: seat.agentId, userId: seat.userId },
               select: { currentVersionId: true },
@@ -220,10 +230,11 @@ export class PokerActionService {
     perspective: "owner" | "public" = "owner",
     heartbeat = false,
     now = new Date(),
+    audience: "desktop" | "decision" = "decision",
   ) {
     return this.poker.withRoom(
       code,
-      (c) => this.view(c, userId, perspective, heartbeat, true),
+      (c) => this.view(c, userId, perspective, heartbeat, true, audience),
       now,
       false,
     )
@@ -234,10 +245,11 @@ export class PokerActionService {
     perspective: "owner" | "public",
     heartbeat: boolean,
     includeVersions = false,
+    audience: "desktop" | "decision" = "decision",
   ) {
     const me = c.seats.find((s) => s.userId === userId),
       own = perspective === "owner" && !!me
-    if (heartbeat && me) {
+    if (heartbeat && me && (audience === "desktop" ? me.controller === "human" : (me.controller ?? "ai") === "ai")) {
       await c.tx.gamePokerSeat.update({ where: { id: me.id }, data: { lastSeenAt: c.now } })
       me.lastSeenAt = c.now
     }
@@ -245,6 +257,9 @@ export class PokerActionService {
       ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } })
       : null
     const h = hand ? engine(hand) : null
+    const session = await c.tx.gameSession.findUnique({ where: { userId_gameKind_gameRoomId: { userId, gameKind: "poker", gameRoomId: c.room.id } } })
+    const controlHistory = !me ? await c.tx.gamePokerControlHistory.findUnique({ where: { roomId_userId: { roomId: c.room.id, userId } } }) : null
+    const policy: PokerViewPolicy = { audience, perspective: me ? perspective : "public", everJoined: !!session, mode: c.room.mode }
     const participating =
       !!hand &&
       !!me &&
@@ -262,10 +277,9 @@ export class PokerActionService {
         })
       : []
     const participants =
-      hand && records.length > 0
+      hand
         ? await c.tx.gamePokerHandSeat.findMany({
             where: { handId: hand.id },
-            select: { seatNo: true, displayName: true },
             take: 10,
           })
         : []
@@ -283,6 +297,10 @@ export class PokerActionService {
             take: 30,
           })
         : []
+    const sources = hand?.status === "settled" ? await c.tx.gamePokerAction.groupBy({
+      by: ["userId", "seatNo", "actionSource", "isAuto"], where: { handId: hand.id },
+      orderBy: [{ userId: "asc" }, { seatNo: "asc" }, { actionSource: "asc" }, { isAuto: "asc" }], take: 100,
+    }) : []
     const recentActions = records.reverse().map((a) => ({
       seq: a.seq,
       seatNo: a.seatNo,
@@ -316,6 +334,15 @@ export class PokerActionService {
     return {
       roomCode: c.room.code,
       mode: c.room.mode,
+      ...resolveRules(c.room as unknown as Parameters<typeof resolveRules>[0]),
+      actionSeq: hand?.actionSeq ?? 0,
+      controller: me ? me.controller ?? "ai" : null,
+      controlVersion: me?.controlVersion ?? controlHistory?.controlVersion ?? 0,
+      handoffPending: me?.handoffPending ?? controlHistory?.joinPending ?? false,
+      requiresJoinApproval: !!controlHistory,
+      pauseReason: own ? me?.pauseReason ?? null : null,
+      nextHandAt: c.room.nextHandAt?.toISOString() ?? null,
+      settlement: hand ? projectSettlement(hand, participants, sources as unknown as Parameters<typeof projectSettlement>[2], userId, policy) : null,
       ownerUserId: c.room.ownerUserId,
       name: c.room.name,
       status: c.room.status,
@@ -330,20 +357,24 @@ export class PokerActionService {
       actionOnSeat: h?.actionOnSeat ?? null,
       deadlineMs,
       cursor: `${hand?.handNo ?? 0}:${hand?.actionSeq ?? 0}`,
-      mySeatNo: own ? me!.seatNo : null,
-      seats: c.seats.map((s) => {
+      mySeatNo: me?.seatNo ?? null,
+      seats: [...c.seats, ...participants.filter((p) => !c.seats.some((s) => s.seatNo === p.seatNo)).map((p) => ({
+        ...p, roomId: c.room.id, stack: p.endingStack ?? h?.seats.find((s) => s.seatNo === p.seatNo)?.stack ?? 0,
+        joinedHandNo: hand!.handNo, status: p.folded ? "folded" : "left", lastSeenAt: new Date(0),
+        controller: "ai", controlVersion: 0, handoffPending: false, leavePending: false, ghost: true,
+      }))].map((s) => {
         const p =
-          hand && (s.joinedHandNo ?? 0) <= hand.handNo
+          hand && (s.joinedHandNo ?? 0) <= hand.handNo && participants.some((p) => p.seatNo === s.seatNo && p.userId === s.userId)
             ? h?.seats.find((p) => p.seatNo === s.seatNo)
             : undefined
-        const visible =
-          own &&
-          (s.userId === userId ||
-            (participating && h?.showdownSeats.includes(s.seatNo) && !p?.folded))
+        const visible = canSeeHole(userId, s.userId, s.participantKind, p?.folded ?? false, h?.showdownSeats.includes(s.seatNo) ?? false, participating, policy)
         return {
           seatNo: s.seatNo,
           participantKind: s.participantKind,
-          ...(s.participantKind === "bot" ? { botId: s.id, leavePending: s.leavePending } : {}),
+          ...(s.participantKind === "bot" && !("ghost" in s) ? { botId: s.id, leavePending: s.leavePending } : {}),
+          controller: s.participantKind === "bot" ? null : s.controller ?? "ai",
+          controlVersion: s.controlVersion ?? 0,
+          handoffPending: s.handoffPending ?? false,
           displayName: s.displayName,
           stack: s.stack,
           status: s.status,
@@ -369,7 +400,7 @@ export class PokerActionService {
             maxRaiseTo: legal.maxRaiseTo,
           }
         : {}),
-      deckRemaining: h?.deck.length ?? 52,
+      deckRemaining: h?.deck.length ?? (c.room.variant === "short32" ? 32 : 52),
     }
   }
 }

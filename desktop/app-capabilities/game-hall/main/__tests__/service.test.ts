@@ -7,7 +7,7 @@ describe("游戏账号网络边界", () => {
     const source = readFileSync(new URL("../service.ts", import.meta.url), "utf8")
     expect(source).not.toMatch(/app\.game\.poker|\/game\/poker/)
   })
-  it("账号切换丢弃旧响应且取消请求，act不允许从桌面IPC调用", async () => {
+  it("账号切换丢弃旧响应且取消请求，table.wait不允许从桌面IPC调用", async () => {
     let before = () => {}
     let resolve!: (value: Response) => void
     const fetch = vi.fn(
@@ -33,7 +33,7 @@ describe("游戏账号网络边界", () => {
     before()
     resolve(new Response("{}"))
     await expect(promise).rejects.toThrow("账号已变更")
-    await expect(service.callFromUi("app.game.poker.action.act", {})).rejects.toThrow()
+    await expect(service.callFromUi("app.game.poker.table.wait", {})).rejects.toThrow()
     service.dispose()
   })
   it("服务端可行动的错误码和合法动作保留给AI", async () => {
@@ -62,7 +62,7 @@ describe("游戏账号网络边界", () => {
     })
     s.dispose()
   })
-  it("房主解散走专用UI入口，仍不暴露出牌能力", async () => {
+  it("房主解散走专用UI入口", async () => {
     const fetch = vi.fn(
       async (_path: string, _init: RequestInit, _message: string) =>
         new Response(JSON.stringify({ pending: true })),

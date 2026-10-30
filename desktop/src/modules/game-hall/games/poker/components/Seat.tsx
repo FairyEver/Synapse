@@ -18,7 +18,7 @@ export function Seat({
   deadlineMs: number | null
 }) {
   const stateLabel =
-    seat.participantKind === "bot" ? "机器人" : seat.aiState === "online" ? "在线" : seat.aiState === "offline" ? "掉线" : "暂离"
+    seat.participantKind === "bot" ? "机器人" : seat.handoffPending ? "等待 AI" : seat.controller === "human" ? seat.isMe ? "本人操作" : "真人操作" : seat.controller === "ai" ? "AI 操作" : seat.aiState === "online" ? "在线" : seat.aiState === "offline" ? "掉线" : "暂离"
   const progress = 100 - Math.min(100, Math.max(0, deadlineMs ?? 0) / 6000)
   return (
     <div
@@ -30,7 +30,7 @@ export function Seat({
       data-mine={seat.isMe}
       aria-label={`座位 ${seat.seatNo + 1} · ${seat.displayName}`}
     >
-      <div className="poker-seat-cards" data-card-size="sm" data-dealt={dealt}>
+      <div className="poker-seat-cards" data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!seat.hole}>
         <Card card={seat.hole?.[0]} faceUp={!!seat.hole && dealt} />
         <Card card={seat.hole?.[1]} faceUp={!!seat.hole && dealt} />
       </div>
@@ -74,7 +74,7 @@ export function Seat({
             {amount(seat.streetBet)}
           </span>
         )}
-        {seat.status === "folded" && <span>弃牌</span>}
+        {seat.status === "folded" && <strong className="poker-folded-label">已弃牌</strong>}
       </div>
     </div>
   )

@@ -1,10 +1,11 @@
 import { orderedDeck } from "./deck"
+import { resolveRules, type PokerRules } from "./rules"
 import { compareHands } from "./hand"
 import { after, seatOrder } from "./seat-order"
 import { splitPots, distribute } from "./pots"
 import { applyBet, betToMatch, type Decision, type EngineSeat, type BettingState } from "./betting"
 export { legalActions } from "./betting"
-export interface HandState extends BettingState {
+export interface HandState extends BettingState, PokerRules {
   street: "preflop" | "flop" | "turn" | "river" | "settled"
   dealerSeat: number
   board: string[]
@@ -18,11 +19,13 @@ export function startHand(
   seats: readonly { seatNo: number; stack: number }[],
   dealerSeat: number,
   deck: readonly string[],
+  rules: Partial<PokerRules> = {},
 ): HandState {
+  const snapshot = resolveRules(rules), validDeck = orderedDeck(snapshot.variant)
   if (
-    deck.length !== 52 ||
-    new Set(deck).size !== 52 ||
-    deck.some((c) => !orderedDeck().includes(c)) ||
+    deck.length !== validDeck.length ||
+    new Set(deck).size !== validDeck.length ||
+    deck.some((c) => !validDeck.includes(c)) ||
     seats.some((s) => !Number.isSafeInteger(s.stack) || s.stack <= 0)
   )
     throw new Error("无效初始牌局")
@@ -31,12 +34,13 @@ export function startHand(
     dealerSeat,
   )
   const h: HandState = {
+    ...snapshot,
     street: "preflop",
     dealerSeat,
     board: [],
     deck: [...deck],
-    currentBet: 2,
-    minRaise: 2,
+    currentBet: snapshot.bigBlind,
+    minRaise: snapshot.bigBlind,
     actionOnSeat: null,
     showdownSeats: [],
     payouts: {},
@@ -56,8 +60,8 @@ export function startHand(
     for (const no of order.postflop)
       h.seats.find((s) => s.seatNo === no)!.hole.push(h.deck.shift()!)
   for (const [no, blind] of [
-    [order.smallBlind, 1],
-    [order.bigBlind, 2],
+    [order.smallBlind, snapshot.smallBlind],
+    [order.bigBlind, snapshot.bigBlind],
   ]) {
     const s = h.seats.find((s) => s.seatNo === no)!
     const amount = Math.min(s.stack, blind)
@@ -112,7 +116,7 @@ function progress(h: HandState, last: number): void {
   h.board.push(...h.deck.splice(0, count))
   h.street = h.street === "preflop" ? "flop" : h.street === "flop" ? "turn" : "river"
   h.currentBet = 0
-  h.minRaise = 2
+  h.minRaise = h.bigBlind ?? 2
   for (const s of h.seats) {
     s.streetBet = 0
     s.lastActedBet = null
@@ -145,6 +149,7 @@ function settle(h: HandState, showdown: boolean): void {
           compareHands(
             [...h.seats.find((s) => s.seatNo === no)!.hole, ...h.board],
             [...h.seats.find((s) => s.seatNo === best)!.hole, ...h.board],
+            h.variant,
           ) > 0
         )
           best = no
@@ -153,10 +158,13 @@ function settle(h: HandState, showdown: boolean): void {
           compareHands(
             [...h.seats.find((s) => s.seatNo === no)!.hole, ...h.board],
             [...h.seats.find((s) => s.seatNo === best)!.hole, ...h.board],
+            h.variant,
           ) === 0,
       )
     }
     const shares = distribute(pot.amount, winners, order)
+    pot.winners = [...winners]
+    pot.shares = shares
     for (const [no, amount] of Object.entries(shares)) {
       h.payouts[Number(no)] = (h.payouts[Number(no)] ?? 0) + amount
       h.seats.find((s) => s.seatNo === Number(no))!.stack += amount

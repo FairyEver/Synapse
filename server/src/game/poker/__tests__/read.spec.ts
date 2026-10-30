@@ -7,6 +7,7 @@ import { PokerService } from "../poker.service"
 import { PokerActionService } from "../poker-action.service"
 import { PokerReadService } from "../poker-read.service"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("记录、暂离与不可变性", () => {
   const db = new PrismaClient({
@@ -36,6 +37,8 @@ const url = gameTestDatabaseUrl()
     expect(paused.seats.find((s) => s.isMe)?.status).toBe("sitting_out")
     await poker.sit(a, code, false)
     const fresh = new PokerActionService(new PokerService(db, new HallService(db)))
+    expect((await fresh.state(a, code)).handNo).toBe(1)
+    await advanceNextHand(fresh, code)
     expect((await fresh.state(a, code)).handNo).toBe(2)
     expect((await hall.overview(a)).sessions).toHaveLength(1)
   })

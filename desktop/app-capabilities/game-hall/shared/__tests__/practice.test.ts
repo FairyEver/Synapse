@@ -3,12 +3,13 @@ import { GAME_TOOLS } from "@synapse/shared/game-contracts"
 import { gameIpcModule } from "../../main/ipc"
 import { GAME_RESPONSE_SCHEMAS } from "../response-schemas"
 describe("陪练客户端协议", () => {
-  it("机器人管理可从UI调用，真人出牌/入座/等待仍不进入IPC", () => {
+  it("机器人管理与人工出牌入座可从UI调用，等待仍仅Agent使用", () => {
     const ids = Object.values(gameIpcModule.methods).map((m) => m.operationId)
-    expect(ids).toHaveLength(20)
+    expect(ids).toHaveLength(24)
     expect(ids).toContain("app.game.poker.bot.add")
     expect(ids).toContain("app.game.poker.bot.remove")
-    for (const action of ["action.act", "seat.join", "table.wait"]) expect(ids).not.toContain(`app.game.poker.${action}`)
+    for (const action of ["action.act", "seat.join"]) expect(ids).toContain(`app.game.poker.${action}`)
+    expect(ids).not.toContain("app.game.poker.table.wait")
   })
   it("两个管理操作成功/失败输入按既有响应边界校验", () => {
     expect(GAME_TOOLS.filter((t) => t.id.startsWith("app.game.poker.bot."))).toHaveLength(2)

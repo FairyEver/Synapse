@@ -60,7 +60,33 @@ const state: PokerTableView = {
   persona: "私密风格",
   deckRemaining: 48,
 }
-describe("只读牌桌", () => {
+describe("牌桌", () => {
+  it("保留边缘提醒入口及原有时间和玩家视角限制", async () => {
+    const host = document.createElement("div"), root = createRoot(host), onNudge = vi.fn()
+    const render = async (table: PokerTableView, perspective: "owner" | "public" = "owner") =>
+      act(async () => root.render(<Table table={table} perspective={perspective} onPerspective={() => {}} onBack={() => {}} onNudge={onNudge} />))
+    const nudge = () => [...host.querySelectorAll("button")].find(b => b.textContent === "提醒玩家")
+    const active = {...state, actionOnSeat: 1, deadlineMs: 540000}
+    await render(active)
+    expect(nudge()?.disabled).toBe(false)
+    await act(async () => nudge()!.click())
+    expect(onNudge).toHaveBeenCalledWith(1)
+    await render({...active, deadlineMs: 540001})
+    expect(nudge()?.disabled).toBe(true)
+    for (const table of [
+      {...active, mySeatNo: null},
+      {...active, actionOnSeat: null},
+      {...active, actionOnSeat: 0},
+      {...active, status: "closed"},
+      {...active, seats: state.seats.map(s => s.seatNo === 1 ? {...s, participantKind: "bot" as const} : s)},
+    ]) {
+      await render(table)
+      expect(nudge()).toBeUndefined()
+    }
+    await render(active, "public")
+    expect(nudge()).toBeUndefined()
+    await act(async () => root.unmount())
+  })
   it.each([null, "settled"])("已解散房间优先于%s街道显示结束状态，公开视角仍保护隐私", async (street) => {
     const host = document.createElement("div"), root = createRoot(host), onBack = vi.fn()
     const closed = { ...state, status: "closed", street, actionOnSeat: null, seats: [] }
@@ -77,12 +103,22 @@ describe("只读牌桌", () => {
     await act(async () => root.unmount())
   })
 
-  it("旁观投影移除自己的底牌、判断、提示词和版本信息", () => {
+  it("旁观投影保留服务端授权底牌和本人身份，移除判断、提示词和版本信息", () => {
     const view = projectTable(state, "public")
-    expect(view.seats.every((s) => !s.hole)).toBe(true)
+    expect(view.seats[0].hole).toEqual(["As", "Kh"])
+    expect(view.mySeatNo).toBe(0)
     expect(view).not.toHaveProperty("persona")
     expect(view.recentActions[0]).not.toHaveProperty("note")
     expect(view.recentActions[0]).not.toHaveProperty("personaVersionId")
+  })
+  it("弃牌后始终保留显著文字，获准可见的底牌仍紧凑显示", async () => {
+    const host=document.createElement("div"), root=createRoot(host)
+    await act(async()=>root.render(<Table table={{...state,seats:[{...state.seats[0],status:"folded"}]}} perspective="public" onPerspective={()=>{}} onBack={()=>{}} />))
+    const seat=host.querySelector('[data-folded="true"]')!
+    expect(seat.querySelector(".poker-folded-label")?.textContent).toBe("已弃牌")
+    expect(seat.querySelector(".poker-seat-cards")?.getAttribute("data-card-size")).toBe("xs")
+    expect(seat.querySelector('[data-card="As"]')).not.toBeNull()
+    await act(async()=>root.unmount())
   })
   it("未知底牌只渲染牌背，不制造占位牌值", async () => {
     const host = document.createElement("div"),
@@ -119,7 +155,7 @@ describe("只读牌桌", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
     await act(async () => root.unmount())
   })
-  it("桌面只有观看与提醒入口，没有出牌控件；旁观状态不显示私密判断", async () => {
+  it("旁观不显示出牌控件和私密判断，仍标记行动座位", async () => {
     const host = document.createElement("div"),
       root = createRoot(host)
     document.body.append(host)
@@ -134,9 +170,9 @@ describe("只读牌桌", () => {
         />,
       ),
     )
-    expect(host.textContent).toContain("旁观中")
+    expect(host.textContent).toContain("AI 操作")
     expect(host.textContent).not.toContain("私密判断")
-    expect(host.querySelector('[aria-label="行动剩余时间"]')).toBeNull()
+    expect(host.querySelector('[aria-label="行动剩余时间"]')).not.toBeNull()
     expect(
       [...host.querySelectorAll("button")].some((b) =>
         /^(弃牌|跟注|加注|全下|过牌|接管)$/.test(b.textContent ?? ""),

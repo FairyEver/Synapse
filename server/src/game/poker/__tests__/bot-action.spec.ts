@@ -6,8 +6,8 @@ import { HallService } from "../../hall/hall.service"
 import { PokerService } from "../poker.service"
 import { PokerActionService } from "../poker-action.service"
 import { PokerBotService } from "../poker-bot.service"
-import { PokerBotTask } from "../poker-bot.task"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand, scopedBotTask } from "./advance-next-hand"
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("陪练机器人行动调度", () => {
   const db = new PrismaClient({ datasources: { db: { url } } }) as PrismaService
@@ -36,8 +36,9 @@ const url = gameTestDatabaseUrl()
     for (let step = 0; step < 1400; step++) {
       const state = await actions.state(u, code)
       if (state.handNo >= 51 || state.status !== "running") break
+      if (state.street === "settled") { now = await advanceNextHand(actions, code); continue }
       const active = state.seats.find((s) => s.seatNo === state.actionOnSeat)!
-      if (active.participantKind === "bot") await new PokerBotTask(actions).scan(now)
+      if (active.participantKind === "bot") await scopedBotTask(actions, code).scan(now)
       else await actions.act(u, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: state.toCall ? "call" : "check" }, now)
       now = new Date(now.getTime() + 1100)
     }
@@ -51,7 +52,7 @@ const url = gameTestDatabaseUrl()
     for (let i = 0; i < 30; i++) {
       const state = await actions.state(u, code)
       if (state.status !== "running") break
-      if (state.seats.find((s) => s.seatNo === state.actionOnSeat)?.participantKind === "bot") await new PokerBotTask(actions).scan(now)
+      if (state.seats.find((s) => s.seatNo === state.actionOnSeat)?.participantKind === "bot") await scopedBotTask(actions, code).scan(now)
       else await actions.act(u, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "fold" }, now)
       now = new Date(now.getTime() + 1100)
     }

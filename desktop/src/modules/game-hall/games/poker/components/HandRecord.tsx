@@ -28,6 +28,10 @@ export function HandRecord() {
     !!selected,
   )
   const streets = detail.data ? recordStreets(detail.data.board, detail.data.actions) : []
+  const mixedControl = detail.data?.seats.some(seat =>
+    detail.data!.actions.some(a => a.seatNo === seat.seatNo && a.actionSource === "human") &&
+    detail.data!.actions.some(a => a.seatNo === seat.seatNo && a.actionSource === "mcp"),
+  )
   return (
     <div className="grid min-h-full grid-cols-1 lg:grid-cols-3">
       <div className="space-y-3 border-r p-4">
@@ -50,6 +54,7 @@ export function HandRecord() {
                 #{hand.roomCode} · 第 {hand.handNo} 手
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {new Date(hand.createdAt).toLocaleString()}
+                  {hand.rules && ` · ${hand.rules.variant === "short32" ? "短牌 32 张" : "标准 52 张"} · ${hand.rules.smallBlind}/${hand.rules.bigBlind}`}
                 </span>
               </span>
               <span className="tabular-nums">
@@ -87,6 +92,8 @@ export function HandRecord() {
             <h3 className="font-medium">
               #{detail.data.roomCode} · 第 {detail.data.handNo} 手{detail.data.mode === "practice" && " · 陪练"}
             </h3>
+            {detail.data.rules && <p className="text-sm text-muted-foreground">{detail.data.rules.variant === "short32" ? "短牌 32 张" : "标准 52 张"} · 盲注 {detail.data.rules.smallBlind}/{detail.data.rules.bigBlind}</p>}
+            {mixedControl && <p className="text-sm text-muted-foreground">人机混合牌局</p>}
             <div className="flex gap-1" data-card-size="sm">
               {detail.data.board.map((card, i) => (
                 <Card key={i} card={card} />
@@ -141,6 +148,7 @@ export function HandRecord() {
                         <PersonaBadge version={action.personaVersion} />
                       )}
                       {action.actionSource === "rules_bot" && <span>机器人</span>}
+                      {action.actionSource === "human" && <span>真人操作</span>}
                       <span>{action.note}</span>
                     </li>
                   ))}

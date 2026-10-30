@@ -2,7 +2,8 @@ import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
 import "../../../styles/hall.css"
 import { useRef, useState } from "react"
-import type { GameFunding } from "@synapse/shared/game-contracts"
+import type { GameFunding, PokerVariant, PokerBlindPreset } from "@synapse/shared/game-contracts"
+import { pokerConnectInstruction } from "../lib/connect-instruction"
 import { ModeFilter } from "./ModeFilter"
 import { useAccount } from "@/app-shell/account"
 import { toast } from "sonner"
@@ -35,7 +36,9 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     [maxSeats, setMaxSeats] = useState("6"),
     [buyIn, setBuyIn] = useState("1000"),
     [mode, setMode] = useState<GameFunding>("points"),
-    [createMode, setCreateMode] = useState<GameFunding>("points")
+    [createMode, setCreateMode] = useState<GameFunding>("points"),
+    [variant, setVariant] = useState<PokerVariant>("standard52"),
+    [blindPreset, setBlindPreset] = useState<PokerBlindPreset>("1/2")
   const creation = useRef<{ key: string; id: string } | null>(null)
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
@@ -47,7 +50,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
-    const params = { name, maxSeats: Number(maxSeats), buyIn: Number(buyIn), mode: createMode },
+    const params = { name, maxSeats: Number(maxSeats), buyIn: Number(buyIn), mode: createMode, variant, blindPreset },
       key = JSON.stringify(params)
     const result = await mutation.run(async () => {
       if (creation.current?.key !== key) creation.current = { key, id: crypto.randomUUID() }
@@ -70,14 +73,22 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     }
   }
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(
-        `通过 Synapse MCP 进 #${connect} 打德州扑克。先读 guide，调 overview，有座位续打，没有才入座，持续循环到我叫停。`,
-      )
-      toast("接入指令已复制")
-    } catch {
-      toast.error("复制失败")
-    }
+    if (!connect) return
+    const roomCode = connect
+    const result = await mutation.run(async () => {
+      const table = await gameApi().poker.table.state({roomCode, perspective:"public"})
+      if (table.mySeatNo === null && !table.handoffPending) {
+        if (table.controlVersion == null) throw new Error("请更新客户端后接入 AI")
+        await gameApi().poker.control.set({roomCode, controlVersion:table.controlVersion, action:"request_ai"})
+      }
+      try {
+        await navigator.clipboard.writeText(pokerConnectInstruction(roomCode))
+      } catch {
+        throw new Error("复制失败，请重试")
+      }
+      return true
+    })
+    if (result) toast("接入指令已复制")
   }
   return (
     <>
@@ -143,6 +154,21 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
                 <SelectContent><SelectItem value="points">点数房</SelectItem><SelectItem value="practice">陪练房</SelectItem></SelectContent>
               </Select>
               {createMode === "practice" && <p className="text-sm text-muted-foreground">不影响大厅点数</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="poker-variant">牌局规则</Label>
+              <Select value={variant} onValueChange={v => setVariant(v as PokerVariant)}>
+                <SelectTrigger id="poker-variant"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="standard52">标准 52 张</SelectItem><SelectItem value="short32">短牌 32 张 · 7 至 A</SelectItem></SelectContent>
+              </Select>
+              {variant === "short32" && <p className="text-sm text-muted-foreground">同花大于葫芦，A789T 是最小顺子</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="poker-blinds">盲注</Label>
+              <Select value={blindPreset} onValueChange={v => setBlindPreset(v as PokerBlindPreset)}>
+                <SelectTrigger id="poker-blinds"><SelectValue /></SelectTrigger>
+                <SelectContent>{["1/2", "2/4", "5/10", "10/20"].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="poker-room-name">房间名称</Label>
@@ -221,8 +247,8 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
             <DialogTitle>接入 AI · #{connect}</DialogTitle>
             <DialogDescription>将指令发到你的 AI 会话</DialogDescription>
           </DialogHeader>
-          <p className="text-sm">通过 Synapse MCP 进 #{connect} 打德州扑克，持续循环到我叫停。</p>
-          <Button type="button" onClick={() => void copy()}>
+          <p className="text-sm">{connect && pokerConnectInstruction(connect)}</p>
+          <Button type="button" disabled={mutation.busy} onClick={() => void copy()}>
             复制接入指令
           </Button>
         </DialogContent>

@@ -71,6 +71,8 @@ export class PokerWaitService implements OnModuleDestroy {
       code,
       async (c) => {
         const seat = c.seats.find((s) => s.userId === userId)
+        if (seat && (seat.controller ?? "ai") === "human")
+          return { status: "control_released", cursor, controlVersion: seat.controlVersion ?? 0, handoffPending: seat.handoffPending ?? false }
         if (seat) {
           await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { lastSeenAt: now } })
           seat.lastSeenAt = now
@@ -179,6 +181,9 @@ export class PokerWaitService implements OnModuleDestroy {
             recentActions: view.recentActions,
             persona: view.persona,
             legalActions: view.legalActions,
+            controlVersion: view.controlVersion,
+            actionSeq: view.actionSeq,
+            rules: { variant: view.variant, smallBlind: view.smallBlind, bigBlind: view.bigBlind },
             deadlineMs: view.deadlineMs,
             cursor: view.cursor,
           }

@@ -6,6 +6,7 @@ import { HallService } from "../../hall/hall.service"
 import { PokerService } from "../poker.service"
 import { PokerActionService } from "../poker-action.service"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("当前手行动身份快照", () => {
@@ -34,10 +35,11 @@ const url = gameTestDatabaseUrl()
       },
       new Date(1),
     )
+    const nextAt = await advanceNextHand(actions, code)
     const second = await actions.state(b, code)
     expect(second).toMatchObject({ handNo: 2, actionOnSeat: 1 })
-    await actions.expire(code, new Date(600001))
-    await poker.join(replacement, code, { modelName: "新模型" }, new Date(600002))
+    await actions.expire(code, new Date(nextAt.getTime() + 600000))
+    await poker.join(replacement, code, { modelName: "新模型" }, new Date(nextAt.getTime() + 600001))
 
     for (const perspective of ["owner", "public"] as const) {
       const view = await actions.state(replacement, code, perspective)

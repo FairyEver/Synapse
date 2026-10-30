@@ -121,7 +121,11 @@ const url = gameTestDatabaseUrl()
     const after = await actions.state(u, code)
     expect(after.status).toBe("paused")
     expect(after.handNo).toBe(1)
-    expect(after.seats.some((s) => loser === "bot" ? s.botId === bot.botId : s.isMe)).toBe(false)
+    const roomId = (await db.gamePokerRoom.findUniqueOrThrow({ where: { code } })).id
+    expect(await db.gamePokerSeat.count({ where: { roomId, ...(loser === "bot" ? { id: bot.botId } : { userId: u }) } })).toBe(0)
+    const losingSeatNo = state.seats.find((s) => s.participantKind === loser)!.seatNo
+    expect(after.seats.find((s) => s.seatNo === losingSeatNo)).toMatchObject({ stack: 0, status: "left" })
+    if (loser === "human") expect(after.mySeatNo).toBeNull()
     expect(await db.gamePokerBot.count({ where: { id: bot.botId } })).toBe(1)
     expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, netProfit: 0 })
   })

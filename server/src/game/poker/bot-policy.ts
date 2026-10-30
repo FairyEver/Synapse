@@ -1,7 +1,9 @@
 import type { ActionKind, Decision } from "./engine/betting"
 import { evaluate } from "./engine/hand"
+import type { PokerVariant } from "./engine/rules"
 
 export interface BotDecisionInput {
+  variant?: PokerVariant
   hole: string[]
   board: string[]
   pot: number
@@ -14,7 +16,7 @@ export function chooseBotAction(input: BotDecisionInput, random: number): Decisi
   const { legal, hole, board } = input
   if (!legal.actions.length) throw new Error("Bot has no legal action")
   const strong = board.length >= 3
-    ? evaluate([...hole, ...board]).category >= 2
+    ? evaluate([...hole, ...board], input.variant).category >= 2
     : hole[0]?.[0] === hole[1]?.[0] || hole.every((c) => "TJQKA".includes(c[0]))
   const raise = legal.actions.includes("raise") ? "raise" : legal.actions.includes("bet") ? "bet" : null
   if (raise && random < (strong ? 0.12 : 0.02) && legal.minRaiseTo <= Math.min(legal.maxRaiseTo, input.streetBet + Math.max(4, Math.floor(input.pot / 3))))

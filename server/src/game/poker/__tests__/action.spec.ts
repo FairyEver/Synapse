@@ -7,6 +7,7 @@ import { PokerService } from "../poker.service"
 import { PokerActionService } from "../poker-action.service"
 import { PokerWaitService } from "../poker-wait.service"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 const url = gameTestDatabaseUrl()
 const suite = url ? describe : describe.skip
 suite("权威行动、隐私与重连", () => {
@@ -98,9 +99,11 @@ suite("权威行动、隐私与重连", () => {
     const waiting = await waiter.wait(b, code, "", 0)
     expect(Object.keys(waiting).sort()).toEqual(["cursor", "status"])
     let done = 0
+    let now = new Date(1)
     for (let i = 0; i < 1000 && done < 10; i++) {
       for (const user of [a, b]) {
-        const state = await actions.state(user, code, "owner", false, new Date(i + 1))
+        const state = await actions.state(user, code, "owner", false, now)
+        if (state.street === "settled") { now = await advanceNextHand(actions, code); continue }
         done = state.handNo - 1
         if (state.actionOnSeat !== state.mySeatNo) continue
         await actions.act(
@@ -112,7 +115,7 @@ suite("权威行动、隐私与重连", () => {
             actionId: randomUUID(),
             action: state.toCall ? "call" : "check",
           },
-          new Date(i + 2),
+          new Date(now.getTime() + 1),
         )
       }
     }
@@ -174,10 +177,11 @@ suite("权威行动、隐私与重连", () => {
       { handId: view.handId!, street: view.street!, actionId: randomUUID(), action: "fold" },
       new Date(1),
     )
-    const next = await actions.state(b, code, "owner", false, new Date(2))
+    const nextAt = await advanceNextHand(actions, code)
+    const next = await actions.state(b, code, "owner", false, nextAt)
     const actor = [a, b, c][next.actionOnSeat!]
-    await actions.expire(code, new Date(600001))
-    await poker.join(d, code, {}, new Date(600002))
+    await actions.expire(code, new Date(nextAt.getTime() + 600000))
+    await poker.join(d, code, {}, new Date(nextAt.getTime() + 600001))
     view = await actions.state(d, code, "owner", false, new Date(600003))
     expect(view.hole).toEqual([])
     expect(view.seats.find((s) => s.isMe)?.hole).toBeUndefined()

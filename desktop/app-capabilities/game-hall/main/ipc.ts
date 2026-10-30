@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { POKER_HUMAN_ACTION_SCHEMA } from "../games/poker/shared/ui-operations"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
 import type { IpcModule, IpcMethodDescriptor } from "../../../electron/runtime/ipc/types"
 import type { PermissionGuard, AuditSink } from "../../../electron/runtime/security"
@@ -15,7 +16,7 @@ function method(operation: string): IpcMethodDescriptor {
             perspective: z.enum(["owner", "public"]).optional(),
           })
           .strict()
-      : z.fromJSONSchema(definition.inputSchema as Parameters<typeof z.fromJSONSchema>[0])
+      : z.fromJSONSchema((operation === "app.game.poker.action.act" ? POKER_HUMAN_ACTION_SCHEMA : definition.inputSchema) as Parameters<typeof z.fromJSONSchema>[0])
   return {
     operationId: operation as IpcMethodDescriptor["operationId"],
     kind: "invoke",
@@ -60,6 +61,10 @@ export const gameIpcModule: IpcModule = {
     pokerBotAdd: { ...method("app.game.poker.bot.add"), operationId: "app.game.poker.bot.add" },
     pokerBotRemove: { ...method("app.game.poker.bot.remove"), operationId: "app.game.poker.bot.remove" },
     pokerRoomGet: { ...method("app.game.poker.room.get"), operationId: "app.game.poker.room.get" },
+    pokerSeatJoin: { ...method("app.game.poker.seat.join"), operationId: "app.game.poker.seat.join" },
+    pokerActionAct: { ...method("app.game.poker.action.act"), operationId: "app.game.poker.action.act" },
+    pokerControlSet: { ...method("app.game.poker.control.set"), operationId: "app.game.poker.control.set" },
+    pokerTableEvents: { ...method("app.game.poker.table.events"), operationId: "app.game.poker.table.events" },
     pokerSeatLeave: {
       ...method("app.game.poker.seat.leave"),
       operationId: "app.game.poker.seat.leave",

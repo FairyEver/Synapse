@@ -23,7 +23,72 @@ export interface HallOverview {
   games: GameDefinition[]
   next: { game: string; roomCode: string | null } | null
 }
+export type PokerVariant = "standard52" | "short32"
+export type PokerController = "human" | "ai" | null
+export type PokerPauseReason = "user" | "context_maintenance" | null
+export type PokerBlindPreset = "1/2" | "2/4" | "5/10" | "10/20"
+export interface PokerRules {
+  variant: PokerVariant
+  smallBlind: number
+  bigBlind: number
+}
+export interface PokerControlView {
+  controller: PokerController
+  controlVersion: number
+  handoffPending: boolean
+}
+export interface PokerResumeCheckpoint {
+  roomCode: string
+  cursor: string
+  controlVersion: number
+  sessionStyle: string
+  continueIntent: boolean
+  pauseReason: "context_maintenance"
+  savedAt: string
+}
+export interface PokerSettlementView {
+  handId: string
+  handNo: number
+  board: string[]
+  rules: PokerRules
+  seats: {
+    seatNo: number
+    displayName: string
+    participantKind: "human" | "bot"
+    isMe: boolean
+    folded: boolean
+    hole?: string[]
+    delta: number
+    payout: number
+    endingStack: number
+    handName?: string
+  }[]
+  pots: {
+    amount: number
+    eligible: number[]
+    winners: number[]
+    shares: Record<string, number>
+    refund: boolean
+  }[]
+  mixedControl: boolean
+}
+export interface PokerTableEvent {
+  kind: "action" | "settlement"
+  handId: string
+  handNo: number
+  seq: number
+  action?: PokerActionView
+  settlement?: PokerSettlementView
+}
+export interface PokerTableEventsView {
+  events: PokerTableEvent[]
+  cursor: string
+  hasMore: boolean
+}
 export interface PokerSeatView {
+  controller?: PokerController
+  controlVersion?: number
+  handoffPending?: boolean
   participantKind?: "human" | "bot"
   botId?: string
   leavePending?: boolean
@@ -37,7 +102,7 @@ export interface PokerSeatView {
   hole?: string[]
 }
 export interface PokerActionView {
-  actionSource?: "mcp" | "timeout" | "rules_bot"
+  actionSource?: "mcp" | "human" | "timeout" | "rules_bot"
   seq: number
   seatNo: number
   displayName?: string
@@ -51,6 +116,17 @@ export interface PokerActionView {
   personaVersion?: { versionNo: number; persona: string } | null
 }
 export interface PokerTableView {
+  requiresJoinApproval?: boolean
+  variant?: PokerVariant
+  smallBlind?: number
+  bigBlind?: number
+  actionSeq?: number
+  controller?: PokerController
+  controlVersion?: number
+  handoffPending?: boolean
+  pauseReason?: PokerPauseReason
+  nextHandAt?: string | null
+  settlement?: PokerSettlementView | null
   mode?: GameFunding
   ownerUserId?: string
   roomCode: string
@@ -79,6 +155,7 @@ export interface PokerTableView {
   deckRemaining: number
 }
 export interface PokerRoomView {
+  rules?: PokerRules
   mode?: GameFunding
   roomCode: string
   name: string | null
@@ -106,6 +183,7 @@ export interface PokerVersionView {
   handCount: number
 }
 export interface PokerSummaryView {
+  rules?: PokerRules
   mode?: GameFunding
   handId: string
   roomCode: string
@@ -118,6 +196,7 @@ export interface PokerSummaryView {
   createdAt: string
 }
 export interface PokerDetailView {
+  rules?: PokerRules
   mode?: GameFunding
   handId: string
   handNo: number
@@ -159,6 +238,7 @@ const str = (maxLength = 200): Field => ({ type: "string", maxLength })
 const integer = (minimum: number, maximum: number): Field => ({ type: "integer", minimum, maximum })
 const code: Field = { type: "string", pattern: "^[0-9]{4,6}$" }
 const room = { roomCode: code }
+const controlVersion = integer(0, 2147483647)
 const mode: Field = { type: "string", enum: ["points", "practice"] }
 const page = { offset: integer(0, 2147483647), limit: integer(1, 100) }
 const definitions: [string, string, Record<string, Field>, string[], boolean][] = [
@@ -187,8 +267,10 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.room.create",
-    "创建2–10人桌，盲注1/2；可传creationId(UUID)，同次创建重试复用，新开一桌更换。",
+    "创建2–10人桌；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。",
     {
+      variant: { type: "string", enum: ["standard52", "short32"] },
+      blindPreset: { type: "string", enum: ["1/2", "2/4", "5/10", "10/20"] },
       creationId: { type: "string", format: "uuid", maxLength: 36 },
       maxSeats: integer(2, 10),
       buyIn: { type: "integer", enum: [500, 1000, 2000, 5000] },
@@ -203,16 +285,16 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ["poker.bot.remove", "仅陪练房房主移除本房机器人；本手参与者手后移除，不能控制其动作或真人座位。", { ...room, botId: str() }, ["roomCode", "botId"], true],
   [
     "poker.seat.join",
-    "按当前账号+roomCode入座，无令牌。鼓励声明modelName，不确定留空，不校验模型身份。",
-    { ...room, agentId: str(), modelName: str(24) },
+    "按当前账号+roomCode入座，无令牌。有控制历史且已离桌时，先table.state确认桌面已授权AI重新入座，再携匹配controlVersion；未授权不得自动入座扣点。modelName仅自述。",
+    { ...room, agentId: str(), modelName: str(24), controlVersion },
     ["roomCode"],
     true,
   ],
-  ["poker.seat.leave", "点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场。", room, ["roomCode"], true],
+  ["poker.seat.leave", "点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场，接管后须提交当前controlVersion。", { ...room, controlVersion }, ["roomCode"], true],
   [
     "poker.seat.sit",
     "主动暂离或回座；当前手结束后生效。sittingOut确认请求，pending表示尚未生效，status是实际座位状态。",
-    { ...room, sittingOut: { type: "boolean" } },
+    { ...room, sittingOut: { type: "boolean" }, controlVersion, reason: { type: "string", enum: ["user", "context_maintenance"] } },
     ["roomCode", "sittingOut"],
     true,
   ],
@@ -225,7 +307,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.table.wait",
-    "循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed。",
+    "循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。",
     { ...room, cursor: str(64), timeoutMs: integer(0, 25000) },
     ["roomCode"],
     false,
@@ -242,6 +324,8 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     "仅Agent提交合法动作。actionId UUID重试复用；旧handId/street拒绝。note限本人可读200字单行。",
     {
       ...room,
+      controlVersion,
+      expectedActionSeq: integer(0, 2147483647),
       handId: str(),
       street: { type: "string", enum: ["preflop", "flop", "turn", "river"] },
       actionId: { type: "string", format: "uuid" },
@@ -256,6 +340,34 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     },
     ["roomCode", "handId", "street", "actionId", "action"],
     true,
+  ],
+  [
+    "poker.control.claim",
+    "仅Agent认领用户已请求的AI托管；必须核对controlVersion，用户已接管时不得重新认领。",
+    { ...room, controlVersion },
+    ["roomCode", "controlVersion"],
+    true,
+  ],
+  [
+    "poker.checkpoint.get",
+    "读取本人服务端私有上下文维护检查点；恢复前先读Skill和overview，不自动恢复用户暂停。",
+    room,
+    ["roomCode"],
+    false,
+  ],
+  [
+    "poker.checkpoint.save",
+    "确认context_maintenance暂离实际生效且无未确认动作后，保存本人服务端私有恢复检查点；不写项目文件。",
+    { ...room, controlVersion, cursor: str(64), sessionStyle: str(20000), continueIntent: { type: "boolean" } },
+    ["roomCode", "controlVersion", "cursor", "continueIntent"],
+    true,
+  ],
+  [
+    "poker.table.events",
+    "分页读取牌桌动作和结算；perspective默认owner，decision投影绝不返回教学明牌；结算seq为2147483647。Pagination: cursor-based. Continue with cursor while hasMore is true; changing roomCode starts a new cursor.",
+    { ...room, cursor: str(64), limit: integer(1, 100), perspective: { type: "string", enum: ["owner", "public"] } },
+    ["roomCode"],
+    false,
   ],
   ["poker.agent.list", "本人选手与私密提示词。", {}, [], false],
   [

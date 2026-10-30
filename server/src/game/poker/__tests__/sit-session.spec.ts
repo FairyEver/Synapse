@@ -6,6 +6,7 @@ import { HallService } from "../../hall/hall.service"
 import { PokerService } from "../poker.service"
 import { PokerActionService } from "../poker-action.service"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("暂离的大厅会话索引", () => {
@@ -61,7 +62,8 @@ const url = gameTestDatabaseUrl()
     })
     expect((await actions.state(a, code)).status).toBe("paused")
     const resumed = await poker.sit(a, code, false)
-    expect(resumed).toMatchObject({ sittingOut: false, pending: false, status: "active" })
+    expect(resumed).toMatchObject({ sittingOut: false, pending: false, status: "waiting" })
+    await advanceNextHand(actions, code)
     expect(await status(a, code)).toMatchObject({ status: "active" })
     expect((await actions.state(a, code)).handNo).toBe(2)
     expect((await hall.overview(a)).points.available).toBe(999000)
@@ -75,6 +77,7 @@ const url = gameTestDatabaseUrl()
     await poker.sit(a, code, true)
     await fold(a, code)
     expect(await status(a, code)).toMatchObject({ status: "sitting_out" })
+    await advanceNextHand(actions, code)
     expect((await actions.state(a, code)).handNo).toBe(2)
     expect(await poker.sit(a, code, false)).toMatchObject({
       sittingOut: false,
@@ -87,6 +90,7 @@ const url = gameTestDatabaseUrl()
       deadlineMs: null,
     })
     await fold(b, code)
+    await advanceNextHand(actions, code)
     expect((await actions.state(a, code)).handNo).toBe(3)
     expect(await status(a, code)).toMatchObject({ status: "active" })
   })

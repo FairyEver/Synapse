@@ -2,6 +2,8 @@ import { Injectable, Logger } from "@nestjs/common"
 import { Interval } from "@nestjs/schedule"
 import type { Prisma } from "@prisma/client"
 import { PokerActionService } from "./poker-action.service"
+import { startNext } from "./poker-lifecycle"
+type RoomBatchKind = "deadline" | "idle" | "next"
 type RoomCursor = { at: Date; id: string; maintainedAt?: Date | null }
 type Rotation = { cutoff: Date | null; cursor: RoomCursor | null }
 @Injectable()
@@ -9,13 +11,14 @@ export class PokerDeadlineTask {
   private running = false
   private lastMaintenance = 0
   private readonly deadlines: Rotation = { cutoff: null, cursor: null }
+  private readonly nextHands: Rotation = { cutoff: null, cursor: null }
   private readonly idleRooms: Rotation = { cutoff: null, cursor: null }
   private readonly logger = new Logger(PokerDeadlineTask.name)
   constructor(private readonly actions: PokerActionService) {}
-  private afterRoom(kind: "deadline" | "idle", cursor: RoomCursor): Prisma.GamePokerRoomWhereInput {
-    const field = kind === "deadline" ? "actionDeadlineAt" : "createdAt"
+  private afterRoom(kind: RoomBatchKind, cursor: RoomCursor): Prisma.GamePokerRoomWhereInput {
+    const field = kind === "deadline" ? "actionDeadlineAt" : kind === "next" ? "nextHandAt" : "createdAt"
     const after = [{ [field]: { gt: cursor.at } }, { [field]: cursor.at, id: { gt: cursor.id } }]
-    if (kind === "deadline") return { OR: after }
+    if (kind !== "idle") return { OR: after }
     return cursor.maintainedAt == null
       ? { OR: [{ lastMaintainedAt: null, OR: after }, { lastMaintainedAt: { not: null } }] }
       : {
@@ -25,15 +28,15 @@ export class PokerDeadlineTask {
           ],
         }
   }
-  private async roomBatch(kind: "deadline" | "idle", cutoff: Date) {
-    const rotation = kind === "deadline" ? this.deadlines : this.idleRooms
-    const field = kind === "deadline" ? "actionDeadlineAt" : "createdAt"
+  private async roomBatch(kind: RoomBatchKind, cutoff: Date) {
+    const rotation = kind === "deadline" ? this.deadlines : kind === "next" ? this.nextHands : this.idleRooms
+    const field = kind === "deadline" ? "actionDeadlineAt" : kind === "next" ? "nextHandAt" : "createdAt"
     rotation.cutoff ??= cutoff
     // Freeze a pass so newly eligible rooms cannot indefinitely delay its wrap.
     const read = () =>
       this.actions.poker.prisma.gamePokerRoom.findMany({
         where: {
-          status: kind === "deadline" ? "running" : { in: ["waiting", "paused"] },
+          status: kind === "deadline" ? "running" : kind === "next" ? { not: "closed" } : { in: ["waiting", "paused"] },
           [field]: { lte: new Date(Math.min(cutoff.getTime(), rotation.cutoff!.getTime())) },
           AND: [
             // Successful maintenance moves its sort key. Exclude those rows for
@@ -55,6 +58,7 @@ export class PokerDeadlineTask {
           id: true,
           code: true,
           actionDeadlineAt: true,
+          nextHandAt: true,
           createdAt: true,
           lastMaintainedAt: true,
         },
@@ -66,7 +70,7 @@ export class PokerDeadlineTask {
                 { createdAt: "asc" },
                 { id: "asc" },
               ]
-            : [{ actionDeadlineAt: "asc" }, { id: "asc" }],
+            : kind === "next" ? [{ nextHandAt: "asc" }, { id: "asc" }] : [{ actionDeadlineAt: "asc" }, { id: "asc" }],
       })
     let rooms = await read()
     if (!rooms.length && rotation.cursor) {
@@ -95,6 +99,24 @@ export class PokerDeadlineTask {
         }
       }
       if (rooms.length < 100) this.deadlines.cutoff = this.deadlines.cursor = null
+      const dueHands = await this.roomBatch("next", now)
+      for (const room of dueHands) {
+        try {
+          await this.actions.poker.withRoom(room.code, async (c) => {
+            // Re-read under the room lock: another process may have advanced it.
+            if (!c.room.nextHandAt || c.room.nextHandAt > now) return
+            await startNext(this.actions.poker, c)
+          }, now)
+        } catch (error) {
+          this.logger.warn(
+            { roomCode: room.code, errorName: error instanceof Error ? error.name : "Unknown" },
+            "Poker next hand transition failed",
+          )
+        } finally {
+          this.nextHands.cursor = { at: room.nextHandAt!, id: room.id }
+        }
+      }
+      if (dueHands.length < 100) this.nextHands.cutoff = this.nextHands.cursor = null
       if (now.getTime() - this.lastMaintenance >= 30000) {
         this.lastMaintenance = now.getTime()
         const idle = await this.roomBatch("idle", new Date(now.getTime() - 1800000))

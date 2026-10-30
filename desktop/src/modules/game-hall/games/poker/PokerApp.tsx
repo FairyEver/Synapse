@@ -1,3 +1,4 @@
+import { useAccount } from "@/app-shell/account"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { GameQueryFeedback } from "../../components/GameQueryFeedback"
@@ -12,6 +13,7 @@ import { Table } from "./components/Table"
 import { HandRecord } from "./components/HandRecord"
 import { AgentProfiles } from "./components/AgentProfiles"
 import { usePokerRoom } from "./hooks/usePokerRoom"
+import { usePokerEvents } from "./hooks/usePokerEvents"
 import { PracticeBots } from "./components/PracticeBots"
 const tabs = [
   { id: "rooms", label: "房间" },
@@ -19,22 +21,29 @@ const tabs = [
   { id: "agents", label: "选手档案" },
 ]
 function Room({ code, onBack }: { code: string; onBack: () => void }) {
+  const { state: account } = useAccount()
+  const identityKey = account.status === "authenticated" ? account.profile.user.id : undefined
   const room = usePokerRoom(code),
     mutation = useGameMutation()
+  const events = usePokerEvents(code, room.perspective, !!room.table, identityKey)
   const nudge = (seatNo: number) => {
     void mutation.run(() => gameApi().poker.seat.nudge({ roomCode: code, seatNo }))
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
       <GameQueryFeedback query={room} />
-      {room.table?.mode === "practice" && <PracticeBots table={room.table} onRefresh={room.refresh} />}
       <div className="min-h-0 flex-1">
         {room.table ? (
           <Table
+            identityKey={identityKey}
             table={room.table}
             perspective={room.table.mySeatNo === null ? "public" : room.perspective}
             onPerspective={room.setPerspective}
             onNudge={nudge}
+            onRefresh={room.refresh}
+            events={events.events}
+            animate={events.animate}
+            extras={room.table.mode === "practice" ? <PracticeBots table={room.table} onRefresh={room.refresh} /> : null}
             onBack={onBack}
           />
         ) : room.error ? (
@@ -63,6 +72,7 @@ export function PokerApp({
   }, [roomCode])
   return (
     <SystemAppWindowShell
+      immersive={!!roomCode}
       left={<span className="text-sm font-medium">德州扑克</span>}
       tabs={tabs}
       value={tab}

@@ -8,6 +8,7 @@ import { PokerActionService } from "../poker-action.service"
 import { PokerWaitService } from "../poker-wait.service"
 import { PokerArchiveService } from "../poker-archive.service"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("延迟请求与自动事件的入座边界", () => {
@@ -57,10 +58,11 @@ const url = gameTestDatabaseUrl()
       // Model an already captured request clock whose connection/room-lock wait
       // lets another instance expire the old seat first. No service is mocked.
       await poker.join(t.a, t.code, {}, queuedJoinClock)
+      await advanceNextHand(actions, t.code)
       const current = await actions.state(t.a, t.code)
       expect(current.handNo).toBe(2)
-      await poker.close(t.a, t.code, t.at(601))
-      await move(current.actionOnSeat === 0 ? t.a : t.b, t.code, "fold", t.at(602))
+      await poker.close(t.a, t.code, t.at(606))
+      await move(current.actionOnSeat === 0 ? t.a : t.b, t.code, "fold", t.at(607))
       const result = await wait.wait(t.a, t.code, "", 0)
       expect(result).toMatchObject({ status: "table_closed" })
       expect(result).not.toHaveProperty("lastAutoAction")
@@ -71,16 +73,17 @@ const url = gameTestDatabaseUrl()
     async (archived) => {
       const t = await table(),
         c = randomUUID()
-      await poker.join(c, t.code, {}, t.at(100))
-      // A request captured at 99s may commit after the 100s join. The new seat
-      // really participates in hand 2, even though its hand timestamp is earlier.
+      await poker.join(c, t.code, {}, t.at(110))
+      // The join captured at 110s commits before the queued 99s action.
+      // The due transition at 104s still opens hand 2 before the join's clock.
       await move(t.a, t.code, "fold", t.at(99))
+      await advanceNextHand(actions, t.code)
       const current = await actions.state(c, t.code)
       expect(current.handNo).toBe(2)
-      await move(t.b, t.code, "call", t.at(101))
-      await actions.expire(t.code, t.at(701))
-      await poker.close(t.a, t.code, t.at(702))
-      await move(t.a, t.code, "fold", t.at(702))
+      await move(t.b, t.code, "call", t.at(105))
+      await actions.expire(t.code, t.at(705))
+      await poker.close(t.a, t.code, t.at(706))
+      await move(t.a, t.code, "fold", t.at(706))
       if (archived) expect(await archive.archiveHand(current.handId!, new Date())).toBe(true)
       const result = await wait.wait(c, t.code, "", 0)
       expect(result).toMatchObject({
@@ -93,13 +96,14 @@ const url = gameTestDatabaseUrl()
   it.each([false, true])("请求时钟乱序的合法新手仍可消费本人结算，已归档=%s", async (archived) => {
     const t = await table(),
       c = randomUUID()
-    await poker.join(c, t.code, {}, t.at(100))
+    await poker.join(c, t.code, {}, t.at(110))
     await move(t.a, t.code, "fold", t.at(99))
+    await advanceNextHand(actions, t.code)
     const current = await actions.state(c, t.code)
     expect(current.handNo).toBe(2)
-    await poker.close(t.a, t.code, t.at(101))
-    await move(t.b, t.code, "fold", t.at(102))
-    await move(c, t.code, "fold", t.at(103))
+    await poker.close(t.a, t.code, t.at(105))
+    await move(t.b, t.code, "fold", t.at(106))
+    await move(c, t.code, "fold", t.at(107))
     if (archived) expect(await archive.archiveHand(current.handId!, new Date())).toBe(true)
     const result = await wait.wait(c, t.code, "2:0", 0)
     expect(result).toMatchObject({

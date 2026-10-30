@@ -806,13 +806,21 @@ const synapseBridge: SynapseBridge = {
         remove: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerBotRemove)(input)),
       },
       seat: {
+        join: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatJoin)(input)),
         leave: async (input) =>
           unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatLeave)(input)),
         sit: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatSit)(input)),
         nudge: async (input) =>
           unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatNudge)(input)),
       },
+      control: {
+        set: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerControlSet)(input)),
+      },
+      action: {
+        act: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerActionAct)(input)),
+      },
       table: {
+        events: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerTableEvents)(input)),
         state: async (input) =>
           unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerTableState)(input)),
       },

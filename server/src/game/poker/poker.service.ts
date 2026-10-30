@@ -5,6 +5,9 @@ import { PrismaService } from "../../prisma/prisma.service"
 import { HallService } from "../hall/hall.service"
 import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
+import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
+import { resolveRules, type PokerVariant } from "./engine/rules"
+import type { PokerResumeCheckpoint } from "@synapse/shared/game-contracts"
 
 export type RoomContext = {
   tx: Prisma.TransactionClient
@@ -44,7 +47,7 @@ export class PokerService {
           async (tx) => {
             const [room] = await tx.$queryRaw<
               GamePokerRoom[]
-            >`SELECT "id", "code", "name", "ownerUserId", "mode", "botActionAt", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
+            >`SELECT "id", "code", "name", "ownerUserId", "mode", "variant", "nextHandAt", "botActionAt", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
             if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
             const seats = await tx.gamePokerSeat.findMany({
               where: { roomId: room.id },
@@ -70,7 +73,7 @@ export class PokerService {
   }
   async createRoom(
     userId: string,
-    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice" },
+    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice"; variant?: PokerVariant; blindPreset?: string },
   ) {
     if (
       !Number.isInteger(input.maxSeats) ||
@@ -80,6 +83,13 @@ export class PokerService {
       (input.mode !== undefined && !["points", "practice"].includes(input.mode))
     )
       reject("POKER_ILLEGAL_ACTION", "座位应为2–10，带入额仅支持500/1000/2000/5000。")
+    let rules
+    try {
+      const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)
+      rules = resolveRules({ variant: input.variant, smallBlind, bigBlind })
+    } catch {
+      reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库和盲注档位。")
+    }
     const id =
       input.creationId === undefined
         ? undefined
@@ -91,6 +101,7 @@ export class PokerService {
             ...(id ? { id } : {}),
             ownerUserId: userId,
             mode: input.mode ?? "points",
+            ...rules,
             code: String(randomInt(1000, 1000000)),
             maxSeats: input.maxSeats,
             buyIn: input.buyIn,
@@ -115,8 +126,9 @@ export class PokerService {
   async join(
     userId: string,
     code: string,
-    input: { agentId?: string; modelName?: string },
+    input: { agentId?: string; modelName?: string; controlVersion?: number },
     now = new Date(),
+    caller: PokerCaller = "mcp",
   ) {
     return this.withRoom(
       code,
@@ -126,12 +138,21 @@ export class PokerService {
         if (seats.some((s) => s.userId === userId))
           reject("POKER_ALREADY_SEATED", "已在该房间入座。")
         if (seats.length >= room.maxSeats) reject("POKER_ROOM_FULL", "房间已满。")
-        const agent = input.agentId
+        const history = await tx.gamePokerControlHistory.findUnique({ where: { roomId_userId: { roomId: room.id, userId } } })
+        if (caller === "mcp" && history && (!history.joinPending || input.controlVersion !== history.controlVersion))
+          reject("POKER_CONTROL_RELEASED", "请在桌面明确授权AI重新入座，旧循环不能重新扣点。")
+        const controlVersion = caller === "human" ? (history ? history.controlVersion + 1 : 0) : history?.controlVersion ?? 0
+        if (caller === "human" || history) await tx.gamePokerControlHistory.upsert({
+          where: { roomId_userId: { roomId: room.id, userId } },
+          create: { roomId: room.id, userId, controlVersion, joinPending: false },
+          update: { controlVersion, joinPending: false },
+        })
+        const agent = caller === "mcp" && input.agentId
           ? await tx.gamePokerAgent.findFirst({ where: { id: input.agentId, userId } })
           : null
-        if (input.agentId && !agent) reject("POKER_SEAT_NOT_FOUND", "选手不存在或不属于你。")
+        if (caller === "mcp" && input.agentId && !agent) reject("POKER_SEAT_NOT_FOUND", "选手不存在或不属于你。")
         const user = await tx.user.findUnique({ where: { id: userId }, select: { nickname: true } })
-        const modelName = (input.modelName ?? agent?.model ?? "")
+        const modelName = (caller === "human" ? "" : input.modelName ?? agent?.model ?? "")
           .replace(/[\x00-\x1f\x7f]/g, "")
           .slice(0, 24)
         const seatNo = Array.from({ length: room.maxSeats }, (_, i) => i).find(
@@ -156,6 +177,8 @@ export class PokerService {
             roomId: room.id,
             userId,
             seatNo,
+            controller: caller === "human" ? "human" : "ai",
+            controlVersion,
             agentId: agent?.id,
             modelName: modelName || null,
             displayName: (user?.nickname ?? "选手") + (modelName ? "的" + modelName : ""),
@@ -171,12 +194,17 @@ export class PokerService {
       now,
     )
   }
-  async leave(userId: string, code: string, now = new Date()) {
+  async leave(userId: string, code: string, now = new Date(), caller: PokerCaller = "mcp", controlVersion?: number) {
     return this.withRoom(
       code,
       async (c) => {
         const seat = c.seats.find((s) => s.userId === userId)
         if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+        assertController(seat, caller, controlVersion)
+        seat.checkpoint = null
+        seat.pauseReason = null
+        seat.handoffPending = false
+        await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { checkpoint: Prisma.DbNull, pauseReason: null, handoffPending: false } })
         if (c.room.status === "running" && ["active", "folded", "allin"].includes(seat.status)) {
           await c.tx.gamePokerSeat.update({
             where: { id: seat.id },
@@ -197,12 +225,23 @@ export class PokerService {
     await c.tx.gamePokerSeat.delete({ where: { id: seat.id } })
     c.seats = c.seats.filter((s) => s.id !== seat.id)
   }
-  async sit(userId: string, code: string, sittingOut: boolean, now = new Date()) {
+  async sit(userId: string, code: string, sittingOut: boolean, now = new Date(), caller: PokerCaller = "mcp", controlVersion?: number, reason: "user" | "context_maintenance" = "user") {
     return this.withRoom(
       code,
       async (c) => {
         const seat = c.seats.find((s) => s.userId === userId)
         if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+        assertController(seat, caller, controlVersion)
+        if (reason === "context_maintenance") {
+          if (caller !== "mcp") reject("POKER_ILLEGAL_ACTION", "上下文维护仅用于AI操作。")
+          if (seat.leavePending || (seat.pauseReason === "user" && (seat.sitPending || seat.status === "sitting_out")))
+            reject("POKER_CONTROL_RELEASED", "用户已暂停或离桌，维护流程不能恢复。")
+          if (!sittingOut) {
+            const checkpoint = seat.checkpoint as unknown as PokerResumeCheckpoint | null
+            if (seat.pauseReason !== reason || !checkpoint?.continueIntent || checkpoint.controlVersion !== seat.controlVersion)
+              reject("POKER_CONTROL_RELEASED", "恢复意图已失效，请等待用户操作。")
+          }
+        }
         const wasSittingOut = seat.status === "sitting_out"
         const inHand =
           ["active", "folded", "allin"].includes(seat.status) && c.room.status === "running"
@@ -210,7 +249,10 @@ export class PokerService {
         if (!inHand) seat.status = sittingOut ? "sitting_out" : "waiting"
         await c.tx.gamePokerSeat.update({
           where: { id: seat.id },
-          data: { sitPending: sittingOut, status: seat.status, lastSeenAt: now },
+          data: { sitPending: sittingOut, status: seat.status, lastSeenAt: now,
+            pauseReason: sittingOut ? reason : null,
+            ...(!sittingOut || reason === "user" ? { checkpoint: Prisma.DbNull } : {}),
+          },
         })
         await c.tx.gameSession.updateMany({
           where: { userId, gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
@@ -230,6 +272,52 @@ export class PokerService {
       },
       now,
     )
+  }
+  async control(userId: string, code: string, action: "takeover" | "request_ai" | "cancel_ai", controlVersion: number, now = new Date()) {
+    return this.withRoom(code, async (c) => {
+      const seat = c.seats.find((s) => s.userId === userId && s.participantKind !== "bot")
+      if (!seat) {
+        if (action === "takeover" || c.room.status === "closed") reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+        const history = await c.tx.gamePokerControlHistory.findUnique({ where: { roomId_userId: { roomId: c.room.id, userId } } })
+        if (controlVersion !== (history?.controlVersion ?? 0)) reject("POKER_STALE_CONTROL", "入座授权已变更，请重新读取牌桌。")
+        const next = controlVersion + 1, joinPending = action === "request_ai"
+        await c.tx.gamePokerControlHistory.upsert({ where: { roomId_userId: { roomId: c.room.id, userId } },
+          create: { roomId: c.room.id, userId, controlVersion: next, joinPending }, update: { controlVersion: next, joinPending } })
+        return { controller: null, controlVersion: next, handoffPending: joinPending }
+      }
+      const patch = changeControl(seat, action, controlVersion)
+      const updated = await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { ...patch, checkpoint: Prisma.DbNull, lastSeenAt: now } })
+      await c.tx.gamePokerControlHistory.upsert({ where: { roomId_userId: { roomId: c.room.id, userId } }, create: { roomId: c.room.id, userId, controlVersion: updated.controlVersion }, update: { controlVersion: updated.controlVersion, joinPending: false } })
+      return { controller: updated.controller, controlVersion: updated.controlVersion, handoffPending: updated.handoffPending }
+    }, now)
+  }
+  async claim(userId: string, code: string, controlVersion: number, now = new Date()) {
+    return this.withRoom(code, async (c) => {
+      const seat = c.seats.find((s) => s.userId === userId && s.participantKind !== "bot")
+      if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+      const patch = claimControl(seat, controlVersion)
+      const updated = await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { ...patch, checkpoint: Prisma.DbNull, lastSeenAt: now } })
+      await c.tx.gamePokerControlHistory.upsert({ where: { roomId_userId: { roomId: c.room.id, userId } }, create: { roomId: c.room.id, userId, controlVersion: updated.controlVersion }, update: { controlVersion: updated.controlVersion, joinPending: false } })
+      return { controller: updated.controller, controlVersion: updated.controlVersion, handoffPending: updated.handoffPending }
+    }, now)
+  }
+  async checkpoint(userId: string, code: string, input?: { controlVersion: number; cursor: string; sessionStyle?: string; continueIntent: boolean }, now = new Date()) {
+    return this.withRoom(code, async (c) => {
+      const seat = c.seats.find((s) => s.userId === userId && s.participantKind !== "bot")
+      if (!seat) return input ? reject("POKER_SEAT_NOT_FOUND", "座位已离场，不能保存恢复信息。") : { checkpoint: null }
+      if (!input) return { checkpoint: (seat.checkpoint ?? null) as unknown as PokerResumeCheckpoint | null }
+      assertController(seat, "mcp", input.controlVersion)
+      if (seat.status !== "sitting_out" || seat.pauseReason !== "context_maintenance")
+        reject("POKER_ILLEGAL_ACTION", "请先完成本手并确认维护暂离。")
+      const parts = /^(\d+):(\d+)$/.exec(input.cursor)
+      if (!parts || parts.slice(1).some((v) => Number(v) > 2147483647) || (input.sessionStyle?.length ?? 0) > 20000)
+        reject("POKER_ILLEGAL_ACTION", "恢复信息无效。")
+      const checkpoint: PokerResumeCheckpoint = { roomCode: code, cursor: input.cursor,
+        controlVersion: input.controlVersion, sessionStyle: input.sessionStyle ?? "",
+        continueIntent: input.continueIntent, pauseReason: "context_maintenance", savedAt: now.toISOString() }
+      await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { checkpoint: json(checkpoint) } })
+      return { checkpoint }
+    }, now, !!input)
   }
   async close(userId: string, code: string, now = new Date()) {
     return this.withRoom(

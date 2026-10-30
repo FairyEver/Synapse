@@ -1,6 +1,7 @@
+import type { PokerVariant } from "./rules"
 export type Card = string
-export function orderedDeck(): Card[] {
-  return [..."23456789TJQKA"].flatMap((rank) => [..."shdc"].map((suit) => rank + suit))
+export function orderedDeck(variant: PokerVariant = "standard52"): Card[] {
+  return [...(variant === "short32" ? "789TJQKA" : "23456789TJQKA")].flatMap((rank) => [..."shdc"].map((suit) => rank + suit))
 }
 /** Entropy comes from the caller (production: crypto.randomInt); no IO in the engine. */
 export function shuffle(

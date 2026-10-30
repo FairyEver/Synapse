@@ -1,9 +1,33 @@
 import { z } from "zod"
 
+const controlFields = {
+  controller: z.enum(["human", "ai"]).nullable(),
+  controlVersion: z.number().int().nonnegative(),
+  handoffPending: z.boolean(),
+}
+const control = z.object(controlFields).passthrough()
+const rules = z.object({ variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
+const checkpoint = z.object({
+  roomCode: z.string(), cursor: z.string(), controlVersion: z.number().int().nonnegative(),
+  sessionStyle: z.string(), continueIntent: z.boolean(), pauseReason: z.literal("context_maintenance"), savedAt: z.string(),
+}).passthrough()
+const settlement = z.object({
+  handId: z.string(), handNo: z.number(), board: z.array(z.string()), rules,
+  seats: z.array(z.object({
+    seatNo: z.number(), displayName: z.string(), participantKind: z.enum(["human", "bot"]),
+    isMe: z.boolean(), folded: z.boolean(), hole: z.array(z.string()).optional(),
+    delta: z.number(), payout: z.number(), endingStack: z.number(), handName: z.string().optional(),
+  }).passthrough()),
+  pots: z.array(z.object({
+    amount: z.number(), eligible: z.array(z.number()), winners: z.array(z.number()),
+    shares: z.record(z.string(), z.number()), refund: z.boolean(),
+  }).passthrough()),
+  mixedControl: z.boolean(),
+}).passthrough()
 const version = z.object({ versionNo: z.number(), persona: z.string() }).passthrough()
 const action = z
   .object({
-    actionSource: z.enum(["mcp", "timeout", "rules_bot"]).optional(),
+    actionSource: z.enum(["mcp", "human", "timeout", "rules_bot"]).optional(),
     seq: z.number(),
     seatNo: z.number(),
     displayName: z.string().optional(),
@@ -19,6 +43,9 @@ const action = z
   .passthrough()
 const seat = z
   .object({
+    controller: controlFields.controller.optional(),
+    controlVersion: controlFields.controlVersion.optional(),
+    handoffPending: controlFields.handoffPending.optional(),
     participantKind: z.enum(["human", "bot"]).optional(),
     botId: z.string().optional(),
     leavePending: z.boolean().optional(),
@@ -34,6 +61,17 @@ const seat = z
   .passthrough()
 const table = z
   .object({
+    requiresJoinApproval: z.boolean().optional(),
+    variant: z.enum(["standard52", "short32"]).optional(),
+    smallBlind: z.number().optional(),
+    bigBlind: z.number().optional(),
+    actionSeq: z.number().int().nonnegative().optional(),
+    controller: controlFields.controller.optional(),
+    controlVersion: controlFields.controlVersion.optional(),
+    handoffPending: controlFields.handoffPending.optional(),
+    pauseReason: z.enum(["user", "context_maintenance"]).nullable().optional(),
+    nextHandAt: z.string().nullable().optional(),
+    settlement: settlement.nullable().optional(),
     mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),
     name: z.string().nullable(),
@@ -83,6 +121,7 @@ const stats = z
   .passthrough()
 const room = z
   .object({
+    rules: rules.optional(),
     mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),
     name: z.string().nullable(),
@@ -97,6 +136,7 @@ const room = z
   .passthrough()
 const summary = z
   .object({
+    rules: rules.optional(),
     handId: z.string(),
     mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),
@@ -117,10 +157,13 @@ const page = <T extends z.ZodType>(item: T) =>
     })
     .passthrough()
 const wait = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("control_released"), cursor: z.string(), controlVersion: controlFields.controlVersion.optional(), handoffPending: controlFields.handoffPending.optional() }).passthrough(),
   z.object({ status: z.literal("waiting"), cursor: z.string() }).passthrough(),
   z
     .object({
       status: z.literal("your_turn"),
+      controlVersion: controlFields.controlVersion.optional(),
+      actionSeq: z.number().int().nonnegative().optional(),
       handId: z.string(),
       handNo: z.number(),
       street: z.string(),
@@ -161,7 +204,16 @@ const wait = z.discriminatedUnion("status", [
     .passthrough(),
 ])
 
+const tableEvent = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("action"), handId: z.string(), handNo: z.number(), seq: z.number(), action }).passthrough(),
+  z.object({ kind: z.literal("settlement"), handId: z.string(), handNo: z.number(), seq: z.literal(2147483647), settlement }).passthrough(),
+])
 export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  "app.game.poker.control.claim": control,
+  "app.game.poker.control.set": control,
+  "app.game.poker.checkpoint.get": z.object({ checkpoint: checkpoint.nullable() }).passthrough(),
+  "app.game.poker.checkpoint.save": z.object({ checkpoint }).passthrough(),
+  "app.game.poker.table.events": z.object({ events: z.array(tableEvent), cursor: z.string(), hasMore: z.boolean() }).passthrough(),
   "app.game.poker.guide": z
     .object({
       rules: z.record(z.string(), z.unknown()),
@@ -214,6 +266,7 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "app.game.poker.hand.history": page(summary),
   "app.game.poker.hand.detail": z
     .object({
+      rules: rules.optional(),
       handId: z.string(),
       handNo: z.number(),
       mode: z.enum(["points", "practice"]).optional(),

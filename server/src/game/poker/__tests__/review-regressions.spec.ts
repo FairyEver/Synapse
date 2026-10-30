@@ -8,8 +8,8 @@ import { PokerActionService } from "../poker-action.service"
 import { PokerWaitService } from "../poker-wait.service"
 import { saveHand, engine } from "../poker-lifecycle"
 import { act as engineAct } from "../engine/hand-runner"
-import { PokerDeadlineTask } from "../poker-deadline.task"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand, scopedDeadlineTask } from "./advance-next-hand"
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("独立审查回归", () => {
   const db = new PrismaClient({
@@ -31,7 +31,7 @@ const url = gameTestDatabaseUrl()
     await poker.join(b, code, {})
     return { a, b, code }
   }
-  it("盲注直接结算后继续开局或暂停，不留下running/settled/空deadline", async () => {
+  it("盲注直接结算保留五秒结果，到期继续开局或暂停", async () => {
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
@@ -40,7 +40,14 @@ const url = gameTestDatabaseUrl()
     await db.gameSession.updateMany({ where: { userId: a }, data: { inPlay: 1 } })
     await db.gameAccount.update({ where: { userId: a }, data: { points: { increment: 999 } } })
     await poker.join(b, code, {})
-    const state = await actions.state(b, code)
+    let state = await actions.state(b, code)
+    if (state.status === "running" && state.street === "settled") {
+      expect(state.actionOnSeat).toBeNull()
+      expect(state.deadlineMs).toBeNull()
+      expect(state.nextHandAt).not.toBeNull()
+      await advanceNextHand(actions, code)
+      state = await actions.state(b, code)
+    }
     expect(
       state.status === "paused" || (state.street !== "settled" && state.deadlineMs !== null),
     ).toBe(true)
@@ -56,6 +63,7 @@ const url = gameTestDatabaseUrl()
         actionId: randomUUID(),
         action: "fold",
       })
+      await advanceNextHand(actions, code)
     }
     const current = await actions.state(a, code),
       user = current.actionOnSeat === 0 ? a : b,
@@ -148,7 +156,7 @@ const url = gameTestDatabaseUrl()
       where: { code: created.roomCode },
       data: { createdAt: new Date(now.getTime() - 3600000) },
     })
-    const task = new PokerDeadlineTask(actions)
+    const task = scopedDeadlineTask(actions, [...rooms.map((r) => r.code), cold.code])
     await task.scan(now)
     await task.scan(new Date(now.getTime() + 30000))
     expect((await db.gamePokerRoom.findUniqueOrThrow({ where: { id: cold.id } })).status).toBe(

@@ -7,6 +7,7 @@ import { PokerService } from "../poker.service"
 import { PokerActionService } from "../poker-action.service"
 import { PokerReadService } from "../poker-read.service"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("暂离座位的摊牌隐私", () => {
@@ -32,6 +33,7 @@ const url = gameTestDatabaseUrl()
       actionId: randomUUID(),
       action: "fold",
     })
+    await advanceNextHand(actions, code)
     expect((await actions.state(a, code)).handNo).toBe(2)
     await poker.sit(b, code, true)
     await poker.sit(c, code, true)
@@ -58,7 +60,10 @@ const url = gameTestDatabaseUrl()
     for (const userId of [a, b]) {
       const publicView = await actions.state(userId, code, "public")
       expect(publicView).not.toHaveProperty("hole")
-      for (const seat of publicView.seats) expect(seat).not.toHaveProperty("hole")
+      for (const seat of publicView.seats) {
+        if (userId === b && [1, 2].includes(seat.seatNo)) expect(seat.hole).toHaveLength(2)
+        else expect(seat).not.toHaveProperty("hole")
+      }
     }
     await expect(read.detail(a, code, 2)).rejects.toMatchObject({
       response: { code: "POKER_SEAT_NOT_FOUND" },

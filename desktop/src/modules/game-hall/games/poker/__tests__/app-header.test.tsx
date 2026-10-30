@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { PokerApp } from "../PokerApp"
 
+vi.mock("@/app-shell/account", () => ({useAccount: () => ({state:{status:"authenticated",profile:{user:{id:"user"}}}})}))
 vi.mock("../components/Lobby", () => ({ Lobby: () => <div>房间内容</div> }))
 vi.mock("../components/HandRecord", () => ({ HandRecord: () => <div>记录内容</div> }))
 vi.mock("../components/AgentProfiles", () => ({ AgentProfiles: () => <div>档案内容</div> }))
@@ -15,6 +16,7 @@ vi.mock("../hooks/usePokerRoom", () => ({
     setPerspective: vi.fn(),
   }),
 }))
+vi.mock("../hooks/usePokerEvents", () => ({ usePokerEvents: () => ({ events: [], animate: [] }) }))
 vi.mock("../components/Table", () => ({
   Table: ({ table }: { table: { roomCode: string } }) => <div>牌桌 {table.roomCode}</div>,
 }))
@@ -43,7 +45,7 @@ describe("游戏应用顶栏", () => {
       root.render(<PokerApp roomCode="4821" onOpenRoom={onOpenRoom} onBack={onBack} />),
     )
     expect(host.textContent).toContain("牌桌 4821")
-    expect(host.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("房间")
+    expect(host.querySelector('[role="tab"]')).toBeNull()
     await act(async () => root.unmount())
   })
 

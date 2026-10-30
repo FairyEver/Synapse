@@ -13,6 +13,7 @@ import { PokerArchiveService } from "./poker/poker-archive.service"
 import { PokerDeadlineTask } from "./poker/poker-deadline.task"
 import { PokerBotService } from "./poker/poker-bot.service"
 import { PokerBotTask } from "./poker/poker-bot.task"
+import { PokerEventsService } from "./poker/poker-events.service"
 @Module({
   imports: [UserAuthModule, NotificationModule, HallModule],
   controllers: [GameController],
@@ -27,6 +28,7 @@ import { PokerBotTask } from "./poker/poker-bot.task"
     PokerArchiveService,
     PokerBotService,
     PokerBotTask,
+    PokerEventsService,
   ],
 })
 export class GameModule {}

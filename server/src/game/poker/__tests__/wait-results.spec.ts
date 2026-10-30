@@ -11,6 +11,7 @@ import { PokerArchiveService } from "../poker-archive.service"
 import { startHand } from "../engine/hand-runner"
 import { orderedDeck } from "../engine/deck"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("离桌后的结算游标", () => {
@@ -32,6 +33,8 @@ const url = gameTestDatabaseUrl()
     await poker.join(a, code, {}, now)
     await poker.join(b, code, {}, now)
     const handId = (await actions.state(a, code)).handId!
+    let clock = now
+    async function advance() { clock = await advanceNextHand(actions, code) }
     async function move(userId: string, action: "fold" | "allin" | "call") {
       const state = await actions.state(userId, code)
       return actions.act(
@@ -43,10 +46,10 @@ const url = gameTestDatabaseUrl()
           actionId: randomUUID(),
           action,
         },
-        new Date(now.getTime() + 1),
+        new Date(clock.getTime() + 1),
       )
     }
-    return { a, b, code, handId, now, move }
+    return { a, b, code, handId, now, move, advance }
   }
   async function resultThenClosed(userId: string, code: string, expected: Record<string, unknown>) {
     const result = await wait.wait(userId, code, "1:0", 0)
@@ -120,7 +123,7 @@ const url = gameTestDatabaseUrl()
     await poker.leave(t.a, t.code)
     await t.move(t.a, "fold")
     if (archived) expect(await archive.archiveHand(t.handId, new Date())).toBe(true)
-    const now = new Date(t.now.getTime() + 2)
+    const now = new Date(t.now.getTime() + 5002)
     await poker.join(t.a, t.code, {}, now)
     const pending = await wait.wait(t.a, t.code, "1:0", 0, undefined, now)
     expect(pending.status).toBe("waiting")
@@ -169,6 +172,7 @@ const url = gameTestDatabaseUrl()
       const state = await actions.state(t.a, t.code)
       expect(state.handNo).toBe(handNo)
       await t.move(state.actionOnSeat === 0 ? t.a : t.b, "fold")
+      await t.advance()
     }
     let cursor = "1:0"
     for (let handNo = 1; handNo <= 200; handNo++) {
@@ -189,6 +193,7 @@ const url = gameTestDatabaseUrl()
   it("空游标重连保持直接恢复当前行动，不追补旧结算", async () => {
     const t = await table()
     await t.move(t.a, "fold")
+    await t.advance()
     const result = await wait.wait(t.b, t.code, "", 0)
     expect(result).toMatchObject({ status: "your_turn", handNo: 2 })
   })

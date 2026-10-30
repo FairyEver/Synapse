@@ -1,12 +1,12 @@
 # 游戏大厅接入与验证
 
-用户带自己的Agent通过Synapse MCP打牌；桌面只能观看、管理房间与私密选手配置。系统不托管模型、不代替真人出牌，也没有座位令牌；正式产品支持程序机器人陪练房。
+用户可桌面亲自打牌，也可请求自己的Agent通过Synapse MCP托管；同账号同房只有一个座位，共用筹码和当前手。系统不托管模型，没有座位令牌；程序机器人仅限陪练房。真人接管优先，AI收到control_released必须退出，不自动重新认领。
 
 陪练流程：room_create(mode=practice)→房主bot_add(roomCode,creationId=UUID)→真人AI正常overview/join/wait/act。bot_remove按botId，本手参与者手后移除；计分房/非房主拒绝。新机器人新UUID，同次重试复用，移除后旧标识不复活。机器人不是账号，无大厅账户/会话；规则策略只接本人及公开信息，持久调度、房锁和引擎裁决。仅机器人或真人全暂离不发新手，机器人不续无人房寿命。
 
 陪练GameSession funding=practice，buyIn/inPlay/returned仅0/null，练习筹码不进账户盈亏或流水；默认历史/统计points，明确mode=practice查练习，归档及版本手数保持隔离。上线须先执行20261030130000_game_poker_practice和20261030131000_game_poker_practice_summary迁移，再API与桌面；已有练习数据后不能回到无资金类型隔离的旧退款逻辑。
 
-接入先通过search发现`app_game_poker_guide`，然后`app_game_hall_overview`；已有座位先检查status：sitting_out仅在用户明确要求继续时seat_sit(false)后wait，仅查看或重连不自动回座；其他已有座位直接wait，无座位才lobby_list/seat_join。暂离时wait只返回waiting，不能等回座错误。GameSession与overview保留实际sitting_out状态，当前手中申请暂离仍为active直到本手结束；seat_sit的sittingOut为请求确认，pending/status表示实际生效情况，pending时立刻停止调用仍可能600秒超时离桌。每次your_turn提交UUID标识的合法act，丢响应时保留同一UUID重试。wait先按cursor补发本次入座未读结算（含已离桌或归档），再返回table_closed；空cursor直接接当前牌况，数字越界拒绝。完整协议、参数与恢复路径以系统Skill包`desktop/app-capabilities/synapse-skill/skill-package/game-hall/`为准。
+接入先通过search发现`app_game_poker_guide`，然后`app_game_hall_overview`；已有座位先检查status：sitting_out仅在用户明确要求继续或完整核对有效上下文维护检查点后seat_sit(false)再wait，仅查看或重连不自动回座；其他已有座位先table_state确认AI控制权再wait，无座位先table_state/room_get核对控制历史及桌面入座授权，再决定lobby_list/seat_join。暂离时wait只返回waiting，不能等回座错误。GameSession与overview保留实际sitting_out状态，当前手中申请暂离仍为active直到本手结束；seat_sit的sittingOut为请求确认，pending/status表示实际生效情况，pending时立刻停止调用仍可能600秒超时离桌。每次your_turn提交UUID标识的合法act，丢响应时保留同一UUID重试。wait先按cursor补发本次入座未读结算（含已离桌或归档），再返回table_closed；空cursor直接接当前牌况，数字越界拒绝。完整协议、参数与恢复路径以系统Skill包`desktop/app-capabilities/synapse-skill/skill-package/game-hall/`为准。
 
 点数与跨游戏进行中属于大厅；扑克service更新会话索引，不能让大厅读取扑克表。所有敏感字段在服务端白名单投影，Renderer旁观投影只作额外防护。
 
@@ -38,3 +38,27 @@ pnpm --filter @synapse/desktop run test --maxWorkers=4
 行动日志的displayName固定为该手参与者快照，不能用当前座位姓名替代；服务端在交叉入座产生已回滚死锁时有限重试，不放宽余额与唯一座位约束。
 
 创建结果丢失时，可用同一creationId恢复房间或同一新选手草稿，不按名称/内容合并。新建另一个实体换UUID；已有选手取得id后仅按id更新，不再传creationId。该字段只用于创建去重，不影响座位重连。新桌面创建会使用该字段，旧客户端不传仍可用，部署顺序必须先服务端后桌面。
+
+
+## 真人控制、规则与事件
+
+共享PokerRules为{variant:standard52|short32,smallBlind,bigBlind}；Room/Summary/Detail通过rules返回快照，Table另带variant/smallBlind/bigBlind。short32仅7到A、同花大于葫芦、A789T最小顺子；盲注预设1/2、2/4、5/10、10/20，默认标准52张和1/2，建房后固定。结算含rules/seats/pots/mixedControl，未跟注返还标记refund。结算后服务端持久等待5秒，前端不擅自开手。
+
+控制权和版本由服务端决定；桌面control.set(takeover|request_ai|cancel_ai)必须带controlVersion，AI只对用户已申请的handoff调用control.claim。接管即时提升epoch、旧AI动作和seat.sit/leave写权失效，已提交动作不回滚，截止时间不重置。act带controlVersion/expectedActionSeq，省略版本只兼容初始epoch0；响应未知保持actionId确认原动作。human动作不绑定persona/note，程序机器人仍rules_bot。
+
+UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/control与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Renderer窄bridge有join/act/control.set/events，没有wait/control.claim/checkpoint。game26项公共能力，24项IPC；room.close/control.set两个私有UI操作不进capability/MCP。
+
+table.events可传perspective=owner|public，MCP默认owner且固定decision投影；UI默认public，玩家日志必须随牌桌传owner，不能混入教学明牌。返回{events,cursor,hasMore}，limit最大100，按(handNo,seq,kind)去重并推进返回cursor；结算seq=2147483647，重连直接呈现最新状态，不重放旧动画。扑克房间获准隐藏业务顶栏/底栏，1440×900画布contain等比缩放、日志可折叠/窄屏抽屉；大厅维持统一壳。
+
+服务端永久参与证据包含closed会话：桌面从未入座账号可教学全牌；参与点数房不能看他人暗牌，参与陪练房最多看程序机器人教学明牌；玩家按本人及合法摊牌，教学不扩大历史读取。MCP/机器人策略始终决策投影；UI公开投影剥离persona、版本、note、合法动作等，但保留服务端已授权hole和mySeatNo，客户端不能自行授予教学权限。
+
+## 上下文维护
+
+每10手或15分钟检查，压力提前，无可靠用量仍周期维护；先seat.sit(reason=context_maintenance)，完成本手并确认实际sitting_out、无未确认act，再checkpoint.save。检查点服务端本人私有保存roomCode/cursor/controlVersion/sessionStyle/continueIntent/pauseReason/savedAt，get/save均返回{checkpoint}（get可null），不落项目文件。
+
+宿主确实支持原生压缩且确认成功才继续；不可用/失败/不明时安全退出提示手动，不用shell伪执行/compact。恢复重读Skill、房规、overview、checkpoint、state；同epoch、AI控制、continueIntent、context_maintenance及真实暂离均有效才回座。不撤销用户暂停/接管/离桌，清退后不自动扣点入座，不增加后台常驻AI运行器。
+
+本次变更仅生成迁移，业务库迁移、部署、真实客户端验收均需单独授权执行。发布先新增迁移再API再桌面；已发生控制切换或短牌数据后，不得回滚到忽略控制epoch/规则快照的旧API。
+
+
+永久扑克控制历史独立于座位保存，离桌/清退不能抹去旧AI写入失效边界。无座位时table.requiresJoinApproval=false明确表示没有历史，可按用户原入座授权首次join；true表示有历史，此时table.controller=null，controlVersion取历史版本，handoffPending表示joinPending。不能按版本0判断历史；缺少标记先核实。UI可在无座位通过control.set(request_ai/cancel_ai)授权/撤销AI重新入座；MCP seat.join有历史时必须该授权有效且携匹配controlVersion。未授权不自动入座、不重扣点，控制记录不存在的首次旧MCP入座才兼容省略版本；control.claim仅用于有座位交接。本次仅扩展既有join输入和私有control.set语义，26项game能力、24项IPC与全局计数不变。

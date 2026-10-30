@@ -2,6 +2,8 @@ export interface Pot {
   amount: number
   eligible: number[]
   refund: boolean
+  winners?: number[]
+  shares?: Record<number, number>
 }
 export function splitPots(
   seats: readonly { seatNo: number; total: number; folded: boolean }[],

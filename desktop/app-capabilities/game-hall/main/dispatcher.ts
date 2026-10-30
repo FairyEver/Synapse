@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { POKER_HUMAN_ACTION_SCHEMA } from "../games/poker/shared/ui-operations"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
 import type { DispatchContext, DispatchResult } from "../../../synapse-capabilities/shared/types"
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
@@ -27,16 +28,18 @@ export function createGameDispatcher(deps: {
       try {
         if (
           operation === "app.game.poker.action.act" &&
+          context.source !== "api" &&
           context.source !== "mcp-http" &&
           context.source !== "mcp-stdio" &&
           context.actor?.kind !== "agent"
         )
           throw new GameCloudError("POKER_ILLEGAL_ACTION", "只有接入的Agent可出牌。")
         const ui = context.source === "api"
+        const schema = ui && operation === "app.game.poker.action.act" ? POKER_HUMAN_ACTION_SCHEMA : definition.inputSchema
         const schemaInput =
           ui && operation === "app.game.poker.table.state" ? { roomCode: input.roomCode } : input
         const params = z
-          .fromJSONSchema(definition.inputSchema as Parameters<typeof z.fromJSONSchema>[0])
+          .fromJSONSchema(schema as Parameters<typeof z.fromJSONSchema>[0])
           .parse(schemaInput) as Record<string, unknown>
         const assertIdentity = deps.service.captureIdentityGuard()
         const allowed = await checkCapabilityPermission({

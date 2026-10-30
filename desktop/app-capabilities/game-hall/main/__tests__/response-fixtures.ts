@@ -199,5 +199,10 @@ export const gameResponseFixtures: Record<string, unknown> = {
     ...stats,
     comparison: [{ ...stats, seatNo: 0, displayName: "选手", isMe: true }],
   },
+  "app.game.poker.control.claim": { controller: "ai", controlVersion: 1, handoffPending: false },
+  "app.game.poker.control.set": { controller: "human", controlVersion: 2, handoffPending: false },
+  "app.game.poker.checkpoint.get": { checkpoint: null },
+  "app.game.poker.checkpoint.save": { checkpoint: { roomCode: "4821", cursor: "1:2147483647", controlVersion: 1, sessionStyle: "", continueIntent: true, pauseReason: "context_maintenance", savedAt: "2026-10-30T00:00:00.000Z" } },
+  "app.game.poker.table.events": { events: [], cursor: "1:1", hasMore: false },
   "app.game.poker.room.close": { pending: true },
 }

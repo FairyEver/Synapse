@@ -64,6 +64,7 @@ describe("system app header architecture", () => {
   it("keeps the game-specific page on the shared window shell", async () => {
     const source = await readFile(new FileURL("../../game-hall/games/poker/PokerApp.tsx", import.meta.url), "utf8")
     expect(source).toContain("<SystemAppWindowShell")
+    expect(source).toContain("immersive={!!roomCode}")
     expect(source).not.toMatch(/<SystemAppTopBar(?:\s|>)/)
   })
 

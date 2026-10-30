@@ -4,22 +4,24 @@ export function projectTable(
   perspective: "owner" | "public",
 ): PokerTableView {
   if (perspective === "owner") return table
-  const {
-    persona: _,
-    hole: __,
-    legalActions: ___,
-    toCall: ____,
-    minRaiseTo: _____,
-    maxRaiseTo: ______,
-    ...publicTable
-  } = table
+  const publicTable = { ...table }
+  delete publicTable.persona
+  delete publicTable.hole
+  delete publicTable.legalActions
+  delete publicTable.toCall
+  delete publicTable.minRaiseTo
+  delete publicTable.maxRaiseTo
   return {
     ...publicTable,
-    mySeatNo: null,
-    seats: table.seats.map(({ hole, ...seat }) => seat),
-    recentActions: table.recentActions.map(
-      ({ note, personaVersionId, personaVersion, ...action }) => action,
-    ),
+    // Card visibility and account identity come from the authenticated server projection.
+    seats: table.seats,
+    recentActions: table.recentActions.map((entry) => {
+      const action = { ...entry }
+      delete action.note
+      delete action.personaVersionId
+      delete action.personaVersion
+      return action
+    }),
   }
 }
 export { formatGameCountdown as remaining, formatGameAmount as amount } from "../../../lib/format"

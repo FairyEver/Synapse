@@ -91,12 +91,28 @@
 
 ## app_game_poker_room_create
 
-创建2–10人桌，盲注1/2；可传creationId(UUID)，同次创建重试复用，新开一桌更换。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+创建2–10人桌；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
   "type": "object",
   "properties": {
+    "variant": {
+      "type": "string",
+      "enum": [
+        "standard52",
+        "short32"
+      ]
+    },
+    "blindPreset": {
+      "type": "string",
+      "enum": [
+        "1/2",
+        "2/4",
+        "5/10",
+        "10/20"
+      ]
+    },
     "creationId": {
       "type": "string",
       "format": "uuid",
@@ -209,7 +225,7 @@
 
 ## app_game_poker_seat_join
 
-按当前账号+roomCode入座，无令牌。鼓励声明modelName，不确定留空，不校验模型身份。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+按当前账号+roomCode入座，无令牌。有控制历史且已离桌时，先table.state确认桌面已授权AI重新入座，再携匹配controlVersion；未授权不得自动入座扣点。modelName仅自述。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -226,6 +242,11 @@
     "modelName": {
       "type": "string",
       "maxLength": 24
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
     }
   },
   "required": [
@@ -237,7 +258,7 @@
 
 ## app_game_poker_seat_leave
 
-点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场，接管后须提交当前controlVersion。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -246,6 +267,11 @@
     "roomCode": {
       "type": "string",
       "pattern": "^[0-9]{4,6}$"
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
     }
   },
   "required": [
@@ -269,6 +295,18 @@
     },
     "sittingOut": {
       "type": "boolean"
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "user",
+        "context_maintenance"
+      ]
     }
   },
   "required": [
@@ -307,7 +345,7 @@
 
 ## app_game_poker_table_wait
 
-循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -366,6 +404,16 @@
       "type": "string",
       "pattern": "^[0-9]{4,6}$"
     },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "expectedActionSeq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
     "handId": {
       "type": "string",
       "maxLength": 200
@@ -419,6 +467,127 @@
     "street",
     "actionId",
     "action"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_control_claim
+
+仅Agent认领用户已请求的AI托管；必须核对controlVersion，用户已接管时不得重新认领。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  },
+  "required": [
+    "roomCode",
+    "controlVersion"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_checkpoint_get
+
+读取本人服务端私有上下文维护检查点；恢复前先读Skill和overview，不自动恢复用户暂停。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    }
+  },
+  "required": [
+    "roomCode"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_checkpoint_save
+
+确认context_maintenance暂离实际生效且无未确认动作后，保存本人服务端私有恢复检查点；不写项目文件。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "sessionStyle": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "continueIntent": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "roomCode",
+    "controlVersion",
+    "cursor",
+    "continueIntent"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_table_events
+
+分页读取牌桌动作和结算；perspective默认owner，decision投影绝不返回教学明牌；结算seq为2147483647。Pagination: cursor-based. Continue with cursor while hasMore is true; changing roomCode starts a new cursor. 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "perspective": {
+      "type": "string",
+      "enum": [
+        "owner",
+        "public"
+      ]
+    }
+  },
+  "required": [
+    "roomCode"
   ],
   "additionalProperties": false
 }

@@ -44,9 +44,9 @@ describe("游戏云响应协议", () => {
       service.dispose()
     }
   })
-  it("响应夹具覆盖22个MCP工具及私有解散操作", () => {
+  it("响应夹具覆盖26个MCP工具及两个私有UI操作", () => {
     expect(Object.keys(gameResponseFixtures).sort()).toEqual(
-      [...GAME_TOOLS.map((tool) => tool.id), "app.game.poker.room.close"].sort(),
+      [...GAME_TOOLS.map((tool) => tool.id), "app.game.poker.room.close", "app.game.poker.control.set"].sort(),
     )
   })
   it.each([
@@ -103,7 +103,7 @@ describe("游戏云响应协议", () => {
       const data = Array.isArray(fixture)
         ? fixture.map((item) => ({ ...item, futureField: "兼容扩展" }))
         : { ...(fixture as object), futureField: "兼容扩展" }
-      const ui = operation === "app.game.poker.room.close"
+      const ui = ["app.game.poker.room.close", "app.game.poker.control.set"].includes(operation)
       const service = serviceFor(ui ? data : { ok: true, data, futureEnvelope: true })
       try {
         expect(

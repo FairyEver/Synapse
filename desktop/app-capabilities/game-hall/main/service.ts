@@ -77,7 +77,7 @@ export class GameHallService {
   }
   async callFromUi(operation: string, params: Record<string, unknown>): Promise<unknown> {
     if (!GAME_UI_OPERATIONS.some((t) => t.id === operation))
-      throw new GameCloudError("POKER_ILLEGAL_ACTION", "桌面不提供出牌或入座操作。")
+      throw new GameCloudError("POKER_ILLEGAL_ACTION", "未知桌面游戏操作。")
     return this.call(operation, params, undefined, true)
   }
   async call(

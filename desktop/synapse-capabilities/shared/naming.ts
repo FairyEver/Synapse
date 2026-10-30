@@ -1,5 +1,8 @@
 const CAPABILITY_ACTIONS = [
   "state", "overview", "guide", "account", "join", "leave", "sit", "nudge", "wait", "act", "versions", "history", "detail",
+  "claim",
+  "save",
+  "events",
   "list",
   "get",
   "create",

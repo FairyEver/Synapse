@@ -9,6 +9,7 @@ import { PokerReadService } from "../poker-read.service"
 import { PokerWaitService } from "../poker-wait.service"
 import { PokerArchiveService } from "../poker-archive.service"
 import { gameTestDatabaseUrl } from "./test-database"
+import { advanceNextHand } from "./advance-next-hand"
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("全下指标与归档后的恢复", () => {
   const db = new PrismaClient({
@@ -111,6 +112,7 @@ const url = gameTestDatabaseUrl()
       { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "fold" },
       old,
     )
+    const nextAt = await advanceNextHand(actions, code)
     state = await actions.state(b, code)
     expect(state.dealerSeat).toBe(1)
     expect(state.seats.map((s) => s.seatNo)).toEqual([1, 2, 4])
@@ -122,7 +124,7 @@ const url = gameTestDatabaseUrl()
         user,
         code,
         { handId, street: current.street!, actionId: randomUUID(), action },
-        new Date(old.getTime() + 1),
+        new Date(nextAt.getTime() + 1),
       )
     }
     await move(b, "call")

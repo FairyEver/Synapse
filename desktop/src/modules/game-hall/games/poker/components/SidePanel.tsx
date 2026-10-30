@@ -1,12 +1,18 @@
 import { ListOrdered, LockKeyhole } from "lucide-react"
-import type { PokerTableView } from "@synapse/shared/game-contracts"
+import type { ReactNode } from "react"
+import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
+import { Settlement } from "./Settlement"
 import { PersonaBadge } from "./PersonaBadge"
 import { actionLabel, amount, streetLabel } from "../lib/view"
 export function SidePanel({
   table,
   perspective,
   id,
+  events = [],
+  extras,
 }: {
+  events?: PokerTableEvent[]
+  extras?: ReactNode
   id?: string
   table: PokerTableView
   perspective: "owner" | "public"
@@ -15,6 +21,8 @@ export function SidePanel({
     perspective === "owner" ? [...table.recentActions].reverse().find((a) => a.note)?.note : null
   return (
     <aside id={id} className="poker-side-panel" aria-label="日志和AI判断">
+      {extras}
+      {[...events].reverse().filter(e => e.kind === "settlement" && e.settlement).slice(0, 2).map(e => <Settlement key={e.handId} settlement={e.settlement!} compact />)}
       <section className="poker-log">
         <h3>
           <ListOrdered aria-hidden="true" />
@@ -27,7 +35,7 @@ export function SidePanel({
             {table.recentActions.map((action) => {
               const displayName = action.displayName ?? `座位 ${action.seatNo + 1}`
               return (
-                <li key={action.seq}>
+                <li key={`${table.handId}:${action.seq}`}>
                   <span className="poker-action-seq">{String(action.seq).padStart(2, "0")}</span>
                   <span className="poker-action-player">
                     <span title={displayName}>{displayName}</span>
@@ -35,6 +43,7 @@ export function SidePanel({
                       {streetLabel[action.street] ?? action.street}
                       {action.isAuto && " · 自动"}
                       {action.actionSource === "rules_bot" && " · 机器人"}
+                      {action.actionSource === "human" && " · 真人操作"}
                     </small>
                     {perspective === "owner" && action.personaVersion && (
                       <PersonaBadge version={action.personaVersion} />

@@ -68,6 +68,7 @@ export function RoomList({
               <span className="gc-room-code">
                 #{room.roomCode}
                 {room.mode === "practice" && " · 陪练"}
+                {room.rules?.variant === "short32" ? " · 短牌 32 张" : " · 标准 52 张"}
                 {mine && " · 我的牌桌"}
               </span>
               <RoomArtwork players={room.players} maxSeats={room.maxSeats} />

@@ -5,14 +5,17 @@ import { json } from "./poker.service"
 import { startHand, type HandState } from "./engine/hand-runner"
 import { orderedDeck, shuffle } from "./engine/deck"
 import { after } from "./engine/seat-order"
+import { resolveRules, type PokerRules } from "./engine/rules"
 export const ACTION_WINDOW_MS = 600000
+export const SETTLEMENT_WINDOW_MS = 5000
 export function engine(hand: GamePokerHand): HandState {
-  return hand.engineState as unknown as HandState
+  const state = hand.engineState as unknown as HandState
+  const saved = hand.rules && typeof hand.rules === "object" && !Array.isArray(hand.rules) ? hand.rules : {}
+  return { ...state, ...resolveRules({ ...saved, ...state } as Partial<PokerRules>) }
 }
 export async function startNext(
   poker: PokerService,
   c: RoomContext,
-  automaticBudget = 8,
 ): Promise<void> {
   if (c.room.status === "closed") return
   const previous = c.room.currentHandId
@@ -25,7 +28,7 @@ export async function startNext(
     }
     c.room = await c.tx.gamePokerRoom.update({
       where: { id: c.room.id },
-      data: { status: "closed", closedAt: c.now, actionDeadlineAt: null },
+      data: { status: "closed", closedAt: c.now, actionDeadlineAt: null, botActionAt: null, nextHandAt: null },
     })
     return
   }
@@ -33,13 +36,20 @@ export async function startNext(
     (s) => s.stack > 0 && s.status !== "sitting_out" && !s.sitPending && !s.leavePending,
   )
   if (eligible.length < 2 || !eligible.some((s) => s.participantKind !== "bot")) {
-    await c.tx.gamePokerRoom.update({
+    c.room = await c.tx.gamePokerRoom.update({
       where: { id: c.room.id },
-      data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null, botActionAt: null },
+      data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null, botActionAt: null, nextHandAt: c.room.nextHandAt && c.room.nextHandAt > c.now ? c.room.nextHandAt : null },
     })
     await c.tx.gameSession.updateMany({
       where: { gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
       data: { needsAction: false, deadlineAt: null },
+    })
+    return
+  }
+  if (c.room.nextHandAt && c.now < c.room.nextHandAt) {
+    c.room = await c.tx.gamePokerRoom.update({
+      where: { id: c.room.id },
+      data: { actionDeadlineAt: null, botActionAt: null },
     })
     return
   }
@@ -49,7 +59,8 @@ export async function startNext(
         c.room.dealerSeat,
       )[0]
     : eligible[0].seatNo
-  const state = startHand(eligible, dealerSeat, shuffle(orderedDeck(), randomInt))
+  const rules = resolveRules(c.room as unknown as Partial<PokerRules>)
+  const state = startHand(eligible, dealerSeat, shuffle(orderedDeck(rules.variant), randomInt), rules)
   const hand = await c.tx.gamePokerHand.create({
     data: {
       roomId: c.room.id,
@@ -59,6 +70,7 @@ export async function startNext(
       street: state.street,
       status: "running",
       engineState: json(state),
+      rules: json(rules),
       startedAt: c.now,
     },
   })
@@ -68,6 +80,7 @@ export async function startNext(
       status: "running",
       handNo: hand.handNo,
       currentHandId: hand.id,
+      nextHandAt: null,
       dealerSeat,
       actionDeadlineAt: new Date(c.now.getTime() + ACTION_WINDOW_MS),
     },
@@ -84,14 +97,7 @@ export async function startNext(
     })),
   })
   await saveHand(poker, c, hand, state)
-  if (state.street === "settled" && c.room.status !== "closed") {
-    if (automaticBudget > 0) await startNext(poker, c, automaticBudget - 1)
-    else
-      await c.tx.gamePokerRoom.update({
-        where: { id: c.room.id },
-        data: { actionDeadlineAt: new Date(c.now.getTime() + 1000) },
-      })
-  }
+  if (state.street === "settled") await startNext(poker, c)
 }
 export async function saveHand(
   poker: PokerService,
@@ -99,27 +105,30 @@ export async function saveHand(
   hand: GamePokerHand,
   state: HandState,
 ): Promise<void> {
+  const rules = resolveRules(state)
   const settled = state.street === "settled"
   const pot = settled ? 0 : state.seats.reduce((sum, s) => sum + s.total, 0)
   await c.tx.gamePokerHand.update({
     where: { id: hand.id },
     data: {
-      engineState: json(state),
+      engineState: json({ ...state, ...rules }),
+      rules: json(rules),
       board: state.board,
       street: state.street,
       pot,
       status: settled ? "settled" : "running",
       showdownSeats: state.showdownSeats,
       ...(settled
-        ? { endedAt: c.now, result: json({ payouts: state.payouts, pots: state.pots }) }
+        ? { endedAt: c.now, result: json({ payouts: state.payouts, pots: state.pots, deltas: Object.fromEntries(state.seats.map((s) => [s.seatNo, s.stack - s.startingStack])) }) }
         : {}),
     },
   })
   const deadlineAt = settled ? null : new Date(c.now.getTime() + ACTION_WINDOW_MS)
-  await c.tx.gamePokerRoom.update({
+  c.room = await c.tx.gamePokerRoom.update({
     where: { id: c.room.id },
     data: {
       actionDeadlineAt: deadlineAt,
+      nextHandAt: settled ? new Date(c.now.getTime() + SETTLEMENT_WINDOW_MS) : null,
       botActionAt: !settled && c.room.mode === "practice" && c.seats.some((s) => s.seatNo === state.actionOnSeat && s.participantKind === "bot")
         ? new Date(c.now.getTime() + 1000) : null,
     },
@@ -190,7 +199,7 @@ export async function saveHand(
     if (c.room.closeRequested)
       c.room = await c.tx.gamePokerRoom.update({
         where: { id: c.room.id },
-        data: { status: "closed", closedAt: c.now, actionDeadlineAt: null },
+        data: { status: "closed", closedAt: c.now, actionDeadlineAt: null, botActionAt: null, nextHandAt: null },
       })
   }
 }

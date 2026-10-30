@@ -311,16 +311,16 @@
 
 - System App为`game-hall`；大厅只拥有GameAccount与GameSession，游戏注册表驱动入口。大厅不得join游戏内部表或按具体gameKind分支。
 - GameAccount.points存可用余额，GameSession.inPlay保存占用；总额=可用+占用，初始1,000,000。入座扣点、座位与会话同事务，账户/房间行锁；同房间账号与位置唯一约束由数据库保证。
-- 首个游戏为Agent专属无限注德州扑克。不托管模型；2026-10-30用户批准陪练房提供纯程序机器人，点数房仍禁止机器人。桌面只读观看，Renderer无act、seat_join、table_wait bridge。真人下注仅MCP的act，主进程检查可信来源；服务端校验账号、房间、手牌、街道、行动点与合法数额。
-- MCP为game域22项索引能力（大厅3、扑克19），公开仍仅search/invoke。桌面有20项窄IPC，其中room.close为UI私有，不进入MCP目录；bot.add/remove仅房间管理，不授予真人出牌权；深链只打开观看窗口。
+- 首个游戏为无限注德州扑克，不托管模型。2026-10-30用户批准桌面本人入座、出牌与接管；真人与AI共用同账号同房唯一座位、筹码和当前手。Renderer开放join/act/control.set/events窄bridge，不开放table.wait。MCP act仅AI来源，UI专用路由由服务端确定human来源，客户端不能指定source/controller，人工动作不绑定persona/note；程序机器人仅陪练房允许。
+- MCP为game域26项索引能力（大厅3、扑克23），公开仍仅search/invoke。桌面24项窄IPC，room.close与control.set为UI私有，不进入capability/MCP目录；control.claim、checkpoint.get/save、table.wait仅Agent使用，table.events两端共用。bot.add/remove不授予机器人动作控制权，深链仅打开房间，不自动入座或交接。
 - 座位不签发令牌，当前账号+roomCode重连；同账号可同时参加多个游戏/多个房间。modelName为可空公开自述，仅展示，不校验后端身份、不参与规则或统计逻辑。
-- persona、历史版本、note仅本人可读，所有查询白名单投影；未摊牌对手底牌及已弃牌底牌不能被其他账号/旁观者读取。摊牌仅向实际参与该手的座位公开，不能只凭入座时间或仍保留座位认定参与；本手未发牌的暂离座位同样不可读。版本与动作不可改写，行动与生效版本同事务保存；口述风格覆盖通过personaSource=session声明，绑定null且不写回游戏设置。
+- persona、历史版本、note仅本人可读，所有查询服务端白名单投影。玩家/MCP/机器人决策不返回对手未摊牌或弃牌暗牌；合法摊牌按实际手牌参与身份判定。桌面教学旁观仅从未入座账号可看全牌，包括closed的GameSession为永久参与证据；参与点数房不能看他人暗牌，参与陪练房仅程序机器人可教学明牌，不扩大他人历史读取。UI公开投影剥离私密配置与合法动作，但保留服务端已授权hole和本人mySeatNo。版本与动作不可改写，行动与生效版本同事务保存；口述风格personaSource=session绑定null且不写回设置。
 - 行动窗口600秒，60秒无调用仅标离线。超时能check则记check，否则fold；两者都立即撤出本手并退款离场，不能继续争夺底池。超时任务与act同一房间锁，成功actionId先按账号/房间查幂等结果。
 - 中途新座位下一手参与，不能按seatNo继承上一选手当前手的牌和筹码。主动离桌/暂离本手结束后生效；房主可请求本手结束后解散并批量退款；人数不足暂停，30分钟无活动且无进行中手牌时维护退款。
-- 应用顶栏复用Synapse统一壳层、主题token与header slot，返回大厅只有一个入口，不提供主题切换或预览测试控件。2026-10-30用户明确允许大厅内部与每个游戏内部独立定制，不要求沿用其它业务页面样式；自定义视觉限定模块作用域，不影响顶栏或共享UI。牌桌仍使用table-tokens.css固定材质。卡牌DOM只有一个，由大厅游戏预览、牌桌、记录复用，尊重减弱动态效果。
+- 大厅顶栏复用Synapse统一壳层、主题token与header slot。用户批准扑克房间沉浸例外：不显示业务顶栏/底栏，仅保留OS/宿主最小壳和单一返回大厅入口；1440×900固定画布contain等比缩放，操作控件保持可点击尺寸，窄窗口日志用抽屉。游戏自定义视觉限定模块作用域，不影响共享UI或其它应用；卡牌DOM共用并尊重减弱动态效果。
 - 服务端和nginx不记录游戏请求载荷；业务日志只记录房间号、手数、动作序号等定位信息，不记录牌面、persona或note。提醒复用消息中心与生产推送网关，来源game-poker，不改变APNS环境。
 - 卡牌素材在扑克模块 `assets/cards/` 本地打包，来源为 CC0 的 letele/playing-cards / Adrian Kennard；来源提交、视觉适配与许可见同目录 README、LICENSE。牌面图案和红黑色不随应用主题变化，不依赖系统花色字体或远程 CDN；遮蔽状态不渲染牌面图片、牌值文本或牌值描述。
-- 大厅与房间采用 `game-center` 局部游戏主题，顶栏和 body 弹窗不继承该调色板。注册项 `Artwork` 负责游戏专属入口画面，扑克插画及缩略图样式归扑克模块所有，大厅组件不导入扑克实现或判断具体游戏。房间图仅表示人数/容量，继续观看、接入 AI、解散各自独立；空闲、满员与本人已在桌不新增人类入座或出牌权限。
+- 大厅与房间采用 `game-center` 局部游戏主题，顶栏和 body 弹窗不继承该调色板。注册项 `Artwork` 负责游戏专属入口画面，扑克插画及缩略图样式归扑克模块所有，大厅组件不导入扑克实现或判断具体游戏。房间图仅表示人数/容量，继续观看、接入 AI、解散各自独立；空闲、满员与本人已在桌仍须按本人座位与控制权校验入座或出牌权限。
 - `game-palette.css` 是大厅、房间和牌桌共用内容色的唯一来源，牌桌材质与卡牌仍由扑克样式定义。房间的叠放牌背只作游戏示意，容量条不表示具体座位；行动以轻量标签、本人视角进度环提示，不以整卡粗金边表示。牌桌固定色与隐私投影不随 Synapse 深浅主题改变。
 
 - 按UTC基准满90天后，仅受控数据库归档函数可清理已结算热记录，不能因数据库会话时区提前清理：先保存完整不可变归档并验证一致，再清理手牌、行动与摘要；对外仍用原权限和白名单读取归档。提示词版本及成功行动幂等凭据永久保留，普通接口不能更新或删除。
@@ -351,3 +351,12 @@
 - 桌面机器人添加结果未确认时标识为重试并复用原creationId；确认移除（含手后移除）后结束该添加意图，下次添加用新标识。移除失败不清理未确认意图；切换账号或房间后迟到移除结果不能清理当前意图或刷新当前房间。服务器永久创建去重记录保持，不以客户端恢复为由复活已删除机器人。
 - 机器人策略纯函数仅接本人底牌和公开信息，复用引擎与房锁，actionSource=rules_bot区别timeout。1秒有界调度、每批100房/每房一动作，冻结资格/稳定游标防饥饿，持久botActionAt支持重启和多实例防重。至少一个可参与真人才开新手，机器人活动不续无人房寿命。
 - 上线陪练先执行20261030130000_game_poker_practice及20261030131000_game_poker_practice_summary迁移，再上线API与桌面。已有陪练数据后不得回滚到不区分模式的旧退款实现；停用先禁新建/添加并合法收尾，不删除数据。
+
+- 扑克standard52与short32（四花色7到A）和points/practice正交；short32同花大于葫芦、A789T为最小顺子。盲注档位1/2、2/4、5/10、10/20，默认standard52和1/2；牌组/盲注创建后固定，每手和冷热历史保留规则快照，旧记录兼容标准牌1/2。
+- 接管在房锁内提升controlVersion，即时撤销旧AI的动作、暂离/回座/离桌写权，不撤回已提交动作、不重置600秒；交回AI需用户申请、AI按当前版本claim，等待可取消。actionId幂等与expectedActionSeq防迟到，旧MCP仅epoch0兼容；人工动作来源human，混合控制手mixedControl不应归因于单一AI风格。
+- 结算后持久nextHandAt并等待5秒，新手由服务端有界调度推进，重启不跳过间隔。结算投影含规则、合法牌面、赢家/牌型/净盈亏及主边池与返还；table.events为上限100的游标分页，结算seq=2147483647，Renderer按手和序号去重，不重连重播旧动画。
+- AI每10手或15分钟检查上下文，压力提前、无可靠用量也按周期维护；reason=context_maintenance申请暂离，完成本手、确认实际sitting_out并解决未确认act后才checkpoint.save。检查点为本人服务端私有，不落项目文件。原生压缩真实可用且成功才恢复，否则安全退出提示手动；禁止shell伪执行/compact。恢复重读Skill/guide/overview/checkpoint/state，仅同epoch、AI控制、有效继续意图和维护暂停可回座；用户接管、暂停、离桌优先，清退不自动重扣点；control_released退出不重入，不增加常驻运行器。
+
+- 扑克永久control history作为独立tombstone保留，删除座位不清除接管失效边界。无座位时Table.requiresJoinApproval明确标识是否有控制历史；false可按用户原授权首次入座，true必须新的入座授权。有历史控制投影为controller=null、历史controlVersion及joinPending映射的handoffPending；不得按版本0推断历史，缺失标记先核实；UI私有control.set可request_ai/cancel_ai入座授权。MCP join有历史必须joinPending和匹配controlVersion，禁止旧AI裸join重新扣点；仅首次无历史旧MCP兼容。Skill无座位先读table.state/room.get，未授权退出，不自动入座；control.claim不替代入座授权。不新增capability或IPC。
+
+- table.events的perspective可选owner/public，MCP默认owner且始终decision投影不带教学牌；UI事件默认public兼容旧调用，玩家视角传owner，日志和牌桌使用一致授权投影，不能因事件补读混入教学机器人牌。不新增能力或IPC。

@@ -4,6 +4,7 @@ import { Prisma, type GamePokerHandSummary } from "@prisma/client"
 import { PokerService } from "./poker.service"
 import { reject } from "./poker-error"
 import { archiveData, type ArchivedHand } from "./poker-archive.service"
+import { resolveRules, type PokerRules } from "./engine/rules"
 @Injectable()
 export class PokerReadService {
   constructor(private readonly poker: PokerService) {}
@@ -19,6 +20,7 @@ export class PokerReadService {
         name: true,
         ownerUserId: true,
         mode: true,
+        variant: true,
         maxSeats: true,
         buyIn: true,
         status: true,
@@ -37,6 +39,7 @@ export class PokerReadService {
         name: r.name,
         ownerUserId: r.ownerUserId,
         mode: r.mode as "points" | "practice",
+        rules: resolveRules(r as unknown as Partial<PokerRules>),
         maxSeats: r.maxSeats,
         buyIn: r.buyIn,
         status: r.status,
@@ -74,7 +77,7 @@ export class PokerReadService {
       ) records ORDER BY "createdAt" DESC,"id" DESC LIMIT ${limit + 1} OFFSET ${offset}`
     const rooms = await this.poker.prisma.gamePokerRoom.findMany({
       where: { id: { in: rows.map((r) => r.roomId) } },
-      select: { id: true, code: true },
+      select: { id: true, code: true, variant: true, smallBlind: true, bigBlind: true },
       take: limit + 1,
     })
     return {
@@ -82,6 +85,7 @@ export class PokerReadService {
         mode,
         handId: r.handId,
         roomCode: rooms.find((room) => room.id === r.roomId)!.code,
+        rules: resolveRules(rooms.find((room) => room.id === r.roomId) as unknown as Partial<PokerRules>),
         handNo: r.handNo,
         seatNo: r.seatNo,
         delta: r.delta,
@@ -159,6 +163,7 @@ export class PokerReadService {
         const shown = Array.isArray(hand.showdownSeats) ? hand.showdownSeats : []
         return {
           mode: room.mode,
+          rules: resolveRules((hand.rules ?? {}) as Partial<PokerRules>),
           handId: hand.id,
           handNo: hand.handNo,
           roomCode: code,
@@ -248,10 +253,14 @@ export class PokerReadService {
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'summaries') AS entry(summary)
         WHERE archive."participantIds" @> ARRAY[${userId}]::text[] AND summary->>'userId'=${userId} AND COALESCE(summary->>'mode','points')=${mode}
       ), played AS (SELECT "handId","delta","result" FROM user_hands), hand_seats AS (
-        SELECT seat."handId",seat."seatNo",seat."startingStack",hand."dealerSeat"
+        SELECT seat."handId",seat."seatNo",seat."startingStack",hand."dealerSeat",
+          COALESCE((hand."rules"->>'smallBlind')::int,1) AS "smallBlind",
+          COALESCE((hand."rules"->>'bigBlind')::int,2) AS "bigBlind"
         FROM "GamePokerHandSeat" seat JOIN "GamePokerHand" hand ON hand."id"=seat."handId" JOIN played ON played."handId"=hand."id"
         UNION ALL
-        SELECT seat->>'handId',(seat->>'seatNo')::int,(seat->>'startingStack')::int,(archive."data"->'hand'->>'dealerSeat')::int
+        SELECT seat->>'handId',(seat->>'seatNo')::int,(seat->>'startingStack')::int,(archive."data"->'hand'->>'dealerSeat')::int,
+          COALESCE((archive."data"->'hand'->'rules'->>'smallBlind')::int,1),
+          COALESCE((archive."data"->'hand'->'rules'->>'bigBlind')::int,2)
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'seats') AS entry(seat)
         JOIN played ON played."handId"=archive."id" WHERE archive."participantIds" @> ARRAY[${userId}]::text[]
       ), positions AS (
@@ -259,9 +268,9 @@ export class PokerReadService {
           row_number() OVER(PARTITION BY "handId" ORDER BY ("seatNo"-"dealerSeat"+10)%10) AS position
         FROM hand_seats
       ), blinds AS (
-        SELECT "handId","seatNo",LEAST("startingStack",CASE
-          WHEN position=CASE WHEN seats=2 THEN 1 ELSE 2 END THEN 1
-          WHEN position=CASE WHEN seats=2 THEN 2 ELSE 3 END THEN 2 ELSE 0 END) AS blind
+        SELECT "handId","seatNo","bigBlind",LEAST("startingStack",CASE
+          WHEN position=CASE WHEN seats=2 THEN 1 ELSE 2 END THEN "smallBlind"
+          WHEN position=CASE WHEN seats=2 THEN 2 ELSE 3 END THEN "bigBlind" ELSE 0 END) AS blind
         FROM positions
       ), all_moves AS (
         SELECT action."handId",action."seq",action."seatNo",action."userId",action."street",action."action",action."amount",action."isAuto"
@@ -271,11 +280,11 @@ export class PokerReadService {
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'actions') AS entry(action)
         JOIN played ON played."handId"=archive."id" WHERE archive."participantIds" @> ARRAY[${userId}]::text[]
       ), contributions AS (
-        SELECT all_moves.*,sum("amount") OVER(PARTITION BY "handId","street","seatNo" ORDER BY "seq")
+        SELECT all_moves.*,COALESCE(blinds."bigBlind",2) AS "bigBlind",sum("amount") OVER(PARTITION BY "handId","street","seatNo" ORDER BY "seq")
           + CASE WHEN "street"='preflop' THEN COALESCE(blinds.blind,0) ELSE 0 END AS "streetBetAfter"
         FROM all_moves LEFT JOIN blinds USING("handId","seatNo")
       ), prior_bets AS (
-        SELECT *,GREATEST(CASE WHEN "street"='preflop' THEN 2 ELSE 0 END,
+        SELECT *,GREATEST(CASE WHEN "street"='preflop' THEN "bigBlind" ELSE 0 END,
           max("streetBetAfter") OVER(PARTITION BY "handId","street" ORDER BY "seq" ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)) AS "priorBet"
         FROM contributions
       ), moves AS (
