@@ -16,10 +16,10 @@
   z-index: 50;
   display: flex;
   flex-direction: column;
-  width: min(40rem, calc(100vw - 2rem));
+  width: min(32rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
   overflow: hidden;
-  border-radius: 1.5rem;
+  border-radius: var(--radius-xl);
   background: var(--gc-surface);
   color: var(--gc-ink);
   color-scheme: dark;
@@ -37,20 +37,20 @@
 .poker-create-header {
   flex: none;
   justify-content: space-between;
-  padding: 1.25rem 1.5rem 1rem;
+  padding: 1rem 1.25rem 0.75rem;
 }
 .poker-create-heading {
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 .poker-create-heading > svg {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.125rem;
+  height: 1.125rem;
   color: var(--gc-accent);
 }
 .poker-create-title {
-  font-size: 1.375rem;
+  font-size: 1rem;
   line-height: 1.3;
-  font-weight: 600;
+  font-weight: 500;
   text-wrap: balance;
 }
 .poker-create-form {
@@ -66,14 +66,14 @@
 }
 .poker-create-fields {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
   min-width: 0;
-  padding: 0.5rem 1.5rem 1.75rem;
+  padding: 0.25rem 1.25rem 1.25rem;
 }
 .poker-create-field {
   display: grid;
   align-content: start;
-  gap: 0.625rem;
+  gap: 0.5rem;
   min-width: 0;
 }
 .poker-create-field > label,
@@ -84,10 +84,10 @@
 .poker-create-input {
   width: 100%;
   min-width: 0;
-  min-height: 2.75rem;
-  padding: 0.625rem 0.875rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
   border: 1px solid var(--gc-line);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-lg);
   background: var(--gc-canvas);
   color: var(--gc-ink);
   outline: none;
@@ -108,9 +108,9 @@
   justify-content: space-between;
   gap: 0.5rem;
   min-width: 0;
-  min-height: 2.75rem;
-  padding: 0.625rem 0.875rem;
-  border-radius: 0.75rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-lg);
   background: var(--gc-canvas);
   color: var(--gc-ink);
   box-shadow: inset 0 0 0 1px var(--gc-line);
@@ -155,14 +155,14 @@
 .poker-create-choices-four .poker-create-choice {
   justify-content: center;
   position: relative;
-  padding: 0.625rem 0.25rem;
+  padding: 0.25rem;
 }
 .poker-create-choices-four .poker-create-check {
   position: absolute;
-  right: 0.25rem;
-  bottom: 0.25rem;
-  width: 0.625rem;
-  height: 0.625rem;
+  right: 0.125rem;
+  bottom: 0.125rem;
+  width: 0.5rem;
+  height: 0.5rem;
 }
 .poker-create-hint {
   color: var(--gc-muted);
@@ -172,17 +172,16 @@
 .poker-create-settings {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
-  gap: 1.25rem;
+  gap: 1rem;
 }
 .poker-create-stepper {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.25rem;
-  min-height: 2.75rem;
-  padding: 0.125rem;
+  min-height: 2rem;
   background: var(--gc-canvas);
-  border-radius: 0.875rem;
+  border-radius: var(--radius-lg);
   box-shadow: inset 0 0 0 1px var(--gc-line);
 }
 .poker-create-stepper output {
@@ -200,18 +199,18 @@
 .poker-create-icon-button {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2rem;
+  height: 2rem;
   flex: none;
-  border-radius: 0.75rem;
+  border-radius: var(--radius-md);
   color: var(--gc-muted);
   outline: none;
 }
 .poker-create-footer {
   flex: none;
   justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
   border-top: 1px solid var(--gc-line);
   background: var(--gc-canvas);
 }
@@ -220,16 +219,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
-  min-height: 2.75rem;
-  padding: 0.625rem 1.25rem;
-  border-radius: 0.75rem;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-lg);
   font-weight: 500;
   outline: none;
 }
 .poker-create-submit {
-  min-width: 10rem;
-  padding-right: 1.125rem;
+  padding-right: 0.5rem;
   background: var(--gc-accent);
   color: var(--gc-accent-ink);
 }
@@ -283,9 +281,8 @@
 @media (max-width: 540px) {
   .poker-create-settings { grid-template-columns: minmax(0, 1fr); }
   .poker-create-header { padding-inline: 1rem; }
-  .poker-create-fields { padding-inline: 1rem; gap: 1.25rem; }
+  .poker-create-fields { padding-inline: 1rem; }
   .poker-create-footer { padding-inline: 1rem; }
-  .poker-create-choice { padding-inline: 0.75rem; }
   .poker-create-choice small { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
