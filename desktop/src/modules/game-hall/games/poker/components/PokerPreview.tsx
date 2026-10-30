@@ -31,5 +31,9 @@ export function PokerPreview() {
     10000,
   )
   const last = history.data?.items[0]
-  return last ? <PokerHandPreview hand={last} /> : null
+  return last ? (
+    <PokerHandPreview hand={last} />
+  ) : (
+    <p className="text-sm text-muted-foreground">暂无牌局记录</p>
+  )
 }

@@ -1,4 +1,5 @@
 import type { ComponentType } from "react"
+import { Coins, Gamepad2 } from "lucide-react"
 import type { HallOverview, GameSessionView } from "@synapse/shared/game-contracts"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -13,6 +14,7 @@ export function HallHome({
   previews,
   onGrant,
   icons = {},
+  artwork = {},
 }: {
   overview: HallOverview | null
   onEnter: (entry: string) => void
@@ -20,50 +22,33 @@ export function HallHome({
   previews: Record<string, ComponentType>
   onGrant: () => void
   icons?: Record<string, ComponentType<{ className?: string }> | undefined>
+  artwork?: Record<string, ComponentType | undefined>
 }) {
   if (!overview)
     return (
-      <div className="space-y-6 p-6">
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-40 w-full" />
+      <div className="game-center gc-page">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="mt-6 h-80 w-full" />
       </div>
     )
   const points = overview.points
   return (
-    <div className="mx-auto max-w-5xl space-y-7 p-6 sm:p-8">
-      <section className="grid gap-6 border-b pb-7 sm:grid-cols-2 lg:grid-cols-5">
-        <dl className="lg:col-span-2">
-          <dt className="text-sm text-muted-foreground">总点数</dt>
-          <dd className="mt-2 text-3xl font-medium tabular-nums tracking-tight">
-            {formatGameAmount(points.total)}
-          </dd>
-        </dl>
-        <dl className="grid grid-cols-3 items-end gap-4 lg:col-span-3">
-          {[
-            ["可用", points.available],
-            ["占用", points.inPlay],
-            ["累计盈亏", points.netProfit],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <dt className="whitespace-nowrap text-xs text-muted-foreground">{label}</dt>
-              <dd className="mt-2 text-lg font-medium tabular-nums">
-                {formatGameAmount(Number(value))}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-      {points.available === 0 && overview.sessions.length === 0 && (
-        <Button type="button" onClick={onGrant}>
-          领取每日补助
-        </Button>
-      )}
-      <MySessions sessions={overview.sessions} onOpen={onSession} />
-      <section className="space-y-3">
-        <h2 className="text-balance text-sm font-medium">游戏</h2>
-        <div className="grid gap-4 md:grid-cols-2">
+    <main className="game-center gc-page">
+      <header className="gc-masthead">
+        <div className="gc-heading">
+          <Gamepad2 aria-hidden="true" />
+          <h1>游戏中心</h1>
+        </div>
+        <span className="gc-meta">
+          {overview.games.filter((game) => game.status === "available").length} 款游戏 ·{" "}
+          {overview.sessions.length} 场进行中
+        </span>
+      </header>
+      <div className="gc-home-layout">
+        <section className="gc-library" aria-label="游戏">
           {overview.games.map((game) => {
-            const Preview = previews[game.entry]
+            const Preview = previews[game.entry],
+              Artwork = artwork[game.entry]
             return (
               <GameCard
                 key={game.id}
@@ -71,12 +56,46 @@ export function HallHome({
                 available={!!Preview}
                 onEnter={() => onEnter(game.entry)}
                 icon={icons[game.entry]}
+                artwork={Artwork ? <Artwork /> : null}
                 preview={Preview ? <Preview /> : null}
               />
             )
           })}
-        </div>
-      </section>
-    </div>
+        </section>
+        <section className="gc-wallet" aria-label="我的点数">
+          <div className="gc-section-heading">
+            <h2>我的点数</h2>
+            <Coins aria-hidden="true" />
+          </div>
+          <dl className="gc-wallet-total">
+            <dt>总点数</dt>
+            <dd>{formatGameAmount(points.total)}</dd>
+          </dl>
+          <dl className="gc-wallet-details">
+            <div>
+              <dt>可用</dt>
+              <dd>{formatGameAmount(points.available)}</dd>
+            </div>
+            <div>
+              <dt>游戏中</dt>
+              <dd>{formatGameAmount(points.inPlay)}</dd>
+            </div>
+            <div>
+              <dt>累计盈亏</dt>
+              <dd data-positive={points.netProfit > 0}>
+                {points.netProfit > 0 ? "+" : ""}
+                {formatGameAmount(points.netProfit)}
+              </dd>
+            </div>
+          </dl>
+          {points.available === 0 && overview.sessions.length === 0 && (
+            <Button type="button" onClick={onGrant}>
+              领取每日补助
+            </Button>
+          )}
+        </section>
+      </div>
+      <MySessions sessions={overview.sessions} onOpen={onSession} />
+    </main>
   )
 }

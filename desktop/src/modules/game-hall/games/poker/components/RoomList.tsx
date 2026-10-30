@@ -1,4 +1,5 @@
-import { ChevronRight, Spade, Users } from "lucide-react"
+import "../styles/lobby.css"
+import { ArrowUpRight, Spade } from "lucide-react"
 import type { PokerRoomView } from "@synapse/shared/game-contracts"
 import { Button } from "@/components/ui/button"
 import { amount } from "../lib/view"
@@ -7,6 +8,35 @@ const statusLabels: Record<string, string> = {
   waiting: "等待中",
   paused: "已暂停",
   closed: "已结束",
+}
+/** Only visualizes occupancy counts, not actual seat positions or hidden game state. */
+function RoomArtwork({ players, maxSeats }: { players: number; maxSeats: number }) {
+  return (
+    <span className="gc-room-art">
+      <svg viewBox="0 0 300 130" aria-hidden="true">
+        <ellipse className="gc-room-rail" cx="150" cy="65" rx="102" ry="40" />
+        <ellipse className="gc-room-felt" cx="150" cy="65" rx="95" ry="33" />
+        {Array.from({ length: maxSeats }, (_, i) => {
+          const angle = (2 * Math.PI * i) / maxSeats - Math.PI / 2
+          return (
+            <circle
+              key={i}
+              cx={150 + 123 * Math.cos(angle)}
+              cy={65 + 53 * Math.sin(angle)}
+              r="6"
+              data-occupied={i < players}
+            />
+          )
+        })}
+      </svg>
+      <span className="gc-room-occupancy">
+        <Spade aria-hidden="true" />
+        <b>
+          {players} <small>/ {maxSeats} 人</small>
+        </b>
+      </span>
+    </span>
+  )
 }
 export function RoomList({
   rooms,
@@ -24,75 +54,69 @@ export function RoomList({
   onClose: (code: string) => void
 }) {
   return (
-    <ul className="game-room-list divide-y rounded-lg border">
+    <ul className="gc-room-grid">
       {rooms.map((room) => {
-        const canConnect = room.players < room.maxSeats && !myRoomCodes.includes(room.roomCode)
+        const mine = myRoomCodes.includes(room.roomCode),
+          canConnect = room.players < room.maxSeats && !mine
         return (
-          <li
-            key={room.roomCode}
-            className="flex flex-wrap items-center gap-x-2 px-2 first:rounded-t-lg last:rounded-b-lg"
-          >
-            <button
-              type="button"
-              className="game-room-row group grid min-w-0 flex-1 items-center gap-4 rounded-md px-3 py-4 text-left"
-              onClick={() => onRoom(room.roomCode)}
-            >
-              <span className="flex min-w-0 items-center gap-3">
-                <Spade className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0">
-                  <span
-                    className="block truncate font-medium"
-                    title={room.name || `房间 #${room.roomCode}`}
-                  >
-                    {room.name || `房间 #${room.roomCode}`}
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {room.name && `#${room.roomCode} · `}
-                    {statusLabels[room.status] ?? room.status}
-                    <span className="game-room-compact">
-                      {room.players} / {room.maxSeats} 人 · 盲注 {room.smallBlind} / {room.bigBlind}
-                    </span>
-                  </span>
+          <li key={room.roomCode} className="gc-room" data-mine={mine}>
+            <button type="button" className="gc-room-open" onClick={() => onRoom(room.roomCode)}>
+              <span className="gc-room-heading">
+                <strong title={room.name || `房间 #${room.roomCode}`}>
+                  {room.name || `房间 #${room.roomCode}`}
+                </strong>
+                <span className="gc-room-state" data-running={room.status === "running"}>
+                  {statusLabels[room.status] ?? room.status}
                 </span>
               </span>
-              <span className="game-room-players items-center gap-1.5 text-sm tabular-nums text-muted-foreground">
-                <Users className="size-3.5" aria-hidden="true" />
-                {room.players} / {room.maxSeats}
+              <span className="gc-room-code">
+                #{room.roomCode}
+                {mine && " · 我的牌桌"}
               </span>
-              <span className="game-room-blinds text-right text-sm tabular-nums text-muted-foreground">
-                {room.smallBlind} / {room.bigBlind}
-                <span className="ml-1 text-xs">盲注</span>
+              <RoomArtwork players={room.players} maxSeats={room.maxSeats} />
+              <span className="gc-room-stakes">
+                <span>
+                  <small>带入</small>
+                  <b>{amount(room.buyIn)}</b>
+                </span>
+                <span>
+                  <small>盲注</small>
+                  <b>
+                    {room.smallBlind} / {room.bigBlind}
+                  </b>
+                </span>
+                <ArrowUpRight aria-hidden="true" />
               </span>
-              <span className="text-right text-sm tabular-nums">
-                {amount(room.buyIn)}
-                <span className="ml-1 text-xs text-muted-foreground">带入</span>
-              </span>
-              <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
             </button>
-            <span className="flex items-center gap-2 py-2 pr-2">
-              {canConnect && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="game-row-action"
-                  onClick={() => onConnect(room.roomCode)}
-                >
-                  接入 AI
-                </Button>
-              )}
-              {room.ownerUserId === userId && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="game-row-action"
-                  onClick={() => onClose(room.roomCode)}
-                >
-                  解散
-                </Button>
-              )}
-            </span>
+            <div className="gc-room-actions">
+              <span>
+                {mine ? "已在桌" : room.players >= room.maxSeats ? "满员 · 可观看" : "可接入 AI"}
+              </span>
+              <div>
+                {canConnect && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="gc-row-action"
+                    onClick={() => onConnect(room.roomCode)}
+                  >
+                    接入 AI
+                  </Button>
+                )}
+                {room.ownerUserId === userId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="gc-row-action"
+                    onClick={() => onClose(room.roomCode)}
+                  >
+                    解散
+                  </Button>
+                )}
+              </div>
+            </div>
           </li>
         )
       })}

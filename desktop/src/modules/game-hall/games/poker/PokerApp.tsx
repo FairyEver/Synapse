@@ -58,7 +58,7 @@ export function PokerApp({
         {tab === "rooms" && roomCode ? (
           <Room key={roomCode} code={roomCode} onBack={() => onOpenRoom(null)} />
         ) : (
-          <ScrollArea className="h-full">
+          <ScrollArea className={tab === "rooms" ? "game-center h-full" : "h-full"}>
             {tab === "rooms" ? (
               <Lobby onRoom={onOpenRoom} />
             ) : tab === "records" ? (

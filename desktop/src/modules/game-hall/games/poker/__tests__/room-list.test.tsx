@@ -49,4 +49,56 @@ describe("房间行交互", () => {
     await act(async () => root.unmount())
     host.remove()
   })
+  it("满员和已入座房间仍可观看，但不重复提供接入入口，完整保留房间条件", async () => {
+    const host = document.createElement("div"),
+      root = createRoot(host),
+      onRoom = vi.fn()
+    await act(async () =>
+      root.render(
+        <RoomList
+          rooms={[
+            {
+              roomCode: "5001",
+              name: "满员牌桌",
+              ownerUserId: "other",
+              maxSeats: 2,
+              buyIn: 500,
+              status: "running",
+              smallBlind: 1,
+              bigBlind: 2,
+              players: 2,
+            },
+            {
+              roomCode: "5002",
+              name: "我的牌桌",
+              ownerUserId: "other",
+              maxSeats: 10,
+              buyIn: 5000,
+              status: "waiting",
+              smallBlind: 1,
+              bigBlind: 2,
+              players: 1,
+            },
+          ]}
+          myRoomCodes={["5002"]}
+          userId="me"
+          onRoom={onRoom}
+          onConnect={() => {}}
+          onClose={() => {}}
+        />,
+      ),
+    )
+    expect(host.textContent).not.toContain("接入 AI")
+    expect(host.textContent).toContain("满员 · 可观看")
+    expect(host.textContent).toContain("已在桌")
+    expect(host.textContent).toContain("5,000")
+    expect(host.textContent).toContain("1 / 2")
+    const buttons = [...host.querySelectorAll("button")]
+    expect(buttons).toHaveLength(2)
+    await act(async () => buttons[0].click())
+    await act(async () => buttons[1].click())
+    expect(onRoom.mock.calls).toEqual([["5001"], ["5002"]])
+    expect(host.querySelector('input[type="range"]')).toBeNull()
+    await act(async () => root.unmount())
+  })
 })

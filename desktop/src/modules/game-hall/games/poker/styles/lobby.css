@@ -1,0 +1,222 @@
+/* Poker-owned illustrations, rendered through the registry artwork slot. */
+.gc-poker-art {
+  position: relative;
+  width: 17rem;
+  height: 14rem;
+  display: grid;
+  place-items: center;
+}
+.gc-art-orbit {
+  position: absolute;
+  width: 16rem;
+  height: 10rem;
+  border: 1px solid var(--gc-line);
+  border-radius: 50%;
+  rotate: -25deg;
+}
+.gc-art-orbit-inner {
+  width: 13rem;
+  height: 7.5rem;
+  opacity: 0.5;
+}
+.gc-art-hand {
+  display: flex;
+  width: 12rem;
+  height: 12rem;
+  align-items: center;
+  justify-content: center;
+}
+.gc-art-hand .poker-card {
+  --cw: 5.5rem;
+  position: absolute;
+  box-shadow: 0 4px 14px color-mix(in oklch, var(--gc-canvas) 60%, transparent);
+  border-radius: 0.275rem;
+}
+.gc-art-hand .poker-card:nth-child(1) {
+  transform: translate(-2.75rem, 0.375rem) rotate(-20deg);
+}
+.gc-art-hand .poker-card:nth-child(2) {
+  transform: rotate(-2deg);
+}
+.gc-art-hand .poker-card:nth-child(3) {
+  transform: translate(2.75rem, 0.375rem) rotate(18deg);
+}
+.gc-art-chip {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 1.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 5px dashed var(--gc-accent);
+  background: var(--gc-surface);
+  box-shadow:
+    0 0 0 2px var(--gc-accent),
+    inset 0 0 0 2px var(--gc-accent);
+}
+.gc-art-chip-back {
+  right: 2.75rem;
+  bottom: 0.875rem;
+  border-color: var(--gc-muted);
+  box-shadow:
+    0 0 0 2px var(--gc-muted),
+    inset 0 0 0 2px var(--gc-muted);
+}
+.gc-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+}
+.gc-room {
+  min-width: 0;
+  border-radius: 0.875rem;
+  background: var(--gc-surface);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--gc-line);
+}
+.gc-room[data-mine="true"] {
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--gc-accent) 60%, var(--gc-line));
+}
+.gc-room-open {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.25rem;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+.gc-room-open:hover {
+  background: var(--gc-art);
+}
+.gc-room-heading {
+  display: flex;
+  width: 100%;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: center;
+}
+.gc-room-heading strong {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.gc-room-state {
+  font-size: 0.6875rem;
+  color: var(--gc-muted);
+  flex: none;
+}
+.gc-room-state[data-running="true"] {
+  color: var(--gc-live);
+}
+.gc-room-code {
+  font-size: 0.6875rem;
+  color: var(--gc-muted);
+  margin-top: 0.375rem;
+}
+.gc-room-art {
+  --poker-lobby-felt: oklch(0.3 0.034 175);
+  display: block;
+  position: relative;
+  width: 100%;
+  max-width: 20rem;
+  align-self: center;
+  margin: 0.375rem 0;
+}
+.gc-room-art > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.gc-room-rail {
+  fill: var(--gc-raised);
+  stroke: var(--gc-line);
+  stroke-width: 1;
+}
+.gc-room-felt {
+  fill: var(--poker-lobby-felt);
+}
+.gc-room-art circle {
+  fill: var(--gc-canvas);
+  stroke: var(--gc-line);
+  stroke-width: 1.5;
+}
+.gc-room-art circle[data-occupied="true"] {
+  fill: var(--gc-accent);
+  stroke: var(--gc-accent);
+}
+.gc-room-occupancy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.625rem;
+}
+.gc-room-occupancy > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--gc-accent);
+}
+.gc-room-occupancy b {
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+.gc-room-occupancy small {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--gc-muted);
+}
+.gc-room-stakes {
+  display: flex;
+  width: 100%;
+  align-items: end;
+  gap: 2rem;
+}
+.gc-room-stakes > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.gc-room-stakes small {
+  color: var(--gc-muted);
+  font-size: 0.6875rem;
+}
+.gc-room-stakes b {
+  font-weight: 500;
+  font-size: 1rem;
+}
+.gc-room-stakes > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: auto 0 0.25rem auto;
+  color: var(--gc-muted);
+}
+.gc-room-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 3.25rem;
+  padding: 0.5rem 1rem 0.5rem 1.25rem;
+  border-top: 1px solid var(--gc-line);
+}
+.gc-room-actions > span {
+  color: var(--gc-muted);
+  font-size: 0.6875rem;
+}
+.gc-room-actions > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+@container game-center (max-width: 580px) {
+  .gc-poker-art {
+    width: 13rem;
+    height: 11rem;
+    scale: 0.7;
+    transform-origin: center;
+  }
+}

@@ -1,7 +1,8 @@
 import { PokerHandPreview } from "@/modules/game-hall/games/poker/components/PokerPreview"
 // Local visual fixture: production components with synthetic data, no account or network.
 import { Spade } from "lucide-react"
-import { RoomList } from "@/modules/game-hall/games/poker/components/RoomList"
+import { LobbyView } from "@/modules/game-hall/games/poker/components/LobbyView"
+import { PokerArtwork } from "@/modules/game-hall/games/poker/components/PokerArtwork"
 import { useState } from "react"
 import { createRoot } from "react-dom/client"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
@@ -134,62 +135,61 @@ function Fixture() {
           ) : undefined
         }
       >
-        <div className="game-hall h-full bg-background text-foreground">
+        <div className={view === "table" ? "game-hall h-full" : "game-hall game-center h-full"}>
           {view === "hall" ? (
             <HallHome
               overview={overview}
               previews={{ "/poker": Preview }}
               icons={{ "/poker": Spade }}
+              artwork={{ "/poker": PokerArtwork }}
               onEnter={() => setView("rooms")}
               onSession={() => setView("table")}
               onGrant={() => {}}
             />
           ) : view === "rooms" ? (
-            <div className="mx-auto max-w-6xl space-y-6 p-8">
-              <h2 className="font-medium">房间</h2>
-              <RoomList
-                rooms={[
-                  {
-                    roomCode: "4821",
-                    name: "晚间牌桌",
-                    ownerUserId: "me",
-                    maxSeats: 6,
-                    buyIn: 1000,
-                    status: "running",
-                    smallBlind: 1,
-                    bigBlind: 2,
-                    players: 4,
-                  },
-                  {
-                    roomCode: "5077",
-                    name: null,
-                    ownerUserId: "other",
-                    maxSeats: 2,
-                    buyIn: 500,
-                    status: "paused",
-                    smallBlind: 1,
-                    bigBlind: 2,
-                    players: 2,
-                  },
-                  {
-                    roomCode: "9931",
-                    name: "好友牌桌",
-                    ownerUserId: "other",
-                    maxSeats: 10,
-                    buyIn: 5000,
-                    status: "waiting",
-                    smallBlind: 1,
-                    bigBlind: 2,
-                    players: 1,
-                  },
-                ]}
-                myRoomCodes={["4821"]}
-                userId="me"
-                onRoom={() => setView("table")}
-                onConnect={() => {}}
-                onClose={() => {}}
-              />
-            </div>
+            <LobbyView
+              rooms={[
+                {
+                  roomCode: "4821",
+                  name: "晚间牌桌",
+                  ownerUserId: "me",
+                  maxSeats: 6,
+                  buyIn: 1000,
+                  status: "running",
+                  smallBlind: 1,
+                  bigBlind: 2,
+                  players: 4,
+                },
+                {
+                  roomCode: "5077",
+                  name: null,
+                  ownerUserId: "other",
+                  maxSeats: 2,
+                  buyIn: 500,
+                  status: "paused",
+                  smallBlind: 1,
+                  bigBlind: 2,
+                  players: 2,
+                },
+                {
+                  roomCode: "9931",
+                  name: "好友牌桌",
+                  ownerUserId: "other",
+                  maxSeats: 10,
+                  buyIn: 5000,
+                  status: "waiting",
+                  smallBlind: 1,
+                  bigBlind: 2,
+                  players: 1,
+                },
+              ]}
+              sessions={overview.sessions}
+              onCreate={() => {}}
+              userId="me"
+              onRoom={() => setView("table")}
+              onConnect={() => {}}
+              onClose={() => {}}
+            />
           ) : (
             <Table
               table={scene}

@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-30 游戏中心内容区重设计：大厅与扑克房间继续使用现有入口和统一 App 顶栏，新增的 `Artwork` 仅为 renderer 注册项的展示插槽；房间网格不新增业务能力。System App、Dock、capability、MCP、IPC、Workflow、Automation 与 Deep Link 数量均不变，MCP/Skill 操作契约不变。
+
 - 2026-10-30 游戏界面顶栏调整：继续使用统一 `SystemAppWindowShell` 和内嵌 header slot，德州扑克补充独立窗口标题，内嵌与独立窗口均只保留一个返回大厅操作；预览测试工具栏不属于产品导航。内容区允许独立视觉语言，应用顶栏仍遵守 Synapse 规范。System App、Dock、capability、MCP、IPC、Workflow、Automation 与 Deep Link 数量均不变。
 
 - 2026-10-30 游戏大厅接入：新增 `game` domain，20个capability/MCP索引（大厅3、德州扑克17），全局363个capability、359个MCP索引。公开工具仍仅search/invoke。System App现为23项，默认Dock仍为9项。新增18项游戏IPC（含不进入MCP目录的房主解散操作）与1项通用view_open_request事件、2条声明式路径；服务端裁决，桌面不注册act/seat_join/table_wait的IPC；提示词、版本、note仅本人可读；模型声明仅展示。

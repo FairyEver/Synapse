@@ -1,3 +1,4 @@
+import { PokerArtwork } from "./games/poker/components/PokerArtwork"
 import { Spade } from "lucide-react"
 import type { ComponentType } from "react"
 import { PokerApp } from "./games/poker/PokerApp"
@@ -13,6 +14,7 @@ export const GAME_RENDERERS: Record<
   {
     Page: ComponentType<GamePageProps>
     Preview: ComponentType
+    Artwork?: ComponentType
     Icon?: ComponentType<{ className?: string }>
   }
-> = { "/poker": { Page: PokerApp, Preview: PokerPreview, Icon: Spade } }
+> = { "/poker": { Page: PokerApp, Preview: PokerPreview, Artwork: PokerArtwork, Icon: Spade } }

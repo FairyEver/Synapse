@@ -1,5 +1,4 @@
-import { Plus } from "lucide-react"
-import { RoomList } from "./RoomList"
+import { LobbyView } from "./LobbyView"
 import "../../../styles/hall.css"
 import { useState } from "react"
 import { useAccount } from "@/app-shell/account"
@@ -21,11 +20,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { Skeleton } from "@/components/ui/skeleton"
 import { gameApi } from "../../../lib/api"
 import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
 import { useHallOverview } from "../../../hooks/useHallOverview"
-import { MySessions } from "../../../components/MySessions"
 export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
   const [offset, setOffset] = useState(0),
     [createOpen, setCreateOpen] = useState(false),
@@ -72,52 +69,38 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     }
   }
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
-      <MySessions
+    <>
+      <LobbyView
+        rooms={lobby.data?.items ?? null}
         sessions={(hall.data?.sessions ?? []).filter((s) => s.game === "poker")}
-        onOpen={(s) => s.roomCode && onRoom(s.roomCode)}
+        userId={userId}
+        onRoom={onRoom}
+        onCreate={() => setCreateOpen(true)}
+        onConnect={setConnect}
+        onClose={setClosing}
+        pagination={
+          offset > 0 || lobby.data?.nextOffset != null ? (
+            <div className="gc-pagination">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={offset === 0}
+                onClick={() => setOffset(Math.max(0, offset - 50))}
+              >
+                上一页
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={lobby.data?.nextOffset == null}
+                onClick={() => setOffset(lobby.data?.nextOffset ?? offset)}
+              >
+                下一页
+              </Button>
+            </div>
+          ) : null
+        }
       />
-      <div className="flex items-center justify-between">
-        <h2 className="text-balance text-sm font-medium">房间</h2>
-        <Button type="button" onClick={() => setCreateOpen(true)}>
-          <Plus data-icon="inline-start" aria-hidden="true" />
-          创建房间
-        </Button>
-      </div>
-      {!lobby.data ? (
-        <Skeleton className="h-40 w-full" />
-      ) : lobby.data.items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">暂无房间</p>
-      ) : (
-        <RoomList
-          rooms={lobby.data.items}
-          myRoomCodes={(hall.data?.sessions ?? [])
-            .filter((s) => s.game === "poker")
-            .map((s) => s.roomCode ?? "")}
-          userId={userId}
-          onRoom={onRoom}
-          onConnect={setConnect}
-          onClose={setClosing}
-        />
-      )}
-      <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={offset === 0}
-          onClick={() => setOffset(Math.max(0, offset - 50))}
-        >
-          上一页
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={lobby.data?.nextOffset == null}
-          onClick={() => setOffset(lobby.data?.nextOffset ?? offset)}
-        >
-          下一页
-        </Button>
-      </div>
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
@@ -213,6 +196,6 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
           </Button>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }

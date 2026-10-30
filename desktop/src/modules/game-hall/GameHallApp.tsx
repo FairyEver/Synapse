@@ -16,6 +16,9 @@ const previews = Object.fromEntries(
 const icons = Object.fromEntries(
   Object.entries(GAME_RENDERERS).map(([entry, value]) => [entry, value.Icon]),
 )
+const artwork = Object.fromEntries(
+  Object.entries(GAME_RENDERERS).map(([entry, value]) => [entry, value.Artwork]),
+)
 function resolveTarget(path: string) {
   const entry = Object.keys(GAME_RENDERERS).find((entry) => path.startsWith(entry + "/"))
   return entry ? { entry, roomCode: path.slice(entry.length + 1) } : null
@@ -64,13 +67,14 @@ export function GameHallApp({
     )
   return (
     <SystemAppWindowShell left={<span className="text-sm font-medium">游戏大厅</span>}>
-      <ScrollArea className="game-hall h-full bg-background text-foreground">
+      <ScrollArea className="game-hall game-center h-full">
         <HallHome
           overview={hall.data}
           onEnter={enter}
           onSession={session}
           previews={previews}
           icons={icons}
+          artwork={artwork}
           onGrant={grant}
         />
       </ScrollArea>
