@@ -52,7 +52,7 @@ export function GameHallApp({
     return (
       <SystemAppWindowShell>
         <div className="flex items-center gap-3 p-6 text-sm">
-          <span>登录后进入游戏大厅</span>
+          <span>登录后进入游戏</span>
           <Button onClick={() => void account.startLogin()}>登录</Button>
         </div>
       </SystemAppWindowShell>
@@ -68,7 +68,7 @@ export function GameHallApp({
       />
     )
   return (
-    <SystemAppWindowShell left={<span className="text-sm font-medium">游戏大厅</span>}>
+    <SystemAppWindowShell left={<span className="text-sm font-medium">游戏</span>}>
       <ScrollArea className="game-hall game-center h-full">
         <GameQueryFeedback query={hall} />
         {(hall.data || !hall.error) && (

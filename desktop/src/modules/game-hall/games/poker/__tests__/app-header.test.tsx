@@ -63,7 +63,7 @@ describe("游戏应用顶栏", () => {
           mode === "window" ? (
             page
           ) : (
-            <EmbeddedSystemAppShell appName="游戏大厅" mode={mode}>
+            <EmbeddedSystemAppShell appName="游戏" mode={mode}>
               {page}
             </EmbeddedSystemAppShell>
           ),
@@ -80,7 +80,7 @@ describe("游戏应用顶栏", () => {
         "选手档案",
       ])
       const returns = [...header.querySelectorAll("button")].filter((button) =>
-        /^(返回大厅|游戏大厅)$/.test(button.textContent ?? ""),
+        /^(返回大厅|游戏)$/.test(button.textContent ?? ""),
       )
       expect(returns).toHaveLength(1)
       expect(returns[0].closest("[data-system-app-top-bar-actions]")).not.toBeNull()

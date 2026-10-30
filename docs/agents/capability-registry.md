@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-31 游戏应用名称与窗口标题统一为“游戏”，App ID 仍为 `game-hall`、namespace 仍为 `game`。仅调整显示文案，23 个 System App、369 个 capability、365 个 MCP 索引及既有 Dock、深链数量不变，MCP schema 和系统 Skill 无需调整。
+
 - 2026-10-31 游戏大厅使用模块 `assets/icon.png` 中的用户指定图标，启动台与 Dock 共用 manifest 资源。仅替换图标，23 个 System App、369 个 capability、365 个 MCP 索引及既有路由数量不变，MCP schema 和系统 Skill 无需调整。
 
 - 2026-10-31 扑克房间列表合并：既有lobby.list的mode新增all，按统一顺序分页查询点数与陪练房；省略仍默认points。桌面不再提供类型切换，每间房显式标记类型；建房、历史、统计仍只接受points/practice。game保持26项能力/24项IPC，全局369 capability/365 MCP索引，其他注册表面与权限无增量；schema、bridge和系统Skill同步。上线时先更新服务端API再更新桌面，无数据库迁移。
@@ -77,7 +79,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
-| Game Hall（模块 `assets/icon.png`） | 是 | 否（可手动固定） | — | — | 26 | 大厅根、扑克房间（2条声明式路径） |
+| 游戏（模块 `assets/icon.png`） | 是 | 否（可手动固定） | — | — | 26 | 大厅根、扑克房间（2条声明式路径） |
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
