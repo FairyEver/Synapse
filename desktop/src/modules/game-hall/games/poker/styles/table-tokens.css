@@ -6,7 +6,6 @@
   --game-line: var(--border);
   --playing-paper: var(--card);
   --playing-ink: var(--foreground);
-  --playing-red: var(--foreground);
   --playing-back: var(--muted);
   --playing-back-ink: var(--muted-foreground);
   --playing-edge: var(--border);
@@ -51,8 +50,7 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  border-radius: calc(var(--cw) * 0.1);
-  border: 1px solid var(--playing-edge, var(--border));
+  border-radius: calc(var(--cw) * 0.05);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   box-shadow:
@@ -61,28 +59,15 @@
 }
 .poker-card-front {
   background: var(--playing-paper, var(--card));
-  color: var(--playing-ink, var(--foreground));
-  font-family: Georgia, serif;
 }
-.poker-card[data-red="true"] .poker-card-front {
-  color: var(--playing-red, var(--foreground));
-}
-.poker-card-corner {
-  position: absolute;
-  top: calc(var(--cw) * 0.065);
-  left: calc(var(--cw) * 0.08);
-  font-size: calc(var(--cw) * 0.3);
-  line-height: 0.94;
-  text-align: center;
-}
-.poker-card-suit {
-  position: absolute;
-  right: calc(var(--cw) * 0.08);
-  bottom: calc(var(--cw) * 0.035);
-  font-size: calc(var(--cw) * 0.58);
-  line-height: 1;
+.poker-card-front img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
 }
 .poker-card-back {
+  border: 1px solid var(--playing-edge, var(--border));
   transform: rotateY(180deg);
   background: var(--playing-back, var(--muted));
   color: var(--playing-back-ink, var(--muted-foreground));
@@ -94,7 +79,7 @@
   position: absolute;
   inset: calc(var(--cw) * 0.07);
   border: 1px solid color-mix(in srgb, var(--playing-back-ink) 50%, transparent);
-  border-radius: calc(var(--cw) * 0.035);
+  border-radius: 0;
 }
 .poker-card-back span {
   font-family: Georgia, serif;
@@ -103,7 +88,7 @@
 }
 .poker-card-placeholder {
   border: 1px dashed var(--game-line, var(--border));
-  border-radius: calc(var(--cw) * 0.1);
+  border-radius: calc(var(--cw) * 0.05);
 }
 /* All material colours stay on the game surface; the surrounding app uses theme tokens. */
 .poker-table {
@@ -123,7 +108,6 @@
   --table-highlight: #ffffff12;
   --playing-paper: #fbf9f2;
   --playing-ink: #19201c;
-  --playing-red: #a83432;
   --playing-back: #234267;
   --playing-back-ink: #c6d3df;
   --playing-edge: #dedcd2;
