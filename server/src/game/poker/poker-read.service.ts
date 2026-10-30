@@ -8,9 +8,9 @@ import { resolveRules, type PokerRules } from "./engine/rules"
 @Injectable()
 export class PokerReadService {
   constructor(private readonly poker: PokerService) {}
-  async lobby(offset = 0, limit = 50, mode: "points" | "practice" = "points") {
+  async lobby(offset = 0, limit = 50, mode: "points" | "practice" | "all" = "points") {
     const rooms = await this.poker.prisma.gamePokerRoom.findMany({
-      where: { status: { not: "closed" }, mode },
+      where: { status: { not: "closed" }, ...(mode === "all" ? {} : { mode }) },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: offset,
       take: limit + 1,

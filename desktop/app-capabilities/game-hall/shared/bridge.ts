@@ -24,7 +24,7 @@ export interface GameBridge {
   poker: {
     guide: () => Promise<unknown>
     lobby: {
-      list: (input?: { offset?: number; limit?: number; mode?: GameFunding }) => Promise<GamePage<PokerRoomView>>
+      list: (input?: { offset?: number; limit?: number; mode?: GameFunding | "all" }) => Promise<GamePage<PokerRoomView>>
     }
     room: {
       close: (input: Room) => Promise<{ pending?: boolean; closed?: boolean }>

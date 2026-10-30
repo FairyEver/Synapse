@@ -4,7 +4,6 @@ import "../../../styles/hall.css"
 import { useRef, useState } from "react"
 import type { GameFunding, PokerVariant, PokerBlindPreset } from "@synapse/shared/game-contracts"
 import { pokerConnectInstruction } from "../lib/connect-instruction"
-import { ModeFilter } from "./ModeFilter"
 import { useAccount } from "@/app-shell/account"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -35,7 +34,6 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     [name, setName] = useState(""),
     [maxSeats, setMaxSeats] = useState("6"),
     [buyIn, setBuyIn] = useState("1000"),
-    [mode, setMode] = useState<GameFunding>("points"),
     [createMode, setCreateMode] = useState<GameFunding>("points"),
     [variant, setVariant] = useState<PokerVariant>("standard52"),
     [blindPreset, setBlindPreset] = useState<PokerBlindPreset>("1/2")
@@ -43,8 +41,8 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
   const lobby = useGameQuery(
-      () => gameApi().poker.lobby.list({ offset, limit: 50, mode }),
-      `poker:lobby:${mode}:${offset}`,
+      () => gameApi().poker.lobby.list({ offset, limit: 50, mode: "all" }),
+      `poker:lobby:all:${offset}`,
       5000,
     ),
     hall = useHallOverview(),
@@ -94,14 +92,13 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     <>
       <LobbyView
         rooms={lobby.data?.items ?? null}
-        modeFilter={<ModeFilter value={mode} onChange={(value) => { setMode(value); setOffset(0) }} />}
         feedback={lobby.error ? <GameQueryFeedback query={lobby} /> : null}
         sessions={(hall.data?.sessions ?? []).filter((s) => s.game === "poker")}
         userId={userId}
         onRoom={onRoom}
         onCreate={() => {
           creation.current = null
-          setCreateMode(mode)
+          setCreateMode("points")
           setCreateOpen(true)
         }}
         onConnect={setConnect}

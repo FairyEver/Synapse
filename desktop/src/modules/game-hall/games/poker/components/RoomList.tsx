@@ -2,6 +2,7 @@ import "../styles/lobby.css"
 import { ArrowUpRight } from "lucide-react"
 import type { PokerRoomView } from "@synapse/shared/game-contracts"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card } from "./Card"
 import { amount } from "../lib/view"
 const statusLabels: Record<string, string> = {
@@ -58,16 +59,18 @@ export function RoomList({
           <li key={room.roomCode} className="gc-room" data-mine={mine}>
             <button type="button" className="gc-room-open" onClick={() => onRoom(room.roomCode)}>
               <span className="gc-room-heading">
-                <strong title={room.name || `房间 #${room.roomCode}`}>
-                  {room.name || `房间 #${room.roomCode}`}
-                </strong>
+                <span className="flex min-w-0 items-center gap-2">
+                  <strong title={room.name || `房间 #${room.roomCode}`}>
+                    {room.name || `房间 #${room.roomCode}`}
+                  </strong>
+                  <Badge variant="outline">{room.mode === "practice" ? "陪练房" : "点数房"}</Badge>
+                </span>
                 <span className="gc-room-state" data-running={room.status === "running"}>
                   {statusLabels[room.status] ?? room.status}
                 </span>
               </span>
               <span className="gc-room-code">
                 #{room.roomCode}
-                {room.mode === "practice" && " · 陪练"}
                 {room.rules?.variant === "short32" ? " · 短牌 32 张" : " · 标准 52 张"}
                 {mine && " · 我的牌桌"}
               </span>

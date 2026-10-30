@@ -95,7 +95,7 @@
 沿用 search/invoke，不给 tools/list 添加直接业务工具。
 
 - room.create 增加可选 mode，默认 points，creationId 的创建意图必须包含 mode。已使用标识的重试恢复原房间，不转换模式。
-- lobby.list 增加模式筛选，旧调用默认 points；新桌面提供点数/陪练筛选。
+- lobby.list 增加模式筛选，旧调用默认 points。2026-10-31 用户调整：桌面取消点数/陪练切换，以 mode=all 在服务端统一排序分页展示两类房间，每间房标明类型；all 仅为查询条件，建房与历史/统计仍只接受 points/practice。
 - 新增 `app.game.poker.bot.add`：roomCode、creationId(UUID)，仅房主在 practice 创建一个机器人；重复成功创建标识返回原结果，即使原机器人后来移除，也不得重试复活它。响应至少 botId、seatNo，当前状态由 room/table 查询确认。
 - 新增 `app.game.poker.bot.remove`：roomCode、botId，仅房主移除本房间机器人；已移除重复请求无副作用，进行中返回 pending。本手新入座但尚未参赛的机器人可立即移除，不能影响前一位参赛者。
 - bot.add/remove 是房间管理能力，桌面和 MCP 均可用；不新增真人行动/入座 bridge。计分房、非房主、机器人目标类型不匹配均由服务端拒绝，不能只藏按钮。

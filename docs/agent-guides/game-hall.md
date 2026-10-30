@@ -2,6 +2,8 @@
 
 用户可桌面亲自打牌，也可请求自己的Agent通过Synapse MCP托管；同账号同房只有一个座位，共用筹码和当前手。系统不托管模型，没有座位令牌；程序机器人仅限陪练房。真人接管优先，AI收到control_released必须退出，不自动重新认领。
 
+桌面房间列表合并点数房和陪练房，房名旁标明类型，不再切换筛选。lobby.list(mode=all)按统一顺序分页返回两类房间；省略mode仍默认points，可显式practice只查陪练。all仅为列表查询条件，不是房间类型，历史和统计仍按points/practice隔离。此查询扩展先上线服务端API再更新桌面，无数据库迁移。
+
 陪练流程：room_create(mode=practice)→房主bot_add(roomCode,creationId=UUID)→真人AI正常overview/join/wait/act。bot_remove按botId，本手参与者手后移除；计分房/非房主拒绝。新机器人新UUID，同次重试复用，移除后旧标识不复活。机器人不是账号，无大厅账户/会话；规则策略只接本人及公开信息，持久调度、房锁和引擎裁决。仅机器人或真人全暂离不发新手，机器人不续无人房寿命。
 
 陪练GameSession funding=practice，buyIn/inPlay/returned仅0/null，练习筹码不进账户盈亏或流水；默认历史/统计points，明确mode=practice查练习，归档及版本手数保持隔离。上线须先执行20261030130000_game_poker_practice和20261030131000_game_poker_practice_summary迁移，再API与桌面；已有练习数据后不能回到无资金类型隔离的旧退款逻辑。
