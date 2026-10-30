@@ -1,7 +1,7 @@
 import { useRef } from "react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { useAccount } from "@/app-shell/account"
-import { Button } from "@/components/ui/button"
+import { PokerButton } from "./PokerButton"
 import { useGameMutation } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 
@@ -30,10 +30,10 @@ export function PracticeBots({ table, onRefresh }: { table: PokerTableView; onRe
     }
   }
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b p-3" aria-label="陪练机器人管理">
-      <span className="text-sm text-muted-foreground">陪练 · 不影响大厅点数</span>
-      <Button type="button" variant="outline" disabled={mutation.busy || full} onClick={() => void add()}>{intent.current.id && !mutation.busy ? "重试添加机器人" : "添加机器人"}</Button>
-      {bots.map((bot) => <Button key={bot.botId} type="button" variant="ghost" disabled={mutation.busy || bot.leavePending} onClick={() => bot.botId && void remove(bot.botId)}>{bot.displayName} · {bot.leavePending ? "本手后移除" : "移除"}</Button>)}
-    </div>
+    <details className="poker-bot-manager" aria-label="陪练机器人管理"><summary>陪练机器人 · {bots.length}</summary><div className="poker-bot-actions">
+      <span className="poker-bot-caption">练习筹码 · 不影响大厅点数</span>
+      <PokerButton type="button" disabled={mutation.busy || full} onClick={() => void add()}>{intent.current.id && !mutation.busy ? "重试添加机器人" : "添加机器人"}</PokerButton>
+      {bots.map((bot) => <PokerButton key={bot.botId} type="button" disabled={mutation.busy || bot.leavePending} onClick={() => bot.botId && void remove(bot.botId)}>{bot.displayName} · {bot.leavePending ? "本手后移除" : "移除"}</PokerButton>)}
+    </div></details>
   )
 }

@@ -5,6 +5,7 @@ import { amount, seatPosition } from "../lib/view"
 export function Seat({
   seat,
   maxSeats,
+  origin = 0,
   acting,
   dealer,
   dealt,
@@ -12,6 +13,7 @@ export function Seat({
 }: {
   seat: PokerSeatView
   maxSeats: number
+  origin?: number
   acting: boolean
   dealer: boolean
   dealt: boolean
@@ -24,7 +26,7 @@ export function Seat({
     <div
       className="poker-seat"
       role="group"
-      data-position={seatPosition(seat.seatNo, maxSeats)}
+      data-position={seatPosition(seat.seatNo, maxSeats, origin)}
       data-acting={acting}
       data-folded={seat.status === "folded"}
       data-mine={seat.isMe}
@@ -53,7 +55,7 @@ export function Seat({
         </span>
         <span className="poker-seat-identity">
           <span className="poker-seat-name" title={seat.displayName}>
-            {seat.displayName}
+            {seat.isMe ? "你" : seat.displayName}
           </span>
           <span className="poker-stack">{amount(seat.stack)}</span>
         </span>
@@ -66,7 +68,7 @@ export function Seat({
       <div className="poker-seat-meta">
         <span className="poker-ai-state" data-acting={acting && seat.aiState === "online"}>
           <span className="poker-ai-dot" data-state={seat.aiState} />
-          {acting && seat.aiState === "online" ? "行动中" : stateLabel}
+          {acting ? seat.isMe && seat.controller === "human" ? "轮到你" : "行动中" : seat.status === "sitting_out" ? "已暂离" : seat.status === "allin" ? "已全下" : stateLabel}
         </span>
         {seat.streetBet > 0 && (
           <span className="poker-seat-bet">
@@ -79,12 +81,12 @@ export function Seat({
     </div>
   )
 }
-export function EmptySeat({ seatNo, maxSeats }: { seatNo: number; maxSeats: number }) {
+export function EmptySeat({ seatNo, maxSeats, origin = 0 }: { seatNo: number; maxSeats: number; origin?: number }) {
   return (
     <div
       className="poker-seat poker-seat-empty"
       role="group"
-      data-position={seatPosition(seatNo, maxSeats)}
+      data-position={seatPosition(seatNo, maxSeats, origin)}
       aria-label={`座位 ${seatNo + 1} · 空位`}
     >
       <span className="poker-empty-marker" aria-hidden="true">

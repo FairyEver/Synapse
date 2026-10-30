@@ -31,7 +31,7 @@ export function MySessions({
             >
               <span className="gc-session-top">
                 <span className="gc-session-status">
-                  {session.needsAction ? "轮到你的 AI" : "进行中"}
+                  {session.needsAction ? "轮到你" : "进行中"}
                 </span>
                 {session.needsAction && session.deadlineMs !== null && (
                   <span className="gc-session-timer">
@@ -50,7 +50,7 @@ export function MySessions({
                   </span>
                 </span>
                 <span className="gc-session-open">
-                  继续观看
+                  继续游戏
                   <ArrowUpRight aria-hidden="true" />
                 </span>
               </span>

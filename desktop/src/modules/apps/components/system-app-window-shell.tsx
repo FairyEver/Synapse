@@ -44,7 +44,7 @@ function SystemAppWindowShell<T extends string>({
   const hasTabs = tabs !== undefined
   const embeddedHeaderSlot = useOptionalSystemAppHeaderSlot()
   const setEmbeddedHeaderSlot = embeddedHeaderSlot?.setSlot
-  const slotState = useMemo<SystemAppHeaderSlotState>(() => immersive ? {} : ({
+  const slotState = useMemo<SystemAppHeaderSlotState>(() => immersive ? { immersive: true } : ({
     leftAddon: embeddedLeftAddon,
     tabs: hasTabs ? tabs : undefined,
     value: hasTabs ? value : undefined,
@@ -62,7 +62,7 @@ function SystemAppWindowShell<T extends string>({
 
   if (embeddedHeaderSlot) {
     return (
-      <div className="h-full min-h-0 min-w-0 bg-surface">
+      <div data-system-app-immersive={immersive || undefined} className="h-full min-h-0 min-w-0 bg-surface">
         {children}
       </div>
     )
@@ -70,7 +70,7 @@ function SystemAppWindowShell<T extends string>({
 
   if (immersive || (!hasTabs && !actions && !left)) {
     return (
-      <div className="h-full min-h-0 min-w-0 bg-surface">
+      <div data-system-app-immersive={immersive || undefined} className="h-full min-h-0 min-w-0 bg-surface">
         {children}
       </div>
     )

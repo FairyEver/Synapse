@@ -19,10 +19,13 @@ export function SidePanel({
 }) {
   const myNote =
     perspective === "owner" ? [...table.recentActions].reverse().find((a) => a.note)?.note : null
+  const settlements = new Map(events.flatMap(event => event.settlement ? [[event.handId, event.settlement] as const] : []))
+  if (table.settlement) settlements.set(table.settlement.handId, table.settlement)
+  const recentResults = [...settlements.values()].sort((a, b) => b.handNo - a.handNo).slice(0, 2)
   return (
     <aside id={id} className="poker-side-panel" aria-label="日志和AI判断">
       {extras}
-      {[...events].reverse().filter(e => e.kind === "settlement" && e.settlement).slice(0, 2).map(e => <Settlement key={e.handId} settlement={e.settlement!} compact />)}
+      {recentResults.map(result => <Settlement key={result.handId} settlement={result} compact />)}
       <section className="poker-log">
         <h3>
           <ListOrdered aria-hidden="true" />

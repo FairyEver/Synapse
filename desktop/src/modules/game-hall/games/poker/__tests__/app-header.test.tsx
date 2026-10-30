@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { PokerApp } from "../PokerApp"
+import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 
 vi.mock("@/app-shell/account", () => ({useAccount: () => ({state:{status:"authenticated",profile:{user:{id:"user"}}}})}))
 vi.mock("../components/Lobby", () => ({ Lobby: () => <div>房间内容</div> }))
@@ -25,6 +26,29 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 afterEach(() => document.body.replaceChildren())
 describe("游戏应用顶栏", () => {
+  it("切换沉浸模式保留子页面的牌桌导航状态", async () => {
+    function Page() {
+      const [open,setOpen]=useState(false)
+      return <SystemAppWindowShell immersive={open}><button onClick={()=>setOpen(value=>!value)}>{open ? "返回房间" : "进入牌桌"}</button></SystemAppWindowShell>
+    }
+    const host=document.createElement("div"),root=createRoot(host)
+    await act(async()=>root.render(<EmbeddedSystemAppShell appName="游戏"><Page /></EmbeddedSystemAppShell>))
+    const enter=[...host.querySelectorAll("button")].find(button=>button.textContent==="进入牌桌")!
+    await act(async()=>enter.click())
+    expect(host.textContent).toContain("返回房间")
+    expect(host.querySelector('[data-system-app-top-bar]')).toBeNull()
+    await act(async()=>host.querySelector<HTMLButtonElement>("button")!.click())
+    expect(host.textContent).toContain("进入牌桌")
+    expect(host.querySelector('[data-system-app-top-bar]')).not.toBeNull()
+    await act(async()=>root.unmount())
+  })
+  it("启动台内进入牌桌也隐藏应用顶栏并声明沉浸状态", async () => {
+    const host=document.createElement("div"),root=createRoot(host)
+    await act(async()=>root.render(<EmbeddedSystemAppShell appName="游戏"><PokerApp roomCode="4821" onOpenRoom={vi.fn()} onBack={vi.fn()} /></EmbeddedSystemAppShell>))
+    expect(host.querySelector('[data-system-app-top-bar]')).toBeNull()
+    expect(host.querySelector('[data-system-app-immersive="true"]')).not.toBeNull()
+    await act(async()=>root.unmount())
+  })
   it.each(["牌局记录", "选手档案"])("从%s收到房间深链后切回牌桌", async (label) => {
     const host = document.createElement("div"),
       root = createRoot(host),

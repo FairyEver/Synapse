@@ -12,7 +12,7 @@ type AppShellLayoutProps = {
 
 function AppShellLayout({ dock, children, leading, actions }: AppShellLayoutProps) {
   return (
-    <main className="h-screen overflow-hidden bg-muted/30">
+    <main className="group/app-shell h-screen overflow-hidden bg-muted/30">
       <RepoOnboardingDialog />
       <QuickRepositorySwitchDialog />
       <SwitchRepositoryOnboardingDialog />
@@ -21,7 +21,7 @@ function AppShellLayout({ dock, children, leading, actions }: AppShellLayoutProp
           {children}
         </section>
 
-        <footer className="shrink-0 border-t border-sidebar-border/50">
+        <footer className="shrink-0 border-t border-sidebar-border/50 group-has-[[data-system-app-immersive=true]]/app-shell:hidden">
           <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 px-3">
             <div className="min-w-0">{leading}</div>
             <div className="min-w-0 justify-self-center">{dock}</div>

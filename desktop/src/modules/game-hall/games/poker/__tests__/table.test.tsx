@@ -61,6 +61,31 @@ const state: PokerTableView = {
   deckRemaining: 48,
 }
 describe("牌桌", () => {
+  it("结算后重新进入仍可在日志查看完整分池结果，轮询事件不重复结算", async () => {
+    const settlement = {handId:"h",handNo:1,board:[],rules:{variant:"standard52" as const,smallBlind:1,bigBlind:2},mixedControl:false,seats:[{seatNo:0,displayName:"我",participantKind:"human" as const,isMe:true,folded:false,delta:3,payout:6,endingStack:1003,handName:"一对"}],pots:[{amount:6,eligible:[0],winners:[0],shares:{0:6},refund:false}]}
+    const host=document.createElement("div"),root=createRoot(host)
+    const render=async(events: Parameters<typeof Table>[0]["events"])=>act(async()=>root.render(<Table table={{...state,settlement}} events={events} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
+    await render([])
+    expect(host.querySelector(".poker-result-log")?.textContent).toContain("主池 6")
+    await render([{kind:"settlement",handId:"h",handNo:1,seq:2147483647,settlement}])
+    expect(host.querySelectorAll(".poker-result-log")).toHaveLength(1)
+    await act(async()=>root.unmount())
+  })
+  it("申请手后暂离时仍按进行中呈现，直到服务端确认已暂停", async () => {
+    const host=document.createElement("div"),root=createRoot(host)
+    await act(async()=>root.render(<Table table={{...state,pauseReason:"user"}} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
+    expect(host.querySelector(".poker-pause-reason")).toBeNull()
+    await act(async()=>root.render(<Table table={{...state,status:"paused",pauseReason:"user"}} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
+    expect(host.querySelector(".poker-pause-reason")?.textContent).toBe("牌局已暂停")
+    await act(async()=>root.unmount())
+  })
+  it("本人入座顺序不影响下方视角，日志默认不挤占牌桌", async () => {
+    const host = document.createElement("div"), root = createRoot(host)
+    await act(async () => root.render(<Table table={{...state, maxSeats:6, mySeatNo:2, seats:state.seats.map((s,i)=>({...s,seatNo:i+2}))}} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
+    expect(host.querySelector('[data-mine="true"]')?.getAttribute("data-position")).toBe("0")
+    expect(host.querySelector('[aria-controls]')?.getAttribute("aria-expanded")).toBe("false")
+    await act(async()=>root.unmount())
+  })
   it("保留边缘提醒入口及原有时间和玩家视角限制", async () => {
     const host = document.createElement("div"), root = createRoot(host), onNudge = vi.fn()
     const render = async (table: PokerTableView, perspective: "owner" | "public" = "owner") =>

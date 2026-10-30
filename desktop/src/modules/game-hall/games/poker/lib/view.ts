@@ -41,6 +41,7 @@ export const actionLabel: Record<string, string> = {
   raise: "加注",
   allin: "全下",
 }
-export function seatPosition(seatNo: number, maxSeats: number): number {
-  return Math.round((seatNo * 10) / maxSeats) % 10
+export function seatPosition(seatNo: number, maxSeats: number, origin = 0): number {
+  const relative = (seatNo - origin + maxSeats) % maxSeats
+  return Math.round((relative * 10) / maxSeats) % 10
 }
