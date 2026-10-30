@@ -107,8 +107,7 @@ const capture = options.get("capture") === "1"
 const initialSeats = Number(options.get("seats") ?? 6)
 document.documentElement.classList.toggle("dark", options.get("theme") === "dark")
 function Fixture() {
-  const [dark, setDark] = useState(options.get("theme") === "dark"),
-    [view, setView] = useState(options.get("view") ?? "hall"),
+  const [view, setView] = useState(options.get("view") ?? "hall"),
     [seatCount, setSeatCount] = useState([2, 6, 10].includes(initialSeats) ? initialSeats : 6),
     [perspective, setPerspective] = useState<"owner" | "public">("owner")
   const scene = {
@@ -132,15 +131,6 @@ function Fixture() {
       {!capture && (
         <nav className="flex items-center gap-3 border-b p-3">
           <span className="mr-auto font-medium">游戏大厅</span>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setDark(!dark)
-              document.documentElement.classList.toggle("dark", !dark)
-            }}
-          >
-            {dark ? "切换浅色" : "切换深色"}
-          </Button>
           <Button variant="outline" onClick={() => setView(view === "hall" ? "table" : "hall")}>
             {view === "hall" ? "查看牌桌" : "查看大厅"}
           </Button>
