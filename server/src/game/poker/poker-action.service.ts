@@ -225,7 +225,11 @@ export class PokerActionService {
       ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } })
       : null
     const h = hand ? engine(hand) : null
-    const participating = !!hand && !!me && (me.joinedHandNo ?? 0) <= hand.handNo
+    const participating =
+      !!hand &&
+      !!me &&
+      (me.joinedHandNo ?? 0) <= hand.handNo &&
+      !!h?.seats.some((s) => s.seatNo === me.seatNo)
     const legal =
       h && own && participating
         ? legalActions(h, me!.seatNo)

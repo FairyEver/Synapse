@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-30 游戏大厅第二轮审核：游戏请求在权限检查之前绑定发起账号，身份切换拒绝旧请求；seat_sit保留请求确认并返回pending/status，overview同步实际暂离状态。20个游戏MCP索引、18个IPC及所有注册数量保持不变，不新增入口或权限。
+
 - 2026-10-30 游戏中心内容区重设计：大厅与扑克房间继续使用现有入口和统一 App 顶栏，新增的 `Artwork` 仅为 renderer 注册项的展示插槽；房间网格不新增业务能力。System App、Dock、capability、MCP、IPC、Workflow、Automation 与 Deep Link 数量均不变，MCP/Skill 操作契约不变。
 
 - 2026-10-30 游戏界面顶栏调整：继续使用统一 `SystemAppWindowShell` 和内嵌 header slot，德州扑克补充独立窗口标题，内嵌与独立窗口均只保留一个返回大厅操作；预览测试工具栏不属于产品导航。内容区允许独立视觉语言，应用顶栏仍遵守 Synapse 规范。System App、Dock、capability、MCP、IPC、Workflow、Automation 与 Deep Link 数量均不变。

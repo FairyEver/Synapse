@@ -1,5 +1,5 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -32,7 +32,14 @@ export function AgentProfiles() {
       persona: "",
     }),
     mutation = useGameMutation()
+  const draftGeneration = useRef(0)
+  const selectDraft = (draft: Partial<PokerAgentView>) => {
+    draftGeneration.current++
+    setEditing(draft)
+  }
   const save = async () => {
+    const submitted = editing,
+      generation = draftGeneration.current
     const result = await mutation.run(() =>
       gameApi().poker.agent.upsert({
         id: editing.id,
@@ -41,7 +48,13 @@ export function AgentProfiles() {
       }),
     )
     if (result) {
-      setEditing(result)
+      if (draftGeneration.current === generation) {
+        setEditing((current) =>
+          current === submitted
+            ? result
+            : { ...result, model: current.model, persona: current.persona },
+        )
+      }
       await agents.refresh()
     }
   }
@@ -54,7 +67,7 @@ export function AgentProfiles() {
             type="button"
             key={agent.id}
             variant={editing.id === agent.id ? "secondary" : "ghost"}
-            onClick={() => setEditing(agent)}
+            onClick={() => selectDraft(agent)}
           >
             {agent.model || "未声明模型"}
           </Button>
@@ -62,7 +75,7 @@ export function AgentProfiles() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => setEditing({ model: "", persona: "" })}
+          onClick={() => selectDraft({ model: "", persona: "" })}
         >
           新建选手
         </Button>

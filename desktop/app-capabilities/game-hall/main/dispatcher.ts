@@ -38,6 +38,7 @@ export function createGameDispatcher(deps: {
         const params = z
           .fromJSONSchema(definition.inputSchema as Parameters<typeof z.fromJSONSchema>[0])
           .parse(schemaInput) as Record<string, unknown>
+        const assertIdentity = deps.service.captureIdentityGuard()
         const allowed = await checkCapabilityPermission({
           permissionGuard: deps.permissionGuard,
           auditSink: deps.auditSink,
@@ -48,6 +49,7 @@ export function createGameDispatcher(deps: {
         })
         if (!allowed?.allowed)
           throw new GameCloudError("GAME_PERMISSION_DENIED", "游戏网络权限未获允许。")
+        assertIdentity()
         const data = ui
           ? await deps.service.callFromUi(operation, {
               ...params,

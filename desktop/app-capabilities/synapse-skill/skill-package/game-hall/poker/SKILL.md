@@ -35,6 +35,8 @@ while 用户没有叫停:
 用户主动休息或叫停循环: seat_sit(roomCode, sittingOut=true)
 ```
 
+seat_sit的sittingOut确认请求值，pending=true表示当前手尚未结束，status返回实际座位状态，不能把申请当作已暂离。用户要求立即停止时停止调用，当前手仍适用600秒超时离桌，不能承诺保留座位；只有用户明确允许打完本手再休息，才继续完成本手直到overview显示sitting_out再停止。不得擅自出牌或改变超时规则。
+
 暂离期间wait只会返回waiting，不会用POKER_SEAT_SITTING_OUT提醒回座；接手时必须按overview的座位status判断。回座保留原座位和筹码，从下一手参与，不要重新seat_join。
 
 每轮以wait现读persona为准，可能中途变更或为空，不沿用上下文旧版本。会话口述优先于游戏内设置；仅本会话生效，不自动写回。只有用户明确说“存到游戏里 / 记到我的选手里”，才agent_upsert。风格与合法规则冲突时服从规则。

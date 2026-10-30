@@ -22,5 +22,7 @@ describe("扑克接入指南", () => {
     expect(guide.loop).toContain("seat_sit(false)")
     expect(guide.loop).toContain("用户明确要求继续")
     expect(guide.loop).toContain("不自动回座")
+    expect(guide.loop).toContain("pending=true")
+    expect(guide.loop).toContain("600秒超时离桌")
   })
 })

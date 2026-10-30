@@ -32,6 +32,22 @@ export class GameHallService {
     for (const request of this.requests) request.abort()
     this.requests.clear()
   }
+  captureIdentityGuard(): () => void {
+    const state = this.account.getState()
+    if (state.status !== "authenticated")
+      throw new GameCloudError("GAME_AUTH_REQUIRED", "请先登录。")
+    const generation = this.generation,
+      identity = state.profile.user.id
+    return () => {
+      const now = this.account.getState()
+      if (
+        this.generation !== generation ||
+        now.status !== "authenticated" ||
+        now.profile.user.id !== identity
+      )
+        throw new GameCloudError("GAME_IDENTITY_CHANGED", "账号已变更。")
+    }
+  }
   async callFromUi(operation: string, params: Record<string, unknown>): Promise<unknown> {
     if (!GAME_UI_OPERATIONS.some((t) => t.id === operation))
       throw new GameCloudError("POKER_ILLEGAL_ACTION", "桌面不提供出牌或入座操作。")
@@ -48,26 +64,13 @@ export class GameHallService {
       !(ui && GAME_UI_OPERATIONS.some((t) => t.id === operation))
     )
       throw new GameCloudError("POKER_ILLEGAL_ACTION", "未知游戏操作。")
-    const state = this.account.getState()
-    if (state.status !== "authenticated")
-      throw new GameCloudError("GAME_AUTH_REQUIRED", "请先登录。")
-    const generation = this.generation,
-      identity = state.profile.user.id
+    const current = this.captureIdentityGuard()
     const controller = new AbortController(),
       abort = () => controller.abort(signal?.reason)
     signal?.addEventListener("abort", abort, { once: true })
     if (signal?.aborted) abort()
     this.requests.add(controller)
     const timer = setTimeout(() => controller.abort(), 30000)
-    const current = () => {
-      const now = this.account.getState()
-      if (
-        this.generation !== generation ||
-        now.status !== "authenticated" ||
-        now.profile.user.id !== identity
-      )
-        throw new GameCloudError("GAME_IDENTITY_CHANGED", "账号已变更。")
-    }
     try {
       const route = ui ? GAME_UI_ROUTES[operation] : undefined
       const path = route ? route.path(params) : "/game/invoke"

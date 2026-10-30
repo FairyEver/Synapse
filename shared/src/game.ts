@@ -193,7 +193,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ["poker.seat.leave", "离桌退剩余筹码；参与中的手结束后离场。", room, ["roomCode"], true],
   [
     "poker.seat.sit",
-    "主动暂离或回座；下一手起生效，保留筹码。",
+    "主动暂离或回座；当前手结束后生效。sittingOut确认请求，pending表示尚未生效，status是实际座位状态。",
     { ...room, sittingOut: { type: "boolean" } },
     ["roomCode", "sittingOut"],
     true,

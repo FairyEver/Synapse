@@ -72,7 +72,7 @@ export class GameApiService {
             privacy: "对手未摊牌底牌不可读；persona、版本、note仅本人可读。",
           },
           tools: GAME_TOOLS.filter((t) => t.id.startsWith("app.game.poker.")),
-          loop: "guide → overview → 无座位lobby_list/seat_join；已有座位先检查status，sitting_out仅在用户明确要求继续时seat_sit(false)后wait，未经继续指令不自动回座；其他已有座位直接wait。循环wait(roomCode,cursor,25000)；your_turn时按每次现读persona或本会话口述风格act(UUID,handId,street)，更新cursor；waiting继续；hand_result仅记结果继续；table_closed重新overview。用户叫停才退出；暂停用seat_sit(true)。",
+          loop: "guide → overview → 无座位lobby_list/seat_join；已有座位先检查status，sitting_out仅在用户明确要求继续时seat_sit(false)后wait，未经继续指令不自动回座；其他已有座位直接wait。循环wait(roomCode,cursor,25000)；your_turn时按每次现读persona或本会话口述风格act(UUID,handId,street)，更新cursor；waiting继续；hand_result仅记结果继续；table_closed重新overview。用户叫停才退出；暂停用seat_sit(true)；pending=true表示当前手尚未结束，立即停止调用仍适用600秒超时离桌，不能承诺保留座位。",
           persona:
             "使用会话口述覆盖时，act传personaSource=session，行动不绑定游戏内版本；口述优先于游戏设置，仅本会话生效；未经用户明确要求不写回。模型自述可选，不确定留空。",
           errors: {

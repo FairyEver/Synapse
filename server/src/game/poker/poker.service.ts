@@ -167,10 +167,19 @@ export class PokerService {
         })
         await c.tx.gameSession.updateMany({
           where: { userId, gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
-          data: { lastActiveAt: now },
+          data: {
+            status: ["waiting", "sitting_out"].includes(seat.status) ? seat.status : "active",
+            lastActiveAt: now,
+            ...(!inHand ? { needsAction: false, deadlineAt: null } : {}),
+          },
         })
         await startNext(this, c)
-        return { sittingOut }
+        const current = c.seats.find((s) => s.id === seat.id)
+        return {
+          sittingOut,
+          pending: !!current?.sitPending && current.status !== "sitting_out",
+          status: current?.status ?? "left",
+        }
       },
       now,
     )
@@ -215,9 +224,19 @@ export class PokerService {
           if (hand && hand.status !== "settled") return
         }
         const cutoff = new Date(now.getTime() - 1800000)
+        const lastSession = !c.seats.length
+          ? await c.tx.gameSession.findFirst({
+              where: { gameKind: "poker", gameRoomId: c.room.id },
+              orderBy: { lastActiveAt: "desc" },
+              select: { lastActiveAt: true },
+            })
+          : null
+        const emptySince = new Date(
+          Math.max(c.room.createdAt.getTime(), lastSession?.lastActiveAt.getTime() ?? 0),
+        )
         const nobodyOnline = c.seats.length
           ? c.seats.every((s) => s.lastSeenAt <= cutoff)
-          : c.room.createdAt <= cutoff
+          : emptySince <= cutoff
         const sessions = await c.tx.gameSession.findMany({
           where: { gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
           take: 10,

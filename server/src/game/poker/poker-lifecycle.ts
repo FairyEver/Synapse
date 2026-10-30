@@ -145,7 +145,7 @@ export async function saveHand(
       },
       data: {
         inPlay: p.stack + (settled ? 0 : p.total),
-        status: s.status === "waiting" || s.status === "sitting_out" ? "waiting" : "active",
+        status: ["waiting", "sitting_out"].includes(s.status) ? s.status : "active",
         needsAction: !settled && state.actionOnSeat === s.seatNo,
         deadlineAt: !settled && state.actionOnSeat === s.seatNo ? deadlineAt : null,
         lastActiveAt: c.now,
