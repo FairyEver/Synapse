@@ -91,7 +91,7 @@ export class GameApiService {
       case "app.game.poker.room.create":
         return this.poker.createRoom(
           userId,
-          p as { maxSeats: number; buyIn: number; name?: string },
+          p as { maxSeats: number; buyIn: number; name?: string; creationId?: string },
         )
       case "app.game.poker.room.get":
         return this.actions.state(userId, p.roomCode, "public")

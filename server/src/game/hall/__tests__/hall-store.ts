@@ -5,6 +5,7 @@ export function createHallStore(points = 1000000) {
   const account = { userId: "u", points, netProfit: 0, lastGrantAt: null as Date | null }
   const sessions: Record<string, any>[] = []
   const tx = {
+    $executeRaw: async () => 0, // This double starts with the account already present.
     $queryRaw: async (sql: TemplateStringsArray, userId: string) => {
       if (!sql.join("").includes('FROM "GameSession"')) return [account]
       const rows = sessions.filter((s) => s.userId === userId && s.status !== "closed")
@@ -17,7 +18,6 @@ export function createHallStore(points = 1000000) {
       ]
     },
     gameAccount: {
-      upsert: async () => account,
       update: async ({ data }: any) => {
         for (const [k, v] of Object.entries(data)) {
           if (typeof v === "object" && v !== null && "increment" in v)

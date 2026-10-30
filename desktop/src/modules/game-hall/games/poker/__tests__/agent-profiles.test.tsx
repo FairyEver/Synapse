@@ -31,6 +31,38 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn() } }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 describe("选手档案异步保存", () => {
+  it.each(["retry", "edit", "new"])("新草稿响应丢失后%s保持对应创建身份，确认后改用实体id", async (mode) => {
+    api.upsert.mockReset().mockRejectedValueOnce(new Error("响应丢失"))
+      .mockResolvedValue({ id: "saved", model: "", persona: "", versionSeq: 0 })
+    const host = document.createElement("div"), root = createRoot(host)
+    const button = (label: string) => [...host.querySelectorAll("button")].find((element) => element.textContent === label)!
+    const submit = async () => act(async () => host.querySelector("form")!.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    ))
+    try {
+      await act(async () => root.render(<AgentProfiles />))
+      await submit()
+      const first = api.upsert.mock.calls[0][0].creationId
+      expect(first).toMatch(/^[0-9a-f-]{36}$/i)
+      if (mode === "edit") {
+        await act(async () => {
+          const input = host.querySelector("textarea")!
+          Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, "新的提示词")
+          input.dispatchEvent(new Event("input", { bubbles: true }))
+        })
+      } else if (mode === "new") await act(async () => button("新建选手").click())
+      await submit()
+      const second = api.upsert.mock.calls[1][0].creationId
+      if (mode === "new") expect(second).not.toBe(first)
+      else expect(second).toBe(first)
+      await submit()
+      expect(api.upsert.mock.calls[2][0].id).toBe("saved")
+      expect(api.upsert.mock.calls[2][0]).not.toHaveProperty("creationId")
+    } finally {
+      await act(async () => root.unmount())
+    }
+  })
+
   it.each(["edit", "switch", "new", "create-edit"])("保存响应迟到时保留后续的%s草稿", async (mode) => {
     api.upsert.mockReset()
     let resolve!: (value: unknown) => void
@@ -54,7 +86,7 @@ describe("选手档案异步保存", () => {
     )
     expect(api.upsert).toHaveBeenLastCalledWith(
       mode === "create-edit"
-        ? { id: undefined, model: "", persona: "" }
+        ? { creationId: expect.stringMatching(/^[0-9a-f-]{36}$/i), model: "", persona: "" }
         : { id: "a", model: "选手A", persona: "原提示词A" },
     )
     if (mode === "edit" || mode === "create-edit") {

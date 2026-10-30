@@ -10,18 +10,21 @@ export function StatusBar({
   perspective: "owner" | "public"
   onNudge: (seatNo: number) => void
 }) {
-  const active = table.seats.find((s) => s.seatNo === table.actionOnSeat),
+  const closed = table.status === "closed",
+    active = closed ? undefined : table.seats.find((s) => s.seatNo === table.actionOnSeat),
     mine = active?.seatNo === table.mySeatNo
   const watching = perspective === "public" || table.mySeatNo === null
-  const text = watching
-    ? "旁观中"
-    : !active
-      ? "等待对手"
-      : mine
-        ? active.aiState === "offline"
-          ? "你的 AI 已掉线"
-          : "你的 AI 正在行动"
-        : `等待 ${active.displayName} 的 AI`
+  const text = closed
+    ? "房间已解散"
+    : watching
+      ? "旁观中"
+      : !active
+        ? "等待对手"
+        : mine
+          ? active.aiState === "offline"
+            ? "你的 AI 已掉线"
+            : "你的 AI 正在行动"
+          : `等待 ${active.displayName} 的 AI`
   const offline = mine && active?.aiState === "offline"
   const countdown = !active || watching ? null : remaining(table.deadlineMs)
   return (

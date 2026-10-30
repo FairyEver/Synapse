@@ -1,7 +1,7 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
 import "../../../styles/hall.css"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useAccount } from "@/app-shell/account"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -32,6 +32,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     [name, setName] = useState(""),
     [maxSeats, setMaxSeats] = useState("6"),
     [buyIn, setBuyIn] = useState("1000")
+  const creation = useRef<{ key: string; id: string } | null>(null)
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
   const lobby = useGameQuery(
@@ -42,16 +43,17 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
-    const result = await mutation.run(() =>
-      gameApi().poker.room.create({
-        name,
-        maxSeats: Number(maxSeats),
-        buyIn: Number(buyIn),
-      }),
-    )
-    if (result) {
+    const params = { name, maxSeats: Number(maxSeats), buyIn: Number(buyIn) },
+      key = JSON.stringify(params)
+    const result = await mutation.run(async () => {
+      if (creation.current?.key !== key) creation.current = { key, id: crypto.randomUUID() }
+      const intent = creation.current
+      const room = await gameApi().poker.room.create({ ...params, creationId: intent.id })
+      return { room, intent }
+    })
+    if (result && creation.current === result.intent) {
       setCreateOpen(false)
-      onRoom(result.roomCode)
+      onRoom(result.room.roomCode)
     }
   }
   const closeRoom = async () => {
@@ -81,7 +83,10 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         sessions={(hall.data?.sessions ?? []).filter((s) => s.game === "poker")}
         userId={userId}
         onRoom={onRoom}
-        onCreate={() => setCreateOpen(true)}
+        onCreate={() => {
+          creation.current = null
+          setCreateOpen(true)
+        }}
         onConnect={setConnect}
         onClose={setClosing}
         pagination={
@@ -107,8 +112,14 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
           ) : null
         }
       />
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!open) creation.current = null
+          setCreateOpen(open)
+        }}
+      >
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>创建房间</DialogTitle>
           </DialogHeader>

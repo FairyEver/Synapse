@@ -33,8 +33,10 @@ export function AgentProfiles() {
     }),
     mutation = useGameMutation()
   const draftGeneration = useRef(0)
+  const creationId = useRef<string | null>(null)
   const selectDraft = (draft: Partial<PokerAgentView>) => {
     draftGeneration.current++
+    creationId.current = null
     setEditing(draft)
   }
   const save = async () => {
@@ -42,7 +44,9 @@ export function AgentProfiles() {
       generation = draftGeneration.current
     const result = await mutation.run(() =>
       gameApi().poker.agent.upsert({
-        id: editing.id,
+        ...(editing.id
+          ? { id: editing.id }
+          : { creationId: (creationId.current ??= crypto.randomUUID()) }),
         model: editing.model ?? "",
         persona: editing.persona ?? "",
       }),

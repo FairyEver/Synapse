@@ -13,6 +13,13 @@ export type RoomContext = {
   now: Date
 }
 export const json = (value: unknown) => value as Prisma.InputJsonValue
+function creationIdentity(userId: string, kind: "room" | "agent", creationId: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creationId))
+    reject("POKER_ILLEGAL_ACTION", "创建标识须为UUID。")
+  return `game-${kind}-${createHash("sha256")
+    .update(JSON.stringify([userId, creationId.toLowerCase()]))
+    .digest("hex")}`
+}
 @Injectable()
 export class PokerService {
   constructor(
@@ -61,7 +68,10 @@ export class PokerService {
     if (changed) for (const listener of this.listeners) listener(code)
     return result
   }
-  async createRoom(userId: string, input: { maxSeats: number; buyIn: number; name?: string }) {
+  async createRoom(
+    userId: string,
+    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string },
+  ) {
     if (
       !Number.isInteger(input.maxSeats) ||
       input.maxSeats < 2 ||
@@ -69,10 +79,15 @@ export class PokerService {
       ![500, 1000, 2000, 5000].includes(input.buyIn)
     )
       reject("POKER_ILLEGAL_ACTION", "座位应为2–10，带入额仅支持500/1000/2000/5000。")
+    const id =
+      input.creationId === undefined
+        ? undefined
+        : creationIdentity(userId, "room", input.creationId)
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
         const room = await this.prisma.gamePokerRoom.create({
           data: {
+            ...(id ? { id } : {}),
             ownerUserId: userId,
             code: String(randomInt(1000, 1000000)),
             maxSeats: input.maxSeats,
@@ -84,6 +99,13 @@ export class PokerService {
       } catch (error) {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002")
           throw error
+        if (id) {
+          const existing = await this.prisma.gamePokerRoom.findFirst({
+            where: { id, ownerUserId: userId },
+            select: { code: true },
+          })
+          if (existing) return { roomCode: existing.code }
+        }
       }
     }
     reject("POKER_ROOM_FULL", "生成房间号失败，请重试。")
@@ -272,13 +294,30 @@ export class PokerService {
       now,
     )
   }
-  async upsertAgent(userId: string, input: { id?: string; model?: string; persona?: string }) {
+  async upsertAgent(
+    userId: string,
+    input: { id?: string; model?: string; persona?: string; creationId?: string },
+  ) {
     if ((input.persona?.length ?? 0) > 20000) reject("POKER_ILLEGAL_ACTION", "风格提示词过长。")
+    if (input.id === "") reject("POKER_ILLEGAL_ACTION", "选手ID不能为空。")
+    if (input.id !== undefined && input.creationId !== undefined)
+      reject("POKER_ILLEGAL_ACTION", "不能同时传选手ID与创建标识。")
+    const stableId =
+      input.creationId === undefined
+        ? undefined
+        : creationIdentity(userId, "agent", input.creationId)
     return this.prisma.$transaction(async (tx) => {
-      const id = input.id ?? randomUUID()
+      const id = input.id ?? stableId ?? randomUUID()
       if (input.id) {
         const owned = await tx.gamePokerAgent.findFirst({ where: { id, userId } })
         if (!owned) reject("POKER_SEAT_NOT_FOUND", "选手不存在。")
+      } else if (stableId) {
+        const created = await tx.gamePokerAgent.upsert({
+          where: { id },
+          update: { id },
+          create: { id, userId },
+        })
+        if (created.userId !== userId) reject("POKER_SEAT_NOT_FOUND", "选手不存在。")
       } else await tx.gamePokerAgent.create({ data: { id, userId } })
       await tx.$queryRaw`SELECT "id" FROM "GamePokerAgent" WHERE "id" = ${id} AND "userId" = ${userId} FOR UPDATE`
       const agent = (await tx.gamePokerAgent.findUnique({ where: { id } }))!

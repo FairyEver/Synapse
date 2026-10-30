@@ -29,3 +29,5 @@ wait的waiting只有status/cursor；your_turn含本次决策字段和现读perso
 房间列表与手牌历史采用offset分页：nextOffset非null时继续，查询条件变动从0开始。提示词版本不可修改、删除；内容相同不生成新版本，清空会生成空版本。
 
 recentActions的displayName是本手行动人姓名快照；同一seatNo后来换人时仍表示原行动人，不要按当前seats姓名重写行动归属。
+
+room_create与agent_upsert的新建流程支持可选creationId(UUID)，按当前账号和实体类型隔离。room_create同标识恢复首次房间（已解散也不另建），不改变旧房间参数；agent_upsert同标识定位同一新选手并按现有更新规则保存新编辑，内容不变不新增版本。获得选手id后只传id，id与creationId不能同传。未提供标识保留旧客户端行为；空选手id和非法创建标识会被拒绝。

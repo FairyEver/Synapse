@@ -27,6 +27,7 @@ export interface GameBridge {
         maxSeats: number
         buyIn: number
         name?: string
+        creationId?: string
       }) => Promise<{ roomCode: string }>
       get: (input: Room) => Promise<PokerTableView>
     }
@@ -40,7 +41,12 @@ export interface GameBridge {
     }
     agent: {
       list: () => Promise<PokerAgentView[]>
-      upsert: (input: { id?: string; model?: string; persona?: string }) => Promise<PokerAgentView>
+      upsert: (input: {
+        id?: string
+        creationId?: string
+        model?: string
+        persona?: string
+      }) => Promise<PokerAgentView>
       versions: (input: { agentId: string }) => Promise<PokerVersionView[]>
     }
     hand: {

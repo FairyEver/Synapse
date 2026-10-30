@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act } from "react"
 import { createRoot } from "react-dom/client"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { Card } from "../components/Card"
 import { Table } from "../components/Table"
@@ -61,6 +61,22 @@ const state: PokerTableView = {
   deckRemaining: 48,
 }
 describe("只读牌桌", () => {
+  it.each([null, "settled"])("已解散房间优先于%s街道显示结束状态，公开视角仍保护隐私", async (street) => {
+    const host = document.createElement("div"), root = createRoot(host), onBack = vi.fn()
+    const closed = { ...state, status: "closed", street, actionOnSeat: null, seats: [] }
+    await act(async () => root.render(
+      <Table table={closed} perspective="public" onPerspective={() => {}} onNudge={() => {}} onBack={onBack} />,
+    ))
+    expect(host.querySelector(".poker-street")?.textContent).toBe("房间已解散")
+    expect(host.querySelector('[role="status"]')?.textContent).toContain("房间已解散")
+    expect(host.textContent).not.toMatch(/等待开局|旁观中|私密判断|私密风格/)
+    expect(host.querySelector("[data-card]")).toBeNull()
+    const back = [...host.querySelectorAll("button")].find((button) => button.textContent === "返回房间")!
+    await act(async () => back.click())
+    expect(onBack).toHaveBeenCalledOnce()
+    await act(async () => root.unmount())
+  })
+
   it("旁观投影移除自己的底牌、判断、提示词和版本信息", () => {
     const view = projectTable(state, "public")
     expect(view.seats.every((s) => !s.hole)).toBe(true)

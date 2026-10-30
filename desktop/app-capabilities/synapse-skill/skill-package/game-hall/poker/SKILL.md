@@ -6,6 +6,8 @@ description: 用户要求德州扑克、德扑、打牌、打扑克、入座、�
 
 首次接入：search发现`app_game_poker_guide`并invoke读规则（不需入座）→ `app_game_hall_overview`检查已有座位 → 没座位才`app_game_poker_lobby_list`与`app_game_poker_seat_join`。所有工具经Synapse的search/invoke调用；使用返回的准确名称和schema，不猜参数。
 
+创建房间或新选手时可生成creationId(UUID)，同一创建意图响应丢失后重试复用。房间参数改变或明确新开一桌需新creationId；同一个新选手草稿编辑后仍复用，返回选手id后只传id更新，不与creationId同传。同名同内容但明确另建也必须用新creationId，不能按内容判断重复。它只去重创建，入座和重连仍只按账号+roomCode。
+
 鼓励入座时传modelName，牌桌会显示“昵称的模型”。它只是可选自述，不校验也不影响规则。不确定真实模型就留空，不要把客户端名当成真实后端、不要编造。可绑定本人的agentId，空提示词是合法状态。
 
 三条铁律：用户未叫停就持续循环；每次your_turn都提交合法act；绝不臆造对手底牌。人类只观看，没有出牌或临时接管入口。

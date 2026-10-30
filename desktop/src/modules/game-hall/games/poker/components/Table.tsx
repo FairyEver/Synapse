@@ -32,7 +32,9 @@ export function Table({
     seat: view.seats.find((s) => s.seatNo === seatNo),
   }))
   const stage =
-    streetLabel[view.street ?? ""] ?? (view.status === "paused" ? "等待对手" : "等待开局")
+    view.status === "closed"
+      ? "房间已解散"
+      : streetLabel[view.street ?? ""] ?? (view.status === "paused" ? "等待对手" : "等待开局")
   return (
     <section
       className="poker-table"

@@ -174,8 +174,9 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.room.create",
-    "创建2–10人桌，盲注1/2。",
+    "创建2–10人桌，盲注1/2；可传creationId(UUID)，同次创建重试复用，新开一桌更换。",
     {
+      creationId: { type: "string", format: "uuid", maxLength: 36 },
       maxSeats: integer(2, 10),
       buyIn: { type: "integer", enum: [500, 1000, 2000, 5000] },
       name: str(48),
@@ -243,8 +244,13 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ["poker.agent.list", "本人选手与私密提示词。", {}, [], false],
   [
     "poker.agent.upsert",
-    "新建/更新本人选手；内容变化生成不可变版本。口述风格未经明确要求不得写回。",
-    { id: str(), model: str(24), persona: str(20000) },
+    "新建/更新本人选手；新建可传creationId(UUID)复用同一草稿，获得id后只传id。相同内容不重复版本，口述风格未经明确要求不得写回。",
+    {
+      id: str(),
+      creationId: { type: "string", format: "uuid", maxLength: 36 },
+      model: str(24),
+      persona: str(20000),
+    },
     [],
     true,
   ],

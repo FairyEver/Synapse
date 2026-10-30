@@ -15,7 +15,10 @@ export class HallService {
   constructor(private readonly prisma: PrismaService) {}
 
   async lockAccount(tx: Prisma.TransactionClient, userId: string): Promise<GameAccount> {
-    await tx.gameAccount.upsert({ where: { userId }, create: { userId }, update: {} })
+    await tx.$executeRaw`
+      INSERT INTO "GameAccount" ("userId", "updatedAt")
+      VALUES (${userId}, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+      ON CONFLICT ("userId") DO NOTHING`
     const [account] = await tx.$queryRaw<
       GameAccount[]
     >`SELECT "userId", "points", "netProfit", "lastGrantAt", "updatedAt" FROM "GameAccount" WHERE "userId" = ${userId} FOR UPDATE`
