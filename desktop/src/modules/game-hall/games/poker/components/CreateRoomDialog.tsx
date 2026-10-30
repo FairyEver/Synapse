@@ -90,22 +90,28 @@ export function CreateRoomDialog({
                 <div className="poker-create-field">
                   <span id="poker-room-mode-label">房间类型</span>
                   <RadioGroup id="poker-room-mode" orientation="horizontal" aria-labelledby="poker-room-mode-label"
-                    aria-describedby={value.mode === "practice" ? "poker-room-mode-hint" : undefined} className="poker-create-choices poker-create-choices-two"
+                    aria-describedby={`poker-room-mode-hint-${value.mode}`} className="poker-create-choices poker-create-choices-two"
                     disabled={busy} value={value.mode} onValueChange={(mode) => update({ mode: mode as GameFunding })}>
                     <Choice value="points"><Coins aria-hidden="true" />点数房</Choice>
                     <Choice value="practice"><Spade aria-hidden="true" />陪练房</Choice>
                   </RadioGroup>
-                  {value.mode === "practice" && <p id="poker-room-mode-hint" className="poker-create-hint">不影响大厅点数</p>}
+                  <div className="poker-create-hints">
+                    <p id="poker-room-mode-hint-points" className="poker-create-hint" aria-hidden={value.mode !== "points"}>使用大厅点数</p>
+                    <p id="poker-room-mode-hint-practice" className="poker-create-hint" aria-hidden={value.mode !== "practice"}>不影响大厅点数</p>
+                  </div>
                 </div>
                 <div className="poker-create-field">
                   <span id="poker-variant-label">牌局规则</span>
                   <RadioGroup id="poker-variant" orientation="horizontal" aria-labelledby="poker-variant-label"
-                    aria-describedby={value.variant === "short32" ? "poker-variant-hint" : undefined} className="poker-create-choices poker-create-choices-two"
+                    aria-describedby={`poker-variant-hint-${value.variant}`} className="poker-create-choices poker-create-choices-two"
                     disabled={busy} value={value.variant} onValueChange={(variant) => update({ variant: variant as PokerVariant })}>
                     <Choice value="standard52">标准 52 张</Choice>
                     <Choice value="short32">短牌 32 张<small>7 至 A</small></Choice>
                   </RadioGroup>
-                  {value.variant === "short32" && <p id="poker-variant-hint" className="poker-create-hint">同花大于葫芦，A789T 是最小顺子</p>}
+                  <div className="poker-create-hints">
+                    <p id="poker-variant-hint-standard52" className="poker-create-hint" aria-hidden={value.variant !== "standard52"}>完整 52 张牌，葫芦大于同花</p>
+                    <p id="poker-variant-hint-short32" className="poker-create-hint" aria-hidden={value.variant !== "short32"}>同花大于葫芦，A789T 是最小顺子</p>
+                  </div>
                 </div>
                 <div className="poker-create-settings">
                   <div className="poker-create-field">

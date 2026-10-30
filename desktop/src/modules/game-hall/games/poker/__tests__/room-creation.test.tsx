@@ -36,6 +36,31 @@ async function submit() {
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))
 }
 describe("建房请求身份", () => {
+  it("每个房间类型和牌局规则都有说明，切换时保留同一组说明占位", async () => {
+    const host = document.createElement("div"), root = createRoot(host)
+    roots.add(root)
+    document.body.append(host)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    for (const groupId of ["poker-room-mode", "poker-variant"]) {
+      const group = document.getElementById(groupId)!
+      const options = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+      const descriptions = options.map((option) => {
+        const hint = document.getElementById(`${groupId}-hint-${option.value}`)
+        expect(hint, `${option.value} 有对应说明`).not.toBeNull()
+        expect(hint!.textContent?.trim()).not.toBe("")
+        return hint!
+      })
+      for (const option of [...options, options[0]]) {
+        await act(async () => option.click())
+        expect(group.getAttribute("aria-describedby")).toBe(`${groupId}-hint-${option.value}`)
+        for (const [index, hint] of descriptions.entries()) {
+          expect(hint.isConnected).toBe(true)
+          expect(hint.getAttribute("aria-hidden")).toBe(String(options[index] !== option))
+        }
+      }
+    }
+  })
   it("创建期间禁用配置并阻止重复提交，失败后可重试", async () => {
     let reject!: (reason: Error) => void
     api.create.mockReset().mockImplementationOnce(() => new Promise((_, fail) => { reject = fail }))

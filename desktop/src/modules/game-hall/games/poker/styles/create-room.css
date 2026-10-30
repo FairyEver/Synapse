@@ -164,10 +164,18 @@
   width: 0.5rem;
   height: 0.5rem;
 }
+.poker-create-hints {
+  display: grid;
+}
 .poker-create-hint {
+  /* All alternatives size the same grid row, including wrapped inactive hints. */
+  grid-area: 1 / 1;
   color: var(--gc-muted);
   font-size: 0.75rem;
   text-wrap: pretty;
+}
+.poker-create-hint[aria-hidden="true"] {
+  visibility: hidden;
 }
 .poker-create-settings {
   display: grid;
