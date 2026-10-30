@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-31 游戏大厅使用模块 `assets/icon.png` 中的用户指定图标，启动台与 Dock 共用 manifest 资源。仅替换图标，23 个 System App、369 个 capability、365 个 MCP 索引及既有路由数量不变，MCP schema 和系统 Skill 无需调整。
+
 - 2026-10-30 离桌控制边界审阅：seat.join增加可选controlVersion，私有control.set在无座位时支持request_ai/cancel_ai重新入座授权；服务端永久控制历史阻止旧AI在接管后裸join重新扣点。无座位先读取table.state/room.get的requiresJoinApproval核对是否需要授权，false按用户原入座授权首次join，true必须handoffPending及匹配版本，不按版本0猜测；首次无控制历史旧MCP保持兼容。table.events同步可选owner/public视角（MCP默认owner、decision投影；UI默认public，玩家显式owner），不允许日志混入教学牌。仅扩展既有schema与私有语义，game26项能力/24项IPC、全局369 capability/365 MCP索引不变，Skill和指南同步。
 
 - 2026-10-30 真人扑克与短牌：新增game公共control.claim、checkpoint.get/save、table.events四项，game为26 capability/MCP索引（大厅3、扑克23），全局369 capability/365 MCP索引。游戏IPC为24项，新增join/act/control.set/events；control.set与room.close仅UI私有，不注册capability/MCP。table.wait、control.claim、checkpoint.get/save不开放Renderer bridge。公开仍仅search/invoke；System App 23、Dock、Workflow、Automation、Deep Link数量不变。共享命名白名单加入已批准claim/save/events，建房牌组与盲注、控制epoch、事件/结算及恢复契约同步schema/Skill。扑克房间获批沉浸顶栏例外，大厅维持统一壳；服务端区分human与MCP动作，教学明牌不进入AI决策。下方较早条目数量为各轮历史基线。
@@ -73,7 +75,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
-| Game Hall | 是 | 否（可手动固定） | — | — | 20 | 大厅根、扑克房间（2条声明式路径） |
+| Game Hall（模块 `assets/icon.png`） | 是 | 否（可手动固定） | — | — | 20 | 大厅根、扑克房间（2条声明式路径） |
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
