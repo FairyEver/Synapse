@@ -1,3 +1,6 @@
+import { Plus } from "lucide-react"
+import { RoomList } from "./RoomList"
+import "../../../styles/hall.css"
 import { useState } from "react"
 import { useAccount } from "@/app-shell/account"
 import { toast } from "sonner"
@@ -69,14 +72,15 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     }
   }
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
       <MySessions
         sessions={(hall.data?.sessions ?? []).filter((s) => s.game === "poker")}
         onOpen={(s) => s.roomCode && onRoom(s.roomCode)}
       />
       <div className="flex items-center justify-between">
-        <h2 className="font-medium">房间</h2>
+        <h2 className="text-balance text-sm font-medium">房间</h2>
         <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Plus data-icon="inline-start" aria-hidden="true" />
           创建房间
         </Button>
       </div>
@@ -85,51 +89,16 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
       ) : lobby.data.items.length === 0 ? (
         <p className="text-sm text-muted-foreground">暂无房间</p>
       ) : (
-        <div className="divide-y rounded-lg border">
-          {lobby.data.items.map((room) => (
-            <div key={room.roomCode} className="flex items-center gap-3">
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center justify-between gap-3 p-4 text-left hover:bg-muted"
-                onClick={() => onRoom(room.roomCode)}
-              >
-                <span className="truncate">
-                  #{room.roomCode} {room.name}
-                </span>
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  {room.players}/{room.maxSeats} · 1/2 · 带入 {room.buyIn.toLocaleString()} ·{" "}
-                  {room.status === "running" ? "进行中" : "等待中"}
-                </span>
-                <span>进入</span>
-              </button>
-              {room.players < room.maxSeats &&
-                !hall.data?.sessions.some(
-                  (s) => s.roomCode === room.roomCode && s.game === "poker",
-                ) && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="mr-3"
-                    onClick={() => setConnect(room.roomCode)}
-                  >
-                    接入 AI
-                  </Button>
-                )}
-              {room.ownerUserId === userId && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="mr-3"
-                  onClick={() => setClosing(room.roomCode)}
-                >
-                  解散
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
+        <RoomList
+          rooms={lobby.data.items}
+          myRoomCodes={(hall.data?.sessions ?? [])
+            .filter((s) => s.game === "poker")
+            .map((s) => s.roomCode ?? "")}
+          userId={userId}
+          onRoom={onRoom}
+          onConnect={setConnect}
+          onClose={setClosing}
+        />
       )}
       <div className="flex justify-end gap-2">
         <Button

@@ -77,6 +77,32 @@ describe("只读牌桌", () => {
     expect(host.textContent).not.toContain("2")
     await act(async () => root.unmount())
   })
+  it("窄窗日志入口可展开和收起，仍只提供观看操作", async () => {
+    const host = document.createElement("div"),
+      root = createRoot(host)
+    await act(async () =>
+      root.render(
+        <Table
+          table={state}
+          perspective="owner"
+          onPerspective={() => {}}
+          onNudge={() => {}}
+          onBack={() => {}}
+        />,
+      ),
+    )
+    const toggle = [...host.querySelectorAll("button")].find((b) =>
+      b.getAttribute("aria-controls"),
+    )!
+    expect(toggle).toBeDefined()
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    expect(host.querySelector("aside")?.id).toBe(toggle.getAttribute("aria-controls"))
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    await act(async () => root.unmount())
+  })
   it("桌面只有观看与提醒入口，没有出牌控件；旁观状态不显示私密判断", async () => {
     const host = document.createElement("div"),
       root = createRoot(host)

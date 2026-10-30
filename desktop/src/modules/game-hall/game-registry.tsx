@@ -1,3 +1,4 @@
+import { Spade } from "lucide-react"
 import type { ComponentType } from "react"
 import { PokerApp } from "./games/poker/PokerApp"
 import { PokerPreview } from "./games/poker/components/PokerPreview"
@@ -9,5 +10,9 @@ export type GamePageProps = {
 /** New games contribute an entry and renderer here; hall components do not change. */
 export const GAME_RENDERERS: Record<
   string,
-  { Page: ComponentType<GamePageProps>; Preview: ComponentType }
-> = { "/poker": { Page: PokerApp, Preview: PokerPreview } }
+  {
+    Page: ComponentType<GamePageProps>
+    Preview: ComponentType
+    Icon?: ComponentType<{ className?: string }>
+  }
+> = { "/poker": { Page: PokerApp, Preview: PokerPreview, Icon: Spade } }

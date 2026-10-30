@@ -1,10 +1,12 @@
+import { PokerHandPreview } from "@/modules/game-hall/games/poker/components/PokerPreview"
 // Local visual fixture: production components with synthetic data, no account or network.
+import { Spade } from "lucide-react"
+import { RoomList } from "@/modules/game-hall/games/poker/components/RoomList"
 import { useState } from "react"
 import { createRoot } from "react-dom/client"
 import { Button } from "@/components/ui/button"
 import { HallHome } from "@/modules/game-hall/components/HallHome"
 import { Table } from "@/modules/game-hall/games/poker/components/Table"
-import { Card } from "@/modules/game-hall/games/poker/components/Card"
 import type { HallOverview, PokerTableView } from "@synapse/shared/game-contracts"
 import "@/styles/globals.css"
 const overview: HallOverview = {
@@ -85,44 +87,138 @@ const table: PokerTableView = {
 }
 function Preview() {
   return (
-    <div className="flex gap-1" data-card-size="xs">
-      <Card card="As" />
-      <Card card="Kh" />
-    </div>
+    <PokerHandPreview
+      hand={{
+        handId: "preview",
+        roomCode: "4821",
+        handNo: 27,
+        seatNo: 0,
+        delta: 128,
+        result: "won",
+        hole: ["As", "Kh"],
+        board: [],
+        createdAt: "2026-10-30T01:00:00Z",
+      }}
+    />
   )
 }
+const options = new URLSearchParams(location.search)
+const capture = options.get("capture") === "1"
+const initialSeats = Number(options.get("seats") ?? 6)
+document.documentElement.classList.toggle("dark", options.get("theme") === "dark")
 function Fixture() {
-  const [dark, setDark] = useState(false),
-    [view, setView] = useState("hall"),
+  const [dark, setDark] = useState(options.get("theme") === "dark"),
+    [view, setView] = useState(options.get("view") ?? "hall"),
+    [seatCount, setSeatCount] = useState([2, 6, 10].includes(initialSeats) ? initialSeats : 6),
     [perspective, setPerspective] = useState<"owner" | "public">("owner")
+  const scene = {
+    ...table,
+    maxSeats: seatCount,
+    seats: Array.from({ length: seatCount }, (_, i) => ({
+      ...table.seats[i % 6],
+      seatNo: i,
+      isMe: i === 0,
+      ...(i === 0 ? { hole: ["As", "Kh"] } : { hole: undefined }),
+    })),
+  }
   return (
-    <div className="game-hall min-h-screen bg-background text-foreground">
-      <nav className="flex items-center gap-3 border-b p-3">
-        <span className="mr-auto font-medium">游戏大厅</span>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setDark(!dark)
-            document.documentElement.classList.toggle("dark", !dark)
-          }}
-        >
-          {dark ? "切换浅色" : "切换深色"}
-        </Button>
-        <Button variant="outline" onClick={() => setView(view === "hall" ? "table" : "hall")}>
-          {view === "hall" ? "查看牌桌" : "查看大厅"}
-        </Button>
-      </nav>
+    <div
+      className={
+        capture
+          ? "game-hall h-screen bg-background text-foreground"
+          : "game-hall min-h-screen bg-background text-foreground"
+      }
+    >
+      {!capture && (
+        <nav className="flex items-center gap-3 border-b p-3">
+          <span className="mr-auto font-medium">游戏大厅</span>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setDark(!dark)
+              document.documentElement.classList.toggle("dark", !dark)
+            }}
+          >
+            {dark ? "切换浅色" : "切换深色"}
+          </Button>
+          <Button variant="outline" onClick={() => setView(view === "hall" ? "table" : "hall")}>
+            {view === "hall" ? "查看牌桌" : "查看大厅"}
+          </Button>
+          <Button variant="outline" onClick={() => setView("rooms")}>
+            房间列表
+          </Button>
+          {[2, 6, 10].map((count) => (
+            <Button
+              key={count}
+              variant={seatCount === count ? "secondary" : "ghost"}
+              onClick={() => {
+                setSeatCount(count)
+                setView("table")
+              }}
+            >
+              {count} 人
+            </Button>
+          ))}
+        </nav>
+      )}
       {view === "hall" ? (
         <HallHome
           overview={overview}
           previews={{ "/poker": Preview }}
+          icons={{ "/poker": Spade }}
           onEnter={() => setView("table")}
           onSession={() => setView("table")}
           onGrant={() => {}}
         />
+      ) : view === "rooms" ? (
+        <div className="mx-auto max-w-6xl space-y-6 p-8">
+          <h2 className="font-medium">房间</h2>
+          <RoomList
+            rooms={[
+              {
+                roomCode: "4821",
+                name: "晚间牌桌",
+                ownerUserId: "me",
+                maxSeats: 6,
+                buyIn: 1000,
+                status: "running",
+                smallBlind: 1,
+                bigBlind: 2,
+                players: 4,
+              },
+              {
+                roomCode: "5077",
+                name: null,
+                ownerUserId: "other",
+                maxSeats: 2,
+                buyIn: 500,
+                status: "paused",
+                smallBlind: 1,
+                bigBlind: 2,
+                players: 2,
+              },
+              {
+                roomCode: "9931",
+                name: "好友牌桌",
+                ownerUserId: "other",
+                maxSeats: 10,
+                buyIn: 5000,
+                status: "waiting",
+                smallBlind: 1,
+                bigBlind: 2,
+                players: 1,
+              },
+            ]}
+            myRoomCodes={["4821"]}
+            userId="me"
+            onRoom={() => setView("table")}
+            onConnect={() => {}}
+            onClose={() => {}}
+          />
+        </div>
       ) : (
         <Table
-          table={table}
+          table={scene}
           perspective={perspective}
           onPerspective={setPerspective}
           onNudge={() => {}}
@@ -132,4 +228,6 @@ function Fixture() {
     </div>
   )
 }
-createRoot(document.getElementById("root")!).render(<Fixture />)
+const root = createRoot(document.getElementById("root")!)
+root.render(<Fixture />)
+if (import.meta.hot) import.meta.hot.dispose(() => root.unmount())

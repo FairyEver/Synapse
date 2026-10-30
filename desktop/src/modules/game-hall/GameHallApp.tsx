@@ -13,6 +13,9 @@ import { GAME_RENDERERS } from "./game-registry"
 const previews = Object.fromEntries(
   Object.entries(GAME_RENDERERS).map(([entry, value]) => [entry, value.Preview]),
 )
+const icons = Object.fromEntries(
+  Object.entries(GAME_RENDERERS).map(([entry, value]) => [entry, value.Icon]),
+)
 function resolveTarget(path: string) {
   const entry = Object.keys(GAME_RENDERERS).find((entry) => path.startsWith(entry + "/"))
   return entry ? { entry, roomCode: path.slice(entry.length + 1) } : null
@@ -67,6 +70,7 @@ export function GameHallApp({
           onEnter={enter}
           onSession={session}
           previews={previews}
+          icons={icons}
           onGrant={grant}
         />
       </ScrollArea>

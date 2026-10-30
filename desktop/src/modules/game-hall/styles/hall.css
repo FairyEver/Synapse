@@ -1,0 +1,59 @@
+.game-session-row,
+.game-room-row {
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+.game-session-row:hover,
+.game-room-row:hover {
+  background: var(--muted);
+}
+.game-session-row:focus-visible,
+.game-room-row:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+  background: var(--muted);
+}
+.game-room-row {
+  grid-template-columns: minmax(8rem, 1fr) auto 1rem;
+}
+.game-row-action {
+  position: relative;
+}
+.game-row-action::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+  min-height: 40px;
+}
+.game-room-list {
+  container: game-rooms / inline-size;
+}
+.game-room-players,
+.game-room-blinds {
+  display: none;
+}
+.game-room-compact {
+  display: block;
+  margin-top: 0.25rem;
+}
+@container game-rooms (min-width:800px) {
+  .game-room-row {
+    grid-template-columns: minmax(8rem, 1fr) 4rem 6rem 7rem 1rem;
+  }
+  .game-room-players {
+    display: flex;
+  }
+  .game-room-blinds {
+    display: block;
+  }
+  .game-room-compact {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-session-row,
+  .game-room-row {
+    transition: none;
+  }
+}

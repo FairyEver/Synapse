@@ -22,12 +22,15 @@ export function projectTable(
     ),
   }
 }
-export function remaining(ms: number | null): string {
-  if (ms === null) return "—"
-  const s = Math.max(0, Math.ceil(ms / 1000))
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
+export { formatGameCountdown as remaining, formatGameAmount as amount } from "../../../lib/format"
+export const streetLabel: Record<string, string> = {
+  preflop: "翻牌前",
+  flop: "翻牌",
+  turn: "转牌",
+  river: "河牌",
+  showdown: "摊牌",
+  settled: "已结算",
 }
-export const amount = (value: number) => new Intl.NumberFormat("zh-CN").format(value)
 export const actionLabel: Record<string, string> = {
   fold: "弃牌",
   check: "过牌",
