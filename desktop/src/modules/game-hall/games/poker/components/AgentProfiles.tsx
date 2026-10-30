@@ -44,10 +44,28 @@ export function AgentProfiles() {
     mutation = useGameMutation()
   const draftGeneration = useRef(0)
   const creationId = useRef<string | null>(null)
+  const confirmedSaves = useRef(new Map<string, PokerAgentView>())
+  const selectionBaseline = useRef(editing)
+  useEffect(() => {
+    if (agents.loading || agents.error || !agents.data) return
+    for (const agent of agents.data) confirmedSaves.current.delete(agent.id)
+    const baseline = selectionBaseline.current,
+      refreshed = agents.data.find((agent) => agent.id === baseline.id)
+    if (!refreshed || refreshed === baseline) return
+    selectionBaseline.current = refreshed
+    setEditing((current) => {
+      if (current.id !== refreshed.id) return current
+      return current === baseline
+        ? refreshed
+        : { ...refreshed, model: current.model, persona: current.persona }
+    })
+  }, [agents.data, agents.error, agents.loading])
   const selectDraft = (draft: Partial<PokerAgentView>) => {
+    const selected = draft.id ? confirmedSaves.current.get(draft.id) ?? draft : draft
     draftGeneration.current++
     creationId.current = null
-    setEditing(draft)
+    selectionBaseline.current = selected
+    setEditing(selected)
   }
   const save = async () => {
     const submitted = editing,
@@ -62,13 +80,20 @@ export function AgentProfiles() {
       }),
     )
     if (result) {
-      if (draftGeneration.current === generation) {
-        setEditing((current) =>
-          current === submitted
+      confirmedSaves.current.set(result.id, result)
+      const sameDraft = draftGeneration.current === generation,
+        baseline = selectionBaseline.current
+      if (sameDraft || baseline.id === result.id) selectionBaseline.current = result
+      setEditing((current) => {
+        if (sameDraft)
+          return current === submitted
             ? result
-            : { ...result, model: current.model, persona: current.persona },
-        )
-      }
+            : { ...result, model: current.model, persona: current.persona }
+        if (current.id !== result.id) return current
+        return current === baseline
+          ? result
+          : { ...result, model: current.model, persona: current.persona }
+      })
       await agents.refresh()
     }
   }
