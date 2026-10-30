@@ -1,3 +1,4 @@
+import {GameHallApp} from "../../game-hall/GameHallApp"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -61,6 +62,7 @@ type SystemAppContentProps = {
   readonly terminalOpenRequest?: SynapseSystemAppTerminalOpenRequest | null
   readonly onTerminalOpenRequestConsumed?: (requestId: string) => void
   readonly meetingOpenRequest?: string | null
+  readonly viewOpenRequest?:import("../types").AppViewOpenRequest|null
   readonly todoOpenRequest?: TodoOpenRequest | null
   readonly onTodoOpenRequestConsumed?: (requestId: string) => void
   readonly mailOpenRequest?: import("../../../../app-capabilities/mail/shared/private-schema").MailOpenRequest | null
@@ -84,6 +86,7 @@ function SystemAppContent({
   terminalOpenRequest = null,
   onTerminalOpenRequestConsumed,
   meetingOpenRequest = null,
+  viewOpenRequest=null,
   todoOpenRequest = null,
   onTodoOpenRequestConsumed,
   mailOpenRequest = null, onMailOpenRequestConsumed,
@@ -107,6 +110,7 @@ function SystemAppContent({
   if (appId === "agent-personas") return <AgentPersonasModule />
   if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
+  if(appId === "game-hall") return <GameHallApp openRequest={viewOpenRequest} />
   if (appId === "todos") return <TodosModule openRequest={todoOpenRequest} onOpenRequestConsumed={onTodoOpenRequestConsumed} />
   if (appId === "mail") return <ExternalMailModule openRequest={mailOpenRequest} onOpenRequestConsumed={onMailOpenRequestConsumed} />
   if (appId === "mail-internal") return <MailModule openRequest={mailInternalOpenRequest} onOpenRequestConsumed={onMailInternalOpenRequestConsumed} />

@@ -1,5 +1,6 @@
 import {
   resolveDeclaredAppDeepLink,
+  resolveDeclaredAppPath,
   resolveDeclaredProtocolRoute,
 } from "../../app-capabilities/manifest-registry"
 
@@ -57,6 +58,9 @@ export function parseDeclaredAppDeepLink(rawUrl: string): ParsedAppDeepLink {
     }
   }
 
+  if(/\/(?:\.|%2e){1,2}(?:\/|$|[?#])/i.test(rawUrl))throw new AppDeepLinkError("invalid_url")
+  const pathRoute=resolveDeclaredAppPath(parsed.pathname)
+  if(pathRoute){if(parsed.search)throw new AppDeepLinkError("invalid_params");return pathRoute}
   const pathParts = parsed.pathname.split("/")
   if (pathParts.length !== 3 || pathParts[0] !== "" || !pathParts[1] || !pathParts[2]) {
     throw new AppDeepLinkError("invalid_url")

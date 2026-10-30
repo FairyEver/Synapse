@@ -17,6 +17,7 @@ const appEntrypoints = {
   drive: { path: "../../drive/index.tsx", header: "module-page" },
   "mail-internal": { path: "../../mail-internal/index.tsx", header: "window-shell" },
   mail: { path: "../../mail/index.tsx", header: "window-shell" },
+  "game-hall": {path:"../../game-hall/GameHallApp.tsx",header:"window-shell"},
   todos: { path: "../../todos/index.tsx", header: "window-shell" },
   automation: { path: "../../automation/index.tsx", header: "module-page" },
   launcher: { path: "../components/system-app-content.tsx", header: "none" },

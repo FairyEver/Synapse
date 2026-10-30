@@ -44,6 +44,7 @@ const terminalOpenRequestSchema = z.object({
   sessionId: z.string().min(1),
 }).strict()
 
+const viewOpenRequestSchema=z.object({requestId:z.string().min(1).max(200),path:z.string().max(200).regex(/^\/(?:[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?$/)}).strict()
 const todoOpenRequestSchema = z.object({ requestId: z.string().min(1).max(200), id: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u) }).strict()
 
 const mailInternalOpenRequestSchema = z.object({ requestId: z.string().min(1), messageId: z.string().min(1) }).strict()
@@ -56,6 +57,7 @@ const openSystemAppRequestSchema = z.object({
     terminalOpenRequest: terminalOpenRequestSchema.optional(),
     mailOpenRequest: mailOpenRequestSchema.nullable().optional(),
     mailInternalOpenRequest: mailInternalOpenRequestSchema.optional(),
+    viewOpenRequest:viewOpenRequestSchema.nullable().optional(),
     todoOpenRequest: todoOpenRequestSchema.nullable().optional(),
   }).strict().optional(),
 }).strict().superRefine((request, context) => {
@@ -122,6 +124,7 @@ export const appsIpcModule: IpcModule = {
   },
   events: {
     mailOpenRequest: { operationId: "app.apps.operation.mail_open_request", kind: "event", payload: mailOpenRequestSchema },
+    viewOpenRequest:{operationId:"app.apps.operation.view_open_request",kind:"event",payload:viewOpenRequestSchema},
     todoOpenRequest: { operationId: "app.apps.operation.todo_open_request", kind: "event", payload: todoOpenRequestSchema },
   },
 }

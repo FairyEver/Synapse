@@ -1626,3 +1626,187 @@ model NotificationImage {
   @@index([userId])
   @@index([state, expiresAt])
 }
+
+// 游戏大厅：points 为可用余额，占用仅通过跨游戏会话索引聚合。
+model GameAccount {
+  userId      String   @id
+  points      Int      @default(1000000)
+  lastGrantAt DateTime?
+  netProfit   Int      @default(0)
+  updatedAt   DateTime @updatedAt
+}
+
+model GameSession {
+  id           String   @id @default(uuid())
+  userId       String
+  gameKind     String
+  gameRoomId   String
+  roomCode     String?
+  seatNo       Int?
+  status       String   @default("active")
+  needsAction  Boolean  @default(false)
+  deadlineAt   DateTime?
+  inPlay       Int      @default(0)
+  buyIn        Int      @default(0)
+  returned     Int?
+  lastEventId  String?
+  startedAt    DateTime @default(now())
+  lastActiveAt DateTime
+
+  @@unique([userId, gameKind, gameRoomId])
+  @@index([userId, status])
+}
+
+model GamePokerRoom {
+  id               String @id @default(uuid())
+  code             String @unique
+  name             String?
+  ownerUserId      String
+  maxSeats         Int
+  buyIn            Int
+  smallBlind       Int @default(1)
+  bigBlind         Int @default(2)
+  status           String @default("waiting")
+  handNo           Int @default(0)
+  dealerSeat       Int @default(0)
+  currentHandId    String?
+  actionDeadlineAt DateTime?
+  closeRequested   Boolean @default(false)
+  lastMaintainedAt DateTime?
+  createdAt        DateTime @default(now())
+  closedAt         DateTime?
+  @@index([status, actionDeadlineAt])
+  @@index([status, lastMaintainedAt, createdAt], map:"GamePokerRoom_maintenance_idx")
+}
+model GamePokerSeat {
+  id           String @id @default(uuid())
+  roomId       String
+  seatNo       Int
+  userId       String
+  agentId      String?
+  modelName    String?
+  displayName  String
+  stack        Int
+  status       String @default("waiting")
+  lastSeenAt   DateTime
+  lastNudgedAt DateTime?
+  joinedHandNo Int?
+  leavePending Boolean @default(false)
+  sitPending   Boolean @default(false)
+  @@unique([roomId, seatNo])
+  @@unique([roomId, userId])
+}
+model GamePokerHand {
+  id            String @id @default(uuid())
+  roomId        String
+  handNo        Int
+  dealerSeat    Int
+  board         Json
+  street        String
+  pot           Int @default(0)
+  status        String @default("dealing")
+  actionSeq     Int @default(0)
+  showdownSeats Json @default("[]")
+  engineState   Json
+  startedAt     DateTime @default(now())
+  endedAt       DateTime?
+  result        Json?
+  @@unique([roomId, handNo])
+  @@index([status, endedAt])
+}
+model GamePokerHandSeat {
+  id            String @id @default(uuid())
+  handId        String
+  seatNo        Int
+  userId        String
+  displayName   String
+  holeCards     Json
+  startingStack Int
+  endingStack   Int?
+  folded        Boolean @default(false)
+  allIn         Boolean @default(false)
+  @@unique([handId, seatNo])
+  @@index([handId, userId])
+}
+model GamePokerAction {
+  id               String @id @default(uuid())
+  handId           String
+  roomId           String
+  userId           String
+  seq              Int
+  seatNo           Int
+  street           String
+  action           String
+  amount           Int @default(0)
+  potAfter         Int
+  isAuto           Boolean @default(false)
+  personaVersionId String?
+  elapsedMs        Int?
+  note             String?
+  actionId         String @unique
+  response         Json?
+  createdAt        DateTime @default(now())
+  @@unique([handId, seq])
+  @@index([roomId, createdAt])
+  @@index([roomId, userId, isAuto, createdAt])
+}
+model GamePokerAgent {
+  id               String @id @default(uuid())
+  userId           String
+  model            String @default("")
+  persona          String @default("")
+  currentVersionId String?
+  versionSeq       Int @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@index([userId, createdAt])
+}
+model GamePokerAgentVersion {
+  id          String @id @default(uuid())
+  agentId     String
+  versionNo   Int
+  persona     String
+  contentHash String
+  createdAt   DateTime @default(now())
+  @@unique([agentId, versionNo])
+  @@index([agentId, createdAt])
+}
+model GamePokerHandSummary {
+  id        String @id @default(uuid())
+  roomId    String
+  handId    String
+  handNo    Int
+  userId    String
+  seatNo    Int
+  delta     Int
+  result    String
+  holeCards Json
+  board     Json
+  createdAt DateTime @default(now())
+  @@unique([handId, userId])
+  @@index([userId, createdAt])
+}
+
+// Permanent idempotency identity survives hot-hand archival.
+model GamePokerActionReceipt {
+  actionId  String @id
+  userId    String
+  roomId    String
+  response  Json?
+  createdAt DateTime @default(now())
+  @@index([roomId, userId])
+}
+
+// Immutable cold copy. JSONB is compressed by PostgreSQL; no deck is retained here.
+model GamePokerHandArchive {
+  id             String @id
+  roomId         String
+  handNo         Int
+  participantIds String[]
+  data           Json
+  endedAt        DateTime
+  archivedAt     DateTime @default(now())
+  @@unique([roomId, handNo])
+  @@index([participantIds], type: Gin)
+  @@index([endedAt])
+}

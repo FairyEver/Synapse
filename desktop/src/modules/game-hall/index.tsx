@@ -1,0 +1,1 @@
+export { GameHallApp } from "./GameHallApp"

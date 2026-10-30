@@ -74,6 +74,7 @@ const MODULE_SOURCES = [
   { id: "connectors", importPath: "app-capabilities/connectors/main/ipc.ts" },
   { id: "secrets", importPath: "app-capabilities/secrets/main/ipc.ts" },
   { id: "mail", importPath: "app-capabilities/mail/main/ipc.ts" },
+  { id: "game", importPath: "app-capabilities/game-hall/main/ipc.ts" },
   { id: "todos", importPath: "app-capabilities/todos/main/ipc.ts" },
   { id: "agentPersonas", importPath: "app-capabilities/agent-personas/main/ipc.ts" },
   { id: "driveSync", importPath: "electron/modules/drive-sync/ipc.ts" },

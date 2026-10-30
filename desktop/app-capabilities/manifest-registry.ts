@@ -1,3 +1,4 @@
+import {gameHallCapabilityManifest} from "./game-hall/shared/manifest"
 import { connectorsCapabilityManifest } from "./connectors/shared/manifest"
 import type {
   AppDeepLinkDeclaration,
@@ -31,6 +32,7 @@ const appDeepLinkManifests = [
   mailInternalCapabilityManifest,
   mailCapabilityManifest,
   todosCapabilityManifest,
+  gameHallCapabilityManifest,
   fileOpenerCapabilityManifest,
   textFileWriterCapabilityManifest,
   htmlGeneratorCapabilityManifest,
@@ -54,5 +56,59 @@ export function resolveDeclaredProtocolRoute(
     const declaration = manifest.protocolRoutes?.find((candidate) => candidate.hostname === hostname)
     if (declaration) return { appId: manifest.id, declaration }
   }
+  return null
+}
+
+/** Exact declarative paths; decoding never turns a segment into a separator. */
+export function resolveDeclaredAppPath(
+  pathname: string,
+): {
+  appId: string
+  action: string
+  mainHandlerId: string
+  params: Record<string, unknown>
+} | null {
+  const segments = pathname.split("/").slice(1)
+  if (segments.some((s) => !s || s === "." || s === ".." || s.includes("\\"))) return null
+  for (const manifest of appDeepLinkManifests as readonly MainAppCapabilityManifest[])
+    for (const route of manifest.pathRoutes ?? []) {
+      const pattern = route.path.split("/")
+      if (pattern.length !== segments.length) continue
+      const params: Record<string, string> = { ...route.defaults }
+      let matched = true
+      for (let i = 0; i < pattern.length; i++) {
+        let value: string
+        try {
+          value = decodeURIComponent(segments[i])
+        } catch {
+          matched = false
+          break
+        }
+        if (
+          !value ||
+          value.includes("/") ||
+          value.includes("\\") ||
+          value === "." ||
+          value === ".."
+        ) {
+          matched = false
+          break
+        }
+        if (pattern[i].startsWith(":")) params[pattern[i].slice(1)] = value
+        else if (pattern[i] !== value) {
+          matched = false
+          break
+        }
+      }
+      if (!matched) continue
+      const parsed = route.paramsSchema.safeParse(params)
+      if (!parsed.success) return null
+      return {
+        appId: manifest.id,
+        action: route.action,
+        mainHandlerId: route.mainHandlerId,
+        params: parsed.data,
+      }
+    }
   return null
 }

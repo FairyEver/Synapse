@@ -6,6 +6,7 @@ export const SYSTEM_APP_IDS = [
   "mail-internal",
   "mail",
   "todos",
+  "game-hall",
   "automation",
   "launcher",
   "settings",
@@ -33,6 +34,7 @@ export type SynapseSystemAppNamespace =
   | "mail_internal"
   | "mail"
   | "todos"
+  | "game"
   | "automation"
   | "launcher"
   | "settings"
@@ -108,7 +110,9 @@ export type SynapseSystemAppMailInternalOpenRequest = {
 
 export type TodoOpenRequest = { readonly requestId: string; readonly id: string }
 
+export type AppViewOpenRequest={readonly requestId:string;readonly path:string}
 export type SynapseSystemAppOpenOptions = {
+  readonly viewOpenRequest?:AppViewOpenRequest|null
   readonly todoOpenRequest?: TodoOpenRequest | null
   readonly contentOpenRequest?: SynapseSystemAppContentOpenRequest | null
   readonly gitOpenRequest?: SynapseSystemAppGitOpenRequest | null

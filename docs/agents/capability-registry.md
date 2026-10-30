@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-30 游戏大厅接入：新增 `game` domain，20个capability/MCP索引（大厅3、德州扑克17），全局363个capability、359个MCP索引。公开工具仍仅search/invoke。System App现为23项，默认Dock仍为9项。新增18项游戏IPC（含不进入MCP目录的房主解散操作）与1项通用view_open_request事件、2条声明式路径；服务端裁决，桌面不注册act/seat_join/table_wait的IPC；提示词、版本、note仅本人可读；模型声明仅展示。
+
 - 2026-10-29 OpenUI 报告展示：系统 Skill 增加聊天内第三方分析报告入口，宿主完整/按需提示同步区分网页生成与聊天 UI，由 AI 决定展示形式。仅调整指引，不新增注册表面；343 项全局 capability、339 项 MCP 索引、22 个 System App 及 Dock、Workflow、Automation、Deep Link、IPC 数量不变。
 
 - 2026-10-28 云盘浏览历史：新增 2 项 UI 私有 IPC `app.drive.browsing_history.list`、`app.drive.browsing_history.clear`，preload 为 `drive.browsingHistory.list/clear`；只读取与清空当前认证账号的历史，不注册 capability 或 MCP 工具。历史默认浏览器打开复用既有受控外链；Drive 仍为 76 个 MCP 工具，全局 capability / MCP 索引及 System App、Dock、Workflow、Automation、Deep Link 数量不变。系统 Skill 标明浏览历史不属于 MCP 表面。
@@ -49,6 +51,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
+| Game Hall | 是 | 否（可手动固定） | — | — | 20 | 大厅根、扑克房间（2条声明式路径） |
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
@@ -183,6 +186,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Connectors | 是 | 否 | — |
 | Mail Internal | 是 | 是（邮箱左侧） | `mail_internal` |
 | Todos | 是 | 否 | `todos` |
+| Game Hall | 是 | 否 | `game` |
 | Meeting | 是 | 否 | — |
 
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
@@ -218,13 +222,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `mail` | 44 | 44 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
-| 合计 | 343 | 339 |
+| `game` | 20 | 20 |
+| 合计 | 363 | 359 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 339 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 359 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

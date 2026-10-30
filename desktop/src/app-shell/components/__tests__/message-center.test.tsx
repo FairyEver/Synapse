@@ -210,7 +210,7 @@ describe("MessageCenter", () => {
     await act(async () => { trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })) })
     const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')]
     expect(options.map((option) => option.textContent)).toEqual([
-      "全部", "系统通知", "Agent 待回复", "Agent 回复完成", "站内信", "录音转写", "待办提醒", "外部通知", "文档互动",
+      "全部", "系统通知", "Agent 待回复", "Agent 回复完成", "站内信", "录音转写", "待办提醒", "外部通知", "德州扑克", "文档互动",
     ])
     await act(async () => { options.find((option) => option.textContent === "Agent 待回复")?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" })) })
     expect(mockCenter.changeSource).toHaveBeenCalledWith("terminal-attention")

@@ -24,6 +24,7 @@ type AppsBridge = {
   readonly onGitOpenRequest: (listener: (request: SynapseSystemAppGitOpenRequest) => void) => () => void
   readonly onTerminalOpenRequest: (listener: (request: SynapseSystemAppTerminalOpenRequest) => void) => () => void
   readonly onMailOpenRequest?: (listener: (request: import("../../../app-capabilities/mail/shared/private-schema").MailOpenRequest) => void) => () => void
+  readonly onViewOpenRequest?:(listener:(request:import("./types").AppViewOpenRequest)=>void)=>()=>void
   readonly onTodoOpenRequest?: (listener: (request: TodoOpenRequest) => void) => () => void
   readonly onMailInternalOpenRequest: (listener: (request: SynapseSystemAppMailInternalOpenRequest) => void) => () => void
 }
@@ -75,6 +76,11 @@ function parseInitialTerminalOpenRequest(): SynapseSystemAppTerminalOpenRequest 
   }
 }
 
+function parseInitialViewOpenRequest():import("./types").AppViewOpenRequest|null {
+  const raw=new URLSearchParams(window.location.search).get("viewOpenRequest")
+  if(!raw)return null
+  try{const p=JSON.parse(raw);return typeof p.requestId==="string"&&typeof p.path==="string"&&/^\/(?:[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?$/.test(p.path)?p:null}catch{return null}
+}
 function parseInitialTodoOpenRequest(): TodoOpenRequest | null {
   const raw = new URLSearchParams(window.location.search).get("todoOpenRequest")
   if (!raw) return null
@@ -114,6 +120,8 @@ export function SystemAppWindowApp() {
     useState<SynapseSystemAppGitOpenRequest | null>(() => parseInitialGitOpenRequest())
   const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
     useState<SynapseSystemAppTerminalOpenRequest | null>(() => parseInitialTerminalOpenRequest())
+  const [pendingViewOpenRequest,setPendingViewOpenRequest]=useState(parseInitialViewOpenRequest)
+  useEffect(()=>getAppsBridge()?.onViewOpenRequest?.(setPendingViewOpenRequest),[])
   const [pendingTodoOpenRequest, setPendingTodoOpenRequest] = useState<TodoOpenRequest | null>(() => parseInitialTodoOpenRequest())
   const [pendingMailOpenRequest, setPendingMailOpenRequest] = useState<import("../../../app-capabilities/mail/shared/private-schema").MailOpenRequest | null>(() => {
     const raw = new URLSearchParams(window.location.search).get("mailOpenRequest")
@@ -200,6 +208,7 @@ export function SystemAppWindowApp() {
       onTerminalOpenRequestConsumed={(requestId) => {
         setPendingTerminalOpenRequest((current) => current?.requestId === requestId ? null : current)
       }}
+      viewOpenRequest={pendingViewOpenRequest}
       todoOpenRequest={pendingTodoOpenRequest}
       onTodoOpenRequestConsumed={handleTodoConsumed}
       mailOpenRequest={pendingMailOpenRequest}

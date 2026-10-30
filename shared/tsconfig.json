@@ -11,7 +11,10 @@
     "declaration": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node", "vitest/globals"]
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
   },
   "include": [
     "src/index.ts",
@@ -23,6 +26,7 @@
     "src/versioned-data-migrator.ts",
     "src/webhook.ts",
     "src/problem-feedback.ts",
-    "src/problem-feedback-fixtures.ts"
+    "src/problem-feedback-fixtures.ts",
+    "src/game.ts"
   ]
 }

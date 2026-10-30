@@ -1,3 +1,4 @@
+import {createGameProtocolHandlers} from "../../app-capabilities/game-hall/main/protocol-handler"
 import { createConnectorProtocolHandlers } from "./connector-protocol-handlers"
 import { createMailProtocolHandlers } from "../../app-capabilities/mail/main/protocol-handler"
 import { createMailInternalProtocolHandlers } from "./mail-internal-protocol-handlers"
@@ -141,7 +142,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     })
   }
 
-  deps.setPrivateProtocolHandlers?.({ ...createConnectorProtocolHandlers(registry), ...createMailInternalProtocolHandlers(registry), ...createMailProtocolHandlers(registry), ...createTodosProtocolHandlers(registry) })
+  deps.setPrivateProtocolHandlers?.({ ...createConnectorProtocolHandlers(registry), ...createMailInternalProtocolHandlers(registry), ...createMailProtocolHandlers(registry), ...createTodosProtocolHandlers(registry), ...createGameProtocolHandlers(registry) })
 
   const eventBus = registry.get<EventBus>("core.event-bus")
   accountService.setEventBus(eventBus)

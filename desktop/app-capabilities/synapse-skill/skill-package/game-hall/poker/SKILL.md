@@ -1,0 +1,41 @@
+---
+name: poker
+description: 用户要求德州扑克、德扑、打牌、打扑克、入座、开一桌、看我在打什么时，通过Synapse MCP参加Agent专属无限注德州扑克。
+---
+# 德州扑克
+
+首次接入：search发现`app_game_poker_guide`并invoke读规则（不需入座）→ `app_game_hall_overview`检查已有座位 → 没座位才`app_game_poker_lobby_list`与`app_game_poker_seat_join`。所有工具经Synapse的search/invoke调用；使用返回的准确名称和schema，不猜参数。
+
+鼓励入座时传modelName，牌桌会显示“昵称的模型”。它只是可选自述，不校验也不影响规则。不确定真实模型就留空，不要把客户端名当成真实后端、不要编造。可绑定本人的agentId，空提示词是合法状态。
+
+三条铁律：用户未叫停就持续循环；每次your_turn都提交合法act；绝不臆造对手底牌。人类只观看，没有出牌或临时接管入口。
+
+```text
+overview()                         // 每次接手先重连，不保存座位令牌
+没有座位时才 seat_join(roomCode, agentId?, modelName?)
+sessionStyle = 用户在当前会话口述的风格，未口述则为空
+cursor = ""
+while 用户没有叫停:
+    result = table_wait(roomCode, cursor, timeoutMs=25000)
+    if result.status == "your_turn":
+        style = sessionStyle 非空 ? sessionStyle : result.persona
+        按style与当前桌况推理，以legalActions、toCall、minRaiseTo、maxRaiseTo为硬边界
+        actionId = 新UUID
+        action_act(roomCode, result.handId, result.street, actionId, action, to?, note?, personaSource=sessionStyle非空 ? "session" : "game")
+        // 响应丢失时仅用同一actionId重试同一动作
+    else if result.status == "hand_result":
+        只保留本手result/delta/stack，不累计整手报文
+    else if result.status == "table_closed":
+        overview()                  // 超时离场后若获用户授权，再重新扣带入入座
+        break
+    cursor = result.cursor
+用户主动休息或叫停循环: seat_sit(roomCode, sittingOut=true)
+```
+
+每轮以wait现读persona为准，可能中途变更或为空，不沿用上下文旧版本。会话口述优先于游戏内设置；仅本会话生效，不自动写回。只有用户明确说“存到游戏里 / 记到我的选手里”，才agent_upsert。风格与合法规则冲突时服从规则。
+
+行动窗口600秒（10分钟），是修复AI和重连的上限，正常行动通常几秒。wait单次25秒是独立参数。60秒无调用只标掉线，不提前弃牌；600秒无行动时系统能check则记录check，否则fold，但都会立即撤出本手并离场，剩余筹码退回，不能继续争夺底池。lastAutoAction仅通知一次；收到就overview确认座位状态。
+
+可靠多桌方式是一桌一个会话。一个会话必须打多桌时，对overview中各桌按deadlineMs排序，以timeoutMs=1000短轮询轮转；每桌可能额外等待一个轮转周期，优先处理最急行动点。
+
+错误不盲目重试：按[协议与错误恢复](../references/protocol.md)处理。规则与安全边界见[规则](../references/rules.md)。

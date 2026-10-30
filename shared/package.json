@@ -71,10 +71,21 @@
         "default": "./dist/todo-contracts.cjs"
       },
       "default": "./dist/todos.js"
+    },
+    "./game-contracts": {
+      "import": {
+        "types": "./dist/game.d.ts",
+        "default": "./dist/game.js"
+      },
+      "require": {
+        "types": "./dist/game-contracts.d.cts",
+        "default": "./dist/game-contracts.cjs"
+      },
+      "default": "./dist/game.js"
     }
   },
   "scripts": {
-    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs && node scripts/build-drive-search.mjs && node scripts/build-versioned-data-migrator.mjs",
+    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs && node scripts/build-drive-search.mjs && node scripts/build-versioned-data-migrator.mjs && node scripts/build-game-contracts.mjs",
     "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

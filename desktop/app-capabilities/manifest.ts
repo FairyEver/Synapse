@@ -12,7 +12,15 @@ export type AppProtocolRouteDeclaration = {
   readonly paramsSchema: z.ZodType<Record<string, unknown>>
 } & ({ readonly capabilityId: string } | { readonly mainHandlerId: string })
 
+export type AppPathRouteDeclaration = {
+  readonly path: string
+  readonly action: string
+  readonly mainHandlerId: string
+  readonly defaults?: Readonly<Record<string, string>>
+  readonly paramsSchema: z.ZodType<Record<string, unknown>>
+}
 export type MainAppCapabilityManifest = {
+  readonly pathRoutes?:readonly AppPathRouteDeclaration[]
   readonly id: string
   readonly deepLinks?: readonly AppDeepLinkDeclaration[]
   readonly protocolRoutes?: readonly AppProtocolRouteDeclaration[]

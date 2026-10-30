@@ -1,3 +1,4 @@
+import { GameModule } from "./game/game.module"
 import { TodosModule } from "./todos/todos.module"
 import { todoLogRequest } from "./todos/todo-log"
 import { Module } from "@nestjs/common"
@@ -47,7 +48,9 @@ type RequestLogObject = {
  */
 function hasSensitiveRequestUrl(url: string): boolean {
   const pathname = url.split("?")[0] ?? ""
-  return pathname === "/api/todos"
+  return pathname === "/api/game"
+    || pathname.startsWith("/api/game/")
+    || pathname === "/api/todos"
     || pathname.startsWith("/api/todos/")
     || pathname === "/api/problem-feedback"
     || pathname === "/api/mail-internal"
@@ -105,6 +108,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
     MobileLiveModule,
     NotificationModule,
     TodosModule,
+    GameModule,
     WebhookModule,
     AdminAuthModule,
     DashboardModule,

@@ -20,6 +20,7 @@ describe("system app registry", () => {
       "mail-internal",
       "mail",
       "todos",
+      "game-hall",
       "automation",
       "launcher",
       "settings",

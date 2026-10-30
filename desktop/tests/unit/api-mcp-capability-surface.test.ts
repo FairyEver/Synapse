@@ -121,10 +121,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(343)
+    expect(allCapabilityIds()).toHaveLength(363)
     expect(APP_DOMAIN.capabilities).toHaveLength(98)
     expect(buildAppTools()).toHaveLength(94)
-    expect(toolNames).toHaveLength(339)
+    expect(toolNames).toHaveLength(359)
     expect(toolNames.filter((toolName) => !toolName.startsWith("app_"))).toEqual([])
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -136,8 +136,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(339)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(339)
+    expect(buildAllMcpTools()).toHaveLength(359)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(359)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
@@ -179,6 +179,7 @@ describe("API and MCP capability surface", () => {
 
   it("routes every registered capability to its owning domain dispatcher", async () => {
     const dispatchers = {
+      game: vi.fn(async () => ({ ok: true as const })),
       app: vi.fn(async () => ({ ok: true as const })),
       automation: vi.fn(async () => ({ ok: true as const })),
       content: vi.fn(async () => ({ ok: true as const })),
@@ -195,6 +196,7 @@ describe("API and MCP capability surface", () => {
     }
     const router = createSynapseActionRouter({
       appDispatch: dispatchers.app,
+      gameDispatch:dispatchers.game,
       automationDispatch: dispatchers.automation,
       contentDispatch: dispatchers.content,
       databaseDispatch: dispatchers.database,

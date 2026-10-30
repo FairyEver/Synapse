@@ -1052,6 +1052,7 @@ export type SynapseBridge = {
       listener: (request: SynapseSystemAppTerminalOpenRequest) => void,
     ) => () => void
     onMailOpenRequest: (listener: (request: import("../../app-capabilities/mail/shared/private-schema").MailOpenRequest) => void) => () => void
+    onViewOpenRequest:(listener:(request:import("../modules/apps/types").AppViewOpenRequest)=>void)=>(()=>void)
     onTodoOpenRequest: (listener: (request: TodoOpenRequest) => void) => () => void
     onMailInternalOpenRequest: (
       listener: (request: SynapseSystemAppMailInternalOpenRequest) => void,
@@ -1417,6 +1418,7 @@ export type SynapseBridge = {
     }
   }
   mail: import("../../app-capabilities/mail/shared/bridge").MailBridge
+  game: import("../../app-capabilities/game-hall/shared/bridge").GameBridge
   todos: {
     item: {
       list: (input?: import("@synapse/shared/todo-contracts").TodoListInput) => Promise<import("@synapse/shared/todo-contracts").TodoPageDto>

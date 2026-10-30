@@ -203,7 +203,7 @@ describe("AppsModule", () => {
       expect(firstAnimation[0]).toEqual([
         {
           opacity: 0,
-          transform: "translate3d(16px, 12px, 0) scale(0.75)",
+          transform: "translate3d(16px, 16px, 0) scale(0.75)",
         },
         {
           opacity: 1,

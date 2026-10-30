@@ -89,6 +89,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.action-runtime",
         "agent.conversation-window-service",
         "app.todos.cloud",
+        "app.game.hall.cloud",
         "core.agent-conversation-control",
         "core.agent-conversation-navigation",
         "core.agent-reference-actions",
@@ -402,6 +403,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.database")?.dependsOn).toEqual([
       "core.mail",
       "app.todos.cloud",
+      "app.game.hall.cloud",
       "core.wecom",
       "core.config",
       "core.connectors",

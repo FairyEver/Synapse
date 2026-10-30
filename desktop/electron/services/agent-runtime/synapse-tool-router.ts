@@ -22,6 +22,7 @@ export const SYNAPSE_TOOL_ROUTER_INVOKE_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVE
 export const SYNAPSE_MCP_TOOL_PREFIX = "mcp__synapse-mcp__"
 
 const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  game:["游戏大厅","德州扑克","德扑","打牌","打扑克","德州","入座","提醒","暂离"],
   app: ["应用", "终端", "通知", "模板", "文件", "密钥", "app", "terminal", "notification", "secret"],
   automation: ["自动化", "定时任务", "调度", "cron", "automation", "schedule"],
   content: ["资源", "规则", "技能", "提示词", "content", "rule", "skill", "prompt"],

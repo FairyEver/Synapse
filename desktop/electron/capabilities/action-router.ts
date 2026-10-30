@@ -22,6 +22,7 @@ export type SynapseActionRouterDeps = {
   readonly driveDispatch: DomainDispatch
   readonly mailDispatch?: DomainDispatch
   readonly mailInternalDispatch: DomainDispatch
+  readonly gameDispatch?: DomainDispatch
   readonly todosDispatch?: DomainDispatch
   readonly wecomDispatch?: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
@@ -41,6 +42,7 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "drive") return deps.driveDispatch(action, params, context)
       if (domainId === "mail") { if (!deps.mailDispatch) throw new Error("Mail dispatcher is not configured"); return deps.mailDispatch(action, params, context) }
       if (domainId === "mail_internal") return deps.mailInternalDispatch(action, params, context)
+      if(domainId === "game") {if(!deps.gameDispatch) throw new Error("Game dispatcher is not configured");return deps.gameDispatch(action,params,context)}
       if (domainId === "todos") {
         if (!deps.todosDispatch) throw new Error("Todo dispatcher is not configured")
         return deps.todosDispatch(action, params, context)

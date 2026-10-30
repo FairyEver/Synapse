@@ -160,6 +160,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
             })
           }
         }
+        if(options.viewOpenRequest)sendToSystemAppWindow(deps.windowManager,existing,"synapse:app:apps:operation:view_open_request",options.viewOpenRequest)
         if (options.todoOpenRequest) {
           sendToSystemAppWindow(deps.windowManager, existing, SYSTEM_APP_TODO_OPEN_REQUEST_CHANNEL, options.todoOpenRequest)
         }
@@ -186,6 +187,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       if (options.terminalOpenRequest) {
         params.set("terminalOpenRequest", JSON.stringify(options.terminalOpenRequest))
       }
+      if(options.viewOpenRequest)params.set("viewOpenRequest",JSON.stringify(options.viewOpenRequest))
       if (options.todoOpenRequest) {
         params.set("todoOpenRequest", JSON.stringify(options.todoOpenRequest))
       }
