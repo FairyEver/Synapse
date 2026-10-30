@@ -101,4 +101,38 @@ describe("房间行交互", () => {
     expect(host.querySelector('input[type="range"]')).toBeNull()
     await act(async () => root.unmount())
   })
+  it("房间概览只展示真实人数和不可识别的示意牌背", async () => {
+    const host = document.createElement("div"),
+      root = createRoot(host)
+    await act(async () =>
+      root.render(
+        <RoomList
+          rooms={[
+            {
+              roomCode: "7321",
+              name: "朋友局",
+              ownerUserId: "other",
+              maxSeats: 6,
+              buyIn: 1000,
+              status: "waiting",
+              smallBlind: 1,
+              bigBlind: 2,
+              players: 4,
+            },
+          ]}
+          myRoomCodes={[]}
+          userId="me"
+          onRoom={() => {}}
+          onConnect={() => {}}
+          onClose={() => {}}
+        />,
+      ),
+    )
+    expect(host.textContent).toContain("4 / 6 人")
+    expect(host.querySelectorAll('[aria-label="牌背"]')).toHaveLength(2)
+    expect(host.querySelector("[data-card]")).toBeNull()
+    expect(host.querySelector(".gc-room-art img")).toBeNull()
+    expect(host.querySelector("button button")).toBeNull()
+    await act(async () => root.unmount())
+  })
 })

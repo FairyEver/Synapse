@@ -64,9 +64,9 @@ export function Seat({
         )}
       </div>
       <div className="poker-seat-meta">
-        <span className="poker-ai-state">
+        <span className="poker-ai-state" data-acting={acting && seat.aiState === "online"}>
           <span className="poker-ai-dot" data-state={seat.aiState} />
-          {stateLabel}
+          {acting && seat.aiState === "online" ? "行动中" : stateLabel}
         </span>
         {seat.streetBet > 0 && (
           <span className="poker-seat-bet">

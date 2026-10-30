@@ -37,7 +37,7 @@ export function SidePanel({
                       {streetLabel[action.street] ?? action.street}
                       {action.isAuto && " · 自动"}
                     </small>
-                    {perspective === "owner" && Object.hasOwn(action, "personaVersionId") && (
+                    {perspective === "owner" && action.personaVersion && (
                       <PersonaBadge version={action.personaVersion} />
                     )}
                   </span>
@@ -55,7 +55,8 @@ export function SidePanel({
         <section className="poker-judgment">
           <h3>
             <LockKeyhole aria-hidden="true" />
-            AI 的判断 · 仅你可见
+            AI 的判断
+            <span className="poker-private-label">仅你可见</span>
           </h3>
           <p className="poker-judgment-text">{myNote ?? "暂无判断"}</p>
           {table.persona && (

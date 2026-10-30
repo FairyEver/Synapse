@@ -1,7 +1,8 @@
 import "../styles/lobby.css"
-import { ArrowUpRight, Spade } from "lucide-react"
+import { ArrowUpRight } from "lucide-react"
 import type { PokerRoomView } from "@synapse/shared/game-contracts"
 import { Button } from "@/components/ui/button"
+import { Card } from "./Card"
 import { amount } from "../lib/view"
 const statusLabels: Record<string, string> = {
   running: "进行中",
@@ -9,31 +10,26 @@ const statusLabels: Record<string, string> = {
   paused: "已暂停",
   closed: "已结束",
 }
-/** Only visualizes occupancy counts, not actual seat positions or hidden game state. */
+/** Occupancy counts only: no real seat positions or hand information. */
 function RoomArtwork({ players, maxSeats }: { players: number; maxSeats: number }) {
   return (
     <span className="gc-room-art">
-      <svg viewBox="0 0 300 130" aria-hidden="true">
-        <ellipse className="gc-room-rail" cx="150" cy="65" rx="102" ry="40" />
-        <ellipse className="gc-room-felt" cx="150" cy="65" rx="95" ry="33" />
-        {Array.from({ length: maxSeats }, (_, i) => {
-          const angle = (2 * Math.PI * i) / maxSeats - Math.PI / 2
-          return (
-            <circle
-              key={i}
-              cx={150 + 123 * Math.cos(angle)}
-              cy={65 + 53 * Math.sin(angle)}
-              r="6"
-              data-occupied={i < players}
-            />
-          )
-        })}
-      </svg>
-      <span className="gc-room-occupancy">
-        <Spade aria-hidden="true" />
-        <b>
-          {players} <small>/ {maxSeats} 人</small>
-        </b>
+      <span className="gc-room-deck" data-card-size="sm" aria-hidden="true">
+        <Card faceUp={false} />
+        <Card faceUp={false} />
+      </span>
+      <span className="gc-room-capacity">
+        <span className="gc-room-occupancy">
+          <b>
+            {players} <small>/ {maxSeats} 人</small>
+          </b>
+          <span>在桌</span>
+        </span>
+        <span className="gc-room-seat-meter" aria-hidden="true">
+          {Array.from({ length: maxSeats }, (_, i) => (
+            <span key={i} data-occupied={i < players} />
+          ))}
+        </span>
       </span>
     </span>
   )

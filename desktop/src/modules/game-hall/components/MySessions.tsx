@@ -31,7 +31,6 @@ export function MySessions({
             >
               <span className="gc-session-top">
                 <span className="gc-session-status">
-                  <i aria-hidden="true" />
                   {session.needsAction ? "轮到你的 AI" : "进行中"}
                 </span>
                 {session.needsAction && session.deadlineMs !== null && (

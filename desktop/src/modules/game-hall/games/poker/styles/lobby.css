@@ -74,9 +74,7 @@
   overflow: hidden;
   box-shadow: 0 0 0 1px var(--gc-line);
 }
-.gc-room[data-mine="true"] {
-  box-shadow: 0 0 0 1px color-mix(in oklch, var(--gc-accent) 60%, var(--gc-line));
-}
+
 .gc-room-open {
   display: flex;
   flex-direction: column;
@@ -118,57 +116,67 @@
   margin-top: 0.375rem;
 }
 .gc-room-art {
-  --poker-lobby-felt: oklch(0.3 0.034 175);
-  display: block;
-  position: relative;
-  width: 100%;
-  max-width: 20rem;
-  align-self: center;
-  margin: 0.375rem 0;
-}
-.gc-room-art > svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.gc-room-rail {
-  fill: var(--gc-raised);
-  stroke: var(--gc-line);
-  stroke-width: 1;
-}
-.gc-room-felt {
-  fill: var(--poker-lobby-felt);
-}
-.gc-room-art circle {
-  fill: var(--gc-canvas);
-  stroke: var(--gc-line);
-  stroke-width: 1.5;
-}
-.gc-room-art circle[data-occupied="true"] {
-  fill: var(--gc-accent);
-  stroke: var(--gc-accent);
-}
-.gc-room-occupancy {
-  position: absolute;
-  inset: 0;
+  --playing-back: var(--gc-deck-back);
+  --playing-back-ink: var(--gc-deck-ink);
+  --playing-edge: var(--gc-line);
   display: flex;
-  justify-content: center;
   align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  padding: 1.25rem 0 1.5rem;
+}
+.gc-room-deck {
+  display: flex;
+  align-items: center;
+  padding: 0.25rem 0.375rem;
+  flex: none;
+}
+.gc-room-deck .poker-card:first-child {
+  transform: rotate(-9deg);
+}
+.gc-room-deck .poker-card:last-child {
+  transform: translateY(-2px) rotate(7deg);
+  margin-left: -0.75rem;
+}
+.gc-room-capacity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   gap: 0.625rem;
 }
-.gc-room-occupancy > svg {
-  width: 1.125rem;
-  height: 1.125rem;
-  color: var(--gc-accent);
+.gc-room-occupancy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 .gc-room-occupancy b {
-  font-size: 1.25rem;
+  font-size: 1.375rem;
+  line-height: 1.1;
   font-weight: 500;
 }
 .gc-room-occupancy small {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 400;
   color: var(--gc-muted);
+}
+.gc-room-occupancy > span {
+  color: var(--gc-muted);
+  font-size: 0.6875rem;
+}
+.gc-room-seat-meter {
+  display: flex;
+  gap: 0.25rem;
+}
+.gc-room-seat-meter > span {
+  height: 0.25rem;
+  flex: 1;
+  border-radius: 0.125rem;
+  background: var(--gc-line);
+}
+.gc-room-seat-meter > span[data-occupied="true"] {
+  background: var(--gc-accent);
 }
 .gc-room-stakes {
   display: flex;

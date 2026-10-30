@@ -1,15 +1,7 @@
+@import "./game-palette.css";
+
 /* Game-center content only. The System App header and body portals keep Synapse tokens. */
 .game-center {
-  --gc-canvas: oklch(0.17 0.012 248);
-  --gc-surface: oklch(0.215 0.015 248);
-  --gc-raised: oklch(0.26 0.017 248);
-  --gc-ink: oklch(0.94 0.012 87);
-  --gc-muted: oklch(0.73 0.02 248);
-  --gc-line: oklch(0.36 0.018 248);
-  --gc-accent: oklch(0.82 0.105 78);
-  --gc-accent-ink: oklch(0.2 0.024 70);
-  --gc-live: oklch(0.8 0.086 165);
-  --gc-art: oklch(0.25 0.025 248);
   --background: var(--gc-canvas);
   --foreground: var(--gc-ink);
   --muted: var(--gc-raised);
@@ -239,11 +231,6 @@
 .gc-session:hover {
   background: var(--gc-raised);
 }
-.gc-session[data-active="true"] {
-  box-shadow:
-    inset 3px 0 0 var(--gc-accent),
-    inset 0 0 0 1px var(--gc-line);
-}
 .gc-session-top,
 .gc-session-bottom {
   display: flex;
@@ -257,19 +244,13 @@
   gap: 0.5rem;
   font-size: 0.75rem;
   color: var(--gc-muted);
-}
-.gc-session-status i {
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 50%;
-  background: var(--gc-live);
-  flex: none;
+  min-height: 1.5rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
 }
 .gc-session[data-active="true"] .gc-session-status {
   color: var(--gc-accent);
-}
-.gc-session[data-active="true"] .gc-session-status i {
-  background: var(--gc-accent);
+  background: color-mix(in oklch, var(--gc-accent) 10%, transparent);
 }
 .gc-session-timer {
   display: flex;
