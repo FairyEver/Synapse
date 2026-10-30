@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleDestroy } from "@nestjs/common"
+import { Injectable, ServiceUnavailableException, type OnModuleDestroy } from "@nestjs/common"
 import { PokerActionService } from "./poker-action.service"
 import { reject } from "./poker-error"
 const MAX_CURSOR_VALUE = 2147483647
@@ -7,12 +7,15 @@ export class PokerWaitService implements OnModuleDestroy {
   private readonly waiters = new Map<string, Set<() => void>>()
   private readonly active = new Map<string, number>()
   private readonly unsubscribe: () => void
+  private stopped = false
   constructor(private readonly actions: PokerActionService) {
     this.unsubscribe = actions.poker.subscribe((code) => {
       for (const wake of this.waiters.get(code) ?? []) wake()
     })
   }
   onModuleDestroy() {
+    if (this.stopped) return
+    this.stopped = true
     this.unsubscribe()
     for (const list of this.waiters.values()) for (const wake of list) wake()
   }
@@ -24,6 +27,7 @@ export class PokerWaitService implements OnModuleDestroy {
     signal?: AbortSignal,
     now?: Date,
   ): Promise<Record<string, any>> {
+    this.assertWaiting(signal)
     const match = /^(\d+):(\d+)$/.exec(cursor),
       position = match ? ([Number(match[1]), Number(match[2])] as const) : null
     if (
@@ -38,17 +42,23 @@ export class PokerWaitService implements OnModuleDestroy {
     const end = Date.now() + timeoutMs
     try {
       do {
-        signal?.throwIfAborted()
+        this.assertWaiting(signal)
         const result = await this.read(userId, code, cursor, now ?? new Date(), position)
+        this.assertWaiting(signal)
         if (result.status !== "waiting" || Date.now() >= end) return result
         await this.pause(code, Math.min(500, end - Date.now()), signal)
       } while (Date.now() <= end)
+      this.assertWaiting(signal)
       return { status: "waiting", cursor }
     } finally {
       const count = (this.active.get(code) ?? 1) - 1
       if (count) this.active.set(code, count)
       else this.active.delete(code)
     }
+  }
+  private assertWaiting(signal?: AbortSignal) {
+    signal?.throwIfAborted()
+    if (this.stopped) throw new ServiceUnavailableException("游戏服务正在停止，请稍后重连。")
   }
   private async read(
     userId: string,
@@ -175,18 +185,22 @@ export class PokerWaitService implements OnModuleDestroy {
     )
   }
   private pause(code: string, ms: number, signal?: AbortSignal): Promise<void> {
+    this.assertWaiting(signal)
     return new Promise((resolve, rejectPromise) => {
       const list = this.waiters.get(code) ?? new Set()
       this.waiters.set(code, list)
-      const finish = () => {
+      const cleanup = () => {
         clearTimeout(timer)
         signal?.removeEventListener("abort", abort)
         list.delete(finish)
         if (!list.size) this.waiters.delete(code)
+      }
+      const finish = () => {
+        cleanup()
         resolve()
       }
       const abort = () => {
-        finish()
+        cleanup()
         rejectPromise(signal?.reason ?? new Error("等待已取消"))
       }
       const timer = setTimeout(finish, ms)

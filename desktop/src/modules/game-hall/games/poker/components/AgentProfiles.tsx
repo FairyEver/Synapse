@@ -1,5 +1,5 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -21,6 +21,16 @@ export function AgentProfiles() {
   const [roomCode, setRoomCode] = useState("all")
   const hall = useHallOverview(),
     rooms = (hall.data?.sessions ?? []).filter((s) => s.game === "poker" && s.roomCode)
+  useEffect(() => {
+    if (
+      hall.data &&
+      roomCode !== "all" &&
+      !hall.data.sessions.some(
+        (session) => session.game === "poker" && session.roomCode === roomCode,
+      )
+    )
+      setRoomCode("all")
+  }, [hall.data, roomCode])
   const agents = useGameQuery(() => gameApi().poker.agent.list(), "poker:agents"),
     stats = useGameQuery(
       () => gameApi().poker.stats.get(roomCode === "all" ? {} : { roomCode }),

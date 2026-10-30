@@ -192,6 +192,7 @@ export class PokerService {
       async (c) => {
         const seat = c.seats.find((s) => s.userId === userId)
         if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+        const wasSittingOut = seat.status === "sitting_out"
         const inHand =
           ["active", "folded", "allin"].includes(seat.status) && c.room.status === "running"
         seat.sitPending = sittingOut
@@ -204,7 +205,7 @@ export class PokerService {
           where: { userId, gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
           data: {
             status: ["waiting", "sitting_out"].includes(seat.status) ? seat.status : "active",
-            lastActiveAt: now,
+            ...(!wasSittingOut || !sittingOut ? { lastActiveAt: now } : {}),
             ...(!inHand ? { needsAction: false, deadlineAt: null } : {}),
           },
         })
