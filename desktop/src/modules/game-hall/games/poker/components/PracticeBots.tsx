@@ -22,13 +22,17 @@ export function PracticeBots({ table, onRefresh }: { table: PokerTableView; onRe
     if (result && intent.current === submitted) { submitted.id = null; await onRefresh() }
   }
   const remove = async (botId: string) => {
+    const submitted = intent.current
     const result = await mutation.run(() => gameApi().poker.bot.remove({ roomCode: table.roomCode, botId }))
-    if (result) await onRefresh()
+    if (result && intent.current === submitted) {
+      submitted.id = null
+      await onRefresh()
+    }
   }
   return (
     <div className="flex flex-wrap items-center gap-3 border-b p-3" aria-label="陪练机器人管理">
       <span className="text-sm text-muted-foreground">陪练 · 不影响大厅点数</span>
-      <Button type="button" variant="outline" disabled={mutation.busy || full} onClick={() => void add()}>添加机器人</Button>
+      <Button type="button" variant="outline" disabled={mutation.busy || full} onClick={() => void add()}>{intent.current.id && !mutation.busy ? "重试添加机器人" : "添加机器人"}</Button>
       {bots.map((bot) => <Button key={bot.botId} type="button" variant="ghost" disabled={mutation.busy || bot.leavePending} onClick={() => bot.botId && void remove(bot.botId)}>{bot.displayName} · {bot.leavePending ? "本手后移除" : "移除"}</Button>)}
     </div>
   )
