@@ -1650,6 +1650,7 @@ model GameSession {
   buyIn        Int      @default(0)
   returned     Int?
   lastEventId  String?
+  startCursor  String?
   startedAt    DateTime @default(now())
   lastActiveAt DateTime
 

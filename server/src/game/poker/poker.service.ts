@@ -138,7 +138,14 @@ export class PokerService {
         await this.hall.join(
           tx,
           userId,
-          { gameKind: "poker", gameRoomId: room.id, roomCode: code, seatNo, buyIn: room.buyIn },
+          {
+            gameKind: "poker",
+            gameRoomId: room.id,
+            roomCode: code,
+            seatNo,
+            buyIn: room.buyIn,
+            startCursor: String(room.handNo + 1),
+          },
           now,
         )
         const seat = await tx.gamePokerSeat.create({

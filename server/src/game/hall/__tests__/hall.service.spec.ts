@@ -3,6 +3,32 @@ import { HallService } from "../hall.service"
 import { createHallStore } from "./hall-store"
 
 describe("跨游戏点数与会话", () => {
+  it("保存并替换游戏自定入座起点，大厅不解释或公开该游标", async () => {
+    const db = createHallStore(),
+      hall = new HallService(db.prisma)
+    const input = {
+      gameKind: "other",
+      gameRoomId: "a",
+      roomCode: "1234",
+      seatNo: 0,
+      buyIn: 1000,
+    }
+    await db.transaction((tx) =>
+      hall.join(tx, "u", { ...input, startCursor: "opaque:first" }, new Date(0)),
+    )
+    expect(db.sessions[0].startCursor).toBe("opaque:first")
+    expect((await hall.overview("u")).sessions[0]).not.toHaveProperty("startCursor")
+    await db.transaction((tx) => hall.leave(tx, "u", "other", "a", 1000, new Date(1)))
+    await db.transaction((tx) =>
+      hall.join(tx, "u", { ...input, startCursor: "opaque:next" }, new Date(2)),
+    )
+    expect(db.sessions[0].startCursor).toBe("opaque:next")
+    await db.transaction((tx) => hall.leave(tx, "u", "other", "a", 1000, new Date(3)))
+    await db.transaction((tx) => hall.join(tx, "u", input, new Date(4)))
+    expect(db.sessions[0].startCursor).toBeNull()
+    expect((await hall.overview("u")).points.total).toBe(1000000)
+  })
+
   it("同一事务扣点建会话，聚合多个游戏并优先返回最急的行动", async () => {
     const db = createHallStore()
     const hall = new HallService(db.prisma)

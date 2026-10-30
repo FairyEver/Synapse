@@ -80,6 +80,16 @@ export class PokerWaitService implements OnModuleDestroy {
             userId_gameKind_gameRoomId: { userId, gameKind: "poker", gameRoomId: c.room.id },
           },
         })
+        // Requests can acquire the room lock out of timestamp order. The game
+        // persists its first eligible hand so closed seats keep an exact boundary.
+        const startHandNo =
+          session?.startCursor != null ? Number(session.startCursor) : (seat?.joinedHandNo ?? null)
+        if (
+          startHandNo !== null &&
+          (!Number.isInteger(startHandNo) || startHandNo < 1 || startHandNo > MAX_CURSOR_VALUE)
+        )
+          throw new Error("扑克会话起始游标无效。")
+        const hasHandBoundary = startHandNo !== null
         // Timeout removal closes the session in the same transaction. Active polling
         // need not expand archived hands; a fresh join also starts a new session epoch.
         const [auto] =
@@ -89,14 +99,16 @@ export class PokerWaitService implements OnModuleDestroy {
               SELECT action."id",hand."handNo",action."seq",action."action",action."createdAt"
               FROM "GamePokerAction" action JOIN "GamePokerHand" hand ON hand."id"=action."handId"
               WHERE action."roomId"=${c.room.id} AND action."userId"=${userId}
-                AND action."isAuto" AND action."createdAt">=${session.startedAt.toISOString()}::timestamp
+                AND action."isAuto" AND hand."handNo">=${startHandNo ?? 0}
+                AND (${hasHandBoundary} OR action."createdAt">=${session.startedAt.toISOString()}::timestamp)
               UNION ALL
               SELECT action->>'id',archive."handNo",(action->>'seq')::int,action->>'action',(action->>'createdAt')::timestamp
               FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'actions') AS entry(action)
               WHERE archive."roomId"=${c.room.id} AND archive."participantIds" @> ARRAY[${userId}]::text[]
-                AND archive."endedAt">=${session.startedAt.toISOString()}::timestamp
+                AND archive."handNo">=${startHandNo ?? 0}
+                AND (${hasHandBoundary} OR archive."endedAt">=${session.startedAt.toISOString()}::timestamp)
                 AND action->>'userId'=${userId} AND (action->>'isAuto')::boolean
-                AND (action->>'createdAt')::timestamp>=${session.startedAt.toISOString()}::timestamp
+                AND (${hasHandBoundary} OR (action->>'createdAt')::timestamp>=${session.startedAt.toISOString()}::timestamp)
             ) events ORDER BY "createdAt" DESC,"id" DESC LIMIT 1`
             : []
         if (auto && session && session.lastEventId !== auto.id) {
@@ -111,7 +123,7 @@ export class PokerWaitService implements OnModuleDestroy {
           }
         }
         if (position && session) {
-          const minimum = Math.max(position[0], seat?.joinedHandNo ?? 1),
+          const minimum = Math.max(position[0], startHandNo ?? 1),
             includeCurrent = position[1] !== MAX_CURSOR_VALUE,
             epoch = session.startedAt.toISOString()
           // Departure and archival must not discard a result already earned in this
@@ -124,7 +136,7 @@ export class PokerWaitService implements OnModuleDestroy {
               FROM "GamePokerHandSummary" summary JOIN "GamePokerHand" hand ON hand."id"=summary."handId"
               JOIN "GamePokerHandSeat" participant ON participant."handId"=hand."id" AND participant."seatNo"=summary."seatNo"
               WHERE summary."userId"=${userId} AND participant."userId"=${userId} AND summary."roomId"=${c.room.id}
-                AND hand."status"='settled' AND hand."startedAt">=${epoch}::timestamp
+                AND hand."status"='settled' AND (${hasHandBoundary} OR hand."startedAt">=${epoch}::timestamp)
                 AND summary."handNo">=${minimum} AND (${includeCurrent} OR summary."handNo">${position[0]})
               UNION ALL
               SELECT archive."handNo",summary->>'result',(summary->>'delta')::int,(participant->>'endingStack')::int
@@ -134,7 +146,7 @@ export class PokerWaitService implements OnModuleDestroy {
               WHERE archive."roomId"=${c.room.id} AND archive."participantIds" @> ARRAY[${userId}]::text[]
                 AND summary->>'userId'=${userId} AND participant->>'userId'=${userId}
                 AND participant->>'seatNo'=summary->>'seatNo'
-                AND (archive."data"->'hand'->>'startedAt')::timestamp>=${epoch}::timestamp
+                AND (${hasHandBoundary} OR (archive."data"->'hand'->>'startedAt')::timestamp>=${epoch}::timestamp)
                 AND archive."handNo">=${minimum} AND (${includeCurrent} OR archive."handNo">${position[0]})
             ) results ORDER BY "handNo" ASC LIMIT 1`
           if (summary) {

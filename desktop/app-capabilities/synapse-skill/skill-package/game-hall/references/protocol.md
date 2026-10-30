@@ -12,6 +12,8 @@ overview返回座位status=sitting_out时，只有用户明确要求继续才sea
 
 游标是handNo:actionSeq，两段都为0至2147483647的整数；2147483647的动作序号标记该手结算已读。非法或越界游标返回POKER_ILLEGAL_ACTION，重新overview接回，不盲重试旧游标。带cursor可补发本次入座的未读结算（包含归档），离桌/输光/手后解散时先hand_result再table_closed；空cursor只恢复当前牌况。按返回cursor推进，同一cursor重试按handNo去重。
 
+本次入座结果和超时提示按服务端保存的牌局顺序边界归属，排队请求的时间乱序不会把旧入座事件带入新座位或漏掉本次结算。此边界不对外提供，接入参数和重连方式不变。
+
 wait的waiting只有status/cursor；your_turn含本次决策字段和现读persona；hand_result含handNo/result/delta/stack/cursor。不要为了获得完整历史而每轮调用hand_history/detail，避免长局上下文膨胀。note限200字单行，仅本人可读。
 
 | 错误码 | 下一步 |

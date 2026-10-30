@@ -9,6 +9,7 @@ type JoinSession = {
   roomCode: string
   seatNo: number
   buyIn: number
+  startCursor?: string
 }
 @Injectable()
 export class HallService {
@@ -59,6 +60,7 @@ export class HallService {
       deadlineAt: null,
       lastActiveAt: now,
       startedAt: now,
+      startCursor: input.startCursor ?? null,
     }
     return tx.gameSession.upsert({
       where,
