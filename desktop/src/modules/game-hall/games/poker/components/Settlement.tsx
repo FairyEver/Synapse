@@ -1,4 +1,5 @@
 import type { PokerSettlementView } from "@synapse/shared/game-contracts"
+import { Trophy } from "lucide-react"
 import { Card } from "./Card"
 import { amount } from "../lib/view"
 export function Settlement({ settlement, compact = false }: { settlement: PokerSettlementView; compact?: boolean }) {
@@ -15,7 +16,14 @@ export function Settlement({ settlement, compact = false }: { settlement: PokerS
   }
   return <section className={compact ? "poker-result-log" : "poker-settlement"} aria-label={`第 ${settlement.handNo} 手结果`}>
     <strong>第 {settlement.handNo} 手结果{settlement.mixedControl && " · 人机混合"}</strong>
-    {settlement.seats.map(s => <div key={s.seatNo} className="poker-winner"><span>{s.displayName}{s.isMe && " · 本人"}{winners.has(s.seatNo) && " · 获胜"}</span>{s.hole && <span className="poker-result-cards" data-card-size="xs">{s.hole.map(card => <Card key={card} card={card} faceUp />)}</span>}<span>{s.folded ? "已弃牌" : s.handName ?? (winners.has(s.seatNo) ? "获胜" : "")}</span><b>{s.delta > 0 ? "+" : ""}{amount(s.delta)}</b></div>)}
+    <div className="poker-result-seats">
+      {settlement.seats.map(s => <div key={s.seatNo} className="poker-winner">
+        <span className="poker-result-player"><span>{s.displayName}{s.isMe && " · 本人"}</span>{winners.has(s.seatNo) && <Trophy className="poker-result-winner" role="img" aria-label="获胜" />}</span>
+        <span className="poker-result-cards" data-card-size="xs">{s.hole?.map(card => <Card key={card} card={card} faceUp />)}</span>
+        <span>{s.folded ? "已弃牌" : s.handName ?? ""}</span>
+        <b>{s.delta > 0 ? "+" : ""}{amount(s.delta)}</b>
+      </div>)}
+    </div>
     {settlement.pots.map((pot, i) => <p key={i}>{pot.refund ? "未跟注返还" : i === 0 ? "主池" : `边池 ${i}`} {amount(pot.amount)}{Object.entries(pot.shares).map(([seat,share]) => ` · ${settlement.seats.find(s => s.seatNo === Number(seat))?.displayName ?? `座位 ${Number(seat)+1}`} ${amount(share)}`)}</p>)}
   </section>
 }
