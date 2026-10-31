@@ -119,4 +119,5 @@
 .poker-immersive[data-control-layout="bottom"] .poker-information-drawer { pointer-events: auto; background: var(--game-panel); border-left: 1px solid var(--game-line); }
 .poker-immersive[data-control-layout="bottom"] .poker-room-heading { display: none; }
 .poker-immersive[data-control-layout="bottom"] .poker-perspective { gap: 0.125rem; }
-.poker-immersive[data-control-layout="bottom"] .poker-control { padding-inline: 0.375rem; }
+.poker-immersive[data-control-layout="bottom"] .poker-control,
+.poker-immersive[data-control-layout="bottom"] .poker-perspective > .poker-button { padding-inline: 0.375rem; }
