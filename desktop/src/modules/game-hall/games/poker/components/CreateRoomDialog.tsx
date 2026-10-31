@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from "react"
 import { Dialog as DialogPrimitive, RadioGroup as RadioPrimitive } from "radix-ui"
-import { ArrowRight, Check, Coins, Minus, Plus, Spade, Users, X } from "lucide-react"
+import { ArrowRight, Coins, Minus, Plus, Spade, Users, X } from "lucide-react"
 import type { GameFunding, PokerBlindPreset, PokerVariant } from "@synapse/shared/game-contracts"
 import { Dialog, DialogTitle } from "@/components/ui/dialog"
 import { RadioGroup } from "@/components/ui/radio-group"
@@ -20,7 +20,6 @@ function Choice({ value, children }: { value: string; children: ReactNode }) {
   return (
     <RadioPrimitive.Item className="poker-create-choice" value={value}>
       <span>{children}</span>
-      <Check className="poker-create-check" aria-hidden="true" />
     </RadioPrimitive.Item>
   )
 }
