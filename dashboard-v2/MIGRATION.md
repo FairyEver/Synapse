@@ -153,3 +153,5 @@ node --test scripts/deploy/dashboard-ui.test.mjs
 ```
 
 将来明确要求部署 V2 时使用 `DASHBOARD_UI=v2 bash deploy.sh`；省略或置空选择器始终构建 V1。原 URL 与最终容器产物目录不变，不混用两版资源；回滚选择 V1 后整包重建。
+
+后续逐页视觉复查与修复见 [VISUAL_REVIEW.md](./VISUAL_REVIEW.md)，其中区分实际本地数据和响应夹具，记录桌面、窄屏及新增布局回归。

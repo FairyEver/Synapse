@@ -83,13 +83,13 @@ export default function TeamDetailPage() {
         cell: ({ row }) => (
           <LongText className='font-medium'>{row.original.email}</LongText>
         ),
-        meta: { className: 'max-w-0 w-1/3' },
+        meta: { className: 'w-64 max-w-64' },
       },
       {
         accessorKey: 'handle',
         header: '用户名',
         cell: ({ row }) => <LongText>{row.original.handle || '-'}</LongText>,
-        meta: { className: 'max-w-0 w-1/5' },
+        meta: { className: 'w-40 max-w-40' },
       },
       {
         accessorKey: 'status',
@@ -151,13 +151,15 @@ export default function TeamDetailPage() {
         >
           <ArrowLeft />
         </Button>
-        <h1 className='text-lg font-semibold'>{team?.name ?? '团队'}</h1>
+        <div className='min-w-0 flex-1'>
+        <h1 className='truncate text-lg font-semibold'>{team?.name ?? '团队'}</h1>
         {team ? (
-          <span className='text-sm text-muted'>
+          <p className='text-sm text-muted'>
             {team.memberCount} 名成员 · 创建于{' '}
             <RelativeTime className='tabular-nums' value={team.createdAt} />
-          </span>
+          </p>
         ) : null}
+        </div>
         <Dropdown >
 
             <Button
@@ -197,6 +199,7 @@ export default function TeamDetailPage() {
           </Button>
         </div>
         <ServerDataTable
+          className='flex-none'
           columns={columns}
           data={membersQuery.data?.data ?? []}
           page={page}

@@ -99,8 +99,8 @@ export function AddMembersDialog({ open, teamId, organizationId, onOpenChange, }
                 {candidatesQuery.isLoading ? '加载中…' : '没有可以添加的用户'}
               </p>) : (<div className='flex flex-col py-1'>
                 {candidates.map((candidate) => (<div key={candidate.id} className='flex items-center gap-2 px-3 py-1.5'>
-                    <Checkbox className='w-full' isSelected={picked.has(candidate.id)} onChange={(checked) => toggle(candidate.id, checked)}>
-                      <Checkbox.Content>
+                    <Checkbox className='min-w-0 flex-1' isSelected={picked.has(candidate.id)} onChange={(checked) => toggle(candidate.id, checked)}>
+                      <Checkbox.Content className='w-full min-w-0'>
                         <Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>
                         <span className='min-w-0 flex-1'>
                           <span className='block truncate'>{candidate.email}</span>

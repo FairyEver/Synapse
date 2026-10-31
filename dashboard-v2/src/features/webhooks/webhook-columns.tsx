@@ -23,11 +23,12 @@ export function buildWebhookColumns({ onEdit, onToggle, onResetSecret, onOpenDel
           {row.original.name}
         </span>),
             enableSorting: false,
-            meta: {
+            meta: { label: 'Webhook',
                 tdClassName: 'min-w-56',
             },
         },
         {
+            meta: { label: '状态' },
             accessorKey: 'enabled',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='状态'/>),
             cell: ({ row }) => (<Chip variant={row.original.enabled ? "soft" : "secondary"}>
@@ -36,6 +37,7 @@ export function buildWebhookColumns({ onEdit, onToggle, onResetSecret, onOpenDel
             enableSorting: false,
         },
         {
+            meta: { label: '最近触发' },
             accessorKey: 'lastDeliveryAt',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='最近触发'/>),
             cell: ({ row }) => (<span className='tabular-nums'>
@@ -44,6 +46,7 @@ export function buildWebhookColumns({ onEdit, onToggle, onResetSecret, onOpenDel
             enableSorting: false,
         },
         {
+            meta: { label: '触发状态' },
             accessorKey: 'lastDeliveryStatus',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='触发状态'/>),
             cell: ({ row }) => row.original.lastDeliveryStatus ? (<Chip variant="tertiary">

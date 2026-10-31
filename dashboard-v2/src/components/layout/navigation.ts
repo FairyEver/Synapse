@@ -27,3 +27,10 @@ export const settingsNavigation = [
   { title: '个人资料', path: '/settings', icon: Activity },
   { title: 'API 密钥', path: '/settings/api-keys', icon: KeyRound },
 ]
+
+/** A detail route belongs to its closest navigation entry. */
+export function getActiveNavigationPath(items: NavigationItem[], pathname: string): string | undefined {
+  return items
+    .filter((item) => !item.external && (pathname === item.path || pathname.startsWith(`${item.path}/`)))
+    .sort((a, b) => b.path.length - a.path.length)[0]?.path
+}

@@ -23,7 +23,7 @@ const columns: ColumnDef<AuditLog>[] = [
     cell: ({ row }) => (
       <LongText className='font-medium'>{row.original.action}</LongText>
     ),
-    meta: { className: 'max-w-0 w-1/4' },
+    meta: { label: '操作', className: 'w-56 max-w-56' },
   },
   {
     accessorKey: 'actorLabel',
@@ -33,7 +33,7 @@ const columns: ColumnDef<AuditLog>[] = [
     cell: ({ row }) => (
       <LongText className='max-w-40'>{row.original.actorLabel}</LongText>
     ),
-    meta: { className: 'w-40' },
+    meta: { label: '主体', className: 'w-40' },
   },
   {
     id: 'target',
@@ -44,13 +44,13 @@ const columns: ColumnDef<AuditLog>[] = [
       <LongText>{`${row.original.targetType}:${row.original.targetId}`}</LongText>
     ),
     enableSorting: false,
-    meta: { className: 'max-w-0 w-1/4' },
+    meta: { label: '目标', className: 'w-56 max-w-56' },
   },
   {
     accessorKey: 'ipAddress',
     header: ({ column }) => <DataTableColumnHeader column={column} title='IP' />,
     enableSorting: false,
-    meta: { className: 'w-36' },
+    meta: { label: 'IP', className: 'w-36' },
   },
   {
     accessorKey: 'createdAt',
@@ -62,7 +62,7 @@ const columns: ColumnDef<AuditLog>[] = [
         {new Date(row.original.createdAt).toLocaleString('zh-CN')}
       </span>
     ),
-    meta: { className: 'w-44' },
+    meta: { label: '时间', className: 'w-44' },
   },
   {
     id: 'actions',

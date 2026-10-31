@@ -24,7 +24,7 @@ export function SystemAppWindowShell({ children, immersive, left, actions, tabs,
       <div className="game-web-header-title min-w-0 font-semibold">{left}</div>
       {tabs && <Tabs selectedKey={value} onSelectionChange={key => onValueChange?.(String(key))} className="mx-auto">
         <Tabs.ListContainer>
-          <Tabs.List aria-label="游戏页面">{tabs.map(tab => <Tabs.Tab key={tab.id} id={tab.id}>{tab.label}<Tabs.Indicator /></Tabs.Tab>)}</Tabs.List>
+          <Tabs.List className="w-max" aria-label="游戏页面">{tabs.map(tab => <Tabs.Tab className="whitespace-nowrap" key={tab.id} id={tab.id}>{tab.label}<Tabs.Indicator /></Tabs.Tab>)}</Tabs.List>
         </Tabs.ListContainer>
       </Tabs>}
       <div className="game-web-header-actions ms-auto flex items-center gap-2">{actions}</div>

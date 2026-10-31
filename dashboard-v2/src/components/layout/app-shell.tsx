@@ -6,7 +6,7 @@ import { adminApi, dashboardApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 import { useAdminAuthStore } from '@/stores/admin-auth-store';
 import { ConfirmDialog } from '@/components/confirm-dialog';
-import { adminNavigation, userNavigation } from './navigation';
+import { adminNavigation, userNavigation, getActiveNavigationPath } from './navigation';
 const SidebarContext = createContext<() => void>(() => undefined);
 export function SidebarToggle() {
     const toggle = useContext(SidebarContext);
@@ -51,12 +51,13 @@ export function AppShell({ mode, children }: {
             setSigningOut(false);
         }
     };
+    const pathname = location.pathname.startsWith(`${base}/`) ? location.pathname.slice(base.length) : location.pathname;
+    const activePath = getActiveNavigationPath(items, pathname);
     const navigation = <div className='flex h-full min-h-0 flex-col gap-5 p-4'>
     <div className='flex items-center gap-3 px-2 py-3'><Avatar><Avatar.Fallback>{name.slice(0, 1).toUpperCase()}</Avatar.Fallback></Avatar><div className='min-w-0'><div className='truncate font-semibold'>{name}</div><div className='truncate text-sm text-muted'>{mode === 'admin' ? 'Synapse 管理' : user?.email}</div></div></div>
     <ScrollShadow className='min-h-0 flex-1'><nav aria-label={mode === 'admin' ? '管理导航' : '账户导航'} className='flex flex-col gap-1'>
       {items.map(({ title, path, icon: Icon, external }) => {
-        const pathname = location.pathname.startsWith(`${base}/`) ? location.pathname.slice(base.length) : location.pathname;
-        const active = !external && (pathname === path || pathname.startsWith(`${path}/`));
+        const active = path === activePath;
         const href = external ? path : `${base}${path}`;
         return <Button key={path} variant={active ? 'secondary' : 'ghost'} fullWidth className='justify-start' aria-current={active ? 'page' : undefined} onPress={() => { if (external) window.open(href, '_blank', 'noopener,noreferrer'); else window.location.assign(href) }}><Icon className='size-5 shrink-0' />{title}</Button>;
       })}

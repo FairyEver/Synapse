@@ -80,11 +80,13 @@ export default function MyDevicesPage() {
     }
     const columns = useMemo<ColumnDef<DashboardDeviceRow>[]>(() => [
         {
+            meta: { label: '设备' },
             accessorKey: 'deviceName',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='设备'/>),
             cell: ({ row }) => <DeviceName device={row.original}/>,
         },
         {
+            meta: { label: '状态' },
             accessorKey: 'status',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='状态'/>),
             cell: ({ row }) => (<Chip color={deviceStatusVariants[row.original.status]}>
@@ -92,19 +94,23 @@ export default function MyDevicesPage() {
           </Chip>),
         },
         {
+            meta: { label: '平台' },
             accessorKey: 'platform',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='平台'/>),
         },
         {
+            meta: { label: '版本' },
             accessorKey: 'appVersion',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='版本'/>),
         },
         {
+            meta: { label: '最近在线' },
             accessorKey: 'lastSeenAt',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='最近在线'/>),
             cell: ({ row }) => <RelativeTime value={row.original.lastSeenAt}/>,
         },
         {
+            meta: { label: '首次连接' },
             accessorKey: 'firstSeenAt',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='首次连接'/>),
             cell: ({ row }) => <RelativeTime value={row.original.firstSeenAt}/>,

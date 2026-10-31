@@ -85,7 +85,7 @@ export default function SkillRepositoryAdminPage({
             <div className='truncate text-muted'>{row.original.name}</div>
           </div>
         ),
-        meta: { className: 'max-w-0 w-1/3' },
+        meta: { label: '仓库', className: 'w-64 max-w-64' },
       },
       {
         id: 'owner',
@@ -96,7 +96,7 @@ export default function SkillRepositoryAdminPage({
           <div className='truncate'>{getOwnerLabel(row.original.owner)}</div>
         ),
         enableSorting: false,
-        meta: { className: 'max-w-0 w-1/4' },
+        meta: { label: '作者', className: 'w-56 max-w-56' },
       },
       {
         accessorKey: 'visibility',
@@ -108,7 +108,7 @@ export default function SkillRepositoryAdminPage({
             {row.original.visibility === 'public' ? '公开' : '私有'}
           </Chip>
         ),
-        meta: { className: 'w-24' },
+        meta: { label: '可见性', className: 'w-24' },
       },
       {
         accessorKey: 'status',
@@ -120,7 +120,7 @@ export default function SkillRepositoryAdminPage({
             {row.original.status === 'removed' ? '已移除' : '正常'}
           </Chip>
         ),
-        meta: { className: 'w-24' },
+        meta: { label: '状态', className: 'w-24' },
       },
       {
         accessorKey: 'updatedAt',
@@ -130,7 +130,7 @@ export default function SkillRepositoryAdminPage({
         cell: ({ row }) => (
           <RelativeTime className='tabular-nums' value={row.original.updatedAt} />
         ),
-        meta: { className: 'w-32' },
+        meta: { label: '更新时间', className: 'w-32' },
       },
       {
         id: 'actions',

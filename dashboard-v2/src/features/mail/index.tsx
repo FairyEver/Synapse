@@ -21,7 +21,7 @@ export default function MailPage({ search }: {
             accessorKey: 'sentAt',
             header: ({ column }) => <DataTableColumnHeader column={column} title='时间'/>,
             cell: ({ row }) => <RelativeTime className='tabular-nums' value={row.original.sentAt} mode='absolute'/>,
-            meta: { className: 'w-44' },
+            meta: { label: '时间', className: 'w-44' },
         },
         {
             id: 'sender',
@@ -43,7 +43,7 @@ export default function MailPage({ search }: {
           </div>
           <span className='block truncate text-muted'>{row.original.snippet}</span>
         </div>),
-            meta: { className: 'max-w-0' },
+            meta: { label: '主题', className: 'w-80 max-w-80' },
         },
         {
             id: 'recipients',

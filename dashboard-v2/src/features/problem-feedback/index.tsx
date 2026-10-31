@@ -43,7 +43,7 @@ export default function ProblemFeedbackPage() {
             cell: ({ row }) => (<RelativeTime className='tabular-nums' value={row.original.receivedAt} mode='absolute'/>),
             enableSorting: false,
             enableHiding: false,
-            meta: { className: 'w-44' },
+            meta: { label: '接收时间', className: 'w-44' },
         },
         {
             id: 'content',
@@ -53,7 +53,7 @@ export default function ProblemFeedbackPage() {
         </span>),
             enableSorting: false,
             enableHiding: false,
-            meta: { className: 'max-w-0' },
+            meta: { label: '正文预览', className: 'w-80 max-w-80' },
         },
         {
             id: 'actions',
@@ -70,7 +70,7 @@ export default function ProblemFeedbackPage() {
             },
             enableSorting: false,
             enableHiding: false,
-            meta: {
+            meta: { label: '操作',
                 className: 'w-20',
                 thClassName: 'text-right',
                 tdClassName: 'text-right',

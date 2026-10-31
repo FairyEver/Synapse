@@ -31,7 +31,7 @@ export function buildWebhookDeliveryHistoryColumns({
         <span className='tabular-nums'>
           {formatWebhookDeliveryHistoryDateTime(row.original.receivedAt)}
         </span>,
-      meta: { className: 'w-40' },
+      meta: { label: '时间', className: 'w-40' },
     },
     {
       id: 'webhook',
@@ -54,7 +54,7 @@ export function buildWebhookDeliveryHistoryColumns({
         </div>
       ),
       enableSorting: false,
-      meta: { className: 'max-w-0 w-1/3' },
+      meta: { label: 'Webhook', className: 'w-64 max-w-64' },
     },
     {
       accessorKey: 'method',
@@ -62,7 +62,7 @@ export function buildWebhookDeliveryHistoryColumns({
         <DataTableColumnHeader column={column} title='方法' />
       ),
       cell: ({ row }) => <Chip color="default">{row.original.method}</Chip>,
-      meta: { className: 'w-20' },
+      meta: { label: '方法', className: 'w-20' },
     },
     {
       accessorKey: 'status',
@@ -78,7 +78,7 @@ export function buildWebhookDeliveryHistoryColumns({
           {getWebhookDeliveryStatusLabel(row.original.status)}
         </Chip>
       ),
-      meta: { className: 'w-32' },
+      meta: { label: '状态', className: 'w-32' },
     },
     {
       id: 'clients',
@@ -87,7 +87,7 @@ export function buildWebhookDeliveryHistoryColumns({
       ),
       cell: ({ row }) => formatWebhookDeliveryClientSummary(row.original),
       enableSorting: false,
-      meta: {
+      meta: { label: '客户端',
         className: 'w-20',
         thClassName: 'text-right',
         tdClassName: 'text-right tabular-nums',
@@ -100,7 +100,7 @@ export function buildWebhookDeliveryHistoryColumns({
       ),
       cell: ({ row }) => formatWebhookDeliveryHistoryBody(row.original),
       enableSorting: false,
-      meta: { className: 'w-24' },
+      meta: { label: 'Body', className: 'w-24' },
     },
     {
       id: 'actions',
@@ -133,7 +133,7 @@ export function buildWebhookDeliveryHistoryColumns({
         <LongText>{row.original.user?.email ?? '-'}</LongText>
       ),
       enableSorting: false,
-      meta: { className: 'max-w-0 w-1/4' },
+      meta: { label: '用户', className: 'w-56 max-w-56' },
     })
   }
 

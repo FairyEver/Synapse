@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@heroui/react"
 import { Input } from "@heroui/react"
 import { TextArea } from "@heroui/react"
-import { Label } from "@heroui/react"
+import { Label, TextField, Description } from "@heroui/react"
 import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 import { ModeFilter } from "./ModeFilter"
@@ -122,7 +122,7 @@ export function AgentProfiles() {
             void save()
           }}
         >
-          <div className="space-y-2">
+          <TextField className="w-full">
             <Label htmlFor="poker-model">模型名称（可选）</Label>
             <Input
               id="poker-model"
@@ -130,8 +130,8 @@ export function AgentProfiles() {
               maxLength={24}
               onChange={(event) => setEditing({ ...editing, model: event.target.value })}
             />
-          </div>
-          <div className="space-y-2">
+          </TextField>
+          <TextField className="w-full">
             <Label htmlFor="poker-persona">风格提示词</Label>
             <TextArea
               id="poker-persona"
@@ -140,8 +140,8 @@ export function AgentProfiles() {
               maxLength={20000}
               onChange={(event) => setEditing({ ...editing, persona: event.target.value })}
             />
-            <p className="text-xs text-muted">只有你自己能看到</p>
-          </div>
+            <Description>只有你自己能看到</Description>
+          </TextField>
           <Button type="submit" isDisabled={mutation.busy}>
             保存选手
           </Button>

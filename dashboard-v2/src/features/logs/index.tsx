@@ -73,7 +73,7 @@ export default function LogsPage() {
         <h1 className='text-lg font-semibold'>系统日志</h1>
       </Header>
       <Main>
-        <div className='flex items-center gap-2 pb-4'>
+        <div className='flex flex-wrap items-center gap-2'>
           <Select aria-label="筛选选项" value={level} onChange={(key) => (setLevel)(String(key ?? ''))}>
             <Select.Trigger className='w-32'>
               <Select.Value  />

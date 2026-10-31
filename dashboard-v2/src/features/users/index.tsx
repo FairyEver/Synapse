@@ -260,7 +260,7 @@ export default function UsersPage() {
             accessorKey: 'email',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='邮箱'/>),
             cell: ({ row }) => (<LongText className='font-medium'>{row.original.email}</LongText>),
-            meta: { className: 'max-w-0 w-1/4' },
+            meta: { label: '邮箱', className: 'w-56 max-w-56' },
         },
         {
             accessorKey: 'handle',
@@ -268,7 +268,7 @@ export default function UsersPage() {
             cell: ({ row }) => (<div onDoubleClick={() => openHandleDialog(row.original)}>
           <LongText>{row.original.handle || '-'}</LongText>
         </div>),
-            meta: { className: 'max-w-0 w-1/5' },
+            meta: { label: '用户名', className: 'w-40 max-w-40' },
         },
         {
             accessorKey: 'nickname',
@@ -277,7 +277,7 @@ export default function UsersPage() {
           <LongText>{row.original.nickname}</LongText>
         </div>),
             enableSorting: false,
-            meta: { className: 'max-w-0 w-1/5' },
+            meta: { label: '昵称', className: 'w-40 max-w-40' },
         },
         {
             accessorKey: 'adminNote',
@@ -289,7 +289,7 @@ export default function UsersPage() {
           </LongText>) : (<span className='text-muted'>-</span>);
             },
             enableSorting: false,
-            meta: { className: 'w-40' },
+            meta: { label: '备注', className: 'w-40' },
         },
         {
             accessorKey: 'status',
@@ -297,7 +297,7 @@ export default function UsersPage() {
             cell: ({ row }) => (<Chip color={row.original.status === 'active' ? "accent" : "default"}>
           {row.original.status === 'active' ? '正常' : '禁用'}
         </Chip>),
-            meta: { className: 'w-20' },
+            meta: { label: '状态', className: 'w-20' },
         },
         {
             id: 'liveClients',
@@ -318,7 +318,7 @@ export default function UsersPage() {
           </div>);
             },
             enableSorting: false,
-            meta: { className: 'w-24' },
+            meta: { label: '客户端', className: 'w-24' },
         },
         {
             id: 'teams',
@@ -335,13 +335,13 @@ export default function UsersPage() {
           </div>);
             },
             enableSorting: false,
-            meta: { className: 'max-w-0 w-1/4' },
+            meta: { className: 'w-56 max-w-56' },
         },
         {
             accessorKey: 'createdAt',
             header: ({ column }) => (<DataTableColumnHeader column={column} title='创建时间'/>),
             cell: ({ row }) => (<RelativeTime className='tabular-nums' value={row.original.createdAt}/>),
-            meta: { className: 'w-32' },
+            meta: { label: '创建时间', className: 'w-32' },
         },
         actionsColumn,
     ];

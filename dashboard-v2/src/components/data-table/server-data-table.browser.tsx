@@ -55,3 +55,23 @@ describe('wide data tables', () => {
     expect(scroller.getBoundingClientRect().width).toBeLessThanOrEqual(host.clientWidth)
   })
 })
+
+
+describe('narrow table states', () => {
+  it.each([false, true])('keeps the empty/error state visible before horizontal scrolling (error=%s)', async (hasError) => {
+    await page.viewport(390, 844)
+    const columns = Array.from({ length: 9 }, (_, index) => ({ accessorKey: `field${index}`, header: `统计字段${index}`, enableHiding: false }))
+    await render(<div className='w-80'><ServerDataTable columns={columns} data={[]} page={1} pageSize={10} total={0} onPageChange={() => undefined} onPageSizeChange={() => undefined} error={hasError ? new Error('加载失败') : undefined} onRetry={() => undefined} /></div>)
+    const label = hasError ? page.getByRole('alert') : page.getByText('暂无数据')
+    const rect = label.element().getBoundingClientRect()
+    expect(rect.left).toBeGreaterThanOrEqual(0)
+    expect(rect.right).toBeLessThanOrEqual(390)
+  })
+
+  it('keeps every pagination action within a narrow footer', async () => {
+    await page.viewport(390, 844)
+    await render(<div className='w-80'><ServerDataTable columns={[{ accessorKey: 'name', header: '名称' }]} data={[{ name: '示例' }]} page={6} pageSize={10} total={200} onPageChange={() => undefined} onPageSizeChange={() => undefined} /></div>)
+    const buttons = document.querySelectorAll('nav[aria-label="pagination"] button')
+    for (const button of buttons) expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(390)
+  })
+})

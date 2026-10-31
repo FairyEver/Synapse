@@ -1,3 +1,5 @@
+import { Header } from '@/components/layout/header';
+import { Main } from '@/components/layout/main';
 import { Button, Chip, Modal, Table } from '@heroui/react';
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
@@ -9,9 +11,9 @@ export function SkillRepositoryListPage() {
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const query = useSkillRepositoryList();
     const repositories = query.data ?? [];
-    return (<div className='flex min-h-0 flex-1 flex-col gap-4 p-6'>
-      <div className='flex items-center justify-between gap-3'>
-        <h1 className='text-xl font-semibold'>我的 Skill 仓库</h1>
+    return (<><Header><h1>我的 Skill 仓库</h1></Header><Main>
+      <div className='flex flex-wrap items-center justify-end gap-3'>
+
         <div className='flex items-center gap-2'>
           <Button type='button' onPress={() => setCreateDialogOpen(true)}>
             <Plus data-icon='inline-start'/>
@@ -36,11 +38,11 @@ export function SkillRepositoryListPage() {
           </Modal.Footer>
         </Modal.Dialog></Modal.Container></Modal.Backdrop>
 
-      <div className='min-h-0 flex-1 overflow-auto rounded-md border bg-background'>
-        {query.isLoading ? (<div className='flex h-full min-h-72 items-center justify-center text-sm text-muted'>加载中</div>) : query.isError ? (<div className='flex h-full min-h-72 flex-col items-center justify-center gap-3 text-sm text-danger'>
+      <div className='min-w-0'>
+        {query.isLoading ? (<div className='flex min-h-60 items-center justify-center rounded-2xl bg-surface p-6 text-sm text-muted'>加载中</div>) : query.isError ? (<div className='flex min-h-60 flex-col items-center justify-center gap-3 rounded-2xl bg-surface p-6 text-sm text-danger'>
             <div>{query.error instanceof Error ? query.error.message : '加载失败。'}</div>
             <Button type='button' variant="outline" onPress={() => { void query.refetch(); }}>重试</Button>
-          </div>) : repositories.length === 0 ? (<div className='flex h-full min-h-72 flex-col items-center justify-center gap-1 text-sm text-muted'>
+          </div>) : repositories.length === 0 ? (<div className='flex min-h-60 flex-col items-center justify-center gap-1 rounded-2xl bg-surface p-6 text-center text-sm text-muted'>
             <div>暂无 Skill 仓库</div>
             <div>通过本地 Synapse MCP 上传 Skill 后会显示在这里。</div>
           </div>) : (<Table><Table.ScrollContainer><Table.Content className='min-w-max'>
@@ -75,7 +77,7 @@ export function SkillRepositoryListPage() {
             </Table.Body>
           </Table.Content></Table.ScrollContainer></Table>)}
       </div>
-    </div>);
+    </Main></>);
 }
 function formatVisibility(value: 'private' | 'public'): string {
     return value === 'public' ? '公开' : '私有';

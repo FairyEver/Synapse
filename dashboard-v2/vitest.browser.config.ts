@@ -6,7 +6,7 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
-  optimizeDeps: { include: ['@tanstack/react-table', '@mdxeditor/editor'] },
+  optimizeDeps: { include: ['@tanstack/react-table', '@tanstack/react-query', '@tanstack/react-router', '@mdxeditor/editor'] },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

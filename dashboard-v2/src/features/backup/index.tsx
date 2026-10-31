@@ -64,7 +64,7 @@ export default function BackupPage() {
         <LongText className='font-medium'>{row.original.filename}</LongText>
       ),
       enableSorting: false,
-      meta: { className: 'max-w-0' },
+      meta: { label: '文件名', className: 'w-80 max-w-80' },
     },
     {
       accessorKey: 'size',
@@ -74,7 +74,7 @@ export default function BackupPage() {
       cell: ({ row }) => (
         <span className='tabular-nums'>{formatSize(row.original.size)}</span>
       ),
-      meta: {
+      meta: { label: '大小',
         className: 'w-28',
         thClassName: 'text-right',
         tdClassName: 'text-right',
@@ -90,7 +90,7 @@ export default function BackupPage() {
         <RelativeTime className='tabular-nums' value={row.original.createdAt} />
       ),
       enableSorting: false,
-      meta: { className: 'w-40' },
+      meta: { label: '创建时间', className: 'w-40' },
     },
     {
       id: 'actions',
@@ -118,7 +118,7 @@ export default function BackupPage() {
           </Button>
         </div>
       ),
-      meta: {
+      meta: { label: '操作',
         className: 'w-24',
         thClassName: 'text-right',
         tdClassName: 'text-right',

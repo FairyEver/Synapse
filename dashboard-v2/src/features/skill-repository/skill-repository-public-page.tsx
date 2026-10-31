@@ -1,3 +1,5 @@
+import { Header } from '@/components/layout/header';
+import { Main } from '@/components/layout/main';
 import { consoleHref } from '@/lib/console-href';
 import { Link as HeroLink } from '@heroui/react';
 import { Button, Chip } from '@heroui/react';
@@ -34,27 +36,27 @@ export function SkillRepositoryPublicPage({ ownerHandle, repositoryName, }: {
         });
     }, [canonicalPath, navigate, repository.detailQuery.data?.redirected]);
     if (repository.detailQuery.isLoading) {
-        return <div className='flex min-h-0 flex-1 items-center justify-center text-sm text-muted'>加载中</div>;
+        return <><Header><h1>Skill 仓库</h1></Header><Main><div className='py-12 text-center text-muted'>加载中</div></Main></>;
     }
     if (repository.detailQuery.isError || !detail || !repository.browser) {
-        return (<div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-sm text-danger'>
+        return (<><Header><h1>Skill 仓库</h1></Header><Main><div className='flex flex-col items-center gap-3 py-12 text-sm text-danger'>
         <div>{repository.detailQuery.error instanceof Error ? repository.detailQuery.error.message : '加载失败。'}</div>
         <Button type='button' variant="outline" onPress={() => { void repository.detailQuery.refetch(); }}>重试</Button>
-      </div>);
+      </div></Main></>);
     }
     const owner = getSkillRepositoryDisplayOwner(detail);
     const isOwner = meQuery.data?.user.id === detail.owner.id;
-    return (<div className='flex min-h-0 flex-1 flex-col gap-4 p-6'>
+    return (<><Header><h1>Skill 仓库</h1></Header><Main>
       <div className='flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between'>
         <div className='flex min-w-0 items-center gap-2'>
-          <h1 className='min-w-0 truncate text-xl font-semibold'>
+          <h2 className='min-w-0 truncate text-base font-semibold'>
             <span className='text-muted'>{owner}</span>
             <span className='px-1 text-muted'>/</span>
             <span>{detail.name}</span>
-          </h1>
+          </h2>
           <Chip variant="secondary">{formatVisibility(detail.visibility)}</Chip>
         </div>
-        <div className='flex shrink-0 items-center gap-2'>
+        <div className='flex shrink-0 flex-wrap items-center gap-2'>
           <Button type='button' variant="outline" isDisabled={actions.states.installing || !detail.id} onPress={() => { void actions.createInstallSession(); }}>
             <Download data-icon='inline-start'/>
             安装
@@ -74,7 +76,7 @@ export function SkillRepositoryPublicPage({ ownerHandle, repositoryName, }: {
             repository.setSelectedFilePath(null);
             repository.setCurrentPath(path);
         }} onOpenFile={repository.setSelectedFilePath} onRenameFile={async () => undefined} onDeleteFile={async () => undefined} onDownloadFile={(path) => skillRepositoryApi.getFileDownloadUrlByPath(ownerHandle, repositoryName, path)} onReloadText={async () => ({ text: repository.fileContentQuery.data?.text ?? '', baseVersionId: repository.fileContentQuery.data?.file.sha256 ?? '' })} onSaveText={async (input) => ({ baseVersionId: input.baseVersionId })}/>
-    </div>);
+    </Main></>);
 }
 function formatVisibility(value: 'private' | 'public'): string {
     return value === 'public' ? '公开' : '私有';

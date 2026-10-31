@@ -1,3 +1,5 @@
+import { Header } from '@/components/layout/header';
+import { Main } from '@/components/layout/main';
 import { Button, Chip, Input, Table } from '@heroui/react';
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
@@ -14,20 +16,20 @@ export function SkillRepositoryExplorePage() {
     const debouncedQuery = useDebouncedValue(query);
     const listQuery = usePublicSkillRepositoryList({ page: 1, pageSize: 20, query: debouncedQuery.trim() || null });
     const repositories = listQuery.data?.items ?? [];
-    return (<div className='flex min-h-0 flex-1 flex-col gap-4 p-6'>
-      <div className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
-        <h1 className='text-xl font-semibold'>探索 Skills</h1>
+    return (<><Header><h1>探索 Skills</h1></Header><Main>
+      <div className='flex flex-wrap items-center justify-end gap-3'>
+
         <div className='relative w-full md:w-72'>
           <Search className='pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted'/>
           <Input value={query} onChange={(event) => setQuery(event.target.value)} className='pl-8' placeholder='搜索 Skill'></Input>
         </div>
       </div>
 
-      <div className='min-h-0 flex-1 overflow-auto rounded-md border bg-background'>
-        {listQuery.isLoading ? (<div className='flex h-full min-h-72 items-center justify-center text-sm text-muted'>加载中</div>) : listQuery.isError ? (<div className='flex h-full min-h-72 flex-col items-center justify-center gap-3 text-sm text-danger'>
+      <div className='min-w-0'>
+        {listQuery.isLoading ? (<div className='flex min-h-60 items-center justify-center rounded-2xl bg-surface p-6 text-sm text-muted'>加载中</div>) : listQuery.isError ? (<div className='flex min-h-60 flex-col items-center justify-center gap-3 rounded-2xl bg-surface p-6 text-sm text-danger'>
             <div>{listQuery.error instanceof Error ? listQuery.error.message : '加载失败。'}</div>
             <Button type='button' variant="outline" onPress={() => { void listQuery.refetch(); }}>重试</Button>
-          </div>) : repositories.length === 0 ? (<div className='flex h-full min-h-72 items-center justify-center text-sm text-muted'>暂无公开 Skill</div>) : (<Table><Table.ScrollContainer><Table.Content className='min-w-max'>
+          </div>) : repositories.length === 0 ? (<div className='flex min-h-60 items-center justify-center rounded-2xl bg-surface p-6 text-sm text-muted'>暂无公开 Skill</div>) : (<Table><Table.ScrollContainer><Table.Content className='min-w-max'>
             <Table.Header>
 
                 <Table.Column isRowHeader>仓库</Table.Column>
@@ -64,7 +66,7 @@ export function SkillRepositoryExplorePage() {
             </Table.Body>
           </Table.Content></Table.ScrollContainer></Table>)}
       </div>
-    </div>);
+    </Main></>);
 }
 function RepositoryLink({ repository }: {
     readonly repository: SkillRepositoryItemDto;

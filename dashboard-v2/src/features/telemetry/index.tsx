@@ -1,4 +1,4 @@
-import { Button, Card, Input, ListBox, Popover, Select, Skeleton } from '@heroui/react'
+import { Button, Card, Input, ListBox, Popover, Select, Skeleton, Surface } from '@heroui/react'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronsUpDown } from 'lucide-react'
@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   XAxis,
   YAxis,
+  Tooltip as ChartTooltip,
 } from 'recharts'
 import {
   adminApi,
@@ -423,8 +424,9 @@ function AdoptionChart({ items }: { items: TelemetryStats['insights']['adoption'
           <ResponsiveContainer width='100%' height={Math.max(260, chartData.length * 30)}>
             <BarChart data={chartData} layout='vertical' margin={{ left: 8, right: 20 }}>
               <XAxis type='number' hide />
-              <YAxis dataKey='label' type='category' width={112} tickLine={false} axisLine={false} fontSize={12} />
-              <Bar dataKey='identities' name='使用身份' fill='var(--accent)' radius={[0, 4, 4, 0]} />
+              <YAxis dataKey='label' type='category' width={112} tickFormatter={dimensionLabel} tickLine={false} axisLine={false} fontSize={12} />
+              <ChartTooltip cursor={false} content={<DimensionTooltip />} />
+              <Bar dataKey='identities' maxBarSize={24} name='使用身份' fill='var(--accent)' radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
@@ -468,8 +470,9 @@ function FunnelChart({ funnels }: { funnels: TelemetryStats['insights']['funnels
           <ResponsiveContainer width='100%' height={260}>
             <BarChart data={chartData} layout='vertical' margin={{ left: 8, right: 20 }}>
               <XAxis type='number' hide />
-              <YAxis dataKey='label' type='category' width={112} tickLine={false} axisLine={false} fontSize={12} />
-              <Bar dataKey='identities' name='完成身份' fill='var(--success)' radius={[0, 4, 4, 0]} />
+              <YAxis dataKey='label' type='category' width={112} tickFormatter={dimensionLabel} tickLine={false} axisLine={false} fontSize={12} />
+              <ChartTooltip cursor={false} content={<DimensionTooltip />} />
+              <Bar dataKey='identities' maxBarSize={24} name='完成身份' fill='var(--success)' radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
@@ -530,11 +533,12 @@ function DimensionChart({
       </Card.Header>
       <Card.Content className='ps-2'>
         {chartData.length > 0 ? (
-          <ResponsiveContainer width='100%' height={Math.max(220, chartData.length * 30)}>
+          <ResponsiveContainer width='100%' height={Math.max(80, chartData.length * 32)}>
             <BarChart data={chartData} layout='vertical' margin={{ left: 8, right: 20 }}>
               <XAxis type='number' hide />
-              <YAxis dataKey='label' type='category' width={112} tickLine={false} axisLine={false} fontSize={12} />
-              <Bar dataKey='count' fill='var(--accent)' radius={[0, 4, 4, 0]} />
+              <YAxis dataKey='label' type='category' width={112} tickFormatter={dimensionLabel} tickLine={false} axisLine={false} fontSize={12} />
+              <ChartTooltip cursor={false} content={<DimensionTooltip />} />
+              <Bar dataKey='count' maxBarSize={24} fill='var(--accent)' radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
@@ -543,6 +547,30 @@ function DimensionChart({
       </Card.Content>
     </Card>
   )
+}
+
+function dimensionLabel(value: string | number): string {
+  const label = String(value)
+  let result = ''
+  let width = 0
+  for (const character of label) {
+    width += character.codePointAt(0)! > 255 ? 2 : 1
+    if (width > 16) return `${result}…`
+    result += character
+  }
+  return label
+}
+
+function DimensionTooltip({ active, label, payload }: {
+  active?: boolean
+  label?: string | number
+  payload?: readonly { value?: string | number }[]
+}) {
+  if (!active || !payload?.length) return null
+  return <Surface className='max-w-80 space-y-1 rounded-xl px-3 py-2 shadow-overlay'>
+    <p className='break-words text-sm'>{label}</p>
+    <p className='text-sm tabular-nums text-muted'>{payload[0].value}</p>
+  </Surface>
 }
 
 function TelemetrySkeleton() {

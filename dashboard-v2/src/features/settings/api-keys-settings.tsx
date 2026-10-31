@@ -148,10 +148,10 @@ export function ApiKeysSettings() {
     }
     return (<section className='flex flex-1 flex-col'>
       <div className='flex flex-none items-center justify-between gap-3'>
-        <h3 className='text-lg font-medium'>API 秘钥</h3>
+        <h3 className='text-lg font-medium'>API 密钥</h3>
         <Button ref={createTriggerRef} onPress={() => setCreateOpen(true)}>
           <Plus />
-          创建秘钥
+          创建密钥
         </Button>
       </div>
       <Separator className='my-4 flex-none'></Separator>
@@ -169,7 +169,7 @@ export function ApiKeysSettings() {
                 重试
               </Button>
             </div>) : null}
-          {!isLoading && !isError && data.length === 0 ? (<div className='py-8 text-center text-sm text-muted'>尚无秘钥</div>) : null}
+          {!isLoading && !isError && data.length === 0 ? (<div className='py-8 text-center text-sm text-muted'>尚无密钥</div>) : null}
           {!isLoading && !isError && data.length > 0 ? (<div className='space-y-3'>
               {data.map((apiKey) => (<Card key={apiKey.id} className='gap-4 py-4 shadow-none'>
                   <Card.Header className='flex flex-col gap-3 px-4 sm:flex-row sm:items-start sm:justify-between'>
@@ -241,8 +241,8 @@ export function ApiKeysSettings() {
       <Modal.Backdrop isOpen={createOpen} onOpenChange={(open) => open ? setCreateOpen(true) : closeCreateDialog()}><Modal.Container><Modal.Dialog>
           <form className='space-y-4' onSubmit={submitCreate}>
             <Modal.Header>
-              <Modal.Heading>创建秘钥</Modal.Heading>
-              <p>完整秘钥只会显示一次。</p>
+              <Modal.Heading>创建密钥</Modal.Heading>
+              <p>完整密钥只会显示一次。</p>
             </Modal.Header>
             <TextField className='space-y-2'>
               <Label htmlFor='api-key-name'>名称</Label>
@@ -284,14 +284,14 @@ export function ApiKeysSettings() {
 
       <Modal.Backdrop isOpen={Boolean(created)} onOpenChange={(open) => !open && setCreated(null)}><Modal.Container><Modal.Dialog>
           <Modal.Header>
-            <Modal.Heading>秘钥已创建</Modal.Heading>
+            <Modal.Heading>密钥已创建</Modal.Heading>
             <p>请立即复制，关闭后无法再次查看。</p>
           </Modal.Header>
           <div className='flex items-center gap-2'>
             <Input value={created?.secret ?? ''} readOnly className='font-mono'></Input>
             <Button type='button' variant="outline" isIconOnly onPress={() => void copySecret()}>
               <Copy />
-              <span className='sr-only'>复制秘钥</span>
+              <span className='sr-only'>复制密钥</span>
             </Button>
           </div>
           <Modal.Footer>
@@ -302,7 +302,7 @@ export function ApiKeysSettings() {
       <Modal.Backdrop isOpen={Boolean(renameTarget)} onOpenChange={(open) => !open && closeRenameDialog()}><Modal.Container><Modal.Dialog>
           <form className='space-y-4' onSubmit={submitRename}>
             <Modal.Header>
-              <Modal.Heading>重命名秘钥</Modal.Heading>
+              <Modal.Heading>重命名密钥</Modal.Heading>
               <p>{renameTarget?.prefix ?? ''}...</p>
             </Modal.Header>
             <TextField className='space-y-2'>
@@ -323,7 +323,7 @@ export function ApiKeysSettings() {
           </form>
         </Modal.Dialog></Modal.Container></Modal.Backdrop>
 
-      <ConfirmDialog open={Boolean(revokeTarget)} onOpenChange={(open) => !open && setRevokeTarget(null)} title='撤销秘钥' desc={`撤销“${revokeTarget?.name ?? ''}”后将无法恢复。`} cancelBtnText='取消' confirmText='撤销' destructive isLoading={revokeApiKey.isPending} handleConfirm={() => revokeTarget && revokeApiKey.mutate(revokeTarget.id)} onCloseAutoFocus={(event) => {
+      <ConfirmDialog open={Boolean(revokeTarget)} onOpenChange={(open) => !open && setRevokeTarget(null)} title='撤销密钥' desc={`撤销“${revokeTarget?.name ?? ''}”后将无法恢复。`} cancelBtnText='取消' confirmText='撤销' destructive isLoading={revokeApiKey.isPending} handleConfirm={() => revokeTarget && revokeApiKey.mutate(revokeTarget.id)} onCloseAutoFocus={(event) => {
             event.preventDefault();
             if (revokeTriggerRef.current?.isConnected) {
                 revokeTriggerRef.current.focus();
@@ -403,18 +403,21 @@ function ApiKeyUsageDialog({ apiKey, onOpenChange, }: {
     });
     const columns = useMemo<ColumnDef<DashboardApiKeyUsageLog>[]>(() => [
         {
+            meta: { label: '时间' },
             accessorKey: 'startedAt',
             header: ({ column }) => <DataTableColumnHeader column={column} title='时间'/>,
             cell: ({ row }) => <RelativeTime value={row.original.startedAt} mode='absolute'/>,
             enableSorting: false,
         },
         {
+            meta: { label: '操作' },
             accessorKey: 'operation',
             header: ({ column }) => <DataTableColumnHeader column={column} title='操作'/>,
             cell: ({ row }) => usageOperationLabels[row.original.operation],
             enableSorting: false,
         },
         {
+            meta: { label: '状态' },
             accessorKey: 'status',
             header: ({ column }) => <DataTableColumnHeader column={column} title='状态'/>,
             cell: ({ row }) => <Chip variant="tertiary">{usageStatusLabels[row.original.status]}</Chip>,
@@ -425,9 +428,10 @@ function ApiKeyUsageDialog({ apiKey, onOpenChange, }: {
             header: ({ column }) => <DataTableColumnHeader column={column} title='HTTP'/>,
             cell: ({ row }) => row.original.httpStatus ?? '-',
             enableSorting: false,
-            meta: { className: 'text-end tabular-nums' },
+            meta: { label: 'HTTP', className: 'text-end tabular-nums' },
         },
         {
+            meta: { label: '制品' },
             accessorKey: 'artifactType',
             header: ({ column }) => <DataTableColumnHeader column={column} title='制品'/>,
             cell: ({ row }) => row.original.artifactType === 'archive'
@@ -440,9 +444,10 @@ function ApiKeyUsageDialog({ apiKey, onOpenChange, }: {
             header: ({ column }) => <DataTableColumnHeader column={column} title='传输'/>,
             cell: ({ row }) => row.original.responseBytes ? formatBytes(row.original.responseBytes) : '-',
             enableSorting: false,
-            meta: { className: 'text-end tabular-nums' },
+            meta: { label: '传输', className: 'text-end tabular-nums' },
         },
         {
+            meta: { label: 'Request ID' },
             accessorKey: 'requestId',
             header: ({ column }) => <DataTableColumnHeader column={column} title='Request ID'/>,
             cell: ({ row }) => <span className='font-mono text-xs'>{row.original.requestId}</span>,

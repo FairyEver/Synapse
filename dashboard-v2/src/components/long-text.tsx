@@ -24,12 +24,12 @@ export function LongText({ children, className = '', contentClassName = '', }: L
       <div className='hidden sm:block'>
         <>
           <Tooltip>
-            <>
+            <Tooltip.Trigger className='min-w-0 max-w-full'>
               <div ref={refCallback} className={cn('truncate', className)}>
                 {children}
               </div>
-            </>
-            <Tooltip.Content>
+            </Tooltip.Trigger>
+            <Tooltip.Content className='max-w-80 whitespace-normal break-words'>
               <p className={contentClassName}>{children}</p>
             </Tooltip.Content>
           </Tooltip>
@@ -37,12 +37,12 @@ export function LongText({ children, className = '', contentClassName = '', }: L
       </div>
       <div className='sm:hidden'>
         <Popover>
-          <>
+          <Popover.Trigger className='min-w-0 max-w-full'>
             <div ref={refCallback} className={cn('truncate', className)}>
               {children}
             </div>
-          </>
-          <Popover.Content className={cn('w-fit', contentClassName)}><Popover.Dialog>
+          </Popover.Trigger>
+          <Popover.Content className={cn('max-w-80 whitespace-normal break-words', contentClassName)}><Popover.Dialog>
             <p>{children}</p>
           </Popover.Dialog></Popover.Content>
         </Popover>

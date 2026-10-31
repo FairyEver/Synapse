@@ -79,7 +79,7 @@ export default function TeamsPage() {
         cell: ({ row }) => (
           <LongText className='font-medium'>{row.original.name}</LongText>
         ),
-        meta: { className: 'max-w-0 w-1/3' },
+        meta: { label: '团队名称', className: 'w-64 max-w-64' },
       },
       {
         accessorKey: 'memberCount',
@@ -87,7 +87,7 @@ export default function TeamsPage() {
           <DataTableColumnHeader column={column} title='成员' />
         ),
         cell: ({ row }) => `${row.original.memberCount} 人`,
-        meta: { className: 'w-24' },
+        meta: { label: '成员', className: 'w-24' },
       },
       {
         accessorKey: 'createdAt',
@@ -97,7 +97,7 @@ export default function TeamsPage() {
         cell: ({ row }) => (
           <RelativeTime className='tabular-nums' value={row.original.createdAt} />
         ),
-        meta: { className: 'w-32' },
+        meta: { label: '创建时间', className: 'w-32' },
       },
       {
         id: 'actions',

@@ -33,8 +33,8 @@ export function HandRecord() {
     detail.data!.actions.some(a => a.seatNo === seat.seatNo && a.actionSource === "mcp"),
   )
   return (
-    <div className="grid min-h-full grid-cols-1 lg:grid-cols-3">
-      <div className="space-y-3 border-r p-4">
+    <div className="grid grid-cols-1 lg:min-h-full lg:grid-cols-3">
+      <div className="space-y-3 border-b border-separator p-4 lg:border-r lg:border-b-0">
         <h2 className="font-medium">牌局记录</h2>
         <ModeFilter value={mode} label="记录类型" onChange={(value) => { setMode(value); setOffset(0); setSelected(null) }} />
         <GameQueryFeedback query={history} />
