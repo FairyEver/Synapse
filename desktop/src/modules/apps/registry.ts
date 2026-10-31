@@ -1,4 +1,3 @@
-import {gameHallAppManifest} from "../game-hall/app-manifest"
 import { agentAppManifest } from "@/modules/agent/app-manifest"
 import { agentPersonasAppManifest } from "../../../app-capabilities/agent-personas/renderer/app-manifest"
 import { automationAppManifest } from "@/modules/automation/app-manifest"
@@ -33,7 +32,6 @@ const systemApps = [
   mailInternalAppManifest,
   mailAppManifest,
   todosAppManifest,
-  gameHallAppManifest,
   automationAppManifest,
   launcherAppManifest,
   settingsAppManifest,

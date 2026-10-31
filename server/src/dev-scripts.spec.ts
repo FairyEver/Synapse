@@ -27,7 +27,7 @@ describe("server dev scripts", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
-      "docker compose --env-file server/.env.local -f server/compose.yml -f server/compose.dev.yml up -d --build postgres pdf-renderer",
+      "node scripts/dev/server-infra.mjs",
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/server run dev",

@@ -78,6 +78,16 @@ function resolveDevCommandEnv(args, processEnv, serverEnv) {
   }
 
   if (isServerDevCommand(args)) {
+    // An explicitly selected local test database must never fall back to business data.
+    if (processEnv.GAME_E2E_DATABASE_URL) {
+      const testDatabase = new URL(processEnv.GAME_E2E_DATABASE_URL)
+      if (!["postgres:", "postgresql:"].includes(testDatabase.protocol)
+        || !["127.0.0.1", "localhost", "[::1]"].includes(testDatabase.hostname)
+        || !decodeURIComponent(testDatabase.pathname).endsWith("_e2e")) {
+        throw new Error("GAME_E2E_DATABASE_URL 只允许本机 _e2e 专用测试库")
+      }
+      env.DATABASE_URL = processEnv.GAME_E2E_DATABASE_URL
+    }
     const explicitPublicAppUrl = processEnv.APP_PUBLIC_URL?.trim()
     const explicitDocumentPublicUrl = processEnv.DOCUMENT_PUBLIC_URL?.trim()
     const localPdfRendererPort = processEnv.PDF_RENDERER_HOST_PORT?.trim()

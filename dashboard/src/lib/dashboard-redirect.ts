@@ -1,4 +1,5 @@
 const dashboardRedirectOrigin = 'https://synapse.local'
+import { isGameRedirect } from '@/game-center/runtime/routes'
 const dashboardBasePath = '/console'
 const legacyDashboardBasePath = '/dashboard'
 const rootPublicRedirectPathPrefixes = ['/share/']
@@ -57,6 +58,10 @@ export function isRootPublicDashboardRedirect(value: string | undefined) {
   if (!normalized) return false
   const pathname = normalized.split(/[?#]/, 1)[0] || '/'
   return rootPublicRedirectPathPrefixes.some((prefix) => pathname.startsWith(prefix))
+}
+
+export function isRootGameDashboardRedirect(value: string | undefined) {
+  return isGameRedirect(value)
 }
 import { isDriveDiscussionNotificationOpenPath } from '@synapse/shared'
 

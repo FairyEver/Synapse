@@ -226,7 +226,7 @@
 
 ## app_game_poker_seat_join
 
-按当前账号+roomCode入座，无令牌。有控制历史且已离桌时，先table.state确认桌面已授权AI重新入座，再携匹配controlVersion；未授权不得自动入座扣点。modelName仅自述。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+按当前账号+roomCode入座，无令牌。有控制历史且已离桌时，先table.state确认Web 游戏中心已授权 AI 重新入座，再携匹配controlVersion；未授权不得自动入座扣点。modelName仅自述。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

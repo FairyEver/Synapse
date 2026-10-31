@@ -1,4 +1,3 @@
-import {gameIpcModule} from "../../app-capabilities/game-hall/main/ipc"
 /**
  * Phase 0.3 — Electron IPC transport adapter and module registration.
  *
@@ -100,7 +99,6 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(secretsIpcModule, ctx)
   registry.register(mailIpcModule, ctx)
   registry.register(todosIpcModule, ctx)
-  registry.register(gameIpcModule, ctx)
   registry.register(skillUninstallerIpcModule, ctx)
   registry.register(agentPersonasIpcModule, ctx)
   registry.register(voiceIpcModule, ctx)
@@ -154,7 +152,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   secretsIpcModule,
   mailIpcModule,
   todosIpcModule,
-  gameIpcModule,
   skillUninstallerIpcModule,
   agentPersonasIpcModule,
   voiceIpcModule,

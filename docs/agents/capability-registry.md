@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-31 游戏完整迁移 Web：System App 23→22，游戏启动台/Dock/UI 及 24 项 IPC/preload 移除；默认 Dock 仍为 9 项。本机 game 26 项 capability/MCP 保留，全局仍 369 capability/365 MCP 索引。`control.set`/`room.close` 仍仅 Web UI 私有操作，无 MCP 索引；历史两条游戏声明式深链保留但受控打开浏览器。UI 类型、操作和校验归入 shared 双入口契约，Web Cookie 绑定预期账号，Bearer 兼容。以下历史条目保持当次基线，当前游戏 UI 边界以本条为准。
+
 - 2026-10-31 建房默认名称使用当前昵称和实际房间号，桌面五项选项通过既有 config IPC 按账号保存在本机。room.create 描述与系统 Skill 同步，输入 schema 不变；game 仍为26项能力/24项IPC，全局369 capability/365 MCP索引，System App、Dock、Workflow、Automation、Deep Link及权限无增量。
 
 - 2026-10-31 单人陪练解散：私有 `app.game.poker.room.close` 在现有座位及未结算当前手均无房主以外真人账号时立即关闭陪练房，取消当前手且不计战绩；多人或点数房仍手后解散。更新私有操作描述、桌面提示、Agent指南与系统Skill；输入/响应schema、game 26项能力/24项IPC、全局369 capability/365 MCP索引及其余表格数量不变。room.close仍仅UI私有，不新增公开MCP权限。
@@ -83,7 +85,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
-| 游戏（模块 `assets/icon.png`） | 是 | 否（可手动固定） | — | — | 26 | 大厅根、扑克房间（2条声明式路径） |
+| 游戏（独立 Web，本机仅后台能力） | 否 | 否 | — | — | 26 | 大厅根、扑克房间（2条兼容路径，打开浏览器） |
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
@@ -218,7 +220,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Connectors | 是 | 否 | — |
 | Mail Internal | 是 | 是（邮箱左侧） | `mail_internal` |
 | Todos | 是 | 否 | `todos` |
-| Game Hall | 是 | 否 | `game` |
+| Game Hall（Web，桌面无应用页） | 否 | 否 | `game`（仅后台 MCP） |
 | Meeting | 是 | 否 | — |
 
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。

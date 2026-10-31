@@ -17,7 +17,6 @@ const appEntrypoints = {
   drive: { path: "../../drive/index.tsx", header: "module-page" },
   "mail-internal": { path: "../../mail-internal/index.tsx", header: "window-shell" },
   mail: { path: "../../mail/index.tsx", header: "window-shell" },
-  "game-hall": {path:"../../game-hall/GameHallApp.tsx",header:"window-shell"},
   todos: { path: "../../todos/index.tsx", header: "window-shell" },
   automation: { path: "../../automation/index.tsx", header: "module-page" },
   launcher: { path: "../components/system-app-content.tsx", header: "none" },
@@ -59,13 +58,6 @@ describe("system app header architecture", () => {
     expect(source).toContain("<SystemAppWindowShell")
     expect(source).toContain("<SystemAppTopBarActionButton")
     expect(source).not.toMatch(/<Sheet(?:\s|>)/)
-  })
-
-  it("keeps the game-specific page on the shared window shell", async () => {
-    const source = await readFile(new FileURL("../../game-hall/games/poker/PokerApp.tsx", import.meta.url), "utf8")
-    expect(source).toContain("<SystemAppWindowShell")
-    expect(source).toContain("immersive={!!roomCode}")
-    expect(source).not.toMatch(/<SystemAppTopBar(?:\s|>)/)
   })
 
   it("keeps terminal header controls on the shared action button", async () => {

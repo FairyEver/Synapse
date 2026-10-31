@@ -27,6 +27,7 @@
     "src/webhook.ts",
     "src/problem-feedback.ts",
     "src/problem-feedback-fixtures.ts",
-    "src/game.ts"
+    "src/game.ts",
+    "src/game-ui.ts"
   ]
 }

@@ -14,10 +14,12 @@ import { PokerDeadlineTask } from "./poker/poker-deadline.task"
 import { PokerBotService } from "./poker/poker-bot.service"
 import { PokerBotTask } from "./poker/poker-bot.task"
 import { PokerEventsService } from "./poker/poker-events.service"
+import { GameWebGuard } from "./game-web.guard"
 @Module({
   imports: [UserAuthModule, NotificationModule, HallModule],
   controllers: [GameController],
   providers: [
+    GameWebGuard,
     GameApiService,
     PokerService,
     PokerActionService,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
-import { gameIpcModule } from "../../main/ipc"
+import { GAME_UI_OPERATIONS } from "@synapse/shared/game-ui"
 import { GAME_RESPONSE_SCHEMAS } from "../response-schemas"
 import { pokerUiRoutes } from "../../games/poker/main/ui-routes"
 import { z } from "zod"
@@ -10,7 +10,7 @@ import { POKER_HUMAN_ACTION_SCHEMA } from "../../games/poker/shared/ui-operation
 const request = (suffix: string) => z.fromJSONSchema(GAME_TOOLS.find(t => t.id === `app.game.poker.${suffix}`)!.inputSchema as Parameters<typeof z.fromJSONSchema>[0])
 describe("扑克人工操作和接管协议", () => {
   it("人工入座/操作/接管及事件具有专用UI入口，控制认领和检查点只向Agent开放", () => {
-    const ids = Object.values(gameIpcModule.methods).map(m => m.operationId)
+    const ids = GAME_UI_OPERATIONS.map(m => m.id)
     for (const suffix of ["seat.join", "action.act", "control.set", "table.events"]) expect(ids).toContain(`app.game.poker.${suffix}`)
     for (const suffix of ["table.wait", "control.claim", "checkpoint.get", "checkpoint.save"]) expect(ids).not.toContain(`app.game.poker.${suffix}`)
     expect(pokerUiRoutes["app.game.poker.control.set" as keyof typeof pokerUiRoutes]?.path({ roomCode: "1234" })).toBe("/game/poker/rooms/1234/control")
@@ -31,7 +31,7 @@ describe("扑克人工操作和接管协议", () => {
     expect(join.safeParse({ roomCode: "1234", controlVersion: 3 }).success).toBe(true)
     for (const controlVersion of [-1, 1.5, "3"]) expect(join.safeParse({ roomCode: "1234", controlVersion }).success).toBe(false)
     expect(join.safeParse({ roomCode: "1234", controlVersion: 3, source: "human" }).success).toBe(false)
-    expect(gameIpcModule.methods.pokerSeatJoin.request.safeParse({ roomCode: "1234", controlVersion: 3 }).success).toBe(true)
+    expect(join.safeParse({ roomCode: "1234", controlVersion: 3 }).success).toBe(true)
   })
   it("人工动作拒绝AI私密参数和客户端来源，MCP保留AI参数", () => {
     const human = z.fromJSONSchema(POKER_HUMAN_ACTION_SCHEMA as Parameters<typeof z.fromJSONSchema>[0])

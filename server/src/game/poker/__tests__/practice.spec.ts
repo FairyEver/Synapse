@@ -12,7 +12,7 @@ import { orderedDeck } from "../engine/deck"
 import { saveHand } from "../poker-lifecycle"
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("程序机器人陪练生命周期", () => {
-  const db = new PrismaClient({ datasources: { db: { url } } }) as PrismaService
+  const db = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://localhost/unused_e2e" } } }) as PrismaService
   const hall = new HallService(db), poker = new PokerService(db, hall), actions = new PokerActionService(poker), bots = new PokerBotService(poker)
   afterAll(() => db.$disconnect())
   async function room(maxSeats = 3) {

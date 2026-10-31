@@ -6,7 +6,6 @@ export const SYSTEM_APP_IDS = [
   "mail-internal",
   "mail",
   "todos",
-  "game-hall",
   "automation",
   "launcher",
   "settings",
@@ -34,7 +33,6 @@ export type SynapseSystemAppNamespace =
   | "mail_internal"
   | "mail"
   | "todos"
-  | "game"
   | "automation"
   | "launcher"
   | "settings"

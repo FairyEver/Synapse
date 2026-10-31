@@ -1418,7 +1418,6 @@ export type SynapseBridge = {
     }
   }
   mail: import("../../app-capabilities/mail/shared/bridge").MailBridge
-  game: import("../../app-capabilities/game-hall/shared/bridge").GameBridge
   todos: {
     item: {
       list: (input?: import("@synapse/shared/todo-contracts").TodoListInput) => Promise<import("@synapse/shared/todo-contracts").TodoPageDto>

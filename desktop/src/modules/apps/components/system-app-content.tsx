@@ -1,4 +1,3 @@
-import {GameHallApp} from "../../game-hall/GameHallApp"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -110,7 +109,6 @@ function SystemAppContent({
   if (appId === "agent-personas") return <AgentPersonasModule />
   if (appId === "workflow") return <WorkflowModule />
   if (appId === "drive") return <DriveModule />
-  if(appId === "game-hall") return <GameHallApp openRequest={viewOpenRequest} />
   if (appId === "todos") return <TodosModule openRequest={todoOpenRequest} onOpenRequestConsumed={onTodoOpenRequestConsumed} />
   if (appId === "mail") return <ExternalMailModule openRequest={mailOpenRequest} onOpenRequestConsumed={onMailOpenRequestConsumed} />
   if (appId === "mail-internal") return <MailModule openRequest={mailInternalOpenRequest} onOpenRequestConsumed={onMailInternalOpenRequestConsumed} />

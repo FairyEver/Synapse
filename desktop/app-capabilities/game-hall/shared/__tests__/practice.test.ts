@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
-import { gameIpcModule } from "../../main/ipc"
+import { GAME_UI_OPERATIONS } from "@synapse/shared/game-ui"
 import { GAME_RESPONSE_SCHEMAS } from "../response-schemas"
 describe("陪练客户端协议", () => {
   it("机器人管理与人工出牌入座可从UI调用，等待仍仅Agent使用", () => {
-    const ids = Object.values(gameIpcModule.methods).map((m) => m.operationId)
+    const ids = GAME_UI_OPERATIONS.map((m) => m.id)
     expect(ids).toHaveLength(24)
     expect(ids).toContain("app.game.poker.bot.add")
     expect(ids).toContain("app.game.poker.bot.remove")

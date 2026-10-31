@@ -1,16 +1,18 @@
 export class ApiError extends Error {
   readonly code?: string
   readonly status: number
+  readonly details: Record<string, unknown>
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, details: Record<string, unknown> = {}) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.details = details
   }
 }
 
-async function readErrorDetails(response: Response): Promise<{ readonly code?: string; readonly message: string }> {
+async function readErrorDetails(response: Response): Promise<{ readonly code?: string; readonly message: string; readonly details?: Record<string, unknown> }> {
   const fallback = response.statusText || '请求失败'
 
   try {
@@ -18,7 +20,7 @@ async function readErrorDetails(response: Response): Promise<{ readonly code?: s
     const code = typeof payload.code === 'string' ? payload.code : undefined
 
     if (typeof payload.message === 'string') {
-      return { code, message: payload.message }
+      return { code, message: payload.message, details: payload }
     }
 
     if (Array.isArray(payload.message)) {
@@ -55,7 +57,7 @@ export async function requestJson<T>(path: string, options: RequestInit = {}) {
 
   if (!response.ok) {
     const error = await readErrorDetails(response)
-    throw new ApiError(error.message, response.status, error.code)
+    throw new ApiError(error.message, response.status, error.code, error.details)
   }
 
   return (await response.json()) as T

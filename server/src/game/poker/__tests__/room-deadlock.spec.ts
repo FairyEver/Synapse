@@ -123,6 +123,7 @@ const url = gameTestDatabaseUrl()
         code: "P2034",
         clientVersion: Prisma.prismaVersion.client,
       })
+    const originalName = (await db.gamePokerRoom.findUniqueOrThrow({ where: { code } })).name
     let attempts = 0
     await expect(
       poker.withRoom(code, async (c) => {
@@ -132,7 +133,7 @@ const url = gameTestDatabaseUrl()
       }),
     ).rejects.toBe(error)
     expect(attempts).toBe(3)
-    expect((await db.gamePokerRoom.findUniqueOrThrow({ where: { code } })).name).toBeNull()
+    expect((await db.gamePokerRoom.findUniqueOrThrow({ where: { code } })).name).toBe(originalName)
   })
   it.each([
     new Error("network failed"),

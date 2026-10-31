@@ -6,6 +6,7 @@ import {
   Webhook,
   MonitorSmartphone,
   FolderKanban,
+  Gamepad2,
 } from 'lucide-react'
 import { Logo } from '@/assets/logo'
 import type { AuthUser } from '@/stores/auth-store'
@@ -33,6 +34,12 @@ const userAccountNavGroup = {
       title: 'Webhooks',
       url: '/webhooks',
       icon: Webhook,
+    },
+    {
+      title: '游戏',
+      url: '/game/',
+      icon: Gamepad2,
+      newTab: true,
     },
     {
       title: 'Webhook 历史',

@@ -285,7 +285,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ["poker.bot.remove", "仅陪练房房主移除本房机器人；本手参与者手后移除，不能控制其动作或真人座位。", { ...room, botId: str() }, ["roomCode", "botId"], true],
   [
     "poker.seat.join",
-    "按当前账号+roomCode入座，无令牌。有控制历史且已离桌时，先table.state确认桌面已授权AI重新入座，再携匹配controlVersion；未授权不得自动入座扣点。modelName仅自述。",
+    "按当前账号+roomCode入座，无令牌。有控制历史且已离桌时，先table.state确认Web 游戏中心已授权 AI 重新入座，再携匹配controlVersion；未授权不得自动入座扣点。modelName仅自述。",
     { ...room, agentId: str(), modelName: str(24), controlVersion },
     ["roomCode"],
     true,

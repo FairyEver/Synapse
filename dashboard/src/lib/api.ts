@@ -72,6 +72,7 @@ import { ApiError, readErrorMessage, requestJson } from './api-client'
 export { ApiError } from './api-client'
 
 export type DashboardSession = {
+  userId?: string
   email: string
   handle: string | null
   sessionId: string
@@ -671,6 +672,7 @@ export function shouldNotifyAuthExpired(path: string, status: number, errorCode?
     !path.startsWith(legacyDashboardApiBasePath) &&
     !path.startsWith(skillRepositoryApiBasePath) &&
     !path.startsWith('/api/notifications/') &&
+    !path.startsWith('/api/game/') &&
     !isProtectedDriveApiPath(path)
   ) {
     return false
@@ -946,7 +948,7 @@ export function getBackupDownloadUrl(filename: string) {
 }
 
 export const dashboardApi = {
-  getSession: () => request<DashboardSession>(`${consoleApiBasePath}/session`),
+  getSession: (options: { signal?: AbortSignal } = {}) => request<DashboardSession>(`${consoleApiBasePath}/session`, options),
   login: (credentials: { email: string; password: string }) =>
     request<DashboardSession>(`${consoleApiBasePath}/login`, {
       method: 'POST',
@@ -954,7 +956,7 @@ export const dashboardApi = {
     }),
   logout: () =>
     request<{ ok: true }>(`${consoleApiBasePath}/logout`, { method: 'POST' }),
-  getMe: () => request<DashboardMe>(`${consoleApiBasePath}/me`),
+  getMe: (options: { signal?: AbortSignal } = {}) => request<DashboardMe>(`${consoleApiBasePath}/me`, options),
   updateMe: (input: { handle?: string; nickname?: string; contactEmail?: string | null }) =>
     request<DashboardMe>(`${consoleApiBasePath}/me`, {
       method: 'PATCH',

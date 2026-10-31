@@ -1,3 +1,4 @@
+import { broadcastUserSessionChange } from '@/lib/user-session-events'
 import { create } from 'zustand'
 
 export interface AuthUser {
@@ -19,15 +20,19 @@ export const useAuthStore = create<AuthState>()((set) => ({
   auth: {
     user: null,
     isAuthenticated: false,
-    setUser: (user) =>
+    setUser: (user) => {
+      broadcastUserSessionChange()
       set((state) => ({
         ...state,
         auth: { ...state.auth, user, isAuthenticated: !!user },
-      })),
-    reset: () =>
+      }))
+    },
+    reset: () => {
+      broadcastUserSessionChange()
       set((state) => ({
         ...state,
         auth: { ...state.auth, user: null, isAuthenticated: false },
-      })),
+      }))
+    },
   },
 }))

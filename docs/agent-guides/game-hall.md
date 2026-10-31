@@ -1,32 +1,34 @@
 # 游戏大厅接入与验证
 
-创建房间时，桌面预填当前 Synapse 昵称加「的房间」，默认名称或空名称由服务端在建房时补上实际 roomCode，格式为「李杨的房间 #123456」；自定义名称保持不变，48 字限制须为房间号预留空间。每次打开表单重新取当前昵称，不沿用上次房间名称。房间类型、牌组、盲注、座位数及带入/初始筹码在选择时通过既有 config IPC 保存到本机 `core.config.global.pokerRoomPreferences[userId]`，取消或重启后仍恢复，账号间隔离；首次使用沿用 points/standard52/1/2/6座/1000。配置读取失败提示重试，写入失败提示重新选择；选项记忆只影响桌面默认值，不让 MCP 隐式继承配置。默认命名复用 room.create 的可选 name，不新增 IPC、能力或数据库迁移；先上线服务端再更新桌面。
+2026-10-31：游戏 UI 已迁移至 Web；本机 MCP/Skill 和后台能力保留。Web 与本机必须使用同一 Synapse 账号才能操作同一座位。Web 会话复用 Console 登录，Cookie 游戏请求必须绑定预期 userId，写请求同源；退出或刷新页面不自动离桌或交接。
 
-桌面牌桌按内容区实际宽度切换操作布局：大于 850px 时共用右栏，上方日志、AI 判断和陪练管理，下方出牌与座位管理；日志展开不改变牌桌宽度。不超过 850px 时底部仅常驻轮次状态及三个合法主要操作，下注/加注先展开金额设置，再显式确认提交；日志为不覆盖底部操作的侧栏，座位管理在顶部“更多”中。金额弹层、日志和更多互斥，普通轮次变化不能强制关闭座位管理菜单。新手、行动序号、控制/视角变化关闭旧金额设置；全下仍需确认，未知结果仍复用原 actionId 重试。复用共享 Tabs/Popover，弹层挂到牌桌内部继承游戏主题，不新增 IPC/MCP/Skill 操作。
+创建房间时，Web预填当前 Synapse 昵称加「的房间」，默认名称或空名称由服务端在建房时补上实际 roomCode，格式为「李杨的房间 #123456」；自定义名称保持不变，48 字限制须为房间号预留空间。每次打开表单重新取当前昵称，不沿用上次房间名称。房间类型、牌组、盲注、座位数及带入/初始筹码在选择时按 userId 保存在当前浏览器 localStorage，取消或重启后仍恢复，账号间隔离；首次使用沿用 points/standard52/1/2/6座/1000。配置读取失败提示重试，写入失败提示重新选择；选项记忆只影响Web默认值，不让 MCP 隐式继承配置。默认命名复用 room.create 的可选 name，不新增 IPC、能力或数据库迁移；先上线服务端再更新Web。
 
-桌面德州扑克音效由本地打包的 Kenney Casino Audio CC0 素材提供，来源与原始许可在扑克模块 `assets/audio/`。按权威快照 handId/actionSeq 增量反馈发牌、公共牌、下注、弃牌、过牌、收池、派彩与本人真人行动；下注及普通派彩金额不超过 12 时按一元一筹码响，5 元五次、10 元十次，超过 12 时按对数平滑增加到最多 16 下；13 元十三次、32 元十四次、100 元十六次，不因金额增大而减少碰撞次数。下注（含盲注）将碰撞集中在最多 180ms 内，首声立即播放、略微错开后形成一簇，连同尾音约 0.44 秒；首个碰撞保留清晰起音，其余增益随数量按平方根衰减，避免叠加变响，不逐个数拍。普通派彩保留原节奏、最快间隔 55ms。本人在玩家视角实际赢池且净盈利时，用皮袋落下与两种金属金币碰撞组合替代普通派彩；按本人本手净赢金额分档增加至 2–6 段，间隔 190–110ms、音量固定，含等待与尾音最长约两秒；分池合并一次，退款、净亏及旁观不触发落袋。专属素材来自 Kenney RPG Audio（CC0），许可与来源保存在同一素材目录。每张新公共牌响一次，相邻间隔 120ms，翻三张响三次，转牌河牌各一次。首次载入、过期快照、超过三秒间隔、身份/视角/控制变更、后台恢复及重新开声只建立基线，不补播历史；静音、失焦、隐藏、跨手与卸载取消旧声源，不影响规则、资金或倒计时。首个真实交互解锁播放，资源或播放失败只记录日志，不阻塞游戏。开关仅保存在当前牌桌组件内，不新增设置存储。MCP schema、IPC 与系统 Skill 操作协议不变。
+Web牌桌按内容区实际宽度切换操作布局：大于 850px 时共用右栏，上方日志、AI 判断和陪练管理，下方出牌与座位管理；日志展开不改变牌桌宽度。不超过 850px 时底部仅常驻轮次状态及三个合法主要操作，下注/加注先展开金额设置，再显式确认提交；日志为不覆盖底部操作的侧栏，座位管理在顶部“更多”中。金额弹层、日志和更多互斥，普通轮次变化不能强制关闭座位管理菜单。新手、行动序号、控制/视角变化关闭旧金额设置；全下仍需确认，未知结果仍复用原 actionId 重试。复用共享 Tabs/Popover，弹层挂到牌桌内部继承游戏主题，不新增 IPC/MCP/Skill 操作。
 
-桌面筹码与轮次反馈以权威 table 快照为单一时序，按 handId/actionSeq 去重；events 游标流继续用于日志。首次载入、超过三秒断流、后台切回、身份/视角/控制版本/布局变化建立基线，不补播历史动作；快速跨街优先最新状态，不排队到下一手。筹码从实际座位牌框到独立本轮下注锚点，本轮结束再进入实际底池，收池包含盲注及新增投入。赢家座位显示赢池金额和净变化，返还与赢池分开；本人赢池且净盈利才有短庆祝，资金、控制和倒计时不依赖动画回调。画布根据实际可用区域宽高比自动使用横向、方形或纵向场景，座位、卡牌、文字和下注统一 contain 等比缩放，不单独逆缩放字号/座位宽度；减弱动态效果移除位移和庆祝，保留静态动作、下注及结果。MCP/IPC 和系统 Skill 操作协议不变。
+Web德州扑克音效由本地打包的 Kenney Casino Audio CC0 素材提供，来源与原始许可在扑克模块 `assets/audio/`。按权威快照 handId/actionSeq 增量反馈发牌、公共牌、下注、弃牌、过牌、收池、派彩与本人真人行动；下注及普通派彩金额不超过 12 时按一元一筹码响，5 元五次、10 元十次，超过 12 时按对数平滑增加到最多 16 下；13 元十三次、32 元十四次、100 元十六次，不因金额增大而减少碰撞次数。下注（含盲注）将碰撞集中在最多 180ms 内，首声立即播放、略微错开后形成一簇，连同尾音约 0.44 秒；首个碰撞保留清晰起音，其余增益随数量按平方根衰减，避免叠加变响，不逐个数拍。普通派彩保留原节奏、最快间隔 55ms。本人在玩家视角实际赢池且净盈利时，用皮袋落下与两种金属金币碰撞组合替代普通派彩；按本人本手净赢金额分档增加至 2–6 段，间隔 190–110ms、音量固定，含等待与尾音最长约两秒；分池合并一次，退款、净亏及旁观不触发落袋。专属素材来自 Kenney RPG Audio（CC0），许可与来源保存在同一素材目录。每张新公共牌响一次，相邻间隔 120ms，翻三张响三次，转牌河牌各一次。首次载入、过期快照、超过三秒间隔、身份/视角/控制变更、后台恢复及重新开声只建立基线，不补播历史；静音、失焦、隐藏、跨手与卸载取消旧声源，不影响规则、资金或倒计时。首个真实交互解锁播放，资源或播放失败只记录日志，不阻塞游戏。开关仅保存在当前牌桌组件内，不新增设置存储。MCP schema、IPC 与系统 Skill 操作协议不变。
 
-桌面应用显示名称与窗口标题为“游戏”；App ID `game-hall`、namespace `game` 和现有 MCP、深链保持不变。
+Web筹码与轮次反馈以权威 table 快照为单一时序，按 handId/actionSeq 去重；events 游标流继续用于日志。首次载入、超过三秒断流、后台切回、身份/视角/控制版本/布局变化建立基线，不补播历史动作；快速跨街优先最新状态，不排队到下一手。筹码从实际座位牌框到独立本轮下注锚点，本轮结束再进入实际底池，收池包含盲注及新增投入。赢家座位显示赢池金额和净变化，返还与赢池分开；本人赢池且净盈利才有短庆祝，资金、控制和倒计时不依赖动画回调。画布根据实际可用区域宽高比自动使用横向、方形或纵向场景，座位、卡牌、文字和下注统一 contain 等比缩放，不单独逆缩放字号/座位宽度；减弱动态效果移除位移和庆祝，保留静态动作、下注及结果。MCP/IPC 和系统 Skill 操作协议不变。
 
-桌面创建扑克房间使用独立深色游戏弹窗：房间类型、牌组、盲注和带入直接点选，座位数在 2–10 人之间步进调节；提交期间禁用草稿修改，关闭后恢复入口焦点。仅改变桌面呈现，创建参数、默认值及 creationId 重试语义不变，MCP schema 与系统 Skill 无需变更。
+游戏中心位于独立 `/game/` Web 页面，由 Console 侧栏在新标签页打开；桌面不再提供游戏 UI 或入口。namespace `game` 和 26 项 MCP 保持兼容，历史 `synapse://app/game-hall` 与房间深链改为受控打开浏览器。
 
-桌面牌桌以本人下方视角呈现，操作区使用游戏专属控件，明确提示轮到本人、等待对象、AI 操作与暂离状态；下注支持最小、半池和一池预设，全下需确认。日志默认收起；陪练房房主在牌桌顶部直接点击「添加机器人」，无需打开日志或切换标签；「陪练」标签直接显示机器人列表与移除操作，不再折叠。顶部与侧栏添加入口共用请求状态及创建标识，提交中同时禁用、失败重试复用标识；满员显示「座位已满」，点数房、非房主或房间已解散不显示管理入口。窄窗口顶部操作允许换行。结算在牌桌上方给出摘要，完整牌型、分池与返还仍在日志。沉浸房间隐藏内嵌宿主的业务顶栏和 Dock，返回房间后恢复。本次仅调整 Renderer 交互与布局；26 项 game MCP 能力、24 项 IPC、权限和控制版本语义不变，系统 Skill 包的操作协议无需变更。
+Web创建扑克房间使用独立深色游戏弹窗：房间类型、牌组、盲注和带入直接点选，座位数在 2–10 人之间步进调节；提交期间禁用草稿修改，关闭后恢复入口焦点。仅改变Web呈现，创建参数、默认值及 creationId 重试语义不变，MCP schema 与系统 Skill 无需变更。
 
-用户可桌面亲自打牌，也可请求自己的Agent通过Synapse MCP托管；同账号同房只有一个座位，共用筹码和当前手。系统不托管模型，没有座位令牌；程序机器人仅限陪练房。真人接管优先，AI收到control_released必须退出，不自动重新认领。
+Web牌桌以本人下方视角呈现，操作区使用游戏专属控件，明确提示轮到本人、等待对象、AI 操作与暂离状态；下注支持最小、半池和一池预设，全下需确认。日志默认收起；陪练房房主在牌桌顶部直接点击「添加机器人」，无需打开日志或切换标签；「陪练」标签直接显示机器人列表与移除操作，不再折叠。顶部与侧栏添加入口共用请求状态及创建标识，提交中同时禁用、失败重试复用标识；满员显示「座位已满」，点数房、非房主或房间已解散不显示管理入口。窄窗口顶部操作允许换行。结算在牌桌上方给出摘要，完整牌型、分池与返还仍在日志。沉浸房间隐藏游戏业务顶栏，返回房间列表后恢复。本次仅调整 Web UI 交互与布局；26 项 game MCP 能力、0 项游戏 IPC、权限和控制版本语义不变，系统 Skill 包的操作协议无需变更。
 
-桌面房间列表合并点数房和陪练房，房名旁标明类型，不再切换筛选。lobby.list(mode=all)按统一顺序分页返回两类房间；省略mode仍默认points，可显式practice只查陪练。all仅为列表查询条件，不是房间类型，历史和统计仍按points/practice隔离。此查询扩展先上线服务端API再更新桌面，无数据库迁移。
+用户可Web亲自打牌，也可请求自己的Agent通过Synapse MCP托管；同账号同房只有一个座位，共用筹码和当前手。系统不托管模型，没有座位令牌；程序机器人仅限陪练房。真人接管优先，AI收到control_released必须退出，不自动重新认领。
 
-房主从大厅解散陪练房时，若现有座位及未结算当前手均只有房主账号与程序机器人，立即关闭；真人或AI控制均适用。当前手标记cancelled并保留过程，不产生结算摘要或战绩，已有已完成结果仍可补发；会话关闭、行动提示与机器人/续局调度一并清空，不兑换点数。有其他账号（含暂离、候场或本手已离座的参与者）时仍按本手结束后解散。此操作仅桌面私有room.close，不新增MCP工具。
+Web房间列表合并点数房和陪练房，房名旁标明类型，不再切换筛选。lobby.list(mode=all)按统一顺序分页返回两类房间；省略mode仍默认points，可显式practice只查陪练。all仅为列表查询条件，不是房间类型，历史和统计仍按points/practice隔离。此查询扩展先上线服务端API再更新Web，无数据库迁移。
+
+房主从大厅解散陪练房时，若现有座位及未结算当前手均只有房主账号与程序机器人，立即关闭；真人或AI控制均适用。当前手标记cancelled并保留过程，不产生结算摘要或战绩，已有已完成结果仍可补发；会话关闭、行动提示与机器人/续局调度一并清空，不兑换点数。有其他账号（含暂离、候场或本手已离座的参与者）时仍按本手结束后解散。此操作仅Web私有room.close，不新增MCP工具。
 
 陪练流程：room_create(mode=practice)→房主bot_add(roomCode,creationId=UUID)→真人AI正常overview/join/wait/act。bot_remove按botId，本手参与者手后移除；计分房/非房主拒绝。新机器人新UUID，同次重试复用，移除后旧标识不复活。机器人不是账号，无大厅账户/会话；规则策略只接本人及公开信息，持久调度、房锁和引擎裁决。仅机器人或真人全暂离不发新手，机器人不续无人房寿命。
 
-陪练GameSession funding=practice，buyIn/inPlay/returned仅0/null，练习筹码不进账户盈亏或流水；默认历史/统计points，明确mode=practice查练习，归档及版本手数保持隔离。上线须先执行20261030130000_game_poker_practice和20261030131000_game_poker_practice_summary迁移，再API与桌面；已有练习数据后不能回到无资金类型隔离的旧退款逻辑。
+陪练GameSession funding=practice，buyIn/inPlay/returned仅0/null，练习筹码不进账户盈亏或流水；默认历史/统计points，明确mode=practice查练习，归档及版本手数保持隔离。上线须先执行20261030130000_game_poker_practice和20261030131000_game_poker_practice_summary迁移，再API与Web；已有练习数据后不能回到无资金类型隔离的旧退款逻辑。
 
-接入先通过search发现`app_game_poker_guide`，然后`app_game_hall_overview`；已有座位先检查status：sitting_out仅在用户明确要求继续或完整核对有效上下文维护检查点后seat_sit(false)再wait，仅查看或重连不自动回座；其他已有座位先table_state确认AI控制权再wait，无座位先table_state/room_get核对控制历史及桌面入座授权，再决定lobby_list/seat_join。暂离时wait只返回waiting，不能等回座错误。GameSession与overview保留实际sitting_out状态，当前手中申请暂离仍为active直到本手结束；seat_sit的sittingOut为请求确认，pending/status表示实际生效情况，pending时立刻停止调用仍可能600秒超时离桌。每次your_turn提交UUID标识的合法act，丢响应时保留同一UUID重试。wait先按cursor补发本次入座未读结算（含已离桌或归档），再返回table_closed；空cursor直接接当前牌况，数字越界拒绝。完整协议、参数与恢复路径以系统Skill包`desktop/app-capabilities/synapse-skill/skill-package/game-hall/`为准。
+接入先通过search发现`app_game_poker_guide`，然后`app_game_hall_overview`；已有座位先检查status：sitting_out仅在用户明确要求继续或完整核对有效上下文维护检查点后seat_sit(false)再wait，仅查看或重连不自动回座；其他已有座位先table_state确认AI控制权再wait，无座位先table_state/room_get核对控制历史及Web入座授权，再决定lobby_list/seat_join。暂离时wait只返回waiting，不能等回座错误。GameSession与overview保留实际sitting_out状态，当前手中申请暂离仍为active直到本手结束；seat_sit的sittingOut为请求确认，pending/status表示实际生效情况，pending时立刻停止调用仍可能600秒超时离桌。每次your_turn提交UUID标识的合法act，丢响应时保留同一UUID重试。wait先按cursor补发本次入座未读结算（含已离桌或归档），再返回table_closed；空cursor直接接当前牌况，数字越界拒绝。完整协议、参数与恢复路径以系统Skill包`desktop/app-capabilities/synapse-skill/skill-package/game-hall/`为准。
 
-点数与跨游戏进行中属于大厅；扑克service更新会话索引，不能让大厅读取扑克表。所有敏感字段在服务端白名单投影，Renderer旁观投影只作额外防护。
+点数与跨游戏进行中属于大厅；扑克service更新会话索引，不能让大厅读取扑克表。所有敏感字段在服务端白名单投影，Web UI旁观投影只作额外防护。
 
 客户端拒绝畸形成功响应并返回GAME_INVALID_RESPONSE，读请求可重试恢复；写请求结果视为未知，先overview或读取已保存对象核对，act重试复用原actionId，创建重试复用原creationId，不能因响应损坏另发新动作。校验只执行既有契约，保留未来附加字段，不代替服务端权限或出牌校验。
 
@@ -47,7 +49,7 @@ pnpm --filter @synapse/desktop run test --maxWorkers=4
 
 真实客户端验收辅助：先构建server API，再用esbuild构建`desktop/tests/manual/game-hall-eval-mcp.ts`到临时产物，运行`server/test/game-hall-ai-eval.cjs`。该脚本仅接受其明确限定的任务测试库，不使用生产账号、不发送真实推送。它运行真实Claude Code与Codex CLI、只暴露game能力，经同一服务与MCP router验证50手与停进程120秒后的新会话overview恢复。运行结果必须以输出的report.json为证，脚本存在不等于验收通过。
 
-发布顺序是服务端新增表迁移及API在先、桌面客户端在后。本功能开发本身不授权发版、部署或业务库迁移；无远程动作时明确标记未部署。回滚客户端不会删除游戏数据；有业务数据后不得直接删除新增表，先保存账户、会话与不可变记录。
+发布顺序是服务端新增表迁移及API在先、Web客户端在后。本功能开发本身不授权发版、部署或业务库迁移；无远程动作时明确标记未部署。回滚客户端不会删除游戏数据；有业务数据后不得直接删除新增表，先保存账户、会话与不可变记录。
 
 归档按UTC基准满90天后执行，不受数据库会话时区影响：数据库函数先验证不可变完整副本，随后清理热表；记录查询和统计统一覆盖热数据与归档。提示词版本与成功行动幂等凭据永久保存。发布时必须七份游戏迁移一并按顺序应用（原五份及两份陪练迁移），不能只上线API。
 
@@ -55,20 +57,20 @@ pnpm --filter @synapse/desktop run test --maxWorkers=4
 
 行动日志的displayName固定为该手参与者快照，不能用当前座位姓名替代；服务端在交叉入座产生已回滚死锁时有限重试，不放宽余额与唯一座位约束。
 
-创建结果丢失时，可用同一creationId恢复房间或同一新选手草稿，不按名称/内容合并。新建另一个实体换UUID；已有选手取得id后仅按id更新，不再传creationId。该字段只用于创建去重，不影响座位重连。新桌面创建会使用该字段，旧客户端不传仍可用，部署顺序必须先服务端后桌面。
+创建结果丢失时，可用同一creationId恢复房间或同一新选手草稿，不按名称/内容合并。新建另一个实体换UUID；已有选手取得id后仅按id更新，不再传creationId。该字段只用于创建去重，不影响座位重连。新Web创建会使用该字段，旧客户端不传仍可用，部署顺序必须先服务端后Web。
 
 
 ## 真人控制、规则与事件
 
 共享PokerRules为{variant:standard52|short32,smallBlind,bigBlind}；Room/Summary/Detail通过rules返回快照，Table另带variant/smallBlind/bigBlind。short32仅7到A、同花大于葫芦、A789T最小顺子；盲注预设1/2、2/4、5/10、10/20，默认标准52张和1/2，建房后固定。结算含rules/seats/pots/mixedControl，未跟注返还标记refund。结算后服务端持久等待5秒，前端不擅自开手。
 
-控制权和版本由服务端决定；桌面control.set(takeover|request_ai|cancel_ai)必须带controlVersion，AI只对用户已申请的handoff调用control.claim。接管即时提升epoch、旧AI动作和seat.sit/leave写权失效，已提交动作不回滚，截止时间不重置。act带controlVersion/expectedActionSeq，省略版本只兼容初始epoch0；响应未知保持actionId确认原动作。human动作不绑定persona/note，程序机器人仍rules_bot。
+控制权和版本由服务端决定；Webcontrol.set(takeover|request_ai|cancel_ai)必须带controlVersion，AI只对用户已申请的handoff调用control.claim。接管即时提升epoch、旧AI动作和seat.sit/leave写权失效，已提交动作不回滚，截止时间不重置。act带controlVersion/expectedActionSeq，省略版本只兼容初始epoch0；响应未知保持actionId确认原动作。human动作不绑定persona/note，程序机器人仍rules_bot。
 
-UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/control与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Renderer窄bridge有join/act/control.set/events，没有wait/control.claim/checkpoint。game26项公共能力，24项IPC；room.close/control.set两个私有UI操作不进capability/MCP。
+UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/control与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Web UI 通过 REST 调用 join/act/control.set/events，没有 wait/control.claim/checkpoint；桌面游戏 bridge 已移除。game 26 项公共能力；桌面游戏 IPC 为 0；room.close/control.set两个私有UI操作不进capability/MCP。
 
-table.events可传perspective=owner|public，MCP默认owner且固定decision投影；UI默认public，玩家日志必须随牌桌传owner，不能混入教学明牌。返回{events,cursor,hasMore}，limit最大100，按(handNo,seq,kind)去重并推进返回cursor；结算seq=2147483647，重连直接呈现最新状态，不重放旧动画。扑克房间获准隐藏业务顶栏/底栏，三种内部场景按可用比例自动选择并 contain 等比缩放、日志可折叠/窄屏抽屉；大厅维持统一壳。
+table.events可传perspective=owner|public，MCP默认owner且固定decision投影；UI默认public，玩家日志必须随牌桌传owner，不能混入教学明牌。返回{events,cursor,hasMore}，limit最大100，按(handNo,seq,kind)去重并推进返回cursor；结算seq=2147483647，重连直接呈现最新状态，不重放旧动画。扑克房间获准隐藏业务顶栏/底栏，三种内部场景按可用比例自动选择并 contain 等比缩放、日志可折叠/窄屏抽屉；大厅使用独立 Web 页面壳。
 
-服务端永久参与证据包含closed会话：桌面从未入座账号可教学全牌；参与点数房不能看他人暗牌，参与陪练房最多看程序机器人教学明牌；玩家按本人及合法摊牌，教学不扩大历史读取。MCP/机器人策略始终决策投影；UI公开投影剥离persona、版本、note、合法动作等，但保留服务端已授权hole和mySeatNo，客户端不能自行授予教学权限。
+服务端永久参与证据包含closed会话：Web从未入座账号可教学全牌；参与点数房不能看他人暗牌，参与陪练房最多看程序机器人教学明牌；玩家按本人及合法摊牌，教学不扩大历史读取。MCP/机器人策略始终决策投影；UI公开投影剥离persona、版本、note、合法动作等，但保留服务端已授权hole和mySeatNo，客户端不能自行授予教学权限。
 
 ## 上下文维护
 
@@ -76,7 +78,7 @@ table.events可传perspective=owner|public，MCP默认owner且固定decision投�
 
 宿主确实支持原生压缩且确认成功才继续；不可用/失败/不明时安全退出提示手动，不用shell伪执行/compact。恢复重读Skill、房规、overview、checkpoint、state；同epoch、AI控制、continueIntent、context_maintenance及真实暂离均有效才回座。不撤销用户暂停/接管/离桌，清退后不自动扣点入座，不增加后台常驻AI运行器。
 
-本次变更仅生成迁移，业务库迁移、部署、真实客户端验收均需单独授权执行。发布先新增迁移再API再桌面；已发生控制切换或短牌数据后，不得回滚到忽略控制epoch/规则快照的旧API。
+本次变更仅生成迁移，业务库迁移、部署、真实客户端验收均需单独授权执行。发布先新增迁移再API再Web；已发生控制切换或短牌数据后，不得回滚到忽略控制epoch/规则快照的旧API。
 
 
-永久扑克控制历史独立于座位保存，离桌/清退不能抹去旧AI写入失效边界。无座位时table.requiresJoinApproval=false明确表示没有历史，可按用户原入座授权首次join；true表示有历史，此时table.controller=null，controlVersion取历史版本，handoffPending表示joinPending。不能按版本0判断历史；缺少标记先核实。UI可在无座位通过control.set(request_ai/cancel_ai)授权/撤销AI重新入座；MCP seat.join有历史时必须该授权有效且携匹配controlVersion。未授权不自动入座、不重扣点，控制记录不存在的首次旧MCP入座才兼容省略版本；control.claim仅用于有座位交接。本次仅扩展既有join输入和私有control.set语义，26项game能力、24项IPC与全局计数不变。
+永久扑克控制历史独立于座位保存，离桌/清退不能抹去旧AI写入失效边界。无座位时table.requiresJoinApproval=false明确表示没有历史，可按用户原入座授权首次join；true表示有历史，此时table.controller=null，controlVersion取历史版本，handoffPending表示joinPending。不能按版本0判断历史；缺少标记先核实。UI可在无座位通过control.set(request_ai/cancel_ai)授权/撤销AI重新入座；MCP seat.join有历史时必须该授权有效且携匹配controlVersion。未授权不自动入座、不重扣点，控制记录不存在的首次旧MCP入座才兼容省略版本；control.claim仅用于有座位交接。本次仅扩展既有join输入和私有control.set语义，26 项 game 能力、0 项游戏 IPC与全局计数不变。

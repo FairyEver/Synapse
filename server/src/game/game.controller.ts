@@ -19,10 +19,11 @@ import { GameApiService } from "./game-api.service"
 import { PokerActionService } from "./poker/poker-action.service"
 import { PokerService } from "./poker/poker.service"
 import { PokerEventsService } from "./poker/poker-events.service"
+import { GameWebGuard } from "./game-web.guard"
 const callSchema = z
   .object({ operation: z.string().max(100), params: z.record(z.string(), z.unknown()).default({}) })
   .strict()
-@UseGuards(UserAuthGuard)
+@UseGuards(UserAuthGuard, GameWebGuard)
 @Controller("/api/game")
 export class GameController {
   constructor(

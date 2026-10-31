@@ -20,7 +20,7 @@ describe("陪练MCP注册", () => {
   })
 })
 ;(url ? describe : describe.skip)("陪练热冷记录隔离", () => {
-  const db = new PrismaClient({ datasources: { db: { url } } }) as PrismaService
+  const db = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://localhost/unused_e2e" } } }) as PrismaService
   const hall = new HallService(db), poker = new PokerService(db, hall), actions = new PokerActionService(poker), read = new PokerReadService(poker), bots = new PokerBotService(poker)
   afterAll(() => db.$disconnect())
   it("默认历史/统计/版本手数不计陪练，归档前后隔离一致", async () => {

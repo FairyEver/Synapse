@@ -12,7 +12,7 @@ import { gameTestDatabaseUrl } from "./test-database"
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("单人陪练立即解散", () => {
-  const db = new PrismaClient({ datasources: { db: { url } } }) as PrismaService
+  const db = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://localhost/unused_e2e" } } }) as PrismaService
   const hall = new HallService(db), poker = new PokerService(db, hall)
   const actions = new PokerActionService(poker), bots = new PokerBotService(poker)
   const read = new PokerReadService(poker), wait = new PokerWaitService(actions)

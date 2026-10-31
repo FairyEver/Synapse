@@ -1,4 +1,3 @@
-import {unwrapGameResult} from "../app-capabilities/game-hall/shared/bridge"
 import type { ShareDomainEvent } from "../app-capabilities/agent/shared/share"
 /**
  * Phase 0.3 — Minimal preload bridge.
@@ -781,68 +780,6 @@ const synapseBridge: SynapseBridge = {
     },
   },
   mail: createMailBridge((channel, input) => invoke(channel)(input), createDomainEventPayloadSubscription(subscribe, "account", "mail.changed")),
-  game: {
-    hall: {
-      overview: async () => unwrapGameResult(await invoke(IPC_CHANNELS.game.hallOverview)({})),
-      guide: async () => unwrapGameResult(await invoke(IPC_CHANNELS.game.hallGuide)({})),
-      account: async (input = {}) =>
-        unwrapGameResult(await invoke(IPC_CHANNELS.game.hallAccount)(input)),
-    },
-    poker: {
-      guide: async () => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerGuide)({})),
-      lobby: {
-        list: async (input = {}) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerLobbyList)(input)),
-      },
-      room: {
-        close: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerRoomClose)(input)),
-        create: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerRoomCreate)(input)),
-        get: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerRoomGet)(input)),
-      },
-      bot: {
-        add: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerBotAdd)(input)),
-        remove: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerBotRemove)(input)),
-      },
-      seat: {
-        join: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatJoin)(input)),
-        leave: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatLeave)(input)),
-        sit: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatSit)(input)),
-        nudge: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerSeatNudge)(input)),
-      },
-      control: {
-        set: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerControlSet)(input)),
-      },
-      action: {
-        act: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerActionAct)(input)),
-      },
-      table: {
-        events: async (input) => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerTableEvents)(input)),
-        state: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerTableState)(input)),
-      },
-      agent: {
-        list: async () => unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerAgentList)({})),
-        upsert: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerAgentUpsert)(input)),
-        versions: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerAgentVersions)(input)),
-      },
-      hand: {
-        history: async (input = {}) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerHandHistory)(input)),
-        detail: async (input) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerHandDetail)(input)),
-      },
-      stats: {
-        get: async (input = {}) =>
-          unwrapGameResult(await invoke(IPC_CHANNELS.game.pokerStatsGet)(input)),
-      },
-    },
-  },
   todos: {
     item: {
       list: async (input = {}) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.list)(input) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoPageDto>),

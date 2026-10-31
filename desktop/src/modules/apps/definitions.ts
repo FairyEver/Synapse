@@ -1,4 +1,3 @@
-import {gameHallAppDefinition} from "../game-hall/app-definition"
 import { agentAppDefinition } from "../agent/app-definition"
 import { agentPersonasAppDefinition } from "../../../app-capabilities/agent-personas/renderer/app-definition"
 import { automationAppDefinition } from "../automation/app-definition"
@@ -32,7 +31,6 @@ const systemAppDefinitions = [
   mailInternalAppDefinition,
   mailAppDefinition,
   todosAppDefinition,
-  gameHallAppDefinition,
   automationAppDefinition,
   launcherAppDefinition,
   settingsAppDefinition,

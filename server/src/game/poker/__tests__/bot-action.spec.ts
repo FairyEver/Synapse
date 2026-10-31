@@ -10,7 +10,7 @@ import { gameTestDatabaseUrl } from "./test-database"
 import { advanceNextHand, scopedBotTask } from "./advance-next-hand"
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("陪练机器人行动调度", () => {
-  const db = new PrismaClient({ datasources: { db: { url } } }) as PrismaService
+  const db = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://localhost/unused_e2e" } } }) as PrismaService
   const hall = new HallService(db), poker = new PokerService(db, hall), actions = new PokerActionService(poker), bots = new PokerBotService(poker)
   afterAll(() => db.$disconnect())
   async function room() {

@@ -20,6 +20,7 @@ type BaseNavItem = {
 }
 
 type NavLink = BaseNavItem & {
+  newTab?: boolean
   url: LinkProps['to'] | (string & {})
   items?: never
 }

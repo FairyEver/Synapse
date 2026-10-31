@@ -7,7 +7,7 @@ import { gameTestDatabaseUrl } from "./test-database"
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("陪练会话资金隔离", () => {
-  const db = new PrismaClient({ datasources: { db: { url } } }) as PrismaService
+  const db = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://localhost/unused_e2e" } } }) as PrismaService
   const hall = new HallService(db)
   afterAll(() => db.$disconnect())
   async function join(userId: string, funding: "points" | "practice") {

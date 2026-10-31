@@ -4,9 +4,9 @@ description: 用户要求德州扑克、德扑、打牌、打扑克、入座、�
 ---
 # 德州扑克
 
-首次接入：search发现`app_game_poker_guide`并invoke读规则（不需入座）→ `app_game_hall_overview`检查已有座位 → 没座位时先读取table_state（或room_get）核对该房控制历史和入座授权，再按下述规则入座。所有工具经Synapse的search/invoke调用；使用返回的准确名称和schema，不猜参数。桌面本人可入座、出牌和接管，与AI共用同一个座位、当前手和筹码；Synapse不托管模型。
+首次接入：search发现`app_game_poker_guide`并invoke读规则（不需入座）→ `app_game_hall_overview`检查已有座位 → 没座位时先读取table_state（或room_get）核对该房控制历史和入座授权，再按下述规则入座。所有工具经Synapse的search/invoke调用；使用返回的准确名称和schema，不猜参数。Web 游戏中心本人可入座、出牌和接管，与AI共用同一个座位、当前手和筹码；Synapse不托管模型。
 
-建房省略 name 或传空白时，服务端以当前 Synapse 昵称和实际房间号命名，例如「李杨的房间 #123456」；自定义名称不改写。桌面记忆的建房选项仅为本机、按账号隔离的表单偏好，MCP 不隐式继承，仍显式传入所需配置。
+建房省略 name 或传空白时，服务端以当前 Synapse 昵称和实际房间号命名，例如「李杨的房间 #123456」；自定义名称不改写。Web 游戏中心记忆的建房选项仅为当前浏览器、按账号隔离的表单偏好，MCP 不隐式继承，仍显式传入所需配置。
 
 创建房间或新选手时生成creationId(UUID)，同一创建意图响应丢失后重试复用。新开另一桌需新UUID；同一新选手草稿编辑仍复用，返回选手id后只传id更新，不与creationId同传。同名同内容但明确另建也用新UUID，不按内容合并。入座和重连仍按账号+roomCode，没有座位令牌。
 
@@ -16,13 +16,13 @@ description: 用户要求德州扑克、德扑、打牌、打扑克、入座、�
 
 ## 控制与行动
 
-座位删除不清除该房的永久控制历史。无座位时先看table_state/room_get的requiresJoinApproval：明确为false表示没有控制历史，可按用户原入座授权join，兼容首次入座；true表示有历史，必须handoffPending=true且携匹配controlVersion才可seat_join。controller=null不代表首次入座，不按版本0猜测；标记缺失或未知时先核实，不能推定首次。未授权时安全退出并提示用户在桌面请求AI入座，不自动join或重扣点。control.set(request_ai)授予该入座授权，cancel_ai撤销；取消或版本变化就停止。control_claim只用于已有座位交接，不能替代无座位入座授权。
+座位删除不清除该房的永久控制历史。无座位时先看table_state/room_get的requiresJoinApproval：明确为false表示没有控制历史，可按用户原入座授权join，兼容首次入座；true表示有历史，必须handoffPending=true且携匹配controlVersion才可seat_join。controller=null不代表首次入座，不按版本0猜测；标记缺失或未知时先核实，不能推定首次。未授权时安全退出并提示用户在Web 游戏中心请求AI入座，不自动join或重扣点。control.set(request_ai)授予该入座授权，cancel_ai撤销；取消或版本变化就停止。control_claim只用于已有座位交接，不能替代无座位入座授权。
 
-每次接手先overview、table_state；恢复会话另读checkpoint_get。controller=human时不出牌；只有用户已通过桌面请求AI托管、handoffPending=true且当前controlVersion一致时，才control_claim接受。真人接管会立即撤销旧AI动作和座位写权，不回滚已提交动作、不延长600秒。收到control_released或控制版本不符时退出循环，不重新认领、不改回座位状态。不得以过期请求覆盖用户暂停、离桌或接管。
+每次接手先overview、table_state；恢复会话另读checkpoint_get。controller=human时不出牌；只有用户已通过Web 游戏中心请求AI托管、handoffPending=true且当前controlVersion一致时，才control_claim接受。真人接管会立即撤销旧AI动作和座位写权，不回滚已提交动作、不延长600秒。收到control_released或控制版本不符时退出循环，不重新认领、不改回座位状态。不得以过期请求覆盖用户暂停、离桌或接管。
 
 ```text
 重读Skill与poker_guide；overview() → table_state(roomCode)
-确认本次用户继续意图、座位状态和AI控制权；无座位且有历史仅接受桌面入座授权并带版本join，已有座位才claim交接
+确认本次用户继续意图、座位状态和AI控制权；无座位且有历史仅接受Web 游戏中心入座授权并带版本join，已有座位才claim交接
 sessionStyle = 当前会话口述风格或安全恢复的检查点风格
 cursor = 当前游标或已验证检查点游标
 while 当前用户授权、AI控制版本有效且未到上下文维护点:
@@ -64,8 +64,8 @@ hand_result后推进cursor并继续接终局，离桌、输光、解散可能先
 
 ## 程序机器人陪练房
 
-房主可从桌面大厅解散陪练房：现有座位及未结算当前手均只有房主账号与机器人时立即解散，房主亲自操作或AI控制均适用；中断手不计已完成战绩，wait返回table_closed，已有已完成结果仍可补发。有其他账号参与时仍本手结束后解散，不兑换大厅点数。解散仅桌面私有操作，无room_close MCP工具，不用离桌冒充解散。
+房主可从Web 游戏中心大厅解散陪练房：现有座位及未结算当前手均只有房主账号与机器人时立即解散，房主亲自操作或AI控制均适用；中断手不计已完成战绩，wait返回table_closed，已有已完成结果仍可补发。有其他账号参与时仍本手结束后解散，不兑换大厅点数。解散仅Web 游戏中心私有操作，无room_close MCP工具，不用离桌冒充解散。
 
 room_create(mode=practice)→房主bot_add(roomCode,creationId=UUID)→正常入座/行动。每个新机器人新UUID，丢响应重试复用；bot_remove(roomCode,botId)的pending表示手后移除。移除后旧UUID不复活机器人，实际座位用room/table确认。仅房主管理，至少保留一位真人容量。
 
-陪练全桌练习筹码，不扣兑大厅点数、不计正式战绩；mode创建后固定，移除全部机器人也不转换。lobby_list/history/stats默认points，查练习明确mode=practice；lobby_list可用mode=all合并两类房间统一分页，桌面房间列表采用此方式并标明每间房的类型。all不能用于建房或历史/统计。机器人不调用模型、不被真人或外部AI代行动、不被催促；决策只接本人及公开信息，MCP决策也不得读取教学明牌。无人类可参赛时不发新手，输光不补。actionSource=rules_bot与human/mcp/timeout分开。
+陪练全桌练习筹码，不扣兑大厅点数、不计正式战绩；mode创建后固定，移除全部机器人也不转换。lobby_list/history/stats默认points，查练习明确mode=practice；lobby_list可用mode=all合并两类房间统一分页，Web 游戏中心房间列表采用此方式并标明每间房的类型。all不能用于建房或历史/统计。机器人不调用模型、不被真人或外部AI代行动、不被催促；决策只接本人及公开信息，MCP决策也不得读取教学明牌。无人类可参赛时不发新手，输光不补。actionSource=rules_bot与human/mcp/timeout分开。

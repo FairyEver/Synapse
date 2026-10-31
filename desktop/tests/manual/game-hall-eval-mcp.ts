@@ -22,7 +22,7 @@ const account = {
   fetchAuthenticated: (path: string, init: RequestInit) =>
     fetch(base + "/api" + path, {
       ...init,
-      headers: { ...init.headers, Authorization: `Bearer ${userId}` },
+      headers: { ...init.headers, Authorization: `Bearer ${process.env.GAME_EVAL_ACCESS_TOKEN || userId}` },
     }),
 } as unknown as AccountService
 const service = new GameHallService(account),
