@@ -99,4 +99,17 @@ describe("本地音频播放器", () => {
     expect(context.gains[17].gain.value).toBe(0.28)
     await audio.dispose()
   })
+  it("本地加载落袋与两种金属金币素材，按顺序播放并可一起停止", async () => {
+    const { audio, context } = await ready()
+    audio.play([
+      { sound: "pocket", delay: 520, volume: 0.3 },
+      { sound: "winCoin1", delay: 620, volume: 0.38 },
+      { sound: "winCoin2", delay: 810, volume: 0.38 },
+    ])
+    expect(context.sources).toHaveLength(3)
+    expect(context.sources.map(s => s.start.mock.calls[0][0])).toEqual([10.52, 10.62, 10.81])
+    audio.stop()
+    expect(context.sources.every(s => s.stop.mock.calls.length === 1)).toBe(true)
+    await audio.dispose()
+  })
 })

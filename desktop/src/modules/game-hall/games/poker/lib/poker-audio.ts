@@ -6,9 +6,12 @@ import tap from "../assets/audio/chip-lay-1.ogg?url"
 import coin1 from "../assets/audio/chips-collide-1.ogg?url"
 import coin2 from "../assets/audio/chips-collide-2.ogg?url"
 import collect from "../assets/audio/chips-stack-1.ogg?url"
+import pocket from "../assets/audio/dropLeather.ogg?url"
+import winCoin1 from "../assets/audio/handleCoins.ogg?url"
+import winCoin2 from "../assets/audio/handleCoins2.ogg?url"
 import type { PokerSound, PokerSoundCue } from "./poker-sounds"
 
-const assets: Record<PokerSound, string> = { deal, card, fold, tap, coin1, coin2, collect, turn: tap }
+const assets: Record<PokerSound, string> = { deal, card, fold, tap, coin1, coin2, collect, turn: tap, pocket, winCoin1, winCoin2 }
 const logger = createRendererLogger("game.poker.audio")
 
 /** Room-scoped, gesture-activated audio. Unready cues are dropped, never replayed. */

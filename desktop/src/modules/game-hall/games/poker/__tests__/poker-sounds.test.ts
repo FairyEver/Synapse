@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest"
+import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { pokerSoundCues } from "../lib/poker-sounds"
 import { soundTable, wager } from "./sound-fixture"
+
+function winningTable(profit: number, payout = profit + 10): PokerTableView {
+  return { ...soundTable, street: "settled", settlement: {
+    handId: "h1", handNo: 1, board: [], rules: { variant: "standard52", smallBlind: 1, bigBlind: 2 }, mixedControl: false,
+    seats: [{ seatNo: 0, displayName: "本人", participantKind: "human", isMe: true, folded: false, delta: profit, payout, endingStack: 1000 + profit }],
+    pots: [{ amount: payout, eligible: [0, 1], winners: [0], shares: { 0: payout }, refund: false }],
+  } }
+}
 
 describe("德扑声音反馈", () => {
   it("小额按一元一筹码，大额平滑增加次数并限制上限，轮询不重播", () => {
@@ -84,6 +93,43 @@ describe("德扑声音反馈", () => {
     expect(pokerSoundCues(next, { ...next }, "owner")).toEqual([])
     const refund = { ...next, settlement: { ...settlement, pots: settlement.pots.map(p => ({ ...p, refund: true })) } }
     expect(pokerSoundCues(soundTable, refund, "owner").some(c => c.sound.startsWith("coin"))).toBe(false)
+  })
+
+  it("本人赢池且净盈利时先落袋后金币碰撞，赢得越多越丰富且有上限", () => {
+    const small = pokerSoundCues(soundTable, winningTable(5), "owner")
+    const medium = pokerSoundCues(soundTable, winningTable(100), "owner")
+    const large = pokerSoundCues(soundTable, winningTable(1_000_000), "owner")
+    const winCoins = (cues: typeof small) => cues.filter(c => c.sound === "winCoin1" || c.sound === "winCoin2")
+    expect(small.filter(c => c.sound === "pocket")).toHaveLength(1)
+    expect(winCoins(small)).toHaveLength(2)
+    expect(winCoins(medium)).toHaveLength(4)
+    expect(winCoins(large)).toHaveLength(6)
+    expect(winCoins(small)[0].delay).toBeGreaterThan(small.find(c => c.sound === "pocket")!.delay)
+    expect(winCoins(large)[1].delay - winCoins(large)[0].delay).toBeLessThan(winCoins(small)[1].delay - winCoins(small)[0].delay)
+    expect(large.every(c => c.volume <= 0.5)).toBe(true)
+    expect(Math.max(...large.map(c => c.delay))).toBeLessThan(1300)
+    expect(small.some(c => c.sound === "coin1" || c.sound === "coin2")).toBe(false)
+    expect(pokerSoundCues(winningTable(5), { ...winningTable(5) }, "owner")).toEqual([])
+  })
+
+  it("落袋丰富程度按本人净赢计算，分池合并一次，退款和净亏不冒充中奖", () => {
+    const pocketCues = (table: PokerTableView, perspective: "owner" | "public" = "owner") =>
+      pokerSoundCues(soundTable, table, perspective).filter(c => c.sound === "pocket" || c.sound === "winCoin1" || c.sound === "winCoin2")
+    expect(pocketCues(winningTable(5, 1_000_000))).toEqual(pocketCues(winningTable(5)))
+    for (const profit of [0, -5]) expect(pocketCues(winningTable(profit, 20))).toEqual([])
+    expect(pocketCues(winningTable(100), "public")).toEqual([])
+    const refund = winningTable(5)
+    refund.settlement!.pots[0].refund = true
+    expect(pocketCues(refund)).toEqual([])
+    const other = winningTable(5)
+    other.settlement!.seats[0].isMe = false
+    expect(pocketCues(other)).toEqual([])
+    const split = winningTable(5)
+    split.settlement!.pots = [
+      { amount: 10, eligible: [0, 1], winners: [0, 1], shares: { 0: 5, 1: 5 }, refund: false },
+      { amount: 10, eligible: [0], winners: [0], shares: { 0: 10 }, refund: false },
+    ]
+    expect(pocketCues(split)).toEqual(pocketCues(winningTable(5)))
   })
 
   it("过旧或跨房间快照不补播，跨多手只建立新基线", () => {
