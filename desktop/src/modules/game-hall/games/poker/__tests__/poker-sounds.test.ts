@@ -43,7 +43,7 @@ describe("德扑声音反馈", () => {
       expect(cues[0].delay).toBe(0)
       expect(cues[0].volume).toBe(0.5)
       expect(cues.at(-1)!.delay).toBeLessThanOrEqual(180)
-      expect(cues.reduce((sum, cue) => sum + cue.volume, 0) * 0.35).toBeLessThan(0.85)
+      expect(cues.reduce((sum, cue) => sum + cue.volume, 0) * 0.35).toBeLessThan(1)
       for (let i = 1; i < cues.length; i++) expect(cues[i].delay).toBeGreaterThan(cues[i - 1].delay)
     }
     const cues = pokerSoundCues(soundTable, wager(100), "owner")

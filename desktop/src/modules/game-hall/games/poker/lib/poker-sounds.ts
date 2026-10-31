@@ -22,7 +22,7 @@ function betChips(amount: number): PokerSoundCue[] {
   if (!contacts.length) return contacts
   // A single short spill, with slightly uneven contacts and bounded overlap gain.
   const spread = Math.min(180, 30 + contacts.length * 10)
-  const volume = 0.5 / Math.sqrt(contacts.length)
+  const volume = 0.6 / Math.sqrt(contacts.length)
   return contacts.map((cue, i) => ({
     ...cue,
     delay: contacts.length === 1 ? 0 : Math.round(spread * (i / (contacts.length - 1)) ** 1.15),
