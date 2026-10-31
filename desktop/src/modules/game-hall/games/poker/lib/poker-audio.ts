@@ -37,7 +37,7 @@ export function createPokerAudio() {
       if (!context) {
         context = new AudioContext()
         master = context.createGain()
-        // Quiet fixed gain: larger wagers add contacts, never a volume jump.
+        // Quiet fixed gain: wager size changes contact count and pace, not volume.
         master.gain.value = 0.35
         master.connect(context.destination)
       }
@@ -66,12 +66,12 @@ export function createPokerAudio() {
     stop()
     if (disposed || !context || context.state !== "running" || !master) return
     try {
-      for (const cue of cues.slice(0, 24)) {
+      for (const cue of cues.slice(0, 32)) {
         const buffer = buffers.get(assets[cue.sound])
         if (!buffer) continue
         const source = context.createBufferSource(), gain = context.createGain()
         source.buffer = buffer
-        gain.gain.value = Math.min(0.4, Math.max(0, cue.volume))
+        gain.gain.value = Math.min(0.5, Math.max(0, cue.volume))
         source.connect(gain)
         gain.connect(master)
         sources.set(source, gain)

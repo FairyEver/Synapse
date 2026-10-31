@@ -8,10 +8,15 @@ class FakeContext {
   currentTime = 10
   destination = {}
   sources: { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = []
+  gains: { gain: { value: number } }[] = []
   resume = vi.fn().mockResolvedValue(undefined)
   close = vi.fn().mockImplementation(async () => { this.state = "closed" })
   decodeAudioData = vi.fn().mockResolvedValue({ duration: 0.3 })
-  createGain() { return { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() } }
+  createGain() {
+    const gain = { gain: { value: 1 }, connect: vi.fn(), disconnect: vi.fn() }
+    this.gains.push(gain)
+    return gain
+  }
   createBufferSource() {
     const source = { buffer: null, onended: null, start: vi.fn(), stop: vi.fn(), connect: vi.fn(), disconnect: vi.fn() }
     this.sources.push(source)
@@ -82,6 +87,16 @@ describe("本地音频播放器", () => {
     vi.spyOn(context, "createBufferSource").mockImplementation(() => { throw new Error("audio device unavailable") })
     expect(() => audio.play([{ sound: "coin1", delay: 0, volume: 0.35 }])).not.toThrow()
     expect(warn).toHaveBeenCalled()
+    await audio.dispose()
+  })
+  it("筹码音量适度提高，翻牌与下注结算同批出现时不截断声音", async () => {
+    const { audio, context } = await ready()
+    const money = Array.from({ length: 12 }, (_, i) => ({ sound: "coin1" as const, delay: i * 55, volume: 0.5 }))
+    const cards = Array.from({ length: 3 }, (_, i) => ({ sound: "card" as const, delay: i * 120, volume: 0.28 }))
+    audio.play([...money, ...cards, ...money.map(c => ({ ...c, delay: c.delay + 520 }))])
+    expect(context.sources).toHaveLength(27)
+    expect(context.gains[1].gain.value).toBe(0.5)
+    expect(context.gains[13].gain.value).toBe(0.28)
     await audio.dispose()
   })
 })
