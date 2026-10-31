@@ -134,7 +134,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>解散房间 #{closing}？</DialogTitle>
-            <DialogDescription>{lobby.data?.items.find((r) => r.roomCode === closing)?.mode === "practice" ? "本手结束后解散，不兑换大厅点数。" : "本手结束后退还所有玩家的剩余筹码。"}</DialogDescription>
+            <DialogDescription>{lobby.data?.items.find((r) => r.roomCode === closing)?.mode === "practice" ? "仅你与机器人参与时立即解散，有其他玩家时本手结束后解散；不兑换大厅点数。" : "本手结束后退还所有玩家的剩余筹码。"}</DialogDescription>
           </DialogHeader>
           <Button
             type="button"

@@ -19,7 +19,7 @@ export const POKER_PRIVATE_UI_OPERATIONS = [
   {
     id: "app.game.poker.room.close",
     name: "",
-    description: "房主请求本手结束后解散",
+    description: "房主解散房间；仅房主与机器人参与的陪练房立即解散，其他进行中房间本手结束后解散",
     mutates: true,
     inputSchema: {
       type: "object",

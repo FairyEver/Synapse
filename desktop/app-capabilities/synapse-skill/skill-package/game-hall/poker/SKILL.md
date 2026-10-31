@@ -62,6 +62,8 @@ hand_result后推进cursor并继续接终局，离桌、输光、解散可能先
 
 ## 程序机器人陪练房
 
+房主可从桌面大厅解散陪练房：现有座位及未结算当前手均只有房主账号与机器人时立即解散，房主亲自操作或AI控制均适用；中断手不计已完成战绩，wait返回table_closed，已有已完成结果仍可补发。有其他账号参与时仍本手结束后解散，不兑换大厅点数。解散仅桌面私有操作，无room_close MCP工具，不用离桌冒充解散。
+
 room_create(mode=practice)→房主bot_add(roomCode,creationId=UUID)→正常入座/行动。每个新机器人新UUID，丢响应重试复用；bot_remove(roomCode,botId)的pending表示手后移除。移除后旧UUID不复活机器人，实际座位用room/table确认。仅房主管理，至少保留一位真人容量。
 
 陪练全桌练习筹码，不扣兑大厅点数、不计正式战绩；mode创建后固定，移除全部机器人也不转换。lobby_list/history/stats默认points，查练习明确mode=practice；lobby_list可用mode=all合并两类房间统一分页，桌面房间列表采用此方式并标明每间房的类型。all不能用于建房或历史/统计。机器人不调用模型、不被真人或外部AI代行动、不被催促；决策只接本人及公开信息，MCP决策也不得读取教学明牌。无人类可参赛时不发新手，输光不补。actionSource=rules_bot与human/mcp/timeout分开。

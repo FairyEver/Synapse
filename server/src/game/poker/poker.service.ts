@@ -324,18 +324,37 @@ export class PokerService {
       code,
       async (c) => {
         if (c.room.ownerUserId !== userId) reject("POKER_SEAT_NOT_FOUND", "只有房主可以解散房间。")
-        if (c.room.status === "running") {
+        const soloPractice = c.room.mode === "practice" &&
+          c.seats.every((s) => s.participantKind === "bot" || s.userId === userId)
+        const hand = soloPractice && c.room.status === "running" && c.room.currentHandId
+          ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } })
+          : null
+        // A departed player may still be owed this hand's result.
+        const otherParticipant = hand && hand.status !== "settled"
+          ? await c.tx.gamePokerHandSeat.findFirst({
+              where: { handId: hand.id, participantKind: { not: "bot" }, userId: { not: userId } },
+              select: { id: true },
+            })
+          : null
+        if (c.room.status === "running" && (!soloPractice || otherParticipant)) {
           await c.tx.gamePokerRoom.update({
             where: { id: c.room.id },
             data: { closeRequested: true },
           })
           return { pending: true }
         }
+        if (hand && hand.status !== "settled") {
+          await c.tx.gamePokerHand.update({
+            where: { id: hand.id },
+            data: { status: "cancelled", endedAt: now,
+              engineState: json({ ...(hand.engineState as Prisma.JsonObject), actionOnSeat: null }) },
+          })
+        }
         for (const s of [...c.seats].sort((a, b) => a.userId.localeCompare(b.userId)))
           await this.refund(c, s)
         await c.tx.gamePokerRoom.update({
           where: { id: c.room.id },
-          data: { status: "closed", closedAt: now, actionDeadlineAt: null },
+          data: { status: "closed", closedAt: now, closeRequested: false, actionDeadlineAt: null, botActionAt: null, nextHandAt: null },
         })
         return { closed: true }
       },

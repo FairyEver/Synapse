@@ -97,7 +97,7 @@ const url = gameTestDatabaseUrl()
       await Promise.all([actions.expire(code, new Date(r.actionDeadlineAt!)), poker.close(u, points)])
     } else {
       await Promise.all([exit === "leave" ? poker.leave(u, code) : poker.close(u, code), poker.close(u, points)])
-      await actions.act(u, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "fold" })
+      if (exit !== "close") await actions.act(u, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "fold" })
     }
     expect((await actions.state(u, code)).status).toBe(exit === "close" ? "closed" : "paused")
     expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, netProfit: 0 })

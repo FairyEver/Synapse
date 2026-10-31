@@ -10,6 +10,8 @@
 
 桌面房间列表合并点数房和陪练房，房名旁标明类型，不再切换筛选。lobby.list(mode=all)按统一顺序分页返回两类房间；省略mode仍默认points，可显式practice只查陪练。all仅为列表查询条件，不是房间类型，历史和统计仍按points/practice隔离。此查询扩展先上线服务端API再更新桌面，无数据库迁移。
 
+房主从大厅解散陪练房时，若现有座位及未结算当前手均只有房主账号与程序机器人，立即关闭；真人或AI控制均适用。当前手标记cancelled并保留过程，不产生结算摘要或战绩，已有已完成结果仍可补发；会话关闭、行动提示与机器人/续局调度一并清空，不兑换点数。有其他账号（含暂离、候场或本手已离座的参与者）时仍按本手结束后解散。此操作仅桌面私有room.close，不新增MCP工具。
+
 陪练流程：room_create(mode=practice)→房主bot_add(roomCode,creationId=UUID)→真人AI正常overview/join/wait/act。bot_remove按botId，本手参与者手后移除；计分房/非房主拒绝。新机器人新UUID，同次重试复用，移除后旧标识不复活。机器人不是账号，无大厅账户/会话；规则策略只接本人及公开信息，持久调度、房锁和引擎裁决。仅机器人或真人全暂离不发新手，机器人不续无人房寿命。
 
 陪练GameSession funding=practice，buyIn/inPlay/returned仅0/null，练习筹码不进账户盈亏或流水；默认历史/统计points，明确mode=practice查练习，归档及版本手数保持隔离。上线须先执行20261030130000_game_poker_practice和20261030131000_game_poker_practice_summary迁移，再API与桌面；已有练习数据后不能回到无资金类型隔离的旧退款逻辑。
