@@ -1,5 +1,6 @@
 import { ListOrdered, LockKeyhole } from "lucide-react"
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
 import { Settlement } from "./Settlement"
 import { PersonaBadge } from "./PersonaBadge"
@@ -22,9 +23,18 @@ export function SidePanel({
   const settlements = new Map(events.flatMap(event => event.settlement ? [[event.handId, event.settlement] as const] : []))
   if (table.settlement) settlements.set(table.settlement.handId, table.settlement)
   const recentResults = [...settlements.values()].sort((a, b) => b.handNo - a.handNo).slice(0, 2)
+  const [selectedTab, setSelectedTab] = useState("log")
+  const canSeeAi = perspective === "owner" && table.mySeatNo !== null
+  const tab = (selectedTab === "ai" && !canSeeAi) || (selectedTab === "practice" && !extras) ? "log" : selectedTab
   return (
     <aside id={id} className="poker-side-panel" aria-label="日志和AI判断">
-      {extras}
+      <Tabs value={tab} onValueChange={setSelectedTab} className="poker-information-tabs">
+        <TabsList variant="line" aria-label="牌局信息">
+          <TabsTrigger value="log">日志</TabsTrigger>
+          {perspective === "owner" && table.mySeatNo !== null && <TabsTrigger value="ai">AI 判断</TabsTrigger>}
+          {extras && <TabsTrigger value="practice">陪练</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="log">
       {recentResults.map(result => <Settlement key={result.handId} settlement={result} compact />)}
       <section className="poker-log">
         <h3>
@@ -62,8 +72,9 @@ export function SidePanel({
           </ol>
         )}
       </section>
+        </TabsContent>
       {perspective === "owner" && table.mySeatNo !== null && (
-        <section className="poker-judgment">
+        <TabsContent value="ai"><section className="poker-judgment">
           <h3>
             <LockKeyhole aria-hidden="true" />
             AI 的判断
@@ -76,8 +87,10 @@ export function SidePanel({
               <p>{table.persona}</p>
             </details>
           )}
-        </section>
+        </section></TabsContent>
       )}
+      {extras && <TabsContent value="practice" forceMount hidden={tab !== "practice"}>{extras}</TabsContent>}
+      </Tabs>
     </aside>
   )
 }

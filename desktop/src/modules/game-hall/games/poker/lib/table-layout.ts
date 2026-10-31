@@ -1,4 +1,5 @@
 import type { PokerTableEvent } from "@synapse/shared/game-contracts"
+export const TABLE_CONTROLS_BREAKPOINT = 850
 export const TABLE_WIDTH = 1440
 export const TABLE_HEIGHT = 900
 export function canvasFit(width: number, height: number) {

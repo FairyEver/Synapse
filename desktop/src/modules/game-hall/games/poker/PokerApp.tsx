@@ -43,7 +43,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
             onRefresh={room.refresh}
             events={events.events}
             animate={events.animate}
-            extras={room.table.mode === "practice" ? <PracticeBots table={room.table} onRefresh={room.refresh} /> : null}
+            extras={room.table.mode === "practice" && room.table.ownerUserId === identityKey && room.table.status !== "closed" ? <PracticeBots table={room.table} onRefresh={room.refresh} /> : null}
             onBack={onBack}
           />
         ) : room.error ? (

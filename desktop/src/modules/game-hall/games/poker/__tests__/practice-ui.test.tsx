@@ -2,6 +2,7 @@
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { describe, expect, it, vi } from "vitest"
+import { SidePanel } from "../components/SidePanel"
 import { PracticeBots } from "../components/PracticeBots"
 import { StatusBar } from "../components/StatusBar"
 import { tableResponse } from "../../../../../../app-capabilities/game-hall/main/__tests__/response-fixtures"
@@ -12,6 +13,22 @@ vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const table = { ...tableResponse, mode: "practice" as const, ownerUserId: "owner", seats: [{ ...tableResponse.seats[0], participantKind: "bot" as const, botId: "bot", isMe: false, aiState: "bot" }], mySeatNo: 1, actionOnSeat: tableResponse.seats[0].seatNo }
 describe("陪练房操作", () => {
+  it("切换日志和陪练标签不丢失添加请求的幂等标识", async () => {
+    api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({botId:"new",seatNo:1})
+    const host=document.createElement("div"),root=createRoot(host)
+    const tab=async(label:string)=>act(async()=>{ const target=[...host.querySelectorAll("[role=tab]")].find(t=>t.textContent===label)!; target.dispatchEvent(new MouseEvent("mousedown",{button:0,bubbles:true})) })
+    try {
+      await act(async()=>root.render(<SidePanel table={table} perspective="owner" extras={<PracticeBots table={table} onRefresh={()=>{}} />} />))
+      await tab("陪练")
+      await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="添加机器人")!.click())
+      const first=api.add.mock.calls[0][0].creationId
+      await tab("日志")
+      await tab("陪练")
+      await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="重试添加机器人"||b.textContent==="添加机器人")!.click())
+      expect(api.add.mock.calls[1][0].creationId).toBe(first)
+    } finally { await act(async()=>root.unmount()) }
+  })
+
   it.each([false, true])("添加丢响应后确认移除（pending=%s），下次添加使用新创建意图", async (pending) => {
     api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({ botId: "replacement", seatNo: 0 })
     api.remove.mockReset().mockResolvedValue({ pending })
