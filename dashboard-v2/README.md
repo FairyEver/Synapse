@@ -1,6 +1,6 @@
 # Dashboard V2
 
-空白 React + TypeScript + Vite 子包，包名为 `@synapse/dashboard-v2`。
+空白 React + TypeScript + Vite + HeroUI v3 子包，包名为 `@synapse/dashboard-v2`。
 
 - 根目录 `pnpm dev` 或 `pnpm dev:prod` 自动启动。
 - 单独启动：根目录 `pnpm dev:dashboard-v2`。
@@ -9,3 +9,31 @@
 - 构建：`pnpm --filter @synapse/dashboard-v2 build`。
 
 当前页面保持空白，尚未接入业务功能。
+
+## UI 与 AI 编码工具
+
+- HeroUI React / Styles `3.2.7`，已补齐当前版本的必需 peer dependencies；Tailwind CSS / Vite 插件复用仓库的 `4.2.2`。
+- CSS 入口 `src/styles/globals.css` 依次导入 Tailwind 和 HeroUI，并由 `src/main.tsx` 加载。HeroUI v3 无需 Provider。
+- [CLAUDE.md](./CLAUDE.md) 保存本子包规则，`AGENTS.md` 是同目录相对软链接；[DESIGN.md](./DESIGN.md) 来自官方默认主题规范。
+- 官方 `heroui-react` Skill 安装在仓库 `.agents/skills/heroui-react/`，`.claude/skills/heroui-react` 链接到同一份内容。新 Skill 下轮对话可用；未显示时重启客户端。
+- 官方 MCP `@heroui/react-mcp@1.1.3` 为子包开发依赖；Codex 读取仓库 `.codex/config.toml`，Claude Code 读取 `.mcp.json`。重启客户端后启用；在仓库根运行 `codex mcp get heroui-react` 可检查配置。
+- 官方 LLMs 索引及完整文档入口已写入规则。离线文档与示例位于 `.heroui-docs/react/`，入口为其中的 `INDEX.md`；生成内容被 Git 忽略。
+
+安装项目依赖后，同步离线文档与 demos：
+
+```bash
+pnpm --filter @synapse/dashboard-v2 docs:heroui:sync
+```
+
+同步脚本只读取官方 GitHub HTTP 文档、英文 demos 和四份 React LLMs 文件，记录来源提交并更新本子包规则中的索引，不克隆上游仓库。最新 HeroUI CLI 要求 pnpm 12，而当前 workspace 固定使用 pnpm 10，因此未安装 CLI 或升级包管理器。
+
+默认设计规范从 <https://heroui.com/react/DESIGN.md> 下载。刷新前先检查本地定制，避免覆盖；主题调整必须同步 DESIGN.md。
+
+官方参考：
+
+- [Quick Start](https://heroui.com/cn/docs/react/getting-started/quick-start.mdx)
+- [LLMs.txt](https://heroui.com/cn/docs/react/getting-started/llms-txt.mdx)
+- [MCP](https://heroui.com/cn/docs/react/getting-started/mcp-server.mdx)
+- [Agent Skills](https://heroui.com/cn/docs/react/getting-started/agent-skills.mdx)
+- [AGENTS.md](https://heroui.com/cn/docs/react/getting-started/agents-md.mdx)
+- [DESIGN.md](https://heroui.com/cn/docs/react/getting-started/design-md.mdx)

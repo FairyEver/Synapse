@@ -23,7 +23,7 @@ desktop/
     └── types/          # Renderer 全局类型
 document/               # VitePress 文档站
 server/                 # 服务端与管理后台
-dashboard-v2/           # 空白 React + TypeScript + Vite 页面
+dashboard-v2/           # React + TypeScript + Vite + HeroUI v3；独立 UI 基线
 pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 ```
 
@@ -37,6 +37,7 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 - `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；控制台自动打开 `http://localhost:19700/console/`，使用双栈监听；API 为 `19701`，PDF 宿主机映射为 `19702`。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
 - `pnpm dev:document`：文档站。
 - `pnpm dev:dashboard-v2`：空白 React 项目，地址为 `http://localhost:19703/`，双栈监听、固定端口；也随 `pnpm dev:prod` 启动，尚未接入业务和生产部署。
+- Dashboard V2 的组件与视觉使用 HeroUI v3，规则见 `dashboard-v2/CLAUDE.md` 与 `DESIGN.md`；此基线仅限该子包。仓库的 `.agents/skills/heroui-react/` 提供官方 Skill，`.codex/config.toml` 和 `.mcp.json` 分别配置 Codex / Claude Code 的官方 MCP。离线文档与 demos 用 `pnpm --filter @synapse/dashboard-v2 docs:heroui:sync` 下载到该子包被 Git 忽略的 `.heroui-docs/`；不会克隆上游仓库。
 - 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`、`pnpm quit:dashboard-v2`。
 
 本机 HTTP 开发端口保留 `19700–19799`，Brick Lab 使用 `19800–19899`。完整分配与生产边界见 `.claude/rules/workspace-dev-ports.md`；数据库和生产映射不随开发 HTTP 端口修改。

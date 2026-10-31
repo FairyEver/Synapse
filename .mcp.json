@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "heroui-react": {
+      "command": "pnpm",
+      "args": ["--filter", "@synapse/dashboard-v2", "exec", "heroui-react-mcp"]
+    }
+  }
+}
