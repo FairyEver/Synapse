@@ -66,7 +66,7 @@ export function createPokerAudio() {
     stop()
     if (disposed || !context || context.state !== "running" || !master) return
     try {
-      for (const cue of cues.slice(0, 32)) {
+      for (const cue of cues.slice(0, 40)) {
         const buffer = buffers.get(assets[cue.sound])
         if (!buffer) continue
         const source = context.createBufferSource(), gain = context.createGain()

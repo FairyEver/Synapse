@@ -3,9 +3,9 @@ import { pokerSoundCues } from "../lib/poker-sounds"
 import { soundTable, wager } from "./sound-fixture"
 
 describe("德扑声音反馈", () => {
-  it("小额按一元一筹码，大额合并面额并限制次数，轮询不重播", () => {
+  it("小额按一元一筹码，大额平滑增加次数并限制上限，轮询不重播", () => {
     expect(pokerSoundCues(soundTable, { ...soundTable }, "owner")).toEqual([])
-    for (const [amount, count] of [[1, 1], [2, 2], [5, 5], [10, 10], [12, 12], [100, 10], [1_000_000, 10]]) {
+    for (const [amount, count] of [[1, 1], [2, 2], [5, 5], [10, 10], [12, 12], [13, 13], [32, 14], [50, 15], [100, 16], [1_000_000, 16]]) {
       const cues = pokerSoundCues(soundTable, wager(amount), "owner")
       expect(cues, `金额 ${amount}`).toHaveLength(count)
       expect(cues.every(c => c.sound === "coin1" || c.sound === "coin2")).toBe(true)
@@ -13,8 +13,19 @@ describe("德扑声音反馈", () => {
     }
     expect(pokerSoundCues({ ...soundTable, bigBlind: 20 }, { ...wager(5), bigBlind: 20 }, "owner")).toHaveLength(5)
     const large = pokerSoundCues(soundTable, wager(1_000_000), "owner")
-    expect(Math.max(...large.map(c => c.delay))).toBeLessThan(700)
+    expect(Math.max(...large.map(c => c.delay))).toBeLessThan(900)
     expect(pokerSoundCues(wager(16), { ...wager(16) }, "owner")).toEqual([])
+  })
+
+  it("金额增加不会导致碰撞次数减少，且大额不会无限延长", () => {
+    let previousCount = 0
+    for (const amount of [1, 5, 10, 12, 13, 20, 25, 32, 50, 60, 61, 100, 120, 121, 500, 1000, 1_000_000]) {
+      const cues = pokerSoundCues(soundTable, wager(amount), "owner")
+      expect(cues.length, `金额 ${amount}`).toBeGreaterThanOrEqual(previousCount)
+      expect(cues.length).toBeLessThanOrEqual(16)
+      expect(cues.at(-1)!.delay).toBeLessThan(1100)
+      previousCount = cues.length
+    }
   })
 
   it("金额越大碰撞节奏稍快，最快间隔有上限", () => {
@@ -69,7 +80,7 @@ describe("德扑声音反馈", () => {
       pots: [{ amount: 32, eligible: [0, 1], winners: [0], shares: { 0: 32 }, refund: false }],
     }
     const next = { ...soundTable, street: "settled", settlement }
-    expect(pokerSoundCues(soundTable, next, "owner").filter(c => c.sound.startsWith("coin"))).toHaveLength(7)
+    expect(pokerSoundCues(soundTable, next, "owner").filter(c => c.sound.startsWith("coin"))).toHaveLength(14)
     expect(pokerSoundCues(next, { ...next }, "owner")).toEqual([])
     const refund = { ...next, settlement: { ...settlement, pots: settlement.pots.map(p => ({ ...p, refund: true })) } }
     expect(pokerSoundCues(soundTable, refund, "owner").some(c => c.sound.startsWith("coin"))).toBe(false)

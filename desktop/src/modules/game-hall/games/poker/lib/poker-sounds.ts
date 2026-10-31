@@ -9,13 +9,8 @@ export function soundActionSeq(table: PokerTableView): number {
 
 function coins(amount: number, delay = 0): PokerSoundCue[] {
   if (amount <= 0) return []
-  // Keep small amounts literal; combine larger wagers into 1/5/10/50/... chips.
-  let denomination = 1
-  while (Math.ceil(amount / denomination) > 12) {
-    denomination *= 5
-    if (Math.ceil(amount / denomination) > 12) denomination *= 2
-  }
-  const count = Math.ceil(amount / denomination)
+  // Keep small amounts literal, then add contacts without denomination cliffs.
+  const count = amount <= 12 ? amount : Math.min(16, 12 + Math.ceil(Math.log2(amount / 12)))
   const interval = Math.max(55, Math.round(105 - Math.log2(Math.max(1, amount)) * 6))
   return Array.from({ length: count }, (_, i) => ({
     sound: i % 2 ? "coin2" : "coin1", delay: delay + i * interval, volume: 0.5,

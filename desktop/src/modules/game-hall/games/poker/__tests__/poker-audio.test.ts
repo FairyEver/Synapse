@@ -89,14 +89,14 @@ describe("本地音频播放器", () => {
     expect(warn).toHaveBeenCalled()
     await audio.dispose()
   })
-  it("筹码音量适度提高，翻牌与下注结算同批出现时不截断声音", async () => {
+  it("筹码保持当前音量，翻牌与下注结算同批出现时不截断声音", async () => {
     const { audio, context } = await ready()
-    const money = Array.from({ length: 12 }, (_, i) => ({ sound: "coin1" as const, delay: i * 55, volume: 0.5 }))
+    const money = Array.from({ length: 16 }, (_, i) => ({ sound: "coin1" as const, delay: i * 55, volume: 0.5 }))
     const cards = Array.from({ length: 3 }, (_, i) => ({ sound: "card" as const, delay: i * 120, volume: 0.28 }))
     audio.play([...money, ...cards, ...money.map(c => ({ ...c, delay: c.delay + 520 }))])
-    expect(context.sources).toHaveLength(27)
+    expect(context.sources).toHaveLength(35)
     expect(context.gains[1].gain.value).toBe(0.5)
-    expect(context.gains[13].gain.value).toBe(0.28)
+    expect(context.gains[17].gain.value).toBe(0.28)
     await audio.dispose()
   })
 })
