@@ -15,6 +15,15 @@ afterEach(() => { vi.clearAllMocks(); document.body.replaceChildren() })
 async function render(value = table) { const host = document.createElement("div"), root = createRoot(host); document.body.append(host); await act(async () => root.render(<HumanControls table={value} perspective="owner" onRefresh={vi.fn()} />)); return { host, root } }
 function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
 describe("真人牌桌操作", () => {
+ it("上手历史座位不能阻止离桌后重新申请入座，实际容量由服务端裁决", async () => {
+  api.join.mockResolvedValue({seatNo:0})
+  const departed={...table,mySeatNo:null,controller:null,seats:[{...table.seats[0],status:"folded"},{...table.seats[0],seatNo:1,isMe:false}]}
+  const {host,root}=await render(departed)
+  expect(button(host,"本人入座").disabled).toBe(false)
+  await act(async()=>button(host,"本人入座").click())
+  expect(api.join).toHaveBeenCalledWith({roomCode:"1234"})
+  await act(async()=>root.unmount())
+ })
  it.each(["raise","call"] as const)("%s 耗尽筹码也需确认，倒计时可被辅助技术读取", async (action) => {
   api.act.mockResolvedValue({ok:true})
   const {host,root}=await render({...table,...(action === "call" ? {toCall:100} : {pot:500})})

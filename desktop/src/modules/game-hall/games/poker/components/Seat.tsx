@@ -1,7 +1,6 @@
-import { Coins } from "lucide-react"
-import type { PokerSeatView } from "@synapse/shared/game-contracts"
+import type { PokerSeatView, PokerSettlementView, PokerTableView } from "@synapse/shared/game-contracts"
 import { Card } from "./Card"
-import { amount, seatPosition } from "../lib/view"
+import { actionLabel, amount, seatPosition } from "../lib/view"
 export function Seat({
   seat,
   maxSeats,
@@ -9,8 +8,14 @@ export function Seat({
   acting,
   dealer,
   dealt,
-  deadlineMs,
+  deadlineMs, result, feedback, feedbackKey, turnPulse, celebrate, departed,
 }: {
+  departed?: boolean
+  result?: PokerSettlementView | null
+  feedback?: PokerTableView["recentActions"][number]
+  feedbackKey?: string
+  turnPulse?: boolean
+  celebrate?: boolean
   seat: PokerSeatView
   maxSeats: number
   origin?: number
@@ -19,13 +24,20 @@ export function Seat({
   dealt: boolean
   deadlineMs: number | null
 }) {
+  const won = !!result?.pots.some(p=>!p.refund && p.winners.includes(seat.seatNo))
+  const wonChips = result?.pots.filter(p=>!p.refund).reduce((sum,p)=>sum+(p.shares[seat.seatNo] ?? 0),0) ?? 0
+  const returned = result?.pots.filter(p=>p.refund).reduce((sum,p)=>sum+(p.shares[seat.seatNo] ?? 0),0) ?? 0
+  const outcome = result?.seats.find(s=>s.seatNo===seat.seatNo)
   const stateLabel =
-    seat.participantKind === "bot" ? "机器人" : seat.handoffPending ? "等待 AI" : seat.controller === "human" ? seat.isMe ? "本人操作" : "真人操作" : seat.controller === "ai" ? "AI 操作" : seat.aiState === "online" ? "在线" : seat.aiState === "offline" ? "掉线" : "暂离"
+    departed || seat.status === "left" ? "已离桌" : seat.participantKind === "bot" ? "机器人" : seat.handoffPending ? "等待 AI" : seat.controller === "human" ? seat.isMe ? "本人操作" : "真人操作" : seat.controller === "ai" ? "AI 操作" : seat.aiState === "online" ? "在线" : seat.aiState === "offline" ? "掉线" : "暂离"
   const progress = 100 - Math.min(100, Math.max(0, deadlineMs ?? 0) / 6000)
   return (
     <div
       className="poker-seat"
       role="group"
+      data-seat={seat.seatNo}
+      data-winner={won}
+      data-celebrate={celebrate}
       data-position={seatPosition(seat.seatNo, maxSeats, origin)}
       data-acting={acting}
       data-folded={seat.status === "folded"}
@@ -36,7 +48,7 @@ export function Seat({
         <Card card={seat.hole?.[0]} faceUp={!!seat.hole && dealt} />
         <Card card={seat.hole?.[1]} faceUp={!!seat.hole && dealt} />
       </div>
-      <div className="poker-seat-plate">
+      <div className="poker-seat-plate" data-turn-pulse={turnPulse}>
         <span className="poker-seat-avatar" aria-hidden={!acting}>
           {seat.seatNo + 1}
           {acting && (
@@ -70,14 +82,10 @@ export function Seat({
           <span className="poker-ai-dot" data-state={seat.aiState} />
           {acting ? seat.isMe && seat.controller === "human" ? "轮到你" : "行动中" : seat.status === "sitting_out" ? "已暂离" : seat.status === "allin" ? "已全下" : stateLabel}
         </span>
-        {seat.streetBet > 0 && (
-          <span className="poker-seat-bet">
-            <Coins aria-hidden="true" />
-            {amount(seat.streetBet)}
-          </span>
-        )}
+        {feedback && <span key={feedbackKey} className="poker-action-receipt">{actionLabel[feedback.action]}{feedback.amount>0 && ` +${amount(feedback.amount)}`}</span>}
         {seat.status === "folded" && <strong className="poker-folded-label">已弃牌</strong>}
       </div>
+      {won && outcome && <div className="poker-seat-result"><strong>赢得 {amount(wonChips)}</strong>{returned>0 && <span>返还 {amount(returned)}</span>}<span>净 {outcome.delta>0 ? "+" : ""}{amount(outcome.delta)}</span></div>}
     </div>
   )
 }

@@ -62,7 +62,7 @@ describe("实时事件与结果",()=>{
     expect(host.querySelector('[data-card="Ac"]')).not.toBeNull()
     await act(async()=>root.render(<Settlement settlement={settlement} />))
     expect(host.textContent).toContain("四条")
-    expect(host.textContent).toContain("本手 +30")
+    expect(host.textContent).toContain("本手净变化 +30")
     expect(host.querySelector(".poker-winner")).toBeNull()
     await act(async()=>root.unmount())
   })

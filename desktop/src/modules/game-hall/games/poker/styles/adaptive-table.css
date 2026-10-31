@@ -1,0 +1,80 @@
+/* Each scene is one contained photograph. Geometry comes only from table-scene.ts. */
+.poker-canvas[data-table-shape] .poker-table-content { position: absolute; inset: 0; }
+.poker-canvas[data-table-shape] .poker-rail {
+  left: var(--poker-rail-left);
+  top: var(--poker-rail-top);
+  width: var(--poker-rail-width);
+  height: var(--poker-rail-height);
+  padding: 22px;
+  background: var(--rail);
+  box-shadow:
+    0 12px 20px -8px var(--table-shadow),
+    inset 0 0 0 1px var(--rail-edge),
+    inset 0 3px 0 var(--table-highlight),
+    inset 0 -5px 0 var(--table-soft-shadow);
+}
+.poker-canvas[data-table-shape] .poker-rail::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border: 1px dashed color-mix(in oklch, var(--gc-muted) 24%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.poker-canvas[data-table-shape] .poker-felt {
+  background-color: var(--felt-bottom);
+  background-image:
+    radial-gradient(ellipse at 50% 20%, var(--felt-top), transparent 85%),
+    radial-gradient(color-mix(in oklch, var(--gc-ink) 5%, transparent) 0.65px, transparent 0.8px);
+  background-size: 100% 100%, 4px 4px;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--gc-muted) 24%, transparent),
+    inset 0 4px 12px var(--table-soft-shadow);
+}
+.poker-canvas[data-table-shape] .poker-felt::after {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border: 1px solid color-mix(in oklch, var(--gc-muted) 10%, transparent);
+  border-radius: inherit;
+}
+.poker-canvas[data-table-shape] .poker-center {
+  left: var(--poker-center-x);
+  top: var(--poker-center-y);
+  gap: 14px;
+}
+.poker-canvas[data-table-shape] .poker-board[data-card-size="md"] { --cw: var(--poker-board-card-width); gap: 8px; }
+.poker-canvas[data-table-shape] .poker-board-caption { font-size: 20px; gap: 10px; }
+.poker-canvas[data-table-shape="portrait"] .poker-board-caption { flex-direction: column; gap: 6px; }
+.poker-canvas[data-table-shape] .poker-pause-reason { max-width: 400px; white-space: normal; text-align: center; margin: 0; font-size: 20px; }
+.poker-canvas[data-table-shape] .poker-seat { width: 190px; }
+.poker-canvas[data-table-shape] .poker-seat[data-mine="true"] { width: 200px; }
+.poker-canvas[data-table-shape] .poker-seat-cards { margin-bottom: 6px; }
+.poker-canvas[data-table-shape] .poker-seat-cards[data-card-size="sm"] { --cw: 56px; }
+.poker-canvas[data-table-shape] .poker-seat[data-mine="true"] .poker-seat-cards[data-card-size="sm"] { --cw: 80px; }
+.poker-canvas[data-table-shape] .poker-seat-plate { padding: 6px 10px; gap: 8px; }
+.poker-canvas[data-table-shape] .poker-seat-name { font-size: 22px; line-height: 26px; }
+.poker-canvas[data-table-shape] .poker-stack { font-size: 24px; line-height: 28px; }
+.poker-canvas[data-table-shape] .poker-seat-identity { gap: 2px; }
+.poker-canvas[data-table-shape] .poker-seat-avatar { width: 32px; height: 32px; font-size: 16px; }
+.poker-canvas[data-table-shape] .poker-seat-meta { font-size: 18px; line-height: 24px; min-height: 28px; margin-top: 4px; gap: 6px; flex-wrap: wrap; }
+.poker-canvas[data-table-shape] .poker-seat-empty { font-size: 20px; }
+.poker-canvas[data-table-shape] .poker-wager { font-size: 20px; line-height: 28px; }
+.poker-canvas[data-table-shape] .poker-seat .poker-seat-result {
+  top: calc(100% + 8px); left: 50%; right: auto; transform: translateX(-50%);
+  max-width: 200px; width: max-content; white-space: normal; flex-wrap: wrap;
+  justify-content: center; font-size: 16px; line-height: 22px; gap: 2px 6px;
+}
+.poker-canvas[data-table-shape] .poker-seat[data-mine="true"] .poker-seat-result {
+  top: auto; bottom: calc(100% + 10px); max-width: 200px;
+}
+.poker-canvas[data-table-shape] .poker-seat[data-position="0"] { left: var(--poker-seat-0-x); top: var(--poker-seat-0-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="1"] { left: var(--poker-seat-1-x); top: var(--poker-seat-1-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="2"] { left: var(--poker-seat-2-x); top: var(--poker-seat-2-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="3"] { left: var(--poker-seat-3-x); top: var(--poker-seat-3-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="4"] { left: var(--poker-seat-4-x); top: var(--poker-seat-4-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="5"] { left: var(--poker-seat-5-x); top: var(--poker-seat-5-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="6"] { left: var(--poker-seat-6-x); top: var(--poker-seat-6-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="7"] { left: var(--poker-seat-7-x); top: var(--poker-seat-7-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="8"] { left: var(--poker-seat-8-x); top: var(--poker-seat-8-y); }
+.poker-canvas[data-table-shape] .poker-seat[data-position="9"] { left: var(--poker-seat-9-x); top: var(--poker-seat-9-y); }

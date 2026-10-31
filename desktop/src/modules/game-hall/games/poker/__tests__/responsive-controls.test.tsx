@@ -106,6 +106,7 @@ describe("牌桌共用侧栏", () => {
         {target:surface,contentRect:{width,height:700}},
         {target:viewport,contentRect:{width:700,height:560}},
       ] as ResizeObserverEntry[],{} as ResizeObserver)
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
     })
     await resize(720)
     expect(host.querySelector("input")).toBeNull()

@@ -6,6 +6,8 @@
 
 桌面德州扑克音效由本地打包的 Kenney Casino Audio CC0 素材提供，来源与原始许可在扑克模块 `assets/audio/`。按权威快照 handId/actionSeq 增量反馈发牌、公共牌、下注、弃牌、过牌、收池、派彩与本人真人行动；下注及普通派彩金额不超过 12 时按一元一筹码响，5 元五次、10 元十次，超过 12 时按对数平滑增加到最多 16 下；13 元十三次、32 元十四次、100 元十六次，不因金额增大而减少碰撞次数。下注（含盲注）将碰撞集中在最多 180ms 内，首声立即播放、略微错开后形成一簇，连同尾音约 0.44 秒；首个碰撞保留清晰起音，其余增益随数量按平方根衰减，避免叠加变响，不逐个数拍。普通派彩保留原节奏、最快间隔 55ms。本人在玩家视角实际赢池且净盈利时，用皮袋落下与两种金属金币碰撞组合替代普通派彩；按本人本手净赢金额分档增加至 2–6 段，间隔 190–110ms、音量固定，含等待与尾音最长约两秒；分池合并一次，退款、净亏及旁观不触发落袋。专属素材来自 Kenney RPG Audio（CC0），许可与来源保存在同一素材目录。每张新公共牌响一次，相邻间隔 120ms，翻三张响三次，转牌河牌各一次。首次载入、过期快照、超过三秒间隔、身份/视角/控制变更、后台恢复及重新开声只建立基线，不补播历史；静音、失焦、隐藏、跨手与卸载取消旧声源，不影响规则、资金或倒计时。首个真实交互解锁播放，资源或播放失败只记录日志，不阻塞游戏。开关仅保存在当前牌桌组件内，不新增设置存储。MCP schema、IPC 与系统 Skill 操作协议不变。
 
+桌面筹码与轮次反馈以权威 table 快照为单一时序，按 handId/actionSeq 去重；events 游标流继续用于日志。首次载入、超过三秒断流、后台切回、身份/视角/控制版本/布局变化建立基线，不补播历史动作；快速跨街优先最新状态，不排队到下一手。筹码从实际座位牌框到独立本轮下注锚点，本轮结束再进入实际底池，收池包含盲注及新增投入。赢家座位显示赢池金额和净变化，返还与赢池分开；本人赢池且净盈利才有短庆祝，资金、控制和倒计时不依赖动画回调。画布根据实际可用区域宽高比自动使用横向、方形或纵向场景，座位、卡牌、文字和下注统一 contain 等比缩放，不单独逆缩放字号/座位宽度；减弱动态效果移除位移和庆祝，保留静态动作、下注及结果。MCP/IPC 和系统 Skill 操作协议不变。
+
 桌面应用显示名称与窗口标题为“游戏”；App ID `game-hall`、namespace `game` 和现有 MCP、深链保持不变。
 
 桌面创建扑克房间使用独立深色游戏弹窗：房间类型、牌组、盲注和带入直接点选，座位数在 2–10 人之间步进调节；提交期间禁用草稿修改，关闭后恢复入口焦点。仅改变桌面呈现，创建参数、默认值及 creationId 重试语义不变，MCP schema 与系统 Skill 无需变更。
@@ -64,7 +66,7 @@ pnpm --filter @synapse/desktop run test --maxWorkers=4
 
 UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/control与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Renderer窄bridge有join/act/control.set/events，没有wait/control.claim/checkpoint。game26项公共能力，24项IPC；room.close/control.set两个私有UI操作不进capability/MCP。
 
-table.events可传perspective=owner|public，MCP默认owner且固定decision投影；UI默认public，玩家日志必须随牌桌传owner，不能混入教学明牌。返回{events,cursor,hasMore}，limit最大100，按(handNo,seq,kind)去重并推进返回cursor；结算seq=2147483647，重连直接呈现最新状态，不重放旧动画。扑克房间获准隐藏业务顶栏/底栏，1440×900画布contain等比缩放、日志可折叠/窄屏抽屉；大厅维持统一壳。
+table.events可传perspective=owner|public，MCP默认owner且固定decision投影；UI默认public，玩家日志必须随牌桌传owner，不能混入教学明牌。返回{events,cursor,hasMore}，limit最大100，按(handNo,seq,kind)去重并推进返回cursor；结算seq=2147483647，重连直接呈现最新状态，不重放旧动画。扑克房间获准隐藏业务顶栏/底栏，三种内部场景按可用比例自动选择并 contain 等比缩放、日志可折叠/窄屏抽屉；大厅维持统一壳。
 
 服务端永久参与证据包含closed会话：桌面从未入座账号可教学全牌；参与点数房不能看他人暗牌，参与陪练房最多看程序机器人教学明牌；玩家按本人及合法摊牌，教学不扩大历史读取。MCP/机器人策略始终决策投影；UI公开投影剥离persona、版本、note、合法动作等，但保留服务端已授权hole和mySeatNo，客户端不能自行授予教学权限。
 

@@ -7,11 +7,11 @@ export function Settlement({ settlement, compact = false }: { settlement: PokerS
   if (!compact) {
     const won = settlement.seats.filter(seat => winners.has(seat.seatNo))
     const mine = settlement.seats.find(seat => seat.isMe)
-    return <section className="poker-settlement" aria-label={`第 ${settlement.handNo} 手结果`}>
+    return <section className="poker-settlement" data-profit={(mine?.delta ?? 0)>0} aria-label={`第 ${settlement.handNo} 手结果`}>
       <span className="poker-settlement-heading">第 {settlement.handNo} 手结束</span>
       <strong title={won.map(seat => seat.displayName).join("、")}>{won.map(seat => seat.displayName).join("、")} 获胜</strong>
       <span>{[...new Set(won.map(seat => seat.handName).filter(Boolean))].join(" · ")}</span>
-      {mine && <b>本手 {mine.delta > 0 ? "+" : ""}{amount(mine.delta)}</b>}
+      {mine && <b>本手净变化 {mine.delta > 0 ? "+" : ""}{amount(mine.delta)}</b>}
     </section>
   }
   return <section className={compact ? "poker-result-log" : "poker-settlement"} aria-label={`第 ${settlement.handNo} 手结果`}>

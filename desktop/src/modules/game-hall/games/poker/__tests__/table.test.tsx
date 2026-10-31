@@ -61,6 +61,31 @@ const state: PokerTableView = {
   deckRemaining: 48,
 }
 describe("牌桌", () => {
+  it("仅权威新增行动播放追加，轮询与重新入桌不重播", async () => {
+    const host=document.createElement("div"), root=createRoot(host)
+    const render=async(table: PokerTableView)=>act(async()=>root.render(<Table table={table} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
+    const before={...state,actionSeq:0,recentActions:[]}
+    await render(before)
+    expect(host.querySelectorAll('[data-motion="bet"]')).toHaveLength(0)
+    const after={...before,actionSeq:1,pot:4,seats:before.seats.map(s=>s.isMe?{...s,stack:998,streetBet:2}:s),recentActions:[{seq:1,seatNo:0,street:"preflop",action:"call",amount:1,potAfter:4,isAuto:false}]}
+    await render(after)
+    expect(host.querySelector('[data-motion="bet"]')?.textContent).toContain("1")
+    await render({...after})
+    expect(host.querySelectorAll('[data-motion="bet"]')).toHaveLength(1)
+    await act(async()=>root.unmount())
+    const second=createRoot(host)
+    await act(async()=>second.render(<Table table={after} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
+    expect(host.querySelectorAll('[data-motion]')).toHaveLength(0)
+    await act(async()=>second.unmount())
+  })
+  it("翻牌收池包含原盲注并先追加后归集", async () => {
+    const host=document.createElement("div"), root=createRoot(host)
+    const render=async(table: PokerTableView)=>act(async()=>root.render(<Table table={table} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
+    await render({...state,actionSeq:0,recentActions:[]})
+    await render({...state,actionSeq:1,street:"flop",pot:4,seats:state.seats.map(s=>({...s,streetBet:0})),recentActions:[{seq:1,seatNo:0,street:"preflop",action:"call",amount:1,potAfter:4,isAuto:false}]})
+    expect([...host.querySelectorAll('[data-motion="collect"]')].map(e=>e.textContent)).toEqual(["2","2"])
+    await act(async()=>root.unmount())
+  })
   it("结算后重新进入仍可在日志查看完整分池结果，轮询事件不重复结算", async () => {
     const settlement = {handId:"h",handNo:1,board:[],rules:{variant:"standard52" as const,smallBlind:1,bigBlind:2},mixedControl:false,seats:[{seatNo:0,displayName:"我",participantKind:"human" as const,isMe:true,folded:false,delta:3,payout:6,endingStack:1003,handName:"一对"}],pots:[{amount:6,eligible:[0],winners:[0],shares:{0:6},refund:false}]}
     const host=document.createElement("div"),root=createRoot(host)
