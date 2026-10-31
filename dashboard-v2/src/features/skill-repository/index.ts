@@ -1,0 +1,5 @@
+export { SkillRepositoryDetailPage } from './skill-repository-detail-page'
+export { default as SkillRepositoryAdminPage } from './skill-repository-admin'
+export { SkillRepositoryExplorePage } from './skill-repository-explore-page'
+export { SkillRepositoryListPage } from './skill-repository-list-page'
+export { SkillRepositoryPublicPage } from './skill-repository-public-page'

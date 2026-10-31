@@ -1,0 +1,210 @@
+.drive-mdxeditor-content.drive-mdxeditor-content {
+  color: var(--foreground);
+  font-family: var(--font-inter);
+  font-size: 1rem;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  line-height: 1.5;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content > :first-child {
+  margin-block-start: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content > :last-child {
+  margin-block-end: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--foreground);
+  font-family: var(--font-inter);
+  font-weight: 600;
+  line-height: 1.25;
+  margin-block: 1.5rem 1rem;
+  padding: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content h1 {
+  font-size: 2rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content h2 {
+  font-size: 1.5rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content h3 {
+  font-size: 1.25rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content :is(h4, h5, h6) {
+  font-size: 1rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content :is(h1, h2) {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3em;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content h6 {
+  color: var(--muted);
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content p {
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content :is(ul, ol) {
+  list-style-position: outside;
+  margin: 0 0 1rem;
+  padding-inline-start: 1.5rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content ul {
+  list-style-type: disc;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content ol {
+  list-style-type: decimal;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content :is(ul, ol) :is(ul, ol) {
+  margin-block: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content li + li {
+  margin-top: 0.25rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content li p {
+  margin-bottom: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content blockquote {
+  border-inline-start: 1px solid var(--border);
+  box-sizing: border-box;
+  color: var(--muted);
+  margin: 0 0 1rem;
+  padding: 0 1rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content blockquote::before {
+  content: none;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content code:not(pre code) {
+  background: var(--surface-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  display: inline;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  font-variant-ligatures: none;
+  line-height: inherit;
+  padding: 0.125rem 0.25rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content pre {
+  background: var(--surface-secondary);
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-variant-ligatures: none;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content div:has(> div > .cm-editor) {
+  background: var(--surface-secondary);
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  margin: 0 0 1rem;
+  overflow: hidden;
+  padding: 1rem;
+  position: relative;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content
+  div:has(> div > .cm-editor)
+  :is(.cm-editor, .cm-gutters) {
+  background: transparent;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content
+  div:has(> div > .cm-editor)
+  .cm-scroller {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-variant-ligatures: none;
+  line-height: 1.5;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content
+  div:has(> div > .cm-editor)
+  .cm-content {
+  padding-block: 0;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  width: 100%;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content
+  :is(th, td):not([data-tool-cell]) {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content th:not([data-tool-cell]) {
+  background: var(--surface-secondary);
+  font-weight: 600;
+  text-align: start;
+}
+
+.drive-mdxeditor-content.drive-mdxeditor-content
+  :is(th, td):not([data-tool-cell])
+  p {
+  margin: 0;
+}
+
+/* MDXEditor portals retain the fixed light reader surface. */
+.mdxeditor-popup-container.mdxeditor-popup-container {
+  --basePageBg: var(--background);
+}
+
+/* This separator only controls the specialized document split layout. */
+.drive-document-divider {
+  position: relative;
+  flex: 0 0 1px;
+  background: transparent;
+  outline-color: var(--accent);
+}
+.drive-document-divider::after {
+  content: '';
+  position: absolute;
+  inset: 0 -2px;
+}
+.drive-document-divider:hover,
+.drive-document-divider:focus-visible,
+.drive-document-divider[data-separator='active'],
+.drive-document-divider-visible {
+  background: var(--border);
+}

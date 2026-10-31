@@ -25,6 +25,8 @@ services:
       args:
         APP_PUBLIC_URL: ${APP_PUBLIC_URL:?APP_PUBLIC_URL is required}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+        # 前端构建选择：默认 v1 保持现有线上界面，仅显式 v2 使用 HeroUI。
+        DASHBOARD_UI: ${DASHBOARD_UI:-v1}
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       ADMIN_ACCESS_SECRET: ${ADMIN_ACCESS_SECRET:?ADMIN_ACCESS_SECRET is required}

@@ -1,0 +1,83 @@
+import type { PokerTableView } from "@synapse/shared/game-contracts"
+
+export type PokerSound = "deal" | "card" | "fold" | "tap" | "coin1" | "coin2" | "collect" | "turn" | "pocket" | "winCoin1" | "winCoin2"
+export type PokerSoundCue = { sound: PokerSound; delay: number; volume: number }
+
+export function soundActionSeq(table: PokerTableView): number {
+  return table.actionSeq ?? table.recentActions.at(-1)?.seq ?? 0
+}
+
+function coins(amount: number, delay = 0): PokerSoundCue[] {
+  if (amount <= 0) return []
+  // Keep small amounts literal, then add contacts without denomination cliffs.
+  const count = amount <= 12 ? amount : Math.min(16, 12 + Math.ceil(Math.log2(amount / 12)))
+  const interval = Math.max(55, Math.round(105 - Math.log2(Math.max(1, amount)) * 6))
+  return Array.from({ length: count }, (_, i) => ({
+    sound: i % 2 ? "coin2" : "coin1", delay: delay + i * interval, volume: 0.5,
+  }))
+}
+
+function betChips(amount: number): PokerSoundCue[] {
+  const contacts = coins(amount)
+  if (!contacts.length) return contacts
+  // A single short spill, with slightly uneven contacts and bounded overlap gain.
+  const spread = Math.min(180, 30 + contacts.length * 10)
+  const volume = 0.6 / Math.sqrt(contacts.length)
+  return contacts.map((cue, i) => ({
+    ...cue,
+    delay: contacts.length === 1 ? 0 : Math.round(spread * (i / (contacts.length - 1)) ** 1.15),
+    volume: i === 0 ? 0.5 : volume,
+  }))
+}
+
+function pocketWin(profit: number): PokerSoundCue[] {
+  const tier = Math.floor(Math.log10(Math.max(1, profit)))
+  const count = Math.min(6, 2 + tier)
+  const interval = Math.max(110, 190 - tier * 20)
+  return [
+    { sound: "pocket", delay: 520, volume: 0.3 },
+    ...Array.from({ length: count }, (_, i): PokerSoundCue => ({
+      sound: i % 2 ? "winCoin2" : "winCoin1", delay: 620 + i * interval, volume: 0.38,
+    })),
+  ]
+}
+
+/** Compare authoritative snapshots, never the event history or button clicks. */
+export function pokerSoundCues(previous: PokerTableView, table: PokerTableView, perspective: "owner" | "public"): PokerSoundCue[] {
+  if (!table.handId || table.status === "closed" || table.roomCode !== previous.roomCode || table.handNo < previous.handNo) return []
+  const sameHand = previous.handId === table.handId
+  if ((!sameHand && table.handNo !== previous.handNo + 1) || (sameHand && soundActionSeq(table) < soundActionSeq(previous))) return []
+  const cues: PokerSoundCue[] = []
+  if (!sameHand) {
+    // A late snapshot already past preflop must not replay the opening deal.
+    if (table.street === "preflop") {
+      const count = Math.min(6, table.seats.filter(s => s.status === "active" || s.status === "allin").length * 2)
+      for (let i = 0; i < count; i++) cues.push({ sound: "deal", delay: (i + 1) * 55, volume: 0.28 })
+      cues.push(...betChips(table.seats.reduce((sum, s) => sum + s.streetBet, 0)))
+    }
+  } else {
+    // Coalesce rapid actions into one short money burst instead of a sound queue.
+    const actions = table.recentActions.filter(a => a.seq > soundActionSeq(previous) && (a.street === previous.street || a.street === table.street)).slice(-3)
+    cues.push(...betChips(actions.reduce((sum, a) => sum + a.amount, 0)))
+    const last = actions.at(-1)
+    if (last?.action === "fold") cues.push({ sound: "fold", delay: 0, volume: 0.25 })
+    if (last?.action === "check") cues.push({ sound: "tap", delay: 0, volume: 0.3 })
+    const newCards = Math.max(0, table.board.length - previous.board.length)
+    for (let i = 0; i < newCards; i++) cues.push({ sound: "card", delay: 55 + i * 120, volume: 0.28 })
+    if (table.street !== previous.street && previous.seats.some(s => s.streetBet > 0)) {
+      cues.push({ sound: "collect", delay: 240, volume: 0.25 })
+    }
+  }
+  if (table.settlement?.handId === table.handId && previous.settlement?.handId !== table.handId) {
+    const pots = table.settlement.pots.filter(p => !p.refund)
+    const mine = table.settlement.seats.find(s => s.isMe)
+    const won = mine && mine.delta > 0 && pots.some(p => p.winners.includes(mine.seatNo) && (p.shares[mine.seatNo] ?? 0) > 0)
+    if (perspective === "owner" && won) cues.push(...pocketWin(mine.delta))
+    else cues.push(...coins(pots.reduce((sum, p) => sum + Object.values(p.shares).reduce((total, value) => total + value, 0), 0), 520))
+  }
+  if (perspective === "owner" && table.controller === "human" && table.mySeatNo !== null && table.status === "running" && table.actionOnSeat === table.mySeatNo
+    && (!sameHand || previous.actionOnSeat !== table.actionOnSeat || previous.street !== table.street)) {
+    cues.push({ sound: "turn", delay: 360, volume: 0.25 })
+  }
+  return cues
+}

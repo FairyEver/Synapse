@@ -38,7 +38,7 @@ paths:
 ## 地址与边界
 
 - 浏览器入口使用 `http://localhost:19700/console/`；dashboard 使用 `::` 双栈监听，避免只在 IPv4 上响应。桌面登录、服务端公开链接与文档开发链接同步使用该应用根地址。
-- Dashboard V2 的空白 React 页面使用 `http://localhost:19703/`，采用 `::` 双栈监听和 `strictPort`；暂不接入业务或生产部署。
+- Dashboard V2 的用户控制台使用 `http://localhost:19703/console/`，管理后台使用同端口 `/admin/`，独立阅读、分享和游戏沿用原 URL；采用 `::` 双栈监听和 `strictPort`。生产构建显式选择 `DASHBOARD_UI=v2`，默认仍为 V1。
 - Electron renderer 与 Docker 宿主机映射保留现有回环地址限制；这属于访问边界，不用来区分项目。
 - 数据库端口与连接保持原样：本机 PostgreSQL `5433`、容器内部 `5432`。不要为了统一 HTTP 端口号改数据库或迁移数据。
 - 生产端口保持原样：宿主机 Synapse `3000`，容器内 Nginx `3000` → API `3001`，PDF renderer `3010`；生产 Compose、Nginx、Caddy 与部署脚本不跟随开发端口修改。

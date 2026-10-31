@@ -1,0 +1,202 @@
+// @vitest-environment jsdom
+
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import { ApiError } from '@/lib/api'
+import type { DriveAnnotationContext } from '../use-drive-annotations'
+import { pdfFilename, useDriveMarkdownPdfExport } from './use-drive-markdown-pdf-export'
+
+const mocks = vi.hoisted(() => ({
+  exportOwnerPdf: vi.fn(),
+  exportSharePdf: vi.fn(),
+  finish: vi.fn(),
+  notify: vi.fn(() => 'toast-id'),
+  update: vi.fn(),
+}))
+
+vi.mock('../shared/drive-telemetry-api', () => ({
+  trackedDriveBrowserApi: {
+    exportOwnerPdf: mocks.exportOwnerPdf,
+    exportSharePdf: mocks.exportSharePdf,
+  },
+}))
+
+vi.mock('../shared/drive-telemetry', () => ({
+  startDriveOperation: vi.fn(() => mocks.finish),
+}))
+
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@heroui/react')>(),
+  toast: Object.assign(mocks.notify, { update: mocks.update }),
+}))
+
+let root: Root | null = null
+let host: HTMLDivElement | null = null
+
+afterEach(() => {
+  if (root) act(() => root?.unmount())
+  host?.remove()
+  root = null
+  host = null
+  vi.clearAllMocks()
+})
+
+describe('useDriveMarkdownPdfExport', () => {
+  it.each([
+    ['文档.md', '文档.pdf'],
+    ['report.bin', 'report.pdf'],
+    ['.notes', '.notes.pdf'],
+  ])('converts %s to %s', (name, expected) => {
+    expect(pdfFilename(name)).toBe(expected)
+  })
+
+  it('disables export while local edits are unsaved', () => {
+    const hook = renderExportHook({ hasUnsavedChanges: true })
+
+    expect(hook().available).toBe(true)
+    expect(hook().disabledReason).toBe('请先保存再导出')
+    void hook().exportPdf()
+    expect(mocks.exportOwnerPdf).not.toHaveBeenCalled()
+  })
+
+  it('prevents duplicate owner exports and reports image and diagram warnings', async () => {
+    const pending = deferred({ imageWarnings: 2, diagramWarnings: 1 })
+    mocks.exportOwnerPdf.mockReturnValueOnce(pending.promise)
+    const hook = renderExportHook()
+
+    const first = hook().exportPdf()
+    const duplicate = hook().exportPdf()
+    expect(mocks.exportOwnerPdf).toHaveBeenCalledOnce()
+    expect(mocks.exportOwnerPdf).toHaveBeenCalledWith('file-1', '说明.pdf')
+    pending.resolve()
+    await act(async () => Promise.all([first, duplicate]))
+
+    expect(mocks.finish).toHaveBeenCalledWith('success')
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', 'PDF 已导出，2 张图片未加载，1 个图表未渲染', { variant: 'warning', isLoading: false, timeout: 4000 })
+  })
+
+  it('routes a shared child export and presents an actionable service error', async () => {
+    mocks.exportSharePdf.mockRejectedValueOnce(new ApiError('unavailable', 502))
+    const hook = renderExportHook({
+      snapshot: markdownSnapshot({ context: 'share' }),
+      context: { context: 'share', shareId: 'share-1', itemId: 'file-1' },
+    })
+
+    await act(async () => hook().exportPdf())
+
+    expect(mocks.exportSharePdf).toHaveBeenCalledWith('share-1', 'file-1', '说明.pdf')
+    expect(mocks.finish).toHaveBeenCalledWith('failure')
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', 'PDF 导出服务暂不可用，请稍后重试。', { variant: 'danger', isLoading: false, timeout: 4000 })
+  })
+
+  it('uses the share-root endpoint when the shared Markdown file is the share root', async () => {
+    mocks.exportSharePdf.mockResolvedValueOnce({ imageWarnings: 0, diagramWarnings: 0 })
+    const hook = renderExportHook({
+      snapshot: markdownSnapshot({ context: 'share' }),
+      context: { context: 'share', shareId: 'share-root', itemId: null },
+    })
+
+    await act(async () => hook().exportPdf())
+
+    expect(mocks.exportSharePdf).toHaveBeenCalledWith('share-root', null, '说明.pdf')
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', 'PDF 已导出', { variant: 'success', isLoading: false, timeout: 4000 })
+  })
+
+  it.each([
+    [413, '文件或图片过大，无法导出。'],
+    [429, '导出请求较多，请稍后重试。'],
+    [504, 'PDF 导出超时，请稍后重试。'],
+  ])('presents the actionable PDF export message for HTTP %i', async (status, message) => {
+    mocks.exportOwnerPdf.mockRejectedValueOnce(new ApiError('request failed', status))
+    const hook = renderExportHook()
+
+    await act(async () => hook().exportPdf())
+
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', message, { variant: 'danger', isLoading: false, timeout: 4000 })
+  })
+
+  it.each([
+    ['owner', undefined, '登录已失效，请重新登录。'],
+    ['share', { context: 'share', shareId: 'share-1', itemId: 'file-1' }, '分享尚未解锁，请重新输入密码。'],
+  ] as const)('uses the correct HTTP 401 message for %s exports', async (snapshotContext, context, message) => {
+    const api = snapshotContext === 'owner' ? mocks.exportOwnerPdf : mocks.exportSharePdf
+    api.mockRejectedValueOnce(new ApiError('unauthorized', 401))
+    const hook = renderExportHook({
+      snapshot: markdownSnapshot({ context: snapshotContext }),
+      context,
+    })
+
+    await act(async () => hook().exportPdf())
+
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', message, { variant: 'danger', isLoading: false, timeout: 4000 })
+  })
+})
+
+function renderExportHook(input: {
+  snapshot?: DriveBrowserSnapshotDto
+  context?: DriveAnnotationContext
+  hasUnsavedChanges?: boolean
+} = {}) {
+  let current: ReturnType<typeof useDriveMarkdownPdfExport> | undefined
+  function Harness() {
+    current = useDriveMarkdownPdfExport({
+      snapshot: input.snapshot ?? markdownSnapshot(),
+      context: input.context,
+      hasUnsavedChanges: input.hasUnsavedChanges ?? false,
+    })
+    return null
+  }
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
+  act(() => root?.render(createElement(Harness)))
+  return () => {
+    if (!current) throw new Error('PDF export hook did not render')
+    return current
+  }
+}
+
+function markdownSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
+  return {
+    context: 'owner',
+    surface: 'standalone',
+    current: {
+      id: 'file-1',
+      name: '说明.md',
+      type: 'file',
+      size: '18',
+      mimeType: 'text/markdown',
+      updatedAt: '2026-09-11T00:00:00.000Z',
+      previewKind: 'markdown',
+      browserUrl: '/drive/items/file-1',
+      downloadUrl: '/drive/items/file-1/download',
+    },
+    breadcrumbs: [],
+    children: [],
+    preview: {
+      kind: 'markdown',
+      text: '# 说明',
+      html: '<h1>说明</h1>',
+      outline: [],
+      truncated: false,
+      imageUrl: null,
+      visitUrl: null,
+      relativeImages: [],
+    },
+    edit: { canEdit: true, editorKind: 'text', currentVersionId: 'version-1', reason: null },
+    annotation: null,
+    canDownload: true,
+    canZip: false,
+    ...input,
+  }
+}
+
+function deferred<T>(value: T) {
+  let resolve!: () => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = () => resolvePromise(value)
+  })
+  return { promise, resolve }
+}

@@ -1,2 +1,15 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@import "@fontsource-variable/inter";
+
+@theme inline {
+  --font-sans: "Inter Variable", sans-serif;
+  --font-inter: "Inter Variable", sans-serif;
+}
+
+@layer base {
+  html { color-scheme: light; }
+  html, body, #root { min-height: 100%; margin: 0; }
+  body { @apply bg-background text-foreground antialiased; }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
+}

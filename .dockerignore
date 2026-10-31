@@ -13,6 +13,9 @@ backups/
 
 node_modules
 **/node_modules
+dashboard-v2/.heroui-docs/
+dashboard-v2/.vite/
+dashboard-v2/coverage/
 
 dist
 **/dist

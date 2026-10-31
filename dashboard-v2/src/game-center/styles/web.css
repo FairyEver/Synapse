@@ -1,0 +1,12 @@
+@font-face {
+  font-family: "Game Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../assets/fonts/geist-latin-wght-normal.woff2") format("woff2");
+}
+.game-web-shell { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
+.game-web-header { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; padding: 1rem 1.5rem; }
+.game-web-content { flex: 1; min-height: 0; overflow: hidden; }
+/* Gameplay keeps its original typography without replacing the application theme. */
+.poker-table { font-family: "Game Geist", sans-serif; }

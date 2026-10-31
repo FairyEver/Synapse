@@ -1,0 +1,682 @@
+// @vitest-environment jsdom
+
+import { resolveDriveAnnotationAnchor, type DriveAnnotationThreadDto, type DriveMarkdownProjectionDto } from '@synapse/shared'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { renderDriveMarkdownFragment } from '../../../../../server/src/drive/drive-markdown-renderer'
+import { renderMarkdownAnnotationHtml } from './markdown-annotation-render'
+import { createMarkdownAnnotationAnchorFromSelection } from './markdown-annotation-target'
+import { createMarkdownRenderedDomRange, createMarkdownRenderedTextModel } from './markdown-rendered-text'
+
+describe('renderMarkdownAnnotationHtml', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it.each([
+    { selector: 'p', start: 10, end: 21, exact: ' 任务目标 16（蓝）' },
+    { selector: 'td:nth-child(4)', start: 0, end: 10, exact: '弹窗内列出错误行清单' },
+  ])('creates and highlights an exact comment in $selector when a table row has extra cells', async ({ selector, start, end, exact }) => {
+    const source = [
+      '| 异常 | 条件 | 策略 |',
+      '| --- | --- | --- |',
+      '| 导入格式错误 | 导入 | 金额非数字 | 弹窗内列出错误行清单并提供「下载错误清单」，**整批不写入**（回滚），Toast"导入失败，请修正后重试" |',
+      '',
+      '###### 1、页面布局',
+      '',
+      '- 面包屑：返回 / 项目详情 / 绩效管理。',
+      '- 双 Tab：绩效考核 / 项目绩效设置。',
+      '',
+      '###### 2、绩效考核 Tab',
+      '',
+      '研究目标 5（紫）/ 任务目标 16（蓝）/ 已完成 8（绿）',
+    ].join('\n')
+    const rendered = await renderDriveMarkdownFragment(source)
+    const root = document.body.appendChild(document.createElement('main'))
+    root.innerHTML = rendered.html
+    const element = root.querySelector(selector)
+    expect(element).not.toBeNull()
+    const text = element!.firstChild!
+    const range = document.createRange()
+    range.setStart(text, start)
+    range.setEnd(text, end)
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
+    selection.addRange(range)
+    const selected = createMarkdownAnnotationAnchorFromSelection({ root, selection, projection: rendered.projection })!
+    selection.removeAllRanges()
+    root.remove()
+    if (selected.selectors.kind === 'image') throw new Error('Expected text selectors')
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: selected.selectors,
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+      crdtSourceRange: selected.selectors.position,
+    })
+
+    expect(root.querySelectorAll('th')).toHaveLength(4)
+    expect(selected.target.quote.exact).toBe(exact)
+    expect(selected.selectors.position).toEqual({
+      start: source.indexOf(exact),
+      end: source.indexOf(exact) + exact.length,
+    })
+    expect(resolution).toMatchObject({ positionStatus: 'attached', quoteStatus: 'exact' })
+    expect(createMarkdownRenderedTextModel(root, rendered.projection).text).toBe(rendered.renderedText)
+    const annotation: DriveAnnotationThreadDto = {
+      ...anchoredThread(),
+      target: selected.target,
+      anchor: {
+        ...anchoredThread().anchor!,
+        selectors: selected.selectors,
+        positionStatus: resolution.positionStatus,
+        quoteStatus: resolution.quoteStatus,
+        resolvedSourceRange: resolution.sourceRange,
+        resolvedRenderedRange: resolution.renderedRange,
+      },
+    }
+    const result = renderMarkdownAnnotationHtml(rendered.html, [annotation], 'version-1', null, rendered.projection)
+    const located = result.resolved[0].range!
+    const model = createMarkdownRenderedTextModel(root, rendered.projection)
+    expect(createMarkdownRenderedDomRange(root, model.segments, located.start, located.end)?.toString()).toBe(exact)
+  })
+
+  it('resolves attached annotation ranges without changing rendered markdown html', () => {
+    const html = '<p>这是 <strong>重点</strong> 内容</p>'
+    const result = renderMarkdownAnnotationHtml(html, [thread()], 'version-1')
+
+    expect(result.html).toBe(html)
+    expect(result.html).not.toContain('data-drive-annotation-thread-id')
+    expect(result.html).not.toContain('bg-amber')
+    expect(result.html).not.toContain('underline')
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'attached' })
+  })
+
+  it('keeps markdown element structure unchanged for ranges across table and inline code', () => {
+    const html = '<table><tbody><tr><td><strong>重点</strong><code>代码</code></td></tr></tbody></table>'
+    const result = renderMarkdownAnnotationHtml(html, [thread({
+      range: { start: 0, end: 4 },
+      quote: { exact: '重点代码', prefix: '', suffix: '' },
+    })], 'version-1')
+
+    expect(result.html).toBe(html)
+    expect(result.html).not.toContain('<span')
+  })
+
+  it('does not write pending annotation markup into markdown html', () => {
+    const html = '<p>这是 <strong>重点</strong> 内容</p>'
+    const result = renderMarkdownAnnotationHtml(html, [], 'version-1')
+
+    expect(result.html).toBe(html)
+    expect(result.html).not.toContain('data-drive-annotation-pending')
+    expect(result.html).not.toContain('data-drive-annotation-thread-id')
+    expect(result.html).not.toContain('bg-amber')
+  })
+
+  it('reattaches shifted ranges by quote context', () => {
+    const result = renderMarkdownAnnotationHtml('<p>新增段落。这是重点内容。</p>', [thread({
+      range: { start: 2, end: 4 },
+      quote: { exact: '重点', prefix: '这是', suffix: '内容' },
+    })], 'version-2')
+
+    expect(result.html).toBe('<p>新增段落。这是重点内容。</p>')
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'shifted', range: { start: 7, end: 9 } })
+  })
+
+  it('trusts an unchanged repeated range only on its source version', () => {
+    const result = renderMarkdownAnnotationHtml('<p>重复。重复。</p>', [thread({
+      range: { start: 0, end: 2 },
+      quote: { exact: '重复', prefix: '', suffix: '' },
+    })], 'version-1')
+
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'attached', range: { start: 0, end: 2 } })
+  })
+
+  it('reattaches a unique quote after markdown syntax changes', () => {
+    const result = renderMarkdownAnnotationHtml('<p>这是 <em>重点</em> 内容</p>', [thread()], 'version-2')
+
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'attached', range: { start: 3, end: 5 } })
+  })
+
+  it('leaves orphaned repeated quotes unmarked', () => {
+    const result = renderMarkdownAnnotationHtml('<p>重复。重复。</p>', [thread({
+      range: { start: 2, end: 4 },
+      quote: { exact: '重复', prefix: '', suffix: '' },
+    })], 'version-2')
+
+    expect(result.html).not.toContain('data-drive-annotation-thread-id')
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'orphaned', range: null })
+  })
+
+  it('uses quote context to resolve repeated text after a version change', () => {
+    const result = renderMarkdownAnnotationHtml('<p>前文重点错误。目标重点内容。</p>', [thread({
+      range: { start: 0, end: 2 },
+      quote: { exact: '重点', prefix: '目标', suffix: '内容' },
+    })], 'version-2')
+
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'shifted', range: { start: 9, end: 11 } })
+  })
+
+  it('does not trust the old range when repeated text loses its context', () => {
+    const result = renderMarkdownAnnotationHtml('<p>重点错误。重点错误。</p>', [thread({
+      range: { start: 0, end: 2 },
+      quote: { exact: '重点', prefix: '目标', suffix: '内容' },
+    })], 'version-2')
+
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'orphaned', range: null })
+  })
+
+  it('orphanes an annotation when only part of the original quote remains', () => {
+    const result = renderMarkdownAnnotationHtml('<p>这是重内容</p>', [thread({
+      range: { start: 2, end: 4 },
+      quote: { exact: '重点', prefix: '这是', suffix: '内容' },
+    })], 'version-2')
+
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'orphaned', range: null })
+  })
+
+  it('orphanes an annotation when the original quote is fully deleted', () => {
+    const result = renderMarkdownAnnotationHtml('<p>这是内容</p>', [thread()], 'version-2')
+
+    expect(result.resolved[0]).toMatchObject({ threadId: 'thread-1', anchorStatus: 'orphaned', range: null })
+  })
+
+  it('reattaches an orphan when its original quote becomes unique again', () => {
+    const annotation = thread()
+    const missing = renderMarkdownAnnotationHtml('<p>这是内容</p>', [annotation], 'version-2')
+    const restored = renderMarkdownAnnotationHtml('<p>这是 <strong>重点</strong> 内容</p>', [annotation], 'version-3')
+
+    expect(missing.resolved[0]).toMatchObject({ anchorStatus: 'orphaned', range: null })
+    expect(restored.resolved[0]).toMatchObject({ anchorStatus: 'attached', range: { start: 3, end: 5 } })
+  })
+
+  it('uses the live CRDT range instead of a cached attached range after the selection is deleted', () => {
+    const text = '锚点前后文'
+    const result = renderMarkdownAnnotationHtml(
+      `<p>${text}</p>`,
+      [anchoredThread()],
+      'version-1',
+      {
+        sourceText: text,
+        projection: projection(text),
+        resolveCrdtRange: () => ({ start: 2, end: 2 }),
+      },
+    )
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-anchored',
+      anchorStatus: 'orphaned',
+      positionStatus: 'source_deleted',
+      quoteStatus: 'deleted',
+      range: null,
+    })
+  })
+
+  it('keeps a server-refreshed modified anchor attached while a live document is active', () => {
+    const text = '前缀表格中默认展示带出已匹配的赠品名称后缀'
+    const expected = '表格中默认展示带出已匹配的赠品名称'
+    const start = Array.from('前缀').length
+    const refreshedThread: DriveAnnotationThreadDto = {
+      ...anchoredThread(),
+      anchor: {
+        ...anchoredThread().anchor!,
+        selectors: {
+          schemaVersion: 2,
+          crdt: { epoch: 'epoch-1', start: 'start', end: 'end' },
+          position: { start: 8, end: 23 },
+          renderedPosition: { start: 8, end: 23 },
+          semantic: { blockId: 'old-block', start: 8, end: 23, blockType: 'paragraph' },
+          quote: { exact: '表格中默认展示已匹配的赠品名称', prefix: '', suffix: '' },
+        },
+        positionStatus: 'attached',
+        quoteStatus: 'modified',
+        resolvedSourceRange: { start, end: start + Array.from(expected).length },
+        resolvedRenderedRange: { start, end: start + Array.from(expected).length },
+        lastResolvedVersionId: 'version-2',
+      },
+    }
+    const result = renderMarkdownAnnotationHtml(
+      `<p>${text}</p>`,
+      [refreshedThread],
+      'checkpoint-version-2',
+      {
+        sourceText: text,
+        projection: projection(text),
+        resolveCrdtRange: () => null,
+      },
+    )
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-anchored',
+      anchorStatus: 'attached',
+      positionStatus: 'attached',
+      quoteStatus: 'modified',
+      renderedRange: { start, end: start + Array.from(expected).length },
+    })
+  })
+
+  it('converts cached V2 code-point ranges to UTF-16 offsets for DOM measurement', () => {
+    const html = '<p>😀 Note</p>'
+    const result = renderMarkdownAnnotationHtml(html, [unicodeAnchoredThread()], 'version-1')
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-unicode',
+      anchorStatus: 'attached',
+      range: { start: 3, end: 7 },
+      renderedRange: { start: 2, end: 6 },
+    })
+  })
+
+  it.each([
+    { newline: '\n', trailingBlank: false },
+    { newline: '\r\n', trailingBlank: false },
+    { newline: '\r', trailingBlank: false },
+    { newline: '\n', trailingBlank: true },
+    { newline: '\r\n', trailingBlank: true },
+    { newline: '\r', trailingBlank: true },
+  ])('highlights the exact comment after fenced code with $newline and trailingBlank=$trailingBlank', async ({ newline, trailingBlank }) => {
+    const source = ['```mermaid', 'flowchart TD', 'A --> B', ...(trailingBlank ? [''] : []), '```', '', '正文：组织'].join(newline)
+    const rendered = await renderDriveMarkdownFragment(source)
+    const sourceStart = source.indexOf('组织')
+    const selectors = {
+      schemaVersion: 2 as const,
+      position: { start: sourceStart, end: sourceStart + 2 },
+      renderedPosition: { start: 24, end: 26 },
+      quote: { exact: '组织', prefix: '正文：', suffix: '' },
+    }
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors,
+      projection: rendered.projection,
+      sourceText: source,
+      renderedText: rendered.renderedText,
+      crdtSourceRange: selectors.position,
+    })
+    const annotation: DriveAnnotationThreadDto = {
+      ...anchoredThread(),
+      anchor: {
+        ...anchoredThread().anchor!,
+        selectors,
+        positionStatus: resolution.positionStatus,
+        quoteStatus: resolution.quoteStatus,
+        confidence: resolution.confidence,
+        resolvedSourceRange: resolution.sourceRange,
+        resolvedRenderedRange: resolution.renderedRange,
+      },
+    }
+    const root = document.createElement('main')
+    root.innerHTML = rendered.html
+    const model = createMarkdownRenderedTextModel(root, rendered.projection)
+
+    for (const live of [false, true]) {
+      const result = renderMarkdownAnnotationHtml(rendered.html, [annotation], 'version-1', live ? {
+        sourceText: source,
+        projection: rendered.projection,
+        resolveCrdtRange: () => selectors.position,
+      } : null, rendered.projection)
+      const resolved = result.resolved[0]
+      expect(resolved).toMatchObject({ anchorStatus: 'attached', quoteStatus: 'exact' })
+      expect(resolved.range).not.toBeNull()
+      const range = resolved.range!
+      expect(createMarkdownRenderedDomRange(root, model.segments, range.start, range.end)?.toString()).toBe('组织')
+    }
+  })
+
+  it('scans Unicode text once for many cached anchors and preserves their DOM offsets', () => {
+    const text = '😀 Note '.repeat(100)
+    const iterator = String.prototype[Symbol.iterator]
+    let fullTextScans = 0
+    vi.spyOn(String.prototype, Symbol.iterator).mockImplementation(function (this: string) {
+      if (String(this) === text) fullTextScans += 1
+      return iterator.call(this)
+    })
+    const threads = Array.from({ length: 100 }, (_value, index): DriveAnnotationThreadDto => {
+      const base = unicodeAnchoredThread()
+      const start = index * 7 + 2
+      return {
+        ...base,
+        id: `thread-${index}`,
+        anchor: {
+          ...base.anchor!,
+          resolvedRenderedRange: { start, end: start + 4 },
+        },
+      }
+    })
+
+    const result = renderMarkdownAnnotationHtml(`<p>${text}</p>`, threads, 'version-1')
+
+    expect(fullTextScans).toBe(1)
+    expect(result.resolved).toHaveLength(100)
+    result.resolved.forEach((range, index) => {
+      expect(range).toMatchObject({ anchorStatus: 'attached', range: { start: index * 8 + 3, end: index * 8 + 7 } })
+    })
+  })
+
+  it('keeps a CRLF paragraph selection precise after text is inserted before it', async () => {
+    const source = '前文\r\n后文'
+    const rendered = await renderDriveMarkdownFragment(source)
+    const root = document.createElement('main')
+    root.innerHTML = rendered.html
+    document.body.append(root)
+    const model = createMarkdownRenderedTextModel(root, rendered.projection)
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
+    selection.addRange(createMarkdownRenderedDomRange(root, model.segments, 3, 5)!)
+    const anchor = createMarkdownAnnotationAnchorFromSelection({ root, selection, projection: rendered.projection })
+    selection.removeAllRanges()
+    root.remove()
+
+    expect(anchor?.selectors.position).toEqual({ start: 4, end: 6 })
+    expect(anchor?.target.quote.exact).toBe('后文')
+    if (!anchor || anchor.selectors.kind === 'image') throw new Error('Missing text anchor')
+    const updatedSource = `新增的${source}`
+    const updated = await renderDriveMarkdownFragment(updatedSource, {
+      previousProjection: { source, projection: rendered.projection },
+    })
+    const resolution = resolveDriveAnnotationAnchor({
+      selectors: anchor.selectors,
+      projection: updated.projection,
+      sourceText: updatedSource,
+      renderedText: updated.renderedText,
+      crdtSourceRange: { start: 7, end: 9 },
+    })
+
+    expect(resolution).toMatchObject({
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      sourceRange: { start: 7, end: 9 },
+      renderedRange: { start: 6, end: 8 },
+    })
+  })
+
+  it.each([
+    { range: { start: -4, end: 100 }, quote: 'Note', expected: { start: 3, end: 7 } },
+    { range: { start: 100, end: 100 }, quote: '', expected: { start: 7, end: 7 } },
+    { range: { start: 2, end: 2 }, quote: '', expected: { start: 3, end: 3 } },
+    { range: { start: 2.9, end: 6.9 }, quote: 'Note', expected: { start: 3, end: 7 } },
+  ])('preserves code-point slicing semantics for cached range $range', ({ range, quote, expected }) => {
+    const base = unicodeAnchoredThread()
+    const result = renderMarkdownAnnotationHtml('<p>😀 Note</p>', [{
+      ...base,
+      anchor: {
+        ...base.anchor!,
+        selectors: { ...base.anchor!.selectors, quote: { exact: quote, prefix: '', suffix: '' } },
+        resolvedRenderedRange: range,
+      },
+    }], 'version-1')
+
+    expect(result.resolved[0]).toMatchObject({ anchorStatus: 'attached', range: expected })
+  })
+
+  it('does not attach an exact cached anchor to different rendered text', () => {
+    const result = renderMarkdownAnnotationHtml('<p>错误位置正确原文</p>', [anchoredThread()], 'version-1')
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-anchored',
+      anchorStatus: 'orphaned',
+      positionStatus: 'orphaned',
+      range: null,
+    })
+  })
+
+  it('resolves an attached image thread by its projected image id', () => {
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1"></p>',
+      [imageThread()],
+      'version-1',
+    )
+
+    expect(result.resolved[0]).toMatchObject({
+      threadId: 'thread-image',
+      imageId: 'mdimg_1',
+      anchorStatus: 'attached',
+      range: null,
+    })
+  })
+
+  it('reads rendered image identities once for many image comments and keeps missing images orphaned', () => {
+    const querySelectorAll = vi.spyOn(DocumentFragment.prototype, 'querySelectorAll')
+    const threads = Array.from({ length: 100 }, (_value, index): DriveAnnotationThreadDto => ({
+      ...imageThread(),
+      id: `image-thread-${index}`,
+    }))
+    const missing = imageThread()
+    if (missing.target.kind !== 'image') throw new Error('image target expected')
+    threads.push({ ...missing, id: 'missing-image', target: { ...missing.target, imageId: 'missing' } })
+
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1"></p>',
+      threads,
+      'version-1',
+    )
+
+    expect(querySelectorAll.mock.calls.filter(([selector]) => selector === '[data-drive-markdown-image-id]')).toHaveLength(1)
+    expect(result.resolved.slice(0, 100).every((range) => range.anchorStatus === 'attached' && range.imageId === 'mdimg_1')).toBe(true)
+    expect(result.resolved[100]).toMatchObject({ threadId: 'missing-image', anchorStatus: 'orphaned', imageId: null })
+  })
+
+  it('orphans an image thread when the image resource identity changes', () => {
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_replacement" src="/files/asset_2"></p>',
+      [imageThread()],
+      'version-2',
+    )
+
+    expect(result.resolved[0]).toMatchObject({ imageId: null, anchorStatus: 'orphaned', quoteStatus: 'deleted' })
+  })
+
+  it('uses the refreshed source range to attach a moved image with a new projected id', () => {
+    const movedThread = {
+      ...imageThread(),
+      anchor: {
+        ...imageThread().anchor!,
+        resolvedSourceRange: { start: 20, end: 38 },
+        lastResolvedVersionId: 'version-2',
+      },
+    }
+    const currentProjection: DriveMarkdownProjectionDto = {
+      ...projection('前文占位内容'),
+      imageAnchorsVersion: 1,
+      images: [{
+        imageId: 'mdimg_moved',
+        segmentId: 'segment-image',
+        blockId: 'block-moved',
+        imageIndex: 0,
+        documentIndex: 0,
+        sourceStart: 20,
+        sourceEnd: 38,
+        renderedStart: 6,
+        renderedEnd: 6,
+        source: '/files/asset_1',
+        resourceKey: 'file:asset_1',
+        alt: '',
+        title: null,
+      }],
+    }
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_moved" src="/files/asset_1"></p>',
+      [movedThread],
+      'version-2',
+      null,
+      currentProjection,
+    )
+
+    expect(result.resolved[0]).toMatchObject({ imageId: 'mdimg_moved', anchorStatus: 'attached', quoteStatus: 'exact' })
+  })
+
+  it('uses the server-refreshed image range while a live document is active', () => {
+    const movedThread = {
+      ...imageThread(),
+      anchor: {
+        ...imageThread().anchor!,
+        resolvedSourceRange: { start: 20, end: 38 },
+        lastResolvedVersionId: 'version-2',
+      },
+    }
+    const text = '占位内容'.repeat(10)
+    const currentProjection: DriveMarkdownProjectionDto = {
+      ...projection(text),
+      imageAnchorsVersion: 1,
+      images: [{
+        imageId: 'mdimg_moved',
+        segmentId: 'segment-image',
+        blockId: 'block-moved',
+        imageIndex: 0,
+        documentIndex: 0,
+        sourceStart: 20,
+        sourceEnd: 38,
+        renderedStart: 6,
+        renderedEnd: 6,
+        source: '/files/asset_1',
+        resourceKey: 'file:asset_1',
+        alt: '',
+        title: null,
+      }],
+    }
+    const result = renderMarkdownAnnotationHtml(
+      '<p><img data-drive-markdown-image-id="mdimg_moved" src="/files/asset_1"></p>',
+      [movedThread],
+      'checkpoint-version-2',
+      {
+        sourceText: text,
+        projection: currentProjection,
+        resolveCrdtRange: () => null,
+      },
+    )
+
+    expect(result.resolved[0]).toMatchObject({ imageId: 'mdimg_moved', anchorStatus: 'attached', quoteStatus: 'exact' })
+  })
+})
+
+function thread(input: {
+  readonly range?: { readonly start: number; readonly end: number }
+  readonly quote?: { readonly exact: string; readonly prefix: string; readonly suffix: string }
+} = {}) {
+  return {
+    id: 'thread-1',
+    itemId: 'item-1',
+    baseVersionId: 'version-1',
+    targetKind: 'textRange' as const,
+    target: {
+      schemaVersion: 1 as const,
+      kind: 'textRange' as const,
+      surface: 'markdownRenderedText' as const,
+      range: input.range ?? { start: 3, end: 5 },
+      quote: input.quote ?? { exact: '重点', prefix: '这是 ', suffix: ' 内容' },
+    },
+    anchorStatus: 'attached' as const,
+    author: { id: 'user-1', email: 'user@example.com', handle: null },
+    comments: [],
+    createdAt: '2026-06-21T00:00:00.000Z',
+    updatedAt: '2026-06-21T00:00:00.000Z',
+    status: 'open',
+    permissions: { canDelete: true, canChangeStatus: true },
+  }
+}
+
+function anchoredThread(): DriveAnnotationThreadDto {
+  return {
+    ...thread(),
+    id: 'thread-anchored',
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: 'version-1',
+      selectors: {
+        schemaVersion: 2,
+        crdt: { epoch: 'epoch-1', start: 'start', end: 'end' },
+        position: { start: 2, end: 7 },
+        renderedPosition: { start: 2, end: 7 },
+        quote: { exact: '已删除文字', prefix: '锚点', suffix: '前后文' },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 2, end: 7 },
+      resolvedRenderedRange: { start: 2, end: 7 },
+      confidence: 1,
+      lastResolvedVersionId: 'version-1',
+    },
+  }
+}
+
+function imageThread(): DriveAnnotationThreadDto {
+  return {
+    ...thread(),
+    id: 'thread-image',
+    targetKind: 'image',
+    target: {
+      schemaVersion: 1,
+      kind: 'image',
+      surface: 'markdownRenderedImage',
+      imageId: 'mdimg_1',
+      resourceKey: 'file:asset_1',
+      source: { startOffset: 0, endOffset: 18 },
+      snapshot: { src: '/files/asset_1', alt: '', title: null },
+      blockHint: { blockId: 'block', blockIndex: 0, imageIndex: 0, headingPath: [] },
+    },
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: 'version-1',
+      selectors: {
+        schemaVersion: 2,
+        kind: 'image',
+        position: { start: 0, end: 18 },
+        semantic: { blockId: 'block', imageIndex: 0, headingPath: [] },
+        identity: { imageId: 'mdimg_1', resourceKey: 'file:asset_1' },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 0, end: 18 },
+      resolvedRenderedRange: null,
+      confidence: 1,
+      lastResolvedVersionId: 'version-1',
+    },
+  }
+}
+
+function unicodeAnchoredThread(): DriveAnnotationThreadDto {
+  return {
+    ...thread(),
+    id: 'thread-unicode',
+    anchor: {
+      schemaVersion: 2,
+      baseVersionId: 'version-1',
+      selectors: {
+        schemaVersion: 2,
+        position: { start: 2, end: 6 },
+        renderedPosition: { start: 2, end: 6 },
+        quote: { exact: 'Note', prefix: '😀 ', suffix: '' },
+      },
+      positionStatus: 'attached',
+      quoteStatus: 'exact',
+      resolvedSourceRange: { start: 2, end: 6 },
+      resolvedRenderedRange: { start: 2, end: 6 },
+      confidence: 1,
+      lastResolvedVersionId: 'version-1',
+    },
+  }
+}
+
+function projection(text: string): DriveMarkdownProjectionDto {
+  const length = Array.from(text).length
+  return {
+    schemaVersion: 1,
+    parserVersion: 'test',
+    sourceSha256: 'test',
+    blocks: [{
+      blockId: 'block',
+      type: 'paragraph',
+      parentBlockId: null,
+      headingPath: [],
+      sourceStart: 0,
+      sourceEnd: length,
+      renderedStart: 0,
+      renderedEnd: length,
+      textFingerprint: 'test',
+    }],
+    segments: [{
+      segmentId: 'segment',
+      blockId: 'block',
+      sourceStart: 0,
+      sourceEnd: length,
+      renderedStart: 0,
+      renderedEnd: length,
+      mapping: 'identity',
+    }],
+  }
+}

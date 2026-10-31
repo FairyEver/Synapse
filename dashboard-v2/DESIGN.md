@@ -4,7 +4,6 @@ library: "@heroui/react"
 styles: "@heroui/styles"
 modes:
   - light
-  - dark
 source: "https://github.com/heroui-inc/heroui/blob/v3/packages/styles/themes/default/variables.css"
 ---
 
@@ -27,7 +26,15 @@ Apply the semantic canvas colors at the application root:
 <body className="bg-background text-foreground">{children}</body>
 ```
 
-Use `class="light"` or `data-theme="light"` for light mode and `class="dark"` or `data-theme="dark"` for dark mode. The `default` theme is the light theme.
+All application entry documents use `data-theme="light"` and `color-scheme: light`. Do not expose theme settings or react to OS color mode. The dark values below document the upstream library only; V2 does not activate them.
+
+## Template and content boundaries
+
+- Shell, overview, metrics, member tables and forms follow https://template-dashboard.heroui.pro/.
+- Histories, logs and search/filter/sort lists follow https://template-4.heroui.pro/transactions.
+- Use standard HeroUI components and variants, not a reskinned legacy dashboard component layer. See MIGRATION.md for the per-feature mapping.
+- Reading/editing content preserves typography, native scrolling and annotation geometry; change outer controls only.
+- Game surfaces retain scoped bespoke visuals; administrative chrome and room forms use standard HeroUI components.
 
 ## Design Direction
 
@@ -36,7 +43,7 @@ Use `class="light"` or `data-theme="light"` for light mode and `class="dark"` or
 - Use one strong accent for primary actions and reserve status colors for meaning.
 - Compose interfaces from HeroUI components before creating custom primitives.
 - Keep interactions accessible, keyboard friendly, and visibly focused.
-- Let semantic tokens adapt the interface between light and dark modes.
+- Use semantic tokens from the default light theme.
 
 ## Colors
 

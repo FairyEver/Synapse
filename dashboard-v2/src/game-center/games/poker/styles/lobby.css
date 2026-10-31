@@ -1,0 +1,64 @@
+/* Poker-owned illustrations, rendered through the registry artwork slot. */
+.gc-poker-art {
+  position: relative;
+  width: 17rem;
+  height: 14rem;
+  display: grid;
+  place-items: center;
+}
+.gc-art-orbit {
+  position: absolute;
+  width: 16rem;
+  height: 10rem;
+  border: 1px solid var(--gc-line);
+  border-radius: 50%;
+  rotate: -25deg;
+}
+.gc-art-orbit-inner {
+  width: 13rem;
+  height: 7.5rem;
+  opacity: 0.5;
+}
+.gc-art-hand {
+  display: flex;
+  width: 12rem;
+  height: 12rem;
+  align-items: center;
+  justify-content: center;
+}
+.gc-art-hand .poker-card {
+  --cw: 5.5rem;
+  position: absolute;
+  box-shadow: 0 4px 14px color-mix(in oklch, var(--gc-canvas) 60%, transparent);
+  border-radius: 0.275rem;
+}
+.gc-art-hand .poker-card:nth-child(1) {
+  transform: translate(-2.75rem, 0.375rem) rotate(-20deg);
+}
+.gc-art-hand .poker-card:nth-child(2) {
+  transform: rotate(-2deg);
+}
+.gc-art-hand .poker-card:nth-child(3) {
+  transform: translate(2.75rem, 0.375rem) rotate(18deg);
+}
+.gc-art-chip {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 1.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 5px dashed var(--gc-accent);
+  background: var(--gc-surface);
+  box-shadow:
+    0 0 0 2px var(--gc-accent),
+    inset 0 0 0 2px var(--gc-accent);
+}
+.gc-art-chip-back {
+  right: 2.75rem;
+  bottom: 0.875rem;
+  border-color: var(--gc-muted);
+  box-shadow:
+    0 0 0 2px var(--gc-muted),
+    inset 0 0 0 2px var(--gc-muted);
+}
