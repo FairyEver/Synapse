@@ -30,6 +30,7 @@
 - 从仓库根运行 `pnpm dev`，或单独运行 `pnpm dev:dashboard-v2`；默认地址 `http://localhost:19703/`，端口占用时直接失败。
 - 停止用 `pnpm quit:dashboard-v2`；`pnpm quit` 也会停止此子包。
 - 构建：`pnpm --filter @synapse/dashboard-v2 build`；类型检查：`pnpm --filter @synapse/dashboard-v2 tsc`。
+- 包管理器统一为 pnpm `12.16.1`；官方 CLI `heroui-cli@3.1.1` 已安装，可用 `pnpm --filter @synapse/dashboard-v2 exec heroui doctor --json` 检查配置。其 `agents-md` 会克隆仓库，文档刷新继续使用本项目 HTTP 同步命令。
 - Node.js 至少 22.22.0，MCP 使用子包 devDependency 的锁定版本。项目级 MCP 配置位于仓库根 `.codex/config.toml`（Codex）和 `.mcp.json`（Claude Code）；新增配置后重启对应客户端。
 - 本地文档使用官方 HTTP 内容初始化，不克隆仓库；快照与 demos 位于被忽略的 `.heroui-docs/`，换机器后重新同步。Skill、规则、DESIGN.md 和 MCP 配置纳入 Git。
 - 更新主题时同步本地 DESIGN.md；刷新官方 DESIGN.md 会覆盖自定义内容，执行前先检查 diff。

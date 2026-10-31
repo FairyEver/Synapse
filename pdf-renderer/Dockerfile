@@ -2,10 +2,11 @@ ARG NPM_REGISTRY=https://registry.npmmirror.com
 
 FROM node:22.23.4-bookworm-slim AS build
 ARG NPM_REGISTRY
-ENV COREPACK_NPM_REGISTRY=$NPM_REGISTRY NPM_CONFIG_REGISTRY=$NPM_REGISTRY
+ENV COREPACK_NPM_REGISTRY=$NPM_REGISTRY PNPM_CONFIG_REGISTRY=$NPM_REGISTRY
 WORKDIR /workspace
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@12.16.1 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY .pnpmfile.cjs ./
 COPY patches patches
 COPY pdf-renderer/package.json pdf-renderer/package.json
 RUN pnpm install --frozen-lockfile --filter @synapse/pdf-renderer...

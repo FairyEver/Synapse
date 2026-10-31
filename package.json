@@ -2,7 +2,7 @@
   "name": "synapse-workspace",
   "private": true,
   "version": "0.0.0",
-  "packageManager": "pnpm@10.22.0",
+  "packageManager": "pnpm@12.16.1",
   "scripts": {
     "dev": "pnpm exec dekit mprocs --config mprocs.yaml",
     "dev:prod": "pnpm exec dekit mprocs --config mprocs.prod.yaml",

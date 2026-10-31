@@ -47,7 +47,7 @@ jobs:
       - name: Setup pnpm
         run: |
           corepack enable
-          corepack prepare pnpm@10.22.0 --activate
+          corepack prepare pnpm@12.16.1 --activate
       - name: Locate pnpm store
         id: pnpm-store
         shell: bash
@@ -56,8 +56,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-v10-${{ runner.os }}-${{ runner.arch }}-
+          key: pnpm-v12-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-v12-${{ runner.os }}-${{ runner.arch }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Test acceptance metadata and installer integrity gates

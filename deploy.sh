@@ -333,6 +333,7 @@ sync_remote_code() {
     --include='/scripts/deploy/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \
+    --include='/.pnpmfile.cjs' \
     --include='/package.json' \
     --exclude='*' \
     ./ "$SERVER:$REMOTE_DIR/"

@@ -9,6 +9,15 @@
 - pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/dashboard-v2`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
 - Git 管理内容，SQLite / DataRepository 管理业务数据。
 
+## 包管理器
+
+- 本机、根 workspace、desktop、CI 与 Docker 统一使用 `pnpm@12.16.1`。以根 `package.json` 的 `packageManager` 为准，desktop 的声明保持一致。
+- pnpm 12 的构建脚本授权集中放在 `pnpm-workspace.yaml` 的 `allowBuilds`，值只能是 `true` / `false`；不再使用 `onlyBuiltDependencies` 或 `ignoredBuiltDependencies`。保留原有允许与拒绝范围，不全量放开构建脚本。
+- `autoDedupe: false` 保留现有依赖解析，包管理器升级不自动升级或去重业务依赖。锁文件包含 pnpm 12 生成的包管理器文档段和 workspace 依赖文档段，提交时保留完整文件。
+- 新依赖保留 pnpm 12 默认的 24 小时发布等待期；迁移时尚在等待期内、但已安装的依赖只按精确版本列入 `minimumReleaseAgeExclude`，不使用包名通配豁免。
+- `.npmrc` 仅放 pnpm 支持的 registry、认证、代理与 TLS 配置；传给 pnpm 的环境变量使用 `PNPM_CONFIG_*`。Electron 下载镜像由 `.pnpmfile.cjs` 的 `updateConfig` / `extraEnv` 传给安装脚本，显式 `ELECTRON_MIRROR` 优先于默认镜像。
+- 安装后使用 `pnpm install --frozen-lockfile` 验证。CI 缓存使用 `pnpm-v12-` 前缀；包管理器升级本身不触发远端 CI、发布或部署。
+
 ```text
 desktop/
 ├── electron/           # 主进程：runtime / bootstrap / services / database

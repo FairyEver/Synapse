@@ -3,15 +3,16 @@ ARG NPM_REGISTRY=https://registry.npmmirror.com
 FROM node:22.23.4-alpine AS base
 ARG NPM_REGISTRY
 RUN COREPACK_NPM_REGISTRY="$NPM_REGISTRY" corepack enable \
-  && COREPACK_NPM_REGISTRY="$NPM_REGISTRY" corepack prepare pnpm@10.22.0 --activate
+  && COREPACK_NPM_REGISTRY="$NPM_REGISTRY" corepack prepare pnpm@12.16.1 --activate
 WORKDIR /app
 COPY scripts/deploy/check-node-runtime.mjs scripts/deploy/check-node-runtime.mjs
 RUN node scripts/deploy/check-node-runtime.mjs
 
 FROM base AS deps
 ARG NPM_REGISTRY
-ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY
+ENV PNPM_CONFIG_REGISTRY=$NPM_REGISTRY
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY .pnpmfile.cjs ./
 COPY patches/ patches/
 COPY shared/package.json shared/package.json
 COPY ui/package.json ui/package.json
@@ -36,6 +37,7 @@ COPY shared/ shared/
 COPY ui/ ui/
 COPY pdf-renderer/package.json pdf-renderer/package.json
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY .pnpmfile.cjs ./
 RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build
 RUN pnpm --filter @synapse/dashboard build

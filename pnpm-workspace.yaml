@@ -11,19 +11,28 @@ packages:
   - auto/web
   - templates/shadcn-admin
 
-onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
-  - electron
-  - electron-winstaller
-  - esbuild
-  - node-pty
-  - prisma
+# 升级包管理器时保留现有依赖解析，不自动去重或升级业务依赖。
+autoDedupe: false
 
-ignoredBuiltDependencies:
-  - '@clerk/shared'
-  - '@nestjs/core'
-  - msw
+# 仅兼容迁移前已安装并锁定、尚不足 24 小时的精确版本；其它新版本保留默认等待期。
+minimumReleaseAgeExclude:
+  - '@aws-sdk/checksums@3.1002.1'
+  - '@aws-sdk/core@3.979.1'
+  - '@aws-sdk/credential-provider-env@3.972.80'
+  - '@aws-sdk/credential-provider-http@3.972.82'
+  - '@aws-sdk/credential-provider-ini@3.973.25'
+  - '@aws-sdk/credential-provider-login@3.972.87'
+  - '@aws-sdk/credential-provider-node@3.972.92'
+  - '@aws-sdk/credential-provider-process@3.972.80'
+  - '@aws-sdk/credential-provider-sso@3.973.24'
+  - '@aws-sdk/credential-provider-web-identity@3.972.86'
+  - '@aws-sdk/middleware-sdk-s3@3.972.85'
+  - '@aws-sdk/nested-clients@3.997.54'
+  - '@aws-sdk/signature-v4-multi-region@3.996.51'
+  - '@aws-sdk/token-providers@3.1161.0'
+  - '@posthog/types@1.419.0'
+  - '@smithy/core@3.38.1'
+  - '@smithy/node-http-handler@4.14.1'
 
 overrides:
   js-yaml: 4.2.0
@@ -33,13 +42,14 @@ patchedDependencies:
   node-pty@1.1.0: patches/node-pty@1.1.0.patch
 
 allowBuilds:
-  '@clerk/shared': set this to true or false
-  '@nestjs/core': set this to true or false
-  '@prisma/client': set this to true or false
-  '@prisma/engines': set this to true or false
-  electron: set this to true or false
-  electron-winstaller: set this to true or false
-  esbuild: set this to true or false
-  msw: set this to true or false
-  node-pty: set this to true or false
-  prisma: set this to true or false
+  '@clerk/shared': false
+  '@nestjs/core': false
+  '@openuidev/lang-core': false
+  '@prisma/client': true
+  '@prisma/engines': true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  msw: false
+  node-pty: true
+  prisma: true
