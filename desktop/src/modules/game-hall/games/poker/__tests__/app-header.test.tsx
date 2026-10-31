@@ -18,6 +18,7 @@ vi.mock("../hooks/usePokerRoom", () => ({
   }),
 }))
 vi.mock("../hooks/usePokerEvents", () => ({ usePokerEvents: () => ({ events: [], animate: [] }) }))
+vi.mock("../hooks/usePracticeBots", () => ({ usePracticeBots: () => ({ canManage: false }) }))
 vi.mock("../components/Table", () => ({
   Table: ({ table }: { table: { roomCode: string } }) => <div>牌桌 {table.roomCode}</div>,
 }))

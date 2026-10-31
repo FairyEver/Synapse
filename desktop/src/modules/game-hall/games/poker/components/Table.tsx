@@ -14,7 +14,7 @@ import { usePokerAudio } from "../hooks/usePokerAudio"
 import "../styles/table-tokens.css"
 import "../styles/responsive-controls.css"
 const NO_EVENTS: PokerTableEvent[] = []
-export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, animate = NO_EVENTS, extras, identityKey }: {
+export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, animate = NO_EVENTS, actions, extras, identityKey }: {
   table: PokerTableView
   perspective: "owner" | "public"
   onPerspective: (v: "owner" | "public") => void
@@ -25,6 +25,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   animate?: PokerTableEvent[]
   identityKey?: string
   extras?: ReactNode
+  actions?: ReactNode
 }) {
   const [panel, setPanel] = useState<PokerControlPanel | "log" | null>(null), [fit, setFit] = useState(canvasFit(1440,900))
   const [compact, setCompact] = useState(false)
@@ -70,6 +71,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           <button type="button" className="poker-control poker-back" onClick={onBack}><ArrowLeft aria-hidden="true" />返回房间</button>
           <span className="poker-room-heading"><strong>#{table.roomCode}</strong><span>第 {table.handNo} 手</span>{table.mode === "practice" && <span>陪练</span>}</span>
           <div className="poker-perspective">
+            {actions}
             <button type="button" className="poker-control" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onClick={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</button>
             {canNudge && <button type="button" className="poker-control" disabled={(view.deadlineMs ?? 600000) > 540000} onClick={() => onNudge(active.seatNo)}><Bell aria-hidden="true" />提醒玩家</button>}
             {table.seats.some(s => s.isMe) && <button type="button" className="poker-control" aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onClick={() => onPerspective(perspective === "owner" ? "public" : "owner")}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "玩家视角" : "旁观视角"}</button>}

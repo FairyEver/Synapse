@@ -2,8 +2,11 @@
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { describe, expect, it, vi } from "vitest"
+import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { SidePanel } from "../components/SidePanel"
-import { PracticeBots } from "../components/PracticeBots"
+import { PracticeBots as BotManager, PracticeBotAddButton } from "../components/PracticeBots"
+import { Table } from "../components/Table"
+import { usePracticeBots } from "../hooks/usePracticeBots"
 import { StatusBar } from "../components/StatusBar"
 import { tableResponse } from "../../../../../../app-capabilities/game-hall/main/__tests__/response-fixtures"
 const api = vi.hoisted(() => ({ add: vi.fn(), remove: vi.fn() }))
@@ -12,7 +15,66 @@ vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { bot: api } }) })
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const table = { ...tableResponse, mode: "practice" as const, ownerUserId: "owner", seats: [{ ...tableResponse.seats[0], participantKind: "bot" as const, botId: "bot", isMe: false, aiState: "bot" }], mySeatNo: 1, actionOnSeat: tableResponse.seats[0].seatNo }
+function PracticeBots({ table, onRefresh }: { table: PokerTableView; onRefresh: () => void | Promise<void> }) {
+  return <BotManager controls={usePracticeBots(table, onRefresh)} />
+}
+function PracticeTable({ table, onRefresh }: { table: PokerTableView; onRefresh: () => void | Promise<void> }) {
+  const controls = usePracticeBots(table, onRefresh)
+  return <Table table={table} perspective="owner" onPerspective={() => {}} onBack={() => {}} actions={<PracticeBotAddButton controls={controls} />} extras={controls.canManage ? <BotManager controls={controls} /> : null} />
+}
 describe("陪练房操作", () => {
+  it("进房无需打开日志即可添加，侧栏直接显示列表且共用重试意图", async () => {
+    api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({ botId: "new", seatNo: 1 })
+    const host = document.createElement("div"), root = createRoot(host), refresh = vi.fn()
+    try {
+      await act(async () => root.render(<PracticeTable table={table} onRefresh={refresh} />))
+      const quickAdd = host.querySelector<HTMLButtonElement>(".poker-edge-controls .poker-button")!
+      expect(quickAdd.textContent).toBe("添加机器人")
+      expect(quickAdd.closest("[hidden], [inert], details")).toBeNull()
+      expect(host.querySelector(".poker-information-drawer")!.hasAttribute("hidden")).toBe(true)
+      await act(async () => quickAdd.click())
+      expect(api.add).toHaveBeenCalledTimes(1)
+      const first = api.add.mock.calls[0][0].creationId
+      await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === "日志")!.click())
+      await act(async () => [...host.querySelectorAll('[role="tab"]')].find(tab => tab.textContent === "陪练")!.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })))
+      const manager = host.querySelector(".poker-bot-manager")!
+      expect(manager.closest("[hidden], details")).toBeNull()
+      expect(manager.querySelector("h3")!.textContent).toBe("陪练机器人 · 1")
+      await act(async () => manager.querySelector<HTMLButtonElement>("button")!.click())
+      expect(api.add.mock.calls[1][0].creationId).toBe(first)
+      expect(refresh).toHaveBeenCalledTimes(1)
+      expect(quickAdd.textContent).toBe("添加机器人")
+    } finally { await act(async () => root.unmount()) }
+  })
+  it("添加进行中同时禁用牌桌和侧栏入口，避免连点重复提交", async () => {
+    let resolve!: (value: { botId: string; seatNo: number }) => void
+    api.add.mockReset().mockImplementation(() => new Promise(done => { resolve = done }))
+    const host = document.createElement("div"), root = createRoot(host)
+    try {
+      await act(async () => root.render(<PracticeTable table={table} onRefresh={() => {}} />))
+      const quickAdd = host.querySelector<HTMLButtonElement>(".poker-edge-controls .poker-button")!
+      await act(async () => { quickAdd.click(); quickAdd.click() })
+      expect(api.add).toHaveBeenCalledTimes(1)
+      expect(quickAdd.disabled).toBe(true)
+      expect(host.querySelector<HTMLButtonElement>(".poker-bot-manager button")!.disabled).toBe(true)
+      await act(async () => resolve({ botId: "new", seatNo: 1 }))
+      expect(quickAdd.disabled).toBe(false)
+    } finally { await act(async () => root.unmount()) }
+  })
+  it("入口在满员时禁用，非房主、点数房和已解散房不显示", async () => {
+    const host = document.createElement("div"), root = createRoot(host)
+    try {
+      await act(async () => root.render(<PracticeTable table={{ ...table, maxSeats: 2, mySeatNo: null }} onRefresh={() => {}} />))
+      const quickAdd = host.querySelector<HTMLButtonElement>(".poker-edge-controls .poker-button")!
+      expect(quickAdd.disabled).toBe(true)
+      expect(quickAdd.textContent).toBe("座位已满")
+      for (const value of [{ ...table, mode: "points" as const }, { ...table, ownerUserId: "other" }, { ...table, status: "closed" as const }]) {
+        await act(async () => root.render(<PracticeTable table={value} onRefresh={() => {}} />))
+        expect(host.querySelector(".poker-edge-controls .poker-button")).toBeNull()
+        expect([...host.querySelectorAll('[role="tab"]')].some(tab => tab.textContent === "陪练")).toBe(false)
+      }
+    } finally { await act(async () => root.unmount()) }
+  })
   it("切换日志和陪练标签不丢失添加请求的幂等标识", async () => {
     api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({botId:"new",seatNo:1})
     const host=document.createElement("div"),root=createRoot(host)
@@ -45,7 +107,7 @@ describe("陪练房操作", () => {
       const remove = [...host.querySelectorAll("button")].find((button) => button.textContent?.endsWith(" · 移除"))!
       await act(async () => remove.click())
       expect(api.remove).toHaveBeenCalledWith({ roomCode: table.roomCode, botId: "bot" })
-      expect(host.querySelector("button")!.textContent).toBe("添加机器人")
+      expect(host.querySelector("button")!.textContent).toBe("座位已满")
       await act(async () => root.render(<PracticeBots table={empty} onRefresh={() => {}} />))
       await act(async () => host.querySelector<HTMLButtonElement>("button")!.click())
       expect(api.add.mock.calls[1][0].creationId).not.toBe(first)

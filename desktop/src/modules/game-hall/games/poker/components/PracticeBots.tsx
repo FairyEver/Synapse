@@ -1,39 +1,18 @@
-import { useRef } from "react"
-import type { PokerTableView } from "@synapse/shared/game-contracts"
-import { useAccount } from "@/app-shell/account"
 import { PokerButton } from "./PokerButton"
-import { useGameMutation } from "../../../hooks/useGameQuery"
-import { gameApi } from "../../../lib/api"
+import type { PracticeBotControls } from "../hooks/usePracticeBots"
 
-export function PracticeBots({ table, onRefresh }: { table: PokerTableView; onRefresh: () => void | Promise<void> }) {
-  const { state } = useAccount(), mutation = useGameMutation()
-  const userId = state.status === "authenticated" ? state.profile.user.id : null
-  const intent = useRef<{ key: string; id: string | null }>({ key: "", id: null })
-  const key = `${userId}:${table.roomCode}`
-  if (intent.current.key !== key) intent.current = { key, id: null }
-  if (table.mode !== "practice" || table.ownerUserId !== userId || table.status === "closed") return null
-  const bots = table.seats.filter((s) => s.participantKind === "bot")
-  const humans = table.seats.length - bots.length
-  const full = table.seats.length >= table.maxSeats - (humans ? 0 : 1)
-  const add = async () => {
-    const submitted = intent.current
-    submitted.id ??= crypto.randomUUID()
-    const result = await mutation.run(() => gameApi().poker.bot.add({ roomCode: table.roomCode, creationId: submitted.id! }))
-    if (result && intent.current === submitted) { submitted.id = null; await onRefresh() }
-  }
-  const remove = async (botId: string) => {
-    const submitted = intent.current
-    const result = await mutation.run(() => gameApi().poker.bot.remove({ roomCode: table.roomCode, botId }))
-    if (result && intent.current === submitted) {
-      submitted.id = null
-      await onRefresh()
-    }
-  }
+export function PracticeBotAddButton({ controls }: { controls: PracticeBotControls }) {
+  if (!controls.canManage) return null
+  return <PokerButton type="button" tone="primary" disabled={controls.busy || controls.full} onClick={() => void controls.add()}>{controls.retrying ? "重试添加机器人" : controls.full ? "座位已满" : "添加机器人"}</PokerButton>
+}
+
+export function PracticeBots({ controls }: { controls: PracticeBotControls }) {
+  if (!controls.canManage) return null
   return (
-    <details className="poker-bot-manager" aria-label="陪练机器人管理"><summary>陪练机器人 · {bots.length}</summary><div className="poker-bot-actions">
+    <section className="poker-bot-manager" aria-label="陪练机器人管理"><h3>陪练机器人 · {controls.bots.length}</h3><div className="poker-bot-actions">
       <span className="poker-bot-caption">练习筹码 · 不影响大厅点数</span>
-      <PokerButton type="button" disabled={mutation.busy || full} onClick={() => void add()}>{intent.current.id && !mutation.busy ? "重试添加机器人" : "添加机器人"}</PokerButton>
-      {bots.map((bot) => <PokerButton key={bot.botId} type="button" disabled={mutation.busy || bot.leavePending} onClick={() => bot.botId && void remove(bot.botId)}>{bot.displayName} · {bot.leavePending ? "本手后移除" : "移除"}</PokerButton>)}
-    </div></details>
+      <PracticeBotAddButton controls={controls} />
+      {controls.bots.map((bot) => <PokerButton key={bot.botId} type="button" disabled={controls.busy || bot.leavePending} onClick={() => bot.botId && void controls.remove(bot.botId)}>{bot.displayName} · {bot.leavePending ? "本手后移除" : "移除"}</PokerButton>)}
+    </div></section>
   )
 }

@@ -14,7 +14,8 @@ import { HandRecord } from "./components/HandRecord"
 import { AgentProfiles } from "./components/AgentProfiles"
 import { usePokerRoom } from "./hooks/usePokerRoom"
 import { usePokerEvents } from "./hooks/usePokerEvents"
-import { PracticeBots } from "./components/PracticeBots"
+import { PracticeBots, PracticeBotAddButton } from "./components/PracticeBots"
+import { usePracticeBots } from "./hooks/usePracticeBots"
 const tabs = [
   { id: "rooms", label: "房间" },
   { id: "records", label: "牌局记录" },
@@ -26,6 +27,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
   const room = usePokerRoom(code),
     mutation = useGameMutation()
   const events = usePokerEvents(code, room.perspective, !!room.table, identityKey)
+  const bots = usePracticeBots(room.table, room.refresh)
   const nudge = (seatNo: number) => {
     void mutation.run(() => gameApi().poker.seat.nudge({ roomCode: code, seatNo }))
   }
@@ -43,7 +45,8 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
             onRefresh={room.refresh}
             events={events.events}
             animate={events.animate}
-            extras={room.table.mode === "practice" && room.table.ownerUserId === identityKey && room.table.status !== "closed" ? <PracticeBots table={room.table} onRefresh={room.refresh} /> : null}
+            actions={<PracticeBotAddButton controls={bots} />}
+            extras={bots.canManage ? <PracticeBots controls={bots} /> : null}
             onBack={onBack}
           />
         ) : room.error ? (
