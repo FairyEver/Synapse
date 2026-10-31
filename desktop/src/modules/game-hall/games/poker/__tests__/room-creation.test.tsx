@@ -1,13 +1,17 @@
 /** @vitest-environment jsdom */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { createDefaultConfig, applySynapseConfigPatch } from "@/lib/config"
 import { Lobby } from "../components/Lobby"
 
+const settings = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }))
+vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => settings }))
+const identity = vi.hoisted(() => ({ user: { id: "user", nickname: "李杨", handle: "liyang" } }))
 const api = vi.hoisted(() => ({ create: vi.fn(), state: vi.fn(), control: vi.fn() }))
 vi.mock("@/app-shell/account", () => ({
   useAccount: () => ({
-    state: { status: "authenticated", connectivity: "online", profile: { user: { id: "user" } } },
+    state: { status: "authenticated", connectivity: "online", profile: { user: identity.user } },
   }),
 }))
 vi.mock("../../../lib/api", () => ({
@@ -23,6 +27,15 @@ vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 const roots = new Set<Root>()
+beforeEach(() => {
+  identity.user = { id: "user", nickname: "李杨", handle: "liyang" }
+  let config = createDefaultConfig()
+  settings.get.mockReset().mockImplementation(async () => config)
+  settings.update.mockReset().mockImplementation(async (patch) => {
+    config = applySynapseConfigPatch(config, patch)
+    return config
+  })
+})
 afterEach(async () => {
   for (const root of roots) await act(async () => root.unmount())
   roots.clear()
@@ -36,6 +49,71 @@ async function submit() {
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))
 }
 describe("建房请求身份", () => {
+  it("默认名称使用当前昵称，每次新建重置名称，默认名称交由服务端补实际房间号", async () => {
+    api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
+    const host = document.createElement("div"), root = createRoot(host)
+    roots.add(root); document.body.append(host)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    expect(document.querySelector<HTMLInputElement>("#poker-room-name")!.value).toBe("李杨的房间")
+    await submit()
+    expect(api.create.mock.calls[0][0].name).toBeUndefined()
+    identity.user.nickname = "新昵称"
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    expect(document.querySelector<HTMLInputElement>("#poker-room-name")!.value).toBe("新昵称的房间")
+  })
+  it("记住所有选项，取消、卸载重进后恢复，并按账号隔离", async () => {
+    const host = document.createElement("div")
+    let root = createRoot(host)
+    roots.add(root); document.body.append(host)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    for (const value of ["practice", "short32", "10/20", "5000"]) {
+      await act(async () => document.querySelector<HTMLButtonElement>(`[role="radio"][value="${value}"]`)!.click())
+    }
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="增加座位"]')!.click())
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
+    await act(async () => root.unmount()); roots.delete(root)
+    root = createRoot(host); roots.add(root)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    for (const value of ["practice", "short32", "10/20", "5000"]) {
+      expect(document.querySelector(`[role="radio"][value="${value}"]`)!.getAttribute("aria-checked")).toBe("true")
+    }
+    expect(document.querySelector("#poker-seats")?.textContent).toContain("7")
+    const saved = settings.update.mock.calls.at(-1)![0].global.pokerRoomPreferences.user
+    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 7, buyIn: 5000 })
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
+    identity.user = { id: "another", nickname: "另一人", handle: "other" }
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    expect(document.querySelector('[role="radio"][value="points"]')!.getAttribute("aria-checked")).toBe("true")
+    expect(document.querySelector("#poker-seats")?.textContent).toContain("6")
+  })
+  it("配置读取失败时提示重试，恢复后可正常打开", async () => {
+    settings.get.mockRejectedValueOnce(new Error("读取失败"))
+    const host = document.createElement("div"), root = createRoot(host)
+    roots.add(root); document.body.append(host)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    expect(document.querySelector("form")).toBeNull()
+    await open(host)
+    expect(document.querySelector("form")).not.toBeNull()
+  })
+  it("配置写入失败后仍可保存下一次选择", async () => {
+    settings.update.mockRejectedValueOnce(new Error("写入失败"))
+    const host = document.createElement("div"), root = createRoot(host)
+    roots.add(root); document.body.append(host)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    await act(async () => document.querySelector<HTMLButtonElement>('[role="radio"][value="practice"]')!.click())
+    await act(async () => document.querySelector<HTMLButtonElement>('[role="radio"][value="short32"]')!.click())
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
+    await open(host)
+    expect(document.querySelector('[role="radio"][value="practice"]')!.getAttribute("aria-checked")).toBe("true")
+    expect(document.querySelector('[role="radio"][value="short32"]')!.getAttribute("aria-checked")).toBe("true")
+  })
   it("每个房间类型和牌局规则都有说明，切换时保留同一组说明占位", async () => {
     const host = document.createElement("div"), root = createRoot(host)
     roots.add(root)

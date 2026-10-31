@@ -267,7 +267,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.room.create",
-    "创建2–10人桌；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。",
+    "创建2–10人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。",
     {
       variant: { type: "string", enum: ["standard52", "short32"] },
       blindPreset: { type: "string", enum: ["1/2", "2/4", "5/10", "10/20"] },

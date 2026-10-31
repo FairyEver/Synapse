@@ -94,18 +94,25 @@ export class PokerService {
       input.creationId === undefined
         ? undefined
         : creationIdentity(userId, "room", input.creationId)
+    const customName = input.name?.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 48)
+    const owner = customName?.trim() ? null : await this.prisma.user.findUnique({
+      where: { id: userId }, select: { nickname: true, handle: true },
+    })
+    const nickname = (owner?.nickname?.trim() || owner?.handle || "用户").replace(/[\x00-\x1f\x7f]/g, "")
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
+        const code = String(randomInt(1000, 1000000))
+        const suffix = `的房间 #${code}`
         const room = await this.prisma.gamePokerRoom.create({
           data: {
             ...(id ? { id } : {}),
             ownerUserId: userId,
             mode: input.mode ?? "points",
             ...rules,
-            code: String(randomInt(1000, 1000000)),
+            code,
             maxSeats: input.maxSeats,
             buyIn: input.buyIn,
-            name: input.name?.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 48),
+            name: customName?.trim() ? customName : `${nickname.slice(0, 48 - suffix.length)}${suffix}`,
           },
         })
         return { roomCode: room.code }

@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-10-31 建房默认名称使用当前昵称和实际房间号，桌面五项选项通过既有 config IPC 按账号保存在本机。room.create 描述与系统 Skill 同步，输入 schema 不变；game 仍为26项能力/24项IPC，全局369 capability/365 MCP索引，System App、Dock、Workflow、Automation、Deep Link及权限无增量。
+
 - 2026-10-31 单人陪练解散：私有 `app.game.poker.room.close` 在现有座位及未结算当前手均无房主以外真人账号时立即关闭陪练房，取消当前手且不计战绩；多人或点数房仍手后解散。更新私有操作描述、桌面提示、Agent指南与系统Skill；输入/响应schema、game 26项能力/24项IPC、全局369 capability/365 MCP索引及其余表格数量不变。room.close仍仅UI私有，不新增公开MCP权限。
 
 - 2026-10-31 游戏应用名称与窗口标题统一为“游戏”，App ID 仍为 `game-hall`、namespace 仍为 `game`。仅调整显示文案，23 个 System App、369 个 capability、365 个 MCP 索引及既有 Dock、深链数量不变，MCP schema 和系统 Skill 无需调整。

@@ -1,12 +1,12 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
 import "../../../styles/hall.css"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { pokerConnectInstruction } from "../lib/connect-instruction"
 import { useAccount } from "@/app-shell/account"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { CreateRoomDialog, type PokerRoomDraft } from "./CreateRoomDialog"
+import { CreateRoomDialog } from "./CreateRoomDialog"
 import {
   Dialog,
   DialogContent,
@@ -16,18 +16,26 @@ import {
 } from "@/components/ui/dialog"
 import { gameApi } from "../../../lib/api"
 import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
+import { usePokerRoomDraft } from "../hooks/usePokerRoomDraft"
 import { useHallOverview } from "../../../hooks/useHallOverview"
 export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
   const [offset, setOffset] = useState(0),
     [createOpen, setCreateOpen] = useState(false),
     [connect, setConnect] = useState<string | null>(null),
-    [closing, setClosing] = useState<string | null>(null),
-    [draft, setDraft] = useState<PokerRoomDraft>({
-      name: "", mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000,
-    })
+    [closing, setClosing] = useState<string | null>(null)
   const creation = useRef<{ key: string; id: string } | null>(null)
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
+  const nickname = account.status === "authenticated" ? account.profile.user.nickname?.trim() || account.profile.user.handle : "用户"
+  const { draft, changeDraft, loadDraft, createParams } = usePokerRoomDraft(userId, nickname)
+  useEffect(() => {
+    creation.current = null
+    setCreateOpen(false)
+  }, [userId])
+  const openCreate = async () => {
+    creation.current = null
+    if (await loadDraft()) setCreateOpen(true)
+  }
   const lobby = useGameQuery(
       () => gameApi().poker.lobby.list({ offset, limit: 50, mode: "all" }),
       `poker:lobby:all:${offset}`,
@@ -36,7 +44,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
-    const params = draft,
+    const params = createParams(),
       key = JSON.stringify(params)
     const result = await mutation.run(async () => {
       if (creation.current?.key !== key) creation.current = { key, id: crypto.randomUUID() }
@@ -84,11 +92,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         sessions={(hall.data?.sessions ?? []).filter((s) => s.game === "poker")}
         userId={userId}
         onRoom={onRoom}
-        onCreate={() => {
-          creation.current = null
-          setDraft((value) => ({ ...value, mode: "points" }))
-          setCreateOpen(true)
-        }}
+        onCreate={() => void openCreate()}
         onConnect={setConnect}
         onClose={setClosing}
         pagination={
@@ -121,7 +125,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
           setCreateOpen(open)
         }}
         value={draft}
-        onChange={setDraft}
+        onChange={changeDraft}
         onCreate={() => void create()}
         busy={mutation.busy}
       />

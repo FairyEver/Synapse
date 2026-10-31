@@ -6,6 +6,8 @@ description: 用户要求德州扑克、德扑、打牌、打扑克、入座、�
 
 首次接入：search发现`app_game_poker_guide`并invoke读规则（不需入座）→ `app_game_hall_overview`检查已有座位 → 没座位时先读取table_state（或room_get）核对该房控制历史和入座授权，再按下述规则入座。所有工具经Synapse的search/invoke调用；使用返回的准确名称和schema，不猜参数。桌面本人可入座、出牌和接管，与AI共用同一个座位、当前手和筹码；Synapse不托管模型。
 
+建房省略 name 或传空白时，服务端以当前 Synapse 昵称和实际房间号命名，例如「李杨的房间 #123456」；自定义名称不改写。桌面记忆的建房选项仅为本机、按账号隔离的表单偏好，MCP 不隐式继承，仍显式传入所需配置。
+
 创建房间或新选手时生成creationId(UUID)，同一创建意图响应丢失后重试复用。新开另一桌需新UUID；同一新选手草稿编辑仍复用，返回选手id后只传id更新，不与creationId同传。同名同内容但明确另建也用新UUID，不按内容合并。入座和重连仍按账号+roomCode，没有座位令牌。
 
 建房variant默认standard52；short32为7到A的32张牌，同花大于葫芦，A789T为最小顺子。blindPreset可选1/2、2/4、5/10、10/20，默认1/2；房间模式、牌组和盲注创建后固定，按当前房规判断合法动作。完整规则见[规则](../references/rules.md)。
