@@ -309,6 +309,8 @@
 
 ## 游戏大厅与德州扑克
 
+- 德州扑克桌面声音反馈仅消费权威快照增量，素材来自扑克模块本地打包的 Kenney Casino Audio（CC0，保留来源与许可）。下注/派奖按金额相对大盲增加有限碰撞次数，不随金额提高音量；本人行动提示仅真人控制且玩家视角有效。初载、断流、后台恢复、身份/视角/控制变化和重新开声不补播；静音、失焦、隐藏、跨手与卸载取消旧声源。开关限牌桌组件生命周期，不新增持久化、IPC/MCP、权限或资金行为；声音失败不影响游戏。
+
 - System App为`game-hall`；大厅只拥有GameAccount与GameSession，游戏注册表驱动入口。大厅不得join游戏内部表或按具体gameKind分支。
 - GameAccount.points存可用余额，GameSession.inPlay保存占用；总额=可用+占用，初始1,000,000。入座扣点、座位与会话同事务，账户/房间行锁；同房间账号与位置唯一约束由数据库保证。
 - 首个游戏为无限注德州扑克，不托管模型。2026-10-30用户批准桌面本人入座、出牌与接管；真人与AI共用同账号同房唯一座位、筹码和当前手。Renderer开放join/act/control.set/events窄bridge，不开放table.wait。MCP act仅AI来源，UI专用路由由服务端确定human来源，客户端不能指定source/controller，人工动作不绑定persona/note；程序机器人仅陪练房允许。

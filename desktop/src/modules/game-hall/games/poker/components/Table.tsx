@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { ArrowLeft, Bell, Eye, ListOrdered, UserRound, X } from "lucide-react"
+import { ArrowLeft, Bell, Eye, ListOrdered, UserRound, Volume2, VolumeX, X } from "lucide-react"
 import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
 import { Card } from "./Card"
 import { Seat, EmptySeat } from "./Seat"
@@ -10,6 +10,7 @@ import { Settlement } from "./Settlement"
 import { amount, projectTable, streetLabel } from "../lib/view"
 import { canvasFit, TABLE_WIDTH, TABLE_HEIGHT } from "../lib/table-layout"
 import { useDealAnimation } from "../hooks/useDealAnimation"
+import { usePokerAudio } from "../hooks/usePokerAudio"
 import "../styles/table-tokens.css"
 const NO_EVENTS: PokerTableEvent[] = []
 export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, animate = NO_EVENTS, extras, identityKey }: {
@@ -27,6 +28,8 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const [panelOpen, setPanelOpen] = useState(false), [fit, setFit] = useState(canvasFit(1440,900))
   const [pulses, setPulses] = useState<PokerTableEvent[]>([])
   const viewport = useRef<HTMLDivElement>(null), panelId = useId()
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  usePokerAudio(table, perspective, identityKey ?? "", soundEnabled)
   const view = projectTable(table, perspective)
   const dealt = useDealAnimation(table.handId, table.seats.length + table.board.length, 0)
   useLayoutEffect(() => {
@@ -52,6 +55,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           <button type="button" className="poker-control poker-back" onClick={onBack}><ArrowLeft aria-hidden="true" />返回房间</button>
           <span className="poker-room-heading"><strong>#{table.roomCode}</strong><span>第 {table.handNo} 手</span>{table.mode === "practice" && <span>陪练</span>}</span>
           <div className="poker-perspective">
+            <button type="button" className="poker-control" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onClick={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</button>
             {canNudge && <button type="button" className="poker-control" disabled={(view.deadlineMs ?? 600000) > 540000} onClick={() => onNudge(active.seatNo)}><Bell aria-hidden="true" />提醒玩家</button>}
             {table.seats.some(s => s.isMe) && <button type="button" className="poker-control" aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onClick={() => onPerspective(perspective === "owner" ? "public" : "owner")}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "玩家视角" : "旁观视角"}</button>}
             <button type="button" className="poker-control poker-log-toggle" aria-expanded={panelOpen} aria-controls={panelId} onClick={() => setPanelOpen(v => !v)}><ListOrdered aria-hidden="true" />{panelOpen ? "收起日志" : "日志"}</button>
