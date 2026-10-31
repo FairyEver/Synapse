@@ -17,6 +17,19 @@ function coins(amount: number, delay = 0): PokerSoundCue[] {
   }))
 }
 
+function betChips(amount: number): PokerSoundCue[] {
+  const contacts = coins(amount)
+  if (!contacts.length) return contacts
+  // A single short spill, with slightly uneven contacts and bounded overlap gain.
+  const spread = Math.min(180, 30 + contacts.length * 10)
+  const volume = 0.5 / Math.sqrt(contacts.length)
+  return contacts.map((cue, i) => ({
+    ...cue,
+    delay: contacts.length === 1 ? 0 : Math.round(spread * (i / (contacts.length - 1)) ** 1.15),
+    volume: i === 0 ? 0.5 : volume,
+  }))
+}
+
 function pocketWin(profit: number): PokerSoundCue[] {
   const tier = Math.floor(Math.log10(Math.max(1, profit)))
   const count = Math.min(6, 2 + tier)
@@ -40,12 +53,12 @@ export function pokerSoundCues(previous: PokerTableView, table: PokerTableView, 
     if (table.street === "preflop") {
       const count = Math.min(6, table.seats.filter(s => s.status === "active" || s.status === "allin").length * 2)
       for (let i = 0; i < count; i++) cues.push({ sound: "deal", delay: (i + 1) * 55, volume: 0.28 })
-      cues.push(...coins(table.seats.reduce((sum, s) => sum + s.streetBet, 0)))
+      cues.push(...betChips(table.seats.reduce((sum, s) => sum + s.streetBet, 0)))
     }
   } else {
     // Coalesce rapid actions into one short money burst instead of a sound queue.
     const actions = table.recentActions.filter(a => a.seq > soundActionSeq(previous) && (a.street === previous.street || a.street === table.street)).slice(-3)
-    cues.push(...coins(actions.reduce((sum, a) => sum + a.amount, 0)))
+    cues.push(...betChips(actions.reduce((sum, a) => sum + a.amount, 0)))
     const last = actions.at(-1)
     if (last?.action === "fold") cues.push({ sound: "fold", delay: 0, volume: 0.25 })
     if (last?.action === "check") cues.push({ sound: "tap", delay: 0, volume: 0.3 })

@@ -18,7 +18,7 @@ describe("德扑声音反馈", () => {
       const cues = pokerSoundCues(soundTable, wager(amount), "owner")
       expect(cues, `金额 ${amount}`).toHaveLength(count)
       expect(cues.every(c => c.sound === "coin1" || c.sound === "coin2")).toBe(true)
-      expect(cues.every(c => c.volume === 0.5)).toBe(true)
+      expect(cues.every(c => c.volume > 0 && c.volume <= 0.5)).toBe(true)
     }
     expect(pokerSoundCues({ ...soundTable, bigBlind: 20 }, { ...wager(5), bigBlind: 20 }, "owner")).toHaveLength(5)
     const large = pokerSoundCues(soundTable, wager(1_000_000), "owner")
@@ -37,22 +37,27 @@ describe("德扑声音反馈", () => {
     }
   })
 
-  it("金额越大碰撞节奏稍快，最快间隔有上限", () => {
-    const interval = (amount: number) => {
+  it("下注集中成短促一簇，多个碰撞略微错开并控制叠加音量", () => {
+    for (const amount of [1, 2, 5, 10, 13, 32, 100, 1000, 1_000_000]) {
       const cues = pokerSoundCues(soundTable, wager(amount), "owner")
-      return cues[1].delay - cues[0].delay
+      expect(cues[0].delay).toBe(0)
+      expect(cues[0].volume).toBe(0.5)
+      expect(cues.at(-1)!.delay).toBeLessThanOrEqual(180)
+      expect(cues.reduce((sum, cue) => sum + cue.volume, 0) * 0.35).toBeLessThan(0.85)
+      for (let i = 1; i < cues.length; i++) expect(cues[i].delay).toBeGreaterThan(cues[i - 1].delay)
     }
-    expect(interval(5)).toBeGreaterThan(interval(10))
-    expect(interval(10)).toBeGreaterThan(interval(100))
-    expect(interval(100)).toBeGreaterThan(interval(1000))
-    expect(interval(1000)).toBe(55)
-    expect(interval(1_000_000)).toBe(55)
+    const cues = pokerSoundCues(soundTable, wager(100), "owner")
+    const gaps = cues.slice(1).map((cue, i) => cue.delay - cues[i].delay)
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(20)
+    expect(new Set(gaps).size).toBeGreaterThan(1)
+    expect(cues.at(-1)!.delay).toBeLessThan(200)
   })
 
   it("新手发牌和盲注有声，翻牌和过牌弃牌有不同反馈", () => {
     const next = { ...soundTable, handId: "h2", handNo: 2 }
     expect(pokerSoundCues(soundTable, next, "owner").some(c => c.sound === "deal")).toBe(true)
     expect(pokerSoundCues(soundTable, { ...next, seats: next.seats.map(s => ({ ...s, status: "allin" })) }, "owner").filter(c => c.sound === "deal")).toHaveLength(4)
+    expect(pokerSoundCues(soundTable, next, "owner").filter(c => c.sound === "coin1" || c.sound === "coin2").every(c => c.delay <= 180)).toBe(true)
     const flop = { ...soundTable, street: "flop", board: ["As", "Kh", "7c"] }
     expect(pokerSoundCues(soundTable, flop, "owner").filter(c => c.sound === "card")).toHaveLength(3)
     const action = wager(0)
@@ -90,6 +95,7 @@ describe("德扑声音反馈", () => {
     }
     const next = { ...soundTable, street: "settled", settlement }
     expect(pokerSoundCues(soundTable, next, "owner").filter(c => c.sound.startsWith("coin"))).toHaveLength(14)
+    expect(pokerSoundCues(soundTable, next, "owner").filter(c => c.sound.startsWith("coin")).at(-1)!.delay).toBeGreaterThan(1000)
     expect(pokerSoundCues(next, { ...next }, "owner")).toEqual([])
     const refund = { ...next, settlement: { ...settlement, pots: settlement.pots.map(p => ({ ...p, refund: true })) } }
     expect(pokerSoundCues(soundTable, refund, "owner").some(c => c.sound.startsWith("coin"))).toBe(false)
