@@ -5,3 +5,5 @@ procs:
     cmd: [pnpm, run, dev:server]
   Document:
     cmd: [pnpm, run, dev:document]
+  Dashboard V2:
+    cmd: [pnpm, run, dev:dashboard-v2]

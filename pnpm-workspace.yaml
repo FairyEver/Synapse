@@ -5,6 +5,7 @@ packages:
   - document
   - server
   - dashboard
+  - dashboard-v2
   - pdf-renderer
   - auto
   - auto/web

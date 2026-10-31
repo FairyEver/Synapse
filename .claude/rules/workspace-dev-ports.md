@@ -6,6 +6,8 @@ paths:
   - desktop/scripts/dev/**
   - dashboard/package.json
   - dashboard/vite.config.ts
+  - dashboard-v2/package.json
+  - dashboard-v2/vite.config.ts
   - server/package.json
   - server/compose.dev.yml
   - scripts/dev/**
@@ -24,17 +26,19 @@ paths:
 | Console / Admin / Drive 网页 | 19700 | `dashboard/vite.config.ts`、`dashboard/package.json` |
 | Server API（含 WebSocket） | 19701 | `server/package.json`、根 `package.json`；可由 `SYNAPSE_SERVER_API_PORT` 覆盖 |
 | PDF renderer 宿主机映射 | 19702 | `server/compose.dev.yml`、`scripts/dev/run-server-with-env.mjs`；可由 `PDF_RENDERER_HOST_PORT` 覆盖 |
+| Dashboard V2 | 19703 | `dashboard-v2/vite.config.ts` |
 | Electron renderer | 19731 | `desktop/scripts/dev/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs`；可由 `SYNAPSE_DEV_PORT` 覆盖 |
 | Auto 本地工具 | 19760 | `auto/src/server.ts` |
 | Auto 网页单独开发 | 19761 | `auto/web/vite.config.ts` |
 | shadcn-admin 模板 | 19762 | `templates/shadcn-admin/vite.config.ts` |
 | VitePress 文档站 | 19773 | `document/.vitepress/config.mts` |
 
-根 `pnpm dev` 启动 Desktop、Server、Document；Server 入口同时启动 API、dashboard、Postgres 和 PDF renderer。Auto 与模板是按需命令，不随根 `pnpm dev` 启动。
+根 `pnpm dev` 和 `pnpm dev:prod` 启动 Desktop、Server、Document、Dashboard V2；Server 入口同时启动 API、dashboard、Postgres 和 PDF renderer。Dashboard V2 使用独立 mprocs 栏目，单独启停用 `pnpm dev:dashboard-v2` / `pnpm quit:dashboard-v2`，`pnpm quit` 同时停止它。Auto 与模板是按需命令，不随根 `pnpm dev` 启动。
 
 ## 地址与边界
 
 - 浏览器入口使用 `http://localhost:19700/console/`；dashboard 使用 `::` 双栈监听，避免只在 IPv4 上响应。桌面登录、服务端公开链接与文档开发链接同步使用该应用根地址。
+- Dashboard V2 的空白 React 页面使用 `http://localhost:19703/`，采用 `::` 双栈监听和 `strictPort`；暂不接入业务或生产部署。
 - Electron renderer 与 Docker 宿主机映射保留现有回环地址限制；这属于访问边界，不用来区分项目。
 - 数据库端口与连接保持原样：本机 PostgreSQL `5433`、容器内部 `5432`。不要为了统一 HTTP 端口号改数据库或迁移数据。
 - 生产端口保持原样：宿主机 Synapse `3000`，容器内 Nginx `3000` → API `3001`，PDF renderer `3010`；生产 Compose、Nginx、Caddy 与部署脚本不跟随开发端口修改。

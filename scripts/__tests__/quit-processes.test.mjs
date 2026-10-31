@@ -7,10 +7,33 @@ import {
   filterSynapseDevProcessRows,
   matchesSynapseDevProcess,
   parsePsRows,
+  parseTargetScripts,
 } from "../dev/quit-processes.mjs"
 
 const workspaceRoot = "/Users/liyang/Documents/code/github/Synapse"
 const desktopRoot = `${workspaceRoot}/desktop`
+
+test("Dashboard V2 cleanup targets only its own workspace dev processes", () => {
+  assert.deepEqual(parseTargetScripts(["dev:dashboard-v2"]), ["dev:dashboard-v2"])
+
+  const rows = [
+    { pid: 501, commandLine: "pnpm run dev:dashboard-v2", cwd: workspaceRoot },
+    { pid: 502, commandLine: "pnpm --filter @synapse/dashboard-v2 run dev", cwd: workspaceRoot },
+    { pid: 503, commandLine: `node ${workspaceRoot}/dashboard-v2/node_modules/.bin/../vite/bin/vite.js`, cwd: `${workspaceRoot}/dashboard-v2` },
+    { pid: 504, commandLine: "pnpm --filter @synapse/dashboard run dev", cwd: workspaceRoot },
+    { pid: 505, commandLine: "pnpm run dev:dashboard-v2", cwd: "/tmp/other-project" },
+  ]
+
+  assert.deepEqual(filterSynapseDevProcessRows(rows, {
+    workspaceRoot, targetScripts: ["dev:dashboard-v2"],
+  }).map((row) => row.pid), [501, 502, 503])
+  assert.deepEqual(filterSynapseDevProcessRows(rows, {
+    workspaceRoot, targetScripts: ["dev:server"],
+  }).map((row) => row.pid), [504])
+  assert.deepEqual(filterSynapseDevProcessRows(rows, {
+    workspaceRoot,
+  }).map((row) => row.pid), [501, 502, 503, 504])
+})
 
 test("matchesSynapseDevProcess matches workspace Electron only", () => {
   assert.equal(matchesSynapseDevProcess({

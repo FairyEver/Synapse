@@ -6,7 +6,7 @@
 
 - Electron 44 + Vite 8 + React 19 + TypeScript 6；macOS 最低支持 13。
 - shadcn/ui（`radix-nova`）+ Tailwind CSS 4。
-- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
+- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/dashboard-v2`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
 - Git 管理内容，SQLite / DataRepository 管理业务数据。
 
 ```text
@@ -23,6 +23,7 @@ desktop/
     └── types/          # Renderer 全局类型
 document/               # VitePress 文档站
 server/                 # 服务端与管理后台
+dashboard-v2/           # 空白 React + TypeScript + Vite 页面
 pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 ```
 
@@ -30,12 +31,13 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 ## 启动与验证
 
-- `pnpm dev`：通过 mprocs 分栏启动 desktop、server、document；按 `q` 退出并停止本次启动的进程。
+- `pnpm dev`：通过 mprocs 分栏启动 desktop、server、document、dashboard-v2；按 `q` 退出并停止本次启动的进程。
 - `pnpm dev:prod`：同一面板启动，桌面端使用生产站点 URL。
 - `pnpm dev:desktop`：仅桌面端。
 - `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；控制台自动打开 `http://localhost:19700/console/`，使用双栈监听；API 为 `19701`，PDF 宿主机映射为 `19702`。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
 - `pnpm dev:document`：文档站。
-- 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`。
+- `pnpm dev:dashboard-v2`：空白 React 项目，地址为 `http://localhost:19703/`，双栈监听、固定端口；也随 `pnpm dev:prod` 启动，尚未接入业务和生产部署。
+- 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`、`pnpm quit:dashboard-v2`。
 
 本机 HTTP 开发端口保留 `19700–19799`，Brick Lab 使用 `19800–19899`。完整分配与生产边界见 `.claude/rules/workspace-dev-ports.md`；数据库和生产映射不随开发 HTTP 端口修改。
 
