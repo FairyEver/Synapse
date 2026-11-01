@@ -275,6 +275,13 @@ function UserFilter({
     queryFn: () => adminApi.listUsers({ page: 1, pageSize: 20, search: search || undefined }),
     enabled: open,
   })
+  const selectUser = (key: string | number) => {
+    onChange(data?.data.find((item) => item.id === key) ?? null)
+    setOpen(false)
+  }
+  const closeCurrentSelection = (key: string) => {
+    if (key === (value?.id ?? allValue)) setOpen(false)
+  }
   return (
     <Popover isOpen={open} onOpenChange={setOpen}>
       <Button variant='outline' aria-label='用户筛选' aria-expanded={open} isDisabled={disabled} className='max-w-56'>
@@ -285,13 +292,14 @@ function UserFilter({
         <Popover.Dialog className='grid gap-2'>
           <Input variant="secondary" aria-label='搜索用户' placeholder='搜索用户' value={search} onChange={(event) => setSearch(event.target.value)} />
           {isLoading ? <p role='status' className='text-sm text-muted'>加载中</p> : null}
-          <ListBox aria-label='用户筛选' selectionMode='single' selectedKeys={[value?.id ?? allValue]} onAction={(key) => {
-            onChange(data?.data.find((item) => item.id === key) ?? null)
-            setOpen(false)
+          <ListBox aria-label='用户筛选' selectionMode='single' disallowEmptySelection selectedKeys={[value?.id ?? allValue]} onSelectionChange={(keys) => {
+            if (keys === 'all') return
+            const key = keys.values().next().value
+            if (key !== undefined) selectUser(key)
           }}>
-            <ListBox.Item id={allValue} textValue='全部用户'>全部用户<ListBox.ItemIndicator /></ListBox.Item>
+            <ListBox.Item id={allValue} textValue='全部用户' onPress={() => closeCurrentSelection(allValue)}>全部用户<ListBox.ItemIndicator /></ListBox.Item>
             {data?.data.map((user) => (
-              <ListBox.Item key={user.id} id={user.id} textValue={`${user.handle} ${user.email}`}>
+              <ListBox.Item key={user.id} id={user.id} textValue={`${user.handle} ${user.email}`} onPress={() => closeCurrentSelection(user.id)}>
                 <span className='min-w-0'>
                   <span className='block truncate'>{user.handle}</span>
                   <span className='block truncate text-xs text-muted'>{user.email}</span>

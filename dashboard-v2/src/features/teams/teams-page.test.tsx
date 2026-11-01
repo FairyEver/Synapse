@@ -19,6 +19,8 @@ vi.mock('@/lib/api', () => ({
     deleteTeam: vi.fn(),
     listTeamMembers: vi.fn(),
     listTeamMemberCandidates: vi.fn(),
+    listOrganizationCandidates: vi.fn(),
+    addOrganizationMembers: vi.fn(),
     addTeamMembers: vi.fn(),
     removeTeamMember: vi.fn(),
   },
@@ -56,7 +58,7 @@ afterEach(() => {
   root = null
   host = null
   document.body.innerHTML = ''
-  vi.clearAllMocks()
+  vi.resetAllMocks()
 })
 
 describe('TeamsPage', () => {
@@ -116,6 +118,87 @@ describe('TeamsPage', () => {
 })
 
 describe('AddMembersDialog', () => {
+  it.each([undefined, 'org-1'])('shows candidate query errors and retries the first page (organization: %s)', async (organizationId) => {
+    const candidatesApi = organizationId
+      ? mockedAdminApi.listOrganizationCandidates
+      : mockedAdminApi.listTeamMemberCandidates
+    candidatesApi.mockReset()
+    candidatesApi.mockRejectedValueOnce(new Error('候选用户暂时不可用'))
+      .mockResolvedValue({
+        data: [candidate({ id: 'user-2', email: 'zhang@example.com', handle: 'zhang' })],
+        total: 1,
+      })
+
+    render(<AddMembersDialog open teamId='team-1' organizationId={organizationId} onOpenChange={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain('候选用户暂时不可用')
+    })
+    expect(document.body.textContent).not.toContain('没有可以添加的用户')
+    await click(buttonByText('重试'))
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('zhang@example.com')
+    })
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+    expect(candidatesApi).toHaveBeenCalledTimes(2)
+    expect(candidatesApi).toHaveBeenLastCalledWith(
+      ...(organizationId ? ['team-1', organizationId] : ['team-1']),
+      { page: 1, pageSize: 50, query: undefined }
+    )
+  })
+
+  it.each([undefined, 'org-1'])('retries the failed candidate page without losing picked members (organization: %s)', async (organizationId) => {
+    const candidatesApi = organizationId
+      ? mockedAdminApi.listOrganizationCandidates
+      : mockedAdminApi.listTeamMemberCandidates
+    candidatesApi.mockReset()
+    candidatesApi.mockResolvedValueOnce({
+      data: [candidate({ id: 'user-2', email: 'zhang@example.com', handle: 'zhang' })],
+      total: 3,
+    }).mockRejectedValueOnce(new Error('下一页加载失败'))
+      .mockResolvedValueOnce({
+        data: [candidate({ id: 'user-3', email: 'wang@example.com', handle: 'wang' })],
+        total: 3,
+      }).mockResolvedValueOnce({
+        data: [candidate({ id: 'user-4', email: 'sun@example.com', handle: 'sun' })],
+        total: 3,
+      })
+    const addApi = organizationId ? mockedAdminApi.addOrganizationMembers : mockedAdminApi.addTeamMembers
+    addApi.mockResolvedValue({ added: 1 })
+
+    render(<AddMembersDialog open teamId='team-1' organizationId={organizationId} onOpenChange={vi.fn()} />)
+    await waitFor(() => expect(checkboxes()).toHaveLength(1))
+    await click(checkboxes()[0]!)
+    await click(buttonByText('加载更多'))
+    await waitFor(() => {
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain('下一页加载失败')
+    })
+    expect(document.body.textContent).toContain('zhang@example.com')
+    expect(document.body.textContent).toContain('已选 1 人')
+    expect(Array.from(document.querySelectorAll('button')).some((button) => button.textContent === '加载更多')).toBe(false)
+
+    await click(buttonByText('重试'))
+    await waitFor(() => expect(document.body.textContent).toContain('wang@example.com'))
+    expect(candidatesApi).toHaveBeenLastCalledWith(
+      ...(organizationId ? ['team-1', organizationId] : ['team-1']),
+      { page: 2, pageSize: 50, query: undefined }
+    )
+    expect(document.body.textContent).toContain('zhang@example.com')
+    expect(document.body.textContent).toContain('已选 1 人')
+    expect(checkboxes()[0]?.checked).toBe(true)
+
+    await click(buttonByText('加载更多'))
+    await waitFor(() => expect(document.body.textContent).toContain('sun@example.com'))
+    expect(candidatesApi).toHaveBeenLastCalledWith(
+      ...(organizationId ? ['team-1', organizationId] : ['team-1']),
+      { page: 3, pageSize: 50, query: undefined }
+    )
+    await click(buttonByText('添加'))
+    expect(addApi).toHaveBeenCalledWith(
+      ...(organizationId ? ['team-1', organizationId] : ['team-1']), ['user-2']
+    )
+  })
+
   it('asks the server for candidates instead of filtering a user list', async () => {
     mockedAdminApi.listTeamMemberCandidates.mockResolvedValue({
       data: [

@@ -132,7 +132,7 @@ export function useSkillRepository(repositoryId: string) {
   })
 
   const reloadSelectedFile = async () => {
-    const result = await fileContentQuery.refetch()
+    const result = await fileContentQuery.refetch({ throwOnError: true })
     const data = result.data
     return {
       text: data?.text ?? '',

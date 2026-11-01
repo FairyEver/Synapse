@@ -65,6 +65,9 @@ export function AddMembersDialog({
   })
 
   const candidateRows = candidatesQuery.data?.data
+  const candidatesError = candidatesQuery.isError
+    ? candidatesQuery.error?.message || '候选用户加载失败'
+    : null
 
   useEffect(() => {
     if (!candidateRows) return
@@ -125,11 +128,11 @@ export function AddMembersDialog({
             }}
           />
           <div className='max-h-72 overflow-y-auto rounded-md border'>
-            {candidates.length === 0 ? (
+            {candidates.length === 0 ? (candidatesError ? null : (
               <p className='px-3 py-6 text-center text-sm text-muted-foreground'>
                 {candidatesQuery.isLoading ? '加载中…' : '没有可以添加的用户'}
               </p>
-            ) : (
+            )) : (
               <div className='flex flex-col py-1'>
                 {candidates.map((candidate) => (
                   <div
@@ -157,8 +160,20 @@ export function AddMembersDialog({
                 ))}
               </div>
             )}
+            {candidatesError ? (
+              <div role='alert' className='grid gap-2 p-3'>
+                <p className='text-sm text-destructive'>{candidatesError}</p>
+                <Button
+                  variant='outline'
+                  disabled={candidatesQuery.isFetching}
+                  onClick={() => void candidatesQuery.refetch()}
+                >
+                  重试
+                </Button>
+              </div>
+            ) : null}
           </div>
-          {candidates.length < total ? (
+          {!candidatesError && candidates.length < total ? (
             <Button
               variant='outline'
               size='sm'

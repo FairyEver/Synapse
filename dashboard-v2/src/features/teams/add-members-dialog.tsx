@@ -42,6 +42,9 @@ export function AddMembersDialog({ open, teamId, organizationId, onOpenChange, }
         enabled: open,
     });
     const candidateRows = candidatesQuery.data?.data;
+    const candidatesError = candidatesQuery.isError
+        ? candidatesQuery.error?.message || '候选用户加载失败'
+        : null;
     useEffect(() => {
         if (!candidateRows)
             return;
@@ -95,7 +98,7 @@ export function AddMembersDialog({ open, teamId, organizationId, onOpenChange, }
             setPage(1);
         }}/>
           <div className='max-h-72 overflow-y-auto rounded-md border'>
-            {candidates.length === 0 ? (<p className='px-3 py-6 text-center text-sm text-muted'>
+            {candidates.length === 0 ? (candidatesError ? null : <p className='px-3 py-6 text-center text-sm text-muted'>
                 {candidatesQuery.isLoading ? '加载中…' : '没有可以添加的用户'}
               </p>) : (<div className='flex flex-col py-1'>
                 {candidates.map((candidate) => (<div key={candidate.id} className='flex items-center gap-2 px-3 py-1.5'>
@@ -112,8 +115,14 @@ export function AddMembersDialog({ open, teamId, organizationId, onOpenChange, }
                     </Checkbox>
                   </div>))}
               </div>)}
+            {candidatesError ? (<div role='alert' className='grid gap-2 p-3'>
+                <p className='text-sm text-danger'>{candidatesError}</p>
+                <Button variant='outline' isDisabled={candidatesQuery.isFetching} onPress={() => void candidatesQuery.refetch()}>
+                  重试
+                </Button>
+              </div>) : null}
           </div>
-          {candidates.length < total ? (<Button variant='outline' size='sm' isDisabled={candidatesQuery.isFetching} onPress={() => setPage((current) => current + 1)}>
+          {!candidatesError && candidates.length < total ? (<Button variant='outline' size='sm' isDisabled={candidatesQuery.isFetching} onPress={() => setPage((current) => current + 1)}>
               加载更多
             </Button>) : null}
         </div>
