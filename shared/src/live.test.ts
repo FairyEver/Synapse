@@ -88,6 +88,19 @@ describe("shared live protocol", () => {
     }))).toBe(false)
   })
 
+  it("recognizes account profile change notifications", () => {
+    expect(isLiveDesktopServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.accountProfileChanged,
+      { userId: "user-1" },
+      { id: "profile-change", sentAt: "2026-11-01T13:20:00.000Z" },
+    ))).toBe(true)
+    expect(isLiveDesktopServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.accountProfileChanged,
+      { userId: "" },
+      { id: "profile-change-empty", sentAt: "2026-11-01T13:20:00.000Z" },
+    ))).toBe(false)
+  })
+
   it("recognizes server webhook delivery messages", () => {
     expect(isLiveDesktopServerMessage(createLiveEnvelope(
       LIVE_MESSAGE_TYPES.webhookDeliveryReceived,

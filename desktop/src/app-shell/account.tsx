@@ -45,7 +45,6 @@ function AccountProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [pendingAction, setPendingAction] = useState<AccountPendingAction | null>(null)
   const stateRef = useRef(state)
-  const lastProfileSyncAtRef = useRef(0)
   const profileSyncInFlightRef = useRef(false)
   stateRef.current = state
 
@@ -92,10 +91,8 @@ function AccountProvider({ children }: { children: ReactNode }) {
         || current.connectivity !== "online"
         || pendingAction !== null
         || profileSyncInFlightRef.current
-        || Date.now() - lastProfileSyncAtRef.current < 60_000
       ) return
 
-      lastProfileSyncAtRef.current = Date.now()
       profileSyncInFlightRef.current = true
       void bridge.account.refresh()
         .then((nextState) => {

@@ -1,8 +1,8 @@
+import { useState } from "react"
 import { CircleUserRound, LoaderCircle, LogIn, LogOut, RefreshCw, Settings } from "lucide-react"
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { buildAccountDashboardHomeUrl } from "@/lib/account-dashboard-url"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { cn } from "@/lib/utils"
 import { runTrackedOperation, startTrackedOperation } from "@/lib/ui-tracking"
 import type { SynapseAccountState } from "@/types/account"
 
@@ -60,14 +61,25 @@ function AccountAvatar({
   loading?: boolean
 }) {
   const avatarUrl = state.status === "authenticated" ? state.profile.user.avatarUrl : null
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const showImage = Boolean(avatarUrl && failedUrl !== avatarUrl && !loading)
 
   return (
-    <Avatar className={className}>
-      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-      <AvatarFallback className="text-muted-foreground">
+    <span className={cn("relative flex size-10 shrink-0 overflow-hidden rounded-full bg-muted", className)}>
+      {showImage && avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt=""
+          className="size-full object-cover"
+          onError={() => setFailedUrl(avatarUrl)}
+        />
+      ) : null}
+      {!showImage ? (
+        <span className="flex size-full items-center justify-center text-muted-foreground">
         {loading ? <LoaderCircle className="size-4 animate-spin" /> : <CircleUserRound className="size-4" />}
-      </AvatarFallback>
-    </Avatar>
+        </span>
+      ) : null}
+    </span>
   )
 }
 

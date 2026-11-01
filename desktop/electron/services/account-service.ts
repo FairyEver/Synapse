@@ -145,7 +145,7 @@ type PersistedAccount = Record<string, unknown> & {
   }
 }
 
-type AccountRefreshReason = "startup" | "api-auth-failure" | "live-auth-failure" | "manual" | "offline-retry"
+type AccountRefreshReason = "startup" | "api-auth-failure" | "live-auth-failure" | "manual" | "offline-retry" | "account-profile-changed"
 
 type AccountRefreshFromStorageOptions = {
   readonly resetRetryBackoff?: boolean

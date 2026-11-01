@@ -151,7 +151,7 @@ describe("AccountProvider", () => {
     expect(button?.dataset.pending).toBe("")
   })
 
-  it("silently refreshes the authenticated profile when the window regains focus", async () => {
+  it("silently refreshes the authenticated profile every time the window regains focus", async () => {
     const accountBridge = installBridge(async () => ({ status: "unauthenticated" }))
     const initial = {
       status: "authenticated",
@@ -191,29 +191,16 @@ describe("AccountProvider", () => {
     })
     expect(container.querySelector("button")?.dataset.user).toBe("user-1")
 
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date("2026-11-01T10:00:00.000Z"))
-    try {
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"))
-        await Promise.resolve()
-      })
-      expect(accountBridge.refresh).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"))
+      await Promise.resolve()
+    })
+    expect(accountBridge.refresh).toHaveBeenCalledTimes(1)
 
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"))
-        await Promise.resolve()
-      })
-      expect(accountBridge.refresh).toHaveBeenCalledTimes(1)
-
-      vi.setSystemTime(new Date("2026-11-01T10:01:01.000Z"))
-      await act(async () => {
-        window.dispatchEvent(new Event("focus"))
-        await Promise.resolve()
-      })
-      expect(accountBridge.refresh).toHaveBeenCalledTimes(2)
-    } finally {
-      vi.useRealTimers()
-    }
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"))
+      await Promise.resolve()
+    })
+    expect(accountBridge.refresh).toHaveBeenCalledTimes(2)
   })
 })

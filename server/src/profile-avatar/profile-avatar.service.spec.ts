@@ -45,17 +45,19 @@ function createService() {
     deleteObject: vi.fn().mockResolvedValue(undefined),
   }
   const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+  const liveGateway = { broadcastToUser: vi.fn().mockReturnValue({ onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0, clientResults: [] }) }
   return {
     prisma,
     storage,
     auditLog,
-    service: new ProfileAvatarService(prisma as never, storage as never, auditLog as never),
+    liveGateway,
+    service: new ProfileAvatarService(prisma as never, storage as never, auditLog as never, liveGateway as never),
   }
 }
 
 describe("ProfileAvatarService", () => {
   it("randomizes to a different system avatar and retires the previous custom avatar", async () => {
-    const { service, prisma, storage, auditLog } = createService()
+    const { service, prisma, storage, auditLog, liveGateway } = createService()
     prisma.user.findUniqueOrThrow.mockResolvedValue({
       id: "user-1",
       email: "user@example.com",
@@ -84,6 +86,13 @@ describe("ProfileAvatarService", () => {
       detail: { source: "random" },
       targetId: "user-1",
     }))
+    expect(liveGateway.broadcastToUser).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        type: "account.profile.changed",
+        payload: { userId: "user-1" },
+      }),
+    )
   })
 
   it("uploads a 256 square png and persists it inside the user avatar prefix", async () => {

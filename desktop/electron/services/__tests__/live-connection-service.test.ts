@@ -438,6 +438,27 @@ describe("LiveConnectionService", () => {
     service.close()
   })
 
+  it("refreshes the account profile when the server reports an avatar change", async () => {
+    const socket = new FakeSocket()
+    const account = createAccountService({ refreshFromStorage: async () => authenticatedState })
+    const service = new LiveConnectionService({
+      accountService: account as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+    })
+    await connectAndWelcome(service, socket)
+
+    socket.emit("message", JSON.stringify(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.accountProfileChanged,
+      { userId: "user-1" },
+      { id: "profile-change", sentAt: new Date().toISOString() },
+    )))
+
+    await waitForCondition(() => account.refreshFromStorage.mock.calls.length === 1)
+    expect(account.refreshFromStorage).toHaveBeenCalledWith({ reason: "account-profile-changed" })
+    service.close()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
   })

@@ -37,6 +37,7 @@ export const LIVE_MESSAGE_TYPES = {
   mobileGitStatus: "mobile.gitStatus",
   meetingTranscriptionCompleted: "meeting.transcription.completed",
   notificationChanged: "notification.changed",
+  accountProfileChanged: "account.profile.changed",
   todosChanged: "todos.changed",
 } as const
 
@@ -107,6 +108,10 @@ export interface NotificationChangedPayload {
   readonly notificationId: string
 }
 
+export interface AccountProfileChangedPayload {
+  readonly userId: string
+}
+
 export type LiveDesktopClientMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.hello, LiveDesktopHelloPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.ping, LiveDesktopPingPayload>
@@ -130,6 +135,7 @@ export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.mobileDetached, import("./mobile-live.js").MobileDetachedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted, import("./meeting.js").MeetingTranscriptionCompletedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.notificationChanged, NotificationChangedPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.accountProfileChanged, AccountProfileChangedPayload>
 
 /**
  * A phone reuses the desktop handshake (hello/welcome/ping/pong) so there is one
@@ -247,6 +253,7 @@ export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktop
     return isMeetingTranscriptionCompletedPayload(value.payload)
   }
   if (value.type === LIVE_MESSAGE_TYPES.notificationChanged) return isNotificationChangedPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.accountProfileChanged) return isAccountProfileChangedPayload(value.payload)
   return false
 }
 
@@ -258,6 +265,12 @@ function isTodoChangedPayload(value: unknown): value is TodoChangedPayload {
 
 function isNotificationChangedPayload(value: unknown): value is NotificationChangedPayload {
   return isRecord(value) && typeof value.notificationId === "string" && value.notificationId.length > 0
+}
+
+function isAccountProfileChangedPayload(value: unknown): value is AccountProfileChangedPayload {
+  return isRecord(value) &&
+    Object.keys(value).length === 1 &&
+    boundedString(value.userId, 128)
 }
 
 function isHelloPayload(value: unknown): value is LiveDesktopHelloPayload {

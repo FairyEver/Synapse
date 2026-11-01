@@ -160,26 +160,27 @@ describe("AccountUserControl", () => {
     accountState.current = createAuthenticatedState()
     if (accountState.current.status !== "authenticated") throw new Error("expected authenticated state")
     accountState.current.profile.user.avatarUrl = "https://example.com/avatar.webp"
-    const originalImage = window.Image
-    window.Image = class LoadedImage {
-      complete = true
-      naturalWidth = 1
-      referrerPolicy: ReferrerPolicy = ""
-      crossOrigin: string | null = null
-      src = ""
-      addEventListener() {}
-      removeEventListener() {}
-    } as unknown as typeof Image
 
-    try {
-      const panel = renderControl("panel")
-      const toolbar = renderControl("toolbar")
+    const panel = renderControl("panel")
+    const toolbar = renderControl("toolbar")
 
-      expect(panel.querySelector("img")?.getAttribute("src")).toBe("https://example.com/avatar.webp")
-      expect(toolbar.querySelector("img")?.getAttribute("src")).toBe("https://example.com/avatar.webp")
-    } finally {
-      window.Image = originalImage
-    }
+    expect(panel.querySelector("img")?.getAttribute("src")).toBe("https://example.com/avatar.webp")
+    expect(toolbar.querySelector("img")?.getAttribute("src")).toBe("https://example.com/avatar.webp")
+  })
+
+  it("falls back when the synchronized avatar cannot load", () => {
+    accountState.current = createAuthenticatedState()
+    if (accountState.current.status !== "authenticated") throw new Error("expected authenticated state")
+    accountState.current.profile.user.avatarUrl = "https://example.com/missing.webp"
+    const panel = renderControl("panel")
+    const image = panel.querySelector("img")
+
+    act(() => {
+      image?.dispatchEvent(new Event("error"))
+    })
+
+    expect(panel.querySelector("img")).toBeNull()
+    expect(panel.querySelector("svg")).toBeTruthy()
   })
 
   it("falls back to email when handle is empty", () => {

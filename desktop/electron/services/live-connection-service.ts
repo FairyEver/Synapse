@@ -426,6 +426,12 @@ export class LiveConnectionService {
       return
     }
 
+    if (parsed.type === LIVE_MESSAGE_TYPES.accountProfileChanged) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
+      await this.accountService.refreshFromStorage({ reason: "account-profile-changed" })
+      return
+    }
+
     if (parsed.type === LIVE_MESSAGE_TYPES.notificationChanged) {
       this.startServerTimeout(this.heartbeatTimeoutMs)
       const notificationId = parsed.payload.notificationId

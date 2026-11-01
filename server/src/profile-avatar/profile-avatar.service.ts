@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  Optional,
   PayloadTooLargeException,
   ServiceUnavailableException,
 } from "@nestjs/common"
@@ -11,7 +12,9 @@ import { randomUUID } from "node:crypto"
 import { AuditLogService, auditActors } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
 import { PlatformMediaStorage } from "../drive/platform-media-storage"
+import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { selectRandomSystemAvatar } from "./system-avatar-selection"
+import { LIVE_MESSAGE_TYPES, createLiveEnvelope } from "@synapse/shared"
 
 const CUSTOM_AVATAR_MAX_BYTES = 1024 * 1024
 const CUSTOM_AVATAR_SIZE = 256
@@ -44,6 +47,7 @@ export class ProfileAvatarService {
     private readonly prisma: PrismaService,
     private readonly storage: PlatformMediaStorage,
     private readonly auditLog: AuditLogService,
+    @Optional() private readonly liveGateway?: LiveDesktopGateway,
   ) {}
 
   async randomize(userId: string, ipAddress = "system"): Promise<void> {
@@ -74,6 +78,7 @@ export class ProfileAvatarService {
     })
 
     await this.deleteCandidateSafely(previous)
+    this.notifyProfileChanged(userId)
     await this.recordAudit(current.email, userId, "random", ipAddress)
   }
 
@@ -126,6 +131,7 @@ export class ProfileAvatarService {
         })
       })
       await this.deleteCandidateSafely(previous)
+      this.notifyProfileChanged(userId)
       await this.recordAudit(current.email, userId, "custom", ipAddress)
     } catch (error) {
       await this.markFailedUploadForDeletion(assetId)
@@ -200,6 +206,22 @@ export class ProfileAvatarService {
       mimeType,
       size: object.size,
       etag: object.etag ?? null,
+    }
+  }
+
+  private notifyProfileChanged(userId: string): void {
+    try {
+      const now = new Date().toISOString()
+      this.liveGateway?.broadcastToUser(userId, createLiveEnvelope(
+        LIVE_MESSAGE_TYPES.accountProfileChanged,
+        { userId },
+        { id: randomUUID(), sentAt: now },
+      ))
+    } catch (error) {
+      this.logger.warn(
+        { userId, errorName: error instanceof Error ? error.name : typeof error },
+        "Failed to broadcast account profile change.",
+      )
     }
   }
 
