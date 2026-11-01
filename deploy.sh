@@ -2,8 +2,8 @@
 # 本机运行：打包代码并上传到服务器
 set -euo pipefail
 
-# 前端构建选择，默认 v1；在任何远程操作或备份前拒绝未知值。
-DASHBOARD_UI=$(node scripts/deploy/dashboard-ui.mjs "${DASHBOARD_UI:-v1}")
+# 前端构建默认 V2；显式 v1 用于回滚，在任何远程操作或备份前拒绝未知值。
+DASHBOARD_UI=$(node scripts/deploy/dashboard-ui.mjs "${DASHBOARD_UI:-v2}")
 export DASHBOARD_UI
 
 # 生产服务器地址。可用环境变量覆盖，便于部署到别的目标或先在本机演练一遍；

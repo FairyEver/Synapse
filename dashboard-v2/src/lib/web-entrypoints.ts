@@ -8,10 +8,10 @@ type WebEntrypoint =
 export function resolveWebEntrypoint(href: string): WebEntrypoint {
   const url = new URL(href, 'http://synapse.local')
   const path = url.pathname.replace(/\/$/u, '') || '/'
-  const legacyItem = /^\/(?:console|dashboard)\/drive\/items\/([^/]+)$/u.exec(path)
-  if (legacyItem) {
+  const legacyReader = /^\/(?:console|dashboard)\/drive\/(?:items|folders)\/([^/]+)$/u.exec(path)
+  if (legacyReader) {
     url.searchParams.set('surface', 'standalone')
-    return { kind: 'redirect', location: `/drive/items/${legacyItem[1]}${url.search}${url.hash}` }
+    return { kind: 'redirect', location: `/drive/items/${legacyReader[1]}${url.search}${url.hash}` }
   }
   if (/^\/(?:console|dashboard)\/drive(?:\/.*)?$/u.test(path) || path === '/drive' || /^\/admin\/drive(?:\/.*)?$/u.test(path)) return { kind: 'not-found' }
   if (/^(?:\/(?:admin|console|dashboard))?\/(?:team-invite|invitations)(?:\/.*)?$/u.test(path) || /^\/(?:console|dashboard)\/teams(?:\/.*)?$/u.test(path)) return { kind: 'not-found' }

@@ -12,17 +12,19 @@ describe('independent Drive browser entrypoints', () => {
     expect(resolveWebEntrypoint(href)).toEqual({ kind: 'html', filename: 'index.html' })
   })
 
-  it.each(['console', 'dashboard'])('moves the %s embedded item link outside the console without losing discussion targets', (prefix) => {
-    const result = resolveWebEntrypoint(`/${prefix}/drive/items/document?surface=console&threadId=discussion#comment`)
-    expect(result).toEqual({
-      kind: 'redirect',
-      location: '/drive/items/document?surface=standalone&threadId=discussion#comment',
+  describe.each(['console', 'dashboard'])('legacy %s reader entrypoints', (prefix) => {
+    it.each(['items', 'folders'])('moves embedded %s links outside the console without losing discussion targets', (kind) => {
+      const result = resolveWebEntrypoint(`/${prefix}/drive/${kind}/document?surface=console&threadId=discussion#comment`)
+      expect(result).toEqual({
+        kind: 'redirect',
+        location: '/drive/items/document?surface=standalone&threadId=discussion#comment',
+      })
     })
   })
 
   it.each([
     '/console/drive?view=files',
-    '/console/drive/folders/folder',
+    '/console/drive/folders',
     '/dashboard/drive',
     '/admin/drive',
     '/admin/drive/storage',

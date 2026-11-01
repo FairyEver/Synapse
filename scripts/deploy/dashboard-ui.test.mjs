@@ -10,13 +10,14 @@ import { resolveDashboardBuild } from "./dashboard-ui.mjs"
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const selector = join(root, "scripts/deploy/dashboard-ui.mjs")
 
-test("the default and explicit v1 target the existing dashboard", () => {
-  for (const value of [undefined, "", "v1"]) {
-    assert.deepEqual(resolveDashboardBuild(value), { ui: "v1", package: "@synapse/dashboard", directory: "dashboard" })
+test("the default and empty selector target the production V2 dashboard", () => {
+  for (const value of [undefined, ""]) {
+    assert.deepEqual(resolveDashboardBuild(value), { ui: "v2", package: "@synapse/dashboard-v2", directory: "dashboard-v2" })
   }
 })
 
-test("v2 selects only the HeroUI dashboard package", () => {
+test("explicit v1 remains available for rollback and v2 selects HeroUI", () => {
+  assert.deepEqual(resolveDashboardBuild("v1"), { ui: "v1", package: "@synapse/dashboard", directory: "dashboard" })
   assert.deepEqual(resolveDashboardBuild("v2"), { ui: "v2", package: "@synapse/dashboard-v2", directory: "dashboard-v2" })
 })
 
@@ -27,10 +28,23 @@ test("unknown or shell-shaped selectors fail rather than falling back", () => {
 })
 
 test("the CLI emits only the selected field consumed by the Docker build", () => {
-  for (const [args, expected] of [[[], "v1"], [["v2"], "v2"], [["v2", "package"], "@synapse/dashboard-v2"], [["v2", "directory"], "dashboard-v2"]]) {
+  for (const [args, expected] of [[[], "v2"], [[""], "v2"], [["v1"], "v1"], [["v2", "package"], "@synapse/dashboard-v2"], [["v2", "directory"], "dashboard-v2"], [["", "json"], '{"ui":"v2"}'], [["v1", "json"], '{"ui":"v1"}']]) {
     const result = spawnSync(process.execPath, [selector, ...args], { encoding: "utf8" })
     assert.equal(result.status, 0, result.stderr)
     assert.equal(result.stdout.trim(), expected)
+  }
+})
+
+test("plain deploy defaults to V2 while an explicit V1 override survives", () => {
+  const script = readFileSync(join(root, "deploy.sh"), "utf8")
+  const initializer = script.slice(0, script.indexOf("export DASHBOARD_UI") + "export DASHBOARD_UI".length)
+  for (const value of [undefined, "", "v1", "v2"]) {
+    const env = { ...process.env }
+    if (value === undefined) delete env.DASHBOARD_UI
+    else env.DASHBOARD_UI = value
+    const result = spawnSync("bash", ["-c", `${initializer}\nnode scripts/deploy/dashboard-ui.mjs "$DASHBOARD_UI"`], { cwd: root, encoding: "utf8", env })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.stdout.trim(), value === "v1" ? "v1" : "v2")
   }
 })
 

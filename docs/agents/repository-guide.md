@@ -45,7 +45,7 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 - `pnpm dev:desktop`：仅桌面端。
 - `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；控制台自动打开 `http://localhost:19700/console/`，使用双栈监听；API 为 `19701`，PDF 宿主机映射为 `19702`。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
 - `pnpm dev:document`：文档站。
-- `pnpm dev:dashboard-v2`：HeroUI 控制台与独立页面，地址为 `http://localhost:19703/console/`，双栈监听、固定端口；也随 `pnpm dev:prod` 启动。生产构建默认 V1，只有显式 `DASHBOARD_UI=v2` 才选择 V2，最终仍输出到容器 `/app/dashboard/dist`；不自动部署。
+- `pnpm dev:dashboard-v2`：HeroUI 控制台与独立页面，地址为 `http://localhost:19703/console/`，双栈监听、固定端口；也随 `pnpm dev:prod` 启动。生产构建默认 V2，显式 `DASHBOARD_UI=v1` 可整包重建回滚旧版，最终输出到容器 `/app/dashboard/dist`；构建本身不自动部署。
 - Dashboard V2 的组件与视觉使用 HeroUI v3，规则见 `dashboard-v2/CLAUDE.md` 与 `DESIGN.md`；此基线仅限该子包。仓库的 `.agents/skills/heroui-react/` 提供官方 Skill，`.codex/config.toml` 和 `.mcp.json` 分别配置 Codex / Claude Code 的官方 MCP。离线文档与 demos 用 `pnpm --filter @synapse/dashboard-v2 docs:heroui:sync` 下载到该子包被 Git 忽略的 `.heroui-docs/`；不会克隆上游仓库。
 - 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`、`pnpm quit:dashboard-v2`。
 

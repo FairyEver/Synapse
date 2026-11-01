@@ -56,10 +56,10 @@
 | 原入口/能力 | V2 处理 | 保留边界/验收 |
 |---|---|---|
 | 普通用户侧栏“网盘” | 移除 | 导航和静态边界检查；R1 |
-| `/console/drive` 的全部视图，含 `?view=files`、目录页、公开素材、回收站和站点等控制台管理入口 | 不提供管理页面，显示 404（开发/预览入口直接返回 HTTP 404）；不建立替代文件管理列表 | 原有云盘数据和服务端能力不删；独立文件夹阅读不受此限制 |
+| `/console/drive` 的全盘视图，含 `?view=files`、公开素材、回收站和站点等控制台管理入口 | 不提供管理页面，显示 404（开发/预览入口直接返回 HTTP 404）；不建立替代文件管理列表 | 原有云盘数据和服务端能力不删；具体文件夹的旧链接按下方规则转到独立阅读器 |
 | 管理员侧栏“云盘管理”、`/admin/drive` 及子路径 | 移除 | 全站文件治理、公开素材、文档图片、存储统计 UI 均不迁入 V2 |
 | `/drive`、`/drive/` | 不再作为全盘列表入口，返回 404 | `/drive/items/:id` 继续保留 |
-| `/console/drive/items/:id`、`/dashboard/drive/items/:id` | 转到 `/drive/items/:id?surface=standalone`，保留其他 query 和 hash | 讨论目标不丢失；R1、R4 |
+| `/console/drive/items/:id`、`/dashboard/drive/items/:id`、`/console/drive/folders/:id`、`/dashboard/drive/folders/:id` | 文件和文件夹均转到 `/drive/items/:id?surface=standalone`，保留编码后的 ID、尾斜杠兼容、其他 query 和 hash | 讨论目标不丢失；全盘列表仍退役；R1、R4 |
 | 阅读器“在云盘/控制台打开” | 移除，不生成已退役链接 | 下载、复制分享链接、版本、打开方式和编辑继续按权限提供 |
 | 旧 `/dashboard/...` 前缀 | 由显式 Web 入口策略处理；云盘详情先转独立地址，云盘列表先 404，其余兼容入口转 `/console/...` | 不将兼容跳转当作新页面；E1 |
 | 用户团队、邀请等原已退役入口 | 继续 404，不在此次 UI 改造中恢复 | 管理员现有团队/组织功能按实际代码保留 |
@@ -154,6 +154,6 @@ pnpm --filter @synapse/dashboard build
 node --test scripts/deploy/dashboard-ui.test.mjs
 ```
 
-将来明确要求部署 V2 时使用 `DASHBOARD_UI=v2 bash deploy.sh`；省略或置空选择器始终构建 V1。原 URL 与最终容器产物目录不变，不混用两版资源；回滚选择 V1 后整包重建。
+2026-11-01 正式默认切换：执行 `bash deploy.sh` 时默认构建 V2，省略或置空 `DASHBOARD_UI` 也选择 V2。原 URL 与最终容器产物目录不变，不混用两版资源；显式执行 `DASHBOARD_UI=v1 bash deploy.sh` 可整包重建回滚。`/console/dashboard-ui.json` 提供实际构建版本标识，部署后须同时核对它和独立文件、分享、旧详情跳转。上方旧验收记录中的“默认 V1”描述保留当时状态。
 
 后续逐页视觉复查与修复见 [VISUAL_REVIEW.md](./VISUAL_REVIEW.md)，其中区分实际本地数据和响应夹具，记录桌面、窄屏及新增布局回归。

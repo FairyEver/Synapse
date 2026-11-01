@@ -1,6 +1,6 @@
 ARG NPM_REGISTRY=https://registry.npmmirror.com
-# 默认构建现有 Dashboard；显式传入 v2 才选择 HeroUI 版本。
-ARG DASHBOARD_UI=v1
+# 默认构建 Dashboard V2；显式传入 v1 保留旧版回滚能力。
+ARG DASHBOARD_UI=v2
 
 FROM node:22.23.4-alpine AS base
 ARG NPM_REGISTRY
@@ -51,7 +51,8 @@ RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build
 RUN pnpm --filter "$(node scripts/deploy/dashboard-ui.mjs "$DASHBOARD_UI" package)" build \
   && mkdir -p /app/dashboard-artifact \
-  && cp -a "$(node scripts/deploy/dashboard-ui.mjs "$DASHBOARD_UI" directory)/dist/." /app/dashboard-artifact/
+  && cp -a "$(node scripts/deploy/dashboard-ui.mjs "$DASHBOARD_UI" directory)/dist/." /app/dashboard-artifact/ \
+  && node scripts/deploy/dashboard-ui.mjs "$DASHBOARD_UI" json > /app/dashboard-artifact/dashboard-ui.json
 RUN APP_PUBLIC_URL=$APP_PUBLIC_URL pnpm --filter @synapse/document build
 
 FROM base AS production

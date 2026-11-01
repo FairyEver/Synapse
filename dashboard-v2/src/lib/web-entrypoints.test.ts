@@ -2,11 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { resolveWebEntrypoint } from './web-entrypoints'
 
 describe('V2 web entrypoints', () => {
-  it.each(['/console/drive', '/console/drive?view=files', '/console/drive/folders/root', '/admin/drive', '/drive'])('retires cloud management without exposing a listing: %s', (url) => {
+  it.each(['/console/drive', '/console/drive?view=files', '/console/drive/folders', '/admin/drive', '/drive'])('retires cloud management without exposing a listing: %s', (url) => {
     expect(resolveWebEntrypoint(url)).toEqual({ kind: 'not-found' })
   })
-  it('moves legacy embedded file links outside the console and retains comment targets', () => {
-    expect(resolveWebEntrypoint('/console/drive/items/doc?surface=console&threadId=thread#comment')).toEqual({ kind: 'redirect', location: '/drive/items/doc?surface=standalone&threadId=thread#comment' })
+  describe.each(['console', 'dashboard'])('legacy %s reader links', (prefix) => {
+    it.each(['items', 'folders'])('moves %s links to the independent reader and retains comment targets', (kind) => {
+      expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc?surface=console&threadId=thread#comment`)).toEqual({ kind: 'redirect', location: '/drive/items/doc?surface=standalone&threadId=thread#comment' })
+    })
+    it.each(['items', 'folders'])('accepts a trailing slash and preserves the encoded %s identifier', (kind) => {
+      expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc%2F%E4%B8%AD/?view=code&versions=1#discussion=annotation&threadId=thread`)).toEqual({ kind: 'redirect', location: '/drive/items/doc%2F%E4%B8%AD?view=code&versions=1&surface=standalone#discussion=annotation&threadId=thread' })
+    })
+    it.each(['items', 'folders'])('does not mistake deeper %s paths for reader links', (kind) => {
+      expect(resolveWebEntrypoint(`/${prefix}/drive/${kind}/doc/download`)).toEqual({ kind: 'not-found' })
+    })
   })
   it.each(['/drive/items/doc?surface=standalone', '/share/token', '/share/token/items/child', '/notifications/notice/open'])('retains independent readers and notification links: %s', (url) => {
     expect(resolveWebEntrypoint(url)).toEqual({ kind: 'html', filename: 'index.html' })
