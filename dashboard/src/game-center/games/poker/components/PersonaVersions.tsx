@@ -1,5 +1,5 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
-import { Skeleton } from "@/game-center/ui/skeleton"
+import { Skeleton } from "@heroui/react"
 import { useGameQuery } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 export function PersonaVersions({ agentId }: { agentId: string }) {
@@ -14,7 +14,7 @@ export function PersonaVersions({ agentId }: { agentId: string }) {
       {!versions.data && !versions.error ? (
         <Skeleton className="h-20 w-full" />
       ) : versions.data?.length === 0 ? (
-        <p className="text-sm text-muted-foreground">尚无提示词版本</p>
+        <p className="text-sm text-muted">尚无提示词版本</p>
       ) : (
         versions.data?.map((version) => (
           <details key={version.id} className="rounded-md border p-3">

@@ -9,18 +9,6 @@ import SkillRepositoryAdminPage from './skill-repository-admin'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-vi.mock('@tanstack/react-router', async () => {
-  const actual = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
-  return {
-    ...actual,
-    Link: ({ children, params }: { readonly children: ReactNode; readonly params?: Record<string, string> }) => (
-      <a href={`/skills/${params?.ownerHandle ?? ''}/${params?.repositoryName ?? ''}`}>
-        {children}
-      </a>
-    ),
-  }
-})
-
 vi.mock('@/lib/api', () => ({
   adminApi: {
     listSkillRepositories: vi.fn(),
@@ -29,11 +17,9 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@heroui/react')>(),
+  toast: { danger: vi.fn(), success: vi.fn() },
 }))
 
 vi.mock('@/components/layout/header', () => ({
@@ -111,7 +97,7 @@ describe('SkillRepositoryAdminPage', () => {
       sortBy: 'updatedAt',
       sortOrder: 'desc',
     })
-    expect(document.querySelector('a[href="/skills/alice/deploy-helper"]')?.textContent).toContain('打开')
+    expect(document.querySelector('a[href="/console/skills/alice/deploy-helper"]')?.textContent).toContain('打开')
   })
 
   it('requires confirmation before removing a repository', async () => {

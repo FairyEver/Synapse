@@ -98,14 +98,14 @@ describe('ApiKeysSettings', () => {
     })
 
     renderSettings()
-    await waitForText('尚无秘钥')
-    await click(buttonByText('创建秘钥'))
+    await waitForText('尚无密钥')
+    await click(buttonByText('创建密钥'))
     await waitForText('允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。')
     await inputValue(inputById('api-key-name'), ' CLI ')
     await click(permissionOption('获取公共链接文件'))
     await click(buttonByText('创建', 'last'))
 
-    await waitForText('秘钥已创建')
+    await waitForText('密钥已创建')
     expect(mockedDashboardApi.createApiKey).toHaveBeenCalledWith({
       name: 'CLI',
       scopes: ['drive.public_link.download'],
@@ -113,7 +113,7 @@ describe('ApiKeysSettings', () => {
     expect(document.body.textContent).toContain('关闭后无法再次查看')
     expect(inputByValue('syn_sk_once-only-secret')).not.toBeNull()
 
-    await click(buttonByText('复制秘钥'))
+    await click(buttonByText('复制密钥'))
     expect(clipboardWrite).toHaveBeenCalledWith('syn_sk_once-only-secret')
 
     await click(buttonByText('完成'))
@@ -125,16 +125,16 @@ describe('ApiKeysSettings', () => {
     mockedDashboardApi.listApiKeys.mockResolvedValue([])
 
     renderSettings()
-    await waitForText('尚无秘钥')
-    const createTrigger = buttonByText('创建秘钥')
+    await waitForText('尚无密钥')
+    const createTrigger = buttonByText('创建密钥')
     createTrigger.focus()
     await click(createTrigger)
-    await waitForText('完整秘钥只会显示一次。')
+    await waitForText('完整密钥只会显示一次。')
 
     await pressEscape(inputById('api-key-name'))
 
     await waitFor(() => {
-      expect(document.body.textContent).not.toContain('完整秘钥只会显示一次。')
+      expect(document.body.textContent).not.toContain('完整密钥只会显示一次。')
       expect(document.activeElement).toBe(createTrigger)
     })
   })
@@ -143,18 +143,18 @@ describe('ApiKeysSettings', () => {
     mockedDashboardApi.listApiKeys.mockResolvedValue([])
 
     renderSettings()
-    await waitForText('尚无秘钥')
-    await click(buttonByText('创建秘钥'))
-    await waitForText('完整秘钥只会显示一次。')
+    await waitForText('尚无密钥')
+    await click(buttonByText('创建密钥'))
+    await waitForText('完整密钥只会显示一次。')
     await inputValue(inputById('api-key-name'), '未提交草稿')
     await click(permissionOption('获取公共链接文件'))
     await click(buttonByText('取消'))
 
-    await click(buttonByText('创建秘钥'))
-    await waitForText('完整秘钥只会显示一次。')
+    await click(buttonByText('创建密钥'))
+    await waitForText('完整密钥只会显示一次。')
 
     expect(inputById('api-key-name').value).toBe('')
-    expect(checkbox().getAttribute('data-state')).toBe('unchecked')
+    expect(checkbox().checked).toBe(false)
     expect(buttonByText('创建', 'last').disabled).toBe(true)
   })
 
@@ -167,7 +167,7 @@ describe('ApiKeysSettings', () => {
     await click(buttonByText('编辑权限'))
     await waitForText('编辑 API 权限')
 
-    expect(checkbox().getAttribute('data-state')).toBe('checked')
+    expect(checkbox().checked).toBe(true)
     expect(buttonByText('保存权限').disabled).toBe(true)
     const documentationLink = linkByText('文档')
     const permissionTitle = document.querySelector('label[for="api-key-edit-drive.public_link.download"]')
@@ -212,7 +212,7 @@ describe('ApiKeysSettings', () => {
     renderSettings()
     await waitForText('开发环境')
     await click(buttonByText('重命名'))
-    await waitForText('重命名秘钥')
+    await waitForText('重命名密钥')
 
     expect(inputById('api-key-rename-name').value).toBe('开发环境')
     expect(buttonByText('保存名称').disabled).toBe(true)
@@ -224,7 +224,7 @@ describe('ApiKeysSettings', () => {
     await waitFor(() => {
       expect(mockedDashboardApi.renameApiKey).toHaveBeenCalledWith('key-1', '生产环境')
       expect(document.body.textContent).toContain('生产环境')
-      expect(document.body.textContent).not.toContain('重命名秘钥')
+      expect(document.body.textContent).not.toContain('重命名密钥')
     })
     expect(document.body.textContent).toContain('syn_sk_12345678...')
     expect(document.body.textContent).toContain('获取公共链接文件')
@@ -237,12 +237,12 @@ describe('ApiKeysSettings', () => {
     await waitForText('开发环境')
     const renameTrigger = buttonByText('重命名')
     await click(renameTrigger)
-    await waitForText('重命名秘钥')
+    await waitForText('重命名密钥')
 
     await click(buttonByText('取消'))
 
     await waitFor(() => {
-      expect(document.body.textContent).not.toContain('重命名秘钥')
+      expect(document.body.textContent).not.toContain('重命名密钥')
       expect(document.activeElement).toBe(renameTrigger)
     })
   })
@@ -259,8 +259,8 @@ describe('ApiKeysSettings', () => {
       }])
 
     renderSettings()
-    await waitForText('尚无秘钥')
-    await click(buttonByText('创建秘钥'))
+    await waitForText('尚无密钥')
+    await click(buttonByText('创建密钥'))
     await waitForText('权限加载失败')
     await click(buttonByText('重试'))
 
@@ -274,7 +274,7 @@ describe('ApiKeysSettings', () => {
 
     renderSettings()
     await waitForText('开发环境')
-    const createTrigger = buttonByText('创建秘钥')
+    const createTrigger = buttonByText('创建密钥')
     await click(buttonByText('撤销'))
     await waitForText('撤销“开发环境”后将无法恢复。')
     await click(buttonByText('撤销', 'last'))
@@ -454,9 +454,9 @@ function inputByValue(value: string): HTMLInputElement {
   return input
 }
 
-function checkbox(): HTMLButtonElement {
-  const element = document.querySelector('[role="checkbox"]')
-  if (!(element instanceof HTMLButtonElement)) throw new Error('Checkbox not found')
+function checkbox(): HTMLInputElement {
+  const element = document.querySelector('input[type="checkbox"]')
+  if (!(element instanceof HTMLInputElement)) throw new Error('Checkbox not found')
   return element
 }
 

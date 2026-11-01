@@ -1,4 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import type {
   FilePreviewToolbarItem,
   FilePreviewToolbarMenuItem,
@@ -10,17 +19,30 @@ export type DriveRendererToolbarMenuItem = FilePreviewToolbarMenuItem
 export type DriveRendererToolbarContextValue = {
   readonly items: readonly DriveRendererToolbarItem[]
   readonly hasUnsavedChanges: boolean
-  readonly registerItems: (scope: string, items: readonly DriveRendererToolbarItem[]) => () => void
+  readonly registerItems: (
+    scope: string,
+    items: readonly DriveRendererToolbarItem[]
+  ) => () => void
   readonly registerUnsavedState: (scope: string, dirty: boolean) => () => void
   readonly clearScope: (scope: string) => void
 }
 
-const DriveRendererToolbarContext = createContext<DriveRendererToolbarContextValue | null>(null)
-const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+const DriveRendererToolbarContext =
+  createContext<DriveRendererToolbarContextValue | null>(null)
+const useIsoLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect
 
-export function DriveRendererToolbarProvider({ children }: { readonly children: ReactNode }) {
-  const [itemsByScope, setItemsByScope] = useState<ReadonlyMap<string, readonly DriveRendererToolbarItem[]>>(() => new Map())
-  const [unsavedByScope, setUnsavedByScope] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+export function DriveRendererToolbarProvider({
+  children,
+}: {
+  readonly children: ReactNode
+}) {
+  const [itemsByScope, setItemsByScope] = useState<
+    ReadonlyMap<string, readonly DriveRendererToolbarItem[]>
+  >(() => new Map())
+  const [unsavedByScope, setUnsavedByScope] = useState<
+    ReadonlyMap<string, boolean>
+  >(() => new Map())
 
   const clearScope = useCallback((scope: string) => {
     setItemsByScope((current) => {
@@ -37,41 +59,50 @@ export function DriveRendererToolbarProvider({ children }: { readonly children: 
     })
   }, [])
 
-  const registerItems = useCallback((scope: string, items: readonly DriveRendererToolbarItem[]) => {
-    setItemsByScope((current) => {
-      const next = new Map(current)
-      next.set(scope, items)
-      return next
-    })
-    return () => clearScope(scope)
-  }, [clearScope])
+  const registerItems = useCallback(
+    (scope: string, items: readonly DriveRendererToolbarItem[]) => {
+      setItemsByScope((current) => {
+        const next = new Map(current)
+        next.set(scope, items)
+        return next
+      })
+      return () => clearScope(scope)
+    },
+    [clearScope]
+  )
 
-  const registerUnsavedState = useCallback((scope: string, dirty: boolean) => {
-    setUnsavedByScope((current) => {
-      if (current.get(scope) === dirty) return current
-      const next = new Map(current)
-      next.set(scope, dirty)
-      return next
-    })
-    return () => clearScope(scope)
-  }, [clearScope])
+  const registerUnsavedState = useCallback(
+    (scope: string, dirty: boolean) => {
+      setUnsavedByScope((current) => {
+        if (current.get(scope) === dirty) return current
+        const next = new Map(current)
+        next.set(scope, dirty)
+        return next
+      })
+      return () => clearScope(scope)
+    },
+    [clearScope]
+  )
 
   const items = useMemo(
     () => Array.from(itemsByScope.values()).flat(),
-    [itemsByScope],
+    [itemsByScope]
   )
   const hasUnsavedChanges = useMemo(
     () => Array.from(unsavedByScope.values()).some(Boolean),
-    [unsavedByScope],
+    [unsavedByScope]
   )
 
-  const value = useMemo<DriveRendererToolbarContextValue>(() => ({
-    hasUnsavedChanges,
-    items,
-    registerItems,
-    registerUnsavedState,
-    clearScope,
-  }), [clearScope, hasUnsavedChanges, items, registerItems, registerUnsavedState])
+  const value = useMemo<DriveRendererToolbarContextValue>(
+    () => ({
+      hasUnsavedChanges,
+      items,
+      registerItems,
+      registerUnsavedState,
+      clearScope,
+    }),
+    [clearScope, hasUnsavedChanges, items, registerItems, registerUnsavedState]
+  )
 
   return (
     <DriveRendererToolbarContext.Provider value={value}>
@@ -82,7 +113,10 @@ export function DriveRendererToolbarProvider({ children }: { readonly children: 
 
 export function useDriveRendererToolbar(): DriveRendererToolbarContextValue {
   const value = useContext(DriveRendererToolbarContext)
-  if (!value) throw new Error('useDriveRendererToolbar must be used inside DriveRendererToolbarProvider')
+  if (!value)
+    throw new Error(
+      'useDriveRendererToolbar must be used inside DriveRendererToolbarProvider'
+    )
   return value
 }
 
@@ -92,7 +126,7 @@ export function useOptionalDriveRendererToolbar(): DriveRendererToolbarContextVa
 
 export function useRegisterDriveRendererToolbarItems(
   scope: string,
-  items: readonly DriveRendererToolbarItem[],
+  items: readonly DriveRendererToolbarItem[]
 ): void {
   const toolbar = useOptionalDriveRendererToolbar()
   const registerItems = toolbar?.registerItems
@@ -102,7 +136,10 @@ export function useRegisterDriveRendererToolbarItems(
   }, [items, registerItems, scope])
 }
 
-export function useRegisterDriveRendererUnsavedState(scope: string, dirty: boolean): void {
+export function useRegisterDriveRendererUnsavedState(
+  scope: string,
+  dirty: boolean
+): void {
   const toolbar = useOptionalDriveRendererToolbar()
   const registerUnsavedState = toolbar?.registerUnsavedState
   useIsoLayoutEffect(() => {

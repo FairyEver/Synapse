@@ -5,9 +5,6 @@ import type { SkillRepositoryDetailDto, SkillRepositoryItemDto } from '@synapse/
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SidebarProvider } from '@/components/ui/sidebar'
-import { DirectionProvider } from '@/context/direction-provider'
-import { LayoutProvider } from '@/context/layout-provider'
 import { SkillRepositoryDetailPage } from './skill-repository-detail-page'
 import { SkillRepositoryExplorePage } from './skill-repository-explore-page'
 import { SkillRepositoryListPage } from './skill-repository-list-page'
@@ -183,11 +180,11 @@ function render(element: ReactNode) {
   root = createRoot(host)
   act(() => {
     root?.render(
-      <DirectionProvider>
-        <LayoutProvider>
-          <SidebarProvider>{element}</SidebarProvider>
-        </LayoutProvider>
-      </DirectionProvider>
+      <>
+        <>
+          <>{element}</>
+        </>
+      </>
     )
   })
 }

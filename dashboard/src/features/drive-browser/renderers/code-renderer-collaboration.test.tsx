@@ -5,13 +5,17 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { driveBrowserApi } from '@/lib/api'
 import { DriveCodeRenderer } from './code-renderer'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const editorModel = {}
 const ctrlCmd = 1 << 11
 const keyS = 49
-let saveCommand: { readonly keybinding: number; readonly handler: () => void } | null = null
+let saveCommand: {
+  readonly keybinding: number
+  readonly handler: () => void
+} | null = null
 const editorInstance = {
   getModel: () => editorModel,
   addCommand: (keybinding: number, handler: () => void) => {
@@ -35,19 +39,27 @@ let collaborationHookResult: {
   }
 } = { session: null, state: null }
 let forceCollaborationHookRender: (() => void) | null = null
-let registeredToolbarItems: readonly { readonly id: string; readonly ariaKeyShortcuts?: string }[] = []
+let registeredToolbarItems: readonly {
+  readonly id: string
+  readonly ariaKeyShortcuts?: string
+}[] = []
 
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
   return {
-    default: ({ onMount }: {
+    default: ({
+      onMount,
+    }: {
       readonly onMount?: (
         editor: typeof editorInstance,
-        monaco: { KeyMod: { CtrlCmd: number }; KeyCode: { KeyS: number } },
+        monaco: { KeyMod: { CtrlCmd: number }; KeyCode: { KeyS: number } }
       ) => void
     }) => {
       React.useEffect(() => {
-        onMount?.(editorInstance, { KeyMod: { CtrlCmd: ctrlCmd }, KeyCode: { KeyS: keyS } })
+        onMount?.(editorInstance, {
+          KeyMod: { CtrlCmd: ctrlCmd },
+          KeyCode: { KeyS: keyS },
+        })
       }, [])
       return React.createElement('textarea', { 'data-monaco-editor': 'true' })
     },
@@ -73,7 +85,10 @@ vi.mock('../collaboration/use-drive-collaboration', async () => {
 })
 
 vi.mock('./drive-renderer-toolbar-context', () => ({
-  useRegisterDriveRendererToolbarItems: (_scope: string, items: typeof registeredToolbarItems) => {
+  useRegisterDriveRendererToolbarItems: (
+    _scope: string,
+    items: typeof registeredToolbarItems
+  ) => {
     registeredToolbarItems = items
   },
   useRegisterDriveRendererUnsavedState: () => undefined,
@@ -110,7 +125,13 @@ describe('DriveCodeRenderer collaboration binding', () => {
         text: { toString: () => '# Initial' },
         awareness: {},
       },
-      state: { canWrite: true, onlineCount: 1, status: 'synced', error: null, epoch: 'epoch-1' },
+      state: {
+        canWrite: true,
+        onlineCount: 1,
+        status: 'synced',
+        error: null,
+        epoch: 'epoch-1',
+      },
     }
     await act(async () => {
       forceCollaborationHookRender?.()
@@ -125,35 +146,50 @@ describe('DriveCodeRenderer collaboration binding', () => {
       collaborationHookResult.session?.text,
       editorModel,
       expect.any(Set),
-      collaborationHookResult.session?.awareness,
+      collaborationHookResult.session?.awareness
     )
-    expect(host?.querySelector('[data-drive-collaboration-bound="true"]')).not.toBeNull()
+    expect(
+      host?.querySelector('[data-drive-collaboration-bound="true"]')
+    ).not.toBeNull()
   })
 
   it('creates a collaboration checkpoint with the platform save command', async () => {
-    const checkpointOwner = vi.spyOn(driveBrowserApi, 'checkpointOwner').mockResolvedValue({
-      created: false,
-      item: null,
-      version: null,
-    })
+    const checkpointOwner = vi
+      .spyOn(driveBrowserApi, 'checkpointOwner')
+      .mockResolvedValue({
+        created: false,
+        item: null,
+        version: null,
+      })
     collaborationHookResult = {
       session: {
         doc: { isDestroyed: false },
         text: { toString: () => '# Initial' },
         awareness: {},
       },
-      state: { canWrite: true, onlineCount: 1, status: 'synced', error: null, epoch: 'epoch-1' },
+      state: {
+        canWrite: true,
+        onlineCount: 1,
+        status: 'synced',
+        error: null,
+        epoch: 'epoch-1',
+      },
     }
     await renderCollaborativeRenderer()
 
     expect(saveCommand?.keybinding).toBe(ctrlCmd | keyS)
-    expect(registeredToolbarItems.find((item) => item.id === 'code-checkpoint')?.ariaKeyShortcuts)
-      .toBe('Meta+S Control+S')
+    expect(
+      registeredToolbarItems.find((item) => item.id === 'code-checkpoint')
+        ?.ariaKeyShortcuts
+    ).toBe('Meta+S Control+S')
     await act(async () => {
       saveCommand?.handler()
       await vi.waitFor(() => expect(checkpointOwner).toHaveBeenCalled())
     })
-    expect(checkpointOwner).toHaveBeenCalledWith('item-1', expect.objectContaining({ epoch: 'epoch-1' }))
+    expect(checkpointOwner).toHaveBeenCalledWith(
+      'item-1',
+      expect.objectContaining({ epoch: 'epoch-1' })
+    )
   })
 })
 

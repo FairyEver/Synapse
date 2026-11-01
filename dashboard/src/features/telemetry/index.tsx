@@ -1,6 +1,7 @@
+import { Button, Card, Input, ListBox, Popover, Select, Skeleton, Surface } from '@heroui/react'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { ChevronsUpDown } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -11,6 +12,7 @@ import {
   ResponsiveContainer,
   XAxis,
   YAxis,
+  Tooltip as ChartTooltip,
 } from 'recharts'
 import {
   adminApi,
@@ -19,29 +21,9 @@ import {
   type TelemetryStats,
   type TelemetryStatsOptions,
 } from '@/lib/api'
-import { cn } from '@/lib/utils'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
+
 
 type IdentityFilter = 'all' | 'authenticated' | 'anonymous'
 type RangeDays = 7 | 30 | 90 | 180
@@ -90,9 +72,9 @@ export default function TelemetryPage() {
           <TelemetryDashboard data={data} />
         ) : (
           <Card>
-            <CardContent className='py-8 text-sm text-muted-foreground'>
+            <Card.Content className='py-8 text-sm text-muted'>
               暂无埋点数据
-            </CardContent>
+            </Card.Content>
           </Card>
         )}
       </Main>
@@ -233,17 +215,17 @@ function FilterSelect({
   onChange: (value: string) => void
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={ariaLabel} size='sm'>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectGroup>
+    <Select aria-label={ariaLabel} value={value} onChange={(key) => (onChange)(String(key ?? ''))}>
+      <Select.Trigger aria-label={ariaLabel} >
+        <Select.Value />
+      <Select.Indicator /></Select.Trigger>
+      <Select.Popover><ListBox>
+
           {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            <ListBox.Item key={option.value} id={option.value}>{option.label}<ListBox.ItemIndicator /></ListBox.Item>
           ))}
-        </SelectGroup>
-      </SelectContent>
+
+      </ListBox></Select.Popover>
     </Select>
   )
 }
@@ -293,57 +275,42 @@ function UserFilter({
     queryFn: () => adminApi.listUsers({ page: 1, pageSize: 20, search: search || undefined }),
     enabled: open,
   })
+  const selectUser = (key: string | number) => {
+    onChange(data?.data.find((item) => item.id === key) ?? null)
+    setOpen(false)
+  }
+  const closeCurrentSelection = (key: string) => {
+    if (key === (value?.id ?? allValue)) setOpen(false)
+  }
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant='outline'
-          size='sm'
-          role='combobox'
-          aria-expanded={open}
-          disabled={disabled}
-          className='max-w-56 justify-between font-normal'
-        >
-          <span className='truncate'>{value ? value.handle || value.email : '全部用户'}</span>
-          <ChevronsUpDown className='size-4 shrink-0 text-muted-foreground' />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className='w-72 p-0' align='start'>
-        <Command shouldFilter={false}>
-          <CommandInput placeholder='搜索用户' value={search} onValueChange={setSearch} />
-          <CommandList>
-            <CommandEmpty>{isLoading ? '加载中' : '没有匹配用户'}</CommandEmpty>
-            <CommandGroup>
-              <CommandItem
-                value={allValue}
-                onSelect={() => {
-                  onChange(null)
-                  setOpen(false)
-                }}
-              >
-                <Check className={cn('size-4', value ? 'opacity-0' : 'opacity-100')} />
-                全部用户
-              </CommandItem>
-              {data?.data.map((user) => (
-                <CommandItem
-                  key={user.id}
-                  value={user.id}
-                  onSelect={() => {
-                    onChange(user)
-                    setOpen(false)
-                  }}
-                >
-                  <Check className={cn('size-4', value?.id === user.id ? 'opacity-100' : 'opacity-0')} />
-                  <span className='min-w-0'>
-                    <span className='block truncate'>{user.handle}</span>
-                    <span className='block truncate text-xs text-muted-foreground'>{user.email}</span>
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
+    <Popover isOpen={open} onOpenChange={setOpen}>
+      <Button variant='outline' aria-label='用户筛选' aria-expanded={open} isDisabled={disabled} className='max-w-56'>
+        <span className='truncate'>{value ? value.handle || value.email : '全部用户'}</span>
+        <ChevronsUpDown className='size-4 shrink-0 text-muted' />
+      </Button>
+      <Popover.Content className='w-72' placement='bottom start'>
+        <Popover.Dialog className='grid gap-2'>
+          <Input variant="secondary" aria-label='搜索用户' placeholder='搜索用户' value={search} onChange={(event) => setSearch(event.target.value)} />
+          {isLoading ? <p role='status' className='text-sm text-muted'>加载中</p> : null}
+          <ListBox aria-label='用户筛选' selectionMode='single' disallowEmptySelection selectedKeys={[value?.id ?? allValue]} onSelectionChange={(keys) => {
+            if (keys === 'all') return
+            const key = keys.values().next().value
+            if (key !== undefined) selectUser(key)
+          }}>
+            <ListBox.Item id={allValue} textValue='全部用户' onPress={() => closeCurrentSelection(allValue)}>全部用户<ListBox.ItemIndicator /></ListBox.Item>
+            {data?.data.map((user) => (
+              <ListBox.Item key={user.id} id={user.id} textValue={`${user.handle} ${user.email}`} onPress={() => closeCurrentSelection(user.id)}>
+                <span className='min-w-0'>
+                  <span className='block truncate'>{user.handle}</span>
+                  <span className='block truncate text-xs text-muted'>{user.email}</span>
+                </span>
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            ))}
+          </ListBox>
+          {!isLoading && !data?.data.length ? <p className='text-sm text-muted'>没有匹配用户</p> : null}
+        </Popover.Dialog>
+      </Popover.Content>
     </Popover>
   )
 }
@@ -369,60 +336,45 @@ function TelemetryDashboard({ data }: { data: TelemetryStats }) {
   ]
   return (
     <div className='flex flex-col gap-4'>
-      <div className='grid overflow-hidden rounded-xl border bg-card sm:grid-cols-2 lg:grid-cols-6'>
-        {metrics.map((metric) => (
-          <div key={metric.label} className='px-4 py-3 not-last:border-b sm:[&:nth-child(odd)]:border-r lg:border-b-0 lg:not-last:border-r'>
-            <div className='text-sm text-muted-foreground'>{metric.label}</div>
-            <div className='mt-1 text-xl font-semibold tabular-nums'>{metric.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className='grid overflow-hidden rounded-xl border bg-card sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8'>
-        {insightMetrics.map((metric) => (
-          <div key={metric.label} className='px-4 py-3 not-last:border-b sm:[&:nth-child(odd)]:border-r lg:border-b-0 lg:not-last:border-r'>
-            <div className='text-sm text-muted-foreground'>{metric.label}</div>
-            <div className='mt-1 text-xl font-semibold tabular-nums'>{metric.value}</div>
-          </div>
-        ))}
-      </div>
+      <MetricCards metrics={metrics} />
+      <MetricCards metrics={insightMetrics} />
 
       <Card>
-        <CardHeader>
-          <CardTitle>事件趋势</CardTitle>
-        </CardHeader>
-        <CardContent className='ps-2'>
+        <Card.Header>
+          <Card.Title>事件趋势</Card.Title>
+        </Card.Header>
+        <Card.Content className='ps-2'>
           <ResponsiveContainer width='100%' height={320}>
             <LineChart data={data.trend} margin={{ right: 16 }}>
-              <CartesianGrid vertical={false} stroke='var(--border)' />
-              <XAxis dataKey='date' tickFormatter={shortDate} stroke='var(--muted-foreground)' fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke='var(--muted-foreground)' fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+              <CartesianGrid vertical={false} stroke='var(--separator)' />
+              <XAxis dataKey='date' tickFormatter={shortDate} stroke='var(--muted)' fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke='var(--muted)' fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
               <Legend />
-              <Line type='monotone' dataKey='events' name='总事件' stroke='var(--primary)' strokeWidth={2} dot={false} />
+              <Line type='monotone' dataKey='events' name='总事件' stroke='var(--accent)' strokeWidth={2} dot={false} />
               <Line type='monotone' dataKey='authenticatedEvents' name='已登录' stroke='var(--foreground)' strokeWidth={2} dot={false} />
-              <Line type='monotone' dataKey='anonymousEvents' name='匿名' stroke='var(--muted-foreground)' strokeWidth={2} strokeDasharray='4 4' dot={false} />
+              <Line type='monotone' dataKey='anonymousEvents' name='匿名' stroke='var(--muted)' strokeWidth={2} strokeDasharray='4 4' dot={false} />
             </LineChart>
           </ResponsiveContainer>
-        </CardContent>
+        </Card.Content>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>活跃与失败趋势</CardTitle>
-        </CardHeader>
-        <CardContent className='ps-2'>
+        <Card.Header>
+          <Card.Title>活跃与失败趋势</Card.Title>
+        </Card.Header>
+        <Card.Content className='ps-2'>
           <ResponsiveContainer width='100%' height={320}>
             <LineChart data={data.trend} margin={{ right: 16 }}>
-              <CartesianGrid vertical={false} stroke='var(--border)' />
-              <XAxis dataKey='date' tickFormatter={shortDate} stroke='var(--muted-foreground)' fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis stroke='var(--muted-foreground)' fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+              <CartesianGrid vertical={false} stroke='var(--separator)' />
+              <XAxis dataKey='date' tickFormatter={shortDate} stroke='var(--muted)' fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis stroke='var(--muted)' fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
               <Legend />
-              <Line type='monotone' dataKey='activeUsers' name='登录用户' stroke='var(--primary)' strokeWidth={2} dot={false} />
+              <Line type='monotone' dataKey='activeUsers' name='登录用户' stroke='var(--accent)' strokeWidth={2} dot={false} />
               <Line type='monotone' dataKey='anonymousClients' name='匿名客户端' stroke='var(--foreground)' strokeWidth={2} dot={false} />
-              <Line type='monotone' dataKey='failures' name='失败操作' stroke='var(--destructive)' strokeWidth={2} strokeDasharray='4 4' dot={false} />
+              <Line type='monotone' dataKey='failures' name='失败操作' stroke='var(--danger)' strokeWidth={2} strokeDasharray='4 4' dot={false} />
             </LineChart>
           </ResponsiveContainer>
-        </CardContent>
+        </Card.Content>
       </Card>
 
       <div className='grid gap-4 lg:grid-cols-2'>
@@ -456,6 +408,15 @@ function TelemetryDashboard({ data }: { data: TelemetryStats }) {
   )
 }
 
+function MetricCards({ metrics }: { metrics: Array<{ label: string; value: string }> }) {
+  return <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+    {metrics.map((metric) => <Card key={metric.label}>
+      <Card.Header><Card.Title className='text-sm text-muted'>{metric.label}</Card.Title></Card.Header>
+      <Card.Content><p className='text-3xl font-semibold tabular-nums'>{metric.value}</p></Card.Content>
+    </Card>)}
+  </div>
+}
+
 function AdoptionChart({ items }: { items: TelemetryStats['insights']['adoption'] }) {
   const chartData = items.slice(0, 12).map((item) => ({
     ...item,
@@ -463,22 +424,23 @@ function AdoptionChart({ items }: { items: TelemetryStats['insights']['adoption'
   }))
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>功能采用</CardTitle>
-      </CardHeader>
-      <CardContent className='ps-2'>
+      <Card.Header>
+        <Card.Title>功能采用</Card.Title>
+      </Card.Header>
+      <Card.Content className='ps-2'>
         {chartData.length > 0 ? (
           <ResponsiveContainer width='100%' height={Math.max(260, chartData.length * 30)}>
             <BarChart data={chartData} layout='vertical' margin={{ left: 8, right: 20 }}>
               <XAxis type='number' hide />
-              <YAxis dataKey='label' type='category' width={112} tickLine={false} axisLine={false} fontSize={12} />
-              <Bar dataKey='identities' name='使用身份' fill='var(--chart-1)' radius={[0, 4, 4, 0]} />
+              <YAxis dataKey='label' type='category' width={112} tickFormatter={dimensionLabel} tickLine={false} axisLine={false} fontSize={12} />
+              <ChartTooltip cursor={false} content={<DimensionTooltip />} />
+              <Bar dataKey='identities' maxBarSize={24} name='使用身份' fill='var(--accent)' radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className='py-12 text-center text-sm text-muted-foreground'>暂无采用数据</div>
+          <div className='py-12 text-center text-sm text-muted'>暂无采用数据</div>
         )}
-      </CardContent>
+      </Card.Content>
     </Card>
   )
 }
@@ -492,38 +454,39 @@ function FunnelChart({ funnels }: { funnels: TelemetryStats['insights']['funnels
   })) ?? []
   return (
     <Card>
-      <CardHeader className='flex-row items-center justify-between gap-3'>
-        <CardTitle>关键漏斗</CardTitle>
+      <Card.Header className='flex-row items-center justify-between gap-3'>
+        <Card.Title>关键漏斗</Card.Title>
         {funnels.length > 0 ? (
-          <Select value={active?.funnelKey} onValueChange={setSelected}>
-            <SelectTrigger size='sm' aria-label='漏斗类型'>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
+          <Select variant="secondary" aria-label='漏斗类型' value={active?.funnelKey} onChange={(key) => (setSelected)(String(key ?? ''))}>
+            <Select.Trigger  aria-label='漏斗类型'>
+              <Select.Value />
+            <Select.Indicator /></Select.Trigger>
+            <Select.Popover><ListBox>
+
                 {funnels.map((funnel) => (
-                  <SelectItem key={funnel.funnelKey} value={funnel.funnelKey}>
+                  <ListBox.Item key={funnel.funnelKey} id={funnel.funnelKey}>
                     {funnelLabel(funnel.funnelKey)}
-                  </SelectItem>
+                  <ListBox.ItemIndicator /></ListBox.Item>
                 ))}
-              </SelectGroup>
-            </SelectContent>
+
+            </ListBox></Select.Popover>
           </Select>
         ) : null}
-      </CardHeader>
-      <CardContent className='ps-2'>
+      </Card.Header>
+      <Card.Content className='ps-2'>
         {chartData.length > 0 ? (
           <ResponsiveContainer width='100%' height={260}>
             <BarChart data={chartData} layout='vertical' margin={{ left: 8, right: 20 }}>
               <XAxis type='number' hide />
-              <YAxis dataKey='label' type='category' width={112} tickLine={false} axisLine={false} fontSize={12} />
-              <Bar dataKey='identities' name='完成身份' fill='var(--chart-2)' radius={[0, 4, 4, 0]} />
+              <YAxis dataKey='label' type='category' width={112} tickFormatter={dimensionLabel} tickLine={false} axisLine={false} fontSize={12} />
+              <ChartTooltip cursor={false} content={<DimensionTooltip />} />
+              <Bar dataKey='identities' maxBarSize={24} name='完成身份' fill='var(--success)' radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className='py-12 text-center text-sm text-muted-foreground'>暂无漏斗数据</div>
+          <div className='py-12 text-center text-sm text-muted'>暂无漏斗数据</div>
         )}
-      </CardContent>
+      </Card.Content>
     </Card>
   )
 }
@@ -537,26 +500,26 @@ function RetentionChart({ rows }: { rows: TelemetryStats['insights']['retention'
   }))
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>身份留存</CardTitle>
-      </CardHeader>
-      <CardContent className='ps-2'>
+      <Card.Header>
+        <Card.Title>身份留存</Card.Title>
+      </Card.Header>
+      <Card.Content className='ps-2'>
         {chartData.length > 0 ? (
           <ResponsiveContainer width='100%' height={320}>
             <LineChart data={chartData} margin={{ right: 16 }}>
-              <CartesianGrid vertical={false} stroke='var(--border)' />
-              <XAxis dataKey='cohortDate' tickFormatter={shortDate} stroke='var(--muted-foreground)' fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} stroke='var(--muted-foreground)' fontSize={12} tickLine={false} axisLine={false} />
+              <CartesianGrid vertical={false} stroke='var(--separator)' />
+              <XAxis dataKey='cohortDate' tickFormatter={shortDate} stroke='var(--muted)' fontSize={12} tickLine={false} axisLine={false} />
+              <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} stroke='var(--muted)' fontSize={12} tickLine={false} axisLine={false} />
               <Legend />
-              <Line type='monotone' dataKey='day1' name='D1' stroke='var(--chart-1)' strokeWidth={2} connectNulls={false} dot={false} />
-              <Line type='monotone' dataKey='day7' name='D7' stroke='var(--chart-2)' strokeWidth={2} connectNulls={false} dot={false} />
-              <Line type='monotone' dataKey='day30' name='D30' stroke='var(--chart-3)' strokeWidth={2} connectNulls={false} dot={false} />
+              <Line type='monotone' dataKey='day1' name='D1' stroke='var(--accent)' strokeWidth={2} connectNulls={false} dot={false} />
+              <Line type='monotone' dataKey='day7' name='D7' stroke='var(--success)' strokeWidth={2} connectNulls={false} dot={false} />
+              <Line type='monotone' dataKey='day30' name='D30' stroke='var(--warning)' strokeWidth={2} connectNulls={false} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className='py-12 text-center text-sm text-muted-foreground'>暂无留存数据</div>
+          <div className='py-12 text-center text-sm text-muted'>暂无留存数据</div>
         )}
-      </CardContent>
+      </Card.Content>
     </Card>
   )
 }
@@ -573,24 +536,49 @@ function DimensionChart({
   const chartData = items.slice(0, 10).map((item) => ({ ...item, label: label(item.value) }))
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent className='ps-2'>
+      <Card.Header>
+        <Card.Title>{title}</Card.Title>
+      </Card.Header>
+      <Card.Content className='ps-2'>
         {chartData.length > 0 ? (
-          <ResponsiveContainer width='100%' height={Math.max(220, chartData.length * 30)}>
+          <ResponsiveContainer width='100%' height={Math.max(80, chartData.length * 32)}>
             <BarChart data={chartData} layout='vertical' margin={{ left: 8, right: 20 }}>
               <XAxis type='number' hide />
-              <YAxis dataKey='label' type='category' width={112} tickLine={false} axisLine={false} fontSize={12} />
-              <Bar dataKey='count' fill='var(--primary)' radius={[0, 4, 4, 0]} />
+              <YAxis dataKey='label' type='category' width={112} tickFormatter={dimensionLabel} tickLine={false} axisLine={false} fontSize={12} />
+              <ChartTooltip cursor={false} content={<DimensionTooltip />} />
+              <Bar dataKey='count' maxBarSize={24} fill='var(--accent)' radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className='py-12 text-center text-sm text-muted-foreground'>暂无数据</div>
+          <div className='py-12 text-center text-sm text-muted'>暂无数据</div>
         )}
-      </CardContent>
+      </Card.Content>
     </Card>
   )
+}
+
+function dimensionLabel(value: string | number): string {
+  const label = String(value)
+  let result = ''
+  let width = 0
+  for (const character of label) {
+    width += character.codePointAt(0)! > 255 ? 2 : 1
+    if (width > 16) return `${result}…`
+    result += character
+  }
+  return label
+}
+
+function DimensionTooltip({ active, label, payload }: {
+  active?: boolean
+  label?: string | number
+  payload?: readonly { value?: string | number }[]
+}) {
+  if (!active || !payload?.length) return null
+  return <Surface className='max-w-80 space-y-1 rounded-xl px-3 py-2 shadow-overlay'>
+    <p className='break-words text-sm'>{label}</p>
+    <p className='text-sm tabular-nums text-muted'>{payload[0].value}</p>
+  </Surface>
 }
 
 function TelemetrySkeleton() {
@@ -609,15 +597,15 @@ function TelemetrySkeleton() {
 function TelemetryError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   return (
     <Card>
-      <CardContent className='flex items-center justify-between gap-4 py-6'>
+      <Card.Content className='flex items-center justify-between gap-4 py-6'>
         <div>
           <div className='font-medium'>加载失败</div>
-          <div className='text-sm text-muted-foreground'>
+          <div className='text-sm text-muted'>
             {error instanceof Error ? error.message : '统计数据暂时不可用'}
           </div>
         </div>
-        <Button variant='outline' size='sm' onClick={onRetry}>重试</Button>
-      </CardContent>
+        <Button variant='outline' size='sm' onPress={onRetry}>重试</Button>
+      </Card.Content>
     </Card>
   )
 }

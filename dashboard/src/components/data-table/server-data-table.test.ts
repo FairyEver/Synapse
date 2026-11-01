@@ -146,7 +146,7 @@ describe('ServerDataTable', () => {
       { email: 'admin@example.com', repositoryName: '核心仓库' },
     ])
 
-    const viewButton = buttonByText('View')
+    const viewButton = buttonByText('列')
     expect(viewButton).not.toBeNull()
 
     await click(viewButton)

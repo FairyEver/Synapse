@@ -1,20 +1,14 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { useEffect, useRef, useState } from "react"
-import { Button } from "@/game-center/ui/button"
-import { Input } from "@/game-center/ui/input"
-import { Textarea } from "@/game-center/ui/textarea"
-import { Label } from "@/game-center/ui/label"
+import { Button } from "@heroui/react"
+import { Input } from "@heroui/react"
+import { TextArea } from "@heroui/react"
+import { Label, TextField, Description } from "@heroui/react"
 import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 import { ModeFilter } from "./ModeFilter"
 import type { GameFunding, PokerAgentView } from "@synapse/shared/game-contracts"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/game-center/ui/select"
+import { ListBox, Select, Table } from "@heroui/react"
 import { useHallOverview } from "../../../hooks/useHallOverview"
 import { amount } from "../lib/view"
 import { PersonaVersions } from "./PersonaVersions"
@@ -107,7 +101,7 @@ export function AgentProfiles() {
             type="button"
             key={agent.id}
             variant={editing.id === agent.id ? "secondary" : "ghost"}
-            onClick={() => selectDraft(agent)}
+            onPress={() => selectDraft(agent)}
           >
             {agent.model || "未声明模型"}
           </Button>
@@ -115,7 +109,7 @@ export function AgentProfiles() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => selectDraft({ model: "", persona: "" })}
+          onPress={() => selectDraft({ model: "", persona: "" })}
         >
           新建选手
         </Button>
@@ -128,7 +122,7 @@ export function AgentProfiles() {
             void save()
           }}
         >
-          <div className="space-y-2">
+          <TextField className="w-full">
             <Label htmlFor="poker-model">模型名称（可选）</Label>
             <Input
               id="poker-model"
@@ -136,19 +130,19 @@ export function AgentProfiles() {
               maxLength={24}
               onChange={(event) => setEditing({ ...editing, model: event.target.value })}
             />
-          </div>
-          <div className="space-y-2">
+          </TextField>
+          <TextField className="w-full">
             <Label htmlFor="poker-persona">风格提示词</Label>
-            <Textarea
+            <TextArea
               id="poker-persona"
               className="min-h-52"
               value={editing.persona ?? ""}
               maxLength={20000}
               onChange={(event) => setEditing({ ...editing, persona: event.target.value })}
             />
-            <p className="text-xs text-muted-foreground">只有你自己能看到</p>
-          </div>
-          <Button type="submit" disabled={mutation.busy}>
+            <Description>只有你自己能看到</Description>
+          </TextField>
+          <Button type="submit" isDisabled={mutation.busy}>
             保存选手
           </Button>
         </form>
@@ -164,7 +158,7 @@ export function AgentProfiles() {
                 ["胜率", `${Math.round(stats.data.winRate * 100)}%`],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <dt className="text-sm text-muted-foreground">{label}</dt>
+                  <dt className="text-sm text-muted">{label}</dt>
                   <dd className="mt-1 font-medium tabular-nums">{value}</dd>
                 </div>
               ))}
@@ -173,55 +167,54 @@ export function AgentProfiles() {
           {rooms.length > 0 && (
             <section className="space-y-3">
               <h3 className="font-medium">同桌对比</h3>
-              <Select value={roomCode} onValueChange={setRoomCode}>
-                <SelectTrigger aria-label="对比牌桌">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">选择牌桌</SelectItem>
+              <Select aria-label="对比牌桌" selectedKey={roomCode} onSelectionChange={key => setRoomCode(String(key))}>
+                <Select.Trigger>
+                  <Select.Value />
+                <Select.Indicator /></Select.Trigger>
+                <Select.Popover><ListBox>
+                  <ListBox.Item id="all" textValue="选择牌桌">选择牌桌</ListBox.Item>
                   {rooms.map((room) => (
-                    <SelectItem key={room.roomCode} value={room.roomCode!}>
+                    <ListBox.Item key={room.roomCode} id={room.roomCode!} textValue={`#${room.roomCode}`}>
                       #{room.roomCode}
-                    </SelectItem>
+                    </ListBox.Item>
                   ))}
-                </SelectContent>
+                </ListBox></Select.Popover>
               </Select>
               {stats.data?.comparison && (
                 <div className="overflow-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="py-2 text-left font-normal">选手</th>
+                  <Table><Table.ScrollContainer><Table.Content aria-label="同桌对比">
+                    <Table.Header>
+
+                        <Table.Column isRowHeader>选手</Table.Column>
                         {["入池", "翻前加注", "进攻", "胜率"].map((label) => (
-                          <th key={label} className="p-2 text-right font-normal">
+                          <Table.Column key={label} className="text-right">
                             {label}
-                          </th>
+                          </Table.Column>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
+                      </Table.Header>
+                    <Table.Body>
                       {stats.data.comparison.map((player) => (
-                        <tr key={player.seatNo} className="border-b">
-                          <th className="py-2 text-left font-normal">
+                        <Table.Row key={player.seatNo} id={player.seatNo}>
+                          <Table.Cell>
                             {player.displayName}
                             {player.isMe && "（我）"}
-                          </th>
-                          <td className="p-2 text-right tabular-nums">
+                          </Table.Cell>
+                          <Table.Cell className="text-right tabular-nums">
                             {Math.round(player.vpip * 100)}%
-                          </td>
-                          <td className="p-2 text-right tabular-nums">
+                          </Table.Cell>
+                          <Table.Cell className="text-right tabular-nums">
                             {Math.round(player.pfr * 100)}%
-                          </td>
-                          <td className="p-2 text-right tabular-nums">
+                          </Table.Cell>
+                          <Table.Cell className="text-right tabular-nums">
                             {player.aggression.toFixed(2)}
-                          </td>
-                          <td className="p-2 text-right tabular-nums">
+                          </Table.Cell>
+                          <Table.Cell className="text-right tabular-nums">
                             {Math.round(player.winRate * 100)}%
-                          </td>
-                        </tr>
+                          </Table.Cell>
+                        </Table.Row>
                       ))}
-                    </tbody>
-                  </table>
+                    </Table.Body>
+                  </Table.Content></Table.ScrollContainer></Table>
                 </div>
               )}
             </section>
@@ -231,7 +224,7 @@ export function AgentProfiles() {
             <section className="space-y-3">
               <h3 className="font-medium">最近手牌</h3>
               {recent.data.items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">暂无牌局记录</p>
+                <p className="text-sm text-muted">暂无牌局记录</p>
               ) : (
                 <ul className="divide-y">
                   {recent.data.items.map((hand) => (

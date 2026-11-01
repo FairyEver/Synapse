@@ -80,37 +80,20 @@ Synapse 的数据能力从旧命名 `Data Store` / `data-store` / `synapse-data`
 ## Console / Dashboard 命名收敛
 
 - 创建时间：2026-06-19
-- 当前状态：待专项清理
-- 相关范围：
-  - `dashboard/` 包目录与 `@synapse/dashboard` 包名
-  - dashboard dev / build / Docker / nginx / CI / 测试脚本
-  - renderer 与 dashboard 代码里的 `dashboardApi`、dashboard 变量名、测试描述和文档描述
-  - 兼容路由 `/dashboard` 与 `/api/dashboard`
+- 当前状态：已完成 Dashboard 目录与双实现收敛
 
 ### 背景
 
 管理后台当前产品命名与用户可见入口已经统一为 Console，主路由是 `/console`，主 API 路由是 `/api/console`。
 
-项目中仍保留了一批 `dashboard` 命名。部分是历史内部命名，例如 `dashboard/` 包、`@synapse/dashboard`、`dashboardApi`；部分是兼容入口，例如 `/dashboard` 到 `/console` 的重定向，以及 `/api/dashboard` legacy alias。
+2026-11-02 已删除旧 `dashboard/`，将 HeroUI 实现迁入唯一的 `dashboard/` 并使用 `@synapse/dashboard`。开发、构建、Docker 和部署均只保留这一套实现；旧独立端口与 Dashboard 进程已移除。
 
-### 清理建议
+### 保留项
 
-不要一刀切删除所有 `dashboard`。
-
-- 可以优先把内部变量、测试描述、脚本描述、文档中的当前语义改为 `console`。
-- 可以评估把 `dashboard/` 包目录和 `@synapse/dashboard` 包名改为 Console，但必须同步更新 pnpm workspace、根脚本、Dockerfile、nginx、部署脚本、CI、测试和文档。
-- `/dashboard` 和 `/api/dashboard` 暂时保留为 legacy redirect / alias，避免破坏旧书签、旧版本客户端或已有集成；已删除的团队邀请链接不兼容。
-
-### 风险
-
-- 包目录或包名漏改会导致 dev、build、Docker、部署或 CI 失败。
-- 直接删除 `/dashboard` 旧入口会让历史链接和书签失效。
-- 直接删除 `/api/dashboard` 旧 API alias 可能影响旧客户端或外部集成。
-- 审计日志、测试快照、历史数据字段中如果强行重命名，可能影响历史查询和兼容判断。
+- `/dashboard` 到 `/console` 的页面跳转和 `/api/dashboard` API 别名继续作为兼容入口，避免破坏历史书签、旧客户端或外部集成。
+- 历史审计、测试快照和数据字段中的版本化命名不因本次目录收敛而改写。
 
 ### 验收建议
-
-专项清理时至少验证：
 
 - `pnpm dev`、`pnpm dev:server`、`pnpm quit:processes` 正常。
 - `/console` 和 `/api/console` 是当前主入口。

@@ -1,8 +1,8 @@
+import { Button, Input, toast } from '@heroui/react'
 import { useState } from 'react'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
-import { toast } from 'sonner'
 import { adminApi, type AuditLog } from '@/lib/api'
 import {
   DataTableColumnHeader,
@@ -13,8 +13,6 @@ import {
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { LongText } from '@/components/long-text'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 
 const columns: ColumnDef<AuditLog>[] = [
   {
@@ -25,7 +23,7 @@ const columns: ColumnDef<AuditLog>[] = [
     cell: ({ row }) => (
       <LongText className='font-medium'>{row.original.action}</LongText>
     ),
-    meta: { className: 'max-w-0 w-1/4' },
+    meta: { label: '操作', className: 'w-56 max-w-56' },
   },
   {
     accessorKey: 'actorLabel',
@@ -35,7 +33,7 @@ const columns: ColumnDef<AuditLog>[] = [
     cell: ({ row }) => (
       <LongText className='max-w-40'>{row.original.actorLabel}</LongText>
     ),
-    meta: { className: 'w-40' },
+    meta: { label: '主体', className: 'w-40' },
   },
   {
     id: 'target',
@@ -46,13 +44,13 @@ const columns: ColumnDef<AuditLog>[] = [
       <LongText>{`${row.original.targetType}:${row.original.targetId}`}</LongText>
     ),
     enableSorting: false,
-    meta: { className: 'max-w-0 w-1/4' },
+    meta: { label: '目标', className: 'w-56 max-w-56' },
   },
   {
     accessorKey: 'ipAddress',
     header: ({ column }) => <DataTableColumnHeader column={column} title='IP' />,
     enableSorting: false,
-    meta: { className: 'w-36' },
+    meta: { label: 'IP', className: 'w-36' },
   },
   {
     accessorKey: 'createdAt',
@@ -64,7 +62,7 @@ const columns: ColumnDef<AuditLog>[] = [
         {new Date(row.original.createdAt).toLocaleString('zh-CN')}
       </span>
     ),
-    meta: { className: 'w-44' },
+    meta: { label: '时间', className: 'w-44' },
   },
   {
     id: 'actions',
@@ -100,7 +98,7 @@ export default function AuditLogsPage() {
       await adminApi.exportAuditLogs({ action: action || undefined })
       toast.success('导出成功')
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '导出失败')
+      toast.danger(err instanceof Error ? err.message : '导出失败')
     }
   }
 
@@ -134,10 +132,10 @@ export default function AuditLogsPage() {
                     setAction(e.target.value)
                     setPage(1)
                   }}
-                  className='h-8 w-37.5 lg:w-62.5'
+                  className='w-37.5 lg:w-62.5'
                 />
               </div>
-              <Button variant='outline' size='sm' onClick={handleExport}>
+              <Button variant='outline' size='sm' onPress={handleExport}>
                 <Download data-icon='inline-start' />
                 导出
               </Button>

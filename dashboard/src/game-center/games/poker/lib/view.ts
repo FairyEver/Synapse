@@ -13,6 +13,7 @@ export function projectTable(
   delete publicTable.maxRaiseTo
   return {
     ...publicTable,
+    ...(table.roll ? {roll:{enabled:table.roll.enabled, ...(table.roll.pricingVersion ? {pricingVersion:table.roll.pricingVersion}:{}), ...(table.roll.pendingSeatNo != null ? {pendingSeatNo:table.roll.pendingSeatNo}:{})}} : {}),
     // Card visibility and account identity come from the authenticated server projection.
     seats: table.seats,
     recentActions: table.recentActions.map((entry) => {

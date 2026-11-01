@@ -29,8 +29,9 @@ import {
 } from './drive-hierarchical-list-markers'
 import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
 import { tableCellLineBreakPlugin } from './mdxeditor-table-cell-line-break-plugin'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let host: HTMLDivElement | null = null
 let root: Root | null = null
@@ -39,21 +40,27 @@ let stopObservingListMarkers: (() => void) | null = null
 beforeEach(() => {
   Range.prototype.getBoundingClientRect = vi.fn(() => new DOMRect())
   Range.prototype.getClientRects = vi.fn(() => [] as unknown as DOMRectList)
-  vi.stubGlobal('ResizeObserver', class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  })
-  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })))
+  vi.stubGlobal(
+    'ResizeObserver',
+    class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  )
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+  )
 })
 
 afterEach(() => {
@@ -97,7 +104,11 @@ describe('MDXEditor list integration', () => {
           markdown={markdown}
           onError={onError}
           toMarkdownOptions={commonMarkToMarkdownOptions}
-          plugins={[commonMarkTextCompatibilityPlugin(), codeBlockPlugin(), codeMirrorPlugin()]}
+          plugins={[
+            commonMarkTextCompatibilityPlugin(),
+            codeBlockPlugin(),
+            codeMirrorPlugin(),
+          ]}
         />
       )
       await Promise.resolve()
@@ -133,7 +144,12 @@ describe('MDXEditor list integration', () => {
           markdown={prepared.markdown}
           onError={onError}
           toMarkdownOptions={commonMarkToMarkdownOptions}
-          plugins={[commonMarkTextCompatibilityPlugin(), linkPlugin(), listsPlugin(), quotePlugin()]}
+          plugins={[
+            commonMarkTextCompatibilityPlugin(),
+            linkPlugin(),
+            listsPlugin(),
+            quotePlugin(),
+          ]}
         />
       )
       await Promise.resolve()
@@ -141,9 +157,13 @@ describe('MDXEditor list integration', () => {
 
     expect(prepared.requiresSourceMode).toBe(false)
     expect(onError).not.toHaveBeenCalled()
-    expect(editorRef.current?.getMarkdown()).toContain('<https://example.com/a?q=1>')
+    expect(editorRef.current?.getMarkdown()).toContain(
+      '<https://example.com/a?q=1>'
+    )
     expect(editorRef.current?.getMarkdown()).toContain('<user@example.com>')
-    expect(editorRef.current?.getMarkdown()).toContain('* <https://example.com/list>')
+    expect(editorRef.current?.getMarkdown()).toContain(
+      '* <https://example.com/list>'
+    )
   })
 
   it('keeps bare URLs as source text when automatic linking is disabled', async () => {
@@ -161,14 +181,21 @@ describe('MDXEditor list integration', () => {
           markdown={markdown}
           onChange={onChange}
           toMarkdownOptions={commonMarkToMarkdownOptions}
-          plugins={[commonMarkTextCompatibilityPlugin(), linkPlugin({ disableAutoLink: true })]}
+          plugins={[
+            commonMarkTextCompatibilityPlugin(),
+            linkPlugin({ disableAutoLink: true }),
+          ]}
         />
       )
       await Promise.resolve()
     })
 
     expect(editorRef.current?.getMarkdown()).toBe(markdown)
-    expect(onChange.mock.calls.every(([, initialMarkdownNormalize]) => initialMarkdownNormalize)).toBe(true)
+    expect(
+      onChange.mock.calls.every(
+        ([, initialMarkdownNormalize]) => initialMarkdownNormalize
+      )
+    ).toBe(true)
   })
 
   it('parses and round-trips programming-language generics in Markdown text', async () => {
@@ -191,7 +218,11 @@ describe('MDXEditor list integration', () => {
           markdown={prepared.markdown}
           onError={onError}
           toMarkdownOptions={commonMarkToMarkdownOptions}
-          plugins={[commonMarkTextCompatibilityPlugin(), tablePlugin(), tableCellLineBreakPlugin()]}
+          plugins={[
+            commonMarkTextCompatibilityPlugin(),
+            tablePlugin(),
+            tableCellLineBreakPlugin(),
+          ]}
         />
       )
       await Promise.resolve()
@@ -199,7 +230,9 @@ describe('MDXEditor list integration', () => {
 
     const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
     expect(onError).not.toHaveBeenCalled()
-    expect(savedMarkdown).toContain('CommonResult<PageResult<VehicleCallOrderRespVO>>')
+    expect(savedMarkdown).toContain(
+      'CommonResult<PageResult<VehicleCallOrderRespVO>>'
+    )
     expect(savedMarkdown).toContain('List<OrderDTO> orderList')
   })
 
@@ -228,7 +261,11 @@ describe('MDXEditor list integration', () => {
           markdown={markdown}
           onError={onError}
           toMarkdownOptions={commonMarkToMarkdownOptions}
-          plugins={[commonMarkTextCompatibilityPlugin(), codeBlockPlugin(), codeMirrorPlugin()]}
+          plugins={[
+            commonMarkTextCompatibilityPlugin(),
+            codeBlockPlugin(),
+            codeMirrorPlugin(),
+          ]}
         />
       )
       await Promise.resolve()
@@ -274,7 +311,12 @@ describe('MDXEditor list integration', () => {
           markdown={prepared.markdown}
           onError={onError}
           toMarkdownOptions={commonMarkToMarkdownOptions}
-          plugins={[commonMarkTextCompatibilityPlugin(), codeBlockPlugin(), codeMirrorPlugin(), listsPlugin()]}
+          plugins={[
+            commonMarkTextCompatibilityPlugin(),
+            codeBlockPlugin(),
+            codeMirrorPlugin(),
+            listsPlugin(),
+          ]}
         />
       )
       await Promise.resolve()
@@ -287,7 +329,9 @@ describe('MDXEditor list integration', () => {
     expect(savedMarkdown).toContain('indented code')
     expect(savedMarkdown).toContain('<span>raw html</span>')
     expect(savedMarkdown).toContain('<!-- keep inline comment -->')
-    expect(savedMarkdown).toContain(['<!-- keep block', 'comment -->'].join('\n'))
+    expect(savedMarkdown).toContain(
+      ['<!-- keep block', 'comment -->'].join('\n')
+    )
   })
 
   it('parses and preserves a valid MDX component with the generic JSX editor', async () => {
@@ -304,15 +348,19 @@ describe('MDXEditor list integration', () => {
           ref={editorRef}
           markdown={markdown}
           onError={onError}
-          plugins={[jsxPlugin({
-            jsxComponentDescriptors: [{
-              name: '*',
-              kind: 'flow',
-              props: [],
-              hasChildren: true,
-              Editor: GenericJsxEditor,
-            }],
-          })]}
+          plugins={[
+            jsxPlugin({
+              jsxComponentDescriptors: [
+                {
+                  name: '*',
+                  kind: 'flow',
+                  props: [],
+                  hasChildren: true,
+                  Editor: GenericJsxEditor,
+                },
+              ],
+            }),
+          ]}
         />
       )
       await Promise.resolve()
@@ -341,15 +389,19 @@ describe('MDXEditor list integration', () => {
           ref={editorRef}
           markdown={markdown}
           onError={onError}
-          plugins={[jsxPlugin({
-            jsxComponentDescriptors: [{
-              name: '*',
-              kind: 'flow',
-              props: [],
-              hasChildren: true,
-              Editor: GenericJsxEditor,
-            }],
-          })]}
+          plugins={[
+            jsxPlugin({
+              jsxComponentDescriptors: [
+                {
+                  name: '*',
+                  kind: 'flow',
+                  props: [],
+                  hasChildren: true,
+                  Editor: GenericJsxEditor,
+                },
+              ],
+            }),
+          ]}
         />
       )
       await Promise.resolve()
@@ -374,7 +426,11 @@ describe('MDXEditor list integration', () => {
           ref={editorRef}
           markdown='普通段落'
           plugins={[
-            toolbarPlugin({ toolbarContents: () => <ListsToggle options={['bullet', 'number']} /> }),
+            toolbarPlugin({
+              toolbarContents: () => (
+                <ListsToggle options={['bullet', 'number']} />
+              ),
+            }),
             listsPlugin(),
           ]}
           contentEditableClassName={`[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 ${DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME}`}
@@ -383,10 +439,14 @@ describe('MDXEditor list integration', () => {
       await Promise.resolve()
     })
 
-    const contentEditable = document.querySelector<HTMLElement>('[contenteditable="true"]')
+    const contentEditable = document.querySelector<HTMLElement>(
+      '[contenteditable="true"]'
+    )
     const paragraphText = contentEditable?.querySelector('p')?.firstChild
-    if (!contentEditable || !paragraphText) throw new Error('MDXEditor did not render the paragraph')
-    stopObservingListMarkers = observeDriveHierarchicalListMarkers(contentEditable)
+    if (!contentEditable || !paragraphText)
+      throw new Error('MDXEditor did not render the paragraph')
+    stopObservingListMarkers =
+      observeDriveHierarchicalListMarkers(contentEditable)
 
     await setCollapsedSelection(contentEditable, paragraphText)
     await clickToolbarButton('Numbered list')
@@ -397,7 +457,8 @@ describe('MDXEditor list integration', () => {
     expect(editorRef.current?.getMarkdown()).toBe('1. 普通段落')
 
     const orderedText = contentEditable.querySelector('ol li')?.firstChild
-    if (!orderedText) throw new Error('MDXEditor did not render the ordered list')
+    if (!orderedText)
+      throw new Error('MDXEditor did not render the ordered list')
     await setCollapsedSelection(contentEditable, orderedText)
     await clickToolbarButton('Bulleted list')
     await flushListMarkerObserver()
@@ -426,7 +487,9 @@ describe('MDXEditor list integration', () => {
       await Promise.resolve()
     })
 
-    const contentEditable = document.querySelector<HTMLElement>('[contenteditable="true"]')
+    const contentEditable = document.querySelector<HTMLElement>(
+      '[contenteditable="true"]'
+    )
     const orderedList = contentEditable?.querySelector('ol')
     const secondListItem = orderedList?.querySelectorAll('li')[1]
     const secondText = secondListItem?.firstChild
@@ -435,11 +498,14 @@ describe('MDXEditor list integration', () => {
     }
 
     expect(contentEditable.className).toContain('[&_ol]:list-decimal')
-    expect(contentEditable.className).toContain(DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME)
+    expect(contentEditable.className).toContain(
+      DRIVE_HIERARCHICAL_LIST_MARKER_CLASSNAME
+    )
     expect(contentEditable.className).toContain('[&_ul]:list-disc')
     expect(contentEditable.querySelector('ul')?.textContent).toBe('无序')
     expect(orderedList.children).toHaveLength(2)
-    stopObservingListMarkers = observeDriveHierarchicalListMarkers(contentEditable)
+    stopObservingListMarkers =
+      observeDriveHierarchicalListMarkers(contentEditable)
     expect(orderedMarkers(contentEditable)).toEqual(['1.', '2.'])
     await setCollapsedSelection(contentEditable, secondText)
     await dispatchTab(contentEditable)
@@ -449,7 +515,9 @@ describe('MDXEditor list integration', () => {
     expect(nestedOrderedList?.textContent).toBe('二级')
     expect(orderedMarkers(contentEditable)).toEqual(['1.', '1.1'])
     expect(editorRef.current?.getMarkdown()).toContain('   1. 二级')
-    expect(editorRef.current?.getMarkdown()).not.toContain('data-drive-list-marker')
+    expect(editorRef.current?.getMarkdown()).not.toContain(
+      'data-drive-list-marker'
+    )
 
     await dispatchHistoryShortcut(contentEditable)
     await flushListMarkerObserver()
@@ -460,7 +528,8 @@ describe('MDXEditor list integration', () => {
     expect(orderedMarkers(contentEditable)).toEqual(['1.', '1.1'])
 
     const nestedText = nestedOrderedList?.querySelector('li')?.firstChild
-    if (!nestedText) throw new Error('MDXEditor did not indent the second list item')
+    if (!nestedText)
+      throw new Error('MDXEditor did not indent the second list item')
     await setCollapsedSelection(contentEditable, nestedText)
     await dispatchTab(contentEditable, true)
     await flushListMarkerObserver()
@@ -498,19 +567,27 @@ describe('MDXEditor list integration', () => {
       await Promise.resolve()
     })
 
-    const contentEditable = document.querySelector<HTMLElement>('[contenteditable="true"]')
-    if (!contentEditable) throw new Error('MDXEditor did not render the content editable')
-    stopObservingListMarkers = observeDriveHierarchicalListMarkers(contentEditable)
+    const contentEditable = document.querySelector<HTMLElement>(
+      '[contenteditable="true"]'
+    )
+    if (!contentEditable)
+      throw new Error('MDXEditor did not render the content editable')
+    stopObservingListMarkers =
+      observeDriveHierarchicalListMarkers(contentEditable)
     const savedMarkdown = editorRef.current?.getMarkdown() ?? ''
     expect(savedMarkdown).toMatch(/^3\. 起始第三项\n4\. 第二项/u)
     expect(savedMarkdown).toMatch(/\n {3}[*-] 二级无序\n {5}1\. 三级有序/u)
-    expect(savedMarkdown).toMatch(/\n[*-] \[x\] 已完成\n[*-] \[ \] 未完成\n[*-]$/u)
+    expect(savedMarkdown).toMatch(
+      /\n[*-] \[x\] 已完成\n[*-] \[ \] 未完成\n[*-]$/u
+    )
     expect(contentEditable.querySelector('ol')?.getAttribute('start')).toBe('3')
     expect(contentEditable.querySelectorAll('ol ul ol')).toHaveLength(1)
     expect(orderedMarkers(contentEditable)).toEqual(['3.', '4.', '4.1'])
     const taskItems = contentEditable.querySelectorAll('li[role="checkbox"]')
     expect(taskItems).toHaveLength(3)
-    expect(Array.from(taskItems, (item) => item.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false'])
+    expect(
+      Array.from(taskItems, (item) => item.getAttribute('aria-checked'))
+    ).toEqual(['true', 'false', 'false'])
   })
 
   it('keeps non-one nested ordered starts parseable after a rich-text round trip', async () => {
@@ -553,7 +630,9 @@ describe('MDXEditor list integration', () => {
 
     const nestedLists = document.querySelectorAll('ol ol')
     expect(nestedLists).toHaveLength(2)
-    expect(Array.from(nestedLists, (list) => list.getAttribute('start'))).toEqual(['3', '9'])
+    expect(
+      Array.from(nestedLists, (list) => list.getAttribute('start'))
+    ).toEqual(['3', '9'])
   })
 })
 
@@ -572,9 +651,9 @@ async function setCollapsedSelection(contentEditable: HTMLElement, node: Node) {
 }
 
 function orderedMarkers(container: ParentNode) {
-  return Array.from(container.querySelectorAll('ol > li'), (item) => (
+  return Array.from(container.querySelectorAll('ol > li'), (item) =>
     item.getAttribute('data-drive-list-marker')
-  )).filter((marker): marker is string => marker !== null)
+  ).filter((marker): marker is string => marker !== null)
 }
 
 async function flushListMarkerObserver() {
@@ -584,33 +663,39 @@ async function flushListMarkerObserver() {
 
 async function dispatchTab(target: HTMLElement, shiftKey = false) {
   await act(async () => {
-    target.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Tab',
-      code: 'Tab',
-      shiftKey,
-      bubbles: true,
-      cancelable: true,
-    }))
+    target.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        code: 'Tab',
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      })
+    )
     await Promise.resolve()
   })
 }
 
 async function dispatchHistoryShortcut(target: HTMLElement, shiftKey = false) {
   await act(async () => {
-    target.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'z',
-      code: 'KeyZ',
-      ctrlKey: true,
-      shiftKey,
-      bubbles: true,
-      cancelable: true,
-    }))
+    target.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'z',
+        code: 'KeyZ',
+        ctrlKey: true,
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+      })
+    )
     await Promise.resolve()
   })
 }
 
 async function clickToolbarButton(label: string) {
-  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  const button = document.querySelector<HTMLButtonElement>(
+    `button[aria-label="${label}"]`
+  )
   if (!button) throw new Error(`Missing toolbar button: ${label}`)
   await act(async () => {
     button.click()

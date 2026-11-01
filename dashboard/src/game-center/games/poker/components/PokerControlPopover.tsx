@@ -1,12 +1,17 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react"
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react"
+import { Button, Popover, popoverVariants } from "@heroui/react"
 import { X } from "lucide-react"
-import { Popover, PopoverAnchor, PopoverContent } from "@/game-center/ui/popover"
-import { PokerButton } from "./PokerButton"
 
-export function PokerControlPopover({ open, onOpenChange, trigger, container, title, id, side = "top", restoreFocus = true, onEscape, children }: {
+// The trigger lives outside this component. Apply HeroUI's exported recipe without
+// a DialogTrigger root, which would require its own pressable child.
+const styles = popoverVariants()
+
+/** The table owns positioning; system content keeps the default HeroUI theme. */
+export function PokerControlPopover({ open, onOpenChange, trigger, anchor, container, title, id, side = "top", restoreFocus = true, onEscape, children }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   trigger: RefObject<HTMLButtonElement | null>
+  anchor?: RefObject<HTMLElement | null>
   container?: HTMLElement | null
   title: string
   id?: string
@@ -15,20 +20,35 @@ export function PokerControlPopover({ open, onOpenChange, trigger, container, ti
   onEscape?: () => void
   children: ReactNode
 }) {
-  const anchor = useRef({ getBoundingClientRect: () => trigger.current?.getBoundingClientRect() ?? new DOMRect() })
   const interactedOutside = useRef(false)
-  useEffect(() => { if (open) interactedOutside.current = false }, [open])
-  return <Popover open={open} onOpenChange={onOpenChange}>
-    <PopoverAnchor virtualRef={anchor} />
-    <PopoverContent id={id} className="poker-control-popover" portalContainer={container} side={side} align="end" collisionBoundary={container ?? undefined} collisionPadding={8} aria-label={title}
-      onInteractOutside={event => {
-        if (event.target instanceof Node && trigger.current?.contains(event.target)) event.preventDefault()
-        else interactedOutside.current = true
-      }}
-      onEscapeKeyDown={onEscape ? event => { event.preventDefault(); onEscape() } : undefined}
-      onCloseAutoFocus={event => { event.preventDefault(); if (restoreFocus && !interactedOutside.current && trigger.current?.isConnected) trigger.current.focus() }}>
-      <div className="poker-control-popover-heading"><span>{title}</span><PokerButton aria-label={title === "加注" || title === "下注" ? `收起${title}设置` : "关闭更多操作"} onClick={() => onOpenChange(false)}><X aria-hidden="true" /></PokerButton></div>
-      {children}
-    </PopoverContent>
-  </Popover>
+  const wasOpen = useRef(false)
+  useLayoutEffect(() => {
+    if (open) interactedOutside.current = false
+    else if (wasOpen.current && restoreFocus && !interactedOutside.current && trigger.current?.isConnected) trigger.current.focus()
+    wasOpen.current = open
+  }, [open, restoreFocus, trigger])
+  useEffect(() => {
+    if (!open || !onEscape) return
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      onEscape()
+    }
+    document.addEventListener("keydown", escape, true)
+    return () => document.removeEventListener("keydown", escape, true)
+  }, [open, onEscape])
+  return <Popover.Content isNonModal isOpen={open} onOpenChange={onOpenChange} className={`${styles.base()} poker-system-popover font-sans text-foreground scheme-light`} triggerRef={anchor ?? trigger} UNSTABLE_portalContainer={container ?? undefined}
+      boundaryElement={container ?? undefined} placement={`${side} end`} containerPadding={8} shouldSkipAnimation
+      shouldCloseOnInteractOutside={target => {
+        if (target.closest('[role="alertdialog"]')) return false
+        if (trigger.current?.contains(target)) return false
+        interactedOutside.current = true
+        return true
+      }}>
+      <Popover.Dialog id={id} aria-label={title} className={styles.dialog()}>
+        <div className="mb-4 flex items-center justify-between gap-3"><Popover.Heading className={styles.heading()}>{title}</Popover.Heading><Button isIconOnly size="sm" variant="tertiary" aria-label={title === "加注" || title === "下注" ? `收起${title}设置` : `关闭${title}`} onPress={() => onOpenChange(false)}><X aria-hidden="true" /></Button></div>
+        {children}
+      </Popover.Dialog>
+    </Popover.Content>
 }

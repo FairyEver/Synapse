@@ -26,11 +26,9 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@heroui/react')>(),
+  toast: { danger: vi.fn(), success: vi.fn() },
 }))
 
 vi.mock('@/components/layout/header', () => ({
@@ -187,7 +185,7 @@ describe('AddMembersDialog', () => {
     )
     expect(document.body.textContent).toContain('zhang@example.com')
     expect(document.body.textContent).toContain('已选 1 人')
-    expect(checkboxes()[0]?.getAttribute('aria-checked') === 'true').toBe(true)
+    expect(checkboxes()[0]?.checked).toBe(true)
 
     await click(buttonByText('加载更多'))
     await waitFor(() => expect(document.body.textContent).toContain('sun@example.com'))
@@ -263,7 +261,7 @@ describe('AddMembersDialog', () => {
       query: undefined,
     })
     // 换页之后已勾选的人不能丢
-    expect(checkboxes().some((box) => box.getAttribute('aria-checked') === 'true')).toBe(true)
+    expect(checkboxes().some((box) => box.checked)).toBe(true)
     expect(document.body.textContent).toContain('已选 1 人')
 
     await typeInto(textInput('input[aria-label="搜索邮箱或用户名"]'), 'li')
@@ -363,9 +361,9 @@ function textInput(selector: string): HTMLInputElement {
   return input
 }
 
-function checkboxes(): HTMLButtonElement[] {
-  return Array.from(document.querySelectorAll('button[role="checkbox"]')).filter(
-    (element): element is HTMLButtonElement => element instanceof HTMLButtonElement
+function checkboxes(): HTMLInputElement[] {
+  return Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(
+    (element): element is HTMLInputElement => element instanceof HTMLInputElement
   )
 }
 
@@ -384,11 +382,7 @@ function menuItemByText(text: string): HTMLElement {
 
 async function openMenu(button: HTMLButtonElement) {
   await act(async () => {
-    button.dispatchEvent(new MouseEvent('pointerdown', {
-      bubbles: true,
-      button: 0,
-      ctrlKey: false,
-    }))
+    button.click()
     await Promise.resolve()
   })
 }

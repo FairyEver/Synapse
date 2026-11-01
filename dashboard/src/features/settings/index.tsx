@@ -1,87 +1,12 @@
-import { Link, Outlet, useLocation, type LinkProps } from '@tanstack/react-router'
-import { KeyRound, UserCog, type LucideIcon } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { buttonVariants } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Header } from '@/components/layout/header'
-import { Main } from '@/components/layout/main'
-
-type SettingsNavItem = {
-  title: string
-  href: LinkProps['to']
-  icon: LucideIcon
-}
-
-const userSettingsNavItems: SettingsNavItem[] = [
-  {
-    title: '个人资料',
-    href: '/settings',
-    icon: UserCog,
-  },
-  {
-    title: 'API 秘钥',
-    href: '/settings/api-keys',
-    icon: KeyRound,
-  },
-]
-
+import { Tabs } from '@heroui/react';
+import { Outlet, useLocation, useNavigate } from '@tanstack/react-router';
+import { Header } from '@/components/layout/header';
+import { Main } from '@/components/layout/main';
 export default function SettingsPage() {
-  const navItems = userSettingsNavItems
-
-  return (
-    <>
-      <Header fixed>
-        <h1 className='text-lg font-semibold'>设置</h1>
-      </Header>
-
-      <Main fixed>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>设置</h2>
-        </div>
-        <Separator className='my-4 lg:my-6' />
-        <div
-          className={cn(
-            'flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row lg:gap-12',
-            navItems.length === 0 && 'lg:block'
-          )}
-        >
-          {navItems.length > 0 ? (
-            <aside className='lg:w-1/5'>
-              <SettingsSidebarNav items={navItems} />
-            </aside>
-          ) : null}
-          <div className='flex w-full overflow-y-hidden p-1'>
-            <Outlet />
-          </div>
-        </div>
-      </Main>
-    </>
-  )
-}
-
-function SettingsSidebarNav({ items }: { items: SettingsNavItem[] }) {
-  const pathname = useLocation({ select: (location) => location.pathname })
-
-  return (
-    <nav className='flex gap-2 overflow-x-auto py-1 lg:flex-col lg:gap-1'>
-      {items.map((item) => {
-        const Icon = item.icon
-
-        return (
-          <Link
-            key={item.href}
-            to={item.href}
-            className={cn(
-              buttonVariants({ variant: 'ghost' }),
-              pathname === item.href && 'bg-muted hover:bg-accent',
-              'justify-start'
-            )}
-          >
-            <Icon className='me-2 size-4' />
-            {item.title}
-          </Link>
-        )
-      })}
-    </nav>
-  )
+    const pathname = useLocation({ select: (location) => location.pathname });
+    const navigate = useNavigate();
+    return <><Header><h1>设置</h1></Header><Main><Tabs selectedKey={pathname.replace(/\/$/u, '')} onSelectionChange={(key) => void navigate({ to: key as '/settings' | '/settings/api-keys' })}>
+    <Tabs.ListContainer className='w-fit'><Tabs.List aria-label='账户设置' className='w-max'><Tabs.Tab className='whitespace-nowrap' id='/settings'>个人资料<Tabs.Indicator /></Tabs.Tab><Tabs.Tab className='whitespace-nowrap' id='/settings/api-keys'>API 密钥<Tabs.Indicator /></Tabs.Tab></Tabs.List></Tabs.ListContainer>
+    <Tabs.Panel id='/settings'><Outlet /></Tabs.Panel><Tabs.Panel id='/settings/api-keys'><Outlet /></Tabs.Panel>
+  </Tabs></Main></>;
 }

@@ -4,5 +4,5 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
-  test: { environment: 'node', include: ['src/**/*.test.{ts,tsx}', 'vite.config.test.ts'], exclude:['**/*.browser.tsx'], maxWorkers: 2 },
+  test: { environment: 'node', setupFiles: ['./test/setup.ts'], include: ['src/**/*.test.{ts,tsx}', 'vite.config.test.ts'], exclude:['**/*.browser.tsx'], maxWorkers: 2 },
 })

@@ -1,3 +1,4 @@
+import { Button, Card, Chip, ProgressBar, Skeleton, Tabs } from '@heroui/react'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -18,17 +19,6 @@ import {
 import { adminApi, type SystemOverview } from '@/lib/api'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getSystemOverviewErrorMessage } from './system-error'
 
 type StatCard = {
@@ -52,14 +42,7 @@ export default function SystemPage() {
         <h1 className='text-lg font-semibold'>系统概览</h1>
       </Header>
       <Main>
-        <div className='mb-4 flex flex-col gap-1'>
-          <h2 className='text-2xl font-bold tracking-tight'>系统</h2>
-          <p className='text-sm text-muted-foreground'>
-            {data?.serverTime
-              ? `更新于 ${formatDateTime(data.serverTime)}`
-              : '系统数据'}
-          </p>
-        </div>
+
 
         {isLoading ? (
           <SystemSkeleton />
@@ -82,17 +65,17 @@ function SystemErrorState({
 }) {
   return (
     <Card>
-      <CardContent className='flex flex-col items-start gap-3 py-6'>
+      <Card.Content className='flex flex-col items-start gap-3 py-6'>
         <div className='space-y-1'>
           <div className='font-medium'>加载失败</div>
-          <p className='text-sm text-muted-foreground'>
+          <p className='text-sm text-muted'>
             {getSystemOverviewErrorMessage(error)}
           </p>
         </div>
-        <Button variant='outline' size='sm' onClick={onRetry}>
+        <Button variant='outline' size='sm' onPress={onRetry}>
           重试
         </Button>
-      </CardContent>
+      </Card.Content>
     </Card>
   )
 }
@@ -107,27 +90,26 @@ function SystemDashboard({
   if (!data) {
     return (
       <Card>
-        <CardContent className='py-6 text-sm text-muted-foreground'>
+        <Card.Content className='py-6 text-sm text-muted'>
           暂无数据
-        </CardContent>
+        </Card.Content>
       </Card>
     )
   }
 
   return (
     <Tabs
-      orientation='vertical'
-      defaultValue='overview'
+      defaultSelectedKey='overview'
       className='flex flex-col gap-4'
     >
       <div className='w-full overflow-x-auto pb-1'>
-        <TabsList>
-          <TabsTrigger value='overview'>概览</TabsTrigger>
-          <TabsTrigger value='activity'>活动</TabsTrigger>
-        </TabsList>
+        <Tabs.ListContainer className='w-fit'><Tabs.List aria-label="页面分区">
+          <Tabs.Tab id='overview'>概览<Tabs.Indicator /></Tabs.Tab>
+          <Tabs.Tab id='activity'>活动<Tabs.Indicator /></Tabs.Tab>
+        </Tabs.List></Tabs.ListContainer>
       </div>
 
-      <TabsContent value='overview' className='flex flex-col gap-4'>
+      <Tabs.Panel id='overview' className='flex flex-col gap-4'>
         <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
           {stats.map((stat) => (
             <SystemStatCard key={stat.title} stat={stat} />
@@ -136,44 +118,44 @@ function SystemDashboard({
 
         <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
           <Card className='lg:col-span-4'>
-            <CardHeader>
-              <CardTitle>增长趋势</CardTitle>
-              <CardDescription>最近 7 天</CardDescription>
-            </CardHeader>
-            <CardContent className='ps-2'>
+            <Card.Header>
+              <Card.Title>增长趋势</Card.Title>
+              <Card.Description>最近 7 天</Card.Description>
+            </Card.Header>
+            <Card.Content className='ps-2'>
               <GrowthChart data={data.dailyTrend} />
-            </CardContent>
+            </Card.Content>
           </Card>
 
           <Card className='lg:col-span-3'>
-            <CardHeader>
-              <CardTitle>账号状态</CardTitle>
-              <CardDescription>当前用户</CardDescription>
-            </CardHeader>
-            <CardContent>
+            <Card.Header>
+              <Card.Title>账号状态</Card.Title>
+              <Card.Description>当前用户</Card.Description>
+            </Card.Header>
+            <Card.Content>
               <StatusDistribution
                 items={[
                   { label: '启用', value: data.userStatus.active },
                   { label: '禁用', value: data.userStatus.disabled },
                 ]}
               />
-            </CardContent>
+            </Card.Content>
           </Card>
         </div>
-      </TabsContent>
+      </Tabs.Panel>
 
-      <TabsContent value='activity'>
+      <Tabs.Panel id='activity'>
         <Card>
-          <CardHeader>
-            <CardTitle>管理操作</CardTitle>
-            <CardDescription>最近 7 天</CardDescription>
-          </CardHeader>
-          <CardContent className='ps-2'>
+          <Card.Header>
+            <Card.Title>管理操作</Card.Title>
+            <Card.Description>最近 7 天</Card.Description>
+          </Card.Header>
+          <Card.Content className='ps-2'>
             <AuditChart data={data.dailyTrend} />
-          </CardContent>
+          </Card.Content>
         </Card>
 
-      </TabsContent>
+      </Tabs.Panel>
     </Tabs>
   )
 }
@@ -183,14 +165,14 @@ function SystemStatCard({ stat }: { stat: StatCard }) {
 
   return (
     <Card>
-      <CardHeader className='flex flex-row items-center justify-between pb-2'>
-        <CardTitle className='text-sm font-medium'>{stat.title}</CardTitle>
-        <Icon className='h-4 w-4 text-muted-foreground' />
-      </CardHeader>
-      <CardContent>
+      <Card.Header className='flex flex-row items-center justify-between pb-2'>
+        <Card.Title className='text-sm font-medium'>{stat.title}</Card.Title>
+        <Icon className='h-4 w-4 text-muted' />
+      </Card.Header>
+      <Card.Content>
         <div className='text-2xl font-bold'>{stat.value}</div>
-        <p className='text-xs text-muted-foreground'>{stat.detail}</p>
-      </CardContent>
+        <p className='text-xs text-muted'>{stat.detail}</p>
+      </Card.Content>
     </Card>
   )
 }
@@ -201,14 +183,14 @@ function GrowthChart({ data }: { data: SystemOverview['dailyTrend'] }) {
       <BarChart data={data}>
         <XAxis
           dataKey='label'
-          stroke='var(--muted-foreground)'
+          stroke='var(--muted)'
           fontSize={12}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
           direction='ltr'
-          stroke='var(--muted-foreground)'
+          stroke='var(--muted)'
           fontSize={12}
           tickLine={false}
           axisLine={false}
@@ -216,7 +198,7 @@ function GrowthChart({ data }: { data: SystemOverview['dailyTrend'] }) {
         />
         <Bar
           dataKey='users'
-          fill='currentColor'
+          fill='var(--accent)'
           radius={[4, 4, 0, 0]}
           className='fill-primary'
         />
@@ -231,13 +213,13 @@ function AuditChart({ data }: { data: SystemOverview['dailyTrend'] }) {
       <AreaChart data={data}>
         <XAxis
           dataKey='label'
-          stroke='var(--muted-foreground)'
+          stroke='var(--muted)'
           fontSize={12}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          stroke='var(--muted-foreground)'
+          stroke='var(--muted)'
           fontSize={12}
           tickLine={false}
           axisLine={false}
@@ -246,8 +228,8 @@ function AuditChart({ data }: { data: SystemOverview['dailyTrend'] }) {
         <Area
           type='monotone'
           dataKey='auditLogs'
-          stroke='var(--primary)'
-          fill='var(--primary)'
+          stroke='var(--accent)'
+          fill='var(--accent)'
           fillOpacity={0.15}
         />
       </AreaChart>
@@ -272,18 +254,15 @@ function StatusDistribution({
             <div className='flex items-center justify-between gap-3 text-sm'>
               <span className='font-medium'>{item.label}</span>
               <div className='flex items-center gap-2'>
-                <span className='tabular-nums text-muted-foreground'>
+                <span className='tabular-nums text-muted'>
                   {item.value}
                 </span>
-                <Badge variant='secondary'>{percent}%</Badge>
+                <Chip color="default">{percent}%</Chip>
               </div>
             </div>
-            <div className='h-2 overflow-hidden rounded-full bg-muted'>
-              <div
-                className='h-full bg-primary'
-                style={{ width: `${percent}%` }}
-              />
-            </div>
+            <ProgressBar aria-label={`${item.label}占比`} value={percent}>
+              <ProgressBar.Track><ProgressBar.Fill /></ProgressBar.Track>
+            </ProgressBar>
           </div>
         )
       })}
@@ -297,33 +276,33 @@ function SystemSkeleton() {
       <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
         {Array.from({ length: 3 }, (_, index) => (
           <Card key={index}>
-            <CardHeader className='pb-2'>
+            <Card.Header className='pb-2'>
               <Skeleton className='h-4 w-20' />
-            </CardHeader>
-            <CardContent className='flex flex-col gap-2'>
-              <Skeleton className='h-8 w-16' />
+            </Card.Header>
+            <Card.Content className='flex flex-col gap-2'>
+              <Skeleton className='w-16' />
               <Skeleton className='h-3 w-28' />
-            </CardContent>
+            </Card.Content>
           </Card>
         ))}
       </div>
       <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
         <Card className='lg:col-span-4'>
-          <CardHeader>
+          <Card.Header>
             <Skeleton className='h-5 w-24' />
-          </CardHeader>
-          <CardContent>
+          </Card.Header>
+          <Card.Content>
             <Skeleton className='h-[350px] w-full' />
-          </CardContent>
+          </Card.Content>
         </Card>
         <Card className='lg:col-span-3'>
-          <CardHeader>
+          <Card.Header>
             <Skeleton className='h-5 w-24' />
-          </CardHeader>
-          <CardContent className='flex flex-col gap-4'>
+          </Card.Header>
+          <Card.Content className='flex flex-col gap-4'>
             <Skeleton className='h-10 w-full' />
             <Skeleton className='h-10 w-full' />
-          </CardContent>
+          </Card.Content>
         </Card>
       </div>
     </div>
@@ -351,10 +330,6 @@ function buildStats(data: SystemOverview | undefined): StatCard[] {
       icon: Clock,
     },
   ]
-}
-
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString('zh-CN')
 }
 
 function formatDate(value: string) {

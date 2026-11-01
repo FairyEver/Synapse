@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { ApiError } from '@/lib/api'
 import { startDriveOperation } from '../shared/drive-telemetry'
@@ -20,7 +20,7 @@ export function useDriveMarkdownPdfExport(input: {
     if (!available || input.hasUnsavedChanges || exportingRef.current) return
     exportingRef.current = true
     setExporting(true)
-    const toastId = toast.loading('正在导出')
+    const toastId = toast('正在导出', { isLoading: true, timeout: 0 })
     const finish = startDriveOperation('web.drive.preview.export-pdf', 'drive-preview')
     try {
       const filename = pdfFilename(input.snapshot.current.name)
@@ -36,11 +36,11 @@ export function useDriveMarkdownPdfExport(input: {
         result.imageWarnings > 0 ? `${result.imageWarnings} 张图片未加载` : null,
         result.diagramWarnings > 0 ? `${result.diagramWarnings} 个图表未渲染` : null,
       ].filter((value): value is string => Boolean(value))
-      if (warningParts.length > 0) toast.warning(`PDF 已导出，${warningParts.join('，')}`, { id: toastId })
-      else toast.success('PDF 已导出', { id: toastId })
+      if (warningParts.length > 0) toast.update(toastId, `PDF 已导出，${warningParts.join('，')}`, { variant: 'warning', isLoading: false, timeout: 4000 })
+      else toast.update(toastId, 'PDF 已导出', { variant: 'success', isLoading: false, timeout: 4000 })
     } catch (error) {
       finish('failure')
-      toast.error(pdfExportErrorMessage(error, input.snapshot.context === 'share'), { id: toastId })
+      toast.update(toastId, pdfExportErrorMessage(error, input.snapshot.context === 'share'), { variant: 'danger', isLoading: false, timeout: 4000 })
     } finally {
       exportingRef.current = false
       setExporting(false)

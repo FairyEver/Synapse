@@ -7,8 +7,9 @@ import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { ApiError } from '@/lib/api'
 import { useDriveDocumentEditorLifecycle } from './drive-document-editor-lifecycle'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const telemetry = vi.hoisted(() => ({ finish: vi.fn(), start: vi.fn() }))
 
@@ -63,23 +64,46 @@ describe('useDriveDocumentEditorLifecycle', () => {
 
     act(() => apiRef.current?.updateValue('# Submitted'))
     let savePromise: Promise<void> | undefined
-    act(() => { savePromise = apiRef.current?.save() })
+    act(() => {
+      savePromise = apiRef.current?.save()
+    })
     await act(async () => apiRef.current?.reload())
     act(() => apiRef.current?.updateValue('# Newer draft'))
-    renderHarness({ ...props, initialText: '# Submitted', currentVersionId: 'version-2' })
+    renderHarness({
+      ...props,
+      initialText: '# Submitted',
+      currentVersionId: 'version-2',
+    })
 
-    expect(status()).toEqual({ value: '# Newer draft', dirty: 'true', conflict: 'false', reloadConfirm: 'false' })
+    expect(status()).toEqual({
+      value: '# Newer draft',
+      dirty: 'true',
+      conflict: 'false',
+      reloadConfirm: 'false',
+    })
     expect(saveAcknowledged()).toBe(true)
-    expect(saveText).toHaveBeenCalledWith({ text: '# Submitted', baseVersionId: 'version-1' })
+    expect(saveText).toHaveBeenCalledWith({
+      text: '# Submitted',
+      baseVersionId: 'version-1',
+    })
     expect(props.editContext.reload).not.toHaveBeenCalled()
 
     await act(async () => {
       pendingSave.resolve()
       await savePromise
     })
-    renderHarness({ ...props, initialText: '# Submitted', currentVersionId: 'version-2' })
+    renderHarness({
+      ...props,
+      initialText: '# Submitted',
+      currentVersionId: 'version-2',
+    })
 
-    expect(status()).toEqual({ value: '# Newer draft', dirty: 'true', conflict: 'false', reloadConfirm: 'false' })
+    expect(status()).toEqual({
+      value: '# Newer draft',
+      dirty: 'true',
+      conflict: 'false',
+      reloadConfirm: 'false',
+    })
     expect(saveAcknowledged()).toBe(false)
     expect(telemetry.finish).toHaveBeenCalledWith('success')
   })
@@ -94,13 +118,18 @@ describe('useDriveDocumentEditorLifecycle', () => {
     act(() => apiRef.current?.updateValue('# Local draft'))
     await act(async () => apiRef.current?.save())
 
-    expect(status()).toEqual({ value: '# Local draft', dirty: 'true', conflict: 'true', reloadConfirm: 'false' })
+    expect(status()).toEqual({
+      value: '# Local draft',
+      dirty: 'true',
+      conflict: 'true',
+      reloadConfirm: 'false',
+    })
     expect(telemetry.finish).toHaveBeenCalledWith('failure')
   })
 
   it('confirms a dirty reload, replaces the draft, and excludes a concurrent save', async () => {
     const pendingReload = deferred<DriveBrowserSnapshotDto>()
-    const saveText = vi.fn(async () => ({} as never))
+    const saveText = vi.fn(async () => ({}) as never)
     const reload = vi.fn(() => pendingReload.promise)
     const onReplaceValue = vi.fn((value: string) => value)
     const apiRef = { current: null } as { current: HarnessApi | null }
@@ -111,17 +140,26 @@ describe('useDriveDocumentEditorLifecycle', () => {
     expect(status().reloadConfirm).toBe('true')
 
     let reloadPromise: Promise<void> | undefined
-    act(() => { reloadPromise = apiRef.current?.reload() })
+    act(() => {
+      reloadPromise = apiRef.current?.reload()
+    })
     await act(async () => apiRef.current?.save())
     expect(saveText).not.toHaveBeenCalled()
 
     await act(async () => {
-      pendingReload.resolve({ preview: { text: '# Server' } } as DriveBrowserSnapshotDto)
+      pendingReload.resolve({
+        preview: { text: '# Server' },
+      } as DriveBrowserSnapshotDto)
       await reloadPromise
     })
 
     expect(onReplaceValue).toHaveBeenLastCalledWith('# Server', 'reload')
-    expect(status()).toEqual({ value: '# Server', dirty: 'false', conflict: 'false', reloadConfirm: 'false' })
+    expect(status()).toEqual({
+      value: '# Server',
+      dirty: 'false',
+      conflict: 'false',
+      reloadConfirm: 'false',
+    })
     expect(telemetry.finish).toHaveBeenCalledWith('success')
   })
 })
@@ -142,12 +180,21 @@ function LifecycleHarness({
     telemetryComponent: 'drive-test-editor',
     onReplaceValue,
   })
-  useImperativeHandle(apiRef, () => ({
-    updateValue: lifecycle.updateValue,
-    save: () => lifecycle.save(),
-    reload: lifecycle.reload,
-    requestReload: lifecycle.requestReload,
-  }), [lifecycle.reload, lifecycle.requestReload, lifecycle.save, lifecycle.updateValue])
+  useImperativeHandle(
+    apiRef,
+    () => ({
+      updateValue: lifecycle.updateValue,
+      save: () => lifecycle.save(),
+      reload: lifecycle.reload,
+      requestReload: lifecycle.requestReload,
+    }),
+    [
+      lifecycle.reload,
+      lifecycle.requestReload,
+      lifecycle.save,
+      lifecycle.updateValue,
+    ]
+  )
   return (
     <div
       data-value={lifecycle.value}
@@ -162,12 +209,15 @@ function LifecycleHarness({
 function harnessProps(
   apiRef: Ref<HarnessApi>,
   saveText: DriveRendererEditContext['saveText'],
-  overrides: Partial<Pick<HarnessProps, 'editContext' | 'onReplaceValue'>> = {},
+  overrides: Partial<Pick<HarnessProps, 'editContext' | 'onReplaceValue'>> = {}
 ): HarnessProps {
   return {
     initialText: '# Initial',
     editContext: overrides.editContext ?? {
-      reload: vi.fn(async () => ({ preview: { text: '# Server' } }) as DriveBrowserSnapshotDto),
+      reload: vi.fn(
+        async () =>
+          ({ preview: { text: '# Server' } }) as DriveBrowserSnapshotDto
+      ),
       reloading: false,
       saveText,
       savingText: false,
@@ -192,11 +242,16 @@ function status() {
 }
 
 function saveAcknowledged() {
-  return (host.firstElementChild as HTMLDivElement).dataset.saveAcknowledged === 'true'
+  return (
+    (host.firstElementChild as HTMLDivElement).dataset.saveAcknowledged ===
+    'true'
+  )
 }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
   return { promise, resolve }
 }

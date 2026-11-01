@@ -4,7 +4,7 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, userAuthApi } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import { SignUpForm } from './sign-up-form'
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -19,12 +19,7 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
-}))
+vi.mock('@heroui/react', async (importOriginal) => ({ ...(await importOriginal<typeof import('@heroui/react')>()), toast: { danger: vi.fn(), success: vi.fn() } }))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { readonly children: ReactNode; readonly to: string }) => (
@@ -90,7 +85,7 @@ describe('SignUpForm', () => {
     await waitFor(() => {
       expect(document.body.textContent).toContain('邮箱已注册。')
     })
-    expect(mockedToast.error).not.toHaveBeenCalled()
+    expect(mockedToast.danger).not.toHaveBeenCalled()
   })
 
   it('keeps generic registration failures in the toast', async () => {
@@ -101,7 +96,7 @@ describe('SignUpForm', () => {
     await submitForm()
 
     await waitFor(() => {
-      expect(mockedToast.error).toHaveBeenCalledWith('注册服务暂不可用')
+      expect(mockedToast.danger).toHaveBeenCalledWith('注册服务暂不可用')
     })
     expect(document.body.textContent).not.toContain('邮箱已注册。')
   })

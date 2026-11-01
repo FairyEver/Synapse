@@ -5,8 +5,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveAnnotationThreadDto } from '@synapse/shared'
 import { useDriveEditorCommentGeometry } from './drive-editor-comment-geometry'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -31,16 +32,28 @@ describe('useDriveEditorCommentGeometry', () => {
       return frameId
     })
     vi.stubGlobal('requestAnimationFrame', requestAnimationFrame)
-    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => frames.delete(id)))
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn((id: number) => frames.delete(id))
+    )
     TestResizeObserver.instances = []
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
-    const getClientRects = vi.fn(() => [rect({ top: 80, left: 20, width: 50, height: 18 })])
-    Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: getClientRects })
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
-      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
-      return rect({})
+    const getClientRects = vi.fn(() => [
+      rect({ top: 80, left: 20, width: 50, height: 18 }),
+    ])
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value: getClientRects,
     })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function () {
+        if (this.hasAttribute('data-test-scroll'))
+          return rect({ top: 10, left: 0, width: 600, height: 400 })
+        if (this.hasAttribute('data-test-host'))
+          return rect({ top: 10, left: 0, width: 600, height: 300 })
+        return rect({})
+      }
+    )
 
     renderHook([commentThread('thread-1'), commentThread('thread-2')])
     expect(frames.size).toBe(1)
@@ -59,7 +72,9 @@ describe('useDriveEditorCommentGeometry', () => {
     expect(getClientRects).toHaveBeenCalledTimes(2)
     expect(requestAnimationFrame).toHaveBeenCalledTimes(2)
 
-    const scroller = document.querySelector<HTMLElement>('[data-test-scroll="true"]')
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-test-scroll="true"]'
+    )
     if (!scroller) throw new Error('Missing editor scroller')
     scroller.dispatchEvent(new Event('scroll'))
 
@@ -101,17 +116,27 @@ describe('useDriveEditorCommentGeometry', () => {
       configurable: true,
       value: () => [rect({ top: 80, left: 20, width: 50, height: 18 })],
     })
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-      if (this.hasAttribute('data-test-scroll')) return rect({ top: 10, left: 0, width: 600, height: 400 })
-      if (this.hasAttribute('data-test-host')) return rect({ top: 10, left: 0, width: 600, height: 300 })
-      return rect({})
-    })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function () {
+        if (this.hasAttribute('data-test-scroll'))
+          return rect({ top: 10, left: 0, width: 600, height: 400 })
+        if (this.hasAttribute('data-test-host'))
+          return rect({ top: 10, left: 0, width: 600, height: 300 })
+        return rect({})
+      }
+    )
     const source = commentThread('thread-1')
-    if (source.target.kind !== 'textRange') throw new Error('Expected text range thread')
+    if (source.target.kind !== 'textRange')
+      throw new Error('Expected text range thread')
     const modified: DriveAnnotationThreadDto = {
       ...source,
-      target: { ...source.target, quote: { exact: 'Older', prefix: '', suffix: '' } },
-      anchor: source.anchor ? { ...source.anchor, quoteStatus: 'modified' as const } : null,
+      target: {
+        ...source.target,
+        quote: { exact: 'Older', prefix: '', suffix: '' },
+      },
+      anchor: source.anchor
+        ? { ...source.anchor, quoteStatus: 'modified' as const }
+        : null,
     }
 
     renderHook([modified])
@@ -121,7 +146,11 @@ describe('useDriveEditorCommentGeometry', () => {
   })
 })
 
-function GeometryHarness({ threads }: { readonly threads: readonly DriveAnnotationThreadDto[] }) {
+function GeometryHarness({
+  threads,
+}: {
+  readonly threads: readonly DriveAnnotationThreadDto[]
+}) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const contentHostRef = useRef<HTMLDivElement | null>(null)
   const { geometry } = useDriveEditorCommentGeometry({
@@ -156,14 +185,18 @@ function renderHook(threads: readonly DriveAnnotationThreadDto[]) {
 
 function resultElement(): HTMLOutputElement {
   const element = document.querySelector('[data-test-result="true"]')
-  if (!(element instanceof HTMLOutputElement)) throw new Error('Missing result element')
+  if (!(element instanceof HTMLOutputElement))
+    throw new Error('Missing result element')
   return element
 }
 
 function commentThread(
   id: string,
-  range: { readonly start: number; readonly end: number } = { start: 0, end: 5 },
-  quote = 'Notes',
+  range: { readonly start: number; readonly end: number } = {
+    start: 0,
+    end: 5,
+  },
+  quote = 'Notes'
 ): DriveAnnotationThreadDto {
   return {
     id,
@@ -186,7 +219,12 @@ function commentThread(
         kind: 'textRange',
         position: { start: 0, end: 7 },
         quote: { exact: quote, prefix: '', suffix: '' },
-        semantic: { blockId: 'block-1', start: range.start, end: range.end, headingPath: [] },
+        semantic: {
+          blockId: 'block-1',
+          start: range.start,
+          end: range.end,
+          headingPath: [],
+        },
       },
       positionStatus: 'attached',
       quoteStatus: 'exact',
@@ -215,10 +253,16 @@ class TestResizeObserver implements ResizeObserver {
     TestResizeObserver.instances.push(this)
   }
 
-  observe(target: Element) { this.observedTargets.push(target) }
+  observe(target: Element) {
+    this.observedTargets.push(target)
+  }
   unobserve() {}
-  disconnect() { this.disconnected = true }
-  emit() { this.callback([], this) }
+  disconnect() {
+    this.disconnected = true
+  }
+  emit() {
+    this.callback([], this)
+  }
 }
 
 function rect(input: Partial<DOMRect>): DOMRect {

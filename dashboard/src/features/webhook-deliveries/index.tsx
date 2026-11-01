@@ -1,3 +1,4 @@
+import { Input, ListBox, Select } from '@heroui/react'
 import { useMemo, useState } from 'react'
 import {
   WEBHOOK_DELIVERY_STATUS,
@@ -13,15 +14,6 @@ import {
 } from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { getWebhookDeliveryStatusLabel } from '@/features/webhooks/webhook-display'
 import { buildWebhookDeliveryHistoryColumns } from './webhook-delivery-history-columns'
 import { WebhookDeliveryHistoryDetailSheet } from './webhook-delivery-history-detail-sheet'
@@ -126,7 +118,7 @@ export default function WebhookDeliveriesPage({
                       setUser(event.target.value)
                       setPage(1)
                     }}
-                    className='h-8 w-37.5 lg:w-62.5'
+                    className='w-37.5 lg:w-62.5'
                   />
                 ) : null}
                 <Input
@@ -136,28 +128,28 @@ export default function WebhookDeliveriesPage({
                     setWebhookId(event.target.value)
                     setPage(1)
                   }}
-                  className='h-8 w-37.5 lg:w-62.5'
+                  className='w-37.5 lg:w-62.5'
                 />
-                <Select
+                <Select aria-label="全部状态"
                   value={status || allStatusesValue}
-                  onValueChange={(value) => {
+                  onChange={(key) => ((value) => {
                     setStatus(value === allStatusesValue ? '' : value)
                     setPage(1)
-                  }}
+                  })(String(key ?? ''))}
                 >
-                  <SelectTrigger size='sm' className='w-36'>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value={allStatusesValue}>全部状态</SelectItem>
+                  <Select.Trigger  className='w-36'>
+                    <Select.Value />
+                  <Select.Indicator /></Select.Trigger>
+                  <Select.Popover><ListBox>
+
+                      <ListBox.Item id={allStatusesValue}>全部状态<ListBox.ItemIndicator /></ListBox.Item>
                       {webhookDeliveryStatusOptions.map((option) => (
-                        <SelectItem key={option} value={option}>
+                        <ListBox.Item key={option} id={option}>
                           {getWebhookDeliveryStatusLabel(option)}
-                        </SelectItem>
+                        <ListBox.ItemIndicator /></ListBox.Item>
                       ))}
-                    </SelectGroup>
-                  </SelectContent>
+
+                  </ListBox></Select.Popover>
                 </Select>
                 <Input
                   aria-label='开始日期'
@@ -167,7 +159,7 @@ export default function WebhookDeliveriesPage({
                     setFrom(event.target.value)
                     setPage(1)
                   }}
-                  className='h-8 w-36'
+                  className='w-36'
                 />
                 <Input
                   aria-label='结束日期'
@@ -177,7 +169,7 @@ export default function WebhookDeliveriesPage({
                     setTo(event.target.value)
                     setPage(1)
                   }}
-                  className='h-8 w-36'
+                  className='w-36'
                 />
             </div>
           }

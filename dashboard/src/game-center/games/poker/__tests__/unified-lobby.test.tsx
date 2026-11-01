@@ -27,7 +27,7 @@ describe("统一房间列表", () => {
       await act(async () => root.render(<Lobby onRoom={onRoom} />))
       expect(api.list).toHaveBeenLastCalledWith({ offset: 0, limit: 50, mode: "all" })
       expect(host.querySelector('[role="group"][aria-label="房间类型"]')).toBeNull()
-      const rooms = [...host.querySelectorAll("li")]
+      const rooms = [...host.querySelectorAll('[role="rowgroup"]:last-child [role="row"]')]
       expect(rooms).toHaveLength(2)
       expect(rooms[0].textContent).toContain("点数房")
       expect(rooms[1].textContent).toContain("陪练房")

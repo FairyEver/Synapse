@@ -343,16 +343,15 @@ describe("server deployment configuration", () => {
     expect(dockerfile).toContain("COPY --from=build /app/shared ./shared")
   })
 
-  it("includes the UI workspace package in the deployed dashboard build", () => {
+  it("does not include the desktop-only UI workspace in the deployed dashboard build", () => {
     const deployScript = readRepoFile("deploy.sh")
     const dockerfile = readRepoFile("server/Dockerfile")
 
-    expect(dockerfile).toContain("COPY ui/package.json ui/package.json")
-    expect(dockerfile).toContain("COPY --from=deps /app/ui/node_modules ./ui/node_modules")
-    expect(dockerfile).toContain("COPY ui/ ui/")
-    expect(deployScript).toContain("--exclude='ui/node_modules'")
-    expect(deployScript).toContain("--exclude='ui/dist'")
-    expect(deployScript).toContain("--include='/ui/***'")
+    expect(dockerfile).not.toContain("COPY ui/package.json")
+    expect(dockerfile).not.toContain("/app/ui/node_modules")
+    expect(dockerfile).not.toContain("COPY ui/ ui/")
+    expect(deployScript).not.toContain("--exclude='ui/node_modules'")
+    expect(deployScript).not.toContain("--include='/ui/***'")
   })
 
   it("builds and serves the VitePress document package with the server image", () => {
@@ -635,17 +634,16 @@ describe("server deployment configuration", () => {
     const viteConfig = readRepoFile("dashboard/vite.config.ts")
 
     expect(viteConfig).toContain("'^/drive/items/[^/]+/(download|render)(?:\\\\?.*)?$'")
-    expect(viteConfig).toContain("'^/share/[^/]+/(download|render)(?:\\\\?.*)?$'")
-    expect(viteConfig).toContain("'^/share/[^/]+/items/[^/]+/(download|render)(?:\\\\?.*)?$'")
-    expect(viteConfig).toContain("'^/share/[^/]+(?:/items/[^/]+)?/reader(?:\\\\?.*)?$'")
+    expect(viteConfig).toContain("'^/share/[^/]+(?:/items/[^/]+)?/(download|render|reader)(?:\\\\?.*)?$'")
     expect(viteConfig).toContain("'/files':")
     expect(viteConfig).toContain("'/object':")
+    expect(viteConfig).toContain("port: 19700")
     expect(viteConfig).not.toContain("download|zip")
   })
 
-  it("revalidates dashboard HTML and its deployment marker without disabling asset caching", () => {
+  it("revalidates dashboard HTML without disabling asset caching", () => {
     const nginx = readRepoFile("server/nginx.conf")
-    expect(nginx).toMatch(/map \$sent_http_content_type \$dashboard_cache_control \{[\s\S]*?default "";[\s\S]*?~\^text\/html "no-cache, must-revalidate";[\s\S]*?application\/json "no-cache, must-revalidate";/u)
+    expect(nginx).toMatch(/map \$sent_http_content_type \$dashboard_cache_control \{[\s\S]*?default "";[\s\S]*?~\^text\/html "no-cache, must-revalidate";\s*\}/u)
     for (const entry of ["/console/", "/admin/", "/drive/items/", "/notifications/", "/share/", "= /drive", "= /drive/"]) {
       const location = nginx.slice(nginx.indexOf(`location ${entry} {`)).split("\n  }")[0]
       expect(location, entry).toContain("add_header Cache-Control $dashboard_cache_control always;")
@@ -676,6 +674,23 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("location /dashboard/")
     expect(nginx).toContain("return 404;")
     expect(nginx).toContain("return 302 /console/;")
+  })
+
+  it("builds the single Dashboard workspace", () => {
+    const dockerfile = readRepoFile("server/Dockerfile")
+    const compose = readRepoFile("server/compose.yml")
+    const deployScript = readRepoFile("deploy.sh")
+    const envExample = readRepoFile("server/.env.example")
+
+    expect(dockerfile).toContain("COPY dashboard/package.json dashboard/package.json")
+    expect(dockerfile).toContain("--filter @synapse/dashboard...")
+    expect(dockerfile).toContain("COPY --from=deps /app/dashboard/node_modules ./dashboard/node_modules")
+    expect(dockerfile).toContain("COPY dashboard/ dashboard/")
+    expect(dockerfile).toContain("pnpm --filter @synapse/dashboard build")
+    expect(dockerfile).toContain("COPY --from=build /app/dashboard/dist ./dashboard/dist")
+    expect(deployScript).toContain("--include='/dashboard/***'")
+    expect(envExample).toContain("APP_PUBLIC_URL")
+    expect(readRepoFile("server/nginx.conf")).toContain("location = /console/dashboard-ui.json {\n    return 404;\n  }")
   })
 
   it("returns 404 for retired invitation pages and legacy console team paths only", () => {

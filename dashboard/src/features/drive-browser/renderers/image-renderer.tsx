@@ -1,4 +1,7 @@
-import type { DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
+import type {
+  DriveBrowserItemDto,
+  DriveBrowserPreviewDto,
+} from '@synapse/shared'
 
 export function DriveImageRenderer({
   current,
@@ -16,7 +19,7 @@ export function DriveImageRenderer({
           className='max-h-full max-w-full rounded-md object-contain'
         />
       ) : (
-        <div className='text-sm text-muted-foreground'>图片不可预览</div>
+        <div className='text-sm text-muted'>图片不可预览</div>
       )}
     </div>
   )

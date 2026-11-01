@@ -1,4 +1,4 @@
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 
 import { adminApi } from '@/lib/api'
 
@@ -11,7 +11,7 @@ type BackupDownloadDeps = {
 const defaultDeps: BackupDownloadDeps = {
   downloadBackup: adminApi.downloadBackup,
   notifySuccess: toast.success,
-  notifyError: toast.error,
+  notifyError: toast.danger,
 }
 
 export async function downloadBackupWithFeedback(

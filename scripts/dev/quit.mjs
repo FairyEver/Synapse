@@ -17,10 +17,9 @@ async function runCleanup(scriptName) {
 const serverResult = await runCleanup("quit:server")
 const desktopResult = await runCleanup("quit:desktop")
 const documentResult = await runCleanup("quit:document")
-const dashboardV2Result = await runCleanup("quit:dashboard-v2")
 
-if (serverResult.signal || desktopResult.signal || documentResult.signal || dashboardV2Result.signal) {
+if (serverResult.signal || desktopResult.signal || documentResult.signal) {
   process.exit(1)
 }
 
-process.exit(serverResult.code || desktopResult.code || documentResult.code || dashboardV2Result.code || 0)
+process.exit(serverResult.code || desktopResult.code || documentResult.code || 0)

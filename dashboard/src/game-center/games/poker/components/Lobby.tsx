@@ -1,19 +1,12 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
-import "../../../styles/hall.css"
 import { useEffect, useRef, useState } from "react"
-import { pokerConnectInstruction } from "../lib/connect-instruction"
+import { PokerAIConnectDialog } from "./PokerAIConnectDialog"
 import { useAccount } from "@/game-center/runtime/account"
-import { toast } from "sonner"
-import { Button } from "@/game-center/ui/button"
+import { toast } from "@heroui/react"
+import { Button } from "@heroui/react"
 import { CreateRoomDialog } from "./CreateRoomDialog"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/game-center/ui/dialog"
+import { Modal } from "@heroui/react"
 import { gameApi } from "../../../lib/api"
 import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
 import { usePokerRoomDraft } from "../hooks/usePokerRoomDraft"
@@ -23,6 +16,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     [createOpen, setCreateOpen] = useState(false),
     [connect, setConnect] = useState<string | null>(null),
     [closing, setClosing] = useState<string | null>(null)
+  const dialogGeneration = useRef(0)
   const creation = useRef<{ key: string; id: string } | null>(null)
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
@@ -30,10 +24,12 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
   const { draft, changeDraft, loadDraft, createParams } = usePokerRoomDraft(userId, nickname)
   useEffect(() => {
     creation.current = null
+    dialogGeneration.current++
     setCreateOpen(false)
+    setConnect(null)
   }, [userId])
   const openCreate = async () => {
-    creation.current = null
+    dialogGeneration.current++
     if (await loadDraft()) setCreateOpen(true)
   }
   const lobby = useGameQuery(
@@ -44,6 +40,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
+    const generation = dialogGeneration.current
     const params = createParams(),
       key = JSON.stringify(params)
     const result = await mutation.run(async () => {
@@ -53,8 +50,11 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
       return { room, intent }
     })
     if (result && creation.current === result.intent) {
-      setCreateOpen(false)
-      onRoom(result.room.roomCode)
+      creation.current = null
+      if (dialogGeneration.current === generation) {
+        setCreateOpen(false)
+        onRoom(result.room.roomCode)
+      }
     }
   }
   const closeRoom = async () => {
@@ -65,24 +65,6 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
       setClosing(null)
       await lobby.refresh()
     }
-  }
-  const copy = async () => {
-    if (!connect) return
-    const roomCode = connect
-    const result = await mutation.run(async () => {
-      const table = await gameApi().poker.table.state({roomCode, perspective:"public"})
-      if (table.mySeatNo === null && !table.handoffPending) {
-        if (table.controlVersion == null) throw new Error("请更新客户端后接入 AI")
-        await gameApi().poker.control.set({roomCode, controlVersion:table.controlVersion, action:"request_ai"})
-      }
-      try {
-        await navigator.clipboard.writeText(pokerConnectInstruction(roomCode))
-      } catch {
-        throw new Error("复制失败，请重试")
-      }
-      return true
-    })
-    if (result) toast("接入指令已复制")
   }
   return (
     <>
@@ -97,20 +79,20 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         onClose={setClosing}
         pagination={
           offset > 0 || lobby.data?.nextOffset != null ? (
-            <div className="gc-pagination">
+            <div className="flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - 50))}
+                isDisabled={offset === 0}
+                onPress={() => setOffset(Math.max(0, offset - 50))}
               >
                 上一页
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                disabled={lobby.data?.nextOffset == null}
-                onClick={() => setOffset(lobby.data?.nextOffset ?? offset)}
+                isDisabled={lobby.data?.nextOffset == null}
+                onPress={() => setOffset(lobby.data?.nextOffset ?? offset)}
               >
                 下一页
               </Button>
@@ -121,7 +103,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
       <CreateRoomDialog
         open={createOpen}
         onOpenChange={(open) => {
-          if (!open) creation.current = null
+          dialogGeneration.current++
           setCreateOpen(open)
         }}
         value={draft}
@@ -129,44 +111,30 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         onCreate={() => void create()}
         busy={mutation.busy}
       />
-      <Dialog
-        open={!!closing}
+      <Modal.Backdrop
+        isOpen={!!closing}
         onOpenChange={(open) => {
           if (!open && !mutation.busy) setClosing(null)
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>解散房间 #{closing}？</DialogTitle>
-            <DialogDescription>{lobby.data?.items.find((r) => r.roomCode === closing)?.mode === "practice" ? "仅你与机器人参与时立即解散，有其他玩家时本手结束后解散；不兑换大厅点数。" : "本手结束后退还所有玩家的剩余筹码。"}</DialogDescription>
-          </DialogHeader>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={mutation.busy}
-            onClick={() => void closeRoom()}
-          >
-            解散房间
-          </Button>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={!!connect}
-        onOpenChange={(open) => {
-          if (!open) setConnect(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>接入 AI · #{connect}</DialogTitle>
-            <DialogDescription>将指令发到你的 AI 会话</DialogDescription>
-          </DialogHeader>
-          <p className="text-sm">{connect && pokerConnectInstruction(connect)}</p>
-          <Button type="button" disabled={mutation.busy} onClick={() => void copy()}>
-            复制接入指令
-          </Button>
-        </DialogContent>
-      </Dialog>
+        <Modal.Container><Modal.Dialog><Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading>解散房间 #{closing}？</Modal.Heading>
+            <p className="text-sm text-muted">{lobby.data?.items.find((r) => r.roomCode === closing)?.mode === "practice" ? "仅你与机器人参与时立即解散，有其他玩家时本手结束后解散；不兑换大厅点数。" : "本手结束后退还所有玩家的剩余筹码。"}</p>
+          </Modal.Header>
+          <Modal.Footer>
+            <Button
+              type="button"
+              variant="danger"
+              isDisabled={mutation.busy}
+              onPress={() => void closeRoom()}
+            >
+              解散房间
+            </Button>
+          </Modal.Footer>
+        </Modal.Dialog></Modal.Container>
+      </Modal.Backdrop>
+      {connect && <PokerAIConnectDialog key={`${userId}:${connect}`} open onOpenChange={open => { if (!open) setConnect(null) }} roomCode={connect} onChanged={lobby.refresh} />}
     </>
   )
 }

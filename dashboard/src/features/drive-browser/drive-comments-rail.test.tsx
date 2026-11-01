@@ -3,9 +3,13 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DriveCommentsRail, type DriveCommentsRailItem } from './drive-comments-rail'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+import {
+  DriveCommentsRail,
+  type DriveCommentsRailItem,
+} from './drive-comments-rail'
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -24,11 +28,19 @@ describe('DriveCommentsRail', () => {
   it('lets the owner resolve and reopen an entire discussion without removing its comments', async () => {
     const onUpdateThreadStatus = vi.fn(async () => undefined)
     renderRail({ onUpdateThreadStatus })
-    expect(requiredButtonWithLabel('标记为已解决').textContent).toBe('标记为已解决')
+    expect(requiredButtonWithLabel('标记为已解决').textContent).toBe(
+      '标记为已解决'
+    )
     expect(document.body.textContent).not.toContain('未解决')
     await click(requiredButtonWithLabel('标记为已解决'))
-    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
-    rerenderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: 'resolved',
+    })
+    rerenderRail({
+      threads: [thread({ status: 'resolved' })],
+      onUpdateThreadStatus,
+    })
     expect(document.body.textContent).toContain('已解决')
     expect(document.body.textContent).toContain('First line')
     expect(document.body.textContent).toContain('Second line')
@@ -36,11 +48,18 @@ describe('DriveCommentsRail', () => {
     await openStatusMenu()
     expect(onUpdateThreadStatus).toHaveBeenCalledTimes(1)
     await click(menuItemWithText('重新打开'))
-    expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({ threadId: 'thread-1', status: 'open' })
+    expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({
+      threadId: 'thread-1',
+      status: 'open',
+    })
   })
 
   it('shows status without controls to non-owners, including comment authors', async () => {
-    renderRail({ threads: [thread({ status: 'resolved', canChangeStatus: false, canEdit: true })] })
+    renderRail({
+      threads: [
+        thread({ status: 'resolved', canChangeStatus: false, canEdit: true }),
+      ],
+    })
     expect(document.body.textContent).toContain('已解决')
     expect(document.body.textContent).not.toContain('重新打开')
     expect(document.body.textContent).not.toContain('标记为已解决')
@@ -53,15 +72,24 @@ describe('DriveCommentsRail', () => {
 
   it('disables repeated status submissions, retains the old status on failure, and permits retry', async () => {
     let reject!: (error: Error) => void
-    const onUpdateThreadStatus = vi.fn(() => new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise }))
+    const onUpdateThreadStatus = vi.fn(
+      () =>
+        new Promise<void>((_resolve, rejectPromise) => {
+          reject = rejectPromise
+        })
+    )
     renderRail({ onUpdateThreadStatus })
     await click(requiredButtonWithLabel('标记为已解决'))
     const button = requiredButtonWithLabel('标记为已解决')
     expect(button.disabled).toBe(true)
     await click(button)
     expect(onUpdateThreadStatus).toHaveBeenCalledTimes(1)
-    await act(async () => { reject(new Error('保存失败，请重试')) })
-    expect(document.querySelector('[role="alert"]')?.textContent).toBe('保存失败，请重试')
+    await act(async () => {
+      reject(new Error('保存失败，请重试'))
+    })
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      '保存失败，请重试'
+    )
     expect(button.textContent).toBe('标记为已解决')
     expect(buttonWithLabel('已解决')).toBeNull()
     expect(button.disabled).toBe(false)
@@ -73,14 +101,29 @@ describe('DriveCommentsRail', () => {
 
   it('keeps the resolved status when reopening fails and permits retry from its menu', async () => {
     let reject!: (error: Error) => void
-    const onUpdateThreadStatus = vi.fn(() => new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise }))
-    renderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+    const onUpdateThreadStatus = vi.fn(
+      () =>
+        new Promise<void>((_resolve, rejectPromise) => {
+          reject = rejectPromise
+        })
+    )
+    renderRail({
+      threads: [thread({ status: 'resolved' })],
+      onUpdateThreadStatus,
+    })
     await openStatusMenu()
     await click(menuItemWithText('重新打开'))
     expect(requiredButtonWithLabel('已解决').disabled).toBe(true)
-    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'open' })
-    await act(async () => { reject(new Error('重新打开失败，请重试')) })
-    expect(document.querySelector('[role="alert"]')?.textContent).toBe('重新打开失败，请重试')
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: 'open',
+    })
+    await act(async () => {
+      reject(new Error('重新打开失败，请重试'))
+    })
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      '重新打开失败，请重试'
+    )
     expect(requiredButtonWithLabel('已解决').disabled).toBe(false)
     expect(buttonWithLabel('标记为已解决')).toBeNull()
     onUpdateThreadStatus.mockResolvedValueOnce(undefined)
@@ -95,42 +138,80 @@ describe('DriveCommentsRail', () => {
     renderRail({ activeThreadId: 'thread-1', onReply })
     await inputValue(textarea(), 'Unsent reply')
     await click(requiredButtonWithLabel('标记为已解决'))
-    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply })
+    rerenderRail({
+      threads: [thread({ status: 'resolved' })],
+      activeThreadId: 'thread-1',
+      onReply,
+    })
     expect(textarea().value).toBe('Unsent reply')
     await click(buttonWithText('发送'))
-    expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: null, body: 'Unsent reply' })
+    expect(onReply).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      parentCommentId: null,
+      body: 'Unsent reply',
+    })
     expect(document.body.textContent).toContain('已解决')
   })
 
   it('preserves an edit draft and disables status changes while a reply or edit is submitting', async () => {
     let finishReply!: () => void
-    const onReply = vi.fn(() => new Promise<void>((resolve) => { finishReply = resolve }))
+    const onReply = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishReply = resolve
+        })
+    )
     renderRail({ activeThreadId: 'thread-1', onReply })
     await inputValue(textarea(), 'Reply')
     await click(buttonWithText('发送'))
     expect(requiredButtonWithLabel('标记为已解决').disabled).toBe(true)
-    await act(async () => { finishReply() })
+    await act(async () => {
+      finishReply()
+    })
     expect(requiredButtonWithLabel('标记为已解决').disabled).toBe(false)
     await editComment()
     await inputValue(textarea(), 'Edited draft')
     await click(requiredButtonWithLabel('标记为已解决'))
-    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply })
+    rerenderRail({
+      threads: [thread({ status: 'resolved' })],
+      activeThreadId: 'thread-1',
+      onReply,
+    })
     expect(textarea().value).toBe('Edited draft')
     let finishEdit!: () => void
-    const onUpdateComment = vi.fn(() => new Promise<void>((resolve) => { finishEdit = resolve }))
-    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onReply, onUpdateComment })
+    const onUpdateComment = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishEdit = resolve
+        })
+    )
+    rerenderRail({
+      threads: [thread({ status: 'resolved' })],
+      activeThreadId: 'thread-1',
+      onReply,
+      onUpdateComment,
+    })
     await click(buttonWithText('保存'))
     expect(requiredButtonWithLabel('已解决').disabled).toBe(true)
-    await act(async () => { finishEdit() })
+    await act(async () => {
+      finishEdit()
+    })
     expect(requiredButtonWithLabel('已解决').disabled).toBe(false)
   })
 
   it('supports resolving unlocated discussions in the compact dialog', async () => {
     const onUpdateThreadStatus = vi.fn(async () => undefined)
-    renderRail({ mode: 'list', threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })], onUpdateThreadStatus })
+    renderRail({
+      mode: 'list',
+      threads: [thread({ anchorStatus: 'orphaned', anchorTop: null })],
+      onUpdateThreadStatus,
+    })
     await click(buttonWithText('未定位评论'))
     await click(requiredButtonWithLabel('标记为已解决'))
-    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: 'resolved',
+    })
     expect(optionalDialogContent()?.textContent).toContain('First line')
   })
 
@@ -150,7 +231,9 @@ describe('DriveCommentsRail', () => {
     expect(document.body.textContent).toContain('First line')
     expect(document.body.textContent).toContain('Second line')
     expect(optionalDialogContent()).not.toBeNull()
-    expect(optionalDialogContent()?.textContent).toContain('1 条评论无法定位到当前文档')
+    expect(optionalDialogContent()?.textContent).toContain(
+      '1 条评论无法定位到当前文档'
+    )
     expect(document.body.textContent).toContain('原文已修改或删除')
     expect(document.body.textContent).toContain('Note')
     expect(document.body.textContent).not.toContain('重新关联')
@@ -174,7 +257,12 @@ describe('DriveCommentsRail', () => {
           resourceKey: 'file:asset_1',
           source: { startOffset: 0, endOffset: 18 },
           snapshot: { src: '/files/asset_1', alt: '', title: null },
-          blockHint: { blockId: 'block', blockIndex: 0, imageIndex: 0, headingPath: [] },
+          blockHint: {
+            blockId: 'block',
+            blockIndex: 0,
+            imageIndex: 0,
+            headingPath: [],
+          },
         },
       },
     } as DriveCommentsRailItem
@@ -183,7 +271,10 @@ describe('DriveCommentsRail', () => {
     renderRail({ threads: [imageItem], onUpdateThreadStatus })
     await click(buttonWithText('未定位评论'))
     await click(requiredButtonWithLabel('标记为已解决'))
-    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: 'resolved',
+    })
 
     expect(document.body.textContent).toContain('图片已替换或删除')
     expect(document.body.textContent).toContain('asset_1')
@@ -194,9 +285,26 @@ describe('DriveCommentsRail', () => {
     renderRail({
       mode: 'list',
       threads: [
-        thread({ id: 'attached', body: 'Attached', anchorStatus: 'attached', anchorTop: 10 }),
-        thread({ id: 'older', body: 'Older lost', anchorStatus: 'orphaned', anchorTop: null, updatedAt: '2026-06-21T00:01:00.000Z' }),
-        thread({ id: 'newer', body: 'Newer lost', anchorStatus: 'orphaned', anchorTop: null, updatedAt: '2026-06-21T00:02:00.000Z' }),
+        thread({
+          id: 'attached',
+          body: 'Attached',
+          anchorStatus: 'attached',
+          anchorTop: 10,
+        }),
+        thread({
+          id: 'older',
+          body: 'Older lost',
+          anchorStatus: 'orphaned',
+          anchorTop: null,
+          updatedAt: '2026-06-21T00:01:00.000Z',
+        }),
+        thread({
+          id: 'newer',
+          body: 'Newer lost',
+          anchorStatus: 'orphaned',
+          anchorTop: null,
+          updatedAt: '2026-06-21T00:02:00.000Z',
+        }),
       ],
     })
 
@@ -244,7 +352,7 @@ describe('DriveCommentsRail', () => {
 
     await click(buttonWithText('未定位评论'))
     expect(document.body.textContent).toContain('First line')
-    await click(buttonWithText('关闭'))
+    await click(requiredButtonWithLabel('关闭'))
 
     expect(document.body.textContent).toContain('未定位评论')
     expect(document.body.textContent).not.toContain('First line')
@@ -266,11 +374,15 @@ describe('DriveCommentsRail', () => {
     expect(replyComposer('thread-1')).not.toBeNull()
     expect(optionalDialogContent()).toBeNull()
     expect(threadCard('thread-1').querySelector('textarea')).not.toBeNull()
-    expect(threadCard('thread-1').className).toContain('border-ring')
+    expect(threadCard('thread-1').className).toContain('border-accent')
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
-    expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: 'comment-1', body: 'Reply body' })
+    expect(onReply).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      parentCommentId: 'comment-1',
+      body: 'Reply body',
+    })
     expect(replyComposer('thread-1')).toBeNull()
   })
 
@@ -311,14 +423,23 @@ describe('DriveCommentsRail', () => {
       body: 'Second comment',
       author: { id: 'user-2', email: null, handle: 'reviewer' },
     }
-    renderRail({ threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, secondComment] } }] })
+    renderRail({
+      threads: [
+        {
+          ...source,
+          thread: { ...source.thread, comments: [firstComment, secondComment] },
+        },
+      ],
+    })
 
     const replyButtons = commentReplyButtons('thread-1')
     await click(replyButtons[0])
     await inputValue(textarea(), 'First draft')
     await click(replyButtons[1])
 
-    expect(document.querySelectorAll('[data-markdown-comment-reply-composer="true"]')).toHaveLength(1)
+    expect(
+      document.querySelectorAll('[data-markdown-comment-reply-composer="true"]')
+    ).toHaveLength(1)
     expect(replyComposer('thread-1')?.textContent).toContain('回复 reviewer')
     expect(textarea().value).toBe('')
   })
@@ -349,7 +470,9 @@ describe('DriveCommentsRail', () => {
     selection?.addRange(range)
 
     await act(async () => {
-      threadCard('thread-1').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      threadCard('thread-1').dispatchEvent(
+        new MouseEvent('click', { bubbles: true })
+      )
     })
 
     expect(selection?.toString()).toBe('First')
@@ -371,25 +494,61 @@ describe('DriveCommentsRail', () => {
     expect(onFocusThread).toHaveBeenCalledWith('thread-1')
   })
 
+  it('shows the current V2 anchor quote after a thread has been reanchored', async () => {
+    const item = thread({ quote: 'Old selection' })
+    const anchoredItem = {
+      ...item,
+      thread: {
+        ...item.thread,
+        anchor: {
+          schemaVersion: 2,
+          baseVersionId: 'version-1',
+          selectors: {
+            schemaVersion: 2,
+            quote: { exact: 'Current selection', prefix: '', suffix: '' },
+            position: { start: 0, end: 17 },
+          },
+          positionStatus: 'attached',
+          quoteStatus: 'exact',
+          resolvedSourceRange: { start: 0, end: 17 },
+          resolvedRenderedRange: { start: 0, end: 17 },
+          confidence: 1,
+          lastResolvedVersionId: 'version-1',
+        },
+      },
+    }
+    const onFocusThread = vi.fn()
+    renderRail({ threads: [anchoredItem], onFocusThread })
+    expect(buttonWithLabel('查看评论：Old selection')).toBeNull()
+    await click(requiredButtonWithLabel('查看评论：Current selection'))
+    expect(onFocusThread).toHaveBeenCalledWith(item.thread.id)
+  })
+
   it('keeps a long unbroken quote within the comment rail', () => {
-    const quote = 'https://example.com/wiki/document?openbrd=1&blockId=long-unbroken-comment-anchor'
+    const quote =
+      'https://example.com/wiki/document?openbrd=1&blockId=long-unbroken-comment-anchor'
     renderRail({ threads: [thread({ quote })] })
 
-    const action = Array.from(document.querySelectorAll('button')).find((button) =>
-      button.getAttribute('aria-label')?.startsWith('查看评论：https://example.com/wiki/document')
+    const action = Array.from(document.querySelectorAll('button')).find(
+      (button) =>
+        button
+          .getAttribute('aria-label')
+          ?.startsWith('查看评论：https://example.com/wiki/document')
     )
     if (!action) throw new Error('Missing long quote action')
     const excerpt = action.querySelector('span')
     expect(action.className).toContain('min-w-0')
     expect(action.className).toContain('flex-1')
     expect(excerpt?.className).toContain('max-w-full')
-    expect(excerpt?.className).toContain('truncate')
+    expect(excerpt?.className).toContain('line-clamp-2')
   })
 
   it('marks the active thread quote action as current', () => {
     renderRail({ activeThreadId: 'thread-1' })
 
-    expect(requiredButtonWithLabel('查看评论：Note').getAttribute('aria-current')).toBe('true')
+    expect(
+      requiredButtonWithLabel('查看评论：Note').getAttribute('aria-current')
+    ).toBe('true')
     expect(threadCard('thread-1').hasAttribute('tabindex')).toBe(false)
   })
 
@@ -404,7 +563,11 @@ describe('DriveCommentsRail', () => {
     expect(onReply).not.toHaveBeenCalled()
 
     await keyDown(textarea(), { key: 'Enter' })
-    expect(onReply).toHaveBeenCalledWith({ threadId: 'thread-1', parentCommentId: null, body: 'Reply body' })
+    expect(onReply).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      parentCommentId: null,
+      body: 'Reply body',
+    })
   })
 
   it('closes an empty composer with Escape but preserves non-empty input', async () => {
@@ -430,18 +593,30 @@ describe('DriveCommentsRail', () => {
 
   it('preserves a thread reply draft while another thread is active', async () => {
     const threads = [
-      thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
-      thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 200 }),
+      thread({
+        id: 'thread-1',
+        body: 'First',
+        anchorStatus: 'attached',
+        anchorTop: 10,
+      }),
+      thread({
+        id: 'thread-2',
+        body: 'Second',
+        anchorStatus: 'attached',
+        anchorTop: 200,
+      }),
     ]
     renderRail({ threads, activeThreadId: 'thread-1' })
     const firstTextarea = replyComposer('thread-1')?.querySelector('textarea')
-    if (!(firstTextarea instanceof HTMLTextAreaElement)) throw new Error('Missing first reply input')
+    if (!(firstTextarea instanceof HTMLTextAreaElement))
+      throw new Error('Missing first reply input')
     await inputValue(firstTextarea, 'Saved draft')
 
     rerenderRail({ threads, activeThreadId: 'thread-2' })
     rerenderRail({ threads, activeThreadId: 'thread-1' })
 
-    const restoredTextarea = replyComposer('thread-1')?.querySelector('textarea')
+    const restoredTextarea =
+      replyComposer('thread-1')?.querySelector('textarea')
     expect(restoredTextarea).toBeInstanceOf(HTMLTextAreaElement)
     expect((restoredTextarea as HTMLTextAreaElement).value).toBe('Saved draft')
   })
@@ -452,15 +627,28 @@ describe('DriveCommentsRail', () => {
 
     await editComment()
 
-    expect(textarea().value).toBe('First line\nSecond line\n<strong>unsafe</strong>')
-    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).not.toBeNull()
+    expect(textarea().value).toBe(
+      'First line\nSecond line\n<strong>unsafe</strong>'
+    )
+    expect(
+      threadCard('thread-1').querySelector(
+        '[data-markdown-comment-edit-composer="true"]'
+      )
+    ).not.toBeNull()
     expect(optionalDialogContent()).toBeNull()
 
     await inputValue(textarea(), 'Updated comment')
     await click(buttonWithText('保存'))
 
-    expect(onUpdateComment).toHaveBeenCalledWith({ commentId: 'comment-1', body: 'Updated comment' })
-    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+    expect(onUpdateComment).toHaveBeenCalledWith({
+      commentId: 'comment-1',
+      body: 'Updated comment',
+    })
+    expect(
+      threadCard('thread-1').querySelector(
+        '[data-markdown-comment-edit-composer="true"]'
+      )
+    ).toBeNull()
   })
 
   it('keeps reply and edit modes mutually exclusive within a thread', async () => {
@@ -471,10 +659,16 @@ describe('DriveCommentsRail', () => {
 
     const card = threadCard('thread-1')
     expect(replyComposer('thread-1')).toBeNull()
-    expect(card.querySelectorAll('[data-markdown-comment-edit-composer="true"]')).toHaveLength(1)
+    expect(
+      card.querySelectorAll('[data-markdown-comment-edit-composer="true"]')
+    ).toHaveLength(1)
     expect(card.querySelectorAll('textarea')).toHaveLength(1)
     expect(card.querySelector('p')).toBeNull()
-    expect(Array.from(card.querySelectorAll('button')).some((button) => button.textContent === '回复')).toBe(false)
+    expect(
+      Array.from(card.querySelectorAll('button')).some(
+        (button) => button.textContent === '回复'
+      )
+    ).toBe(false)
     expect(buttonWithLabel('删除评论')).toBeNull()
   })
 
@@ -485,7 +679,11 @@ describe('DriveCommentsRail', () => {
     rerenderRail({ activeThreadId: null })
     rerenderRail({ activeThreadId: 'thread-1' })
 
-    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).not.toBeNull()
+    expect(
+      threadCard('thread-1').querySelector(
+        '[data-markdown-comment-edit-composer="true"]'
+      )
+    ).not.toBeNull()
     expect(replyComposer('thread-1')).toBeNull()
     expect(threadCard('thread-1').querySelectorAll('textarea')).toHaveLength(1)
   })
@@ -500,16 +698,25 @@ describe('DriveCommentsRail', () => {
     await inputValue(textarea(), 'Updated comment')
     await click(buttonWithText('保存'))
 
-    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).not.toBeNull()
-    expect(document.querySelector('[role="status"]')?.textContent).toBe('保存失败')
+    expect(
+      threadCard('thread-1').querySelector(
+        '[data-markdown-comment-edit-composer="true"]'
+      )
+    ).not.toBeNull()
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(
+      '保存失败'
+    )
     expect(textarea().value).toBe('Updated comment')
   })
 
   it('locks the edit composer while changes are being saved', async () => {
     let resolveUpdate: (() => void) | null = null
-    const onUpdateComment = vi.fn(() => new Promise<void>((resolve) => {
-      resolveUpdate = resolve
-    }))
+    const onUpdateComment = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveUpdate = resolve
+        })
+    )
     renderRail({ onUpdateComment })
 
     await editComment()
@@ -519,7 +726,11 @@ describe('DriveCommentsRail', () => {
     expect(buttonWithText('保存中').disabled).toBe(true)
     expect(textarea().disabled).toBe(true)
     await act(async () => resolveUpdate?.())
-    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+    expect(
+      threadCard('thread-1').querySelector(
+        '[data-markdown-comment-edit-composer="true"]'
+      )
+    ).toBeNull()
   })
 
   it('cancels inline edits without updating the comment', async () => {
@@ -531,7 +742,11 @@ describe('DriveCommentsRail', () => {
     await click(buttonWithText('取消'))
 
     expect(onUpdateComment).not.toHaveBeenCalled()
-    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+    expect(
+      threadCard('thread-1').querySelector(
+        '[data-markdown-comment-edit-composer="true"]'
+      )
+    ).toBeNull()
     expect(document.body.textContent).toContain('First line')
   })
 
@@ -544,12 +759,20 @@ describe('DriveCommentsRail', () => {
     await keyDown(textarea(), { key: 'Escape' })
 
     expect(onUpdateComment).not.toHaveBeenCalled()
-    expect(threadCard('thread-1').querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+    expect(
+      threadCard('thread-1').querySelector(
+        '[data-markdown-comment-edit-composer="true"]'
+      )
+    ).toBeNull()
     expect(document.body.textContent).toContain('First line')
   })
 
   it('hides edit and delete actions when permissions are false', () => {
-    renderRail({ threads: [thread({ canEdit: false, canDelete: false, canDeleteThread: false })] })
+    renderRail({
+      threads: [
+        thread({ canEdit: false, canDelete: false, canDeleteThread: false }),
+      ],
+    })
 
     expect(document.body.textContent).toContain('回复')
     expect(document.body.textContent).not.toContain('编辑')
@@ -575,17 +798,17 @@ describe('DriveCommentsRail', () => {
   it('uses restrained product styling for active cards and comment actions', () => {
     renderRail({ activeThreadId: 'thread-1' })
 
-    expect(threadCard('thread-1').className).toContain('border-ring')
+    expect(threadCard('thread-1').className).toContain('border-accent')
     expect(threadCard('thread-1').className).not.toContain('border-foreground')
     expect(threadCard('thread-1').textContent).toContain('Note')
-    expect(threadCard('thread-1').querySelector('[data-slot="avatar"]')).not.toBeNull()
+    expect(threadCard('thread-1').querySelector('.avatar')).not.toBeNull()
     expect(threadCard('thread-1').querySelector('time')).not.toBeNull()
-    expect(threadCard('thread-1').className).toContain('bg-card')
+    expect(threadCard('thread-1').className).toContain('bg-surface')
     expect(threadCard('thread-1').className).toContain('ring-inset')
-    expect(threadCard('thread-1').className).toContain('ring-amber-500/90')
+    expect(threadCard('thread-1').className).toContain('ring-accent')
     expect(threadCard('thread-1').querySelector('.bg-amber-400')).toBeNull()
-    expect(buttonWithText('回复').className).toContain('text-sm')
-    expect(buttonWithText('回复').className).toContain('h-9')
+    expect(buttonWithText('回复').className).toContain('button--ghost')
+    expect(buttonWithText('回复').className).toContain('button')
   })
 
   it('renders reply input inline and marks async errors as status text', async () => {
@@ -600,21 +823,27 @@ describe('DriveCommentsRail', () => {
     await inputValue(textarea(), 'Reply body')
     await click(buttonWithText('发送'))
 
-    expect(document.querySelector('[role="status"]')?.textContent).toBe('回复失败')
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(
+      '回复失败'
+    )
   })
 
   it('counts an inline draft as a provisional thread in anchored and compact rails', () => {
     const draft = commentDraft()
     renderRail({ threads: [], draft })
 
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-draft-card="true"]')
+    ).not.toBeNull()
     expect(document.body.textContent).toContain('“Selected text”')
     expect(railTitle().textContent).toContain('1')
     expect(document.body.textContent).not.toContain('暂无评论')
     expect(draftTop()).toBe(24)
 
     rerenderRail({ mode: 'list', threads: [], draft })
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-draft-card="true"]')
+    ).not.toBeNull()
     expect(railTitle().textContent).toContain('1')
     expect(document.body.textContent).not.toContain('暂无评论')
   })
@@ -639,9 +868,12 @@ describe('DriveCommentsRail', () => {
 
   it('shows pending state while an inline reply is being submitted', async () => {
     let resolveReply: (() => void) | null = null
-    const onReply = vi.fn(() => new Promise<void>((resolve) => {
-      resolveReply = resolve
-    }))
+    const onReply = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveReply = resolve
+        })
+    )
     renderRail({ onReply })
 
     await click(buttonWithText('回复'))
@@ -655,19 +887,30 @@ describe('DriveCommentsRail', () => {
   })
 
   it('positions attached comments by their markdown anchor', () => {
-    renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 48 })] })
+    renderRail({
+      threads: [thread({ anchorStatus: 'attached', anchorTop: 48 })],
+    })
 
-    expect(threadSection('thread-1').getAttribute('style')).toContain('top: 8px')
+    expect(threadSection('thread-1').getAttribute('style')).toContain(
+      'top: 8px'
+    )
   })
 
   it('offsets attached comments by the markdown content position', () => {
-    renderRail({ anchorBaseOffset: 24, threads: [thread({ anchorStatus: 'attached', anchorTop: 48 })] })
+    renderRail({
+      anchorBaseOffset: 24,
+      threads: [thread({ anchorStatus: 'attached', anchorTop: 48 })],
+    })
 
-    expect(threadSection('thread-1').getAttribute('style')).toContain('top: 32px')
+    expect(threadSection('thread-1').getAttribute('style')).toContain(
+      'top: 32px'
+    )
   })
 
   it('keeps the rail frame fixed and clips the translated anchored layer', () => {
-    renderRail({ threads: [thread({ anchorStatus: 'attached', anchorTop: 0 })] })
+    renderRail({
+      threads: [thread({ anchorStatus: 'attached', anchorTop: 0 })],
+    })
 
     expect(commentRail().className).toContain('h-full')
     expect(commentRail().className).toContain('min-h-0')
@@ -683,8 +926,18 @@ describe('DriveCommentsRail', () => {
   it('keeps nearby anchored comments from overlapping', () => {
     renderRail({
       threads: [
-        thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
-        thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 }),
+        thread({
+          id: 'thread-1',
+          body: 'First',
+          anchorStatus: 'attached',
+          anchorTop: 10,
+        }),
+        thread({
+          id: 'thread-2',
+          body: 'Second',
+          anchorStatus: 'attached',
+          anchorTop: 20,
+        }),
       ],
     })
 
@@ -710,7 +963,9 @@ describe('DriveCommentsRail', () => {
       frames.set(frameId, callback)
       return frameId
     })
-    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) =>
+      frames.delete(frameId)
+    )
     TestResizeObserver.instances = []
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
 
@@ -744,21 +999,40 @@ describe('DriveCommentsRail', () => {
       return frameId
     })
     vi.stubGlobal('requestAnimationFrame', requestAnimationFrame)
-    vi.stubGlobal('cancelAnimationFrame', vi.fn((frameId: number) => frames.delete(frameId)))
+    vi.stubGlobal(
+      'cancelAnimationFrame',
+      vi.fn((frameId: number) => frames.delete(frameId))
+    )
     TestResizeObserver.instances = []
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
 
     renderRail({
       threads: [
-        thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
-        thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 }),
+        thread({
+          id: 'thread-1',
+          body: 'First',
+          anchorStatus: 'attached',
+          anchorTop: 10,
+        }),
+        thread({
+          id: 'thread-2',
+          body: 'Second',
+          anchorStatus: 'attached',
+          anchorTop: 20,
+        }),
       ],
     })
 
     expect(TestResizeObserver.instances).toHaveLength(1)
     const observer = TestResizeObserver.instances[0]
     if (!observer) throw new Error('Missing resize observer')
-    expect(observer.observed).toEqual(new Set([railTitle(), threadSection('thread-1'), threadSection('thread-2')]))
+    expect(observer.observed).toEqual(
+      new Set([
+        railTitle(),
+        threadSection('thread-1'),
+        threadSection('thread-2'),
+      ])
+    )
 
     observer.emit([
       resizeEntry(threadSection('thread-1'), 80),
@@ -793,7 +1067,9 @@ describe('DriveCommentsRail', () => {
       frames.set(frameId, callback)
       return frameId
     })
-    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) =>
+      frames.delete(frameId)
+    )
     TestResizeObserver.instances = []
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
     renderRail({
@@ -828,12 +1104,24 @@ describe('DriveCommentsRail', () => {
       frames.set(frameId, callback)
       return frameId
     })
-    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) =>
+      frames.delete(frameId)
+    )
     TestResizeObserver.instances = []
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
     const threads = [
-      thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 }),
-      thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 }),
+      thread({
+        id: 'thread-1',
+        body: 'First',
+        anchorStatus: 'attached',
+        anchorTop: 10,
+      }),
+      thread({
+        id: 'thread-2',
+        body: 'Second',
+        anchorStatus: 'attached',
+        anchorTop: 20,
+      }),
     ]
 
     renderRail({ threads })
@@ -862,11 +1150,23 @@ describe('DriveCommentsRail', () => {
       frames.set(frameId, callback)
       return frameId
     })
-    vi.stubGlobal('cancelAnimationFrame', (frameId: number) => frames.delete(frameId))
+    vi.stubGlobal('cancelAnimationFrame', (frameId: number) =>
+      frames.delete(frameId)
+    )
     TestResizeObserver.instances = []
     vi.stubGlobal('ResizeObserver', TestResizeObserver)
-    const first = thread({ id: 'thread-1', body: 'First', anchorStatus: 'attached', anchorTop: 10 })
-    const second = thread({ id: 'thread-2', body: 'Second', anchorStatus: 'attached', anchorTop: 20 })
+    const first = thread({
+      id: 'thread-1',
+      body: 'First',
+      anchorStatus: 'attached',
+      anchorTop: 10,
+    })
+    const second = thread({
+      id: 'thread-2',
+      body: 'Second',
+      anchorStatus: 'attached',
+      anchorTop: 20,
+    })
 
     renderRail({ threads: [first, second] })
     const observer = TestResizeObserver.instances[0]
@@ -888,7 +1188,9 @@ describe('DriveCommentsRail', () => {
     const onDeleteComment = vi.fn(async () => undefined)
     renderRail({
       onDeleteComment,
-      threads: [thread({ canEdit: true, canDelete: true, canDeleteThread: true })],
+      threads: [
+        thread({ canEdit: true, canDelete: true, canDeleteThread: true }),
+      ],
     })
 
     expect(document.body.textContent).not.toContain('编辑评论')
@@ -910,7 +1212,9 @@ describe('DriveCommentsRail', () => {
 
   it('does not expose discussion deletion when only thread delete permission is allowed', () => {
     renderRail({
-      threads: [thread({ canEdit: false, canDelete: false, canDeleteThread: true })],
+      threads: [
+        thread({ canEdit: false, canDelete: false, canDeleteThread: true }),
+      ],
     })
 
     expect(document.body.textContent).not.toContain('编辑')
@@ -930,7 +1234,12 @@ describe('DriveCommentsRail', () => {
       body: 'Reply body',
     }
     renderRail({
-      threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
+      threads: [
+        {
+          ...source,
+          thread: { ...source.thread, comments: [firstComment, reply] },
+        },
+      ],
     })
 
     await openCommentMenu()
@@ -956,7 +1265,12 @@ describe('DriveCommentsRail', () => {
       body: 'Child reply',
     }
     renderRail({
-      threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, parent, child] } }],
+      threads: [
+        {
+          ...source,
+          thread: { ...source.thread, comments: [firstComment, parent, child] },
+        },
+      ],
     })
 
     await openCommentMenu(1)
@@ -977,10 +1291,17 @@ describe('DriveCommentsRail', () => {
     }
     renderRail({
       onDeleteComment,
-      threads: [{ ...source, thread: { ...source.thread, comments: [firstComment, reply] } }],
+      threads: [
+        {
+          ...source,
+          thread: { ...source.thread, comments: [firstComment, reply] },
+        },
+      ],
     })
 
-    const actionButtons = document.querySelectorAll<HTMLButtonElement>('button[aria-label^="评论操作："]')
+    const actionButtons = document.querySelectorAll<HTMLButtonElement>(
+      'button[aria-label^="评论操作："]'
+    )
     expect(actionButtons).toHaveLength(2)
     expect(buttonWithLabel('讨论操作')).toBeNull()
     await openCommentMenu(1)
@@ -999,7 +1320,9 @@ describe('DriveCommentsRail', () => {
     expect(quote.parentElement?.querySelector('[data-slot="badge"]')).toBeNull()
     expect(buttonWithLabel('重新打开')).toBeNull()
     expect(statusAction.textContent).toBe('已解决')
-    expect(statusAction.getAttribute('aria-haspopup')).toBe('menu')
+    expect(['menu', 'true']).toContain(
+      statusAction.getAttribute('aria-haspopup')
+    )
   })
 
   it('does not focus the thread when its status action or menu icon is clicked', async () => {
@@ -1007,24 +1330,41 @@ describe('DriveCommentsRail', () => {
     const onUpdateThreadStatus = vi.fn(async () => undefined)
     renderRail({ onFocusThread, onUpdateThreadStatus })
     await click(requiredButtonWithLabel('标记为已解决'))
-    expect(onUpdateThreadStatus).toHaveBeenCalledWith({ threadId: 'thread-1', status: 'resolved' })
+    expect(onUpdateThreadStatus).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: 'resolved',
+    })
     expect(onFocusThread).not.toHaveBeenCalled()
-    rerenderRail({ threads: [thread({ status: 'resolved' })], onFocusThread, onUpdateThreadStatus })
+    rerenderRail({
+      threads: [thread({ status: 'resolved' })],
+      onFocusThread,
+      onUpdateThreadStatus,
+    })
     await openStatusMenu()
     const icon = menuItemWithText('重新打开').querySelector('svg')
     if (!icon) throw new Error('Missing reopen icon')
-    await act(async () => { icon.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({ threadId: 'thread-1', status: 'open' })
+    await act(async () => {
+      icon.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(onUpdateThreadStatus).toHaveBeenLastCalledWith({
+      threadId: 'thread-1',
+      status: 'open',
+    })
     expect(onFocusThread).not.toHaveBeenCalled()
   })
 
   it('keeps keyboard focus on the status control after resolving', async () => {
     const onUpdateThreadStatus = vi.fn(async () => {
-      rerenderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+      rerenderRail({
+        threads: [thread({ status: 'resolved' })],
+        onUpdateThreadStatus,
+      })
     })
     renderRail({ onUpdateThreadStatus })
     const action = requiredButtonWithLabel('标记为已解决')
-    await act(async () => { action.focus() })
+    await act(async () => {
+      action.focus()
+    })
     await click(action)
     expect(document.activeElement).toBe(requiredButtonWithLabel('已解决'))
   })
@@ -1033,25 +1373,45 @@ describe('DriveCommentsRail', () => {
     const onUpdateThreadStatus = vi.fn(async () => {
       rerenderRail({ onUpdateThreadStatus })
     })
-    renderRail({ threads: [thread({ status: 'resolved' })], onUpdateThreadStatus })
+    renderRail({
+      threads: [thread({ status: 'resolved' })],
+      onUpdateThreadStatus,
+    })
     await openStatusMenu()
     const reopen = menuItemWithText('重新打开')
-    await act(async () => { reopen.focus() })
+    await act(async () => {
+      reopen.focus()
+    })
     await keyDown(reopen, { key: 'Enter' })
     expect(document.activeElement).toBe(requiredButtonWithLabel('标记为已解决'))
   })
 
   it('does not take focus from a reply being written while the status update finishes', async () => {
     let finish!: () => void
-    const onUpdateThreadStatus = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    const onUpdateThreadStatus = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
     renderRail({ activeThreadId: 'thread-1', onUpdateThreadStatus })
     const action = requiredButtonWithLabel('标记为已解决')
-    await act(async () => { action.focus() })
+    await act(async () => {
+      action.focus()
+    })
     await click(action)
-    await act(async () => { textarea().focus() })
+    await act(async () => {
+      textarea().focus()
+    })
     await inputValue(textarea(), 'Still writing')
-    rerenderRail({ threads: [thread({ status: 'resolved' })], activeThreadId: 'thread-1', onUpdateThreadStatus })
-    await act(async () => { finish() })
+    rerenderRail({
+      threads: [thread({ status: 'resolved' })],
+      activeThreadId: 'thread-1',
+      onUpdateThreadStatus,
+    })
+    await act(async () => {
+      finish()
+    })
     expect(document.activeElement).toBe(textarea())
     expect(textarea().value).toBe('Still writing')
   })
@@ -1068,12 +1428,20 @@ describe('DriveCommentsRail', () => {
     renderRail({ threads: [thread({ canEdit: true, canDelete: false })] })
     await openCommentMenu()
     expect(menuItemWithText('编辑评论')).not.toBeNull()
-    expect(Array.from(document.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent === '删除评论')).toBe(false)
+    expect(
+      Array.from(document.querySelectorAll('[role="menuitem"]')).some(
+        (item) => item.textContent === '删除评论'
+      )
+    ).toBe(false)
     await keyDown(menuItemWithText('编辑评论'), { key: 'Escape' })
     rerenderRail({ threads: [thread({ canEdit: false, canDelete: true })] })
     await openCommentMenu()
     expect(menuItemWithText('删除评论')).not.toBeNull()
-    expect(Array.from(document.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent === '编辑评论')).toBe(false)
+    expect(
+      Array.from(document.querySelectorAll('[role="menuitem"]')).some(
+        (item) => item.textContent === '编辑评论'
+      )
+    ).toBe(false)
   })
 
   it('cancels deletion from the inline confirmation without deleting or focusing the thread', async () => {
@@ -1089,14 +1457,19 @@ describe('DriveCommentsRail', () => {
   })
 })
 
-function renderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> = {}) {
+function renderRail(
+  overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> = {}
+) {
   host = document.createElement('div')
   document.body.append(host)
   const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-    if (this.hasAttribute('data-markdown-comments-header')) return rectWithHeight(40)
-    return getBoundingClientRect.call(this)
-  })
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function () {
+      if (this.hasAttribute('data-markdown-comments-header'))
+        return rectWithHeight(40)
+      return getBoundingClientRect.call(this)
+    }
+  )
   root = createRoot(host)
   act(() => {
     root?.render(
@@ -1115,7 +1488,9 @@ function renderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> 
   })
 }
 
-function rerenderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> = {}) {
+function rerenderRail(
+  overrides: Partial<Parameters<typeof DriveCommentsRail>[0]> = {}
+) {
   act(() => {
     root?.render(
       <DriveCommentsRail
@@ -1135,7 +1510,9 @@ function rerenderRail(overrides: Partial<Parameters<typeof DriveCommentsRail>[0]
 
 const canReply = true
 
-function commentDraft(overrides: Partial<ReturnType<typeof createCommentDraft>> = {}) {
+function commentDraft(
+  overrides: Partial<ReturnType<typeof createCommentDraft>> = {}
+) {
   return { ...createCommentDraft(), ...overrides }
 }
 
@@ -1152,21 +1529,23 @@ function createCommentDraft() {
   }
 }
 
-function thread(input: {
-  readonly id?: string
-  readonly body?: string
-  readonly anchorStatus?: 'attached' | 'shifted' | 'orphaned'
-  readonly anchorTop?: number | null
-  readonly canEdit?: boolean
-  readonly canDelete?: boolean
-  readonly canDeleteThread?: boolean
-  readonly canChangeStatus?: boolean
-  readonly status?: 'open' | 'resolved'
-  readonly handle?: string | null
-  readonly email?: string | null
-  readonly quote?: string
-  readonly updatedAt?: string
-} = {}) {
+function thread(
+  input: {
+    readonly id?: string
+    readonly body?: string
+    readonly anchorStatus?: 'attached' | 'shifted' | 'orphaned'
+    readonly anchorTop?: number | null
+    readonly canEdit?: boolean
+    readonly canDelete?: boolean
+    readonly canDeleteThread?: boolean
+    readonly canChangeStatus?: boolean
+    readonly status?: 'open' | 'resolved'
+    readonly handle?: string | null
+    readonly email?: string | null
+    readonly quote?: string
+    readonly updatedAt?: string
+  } = {}
+) {
   const handle = 'handle' in input ? input.handle : 'user'
   const email = 'email' in input ? input.email : 'user@example.com'
   const id = input.id ?? 'thread-1'
@@ -1183,44 +1562,55 @@ function thread(input: {
         range: { start: 0, end: 4 },
         quote: { exact: input.quote ?? 'Note', prefix: '', suffix: '' },
       },
-      anchorStatus: input.anchorStatus ?? 'attached' as const,
+      anchorStatus: input.anchorStatus ?? ('attached' as const),
       status: input.status ?? 'open',
       author: { id: 'user-1', email, handle },
-      comments: [{
-        id: 'comment-1',
-        threadId: id,
-        parentCommentId: null,
-        body: input.body ?? 'First line\nSecond line\n<strong>unsafe</strong>',
-        author: { id: 'user-1', email, handle },
-        createdAt: '2026-06-21T00:00:00.000Z',
-        updatedAt: '2026-06-21T00:00:00.000Z',
-        editedAt: null,
-        deletedAt: null,
-        deleted: false,
-        permissions: { canEdit: input.canEdit ?? true, canDelete: input.canDelete ?? true },
-      }],
+      comments: [
+        {
+          id: 'comment-1',
+          threadId: id,
+          parentCommentId: null,
+          body:
+            input.body ?? 'First line\nSecond line\n<strong>unsafe</strong>',
+          author: { id: 'user-1', email, handle },
+          createdAt: '2026-06-21T00:00:00.000Z',
+          updatedAt: '2026-06-21T00:00:00.000Z',
+          editedAt: null,
+          deletedAt: null,
+          deleted: false,
+          permissions: {
+            canEdit: input.canEdit ?? true,
+            canDelete: input.canDelete ?? true,
+          },
+        },
+      ],
       createdAt: '2026-06-21T00:00:00.000Z',
       updatedAt: input.updatedAt ?? '2026-06-21T00:00:00.000Z',
-      permissions: { canDelete: input.canDeleteThread ?? true, canChangeStatus: input.canChangeStatus ?? true },
+      permissions: {
+        canDelete: input.canDeleteThread ?? true,
+        canChangeStatus: input.canChangeStatus ?? true,
+      },
     },
-    placement: typeof input.anchorTop === 'number'
-      ? { status: 'positioned' as const, anchorTop: input.anchorTop }
-      : 'anchorTop' in input
-        ? { status: 'unavailable' as const }
-        : { status: 'positioned' as const, anchorTop: 0 },
+    placement:
+      typeof input.anchorTop === 'number'
+        ? { status: 'positioned' as const, anchorTop: input.anchorTop }
+        : 'anchorTop' in input
+          ? { status: 'unavailable' as const }
+          : { status: 'positioned' as const, anchorTop: 0 },
   }
 }
 
 async function click(element: HTMLElement) {
   await act(async () => {
-    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
     element.click()
   })
 }
 
 async function keyDown(element: HTMLElement, init: KeyboardEventInit) {
   await act(async () => {
-    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+    element.dispatchEvent(
+      new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+    )
   })
 }
 
@@ -1229,13 +1619,17 @@ async function openStatusMenu() {
 }
 
 async function openCommentMenu(index = 0) {
-  const trigger = document.querySelectorAll<HTMLButtonElement>('button[aria-label^="评论操作："]')[index]
+  const trigger = document.querySelectorAll<HTMLButtonElement>(
+    'button[aria-label^="评论操作："]'
+  )[index]
   if (!trigger) throw new Error(`Missing comment menu ${index}`)
   await keyDown(trigger, { key: 'Enter' })
 }
 
 function menuItemWithText(text: string) {
-  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) => item.textContent === text)
+  const item = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="menuitem"]')
+  ).find((item) => item.textContent === text)
   if (!item) throw new Error(`Missing comment menu item ${text}`)
   return item
 }
@@ -1246,13 +1640,17 @@ async function editComment(index = 0) {
 }
 
 function buttonWithText(text: string) {
-  const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes(text))
+  const button = Array.from(document.querySelectorAll('button')).find((item) =>
+    item.textContent?.includes(text)
+  )
   if (!button) throw new Error(`Missing button ${text}`)
   return button as HTMLButtonElement
 }
 
 function buttonWithLabel(label: string) {
-  return document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  return document.querySelector<HTMLButtonElement>(
+    `button[aria-label="${label}"]`
+  )
 }
 
 function requiredButtonWithLabel(label: string) {
@@ -1268,35 +1666,44 @@ function textarea() {
 }
 
 function dialogContent() {
-  const element = document.querySelector('[data-slot="dialog-content"]')
-  if (!(element instanceof HTMLElement)) throw new Error('Missing dialog content')
+  const element = document.querySelector('[data-slot="modal-dialog"]')
+  if (!(element instanceof HTMLElement))
+    throw new Error('Missing dialog content')
   return element
 }
 
 function optionalDialogContent() {
-  return document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+  return document.querySelector<HTMLElement>('[data-slot="modal-dialog"]')
 }
 
 function replyComposer(threadId: string) {
-  return threadCard(threadId).querySelector<HTMLElement>('[data-markdown-comment-reply-composer="true"]')
+  return threadCard(threadId).querySelector<HTMLElement>(
+    '[data-markdown-comment-reply-composer="true"]'
+  )
 }
 
 function commentReplyButtons(threadId: string) {
-  const buttons = Array.from(threadCard(threadId).querySelectorAll<HTMLButtonElement>('button'))
-    .filter((button) => button.textContent === '回复')
-  if (buttons.length === 0) throw new Error(`Missing reply buttons for ${threadId}`)
+  const buttons = Array.from(
+    threadCard(threadId).querySelectorAll<HTMLButtonElement>('button')
+  ).filter((button) => button.textContent === '回复')
+  if (buttons.length === 0)
+    throw new Error(`Missing reply buttons for ${threadId}`)
   return buttons
 }
 
 function threadSection(threadId: string) {
-  const element = document.querySelector(`[data-markdown-comment-thread-id="${threadId}"]`)
-  if (!(element instanceof HTMLElement)) throw new Error(`Missing thread ${threadId}`)
+  const element = document.querySelector(
+    `[data-markdown-comment-thread-id="${threadId}"]`
+  )
+  if (!(element instanceof HTMLElement))
+    throw new Error(`Missing thread ${threadId}`)
   return element
 }
 
 function threadCard(threadId: string) {
   const element = threadSection(threadId).querySelector('section')
-  if (!(element instanceof HTMLElement)) throw new Error(`Missing thread card ${threadId}`)
+  if (!(element instanceof HTMLElement))
+    throw new Error(`Missing thread card ${threadId}`)
   return element
 }
 
@@ -1306,13 +1713,17 @@ function threadTop(threadId: string): number {
 }
 
 function draftTop(): number {
-  const element = document.querySelector<HTMLElement>('[data-markdown-comment-draft="true"]')
+  const element = document.querySelector<HTMLElement>(
+    '[data-markdown-comment-draft="true"]'
+  )
   if (!element) throw new Error('Missing draft')
   return Number(element.style.top.replace('px', ''))
 }
 
 function railTitle() {
-  const element = document.querySelector('[data-markdown-comments-rail="true"] > div')
+  const element = document.querySelector(
+    '[data-markdown-comments-rail="true"] > div'
+  )
   if (!(element instanceof HTMLElement)) throw new Error('Missing rail title')
   return element
 }
@@ -1324,26 +1735,36 @@ function commentRail() {
 }
 
 function railScrollRegion() {
-  const element = document.querySelector('[data-markdown-comments-rail="true"] > div + div')
-  if (!(element instanceof HTMLElement)) throw new Error('Missing rail scroll region')
+  const element = document.querySelector(
+    '[data-markdown-comments-rail="true"] > div + div'
+  )
+  if (!(element instanceof HTMLElement))
+    throw new Error('Missing rail scroll region')
   return element
 }
 
 function anchoredRegion() {
   const element = anchoredLayer().parentElement
-  if (!(element instanceof HTMLElement)) throw new Error('Missing anchored region')
+  if (!(element instanceof HTMLElement))
+    throw new Error('Missing anchored region')
   return element
 }
 
 function anchoredLayer() {
-  const element = document.querySelector('[data-markdown-comments-anchored-layer="true"]')
-  if (!(element instanceof HTMLElement)) throw new Error('Missing anchored layer')
+  const element = document.querySelector(
+    '[data-markdown-comments-anchored-layer="true"]'
+  )
+  if (!(element instanceof HTMLElement))
+    throw new Error('Missing anchored layer')
   return element
 }
 
 async function inputValue(element: HTMLTextAreaElement, value: string) {
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value'
+    )?.set
     setter?.call(element, value)
     element.dispatchEvent(new Event('input', { bubbles: true }))
   })

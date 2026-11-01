@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const directory = path.dirname(fileURLToPath(import.meta.url))
 const repository = path.resolve(directory, '../../..')
-const dashboard = path.join(repository, 'dashboard-v2')
+const dashboard = path.join(repository, 'dashboard')
 const requireDashboard = createRequire(path.join(dashboard, 'package.json'))
 const ts = requireDashboard('typescript')
 const dataModule = async code => import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)

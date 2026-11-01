@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import type { SkillRepositoryForkInput } from '@synapse/shared'
 import { skillRepositoryApi } from './skill-repository-api'
 import { skillRepositoryKeys } from './use-skill-repository'

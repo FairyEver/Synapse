@@ -1,20 +1,25 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { DriveConsoleItemPage } from '@/features/drive-console/drive-console-page'
+import { DriveBrowserPage } from '@/features/drive-browser/drive-browser-page'
 import { navigateDriveBrowserUrl } from '@/features/drive-browser/shared/drive-navigation'
-
-export const Route = createFileRoute('/_authenticated/drive/items/$browserItemId')({
+export const Route = createFileRoute(
+  '/_authenticated/drive/items/$browserItemId'
+)({
   validateSearch: validateDriveBrowserSearch,
   component: RouteComponent,
 })
-
 function RouteComponent() {
   const { browserItemId } = Route.useParams()
-  const { surface } = Route.useSearch()
-  return <DriveConsoleItemPage itemId={browserItemId} surface={surface} onNavigate={navigateDriveBrowserUrl} />
+  return (
+    <DriveBrowserPage
+      context='owner'
+      itemId={browserItemId}
+      surface='standalone'
+      onNavigate={navigateDriveBrowserUrl}
+    />
+  )
 }
-
-function validateDriveBrowserSearch(search: Record<string, unknown>) {
+function validateDriveBrowserSearch(_search: Record<string, unknown>) {
   return {
-    surface: search.surface === 'console' ? 'console' as const : 'standalone' as const,
+    surface: 'standalone' as const,
   }
 }

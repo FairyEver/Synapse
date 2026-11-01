@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@heroui/react"
 import { roomPreferencesStore, type PokerRoomPreferences } from "../../../runtime/preferences"
 import type { PokerRoomDraft } from "../components/CreateRoomDialog"
 
 const defaults: PokerRoomPreferences = {
-  mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000,
+  mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000, roll: false,
 }
 // Serialize config read/merge/write, including choices made immediately before unmount.
 let pendingSave: Promise<void> = Promise.resolve()
 
-function roomPreferences({ mode, variant, blindPreset, maxSeats, buyIn }: PokerRoomPreferences): PokerRoomPreferences {
-  return { mode, variant, blindPreset, maxSeats, buyIn }
+function roomPreferences({ mode, variant, blindPreset, maxSeats, buyIn, roll = false }: PokerRoomPreferences): PokerRoomPreferences {
+  return { mode, variant, blindPreset, maxSeats, buyIn, roll }
 }
 
 export function usePokerRoomDraft(userId: string | null, nickname: string) {
@@ -33,7 +33,7 @@ export function usePokerRoomDraft(userId: string | null, nickname: string) {
       setDraft({ ...(preferences ?? defaults), name: defaultName })
       return true
     } catch {
-      if (identity.current === userId && loadVersion.current === version) toast.error("读取房间配置失败，请重试")
+      if (identity.current === userId && loadVersion.current === version) toast.danger("读取房间配置失败，请重试")
       return false
     }
   }
@@ -45,11 +45,12 @@ export function usePokerRoomDraft(userId: string | null, nickname: string) {
     pendingSave = pendingSave.then(async () => {
       await roomPreferencesStore.update(userId, preferences)
     }).catch(() => {
-      if (identity.current === userId) toast.error("保存房间配置失败，请重新选择")
+      if (identity.current === userId) toast.danger("保存房间配置失败，请重新选择")
     })
   }
   const createParams = () => ({
-    ...draft,
+    mode:draft.mode, variant:draft.variant, blindPreset:draft.blindPreset, maxSeats:draft.maxSeats, buyIn:draft.buyIn,
+    ruleOptions: {roll:draft.roll ?? false},
     // The server adds the authoritative room code only for automatic names.
     name: !draft.name.trim() || draft.name === initialName.current ? undefined : draft.name,
   })

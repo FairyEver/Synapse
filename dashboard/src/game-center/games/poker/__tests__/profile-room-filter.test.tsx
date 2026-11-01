@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { act, type ReactNode } from "react"
+import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { AgentProfiles } from "../components/AgentProfiles"
@@ -24,33 +24,6 @@ vi.mock("../../../lib/api", () => ({
     },
   }),
 }))
-// Keep the page's selection binding while avoiding shared Radix geometry in jsdom.
-vi.mock("@/game-center/ui/select", () => ({
-  Select: ({
-    value,
-    onValueChange,
-    children,
-  }: {
-    value: string
-    onValueChange: (value: string) => void
-    children: ReactNode
-  }) => (
-    <select
-      aria-label="对比牌桌"
-      value={value}
-      onChange={(event) => onValueChange(event.target.value)}
-    >
-      {children}
-    </select>
-  ),
-  SelectContent: ({ children }: { children: ReactNode }) => children,
-  SelectItem: ({ value, children }: { value: string; children: ReactNode }) => (
-    <option value={value}>{children}</option>
-  ),
-  SelectTrigger: () => null,
-  SelectValue: () => null,
-}))
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 const seated = { sessions: [{ game: "poker", roomCode: "4821" }] }

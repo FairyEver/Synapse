@@ -1,9 +1,7 @@
-import { createFileRoute, Navigate } from '@tanstack/react-router'
-
+import { createFileRoute, Navigate } from '@tanstack/react-router';
 export const Route = createFileRoute('/_authenticated/')({
-  component: AuthenticatedIndexRoute,
-})
-
+    component: AuthenticatedIndexRoute,
+});
 function AuthenticatedIndexRoute() {
-  return <Navigate to='/settings' replace />
+    return <Navigate to='/settings' replace/>;
 }

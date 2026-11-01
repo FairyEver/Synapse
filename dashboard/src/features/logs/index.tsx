@@ -1,26 +1,11 @@
+import { Alert, Button, Chip, Input, ListBox, Select, Table, toast } from '@heroui/react'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { adminApi } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { getCleanupBeforeDate, LOG_CLEANUP_RETENTION_DAYS } from './cleanup-date'
 import { getCleanupResultMessage } from './cleanup-result'
 import { getLogsQueryErrorMessage } from './logs-error'
@@ -55,7 +40,7 @@ export default function LogsPage() {
       await adminApi.downloadLogs({})
       toast.success('日志下载中')
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '下载失败')
+      toast.danger(err instanceof Error ? err.message : '下载失败')
     }
   }
 
@@ -67,7 +52,7 @@ export default function LogsPage() {
       setCleanupOpen(false)
       toast.success(getCleanupResultMessage(result))
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '清理失败')
+      toast.danger(err instanceof Error ? err.message : '清理失败')
     } finally {
       setIsCleaning(false)
     }
@@ -76,9 +61,9 @@ export default function LogsPage() {
   function levelColor(lvl: string) {
     switch (lvl) {
       case 'fatal':
-      case 'error': return 'destructive' as const
-      case 'warn': return 'secondary' as const
-      default: return 'outline' as const
+      case 'error': return 'danger' as const
+      case 'warn': return 'warning' as const
+      default: return 'default' as const
     }
   }
 
@@ -88,72 +73,75 @@ export default function LogsPage() {
         <h1 className='text-lg font-semibold'>系统日志</h1>
       </Header>
       <Main>
-        <div className='flex items-center gap-2 pb-4'>
-          <Select value={level} onValueChange={setLevel}>
-            <SelectTrigger className='w-32'>
-              <SelectValue placeholder='级别' />
-            </SelectTrigger>
-            <SelectContent>
+        <div className='flex flex-wrap items-center gap-2'>
+          <Select aria-label="筛选选项" value={level} onChange={(key) => (setLevel)(String(key ?? ''))}>
+            <Select.Trigger className='w-32'>
+              <Select.Value  />
+            <Select.Indicator /></Select.Trigger>
+            <Select.Popover><ListBox>
               {logLevelOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                <ListBox.Item key={option.value} id={option.value}>{option.label}<ListBox.ItemIndicator /></ListBox.Item>
               ))}
-            </SelectContent>
+            </ListBox></Select.Popover>
           </Select>
           <Input
+            aria-label='日志条数'
             type='number'
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value) || 100)}
             className='w-24'
             placeholder='条数'
           />
-          <Button variant='outline' size='sm' onClick={handleDownload}>
+          <Button variant='outline' size='sm' onPress={handleDownload}>
             <Download className='mr-1 h-4 w-4' />
             下载
           </Button>
           <Button
             variant='outline'
             size='sm'
-            disabled={isCleaning}
-            onClick={() => setCleanupOpen(true)}
+            isDisabled={isCleaning}
+            onPress={() => setCleanupOpen(true)}
           >
             <Trash2 className='mr-1 h-4 w-4' />
             清理{LOG_CLEANUP_RETENTION_DAYS}天前
           </Button>
         </div>
         {isLoading ? (
-          <div className='text-muted-foreground'>加载中...</div>
+          <div className='text-muted'>加载中...</div>
         ) : isError ? (
-          <Alert variant='destructive'>
-            <AlertTitle>加载失败</AlertTitle>
-            <AlertDescription>
+          <Alert status="danger">
+            <Alert.Indicator /><Alert.Content><Alert.Title>加载失败</Alert.Title>
+            <Alert.Description>
               <p>{getLogsQueryErrorMessage(error)}</p>
               <Button
                 type='button'
                 variant='outline'
                 size='sm'
-                onClick={() => void refetch()}
+                onPress={() => void refetch()}
               >
                 重试
               </Button>
-            </AlertDescription>
+            </Alert.Description></Alert.Content>
           </Alert>
         ) : (
-          <div className='space-y-1 rounded-md border p-3 font-mono text-xs'>
-            {data?.map((entry, i) => (
-              <div key={i} className='flex gap-2'>
-                <span className='shrink-0 text-muted-foreground'>
-                  {new Date(entry.time).toLocaleTimeString('zh-CN')}
-                </span>
-                <Badge variant={levelColor(entry.level)} className='shrink-0 text-[10px]'>
-                  {entry.level}
-                </Badge>
-                <span className='break-all'>{entry.msg}</span>
-              </div>
-            ))}
-            {data?.length === 0 && (
-              <div className='text-muted-foreground'>暂无日志</div>
-            )}
-          </div>
+          <Table>
+            <Table.ScrollContainer>
+              <Table.Content aria-label='系统日志'>
+                <Table.Header>
+                  <Table.Column id='time' isRowHeader>时间</Table.Column>
+                  <Table.Column id='level'>级别</Table.Column>
+                  <Table.Column id='message'>内容</Table.Column>
+                </Table.Header>
+                <Table.Body renderEmptyState={() => '暂无日志'}>
+                  {data?.map((entry, index) => <Table.Row id={String(index)} key={index}>
+                    <Table.Cell className='whitespace-nowrap tabular-nums text-muted'>{new Date(entry.time).toLocaleTimeString('zh-CN')}</Table.Cell>
+                    <Table.Cell><Chip color={levelColor(entry.level)} size='sm'>{entry.level}</Chip></Table.Cell>
+                    <Table.Cell className='break-all font-mono text-xs'>{entry.msg}</Table.Cell>
+                  </Table.Row>)}
+                </Table.Body>
+              </Table.Content>
+            </Table.ScrollContainer>
+          </Table>
         )}
         <ConfirmDialog
           open={cleanupOpen}

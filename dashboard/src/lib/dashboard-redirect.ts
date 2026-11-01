@@ -1,8 +1,9 @@
 const dashboardRedirectOrigin = 'https://synapse.local'
 import { isGameRedirect } from '@/game-center/runtime/routes'
+import { resolveWebEntrypoint } from './web-entrypoints'
 const dashboardBasePath = '/console'
 const legacyDashboardBasePath = '/dashboard'
-const rootPublicRedirectPathPrefixes = ['/share/']
+const rootPublicRedirectPathPrefixes = ['/share/', '/drive/items/']
 
 type DashboardRedirectLocation = Pick<Location, 'pathname' | 'search' | 'hash'>
 
@@ -43,8 +44,15 @@ export function normalizeDashboardRedirect(value: string | undefined) {
   if (!value) return undefined
   try {
     const url = new URL(value, dashboardRedirectOrigin)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
+    const entrypoint = resolveWebEntrypoint(url.pathname.startsWith('/drive/folders/')
+      ? `${dashboardBasePath}${url.pathname}${url.search}${url.hash}`
+      : url.href)
+    if (entrypoint.kind === 'redirect' && entrypoint.location.startsWith('/drive/items/')) {
+      return entrypoint.location
+    }
     const pathname = stripDashboardBasePath(url.pathname)
-    if (!pathname.startsWith('/') || pathname === '/sign-in') {
+    if (!pathname.startsWith('/') || pathname.startsWith('//') || pathname === '/sign-in') {
       return undefined
     }
     return `${pathname}${url.search}${url.hash}`

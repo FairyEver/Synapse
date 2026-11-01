@@ -1,9 +1,9 @@
+import { Button, Dropdown, Separator, toast } from '@heroui/react'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { MoreHorizontal, Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { adminApi, type AdminTeamRow } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
@@ -16,14 +16,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { TeamNameDialog } from './team-dialogs'
 
 export default function TeamsPage() {
@@ -74,7 +66,7 @@ export default function TeamsPage() {
       setDeleteTarget(null)
       toast.success('已删除团队')
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.danger(error.message),
   })
 
   const columns = useMemo<ColumnDef<AdminTeamRow>[]>(
@@ -87,7 +79,7 @@ export default function TeamsPage() {
         cell: ({ row }) => (
           <LongText className='font-medium'>{row.original.name}</LongText>
         ),
-        meta: { className: 'max-w-0 w-1/3' },
+        meta: { label: '团队名称', className: 'w-64 max-w-64' },
       },
       {
         accessorKey: 'memberCount',
@@ -95,7 +87,7 @@ export default function TeamsPage() {
           <DataTableColumnHeader column={column} title='成员' />
         ),
         cell: ({ row }) => `${row.original.memberCount} 人`,
-        meta: { className: 'w-24' },
+        meta: { label: '成员', className: 'w-24' },
       },
       {
         accessorKey: 'createdAt',
@@ -105,7 +97,7 @@ export default function TeamsPage() {
         cell: ({ row }) => (
           <RelativeTime className='tabular-nums' value={row.original.createdAt} />
         ),
-        meta: { className: 'w-32' },
+        meta: { label: '创建时间', className: 'w-32' },
       },
       {
         id: 'actions',
@@ -114,30 +106,30 @@ export default function TeamsPage() {
             className='flex justify-end'
             onClick={(event) => event.stopPropagation()}
           >
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
+            <Dropdown >
+
                 <Button
                   variant='ghost'
-                  size='icon'
+                  isIconOnly
                   className='size-8'
                   aria-label={`${row.original.name} 的团队操作`}
                 >
                   <MoreHorizontal />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align='end'>
-                <DropdownMenuItem onSelect={() => setRenameTarget(row.original)}>
+
+              <Dropdown.Popover placement="bottom end"><Dropdown.Menu>
+                <Dropdown.Item id="action-1" onAction={() => setRenameTarget(row.original)}>
                   重命名
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant='destructive'
-                  onSelect={() => setDeleteTarget(row.original)}
+                </Dropdown.Item>
+                <Separator />
+                <Dropdown.Item id="action-2"
+                  variant="danger"
+                  onAction={() => setDeleteTarget(row.original)}
                 >
                   删除团队
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </Dropdown.Item>
+              </Dropdown.Menu></Dropdown.Popover>
+            </Dropdown>
           </div>
         ),
         meta: {
@@ -161,7 +153,7 @@ export default function TeamsPage() {
       <Header fixed>
         <h1 className='text-lg font-semibold'>团队</h1>
         {(teamsQuery.data?.total ?? 0) > 0 ? (
-          <span className='text-sm text-muted-foreground'>
+          <span className='text-sm text-muted'>
             共 {teamsQuery.data?.total} 个
           </span>
         ) : null}
@@ -183,15 +175,16 @@ export default function TeamsPage() {
           onSortingChange={setSorting}
           getRowProps={(row) => ({
             className: 'cursor-pointer',
-            onClick: () => openTeam(row.original),
+            'aria-label': `打开 ${row.original.name}`,
+            onAction: () => openTeam(row.original),
           })}
           emptyMessage={
             <div className='flex flex-col items-center gap-2 py-2'>
               <p className='font-medium'>还没有团队</p>
-              <p className='text-sm text-muted-foreground'>
+              <p className='text-sm text-muted'>
                 创建一个团队，然后把用户加进来。
               </p>
-              <Button size='sm' onClick={() => setCreateOpen(true)}>
+              <Button size='sm' onPress={() => setCreateOpen(true)}>
                 <Plus />
                 新建团队
               </Button>
@@ -199,7 +192,7 @@ export default function TeamsPage() {
           }
           toolbar={
             (teamsQuery.data?.total ?? 0) > 0 ? (
-              <Button size='sm' onClick={() => setCreateOpen(true)}>
+              <Button size='sm' onPress={() => setCreateOpen(true)}>
                 <Plus />
                 新建团队
               </Button>

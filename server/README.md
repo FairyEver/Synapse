@@ -356,7 +356,7 @@ cd /Users/liyang/Documents/code/github/Synapse
 bash deploy.sh
 ```
 
-生产前端默认构建 Dashboard V2，控制台、管理后台、客户端文件预览和已有分享沿用原 URL。未设置或置空 `DASHBOARD_UI` 均选择 V2；需要回滚旧前端时执行 `DASHBOARD_UI=v1 bash deploy.sh`，必须整包重建，不能混用两版入口资源。仅修改服务器 `.env` 不会覆盖部署命令的选择。容器构建生成 `/console/dashboard-ui.json`，部署后应核对其 `ui` 字段与本次目标一致。
+生产镜像直接构建当前 Dashboard，控制台、管理后台、客户端文件预览、已有分享和游戏入口沿用原 URL。部署不再提供旧版构建选择或部署版本标记；入口 HTML 会重新校验缓存，带 hash 的静态资源继续使用长期缓存。
 
 `deploy.sh` 会先读取线上已应用的 Prisma migration，扫描本次待发布 migration 中的危险 SQL。遇到删表、删列、删行、唯一索引或危险 `NOT NULL` 变更时，默认会把待发布 migration、风险数量、文件行号和 SQL 明细写入日志并继续部署；如果需要让风险扫描恢复为阻断部署，可用 `STRICT_MIGRATION_RISK_SCAN=1 bash deploy.sh`。
 
@@ -578,5 +578,5 @@ server/               # NestJS API、Prisma、Docker 和 Nginx 配置
 ├── Dockerfile        # Docker 多阶段构建文件
 └── .env.example      # 环境变量模板
 
-dashboard/            # React + Vite 管理后台源码，生产构建后由 server 容器的 Nginx 服务到 /console/
+dashboard/            # React + Vite + HeroUI 网页控制台，生产构建后由 server 容器的 Nginx 服务
 ```

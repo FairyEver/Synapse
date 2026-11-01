@@ -60,6 +60,18 @@ describe("游戏中心入口", () => {
     expect(host.textContent).toContain("1:30")
     await act(async () => root.unmount())
   })
+  it("待结算点数有独立数值且阻止补助，旧响应缺字段按零展示",async()=>{
+    const host=document.createElement("div"),root=createRoot(host)
+    const render=async(pending?:number)=>act(async()=>root.render(<HallHome overview={{...overview,points:{total:pending??0,available:0,inPlay:0,netProfit:0,...(pending===undefined?{}:{pending})},sessions:[]}} previews={{}} onEnter={()=>{}} onSession={()=>{}} onGrant={()=>{}}/>))
+    await render(31)
+    const metrics=[...host.querySelectorAll('section[aria-label="我的点数"] > div')]
+    expect(metrics.find(node=>node.textContent?.includes("待结算"))?.textContent).toContain("31")
+    expect(host.textContent).not.toContain("领取每日补助")
+    await render()
+    expect(host.textContent).toContain("领取每日补助")
+    expect(host.textContent).toContain("待结算0")
+    await act(async()=>root.unmount())
+  })
   it("只有可用点数为零且没有进行中会话时才提供补助", async () => {
     const host = document.createElement("div"),
       root = createRoot(host),

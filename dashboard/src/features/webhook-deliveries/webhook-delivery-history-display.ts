@@ -1,6 +1,6 @@
 import type { WebhookDeliveryHistoryDto, WebhookDeliveryStatus } from '@synapse/shared'
 
-export type HistoryStatusBadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline'
+export type HistoryStatusColor = 'success' | 'default' | 'danger' | 'accent'
 
 export type WebhookDeliveryHistoryQueryDraft = {
   page: number
@@ -31,13 +31,13 @@ export function formatWebhookDeliveryHistoryBody(
   return `${delivery.bodyKind} · ${delivery.bodySize} B`
 }
 
-export function getWebhookDeliveryHistoryStatusBadgeVariant(
+export function getWebhookDeliveryHistoryStatusColor(
   status: WebhookDeliveryStatus
-): HistoryStatusBadgeVariant {
-  if (status === 'delivered') return 'default'
-  if (status === 'broadcast_failed') return 'destructive'
-  if (status === 'received' || status === 'sent') return 'outline'
-  return 'secondary'
+): HistoryStatusColor {
+  if (status === 'delivered') return 'success'
+  if (status === 'broadcast_failed') return 'danger'
+  if (status === 'received' || status === 'sent') return 'accent'
+  return 'default'
 }
 
 export function formatWebhookDeliveryHistoryDateTime(value: string) {

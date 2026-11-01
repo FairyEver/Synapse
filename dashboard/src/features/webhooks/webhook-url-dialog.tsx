@@ -1,58 +1,40 @@
-import { Copy } from 'lucide-react'
-import { toast } from 'sonner'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-
+import { TextField } from '@heroui/react';
+import { Button, Input, Label, Modal, toast } from '@heroui/react';
+import { Copy } from 'lucide-react';
 type WebhookUrlDialogProps = {
-  open: boolean
-  title: string
-  url: string
-  onOpenChange: (open: boolean) => void
-}
-
-export function WebhookUrlDialog({
-  open,
-  title,
-  url,
-  onOpenChange,
-}: WebhookUrlDialogProps) {
-  async function copyUrl() {
-    try {
-      await navigator.clipboard.writeText(url)
-      toast.success('已复制')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '复制失败')
+    open: boolean;
+    title: string;
+    url: string;
+    onOpenChange: (open: boolean) => void;
+};
+export function WebhookUrlDialog({ open, title, url, onOpenChange, }: WebhookUrlDialogProps) {
+    async function copyUrl() {
+        try {
+            await navigator.clipboard.writeText(url);
+            toast.success('已复制');
+        }
+        catch (error) {
+            toast.danger(error instanceof Error ? error.message : '复制失败');
+        }
     }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
-        <div className='grid gap-2'>
-          <Label htmlFor='webhook-url'>URL</Label>
-          <Input id='webhook-url' readOnly value={url} />
-        </div>
-        <DialogFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+    return (<Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}><Modal.Container><Modal.Dialog>
+        <Modal.Header>
+          <Modal.Heading>{title}</Modal.Heading>
+        </Modal.Header>
+        <Modal.Body>
+          <TextField className='grid gap-2'>
+            <Label htmlFor='webhook-url'>URL</Label>
+            <Input variant="secondary" id='webhook-url' readOnly value={url}></Input>
+          </TextField>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline" onPress={() => onOpenChange(false)}>
             关闭
           </Button>
-          <Button onClick={() => void copyUrl()}>
+          <Button onPress={() => void copyUrl()}>
             <Copy />
             复制
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
+        </Modal.Footer>
+      </Modal.Dialog></Modal.Container></Modal.Backdrop>);
 }

@@ -1,15 +1,14 @@
+import { Button, Chip } from '@heroui/react'
 import type { WebhookDeliveryHistoryDto } from '@synapse/shared'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { LongText } from '@/components/long-text'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { getWebhookDeliveryStatusLabel } from '@/features/webhooks/webhook-display'
 import {
   formatWebhookDeliveryClientSummary,
   formatWebhookDeliveryHistoryBody,
   formatWebhookDeliveryHistoryDateTime,
-  getWebhookDeliveryHistoryStatusBadgeVariant,
+  getWebhookDeliveryHistoryStatusColor,
   getWebhookHistoryDisplayName,
 } from './webhook-delivery-history-display'
 
@@ -32,7 +31,7 @@ export function buildWebhookDeliveryHistoryColumns({
         <span className='tabular-nums'>
           {formatWebhookDeliveryHistoryDateTime(row.original.receivedAt)}
         </span>,
-      meta: { className: 'w-40' },
+      meta: { label: '时间', className: 'w-40' },
     },
     {
       id: 'webhook',
@@ -46,24 +45,24 @@ export function buildWebhookDeliveryHistoryColumns({
               {getWebhookHistoryDisplayName(row.original)}
             </span>
             {row.original.webhook.deletedAt ? (
-              <Badge variant='secondary'>已删除</Badge>
+              <Chip color="default">已删除</Chip>
             ) : null}
           </div>
-          <span className='truncate font-mono text-xs text-muted-foreground'>
+          <span className='truncate font-mono text-xs text-muted'>
             {row.original.webhook.publicId}
           </span>
         </div>
       ),
       enableSorting: false,
-      meta: { className: 'max-w-0 w-1/3' },
+      meta: { label: 'Webhook', className: 'w-64 max-w-64' },
     },
     {
       accessorKey: 'method',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='方法' />
       ),
-      cell: ({ row }) => <Badge variant='outline'>{row.original.method}</Badge>,
-      meta: { className: 'w-20' },
+      cell: ({ row }) => <Chip color="default">{row.original.method}</Chip>,
+      meta: { label: '方法', className: 'w-20' },
     },
     {
       accessorKey: 'status',
@@ -71,15 +70,15 @@ export function buildWebhookDeliveryHistoryColumns({
         <DataTableColumnHeader column={column} title='状态' />
       ),
       cell: ({ row }) => (
-        <Badge
-          variant={getWebhookDeliveryHistoryStatusBadgeVariant(
+        <Chip
+          color={getWebhookDeliveryHistoryStatusColor(
             row.original.status
           )}
         >
           {getWebhookDeliveryStatusLabel(row.original.status)}
-        </Badge>
+        </Chip>
       ),
-      meta: { className: 'w-32' },
+      meta: { label: '状态', className: 'w-32' },
     },
     {
       id: 'clients',
@@ -88,7 +87,7 @@ export function buildWebhookDeliveryHistoryColumns({
       ),
       cell: ({ row }) => formatWebhookDeliveryClientSummary(row.original),
       enableSorting: false,
-      meta: {
+      meta: { label: '客户端',
         className: 'w-20',
         thClassName: 'text-right',
         tdClassName: 'text-right tabular-nums',
@@ -101,7 +100,7 @@ export function buildWebhookDeliveryHistoryColumns({
       ),
       cell: ({ row }) => formatWebhookDeliveryHistoryBody(row.original),
       enableSorting: false,
-      meta: { className: 'w-24' },
+      meta: { label: 'Body', className: 'w-24' },
     },
     {
       id: 'actions',
@@ -109,7 +108,7 @@ export function buildWebhookDeliveryHistoryColumns({
         <Button
           variant='ghost'
           size='sm'
-          onClick={() => onOpenDetail(row.original)}
+          onPress={() => onOpenDetail(row.original)}
         >
           详情
         </Button>
@@ -134,7 +133,7 @@ export function buildWebhookDeliveryHistoryColumns({
         <LongText>{row.original.user?.email ?? '-'}</LongText>
       ),
       enableSorting: false,
-      meta: { className: 'max-w-0 w-1/4' },
+      meta: { label: '用户', className: 'w-56 max-w-56' },
     })
   }
 

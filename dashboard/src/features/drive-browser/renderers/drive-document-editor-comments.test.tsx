@@ -8,8 +8,9 @@ import {
   type DriveDocumentEditorCommentsController,
   type DriveDocumentEditorCommentsDataAttributes,
 } from './drive-document-editor-comments'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const dataAttributes = {
   layout: 'data-test-editor-layout',
@@ -40,20 +41,28 @@ afterEach(async () => {
 })
 
 it('keeps one editor mounted while responsive side panels move into sheets', async () => {
-  vi.stubGlobal('ResizeObserver', class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  })
-  vi.stubGlobal('IntersectionObserver', class IntersectionObserver {
-    readonly root = null
-    readonly rootMargin = '0px'
-    readonly thresholds = [0]
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-    takeRecords() { return [] }
-  })
+  vi.stubGlobal(
+    'ResizeObserver',
+    class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  )
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class IntersectionObserver {
+      readonly root = null
+      readonly rootMargin = '0px'
+      readonly thresholds = [0]
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return []
+      }
+    }
+  )
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
@@ -99,29 +108,45 @@ it('keeps one editor mounted while responsive side panels move into sheets', asy
       <DriveDocumentEditorCommentsFrame
         comments={comments}
         dataAttributes={dataAttributes}
-        editorView={<textarea aria-label='Document editor' defaultValue='Initial' />}
+        editorView={
+          <textarea aria-label='Document editor' defaultValue='Initial' />
+        }
       />
     )
   }
 
   act(() => renderFrame({ commentsOpen: true, isCompact: false }))
-  const editor = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Document editor"]')
+  const editor = document.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="Document editor"]'
+  )
   if (!editor) throw new Error('Missing document editor')
   await inputTextarea(editor, 'Unsaved draft')
   expect(panel('comments')).not.toBeNull()
 
   act(() => renderFrame({ commentsOpen: false, isCompact: false }))
-  expect(document.querySelector('textarea[aria-label="Document editor"]')).toBe(editor)
+  expect(document.querySelector('textarea[aria-label="Document editor"]')).toBe(
+    editor
+  )
   expect(editor.value).toBe('Unsaved draft')
   expect(panel('comments')).toBeNull()
 
-  act(() => renderFrame({ commentsOpen: true, compactCommentsOpen: true, isCompact: true }))
-  expect(document.querySelector('textarea[aria-label="Document editor"]')).toBe(editor)
+  act(() =>
+    renderFrame({
+      commentsOpen: true,
+      compactCommentsOpen: true,
+      isCompact: true,
+    })
+  )
+  expect(document.querySelector('textarea[aria-label="Document editor"]')).toBe(
+    editor
+  )
   expect(editor.value).toBe('Unsaved draft')
   expect(sheet('comments')).not.toBeNull()
 
   act(() => renderFrame({ commentsOpen: true, isCompact: false }))
-  expect(document.querySelector('textarea[aria-label="Document editor"]')).toBe(editor)
+  expect(document.querySelector('textarea[aria-label="Document editor"]')).toBe(
+    editor
+  )
   expect(editor.value).toBe('Unsaved draft')
   expect(panel('comments')).not.toBeNull()
 })
@@ -134,8 +159,14 @@ function sheet(name: 'comments'): Element | null {
   return document.querySelector(`[data-test-editor-sheet="${name}"]`)
 }
 
-async function inputTextarea(editor: HTMLTextAreaElement, value: string): Promise<void> {
-  const valueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+async function inputTextarea(
+  editor: HTMLTextAreaElement,
+  value: string
+): Promise<void> {
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    HTMLTextAreaElement.prototype,
+    'value'
+  )?.set
   if (!valueSetter) throw new Error('Missing textarea value setter')
   await act(async () => {
     editor.focus()

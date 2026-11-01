@@ -1,9 +1,9 @@
+import { Button, Chip, Dropdown, Separator, toast } from '@heroui/react'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { ArrowLeft, MoreHorizontal, Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { adminApi, type AdminTeamMemberRow } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
@@ -14,15 +14,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { AddMembersDialog } from './add-members-dialog'
 import { TeamNameDialog } from './team-dialogs'
 import { Organizations } from './organizations'
@@ -68,7 +59,7 @@ export default function TeamDetailPage() {
       toast.success('已删除团队')
       void navigate({ to: '/teams' })
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.danger(error.message),
   })
 
   const removeMember = useMutation({
@@ -81,7 +72,7 @@ export default function TeamDetailPage() {
       setRemoveTarget(null)
       toast.success('已移出团队')
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.danger(error.message),
   })
 
   const columns = useMemo<ColumnDef<AdminTeamMemberRow>[]>(
@@ -92,23 +83,23 @@ export default function TeamDetailPage() {
         cell: ({ row }) => (
           <LongText className='font-medium'>{row.original.email}</LongText>
         ),
-        meta: { className: 'max-w-0 w-1/3' },
+        meta: { className: 'w-64 max-w-64' },
       },
       {
         accessorKey: 'handle',
         header: '用户名',
         cell: ({ row }) => <LongText>{row.original.handle || '-'}</LongText>,
-        meta: { className: 'max-w-0 w-1/5' },
+        meta: { className: 'w-40 max-w-40' },
       },
       {
         accessorKey: 'status',
         header: '状态',
         cell: ({ row }) => (
-          <Badge
-            variant={row.original.status === 'active' ? 'default' : 'secondary'}
+          <Chip
+            color={row.original.status === 'active' ? "accent" : "default"}
           >
             {row.original.status === 'active' ? '正常' : '已禁用'}
-          </Badge>
+          </Chip>
         ),
         meta: { className: 'w-24' },
       },
@@ -127,8 +118,8 @@ export default function TeamDetailPage() {
             <Button
               variant='ghost'
               size='sm'
-              disabled={removeMember.isPending}
-              onClick={() => setRemoveTarget(row.original)}
+              isDisabled={removeMember.isPending}
+              onPress={() => setRemoveTarget(row.original)}
             >
               移除
             </Button>
@@ -153,44 +144,46 @@ export default function TeamDetailPage() {
       <Header fixed>
         <Button
           variant='ghost'
-          size='icon'
+          isIconOnly
           className='size-8'
           aria-label='返回团队列表'
-          onClick={() => void navigate({ to: '/teams' })}
+          onPress={() => void navigate({ to: '/teams' })}
         >
           <ArrowLeft />
         </Button>
-        <h1 className='text-lg font-semibold'>{team?.name ?? '团队'}</h1>
+        <div className='min-w-0 flex-1'>
+        <h1 className='truncate text-lg font-semibold'>{team?.name ?? '团队'}</h1>
         {team ? (
-          <span className='text-sm text-muted-foreground'>
+          <p className='text-sm text-muted'>
             {team.memberCount} 名成员 · 创建于{' '}
             <RelativeTime className='tabular-nums' value={team.createdAt} />
-          </span>
+          </p>
         ) : null}
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
+        </div>
+        <Dropdown >
+
             <Button
               variant='ghost'
-              size='icon'
+              isIconOnly
               className='ms-auto size-8'
               aria-label='团队操作'
             >
               <MoreHorizontal />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align='end'>
-            <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+
+          <Dropdown.Popover placement="bottom end"><Dropdown.Menu>
+            <Dropdown.Item id="action-1" onAction={() => setRenameOpen(true)}>
               重命名
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant='destructive'
-              onSelect={() => setDeleteOpen(true)}
+            </Dropdown.Item>
+            <Separator />
+            <Dropdown.Item id="action-2"
+              variant="danger"
+              onAction={() => setDeleteOpen(true)}
             >
               删除团队
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </Dropdown.Item>
+          </Dropdown.Menu></Dropdown.Popover>
+        </Dropdown>
       </Header>
       <Main>
         <div className='flex items-center justify-between pb-2'>
@@ -198,14 +191,15 @@ export default function TeamDetailPage() {
           <Button
             variant='outline'
             size='sm'
-            disabled={!team}
-            onClick={() => setAddMembersOpen(true)}
+            isDisabled={!team}
+            onPress={() => setAddMembersOpen(true)}
           >
             <Plus />
             添加成员
           </Button>
         </div>
         <ServerDataTable
+          className='flex-none'
           columns={columns}
           data={membersQuery.data?.data ?? []}
           page={page}
@@ -221,10 +215,10 @@ export default function TeamDetailPage() {
           emptyMessage={
             <div className='flex flex-col items-center gap-2 py-2'>
               <p className='font-medium'>这个团队还没有成员</p>
-              <p className='text-sm text-muted-foreground'>
+              <p className='text-sm text-muted'>
                 添加成员后，他们会出现在这里。
               </p>
-              <Button size='sm' onClick={() => setAddMembersOpen(true)}>
+              <Button size='sm' onPress={() => setAddMembersOpen(true)}>
                 <Plus />
                 添加成员
               </Button>

@@ -13,8 +13,8 @@ export function PokerHandPreview({ hand }: { hand: PokerSummaryView }) {
         ))}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-muted-foreground">最近一手</p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="text-xs text-muted">最近点数牌局</p>
+        <p className="mt-1 text-xs text-muted">
           #{hand.roomCode} · 第 {hand.handNo} 手
         </p>
       </div>
@@ -39,8 +39,8 @@ export function PokerPreview() {
         <PokerHandPreview hand={last} />
       ) : (
         !history.error && (
-          <p className="text-sm text-muted-foreground">
-            {history.data ? "暂无牌局记录" : "正在读取记录…"}
+          <p className="text-sm text-muted">
+            {history.data ? "暂无点数牌局记录" : "正在读取记录…"}
           </p>
         )
       )}

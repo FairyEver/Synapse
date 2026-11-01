@@ -12,10 +12,8 @@ const mocks = vi.hoisted(() => ({
   exportOwnerPdf: vi.fn(),
   exportSharePdf: vi.fn(),
   finish: vi.fn(),
-  loading: vi.fn(() => 'toast-id'),
-  success: vi.fn(),
-  warning: vi.fn(),
-  error: vi.fn(),
+  notify: vi.fn(() => 'toast-id'),
+  update: vi.fn(),
 }))
 
 vi.mock('../shared/drive-telemetry-api', () => ({
@@ -29,13 +27,9 @@ vi.mock('../shared/drive-telemetry', () => ({
   startDriveOperation: vi.fn(() => mocks.finish),
 }))
 
-vi.mock('sonner', () => ({
-  toast: {
-    loading: mocks.loading,
-    success: mocks.success,
-    warning: mocks.warning,
-    error: mocks.error,
-  },
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@heroui/react')>(),
+  toast: Object.assign(mocks.notify, { update: mocks.update }),
 }))
 
 let root: Root | null = null
@@ -80,7 +74,7 @@ describe('useDriveMarkdownPdfExport', () => {
     await act(async () => Promise.all([first, duplicate]))
 
     expect(mocks.finish).toHaveBeenCalledWith('success')
-    expect(mocks.warning).toHaveBeenCalledWith('PDF 已导出，2 张图片未加载，1 个图表未渲染', { id: 'toast-id' })
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', 'PDF 已导出，2 张图片未加载，1 个图表未渲染', { variant: 'warning', isLoading: false, timeout: 4000 })
   })
 
   it('routes a shared child export and presents an actionable service error', async () => {
@@ -94,7 +88,7 @@ describe('useDriveMarkdownPdfExport', () => {
 
     expect(mocks.exportSharePdf).toHaveBeenCalledWith('share-1', 'file-1', '说明.pdf')
     expect(mocks.finish).toHaveBeenCalledWith('failure')
-    expect(mocks.error).toHaveBeenCalledWith('PDF 导出服务暂不可用，请稍后重试。', { id: 'toast-id' })
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', 'PDF 导出服务暂不可用，请稍后重试。', { variant: 'danger', isLoading: false, timeout: 4000 })
   })
 
   it('uses the share-root endpoint when the shared Markdown file is the share root', async () => {
@@ -107,7 +101,7 @@ describe('useDriveMarkdownPdfExport', () => {
     await act(async () => hook().exportPdf())
 
     expect(mocks.exportSharePdf).toHaveBeenCalledWith('share-root', null, '说明.pdf')
-    expect(mocks.success).toHaveBeenCalledWith('PDF 已导出', { id: 'toast-id' })
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', 'PDF 已导出', { variant: 'success', isLoading: false, timeout: 4000 })
   })
 
   it.each([
@@ -120,7 +114,7 @@ describe('useDriveMarkdownPdfExport', () => {
 
     await act(async () => hook().exportPdf())
 
-    expect(mocks.error).toHaveBeenCalledWith(message, { id: 'toast-id' })
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', message, { variant: 'danger', isLoading: false, timeout: 4000 })
   })
 
   it.each([
@@ -136,7 +130,7 @@ describe('useDriveMarkdownPdfExport', () => {
 
     await act(async () => hook().exportPdf())
 
-    expect(mocks.error).toHaveBeenCalledWith(message, { id: 'toast-id' })
+    expect(mocks.update).toHaveBeenCalledWith('toast-id', message, { variant: 'danger', isLoading: false, timeout: 4000 })
   })
 })
 

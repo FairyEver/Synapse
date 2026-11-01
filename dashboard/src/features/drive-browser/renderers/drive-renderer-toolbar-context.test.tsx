@@ -7,8 +7,9 @@ import {
   DriveRendererToolbarProvider,
   useDriveRendererToolbar,
 } from './drive-renderer-toolbar-context'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -56,11 +57,17 @@ describe('DriveRendererToolbarProvider', () => {
 
 function Contributor({ label }: { readonly label: string }) {
   const { registerItems } = useDriveRendererToolbar()
-  useEffect(() => registerItems('code', [{
-    kind: 'status',
-    id: 'sync',
-    label,
-  }]), [label, registerItems])
+  useEffect(
+    () =>
+      registerItems('code', [
+        {
+          kind: 'status',
+          id: 'sync',
+          label,
+        },
+      ]),
+    [label, registerItems]
+  )
   return null
 }
 
@@ -83,5 +90,7 @@ function render(element: ReactElement) {
 }
 
 function toolbarLabels(): string {
-  return document.querySelector('[data-testid="toolbar-items"]')?.textContent ?? ''
+  return (
+    document.querySelector('[data-testid="toolbar-items"]')?.textContent ?? ''
+  )
 }

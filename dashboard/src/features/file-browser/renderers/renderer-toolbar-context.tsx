@@ -1,19 +1,39 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import type { FilePreviewToolbarItem } from '../preview/file-preview-toolbar'
 
 export type FileRendererToolbarItem = FilePreviewToolbarItem
 
 export type FileRendererToolbarContextValue = {
   readonly items: readonly FileRendererToolbarItem[]
-  readonly registerItems: (scope: string, items: readonly FileRendererToolbarItem[]) => () => void
+  readonly registerItems: (
+    scope: string,
+    items: readonly FileRendererToolbarItem[]
+  ) => () => void
   readonly clearScope: (scope: string) => void
 }
 
-const FileRendererToolbarContext = createContext<FileRendererToolbarContextValue | null>(null)
-const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+const FileRendererToolbarContext =
+  createContext<FileRendererToolbarContextValue | null>(null)
+const useIsoLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect
 
-export function FileRendererToolbarProvider({ children }: { readonly children: ReactNode }) {
-  const [itemsByScope, setItemsByScope] = useState<ReadonlyMap<string, readonly FileRendererToolbarItem[]>>(() => new Map())
+export function FileRendererToolbarProvider({
+  children,
+}: {
+  readonly children: ReactNode
+}) {
+  const [itemsByScope, setItemsByScope] = useState<
+    ReadonlyMap<string, readonly FileRendererToolbarItem[]>
+  >(() => new Map())
 
   const clearScope = useCallback((scope: string) => {
     setItemsByScope((current) => {
@@ -24,21 +44,30 @@ export function FileRendererToolbarProvider({ children }: { readonly children: R
     })
   }, [])
 
-  const registerItems = useCallback((scope: string, items: readonly FileRendererToolbarItem[]) => {
-    setItemsByScope((current) => {
-      const next = new Map(current)
-      next.set(scope, items)
-      return next
-    })
-    return () => clearScope(scope)
-  }, [clearScope])
+  const registerItems = useCallback(
+    (scope: string, items: readonly FileRendererToolbarItem[]) => {
+      setItemsByScope((current) => {
+        const next = new Map(current)
+        next.set(scope, items)
+        return next
+      })
+      return () => clearScope(scope)
+    },
+    [clearScope]
+  )
 
-  const items = useMemo(() => Array.from(itemsByScope.values()).flat(), [itemsByScope])
-  const value = useMemo<FileRendererToolbarContextValue>(() => ({
-    items,
-    registerItems,
-    clearScope,
-  }), [clearScope, items, registerItems])
+  const items = useMemo(
+    () => Array.from(itemsByScope.values()).flat(),
+    [itemsByScope]
+  )
+  const value = useMemo<FileRendererToolbarContextValue>(
+    () => ({
+      items,
+      registerItems,
+      clearScope,
+    }),
+    [clearScope, items, registerItems]
+  )
 
   return (
     <FileRendererToolbarContext.Provider value={value}>
@@ -49,7 +78,10 @@ export function FileRendererToolbarProvider({ children }: { readonly children: R
 
 export function useFileRendererToolbar(): FileRendererToolbarContextValue {
   const value = useContext(FileRendererToolbarContext)
-  if (!value) throw new Error('useFileRendererToolbar must be used inside FileRendererToolbarProvider')
+  if (!value)
+    throw new Error(
+      'useFileRendererToolbar must be used inside FileRendererToolbarProvider'
+    )
   return value
 }
 
@@ -59,7 +91,7 @@ export function useOptionalFileRendererToolbar(): FileRendererToolbarContextValu
 
 export function useRegisterFileRendererToolbarItems(
   scope: string,
-  items: readonly FileRendererToolbarItem[],
+  items: readonly FileRendererToolbarItem[]
 ): void {
   const toolbar = useOptionalFileRendererToolbar()
   const registerItems = toolbar?.registerItems

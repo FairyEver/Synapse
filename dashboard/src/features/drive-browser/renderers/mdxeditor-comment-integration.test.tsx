@@ -23,8 +23,9 @@ import {
   commonMarkToMarkdownOptions,
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let host: HTMLDivElement | null = null
 let root: Root | null = null
@@ -32,19 +33,25 @@ let root: Root | null = null
 beforeEach(() => {
   Range.prototype.getBoundingClientRect = vi.fn(() => new DOMRect())
   Range.prototype.getClientRects = vi.fn(() => [] as unknown as DOMRectList)
-  vi.stubGlobal('ResizeObserver', class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  })
-  vi.stubGlobal('Image', class Image {
-    onerror: ((event: Event) => void) | null = null
-    onload: ((event: Event) => void) | null = null
-
-    set src(_value: string) {
-      queueMicrotask(() => this.onload?.(new Event('load')))
+  vi.stubGlobal(
+    'ResizeObserver',
+    class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
     }
-  })
+  )
+  vi.stubGlobal(
+    'Image',
+    class Image {
+      onerror: ((event: Event) => void) | null = null
+      onload: ((event: Event) => void) | null = null
+
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.(new Event('load')))
+      }
+    }
+  )
 })
 
 afterEach(() => {
@@ -80,19 +87,29 @@ describe('MDXEditor comment text integration', () => {
         <MDXEditor
           markdown={markdown}
           contentEditableClassName='drive-mdxeditor-content'
-          plugins={[headingsPlugin(), listsPlugin(), quotePlugin(), tablePlugin()]}
+          plugins={[
+            headingsPlugin(),
+            listsPlugin(),
+            quotePlugin(),
+            tablePlugin(),
+          ]}
         />
       )
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
 
-    const content = document.querySelector<HTMLElement>('.drive-mdxeditor-content')
-    if (!content) throw new Error('MDXEditor did not render the content editable')
+    const content = document.querySelector<HTMLElement>(
+      '.drive-mdxeditor-content'
+    )
+    if (!content)
+      throw new Error('MDXEditor did not render the content editable')
     const model = createDriveEditorTextModel(content)
 
     expect(model.text).toContain('标题普通 目标🙂列表项引用')
     expect(model.text).toContain('第一列第二列单元格尾部')
-    expect(model.text.indexOf('目标🙂')).toBeLessThan(model.text.indexOf('单元格'))
+    expect(model.text.indexOf('目标🙂')).toBeLessThan(
+      model.text.indexOf('单元格')
+    )
   })
 
   it('keeps the comment text stream aligned across rich Markdown structures', async () => {
@@ -179,13 +196,20 @@ describe('MDXEditor comment text integration', () => {
       await Promise.resolve()
     })
 
-    const content = document.querySelector<HTMLElement>('.drive-mdxeditor-content')
-    if (!content) throw new Error('MDXEditor did not render the content editable')
+    const content = document.querySelector<HTMLElement>(
+      '.drive-mdxeditor-content'
+    )
+    if (!content)
+      throw new Error('MDXEditor did not render the content editable')
     const model = createDriveEditorTextModel(content)
 
-    expect(model.text).toBe('HeadingBefore bold🙂orderedsecondparentnestedloose firstloose secondList separatortaskquoteHeadValueCellEndconst value = "😀"\nreturn valueEscaped *plain* & link goneBefore image inline after.blockBefore break\nAfter breakFormula $x + 1$ endraw htmlAfter')
+    expect(model.text).toBe(
+      'HeadingBefore bold🙂orderedsecondparentnestedloose firstloose secondList separatortaskquoteHeadValueCellEndconst value = "😀"\nreturn valueEscaped *plain* & link goneBefore image inline after.blockBefore break\nAfter breakFormula $x + 1$ endraw htmlAfter'
+    )
     const roundTripped = editorRef.current?.getMarkdown() ?? ''
-    expect(roundTripped).toMatch(/[*-](?: \[[ xX]\])? loose first\n\s*\n\s+loose second/u)
+    expect(roundTripped).toMatch(
+      /[*-](?: \[[ xX]\])? loose first\n\s*\n\s+loose second/u
+    )
     expect(roundTripped).toMatch(/<div>\n\s+raw block html\n<\/div>/u)
     expect(roundTripped).toContain('Before break\\\nAfter break')
   })

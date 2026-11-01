@@ -1,25 +1,47 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { DriveAnnotationCommentDto, DriveAnnotationThreadDto, DriveAnnotationThreadStatus } from '@synapse/shared'
-import { ChevronDown, ChevronRight, ChevronUp, Loader2, MapPinOff, MoreHorizontal, Pencil, Quote, RefreshCw, Reply, RotateCcw, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { useDiscussionTargetFocus, usePendingDriveDiscussion } from './use-drive-discussion-location'
-import { RelativeTime } from '@/components/relative-time'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogFrame,
-  DialogFrameBody,
-  DialogFrameHeader,
-} from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Textarea } from '@/components/ui/textarea'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+  Avatar,
+  Button,
+  Chip,
+  Dropdown,
+  Modal,
+  TextArea,
+  Tooltip,
+  toast,
+} from '@heroui/react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react'
+import type {
+  DriveAnnotationCommentDto,
+  DriveAnnotationThreadDto,
+  DriveAnnotationThreadStatus,
+} from '@synapse/shared'
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Loader2,
+  MapPinOff,
+  MoreHorizontal,
+  Pencil,
+  Quote,
+  RefreshCw,
+  Reply,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
+import {
+  useDiscussionTargetFocus,
+  usePendingDriveDiscussion,
+} from './use-drive-discussion-location'
+import { RelativeTime } from '@/components/relative-time'
 import { cn, getDisplayNameInitials } from '@/lib/utils'
-
 const COMMENT_CARD_ESTIMATED_HEIGHT = 128
 const COMMENT_CARD_GAP = 8
 const COMMENT_DRAFT_CARD_ID = '__comment-draft__'
@@ -29,22 +51,27 @@ const COMMENT_COMPOSER_EVENT_KEYS = {
   edit: 'web.drive.comment.update',
 } as const
 type CommentActionPromise = Promise<unknown>
-
 type CommentRailMeasurements = {
   readonly cardHeights: Record<string, number>
   readonly headerHeight: number
   readonly unlocatedSectionHeight: number
 }
-
 type MeasurementTarget =
-  | { readonly kind: 'card'; readonly threadId: string }
-  | { readonly kind: 'header' }
-  | { readonly kind: 'unlocated' }
-
+  | {
+      readonly kind: 'card'
+      readonly threadId: string
+    }
+  | {
+      readonly kind: 'header'
+    }
+  | {
+      readonly kind: 'unlocated'
+    }
 type PendingMeasurement = number | HTMLElement | null
-
 type ThreadComposerState =
-  | { readonly kind: 'closed' }
+  | {
+      readonly kind: 'closed'
+    }
   | {
       readonly kind: 'reply'
       readonly parentCommentId: string | null
@@ -60,16 +87,23 @@ type ThreadComposerState =
       readonly submitting: boolean
       readonly error: string | null
     }
-
-type ThreadEditComposerState = Extract<ThreadComposerState, { readonly kind: 'edit' }>
-
+type ThreadEditComposerState = Extract<
+  ThreadComposerState,
+  {
+    readonly kind: 'edit'
+  }
+>
 export type DriveCommentsRailItem = {
   readonly thread: DriveAnnotationThreadDto
   readonly placement:
-    | { readonly status: 'positioned'; readonly anchorTop: number }
-    | { readonly status: 'unavailable' }
+    | {
+        readonly status: 'positioned'
+        readonly anchorTop: number
+      }
+    | {
+        readonly status: 'unavailable'
+      }
 }
-
 export type MarkdownCommentDraft = {
   readonly anchorTop: number
   readonly quote: string
@@ -80,11 +114,19 @@ export type MarkdownCommentDraft = {
   readonly onSubmit: () => void
   readonly onCancel: () => void
 }
-
 type AnchoredRailCard =
-  | { readonly id: string; readonly kind: 'thread'; readonly anchorTop: number; readonly item: DriveCommentsRailItem }
-  | { readonly id: typeof COMMENT_DRAFT_CARD_ID; readonly kind: 'draft'; readonly anchorTop: number; readonly draft: MarkdownCommentDraft }
-
+  | {
+      readonly id: string
+      readonly kind: 'thread'
+      readonly anchorTop: number
+      readonly item: DriveCommentsRailItem
+    }
+  | {
+      readonly id: typeof COMMENT_DRAFT_CARD_ID
+      readonly kind: 'draft'
+      readonly anchorTop: number
+      readonly draft: MarkdownCommentDraft
+    }
 export function DriveCommentsRail({
   mode = 'anchored',
   threads,
@@ -116,9 +158,19 @@ export function DriveCommentsRail({
   readonly onRefresh?: () => void
   readonly onNavigatePrevious?: () => void
   readonly onNavigateNext?: () => void
-  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
-  readonly onUpdateThreadStatus: (input: { readonly threadId: string; readonly status: DriveAnnotationThreadStatus }) => CommentActionPromise
-  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onReply: (input: {
+    readonly threadId: string
+    readonly parentCommentId: string | null
+    readonly body: string
+  }) => CommentActionPromise
+  readonly onUpdateThreadStatus: (input: {
+    readonly threadId: string
+    readonly status: DriveAnnotationThreadStatus
+  }) => CommentActionPromise
+  readonly onUpdateComment: (input: {
+    readonly commentId: string
+    readonly body: string
+  }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
   readonly anchorLayerRef?: (element: HTMLDivElement | null) => void
   readonly onAnchoredHeightChange?: (height: number) => void
@@ -128,96 +180,127 @@ export function DriveCommentsRail({
   const anchoredRegionRef = useRef<HTMLDivElement | null>(null)
   const partition = useMemo(() => partitionRailThreads(threads), [threads])
   const unlocatedThreads = useMemo(
-    () => mode === 'list'
-      ? partition.orphaned
-      : [...partition.orphaned, ...partition.unavailable],
+    () =>
+      mode === 'list'
+        ? partition.orphaned
+        : [...partition.orphaned, ...partition.unavailable],
     [mode, partition]
   )
   const listThreads = useMemo(
-    () => mode === 'list'
-      ? [...partition.anchored, ...partition.unavailable]
-      : partition.anchored,
+    () =>
+      mode === 'list'
+        ? [...partition.anchored, ...partition.unavailable]
+        : partition.anchored,
     [mode, partition]
   )
   const anchoredCards = useMemo<readonly AnchoredRailCard[]>(() => {
     const cards: AnchoredRailCard[] = partition.anchored.map((item) => ({
       id: item.thread.id,
       kind: 'thread',
-      anchorTop: item.placement.status === 'positioned' ? item.placement.anchorTop : 0,
+      anchorTop:
+        item.placement.status === 'positioned' ? item.placement.anchorTop : 0,
       item,
     }))
-    if (draft) cards.push({ id: COMMENT_DRAFT_CARD_ID, kind: 'draft', anchorTop: draft.anchorTop, draft })
+    if (draft)
+      cards.push({
+        id: COMMENT_DRAFT_CARD_ID,
+        kind: 'draft',
+        anchorTop: draft.anchorTop,
+        draft,
+      })
     return cards
   }, [draft, partition.anchored])
   const measurementIds = useMemo(
-    () => [...threads.map((item) => item.thread.id), ...(draft ? [COMMENT_DRAFT_CARD_ID] : [])],
+    () => [
+      ...threads.map((item) => item.thread.id),
+      ...(draft ? [COMMENT_DRAFT_CARD_ID] : []),
+    ],
     [draft, threads]
   )
-  const measurements = useCommentRailMeasurements(mode !== 'list', measurementIds)
-  const reservedTop = measurements.headerHeight + measurements.unlocatedSectionHeight
+  const measurements = useCommentRailMeasurements(
+    mode !== 'list',
+    measurementIds
+  )
+  const reservedTop =
+    measurements.headerHeight + measurements.unlocatedSectionHeight
   const layout = useMemo(
-    () => layoutRailCards(anchoredCards, measurements.cardHeights, anchorBaseOffset, reservedTop),
+    () =>
+      layoutRailCards(
+        anchoredCards,
+        measurements.cardHeights,
+        anchorBaseOffset,
+        reservedTop
+      ),
     [anchorBaseOffset, anchoredCards, measurements.cardHeights, reservedTop]
   )
-
   const compact = mode === 'list'
-
   const pending = usePendingDriveDiscussion()
   useEffect(() => {
     const target = pending?.location
     if (!pending || target?.kind !== 'annotation' || loading) return
     const item = threads.find((item) => item.thread.id === target.threadId)
-    if (!item) { pending.unavailable('该评论已删除'); return }
-    const comment = item.thread.comments.find((comment) => comment.id === target.commentId && !comment.deleted)
-    if (!comment) { pending.unavailable('该回复已删除'); return }
-    if (unlocatedThreads.some((item) => item.thread.id === target.threadId)) setUnlocatedDialogOpen(true)
+    if (!item) {
+      pending.unavailable('该评论已删除')
+      return
+    }
+    const comment = item.thread.comments.find(
+      (comment) => comment.id === target.commentId && !comment.deleted
+    )
+    if (!comment) {
+      pending.unavailable('该回复已删除')
+      return
+    }
+    if (unlocatedThreads.some((item) => item.thread.id === target.threadId))
+      setUnlocatedDialogOpen(true)
   }, [loading, pending, threads, unlocatedThreads])
-
   useLayoutEffect(() => {
     if (compact) return
-    const anchoredDocumentHeight = layout.anchored.length > 0
-      ? reservedTop + layout.anchoredHeight
-      : 0
+    const anchoredDocumentHeight =
+      layout.anchored.length > 0 ? reservedTop + layout.anchoredHeight : 0
     onAnchoredHeightChange?.(anchoredDocumentHeight)
-  }, [compact, layout.anchored.length, layout.anchoredHeight, onAnchoredHeightChange, reservedTop])
-
+  }, [
+    compact,
+    layout.anchored.length,
+    layout.anchoredHeight,
+    onAnchoredHeightChange,
+    reservedTop,
+  ])
   useEffect(() => {
     const element = anchoredRegionRef.current
     if (compact || !element || !onAnchoredWheel) return
     element.addEventListener('wheel', onAnchoredWheel, { passive: false })
     return () => element.removeEventListener('wheel', onAnchoredWheel)
   }, [compact, onAnchoredWheel])
-
   useEffect(() => {
     if (unlocatedThreads.length === 0) setUnlocatedDialogOpen(false)
   }, [unlocatedThreads.length])
-
-  const unlocatedButton = unlocatedThreads.length > 0 ? (
-    <UnlocatedCommentsButton
-      count={unlocatedThreads.length}
-      label={partition.orphaned.length > 0 ? '未定位评论' : '编辑中暂未定位'}
-      compact={compact}
-      elementRef={compact ? undefined : measurements.unlocatedSectionRef}
-      onClick={() => setUnlocatedDialogOpen(true)}
-    />
-  ) : null
-  const unlocatedDialog = unlocatedThreads.length > 0 ? (
-    <UnlocatedCommentsDialog
-      loading={loading}
-      open={unlocatedDialogOpen}
-      threads={unlocatedThreads}
-      activeThreadId={activeThreadId}
-      canReply={canReply}
-      compact={compact}
-      onOpenChange={setUnlocatedDialogOpen}
-      onFocusThread={onFocusThread}
-      onReply={onReply}
-      onUpdateThreadStatus={onUpdateThreadStatus}
-      onUpdateComment={onUpdateComment}
-      onDeleteComment={onDeleteComment}
-    />
-  ) : null
-
+  const unlocatedButton =
+    unlocatedThreads.length > 0 ? (
+      <UnlocatedCommentsButton
+        count={unlocatedThreads.length}
+        label={partition.orphaned.length > 0 ? '未定位评论' : '编辑中暂未定位'}
+        compact={compact}
+        elementRef={compact ? undefined : measurements.unlocatedSectionRef}
+        onClick={() => setUnlocatedDialogOpen(true)}
+      />
+    ) : null
+  const unlocatedDialog =
+    unlocatedThreads.length > 0 ? (
+      <UnlocatedCommentsDialog
+        loading={loading}
+        open={unlocatedDialogOpen}
+        threads={unlocatedThreads}
+        activeThreadId={activeThreadId}
+        canReply={canReply}
+        compact={compact}
+        onOpenChange={setUnlocatedDialogOpen}
+        onFocusThread={onFocusThread}
+        onReply={onReply}
+        onUpdateThreadStatus={onUpdateThreadStatus}
+        onUpdateComment={onUpdateComment}
+        onDeleteComment={onDeleteComment}
+      />
+    ) : null
   if (compact) {
     return (
       <div
@@ -235,18 +318,24 @@ export function DriveCommentsRail({
         />
         {unlocatedButton}
         {listThreads.length === 0 && !draft ? (
-          <div className='px-3 py-6 text-sm text-muted-foreground'>
+          <div className='px-3 py-6 text-sm text-muted'>
             {threads.length === 0 ? '暂无评论' : '暂无已定位评论'}
           </div>
         ) : (
           <div className='space-y-2 p-3'>
             {draft ? <CommentDraftCard draft={draft} compact /> : null}
             {listThreads.map((item) => (
-              <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
+              <div
+                key={item.thread.id}
+                data-markdown-comment-thread-id={item.thread.id}
+              >
                 <ThreadView
-                      notificationLoading={loading}
+                  notificationLoading={loading}
                   thread={item.thread}
-                  positionUnavailable={item.placement.status === 'unavailable' && item.thread.anchorStatus !== 'orphaned'}
+                  positionUnavailable={
+                    item.placement.status === 'unavailable' &&
+                    item.thread.anchorStatus !== 'orphaned'
+                  }
                   active={item.thread.id === activeThreadId}
                   canReply={canReply}
                   compact
@@ -264,7 +353,6 @@ export function DriveCommentsRail({
       </div>
     )
   }
-
   return (
     <div
       data-markdown-comments-rail='true'
@@ -281,9 +369,13 @@ export function DriveCommentsRail({
         elementRef={measurements.headerRef}
       />
       {unlocatedButton}
-      <div ref={anchoredRegionRef} data-markdown-comments-scroll-region='true' className='relative min-h-0 flex-1 overflow-hidden'>
+      <div
+        ref={anchoredRegionRef}
+        data-markdown-comments-scroll-region='true'
+        className='relative min-h-0 flex-1 overflow-hidden'
+      >
         {partition.anchored.length === 0 && !draft ? (
-          <div className='px-3 py-6 text-sm text-muted-foreground'>
+          <div className='px-3 py-6 text-sm text-muted'>
             {threads.length === 0 ? '暂无评论' : '暂无已定位评论'}
           </div>
         ) : null}
@@ -299,8 +391,12 @@ export function DriveCommentsRail({
                 <div
                   key={item.id}
                   ref={measurements.cardRef(item.id)}
-                  data-markdown-comment-thread-id={item.kind === 'thread' ? item.item.thread.id : undefined}
-                  data-markdown-comment-draft={item.kind === 'draft' ? 'true' : undefined}
+                  data-markdown-comment-thread-id={
+                    item.kind === 'thread' ? item.item.thread.id : undefined
+                  }
+                  data-markdown-comment-draft={
+                    item.kind === 'draft' ? 'true' : undefined
+                  }
                   className='absolute left-3 right-3'
                   style={{ top }}
                 >
@@ -318,7 +414,9 @@ export function DriveCommentsRail({
                       onUpdateComment={onUpdateComment}
                       onDeleteComment={onDeleteComment}
                     />
-                  ) : <CommentDraftCard draft={item.draft} compact={false} />}
+                  ) : (
+                    <CommentDraftCard draft={item.draft} compact={false} />
+                  )}
                 </div>
               ))}
             </div>
@@ -329,7 +427,6 @@ export function DriveCommentsRail({
     </div>
   )
 }
-
 function UnlocatedCommentsButton({
   count,
   label,
@@ -356,21 +453,20 @@ function UnlocatedCommentsButton({
         className={cn('w-full justify-between', compact && 'min-h-11')}
         aria-label={`查看 ${count} 条${label}`}
         aria-haspopup='dialog'
-        onClick={onClick}
+        onPress={onClick}
       >
         <span className='flex min-w-0 items-center gap-2'>
           <MapPinOff />
           <span>{label}</span>
         </span>
         <span className='flex items-center gap-1.5'>
-          <Badge variant='secondary'>{count}</Badge>
-          <ChevronRight className='text-muted-foreground' />
+          <Chip variant='soft'>{count}</Chip>
+          <ChevronRight className='text-muted' />
         </span>
       </Button>
     </div>
   )
 }
-
 function UnlocatedCommentsDialog({
   loading,
   open,
@@ -393,54 +489,66 @@ function UnlocatedCommentsDialog({
   readonly compact: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly onFocusThread: (threadId: string) => void
-  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
-  readonly onUpdateThreadStatus: (input: { readonly threadId: string; readonly status: DriveAnnotationThreadStatus }) => CommentActionPromise
-  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onReply: (input: {
+    readonly threadId: string
+    readonly parentCommentId: string | null
+    readonly body: string
+  }) => CommentActionPromise
+  readonly onUpdateThreadStatus: (input: {
+    readonly threadId: string
+    readonly status: DriveAnnotationThreadStatus
+  }) => CommentActionPromise
+  readonly onUpdateComment: (input: {
+    readonly commentId: string
+    readonly body: string
+  }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        data-drive-telemetry-scope='portal'
-        showCloseButton={false}
-        data-markdown-comments-unlocated-dialog='true'
-        className='h-[min(44rem,calc(100svh-2rem))] gap-0 overflow-hidden p-0 sm:max-w-2xl'
-      >
-        <DialogFrame>
-          <DialogFrameHeader
-            bordered
-            title='未定位评论'
-            description={`${threads.length} 条评论无法定位到当前文档`}
-          />
-          <DialogFrameBody>
-            <ScrollArea className='h-full'>
-              <div className='space-y-2 p-4'>
-                {threads.map((item) => (
-                  <div key={item.thread.id} data-markdown-comment-thread-id={item.thread.id}>
-                    <ThreadView
-                      notificationLoading={loading}
-                      thread={item.thread}
-                      positionUnavailable={item.placement.status === 'unavailable' && item.thread.anchorStatus !== 'orphaned'}
-                      active={item.thread.id === activeThreadId}
-                      canReply={canReply}
-                      compact={compact}
-                      onFocusThread={onFocusThread}
-                      onReply={onReply}
-                      onUpdateThreadStatus={onUpdateThreadStatus}
-                      onUpdateComment={onUpdateComment}
-                      onDeleteComment={onDeleteComment}
-                    />
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </DialogFrameBody>
-        </DialogFrame>
-      </DialogContent>
-    </Dialog>
+    <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}>
+      <Modal.Container>
+        <Modal.Dialog
+          data-drive-telemetry-scope='portal'
+          data-markdown-comments-unlocated-dialog='true'
+          className='max-h-[min(44rem,calc(100svh-2rem))] sm:max-w-2xl'
+        >
+          <Modal.CloseTrigger aria-label='关闭' />
+          <Modal.Header>
+            <Modal.Heading>{'\u672A\u5B9A\u4F4D\u8BC4\u8BBA'}</Modal.Heading>
+            <p>{`${threads.length} 条评论无法定位到当前文档`}</p>
+          </Modal.Header>
+          <Modal.Body data-drive-comments-dialog-scroll='true'>
+            <div className='space-y-2'>
+              {threads.map((item) => (
+                <div
+                  key={item.thread.id}
+                  data-markdown-comment-thread-id={item.thread.id}
+                >
+                  <ThreadView
+                    notificationLoading={loading}
+                    thread={item.thread}
+                    positionUnavailable={
+                      item.placement.status === 'unavailable' &&
+                      item.thread.anchorStatus !== 'orphaned'
+                    }
+                    active={item.thread.id === activeThreadId}
+                    canReply={canReply}
+                    compact={compact}
+                    onFocusThread={onFocusThread}
+                    onReply={onReply}
+                    onUpdateThreadStatus={onUpdateThreadStatus}
+                    onUpdateComment={onUpdateComment}
+                    onDeleteComment={onDeleteComment}
+                  />
+                </div>
+              ))}
+            </div>
+          </Modal.Body>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   )
 }
-
 function CommentsRailHeader({
   compact,
   count,
@@ -459,32 +567,36 @@ function CommentsRailHeader({
   readonly elementRef?: (element: HTMLDivElement | null) => void
 }) {
   return (
-    <div ref={elementRef} data-markdown-comments-header='true' className={cn(
-      'flex shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium',
-      compact ? 'sticky top-0 z-10 h-12 pr-14' : 'h-10'
-    )}>
-      <span>评论</span>
+    <div
+      ref={elementRef}
+      data-markdown-comments-header='true'
+      className={cn(
+        'flex shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium',
+        compact ? 'sticky top-0 z-10 h-12 pr-14' : 'h-12'
+      )}
+    >
+      <span>批注</span>
       <div className='flex items-center gap-1'>
-        <span className='text-xs font-normal text-muted-foreground'>{count}</span>
+        <span className='text-xs font-normal tabular-nums text-muted'>{count}</span>
         <Button
           type='button'
           variant='ghost'
-          size='icon'
-          className={compact ? 'size-11' : 'size-7'}
+          isIconOnly
+          className={compact ? 'size-11' : 'size-10'}
           aria-label='上一条评论'
-          disabled={!onNavigatePrevious}
-          onClick={onNavigatePrevious}
+          isDisabled={!onNavigatePrevious}
+          onPress={onNavigatePrevious}
         >
           <ChevronUp />
         </Button>
         <Button
           type='button'
           variant='ghost'
-          size='icon'
-          className={compact ? 'size-11' : 'size-7'}
+          isIconOnly
+          className={compact ? 'size-11' : 'size-10'}
           aria-label='下一条评论'
-          disabled={!onNavigateNext}
-          onClick={onNavigateNext}
+          isDisabled={!onNavigateNext}
+          onPress={onNavigateNext}
         >
           <ChevronDown />
         </Button>
@@ -492,11 +604,11 @@ function CommentsRailHeader({
           <Button
             type='button'
             variant='ghost'
-            size='icon'
-            className={compact ? 'size-11' : 'size-7'}
+            isIconOnly
+            className={compact ? 'size-11' : 'size-10'}
             aria-label='刷新评论'
-            disabled={loading}
-            onClick={onRefresh}
+            isDisabled={loading}
+            onPress={onRefresh}
           >
             {loading ? <Loader2 className='animate-spin' /> : <RefreshCw />}
           </Button>
@@ -505,15 +617,22 @@ function CommentsRailHeader({
     </div>
   )
 }
-
-function CommentDraftCard({ draft, compact }: { readonly draft: MarkdownCommentDraft; readonly compact: boolean }) {
+function CommentDraftCard({
+  draft,
+  compact,
+}: {
+  readonly draft: MarkdownCommentDraft
+  readonly compact: boolean
+}) {
   return (
     <section
       data-markdown-comment-draft-card='true'
-      className='relative overflow-hidden rounded-lg border border-amber-400/70 bg-muted/30 px-3 pb-2 pt-3 text-sm'
+      className='relative overflow-hidden rounded-lg border border-amber-400/70 bg-surface-secondary/30 px-3 pb-2 pt-3 text-sm'
     >
       <div aria-hidden className='absolute inset-x-0 top-0 h-1 bg-amber-400' />
-      <div className='mb-2 line-clamp-2 text-xs font-medium text-muted-foreground'>“{draft.quote}”</div>
+      <div className='mb-2 line-clamp-2 text-xs font-medium text-muted'>
+        “{draft.quote}”
+      </div>
       <CommentComposer
         dataAttribute='draft'
         value={draft.value}
@@ -532,7 +651,6 @@ function CommentDraftCard({ draft, compact }: { readonly draft: MarkdownCommentD
     </section>
   )
 }
-
 function ThreadView({
   notificationLoading,
   thread,
@@ -553,17 +671,37 @@ function ThreadView({
   readonly canReply: boolean
   readonly compact: boolean
   readonly onFocusThread: (threadId: string) => void
-  readonly onReply: (input: { readonly threadId: string; readonly parentCommentId: string | null; readonly body: string }) => CommentActionPromise
-  readonly onUpdateThreadStatus: (input: { readonly threadId: string; readonly status: DriveAnnotationThreadStatus }) => CommentActionPromise
-  readonly onUpdateComment: (input: { readonly commentId: string; readonly body: string }) => CommentActionPromise
+  readonly onReply: (input: {
+    readonly threadId: string
+    readonly parentCommentId: string | null
+    readonly body: string
+  }) => CommentActionPromise
+  readonly onUpdateThreadStatus: (input: {
+    readonly threadId: string
+    readonly status: DriveAnnotationThreadStatus
+  }) => CommentActionPromise
+  readonly onUpdateComment: (input: {
+    readonly commentId: string
+    readonly body: string
+  }) => CommentActionPromise
   readonly onDeleteComment: (commentId: string) => CommentActionPromise
 }) {
   const pending = usePendingDriveDiscussion()
   const target = pending?.location
-  const fromNotification = target?.kind === 'annotation' && target.threadId === thread.id
-  const [composer, setComposer] = useState<ThreadComposerState>(() => active && !fromNotification
-    ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
-    : { kind: 'closed' })
+  const fromNotification =
+    target?.kind === 'annotation' && target.threadId === thread.id
+  const [composer, setComposer] = useState<ThreadComposerState>(() =>
+    active && !fromNotification
+      ? {
+          kind: 'reply',
+          parentCommentId: null,
+          value: '',
+          submitting: false,
+          error: null,
+          revision: 0,
+        }
+      : { kind: 'closed' }
+  )
   const [statusSubmitting, setStatusSubmitting] = useState(false)
   const statusSubmittingRef = useRef(false)
   const statusButtonRef = useRef<HTMLButtonElement>(null)
@@ -571,35 +709,54 @@ function ThreadView({
   const restoreStatusFocusRef = useRef(false)
   const [statusError, setStatusError] = useState<string | null>(null)
   const previousActiveRef = useRef(active)
-  const authorByCommentId = useMemo(() => new Map(thread.comments.map((comment) => [comment.id, comment.author])), [thread.comments])
-  const replyingToComment = composer.kind === 'reply'
-    ? thread.comments.find((comment) => comment.id === composer.parentCommentId && !comment.deleted) ?? null
-    : null
-  const composerVisible = composer.kind === 'edit'
-    || (composer.kind === 'reply' && (active || composer.parentCommentId !== null))
+  const authorByCommentId = useMemo(
+    () =>
+      new Map(thread.comments.map((comment) => [comment.id, comment.author])),
+    [thread.comments]
+  )
+  const replyingToComment =
+    composer.kind === 'reply'
+      ? (thread.comments.find(
+          (comment) =>
+            comment.id === composer.parentCommentId && !comment.deleted
+        ) ?? null)
+      : null
+  const composerVisible =
+    composer.kind === 'edit' ||
+    (composer.kind === 'reply' && (active || composer.parentCommentId !== null))
   const emphasized = active || composerVisible
   const composerSubmitting = composer.kind !== 'closed' && composer.submitting
   const quote = annotationQuoteExcerpt(thread)
   const resolved = thread.status === 'resolved'
-
   useLayoutEffect(() => {
     if (statusSubmitting || !restoreStatusFocusRef.current) return
-    if (document.activeElement === document.body || document.activeElement === statusButtonRef.current) {
+    if (
+      document.activeElement === document.body ||
+      document.activeElement === statusButtonRef.current
+    ) {
       statusButtonRef.current?.focus()
     }
     restoreStatusFocusRef.current = false
   }, [resolved, statusSubmitting])
-
   const changeStatus = async () => {
-    if (statusSubmittingRef.current || composerSubmitting || !thread.permissions.canChangeStatus) return
+    if (
+      statusSubmittingRef.current ||
+      composerSubmitting ||
+      !thread.permissions.canChangeStatus
+    )
+      return
     pending?.cancel()
-    restoreStatusFocusRef.current = document.activeElement === statusButtonRef.current
-      || Boolean(statusMenuRef.current?.contains(document.activeElement))
+    restoreStatusFocusRef.current =
+      document.activeElement === statusButtonRef.current ||
+      Boolean(statusMenuRef.current?.contains(document.activeElement))
     statusSubmittingRef.current = true
     setStatusSubmitting(true)
     setStatusError(null)
     try {
-      await onUpdateThreadStatus({ threadId: thread.id, status: resolved ? 'open' : 'resolved' })
+      await onUpdateThreadStatus({
+        threadId: thread.id,
+        status: resolved ? 'open' : 'resolved',
+      })
     } catch (cause) {
       setStatusError(getCommentActionErrorMessage(cause))
     } finally {
@@ -607,16 +764,23 @@ function ThreadView({
       setStatusSubmitting(false)
     }
   }
-
   useEffect(() => {
     if (active && !previousActiveRef.current && !fromNotification) {
-      setComposer((current) => current.kind === 'closed'
-        ? { kind: 'reply', parentCommentId: null, value: '', submitting: false, error: null, revision: 0 }
-        : current)
+      setComposer((current) =>
+        current.kind === 'closed'
+          ? {
+              kind: 'reply',
+              parentCommentId: null,
+              value: '',
+              submitting: false,
+              error: null,
+              revision: 0,
+            }
+          : current
+      )
     }
     previousActiveRef.current = active
   }, [active, fromNotification])
-
   const openReplyComposer = (commentId: string | null) => {
     if (composerSubmitting) return
     pending?.cancel()
@@ -629,7 +793,6 @@ function ThreadView({
       revision: current.kind === 'reply' ? current.revision + 1 : 0,
     }))
   }
-
   const openEditComposer = (comment: DriveAnnotationCommentDto) => {
     if (composerSubmitting) return
     pending?.cancel()
@@ -641,44 +804,74 @@ function ThreadView({
       error: null,
     })
   }
-
   const submitReply = async () => {
-    if (composer.kind !== 'reply' || !composer.value.trim() || composer.submitting) return
+    if (
+      composer.kind !== 'reply' ||
+      !composer.value.trim() ||
+      composer.submitting
+    )
+      return
     const submission = composer
     setComposer({ ...submission, submitting: true, error: null })
     try {
-      await onReply({ threadId: thread.id, parentCommentId: submission.parentCommentId, body: submission.value })
+      await onReply({
+        threadId: thread.id,
+        parentCommentId: submission.parentCommentId,
+        body: submission.value,
+      })
       setComposer({ kind: 'closed' })
     } catch (cause) {
-      setComposer((current) => current.kind === 'reply'
-        ? { ...current, submitting: false, error: getCommentActionErrorMessage(cause) }
-        : current)
+      setComposer((current) =>
+        current.kind === 'reply'
+          ? {
+              ...current,
+              submitting: false,
+              error: getCommentActionErrorMessage(cause),
+            }
+          : current
+      )
     }
   }
-
   const submitEdit = async () => {
-    if (composer.kind !== 'edit' || !composer.value.trim() || composer.submitting) return
+    if (
+      composer.kind !== 'edit' ||
+      !composer.value.trim() ||
+      composer.submitting
+    )
+      return
     const submission = composer
     setComposer({ ...submission, submitting: true, error: null })
     try {
-      await onUpdateComment({ commentId: submission.commentId, body: submission.value })
+      await onUpdateComment({
+        commentId: submission.commentId,
+        body: submission.value,
+      })
       setComposer({ kind: 'closed' })
     } catch (cause) {
-      setComposer((current) => current.kind === 'edit'
-        ? { ...current, submitting: false, error: getCommentActionErrorMessage(cause) }
-        : current)
+      setComposer((current) =>
+        current.kind === 'edit'
+          ? {
+              ...current,
+              submitting: false,
+              error: getCommentActionErrorMessage(cause),
+            }
+          : current
+      )
     }
   }
-
   return (
     <section
       className={cn(
-        'relative cursor-default overflow-hidden rounded-lg border bg-card p-4 text-sm transition-colors hover:border-ring/60 focus-within:border-ring contain-inline-size',
-        emphasized ? 'border-ring' : 'border-border',
-        active && 'ring-2 ring-inset ring-amber-500/90'
+        'relative cursor-default overflow-hidden rounded-lg border bg-surface p-4 text-sm transition-colors hover:border-accent/60 focus-within:border-accent contain-inline-size',
+        emphasized ? 'border-accent' : 'border-border',
+        active && 'ring-2 ring-inset ring-accent'
       )}
       onClick={(event) => {
-        if (isInteractiveCommentTarget(event.target) || hasSelectionWithin(event.currentTarget)) return
+        if (
+          isInteractiveCommentTarget(event.target) ||
+          hasSelectionWithin(event.currentTarget)
+        )
+          return
         onFocusThread(thread.id)
       }}
     >
@@ -686,53 +879,70 @@ function ThreadView({
       <div className='mb-4 space-y-2'>
         <div className='flex items-center gap-2'>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type='button'
-                variant='ghost'
-                size='sm'
-                className={cn('min-w-0 flex-1 justify-start', compact && 'min-h-11')}
-                aria-label={`查看评论：${quote}`}
-                aria-current={active ? 'true' : undefined}
-                onClick={() => onFocusThread(thread.id)}
-              >
-                <Quote aria-hidden className='text-muted-foreground' />
-                <span className='min-w-0 w-0 max-w-full flex-1 truncate text-left'>{quote}</span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className='max-w-sm break-all'>{quote}</TooltipContent>
+            <Button
+              type='button'
+              variant='ghost'
+              size='sm'
+              className={cn(
+                'h-auto min-h-10 min-w-0 flex-1 items-start justify-start py-2',
+                compact && 'min-h-11'
+              )}
+              aria-label={`查看评论：${quote}`}
+              aria-current={active ? 'true' : undefined}
+              onPress={() => onFocusThread(thread.id)}
+            >
+              <Quote aria-hidden className='mt-0.5 shrink-0 text-muted' />
+              <span className='line-clamp-2 min-w-0 w-0 max-w-full flex-1 whitespace-normal break-words text-left'>
+                {quote}
+              </span>
+            </Button>
+            <Tooltip.Content className='max-w-sm break-all'>
+              {quote}
+            </Tooltip.Content>
           </Tooltip>
           {thread.permissions.canChangeStatus ? (
             resolved ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    ref={statusButtonRef}
-                    type='button'
-                    variant='secondary'
-                    size='sm'
-                    className={compact ? 'min-h-11' : undefined}
-                    disabled={composerSubmitting || statusSubmitting}
-                    aria-label='已解决'
-                    aria-busy={statusSubmitting}
-                  >
-                    {statusSubmitting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : null}
-                    已解决
-                    <ChevronDown aria-hidden />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent ref={statusMenuRef} align='end' data-drive-telemetry-scope='portal' onClick={(event) => event.stopPropagation()}>
-                  <DropdownMenuItem
-                    className={compact ? 'min-h-11' : undefined}
-                    data-drive-telemetry-event='web.drive.comment.status-update'
-                    disabled={composerSubmitting || statusSubmitting}
-                    onSelect={() => { void changeStatus() }}
-                  >
-                    <RotateCcw aria-hidden />
-                    重新打开
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Dropdown>
+                <Button
+                  ref={statusButtonRef}
+                  type='button'
+                  variant='secondary'
+                  size='sm'
+                  className={compact ? 'min-h-11' : undefined}
+                  isDisabled={composerSubmitting || statusSubmitting}
+                  aria-label='已解决'
+                  aria-busy={statusSubmitting}
+                >
+                  {statusSubmitting ? (
+                    <Loader2
+                      aria-hidden
+                      className='animate-spin motion-reduce:animate-none'
+                    />
+                  ) : null}
+                  已解决
+                  <ChevronDown aria-hidden />
+                </Button>
+                <Dropdown.Popover
+                  isNonModal
+                  ref={statusMenuRef}
+                  data-drive-telemetry-scope='portal'
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Dropdown.Menu aria-label='操作'>
+                    <Dropdown.Item
+                      className={compact ? 'min-h-11' : undefined}
+                      data-drive-telemetry-event='web.drive.comment.status-update'
+                      isDisabled={composerSubmitting || statusSubmitting}
+                      onAction={() => {
+                        void changeStatus()
+                      }}
+                    >
+                      <RotateCcw aria-hidden />
+                      重新打开
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
             ) : (
               <Button
                 ref={statusButtonRef}
@@ -741,24 +951,39 @@ function ThreadView({
                 size='sm'
                 className={compact ? 'min-h-11' : undefined}
                 data-drive-telemetry-event='web.drive.comment.status-update'
-                disabled={composerSubmitting || statusSubmitting}
+                isDisabled={composerSubmitting || statusSubmitting}
                 aria-label='标记为已解决'
                 aria-busy={statusSubmitting}
-                onClick={() => { void changeStatus() }}
+                onPress={() => {
+                  void changeStatus()
+                }}
               >
-                {statusSubmitting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : null}
+                {statusSubmitting ? (
+                  <Loader2
+                    aria-hidden
+                    className='animate-spin motion-reduce:animate-none'
+                  />
+                ) : null}
                 标记为已解决
               </Button>
             )
           ) : (
-            <Badge variant={resolved ? 'secondary' : 'outline'}>{resolved ? '已解决' : '未解决'}</Badge>
+            <Chip variant={resolved ? 'soft' : 'secondary'}>
+              {resolved ? '已解决' : '未解决'}
+            </Chip>
           )}
         </div>
-        {statusError ? <p role='alert' className='text-xs text-destructive'>{statusError}</p> : null}
+        {statusError ? (
+          <p role='alert' className='text-xs text-danger'>
+            {statusError}
+          </p>
+        ) : null}
         {thread.anchorStatus === 'orphaned' || positionUnavailable ? (
           <div className='flex flex-wrap items-center gap-1'>
-            <span className='text-xs text-muted-foreground'>
-              {positionUnavailable ? '编辑中暂未定位' : annotationPositionLabel(thread)}
+            <span className='text-xs text-muted'>
+              {positionUnavailable
+                ? '编辑中暂未定位'
+                : annotationPositionLabel(thread)}
             </span>
           </div>
         ) : null}
@@ -769,22 +994,37 @@ function ThreadView({
             key={comment.id}
             comment={comment}
             canFocusFromNotification={!notificationLoading}
-            replyToName={comment.parentCommentId ? displayAuthor(authorByCommentId.get(comment.parentCommentId)) : null}
+            replyToName={
+              comment.parentCommentId
+                ? displayAuthor(authorByCommentId.get(comment.parentCommentId))
+                : null
+            }
             canReply={canReply}
             compact={compact}
-            deleteDescription={commentDeleteDescription(comment, thread.comments)}
-            editComposer={composer.kind === 'edit' && composer.commentId === comment.id ? composer : null}
+            deleteDescription={commentDeleteDescription(
+              comment,
+              thread.comments
+            )}
+            editComposer={
+              composer.kind === 'edit' && composer.commentId === comment.id
+                ? composer
+                : null
+            }
             actionsHidden={composer.kind === 'edit'}
             actionsDisabled={composerSubmitting}
             onStartReply={() => openReplyComposer(comment.id)}
             onStartEdit={() => openEditComposer(comment)}
             onEditValueChange={(value) => {
-              setComposer((current) => current.kind === 'edit'
-                ? { ...current, value, error: null }
-                : current)
+              setComposer((current) =>
+                current.kind === 'edit'
+                  ? { ...current, value, error: null }
+                  : current
+              )
             }}
             onCancelEdit={() => setComposer({ kind: 'closed' })}
-            onSubmitEdit={() => { void submitEdit() }}
+            onSubmitEdit={() => {
+              void submitEdit()
+            }}
             onDeleteComment={onDeleteComment}
           />
         ))}
@@ -795,8 +1035,16 @@ function ThreadView({
             key={composer.revision}
             dataAttribute='reply'
             value={composer.value}
-            ariaLabel={replyingToComment ? `回复 ${displayAuthor(replyingToComment.author)}` : '回复讨论'}
-            label={replyingToComment ? `回复 ${displayAuthor(replyingToComment.author)}` : null}
+            ariaLabel={
+              replyingToComment
+                ? `回复 ${displayAuthor(replyingToComment.author)}`
+                : '回复讨论'
+            }
+            label={
+              replyingToComment
+                ? `回复 ${displayAuthor(replyingToComment.author)}`
+                : null
+            }
             placeholder='回复'
             compact={compact}
             submitting={composer.submitting}
@@ -805,19 +1053,22 @@ function ThreadView({
             submittingLabel='发送中'
             autoFocus={composer.parentCommentId !== null}
             onValueChange={(value) => {
-              setComposer((current) => current.kind === 'reply'
-                ? { ...current, value, error: null }
-                : current)
+              setComposer((current) =>
+                current.kind === 'reply'
+                  ? { ...current, value, error: null }
+                  : current
+              )
             }}
             onCancel={() => setComposer({ kind: 'closed' })}
-            onSubmit={() => { void submitReply() }}
+            onSubmit={() => {
+              void submitReply()
+            }}
           />
         </div>
       ) : null}
     </section>
   )
 }
-
 function annotationPositionLabel(thread: DriveAnnotationThreadDto): string {
   if (thread.targetKind === 'image') return '图片已替换或删除'
   if (thread.anchor?.positionStatus === 'source_deleted') return '原文已删除'
@@ -825,7 +1076,6 @@ function annotationPositionLabel(thread: DriveAnnotationThreadDto): string {
   if (thread.anchor?.positionStatus === 'unavailable') return '暂无法定位'
   return '原文已修改或删除'
 }
-
 function CommentView({
   canFocusFromNotification,
   comment,
@@ -862,24 +1112,39 @@ function CommentView({
   const [deleteConfirming, setDeleteConfirming] = useState(false)
   const elementRef = useRef<HTMLElement | null>(null)
   const target = usePendingDriveDiscussion()?.location
-  useDiscussionTargetFocus(elementRef, canFocusFromNotification && !comment.deleted && target?.kind === 'annotation' && target.threadId === comment.threadId && target.commentId === comment.id)
+  useDiscussionTargetFocus(
+    elementRef,
+    canFocusFromNotification &&
+      !comment.deleted &&
+      target?.kind === 'annotation' &&
+      target.threadId === comment.threadId &&
+      target.commentId === comment.id
+  )
   const authorName = displayAuthor(comment.author)
   return (
-    <article ref={elementRef} tabIndex={-1} data-drive-annotation-comment-id={comment.id} className='group/comment'>
+    <article
+      ref={elementRef}
+      tabIndex={-1}
+      data-drive-annotation-comment-id={comment.id}
+      className='group/comment'
+    >
       <div className='flex items-start gap-3'>
         <Avatar className='size-8'>
-          <AvatarFallback className='text-xs font-medium text-muted-foreground'>
+          <Avatar.Fallback className='text-xs font-medium text-muted'>
             {getDisplayNameInitials(authorName)}
-          </AvatarFallback>
+          </Avatar.Fallback>
         </Avatar>
         <div className='min-w-0 flex-1 space-y-1'>
           <div className='flex min-h-9 items-center justify-between gap-2'>
-            <div className='flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5'>
-              <span className='truncate text-sm font-medium'>{authorName}</span>
-              <RelativeTime value={comment.createdAt} className='text-xs text-muted-foreground' />
-              {comment.editedAt ? <span className='text-xs text-muted-foreground'>已编辑</span> : null}
+            <div className='min-w-0 space-y-0.5'>
+              <div className='truncate text-sm font-medium' title={authorName}>{authorName}</div>
+              <div className='flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted'>
+                <RelativeTime value={comment.createdAt} />
+                {comment.editedAt ? <span>已编辑</span> : null}
+              </div>
             </div>
-            {(comment.permissions.canEdit || comment.permissions.canDelete) && !actionsHidden ? (
+            {(comment.permissions.canEdit || comment.permissions.canDelete) &&
+            !actionsHidden ? (
               <div className='shrink-0'>
                 <CommentActionsMenu
                   authorName={authorName}
@@ -896,7 +1161,9 @@ function CommentView({
               </div>
             ) : null}
           </div>
-          {replyToName ? <div className='text-xs text-muted-foreground'>回复 {replyToName}</div> : null}
+          {replyToName ? (
+            <div className='text-xs text-muted'>回复 {replyToName}</div>
+          ) : null}
           {editComposer ? (
             <CommentComposer
               dataAttribute='edit'
@@ -915,7 +1182,9 @@ function CommentView({
             />
           ) : (
             <>
-              <p className='whitespace-pre-wrap break-words text-sm leading-6'>{comment.body}</p>
+              <p className='whitespace-pre-wrap break-words text-sm leading-6'>
+                {comment.body}
+              </p>
               {!actionsHidden && canReply ? (
                 <div className='-ml-3 pt-1'>
                   <Button
@@ -923,12 +1192,15 @@ function CommentView({
                     type='button'
                     variant='ghost'
                     className={compact ? 'min-h-11' : undefined}
-                    disabled={actionsDisabled}
-                    onClick={() => {
+                    isDisabled={actionsDisabled}
+                    onPress={() => {
                       setDeleteConfirming(false)
                       onStartReply()
                     }}
-                  ><Reply aria-hidden />回复</Button>
+                  >
+                    <Reply aria-hidden />
+                    回复
+                  </Button>
                 </div>
               ) : null}
               {deleteConfirming && !actionsHidden ? (
@@ -947,7 +1219,6 @@ function CommentView({
     </article>
   )
 }
-
 function CommentComposer({
   dataAttribute,
   value,
@@ -980,11 +1251,9 @@ function CommentComposer({
   readonly onSubmit: () => void
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-
   useLayoutEffect(() => {
     if (autoFocus) textareaRef.current?.focus({ preventScroll: true })
   }, [autoFocus])
-
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -992,22 +1261,32 @@ function CommentComposer({
       onSubmit()
       return
     }
-    if (event.key === 'Escape' && (dataAttribute !== 'reply' || !value.trim())) {
+    if (
+      event.key === 'Escape' &&
+      (dataAttribute !== 'reply' || !value.trim())
+    ) {
       event.preventDefault()
       onCancel()
     }
   }
-
   return (
     <div
-      data-markdown-comment-draft-composer={dataAttribute === 'draft' ? 'true' : undefined}
-      data-markdown-comment-reply-composer={dataAttribute === 'reply' ? 'true' : undefined}
-      data-markdown-comment-edit-composer={dataAttribute === 'edit' ? 'true' : undefined}
+      data-markdown-comment-draft-composer={
+        dataAttribute === 'draft' ? 'true' : undefined
+      }
+      data-markdown-comment-reply-composer={
+        dataAttribute === 'reply' ? 'true' : undefined
+      }
+      data-markdown-comment-edit-composer={
+        dataAttribute === 'edit' ? 'true' : undefined
+      }
       className={cn(dataAttribute === 'edit' ? 'mt-2' : 'mt-3 border-t pt-3')}
       onClick={(event) => event.stopPropagation()}
     >
-      {label ? <div className='mb-2 text-xs text-muted-foreground'>{label}</div> : null}
-      <Textarea
+      {label ? <div className='mb-2 text-xs text-muted'>{label}</div> : null}
+      <TextArea
+        fullWidth
+        variant={dataAttribute === 'draft' ? 'primary' : 'secondary'}
         ref={textareaRef}
         value={value}
         aria-label={ariaLabel}
@@ -1016,17 +1295,38 @@ function CommentComposer({
         onChange={(event) => onValueChange(event.currentTarget.value)}
         onKeyDown={handleKeyDown}
       />
-      {error ? <div role='status' className='mt-2 text-sm text-destructive'>{error}</div> : null}
+      {error ? (
+        <div role='status' className='mt-2 text-sm text-danger'>
+          {error}
+        </div>
+      ) : null}
       <div className='mt-2 flex justify-end gap-1'>
-        <Button type='button' variant='ghost' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={submitting} onClick={onCancel}>取消</Button>
-        <Button data-drive-telemetry-event={COMMENT_COMPOSER_EVENT_KEYS[dataAttribute]} type='button' size='sm' className={compact ? 'min-h-11' : 'h-7'} disabled={!value.trim() || submitting} onClick={onSubmit}>
+        <Button
+          type='button'
+          variant='ghost'
+          size='sm'
+          className={compact ? 'min-h-11' : 'h-7'}
+          isDisabled={submitting}
+          onPress={onCancel}
+        >
+          取消
+        </Button>
+        <Button
+          data-drive-telemetry-event={
+            COMMENT_COMPOSER_EVENT_KEYS[dataAttribute]
+          }
+          type='button'
+          size='sm'
+          className={compact ? 'min-h-11' : 'h-7'}
+          isDisabled={!value.trim() || submitting}
+          onPress={onSubmit}
+        >
           {submitting ? submittingLabel : submitLabel}
         </Button>
       </div>
     </div>
   )
 }
-
 function CommentActionsMenu({
   authorName,
   canEdit,
@@ -1044,33 +1344,51 @@ function CommentActionsMenu({
   readonly onStartEdit: () => void
   readonly onStartDelete: () => void
 }) {
-  const editingRef = useRef(false)
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type='button' variant='ghost' size='icon' className={compact ? 'size-11' : undefined} aria-label={`评论操作：${authorName}`} disabled={disabled}><MoreHorizontal aria-hidden /></Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        data-drive-telemetry-scope='portal'
-        align='end'
-        onClick={(event) => event.stopPropagation()}
-        onCloseAutoFocus={(event) => {
-          if (editingRef.current) event.preventDefault()
-          editingRef.current = false
-        }}
+    <Dropdown>
+      <Button
+        type='button'
+        variant='ghost'
+        isIconOnly
+        className={compact ? 'size-11' : undefined}
+        aria-label={`评论操作：${authorName}`}
+        isDisabled={disabled}
       >
-        {canEdit ? (
-          <DropdownMenuItem data-drive-telemetry-event='web.drive.comment.edit-open' disabled={disabled} onSelect={() => {
-            editingRef.current = true
-            onStartEdit()
-          }}><Pencil aria-hidden />编辑评论</DropdownMenuItem>
-        ) : null}
-        {canDelete ? <DropdownMenuItem variant='destructive' disabled={disabled} onSelect={onStartDelete}><Trash2 aria-hidden />删除评论</DropdownMenuItem> : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <MoreHorizontal aria-hidden />
+      </Button>
+      <Dropdown.Popover
+        isNonModal
+        data-drive-telemetry-scope='portal'
+        onClick={(event) => event.stopPropagation()}
+      >
+        <Dropdown.Menu aria-label='操作'>
+          {canEdit ? (
+            <Dropdown.Item
+              data-drive-telemetry-event='web.drive.comment.edit-open'
+              isDisabled={disabled}
+              onAction={() => {
+                onStartEdit()
+              }}
+            >
+              <Pencil aria-hidden />
+              编辑评论
+            </Dropdown.Item>
+          ) : null}
+          {canDelete ? (
+            <Dropdown.Item
+              variant='danger'
+              isDisabled={disabled}
+              onAction={onStartDelete}
+            >
+              <Trash2 aria-hidden />
+              删除评论
+            </Dropdown.Item>
+          ) : null}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   )
 }
-
 function CommentDeleteConfirmation({
   compact = false,
   disabled = false,
@@ -1093,12 +1411,11 @@ function CommentDeleteConfirmation({
       onCancel()
     } catch (cause) {
       onCancel()
-      toast.error(getCommentActionErrorMessage(cause))
+      toast.danger(getCommentActionErrorMessage(cause))
     } finally {
       setDeleting(false)
     }
   }
-
   return (
     <div
       role='group'
@@ -1111,48 +1428,84 @@ function CommentDeleteConfirmation({
     >
       <p className='text-sm'>{deleteDescription}</p>
       <div className='flex justify-end gap-2'>
-        <Button type='button' variant='ghost' className={compact ? 'min-h-11' : undefined} disabled={disabled || deleting} onClick={onCancel}>取消</Button>
+        <Button
+          type='button'
+          variant='ghost'
+          className={compact ? 'min-h-11' : undefined}
+          isDisabled={disabled || deleting}
+          onPress={onCancel}
+        >
+          取消
+        </Button>
         <Button
           data-drive-telemetry-event='web.drive.comment.delete'
           type='button'
-          variant='destructive'
+          variant='danger'
           className={compact ? 'min-h-11' : undefined}
           aria-label='确认删除评论'
           aria-busy={deleting}
-          disabled={disabled || deleting}
-          onClick={() => { void handleDelete() }}
-        >{deleting ? <Loader2 aria-hidden className='animate-spin motion-reduce:animate-none' /> : null}{deleting ? '删除中' : '删除评论'}</Button>
+          isDisabled={disabled || deleting}
+          onPress={() => {
+            void handleDelete()
+          }}
+        >
+          {deleting ? (
+            <Loader2
+              aria-hidden
+              className='animate-spin motion-reduce:animate-none'
+            />
+          ) : null}
+          {deleting ? '删除中' : '删除评论'}
+        </Button>
       </div>
     </div>
   )
 }
-
-function displayAuthor(author: { readonly handle: string | null; readonly email: string | null } | undefined): string {
+function displayAuthor(
+  author:
+    | {
+        readonly handle: string | null
+        readonly email: string | null
+      }
+    | undefined
+): string {
   return author?.handle || author?.email || '评论者'
 }
-
 function isInteractiveCommentTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest('button, textarea, input, select, a, [contenteditable="true"], [role="button"]'))
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        'button, textarea, input, select, a, [contenteditable="true"], [role="button"]'
+      )
+    )
+  )
 }
-
 function hasSelectionWithin(element: HTMLElement): boolean {
   const selection = element.ownerDocument.getSelection()
   if (!selection || selection.isCollapsed || !selection.toString()) return false
-  return [selection.anchorNode, selection.focusNode].some((node) => node && element.contains(node))
+  return [selection.anchorNode, selection.focusNode].some(
+    (node) => node && element.contains(node)
+  )
 }
-
 function commentDeleteDescription(
   comment: DriveAnnotationCommentDto,
   comments: readonly DriveAnnotationCommentDto[]
 ): string {
   const visibleComments = comments.filter((item) => !item.deleted)
-  if (visibleComments[0]?.id === comment.id) return '删除后，整条讨论及原文标记将一并移除，且无法恢复。'
-  if (hasVisibleDescendant(comment.id, visibleComments)) return '删除后，该评论及其所有回复将一并删除，且无法恢复。'
+  if (visibleComments[0]?.id === comment.id)
+    return '删除后，整条讨论及原文标记将一并移除，且无法恢复。'
+  if (hasVisibleDescendant(comment.id, visibleComments))
+    return '删除后，该评论及其所有回复将一并删除，且无法恢复。'
   return '删除后无法恢复。'
 }
-
-function hasVisibleDescendant(commentId: string, comments: readonly DriveAnnotationCommentDto[]): boolean {
-  const parentById = new Map(comments.map((comment) => [comment.id, comment.parentCommentId]))
+function hasVisibleDescendant(
+  commentId: string,
+  comments: readonly DriveAnnotationCommentDto[]
+): boolean {
+  const parentById = new Map(
+    comments.map((comment) => [comment.id, comment.parentCommentId])
+  )
   return comments.some((comment) => {
     let parentCommentId = comment.parentCommentId
     const visited = new Set<string>()
@@ -1164,7 +1517,6 @@ function hasVisibleDescendant(commentId: string, comments: readonly DriveAnnotat
     return false
   })
 }
-
 function annotationQuoteExcerpt(thread: DriveAnnotationThreadDto): string {
   if (thread.target.kind === 'image') {
     const alt = thread.target.snapshot.alt.trim()
@@ -1174,39 +1526,49 @@ function annotationQuoteExcerpt(thread: DriveAnnotationThreadDto): string {
     const fileName = pathSegments[pathSegments.length - 1]?.trim()
     return fileName || '图片'
   }
-  return thread.target.quote.exact.replace(/\s+/gu, ' ').trim()
+  const quote = thread.anchor?.selectors.kind !== 'image'
+    ? thread.anchor?.selectors.quote.exact ?? thread.target.quote.exact
+    : thread.target.quote.exact
+  return quote.replace(/\s+/gu, ' ').trim()
 }
-
 export function getCommentActionErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message
   if (typeof error === 'string' && error.trim()) return error
   return '操作失败'
 }
-
 function layoutRailCards(
   items: readonly AnchoredRailCard[],
   measuredHeights: Record<string, number>,
   anchorBaseOffset = 0,
-  reservedTop = 0,
+  reservedTop = 0
 ): {
-  readonly anchored: readonly { readonly item: AnchoredRailCard; readonly top: number }[]
+  readonly anchored: readonly {
+    readonly item: AnchoredRailCard
+    readonly top: number
+  }[]
   readonly anchoredHeight: number
 } {
   const anchoredSource = [...items].sort((a, b) => a.anchorTop - b.anchorTop)
-  const anchored: Array<{ readonly item: AnchoredRailCard; readonly top: number }> = []
+  const anchored: Array<{
+    readonly item: AnchoredRailCard
+    readonly top: number
+  }> = []
   let previousBottom = 0
-
   for (const item of anchoredSource) {
-    const requestedTop = Math.max(0, item.anchorTop + anchorBaseOffset - reservedTop)
-    const top = anchored.length === 0 ? requestedTop : Math.max(requestedTop, previousBottom + COMMENT_CARD_GAP)
+    const requestedTop = Math.max(
+      0,
+      item.anchorTop + anchorBaseOffset - reservedTop
+    )
+    const top =
+      anchored.length === 0
+        ? requestedTop
+        : Math.max(requestedTop, previousBottom + COMMENT_CARD_GAP)
     const height = measuredHeights[item.id] ?? COMMENT_CARD_ESTIMATED_HEIGHT
     anchored.push({ item, top })
     previousBottom = top + height
   }
-
   return { anchored, anchoredHeight: anchored.length > 0 ? previousBottom : 0 }
 }
-
 function partitionRailThreads(items: readonly DriveCommentsRailItem[]): {
   readonly anchored: readonly DriveCommentsRailItem[]
   readonly orphaned: readonly DriveCommentsRailItem[]
@@ -1214,24 +1576,46 @@ function partitionRailThreads(items: readonly DriveCommentsRailItem[]): {
 } {
   const orphaned = items
     .filter((item) => item.thread.anchorStatus === 'orphaned')
-    .sort((a, b) => Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt))
+    .sort(
+      (a, b) => Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt)
+    )
   const unavailable = items
-    .filter((item) => item.thread.anchorStatus !== 'orphaned' && item.placement.status === 'unavailable')
-    .sort((a, b) => Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt))
-  const anchored = items.filter((item) => item.placement.status === 'positioned' && item.thread.anchorStatus !== 'orphaned')
+    .filter(
+      (item) =>
+        item.thread.anchorStatus !== 'orphaned' &&
+        item.placement.status === 'unavailable'
+    )
+    .sort(
+      (a, b) => Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt)
+    )
+  const anchored = items.filter(
+    (item) =>
+      item.placement.status === 'positioned' &&
+      item.thread.anchorStatus !== 'orphaned'
+  )
   return { anchored, orphaned, unavailable }
 }
-
-function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]) {
+function useCommentRailMeasurements(
+  enabled: boolean,
+  cardIds: readonly string[]
+) {
   const cardElementsRef = useRef(new Map<string, HTMLElement>())
   const headerElementRef = useRef<HTMLElement | null>(null)
   const unlocatedElementRef = useRef<HTMLElement | null>(null)
   const targetByElementRef = useRef(new WeakMap<Element, MeasurementTarget>())
-  const cardRefCallbacksRef = useRef(new Map<string, (element: HTMLDivElement | null) => void>())
+  const cardRefCallbacksRef = useRef(
+    new Map<string, (element: HTMLDivElement | null) => void>()
+  )
   const observerRef = useRef<ResizeObserver | null>(null)
-  const pendingCardMeasurementsRef = useRef(new Map<string, PendingMeasurement>())
-  const pendingHeaderMeasurementRef = useRef<PendingMeasurement | undefined>(undefined)
-  const pendingUnlocatedMeasurementRef = useRef<PendingMeasurement | undefined>(undefined)
+  const pendingCardMeasurementsRef = useRef(
+    new Map<string, PendingMeasurement>()
+  )
+  const pendingHeaderMeasurementRef = useRef<PendingMeasurement | undefined>(
+    undefined
+  )
+  const pendingUnlocatedMeasurementRef = useRef<PendingMeasurement | undefined>(
+    undefined
+  )
   const frameRef = useRef<number | null>(null)
   const disposedRef = useRef(false)
   const initialMeasurements: CommentRailMeasurements = {
@@ -1240,8 +1624,8 @@ function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]
     unlocatedSectionHeight: 0,
   }
   const measurementsRef = useRef(initialMeasurements)
-  const [measurements, setMeasurements] = useState<CommentRailMeasurements>(initialMeasurements)
-
+  const [measurements, setMeasurements] =
+    useState<CommentRailMeasurements>(initialMeasurements)
   const flushMeasurements = useCallback(() => {
     frameRef.current = null
     const pendingCards = [...pendingCardMeasurementsRef.current]
@@ -1250,43 +1634,48 @@ function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]
     pendingCardMeasurementsRef.current.clear()
     pendingHeaderMeasurementRef.current = undefined
     pendingUnlocatedMeasurementRef.current = undefined
-
-    const resolvedCards = pendingCards.map(([threadId, value]) => [
-      threadId,
-      resolvePendingMeasurement(value, COMMENT_CARD_ESTIMATED_HEIGHT),
-    ] as const)
-    const resolvedHeader = pendingHeader === undefined
-      ? undefined
-      : resolvePendingMeasurement(pendingHeader, 0)
-    const resolvedUnlocated = pendingUnlocated === undefined
-      ? undefined
-      : resolvePendingMeasurement(pendingUnlocated, 0)
-
+    const resolvedCards = pendingCards.map(
+      ([threadId, value]) =>
+        [
+          threadId,
+          resolvePendingMeasurement(value, COMMENT_CARD_ESTIMATED_HEIGHT),
+        ] as const
+    )
+    const resolvedHeader =
+      pendingHeader === undefined
+        ? undefined
+        : resolvePendingMeasurement(pendingHeader, 0)
+    const resolvedUnlocated =
+      pendingUnlocated === undefined
+        ? undefined
+        : resolvePendingMeasurement(pendingUnlocated, 0)
     setMeasurements((current) => {
       let nextCardHeights = current.cardHeights
       let changed = false
-
       for (const [threadId, height] of resolvedCards) {
         if (height === null) {
           if (!(threadId in nextCardHeights)) continue
-          if (nextCardHeights === current.cardHeights) nextCardHeights = { ...current.cardHeights }
+          if (nextCardHeights === current.cardHeights)
+            nextCardHeights = { ...current.cardHeights }
           delete nextCardHeights[threadId]
           changed = true
           continue
         }
         if (nextCardHeights[threadId] === height) continue
-        if (nextCardHeights === current.cardHeights) nextCardHeights = { ...current.cardHeights }
+        if (nextCardHeights === current.cardHeights)
+          nextCardHeights = { ...current.cardHeights }
         nextCardHeights[threadId] = height
         changed = true
       }
-
-      const nextHeaderHeight = resolvedHeader === undefined
-        ? current.headerHeight
-        : resolvedHeader ?? 0
+      const nextHeaderHeight =
+        resolvedHeader === undefined
+          ? current.headerHeight
+          : (resolvedHeader ?? 0)
       if (nextHeaderHeight !== current.headerHeight) changed = true
-      const nextUnlocatedHeight = resolvedUnlocated === undefined
-        ? current.unlocatedSectionHeight
-        : resolvedUnlocated ?? 0
+      const nextUnlocatedHeight =
+        resolvedUnlocated === undefined
+          ? current.unlocatedSectionHeight
+          : (resolvedUnlocated ?? 0)
       if (nextUnlocatedHeight !== current.unlocatedSectionHeight) changed = true
       if (!changed) return current
       const next = {
@@ -1298,92 +1687,115 @@ function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]
       return next
     })
   }, [])
-
   const scheduleFrame = useCallback(() => {
     if (disposedRef.current || frameRef.current !== null) return
     frameRef.current = window.requestAnimationFrame(flushMeasurements)
   }, [flushMeasurements])
-
-  const scheduleCardMeasurement = useCallback((threadId: string, value: PendingMeasurement) => {
-    pendingCardMeasurementsRef.current.set(threadId, value)
-    scheduleFrame()
-  }, [scheduleFrame])
-
-  const scheduleHeaderMeasurement = useCallback((value: PendingMeasurement) => {
-    pendingHeaderMeasurementRef.current = value
-    scheduleFrame()
-  }, [scheduleFrame])
-
-  const scheduleUnlocatedMeasurement = useCallback((value: PendingMeasurement) => {
-    pendingUnlocatedMeasurementRef.current = value
-    scheduleFrame()
-  }, [scheduleFrame])
-
-  const registerCardElement = useCallback((threadId: string, element: HTMLDivElement | null) => {
-    const previous = cardElementsRef.current.get(threadId)
-    if (previous === element) return
-    if (previous) {
-      unobserveElement(observerRef.current, previous)
-      targetByElementRef.current.delete(previous)
-    }
-    if (!element) {
-      cardElementsRef.current.delete(threadId)
-      // Preserve the last valid height across transient ref detaches to avoid fallback-size oscillation.
-      return
-    }
-    cardElementsRef.current.set(threadId, element)
-    targetByElementRef.current.set(element, { kind: 'card', threadId })
-    observerRef.current?.observe(element)
-    if (typeof ResizeObserver === 'undefined') scheduleCardMeasurement(threadId, element)
-  }, [scheduleCardMeasurement])
-
-  const cardRef = useCallback((threadId: string) => {
-    const existing = cardRefCallbacksRef.current.get(threadId)
-    if (existing) return existing
-    const callback = (element: HTMLDivElement | null) => {
-      registerCardElement(threadId, element)
-      if (!element) cardRefCallbacksRef.current.delete(threadId)
-    }
-    cardRefCallbacksRef.current.set(threadId, callback)
-    return callback
-  }, [registerCardElement])
-
-  const headerRef = useCallback((element: HTMLDivElement | null) => {
-    const previous = headerElementRef.current
-    if (previous === element) return
-    if (previous) {
-      unobserveElement(observerRef.current, previous)
-      targetByElementRef.current.delete(previous)
-    }
-    headerElementRef.current = element
-    if (!element) {
-      if (pendingHeaderMeasurementRef.current === undefined && measurementsRef.current.headerHeight === 0) return
-      scheduleHeaderMeasurement(null)
-      return
-    }
-    targetByElementRef.current.set(element, { kind: 'header' })
-    observerRef.current?.observe(element)
-    if (typeof ResizeObserver === 'undefined') scheduleHeaderMeasurement(element)
-  }, [scheduleHeaderMeasurement])
-
-  const unlocatedSectionRef = useCallback((element: HTMLDivElement | null) => {
-    const previous = unlocatedElementRef.current
-    if (previous === element) return
-    if (previous) {
-      unobserveElement(observerRef.current, previous)
-      targetByElementRef.current.delete(previous)
-    }
-    unlocatedElementRef.current = element
-    if (!element) {
-      if (pendingUnlocatedMeasurementRef.current === undefined && measurementsRef.current.unlocatedSectionHeight === 0) return
-      scheduleUnlocatedMeasurement(null)
-      return
-    }
-    targetByElementRef.current.set(element, { kind: 'unlocated' })
-    observerRef.current?.observe(element)
-    if (typeof ResizeObserver === 'undefined') scheduleUnlocatedMeasurement(element)
-  }, [scheduleUnlocatedMeasurement])
-
+  const scheduleCardMeasurement = useCallback(
+    (threadId: string, value: PendingMeasurement) => {
+      pendingCardMeasurementsRef.current.set(threadId, value)
+      scheduleFrame()
+    },
+    [scheduleFrame]
+  )
+  const scheduleHeaderMeasurement = useCallback(
+    (value: PendingMeasurement) => {
+      pendingHeaderMeasurementRef.current = value
+      scheduleFrame()
+    },
+    [scheduleFrame]
+  )
+  const scheduleUnlocatedMeasurement = useCallback(
+    (value: PendingMeasurement) => {
+      pendingUnlocatedMeasurementRef.current = value
+      scheduleFrame()
+    },
+    [scheduleFrame]
+  )
+  const registerCardElement = useCallback(
+    (threadId: string, element: HTMLDivElement | null) => {
+      const previous = cardElementsRef.current.get(threadId)
+      if (previous === element) return
+      if (previous) {
+        unobserveElement(observerRef.current, previous)
+        targetByElementRef.current.delete(previous)
+      }
+      if (!element) {
+        cardElementsRef.current.delete(threadId)
+        // Preserve the last valid height across transient ref detaches to avoid fallback-size oscillation.
+        return
+      }
+      cardElementsRef.current.set(threadId, element)
+      targetByElementRef.current.set(element, { kind: 'card', threadId })
+      observerRef.current?.observe(element)
+      if (typeof ResizeObserver === 'undefined')
+        scheduleCardMeasurement(threadId, element)
+    },
+    [scheduleCardMeasurement]
+  )
+  const cardRef = useCallback(
+    (threadId: string) => {
+      const existing = cardRefCallbacksRef.current.get(threadId)
+      if (existing) return existing
+      const callback = (element: HTMLDivElement | null) => {
+        registerCardElement(threadId, element)
+        if (!element) cardRefCallbacksRef.current.delete(threadId)
+      }
+      cardRefCallbacksRef.current.set(threadId, callback)
+      return callback
+    },
+    [registerCardElement]
+  )
+  const headerRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      const previous = headerElementRef.current
+      if (previous === element) return
+      if (previous) {
+        unobserveElement(observerRef.current, previous)
+        targetByElementRef.current.delete(previous)
+      }
+      headerElementRef.current = element
+      if (!element) {
+        if (
+          pendingHeaderMeasurementRef.current === undefined &&
+          measurementsRef.current.headerHeight === 0
+        )
+          return
+        scheduleHeaderMeasurement(null)
+        return
+      }
+      targetByElementRef.current.set(element, { kind: 'header' })
+      observerRef.current?.observe(element)
+      if (typeof ResizeObserver === 'undefined')
+        scheduleHeaderMeasurement(element)
+    },
+    [scheduleHeaderMeasurement]
+  )
+  const unlocatedSectionRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      const previous = unlocatedElementRef.current
+      if (previous === element) return
+      if (previous) {
+        unobserveElement(observerRef.current, previous)
+        targetByElementRef.current.delete(previous)
+      }
+      unlocatedElementRef.current = element
+      if (!element) {
+        if (
+          pendingUnlocatedMeasurementRef.current === undefined &&
+          measurementsRef.current.unlocatedSectionHeight === 0
+        )
+          return
+        scheduleUnlocatedMeasurement(null)
+        return
+      }
+      targetByElementRef.current.set(element, { kind: 'unlocated' })
+      observerRef.current?.observe(element)
+      if (typeof ResizeObserver === 'undefined')
+        scheduleUnlocatedMeasurement(element)
+    },
+    [scheduleUnlocatedMeasurement]
+  )
   useLayoutEffect(() => {
     if (!enabled || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver((entries) => {
@@ -1391,7 +1803,8 @@ function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]
         const target = targetByElementRef.current.get(entry.target)
         if (!target) continue
         const height = resizeObserverEntryHeight(entry)
-        if (target.kind === 'card') scheduleCardMeasurement(target.threadId, height)
+        if (target.kind === 'card')
+          scheduleCardMeasurement(target.threadId, height)
         else if (target.kind === 'header') scheduleHeaderMeasurement(height)
         else scheduleUnlocatedMeasurement(height)
       }
@@ -1399,16 +1812,22 @@ function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]
     observerRef.current = observer
     cardElementsRef.current.forEach((element) => observer.observe(element))
     if (headerElementRef.current) observer.observe(headerElementRef.current)
-    if (unlocatedElementRef.current) observer.observe(unlocatedElementRef.current)
+    if (unlocatedElementRef.current)
+      observer.observe(unlocatedElementRef.current)
     return () => {
       if (observerRef.current === observer) observerRef.current = null
       observer.disconnect()
     }
-  }, [enabled, scheduleCardMeasurement, scheduleHeaderMeasurement, scheduleUnlocatedMeasurement])
-
+  }, [
+    enabled,
+    scheduleCardMeasurement,
+    scheduleHeaderMeasurement,
+    scheduleUnlocatedMeasurement,
+  ])
   useLayoutEffect(() => {
     if (!enabled || !headerElementRef.current) return
-    const headerHeight = resolvePendingMeasurement(headerElementRef.current, 0) ?? 0
+    const headerHeight =
+      resolvePendingMeasurement(headerElementRef.current, 0) ?? 0
     setMeasurements((current) => {
       if (current.headerHeight === headerHeight) return current
       const next = { ...current, headerHeight }
@@ -1416,18 +1835,26 @@ function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]
       return next
     })
   }, [enabled])
-
   useLayoutEffect(() => {
     if (!enabled || typeof ResizeObserver !== 'undefined') return
-    cardElementsRef.current.forEach((element, threadId) => scheduleCardMeasurement(threadId, element))
+    cardElementsRef.current.forEach((element, threadId) =>
+      scheduleCardMeasurement(threadId, element)
+    )
     scheduleHeaderMeasurement(headerElementRef.current)
     scheduleUnlocatedMeasurement(unlocatedElementRef.current)
-  }, [cardIds, enabled, scheduleCardMeasurement, scheduleHeaderMeasurement, scheduleUnlocatedMeasurement])
-
+  }, [
+    cardIds,
+    enabled,
+    scheduleCardMeasurement,
+    scheduleHeaderMeasurement,
+    scheduleUnlocatedMeasurement,
+  ])
   useEffect(() => {
     const activeCardIds = new Set(cardIds)
     setMeasurements((current) => {
-      const staleCardIds = Object.keys(current.cardHeights).filter((cardId) => !activeCardIds.has(cardId))
+      const staleCardIds = Object.keys(current.cardHeights).filter(
+        (cardId) => !activeCardIds.has(cardId)
+      )
       if (staleCardIds.length === 0) return current
       const cardHeights = { ...current.cardHeights }
       for (const cardId of staleCardIds) {
@@ -1439,34 +1866,37 @@ function useCommentRailMeasurements(enabled: boolean, cardIds: readonly string[]
       return next
     })
   }, [cardIds])
-
   useLayoutEffect(() => {
     disposedRef.current = false
     return () => {
       disposedRef.current = true
-      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current)
+      if (frameRef.current !== null)
+        window.cancelAnimationFrame(frameRef.current)
       frameRef.current = null
       pendingCardMeasurementsRef.current.clear()
       pendingHeaderMeasurementRef.current = undefined
       pendingUnlocatedMeasurementRef.current = undefined
     }
   }, [])
-
   return { ...measurements, cardRef, headerRef, unlocatedSectionRef }
 }
-
-function resolvePendingMeasurement(value: PendingMeasurement, fallback: number): number | null {
+function resolvePendingMeasurement(
+  value: PendingMeasurement,
+  fallback: number
+): number | null {
   if (value === null) return null
   if (typeof value === 'number') return Math.max(0, Math.ceil(value))
   if (!value.isConnected) return null
   const measured = value.getBoundingClientRect().height || value.offsetHeight
   return Math.max(0, Math.ceil(measured || fallback))
 }
-
 function resizeObserverEntryHeight(entry: ResizeObserverEntry): number {
   return entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
 }
-
-function unobserveElement(observer: ResizeObserver | null, element: Element): void {
-  if (observer && typeof observer.unobserve === 'function') observer.unobserve(element)
+function unobserveElement(
+  observer: ResizeObserver | null,
+  element: Element
+): void {
+  if (observer && typeof observer.unobserve === 'function')
+    observer.unobserve(element)
 }

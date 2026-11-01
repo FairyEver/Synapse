@@ -12,12 +12,12 @@ const THEME_TOKENS = [
   '--background',
   '--foreground',
   '--muted',
-  '--muted-foreground',
+  '--muted',
   '--border',
-  '--primary',
-  '--primary-foreground',
-  '--secondary',
-  '--secondary-foreground',
+  '--accent',
+  '--accent-foreground',
+  '--surface-secondary',
+  '--foreground',
 ]
 
 beforeEach(() => {
@@ -67,7 +67,7 @@ describe('drive markdown Mermaid renderer', () => {
     expect(root.querySelector('svg')?.getAttribute('role')).toBe('img')
     expect(root.querySelector('svg')?.getAttribute('aria-label')).toBe('Mermaid 流程图')
     expect(root.querySelector('figure')?.className).toContain('overflow-x-auto')
-    expect(root.querySelector('figure')?.className).toContain('bg-muted/40')
+    expect(root.querySelector('figure')?.className).toContain('bg-surface-secondary/40')
     expect(root.querySelector('figure')?.className).toContain('mx-0')
     expect(root.querySelector('pre')?.classList.contains('hidden')).toBe(true)
     expect(root.querySelector('pre')?.textContent).toContain('flowchart TB')

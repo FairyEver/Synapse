@@ -1,45 +1,45 @@
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { resolveWebEntrypoint } from '@/lib/web-entrypoints'
 
-const routeTreePath = fileURLToPath(new URL('../routeTree.gen.ts', import.meta.url))
-const driveRoutePaths = [
-  fileURLToPath(new URL('./_authenticated/drive/index.tsx', import.meta.url)),
-  fileURLToPath(new URL('./_authenticated/drive/folders/$folderId.tsx', import.meta.url)),
-  fileURLToPath(new URL('./_authenticated/drive/items/$browserItemId.tsx', import.meta.url)),
-] as const
-
-describe('drive browser file routes', () => {
-  it('keeps owner file preview route outside the folder route component', () => {
-    const routeTree = readFileSync(routeTreePath, 'utf8')
-
-    expect(routeTree).toContain("id: '/drive/items/$browserItemId'")
-    expect(routeTree).toContain("fullPath: '/drive/items/$browserItemId'")
-    expect(routeTree).toContain("parentRoute: typeof AuthenticatedRouteRoute")
-    expect(routeTree).not.toContain("parentRoute: typeof AuthenticatedDriveFoldersFolderIdRoute")
+// Exercise the actual SPA-selection policy, not deleted console component source.
+describe('independent Drive browser entrypoints', () => {
+  it.each([
+    '/drive/items/document?surface=standalone',
+    '/drive/items/folder',
+    '/share/public-share',
+    '/share/public-share/items/child',
+  ])('serves the independent user/share reader for %s', (href) => {
+    expect(resolveWebEntrypoint(href)).toEqual({ kind: 'html', filename: 'index.html' })
   })
 
-  it('keeps share file preview route outside the share root component', () => {
-    const routeTree = readFileSync(routeTreePath, 'utf8')
-
-    expect(routeTree).toContain("id: '/share/$shareId_/items/$browserItemId'")
-    expect(routeTree).toContain("fullPath: '/share/$shareId/items/$browserItemId'")
-    expect(routeTree).toContain("parentRoute: typeof rootRouteImport")
-    expect(routeTree).not.toContain("parentRoute: typeof ShareShareIdRoute")
+  describe.each(['console', 'dashboard'])('legacy %s reader entrypoints', (prefix) => {
+    it.each(['items', 'folders'])('moves embedded %s links outside the console without losing discussion targets', (kind) => {
+      const result = resolveWebEntrypoint(`/${prefix}/drive/${kind}/document?surface=console&threadId=discussion#comment`)
+      expect(result).toEqual({
+        kind: 'redirect',
+        location: '/drive/items/document?surface=standalone&threadId=discussion#comment',
+      })
+    })
   })
 
-  it('inherits authentication from the ordinary-user route tree', () => {
-    for (const routePath of driveRoutePaths) {
-      const routeSource = readFileSync(routePath, 'utf8')
-      expect(routeSource).not.toContain('requireDashboardUser')
-      expect(routeSource).not.toContain('beforeLoad:')
-    }
+  it.each([
+    '/console/drive?view=files',
+    '/console/drive/folders',
+    '/dashboard/drive',
+    '/admin/drive',
+    '/admin/drive/storage',
+    '/drive',
+  ])('rejects the retired management/listing surface %s', (href) => {
+    expect(resolveWebEntrypoint(href)).toEqual({ kind: 'not-found' })
   })
 
-  it('opens owner item routes in standalone mode by default', () => {
-    const routeSource = readFileSync(driveRoutePaths[2], 'utf8')
-
-    expect(routeSource).toContain("search.surface === 'console'")
-    expect(routeSource).toContain("'standalone' as const")
+  it.each([
+    '/drive/items/document/download',
+    '/drive/items/document/render',
+    '/share/public-share/reader',
+    '/share/public-share/items/child/reader',
+    '/share/public-share/items/child/download',
+  ])('keeps server-rendered/download endpoint %s outside SPA fallback', (href) => {
+    expect(resolveWebEntrypoint(href)).toEqual({ kind: 'pass' })
   })
 })

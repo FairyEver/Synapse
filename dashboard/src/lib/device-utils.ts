@@ -8,11 +8,11 @@ export const deviceStatusLabels: Record<DashboardDeviceRow['status'], string> = 
 
 export const deviceStatusVariants: Record<
   DashboardDeviceRow['status'],
-  'default' | 'secondary' | 'outline'
+  'success' | 'warning' | 'default'
 > = {
-  online: 'default',
-  stale: 'secondary',
-  offline: 'outline',
+  online: 'success',
+  stale: 'warning',
+  offline: 'default',
 }
 
 type DeviceScope = {

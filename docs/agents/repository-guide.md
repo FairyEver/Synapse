@@ -6,7 +6,7 @@
 
 - Electron 44 + Vite 8 + React 19 + TypeScript 6；macOS 最低支持 13。
 - shadcn/ui（`radix-nova`）+ Tailwind CSS 4。
-- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/dashboard-v2`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
+- pnpm monorepo：`@synapse/desktop`、`@synapse/document`、`@synapse/server`、`@synapse/dashboard`、`@synapse/pdf-renderer`、`@synapse/auto`、`@synapse/auto-web`。
 - Git 管理内容，SQLite / DataRepository 管理业务数据。
 
 ## 包管理器
@@ -32,7 +32,7 @@ desktop/
     └── types/          # Renderer 全局类型
 document/               # VitePress 文档站
 server/                 # 服务端与管理后台
-dashboard-v2/           # React + TypeScript + Vite + HeroUI v3；独立 UI 基线
+dashboard/              # React + TypeScript + Vite + HeroUI v3；唯一 Web 界面
 pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 ```
 
@@ -40,14 +40,14 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 ## 启动与验证
 
-- `pnpm dev`：通过 mprocs 分栏启动 desktop、server、document、dashboard-v2；按 `q` 退出并停止本次启动的进程。
+- `pnpm dev`：通过 mprocs 分栏启动 desktop、server、document；Dashboard 由 Server 进程一并启动。按 `q` 退出并停止本次启动的进程。
 - `pnpm dev:prod`：同一面板启动，桌面端使用生产站点 URL。
 - `pnpm dev:desktop`：仅桌面端。
 - `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；控制台自动打开 `http://localhost:19700/console/`，使用双栈监听；API 为 `19701`，PDF 宿主机映射为 `19702`。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
 - `pnpm dev:document`：文档站。
-- `pnpm dev:dashboard-v2`：HeroUI 控制台与独立页面，地址为 `http://localhost:19703/console/`，双栈监听、固定端口；也随 `pnpm dev:prod` 启动。生产构建默认 V2，显式 `DASHBOARD_UI=v1` 可整包重建回滚旧版，最终输出到容器 `/app/dashboard/dist`；构建本身不自动部署。
-- Dashboard V2 的组件与视觉使用 HeroUI v3，规则见 `dashboard-v2/CLAUDE.md` 与 `DESIGN.md`；此基线仅限该子包。仓库的 `.agents/skills/heroui-react/` 提供官方 Skill，`.codex/config.toml` 和 `.mcp.json` 分别配置 Codex / Claude Code 的官方 MCP。离线文档与 demos 用 `pnpm --filter @synapse/dashboard-v2 docs:heroui:sync` 下载到该子包被 Git 忽略的 `.heroui-docs/`；不会克隆上游仓库。
-- 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`、`pnpm quit:dashboard-v2`。
+- Dashboard 使用 `http://localhost:19700/console/`，双栈监听、固定端口；生产镜像直接构建到 `/app/dashboard/dist`，构建本身不自动部署。
+- Dashboard 的组件与视觉使用 HeroUI v3，规则见 `dashboard/CLAUDE.md` 与 `DESIGN.md`；此基线仅限该子包。仓库的 `.agents/skills/heroui-react/` 提供官方 Skill，`.codex/config.toml` 和 `.mcp.json` 分别配置 Codex / Claude Code 的官方 MCP。离线文档与 demos 用 `pnpm --filter @synapse/dashboard docs:heroui:sync` 下载到该子包被 Git 忽略的 `.heroui-docs/`；不会克隆上游仓库。
+- 对应停止命令为 `pnpm quit`、`pnpm quit:desktop`、`pnpm quit:server`、`pnpm quit:document`。
 
 本机 HTTP 开发端口保留 `19700–19799`，Brick Lab 使用 `19800–19899`。完整分配与生产边界见 `.claude/rules/workspace-dev-ports.md`；数据库和生产映射不随开发 HTTP 端口修改。
 
@@ -57,7 +57,7 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 游戏 Web 隔离验收仍使用根 `pnpm dev:server`：显式 `GAME_E2E_DATABASE_URL` 只允许本机、库名以 `_e2e` 结尾的 PostgreSQL，并覆盖本地业务数据库配置；可结合既有 `SYNAPSE_SERVER_API_PORT` 将测试 API 与运行中的业务 API 分开。省略该变量时普通开发行为不变。依赖容器已有可用镜像时，`SYNAPSE_SERVER_REUSE_INFRA=1` 使用 `--no-build` 启动依赖，避免重复拉取/构建；默认仍构建。
 
-游戏 Web 的 Cookie 写请求仅在 `NODE_ENV !== production` 且 `APP_PUBLIC_URL` 的 origin 为 `http://localhost:19700` 或 `http://localhost:19703` 时，允许这两个固定开发来源互通；不扩展到其他端口、域名、协议或回环地址。生产环境仍要求 Origin 与 `APP_PUBLIC_URL` 精确匹配；开发例外不绕过跨站拦截、账号绑定或 invoke 操作白名单。
+游戏 Web 的 Cookie 写请求仅在 `NODE_ENV !== production` 且 `APP_PUBLIC_URL` 的 origin 为 `http://localhost:19700` 时允许本地开发来源；不扩展到其他端口、域名、协议或回环地址。生产环境仍要求 Origin 与 `APP_PUBLIC_URL` 精确匹配；开发例外不绕过跨站拦截、账号绑定或 invoke 操作白名单。
 
 ## 配置规则
 

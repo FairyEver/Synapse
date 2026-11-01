@@ -5,10 +5,14 @@ import type { ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { DriveBrowserPage, DriveSingleFileReaderView } from './drive-browser-page'
+import {
+  DriveBrowserPage,
+  DriveSingleFileReaderView,
+} from './drive-browser-page'
 import { useDriveBrowser, type DriveBrowserState } from './use-drive-browser'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const driveAnnotationsMock = vi.hoisted(() => ({
   value: {
@@ -30,14 +34,21 @@ const driveAnnotationsMock = vi.hoisted(() => ({
 vi.mock('./use-drive-browser', () => ({
   useDriveBrowser: vi.fn(),
 }))
-vi.mock('./use-drive-browsing-history-visit', () => ({ useDriveBrowsingHistoryVisit: vi.fn() }))
+vi.mock('./use-drive-browsing-history-visit', () => ({
+  useDriveBrowsingHistoryVisit: vi.fn(),
+}))
 
 vi.mock('./use-drive-annotations', () => ({
   useDriveAnnotations: () => driveAnnotationsMock.value,
 }))
 
 vi.mock('./use-drive-messages', () => ({
-  useDriveMessages: () => ({ messages: [], loading: false, error: null, canPost: false }),
+  useDriveMessages: () => ({
+    messages: [],
+    loading: false,
+    error: null,
+    canPost: false,
+  }),
 }))
 
 let root: Root | null = null
@@ -50,8 +61,15 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   }
-  Range.prototype.getBoundingClientRect = vi.fn(() => domRect({ left: 80, top: 120, width: 48, height: 20 }))
-  Range.prototype.getClientRects = vi.fn(() => [domRect({ left: 80, top: 120, width: 48, height: 20 })] as unknown as DOMRectList)
+  Range.prototype.getBoundingClientRect = vi.fn(() =>
+    domRect({ left: 80, top: 120, width: 48, height: 20 })
+  )
+  Range.prototype.getClientRects = vi.fn(
+    () =>
+      [
+        domRect({ left: 80, top: 120, width: 48, height: 20 }),
+      ] as unknown as DOMRectList
+  )
 })
 
 afterEach(() => {
@@ -69,35 +87,60 @@ afterEach(() => {
 
 describe('DriveBrowserPage', () => {
   it.each([
-    { label: 'shared files', context: 'share' as const, surface: 'standalone' as const, embedded: false },
-    { label: 'standalone owner files', context: 'owner' as const, surface: 'standalone' as const, embedded: false },
-    { label: 'console owner files', context: 'owner' as const, surface: 'console' as const, embedded: true },
-  ])('uses the complete file name as the document title for $label', ({ context, surface, embedded }) => {
-    renderPage(
-      <DriveSingleFileReaderView
-        snapshot={createSnapshot({
-          context,
-          surface,
-          current: { ...baseCurrent(), name: '产品中心 & 开发中心共享文档仓库.md' },
-        })}
-        embedded={embedded}
-      />
-    )
+    {
+      label: 'shared files',
+      context: 'share' as const,
+      surface: 'standalone' as const,
+      embedded: false,
+    },
+    {
+      label: 'standalone owner files',
+      context: 'owner' as const,
+      surface: 'standalone' as const,
+      embedded: false,
+    },
+    {
+      label: 'console owner files',
+      context: 'owner' as const,
+      surface: 'console' as const,
+      embedded: true,
+    },
+  ])(
+    'uses the complete file name as the document title for $label',
+    ({ context, surface, embedded }) => {
+      renderPage(
+        <DriveSingleFileReaderView
+          snapshot={createSnapshot({
+            context,
+            surface,
+            current: {
+              ...baseCurrent(),
+              name: '产品中心 & 开发中心共享文档仓库.md',
+            },
+          })}
+          embedded={embedded}
+        />
+      )
 
-    expect(document.title).toBe('产品中心 & 开发中心共享文档仓库.md')
-  })
+      expect(document.title).toBe('产品中心 & 开发中心共享文档仓库.md')
+    }
+  )
 
   it('updates the document title when the file changes and restores the previous title on unmount', () => {
     renderPage(
       <DriveSingleFileReaderView
-        snapshot={createSnapshot({ current: { ...baseCurrent(), name: 'first.md' } })}
+        snapshot={createSnapshot({
+          current: { ...baseCurrent(), name: 'first.md' },
+        })}
       />
     )
     expect(document.title).toBe('first.md')
 
     rerenderPage(
       <DriveSingleFileReaderView
-        snapshot={createSnapshot({ current: { ...baseCurrent(), id: 'second', name: 'second.md' } })}
+        snapshot={createSnapshot({
+          current: { ...baseCurrent(), id: 'second', name: 'second.md' },
+        })}
       />
     )
     expect(document.title).toBe('second.md')
@@ -127,7 +170,12 @@ describe('DriveBrowserPage', () => {
     mockDriveBrowserState({
       status: 'ready',
       snapshot: createSnapshot({
-        current: { ...baseCurrent(), id: 'folder', name: '资料', type: 'folder' },
+        current: {
+          ...baseCurrent(),
+          id: 'folder',
+          name: '资料',
+          type: 'folder',
+        },
         preview: null,
       }),
       loadingMoreChildren: false,
@@ -153,14 +201,23 @@ describe('DriveBrowserPage', () => {
 
     renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
 
-    const input = document.querySelector<HTMLInputElement>('#drive-share-password')
+    const input = document.querySelector<HTMLInputElement>(
+      '#drive-share-password'
+    )
     const button = buttonWithText('打开分享')
     expect(document.querySelector('[aria-label="Synapse"]')).not.toBeNull()
     expect(document.querySelector('main')?.className).toContain('min-h-screen')
-    expect(document.querySelector('main')?.className).toContain('supports-[height:100svh]:min-h-svh')
-    expect(document.querySelector<HTMLImageElement>('[aria-label="Synapse"] img')?.src).toContain('synapse-logo.png')
+    expect(document.querySelector('main')?.className).toContain(
+      'supports-[height:100svh]:min-h-svh'
+    )
+    expect(
+      document.querySelector<HTMLImageElement>('[aria-label="Synapse"] img')
+        ?.src
+    ).toContain('synapse-logo.png')
     expect(document.body.textContent).toContain('此分享受密码保护')
-    expect(document.querySelector('label[for="drive-share-password"]')?.textContent).toBe('访问密码')
+    expect(
+      document.querySelector('label[for="drive-share-password"]')?.textContent
+    ).toBe('访问密码')
     expect(document.body.textContent).not.toContain('请输入密码。')
     expect(input?.required).toBe(true)
     expect(document.activeElement).toBe(input)
@@ -186,7 +243,9 @@ describe('DriveBrowserPage', () => {
     })
     renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
 
-    const input = document.querySelector<HTMLInputElement>('#drive-share-password')
+    const input = document.querySelector<HTMLInputElement>(
+      '#drive-share-password'
+    )
     if (!input) throw new Error('Missing password input.')
     await inputValue(input, 'letmein')
 
@@ -214,12 +273,18 @@ describe('DriveBrowserPage', () => {
 
     renderPage(<DriveBrowserPage context='share' shareId='share-1' />)
 
-    const input = document.querySelector<HTMLInputElement>('#drive-share-password')
-    const error = document.querySelector<HTMLElement>('#drive-share-password-error')
+    const input = document.querySelector<HTMLInputElement>(
+      '#drive-share-password'
+    )
+    const error = document.querySelector<HTMLElement>(
+      '#drive-share-password-error'
+    )
     expect(error?.textContent).toBe('密码不正确，请重试。')
     expect(error?.getAttribute('role')).toBe('alert')
     expect(input?.getAttribute('aria-invalid')).toBe('true')
-    expect(input?.getAttribute('aria-describedby')).toBe('drive-share-password-error')
+    expect(input?.getAttribute('aria-describedby')).toBe(
+      'drive-share-password-error'
+    )
     expect(document.querySelector('[data-slot="alert"]')).toBeNull()
   })
 
@@ -230,7 +295,9 @@ describe('DriveBrowserPage', () => {
 
     expect(document.querySelector('[aria-label="Synapse"]')).not.toBeNull()
     expect(document.querySelector('[aria-busy="true"]')).not.toBeNull()
-    expect(document.querySelector('main')?.className).toContain('bg-muted/30')
+    expect(document.querySelector('main')?.className).toContain(
+      'bg-surface-secondary/30'
+    )
   })
 
   it('clears consumed initial share passwords when unlock falls back to the password form', () => {
@@ -281,7 +348,13 @@ describe('DriveBrowserPage', () => {
       unlocking: false,
       unlockError: null,
     })
-    rerenderPage(<DriveBrowserPage context='share' shareId='share-1' onInitialPasswordConsumed={onInitialPasswordConsumed} />)
+    rerenderPage(
+      <DriveBrowserPage
+        context='share'
+        shareId='share-1'
+        onInitialPasswordConsumed={onInitialPasswordConsumed}
+      />
+    )
 
     expect(onInitialPasswordConsumed).toHaveBeenCalledTimes(1)
     expect(document.body.textContent).toContain('密码不正确，请重试。')
@@ -328,7 +401,9 @@ describe('DriveBrowserPage', () => {
       retrying: false,
     })
 
-    renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='file' />)
+    renderPage(
+      <DriveBrowserPage context='owner' surface='standalone' itemId='file' />
+    )
 
     buttonWithText('重试')?.click()
 
@@ -365,16 +440,23 @@ describe('DriveBrowserPage', () => {
       savingText: false,
     })
 
-    renderPage(<DriveBrowserPage context='owner' surface='console' itemId='file' />)
+    renderPage(
+      <DriveBrowserPage context='owner' surface='console' itemId='file' />
+    )
     selectStrongText()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new Event('pointerup', { bubbles: true }))
+      document
+        .querySelector('[data-testid="markdown-body"]')
+        ?.dispatchEvent(new Event('pointerup', { bubbles: true }))
     })
 
     expect(buttonWithText('添加评论')).not.toBeNull()
     expect(document.querySelector('[data-drive-finder="file"]')).not.toBeNull()
-    expect(document.querySelector('[data-testid="markdown-document-scroll"]')?.className).toContain('overflow-y-auto')
+    expect(
+      document.querySelector('[data-testid="markdown-document-scroll"]')
+        ?.className
+    ).toContain('overflow-y-auto')
   })
 
   it('uses the shared bounded markdown scroller in public share readers', () => {
@@ -406,10 +488,17 @@ describe('DriveBrowserPage', () => {
       savingText: false,
     })
 
-    renderPage(<DriveBrowserPage context='share' shareId='share-1' itemId='file' />)
+    renderPage(
+      <DriveBrowserPage context='share' shareId='share-1' itemId='file' />
+    )
 
-    expect(document.querySelector('[data-testid="markdown-layout"]')?.className).toContain('overflow-hidden')
-    expect(document.querySelector('[data-testid="markdown-document-scroll"]')?.className).toContain('overflow-y-auto')
+    expect(
+      document.querySelector('[data-testid="markdown-layout"]')?.className
+    ).toContain('overflow-hidden')
+    expect(
+      document.querySelector('[data-testid="markdown-document-scroll"]')
+        ?.className
+    ).toContain('overflow-y-auto')
   })
 
   it('keeps standalone owner file reader behavior outside the console shell', () => {
@@ -431,11 +520,18 @@ describe('DriveBrowserPage', () => {
       savingText: false,
     })
 
-    renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='file' />)
+    renderPage(
+      <DriveBrowserPage context='owner' surface='standalone' itemId='file' />
+    )
 
     expect(document.body.textContent).toContain('notes.md')
-    expect(document.querySelector('[data-testid="markdown-layout"]')?.className).toContain('overflow-hidden')
-    expect(document.querySelector('[data-testid="markdown-document-scroll"]')?.className).toContain('overflow-y-auto')
+    expect(
+      document.querySelector('[data-testid="markdown-layout"]')?.className
+    ).toContain('overflow-hidden')
+    expect(
+      document.querySelector('[data-testid="markdown-document-scroll"]')
+        ?.className
+    ).toContain('overflow-y-auto')
   })
 
   it('opens the renderer menu without applying modal side effects to the document', async () => {
@@ -456,11 +552,13 @@ describe('DriveBrowserPage', () => {
     if (!trigger) throw new Error('Missing renderer menu trigger.')
 
     await act(async () => {
-      trigger.dispatchEvent(new MouseEvent('pointerdown', {
-        bubbles: true,
-        button: 0,
-        ctrlKey: false,
-      }))
+      trigger.dispatchEvent(
+        new MouseEvent('pointerdown', {
+          bubbles: true,
+          button: 0,
+          ctrlKey: false,
+        })
+      )
     })
 
     expect(document.querySelector('[role="menu"]')).not.toBeNull()
@@ -482,12 +580,14 @@ describe('DriveBrowserPage', () => {
         },
         preview: null,
         canZip: true,
-        children: [{
-          ...baseCurrent(),
-          id: 'child',
-          name: 'child.md',
-          browserUrl: '/drive/items/child',
-        }],
+        children: [
+          {
+            ...baseCurrent(),
+            id: 'child',
+            name: 'child.md',
+            browserUrl: '/drive/items/child',
+          },
+        ],
       }),
       loadingMoreChildren: false,
       loadMoreChildrenError: null,
@@ -497,15 +597,28 @@ describe('DriveBrowserPage', () => {
       savingText: false,
     })
 
-    renderPage(<DriveBrowserPage context='owner' surface='standalone' itemId='folder' onNavigate={onNavigate} />)
+    renderPage(
+      <DriveBrowserPage
+        context='owner'
+        surface='standalone'
+        itemId='folder'
+        onNavigate={onNavigate}
+      />
+    )
 
     expect(document.querySelector('main')?.className).toContain('min-h-screen')
-    expect(document.querySelector('main')?.className).toContain('supports-[height:100svh]:min-h-svh')
+    expect(document.querySelector('main')?.className).toContain(
+      'supports-[height:100svh]:min-h-svh'
+    )
     rowWithText('child.md')?.click()
     expect(onNavigate).toHaveBeenCalledWith('/drive/items/child')
 
-    const breadcrumb = document.querySelector<HTMLAnchorElement>('a[href="/drive/items/root"]')
-    breadcrumb?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, cancelable: true }))
+    const breadcrumb = document.querySelector<HTMLAnchorElement>(
+      'a[href="/drive/items/root"]'
+    )
+    breadcrumb?.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, button: 0, cancelable: true })
+    )
     expect(onNavigate).toHaveBeenCalledWith('/drive/items/root')
   })
 })
@@ -529,12 +642,16 @@ function rerenderPage(element: ReactElement) {
   })
 }
 
-function createSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
+function createSnapshot(
+  input: Partial<DriveBrowserSnapshotDto> = {}
+): DriveBrowserSnapshotDto {
   return {
     context: 'owner',
     surface: 'standalone',
     current: baseCurrent(),
-    breadcrumbs: [{ id: 'root', name: 'root', browserUrl: '/drive/items/root' }],
+    breadcrumbs: [
+      { id: 'root', name: 'root', browserUrl: '/drive/items/root' },
+    ],
     children: [],
     preview: basePreview(),
     edit: null,
@@ -584,13 +701,19 @@ function selectStrongText(): void {
 }
 
 function buttonWithText(text: string): HTMLButtonElement | null {
-  return Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-    .find((button) => button.textContent?.includes(text)) ?? null
+  return (
+    Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes(text)
+    ) ?? null
+  )
 }
 
 async function inputValue(input: HTMLInputElement, value: string) {
   await act(async () => {
-    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      'value'
+    )?.set
     valueSetter?.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
     input.dispatchEvent(new Event('change', { bubbles: true }))
@@ -599,8 +722,11 @@ async function inputValue(input: HTMLInputElement, value: string) {
 }
 
 function rowWithText(text: string): HTMLTableRowElement | null {
-  return Array.from(document.querySelectorAll<HTMLTableRowElement>('tr'))
-    .find((row) => row.textContent?.includes(text)) ?? null
+  return (
+    Array.from(document.querySelectorAll<HTMLTableRowElement>('tr')).find(
+      (row) => row.textContent?.includes(text)
+    ) ?? null
+  )
 }
 
 function domRect(input: Partial<DOMRect> = {}): DOMRect {

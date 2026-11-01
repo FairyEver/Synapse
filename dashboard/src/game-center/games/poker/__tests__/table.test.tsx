@@ -111,17 +111,19 @@ describe("牌桌", () => {
     expect(host.querySelector('[aria-controls]')?.getAttribute("aria-expanded")).toBe("false")
     await act(async()=>root.unmount())
   })
-  it("保留边缘提醒入口及原有时间和玩家视角限制", async () => {
+  it("保留更多菜单提醒入口及原有时间和玩家视角限制", async () => {
     const host = document.createElement("div"), root = createRoot(host), onNudge = vi.fn()
     const render = async (table: PokerTableView, perspective: "owner" | "public" = "owner") =>
       act(async () => root.render(<Table table={table} perspective={perspective} onPerspective={() => {}} onBack={() => {}} onNudge={onNudge} />))
     const nudge = () => [...host.querySelectorAll("button")].find(b => b.textContent === "提醒玩家")
     const active = {...state, actionOnSeat: 1, deadlineMs: 540000}
     await render(active)
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
     expect(nudge()?.disabled).toBe(false)
     await act(async () => nudge()!.click())
     expect(onNudge).toHaveBeenCalledWith(1)
     await render({...active, deadlineMs: 540001})
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
     expect(nudge()?.disabled).toBe(true)
     for (const table of [
       {...active, mySeatNo: null},

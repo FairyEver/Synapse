@@ -63,7 +63,7 @@ describe("游戏应用顶栏", () => {
       (tab) => tab.textContent === label,
     )!
     await act(async () =>
-      target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+      target.click(),
     )
     expect(host.textContent).toContain(label === "牌局记录" ? "记录内容" : "档案内容")
     await act(async () =>
@@ -112,10 +112,10 @@ describe("游戏应用顶栏", () => {
       await act(async () => returns[0].click())
       expect(onBack).toHaveBeenCalledOnce()
       const records = header.querySelector<HTMLButtonElement>(
-        '[role="tab"][data-state="inactive"]',
+        '[role="tab"][aria-selected="false"]',
       )!
       await act(async () =>
-        records.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })),
+        records.click(),
       )
       expect(host.textContent).toContain("记录内容")
       expect(onOpenRoom).toHaveBeenCalledWith(null)

@@ -18,11 +18,9 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@heroui/react')>(),
+  toast: { danger: vi.fn(), success: vi.fn() },
 }))
 
 vi.mock('@/components/layout/header', () => ({

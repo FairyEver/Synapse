@@ -3,8 +3,7 @@ import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { describe, expect, it, vi } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
-import { SidePanel } from "../components/SidePanel"
-import { PracticeBots as BotManager, PracticeBotAddButton } from "../components/PracticeBots"
+import { PracticeBots as BotManager } from "../components/PracticeBots"
 import { Table } from "../components/Table"
 import { usePracticeBots } from "../hooks/usePracticeBots"
 import { StatusBar } from "../components/StatusBar"
@@ -12,7 +11,7 @@ import { tableResponse } from "../../../../../../shared/test/game-response-fixtu
 const api = vi.hoisted(() => ({ add: vi.fn(), remove: vi.fn() }))
 vi.mock("@/game-center/runtime/account", () => ({ useAccount: () => ({ state: { status: "authenticated", profile: { user: { id: "owner" } } } }) }))
 vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { bot: api } }) }))
-vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
+vi.mock("@heroui/react", async (original) => ({ ...await original<typeof import("@heroui/react")>(), toast: Object.assign(vi.fn(), { danger: vi.fn(), update: vi.fn() }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const table = { ...tableResponse, mode: "practice" as const, ownerUserId: "owner", seats: [{ ...tableResponse.seats[0], participantKind: "bot" as const, botId: "bot", isMe: false, aiState: "bot" }], mySeatNo: 1, actionOnSeat: tableResponse.seats[0].seatNo }
 function PracticeBots({ table, onRefresh }: { table: PokerTableView; onRefresh: () => void | Promise<void> }) {
@@ -20,30 +19,29 @@ function PracticeBots({ table, onRefresh }: { table: PokerTableView; onRefresh: 
 }
 function PracticeTable({ table, onRefresh }: { table: PokerTableView; onRefresh: () => void | Promise<void> }) {
   const controls = usePracticeBots(table, onRefresh)
-  return <Table table={table} perspective="owner" onPerspective={() => {}} onBack={() => {}} actions={<PracticeBotAddButton controls={controls} />} extras={controls.canManage ? <BotManager controls={controls} /> : null} />
+  return <Table table={table} perspective="owner" onPerspective={() => {}} onBack={() => {}} members={controls.canManage ? <BotManager controls={controls} /> : null} />
 }
 describe("陪练房操作", () => {
-  it("进房无需打开日志即可添加，侧栏直接显示列表且共用重试意图", async () => {
+  it("成员入口统一增删，失败和成功后保持打开，关闭重开保留重试意图", async () => {
     api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({ botId: "new", seatNo: 1 })
     const host = document.createElement("div"), root = createRoot(host), refresh = vi.fn()
     try {
       await act(async () => root.render(<PracticeTable table={table} onRefresh={refresh} />))
-      const quickAdd = host.querySelector<HTMLButtonElement>(".poker-edge-controls .poker-button")!
-      expect(quickAdd.textContent).toBe("添加机器人")
-      expect(quickAdd.closest("[hidden], [inert], details")).toBeNull()
-      expect(host.querySelector(".poker-information-drawer")!.hasAttribute("hidden")).toBe(true)
-      await act(async () => quickAdd.click())
-      expect(api.add).toHaveBeenCalledTimes(1)
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="成员管理"]')!.click())
+      const add = () => [...host.querySelectorAll<HTMLButtonElement>(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人)$/.test(b.textContent ?? ""))!
+      await act(async () => add().click())
       const first = api.add.mock.calls[0][0].creationId
-      await act(async () => [...host.querySelectorAll("button")].find(b => b.textContent === "日志")!.click())
-      await act(async () => [...host.querySelectorAll('[role="tab"]')].find(tab => tab.textContent === "陪练")!.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })))
-      const manager = host.querySelector(".poker-bot-manager")!
-      expect(manager.closest("[hidden], details")).toBeNull()
-      expect(manager.querySelector("h3")!.textContent).toBe("陪练机器人 · 1")
-      await act(async () => manager.querySelector<HTMLButtonElement>("button")!.click())
+      expect(host.querySelector('[aria-label="陪练机器人管理"]')).not.toBeNull()
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="关闭成员管理"]')!.click())
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="成员管理"]')!.click())
+      await act(async () => add().click())
       expect(api.add.mock.calls[1][0].creationId).toBe(first)
       expect(refresh).toHaveBeenCalledTimes(1)
-      expect(quickAdd.textContent).toBe("添加机器人")
+      expect(host.querySelector('[aria-label="移除 陪练 1"]') ?? host.querySelector('[aria-label^="移除 "]')).not.toBeNull()
+      expect(host.querySelector('[aria-label="成员管理"]')?.getAttribute("aria-expanded")).toBe("true")
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
+      expect(host.querySelector('[aria-label="陪练机器人管理"]')).toBeNull()
+      expect([...host.querySelectorAll(".poker-system-popover button")].some(b => b.textContent === "添加机器人")).toBe(false)
     } finally { await act(async () => root.unmount()) }
   })
   it("添加进行中同时禁用牌桌和侧栏入口，避免连点重复提交", async () => {
@@ -52,11 +50,12 @@ describe("陪练房操作", () => {
     const host = document.createElement("div"), root = createRoot(host)
     try {
       await act(async () => root.render(<PracticeTable table={table} onRefresh={() => {}} />))
-      const quickAdd = host.querySelector<HTMLButtonElement>(".poker-edge-controls .poker-button")!
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="成员管理"]')!.click())
+      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
       await act(async () => { quickAdd.click(); quickAdd.click() })
       expect(api.add).toHaveBeenCalledTimes(1)
       expect(quickAdd.disabled).toBe(true)
-      expect(host.querySelector<HTMLButtonElement>(".poker-bot-manager button")!.disabled).toBe(true)
+      expect(host.querySelector<HTMLButtonElement>('[aria-label="陪练机器人管理"] button')!.disabled).toBe(true)
       await act(async () => resolve({ botId: "new", seatNo: 1 }))
       expect(quickAdd.disabled).toBe(false)
     } finally { await act(async () => root.unmount()) }
@@ -65,32 +64,17 @@ describe("陪练房操作", () => {
     const host = document.createElement("div"), root = createRoot(host)
     try {
       await act(async () => root.render(<PracticeTable table={{ ...table, maxSeats: 2, mySeatNo: null }} onRefresh={() => {}} />))
-      const quickAdd = host.querySelector<HTMLButtonElement>(".poker-edge-controls .poker-button")!
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="成员管理"]')!.click())
+      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
       expect(quickAdd.disabled).toBe(true)
       expect(quickAdd.textContent).toBe("座位已满")
       for (const value of [{ ...table, mode: "points" as const }, { ...table, ownerUserId: "other" }, { ...table, status: "closed" as const }]) {
         await act(async () => root.render(<PracticeTable table={value} onRefresh={() => {}} />))
-        expect(host.querySelector(".poker-edge-controls .poker-button")).toBeNull()
+        expect([...host.querySelectorAll(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? "")) ?? null).toBeNull()
         expect([...host.querySelectorAll('[role="tab"]')].some(tab => tab.textContent === "陪练")).toBe(false)
       }
     } finally { await act(async () => root.unmount()) }
   })
-  it("切换日志和陪练标签不丢失添加请求的幂等标识", async () => {
-    api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({botId:"new",seatNo:1})
-    const host=document.createElement("div"),root=createRoot(host)
-    const tab=async(label:string)=>act(async()=>{ const target=[...host.querySelectorAll("[role=tab]")].find(t=>t.textContent===label)!; target.dispatchEvent(new MouseEvent("mousedown",{button:0,bubbles:true})) })
-    try {
-      await act(async()=>root.render(<SidePanel table={table} perspective="owner" extras={<PracticeBots table={table} onRefresh={()=>{}} />} />))
-      await tab("陪练")
-      await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="添加机器人")!.click())
-      const first=api.add.mock.calls[0][0].creationId
-      await tab("日志")
-      await tab("陪练")
-      await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="重试添加机器人"||b.textContent==="添加机器人")!.click())
-      expect(api.add.mock.calls[1][0].creationId).toBe(first)
-    } finally { await act(async()=>root.unmount()) }
-  })
-
   it.each([false, true])("添加丢响应后确认移除（pending=%s），下次添加使用新创建意图", async (pending) => {
     api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({ botId: "replacement", seatNo: 0 })
     api.remove.mockReset().mockResolvedValue({ pending })
@@ -104,7 +88,7 @@ describe("陪练房操作", () => {
       // The successful server write becomes visible through the next table poll.
       await act(async () => root.render(<PracticeBots table={{ ...table, maxSeats: 2, mySeatNo: null }} onRefresh={() => {}} />))
       expect(host.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true)
-      const remove = [...host.querySelectorAll("button")].find((button) => button.textContent?.endsWith(" · 移除"))!
+      const remove = [...host.querySelectorAll("button")].find((button) => button.getAttribute("aria-label")?.startsWith("移除 "))!
       await act(async () => remove.click())
       expect(api.remove).toHaveBeenCalledWith({ roomCode: table.roomCode, botId: "bot" })
       expect(host.querySelector("button")!.textContent).toBe("座位已满")
@@ -121,7 +105,7 @@ describe("陪练房操作", () => {
       await act(async () => root.render(<PracticeBots table={table} onRefresh={() => {}} />))
       await act(async () => host.querySelector<HTMLButtonElement>("button")!.click())
       const first = api.add.mock.calls[0][0].creationId
-      await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.endsWith(" · 移除"))!.click())
+      await act(async () => [...host.querySelectorAll("button")].find((button) => button.getAttribute("aria-label")?.startsWith("移除 "))!.click())
       await act(async () => host.querySelector<HTMLButtonElement>("button")!.click())
       expect(api.add.mock.calls[1][0].creationId).toBe(first)
     } finally { await act(async () => root.unmount()) }
@@ -134,7 +118,7 @@ describe("陪练房操作", () => {
     const refresh = vi.fn(), next = { ...table, roomCode: "7890" }
     try {
       await act(async () => root.render(<PracticeBots table={table} onRefresh={refresh} />))
-      await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.endsWith(" · 移除"))!.click())
+      await act(async () => [...host.querySelectorAll("button")].find((button) => button.getAttribute("aria-label")?.startsWith("移除 "))!.click())
       await act(async () => root.render(<PracticeBots table={next} onRefresh={refresh} />))
       await act(async () => resolve({ pending: false }))
       expect(refresh).not.toHaveBeenCalled()

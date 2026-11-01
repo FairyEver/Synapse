@@ -1,8 +1,8 @@
+import { Button, toast } from '@heroui/react'
 import { useState } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Download, Trash2, Plus, Loader2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { adminApi, type BackupFile } from '@/lib/api'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
@@ -13,7 +13,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { LongText } from '@/components/long-text'
 import { RelativeTime } from '@/components/relative-time'
-import { Button } from '@/components/ui/button'
 import { downloadBackupWithFeedback } from './backup-download'
 import { getBackupListErrorMessage } from './backup-error'
 
@@ -40,7 +39,7 @@ export default function BackupPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-backups'] })
       toast.success('备份已创建')
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.danger(err.message),
   })
 
   const deleteBackup = useMutation({
@@ -50,7 +49,7 @@ export default function BackupPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-backups'] })
       toast.success('备份已删除')
     },
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.danger(err.message),
   })
 
   const backups = data ?? []
@@ -65,7 +64,7 @@ export default function BackupPage() {
         <LongText className='font-medium'>{row.original.filename}</LongText>
       ),
       enableSorting: false,
-      meta: { className: 'max-w-0' },
+      meta: { label: '文件名', className: 'w-80 max-w-80' },
     },
     {
       accessorKey: 'size',
@@ -75,7 +74,7 @@ export default function BackupPage() {
       cell: ({ row }) => (
         <span className='tabular-nums'>{formatSize(row.original.size)}</span>
       ),
-      meta: {
+      meta: { label: '大小',
         className: 'w-28',
         thClassName: 'text-right',
         tdClassName: 'text-right',
@@ -91,7 +90,7 @@ export default function BackupPage() {
         <RelativeTime className='tabular-nums' value={row.original.createdAt} />
       ),
       enableSorting: false,
-      meta: { className: 'w-40' },
+      meta: { label: '创建时间', className: 'w-40' },
     },
     {
       id: 'actions',
@@ -102,24 +101,24 @@ export default function BackupPage() {
         <div className='flex justify-end gap-1'>
           <Button
             variant='ghost'
-            size='icon'
+            isIconOnly
             aria-label={`下载 ${row.original.filename}`}
-            onClick={() => void downloadBackupWithFeedback(row.original.filename)}
+            onPress={() => void downloadBackupWithFeedback(row.original.filename)}
           >
             <Download className='h-4 w-4' />
           </Button>
           <Button
             variant='ghost'
-            size='icon'
+            isIconOnly
             aria-label={`删除 ${row.original.filename}`}
-            disabled={deleteBackup.isPending}
-            onClick={() => setDeleteTarget(row.original)}
+            isDisabled={deleteBackup.isPending}
+            onPress={() => setDeleteTarget(row.original)}
           >
             <Trash2 className='h-4 w-4' />
           </Button>
         </div>
       ),
-      meta: {
+      meta: { label: '操作',
         className: 'w-24',
         thClassName: 'text-right',
         tdClassName: 'text-right',
@@ -130,7 +129,7 @@ export default function BackupPage() {
   ]
   const toolbar = (
     <div className='flex justify-end'>
-      <Button onClick={() => triggerBackup.mutate()} disabled={triggerBackup.isPending}>
+      <Button onPress={() => triggerBackup.mutate()} isDisabled={triggerBackup.isPending}>
         {triggerBackup.isPending ? <Loader2 className='mr-1 h-4 w-4 animate-spin' /> : <Plus className='mr-1 h-4 w-4' />}
         创建备份
       </Button>

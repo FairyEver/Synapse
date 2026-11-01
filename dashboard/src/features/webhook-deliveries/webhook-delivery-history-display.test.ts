@@ -4,7 +4,7 @@ import {
   buildWebhookDeliveryHistoryQuery,
   formatWebhookDeliveryClientSummary,
   formatWebhookDeliveryHistoryBody,
-  getWebhookDeliveryHistoryStatusBadgeVariant,
+  getWebhookDeliveryHistoryStatusColor,
   getWebhookHistoryDisplayName,
 } from './webhook-delivery-history-display'
 
@@ -51,10 +51,10 @@ describe('webhook delivery history display helpers', () => {
     expect(formatWebhookDeliveryHistoryBody(row())).toBe('json · 12 B')
   })
 
-  it('maps delivery status to badge variants', () => {
-    expect(getWebhookDeliveryHistoryStatusBadgeVariant(WEBHOOK_DELIVERY_STATUS.delivered)).toBe('default')
-    expect(getWebhookDeliveryHistoryStatusBadgeVariant(WEBHOOK_DELIVERY_STATUS.broadcastFailed)).toBe('destructive')
-    expect(getWebhookDeliveryHistoryStatusBadgeVariant(WEBHOOK_DELIVERY_STATUS.noOnlineClients)).toBe('secondary')
+  it('maps delivery outcomes to semantic status colors', () => {
+    expect(getWebhookDeliveryHistoryStatusColor(WEBHOOK_DELIVERY_STATUS.delivered)).toBe('success')
+    expect(getWebhookDeliveryHistoryStatusColor(WEBHOOK_DELIVERY_STATUS.broadcastFailed)).toBe('danger')
+    expect(getWebhookDeliveryHistoryStatusColor(WEBHOOK_DELIVERY_STATUS.noOnlineClients)).toBe('default')
   })
 
   it('keeps only meaningful history query values', () => {

@@ -3,14 +3,24 @@
 import { act, type ComponentProps, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DriveAnnotationThreadDto, DriveMarkdownOutlineItemDto, DriveMarkdownProjectionDto } from '@synapse/shared'
+import type {
+  DriveAnnotationThreadDto,
+  DriveMarkdownOutlineItemDto,
+  DriveMarkdownProjectionDto,
+} from '@synapse/shared'
 import { DriveMarkdownRenderer } from './markdown-renderer'
 import { useAuthStore } from '@/stores/auth-store'
 import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
-import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
+import {
+  DriveRendererToolbarProvider,
+  useDriveRendererToolbar,
+} from './drive-renderer-toolbar-context'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
-import { DriveDiscussionLocationContext, useDriveDiscussionLocation } from '../use-drive-discussion-location'
+import {
+  DriveDiscussionLocationContext,
+  useDriveDiscussionLocation,
+} from '../use-drive-discussion-location'
 
 const mermaidRendererMock = vi.hoisted(() => ({
   render: vi.fn(async () => undefined),
@@ -24,38 +34,53 @@ vi.mock('./markdown-mermaid-renderer', () => ({
 
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
-}));
+}))
 
 vi.mock('../use-drive-messages', () => ({
-  useDriveMessages: () => ({ messages: [], canPost: false, refresh: vi.fn(async () => undefined) }),
+  useDriveMessages: () => ({
+    messages: [],
+    canPost: false,
+    refresh: vi.fn(async () => undefined),
+  }),
 }))
 
 vi.mock('../drive-messages-section', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
-  return { DriveMessagesSection: ({ sectionRef }: { sectionRef: React.Ref<HTMLElement> }) => React.createElement('section', { ref: sectionRef, 'data-drive-messages-section': 'true' }) }
+  return {
+    DriveMessagesSection: ({
+      sectionRef,
+    }: {
+      sectionRef: React.Ref<HTMLElement>
+    }) =>
+      React.createElement('section', {
+        ref: sectionRef,
+        'data-drive-messages-section': 'true',
+      }),
+  }
 })
 
 let collaborationPreviewHtml: string | null = null
 
 vi.mock('../collaboration/use-drive-collaboration', () => ({
-  useDriveCollaboration: () => collaborationPreviewHtml
-    ? {
-        session: null,
-        state: {
-          epoch: 'epoch-1',
-          checkpointVersionId: 'version-1',
-          annotationRevision: 0,
-          preview: {
+  useDriveCollaboration: () =>
+    collaborationPreviewHtml
+      ? {
+          session: null,
+          state: {
             epoch: 'epoch-1',
-            stateVector: 'state-1',
-            html: collaborationPreviewHtml,
-            outline: [],
-            projection: null,
+            checkpointVersionId: 'version-1',
+            annotationRevision: 0,
+            preview: {
+              epoch: 'epoch-1',
+              stateVector: 'state-1',
+              html: collaborationPreviewHtml,
+              outline: [],
+              projection: null,
+            },
           },
-        },
-      }
-    : { session: null, state: null },
-}));
+        }
+      : { session: null, state: null },
+}))
 
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
@@ -69,27 +94,31 @@ vi.mock('@monaco-editor/react', async () => {
       readonly value?: string
       readonly onChange?: (value?: string) => void
       readonly options?: { readonly readOnly?: boolean }
-    }) => React.createElement('textarea', {
-      'data-monaco-editor': 'true',
-      readOnly: options?.readOnly,
-      value: value ?? '',
-      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-        onChange?.(event.currentTarget.value)
-      },
-    }),
+    }) =>
+      React.createElement('textarea', {
+        'data-monaco-editor': 'true',
+        readOnly: options?.readOnly,
+        value: value ?? '',
+        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+          onChange?.(event.currentTarget.value)
+        },
+      }),
   }
-});
+})
 
 vi.mock('y-monaco', () => ({
   MonacoBinding: class {
     destroy(): void {}
   },
-}));
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-;(globalThis as typeof globalThis & {
-  ResizeObserver: typeof ResizeObserver
-}).ResizeObserver = class ResizeObserver {
+}))
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & {
+    ResizeObserver: typeof ResizeObserver
+  }
+).ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
@@ -102,7 +131,10 @@ let scrollIntoViewMock: ReturnType<typeof vi.fn>
 let scrollContainerScrollToMock: ReturnType<typeof vi.fn>
 let rangeRects: DOMRect[]
 let resizeObservers: TestResizeObserver[]
-let animationFrameCallbacks: Array<{ readonly id: number; readonly callback: FrameRequestCallback }>
+let animationFrameCallbacks: Array<{
+  readonly id: number
+  readonly callback: FrameRequestCallback
+}>
 let nextAnimationFrameId: number
 
 beforeEach(() => {
@@ -117,24 +149,34 @@ beforeEach(() => {
   nextAnimationFrameId = 1
   collaborationPreviewHtml = null
   Element.prototype.scrollIntoView = scrollIntoViewMock
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function () {
-    return this.hasAttribute('data-markdown-comments-header') ? 40 : 0
-  })
-  Range.prototype.getBoundingClientRect = vi.fn(() => rangeRects[0] ?? domRect())
-  Range.prototype.getClientRects = vi.fn(() => rangeRects as unknown as DOMRectList)
-  vi.stubGlobal('ResizeObserver', class ResizeObserverMock {
-    readonly callback: ResizeObserverCallback
-    readonly observe = vi.fn((target: Element) => {
-      this.observedElements.push(target)
-    })
-    readonly disconnect = vi.fn()
-    readonly observedElements: Element[] = []
-
-    constructor(callback: ResizeObserverCallback) {
-      this.callback = callback
-      resizeObservers.push(this)
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+    function () {
+      return this.hasAttribute('data-markdown-comments-header') ? 40 : 0
     }
-  })
+  )
+  Range.prototype.getBoundingClientRect = vi.fn(
+    () => rangeRects[0] ?? domRect()
+  )
+  Range.prototype.getClientRects = vi.fn(
+    () => rangeRects as unknown as DOMRectList
+  )
+  vi.stubGlobal(
+    'ResizeObserver',
+    class ResizeObserverMock {
+      readonly callback: ResizeObserverCallback
+      readonly observe = vi.fn((target: Element) => {
+        this.observedElements.push(target)
+      })
+      readonly unobserve = vi.fn()
+      readonly disconnect = vi.fn()
+      readonly observedElements: Element[] = []
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback
+        resizeObservers.push(this)
+      }
+    }
+  )
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
     const id = nextAnimationFrameId
     nextAnimationFrameId += 1
@@ -142,7 +184,9 @@ beforeEach(() => {
     return id
   })
   vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
-    animationFrameCallbacks = animationFrameCallbacks.filter((item) => item.id !== id)
+    animationFrameCallbacks = animationFrameCallbacks.filter(
+      (item) => item.id !== id
+    )
   })
   useAuthStore.getState().auth.reset()
 })
@@ -162,9 +206,15 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ previewData: preview({ html: '<p>Article end</p>' }) })
     const section = document.querySelector('[data-drive-messages-section]')
     const article = document.querySelector('[data-testid="markdown-body"]')
-    expect(article?.compareDocumentPosition(section as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      article?.compareDocumentPosition(section as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
     act(() => buttonWithText('留言 0').click())
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' })
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      block: 'start',
+      behavior: 'instant',
+    })
   })
 
   it('does not parse plain markdown html through the relative image rewriter', () => {
@@ -172,41 +222,64 @@ describe('DriveMarkdownRenderer', () => {
 
     renderMarkdown({ previewData: preview({ html: '<p>Plain text</p>' }) })
 
-    expect(createElement.mock.calls.some(([tagName]) => tagName === 'template')).toBe(false)
+    expect(
+      createElement.mock.calls.some(([tagName]) => tagName === 'template')
+    ).toBe(false)
   })
 
   it('restores mapped relative image sources after collaboration replaces the preview html', () => {
-    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="./images/team%20photo.png" alt="diagram"></p>'
+    collaborationPreviewHtml =
+      '<p><img data-drive-markdown-relative-src="./images/team%20photo.png" alt="diagram"></p>'
     renderMarkdown({
       previewData: preview({
         html: '<p><img src="/drive/items/image-1/download" alt="diagram"></p>',
-        relativeImages: [{ src: './images/team photo.png', resolvedUrl: '/drive/items/image-1/download' }],
+        relativeImages: [
+          {
+            src: './images/team photo.png',
+            resolvedUrl: '/drive/items/image-1/download',
+          },
+        ],
       }),
     })
 
-    expect(document.querySelector('img')?.getAttribute('src')).toBe('/drive/items/image-1/download')
+    expect(document.querySelector('img')?.getAttribute('src')).toBe(
+      '/drive/items/image-1/download'
+    )
   })
 
   it('keeps markdown images within a centered square capped at the reading width', () => {
-    renderMarkdown({ previewData: preview({ html: '<p><img src="/phone.png" alt="手机截图"></p>' }) })
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img src="/phone.png" alt="手机截图"></p>',
+      }),
+    })
 
     const body = markdownBody()
     expect(body.className).toContain('@container')
     expect(body.className).toContain('[&_img]:mx-auto')
     expect(body.className).toContain('[&_img]:block')
     expect(body.className).toContain('[&_img]:h-auto')
-    expect(body.className).toContain('[&_img]:max-h-[min(100cqi,var(--container-3xl))]')
+    expect(body.className).toContain(
+      '[&_img]:max-h-[min(100cqi,var(--container-3xl))]'
+    )
     expect(body.className).toContain('[&_img]:max-w-full')
     expect(body.className).toContain('[&_img]:object-contain')
   })
 
   it('does not restore collaboration image sources without a server mapping', () => {
-    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="./images/private.png" src="/drive/items/private/download" alt="private"></p>'
+    collaborationPreviewHtml =
+      '<p><img data-drive-markdown-relative-src="./images/private.png" src="/drive/items/private/download" alt="private"></p>'
     renderMarkdown({ previewData: preview() })
 
     expect(document.querySelector('img')?.hasAttribute('src')).toBe(false)
-    expect(document.querySelector('[data-drive-markdown-image-fallback="true"]')?.textContent).toContain('private')
-    expect(document.querySelector('[data-drive-markdown-image-fallback="true"]')?.textContent).toContain('图片无法显示')
+    expect(
+      document.querySelector('[data-drive-markdown-image-fallback="true"]')
+        ?.textContent
+    ).toContain('private')
+    expect(
+      document.querySelector('[data-drive-markdown-image-fallback="true"]')
+        ?.textContent
+    ).toContain('图片无法显示')
   })
 
   it('replaces a failed markdown image with the shared fallback component', async () => {
@@ -217,48 +290,63 @@ describe('DriveMarkdownRenderer', () => {
       }),
     })
 
-    const image = document.querySelector<HTMLImageElement>('[data-testid="markdown-body"] img')
+    const image = document.querySelector<HTMLImageElement>(
+      '[data-testid="markdown-body"] img'
+    )
     if (!image) throw new Error('Missing markdown image')
 
     await act(async () => {
       image.dispatchEvent(new Event('error'))
     })
 
-    const fallback = document.querySelector<HTMLElement>('[data-drive-markdown-image-fallback="true"]')
-    const fallbackHost = document.querySelector<HTMLElement>('[data-drive-markdown-image-fallback-host="true"]')
+    const fallback = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-image-fallback="true"]'
+    )
+    const fallbackHost = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-image-fallback-host="true"]'
+    )
     expect(image.hidden).toBe(true)
     expect(image.hasAttribute('role')).toBe(false)
     expect(fallback?.getAttribute('role')).toBe('img')
     expect(fallback?.getAttribute('aria-label')).toBe('客户管理，图片无法显示')
     expect(fallback?.textContent).toContain('客户管理')
     expect(fallback?.textContent).toContain('图片无法显示')
-    expect(fallback?.className).toContain('bg-muted/40')
+    expect(fallback?.className).toContain('bg-surface-secondary/40')
     expect(fallbackHost?.dataset.driveMarkdownImageId).toBe('mdimg_1')
     expect(fallbackHost?.tabIndex).toBe(0)
   })
 
   it('restores the share-scoped image url without converting it to an owner url', () => {
-    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="../assets/diagram.png" alt="diagram"></p>'
+    collaborationPreviewHtml =
+      '<p><img data-drive-markdown-relative-src="../assets/diagram.png" alt="diagram"></p>'
     renderMarkdown({
       previewData: preview({
-        relativeImages: [{
-          src: '../assets/diagram.png',
-          resolvedUrl: '/share/share-1/items/image-1/download',
-        }],
+        relativeImages: [
+          {
+            src: '../assets/diagram.png',
+            resolvedUrl: '/share/share-1/items/image-1/download',
+          },
+        ],
       }),
     })
 
-    expect(document.querySelector('img')?.getAttribute('src')).toBe('/share/share-1/items/image-1/download')
+    expect(document.querySelector('img')?.getAttribute('src')).toBe(
+      '/share/share-1/items/image-1/download'
+    )
   })
 
   it('restores an encoded Windows collaboration image only from the server mapping', () => {
-    collaborationPreviewHtml = '<p><img data-drive-markdown-relative-src="..%5Cassets%5C%E5%9B%BE%E7%89%87.webp?version=1#preview" alt="Windows"></p>'
+    collaborationPreviewHtml =
+      '<p><img data-drive-markdown-relative-src="..%5Cassets%5C%E5%9B%BE%E7%89%87.webp?version=1#preview" alt="Windows"></p>'
     renderMarkdown({
       previewData: preview({
-        relativeImages: [{
-          src: String.raw`..\assets\图片.webp?version=1#preview`,
-          resolvedUrl: '/share/share-1/items/image-1/download?version=1#preview',
-        }],
+        relativeImages: [
+          {
+            src: String.raw`..\assets\图片.webp?version=1#preview`,
+            resolvedUrl:
+              '/share/share-1/items/image-1/download?version=1#preview',
+          },
+        ],
       }),
     })
 
@@ -275,7 +363,8 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     const image = document.querySelector('[data-testid="markdown-body"] img')
-    if (!(image instanceof HTMLImageElement)) throw new Error('Missing markdown image')
+    if (!(image instanceof HTMLImageElement))
+      throw new Error('Missing markdown image')
 
     expect(image.getAttribute('role')).toBe('button')
     expect(image.tabIndex).toBe(0)
@@ -284,7 +373,9 @@ describe('DriveMarkdownRenderer', () => {
     await click(image)
 
     const previewImage = document.querySelector('[data-image-lightbox] img')
-    expect(previewImage?.getAttribute('src')).toBe('/share/share-1/items/image-1/download')
+    expect(previewImage?.getAttribute('src')).toBe(
+      '/share/share-1/items/image-1/download'
+    )
     expect(previewImage?.getAttribute('alt')).toBe('税费支出申请单')
 
     await click(dialogCloseButton())
@@ -294,15 +385,24 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('opens a focused markdown image with the keyboard', async () => {
-    renderMarkdown({ previewData: preview({ html: '<p><img src="/image.png" alt="示意图"></p>' }) })
+    renderMarkdown({
+      previewData: preview({
+        html: '<p><img src="/image.png" alt="示意图"></p>',
+      }),
+    })
     const image = document.querySelector('[data-testid="markdown-body"] img')
-    if (!(image instanceof HTMLImageElement)) throw new Error('Missing markdown image')
+    if (!(image instanceof HTMLImageElement))
+      throw new Error('Missing markdown image')
 
     await act(async () => {
-      image.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }))
+      image.dispatchEvent(
+        new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' })
+      )
     })
 
-    expect(document.querySelector('[data-image-lightbox] img')?.getAttribute('src')).toBe('/image.png')
+    expect(
+      document.querySelector('[data-image-lightbox] img')?.getAttribute('src')
+    ).toBe('/image.png')
   })
 
   it('opens an image comment draft from the hover action without opening the lightbox', async () => {
@@ -318,12 +418,20 @@ describe('DriveMarkdownRenderer', () => {
     await setPreviewWidth(1200)
     triggerAllResizeObservers()
     await flushAnimationFrames()
-    const image = document.querySelector<HTMLImageElement>('[data-drive-markdown-image-id="mdimg_1"]')
+    const image = document.querySelector<HTMLImageElement>(
+      '[data-drive-markdown-image-id="mdimg_1"]'
+    )
     if (!image) throw new Error('Missing projected image')
 
-    await act(async () => image.dispatchEvent(new Event('pointerover', { bubbles: true })))
-    const imageToolbar = document.querySelector('[data-drive-markdown-image-comment-action="true"]')
-    const imageTarget = document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')
+    await act(async () =>
+      image.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    )
+    const imageToolbar = document.querySelector(
+      '[data-drive-markdown-image-comment-action="true"]'
+    )
+    const imageTarget = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-image-comment-target="true"]'
+    )
     expect(imageToolbar?.getAttribute('data-inline-toolbar')).toBe('true')
     expect(buttonWithText('添加评论').querySelector('svg')).not.toBeNull()
     expect(imageTarget?.className).toContain('pointer-events-none')
@@ -336,20 +444,34 @@ describe('DriveMarkdownRenderer', () => {
     await click(buttonWithText('添加评论'))
 
     expect(document.querySelector('[data-image-lightbox]')).toBeNull()
-    expect(document.querySelector('[data-drive-markdown-image-comment-target="true"]')).not.toBeNull()
+    expect(
+      document.querySelector(
+        '[data-drive-markdown-image-comment-target="true"]'
+      )
+    ).not.toBeNull()
     expect(textarea()).toBeTruthy()
-    const imageComposer = document.querySelector<HTMLElement>('[data-markdown-comment-composer-popover="true"]')
+    const imageComposer = document.querySelector<HTMLElement>(
+      '[data-markdown-comment-composer-popover="true"]'
+    )
     expect(imageComposer?.style.left).toBe('348px')
     expect(imageComposer?.style.top).toBe('136px')
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-draft-card="true"]')
+    ).toBeNull()
 
     await inputValue(textarea(), '检查这张图')
     await click(buttonWithText('评论'))
-    expect(annotationsMock.createThread).toHaveBeenCalledWith(expect.objectContaining({
-      targetKind: 'image',
-      target: expect.objectContaining({ kind: 'image', imageId: 'mdimg_1', resourceKey: 'file:asset_1' }),
-      body: '检查这张图',
-    }))
+    expect(annotationsMock.createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetKind: 'image',
+        target: expect.objectContaining({
+          kind: 'image',
+          imageId: 'mdimg_1',
+          resourceKey: 'file:asset_1',
+        }),
+        body: '检查这张图',
+      })
+    )
   })
 
   it('remeasures image comment markers on width changes without a body resize', async () => {
@@ -363,17 +485,30 @@ describe('DriveMarkdownRenderer', () => {
     await setPreviewWidth(1200)
     triggerAllResizeObservers()
     await flushAnimationFrames()
-    const image = document.querySelector<HTMLImageElement>('[data-drive-markdown-image-id="mdimg_1"]')
+    const image = document.querySelector<HTMLImageElement>(
+      '[data-drive-markdown-image-id="mdimg_1"]'
+    )
     if (!image) throw new Error('Missing projected image')
     Object.defineProperty(image, 'getBoundingClientRect', {
       configurable: true,
-      value: () => domRect({
-        left: markdownBody().parentElement?.dataset.markdownWidthMode === 'wide' ? 280 : 100,
-        top: 120, width: 240, height: 180,
-      }),
+      value: () =>
+        domRect({
+          left:
+            markdownBody().parentElement?.dataset.markdownWidthMode === 'wide'
+              ? 280
+              : 100,
+          top: 120,
+          width: 240,
+          height: 180,
+        }),
     })
-    await act(async () => image.dispatchEvent(new Event('pointerover', { bubbles: true })))
-    const target = () => document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')
+    await act(async () =>
+      image.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    )
+    const target = () =>
+      document.querySelector<HTMLElement>(
+        '[data-drive-markdown-image-comment-target="true"]'
+      )
     expect(target()?.style.left).toBe('100px')
 
     // Full-width body dimensions stay the same; switching the prose width alone moves the image.
@@ -402,25 +537,53 @@ describe('DriveMarkdownRenderer', () => {
     await setPreviewWidth(1200)
     triggerAllResizeObservers()
     await flushAnimationFrames()
-    const upperImage = document.querySelector<HTMLElement>('[data-drive-markdown-image-id="mdimg_1"]')
-    const lowerImage = document.querySelector<HTMLElement>('[data-drive-markdown-image-id="mdimg_2"]')
-    if (!upperImage || !lowerImage) throw new Error('Missing adjacent projected images')
+    const upperImage = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-image-id="mdimg_1"]'
+    )
+    const lowerImage = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-image-id="mdimg_2"]'
+    )
+    if (!upperImage || !lowerImage)
+      throw new Error('Missing adjacent projected images')
 
-    await act(async () => lowerImage.dispatchEvent(new Event('pointerover', { bubbles: true })))
-    expect(document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')?.style.top).toBe('300px')
+    await act(async () =>
+      lowerImage.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    )
+    expect(
+      document.querySelector<HTMLElement>(
+        '[data-drive-markdown-image-comment-target="true"]'
+      )?.style.top
+    ).toBe('300px')
 
     await act(async () => {
-      lowerImage.dispatchEvent(new MouseEvent('pointerout', { bubbles: true, relatedTarget: upperImage }))
+      lowerImage.dispatchEvent(
+        new MouseEvent('pointerout', {
+          bubbles: true,
+          relatedTarget: upperImage,
+        })
+      )
       upperImage.dispatchEvent(new Event('pointerover', { bubbles: true }))
     })
-    const imageToolbar = document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-action="true"]')
+    const imageToolbar = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-image-comment-action="true"]'
+    )
     if (!imageToolbar) throw new Error('Missing image comment action')
-    await act(async () => imageToolbar.dispatchEvent(new Event('pointerover', { bubbles: true })))
+    await act(async () =>
+      imageToolbar.dispatchEvent(new Event('pointerover', { bubbles: true }))
+    )
 
-    expect(document.querySelector<HTMLElement>('[data-drive-markdown-image-comment-target="true"]')?.style.top).toBe('300px')
+    expect(
+      document.querySelector<HTMLElement>(
+        '[data-drive-markdown-image-comment-target="true"]'
+      )?.style.top
+    ).toBe('300px')
     await click(buttonWithText('添加评论'))
-    expect(document.querySelector('[data-markdown-comment-composer-popover="true"]')).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-composer-popover="true"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-draft-card="true"]')
+    ).toBeNull()
   })
 
   it('shows the image comment action when a projected image receives keyboard focus', async () => {
@@ -436,7 +599,9 @@ describe('DriveMarkdownRenderer', () => {
     await setPreviewWidth(1200)
     triggerAllResizeObservers()
     await flushAnimationFrames()
-    const image = document.querySelector<HTMLImageElement>('[data-drive-markdown-image-id="mdimg_1"]')
+    const image = document.querySelector<HTMLImageElement>(
+      '[data-drive-markdown-image-id="mdimg_1"]'
+    )
     if (!image) throw new Error('Missing projected image')
 
     await act(async () => image.focus())
@@ -462,11 +627,15 @@ describe('DriveMarkdownRenderer', () => {
     triggerAllResizeObservers()
     await flushAnimationFrames()
 
-    const marker = document.querySelector<HTMLButtonElement>('[data-drive-markdown-image-comment-count="2"]')
+    const marker = document.querySelector<HTMLButtonElement>(
+      '[data-drive-markdown-image-comment-count="2"]'
+    )
     expect(marker?.textContent).toBe('2')
     if (!marker) throw new Error('Missing image comment marker')
     await click(marker)
-    expect(document.querySelector('[data-drive-markdown-image-active="true"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-drive-markdown-image-active="true"]')
+    ).not.toBeNull()
     expect(document.querySelector('[data-image-lightbox]')).toBeNull()
   })
 
@@ -476,32 +645,58 @@ describe('DriveMarkdownRenderer', () => {
         html: '<p><img src="/first.png" alt="第一张"></p><p><img src="/second.png" alt="第二张"></p>',
       }),
     })
-    const images = document.querySelectorAll<HTMLImageElement>('[data-testid="markdown-body"] img')
+    const images = document.querySelectorAll<HTMLImageElement>(
+      '[data-testid="markdown-body"] img'
+    )
     const secondImage = images[1]
     if (!secondImage) throw new Error('Missing second markdown image')
 
     await act(async () => {
-      secondImage.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ' ' }))
+      secondImage.dispatchEvent(
+        new KeyboardEvent('keydown', { bubbles: true, key: ' ' })
+      )
     })
 
-    expect(document.querySelector('[data-image-lightbox]')?.textContent).toContain('2 / 2')
-    expect(document.querySelector('[data-image-lightbox-active]')?.getAttribute('src')).toBe('/second.png')
+    expect(
+      document.querySelector('[data-image-lightbox]')?.textContent
+    ).toContain('2 / 2')
+    expect(
+      document
+        .querySelector('[data-image-lightbox-active]')
+        ?.getAttribute('src')
+    ).toBe('/second.png')
 
     await act(async () => {
-      document.querySelector('[data-image-lightbox]')?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowLeft' }))
+      document
+        .querySelector('[data-image-lightbox] > div')
+        ?.dispatchEvent(
+          new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowLeft' })
+        )
     })
 
-    expect(document.querySelector('[data-image-lightbox]')?.textContent).toContain('1 / 2')
-    expect(document.querySelector('[data-image-lightbox-active]')?.getAttribute('src')).toBe('/first.png')
+    expect(
+      document.querySelector('[data-image-lightbox]')?.textContent
+    ).toContain('1 / 2')
+    expect(
+      document
+        .querySelector('[data-image-lightbox-active]')
+        ?.getAttribute('src')
+    ).toBe('/first.png')
   })
 
   it('switches from the empty code fallback to rendered markdown without changing hook order', () => {
-    const { rerender } = renderMarkdown({ previewData: preview({ html: '', text: '' }) })
+    const { rerender } = renderMarkdown({
+      previewData: preview({ html: '', text: '' }),
+    })
 
     expect(document.querySelector('[data-monaco-editor="true"]')).not.toBeNull()
     expect(() => rerender({ previewData: preview() })).not.toThrow()
-    expect(document.querySelector('[data-testid="markdown-body"]')).not.toBeNull()
-    expect(() => rerender({ previewData: preview({ html: '', text: '' }) })).not.toThrow()
+    expect(
+      document.querySelector('[data-testid="markdown-body"]')
+    ).not.toBeNull()
+    expect(() =>
+      rerender({ previewData: preview({ html: '', text: '' }) })
+    ).not.toThrow()
     expect(document.querySelector('[data-monaco-editor="true"]')).not.toBeNull()
   })
 
@@ -518,12 +713,15 @@ describe('DriveMarkdownRenderer', () => {
   it('shows the outline resize line only while the outline rail is active', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
-    const outlinePanel = document.querySelector('[data-markdown-resizable-panel="outline"]')
+    const outlinePanel = document.querySelector(
+      '[data-markdown-resizable-panel="outline"]'
+    )
     const outlineHandle = outlinePanel?.nextElementSibling
 
-    expect(outlineHandle?.getAttribute('data-slot')).toBe('resizable-handle')
-    expect(outlineHandle?.className).toContain('bg-transparent')
-    expect(outlineHandle?.className).toContain('[[data-panel]:hover+&]:bg-border')
+    expect(outlineHandle?.hasAttribute('data-markdown-resizable-divider')).toBe(
+      true
+    )
+    expect(outlineHandle?.className).toContain('drive-document-divider')
     expect(outlineHandle?.childElementCount).toBe(0)
   })
 
@@ -531,11 +729,19 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
     const layout = document.querySelector('[data-testid="markdown-layout"]')
-    const outlineRail = document.querySelector('nav[aria-label="目录"]')?.closest('[data-slot="resizable-panel"]')
+    const outlineRail = document
+      .querySelector('nav[aria-label="目录"]')
+      ?.closest('[data-markdown-resizable-panel]')
     const outlineRailContent = outlineRail?.firstElementChild
-    const outlineAside = document.querySelector('nav[aria-label="目录"]')?.closest('aside')
-    const documentColumn = document.querySelector('[data-testid="markdown-body"]')?.parentElement
-    const documentScroller = document.querySelector('[data-testid="markdown-document-scroll"]')
+    const outlineAside = document
+      .querySelector('nav[aria-label="目录"]')
+      ?.closest('aside')
+    const documentColumn = document.querySelector(
+      '[data-testid="markdown-body"]'
+    )?.parentElement
+    const documentScroller = document.querySelector(
+      '[data-testid="markdown-document-scroll"]'
+    )
 
     expect(layout?.className).toContain('h-full')
     expect(layout?.className).toContain('overflow-hidden')
@@ -548,17 +754,19 @@ describe('DriveMarkdownRenderer', () => {
     expect(layout?.className).not.toContain('mx-auto')
     expect(layout?.className).not.toContain('max-w-7xl')
     expect(layout?.className).not.toContain('gap-6')
-    const panelGroup = document.querySelector('[data-slot="resizable-panel-group"]')
+    const panelGroup = document.querySelector('[data-markdown-resizable-group]')
     expect(panelGroup).not.toBeNull()
     expect(panelGroup?.className).toContain('h-full')
     expect(panelGroup?.className).toContain('min-h-0')
     expect(panelGroup?.className).toContain('overflow-hidden')
-    expect(outlineRail?.getAttribute('data-slot')).toBe('resizable-panel')
+    expect(outlineRail?.hasAttribute('data-markdown-resizable-panel')).toBe(
+      true
+    )
     expect(outlineRailContent?.className).toContain('h-full')
     expect(outlineRailContent?.className).toContain('min-h-0')
-    expect(outlineRail?.getAttribute('data-panel-size')).toBe('16%')
-    expect(outlineRail?.getAttribute('data-panel-min-size')).toBe('12%')
-    expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('32%')
+    expect(outlineRail?.getAttribute('data-panel-size')).toBe('224px')
+    expect(outlineRail?.getAttribute('data-panel-min-size')).toBe('160px')
+    expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('288px')
     expect(outlineAside?.className).not.toContain('px-4')
     expect(outlineAside?.className).not.toContain('md:px-6')
     expect(outlineAside?.className).toContain('py-6')
@@ -577,7 +785,9 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentColumn?.className).not.toContain('ml-auto')
     expect(documentColumn?.className).toContain('w-full')
     expect(documentColumn?.className).not.toContain('max-w-3xl')
-    expect(documentColumn?.getAttribute('data-markdown-width-mode')).toBe('reading')
+    expect(documentColumn?.getAttribute('data-markdown-width-mode')).toBe(
+      'reading'
+    )
   })
 
   it('activates and reveals the current outline item when the user scrolls the markdown document', async () => {
@@ -593,25 +803,48 @@ describe('DriveMarkdownRenderer', () => {
     })
 
     const scroller = markdownDocumentScroller()
-    const outlineScroller = document.querySelector<HTMLElement>('nav[aria-label="目录"]')
+    const outlineScroller = document.querySelector<HTMLElement>(
+      'nav[aria-label="目录"]'
+    )
     const firstHeading = document.getElementById('heading-1')
     const secondHeading = document.getElementById('heading-2')
-    const secondLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-2"]')
-    if (!outlineScroller || !firstHeading || !secondHeading || !secondLink) throw new Error('Missing outline fixtures')
-    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
-    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: -20, height: 20 }))
-    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
-    vi.spyOn(outlineScroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(secondLink, 'getBoundingClientRect').mockReturnValue(domRect({ top: 120, height: 20 }))
+    const secondLink = document.querySelector<HTMLElement>(
+      '[data-markdown-outline-id="heading-2"]'
+    )
+    if (!outlineScroller || !firstHeading || !secondHeading || !secondLink)
+      throw new Error('Missing outline fixtures')
+    Object.defineProperty(scroller, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    })
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 0, height: 100 })
+    )
+    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: -20, height: 20 })
+    )
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 10, height: 20 })
+    )
+    vi.spyOn(outlineScroller, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 0, height: 100 })
+    )
+    vi.spyOn(secondLink, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 120, height: 20 })
+    )
     scrollIntoViewMock.mockClear()
 
-    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }))
+    scroller.dispatchEvent(
+      new WheelEvent('wheel', { bubbles: true, deltaY: 100 })
+    )
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     await flushAnimationFrames()
 
     expect(secondLink.getAttribute('aria-current')).toBe('location')
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest', behavior: 'instant' })
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      block: 'nearest',
+      behavior: 'instant',
+    })
   })
 
   it('keeps the clicked outline item active during its programmatic document jump', async () => {
@@ -631,13 +864,27 @@ describe('DriveMarkdownRenderer', () => {
     const firstHeading = document.getElementById('heading-1')
     const secondHeading = document.getElementById('heading-2')
     const thirdHeading = document.getElementById('heading-3')
-    const thirdLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-3"]')
-    if (!firstHeading || !secondHeading || !thirdHeading || !thirdLink) throw new Error('Missing outline fixtures')
-    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
-    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: -200, height: 20 }))
-    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
-    vi.spyOn(thirdHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 500, height: 20 }))
+    const thirdLink = document.querySelector<HTMLElement>(
+      '[data-markdown-outline-id="heading-3"]'
+    )
+    if (!firstHeading || !secondHeading || !thirdHeading || !thirdLink)
+      throw new Error('Missing outline fixtures')
+    Object.defineProperty(scroller, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    })
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 0, height: 100 })
+    )
+    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: -200, height: 20 })
+    )
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 10, height: 20 })
+    )
+    vi.spyOn(thirdHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 500, height: 20 })
+    )
 
     await click(thirdLink)
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
@@ -645,11 +892,17 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(thirdLink.getAttribute('aria-current')).toBe('location')
 
-    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }))
+    scroller.dispatchEvent(
+      new WheelEvent('wheel', { bubbles: true, deltaY: -100 })
+    )
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     await flushAnimationFrames()
 
-    expect(document.querySelector('[data-markdown-outline-id="heading-2"]')?.getAttribute('aria-current')).toBe('location')
+    expect(
+      document
+        .querySelector('[data-markdown-outline-id="heading-2"]')
+        ?.getAttribute('aria-current')
+    ).toBe('location')
   })
 
   it('scrolls the markdown document instead of the page when an outline item is selected', async () => {
@@ -662,39 +915,59 @@ describe('DriveMarkdownRenderer', () => {
     })
     const scroller = markdownDocumentScroller()
     const heading = document.getElementById('heading-1')
-    const link = document.querySelector<HTMLElement>('[data-markdown-outline-id="heading-1"]')
+    const link = document.querySelector<HTMLElement>(
+      '[data-markdown-outline-id="heading-1"]'
+    )
     if (!heading || !link) throw new Error('Missing outline fixtures')
     scroller.scrollTop = 50
-    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(heading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 200, height: 20 }))
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 0, height: 100 })
+    )
+    vi.spyOn(heading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 200, height: 20 })
+    )
     scrollContainerScrollToMock.mockClear()
 
     await click(link)
 
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 226, behavior: 'instant' })
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({
+      top: 226,
+      behavior: 'instant',
+    })
     expect(link.getAttribute('aria-current')).toBe('location')
     expect(host?.scrollTop).toBe(0)
   })
 
   it('switches the markdown document between reading and wide width', async () => {
-    renderMarkdown({ previewData: preview({ html: [
-      '<p>正文之前</p>',
-      '<div data-drive-markdown-table-scroll="true"><table><tbody><tr><td>宽表格</td></tr></tbody></table></div>',
-      '<pre><code class="language-mermaid">flowchart LR\nA --&gt; B</code></pre>',
-      '<p>正文之后</p>',
-    ].join('') }) })
+    renderMarkdown({
+      previewData: preview({
+        html: [
+          '<p>正文之前</p>',
+          '<div data-drive-markdown-table-scroll="true"><table><tbody><tr><td>宽表格</td></tr></tbody></table></div>',
+          '<pre><code class="language-mermaid">flowchart LR\nA --&gt; B</code></pre>',
+          '<p>正文之后</p>',
+        ].join(''),
+      }),
+    })
 
-    const documentColumn = () => document.querySelector('[data-testid="markdown-body"]')?.parentElement
+    const documentColumn = () =>
+      document.querySelector('[data-testid="markdown-body"]')?.parentElement
     const originalBody = markdownBody().innerHTML
     expect(documentColumn()?.className).not.toContain('max-w-3xl')
     expect(documentColumn()?.className).toContain('w-full')
     expect(markdownBody().className).toContain('max-w-3xl')
-    expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('reading')
+    expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe(
+      'reading'
+    )
     expect(buttonWithText('宽度')).not.toBeNull()
 
     await openDropdown(buttonWithText('宽度'))
-    expect(radioMenuItemWithText('阅读').getAttribute('data-state')).toBe('checked')
-    expect(radioMenuItemWithText('宽屏').getAttribute('data-state')).toBe('unchecked')
+    expect(radioMenuItemWithText('阅读').getAttribute('aria-checked')).toBe(
+      'true'
+    )
+    expect(radioMenuItemWithText('宽屏').getAttribute('aria-checked')).toBe(
+      'false'
+    )
     await click(radioMenuItemWithText('宽屏'))
 
     expect(documentColumn()?.className).not.toContain('max-w-3xl')
@@ -702,12 +975,18 @@ describe('DriveMarkdownRenderer', () => {
     expect(documentColumn()?.className).toContain('w-full')
     expect(markdownBody().className).not.toContain('max-w-3xl')
     expect(markdownBody().innerHTML).toBe(originalBody)
-    expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe('wide')
+    expect(documentColumn()?.getAttribute('data-markdown-width-mode')).toBe(
+      'wide'
+    )
     expect(buttonWithText('宽度')).not.toBeNull()
 
     await openDropdown(buttonWithText('宽度'))
-    expect(radioMenuItemWithText('阅读').getAttribute('data-state')).toBe('unchecked')
-    expect(radioMenuItemWithText('宽屏').getAttribute('data-state')).toBe('checked')
+    expect(radioMenuItemWithText('阅读').getAttribute('aria-checked')).toBe(
+      'false'
+    )
+    expect(radioMenuItemWithText('宽屏').getAttribute('aria-checked')).toBe(
+      'true'
+    )
     await click(radioMenuItemWithText('阅读'))
     expect(markdownBody().className).toContain('max-w-3xl')
     expect(markdownBody().innerHTML).toBe(originalBody)
@@ -721,7 +1000,9 @@ describe('DriveMarkdownRenderer', () => {
     await setPreviewWidth(390)
 
     expect(queryButtonWithText('宽度')).toBeNull()
-    expect(document.querySelector('[data-drive-messages-section]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-drive-messages-section]')
+    ).not.toBeNull()
     expect(buttonWithText('留言 0')).not.toBeNull()
 
     await setPreviewWidth(1280)
@@ -730,28 +1011,34 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('enables comments for .md files', () => {
-    renderMarkdown({ currentItem: current({ name: 'notes.md', mimeType: null }) })
+    renderMarkdown({
+      currentItem: current({ name: 'notes.md', mimeType: null }),
+    })
 
-    expect(buttonWithText('评论 0')).not.toBeNull()
+    expect(buttonWithText('批注 0')).not.toBeNull()
   })
 
   it('enables comments for Markdown MIME without a .md extension', () => {
-    renderMarkdown({ currentItem: current({ name: 'notes', mimeType: 'text/markdown' }) })
+    renderMarkdown({
+      currentItem: current({ name: 'notes', mimeType: 'text/markdown' }),
+    })
 
-    expect(buttonWithText('评论 0')).not.toBeNull()
+    expect(buttonWithText('批注 0')).not.toBeNull()
   })
 
   it('does not enable comments for non-markdown files', () => {
-    renderMarkdown({ currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }) })
+    renderMarkdown({
+      currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }),
+    })
 
-    expect(queryButtonWithText('评论 0')).toBeNull()
+    expect(queryButtonWithText('批注 0')).toBeNull()
   })
 
   it('keeps empty markdown code fallback editable', () => {
     renderMarkdown({
       previewData: preview({ html: '   ', text: '' }),
       editContext: {
-        reload: vi.fn(async () => ({} as never)),
+        reload: vi.fn(async () => ({}) as never),
         reloading: false,
         saveText: vi.fn(async () => undefined),
         savingText: false,
@@ -766,7 +1053,8 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('wraps long inline markdown content inside the reader column', () => {
-    const path = 'erp-module-fm/erp-module-fm-biz/src/main/java/com/wdbc/erp/module/fm/service/sys/impl/PushMessageApiImpl.java'
+    const path =
+      'erp-module-fm/erp-module-fm-biz/src/main/java/com/wdbc/erp/module/fm/service/sys/impl/PushMessageApiImpl.java'
     renderMarkdown({
       previewData: preview({
         text: path,
@@ -774,7 +1062,9 @@ describe('DriveMarkdownRenderer', () => {
       }),
     })
 
-    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+    const body = document.querySelector<HTMLElement>(
+      '[data-testid="markdown-body"]'
+    )
     expect(body?.className.split(/\s+/u)).toContain('markdown-body')
     expect(body?.querySelector('code')?.textContent).toBe(path)
     expect(body?.className).not.toContain('[&_pre]')
@@ -787,7 +1077,9 @@ describe('DriveMarkdownRenderer', () => {
       }),
     })
 
-    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+    const body = document.querySelector<HTMLElement>(
+      '[data-testid="markdown-body"]'
+    )
     expect(body?.className).toContain('[&_h4]:text-base!')
     expect(body?.className).toContain('[&_h5]:text-base!')
     expect(body?.className).toContain('[&_h6]:text-base!')
@@ -800,29 +1092,30 @@ describe('DriveMarkdownRenderer', () => {
       }),
     })
 
-    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
-    const bodyClasses = body
-      ?.className.split(/\s+/u) ?? []
-    expect(bodyClasses).toEqual(expect.arrayContaining([
-      '[&_ul]:list-disc',
-      '[&_ol]:list-decimal!',
-      '[&_ul]:pl-6',
-      '[&_ol]:pl-6',
-    ]))
+    const body = document.querySelector<HTMLElement>(
+      '[data-testid="markdown-body"]'
+    )
+    const bodyClasses = body?.className.split(/\s+/u) ?? []
+    expect(bodyClasses).toEqual(
+      expect.arrayContaining([
+        '[&_ul]:list-disc',
+        '[&_ol]:list-decimal!',
+        '[&_ul]:pl-6',
+        '[&_ol]:pl-6',
+      ])
+    )
     expect(body?.querySelectorAll('ol ol')).toHaveLength(2)
-    expect(Array.from(body?.querySelectorAll('ol > li') ?? [], (item) => (
-      item.getAttribute('data-drive-list-marker')
-    ))).toEqual(['1.', '2.', '2.1', '2.2', '2.2.1', '3.'])
+    expect(
+      Array.from(body?.querySelectorAll('ol > li') ?? [], (item) =>
+        item.getAttribute('data-drive-list-marker')
+      )
+    ).toEqual(['1.', '2.', '2.1', '2.2', '2.2.1', '3.'])
   })
 
   it('keeps wide markdown tables scrollable inside the reader column', () => {
     renderMarkdown({
       previewData: preview({
-        text: [
-          '前端文件:行号',
-          'v-for 数据源',
-          '处理口径',
-        ].join(''),
+        text: ['前端文件:行号', 'v-for 数据源', '处理口径'].join(''),
         html: [
           '<div data-drive-markdown-table-scroll="true">',
           '<table>',
@@ -839,14 +1132,24 @@ describe('DriveMarkdownRenderer', () => {
       }),
     })
 
-    const body = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
-    const wrapper = document.querySelector<HTMLElement>('[data-drive-markdown-table-scroll="true"]')
-    const table = document.querySelector<HTMLTableElement>('[data-testid="markdown-body"] table')
+    const body = document.querySelector<HTMLElement>(
+      '[data-testid="markdown-body"]'
+    )
+    const wrapper = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-table-scroll="true"]'
+    )
+    const table = document.querySelector<HTMLTableElement>(
+      '[data-testid="markdown-body"] table'
+    )
     expect(wrapper).not.toBeNull()
     expect(table).not.toBeNull()
     expect(body?.className.split(/\s+/u)).toContain('markdown-body')
-    expect(body?.className).toContain('[&_[data-drive-markdown-table-scroll="true"]]:max-w-full')
-    expect(body?.className).toContain('[&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto')
+    expect(body?.className).toContain(
+      '[&_[data-drive-markdown-table-scroll="true"]]:max-w-full'
+    )
+    expect(body?.className).toContain(
+      '[&_[data-drive-markdown-table-scroll="true"]]:overflow-x-auto'
+    )
     expect(body?.className).toContain('[&_table]:w-max')
     expect(body?.className).toContain('[&_table]:min-w-0')
     expect(body?.className).toContain('[&_table]:mx-auto')
@@ -869,17 +1172,27 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('批注')
     expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('Comment body')
-    expect(toolbarButtonTexts()).toEqual(['目录', '评论 1', '留言 0', '宽度'])
-    expect(commentRailTitle()?.querySelector('button[aria-label="刷新评论"]')).not.toBeNull()
+    expect(toolbarButtonTexts()).toEqual(['目录', '批注 1', '留言 0', '宽度'])
+    expect(
+      commentRailTitle()?.querySelector('button[aria-label="刷新评论"]')
+    ).not.toBeNull()
     expect(commentRailShell()?.className).not.toContain('border-l')
-    expect(commentRailPanelGroup()?.previousElementSibling?.childElementCount).toBe(0)
-    expect(commentRailPanelGroup()?.getAttribute('data-slot')).toBe('resizable-panel')
-    expect(commentRailPanelGroup()?.getAttribute('data-panel-size')).toBe('22%')
-    expect(commentRailPanelGroup()?.getAttribute('data-panel-min-size')).toBe('17%')
-    expect(commentRailPanelGroup()?.getAttribute('data-panel-max-size')).toBe('32%')
+    expect(
+      commentRailPanelGroup()?.previousElementSibling?.childElementCount
+    ).toBe(0)
+    expect(
+      commentRailPanelGroup()?.hasAttribute('data-markdown-resizable-panel')
+    ).toBe(true)
+    expect(commentRailPanelGroup()?.getAttribute('data-panel-size')).toBe('384px')
+    expect(commentRailPanelGroup()?.getAttribute('data-panel-min-size')).toBe(
+      '320px'
+    )
+    expect(commentRailPanelGroup()?.getAttribute('data-panel-max-size')).toBe(
+      '480px'
+    )
     expect(commentRailShell()?.className).toContain('overflow-hidden')
     expect(commentRailShell()?.className).not.toContain('gap-6')
     expect(commentRailPanel()?.className).toContain('min-h-0')
@@ -887,9 +1200,18 @@ describe('DriveMarkdownRenderer', () => {
     expect(commentRailPanel()?.className).not.toContain('max-h-screen')
     expect(commentRailTitle()?.className).toContain('shrink-0')
     expect(commentRailScrollRegion()?.className).toContain('overflow-hidden')
-    expect(windowAddEventListener).not.toHaveBeenCalledWith('resize', expect.any(Function))
-    expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).toContain('mx-auto')
-    expect(document.querySelector('[data-testid="markdown-body"]')?.parentElement?.className).not.toContain('ml-auto')
+    expect(windowAddEventListener).not.toHaveBeenCalledWith(
+      'resize',
+      expect.any(Function)
+    )
+    expect(
+      document.querySelector('[data-testid="markdown-body"]')?.parentElement
+        ?.className
+    ).toContain('mx-auto')
+    expect(
+      document.querySelector('[data-testid="markdown-body"]')?.parentElement
+        ?.className
+    ).not.toContain('ml-auto')
 
     windowAddEventListener.mockRestore()
   })
@@ -901,17 +1223,25 @@ describe('DriveMarkdownRenderer', () => {
     await act(async () => undefined)
     await setPreviewWidth(390)
 
-    expect(document.querySelector('[data-slot="resizable-panel-group"]')).toBeNull()
+    expect(document.querySelector('[data-markdown-resizable-group]')).toBeNull()
     expect(document.querySelector('[data-markdown-sheet]')).toBeNull()
 
     await click(buttonWithText('目录'))
-    expect(document.querySelector('[data-markdown-sheet="outline"]')).not.toBeNull()
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="outline"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).toBeNull()
 
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comments-mode="list"]')
+    ).not.toBeNull()
     expect(commentAnchorLayer()).toBeNull()
   })
 
@@ -919,10 +1249,12 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
     await setPreviewWidth(1023)
-    expect(document.querySelector('[data-slot="resizable-panel-group"]')).toBeNull()
+    expect(document.querySelector('[data-markdown-resizable-group]')).toBeNull()
 
     await setPreviewWidth(1024)
-    expect(document.querySelector('[data-slot="resizable-panel-group"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-resizable-group]')
+    ).not.toBeNull()
   })
 
   it('closes the compact outline after navigation and keeps comments open while activating a thread', async () => {
@@ -933,28 +1265,40 @@ describe('DriveMarkdownRenderer', () => {
     await setPreviewWidth(390)
 
     await click(buttonWithText('目录'))
-    const outlineLink = document.querySelector<HTMLAnchorElement>('a[href="#heading-1"]')
+    const outlineLink = document.querySelector<HTMLAnchorElement>(
+      'a[href="#heading-1"]'
+    )
     if (!outlineLink) throw new Error('Missing compact outline link')
     await click(outlineLink)
     expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
 
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await click(elementWithText('Comment body'))
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).not.toBeNull()
     expect(scrollContainerScrollToMock).toHaveBeenCalled()
   })
 
   it('keeps compact comments open when an unlocated thread is selected', async () => {
-    annotationsMock.threads = [thread({ body: 'Lost comment', range: { start: 0, end: 2 }, quote: '缺失' })]
+    annotationsMock.threads = [
+      thread({
+        body: 'Lost comment',
+        range: { start: 0, end: 2 },
+        quote: '缺失',
+      }),
+    ]
     renderMarkdown()
 
     await act(async () => undefined)
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await click(buttonByLabel('查看 1 条未定位评论'))
     await click(elementWithText('Lost comment'))
 
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).not.toBeNull()
     expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
   })
 
@@ -964,12 +1308,14 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await click(elementWithText('Comment body'))
     await inputValue(textarea(), 'Saved reply')
     await keyDown(textarea(), { key: 'Escape' })
 
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).not.toBeNull()
     expect(textarea().value).toBe('Saved reply')
   })
 
@@ -979,14 +1325,22 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await openDropdown(buttonByLabel('评论操作：user@example.com'))
-    await click(Array.from(document.querySelectorAll<HTMLElement>('[role=menuitem]')).find((item) => item.textContent === '编辑评论')!)
+    await click(
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role=menuitem]')
+      ).find((item) => item.textContent === '编辑评论')!
+    )
     await inputValue(textarea(), 'Updated comment')
     await keyDown(textarea(), { key: 'Escape' })
 
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comment-edit-composer="true"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-edit-composer="true"]')
+    ).toBeNull()
     expect(document.body.textContent).toContain('Comment body')
   })
 
@@ -994,15 +1348,21 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown({ previewData: preview({ outline: [outlineItem()] }) })
 
     await click(buttonWithText('目录'))
-    expect(document.querySelector('[data-markdown-resizable-panel="outline"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-resizable-panel="outline"]')
+    ).toBeNull()
 
     await setPreviewWidth(834)
     await click(buttonWithText('目录'))
-    expect(document.querySelector('[data-markdown-sheet="outline"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-sheet="outline"]')
+    ).not.toBeNull()
 
     await setPreviewWidth(1280)
     expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
-    expect(document.querySelector('[data-markdown-resizable-panel="outline"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-resizable-panel="outline"]')
+    ).toBeNull()
   })
 
   it('rerenders Mermaid when the preview layout remounts the document in compact mode', async () => {
@@ -1026,15 +1386,19 @@ describe('DriveMarkdownRenderer', () => {
       }),
     })
 
-    expect(Array.from(document.querySelectorAll('ol > li'), (item) => (
-      item.getAttribute('data-drive-list-marker')
-    ))).toEqual(['3.', '4.'])
+    expect(
+      Array.from(document.querySelectorAll('ol > li'), (item) =>
+        item.getAttribute('data-drive-list-marker')
+      )
+    ).toEqual(['3.', '4.'])
 
     await setPreviewWidth(834)
 
-    expect(Array.from(document.querySelectorAll('ol > li'), (item) => (
-      item.getAttribute('data-drive-list-marker')
-    ))).toEqual(['3.', '4.'])
+    expect(
+      Array.from(document.querySelectorAll('ol > li'), (item) =>
+        item.getAttribute('data-drive-list-marker')
+      )
+    ).toEqual(['3.', '4.'])
   })
 
   it('keeps compact comment interactions separate from regular panel preferences', async () => {
@@ -1042,39 +1406,49 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown()
 
     await act(async () => undefined)
-    await click(buttonWithText('评论 1'))
-    expect(document.querySelector('[data-markdown-resizable-panel="comments"]')).toBeNull()
+    await click(buttonWithText('批注 1'))
+    expect(
+      document.querySelector('[data-markdown-resizable-panel="comments"]')
+    ).toBeNull()
 
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).not.toBeNull()
-    await click(buttonWithText('评论 1'))
-    expect(document.querySelector('[data-markdown-sheet="comments"]')).toBeNull()
+    await click(buttonWithText('批注 1'))
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).not.toBeNull()
+    await click(buttonWithText('批注 1'))
+    expect(
+      document.querySelector('[data-markdown-sheet="comments"]')
+    ).toBeNull()
 
     await setPreviewWidth(1280)
-    expect(document.querySelector('[data-markdown-resizable-panel="comments"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-resizable-panel="comments"]')
+    ).toBeNull()
   })
 
   it('counts comment threads rather than replies in the toolbar total', async () => {
     const baseThread = thread()
-    annotationsMock.threads = [{
-      ...baseThread,
-      comments: [
-        ...baseThread.comments,
-        {
-          ...baseThread.comments[0],
-          id: 'comment-reply-1',
-          parentCommentId: baseThread.comments[0].id,
-          body: 'Reply body',
-        },
-      ],
-    }]
+    annotationsMock.threads = [
+      {
+        ...baseThread,
+        comments: [
+          ...baseThread.comments,
+          {
+            ...baseThread.comments[0],
+            id: 'comment-reply-1',
+            parentCommentId: baseThread.comments[0].id,
+            body: 'Reply body',
+          },
+        ],
+      },
+    ]
 
     renderMarkdown()
 
     await act(async () => undefined)
 
-    expect(toolbarButtonTexts()).toEqual(['评论 1', '留言 0', '宽度'])
+    expect(toolbarButtonTexts()).toEqual(['批注 1', '留言 0', '宽度'])
     expect(document.body.textContent).toContain('Reply body')
   })
 
@@ -1107,7 +1481,7 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(document.querySelector('textarea')).toBeNull()
     expect(buttonWithText('添加评论')).not.toBeNull()
-    expect(buttonWithText('添加评论').className).toContain('h-8')
+    expect(buttonWithText('添加评论').className).toContain('button--sm')
     expect(buttonWithText('添加评论').querySelector('svg')).not.toBeNull()
     expect(selectionAction()?.getAttribute('data-inline-toolbar')).toBe('true')
     expect(pendingOverlay()).not.toBeNull()
@@ -1115,22 +1489,28 @@ describe('DriveMarkdownRenderer', () => {
 
     await click(buttonWithText('添加评论'))
     expect(pendingOverlay()).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comment-composer-popover="true"]')).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
-    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull()
-    expect(toolbarButtonTexts()).toContain('评论 0')
+    expect(
+      document.querySelector('[data-markdown-comment-composer-popover="true"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-draft-card="true"]')
+    ).toBeNull()
+    expect(document.querySelector('[data-slot="modal-dialog"]')).toBeNull()
+    expect(toolbarButtonTexts()).toContain('批注 0')
     await inputValue(textarea(), 'New comment')
     await click(buttonWithText('评论'))
 
-    expect(annotationsMock.createThread).toHaveBeenCalledWith(expect.objectContaining({
-      baseVersionId: 'version-1',
-      targetKind: 'textRange',
-      body: 'New comment',
-      target: expect.objectContaining({
-        range: { start: 3, end: 5 },
-        quote: expect.objectContaining({ exact: '重点' }),
-      }),
-    }))
+    expect(annotationsMock.createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseVersionId: 'version-1',
+        targetKind: 'textRange',
+        body: 'New comment',
+        target: expect.objectContaining({
+          range: { start: 3, end: 5 },
+          quote: expect.objectContaining({ exact: '重点' }),
+        }),
+      })
+    )
     expect(pendingOverlay()).toBeNull()
   })
 
@@ -1148,7 +1528,9 @@ describe('DriveMarkdownRenderer', () => {
     await keyDown(textarea(), { key: 'Escape' })
     await flushAnimationFrames()
 
-    expect(document.querySelector('[data-markdown-comment-composer-popover="true"]')).toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comment-composer-popover="true"]')
+    ).toBeNull()
     expect(commentRailPanel()).toBeUndefined()
   })
 
@@ -1156,13 +1538,26 @@ describe('DriveMarkdownRenderer', () => {
     mockCommentComposerRects()
     const nativeFocus = HTMLTextAreaElement.prototype.focus
     const visibleWhenFocused: boolean[] = []
-    vi.spyOn(HTMLTextAreaElement.prototype, 'focus').mockImplementation(function (options?: FocusOptions) {
-      const composer = this.closest<HTMLElement>('[data-markdown-comment-composer-popover="true"]')
-      visibleWhenFocused.push(Boolean(composer && composer.getAttribute('aria-hidden') !== 'true' && !composer.classList.contains('invisible')))
-      nativeFocus.call(this, options)
-      const documentScroller = document.querySelector<HTMLElement>('[data-testid="markdown-document-scroll"]')
-      if (documentScroller && !options?.preventScroll) documentScroller.scrollTop = 480
-    })
+    vi.spyOn(HTMLTextAreaElement.prototype, 'focus').mockImplementation(
+      function (options?: FocusOptions) {
+        const composer = this.closest<HTMLElement>(
+          '[data-markdown-comment-composer-popover="true"]'
+        )
+        visibleWhenFocused.push(
+          Boolean(
+            composer &&
+            composer.getAttribute('aria-hidden') !== 'true' &&
+            !composer.classList.contains('invisible')
+          )
+        )
+        nativeFocus.call(this, options)
+        const documentScroller = document.querySelector<HTMLElement>(
+          '[data-testid="markdown-document-scroll"]'
+        )
+        if (documentScroller && !options?.preventScroll)
+          documentScroller.scrollTop = 480
+      }
+    )
     renderMarkdown()
     selectStrongText()
 
@@ -1177,21 +1572,25 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('keeps a new comment composer beside the selection when the comment rail is dense', async () => {
-    annotationsMock.threads = Array.from({ length: 8 }, (_, index) => thread({
-      id: `thread-${index + 1}`,
-      body: `Comment ${index + 1}`,
-      createdAt: `2026-06-21T00:${String(index).padStart(2, '0')}:00.000Z`,
-    }))
+    annotationsMock.threads = Array.from({ length: 8 }, (_, index) =>
+      thread({
+        id: `thread-${index + 1}`,
+        body: `Comment ${index + 1}`,
+        createdAt: `2026-06-21T00:${String(index).padStart(2, '0')}:00.000Z`,
+      })
+    )
     const nativeRect = HTMLElement.prototype.getBoundingClientRect
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-      if (this.hasAttribute('data-markdown-comment-composer-popover')) {
-        return domRect({ width: 288, height: 148 })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function () {
+        if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+          return domRect({ width: 288, height: 148 })
+        }
+        if (this.getAttribute('data-testid') === 'markdown-document-scroll') {
+          return domRect({ left: 0, top: 0, width: 800, height: 600 })
+        }
+        return nativeRect.call(this)
       }
-      if (this.getAttribute('data-testid') === 'markdown-document-scroll') {
-        return domRect({ left: 0, top: 0, width: 800, height: 600 })
-      }
-      return nativeRect.call(this)
-    })
+    )
     renderMarkdown()
     selectStrongText()
 
@@ -1200,12 +1599,18 @@ describe('DriveMarkdownRenderer', () => {
     })
     await click(buttonWithText('添加评论'))
 
-    const composer = document.querySelector<HTMLElement>('[data-markdown-comment-composer-popover="true"]')
+    const composer = document.querySelector<HTMLElement>(
+      '[data-markdown-comment-composer-popover="true"]'
+    )
     expect(composer?.className).toContain('fixed')
     expect(composer?.style.left).toBe('136px')
     expect(composer?.style.top).toBe('56px')
-    expect(document.querySelector('[data-markdown-comment-draft-card="true"]')).toBeNull()
-    expect(document.querySelectorAll('[data-markdown-comment-thread-id]')).toHaveLength(8)
+    expect(
+      document.querySelector('[data-markdown-comment-draft-card="true"]')
+    ).toBeNull()
+    expect(
+      document.querySelectorAll('[data-markdown-comment-thread-id]')
+    ).toHaveLength(8)
   })
 
   it('waits for pointer completion before creating a selection anchor', async () => {
@@ -1242,13 +1647,19 @@ describe('DriveMarkdownRenderer', () => {
     expect(window.getSelection()?.toString()).toBe('重点')
     expect(buttonWithText('添加评论')).not.toBeNull()
     expect(pendingOverlay()).not.toBeNull()
-    expect(document.querySelector('[data-drive-annotation-overlay-layer="true"]')?.className).toContain('opacity-0')
+    expect(
+      document.querySelector('[data-drive-annotation-overlay-layer="true"]')
+        ?.className
+    ).toContain('opacity-0')
 
     await click(buttonWithText('添加评论'))
 
     expect(window.getSelection()?.toString()).toBe('')
-    expect(document.querySelector('[data-drive-annotation-overlay-layer="true"]')?.className).not.toContain('opacity-0')
-    expect(pendingOverlay()?.className).toContain('bg-amber-200/60')
+    expect(
+      document.querySelector('[data-drive-annotation-overlay-layer="true"]')
+        ?.className
+    ).not.toContain('opacity-0')
+    expect(pendingOverlay()?.className).toContain('bg-warning/25')
   })
 
   it('creates one selection anchor for the pointer release event sequence', async () => {
@@ -1258,7 +1669,9 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => {
       dispatchPointerUpOnMarkdownBody()
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      document
+        .querySelector('[data-testid="markdown-body"]')
+        ?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
     })
 
     expect(cloneContents).toHaveBeenCalledTimes(2)
@@ -1284,7 +1697,9 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('shows an error when creating a comment fails', async () => {
-    annotationsMock.createThread.mockRejectedValueOnce(new Error('文件已有新内容。'))
+    annotationsMock.createThread.mockRejectedValueOnce(
+      new Error('文件已有新内容。')
+    )
     renderMarkdown()
     selectStrongText()
     await act(async () => {
@@ -1341,7 +1756,9 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('does not open the composer for logged-out share viewers', async () => {
-    renderMarkdown({ annotationContext: { context: 'share', shareId: 'share-1' } })
+    renderMarkdown({
+      annotationContext: { context: 'share', shareId: 'share-1' },
+    })
     selectStrongText()
 
     await act(async () => {
@@ -1361,7 +1778,11 @@ describe('DriveMarkdownRenderer', () => {
     })
     renderMarkdown({
       edit: { ...editable(), canEdit: false, reason: 'permission_denied' },
-      annotationContext: { context: 'share', shareId: 'share-1', canComment: true },
+      annotationContext: {
+        context: 'share',
+        shareId: 'share-1',
+        canComment: true,
+      },
     })
     selectStrongText()
 
@@ -1375,7 +1796,9 @@ describe('DriveMarkdownRenderer', () => {
 
   it('hides reply actions for logged-out share viewers', async () => {
     annotationsMock.threads = [thread()]
-    renderMarkdown({ annotationContext: { context: 'share', shareId: 'share-1' } })
+    renderMarkdown({
+      annotationContext: { context: 'share', shareId: 'share-1' },
+    })
 
     await act(async () => undefined)
 
@@ -1384,28 +1807,32 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('does not show comment controls for non-markdown previews', async () => {
-    renderMarkdown({ currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }) })
+    renderMarkdown({
+      currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }),
+    })
     selectStrongText()
 
     await act(async () => {
       dispatchPointerUpOnMarkdownBody()
     })
 
-    expect(document.body.textContent).not.toContain('评论')
+    expect(document.body.textContent).not.toContain('批注')
     expect(document.body.textContent).not.toContain('添加评论')
     expect(document.querySelector('textarea')).toBeNull()
     expect(pendingOverlay()).toBeNull()
   })
 
   it('does not show comment controls when neither the extension nor MIME is Markdown', async () => {
-    renderMarkdown({ currentItem: current({ name: 'notes.mdx', mimeType: null }) })
+    renderMarkdown({
+      currentItem: current({ name: 'notes.mdx', mimeType: null }),
+    })
     selectStrongText()
 
     await act(async () => {
       dispatchPointerUpOnMarkdownBody()
     })
 
-    expect(document.body.textContent).not.toContain('评论')
+    expect(document.body.textContent).not.toContain('批注')
     expect(document.body.textContent).not.toContain('添加评论')
     expect(pendingOverlay()).toBeNull()
   })
@@ -1418,7 +1845,10 @@ describe('DriveMarkdownRenderer', () => {
     await click(elementWithText('Comment body'))
 
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 96, behavior: 'smooth' })
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({
+      top: 96,
+      behavior: 'smooth',
+    })
     expect(markdownDocumentScroller().scrollTop).toBe(96)
   })
 
@@ -1426,7 +1856,10 @@ describe('DriveMarkdownRenderer', () => {
     rangeRects = [domRect({ top: 32, height: 20 })]
     annotationsMock.threads = [thread()]
     renderMarkdown()
-    vi.spyOn(markdownDocumentScroller(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
+    vi.spyOn(
+      markdownDocumentScroller(),
+      'getBoundingClientRect'
+    ).mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
 
     await act(async () => undefined)
     await click(elementWithText('Comment body'))
@@ -1437,7 +1870,10 @@ describe('DriveMarkdownRenderer', () => {
   it('does not scroll again when the active comment card is clicked repeatedly', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
-    vi.spyOn(markdownDocumentScroller(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
+    vi.spyOn(
+      markdownDocumentScroller(),
+      'getBoundingClientRect'
+    ).mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
 
     await act(async () => undefined)
     await click(elementWithText('Comment body'))
@@ -1452,7 +1888,10 @@ describe('DriveMarkdownRenderer', () => {
   it('scrolls an active comment again after its anchor leaves the safe viewport', async () => {
     annotationsMock.threads = [thread()]
     renderMarkdown()
-    vi.spyOn(markdownDocumentScroller(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
+    vi.spyOn(
+      markdownDocumentScroller(),
+      'getBoundingClientRect'
+    ).mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 100 }))
 
     await act(async () => undefined)
     await click(elementWithText('Comment body'))
@@ -1468,9 +1907,24 @@ describe('DriveMarkdownRenderer', () => {
 
   it('navigates attached comments in anchor order without wrapping or including orphaned threads', async () => {
     annotationsMock.threads = [
-      thread({ id: 'thread-2', body: 'Second comment', range: { start: 6, end: 8 }, quote: '内容' }),
-      thread({ id: 'thread-orphaned', body: 'Lost comment', range: { start: 0, end: 2 }, quote: '缺失' }),
-      thread({ id: 'thread-1', body: 'First comment', range: { start: 3, end: 5 }, quote: '重点' }),
+      thread({
+        id: 'thread-2',
+        body: 'Second comment',
+        range: { start: 6, end: 8 },
+        quote: '内容',
+      }),
+      thread({
+        id: 'thread-orphaned',
+        body: 'Lost comment',
+        range: { start: 0, end: 2 },
+        quote: '缺失',
+      }),
+      thread({
+        id: 'thread-1',
+        body: 'First comment',
+        range: { start: 3, end: 5 },
+        quote: '重点',
+      }),
     ]
     renderMarkdown()
 
@@ -1493,14 +1947,22 @@ describe('DriveMarkdownRenderer', () => {
   })
 
   it('uses instant positioning for comment navigation when reduced motion is requested', async () => {
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => mediaQuery(query, query === '(prefers-reduced-motion: reduce)')))
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) =>
+        mediaQuery(query, query === '(prefers-reduced-motion: reduce)')
+      )
+    )
     annotationsMock.threads = [thread()]
     renderMarkdown()
 
     await act(async () => undefined)
     await click(elementWithText('Comment body'))
 
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 96, behavior: 'auto' })
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({
+      top: 96,
+      behavior: 'auto',
+    })
   })
 
   it('renders existing comments as overlay rectangles and focuses them by click position', async () => {
@@ -1512,18 +1974,22 @@ describe('DriveMarkdownRenderer', () => {
     const overlay = threadOverlay('thread-1')
     expect(overlay).not.toBeNull()
     expect(overlay?.className).toContain('mix-blend-multiply')
-    expect(overlay?.className).toContain('bg-amber-200/45')
-    expect(document.querySelector('[data-drive-annotation-thread-id]')).toBeNull()
+    expect(overlay?.className).toContain('bg-warning/20')
+    expect(
+      document.querySelector('[data-drive-annotation-thread-id]')
+    ).toBeNull()
 
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('click', {
-        bubbles: true,
-        clientX: 96,
-        clientY: 128,
-      }))
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(
+        new MouseEvent('click', {
+          bubbles: true,
+          clientX: 96,
+          clientY: 128,
+        })
+      )
     })
 
-    expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('批注')
     expect(document.body.textContent).toContain('1')
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
     expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
@@ -1537,8 +2003,12 @@ describe('DriveMarkdownRenderer', () => {
     await act(async () => undefined)
 
     expect(markdownResizeObserver()).not.toBeNull()
-    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('top: 120px')
-    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('left: 80px')
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain(
+      'top: 120px'
+    )
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain(
+      'left: 80px'
+    )
 
     rangeRects = [domRect({ left: 160, top: 240, width: 90, height: 22 })]
     triggerMarkdownResize()
@@ -1549,21 +2019,32 @@ describe('DriveMarkdownRenderer', () => {
 
     await flushAnimationFrames()
 
-    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('top: 240px')
-    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('left: 160px')
-    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('width: 90px')
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain(
+      'top: 240px'
+    )
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain(
+      'left: 160px'
+    )
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain(
+      'width: 90px'
+    )
 
     scrollContainerScrollToMock.mockClear()
     await act(async () => {
-      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new MouseEvent('click', {
-        bubbles: true,
-        clientX: 180,
-        clientY: 250,
-      }))
+      document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(
+        new MouseEvent('click', {
+          bubbles: true,
+          clientX: 180,
+          clientY: 250,
+        })
+      )
     })
 
     expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
-    expect(windowAddEventListener).not.toHaveBeenCalledWith('resize', expect.any(Function))
+    expect(windowAddEventListener).not.toHaveBeenCalledWith(
+      'resize',
+      expect.any(Function)
+    )
 
     windowAddEventListener.mockRestore()
   })
@@ -1580,8 +2061,12 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(markdownBody().className).toContain('[&_ol]:pl-6')
     expect(markdownBody().className).toContain('[&_ul]:pl-6')
-    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain('top: 120px')
-    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
+    expect(threadOverlay('thread-1')?.getAttribute('style')).toContain(
+      'top: 120px'
+    )
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain(
+      'top: 80px'
+    )
 
     rangeRects = [domRect({ left: 136, top: 260, width: 120, height: 42 })]
     triggerMarkdownResize()
@@ -1591,11 +2076,16 @@ describe('DriveMarkdownRenderer', () => {
     expect(overlayStyle).toContain('top: 260px')
     expect(overlayStyle).toContain('left: 136px')
     expect(overlayStyle).toContain('height: 42px')
-    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 220px')
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain(
+      'top: 220px'
+    )
 
     await click(elementWithText('Comment body'))
 
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 236, behavior: 'smooth' })
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({
+      top: 236,
+      behavior: 'smooth',
+    })
   })
 
   it('moves and clips table comment overlays when a rerendered table scrolls horizontally', async () => {
@@ -1608,12 +2098,19 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    const initialTableScroller = document.querySelector<HTMLElement>('[data-drive-markdown-table-scroll="true"]')
-    if (!initialTableScroller) throw new Error('Missing markdown table scroller')
+    const initialTableScroller = document.querySelector<HTMLElement>(
+      '[data-drive-markdown-table-scroll="true"]'
+    )
+    if (!initialTableScroller)
+      throw new Error('Missing markdown table scroller')
     const tableScroller = initialTableScroller.cloneNode(true) as HTMLElement
     initialTableScroller.replaceWith(tableScroller)
-    vi.spyOn(markdownBody(), 'getBoundingClientRect').mockReturnValue(domRect({ left: 0, top: 0, width: 500, height: 500 }))
-    vi.spyOn(tableScroller, 'getBoundingClientRect').mockReturnValue(domRect({ left: 100, top: 80, width: 200, height: 80 }))
+    vi.spyOn(markdownBody(), 'getBoundingClientRect').mockReturnValue(
+      domRect({ left: 0, top: 0, width: 500, height: 500 })
+    )
+    vi.spyOn(tableScroller, 'getBoundingClientRect').mockReturnValue(
+      domRect({ left: 100, top: 80, width: 200, height: 80 })
+    )
 
     rangeRects = [domRect({ left: 50, top: 100, width: 100, height: 20 })]
     await act(async () => {
@@ -1631,7 +2128,9 @@ describe('DriveMarkdownRenderer', () => {
     await flushAnimationFrames()
 
     expect(threadOverlay('thread-1')).toBeNull()
-    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top:')
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain(
+      'top:'
+    )
   })
 
   it('does not walk the rendered text once per comment overlay', async () => {
@@ -1659,7 +2158,9 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    const layout = document.querySelector<HTMLElement>('[data-testid="markdown-layout"]')
+    const layout = document.querySelector<HTMLElement>(
+      '[data-testid="markdown-layout"]'
+    )
     const documentContent = markdownDocumentScroller()
     const commentShell = commentRailShell()
     const anchorLayer = commentAnchorLayer()
@@ -1669,7 +2170,9 @@ describe('DriveMarkdownRenderer', () => {
     expect(commentShell?.className).toContain('overflow-hidden')
     expect(anchorLayer?.parentElement?.className).toContain('overflow-hidden')
     expect(anchorLayer?.className).toContain('will-change-transform')
-    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain(
+      'top: 80px'
+    )
     expect(anchorLayer?.style.transform).toBe('translate3d(0, 0px, 0)')
 
     documentContent.scrollTop = 50
@@ -1679,7 +2182,9 @@ describe('DriveMarkdownRenderer', () => {
 
     expect(animationFrameCallbacks).toHaveLength(1)
     await flushAnimationFrames()
-    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain('top: 80px')
+    expect(threadCommentCard('thread-1')?.getAttribute('style')).toContain(
+      'top: 80px'
+    )
     expect(anchorLayer?.style.transform).toBe('translate3d(0, -50px, 0)')
   })
 
@@ -1688,11 +2193,17 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown()
     await act(async () => undefined)
     const scroller = markdownDocumentScroller()
-    const commentRegion = document.querySelector<HTMLElement>('[data-markdown-comments-scroll-region="true"]')
+    const commentRegion = document.querySelector<HTMLElement>(
+      '[data-markdown-comments-scroll-region="true"]'
+    )
     if (!commentRegion) throw new Error('Missing anchored comment region')
     scroller.scrollTop = 10
     animationFrameCallbacks = []
-    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 30 })
+    const wheel = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 30,
+    })
     Object.defineProperty(wheel, 'deltaY', { configurable: true, value: 30 })
 
     await act(async () => {
@@ -1703,7 +2214,9 @@ describe('DriveMarkdownRenderer', () => {
     expect(scroller.scrollTop).toBe(40)
     expect(animationFrameCallbacks).toHaveLength(1)
     await flushAnimationFrames()
-    expect(commentAnchorLayer()?.style.transform).toBe('translate3d(0, -40px, 0)')
+    expect(commentAnchorLayer()?.style.transform).toBe(
+      'translate3d(0, -40px, 0)'
+    )
   })
 
   it('adds document bottom compensation when stacked comments extend beyond the markdown content', async () => {
@@ -1712,14 +2225,23 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    const compensation = document.querySelector<HTMLElement>('[data-markdown-comment-bottom-compensation="true"]')
-    expect(Number.parseFloat(compensation?.style.height ?? '0')).toBeGreaterThan(0)
+    const compensation = document.querySelector<HTMLElement>(
+      '[data-markdown-comment-bottom-compensation="true"]'
+    )
+    expect(
+      Number.parseFloat(compensation?.style.height ?? '0')
+    ).toBeGreaterThan(0)
   })
 
   it('renders the focused thread overlay with a stronger active highlight', async () => {
     annotationsMock.threads = [
       thread({ id: 'thread-1', body: 'First comment' }),
-      thread({ id: 'thread-2', body: 'Second comment', range: { start: 6, end: 8 }, quote: '内容' }),
+      thread({
+        id: 'thread-2',
+        body: 'Second comment',
+        range: { start: 6, end: 8 },
+        quote: '内容',
+      }),
     ]
     renderMarkdown()
 
@@ -1731,8 +2253,8 @@ describe('DriveMarkdownRenderer', () => {
     await click(elementWithText('First comment'))
 
     expect(threadOverlay('thread-1')?.className).toContain('ring-2')
-    expect(threadOverlay('thread-1')?.className).toContain('bg-amber-300/80')
-    expect(threadOverlay('thread-1')?.className).toContain('ring-amber-500/90')
+    expect(threadOverlay('thread-1')?.className).toContain('bg-accent/20')
+    expect(threadOverlay('thread-1')?.className).toContain('ring-accent')
     expect(threadOverlay('thread-2')?.className).not.toContain('ring-1')
   })
 
@@ -1755,7 +2277,10 @@ describe('DriveMarkdownRenderer', () => {
     await click(elementWithText('Comment body'))
 
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
-    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({ top: 34, behavior: 'smooth' })
+    expect(scrollContainerScrollToMock).toHaveBeenCalledWith({
+      top: 34,
+      behavior: 'smooth',
+    })
   })
 
   it('filters narrow empty overlay rectangles from cross-structure selections', async () => {
@@ -1770,7 +2295,11 @@ describe('DriveMarkdownRenderer', () => {
       dispatchPointerUpOnMarkdownBody()
     })
 
-    expect(document.querySelectorAll('[data-drive-annotation-overlay-kind="pending"]')).toHaveLength(1)
+    expect(
+      document.querySelectorAll(
+        '[data-drive-annotation-overlay-kind="pending"]'
+      )
+    ).toHaveLength(1)
   })
 
   it('drops broad container overlay rectangles when precise text rectangles overlap them', async () => {
@@ -1785,60 +2314,107 @@ describe('DriveMarkdownRenderer', () => {
       dispatchPointerUpOnMarkdownBody()
     })
 
-    const overlays = document.querySelectorAll<HTMLElement>('[data-drive-annotation-overlay-kind="pending"]')
+    const overlays = document.querySelectorAll<HTMLElement>(
+      '[data-drive-annotation-overlay-kind="pending"]'
+    )
     expect(overlays).toHaveLength(1)
     expect(overlays[0]?.style.width).toBe('120px')
   })
 
   it('sorts attached comments by current rendered position', async () => {
     annotationsMock.threads = [
-      thread({ id: 'thread-2', body: 'Later comment', range: { start: 6, end: 8 }, quote: '内容', createdAt: '2026-06-21T00:00:00.000Z' }),
-      thread({ id: 'thread-1', body: 'Earlier comment', range: { start: 3, end: 5 }, quote: '重点', createdAt: '2026-06-21T00:01:00.000Z' }),
+      thread({
+        id: 'thread-2',
+        body: 'Later comment',
+        range: { start: 6, end: 8 },
+        quote: '内容',
+        createdAt: '2026-06-21T00:00:00.000Z',
+      }),
+      thread({
+        id: 'thread-1',
+        body: 'Earlier comment',
+        range: { start: 3, end: 5 },
+        quote: '重点',
+        createdAt: '2026-06-21T00:01:00.000Z',
+      }),
     ]
     renderMarkdown()
 
     await act(async () => undefined)
 
     const text = document.body.textContent ?? ''
-    expect(text.indexOf('Earlier comment')).toBeLessThan(text.indexOf('Later comment'))
+    expect(text.indexOf('Earlier comment')).toBeLessThan(
+      text.indexOf('Later comment')
+    )
   })
 
   it('shows orphaned anchor status in the comment rail after resolving current markdown', async () => {
     annotationsMock.threads = [
-      thread({ body: 'Lost comment', range: { start: 0, end: 2 }, quote: '缺失' }),
+      thread({
+        body: 'Lost comment',
+        range: { start: 0, end: 2 },
+        quote: '缺失',
+      }),
     ]
     renderMarkdown()
 
     await act(async () => undefined)
     await click(buttonByLabel('查看 1 条未定位评论'))
 
-    expect(elementWithText('Lost comment').textContent).toContain('原文已修改或删除')
+    expect(elementWithText('Lost comment').textContent).toContain(
+      '原文已修改或删除'
+    )
     expect(elementWithText('Lost comment').textContent).toContain('缺失')
   })
-
 })
 
 it('preserves an explicitly selected discussion when a slow notification refresh finishes', async () => {
-  const oldUrl = window.location.pathname + window.location.search + window.location.hash
-  history.replaceState(null, '', '/drive/items/item-1#discussion=annotation&threadId=thread-1&commentId=comment-1')
+  const oldUrl =
+    window.location.pathname + window.location.search + window.location.hash
+  history.replaceState(
+    null,
+    '',
+    '/drive/items/item-1#discussion=annotation&threadId=thread-1&commentId=comment-1'
+  )
   try {
     annotationsMock.loading = true
-    annotationsMock.threads = [thread({ id: 'thread-2', body: 'Selected discussion' })]
+    annotationsMock.threads = [
+      thread({ id: 'thread-2', body: 'Selected discussion' }),
+    ]
     const view = renderMarkdown({ discussion: true })
     await act(async () => undefined)
     await click(elementWithText('Selected discussion'))
     annotationsMock.loading = false
-    annotationsMock.threads = [thread(), thread({ id: 'thread-2', body: 'Selected discussion' })]
+    annotationsMock.threads = [
+      thread(),
+      thread({ id: 'thread-2', body: 'Selected discussion' }),
+    ]
     view.rerender({})
-    await act(async () => { await new Promise((done) => setTimeout(done, 40)) })
-    expect(document.querySelector('[data-markdown-comment-thread-id="thread-2"] [aria-current=true]')).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comment-thread-id="thread-1"] [aria-current=true]')).toBeNull()
-  } finally { history.replaceState(null, '', oldUrl) }
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 40))
+    })
+    expect(
+      document.querySelector(
+        '[data-markdown-comment-thread-id="thread-2"] [aria-current=true]'
+      )
+    ).not.toBeNull()
+    expect(
+      document.querySelector(
+        '[data-markdown-comment-thread-id="thread-1"] [aria-current=true]'
+      )
+    ).toBeNull()
+  } finally {
+    history.replaceState(null, '', oldUrl)
+  }
 })
 
 function DiscussionProvider({ children }: { children: ReactNode }) {
   const pending = useDriveDiscussionLocation('item-1')
-  return <DriveDiscussionLocationContext value={pending}>{children}</DriveDiscussionLocationContext>
+  return (
+    <DriveDiscussionLocationContext value={pending}>
+      {children}
+    </DriveDiscussionLocationContext>
+  )
 }
 
 function renderMarkdown({
@@ -1853,22 +2429,36 @@ function renderMarkdown({
   readonly currentItem?: ReturnType<typeof current>
   readonly previewData?: ReturnType<typeof preview>
   readonly edit?: ComponentProps<typeof DriveMarkdownRenderer>['edit']
-  readonly annotationContext?: ComponentProps<typeof DriveMarkdownRenderer>['annotationContext']
+  readonly annotationContext?: ComponentProps<
+    typeof DriveMarkdownRenderer
+  >['annotationContext']
   readonly editContext?: DriveRendererEditContext
 } = {}) {
   host = document.createElement('div')
   host.style.overflow = 'auto'
-  Object.defineProperty(host, 'clientHeight', { configurable: true, value: 100 })
+  Object.defineProperty(host, 'clientHeight', {
+    configurable: true,
+    value: 100,
+  })
   Object.defineProperty(host, 'scrollTo', {
     configurable: true,
-    value: vi.fn(function scrollTo(this: HTMLDivElement, options?: ScrollToOptions) {
+    value: vi.fn(function scrollTo(
+      this: HTMLDivElement,
+      options?: ScrollToOptions
+    ) {
       scrollContainerScrollToMock(options)
       if (typeof options?.top === 'number') this.scrollTop = options.top
     }),
   })
   document.body.append(host)
   root = createRoot(host)
-  const initialInput = { currentItem, previewData, edit, annotationContext, editContext }
+  const initialInput = {
+    currentItem,
+    previewData,
+    edit,
+    annotationContext,
+    editContext,
+  }
   const render = (input: typeof initialInput) => {
     const element = (
       <DriveRendererToolbarProvider>
@@ -1884,7 +2474,9 @@ function renderMarkdown({
         </FilePreviewLayout>
       </DriveRendererToolbarProvider>
     )
-    root?.render(discussion ? <DiscussionProvider>{element}</DiscussionProvider> : element)
+    root?.render(
+      discussion ? <DiscussionProvider>{element}</DiscussionProvider> : element
+    )
   }
   act(() => {
     render(initialInput)
@@ -1901,13 +2493,21 @@ function renderMarkdown({
 }
 
 function configureMarkdownDocumentScroller() {
-  const scroller = document.querySelector<HTMLElement>('[data-testid="markdown-document-scroll"]')
+  const scroller = document.querySelector<HTMLElement>(
+    '[data-testid="markdown-document-scroll"]'
+  )
   if (!scroller) return
   scroller.style.overflow = 'auto'
-  Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 100 })
+  Object.defineProperty(scroller, 'clientHeight', {
+    configurable: true,
+    value: 100,
+  })
   Object.defineProperty(scroller, 'scrollTo', {
     configurable: true,
-    value: vi.fn(function scrollTo(this: HTMLElement, options?: ScrollToOptions) {
+    value: vi.fn(function scrollTo(
+      this: HTMLElement,
+      options?: ScrollToOptions
+    ) {
       scrollContainerScrollToMock(options)
       if (typeof options?.top === 'number') this.scrollTop = options.top
     }),
@@ -1916,67 +2516,79 @@ function configureMarkdownDocumentScroller() {
 
 function mockCommentComposerRects() {
   const nativeRect = HTMLElement.prototype.getBoundingClientRect
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-    if (this.hasAttribute('data-markdown-comment-composer-popover')) {
-      return domRect({ width: 288, height: 148 })
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function () {
+      if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+        return domRect({ width: 288, height: 148 })
+      }
+      if (this.getAttribute('data-testid') === 'markdown-document-scroll') {
+        return domRect({ left: 0, top: 0, width: 800, height: 600 })
+      }
+      return nativeRect.call(this)
     }
-    if (this.getAttribute('data-testid') === 'markdown-document-scroll') {
-      return domRect({ left: 0, top: 0, width: 800, height: 600 })
-    }
-    return nativeRect.call(this)
-  })
+  )
 }
 
 function mockImageCommentRects() {
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-    if (this.hasAttribute('data-markdown-comment-composer-popover')) {
-      return domRect({ width: 288, height: 148 })
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function () {
+      if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+        return domRect({ width: 288, height: 148 })
+      }
+      if (this.hasAttribute('data-inline-toolbar')) {
+        return domRect({ width: 104, height: 32 })
+      }
+      if (this.hasAttribute('data-drive-markdown-image-id')) {
+        return domRect({ left: 100, top: 120, width: 240, height: 180 })
+      }
+      return domRect({ left: 0, top: 0, width: 800, height: 600 })
     }
-    if (this.hasAttribute('data-inline-toolbar')) {
-      return domRect({ width: 104, height: 32 })
-    }
-    if (this.hasAttribute('data-drive-markdown-image-id')) {
-      return domRect({ left: 100, top: 120, width: 240, height: 180 })
-    }
-    return domRect({ left: 0, top: 0, width: 800, height: 600 })
-  })
+  )
 }
 
 function mockAdjacentImageCommentRects() {
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-    if (this.hasAttribute('data-markdown-comment-composer-popover')) {
-      return domRect({ width: 288, height: 148 })
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function () {
+      if (this.hasAttribute('data-markdown-comment-composer-popover')) {
+        return domRect({ width: 288, height: 148 })
+      }
+      if (this.hasAttribute('data-inline-toolbar')) {
+        return domRect({ width: 104, height: 32 })
+      }
+      if (this.dataset.driveMarkdownImageId === 'mdimg_1') {
+        return domRect({ left: 100, top: 120, width: 240, height: 180 })
+      }
+      if (this.dataset.driveMarkdownImageId === 'mdimg_2') {
+        return domRect({ left: 100, top: 300, width: 240, height: 180 })
+      }
+      return domRect({ left: 0, top: 0, width: 800, height: 600 })
     }
-    if (this.hasAttribute('data-inline-toolbar')) {
-      return domRect({ width: 104, height: 32 })
-    }
-    if (this.dataset.driveMarkdownImageId === 'mdimg_1') {
-      return domRect({ left: 100, top: 120, width: 240, height: 180 })
-    }
-    if (this.dataset.driveMarkdownImageId === 'mdimg_2') {
-      return domRect({ left: 100, top: 300, width: 240, height: 180 })
-    }
-    return domRect({ left: 0, top: 0, width: 800, height: 600 })
-  })
+  )
 }
 
 function mockInlineToolbarRect() {
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
-    return this.hasAttribute('data-inline-toolbar')
-      ? domRect({ width: 104, height: 32 })
-      : domRect({ left: 0, top: 0, width: 0, height: 0 })
-  })
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function () {
+      return this.hasAttribute('data-inline-toolbar')
+        ? domRect({ width: 104, height: 32 })
+        : domRect({ left: 0, top: 0, width: 0, height: 0 })
+    }
+  )
 }
 
 function dispatchPointerUpOnMarkdownBody() {
-  document.querySelector('[data-testid="markdown-body"]')?.dispatchEvent(new Event('pointerup', { bubbles: true }))
+  document
+    .querySelector('[data-testid="markdown-body"]')
+    ?.dispatchEvent(new Event('pointerup', { bubbles: true }))
 }
 
 function ToolbarHost() {
   const toolbar = useDriveRendererToolbar()
   return (
     <div data-testid='toolbar'>
-      {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+      {toolbar.items.map((item) => (
+        <DrivePreviewToolbarItemView key={item.id} item={item} />
+      ))}
     </div>
   )
 }
@@ -1991,7 +2603,10 @@ function editable(overrides: Partial<DriveBrowserEditDto> = {}) {
   }
 }
 
-function current({ name = 'notes.md', mimeType = 'text/markdown' }: { readonly name?: string; readonly mimeType?: string | null } = {}) {
+function current({
+  name = 'notes.md',
+  mimeType = 'text/markdown',
+}: { readonly name?: string; readonly mimeType?: string | null } = {}) {
   return {
     id: 'item-1',
     name,
@@ -2015,7 +2630,10 @@ function preview({
   readonly outline?: DriveMarkdownOutlineItemDto[]
   readonly html?: string
   readonly text?: string
-  readonly relativeImages?: readonly { readonly src: string; readonly resolvedUrl: string | null }[]
+  readonly relativeImages?: readonly {
+    readonly src: string
+    readonly resolvedUrl: string | null
+  }[]
   readonly markdownProjection?: DriveMarkdownProjectionDto
 } = {}) {
   return {
@@ -2067,19 +2685,21 @@ function thread({
     },
     anchorStatus: 'attached' as const,
     author: { id: 'user-1', email: 'user@example.com', handle: null },
-    comments: [{
-      id: `comment-${id}`,
-      threadId: id,
-      parentCommentId: null,
-      body,
-      author: { id: 'user-1', email: 'user@example.com', handle: null },
-      createdAt: '2026-06-21T00:00:00.000Z',
-      updatedAt: '2026-06-21T00:00:00.000Z',
-      editedAt: null,
-      deletedAt: null,
-      deleted: false,
-      permissions: { canEdit: true, canDelete: true },
-    }],
+    comments: [
+      {
+        id: `comment-${id}`,
+        threadId: id,
+        parentCommentId: null,
+        body,
+        author: { id: 'user-1', email: 'user@example.com', handle: null },
+        createdAt: '2026-06-21T00:00:00.000Z',
+        updatedAt: '2026-06-21T00:00:00.000Z',
+        editedAt: null,
+        deletedAt: null,
+        deleted: false,
+        permissions: { canEdit: true, canDelete: true },
+      },
+    ],
     createdAt,
     updatedAt: createdAt,
     status: 'open',
@@ -2092,34 +2712,38 @@ function imageProjection(): DriveMarkdownProjectionDto {
     schemaVersion: 1,
     parserVersion: 'test',
     sourceSha256: 'hash',
-    blocks: [{
-      blockId: 'block-image',
-      type: 'paragraph',
-      parentBlockId: null,
-      headingPath: [],
-      sourceStart: 0,
-      sourceEnd: 24,
-      renderedStart: 0,
-      renderedEnd: 3,
-      textFingerprint: 'hash',
-    }],
+    blocks: [
+      {
+        blockId: 'block-image',
+        type: 'paragraph',
+        parentBlockId: null,
+        headingPath: [],
+        sourceStart: 0,
+        sourceEnd: 24,
+        renderedStart: 0,
+        renderedEnd: 3,
+        textFingerprint: 'hash',
+      },
+    ],
     segments: [],
     imageAnchorsVersion: 1,
-    images: [{
-      imageId: 'mdimg_1',
-      segmentId: 'segment-image',
-      blockId: 'block-image',
-      imageIndex: 0,
-      documentIndex: 0,
-      sourceStart: 0,
-      sourceEnd: 24,
-      renderedStart: 0,
-      renderedEnd: 3,
-      source: '/files/asset_1',
-      resourceKey: 'file:asset_1',
-      alt: '示意图',
-      title: null,
-    }],
+    images: [
+      {
+        imageId: 'mdimg_1',
+        segmentId: 'segment-image',
+        blockId: 'block-image',
+        imageIndex: 0,
+        documentIndex: 0,
+        sourceStart: 0,
+        sourceEnd: 24,
+        renderedStart: 0,
+        renderedEnd: 3,
+        source: '/files/asset_1',
+        resourceKey: 'file:asset_1',
+        alt: '示意图',
+        title: null,
+      },
+    ],
   }
 }
 
@@ -2145,7 +2769,10 @@ function adjacentImageProjection(): DriveMarkdownProjectionDto {
   }
 }
 
-function imageThread(id = 'thread-image', createdAt = '2026-06-21T00:00:00.000Z'): DriveAnnotationThreadDto {
+function imageThread(
+  id = 'thread-image',
+  createdAt = '2026-06-21T00:00:00.000Z'
+): DriveAnnotationThreadDto {
   return {
     ...thread({ id, createdAt }),
     targetKind: 'image',
@@ -2157,7 +2784,12 @@ function imageThread(id = 'thread-image', createdAt = '2026-06-21T00:00:00.000Z'
       resourceKey: 'file:asset_1',
       source: { startOffset: 0, endOffset: 24 },
       snapshot: { src: '/files/asset_1', alt: '示意图', title: null },
-      blockHint: { blockId: 'block-image', blockIndex: 0, imageIndex: 0, headingPath: [] },
+      blockHint: {
+        blockId: 'block-image',
+        blockIndex: 0,
+        imageIndex: 0,
+        headingPath: [],
+      },
     },
     anchor: {
       schemaVersion: 2,
@@ -2196,7 +2828,6 @@ function createAnnotationsMock() {
   }
 }
 
-
 async function click(element: HTMLElement) {
   await act(async () => {
     element.click()
@@ -2204,44 +2835,50 @@ async function click(element: HTMLElement) {
 }
 
 async function openDropdown(element: HTMLElement) {
-  await act(async () => {
-    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
-  })
+  await click(element)
 }
 
 function buttonWithText(text: string) {
-  const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.trim() === text)
+  const button = Array.from(document.querySelectorAll('button')).find(
+    (item) => item.textContent?.trim() === text
+  )
   if (!button) throw new Error(`Missing button ${text}`)
   return button as HTMLButtonElement
 }
 
 function radioMenuItemWithText(text: string) {
-  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemradio"]'))
-    .find((element) => element.textContent?.trim() === text)
+  const item = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+  ).find((element) => element.textContent?.trim() === text)
   if (!item) throw new Error(`Missing radio menu item ${text}`)
   return item
 }
 
 function queryButtonWithText(text: string) {
-  const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.trim() === text)
+  const button = Array.from(document.querySelectorAll('button')).find(
+    (item) => item.textContent?.trim() === text
+  )
   return button instanceof HTMLButtonElement ? button : null
 }
 
 function buttonByLabel(label: string) {
   const button = document.querySelector(`button[aria-label="${label}"]`)
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button ${label}`)
+  if (!(button instanceof HTMLButtonElement))
+    throw new Error(`Missing button ${label}`)
   return button
 }
 
 function dialogCloseButton() {
-  const button = document.querySelector('[data-slot="dialog-close"]')
-  if (!(button instanceof HTMLButtonElement)) throw new Error('Missing dialog close button')
+  const button = document.querySelector('[data-track="image-lightbox-close"]')
+  if (!(button instanceof HTMLButtonElement))
+    throw new Error('Missing dialog close button')
   return button
 }
 
 function toolbarButtonTexts() {
-  return Array.from(document.querySelectorAll<HTMLElement>('[data-testid="toolbar"] button'))
-    .map((button) => button.textContent?.trim() ?? '')
+  return Array.from(
+    document.querySelectorAll<HTMLElement>('[data-testid="toolbar"] button')
+  ).map((button) => button.textContent?.trim() ?? '')
 }
 
 function selectionAction() {
@@ -2253,29 +2890,46 @@ function elementWithText(text: string) {
     .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
     .find((item) => item.textContent?.includes(text))
   if (!element) throw new Error(`Missing element ${text}`)
-  const commentThread = element.closest('[data-markdown-comment-thread-id]')?.querySelector('section')
+  const commentThread = element
+    .closest('[data-markdown-comment-thread-id]')
+    ?.querySelector('section')
   return (commentThread ?? element) as HTMLElement
 }
 
 function commentRailShell() {
-  return Array.from(document.querySelectorAll('aside'))
-    .find((item) => item.textContent?.includes('Comment body')) as HTMLElement | undefined
+  return Array.from(document.querySelectorAll('aside')).find((item) =>
+    item.textContent?.includes('Comment body')
+  ) as HTMLElement | undefined
 }
 
 function commentRailPanelGroup() {
-  return commentRailShell()?.closest('[data-slot="resizable-panel"]') as HTMLElement | null
+  return commentRailShell()?.closest(
+    '[data-markdown-resizable-panel]'
+  ) as HTMLElement | null
 }
 
 function commentRailPanel() {
-  return document.querySelector<HTMLElement>('[data-markdown-comments-rail="true"]') ?? undefined
+  return (
+    document.querySelector<HTMLElement>(
+      '[data-markdown-comments-rail="true"]'
+    ) ?? undefined
+  )
 }
 
 function commentRailTitle() {
-  return document.querySelector<HTMLElement>('[data-markdown-comments-rail="true"] > div') ?? undefined
+  return (
+    document.querySelector<HTMLElement>(
+      '[data-markdown-comments-rail="true"] > div'
+    ) ?? undefined
+  )
 }
 
 function commentRailScrollRegion() {
-  return document.querySelector<HTMLElement>('[data-markdown-comments-scroll-region="true"]') ?? undefined
+  return (
+    document.querySelector<HTMLElement>(
+      '[data-markdown-comments-scroll-region="true"]'
+    ) ?? undefined
+  )
 }
 
 function textarea() {
@@ -2289,29 +2943,41 @@ function pendingMarker() {
 }
 
 function pendingOverlay() {
-  return document.querySelector('[data-drive-annotation-overlay-kind="pending"]')
+  return document.querySelector(
+    '[data-drive-annotation-overlay-kind="pending"]'
+  )
 }
 
 function threadOverlay(threadId: string) {
-  return document.querySelector(`[data-drive-annotation-overlay-thread-id="${threadId}"]`)
+  return document.querySelector(
+    `[data-drive-annotation-overlay-thread-id="${threadId}"]`
+  )
 }
 
 function threadCommentCard(threadId: string) {
-  return document.querySelector<HTMLElement>(`[data-markdown-comment-thread-id="${threadId}"]`)
+  return document.querySelector<HTMLElement>(
+    `[data-markdown-comment-thread-id="${threadId}"]`
+  )
 }
 
 function commentAnchorLayer() {
-  return document.querySelector<HTMLElement>('[data-markdown-comments-anchored-layer="true"]')
+  return document.querySelector<HTMLElement>(
+    '[data-markdown-comments-anchored-layer="true"]'
+  )
 }
 
 function markdownDocumentScroller() {
-  const element = document.querySelector<HTMLElement>('[data-testid="markdown-document-scroll"]')
+  const element = document.querySelector<HTMLElement>(
+    '[data-testid="markdown-document-scroll"]'
+  )
   if (!element) throw new Error('Missing markdown document scroller')
   return element
 }
 
 function markdownBody() {
-  const element = document.querySelector<HTMLElement>('[data-testid="markdown-body"]')
+  const element = document.querySelector<HTMLElement>(
+    '[data-testid="markdown-body"]'
+  )
   if (!element) throw new Error('Missing markdown body')
   return element
 }
@@ -2323,29 +2989,41 @@ function triggerMarkdownResize() {
 }
 
 function triggerAllResizeObservers() {
-  for (const observer of resizeObservers) observer.callback([], observer as unknown as ResizeObserver)
+  for (const observer of resizeObservers)
+    observer.callback([], observer as unknown as ResizeObserver)
 }
 
 async function setPreviewWidth(width: number) {
   const observer = previewLayoutResizeObserver()
   if (!observer) throw new Error('Missing preview layout ResizeObserver')
   await act(async () => {
-    observer.callback([
-      {
-        contentRect: domRect({ left: 0, top: 0, width, height: 844 }),
-      } as ResizeObserverEntry,
-    ], observer as unknown as ResizeObserver)
+    observer.callback(
+      [
+        {
+          contentRect: domRect({ left: 0, top: 0, width, height: 844 }),
+        } as ResizeObserverEntry,
+      ],
+      observer as unknown as ResizeObserver
+    )
   })
 }
 
 function markdownResizeObserver() {
   const body = document.querySelector('[data-testid="markdown-body"]')
-  return resizeObservers.find((observer) => body ? observer.observedElements.includes(body) : false) ?? null
+  return (
+    resizeObservers.find((observer) =>
+      body ? observer.observedElements.includes(body) : false
+    ) ?? null
+  )
 }
 
 function previewLayoutResizeObserver() {
   const layout = document.querySelector('[data-file-preview-layout]')
-  return resizeObservers.find((observer) => layout ? observer.observedElements.includes(layout) : false) ?? null
+  return (
+    resizeObservers.find((observer) =>
+      layout ? observer.observedElements.includes(layout) : false
+    ) ?? null
+  )
 }
 
 async function flushAnimationFrames() {
@@ -2415,7 +3093,10 @@ type TestResizeObserver = {
 
 async function inputValue(element: HTMLTextAreaElement, value: string) {
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      'value'
+    )?.set
     setter?.call(element, value)
     element.dispatchEvent(new Event('input', { bubbles: true }))
   })
@@ -2423,6 +3104,8 @@ async function inputValue(element: HTMLTextAreaElement, value: string) {
 
 async function keyDown(element: HTMLElement, init: KeyboardEventInit) {
   await act(async () => {
-    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+    element.dispatchEvent(
+      new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+    )
   })
 }

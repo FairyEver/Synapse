@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@heroui/react"
 import { useAccount } from "@/game-center/runtime/account"
 export function useGameQuery<T>(
   read: () => Promise<T>,
@@ -23,6 +23,7 @@ export function useGameQuery<T>(
     message: string
   } | null>(null)
   const [loading, setLoading] = useState(false)
+  const errorToast = useRef<string | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
   useEffect(() => {
     let stopped = false,
@@ -48,7 +49,7 @@ export function useGameQuery<T>(
         if (!stopped) {
           const message = error instanceof Error ? error.message : "游戏数据读取失败"
           setFailure({ key, identity, message })
-          toast.error(message, { id: `game:${key}` })
+          if (!errorToast.current || !toast.update(errorToast.current, message, { variant: "danger", timeout: 4000 })) errorToast.current = toast.danger(message)
         }
       } finally {
         busy = false
@@ -132,7 +133,7 @@ export function useGameMutation() {
       const result = await work()
       return current() ? result : null
     } catch (error) {
-      if (current()) toast.error(error instanceof Error ? error.message : "游戏操作失败")
+      if (current()) toast.danger(error instanceof Error ? error.message : "游戏操作失败")
       return null
     } finally {
       if (pending.current === ticket) {

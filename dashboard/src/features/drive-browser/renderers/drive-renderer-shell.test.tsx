@@ -5,19 +5,33 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
-import { DrivePreviewHeader, DrivePreviewToolbarItemView } from './drive-preview-header'
-import { DriveRendererContent, DriveRendererShell, refreshBeforeDriveRendererMount } from './drive-renderer-shell'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+import {
+  DrivePreviewHeader,
+  DrivePreviewToolbarItemView,
+} from './drive-preview-header'
+import {
+  DriveRendererContent,
+  DriveRendererShell,
+  refreshBeforeDriveRendererMount,
+} from './drive-renderer-shell'
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }
+).ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
 }
 
-vi.mock('../drive-file-versions-dialog', () => ({ DriveFileVersionsDialog: ({ itemId }: { itemId: string }) => <div data-testid='versions-dialog'>{itemId}</div> }))
+vi.mock('../drive-file-versions-dialog', () => ({
+  DriveFileVersionsDialog: ({ itemId }: { itemId: string }) => (
+    <div data-testid='versions-dialog'>{itemId}</div>
+  ),
+}))
 
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
@@ -29,11 +43,12 @@ vi.mock('@monaco-editor/react', async () => {
     }: {
       readonly value?: string
       readonly options?: { readonly readOnly?: boolean }
-    }) => React.createElement('textarea', {
-      'data-monaco-editor': 'true',
-      readOnly: options?.readOnly,
-      value: value ?? '',
-    }),
+    }) =>
+      React.createElement('textarea', {
+        'data-monaco-editor': 'true',
+        readOnly: options?.readOnly,
+        value: value ?? '',
+      }),
   }
 })
 
@@ -43,26 +58,39 @@ vi.mock('@mdxeditor/editor', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
 
   return {
-    MDXEditor: React.forwardRef(({
-      markdown,
-      readOnly,
-    }: {
-      readonly markdown: string
-      readonly readOnly?: boolean
-    }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
-      React.useImperativeHandle(ref, () => ({
-        setMarkdown: () => undefined,
-      }), [])
-      return React.createElement('textarea', {
-        'data-mdxeditor': 'true',
-        readOnly,
-        value: markdown,
-      })
-    }),
+    MDXEditor: React.forwardRef(
+      (
+        {
+          markdown,
+          readOnly,
+        }: {
+          readonly markdown: string
+          readonly readOnly?: boolean
+        },
+        ref: React.Ref<{ setMarkdown: (value: string) => void }>
+      ) => {
+        React.useImperativeHandle(
+          ref,
+          () => ({
+            setMarkdown: () => undefined,
+          }),
+          []
+        )
+        return React.createElement('textarea', {
+          'data-mdxeditor': 'true',
+          readOnly,
+          value: markdown,
+        })
+      }
+    ),
     BlockTypeSelect: () => null,
     BoldItalicUnderlineToggles: () => null,
     CreateLink: () => null,
-    DiffSourceToggleWrapper: ({ children }: { readonly children: React.ReactNode }) => children,
+    DiffSourceToggleWrapper: ({
+      children,
+    }: {
+      readonly children: React.ReactNode
+    }) => children,
     InsertCodeBlock: () => null,
     InsertTable: () => null,
     InsertThematicBreak: () => null,
@@ -109,14 +137,20 @@ const annotationsMock = vi.hoisted(() => ({
 }))
 
 vi.mock('../use-drive-messages', () => ({
-  useDriveMessages: () => ({ messages: [], loading: false, error: null, canPost: false }),
+  useDriveMessages: () => ({
+    messages: [],
+    loading: false,
+    error: null,
+    canPost: false,
+  }),
 }))
 
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: () => annotationsMock,
 }))
 
-vi.mock('sonner', () => ({
+vi.mock('@heroui/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@heroui/react')>()),
   toast: vi.fn(),
 }))
 
@@ -131,17 +165,27 @@ afterEach(() => {
   host = null
   document.body.innerHTML = ''
   Reflect.deleteProperty(navigator, 'clipboard')
-  Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: originalMatchMedia })
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: originalMatchMedia,
+  })
   window.history.replaceState(null, '', '/')
   vi.clearAllMocks()
 })
 
 describe('DriveRendererShell', () => {
   it('opens owner history from the new-version link and consumes only its query parameter', async () => {
-    window.history.replaceState(null, '', '/drive/items/file?versions=1&surface=standalone#keep')
+    window.history.replaceState(
+      null,
+      '',
+      '/drive/items/file?versions=1&surface=standalone#keep'
+    )
     renderShell({ snapshot: baseSnapshot(), rendererId: 'code' })
     await act(async () => undefined)
-    expect(document.querySelector('[data-testid="versions-dialog"]')?.textContent).toBe(baseSnapshot().current.id)
+    expect(
+      document.querySelector('[data-testid="versions-dialog"]')?.textContent
+    ).toBe(baseSnapshot().current.id)
     expect(window.location.search).toBe('?surface=standalone')
     expect(window.location.hash).toBe('#keep')
   })
@@ -153,7 +197,9 @@ describe('DriveRendererShell', () => {
       window.history.pushState(null, '', '/drive/items/file?versions=1')
       window.dispatchEvent(new PopStateEvent('popstate'))
     })
-    expect(document.querySelector('[data-testid="versions-dialog"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-testid="versions-dialog"]')
+    ).not.toBeNull()
     expect(window.location.search).toBe('')
   })
 
@@ -170,7 +216,10 @@ describe('DriveRendererShell', () => {
 
   it('does not open owner history for a shared file', async () => {
     window.history.replaceState(null, '', '/share/share-1?versions=1')
-    renderShell({ snapshot: baseSnapshot({ context: 'share' }), rendererId: 'code' })
+    renderShell({
+      snapshot: baseSnapshot({ context: 'share' }),
+      rendererId: 'code',
+    })
     await act(async () => undefined)
     expect(document.querySelector('[data-testid="versions-dialog"]')).toBeNull()
   })
@@ -187,9 +236,14 @@ describe('DriveRendererShell', () => {
       rendererId: 'code',
     })
 
-    const header = document.querySelector<HTMLElement>('[data-file-preview-header="regular"]')
-    const fileName = document.querySelector<HTMLElement>('[data-drive-preview-file-name="true"]')
-    if (!header || !fileName) throw new Error('regular preview header not found')
+    const header = document.querySelector<HTMLElement>(
+      '[data-file-preview-header="regular"]'
+    )
+    const fileName = document.querySelector<HTMLElement>(
+      '[data-drive-preview-file-name="true"]'
+    )
+    if (!header || !fileName)
+      throw new Error('regular preview header not found')
 
     expect(header.className).toContain('p-2')
     expect(header.className).not.toContain('flex-col')
@@ -200,11 +254,95 @@ describe('DriveRendererShell', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
 
-    const metadata = document.querySelector<HTMLElement>('[data-drive-preview-file-metadata="true"]')
+    const metadata = document.querySelector<HTMLElement>(
+      '[data-drive-preview-file-metadata="true"]'
+    )
     expect(metadata?.textContent).toContain('18 B')
     expect(metadata?.textContent).toContain('文本')
-    expect(metadata?.querySelector('time')?.dateTime).toBe('2026-06-09T00:00:00.000Z')
+    expect(metadata?.querySelector('time')?.dateTime).toBe(
+      '2026-06-09T00:00:00.000Z'
+    )
   })
+
+  it.each(['regular', 'compact'] as const)(
+    'navigates %s document actions with arrow keys and preserves independent toggles',
+    async (mode) => {
+      vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+        ...originalMatchMedia(query),
+        matches: mode === 'compact',
+      }))
+      const onOutlineChange = vi.fn()
+      const onCommentsChange = vi.fn()
+      const onMessages = vi.fn()
+      host = document.createElement('div')
+      document.body.append(host)
+      root = createRoot(host)
+      act(() => {
+        root?.render(
+          <FilePreviewLayout>
+            <DrivePreviewHeader
+              snapshot={markdownSnapshot()}
+              rendererItems={[
+                {
+                  kind: 'toggle', id: 'outline', label: '目录', pressed: true,
+                  group: '文档导航',
+                  compactPlacement: 'primary', onPressedChange: onOutlineChange,
+                },
+                {
+                  kind: 'button', id: 'disabled', label: '保存', disabled: true,
+                  group: '文档导航',
+                  compactPlacement: 'primary',
+                },
+                {
+                  kind: 'toggle', id: 'comments', label: '批注 3', pressed: true,
+                  group: '文档导航',
+                  compactPlacement: 'primary', onPressedChange: onCommentsChange,
+                },
+                {
+                  kind: 'button', id: 'messages', label: '留言 0',
+                  group: '文档导航',
+                  compactPlacement: 'primary', onClick: onMessages,
+                },
+              ]}
+              rendererOptions={[]}
+              selectedRendererId='markdown'
+              onRendererChange={vi.fn()}
+              onOpenVersions={vi.fn()}
+            />
+          </FilePreviewLayout>
+        )
+      })
+      const outline = buttonWithText('目录')
+      const comments = buttonWithText('批注 3')
+      const messages = buttonWithText('留言 0')
+      const group = document.querySelector('[role="group"][aria-label="文档导航"]')
+      expect(group).not.toBeNull()
+      expect(group?.contains(outline)).toBe(true)
+      expect(group?.contains(comments)).toBe(true)
+      expect(group?.contains(messages)).toBe(true)
+      expect(messages.hasAttribute('aria-pressed')).toBe(false)
+      expect(outline.getAttribute('aria-pressed')).toBe('true')
+      expect(comments.getAttribute('aria-pressed')).toBe('true')
+      act(() => outline.focus())
+      await act(async () => {
+        outline.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+        )
+      })
+      expect(document.activeElement).toBe(comments)
+      await click(comments)
+      expect(onCommentsChange).toHaveBeenCalledExactlyOnceWith(false)
+      expect(onOutlineChange).not.toHaveBeenCalled()
+      await act(async () => {
+        comments.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+        )
+      })
+      expect(document.activeElement).toBe(messages)
+      await click(messages)
+      expect(onMessages).toHaveBeenCalledOnce()
+    }
+  )
 
   it('uses a flat active state and stable numerals for preview toggles', () => {
     host = document.createElement('div')
@@ -226,15 +364,18 @@ describe('DriveRendererShell', () => {
 
     const comments = buttonWithText('评论 5')
     expect(comments.getAttribute('aria-pressed')).toBe('true')
-    expect(comments.className).toContain('bg-secondary')
-    expect(comments.className).toContain('shadow-none')
+    expect(comments.getAttribute('data-selected')).toBe('true')
     expect(comments.className).toContain('tabular-nums')
   })
 
   it('refreshes the latest checkpoint before entering the rich Markdown editor from collaboration', async () => {
     const reload = vi.fn(async () => baseSnapshot())
 
-    await refreshBeforeDriveRendererMount({ id: 'mdxeditor', collaborationEnabled: true, reload })
+    await refreshBeforeDriveRendererMount({
+      id: 'mdxeditor',
+      collaborationEnabled: true,
+      reload,
+    })
 
     expect(reload).toHaveBeenCalledOnce()
   })
@@ -242,8 +383,16 @@ describe('DriveRendererShell', () => {
   it('does not reload when switching between collaboration-aware renderers', async () => {
     const reload = vi.fn(async () => baseSnapshot())
 
-    await refreshBeforeDriveRendererMount({ id: 'code', collaborationEnabled: true, reload })
-    await refreshBeforeDriveRendererMount({ id: 'markdown', collaborationEnabled: true, reload })
+    await refreshBeforeDriveRendererMount({
+      id: 'code',
+      collaborationEnabled: true,
+      reload,
+    })
+    await refreshBeforeDriveRendererMount({
+      id: 'markdown',
+      collaborationEnabled: true,
+      reload,
+    })
 
     expect(reload).not.toHaveBeenCalled()
   })
@@ -258,7 +407,11 @@ describe('DriveRendererShell', () => {
     const reloadingEditContext = createEditContext({ reload, reloading: true })
 
     const reloadPromise = reload()
-    renderShell({ snapshot, initialRendererId: rendererId, editContext: reloadingEditContext })
+    renderShell({
+      snapshot,
+      initialRendererId: rendererId,
+      editContext: reloadingEditContext,
+    })
     await act(async () => undefined)
 
     expect(document.querySelector(selector)).toBeNull()
@@ -282,7 +435,8 @@ describe('DriveRendererShell', () => {
     const snapshot = markdownSnapshot()
     const retriedSnapshot = markdownSnapshot({ text: '# Retried' })
     const retry = deferred<DriveBrowserSnapshotDto>()
-    const reload = vi.fn()
+    const reload = vi
+      .fn()
       .mockRejectedValueOnce(new Error('reload failed'))
       .mockImplementationOnce(() => retry.promise)
     const failedReload = reload()
@@ -330,7 +484,9 @@ describe('DriveRendererShell', () => {
     expect(document.querySelector(selector)).toBeNull()
 
     await selectRenderer('代码')
-    expect(document.querySelector('[data-drive-code-renderer="true"]')).toBeNull()
+    expect(
+      document.querySelector('[data-drive-code-renderer="true"]')
+    ).toBeNull()
     expect(reload).toHaveBeenCalledOnce()
 
     refresh.resolve(snapshot)
@@ -346,12 +502,20 @@ describe('DriveRendererShell', () => {
     renderShell({
       snapshot: baseSnapshot({
         context: 'share',
-        edit: { canEdit: false, reason: 'login_required', currentVersionId: null },
+        edit: {
+          canEdit: false,
+          reason: 'login_required',
+          currentVersionId: null,
+        },
       }),
     })
 
-    expect(document.querySelector('[data-drive-preview-header="true"]')).not.toBeNull()
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
+    expect(
+      document.querySelector('[data-drive-preview-header="true"]')
+    ).not.toBeNull()
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe(
+      '/console/sign-in?redirect=%2Fshare%2Fshare-1'
+    )
   })
 
   it('keeps file actions in the shared overflow menu', async () => {
@@ -378,20 +542,30 @@ describe('DriveRendererShell', () => {
     })
 
     expect(buttonWithText('打开方式')).not.toBeNull()
-    expect(document.querySelector<HTMLElement>('[data-drive-preview-renderer-actions="true"]')?.className).toContain('gap-1')
-    expect(buttonWithText('打开方式').className.split(/\s+/u)).not.toContain('border')
+    expect(
+      document.querySelector<HTMLElement>(
+        '[data-drive-preview-renderer-actions="true"]'
+      )?.className
+    ).toContain('gap-1')
+    expect(buttonWithText('打开方式').className.split(/\s+/u)).not.toContain(
+      'border'
+    )
     expect(document.body.textContent).not.toContain('在云盘中查看')
     expect(document.body.textContent).not.toContain('历史版本')
 
     await click(buttonWithLabel('更多操作'))
 
-    expect(menuItemTexts()).toEqual(['下载', '导出为 PDF', '在云盘中查看', '历史版本'])
+    expect(menuItemTexts()).toEqual(['下载', '导出为 PDF', '历史版本'])
   })
 
   it('closes the overflow menu after PDF export starts and exposes the busy state', async () => {
     const onExport = vi.fn(async () => undefined)
     const snapshot = markdownSnapshot()
-    renderPreviewHeader(snapshot, { exporting: false, disabledReason: null, onExport })
+    renderPreviewHeader(snapshot, {
+      exporting: false,
+      disabledReason: null,
+      onExport,
+    })
 
     await click(buttonWithLabel('更多操作'))
     await click(getMenuItem('导出为 PDF'))
@@ -399,7 +573,11 @@ describe('DriveRendererShell', () => {
     expect(onExport).toHaveBeenCalledOnce()
     expect(menuItemTexts()).toEqual([])
 
-    rerenderPreviewHeader(snapshot, { exporting: true, disabledReason: null, onExport })
+    rerenderPreviewHeader(snapshot, {
+      exporting: true,
+      disabledReason: null,
+      onExport,
+    })
     await click(buttonWithLabel('更多操作'))
     const busyItem = getMenuItem('正在导出')
     expect(busyItem.getAttribute('aria-disabled')).toBe('true')
@@ -435,20 +613,29 @@ describe('DriveRendererShell', () => {
             selectedRendererId='markdown'
             onRendererChange={vi.fn()}
             onOpenVersions={vi.fn()}
-            pdfExport={{ exporting: false, disabledReason: null, onExport: vi.fn(async () => undefined) }}
+            pdfExport={{
+              exporting: false,
+              disabledReason: null,
+              onExport: vi.fn(async () => undefined),
+            }}
           />
         </FilePreviewLayout>
       )
     })
 
-    expect(document.querySelector('[data-file-preview-header="compact"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-file-preview-header="compact"]')
+    ).not.toBeNull()
     await click(buttonWithLabel('更多操作'))
     expect(menuItemTexts()).toContain('导出为 PDF')
   })
 
   it('copies a shared file title and link from the shared overflow menu', async () => {
     const writeText = vi.fn(async () => undefined)
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
     renderShell({
       snapshot: baseSnapshot({
         current: {
@@ -464,13 +651,18 @@ describe('DriveRendererShell', () => {
 
     await click(getMenuItem('复制分享链接'))
 
-    expect(writeText).toHaveBeenCalledWith('文件分享：版本号规则\nhttps://synapse.d2.pub/share/shr_1')
+    expect(writeText).toHaveBeenCalledWith(
+      '文件分享：版本号规则\nhttps://synapse.d2.pub/share/shr_1'
+    )
     expect(toast).toHaveBeenCalledWith('已复制分享链接')
   })
 
   it('copies a shared HTML page title and link from the floating menu', async () => {
     const writeText = vi.fn(async () => undefined)
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
     renderShell({
       snapshot: baseSnapshot({
         context: 'share',
@@ -501,14 +693,28 @@ describe('DriveRendererShell', () => {
     trigger.setPointerCapture = vi.fn()
     trigger.releasePointerCapture = vi.fn()
     await act(async () => {
-      trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
-      trigger.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, cancelable: true, button: 0 }))
+      trigger.dispatchEvent(
+        new MouseEvent('pointerdown', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        })
+      )
+      trigger.dispatchEvent(
+        new MouseEvent('pointerup', {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        })
+      )
     })
     expect(menuItemTexts()).toContain('复制分享链接')
 
     await click(getMenuItem('复制分享链接'))
 
-    expect(writeText).toHaveBeenCalledWith('网页分享：产品介绍\nhttp://localhost:3000/share/shr_webpage')
+    expect(writeText).toHaveBeenCalledWith(
+      '网页分享：产品介绍\nhttp://localhost:3000/share/shr_webpage'
+    )
     expect(toast).toHaveBeenCalledWith('已复制分享链接')
   })
 
@@ -533,7 +739,7 @@ describe('DriveRendererShell', () => {
         snapshot={baseSnapshot()}
         selected={{ id: 'code', label: '代码', container: 'full' }}
         body
-      />,
+      />
     )
 
     expect(html).toContain('data-drive-code-renderer="true"')
@@ -546,13 +752,14 @@ describe('DriveRendererShell', () => {
           current: {
             ...baseSnapshot().current,
             name: 'report.docx',
-            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            mimeType:
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             previewKind: 'download-only',
           },
           preview: null,
         })}
         selected={{ id: 'download', label: '下载', container: 'reading' }}
-      />,
+      />
     )
 
     expect(html).toContain('data-drive-download-state="true"')
@@ -586,11 +793,13 @@ describe('DriveRendererShell', () => {
         })}
         selected={{ id: 'markdown', label: '预览', container: 'reading' }}
         body
-      />,
+      />
     )
 
     expect(html).toContain('overflow-hidden')
-    expect(html).not.toContain('overflow-auto"><div class="min-h-full bg-background"')
+    expect(html).not.toContain(
+      'overflow-auto"><div class="min-h-full bg-background"'
+    )
   })
 
   it('does not render the retired image-source action for editable share markdown', () => {
@@ -604,7 +813,9 @@ describe('DriveRendererShell', () => {
         browserUrl: '/share/share-1',
         downloadUrl: '/share/share-1/download',
       },
-      breadcrumbs: [{ id: 'file', name: 'notes.md', browserUrl: '/share/share-1' }],
+      breadcrumbs: [
+        { id: 'file', name: 'notes.md', browserUrl: '/share/share-1' },
+      ],
       preview: {
         kind: 'markdown',
         text: '# Notes',
@@ -657,7 +868,7 @@ function rerenderShell(props: ComponentProps<typeof DriveRendererShell>) {
 
 function renderPreviewHeader(
   snapshot: DriveBrowserSnapshotDto,
-  pdfExport: NonNullable<ComponentProps<typeof DrivePreviewHeader>['pdfExport']>,
+  pdfExport: NonNullable<ComponentProps<typeof DrivePreviewHeader>['pdfExport']>
 ) {
   host = document.createElement('div')
   document.body.append(host)
@@ -667,7 +878,7 @@ function renderPreviewHeader(
 
 function rerenderPreviewHeader(
   snapshot: DriveBrowserSnapshotDto,
-  pdfExport: NonNullable<ComponentProps<typeof DrivePreviewHeader>['pdfExport']>,
+  pdfExport: NonNullable<ComponentProps<typeof DrivePreviewHeader>['pdfExport']>
 ) {
   act(() => {
     root?.render(
@@ -711,19 +922,25 @@ function markdownSnapshot({
       visitUrl: null,
       relativeImages: [],
     },
-    collaboration: collaborationEnabled ? {
-      enabled: true,
-      canRead: true,
-      canWrite: true,
-      epoch: 'epoch-1',
-      checkpointVersionId: 'version-1',
-      websocketPath: '/api/drive/collaboration',
-      reason: null,
-    } : null,
+    collaboration: collaborationEnabled
+      ? {
+          enabled: true,
+          canRead: true,
+          canWrite: true,
+          epoch: 'epoch-1',
+          checkpointVersionId: 'version-1',
+          websocketPath: '/api/drive/collaboration',
+          reason: null,
+        }
+      : null,
   })
 }
 
-function createEditContext(input: Partial<NonNullable<ComponentProps<typeof DriveRendererShell>['editContext']>> = {}) {
+function createEditContext(
+  input: Partial<
+    NonNullable<ComponentProps<typeof DriveRendererShell>['editContext']>
+  > = {}
+) {
   return {
     reload: vi.fn(async () => baseSnapshot()),
     reloading: false,
@@ -733,7 +950,9 @@ function createEditContext(input: Partial<NonNullable<ComponentProps<typeof Driv
   }
 }
 
-function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
+function baseSnapshot(
+  input: Partial<DriveBrowserSnapshotDto> = {}
+): DriveBrowserSnapshotDto {
   return {
     context: 'owner',
     surface: 'standalone',
@@ -748,7 +967,9 @@ function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowse
       browserUrl: '/drive/items/file',
       downloadUrl: '/drive/items/file/download',
     },
-    breadcrumbs: [{ id: 'root', name: 'root', browserUrl: '/drive/items/root' }],
+    breadcrumbs: [
+      { id: 'root', name: 'root', browserUrl: '/drive/items/root' },
+    ],
     children: [],
     preview: {
       kind: 'code',
@@ -774,22 +995,25 @@ function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowse
 }
 
 function anchorWithText(text: string): HTMLAnchorElement {
-  const element = Array.from(document.querySelectorAll('a')).find((anchor) => anchor.textContent?.includes(text))
-  if (!(element instanceof HTMLAnchorElement)) throw new Error(`anchor not found: ${text}`)
+  const element = Array.from(document.querySelectorAll('a')).find((anchor) =>
+    anchor.textContent?.includes(text)
+  )
+  if (!(element instanceof HTMLAnchorElement))
+    throw new Error(`anchor not found: ${text}`)
   return element
 }
 
 async function click(element: HTMLElement) {
   await act(async () => {
-    element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
     element.click()
   })
 }
 
 async function selectRenderer(label: string) {
   await click(buttonWithText('打开方式'))
-  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]'))
-    .find((item) => item.textContent?.includes(label))
+  const option = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+  ).find((item) => item.textContent?.includes(label))
   if (!option) throw new Error(`renderer option not found: ${label}`)
   await click(option)
 }
@@ -811,26 +1035,31 @@ function deferred<T>() {
 }
 
 function buttonWithLabel(label: string): HTMLButtonElement {
-  const element = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  const element = document.querySelector<HTMLButtonElement>(
+    `button[aria-label="${label}"]`
+  )
   if (!element) throw new Error(`button not found: ${label}`)
   return element
 }
 
 function buttonWithText(text: string): HTMLButtonElement {
-  const element = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
-    .find((button) => button.textContent?.includes(text))
+  const element = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('button')
+  ).find((button) => button.textContent?.includes(text))
   if (!element) throw new Error(`button not found: ${text}`)
   return element
 }
 
 function menuItemTexts(): string[] {
-  return Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-    .map((item) => item.textContent?.trim() ?? '')
+  return Array.from(
+    document.querySelectorAll<HTMLElement>('[role="menuitem"]')
+  ).map((item) => item.textContent?.trim() ?? '')
 }
 
 function getMenuItem(text: string): HTMLElement {
-  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-    .find((candidate) => candidate.textContent?.includes(text))
+  const item = Array.from(
+    document.querySelectorAll<HTMLElement>('[role="menuitem"]')
+  ).find((candidate) => candidate.textContent?.includes(text))
   if (!item) throw new Error(`menu item not found: ${text}`)
   return item
 }

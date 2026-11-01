@@ -2,10 +2,6 @@
 # 本机运行：打包代码并上传到服务器
 set -euo pipefail
 
-# 前端构建默认 V2；显式 v1 用于回滚，在任何远程操作或备份前拒绝未知值。
-DASHBOARD_UI=$(node scripts/deploy/dashboard-ui.mjs "${DASHBOARD_UI:-v2}")
-export DASHBOARD_UI
-
 # 生产服务器地址。可用环境变量覆盖，便于部署到别的目标或先在本机演练一遍；
 # 默认值保持现状，不改变现有用法。
 SERVER="${SYNAPSE_DEPLOY_SERVER:-root@120.53.17.64}"
@@ -314,15 +310,11 @@ sync_remote_code() {
     --exclude='server/data' \
     --exclude='dashboard/node_modules' \
     --exclude='dashboard/dist' \
-    --exclude='dashboard-v2/node_modules' \
-    --exclude='dashboard-v2/dist' \
-    --exclude='dashboard-v2/.heroui-docs' \
-    --exclude='dashboard-v2/.vite' \
-    --exclude='dashboard-v2/coverage' \
+    --exclude='dashboard/.heroui-docs' \
+    --exclude='dashboard/.vite' \
+    --exclude='dashboard/coverage' \
     --exclude='shared/node_modules' \
     --exclude='shared/dist' \
-    --exclude='ui/node_modules' \
-    --exclude='ui/dist' \
     --exclude='document/node_modules' \
     --exclude='document/.vitepress/cache' \
     --exclude='document/.vitepress/dist' \
@@ -333,9 +325,7 @@ sync_remote_code() {
     --include='/restart.sh' \
     --include='/server/***' \
     --include='/dashboard/***' \
-    --include='/dashboard-v2/***' \
     --include='/shared/***' \
-    --include='/ui/***' \
     --include='/document/***' \
     --include='/pdf-renderer/***' \
     --include='/patches/***' \
@@ -350,7 +340,7 @@ sync_remote_code() {
 }
 
 build_remote_image() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && DASHBOARD_UI='$DASHBOARD_UI' NEW_IMAGE_TAG='$NEW_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+  ssh "$SERVER" "cd $REMOTE_DIR/server && NEW_IMAGE_TAG='$NEW_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env build --pull server pdf-renderer
 for service in server pdf-renderer; do
@@ -1045,7 +1035,7 @@ if ! ssh "$SERVER" "test -f $REMOTE_DIR/server/.env"; then
 
   echo ""
   echo "首次部署已同步本机 server/.env.server，请 SSH 登录服务器启动服务："
-  echo "  cd $REMOTE_DIR/server && DASHBOARD_UI=$DASHBOARD_UI docker compose --env-file .env up -d --build"
+  echo "  cd $REMOTE_DIR/server && docker compose --env-file .env up -d --build"
   echo "启动完成后重新运行 bash deploy.sh，通过部署后健康检查再发布桌面客户端。"
   exit 0
 fi

@@ -1,8 +1,13 @@
-import '@/styles/index.css'
+import '../reader.css'
+import '@/styles/globals.css'
 import '@mdxeditor/editor/style.css'
 import type { ComponentProps } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { DriveBrowserEditDto, DriveBrowserItemDto, DriveBrowserPreviewDto } from '@synapse/shared'
+import type {
+  DriveBrowserEditDto,
+  DriveBrowserItemDto,
+  DriveBrowserPreviewDto,
+} from '@synapse/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
@@ -20,6 +25,7 @@ afterEach(() => {
 
 describe('drive editor typography in Chromium', () => {
   it('applies the Drive document typography to the rich-text editor', async () => {
+    const consoleError = vi.spyOn(console, 'error')
     const screen = await render(
       <QueryClientProvider client={new QueryClient()}>
         <DriveRendererToolbarProvider>
@@ -30,19 +36,35 @@ describe('drive editor typography in Chromium', () => {
             editContext={editContext()}
           />
         </DriveRendererToolbarProvider>
-      </QueryClientProvider>,
+      </QueryClientProvider>
     )
 
     try {
-      await expect.poll(() => document.querySelector<HTMLElement>('.drive-mdxeditor-content h1')).not.toBeNull()
-      const root = document.querySelector<HTMLElement>('.drive-mdxeditor-content')!
+      await expect
+        .poll(() =>
+          document.querySelector<HTMLElement>('.drive-mdxeditor-content h1')
+        )
+        .not.toBeNull()
+      const root = document.querySelector<HTMLElement>(
+        '.drive-mdxeditor-content'
+      )!
 
+      expect(
+        consoleError.mock.calls
+          .flat()
+          .some((message) =>
+            String(message).includes('Cannot update a component')
+          )
+      ).toBe(false)
       expect(getComputedStyle(root.querySelector('h1')!).fontSize).toBe('32px')
       expect(getComputedStyle(root.querySelector('h6')!).fontSize).toBe('16px')
       expect(getComputedStyle(root.querySelector('p')!).lineHeight).toBe('24px')
-      expect(getComputedStyle(root.querySelector('code')!).color).toBe(getComputedStyle(root).color)
+      expect(getComputedStyle(root.querySelector('code')!).color).toBe(
+        getComputedStyle(root).color
+      )
     } finally {
       await screen.unmount()
+      consoleError.mockRestore()
     }
   })
 
@@ -51,8 +73,8 @@ describe('drive editor typography in Chromium', () => {
     const before = snapshotStyles(root)
     lateVendorStyle = document.createElement('style')
     lateVendorStyle.textContent = `
-      .drive-mdxeditor-content h1 { color: var(--destructive); font-size: 2.625rem; font-weight: 400; }
-      .drive-mdxeditor-content code { color: var(--destructive); font-size: 2rem; }
+      .drive-mdxeditor-content h1 { color: var(--danger); font-size: 2.625rem; font-weight: 400; }
+      .drive-mdxeditor-content code { color: var(--danger); font-size: 2rem; }
     `
     document.head.append(lateVendorStyle)
 
@@ -61,7 +83,9 @@ describe('drive editor typography in Chromium', () => {
 
   it('does not apply document-cell styling to table controls', () => {
     const root = renderSyntheticEditorFixture()
-    const contentCell = root.querySelector<HTMLElement>('td:not([data-tool-cell])')!
+    const contentCell = root.querySelector<HTMLElement>(
+      'td:not([data-tool-cell])'
+    )!
     const toolCell = root.querySelector<HTMLElement>('td[data-tool-cell]')!
 
     expect(getComputedStyle(contentCell).paddingInlineStart).toBe('12px')
@@ -126,14 +150,21 @@ function preview(): DriveBrowserPreviewDto {
 }
 
 function editable(): DriveBrowserEditDto {
-  return { canEdit: true, editorKind: 'text', currentVersionId: 'version-1', reason: null }
+  return {
+    canEdit: true,
+    editorKind: 'text',
+    currentVersionId: 'version-1',
+    reason: null,
+  }
 }
 
-function editContext(): NonNullable<ComponentProps<typeof DriveMDXeditorRenderer>['editContext']> {
+function editContext(): NonNullable<
+  ComponentProps<typeof DriveMDXeditorRenderer>['editContext']
+> {
   return {
-    reload: vi.fn(async () => ({} as never)),
+    reload: vi.fn(async () => ({}) as never),
     reloading: false,
-    saveText: vi.fn(async () => ({} as never)),
+    saveText: vi.fn(async () => ({}) as never),
     savingText: false,
   }
 }

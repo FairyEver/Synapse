@@ -1,46 +1,42 @@
+import {
+  Button,
+  Chip,
+  Link,
+  Modal,
+  Skeleton,
+  Table,
+  Tooltip,
+  toast,
+} from '@heroui/react'
 import { useState, type ReactNode } from 'react'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { DriveFileVersionDto, DriveFileVersionSource } from '@synapse/shared'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query'
+import type {
+  DriveFileVersionDto,
+  DriveFileVersionSource,
+} from '@synapse/shared'
 import { Download, Loader2, Pin, PinOff, RotateCcw, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { RelativeTime } from '@/components/relative-time'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFrame,
-  DialogFrameBody,
-  DialogFrameHeader,
-} from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { trackedDriveFileVersionsApi as driveFileVersionsApi } from './shared/drive-telemetry-api'
 import { cn } from '@/lib/utils'
 import { formatDriveBrowserBytes } from './shared/drive-format'
 import { startDriveOperation } from './shared/drive-telemetry'
-
 const versionPageSize = 100
 const versionSkeletonRows = [0, 1, 2] as const
-
 type ConfirmTarget =
-  | { action: 'restore'; version: DriveFileVersionDto }
-  | { action: 'delete'; version: DriveFileVersionDto }
+  | {
+      action: 'restore'
+      version: DriveFileVersionDto
+    }
+  | {
+      action: 'delete'
+      version: DriveFileVersionDto
+    }
   | null
-
 export function DriveFileVersionsDialog({
   itemId,
   open,
@@ -58,100 +54,137 @@ export function DriveFileVersionsDialog({
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget>(null)
   const versionsQuery = useInfiniteQuery({
     queryKey: ['drive-file-versions', itemId],
-    queryFn: ({ pageParam }) => driveFileVersionsApi.list(itemId, { offset: pageParam, limit: versionPageSize }),
+    queryFn: ({ pageParam }) =>
+      driveFileVersionsApi.list(itemId, {
+        offset: pageParam,
+        limit: versionPageSize,
+      }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.page.nextOffset ?? undefined,
     enabled: open,
   })
   const versions = versionsQuery.data?.pages.flatMap((page) => page.items) ?? []
   const invalidateVersionState = () => {
-    void queryClient.invalidateQueries({ queryKey: ['drive-file-versions', itemId] })
+    void queryClient.invalidateQueries({
+      queryKey: ['drive-file-versions', itemId],
+    })
     void queryClient.invalidateQueries({ queryKey: ['drive-browser'] })
     void Promise.resolve(onChanged?.()).catch(() => undefined)
   }
   const restoreMutation = useMutation({
-    mutationFn: (versionId: string) => trackVersionOperation(
-      'web.drive.version.restore',
-      () => driveFileVersionsApi.restore(itemId, versionId),
-    ),
+    mutationFn: (versionId: string) =>
+      trackVersionOperation('web.drive.version.restore', () =>
+        driveFileVersionsApi.restore(itemId, versionId)
+      ),
     onSuccess: () => {
       setConfirmTarget(null)
       invalidateVersionState()
       toast.success('已恢复')
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.danger(error.message),
   })
   const deleteMutation = useMutation({
-    mutationFn: (versionId: string) => trackVersionOperation(
-      'web.drive.version.delete',
-      () => driveFileVersionsApi.delete(itemId, versionId),
-    ),
+    mutationFn: (versionId: string) =>
+      trackVersionOperation('web.drive.version.delete', () =>
+        driveFileVersionsApi.delete(itemId, versionId)
+      ),
     onSuccess: (result) => {
       setConfirmTarget(null)
       invalidateVersionState()
       toast.success(result.deletePending ? '清理中' : '已删除')
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.danger(error.message),
   })
   const pinMutation = useMutation({
-    mutationFn: ({ versionId, isPinned }: { versionId: string; isPinned: boolean }) =>
-      trackVersionOperation(
-        'web.drive.version.pin-update',
-        () => driveFileVersionsApi.updatePin(itemId, versionId, isPinned),
+    mutationFn: ({
+      versionId,
+      isPinned,
+    }: {
+      versionId: string
+      isPinned: boolean
+    }) =>
+      trackVersionOperation('web.drive.version.pin-update', () =>
+        driveFileVersionsApi.updatePin(itemId, versionId, isPinned)
       ),
     onSuccess: () => {
       invalidateVersionState()
       toast.success('已保存')
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.danger(error.message),
   })
   const confirming = restoreMutation.isPending || deleteMutation.isPending
-  const restoreWillDiscardDraft = confirmTarget?.action === 'restore' && hasUnsavedChanges
-  const confirmTitle = restoreWillDiscardDraft ? '放弃本地修改？' : confirmTarget?.action === 'restore' ? '恢复版本' : '删除版本'
+  const restoreWillDiscardDraft =
+    confirmTarget?.action === 'restore' && hasUnsavedChanges
+  const confirmTitle = restoreWillDiscardDraft
+    ? '放弃本地修改？'
+    : confirmTarget?.action === 'restore'
+      ? '恢复版本'
+      : '删除版本'
   const confirmText = confirmTarget?.action === 'restore' ? '恢复' : '删除'
-  const confirmDesc = confirmTarget?.action === 'restore'
-    ? restoreWillDiscardDraft
-      ? `恢复 v${confirmTarget.version.versionNumber} 会放弃当前未保存修改。`
-      : `将 v${confirmTarget.version.versionNumber} 恢复为当前版本。`
-    : `删除 v${confirmTarget?.version.versionNumber ?? ''} 后无法恢复。`
-
+  const confirmDesc =
+    confirmTarget?.action === 'restore'
+      ? restoreWillDiscardDraft
+        ? `恢复 v${confirmTarget.version.versionNumber} 会放弃当前未保存修改。`
+        : `将 v${confirmTarget.version.versionNumber} 恢复为当前版本。`
+      : `删除 v${confirmTarget?.version.versionNumber ?? ''} 后无法恢复。`
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent data-drive-telemetry-scope='portal' className='gap-0 overflow-hidden p-0 sm:max-w-3xl' showCloseButton={false} aria-describedby={undefined}>
-          <DialogFrame>
-            <DialogFrameHeader title='历史版本' bordered />
-            <DialogFrameBody className='px-6 py-4'>
-              <div className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'>
-                <DriveFileVersionContent
-                  itemId={itemId}
-                  versions={versions}
-                  loading={versionsQuery.isLoading}
-                  error={versions.length === 0 && versionsQuery.error instanceof Error ? versionsQuery.error.message : null}
-                  loadMoreError={
-                    versions.length > 0 && versionsQuery.isFetchNextPageError && versionsQuery.error instanceof Error
-                      ? versionsQuery.error.message
-                      : null
-                  }
-                  pinningVersionId={pinMutation.variables?.versionId ?? null}
-                  pinning={pinMutation.isPending}
-                  hasMore={versionsQuery.hasNextPage}
-                  loadingMore={versionsQuery.isFetchingNextPage}
-                  onRetry={() => {
-                    void versionsQuery.refetch()
-                  }}
-                  onLoadMore={() => {
-                    void versionsQuery.fetchNextPage()
-                  }}
-                  onPin={(version) => pinMutation.mutate({ versionId: version.id, isPinned: !version.isPinned })}
-                  onRestore={(version) => setConfirmTarget({ action: 'restore', version })}
-                  onDelete={(version) => setConfirmTarget({ action: 'delete', version })}
-                />
-              </div>
-            </DialogFrameBody>
-          </DialogFrame>
-        </DialogContent>
-      </Dialog>
+      <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}>
+        <Modal.Container>
+          <Modal.Dialog
+            data-drive-telemetry-scope='portal'
+            className='sm:max-w-3xl'
+            aria-describedby={undefined}
+          >
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>{'\u5386\u53F2\u7248\u672C'}</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <DriveFileVersionContent
+                itemId={itemId}
+                versions={versions}
+                loading={versionsQuery.isLoading}
+                error={
+                  versions.length === 0 &&
+                  versionsQuery.error instanceof Error
+                    ? versionsQuery.error.message
+                    : null
+                }
+                loadMoreError={
+                  versions.length > 0 &&
+                  versionsQuery.isFetchNextPageError &&
+                  versionsQuery.error instanceof Error
+                    ? versionsQuery.error.message
+                    : null
+                }
+                pinningVersionId={pinMutation.variables?.versionId ?? null}
+                pinning={pinMutation.isPending}
+                hasMore={versionsQuery.hasNextPage}
+                loadingMore={versionsQuery.isFetchingNextPage}
+                onRetry={() => {
+                  void versionsQuery.refetch()
+                }}
+                onLoadMore={() => {
+                  void versionsQuery.fetchNextPage()
+                }}
+                onPin={(version) =>
+                  pinMutation.mutate({
+                    versionId: version.id,
+                    isPinned: !version.isPinned,
+                  })
+                }
+                onRestore={(version) =>
+                  setConfirmTarget({ action: 'restore', version })
+                }
+                onDelete={(version) =>
+                  setConfirmTarget({ action: 'delete', version })
+                }
+              />
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
       {confirmTarget ? (
         <ConfirmDialog
           contentProps={{ 'data-drive-telemetry-scope': 'portal' }}
@@ -177,7 +210,6 @@ export function DriveFileVersionsDialog({
     </>
   )
 }
-
 export function DriveFileVersionContent({
   itemId,
   versions,
@@ -221,9 +253,9 @@ export function DriveFileVersionContent({
       <div className='flex min-h-48 flex-1 flex-col items-center justify-center gap-3 rounded-md border p-4 text-center'>
         <div className='grid gap-1 text-sm'>
           <div className='font-medium'>读取失败</div>
-          <div className='text-muted-foreground'>{error}</div>
+          <div className='text-muted'>{error}</div>
         </div>
-        <Button type='button' variant='outline' size='sm' onClick={onRetry}>
+        <Button type='button' variant='outline' size='sm' onPress={onRetry}>
           重试
         </Button>
       </div>
@@ -231,12 +263,11 @@ export function DriveFileVersionContent({
   }
   if (versions.length === 0) {
     return (
-      <div className='flex min-h-48 flex-1 items-center justify-center rounded-md border p-4 text-sm text-muted-foreground'>
+      <div className='flex min-h-48 flex-1 items-center justify-center rounded-md border p-4 text-sm text-muted'>
         暂无历史版本
       </div>
     )
   }
-
   return (
     <DriveFileVersionTableFrame>
       <DriveFileVersionTable>
@@ -255,12 +286,18 @@ export function DriveFileVersionContent({
       {hasMore || loadMoreError ? (
         <div className='grid justify-items-center gap-2 border-t p-2'>
           {loadMoreError ? (
-            <div className='text-center text-sm text-destructive'>
+            <div className='text-center text-sm text-danger'>
               加载更多失败：{loadMoreError}
             </div>
           ) : null}
           {hasMore ? (
-            <Button type='button' variant='outline' size='sm' disabled={loadingMore} onClick={onLoadMore}>
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              isDisabled={loadingMore}
+              onPress={onLoadMore}
+            >
               {loadingMore ? <Loader2 className='animate-spin' /> : null}
               {loadingMore ? '加载中' : '加载更多'}
             </Button>
@@ -270,15 +307,13 @@ export function DriveFileVersionContent({
     </DriveFileVersionTableFrame>
   )
 }
-
-function DriveFileVersionTableFrame({ children }: { readonly children: ReactNode }) {
-  return (
-    <div className='rounded-md border'>
-      {children}
-    </div>
-  )
+function DriveFileVersionTableFrame({
+  children,
+}: {
+  readonly children: ReactNode
+}) {
+  return <div className='rounded-md border'>{children}</div>
 }
-
 function DriveFileVersionTable({
   children,
   skeleton = false,
@@ -287,44 +322,57 @@ function DriveFileVersionTable({
   readonly skeleton?: boolean
 }) {
   return (
-    <Table className='min-w-[680px] table-fixed'>
-      <TableHeader>
-        <TableRow>
-          <TableHead className='w-40'>版本</TableHead>
-          <TableHead className='w-24'>来源</TableHead>
-          <TableHead className='w-24 text-right'>大小</TableHead>
-          <TableHead className='w-44'>创建时间</TableHead>
-          <TableHead className='w-40 text-right' aria-label='操作' />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {skeleton ? <DriveFileVersionTableSkeleton /> : children}
-      </TableBody>
+    <Table>
+      <Table.ScrollContainer>
+        <Table.Content
+          aria-label='文件列表'
+          className='min-w-[680px] table-fixed'
+        >
+          <Table.Header>
+            <Table.Column isRowHeader className='w-40'>
+              版本
+            </Table.Column>
+            <Table.Column className='w-24'>来源</Table.Column>
+            <Table.Column className='w-24 text-right'>大小</Table.Column>
+            <Table.Column className='w-44'>创建时间</Table.Column>
+            <Table.Column className='w-40 text-right' aria-label='操作' />
+          </Table.Header>
+          <Table.Body>
+            {skeleton ? <DriveFileVersionTableSkeleton /> : children}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
     </Table>
   )
 }
-
 function DriveFileVersionTableSkeleton() {
   return (
     <>
       {versionSkeletonRows.map((row) => (
-        <TableRow key={row}>
-          <TableCell>
+        <Table.Row key={row}>
+          <Table.Cell>
             <div className='flex items-center gap-2'>
               <Skeleton className='h-4 w-10' />
               <Skeleton className='h-5 w-12' />
             </div>
-          </TableCell>
-          <TableCell><Skeleton className='h-5 w-12' /></TableCell>
-          <TableCell><Skeleton className='ml-auto h-4 w-14' /></TableCell>
-          <TableCell><Skeleton className='h-4 w-32' /></TableCell>
-          <TableCell><Skeleton className='ml-auto h-8 w-28' /></TableCell>
-        </TableRow>
+          </Table.Cell>
+          <Table.Cell>
+            <Skeleton className='h-5 w-12' />
+          </Table.Cell>
+          <Table.Cell>
+            <Skeleton className='ml-auto h-4 w-14' />
+          </Table.Cell>
+          <Table.Cell>
+            <Skeleton className='h-4 w-32' />
+          </Table.Cell>
+          <Table.Cell>
+            <Skeleton className='ml-auto h-8 w-28' />
+          </Table.Cell>
+        </Table.Row>
       ))}
     </>
   )
 }
-
 function DriveFileVersionRow({
   itemId,
   version,
@@ -342,25 +390,28 @@ function DriveFileVersionRow({
 }) {
   const canDownload = !version.deletePending
   const canModify = !version.isCurrent && !version.deletePending
-
   return (
-    <TableRow>
-      <TableCell>
+    <Table.Row>
+      <Table.Cell>
         <div className='flex min-w-0 items-center gap-2'>
-          <span className='shrink-0 font-medium tabular-nums'>v{version.versionNumber}</span>
+          <span className='shrink-0 font-medium tabular-nums'>
+            v{version.versionNumber}
+          </span>
           <DriveFileVersionBadges version={version} />
         </div>
-      </TableCell>
-      <TableCell>
-        <Badge variant='outline'>{driveVersionSourceLabel(version.source)}</Badge>
-      </TableCell>
-      <TableCell className='text-right tabular-nums text-muted-foreground'>
+      </Table.Cell>
+      <Table.Cell>
+        <Chip variant='secondary'>
+          {driveVersionSourceLabel(version.source)}
+        </Chip>
+      </Table.Cell>
+      <Table.Cell className='text-right tabular-nums text-muted'>
         {formatDriveBrowserBytes(version.size)}
-      </TableCell>
-      <TableCell className='truncate tabular-nums text-muted-foreground'>
+      </Table.Cell>
+      <Table.Cell className='truncate tabular-nums text-muted'>
         <RelativeTime value={version.createdAt} />
-      </TableCell>
-      <TableCell>
+      </Table.Cell>
+      <Table.Cell>
         <div className='flex items-center justify-end gap-1'>
           {canDownload ? (
             <DriveVersionActionButton
@@ -369,7 +420,7 @@ function DriveFileVersionRow({
               label={`下载 v${version.versionNumber}`}
               tooltip='下载'
             >
-              <Download />
+              <Download className='size-4' />
             </DriveVersionActionButton>
           ) : null}
           {canModify ? (
@@ -386,11 +437,21 @@ function DriveFileVersionRow({
             <DriveVersionActionButton
               telemetryEvent='web.drive.version.pin-toggle'
               disabled={pinning}
-              label={version.isPinned ? `取消保留 v${version.versionNumber}` : `保留 v${version.versionNumber}`}
+              label={
+                version.isPinned
+                  ? `取消保留 v${version.versionNumber}`
+                  : `保留 v${version.versionNumber}`
+              }
               tooltip={version.isPinned ? '取消保留' : '保留'}
               onClick={() => onPin(version)}
             >
-              {pinning ? <Loader2 className='animate-spin' /> : version.isPinned ? <PinOff /> : <Pin />}
+              {pinning ? (
+                <Loader2 className='animate-spin' />
+              ) : version.isPinned ? (
+                <PinOff />
+              ) : (
+                <Pin />
+              )}
             </DriveVersionActionButton>
           ) : null}
           {canModify && !version.isPinned ? (
@@ -405,21 +466,23 @@ function DriveFileVersionRow({
             </DriveVersionActionButton>
           ) : null}
         </div>
-      </TableCell>
-    </TableRow>
+      </Table.Cell>
+    </Table.Row>
   )
 }
-
-function DriveFileVersionBadges({ version }: { readonly version: DriveFileVersionDto }) {
+function DriveFileVersionBadges({
+  version,
+}: {
+  readonly version: DriveFileVersionDto
+}) {
   return (
     <div className='flex min-w-0 items-center gap-1'>
-      {version.isCurrent ? <Badge>当前</Badge> : null}
-      {version.isPinned ? <Badge variant='outline'>保留</Badge> : null}
-      {version.deletePending ? <Badge variant='secondary'>待清理</Badge> : null}
+      {version.isCurrent ? <Chip>当前</Chip> : null}
+      {version.isPinned ? <Chip variant='secondary'>保留</Chip> : null}
+      {version.deletePending ? <Chip variant='soft'>待清理</Chip> : null}
     </div>
   )
 }
-
 function DriveVersionActionButton({
   children,
   destructive = false,
@@ -439,37 +502,41 @@ function DriveVersionActionButton({
   readonly tooltip: string
   readonly telemetryEvent: string
 }) {
-  const className = cn('size-8', destructive && 'text-destructive hover:text-destructive')
+  const className = cn('size-8', destructive && 'text-danger hover:text-danger')
   const button = href ? (
-    <Button asChild variant='ghost' size='icon' className={className} aria-label={label}>
-      <a data-drive-telemetry-event={telemetryEvent} href={href}>{children}</a>
-    </Button>
+    <Link
+      className={className}
+      aria-label={label}
+      data-drive-telemetry-event={telemetryEvent}
+      href={href}
+    >
+      <Link.Icon className='size-4'>{children}</Link.Icon>
+    </Link>
   ) : (
     <Button
       data-drive-telemetry-event={telemetryEvent}
       type='button'
       variant='ghost'
-      size='icon'
+      isIconOnly
       className={className}
       aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
+      isDisabled={disabled}
+      onPress={onClick}
     >
       {children}
     </Button>
   )
-
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        {button}
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
+      {button}
+      <Tooltip.Content>{tooltip}</Tooltip.Content>
     </Tooltip>
   )
 }
-
-async function trackVersionOperation<T>(eventKey: string, operation: () => Promise<T>): Promise<T> {
+async function trackVersionOperation<T>(
+  eventKey: string,
+  operation: () => Promise<T>
+): Promise<T> {
   const finish = startDriveOperation(eventKey, 'drive-versions')
   try {
     const result = await operation()
@@ -480,7 +547,6 @@ async function trackVersionOperation<T>(eventKey: string, operation: () => Promi
     throw error
   }
 }
-
 function driveVersionSourceLabel(source: DriveFileVersionSource) {
   const labels: Record<DriveFileVersionSource, string> = {
     upload: '上传',

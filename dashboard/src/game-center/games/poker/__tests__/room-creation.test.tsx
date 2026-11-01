@@ -2,6 +2,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { tableResponse } from "../../../../../../shared/test/game-response-fixtures"
 import { Lobby } from "../components/Lobby"
 
 const settings = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }))
@@ -22,7 +23,7 @@ vi.mock("../../../lib/api", () => ({
 vi.mock("../components/LobbyView", () => ({
   LobbyView: ({ onCreate, onConnect }: { onCreate: () => void; onConnect:(code:string)=>void }) => <><button onClick={onCreate}>打开创建</button><button onClick={()=>onConnect("1234")}>接入测试房</button></>,
 }))
-vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
+vi.mock("@heroui/react", async (original) => ({ ...await original<typeof import("@heroui/react")>(), toast: Object.assign(vi.fn(), { danger: vi.fn(), success: vi.fn(), update: vi.fn() }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 const roots = new Set<Root>()
@@ -66,8 +67,9 @@ describe("建房请求身份", () => {
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
     await open(host)
     for (const value of ["practice", "short32", "10/20", "5000"]) {
-      await act(async () => document.querySelector<HTMLButtonElement>(`[role="radio"][value="${value}"]`)!.click())
+      await act(async () => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!.click())
     }
+    await act(async () => document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
     await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="增加座位"]')!.click())
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     await act(async () => root.unmount()); roots.delete(root)
@@ -75,16 +77,16 @@ describe("建房请求身份", () => {
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
     await open(host)
     for (const value of ["practice", "short32", "10/20", "5000"]) {
-      expect(document.querySelector(`[role="radio"][value="${value}"]`)!.getAttribute("aria-checked")).toBe("true")
+      expect(document.querySelector(`input[type="radio"][value="${value}"]`)!.checked).toBe(true)
     }
     expect(document.querySelector("#poker-seats")?.textContent).toContain("7")
     const saved = settings.update.mock.calls.at(-1)![1]
-    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 7, buyIn: 5000 })
+    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 7, buyIn: 5000, roll: true })
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     identity.user = { id: "another", nickname: "另一人", handle: "other" }
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
     await open(host)
-    expect(document.querySelector('[role="radio"][value="points"]')!.getAttribute("aria-checked")).toBe("true")
+    expect(document.querySelector('input[type="radio"][value="points"]')!.checked).toBe(true)
     expect(document.querySelector("#poker-seats")?.textContent).toContain("6")
   })
   it("配置读取失败时提示重试，恢复后可正常打开", async () => {
@@ -103,12 +105,12 @@ describe("建房请求身份", () => {
     roots.add(root); document.body.append(host)
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
     await open(host)
-    await act(async () => document.querySelector<HTMLButtonElement>('[role="radio"][value="practice"]')!.click())
-    await act(async () => document.querySelector<HTMLButtonElement>('[role="radio"][value="short32"]')!.click())
+    await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="practice"]')!.click())
+    await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="short32"]')!.click())
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     await open(host)
-    expect(document.querySelector('[role="radio"][value="practice"]')!.getAttribute("aria-checked")).toBe("true")
-    expect(document.querySelector('[role="radio"][value="short32"]')!.getAttribute("aria-checked")).toBe("true")
+    expect(document.querySelector('input[type="radio"][value="practice"]')!.checked).toBe(true)
+    expect(document.querySelector('input[type="radio"][value="short32"]')!.checked).toBe(true)
   })
   it("每个房间类型和牌局规则都有说明，切换时保留同一组说明占位", async () => {
     const host = document.createElement("div"), root = createRoot(host)
@@ -118,7 +120,7 @@ describe("建房请求身份", () => {
     await open(host)
     for (const groupId of ["poker-room-mode", "poker-variant"]) {
       const group = document.getElementById(groupId)!
-      const options = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+      const options = [...group.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
       const descriptions = options.map((option) => {
         const hint = document.getElementById(`${groupId}-hint-${option.value}`)
         expect(hint, `${option.value} 有对应说明`).not.toBeNull()
@@ -127,7 +129,7 @@ describe("建房请求身份", () => {
       })
       for (const option of [...options, options[0]]) {
         await act(async () => option.click())
-        expect(group.getAttribute("aria-describedby")).toBe(`${groupId}-hint-${option.value}`)
+        expect(group.getAttribute("aria-describedby")).toContain(`${groupId}-hint-${option.value}`)
         for (const [index, hint] of descriptions.entries()) {
           expect(hint.isConnected).toBe(true)
           expect(hint.getAttribute("aria-hidden")).toBe(String(options[index] !== option))
@@ -161,10 +163,10 @@ describe("建房请求身份", () => {
     await act(async () => root.render(<Lobby onRoom={onRoom} />))
     await open(host)
     for (const value of ["practice", "short32", "5/10", "2000"]) {
-      const option = document.querySelector<HTMLButtonElement>(`[role="radio"][value="${value}"]`)
+      const option = document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)
       expect(option, `直接选择 ${value}`).not.toBeNull()
       await act(async () => option!.click())
-      expect(option!.getAttribute("aria-checked")).toBe("true")
+      expect(option!.checked).toBe(true)
     }
     expect(document.body.textContent).toContain("不影响大厅点数")
     expect(document.body.textContent).toContain("同花大于葫芦")
@@ -192,9 +194,9 @@ describe("建房请求身份", () => {
     for (let i = 0; i < 9; i++) await act(async () => increase.click())
     expect(increase.disabled).toBe(true)
     expect(document.querySelector("#poker-seats")?.textContent).toContain("10")
-    await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })))
-    // Radix restores focus in the deferred FocusScope unmount callback.
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+    await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })))
+    // React Aria restores focus when its overlay FocusScope unmounts.
+    await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)) })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(document.activeElement).toBe(host.querySelector("button"))
   })
@@ -224,22 +226,37 @@ describe("建房请求身份", () => {
     }
     await submit()
     const second = api.create.mock.calls[1][0].creationId
-    if (mode === "retry") expect(second).toBe(first)
+    if (mode !== "change") expect(second).toBe(first)
     else expect(second).not.toBe(first)
     expect(onRoom).toHaveBeenCalledWith("1234")
   })
+  it("成功确认后再建同配置房间使用新UUID，Roll开关进入请求意图",async()=>{
+    api.create.mockReset().mockResolvedValue({roomCode:"5678"})
+    const host=document.createElement("div"),root=createRoot(host);roots.add(root);document.body.append(host)
+    await act(async()=>root.render(<Lobby onRoom={vi.fn()}/>))
+    await open(host)
+    await act(async()=>document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
+    await submit();const first=api.create.mock.calls[0][0]
+    await open(host);await submit();const second=api.create.mock.calls[1][0]
+    expect(first.ruleOptions).toEqual({roll:true});expect(second.ruleOptions).toEqual({roll:true})
+    expect(second.creationId).not.toBe(first.creationId)
+    expect(second).not.toHaveProperty("roll")
+  })
   it("大厅接入AI先授权，复制失败重试不再次改变控制版本", async () => {
-    api.state.mockReset().mockResolvedValueOnce({mySeatNo:null,controlVersion:4,handoffPending:false}).mockResolvedValueOnce({mySeatNo:null,controlVersion:5,handoffPending:true})
-    api.control.mockReset().mockResolvedValue({controlVersion:5,handoffPending:true})
+    let current={...tableResponse,roomCode:"1234",mySeatNo:null,seats:[],controller:null as "human"|"ai"|null,controlVersion:4,handoffPending:false}
+    api.state.mockReset().mockImplementation(async()=>current)
+    api.control.mockReset().mockImplementation(async()=>{current={...current,controlVersion:5,handoffPending:true};return {controller:null,controlVersion:5,handoffPending:true}})
     const copy=vi.fn().mockRejectedValueOnce(new Error("拒绝剪贴板")).mockResolvedValueOnce(undefined)
     Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:copy}})
     const host=document.createElement("div"),root=createRoot(host)
     roots.add(root);document.body.append(host)
     await act(async()=>root.render(<Lobby onRoom={vi.fn()} />))
     await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="接入测试房")!.click())
-    const button=[...document.querySelectorAll("button")].find(b=>b.textContent==="复制接入指令")!
-    await act(async()=>button.click())
-    await act(async()=>button.click())
+    const button=(label:string)=>[...document.querySelectorAll("button")].find(b=>b.textContent===label)!
+    expect(api.control).not.toHaveBeenCalled()
+    await act(async()=>button("允许 AI 接入并复制指令").click())
+    expect(document.body.textContent).toContain("授权保持不变")
+    await act(async()=>button("复制接入指令").click())
     expect(api.control).toHaveBeenCalledOnce()
     expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"request_ai"})
     expect(copy).toHaveBeenCalledTimes(2)
@@ -247,7 +264,7 @@ describe("建房请求身份", () => {
   })
   it("关闭旧表单再打开后，旧创建响应不关闭新表单或导航", async () => {
     let resolve!: (value: { roomCode: string }) => void
-    api.create.mockReset().mockImplementationOnce(() => new Promise((done) => { resolve = done }))
+    api.create.mockReset().mockImplementationOnce(() => new Promise((done) => { resolve = done })).mockResolvedValueOnce({roomCode:"5678"})
     const host = document.createElement("div"), root = createRoot(host), onRoom = vi.fn()
     roots.add(root)
     document.body.append(host)
@@ -259,5 +276,9 @@ describe("建房请求身份", () => {
     await act(async () => resolve({ roomCode: "1234" }))
     expect(onRoom).not.toHaveBeenCalled()
     expect(document.querySelector("form")).not.toBeNull()
+    const first=api.create.mock.calls[0][0].creationId
+    await submit()
+    expect(api.create.mock.calls[1][0].creationId).not.toBe(first)
+    expect(onRoom).toHaveBeenCalledWith("5678")
   })
 })

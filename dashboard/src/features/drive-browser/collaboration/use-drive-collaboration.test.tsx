@@ -4,8 +4,9 @@ import { StrictMode, act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useDriveCollaboration } from './use-drive-collaboration'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
@@ -25,12 +26,15 @@ afterEach(async () => {
 describe('useDriveCollaboration', () => {
   it('creates a fresh live session after the StrictMode effect probe', async () => {
     const sockets: FakeWebSocket[] = []
-    vi.stubGlobal('WebSocket', class extends FakeWebSocket {
-      constructor(url: string | URL) {
-        super(url)
-        sockets.push(this)
+    vi.stubGlobal(
+      'WebSocket',
+      class extends FakeWebSocket {
+        constructor(url: string | URL) {
+          super(url)
+          sockets.push(this)
+        }
       }
-    })
+    )
     host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)

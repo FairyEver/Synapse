@@ -1,6 +1,4 @@
 import {
-  buildConsoleDriveBrowserUrl,
-  buildConsoleDriveItemBrowserUrl,
   buildOwnerDriveBrowserUrl,
   resolveDriveShareClipboardKind,
   type DriveBrowserSnapshotDto,
@@ -15,7 +13,6 @@ export type DrivePreviewSystemActionId =
   | 'download'
   | 'pdf-export'
   | 'copy-share-link'
-  | 'open-in-drive'
   | 'open-new-window'
   | 'versions'
   | 'renderer-select'
@@ -96,6 +93,14 @@ export function getDrivePreviewFileIdentity(snapshot: DriveBrowserSnapshotDto): 
   }
 }
 
+export function getDrivePreviewDisplayName(snapshot: DriveBrowserSnapshotDto, rendererId: DriveRendererId | null): string {
+  if (rendererId === 'markdown' || rendererId === 'mdxeditor') {
+    const title = snapshot.preview?.outline?.find((item) => item.depth === 1)?.text.trim()
+    if (title) return title
+  }
+  return snapshot.current.name
+}
+
 export function getDrivePreviewSystemActions(
   snapshot: DriveBrowserSnapshotDto,
   selectedRendererId: DriveRendererId | null = null,
@@ -124,17 +129,6 @@ export function getDrivePreviewSystemActions(
 
   const copyShareLinkAction = getDriveCopyShareLinkAction(snapshot)
   if (copyShareLinkAction) actions.push(copyShareLinkAction)
-
-  const driveBrowserUrl = getDrivePreviewDriveBrowserUrl(snapshot)
-  if (driveBrowserUrl) {
-    actions.push({
-      kind: 'link',
-      id: 'open-in-drive',
-      label: '在云盘中查看',
-      href: driveBrowserUrl,
-      icon: ExternalLink,
-    })
-  }
 
   const newWindowUrl = getDrivePreviewNewWindowUrl(snapshot)
   if (newWindowUrl) {
@@ -212,9 +206,6 @@ export function getDrivePreviewNewWindowUrl(snapshot: DriveBrowserSnapshotDto): 
   return `${url.pathname}${url.search}${url.hash}`
 }
 
-export function getDrivePreviewDriveBrowserUrl(snapshot: DriveBrowserSnapshotDto): string | null {
-  if (snapshot.context !== 'owner' || snapshot.surface !== 'standalone') return null
-  return snapshot.current.type === 'folder'
-    ? buildConsoleDriveBrowserUrl(snapshot.current.id)
-    : buildConsoleDriveItemBrowserUrl(snapshot.current.id)
+export function getDrivePreviewDriveBrowserUrl(_snapshot: DriveBrowserSnapshotDto): null {
+  return null
 }

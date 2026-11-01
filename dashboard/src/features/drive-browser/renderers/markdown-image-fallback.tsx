@@ -13,14 +13,22 @@ type MarkdownImageFallbacksProps = {
   readonly rootRef: RefObject<HTMLElement | null>
 }
 
-export function MarkdownImageFallbacks({ contentKey, rootRef }: MarkdownImageFallbacksProps) {
-  const [fallbacks, setFallbacks] = useState<readonly MarkdownImageFallbackEntry[]>([])
+export function MarkdownImageFallbacks({
+  contentKey,
+  rootRef,
+}: MarkdownImageFallbacksProps) {
+  const [fallbacks, setFallbacks] = useState<
+    readonly MarkdownImageFallbackEntry[]
+  >([])
 
   useLayoutEffect(() => {
     const root = rootRef.current
     if (!root) return
 
-    const fallbackByImage = new Map<HTMLImageElement, MarkdownImageFallbackEntry>()
+    const fallbackByImage = new Map<
+      HTMLImageElement,
+      MarkdownImageFallbackEntry
+    >()
     const cleanups: Array<() => void> = []
     const syncFallbacks = () => setFallbacks([...fallbackByImage.values()])
 
@@ -28,7 +36,10 @@ export function MarkdownImageFallbacks({ contentKey, rootRef }: MarkdownImageFal
       image.hidden = false
       image.tabIndex = 0
       image.setAttribute('role', 'button')
-      image.setAttribute('aria-label', image.alt ? `预览图片：${image.alt}` : '预览图片')
+      image.setAttribute(
+        'aria-label',
+        image.alt ? `预览图片：${image.alt}` : '预览图片'
+      )
     }
 
     const showFallback = (image: HTMLImageElement, id: number, sync = true) => {
@@ -39,7 +50,10 @@ export function MarkdownImageFallbacks({ contentKey, rootRef }: MarkdownImageFal
       if (imageId) host.setAttribute('data-drive-markdown-image-id', imageId)
       host.tabIndex = 0
       host.setAttribute('role', 'group')
-      host.setAttribute('aria-label', image.alt.trim() ? `图片评论目标：${image.alt.trim()}` : '图片评论目标')
+      host.setAttribute(
+        'aria-label',
+        image.alt.trim() ? `图片评论目标：${image.alt.trim()}` : '图片评论目标'
+      )
       image.hidden = true
       image.removeAttribute('tabindex')
       image.removeAttribute('role')
@@ -69,7 +83,10 @@ export function MarkdownImageFallbacks({ contentKey, rootRef }: MarkdownImageFal
         image.removeEventListener('load', onLoad)
       })
 
-      if (!image.getAttribute('src')?.trim() || (image.complete && image.naturalWidth === 0)) {
+      if (
+        !image.getAttribute('src')?.trim() ||
+        (image.complete && image.naturalWidth === 0)
+      ) {
         showFallback(image, index, false)
       } else {
         prepareImagePreview(image)
@@ -87,11 +104,13 @@ export function MarkdownImageFallbacks({ contentKey, rootRef }: MarkdownImageFal
     }
   }, [contentKey, rootRef])
 
-  return fallbacks.map((fallback) => createPortal(
-    <MarkdownImageFallback alt={fallback.alt} />,
-    fallback.host,
-    fallback.id
-  ))
+  return fallbacks.map((fallback) =>
+    createPortal(
+      <MarkdownImageFallback alt={fallback.alt} />,
+      fallback.host,
+      fallback.id
+    )
+  )
 }
 
 function MarkdownImageFallback({ alt }: { readonly alt: string }) {
@@ -101,12 +120,14 @@ function MarkdownImageFallback({ alt }: { readonly alt: string }) {
       data-drive-markdown-image-fallback='true'
       role='img'
       aria-label={accessibleLabel}
-      className='inline-flex min-h-16 max-w-full select-none items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 align-middle text-foreground'
+      className='inline-flex min-h-16 max-w-full select-none items-center gap-3 rounded-lg border bg-surface-secondary/40 px-4 py-3 align-middle text-foreground'
     >
-      <ImageOff aria-hidden className='size-5 shrink-0 text-muted-foreground' />
+      <ImageOff aria-hidden className='size-5 shrink-0 text-muted' />
       <span aria-hidden className='min-w-0'>
-        {alt ? <span className='block truncate text-sm font-medium'>{alt}</span> : null}
-        <span className='block text-xs text-muted-foreground'>图片无法显示</span>
+        {alt ? (
+          <span className='block truncate text-sm font-medium'>{alt}</span>
+        ) : null}
+        <span className='block text-xs text-muted'>图片无法显示</span>
       </span>
     </span>
   )

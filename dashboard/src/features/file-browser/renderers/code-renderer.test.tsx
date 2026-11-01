@@ -5,9 +5,13 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api'
 import { FileBrowserCodeRenderer } from './code-renderer'
-import { FileRendererShell, type FileRendererEditContext } from './renderer-shell'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+import {
+  FileRendererShell,
+  type FileRendererEditContext,
+} from './renderer-shell'
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@monaco-editor/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
@@ -20,12 +24,14 @@ vi.mock('@monaco-editor/react', async () => {
       readonly value?: string
       readonly onChange?: (value?: string) => void
       readonly options?: { readonly readOnly?: boolean }
-    }) => React.createElement('textarea', {
-      'data-monaco-editor': 'true',
-      readOnly: options?.readOnly,
-      value: value ?? '',
-      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.currentTarget.value),
-    }),
+    }) =>
+      React.createElement('textarea', {
+        'data-monaco-editor': 'true',
+        readOnly: options?.readOnly,
+        value: value ?? '',
+        onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) =>
+          onChange?.(event.currentTarget.value),
+      }),
   }
 })
 
@@ -96,7 +102,9 @@ function renderRenderer(editContext: FileRendererEditContext) {
   })
 }
 
-function createEditContext(overrides: Partial<FileRendererEditContext> = {}): FileRendererEditContext {
+function createEditContext(
+  overrides: Partial<FileRendererEditContext> = {}
+): FileRendererEditContext {
   return {
     reload: vi.fn(async () => ({ text: '# Remote', baseVersionId: 'sha-2' })),
     reloading: false,
@@ -108,7 +116,8 @@ function createEditContext(overrides: Partial<FileRendererEditContext> = {}): Fi
 
 function editor(): HTMLTextAreaElement {
   const element = document.querySelector('[data-monaco-editor="true"]')
-  if (!(element instanceof HTMLTextAreaElement)) throw new Error('editor not found')
+  if (!(element instanceof HTMLTextAreaElement))
+    throw new Error('editor not found')
   return element
 }
 
@@ -133,7 +142,10 @@ async function click(element: HTMLElement) {
 }
 
 function buttonWithText(text: string): HTMLButtonElement {
-  const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes(text))
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`button not found: ${text}`)
+  const button = Array.from(document.querySelectorAll('button')).find((item) =>
+    item.textContent?.includes(text)
+  )
+  if (!(button instanceof HTMLButtonElement))
+    throw new Error(`button not found: ${text}`)
   return button
 }

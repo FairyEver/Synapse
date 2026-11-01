@@ -3,8 +3,8 @@ import { GAME_WEB_IDENTITY_HEADER, GAME_WEB_INVOKE_OPERATIONS } from "@synapse/s
 import type { AuthenticatedUserRequest } from "../auth/user-auth.guard"
 import { resolvePublicAppUrl } from "../common/public-app-url"
 
-// Only the two fixed local Web entrypoints may share development Cookie calls.
-const localWebOrigins = new Set(["http://localhost:19700", "http://localhost:19703"])
+// Only the fixed local Web entrypoint may share development Cookie calls.
+const localWebOrigins = new Set(["http://localhost:19700"])
 
 /** UserAuthGuard runs first. Browser-only checks never change Bearer callers. */
 @Injectable()

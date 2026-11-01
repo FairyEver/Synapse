@@ -6,19 +6,8 @@ import {
   type DriveBrowserNavigate,
 } from '../shared/drive-navigation'
 
-const driveConsoleHomeBreadcrumb = {
-  id: '__drive_console_home__',
-  name: '我的空间',
-  browserUrl: '/console/drive',
-}
-
 export function getDriveFinderBreadcrumbs(snapshot: DriveBrowserSnapshotDto) {
-  if (snapshot.context !== 'owner' || snapshot.surface !== 'console') return snapshot.breadcrumbs
-  const [firstBreadcrumb, ...remainingBreadcrumbs] = snapshot.breadcrumbs
-  if (firstBreadcrumb?.browserUrl === driveConsoleHomeBreadcrumb.browserUrl) {
-    return [{ ...firstBreadcrumb, name: driveConsoleHomeBreadcrumb.name }, ...remainingBreadcrumbs]
-  }
-  return [driveConsoleHomeBreadcrumb, ...snapshot.breadcrumbs]
+  return snapshot.breadcrumbs
 }
 
 export function DriveFinderBreadcrumbs({
@@ -30,16 +19,19 @@ export function DriveFinderBreadcrumbs({
 }) {
   const breadcrumbs = getDriveFinderBreadcrumbs(snapshot)
   return (
-    <nav className='flex min-w-0 flex-wrap items-center gap-1 text-sm' aria-label='当前位置'>
+    <nav
+      className='flex min-w-0 flex-wrap items-center gap-1 text-sm'
+      aria-label='当前位置'
+    >
       {breadcrumbs.map((item, index) => (
         <span key={item.id} className='flex min-w-0 items-center gap-1'>
-          {index > 0 ? <span className='text-muted-foreground'>/</span> : null}
+          {index > 0 ? <span className='text-muted'>/</span> : null}
           <a
             data-drive-telemetry-event='web.drive.breadcrumb.open'
             href={item.browserUrl}
             className={cn(
-              'min-w-0 truncate rounded-sm px-1 py-0.5 hover:bg-accent',
-              index === breadcrumbs.length - 1 ? 'font-medium' : 'text-muted-foreground'
+              'min-w-0 truncate rounded-sm px-1 py-0.5 hover:bg-surface-secondary',
+              index === breadcrumbs.length - 1 ? 'font-medium' : 'text-muted'
             )}
             onClick={(event) => {
               if (!shouldHandleDriveBrowserLinkClick(event)) return

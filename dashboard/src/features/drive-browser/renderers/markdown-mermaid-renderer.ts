@@ -29,12 +29,10 @@ const MERMAID_THEME_TOKENS = [
   '--background',
   '--foreground',
   '--muted',
-  '--muted-foreground',
   '--border',
-  '--primary',
-  '--primary-foreground',
-  '--secondary',
-  '--secondary-foreground',
+  '--accent',
+  '--accent-foreground',
+  '--surface-secondary',
 ] as const
 
 let nextMermaidDiagramId = 1
@@ -140,32 +138,32 @@ function resolveMermaidThemeVariables(root: HTMLElement): Record<string, string 
   const color = (token: typeof MERMAID_THEME_TOKENS[number]) => colors.get(token)!
   return {
     background: color('--background'),
-    primaryColor: color('--muted'),
+    primaryColor: color('--surface-secondary'),
     primaryTextColor: color('--foreground'),
     primaryBorderColor: color('--border'),
-    secondaryColor: color('--secondary'),
-    secondaryTextColor: color('--secondary-foreground'),
+    secondaryColor: color('--surface-secondary'),
+    secondaryTextColor: color('--foreground'),
     secondaryBorderColor: color('--border'),
     tertiaryColor: color('--background'),
     tertiaryTextColor: color('--foreground'),
     tertiaryBorderColor: color('--border'),
-    lineColor: color('--muted-foreground'),
+    lineColor: color('--muted'),
     textColor: color('--foreground'),
-    noteBkgColor: color('--muted'),
+    noteBkgColor: color('--surface-secondary'),
     noteTextColor: color('--foreground'),
     noteBorderColor: color('--border'),
     mainBkg: color('--background'),
     actorBkg: color('--background'),
     actorBorder: color('--border'),
     actorTextColor: color('--foreground'),
-    signalColor: color('--muted-foreground'),
+    signalColor: color('--muted'),
     signalTextColor: color('--foreground'),
-    labelBoxBkgColor: color('--muted'),
+    labelBoxBkgColor: color('--surface-secondary'),
     labelBoxBorderColor: color('--border'),
     labelTextColor: color('--foreground'),
     loopTextColor: color('--foreground'),
-    activationBkgColor: color('--primary'),
-    activationBorderColor: color('--primary-foreground'),
+    activationBkgColor: color('--accent'),
+    activationBorderColor: color('--accent-foreground'),
   }
 }
 
@@ -206,7 +204,7 @@ function replaceMermaidSourceWithDiagram(pre: HTMLElement, svgMarkup: string): v
 
   const diagram = document.createElement('figure')
   diagram.dataset.driveMermaidDiagram = 'true'
-  diagram.className = 'mx-0 my-4 max-w-full overflow-x-auto rounded-md bg-muted/40 p-4'
+  diagram.className = 'mx-0 my-4 max-w-full overflow-x-auto rounded-md bg-surface-secondary/40 p-4'
   const rendered = document.createElement('div')
   rendered.dataset.driveMermaidRendered = 'true'
   rendered.className = 'min-w-fit'
@@ -223,7 +221,7 @@ function replaceMermaidSourceWithDiagram(pre: HTMLElement, svgMarkup: string): v
 function showMermaidRenderError(pre: HTMLElement): void {
   const error = pre.ownerDocument.createElement('p')
   error.dataset.driveMermaidError = 'true'
-  error.className = 'text-sm text-destructive'
+  error.className = 'text-sm text-danger'
   error.setAttribute('role', 'status')
   error.textContent = '无法渲染流程图，已显示源码。'
   pre.before(error)

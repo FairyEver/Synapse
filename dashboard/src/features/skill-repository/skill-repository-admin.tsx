@@ -1,10 +1,8 @@
+import { Button, Chip, Input, Link, ListBox, Select, toast } from '@heroui/react'
 import { useMemo, useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { ExternalLink } from 'lucide-react'
 import type { SkillRepositoryStatus } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
-import { toast } from 'sonner'
 import {
   adminApi,
   type AdminSkillRepositoryRow,
@@ -19,18 +17,7 @@ import {
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { RelativeTime } from '@/components/relative-time'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 type SkillRepositoryAdminPageProps = {
   search?: Record<string, unknown>
@@ -81,7 +68,7 @@ export default function SkillRepositoryAdminPage({
       void queryClient.invalidateQueries({ queryKey: ['admin-skill-repositories'] })
       toast.success('已更新')
     },
-    onError: (error) => toast.error(getErrorMessage(error, '更新失败')),
+    onError: (error) => toast.danger(getErrorMessage(error, '更新失败')),
   })
 
   const columns = useMemo<ColumnDef<AdminSkillRepositoryRow>[]>(
@@ -94,10 +81,10 @@ export default function SkillRepositoryAdminPage({
         cell: ({ row }) => (
           <div className='min-w-0'>
             <div className='truncate font-medium'>{row.original.title}</div>
-            <div className='truncate text-muted-foreground'>{row.original.name}</div>
+            <div className='truncate text-muted'>{row.original.name}</div>
           </div>
         ),
-        meta: { className: 'max-w-0 w-1/3' },
+        meta: { label: '仓库', className: 'w-64 max-w-64' },
       },
       {
         id: 'owner',
@@ -108,7 +95,7 @@ export default function SkillRepositoryAdminPage({
           <div className='truncate'>{getOwnerLabel(row.original.owner)}</div>
         ),
         enableSorting: false,
-        meta: { className: 'max-w-0 w-1/4' },
+        meta: { label: '作者', className: 'w-56 max-w-56' },
       },
       {
         accessorKey: 'visibility',
@@ -116,11 +103,11 @@ export default function SkillRepositoryAdminPage({
           <DataTableColumnHeader column={column} title='可见性' />
         ),
         cell: ({ row }) => (
-          <Badge variant={row.original.visibility === 'public' ? 'default' : 'outline'}>
+          <Chip color={row.original.visibility === 'public' ? "accent" : "default"}>
             {row.original.visibility === 'public' ? '公开' : '私有'}
-          </Badge>
+          </Chip>
         ),
-        meta: { className: 'w-24' },
+        meta: { label: '可见性', className: 'w-24' },
       },
       {
         accessorKey: 'status',
@@ -128,11 +115,11 @@ export default function SkillRepositoryAdminPage({
           <DataTableColumnHeader column={column} title='状态' />
         ),
         cell: ({ row }) => (
-          <Badge variant={row.original.status === 'removed' ? 'destructive' : 'secondary'}>
+          <Chip color={row.original.status === 'removed' ? "danger" : "default"}>
             {row.original.status === 'removed' ? '已移除' : '正常'}
-          </Badge>
+          </Chip>
         ),
-        meta: { className: 'w-24' },
+        meta: { label: '状态', className: 'w-24' },
       },
       {
         accessorKey: 'updatedAt',
@@ -142,32 +129,22 @@ export default function SkillRepositoryAdminPage({
         cell: ({ row }) => (
           <RelativeTime className='tabular-nums' value={row.original.updatedAt} />
         ),
-        meta: { className: 'w-32' },
+        meta: { label: '更新时间', className: 'w-32' },
       },
       {
         id: 'actions',
         cell: ({ row }) => (
           <div className='flex justify-end gap-2'>
             {row.original.owner.handle ? (
-              <Button asChild variant='ghost' size='sm'>
-                <Link
-                  to='/skills/$ownerHandle/$repositoryName'
-                  params={{
-                    ownerHandle: row.original.owner.handle,
-                    repositoryName: row.original.name,
-                  }}
-                >
-                  <ExternalLink />
-                  打开
-                </Link>
-              </Button>
+              <Link href={`/console/skills/${encodeURIComponent(row.original.owner.handle)}/${encodeURIComponent(row.original.name)}`} target='_blank' rel='noreferrer' aria-label={`打开 ${row.original.title}`}>
+                打开<Link.Icon />
+              </Link>
             ) : null}
             <Button
               variant='ghost'
               size='sm'
-              disabled={moderationMutation.isPending}
-              onClick={(event) => {
-                event.stopPropagation()
+              isDisabled={moderationMutation.isPending}
+              onPress={() => {
                 if (row.original.status === 'removed') {
                   moderationMutation.mutate({ id: row.original.id, remove: false })
                   return
@@ -219,24 +196,24 @@ export default function SkillRepositoryAdminPage({
                   setQuery(event.target.value)
                   setPage(1)
                 }}
-                className='h-8 w-45 lg:w-62.5'
+                className='w-45 lg:w-62.5'
               />
-              <Select
+              <Select aria-label="正常"
                 value={status}
-                onValueChange={(value) => {
+                onChange={(key) => ((value) => {
                   setStatus(value as SkillRepositoryStatus)
                   setPage(1)
-                }}
+                })(String(key ?? ''))}
               >
-                <SelectTrigger size='sm' className='w-32'>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value='active'>正常</SelectItem>
-                    <SelectItem value='removed'>已移除</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
+                <Select.Trigger  className='w-32'>
+                  <Select.Value />
+                <Select.Indicator /></Select.Trigger>
+                <Select.Popover><ListBox>
+
+                    <ListBox.Item id='active'>正常<ListBox.ItemIndicator /></ListBox.Item>
+                    <ListBox.Item id='removed'>已移除<ListBox.ItemIndicator /></ListBox.Item>
+
+                </ListBox></Select.Popover>
               </Select>
             </div>
           }

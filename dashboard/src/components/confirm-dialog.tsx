@@ -1,83 +1,52 @@
-import { cn } from '@/lib/utils'
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-
-type ConfirmDialogContentProps = Omit<
-  React.ComponentProps<typeof AlertDialogContent>,
-  'children' | 'className' | 'onCloseAutoFocus'
-> & {
-  readonly [key: `data-${string}`]: string | number | boolean | undefined
-}
-
+import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react';
+import { AlertDialog, Button } from '@heroui/react';
 type ConfirmDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: React.ReactNode
-  disabled?: boolean
-  desc: React.JSX.Element | string
-  cancelBtnText?: string
-  confirmText?: React.ReactNode
-  destructive?: boolean
-  isLoading?: boolean
-  className?: string
-  contentProps?: ConfirmDialogContentProps
-  children?: React.ReactNode
-  onCloseAutoFocus?: React.ComponentProps<typeof AlertDialogContent>['onCloseAutoFocus']
-} & (
-  | { form: string; handleConfirm?: undefined }
-  | { form?: undefined; handleConfirm: () => void }
-)
-
-export function ConfirmDialog(props: ConfirmDialogProps) {
-  const {
-    title,
-    desc,
-    children,
-    className,
-    contentProps,
-    confirmText,
-    cancelBtnText,
-    destructive,
-    isLoading,
-    disabled = false,
-    form,
-    handleConfirm,
-    onCloseAutoFocus,
-    ...actions
-  } = props
-  return (
-    <AlertDialog {...actions}>
-      <AlertDialogContent {...contentProps} className={cn(className && className)} onCloseAutoFocus={onCloseAutoFocus}>
-        <AlertDialogHeader className='text-start'>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div>{desc}</div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        {children}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>
-            {cancelBtnText ?? 'Cancel'}
-          </AlertDialogCancel>
-          <Button
-            type={form ? 'submit' : 'button'}
-            form={form}
-            onClick={handleConfirm}
-            variant={destructive ? 'destructive' : 'default'}
-            disabled={disabled || isLoading}
-          >
-            {confirmText ?? 'Continue'}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    title: ReactNode;
+    desc: ReactNode;
+    cancelBtnText?: string;
+    confirmText?: ReactNode;
+    destructive?: boolean;
+    disabled?: boolean;
+    isLoading?: boolean;
+    className?: string;
+    contentProps?: ComponentProps<typeof AlertDialog.Dialog> & {
+        [key: `data-${string}`]: unknown;
+    };
+    children?: ReactNode;
+    onCloseAutoFocus?: (event: Event) => void;
+} & ({
+    form: string;
+    handleConfirm?: undefined;
+} | {
+    form?: undefined;
+    handleConfirm: () => void;
+});
+/** Business confirmation, shared by account and administrative mutations. */
+export function ConfirmDialog({ open, onOpenChange, title, desc, cancelBtnText = '取消', confirmText = '确认', destructive, disabled, isLoading, className, contentProps, children, form, handleConfirm, onCloseAutoFocus }: ConfirmDialogProps) {
+    const wasOpen = useRef(false);
+    useEffect(() => {
+        const closed = wasOpen.current && !open;
+        wasOpen.current = open;
+        if (!closed || !onCloseAutoFocus)
+            return;
+        const frame = requestAnimationFrame(() => onCloseAutoFocus(new Event('dialog-closed', { cancelable: true })));
+        return () => cancelAnimationFrame(frame);
+    }, [open, onCloseAutoFocus]);
+    return <AlertDialog.Backdrop isOpen={open} onOpenChange={(next) => {
+            if (!isLoading)
+                onOpenChange(next);
+        }} isDismissable={!isLoading} isKeyboardDismissDisabled={isLoading}>
+      <AlertDialog.Container>
+        <AlertDialog.Dialog {...contentProps} className={className}>
+          <AlertDialog.Header><AlertDialog.Heading>{title}</AlertDialog.Heading></AlertDialog.Header>
+          <AlertDialog.Body><div>{desc}</div>{children}</AlertDialog.Body>
+          <AlertDialog.Footer>
+            <Button variant="tertiary" isDisabled={isLoading} onPress={() => onOpenChange(false)} autoFocus>{cancelBtnText}</Button>
+            <Button type={form ? 'submit' : 'button'} form={form} onPress={handleConfirm} variant={destructive ? "danger" : "primary"} isDisabled={disabled || isLoading} isPending={isLoading}>{confirmText}</Button>
+          </AlertDialog.Footer>
+        </AlertDialog.Dialog>
+      </AlertDialog.Container>
+    </AlertDialog.Backdrop>;
 }

@@ -1,4 +1,5 @@
 import type { PokerTableView } from "@synapse/shared/game-contracts"
+import { waitingForPlayers } from "./room-entry"
 
 export function actionState(table: PokerTableView, acting: boolean, handoff: boolean | undefined) {
   const mine = table.seats.find(seat => seat.seatNo === table.mySeatNo)
@@ -6,7 +7,10 @@ export function actionState(table: PokerTableView, acting: boolean, handoff: boo
   if (table.status === "closed") return "房间已解散"
   if (!mine) return handoff ? "等待 AI 入座" : "选择你的入座方式"
   if (mine.status === "sitting_out") return "已暂离"
+  if (table.awaitingReady) return mine.readyForNextHand ? "已准备 · 等待其他玩家" : "本手结束 · 请确认准备下一手"
   if (table.street === "settled") return "本手结束"
+  const waiting = waitingForPlayers(table)
+  if (waiting) return waiting
   if (mine.status === "waiting") return "已入座 · 下一手加入"
   if (acting) return "轮到你"
   if (mine.status === "folded") return "已弃牌 · 等待下一手"

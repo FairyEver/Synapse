@@ -1,22 +1,14 @@
+import { AlertDialog, Button } from '@heroui/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import { Download, RefreshCw, Save } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
 import { getCodeEditorLanguage } from '@/lib/code-editor-language'
 import type { FileRendererEditContext } from './renderer-shell'
-import { useRegisterFileRendererToolbarItems, type FileRendererToolbarItem } from './renderer-toolbar-context'
-
+import {
+  useRegisterFileRendererToolbarItems,
+  type FileRendererToolbarItem,
+} from './renderer-toolbar-context'
 export function FileBrowserCodeRenderer({
   path,
   text,
@@ -39,7 +31,6 @@ export function FileBrowserCodeRenderer({
   const [conflictOpen, setConflictOpen] = useState(false)
   const [reloadConfirmOpen, setReloadConfirmOpen] = useState(false)
   const canEdit = Boolean(editContext)
-
   useEffect(() => {
     savedValueRef.current = text
     setValue(text)
@@ -49,12 +40,14 @@ export function FileBrowserCodeRenderer({
     setConflictOpen(false)
     setReloadConfirmOpen(false)
   }, [baseVersionId, path, text])
-
   const handleSave = useCallback(async () => {
     if (!editContext) return
     setError(null)
     try {
-      const result = await editContext.saveText({ text: value, baseVersionId: versionId })
+      const result = await editContext.saveText({
+        text: value,
+        baseVersionId: versionId,
+      })
       savedValueRef.current = value
       setVersionId(result.baseVersionId)
       setDirty(false)
@@ -66,7 +59,6 @@ export function FileBrowserCodeRenderer({
       setError(saveError instanceof Error ? saveError.message : '保存失败。')
     }
   }, [editContext, value, versionId])
-
   const handleReload = useCallback(async () => {
     if (!editContext) return
     setError(null)
@@ -79,10 +71,11 @@ export function FileBrowserCodeRenderer({
       setConflictOpen(false)
       setReloadConfirmOpen(false)
     } catch (reloadError) {
-      setError(reloadError instanceof Error ? reloadError.message : '重新加载失败。')
+      setError(
+        reloadError instanceof Error ? reloadError.message : '重新加载失败。'
+      )
     }
   }, [editContext])
-
   const requestReload = useCallback(() => {
     if (dirty) {
       setReloadConfirmOpen(true)
@@ -90,7 +83,6 @@ export function FileBrowserCodeRenderer({
     }
     void handleReload()
   }, [dirty, handleReload])
-
   const toolbarItems = useMemo<readonly FileRendererToolbarItem[]>(() => {
     if (!canEdit) return []
     return [
@@ -117,7 +109,9 @@ export function FileBrowserCodeRenderer({
         compactPlacement: 'primary',
         loading: editContext?.savingText,
         disabled: !dirty || editContext?.savingText || editContext?.reloading,
-        onClick: () => { void handleSave() },
+        onClick: () => {
+          void handleSave()
+        },
       },
     ]
   }, [
@@ -128,9 +122,7 @@ export function FileBrowserCodeRenderer({
     handleSave,
     requestReload,
   ])
-
   useRegisterFileRendererToolbarItems('code-editor', toolbarItems)
-
   return (
     <div className='flex h-full min-h-0 w-full flex-col overflow-hidden'>
       <div className='min-h-0 flex-1'>
@@ -155,52 +147,92 @@ export function FileBrowserCodeRenderer({
           }}
         />
       </div>
-      {error ? <div className='border-t px-3 py-2 text-xs text-destructive'>{error}</div> : null}
-      {truncated ? <div className='border-t px-3 py-2 text-xs text-muted-foreground'>内容已截断</div> : null}
-      <AlertDialog open={reloadConfirmOpen} onOpenChange={setReloadConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>放弃本地修改？</AlertDialogTitle>
-            <AlertDialogDescription>
-              重新加载会用服务器内容覆盖当前未保存编辑。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(path, value)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction onClick={() => { void handleReload() }}>放弃并重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={conflictOpen} onOpenChange={setConflictOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>文件已有新内容</AlertDialogTitle>
-            <AlertDialogDescription>
-              你的编辑仍保留，可以下载到本地或重新加载。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <Button type='button' variant='outline' onClick={() => downloadLocalVersion(path, value)}>
-              <Download data-icon='inline-start' />
-              下载本地版本
-            </Button>
-            <AlertDialogAction onClick={() => { void handleReload() }}>重新加载</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {error ? (
+        <div className='border-t px-3 py-2 text-xs text-danger'>{error}</div>
+      ) : null}
+      {truncated ? (
+        <div className='border-t px-3 py-2 text-xs text-muted'>内容已截断</div>
+      ) : null}
+      <AlertDialog.Backdrop
+        isOpen={reloadConfirmOpen}
+        onOpenChange={setReloadConfirmOpen}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog>
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Heading>放弃本地修改？</AlertDialog.Heading>
+              <p>重新加载会用服务器内容覆盖当前未保存编辑。</p>
+            </AlertDialog.Header>
+            <AlertDialog.Footer className='flex-wrap'>
+              <Button slot='close' variant='tertiary'>
+                取消
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                onPress={() => downloadLocalVersion(path, value)}
+              >
+                <Download data-icon='inline-start' />
+                下载本地版本
+              </Button>
+              <Button
+                onPress={() => {
+                  void handleReload()
+                }}
+                slot='close'
+              >
+                放弃并重新加载
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
+      <AlertDialog.Backdrop
+        isOpen={conflictOpen}
+        onOpenChange={setConflictOpen}
+      >
+        <AlertDialog.Container>
+          <AlertDialog.Dialog>
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Heading>文件已有新内容</AlertDialog.Heading>
+              <p>你的编辑仍保留，可以下载到本地或重新加载。</p>
+            </AlertDialog.Header>
+            <AlertDialog.Footer className='flex-wrap'>
+              <Button slot='close' variant='tertiary'>
+                取消
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                onPress={() => downloadLocalVersion(path, value)}
+              >
+                <Download data-icon='inline-start' />
+                下载本地版本
+              </Button>
+              <Button
+                onPress={() => {
+                  void handleReload()
+                }}
+                slot='close'
+              >
+                重新加载
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </div>
   )
 }
-
 function downloadLocalVersion(path: string, value: string): void {
   const segments = path.split('/').filter(Boolean)
-  const filename = segments.length > 0 ? segments[segments.length - 1] : 'file.txt'
-  const url = URL.createObjectURL(new Blob([value], { type: 'text/plain;charset=utf-8' }))
+  const filename =
+    segments.length > 0 ? segments[segments.length - 1] : 'file.txt'
+  const url = URL.createObjectURL(
+    new Blob([value], { type: 'text/plain;charset=utf-8' })
+  )
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename

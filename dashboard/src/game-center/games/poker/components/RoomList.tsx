@@ -1,48 +1,12 @@
-import "../styles/lobby.css"
-import { ArrowUpRight } from "lucide-react"
+import { Button, Chip, Table } from "@heroui/react"
 import type { PokerRoomView } from "@synapse/shared/game-contracts"
-import { Button } from "@/game-center/ui/button"
-import { Badge } from "@/game-center/ui/badge"
 import { Card } from "./Card"
 import { amount } from "../lib/view"
-const statusLabels: Record<string, string> = {
-  running: "进行中",
-  waiting: "等待中",
-  paused: "已暂停",
-  closed: "已结束",
-}
-/** Occupancy counts only: no real seat positions or hand information. */
-function RoomArtwork({ players, maxSeats }: { players: number; maxSeats: number }) {
-  return (
-    <span className="gc-room-art">
-      <span className="gc-room-deck" data-card-size="sm" aria-hidden="true">
-        <Card faceUp={false} />
-        <Card faceUp={false} />
-      </span>
-      <span className="gc-room-capacity">
-        <span className="gc-room-occupancy">
-          <b>
-            {players} <small>/ {maxSeats} 人</small>
-          </b>
-          <span>在桌</span>
-        </span>
-        <span className="gc-room-seat-meter" aria-hidden="true">
-          {Array.from({ length: maxSeats }, (_, i) => (
-            <span key={i} data-occupied={i < players} />
-          ))}
-        </span>
-      </span>
-    </span>
-  )
-}
-export function RoomList({
-  rooms,
-  myRoomCodes,
-  userId,
-  onRoom,
-  onConnect,
-  onClose,
-}: {
+
+import "../../../styles/responsive-lists.css"
+
+const statusLabels: Record<string, string> = { running: "进行中", waiting: "等待中", paused: "已暂停", closed: "已结束" }
+export function RoomList({ rooms, myRoomCodes, userId, onRoom, onConnect, onClose }: {
   rooms: PokerRoomView[]
   myRoomCodes: readonly string[]
   userId: string | null
@@ -50,77 +14,24 @@ export function RoomList({
   onConnect: (code: string) => void
   onClose: (code: string) => void
 }) {
-  return (
-    <ul className="gc-room-grid">
-      {rooms.map((room) => {
-        const mine = myRoomCodes.includes(room.roomCode),
-          canConnect = room.players < room.maxSeats && !mine
-        return (
-          <li key={room.roomCode} className="gc-room" data-mine={mine}>
-            <button type="button" className="gc-room-open" onClick={() => onRoom(room.roomCode)}>
-              <span className="gc-room-heading">
-                <span className="flex min-w-0 items-center gap-2">
-                  <strong title={room.name || `房间 #${room.roomCode}`}>
-                    {room.name || `房间 #${room.roomCode}`}
-                  </strong>
-                  <Badge variant="outline">{room.mode === "practice" ? "陪练房" : "点数房"}</Badge>
-                </span>
-                <span className="gc-room-state" data-running={room.status === "running"}>
-                  {statusLabels[room.status] ?? room.status}
-                </span>
-              </span>
-              <span className="gc-room-code">
-                #{room.roomCode}
-                {room.rules?.variant === "short32" ? " · 短牌 32 张" : " · 标准 52 张"}
-                {mine && " · 我的牌桌"}
-              </span>
-              <RoomArtwork players={room.players} maxSeats={room.maxSeats} />
-              <span className="gc-room-stakes">
-                <span>
-                  <small>{room.mode === "practice" ? "初始筹码" : "带入"}</small>
-                  <b>{amount(room.buyIn)}</b>
-                </span>
-                <span>
-                  <small>盲注</small>
-                  <b>
-                    {room.smallBlind} / {room.bigBlind}
-                  </b>
-                </span>
-                <ArrowUpRight aria-hidden="true" />
-              </span>
-            </button>
-            <div className="gc-room-actions">
-              <span>
-                {mine ? "已在桌" : room.players >= room.maxSeats ? "满员 · 可观看" : "可接入 AI"}
-              </span>
-              <div>
-                {canConnect && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="gc-row-action"
-                    onClick={() => onConnect(room.roomCode)}
-                  >
-                    接入 AI
-                  </Button>
-                )}
-                {room.ownerUserId === userId && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="gc-row-action"
-                    onClick={() => onClose(room.roomCode)}
-                  >
-                    解散
-                  </Button>
-                )}
-              </div>
-            </div>
-          </li>
-        )
+  return <div className="game-responsive-list"><Table><Table.ScrollContainer><Table.Content aria-label="房间列表" className="game-room-table min-w-3xl">
+    <Table.Header><Table.Column isRowHeader>房间</Table.Column><Table.Column>类型</Table.Column><Table.Column>状态</Table.Column><Table.Column>人数</Table.Column><Table.Column>带入 / 盲注</Table.Column><Table.Column>操作</Table.Column></Table.Header>
+    <Table.Body>
+      {rooms.map(room => {
+        const pending = room.myControl?.handoffPending, ai = room.myControl?.controller === "ai"
+        const mine = room.myControl?.seatNo != null || myRoomCodes.includes(room.roomCode), canConnect = pending || ai || room.players < room.maxSeats && !mine
+        return <Table.Row key={room.roomCode} id={room.roomCode}>
+          <Table.Cell><div className="flex items-center gap-3"><span className="flex gap-1" data-card-size="xs" aria-hidden="true"><Card faceUp={false} /><Card faceUp={false} /></span><div>
+            <Button variant="ghost" size="sm" onPress={() => onRoom(room.roomCode)}>{room.name || `房间 #${room.roomCode}`}</Button>
+            <p className="text-xs text-muted">#{room.roomCode} · {room.rules?.variant === "short32" ? "短牌 32 张" : "标准 52 张"}{room.rules?.ruleOptions?.roll && " · Roll"}</p>
+          </div></div></Table.Cell>
+          <Table.Cell><Chip size="sm">{room.mode === "practice" ? "陪练房" : "点数房"}</Chip></Table.Cell>
+          <Table.Cell><Chip size="sm" color={room.status === "running" ? "success" : "default"}>{statusLabels[room.status] ?? room.status}</Chip><p className="mt-1 text-xs text-muted">{pending ? "等待你的 AI 接入" : ai ? "你的 AI 已接管" : mine ? "已在桌" : room.players >= room.maxSeats ? "满员 · 可观看" : "可加入"}</p></Table.Cell>
+          <Table.Cell><span className="tabular-nums">{room.players} / {room.maxSeats} 人</span></Table.Cell>
+          <Table.Cell><p className="text-xs text-muted">{room.mode === "practice" ? "初始筹码" : "带入点数"}</p><p className="tabular-nums">{amount(room.buyIn)}</p><p className="text-xs text-muted tabular-nums">{room.smallBlind} / {room.bigBlind}</p></Table.Cell>
+          <Table.Cell><div className="flex items-center gap-2">{canConnect && <Button size="sm" variant="tertiary" onPress={() => onConnect(room.roomCode)}>{pending ? "查看接入 / 取消" : ai ? "查看 AI 控制" : "接入 AI"}</Button>}{room.ownerUserId === userId && <Button size="sm" variant="danger-soft" onPress={() => onClose(room.roomCode)}>解散</Button>}</div></Table.Cell>
+        </Table.Row>
       })}
-    </ul>
-  )
+    </Table.Body>
+  </Table.Content></Table.ScrollContainer></Table></div>
 }

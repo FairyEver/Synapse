@@ -24,7 +24,7 @@ vi.mock("../../../lib/api", () => ({
     },
   }),
 }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }))
+vi.mock("@heroui/react", async (original) => ({ ...await original<typeof import("@heroui/react")>(), toast: { danger: vi.fn(), update: vi.fn() } }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 beforeEach(() => {
   api.versions.mockReset().mockResolvedValue([])

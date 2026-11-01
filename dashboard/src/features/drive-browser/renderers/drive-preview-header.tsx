@@ -1,19 +1,19 @@
-import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { ChevronDown, MoreHorizontal } from 'lucide-react'
-import { RelativeTime } from '@/components/relative-time'
-import { Button } from '@/components/ui/button'
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Separator } from '@/components/ui/separator'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+  Button,
+  ButtonGroup,
+  Description,
+  Dropdown,
+  Header,
+  Label,
+  Link,
+  Separator,
+  Toolbar,
+  Tooltip,
+} from '@heroui/react'
+import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import { ChevronDown } from 'lucide-react'
+import { RelativeTime } from '@/components/relative-time'
+import { cn } from '@/lib/utils'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import {
   FilePreviewToolbarItemView,
@@ -23,16 +23,24 @@ import {
 } from '@/features/file-browser/preview/file-preview-toolbar'
 import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
-import { getDrivePreviewFileIdentity, getDrivePreviewSystemActions } from './drive-preview-actions'
-import type { DrivePreviewPdfExportAction, DrivePreviewSystemAction } from './drive-preview-actions'
+import {
+  getDrivePreviewFileIdentity,
+  getDrivePreviewDisplayName,
+  getDrivePreviewSystemActions,
+} from './drive-preview-actions'
+import type {
+  DrivePreviewPdfExportAction,
+  DrivePreviewSystemAction,
+} from './drive-preview-actions'
 import { copyDrivePreviewShareLink } from './drive-preview-share-clipboard'
-import type { DriveRendererId, DriveRendererOption } from './drive-renderer-registry'
+import type {
+  DriveRendererId,
+  DriveRendererOption,
+} from './drive-renderer-registry'
 import type { DriveRendererToolbarItem } from './drive-renderer-toolbar-context'
-
-const DRIVE_PREVIEW_PRIMARY_ACTION_IDS = new Set<DrivePreviewSystemAction['id']>([
-  'renderer-select',
-])
-
+const DRIVE_PREVIEW_PRIMARY_ACTION_IDS = new Set<
+  DrivePreviewSystemAction['id']
+>(['renderer-select'])
 export function DrivePreviewHeader({
   snapshot,
   rendererItems,
@@ -47,18 +55,31 @@ export function DrivePreviewHeader({
   readonly selectedRendererId: DriveRendererId | null
   readonly onRendererChange: (id: DriveRendererId) => void
   readonly onOpenVersions: (itemId: string) => void
-  readonly pdfExport?: Omit<DrivePreviewPdfExportAction, 'kind' | 'id' | 'label' | 'icon'>
+  readonly pdfExport?: Omit<
+    DrivePreviewPdfExportAction,
+    'kind' | 'id' | 'label' | 'icon'
+  >
 }) {
   const identity = getDrivePreviewFileIdentity(snapshot)
-  const systemActions = getDrivePreviewSystemActions(snapshot, selectedRendererId, pdfExport)
+  const displayName = getDrivePreviewDisplayName(snapshot, selectedRendererId)
+  const systemActions = getDrivePreviewSystemActions(
+    snapshot,
+    selectedRendererId,
+    pdfExport
+  )
   const layoutMode = useFilePreviewLayoutMode()
-  const primaryActions = systemActions.filter((action) => DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id))
-  const overflowActions = systemActions.filter((action) => !DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id))
-  const hasHeaderActions = primaryActions.length > 0 || overflowActions.length > 0
+  const primaryActions = systemActions.filter((action) =>
+    DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id)
+  )
+  const overflowActions = systemActions.filter(
+    (action) => !DRIVE_PREVIEW_PRIMARY_ACTION_IDS.has(action.id)
+  )
+  const hasHeaderActions =
+    primaryActions.length > 0 || overflowActions.length > 0
   const showActionSeparator = rendererItems.length > 0 && hasHeaderActions
   const showViewerStatus = snapshot.context === 'share'
-  const showViewerSeparator = showViewerStatus && (rendererItems.length > 0 || hasHeaderActions)
-
+  const showViewerSeparator =
+    showViewerStatus && (rendererItems.length > 0 || hasHeaderActions)
   if (layoutMode === 'compact') {
     return (
       <DrivePreviewCompactHeader
@@ -71,31 +92,46 @@ export function DrivePreviewHeader({
       />
     )
   }
-
   return (
-    <header data-drive-preview-header='true' data-file-preview-header='regular' className='flex shrink-0 items-center justify-between gap-2 border-b p-2'>
+    <header
+      data-drive-preview-header='true'
+      data-file-preview-header='regular'
+      className='flex shrink-0 items-center justify-between gap-2 border-b p-2'
+    >
       <div className='flex min-w-0 flex-1 items-center gap-2 text-sm font-medium'>
         <DriveBrowserItemIcon item={snapshot.current} />
         <Tooltip>
-          <TooltipTrigger
+          <Tooltip.Trigger
             data-drive-preview-file-name='true'
-            className='min-w-0 truncate text-left focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+            className='min-w-0 truncate text-left focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
           >
-            {identity.name}
-          </TooltipTrigger>
-          <TooltipContent side='bottom' align='start' sideOffset={6}>
-            <span data-drive-preview-file-metadata='true' className='flex items-center gap-2 whitespace-nowrap'>
-              <span>{identity.sizeLabel}</span>
-              <span>{identity.kindLabel}</span>
-              <RelativeTime value={identity.updatedAt} />
+            {displayName}
+          </Tooltip.Trigger>
+          <Tooltip.Content placement='bottom' offset={6}>
+            <span
+              data-drive-preview-file-metadata='true'
+              className='flex max-w-sm flex-col gap-1'
+            >
+              <span className='break-words'>{identity.name}</span>
+              <span className='flex items-center gap-2'>
+                <span>{identity.sizeLabel}</span>
+                <span>{identity.kindLabel}</span>
+                <RelativeTime value={identity.updatedAt} />
+              </span>
             </span>
-          </TooltipContent>
+          </Tooltip.Content>
         </Tooltip>
       </div>
-      <div className='flex shrink-0 flex-wrap items-center gap-2'>
+      <Toolbar
+        aria-label='文档工具栏'
+        className='flex shrink-0 flex-wrap items-center gap-2'
+      >
         {rendererItems.length > 0 ? (
-          <div data-drive-preview-renderer-actions='true' className='flex items-center gap-1'>
-            {rendererItems.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+          <div
+            data-drive-preview-renderer-actions='true'
+            className='flex items-center gap-1'
+          >
+            <DrivePreviewToolbarItems items={rendererItems} />
           </div>
         ) : null}
         {showActionSeparator ? (
@@ -115,21 +151,19 @@ export function DrivePreviewHeader({
           />
         ))}
         {overflowActions.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                data-drive-telemetry-event='web.drive.preview.menu'
-                type='button'
-                variant='ghost'
-                size='icon'
-                className="relative h-8 w-8 shadow-none after:absolute after:-inset-1 after:content-['']"
-                aria-label='更多操作'
-              >
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent data-drive-telemetry-scope='portal' align='end'>
-              <DropdownMenuGroup>
+          <Dropdown>
+            <Button
+              data-drive-telemetry-event='web.drive.preview.menu'
+              type='button'
+              variant='ghost'
+              size='sm'
+              aria-label='更多操作'
+            >
+              更多
+              <ChevronDown data-icon='inline-end' />
+            </Button>
+            <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
+              <Dropdown.Menu aria-label='操作'>
                 {overflowActions.map((action) => (
                   <DrivePreviewHeaderMenuAction
                     key={action.id}
@@ -139,9 +173,9 @@ export function DrivePreviewHeader({
                     onOpenVersions={onOpenVersions}
                   />
                 ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
         ) : null}
         {showViewerStatus ? (
           <div className='flex shrink-0 items-center gap-2'>
@@ -155,11 +189,10 @@ export function DrivePreviewHeader({
             <DriveShareViewerStatus snapshot={snapshot} />
           </div>
         ) : null}
-      </div>
+      </Toolbar>
     </header>
   )
 }
-
 function DrivePreviewCompactHeader({
   snapshot,
   rendererItems,
@@ -176,42 +209,96 @@ function DrivePreviewCompactHeader({
   readonly onOpenVersions: (itemId: string) => void
 }) {
   const identity = getDrivePreviewFileIdentity(snapshot)
+  const displayName = getDrivePreviewDisplayName(snapshot, selectedRendererId)
   const primaryItems = getCompactPrimaryToolbarItems(rendererItems)
   const overflowItems = getCompactOverflowToolbarItems(rendererItems)
   const showViewerStatus = snapshot.context === 'share'
-  const hasMenuActions = overflowItems.length > 0 || systemActions.length > 0 || showViewerStatus
-
+  const fileActions = systemActions.filter(
+    (action) => action.kind !== 'renderer-select'
+  )
+  const rendererAction = systemActions.find(
+    (action) => action.kind === 'renderer-select'
+  )
+  const hasMenuActions =
+    overflowItems.length > 0 || systemActions.length > 0 || showViewerStatus
   return (
-    <header data-drive-preview-header='true' data-file-preview-header='compact' className='shrink-0 border-b'>
+    <header
+      data-drive-preview-header='true'
+      data-file-preview-header='compact'
+      className='shrink-0 border-b'
+    >
       <div className='flex min-h-14 min-w-0 items-center gap-3 px-3'>
         <DriveBrowserItemIcon item={snapshot.current} />
-        <span className='min-w-0 flex-1 truncate text-sm font-medium'>{identity.name}</span>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button data-drive-telemetry-event='web.drive.preview.menu' type='button' variant='outline' size='icon' className='size-11' aria-label='更多操作'>
-              <MoreHorizontal />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent data-drive-telemetry-scope='portal' align='end' className='w-72'>
-            <DropdownMenuLabel className='min-w-0 truncate'>{identity.name}</DropdownMenuLabel>
-            <div className='px-2 pb-2 text-xs text-muted-foreground'>
-              {identity.sizeLabel} / {identity.kindLabel} / <RelativeTime value={identity.updatedAt} />
+        <span className='min-w-0 flex-1 truncate text-sm font-medium'>
+          {displayName}
+        </span>
+        <Dropdown>
+          <Button
+            data-drive-telemetry-event='web.drive.preview.menu'
+            type='button'
+            variant='outline'
+            className='min-h-11'
+            aria-label='更多操作'
+          >
+            更多
+            <ChevronDown data-icon='inline-end' />
+          </Button>
+          <Dropdown.Popover
+            isNonModal
+            data-drive-telemetry-scope='portal'
+            className='w-72'
+          >
+            <div
+              data-drive-preview-file-metadata='true'
+              className='min-w-0 space-y-1 px-4 py-3'
+            >
+              <p
+                data-drive-preview-menu-file-name
+                className='truncate text-sm font-medium'
+                title={identity.name}
+              >
+                {identity.name}
+              </p>
+              <Description>
+                {identity.sizeLabel} · {identity.kindLabel} ·{' '}
+                <RelativeTime value={identity.updatedAt} />
+              </Description>
             </div>
-            {hasMenuActions ? <DropdownMenuSeparator /> : null}
-            <FilePreviewToolbarMenuItems items={overflowItems} />
-            {overflowItems.length > 0 && systemActions.length > 0 ? <DropdownMenuSeparator /> : null}
-            {systemActions.map((action) => (
-              <DrivePreviewHeaderMenuAction
-                key={action.id}
-                action={action}
-                selectedRendererId={selectedRendererId}
-                onRendererChange={onRendererChange}
-                onOpenVersions={onOpenVersions}
-              />
-            ))}
+            <Dropdown.Menu aria-label='操作'>
+              {hasMenuActions ? <Separator /> : null}
+              <FilePreviewToolbarMenuItems items={overflowItems} />
+              {overflowItems.length > 0 && fileActions.length > 0 ? (
+                <Separator />
+              ) : null}
+              {fileActions.map((action) => (
+                <DrivePreviewHeaderMenuAction
+                  key={action.id}
+                  action={action}
+                  selectedRendererId={selectedRendererId}
+                  onRendererChange={onRendererChange}
+                  onOpenVersions={onOpenVersions}
+                />
+              ))}
+              {rendererAction ? (
+                <>
+                  {overflowItems.length > 0 || fileActions.length > 0 ? (
+                    <Separator />
+                  ) : null}
+                  <DrivePreviewHeaderMenuAction
+                    action={rendererAction}
+                    selectedRendererId={selectedRendererId}
+                    onRendererChange={onRendererChange}
+                    onOpenVersions={onOpenVersions}
+                    showRendererHeading
+                  />
+                </>
+              ) : null}
+            </Dropdown.Menu>
             {showViewerStatus ? (
               <>
-                {(overflowItems.length > 0 || systemActions.length > 0) ? <DropdownMenuSeparator /> : null}
+                {overflowItems.length > 0 || systemActions.length > 0 ? (
+                  <Separator />
+                ) : null}
                 <div className='px-2 py-1.5'>
                   <DriveShareViewerStatus
                     snapshot={snapshot}
@@ -220,20 +307,20 @@ function DrivePreviewCompactHeader({
                 </div>
               </>
             ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </Dropdown.Popover>
+        </Dropdown>
       </div>
       {primaryItems.length > 0 ? (
-        <div className='flex min-h-14 max-w-full items-center gap-2 overflow-x-auto border-t px-3 py-1.5'>
-          {primaryItems.map((item) => (
-            <DrivePreviewToolbarItemView key={item.id} item={item} compact />
-          ))}
-        </div>
+        <Toolbar
+          aria-label='文档工具栏'
+          className='flex min-h-14 w-full max-w-full items-center gap-2 overflow-x-auto border-t px-3 py-1.5'
+        >
+          <DrivePreviewToolbarItems items={primaryItems} compact />
+        </Toolbar>
       ) : null}
     </header>
   )
 }
-
 function DrivePreviewHeaderAction({
   action,
   selectedRendererId,
@@ -247,17 +334,29 @@ function DrivePreviewHeaderAction({
 }) {
   if (action.kind === 'link') {
     return (
-      <Button asChild variant='outline' size='sm'>
-        <a data-drive-telemetry-event='web.drive.preview.action' href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
-          <action.icon data-icon='inline-start' />
-          {action.label}
-        </a>
-      </Button>
+      <Link
+        className='gap-1'
+        data-drive-telemetry-event='web.drive.preview.action'
+        href={action.href}
+        target={action.external ? '_blank' : undefined}
+        rel={action.external ? 'noreferrer' : undefined}
+      >
+        <Link.Icon><action.icon className='size-full' /></Link.Icon>
+        {action.label}
+      </Link>
     )
   }
   if (action.kind === 'copy-share-link') {
     return (
-      <Button data-drive-telemetry-event='web.drive.preview.copy-share-link' type='button' variant='outline' size='sm' onClick={() => { void copyDrivePreviewShareLink(action) }}>
+      <Button
+        data-drive-telemetry-event='web.drive.preview.copy-share-link'
+        type='button'
+        variant='outline'
+        size='sm'
+        onPress={() => {
+          void copyDrivePreviewShareLink(action)
+        }}
+      >
         <action.icon data-icon='inline-start' />
         {action.label}
       </Button>
@@ -265,7 +364,13 @@ function DrivePreviewHeaderAction({
   }
   if (action.kind === 'versions') {
     return (
-      <Button data-drive-telemetry-event='web.drive.preview.versions' type='button' variant='outline' size='sm' onClick={() => onOpenVersions(action.itemId)}>
+      <Button
+        data-drive-telemetry-event='web.drive.preview.versions'
+        type='button'
+        variant='outline'
+        size='sm'
+        onPress={() => onOpenVersions(action.itemId)}
+      >
         <action.icon data-icon='inline-start' />
         {action.label}
       </Button>
@@ -278,9 +383,10 @@ function DrivePreviewHeaderAction({
         type='button'
         variant='outline'
         size='sm'
-        disabled={action.exporting || Boolean(action.disabledReason)}
-        title={action.disabledReason ?? undefined}
-        onClick={() => { void action.onExport() }}
+        isDisabled={action.exporting || Boolean(action.disabledReason)}
+        onPress={() => {
+          void action.onExport()
+        }}
       >
         <action.icon data-icon='inline-start' />
         {action.label}
@@ -288,118 +394,185 @@ function DrivePreviewHeaderAction({
     )
   }
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          data-drive-telemetry-event='web.drive.preview.renderer-menu'
-          type='button'
-          variant='ghost'
-          size='sm'
-          className="relative pl-2.5 pr-2 shadow-none after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']"
-        >
-          {action.label}
-          <ChevronDown data-icon='inline-end' />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent data-drive-telemetry-scope='portal' align='end'>
-        {action.options.map((option) => (
-          <DropdownMenuCheckboxItem
-            data-drive-telemetry-event='web.drive.renderer.select'
-            key={option.id}
-            checked={option.id === selectedRendererId}
-            disabled={Boolean(option.disabledReason)}
-            onCheckedChange={() => {
-              if (!option.disabledReason) onRendererChange(option.id)
-            }}
-          >
-            <DriveRendererOptionMenuLabel option={option} />
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Dropdown>
+      <Button
+        data-drive-telemetry-event='web.drive.preview.renderer-menu'
+        type='button'
+        variant='ghost'
+        size='sm'
+      >
+        {action.label}
+        <ChevronDown data-icon='inline-end' />
+      </Button>
+      <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
+        <Dropdown.Menu aria-label='操作'>
+          <DrivePreviewHeaderMenuAction
+            action={action}
+            selectedRendererId={selectedRendererId}
+            onRendererChange={onRendererChange}
+            onOpenVersions={onOpenVersions}
+          />
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   )
 }
-
 function DrivePreviewHeaderMenuAction({
   action,
   selectedRendererId,
   onRendererChange,
   onOpenVersions,
+  showRendererHeading = false,
 }: {
   readonly action: DrivePreviewSystemAction
   readonly selectedRendererId: DriveRendererId | null
   readonly onRendererChange: (id: DriveRendererId) => void
   readonly onOpenVersions: (itemId: string) => void
+  readonly showRendererHeading?: boolean
 }) {
   if (action.kind === 'link') {
     return (
-      <DropdownMenuItem asChild>
-        <a data-drive-telemetry-event='web.drive.preview.action' href={action.href} target={action.external ? '_blank' : undefined} rel={action.external ? 'noreferrer' : undefined}>
-          <action.icon data-icon='inline-start' />
-          {action.label}
-        </a>
-      </DropdownMenuItem>
+      <Dropdown.Item
+        textValue={action.label}
+        data-drive-telemetry-event='web.drive.preview.action'
+        href={action.href}
+        target={action.external ? '_blank' : undefined}
+        rel={action.external ? 'noreferrer' : undefined}
+      >
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
+        <Label>{action.label}</Label>
+      </Dropdown.Item>
     )
   }
   if (action.kind === 'copy-share-link') {
     return (
-      <DropdownMenuItem data-drive-telemetry-event='web.drive.preview.copy-share-link' onSelect={() => { void copyDrivePreviewShareLink(action) }}>
-        <action.icon data-icon='inline-start' />
-        {action.label}
-      </DropdownMenuItem>
+      <Dropdown.Item
+        textValue={action.label}
+        data-drive-telemetry-event='web.drive.preview.copy-share-link'
+        onAction={() => {
+          void copyDrivePreviewShareLink(action)
+        }}
+      >
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
+        <Label>{action.label}</Label>
+      </Dropdown.Item>
     )
   }
   if (action.kind === 'versions') {
     return (
-      <DropdownMenuItem data-drive-telemetry-event='web.drive.preview.versions' onSelect={() => onOpenVersions(action.itemId)}>
-        <action.icon data-icon='inline-start' />
-        {action.label}
-      </DropdownMenuItem>
+      <Dropdown.Item
+        textValue={action.label}
+        data-drive-telemetry-event='web.drive.preview.versions'
+        onAction={() => onOpenVersions(action.itemId)}
+      >
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
+        <Label>{action.label}</Label>
+      </Dropdown.Item>
     )
   }
   if (action.kind === 'pdf-export') {
     return (
-      <DropdownMenuItem
+      <Dropdown.Item
+        textValue={action.label}
         data-drive-telemetry-event='web.drive.preview.export-pdf'
-        disabled={action.exporting || Boolean(action.disabledReason)}
-        title={action.disabledReason ?? undefined}
-        onSelect={() => { void action.onExport() }}
+        isDisabled={action.exporting || Boolean(action.disabledReason)}
+        onAction={() => {
+          void action.onExport()
+        }}
       >
-        <action.icon data-icon='inline-start' />
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
         {action.disabledReason ? (
           <span className='flex min-w-0 flex-col gap-0.5'>
-            <span>{action.label}</span>
-            <span className='text-xs text-muted-foreground'>{action.disabledReason}</span>
+            <Label>{action.label}</Label>
+            <Description>{action.disabledReason}</Description>
           </span>
-        ) : action.label}
-      </DropdownMenuItem>
+        ) : (
+          <Label>{action.label}</Label>
+        )}
+      </Dropdown.Item>
     )
   }
-  return action.options.map((option) => (
-    <DropdownMenuCheckboxItem
-      data-drive-telemetry-event='web.drive.renderer.select'
-      key={option.id}
-      checked={option.id === selectedRendererId}
-      disabled={Boolean(option.disabledReason)}
-      onCheckedChange={() => {
-        if (!option.disabledReason) onRendererChange(option.id)
-      }}
-    >
-      <DriveRendererOptionMenuLabel option={option} />
-    </DropdownMenuCheckboxItem>
-  ))
-}
-
-export function DriveRendererOptionMenuLabel({ option }: { readonly option: DriveRendererOption }) {
-  if (!option.disabledReason) return <>{option.label}</>
   return (
-    <span className='flex min-w-0 flex-col gap-0.5'>
-      <span>{option.label}</span>
-      <span className='text-xs text-muted-foreground'>{option.disabledReason}</span>
+    <Dropdown.Section
+      aria-label='打开方式'
+      selectionMode='single'
+      selectedKeys={selectedRendererId ? [selectedRendererId] : []}
+    >
+      {showRendererHeading ? <Header>打开方式</Header> : null}
+      {action.options.map((option) => (
+        <Dropdown.Item
+          data-drive-telemetry-event='web.drive.renderer.select'
+          key={option.id}
+          isDisabled={Boolean(option.disabledReason)}
+          id={option.id}
+          textValue={option.label}
+          onAction={() => {
+            if (!option.disabledReason) onRendererChange(option.id)
+          }}
+        >
+          <Dropdown.ItemIndicator />
+          <DriveRendererOptionMenuLabel
+            option={option}
+            alignWithActionIcons={showRendererHeading}
+          />
+        </Dropdown.Item>
+      ))}
+    </Dropdown.Section>
+  )
+}
+export function DriveRendererOptionMenuLabel({
+  option,
+  alignWithActionIcons = false,
+}: {
+  readonly option: DriveRendererOption
+  readonly alignWithActionIcons?: boolean
+}) {
+  return (
+    <span
+      className={cn(
+        'flex min-w-0 flex-col gap-0.5',
+        // Native selection padding reserves 10px less than a 16px action icon plus the menu gap.
+        alignWithActionIcons && 'ps-2.5'
+      )}
+    >
+      <Label>{option.label}</Label>
+      {option.disabledReason ? <Description>{option.disabledReason}</Description> : null}
     </span>
   )
 }
-
+function DrivePreviewToolbarItems({
+  items,
+  compact = false,
+}: {
+  readonly items: readonly DriveRendererToolbarItem[]
+  readonly compact?: boolean
+}) {
+  const groups: { label?: string; items: DriveRendererToolbarItem[] }[] = []
+  for (const item of items) {
+    const previous = groups.at(-1)
+    if (item.group && previous?.label === item.group) {
+      previous.items.push(item)
+    } else {
+      groups.push({ label: item.group, items: [item] })
+    }
+  }
+  return groups.map(({ label, items: groupItems }) => {
+    const controls = groupItems.map((item) => (
+      <DrivePreviewToolbarItemView key={item.id} item={item} compact={compact} />
+    ))
+    return label ? (
+      <ButtonGroup
+        key={groupItems[0].id}
+        aria-label={label}
+        size='sm'
+        variant='tertiary'
+        className='shrink-0'
+      >
+        {controls}
+      </ButtonGroup>
+    ) : controls
+  })
+}
 export function DrivePreviewToolbarItemView({
   item,
   compact = false,
@@ -407,5 +580,12 @@ export function DrivePreviewToolbarItemView({
   readonly item: DriveRendererToolbarItem
   readonly compact?: boolean
 }) {
-  return <FilePreviewToolbarItemView item={item} compact={compact} defaultButtonVariant='ghost' />
+  return (
+    <FilePreviewToolbarItemView
+      item={item}
+      compact={compact}
+      defaultButtonVariant='ghost'
+      showIcons={false}
+    />
+  )
 }

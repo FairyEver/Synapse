@@ -15,17 +15,25 @@ import { ApiError, driveBrowserApi } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
-import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+import {
+  DriveRendererToolbarProvider,
+  useDriveRendererToolbar,
+} from './drive-renderer-toolbar-context'
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 let objectUrlIndex = 0
 const mdxEditorMockState = vi.hoisted(() => ({
   deferContentMount: false,
-  imagePreviewHandler: null as ((imageSource: string) => Promise<string>) | null,
+  imagePreviewHandler: null as
+    | ((imageSource: string) => Promise<string>)
+    | null,
   linkAutoLinkDisabled: null as boolean | null,
 }))
-const layoutModeMock = vi.hoisted(() => ({ value: 'regular' as 'regular' | 'compact' }))
+const layoutModeMock = vi.hoisted(() => ({
+  value: 'regular' as 'regular' | 'compact',
+}))
 const annotationsMock = vi.hoisted(() => ({
   input: undefined as unknown,
   threads: [] as DriveAnnotationThreadDto[],
@@ -62,14 +70,25 @@ Object.defineProperty(Range.prototype, 'getClientRects', {
 
 vi.mock('@mdxeditor/editor/style.css', () => ({}))
 
-vi.mock('./mdxeditor-commonmark-compatibility-plugin', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./mdxeditor-commonmark-compatibility-plugin')>()
-  return {
-    ...actual,
-    commonMarkTextCompatibilityPlugin: () => ({ name: 'commonMarkTextCompatibilityPlugin' }),
-    commonMarkToMarkdownOptions: { ...actual.commonMarkToMarkdownOptions, marker: 'commonmark' },
+vi.mock(
+  './mdxeditor-commonmark-compatibility-plugin',
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import('./mdxeditor-commonmark-compatibility-plugin')
+      >()
+    return {
+      ...actual,
+      commonMarkTextCompatibilityPlugin: () => ({
+        name: 'commonMarkTextCompatibilityPlugin',
+      }),
+      commonMarkToMarkdownOptions: {
+        ...actual.commonMarkToMarkdownOptions,
+        marker: 'commonmark',
+      },
+    }
   }
-})
+)
 
 vi.mock('../use-drive-annotations', () => ({
   useDriveAnnotations: (input: unknown) => {
@@ -79,12 +98,26 @@ vi.mock('../use-drive-annotations', () => ({
 }))
 
 vi.mock('../use-drive-messages', () => ({
-  useDriveMessages: () => ({ messages: [], canPost: false, refresh: vi.fn(async () => undefined) }),
+  useDriveMessages: () => ({
+    messages: [],
+    canPost: false,
+    refresh: vi.fn(async () => undefined),
+  }),
 }))
 
 vi.mock('../drive-messages-section', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
-  return { DriveMessagesSection: ({ sectionRef }: { sectionRef: React.Ref<HTMLElement> }) => React.createElement('section', { ref: sectionRef, 'data-drive-messages-section': 'true' }) }
+  return {
+    DriveMessagesSection: ({
+      sectionRef,
+    }: {
+      sectionRef: React.Ref<HTMLElement>
+    }) =>
+      React.createElement('section', {
+        ref: sectionRef,
+        'data-drive-messages-section': 'true',
+      }),
+  }
 })
 
 vi.mock('@/features/file-browser/preview/file-preview-layout', () => ({
@@ -104,111 +137,181 @@ vi.mock('@mdxeditor/editor', async () => {
   }
 
   return {
-    MDXEditor: React.forwardRef(({
-      markdown,
-      readOnly,
-      onChange,
-      onError,
-      plugins,
-      className,
-      contentEditableClassName,
-      toMarkdownOptions,
-      translation,
-    }: {
-      readonly markdown: string
-      readonly readOnly?: boolean
-      readonly onChange?: (value: string, initialMarkdownNormalize?: boolean) => void
-      readonly onError?: (payload: { readonly error: Error; readonly source: string }) => void
-      readonly plugins?: readonly unknown[]
-      readonly className?: string
-      readonly contentEditableClassName?: string
-      readonly toMarkdownOptions?: { readonly marker?: string }
-      readonly translation?: (key: string, defaultValue: string, interpolations?: Record<string, unknown>) => string
-    }, ref: React.Ref<{ setMarkdown: (value: string) => void }>) => {
-      const [value, setValue] = React.useState(markdown)
-      const [contentMounted, setContentMounted] = React.useState(!mdxEditorMockState.deferContentMount)
-      const valueRef = React.useRef(markdown)
-      React.useEffect(() => {
-        if (!mdxEditorMockState.deferContentMount) return
-        const frame = window.requestAnimationFrame(() => setContentMounted(true))
-        return () => window.cancelAnimationFrame(frame)
-      }, [])
-      const hasCommonMarkCompatibility = plugins?.some((plugin) => (
-        (plugin as { readonly name?: string }).name === 'commonMarkTextCompatibilityPlugin'
-      )) ?? false
-      const hasMdxCompatibility = plugins?.some((plugin) => (
-        (plugin as { readonly name?: string }).name === 'jsxPlugin'
-      )) ?? false
-      const reportParseError = (source: string) => {
-        if (
-          source.includes('broken-mdx')
-          || (source.includes('<=') && !hasCommonMarkCompatibility)
-          || (source.includes('<Callout') && !hasMdxCompatibility)
-        ) {
-          onError?.({ error: new Error('Parse failed'), source })
+    MDXEditor: React.forwardRef(
+      (
+        {
+          markdown,
+          readOnly,
+          onChange,
+          onError,
+          plugins,
+          className,
+          contentEditableClassName,
+          toMarkdownOptions,
+          translation,
+        }: {
+          readonly markdown: string
+          readonly readOnly?: boolean
+          readonly onChange?: (
+            value: string,
+            initialMarkdownNormalize?: boolean
+          ) => void
+          readonly onError?: (payload: {
+            readonly error: Error
+            readonly source: string
+          }) => void
+          readonly plugins?: readonly unknown[]
+          readonly className?: string
+          readonly contentEditableClassName?: string
+          readonly toMarkdownOptions?: { readonly marker?: string }
+          readonly translation?: (
+            key: string,
+            defaultValue: string,
+            interpolations?: Record<string, unknown>
+          ) => string
+        },
+        ref: React.Ref<{ setMarkdown: (value: string) => void }>
+      ) => {
+        const [value, setValue] = React.useState(markdown)
+        const [contentMounted, setContentMounted] = React.useState(
+          !mdxEditorMockState.deferContentMount
+        )
+        const valueRef = React.useRef(markdown)
+        React.useEffect(() => {
+          if (!mdxEditorMockState.deferContentMount) return
+          const frame = window.requestAnimationFrame(() =>
+            setContentMounted(true)
+          )
+          return () => window.cancelAnimationFrame(frame)
+        }, [])
+        const hasCommonMarkCompatibility =
+          plugins?.some(
+            (plugin) =>
+              (plugin as { readonly name?: string }).name ===
+              'commonMarkTextCompatibilityPlugin'
+          ) ?? false
+        const hasMdxCompatibility =
+          plugins?.some(
+            (plugin) =>
+              (plugin as { readonly name?: string }).name === 'jsxPlugin'
+          ) ?? false
+        const reportParseError = (source: string) => {
+          if (
+            source.includes('broken-mdx') ||
+            (source.includes('<=') && !hasCommonMarkCompatibility) ||
+            (source.includes('<Callout') && !hasMdxCompatibility)
+          ) {
+            onError?.({ error: new Error('Parse failed'), source })
+          }
         }
-      }
-      if (markdown.includes('<=') && !hasCommonMarkCompatibility) reportParseError(markdown)
-      const updateValue = (nextValue: string) => {
-        valueRef.current = nextValue
-        setValue(nextValue)
-        onChange?.(nextValue)
-        reportParseError(nextValue)
-      }
-      React.useImperativeHandle(ref, () => ({
-        getMarkdown: () => valueRef.current,
-        setMarkdown: (nextValue: string) => {
-          const scroller = document.querySelector('[data-drive-mdxeditor-scroll="true"]')
-          if (nextValue.includes('|') && scroller instanceof HTMLElement) scroller.scrollTop = 0
+        if (markdown.includes('<=') && !hasCommonMarkCompatibility)
+          reportParseError(markdown)
+        const updateValue = (nextValue: string) => {
           valueRef.current = nextValue
           setValue(nextValue)
+          onChange?.(nextValue)
           reportParseError(nextValue)
-        },
-        insertMarkdown: (markdownValue: string) => updateValue(`${valueRef.current}${markdownValue}`),
-        focus: (callback?: () => void) => callback?.(),
-      }), [])
+        }
+        React.useImperativeHandle(
+          ref,
+          () => ({
+            getMarkdown: () => valueRef.current,
+            setMarkdown: (nextValue: string) => {
+              const scroller = document.querySelector(
+                '[data-drive-mdxeditor-scroll="true"]'
+              )
+              if (nextValue.includes('|') && scroller instanceof HTMLElement)
+                scroller.scrollTop = 0
+              valueRef.current = nextValue
+              setValue(nextValue)
+              reportParseError(nextValue)
+            },
+            insertMarkdown: (markdownValue: string) =>
+              updateValue(`${valueRef.current}${markdownValue}`),
+            focus: (callback?: () => void) => callback?.(),
+          }),
+          []
+        )
 
-      const toolbarContents = plugins
-        ?.map((plugin) => (plugin as { readonly toolbarContents?: () => React.ReactNode }).toolbarContents?.())
-        .filter(Boolean)
-      const toolbar = plugins?.find((plugin) => (
-        (plugin as { readonly name?: string }).name === 'toolbarPlugin'
-      )) as { readonly toolbarClassName?: string } | undefined
-      return React.createElement('div', { 'data-testid': 'mdx-editor-root', className },
-        React.createElement('div', { 'data-testid': 'mdx-toolbar', className: `mdxeditor-toolbar ${toolbar?.toolbarClassName ?? ''}` }, toolbarContents),
-        contentMounted ? React.createElement(
+        const toolbarContents = plugins
+          ?.map((plugin) =>
+            (
+              plugin as { readonly toolbarContents?: () => React.ReactNode }
+            ).toolbarContents?.()
+          )
+          .filter(Boolean)
+        const toolbar = plugins?.find(
+          (plugin) =>
+            (plugin as { readonly name?: string }).name === 'toolbarPlugin'
+        ) as { readonly toolbarClassName?: string } | undefined
+        return React.createElement(
           'div',
-          { className: contentEditableClassName },
-          markdownHeadings(value).map((heading) => React.createElement(
-            `h${heading.depth}`,
-            { key: heading.key, 'data-testid': heading.key },
-            heading.text,
-          )),
-        ) : null,
-        React.createElement('textarea', {
-          'data-mdxeditor': 'true',
-          'data-toolbar-plugin': String(pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)),
-          'data-toolbar-controls': Array.from(pluginCalls).join(','),
-          'data-content-editable-class': contentEditableClassName ?? '',
-          'data-commonmark-options': toMarkdownOptions?.marker ?? '',
-          'data-mdx-support': String(hasMdxCompatibility),
-          'data-translation-bold': translation?.('toolbar.bold', 'Bold') ?? '',
-          'data-translation-undo': translation?.('toolbar.undo', 'Undo {{shortcut}}', { shortcut: 'Ctrl+Z' }) ?? '',
-          'data-translation-heading': translation?.('toolbar.blockTypes.heading', 'Heading {{level}}', { level: 2 }) ?? '',
-          'data-translation-unknown': translation?.('unknown.key', 'Fallback {{value}}', { value: 'OK' }) ?? '',
-          readOnly,
-          value,
-          onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-            setValue(event.currentTarget.value)
-            onChange?.(event.currentTarget.value, event.currentTarget.dataset.initialNormalize === 'true')
-            reportParseError(event.currentTarget.value)
-          },
-        }),
-        value.includes('盘点创建')
-          ? React.createElement('ol', { 'data-mdx-list-fixture': 'true' }, React.createElement('li', null, '盘点创建'))
-          : null,
-      )
-    }),
+          { 'data-testid': 'mdx-editor-root', className },
+          React.createElement(
+            'div',
+            {
+              'data-testid': 'mdx-toolbar',
+              className: `mdxeditor-toolbar ${toolbar?.toolbarClassName ?? ''}`,
+            },
+            toolbarContents
+          ),
+          contentMounted
+            ? React.createElement(
+                'div',
+                { className: contentEditableClassName },
+                markdownHeadings(value).map((heading) =>
+                  React.createElement(
+                    `h${heading.depth}`,
+                    { key: heading.key, 'data-testid': heading.key },
+                    heading.text
+                  )
+                )
+              )
+            : null,
+          React.createElement('textarea', {
+            'data-mdxeditor': 'true',
+            'data-toolbar-plugin': String(
+              pluginCalls.has('toolbarPlugin') && Boolean(plugins?.length)
+            ),
+            'data-toolbar-controls': Array.from(pluginCalls).join(','),
+            'data-content-editable-class': contentEditableClassName ?? '',
+            'data-commonmark-options': toMarkdownOptions?.marker ?? '',
+            'data-mdx-support': String(hasMdxCompatibility),
+            'data-translation-bold':
+              translation?.('toolbar.bold', 'Bold') ?? '',
+            'data-translation-undo':
+              translation?.('toolbar.undo', 'Undo {{shortcut}}', {
+                shortcut: 'Ctrl+Z',
+              }) ?? '',
+            'data-translation-heading':
+              translation?.('toolbar.blockTypes.heading', 'Heading {{level}}', {
+                level: 2,
+              }) ?? '',
+            'data-translation-unknown':
+              translation?.('unknown.key', 'Fallback {{value}}', {
+                value: 'OK',
+              }) ?? '',
+            readOnly,
+            value,
+            onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+              setValue(event.currentTarget.value)
+              onChange?.(
+                event.currentTarget.value,
+                event.currentTarget.dataset.initialNormalize === 'true'
+              )
+              reportParseError(event.currentTarget.value)
+            },
+          }),
+          value.includes('盘点创建')
+            ? React.createElement(
+                'ol',
+                { 'data-mdx-list-fixture': 'true' },
+                React.createElement('li', null, '盘点创建')
+              )
+            : null
+        )
+      }
+    ),
     BlockTypeSelect: () => {
       pluginCalls.add('BlockTypeSelect')
       return null
@@ -244,7 +347,11 @@ vi.mock('@mdxeditor/editor', async () => {
     codeBlockPlugin: () => ({ name: 'codeBlockPlugin' }),
     codeMirrorPlugin: () => ({ name: 'codeMirrorPlugin' }),
     diffSourcePlugin: () => ({ name: 'diffSourcePlugin' }),
-    DiffSourceToggleWrapper: ({ children }: { readonly children: React.ReactNode }) => {
+    DiffSourceToggleWrapper: ({
+      children,
+    }: {
+      readonly children: React.ReactNode
+    }) => {
       pluginCalls.add('DiffSourceToggleWrapper')
       return React.createElement(React.Fragment, null, children)
     },
@@ -284,10 +391,17 @@ vi.mock('@mdxeditor/editor', async () => {
     $isImageNode: () => false,
     tablePlugin: () => ({ name: 'tablePlugin' }),
     thematicBreakPlugin: () => ({ name: 'thematicBreakPlugin' }),
-    toolbarPlugin: (input: { readonly toolbarClassName?: string; readonly toolbarContents: () => React.ReactNode }) => {
+    toolbarPlugin: (input: {
+      readonly toolbarClassName?: string
+      readonly toolbarContents: () => React.ReactNode
+    }) => {
       pluginCalls.add('toolbarPlugin')
       collectToolbarControls(input.toolbarContents())
-      return { name: 'toolbarPlugin', toolbarClassName: input.toolbarClassName, toolbarContents: input.toolbarContents }
+      return {
+        name: 'toolbarPlugin',
+        toolbarClassName: input.toolbarClassName,
+        toolbarContents: input.toolbarContents,
+      }
     },
   }
 })
@@ -297,9 +411,15 @@ let host: HTMLDivElement | null = null
 
 class TestResizeObserver implements ResizeObserver {
   readonly observed = new Set<Element>()
-  observe = (element: Element) => { this.observed.add(element) }
-  unobserve = (element: Element) => { this.observed.delete(element) }
-  disconnect = () => { this.observed.clear() }
+  observe = (element: Element) => {
+    this.observed.add(element)
+  }
+  unobserve = (element: Element) => {
+    this.observed.delete(element)
+  }
+  disconnect = () => {
+    this.observed.clear()
+  }
 }
 
 vi.stubGlobal('ResizeObserver', TestResizeObserver)
@@ -337,49 +457,76 @@ describe('DriveMDXeditorRenderer', () => {
     const scroll = vi.fn()
     Element.prototype.scrollIntoView = scroll
     renderRenderer()
-    const content = document.querySelector('[data-drive-mdxeditor-content-host]')
+    const content = document.querySelector(
+      '[data-drive-mdxeditor-content-host]'
+    )
     const section = document.querySelector('[data-drive-messages-section]')
-    expect(content?.compareDocumentPosition(section as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      content?.compareDocumentPosition(section as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
     act(() => buttonWithText('留言 0').click())
     expect(scroll).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' })
   })
 
   it('shows the live outline in the default left panel', async () => {
-    renderRenderer({ preview: { ...basePreview(), text: '# Notes\n\n## Details' } })
+    renderRenderer({
+      preview: { ...basePreview(), text: '# Notes\n\n## Details' },
+    })
 
     await flushOutlineFrame()
 
     expect(buttonWithText('目录').getAttribute('aria-pressed')).toBe('true')
-    const outlinePanel = document.querySelector('[data-mdxeditor-resizable-panel="outline"]')
+    const outlinePanel = document.querySelector(
+      '[data-mdxeditor-resizable-panel="outline"]'
+    )
     expect(outlinePanel?.getAttribute('data-panel-size')).toBe('16%')
     expect(outlinePanel?.getAttribute('data-panel-min-size')).toBe('12%')
     expect(outlinePanel?.getAttribute('data-panel-max-size')).toBe('32%')
-    const outlineDividerClasses = outlinePanel?.nextElementSibling?.className.split(/\s+/u) ?? []
-    expect(outlineDividerClasses).toContain('bg-border')
+    const outlineDividerClasses =
+      outlinePanel?.nextElementSibling?.className.split(/\s+/u) ?? []
+    expect(outlineDividerClasses).toContain('drive-document-divider-visible')
     expect(outlineDividerClasses).not.toContain('bg-transparent')
-    expect(document.querySelector('nav[aria-label="目录"]')?.textContent).toContain('Notes')
-    expect(document.querySelector('[data-markdown-outline-id="mdxeditor-heading-2"]')?.closest('[data-markdown-outline-row]')?.className).toContain('pl-3')
+    expect(
+      document.querySelector('nav[aria-label="目录"]')?.textContent
+    ).toContain('Notes')
+    expect(
+      document
+        .querySelector('[data-markdown-outline-id="mdxeditor-heading-2"]')
+        ?.closest('[data-markdown-outline-row]')?.className
+    ).toContain('pl-3')
   })
 
   it('discovers headings when the MDXEditor content root mounts after the outer layout', async () => {
     mdxEditorMockState.deferContentMount = true
-    renderRenderer({ preview: { ...basePreview(), text: '# Notes\n\n## Details' } })
+    renderRenderer({
+      preview: { ...basePreview(), text: '# Notes\n\n## Details' },
+    })
 
     await flushOutlineFrame()
     await flushOutlineFrame()
 
     expect(buttonWithText('目录').getAttribute('aria-pressed')).toBe('true')
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="outline"]')).not.toBeNull()
-    expect(document.querySelector('nav[aria-label="目录"]')?.textContent).toContain('Details')
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="outline"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('nav[aria-label="目录"]')?.textContent
+    ).toContain('Details')
   })
 
   it('keeps outline frame scheduling live through Strict Mode effect cleanup', async () => {
-    renderRenderer({ preview: { ...basePreview(), text: '# Notes\n\n## Details' }, strict: true })
+    renderRenderer({
+      preview: { ...basePreview(), text: '# Notes\n\n## Details' },
+      strict: true,
+    })
 
     await flushOutlineFrame()
 
     expect(buttonWithText('目录').getAttribute('aria-pressed')).toBe('true')
-    expect(document.querySelectorAll('[data-markdown-outline-id]')).toHaveLength(2)
+    expect(
+      document.querySelectorAll('[data-markdown-outline-id]')
+    ).toHaveLength(2)
   })
 
   it('updates, removes, and restores the outline from unsaved rich-text headings', async () => {
@@ -391,38 +538,77 @@ describe('DriveMDXeditorRenderer', () => {
     await flushOutlineFrame()
 
     expect(buttonWithText('目录')).not.toBeNull()
-    expect(document.querySelector('nav[aria-label="目录"]')?.textContent).toContain('Draft')
-    expect(document.querySelector('nav[aria-label="目录"]')?.textContent).toContain('Deep')
-    expect(document.querySelectorAll('[data-markdown-outline-id]')).toHaveLength(2)
+    expect(
+      document.querySelector('nav[aria-label="目录"]')?.textContent
+    ).toContain('Draft')
+    expect(
+      document.querySelector('nav[aria-label="目录"]')?.textContent
+    ).toContain('Deep')
+    expect(
+      document.querySelectorAll('[data-markdown-outline-id]')
+    ).toHaveLength(2)
 
     await inputValue(editor(), 'Plain text')
     await flushOutlineFrame()
 
     expect(buttonWithTextOrNull('目录')).toBeNull()
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="outline"]')).toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="outline"]')
+    ).toBeNull()
   })
 
   it('keeps selected headings below the toolbar while tracking the active outline item', async () => {
-    renderRenderer({ preview: { ...basePreview(), text: '# First\n\n## Second' } })
+    renderRenderer({
+      preview: { ...basePreview(), text: '# First\n\n## Second' },
+    })
     await flushOutlineFrame()
 
     const scroller = mdxEditorScroller()
-    const firstHeading = document.querySelector<HTMLElement>('[data-testid="mock-heading-1"]')
-    const secondHeading = document.querySelector<HTMLElement>('[data-testid="mock-heading-2"]')
-    const secondLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="mdxeditor-heading-2"]')
-    const outlineScroller = document.querySelector<HTMLElement>('nav[aria-label="目录"]')
+    const firstHeading = document.querySelector<HTMLElement>(
+      '[data-testid="mock-heading-1"]'
+    )
+    const secondHeading = document.querySelector<HTMLElement>(
+      '[data-testid="mock-heading-2"]'
+    )
+    const secondLink = document.querySelector<HTMLElement>(
+      '[data-markdown-outline-id="mdxeditor-heading-2"]'
+    )
+    const outlineScroller = document.querySelector<HTMLElement>(
+      'nav[aria-label="目录"]'
+    )
     const toolbar = mdxToolbar()
-    if (!firstHeading || !secondHeading || !secondLink || !outlineScroller) throw new Error('Missing outline fixtures')
-    const scrollTo = vi.fn(({ top }: ScrollToOptions) => { scroller.scrollTop = Number(top) })
+    if (!firstHeading || !secondHeading || !secondLink || !outlineScroller)
+      throw new Error('Missing outline fixtures')
+    const scrollTo = vi.fn(({ top }: ScrollToOptions) => {
+      scroller.scrollTop = Number(top)
+    })
     scroller.scrollTo = scrollTo
-    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 100 })
-    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1000 })
-    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(toolbar, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 56 }))
-    vi.spyOn(outlineScroller, 'getBoundingClientRect').mockReturnValue(domRect({ top: 0, height: 100 }))
-    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: -20, height: 20 }))
-    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 200, height: 20 }))
-    vi.spyOn(secondLink, 'getBoundingClientRect').mockReturnValue(domRect({ top: 150, height: 20 }))
+    Object.defineProperty(scroller, 'clientHeight', {
+      configurable: true,
+      value: 100,
+    })
+    Object.defineProperty(scroller, 'scrollHeight', {
+      configurable: true,
+      value: 1000,
+    })
+    vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 0, height: 100 })
+    )
+    vi.spyOn(toolbar, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 0, height: 56 })
+    )
+    vi.spyOn(outlineScroller, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 0, height: 100 })
+    )
+    vi.spyOn(firstHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: -20, height: 20 })
+    )
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 200, height: 20 })
+    )
+    vi.spyOn(secondLink, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 150, height: 20 })
+    )
 
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     await flushOutlineFrame()
@@ -435,17 +621,25 @@ describe('DriveMDXeditorRenderer', () => {
     scroller.scrollTop = 0
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     await flushOutlineFrame()
-    expect(document.querySelector('[data-markdown-outline-id="mdxeditor-heading-1"]')?.getAttribute('aria-current')).toBe('location')
+    expect(
+      document
+        .querySelector('[data-markdown-outline-id="mdxeditor-heading-1"]')
+        ?.getAttribute('aria-current')
+    ).toBe('location')
 
     scroller.scrollTop = 50
-    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 10, height: 20 }))
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 10, height: 20 })
+    )
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     await flushOutlineFrame()
 
     expect(secondLink.getAttribute('aria-current')).toBe('location')
     expect(document.scrollingElement?.scrollTop ?? 0).toBe(0)
 
-    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(domRect({ top: 24.05, height: 20 }))
+    vi.spyOn(secondHeading, 'getBoundingClientRect').mockReturnValue(
+      domRect({ top: 24.05, height: 20 })
+    )
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     await flushOutlineFrame()
 
@@ -461,19 +655,31 @@ describe('DriveMDXeditorRenderer', () => {
     })
     await flushOutlineFrame()
 
-    expect(document.querySelector('[data-drive-messages-section]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-drive-messages-section]')
+    ).not.toBeNull()
     expect(buttonWithText('留言 0')).not.toBeNull()
-    expect(document.querySelector('[data-mdxeditor-sheet="comments"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-sheet="comments"]')
+    ).not.toBeNull()
     await click(buttonWithText('目录'))
 
-    expect(document.querySelector('[data-mdxeditor-sheet="outline"]')).not.toBeNull()
-    expect(document.querySelector('[data-mdxeditor-sheet="comments"]')).toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-sheet="outline"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-sheet="comments"]')
+    ).toBeNull()
 
-    const outlineLink = document.querySelector<HTMLElement>('[data-markdown-outline-id="mdxeditor-heading-1"]')
+    const outlineLink = document.querySelector<HTMLElement>(
+      '[data-markdown-outline-id="mdxeditor-heading-1"]'
+    )
     if (!outlineLink) throw new Error('Missing compact outline link')
     await click(outlineLink)
 
-    expect(document.querySelector('[data-mdxeditor-sheet="outline"]')).toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-sheet="outline"]')
+    ).toBeNull()
   })
 
   it.each([
@@ -483,15 +689,22 @@ describe('DriveMDXeditorRenderer', () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
-    expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe('Meta+S Control+S')
-    expect(buttonWithText('保存').className).toContain('bg-primary')
-    expect(buttonWithText('重新加载').className).toContain('hover:bg-accent')
-    expect(buttonWithText('重新加载').className.split(/\s+/u)).not.toContain('border')
+    expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe(
+      'Meta+S Control+S'
+    )
+    expect(buttonWithText('保存').className).toContain('button--primary')
+    expect(buttonWithText('重新加载').className).toContain('button--ghost')
+    expect(buttonWithText('重新加载').className.split(/\s+/u)).not.toContain(
+      'border'
+    )
     await inputValue(editor(), '# Shortcut')
     const accepted = await pressKey(editor(), { key: 's', ...modifiers })
 
     expect(accepted).toBe(false)
-    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Shortcut', baseVersionId: 'version-1' })
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Shortcut',
+      baseVersionId: 'version-1',
+    })
   })
 
   it('ignores non-save key combinations and unavailable saves', async () => {
@@ -509,7 +722,10 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('does not save clean, read-only, or reloading markdown', async () => {
     const cleanContext = createEditContext()
-    const { rerender } = renderRenderer({ edit: editable(), editContext: cleanContext })
+    const { rerender } = renderRenderer({
+      edit: editable(),
+      editContext: cleanContext,
+    })
 
     await pressKey(editor(), { key: 's', metaKey: true })
     expect(cleanContext.saveText).not.toHaveBeenCalled()
@@ -528,10 +744,14 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('does not submit again while a shortcut save is uploading an image', async () => {
     let resolveUpload!: (asset: DriveHostedDocumentImageDto) => void
-    const uploadPromise = new Promise<DriveHostedDocumentImageDto>((resolve) => {
-      resolveUpload = resolve
-    })
-    const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(uploadPromise)
+    const uploadPromise = new Promise<DriveHostedDocumentImageDto>(
+      (resolve) => {
+        resolveUpload = resolve
+      }
+    )
+    const upload = vi
+      .spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
+      .mockReturnValue(uploadPromise)
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
@@ -559,7 +779,10 @@ describe('DriveMDXeditorRenderer', () => {
     await inputValue(sourceEditor(), '# Fixed')
     await pressKey(sourceEditor(), { key: 's', metaKey: true })
 
-    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Fixed', baseVersionId: 'version-1' })
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Fixed',
+      baseVersionId: 'version-1',
+    })
   })
 
   it('saves dirty markdown text with the current base version', async () => {
@@ -572,7 +795,10 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('未保存')
     await click(buttonWithText('保存'))
 
-    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Next', baseVersionId: 'version-1' })
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Next',
+      baseVersionId: 'version-1',
+    })
     expect(document.body.textContent).toContain('已同步')
   })
 
@@ -580,14 +806,19 @@ describe('DriveMDXeditorRenderer', () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
-    await inputValue(editor(), '# Notes\n\n<img height="256" width="256" src="http://localhost:3000/files/asset_image" />')
+    await inputValue(
+      editor(),
+      '# Notes\n\n<img height="256" width="256" src="http://localhost:3000/files/asset_image" />'
+    )
     await click(buttonWithText('保存'))
 
     expect(editContext.saveText).toHaveBeenCalledWith({
       text: '# Notes\n\n![](http://localhost:3000/files/asset_image)',
       baseVersionId: 'version-1',
     })
-    expect(editor().value).toBe('# Notes\n\n![](http://localhost:3000/files/asset_image)')
+    expect(editor().value).toBe(
+      '# Notes\n\n![](http://localhost:3000/files/asset_image)'
+    )
     expect(document.body.textContent).toContain('已同步')
   })
 
@@ -671,9 +902,15 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('downloads the dirty markdown draft without reloading it from the discard dialog', async () => {
-    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-draft')
-    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
-    const clickAnchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:local-draft')
+    const revokeObjectURL = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+    const clickAnchor = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
@@ -690,7 +927,9 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('resets the mounted editor content after reload', async () => {
     const editContext = createEditContext({
-      reload: vi.fn(async () => baseSnapshot({ preview: { ...basePreview(), text: '# Server' } })),
+      reload: vi.fn(async () =>
+        baseSnapshot({ preview: { ...basePreview(), text: '# Server' } })
+      ),
     })
     renderRenderer({ edit: editable(), editContext })
 
@@ -743,12 +982,18 @@ describe('DriveMDXeditorRenderer', () => {
     expect(buttonWithText('保存').disabled).toBe(true)
 
     await inputValue(editor(), '# Draft')
-    rerender({ edit: editable(), editContext: createEditContext({ savingText: true }) })
+    rerender({
+      edit: editable(),
+      editContext: createEditContext({ savingText: true }),
+    })
 
     expect(buttonWithText('保存').disabled).toBe(true)
     expect(buttonWithText('重新加载').disabled).toBe(true)
 
-    rerender({ edit: editable(), editContext: createEditContext({ reloading: true }) })
+    rerender({
+      edit: editable(),
+      editContext: createEditContext({ reloading: true }),
+    })
 
     expect(buttonWithText('保存').disabled).toBe(true)
     expect(buttonWithText('重新加载').disabled).toBe(true)
@@ -782,19 +1027,21 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().dataset.toolbarPlugin).toBe('true')
     expect(mdxToolbar().classList.contains('rounded-none!')).toBe(true)
     expect(mdxToolbar().classList.contains('p-1!')).toBe(true)
-    expect(editor().dataset.toolbarControls?.split(',')).toEqual(expect.arrayContaining([
-      'toolbarPlugin',
-      'DiffSourceToggleWrapper',
-      'UndoRedo',
-      'BlockTypeSelect',
-      'BoldItalicUnderlineToggles',
-      'ListsToggle',
-      'CreateLink',
-      'InsertCodeBlock',
-      'imagePlugin',
-      'InsertTable',
-      'InsertThematicBreak',
-    ]))
+    expect(editor().dataset.toolbarControls?.split(',')).toEqual(
+      expect.arrayContaining([
+        'toolbarPlugin',
+        'DiffSourceToggleWrapper',
+        'UndoRedo',
+        'BlockTypeSelect',
+        'BoldItalicUnderlineToggles',
+        'ListsToggle',
+        'CreateLink',
+        'InsertCodeBlock',
+        'imagePlugin',
+        'InsertTable',
+        'InsertThematicBreak',
+      ])
+    )
     expect(buttonWithText('插入图片')).toBeInstanceOf(HTMLButtonElement)
   })
 
@@ -825,9 +1072,12 @@ describe('DriveMDXeditorRenderer', () => {
   it('uses the shared editor typography rules for list layout and keeps hierarchical markers', () => {
     renderRenderer({ edit: editable() })
 
-    const contentClasses = editor().dataset.contentEditableClass?.split(' ') ?? []
+    const contentClasses =
+      editor().dataset.contentEditableClass?.split(' ') ?? []
     expect(contentClasses).toContain('drive-mdxeditor-content')
-    expect(contentClasses).toContain('[&_ol>li[data-drive-list-marker]::marker]:content-[attr(data-drive-list-marker)_"_"]!')
+    expect(contentClasses).toContain(
+      '[&_ol>li[data-drive-list-marker]::marker]:content-[attr(data-drive-list-marker)_"_"]!'
+    )
     expect(contentClasses).not.toContain('[&_ul]:list-disc')
     expect(contentClasses).not.toContain('[&_ol]:list-decimal')
     expect(contentClasses).not.toContain('[&_ul]:pl-6')
@@ -894,7 +1144,9 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('uploads a selected image to the platform image host without confirmation', async () => {
     const editContext = createEditContext()
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(createHostedImage())
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(
+      createHostedImage()
+    )
     renderRenderer({ edit: editable(), editContext })
 
     await selectImage(new File(['image'], 'chart.png', { type: 'image/png' }))
@@ -924,7 +1176,9 @@ describe('DriveMDXeditorRenderer', () => {
     await selectImage(new File([], 'empty.png', { type: 'image/png' }))
 
     expect(upload).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('图片内容为空，请重新复制或选择图片。')
+    expect(document.body.textContent).toContain(
+      '图片内容为空，请重新复制或选择图片。'
+    )
     expect(document.body.textContent).not.toContain('公开上传图片')
   })
 
@@ -932,15 +1186,22 @@ describe('DriveMDXeditorRenderer', () => {
     const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
     renderRenderer({ edit: editable() })
 
-    await pasteClipboardImage(new File([], 'empty.png', { type: 'image/png' }), false)
+    await pasteClipboardImage(
+      new File([], 'empty.png', { type: 'image/png' }),
+      false
+    )
 
     expect(upload).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('图片内容为空，请重新复制或选择图片。')
+    expect(document.body.textContent).toContain(
+      '图片内容为空，请重新复制或选择图片。'
+    )
   })
 
   it('uploads image files from mixed clipboard payloads immediately', async () => {
     const file = new File(['image'], 'chart.png', { type: 'image/png' })
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(createHostedImage())
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockResolvedValue(
+      createHostedImage()
+    )
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
 
@@ -957,8 +1218,18 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('uploads consecutive selected images without confirmation', async () => {
     vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
-      .mockResolvedValueOnce(createHostedImage({ imageId: 'img_11111111111111111111111111111111', url: '/object/img_11111111111111111111111111111111' }))
-      .mockResolvedValueOnce(createHostedImage({ imageId: 'img_22222222222222222222222222222222', url: '/object/img_22222222222222222222222222222222' }))
+      .mockResolvedValueOnce(
+        createHostedImage({
+          imageId: 'img_11111111111111111111111111111111',
+          url: '/object/img_11111111111111111111111111111111',
+        })
+      )
+      .mockResolvedValueOnce(
+        createHostedImage({
+          imageId: 'img_22222222222222222222222222222222',
+          url: '/object/img_22222222222222222222222222222222',
+        })
+      )
     renderRenderer({ edit: editable() })
 
     await selectImage(new File(['image'], 'first.png', { type: 'image/png' }))
@@ -973,10 +1244,14 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('does not insert an upload that finishes after switching documents', async () => {
     let resolveUpload!: (value: DriveHostedDocumentImageDto) => void
-    const uploadPromise = new Promise<DriveHostedDocumentImageDto>((resolve) => {
-      resolveUpload = resolve
-    })
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(uploadPromise)
+    const uploadPromise = new Promise<DriveHostedDocumentImageDto>(
+      (resolve) => {
+        resolveUpload = resolve
+      }
+    )
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(
+      uploadPromise
+    )
     const editContext = createEditContext()
     const renderer = renderRenderer({ editContext })
 
@@ -1005,12 +1280,18 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('does not insert an upload that finishes after the current document version is replaced', async () => {
     const upload = deferred<DriveHostedDocumentImageDto>()
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(
+      upload.promise
+    )
     const renderer = renderRenderer()
 
     await selectImage(new File(['image'], 'old.png', { type: 'image/png' }))
     renderer.rerender({
-      preview: { ...basePreview(), text: '# Replacement', html: '<h1>Replacement</h1>' },
+      preview: {
+        ...basePreview(),
+        text: '# Replacement',
+        html: '<h1>Replacement</h1>',
+      },
       edit: { ...editable(), currentVersionId: 'version-2' },
     })
 
@@ -1025,11 +1306,19 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('does not insert an upload that finishes after reloading the current version', async () => {
     const upload = deferred<DriveHostedDocumentImageDto>()
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(
+      upload.promise
+    )
     const editContext = createEditContext({
-      reload: vi.fn(async () => baseSnapshot({
-        preview: { ...basePreview(), text: '# Reloaded', html: '<h1>Reloaded</h1>' },
-      })),
+      reload: vi.fn(async () =>
+        baseSnapshot({
+          preview: {
+            ...basePreview(),
+            text: '# Reloaded',
+            html: '<h1>Reloaded</h1>',
+          },
+        })
+      ),
     })
     renderRenderer({ editContext })
 
@@ -1050,7 +1339,9 @@ describe('DriveMDXeditorRenderer', () => {
     const upload = vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage')
     renderRenderer({ edit: editable() })
 
-    await selectImage(new File(['<svg />'], 'vector.svg', { type: 'image/svg+xml' }))
+    await selectImage(
+      new File(['<svg />'], 'vector.svg', { type: 'image/svg+xml' })
+    )
 
     expect(upload).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('格式不支持。')
@@ -1075,7 +1366,9 @@ describe('DriveMDXeditorRenderer', () => {
     })
 
     expect(editor().readOnly).toBe(true)
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe(
+      '/console/sign-in?redirect=%2Fshare%2Fshare-1'
+    )
   })
 
   it('updates the login action redirect after switching shared files', () => {
@@ -1087,12 +1380,16 @@ describe('DriveMDXeditorRenderer', () => {
     }
     window.history.pushState(null, '', '/share/share-1/items/file-a')
     const { rerender } = renderRenderer({ edit: loginEdit })
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-a')
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe(
+      '/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-a'
+    )
 
     window.history.pushState(null, '', '/share/share-1/items/file-b')
     rerender({ edit: loginEdit })
 
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-b')
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe(
+      '/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-b'
+    )
   })
 
   it('opens a conflict dialog and can reload after a version conflict', async () => {
@@ -1123,15 +1420,23 @@ describe('DriveMDXeditorRenderer', () => {
       preview: {
         ...basePreview(),
         text: '![diagram](./images/diagram.png)',
-        relativeImages: [{
-          src: './images/diagram.png',
-          resolvedUrl: '/drive/items/image-1/download',
-        }],
+        relativeImages: [
+          {
+            src: './images/diagram.png',
+            resolvedUrl: '/drive/items/image-1/download',
+          },
+        ],
       },
     })
 
-    expect(await mdxEditorMockState.imagePreviewHandler?.('./images/diagram.png')).toBe('/drive/items/image-1/download')
-    expect(await mdxEditorMockState.imagePreviewHandler?.('https://example.com/image.png')).toBe('https://example.com/image.png')
+    expect(
+      await mdxEditorMockState.imagePreviewHandler?.('./images/diagram.png')
+    ).toBe('/drive/items/image-1/download')
+    expect(
+      await mdxEditorMockState.imagePreviewHandler?.(
+        'https://example.com/image.png'
+      )
+    ).toBe('https://example.com/image.png')
     expect(editor().value).toBe('![diagram](./images/diagram.png)')
   })
 
@@ -1153,17 +1458,19 @@ describe('DriveMDXeditorRenderer', () => {
       },
     })
 
-    expect(editor().value).toBe([
-      '| 写法 | 表格内容 |',
-      '| --- | --- |',
-      '| `<br>` | 借：管理费用<br />贷：应付职工薪酬 |',
-      '| `<br/>` | 借：应付职工薪酬<br/>贷：银行存款 |',
-      '| `<br />` | 第一行<br />第二行 |',
-      '',
-      '```html',
-      '<br>',
-      '```',
-    ].join('\n'))
+    expect(editor().value).toBe(
+      [
+        '| 写法 | 表格内容 |',
+        '| --- | --- |',
+        '| `<br>` | 借：管理费用<br />贷：应付职工薪酬 |',
+        '| `<br/>` | 借：应付职工薪酬<br/>贷：银行存款 |',
+        '| `<br />` | 第一行<br />第二行 |',
+        '',
+        '```html',
+        '<br>',
+        '```',
+      ].join('\n')
+    )
     expect(document.body.textContent).not.toContain('解析失败')
   })
 
@@ -1185,11 +1492,13 @@ describe('DriveMDXeditorRenderer', () => {
       },
     })
 
-    expect(editor().value).toBe([
-      '[https://example.com/path?q=1](<https://example.com/path?q=1>)',
-      '',
-      '[user@example.com](<mailto:user@example.com>)',
-    ].join('\n'))
+    expect(editor().value).toBe(
+      [
+        '[https://example.com/path?q=1](<https://example.com/path?q=1>)',
+        '',
+        '[user@example.com](<mailto:user@example.com>)',
+      ].join('\n')
+    )
     expect(document.body.textContent).not.toContain('解析失败')
   })
 
@@ -1197,12 +1506,15 @@ describe('DriveMDXeditorRenderer', () => {
     '    <https://example.com/code>',
     '<span>raw html</span>',
     '<!doctype html>',
-  ])('lets MDXEditor parse CommonMark before using source fallback: %s', (markdown) => {
-    renderRenderer({ preview: { ...basePreview(), text: markdown } })
+  ])(
+    'lets MDXEditor parse CommonMark before using source fallback: %s',
+    (markdown) => {
+      renderRenderer({ preview: { ...basePreview(), text: markdown } })
 
-    expect(editor().value).toBe(markdown)
-    expect(document.body.textContent).not.toContain('解析失败')
-  })
+      expect(editor().value).toBe(markdown)
+      expect(document.body.textContent).not.toContain('解析失败')
+    }
+  )
 
   it('keeps strict MDX parsing for MDX files', async () => {
     renderRenderer({
@@ -1210,7 +1522,9 @@ describe('DriveMDXeditorRenderer', () => {
       preview: { ...basePreview(), text: '金额 <= 1000' },
     })
 
-    await act(async () => { await Promise.resolve() })
+    await act(async () => {
+      await Promise.resolve()
+    })
 
     expect(sourceEditor().value).toBe('金额 <= 1000')
     expect(document.body.textContent).toContain('解析失败')
@@ -1219,10 +1533,15 @@ describe('DriveMDXeditorRenderer', () => {
   it('opens valid MDX components in rich mode for MDX files', async () => {
     renderRenderer({
       current: { ...baseCurrent(), name: 'notes.mdx' },
-      preview: { ...basePreview(), text: '<Callout tone="info">正文</Callout>' },
+      preview: {
+        ...basePreview(),
+        text: '<Callout tone="info">正文</Callout>',
+      },
     })
 
-    await act(async () => { await Promise.resolve() })
+    await act(async () => {
+      await Promise.resolve()
+    })
 
     expect(editor().value).toBe('<Callout tone="info">正文</Callout>')
     expect(editor().dataset.mdxSupport).toBe('true')
@@ -1248,11 +1567,7 @@ describe('DriveMDXeditorRenderer', () => {
   })
 
   it('does not mistake fenced import or export examples for MDX ESM', async () => {
-    const markdown = [
-      '```tsx',
-      'export const total = 2',
-      '```',
-    ].join('\n')
+    const markdown = ['```tsx', 'export const total = 2', '```'].join('\n')
     renderRenderer({
       current: { ...baseCurrent(), name: 'notes.mdx' },
       preview: { ...basePreview(), text: markdown },
@@ -1283,11 +1598,15 @@ describe('DriveMDXeditorRenderer', () => {
       preview: { ...basePreview(), text: '金额 <= 1000' },
       editContext,
     })
-    await act(async () => { await Promise.resolve() })
+    await act(async () => {
+      await Promise.resolve()
+    })
 
     await inputValue(sourceEditor(), '金额 <= 2000')
     await click(buttonWithText('保存'))
-    await act(async () => { await Promise.resolve() })
+    await act(async () => {
+      await Promise.resolve()
+    })
 
     expect(editContext.saveText).toHaveBeenCalledWith({
       text: '金额 <= 2000',
@@ -1314,7 +1633,10 @@ describe('DriveMDXeditorRenderer', () => {
     await inputValue(sourceEditor(), '# Fixed')
     await click(buttonWithText('保存'))
 
-    expect(editContext.saveText).toHaveBeenCalledWith({ text: '# Fixed', baseVersionId: 'version-1' })
+    expect(editContext.saveText).toHaveBeenCalledWith({
+      text: '# Fixed',
+      baseVersionId: 'version-1',
+    })
     expect(document.body.textContent).not.toContain('解析失败')
     expect(editor().value).toBe('# Fixed')
     expect(document.body.textContent).toContain('已同步')
@@ -1326,11 +1648,17 @@ describe('DriveMDXeditorRenderer', () => {
     await flushOutlineFrame()
 
     expect(annotationsMock.input).toEqual({ context: 'owner', itemId: 'file' })
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="outline"]')).not.toBeNull()
-    expect(buttonWithText('评论 1')).not.toBeNull()
-    const commentsPanel = document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="outline"]')
+    ).not.toBeNull()
+    expect(buttonWithText('批注 1')).not.toBeNull()
+    const commentsPanel = document.querySelector(
+      '[data-mdxeditor-resizable-panel="comments"]'
+    )
     expect(commentsPanel).not.toBeNull()
-    expect(commentsPanel?.querySelector('aside')?.className).not.toContain('border-l')
+    expect(commentsPanel?.querySelector('aside')?.className).not.toContain(
+      'border-l'
+    )
     expect(commentsPanel?.previousElementSibling?.childElementCount).toBe(0)
     expect(document.body.textContent).toContain('编辑中暂未定位')
 
@@ -1348,8 +1676,12 @@ describe('DriveMDXeditorRenderer', () => {
       annotationContext: { context: 'owner', itemId: 'file' },
     })
 
-    const listItem = document.querySelector('[data-mdx-list-fixture="true"] > li')
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
+    const listItem = document.querySelector(
+      '[data-mdx-list-fixture="true"] > li'
+    )
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    ).not.toBeNull()
     expect(listItem?.getAttribute('data-drive-list-marker')).toBe('1.')
   })
 
@@ -1360,12 +1692,16 @@ describe('DriveMDXeditorRenderer', () => {
       annotationContext: { context: 'owner', itemId: 'file' },
     })
 
-    await act(async () => { await Promise.resolve() })
+    await act(async () => {
+      await Promise.resolve()
+    })
     await flushOutlineFrame()
 
     expect(sourceEditor()).not.toBeNull()
     expect(buttonWithTextOrNull('目录')).toBeNull()
-    expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comments-mode="list"]')
+    ).not.toBeNull()
     expect(document.body.textContent).toContain('First comment')
     expect(document.body.textContent).toContain('编辑中暂未定位')
     expect(document.body.textContent).not.toContain('未定位评论')
@@ -1376,25 +1712,39 @@ describe('DriveMDXeditorRenderer', () => {
     annotationsMock.threads = [commentThread()]
     renderRenderer({ annotationContext: { context: 'owner', itemId: 'file' } })
 
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
-    expect(document.querySelector('[data-mdxeditor-sheet="comments"]')).not.toBeNull()
-    expect(document.querySelector('[data-markdown-comments-mode="list"]')).not.toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    ).toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-sheet="comments"]')
+    ).not.toBeNull()
+    expect(
+      document.querySelector('[data-markdown-comments-mode="list"]')
+    ).not.toBeNull()
     expect(document.body.textContent).toContain('First comment')
   })
 
   it('does not reopen comments after the user closes them during the current mount', async () => {
     annotationsMock.threads = [commentThread()]
-    const renderer = renderRenderer({ annotationContext: { context: 'owner', itemId: 'file' } })
+    const renderer = renderRenderer({
+      annotationContext: { context: 'owner', itemId: 'file' },
+    })
 
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
-    await click(buttonWithText('评论 1'))
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    ).not.toBeNull()
+    await click(buttonWithText('批注 1'))
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    ).toBeNull()
 
     renderer.rerender({
       preview: { ...basePreview(), text: '# Notes\n\nAfter edit' },
       annotationContext: { context: 'owner', itemId: 'file' },
     })
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    ).toBeNull()
   })
 
   it('enables comments for Markdown MIME without a .md extension', () => {
@@ -1405,20 +1755,28 @@ describe('DriveMDXeditorRenderer', () => {
     })
 
     expect(annotationsMock.input).toEqual({ context: 'owner', itemId: 'file' })
-    expect(buttonWithText('评论 1')).not.toBeNull()
-    expect(document.querySelector('[data-mdxeditor-resizable-panel="comments"]')).not.toBeNull()
+    expect(buttonWithText('批注 1')).not.toBeNull()
+    expect(
+      document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
+    ).not.toBeNull()
   })
 })
 
-function renderRenderer(input: {
-  readonly current?: DriveBrowserItemDto
-  readonly preview?: DriveBrowserPreviewDto
-  readonly edit?: DriveBrowserEditDto | null
-  readonly editContext?: DriveRendererEditContext
-  readonly annotationContext?: ComponentProps<typeof DriveMDXeditorRenderer>['annotationContext']
-  readonly imageUploadContext?: ComponentProps<typeof DriveMDXeditorRenderer>['imageUploadContext']
-  readonly strict?: boolean
-} = {}) {
+function renderRenderer(
+  input: {
+    readonly current?: DriveBrowserItemDto
+    readonly preview?: DriveBrowserPreviewDto
+    readonly edit?: DriveBrowserEditDto | null
+    readonly editContext?: DriveRendererEditContext
+    readonly annotationContext?: ComponentProps<
+      typeof DriveMDXeditorRenderer
+    >['annotationContext']
+    readonly imageUploadContext?: ComponentProps<
+      typeof DriveMDXeditorRenderer
+    >['imageUploadContext']
+    readonly strict?: boolean
+  } = {}
+) {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
@@ -1433,7 +1791,9 @@ function renderRenderer(input: {
           edit={nextInput.edit === undefined ? editable() : nextInput.edit}
           editContext={nextInput.editContext ?? createEditContext()}
           annotationContext={nextInput.annotationContext}
-          imageUploadContext={nextInput.imageUploadContext ?? { kind: 'owner', itemId: 'file' }}
+          imageUploadContext={
+            nextInput.imageUploadContext ?? { kind: 'owner', itemId: 'file' }
+          }
         />
       </DriveRendererToolbarProvider>
     )
@@ -1457,7 +1817,9 @@ function ToolbarHost() {
   const toolbar = useDriveRendererToolbar()
   return (
     <div data-testid='toolbar' data-unsaved={String(toolbar.hasUnsavedChanges)}>
-      {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+      {toolbar.items.map((item) => (
+        <DrivePreviewToolbarItemView key={item.id} item={item} />
+      ))}
     </div>
   )
 }
@@ -1481,12 +1843,16 @@ function baseCurrent(): DriveBrowserItemDto {
   }
 }
 
-function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
+function baseSnapshot(
+  input: Partial<DriveBrowserSnapshotDto> = {}
+): DriveBrowserSnapshotDto {
   return {
     context: 'owner',
     surface: 'standalone',
     current: baseCurrent(),
-    breadcrumbs: [{ id: 'root', name: 'root', browserUrl: '/drive/items/root' }],
+    breadcrumbs: [
+      { id: 'root', name: 'root', browserUrl: '/drive/items/root' },
+    ],
     children: [],
     preview: basePreview(),
     edit: editable(),
@@ -1542,19 +1908,21 @@ function commentThread(): DriveAnnotationThreadDto {
       lastResolvedVersionId: 'version-1',
     },
     author: { id: 'user-1', email: null, handle: 'author' },
-    comments: [{
-      id: 'comment-1',
-      threadId: 'thread-1',
-      parentCommentId: null,
-      body: 'First comment',
-      author: { id: 'user-1', email: null, handle: 'author' },
-      createdAt: '2026-09-01T00:00:00.000Z',
-      updatedAt: '2026-09-01T00:00:00.000Z',
-      editedAt: null,
-      deletedAt: null,
-      deleted: false,
-      permissions: { canEdit: true, canDelete: true },
-    }],
+    comments: [
+      {
+        id: 'comment-1',
+        threadId: 'thread-1',
+        parentCommentId: null,
+        body: 'First comment',
+        author: { id: 'user-1', email: null, handle: 'author' },
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+        editedAt: null,
+        deletedAt: null,
+        deleted: false,
+        permissions: { canEdit: true, canDelete: true },
+      },
+    ],
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
     status: 'open',
@@ -1571,7 +1939,9 @@ function editable(): DriveBrowserEditDto {
   }
 }
 
-function createHostedImage(overrides: Partial<DriveHostedDocumentImageDto> = {}): DriveHostedDocumentImageDto {
+function createHostedImage(
+  overrides: Partial<DriveHostedDocumentImageDto> = {}
+): DriveHostedDocumentImageDto {
   return {
     imageId: 'img_00000000000000000000000000000000',
     name: 'image.png',
@@ -1600,24 +1970,40 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function markdownHeadings(markdown: string): readonly { readonly depth: number; readonly key: string; readonly text: string }[] {
+function markdownHeadings(markdown: string): readonly {
+  readonly depth: number
+  readonly key: string
+  readonly text: string
+}[] {
   let sequence = 0
   return markdown.split('\n').flatMap((line) => {
     const match = /^(#{1,6})\s+(.*)$/u.exec(line)
     if (!match) return []
     sequence += 1
-    return [{ depth: match[1]?.length ?? 1, key: `mock-heading-${sequence}`, text: match[2] ?? '' }]
+    return [
+      {
+        depth: match[1]?.length ?? 1,
+        key: `mock-heading-${sequence}`,
+        text: match[2] ?? '',
+      },
+    ]
   })
 }
 
 async function flushOutlineFrame() {
   await act(async () => {
-    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+    await new Promise<void>((resolve) =>
+      window.requestAnimationFrame(() => resolve())
+    )
     await Promise.resolve()
   })
 }
 
-async function inputValue(input: HTMLTextAreaElement, value: string, initialNormalize = false) {
+async function inputValue(
+  input: HTMLTextAreaElement,
+  value: string,
+  initialNormalize = false
+) {
   await act(async () => {
     const valueSetter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
@@ -1639,10 +2025,15 @@ async function click(element: HTMLElement) {
   })
 }
 
-async function pressKey(element: HTMLElement, init: KeyboardEventInit): Promise<boolean> {
+async function pressKey(
+  element: HTMLElement,
+  init: KeyboardEventInit
+): Promise<boolean> {
   let accepted = true
   await act(async () => {
-    accepted = element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+    accepted = element.dispatchEvent(
+      new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+    )
     await Promise.resolve()
   })
   return accepted
@@ -1650,7 +2041,8 @@ async function pressKey(element: HTMLElement, init: KeyboardEventInit): Promise<
 
 async function selectImage(file: File) {
   const input = document.querySelector('input[type="file"]')
-  if (!(input instanceof HTMLInputElement)) throw new Error('image input not found')
+  if (!(input instanceof HTMLInputElement))
+    throw new Error('image input not found')
   await act(async () => {
     Object.defineProperty(input, 'files', {
       configurable: true,
@@ -1685,46 +2077,64 @@ async function pasteClipboardImage(file: File, mixed = true) {
 
 function editor(): HTMLTextAreaElement {
   const element = document.querySelector('[data-mdxeditor="true"]')
-  if (!(element instanceof HTMLTextAreaElement)) throw new Error('mdx editor not found')
+  if (!(element instanceof HTMLTextAreaElement))
+    throw new Error('mdx editor not found')
   return element
 }
 
 function sourceEditor(): HTMLTextAreaElement {
-  const element = Array.from(document.querySelectorAll('textarea')).find((item) => item.dataset.mdxeditor !== 'true')
-  if (!(element instanceof HTMLTextAreaElement)) throw new Error('source editor not found')
+  const element = Array.from(document.querySelectorAll('textarea')).find(
+    (item) => item.dataset.mdxeditor !== 'true'
+  )
+  if (!(element instanceof HTMLTextAreaElement))
+    throw new Error('source editor not found')
   return element
 }
 
 function mdxEditorRoot(): HTMLElement {
   const element = document.querySelector('[data-testid="mdx-editor-root"]')
-  if (!(element instanceof HTMLElement)) throw new Error('mdx editor root not found')
+  if (!(element instanceof HTMLElement))
+    throw new Error('mdx editor root not found')
   return element
 }
 
 function mdxToolbar(): HTMLElement {
   const element = document.querySelector('[data-testid="mdx-toolbar"]')
-  if (!(element instanceof HTMLElement)) throw new Error('mdx toolbar not found')
+  if (!(element instanceof HTMLElement))
+    throw new Error('mdx toolbar not found')
   return element
 }
 
 function mdxEditorScroller(): HTMLElement {
   const element = document.querySelector('[data-drive-mdxeditor-scroll="true"]')
-  if (!(element instanceof HTMLElement)) throw new Error('mdx editor scroller not found')
+  if (!(element instanceof HTMLElement))
+    throw new Error('mdx editor scroller not found')
   return element
 }
 
 function buttonWithText(text: string): HTMLButtonElement {
-  const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes(text))
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} button not found`)
+  const button = Array.from(document.querySelectorAll('button')).find((item) =>
+    item.textContent?.includes(text)
+  )
+  if (!(button instanceof HTMLButtonElement))
+    throw new Error(`${text} button not found`)
   return button
 }
 
 function buttonWithTextOrNull(text: string): HTMLButtonElement | null {
-  const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes(text))
+  const button = Array.from(document.querySelectorAll('button')).find((item) =>
+    item.textContent?.includes(text)
+  )
   return button instanceof HTMLButtonElement ? button : null
 }
 
-function domRect({ top, height }: { readonly top: number; readonly height: number }): DOMRect {
+function domRect({
+  top,
+  height,
+}: {
+  readonly top: number
+  readonly height: number
+}): DOMRect {
   return {
     x: 0,
     y: top,
@@ -1739,14 +2149,20 @@ function domRect({ top, height }: { readonly top: number; readonly height: numbe
 }
 
 function lastButtonWithText(text: string): HTMLButtonElement {
-  const buttons = Array.from(document.querySelectorAll('button')).filter((item) => item.textContent?.includes(text))
+  const buttons = Array.from(document.querySelectorAll('button')).filter(
+    (item) => item.textContent?.includes(text)
+  )
   const button = buttons[buttons.length - 1]
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} button not found`)
+  if (!(button instanceof HTMLButtonElement))
+    throw new Error(`${text} button not found`)
   return button
 }
 
 function anchorWithText(text: string): HTMLAnchorElement {
-  const anchor = Array.from(document.querySelectorAll('a')).find((item) => item.textContent?.includes(text))
-  if (!(anchor instanceof HTMLAnchorElement)) throw new Error(`${text} anchor not found`)
+  const anchor = Array.from(document.querySelectorAll('a')).find((item) =>
+    item.textContent?.includes(text)
+  )
+  if (!(anchor instanceof HTMLAnchorElement))
+    throw new Error(`${text} anchor not found`)
   return anchor
 }

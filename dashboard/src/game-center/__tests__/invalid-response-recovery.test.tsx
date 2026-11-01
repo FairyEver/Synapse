@@ -18,7 +18,7 @@ vi.mock("@/game-center/runtime/account", () => ({
 }))
 vi.mock("../lib/api", () => ({ gameApi: () => ({ hall: { overview: wire.overview } }) }))
 vi.mock("../game-registry", () => ({ GAME_RENDERERS: {} }))
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }))
+vi.mock("@heroui/react", async (original) => ({ ...await original<typeof import("@heroui/react")>(), toast: { danger: vi.fn(), update: vi.fn() } }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 describe("畸形大厅响应恢复", () => {

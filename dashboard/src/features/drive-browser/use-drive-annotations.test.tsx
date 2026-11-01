@@ -6,8 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { driveAnnotationApi } from '@/lib/api'
 import { useDriveAnnotations } from './use-drive-annotations'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('@/lib/api', () => ({
   driveApi: {},
@@ -49,47 +50,82 @@ afterEach(() => {
 })
 
 describe('useDriveAnnotations', () => {
-  it.each(['owner', 'share'] as const)('updates %s discussion status and refreshes its query', async (context) => {
-    mockedDriveAnnotationApi.listOwner.mockResolvedValue([])
-    mockedDriveAnnotationApi.listShare.mockResolvedValue([])
-    const updated = { id: 'thread-1', status: 'resolved' } as Awaited<ReturnType<typeof driveAnnotationApi.updateOwnerThreadStatus>>
-    mockedDriveAnnotationApi.updateOwnerThreadStatus.mockResolvedValue(updated)
-    mockedDriveAnnotationApi.updateShareThreadStatus.mockResolvedValue(updated)
-    const { result } = renderDriveAnnotationsHook(context === 'owner'
-      ? { context, itemId: 'item-1' }
-      : { context, shareId: 'share-1', itemId: 'item-1' })
-    await act(async () => {
-      await result.current.updateThreadStatus({ threadId: 'thread-1', status: 'resolved' })
-    })
-    if (context === 'owner') {
-      expect(mockedDriveAnnotationApi.updateOwnerThreadStatus).toHaveBeenCalledWith('item-1', 'thread-1', { status: 'resolved' })
-      expect(mockedDriveAnnotationApi.listOwner.mock.calls.length).toBeGreaterThan(1)
-    } else {
-      expect(mockedDriveAnnotationApi.updateShareThreadStatus).toHaveBeenCalledWith('share-1', 'item-1', 'thread-1', { status: 'resolved' })
-      expect(mockedDriveAnnotationApi.listShare.mock.calls.length).toBeGreaterThan(1)
+  it.each(['owner', 'share'] as const)(
+    'updates %s discussion status and refreshes its query',
+    async (context) => {
+      mockedDriveAnnotationApi.listOwner.mockResolvedValue([])
+      mockedDriveAnnotationApi.listShare.mockResolvedValue([])
+      const updated = { id: 'thread-1', status: 'resolved' } as Awaited<
+        ReturnType<typeof driveAnnotationApi.updateOwnerThreadStatus>
+      >
+      mockedDriveAnnotationApi.updateOwnerThreadStatus.mockResolvedValue(
+        updated
+      )
+      mockedDriveAnnotationApi.updateShareThreadStatus.mockResolvedValue(
+        updated
+      )
+      const { result } = renderDriveAnnotationsHook(
+        context === 'owner'
+          ? { context, itemId: 'item-1' }
+          : { context, shareId: 'share-1', itemId: 'item-1' }
+      )
+      await act(async () => {
+        await result.current.updateThreadStatus({
+          threadId: 'thread-1',
+          status: 'resolved',
+        })
+      })
+      if (context === 'owner') {
+        expect(
+          mockedDriveAnnotationApi.updateOwnerThreadStatus
+        ).toHaveBeenCalledWith('item-1', 'thread-1', { status: 'resolved' })
+        expect(
+          mockedDriveAnnotationApi.listOwner.mock.calls.length
+        ).toBeGreaterThan(1)
+      } else {
+        expect(
+          mockedDriveAnnotationApi.updateShareThreadStatus
+        ).toHaveBeenCalledWith('share-1', 'item-1', 'thread-1', {
+          status: 'resolved',
+        })
+        expect(
+          mockedDriveAnnotationApi.listShare.mock.calls.length
+        ).toBeGreaterThan(1)
+      }
     }
-  })
+  )
 
   it('sends only the comment update body to the owner update endpoint', async () => {
     mockedDriveAnnotationApi.listOwner.mockResolvedValue([])
     mockedDriveAnnotationApi.updateOwnerComment.mockResolvedValue(comment())
-    const { result } = renderDriveAnnotationsHook({ context: 'owner', itemId: 'item-1' })
+    const { result } = renderDriveAnnotationsHook({
+      context: 'owner',
+      itemId: 'item-1',
+    })
 
     await act(async () => {
-      await result.current.updateComment({ commentId: 'comment-1', body: 'Updated comment' })
+      await result.current.updateComment({
+        commentId: 'comment-1',
+        body: 'Updated comment',
+      })
     })
 
     expect(mockedDriveAnnotationApi.updateOwnerComment).toHaveBeenCalledWith(
       'item-1',
       'comment-1',
-      { body: 'Updated comment' },
+      { body: 'Updated comment' }
     )
   })
 
   it('sends only the reply body to the owner reply endpoint', async () => {
     mockedDriveAnnotationApi.listOwner.mockResolvedValue([])
-    mockedDriveAnnotationApi.replyOwner.mockResolvedValue(comment({ id: 'reply-1', parentCommentId: 'comment-1' }))
-    const { result } = renderDriveAnnotationsHook({ context: 'owner', itemId: 'item-1' })
+    mockedDriveAnnotationApi.replyOwner.mockResolvedValue(
+      comment({ id: 'reply-1', parentCommentId: 'comment-1' })
+    )
+    const { result } = renderDriveAnnotationsHook({
+      context: 'owner',
+      itemId: 'item-1',
+    })
 
     await act(async () => {
       await result.current.reply({
@@ -102,12 +138,14 @@ describe('useDriveAnnotations', () => {
     expect(mockedDriveAnnotationApi.replyOwner).toHaveBeenCalledWith(
       'item-1',
       'thread-1',
-      { parentCommentId: 'comment-1', body: 'Reply body' },
+      { parentCommentId: 'comment-1', body: 'Reply body' }
     )
   })
 })
 
-function renderDriveAnnotationsHook(input: Parameters<typeof useDriveAnnotations>[0]) {
+function renderDriveAnnotationsHook(
+  input: Parameters<typeof useDriveAnnotations>[0]
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       mutations: { retry: false },
@@ -127,17 +165,21 @@ function renderDriveAnnotationsHook(input: Parameters<typeof useDriveAnnotations
   }
 
   act(() => {
-    root?.render(createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(Harness)
-    ))
+    root?.render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(Harness)
+      )
+    )
   })
 
   return { result }
 }
 
-function comment(input: { readonly id?: string; readonly parentCommentId?: string | null } = {}) {
+function comment(
+  input: { readonly id?: string; readonly parentCommentId?: string | null } = {}
+) {
   return {
     id: input.id ?? 'comment-1',
     threadId: 'thread-1',

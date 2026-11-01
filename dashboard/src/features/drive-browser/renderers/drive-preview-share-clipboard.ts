@@ -1,4 +1,4 @@
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import { buildDriveShareClipboardText } from '@synapse/shared'
 import type { DrivePreviewCopyShareLinkAction } from './drive-preview-actions'
 

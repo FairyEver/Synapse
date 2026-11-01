@@ -1,34 +1,23 @@
+import { Button, Dropdown, Link, ToggleButton } from '@heroui/react'
+import { Fragment } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ChevronDown, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-
 type FilePreviewToolbarItemBase = {
   readonly id: string
   readonly label: string
   readonly compactPlacement?: 'primary' | 'overflow'
+  readonly group?: string
 }
-
-export type FilePreviewToolbarItem =
-  & FilePreviewToolbarItemBase
-  & (
+export type FilePreviewToolbarItem = FilePreviewToolbarItemBase &
+  (
     | {
         readonly kind: 'status'
       }
     | {
         readonly kind: 'button'
         readonly icon?: LucideIcon
-        readonly variant?: 'default' | 'outline' | 'secondary' | 'ghost'
+        readonly variant?: 'primary' | 'outline' | 'secondary' | 'tertiary' | 'ghost'
         readonly ariaKeyShortcuts?: string
         readonly disabled?: boolean
         readonly loading?: boolean
@@ -51,107 +40,130 @@ export type FilePreviewToolbarItem =
         readonly items: readonly FilePreviewToolbarMenuItem[]
       }
   )
-
 export type FilePreviewToolbarMenuItem = {
   readonly id: string
   readonly label: string
   readonly disabled?: boolean
   readonly onSelect: () => void
 }
-
 export function FilePreviewToolbarItemView({
   item,
   compact = false,
   defaultButtonVariant = 'outline',
+  showIcons = true,
 }: {
   readonly item: FilePreviewToolbarItem
   readonly compact?: boolean
-  readonly defaultButtonVariant?: 'default' | 'outline' | 'ghost'
+  readonly defaultButtonVariant?: 'primary' | 'outline' | 'ghost'
+  readonly showIcons?: boolean
 }) {
   if (item.kind === 'status') {
-    return <span className='inline-flex h-8 items-center px-1 text-xs text-muted-foreground tabular-nums'>{item.label}</span>
+    return (
+      <span className='inline-flex h-8 items-center px-1 text-xs text-muted tabular-nums'>
+        {item.label}
+      </span>
+    )
   }
-  const buttonClassName = cn(
-    'shadow-none tabular-nums has-[>svg]:pl-2 has-[>svg]:pr-2.5',
-    compact ? 'min-h-11' : "relative after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']"
-  )
+  const buttonClassName = cn('tabular-nums', compact && 'min-h-11')
   if (item.kind === 'button') {
     const content = (
       <>
-        {item.loading ? <Loader2 className='animate-spin' /> : item.icon ? <item.icon data-icon='inline-start' /> : null}
+        {item.loading ? (
+          <Loader2 className='animate-spin' />
+        ) : showIcons && item.icon ? (
+          <item.icon data-icon='inline-start' />
+        ) : null}
         {item.label}
       </>
     )
-    const variant = compact && item.compactPlacement === 'primary'
-      ? item.variant ?? 'default'
-      : item.variant ?? defaultButtonVariant
+    const variant =
+      compact && item.compactPlacement === 'primary'
+        ? (item.variant ?? 'primary')
+        : (item.variant ?? defaultButtonVariant)
     if (item.href) {
       return (
-        <Button
-          asChild
-          variant={variant}
-          size='sm'
-          disabled={item.disabled}
+        <Link
+          isDisabled={item.disabled}
           aria-keyshortcuts={item.ariaKeyShortcuts}
-          className={buttonClassName}
+          className={cn('gap-1', buttonClassName)}
+          href={item.href}
+          target={item.external ? '_blank' : undefined}
+          rel={item.external ? 'noreferrer' : undefined}
         >
-          <a href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
-            {content}
-          </a>
-        </Button>
+          {item.loading ? (<Link.Icon><Loader2 className='size-full animate-spin' /></Link.Icon>)
+            : showIcons && item.icon ? (<Link.Icon><item.icon className='size-full' /></Link.Icon>) : null}
+          {item.label}
+        </Link>
       )
     }
     return (
       <Button
+        render={(props) => (
+          <button {...props} aria-keyshortcuts={item.ariaKeyShortcuts} />
+        )}
         type='button'
         variant={variant}
         size='sm'
-        disabled={item.disabled || item.loading}
+        isDisabled={item.disabled || item.loading}
         aria-keyshortcuts={item.ariaKeyShortcuts}
         className={buttonClassName}
-        onClick={item.onClick}
+        onPress={item.onClick}
       >
         {content}
       </Button>
     )
   }
   if (item.kind === 'toggle') {
+    if (item.group) {
+      return (
+        <Button
+          type='button'
+          variant={item.pressed ? 'secondary' : 'tertiary'}
+          size='sm'
+          isDisabled={item.disabled}
+          aria-pressed={item.pressed}
+          className={buttonClassName}
+          onPress={() => item.onPressedChange(!item.pressed)}
+        >
+          {showIcons && item.icon ? <item.icon data-icon='inline-start' /> : null}
+          {item.label}
+        </Button>
+      )
+    }
     return (
-      <Button
-        type='button'
-        variant={item.pressed ? 'secondary' : 'ghost'}
+      <ToggleButton
+        variant='ghost'
         size='sm'
-        disabled={item.disabled}
-        aria-pressed={item.pressed}
+        isDisabled={item.disabled}
+        isSelected={item.pressed}
         className={buttonClassName}
-        onClick={() => item.onPressedChange(!item.pressed)}
+        onChange={item.onPressedChange}
       >
-        {item.icon ? <item.icon data-icon='inline-start' /> : null}
+        {showIcons && item.icon ? <item.icon data-icon='inline-start' /> : null}
         {item.label}
-      </Button>
+      </ToggleButton>
     )
   }
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type='button'
-          variant={item.variant ?? 'outline'}
-          size='sm'
-          className={cn(buttonClassName, 'has-[>svg]:pl-2.5 has-[>svg]:pr-2')}
-        >
-          {item.icon ? <item.icon data-icon='inline-start' /> : null}
-          {item.label}
-          <ChevronDown data-icon='inline-end' />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align='end'>
-        <FilePreviewToolbarMenuOptions item={item} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Dropdown>
+      <Button
+        type='button'
+        variant={item.variant ?? 'outline'}
+        size='sm'
+        className={buttonClassName}
+      >
+        {showIcons && item.icon ? <item.icon data-icon='inline-start' /> : null}
+        {item.label}
+        <ChevronDown data-icon='inline-end' />
+      </Button>
+      <Dropdown.Popover isNonModal>
+        <Dropdown.Menu aria-label='操作'>
+          <FilePreviewToolbarMenuOptions item={item} />
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   )
 }
-
 export function FilePreviewToolbarMenuItems({
   items,
 }: {
@@ -160,97 +172,146 @@ export function FilePreviewToolbarMenuItems({
   return items.map((item) => {
     if (item.kind === 'status') {
       return (
-        <DropdownMenuLabel key={item.id} className='font-normal text-muted-foreground'>
+        <Dropdown.Item
+          key={item.id}
+          id={item.id}
+          textValue={item.label}
+          isDisabled
+        >
           {item.label}
-        </DropdownMenuLabel>
+        </Dropdown.Item>
       )
     }
     if (item.kind === 'button') {
       const content = (
         <>
-          {item.loading ? <Loader2 className='animate-spin' /> : item.icon ? <item.icon data-icon='inline-start' /> : null}
+          {item.loading ? (
+            <Loader2 className='animate-spin' />
+          ) : item.icon ? (
+            <item.icon data-icon='inline-start' />
+          ) : null}
           {item.label}
         </>
       )
       if (item.href) {
         return (
-          <DropdownMenuItem key={item.id} asChild disabled={item.disabled} aria-keyshortcuts={item.ariaKeyShortcuts}>
-            <a href={item.href} target={item.external ? '_blank' : undefined} rel={item.external ? 'noreferrer' : undefined}>
-              {content}
-            </a>
-          </DropdownMenuItem>
+          <Dropdown.Item
+            key={item.id}
+            isDisabled={item.disabled}
+            aria-keyshortcuts={item.ariaKeyShortcuts}
+            href={item.href}
+            target={item.external ? '_blank' : undefined}
+            rel={item.external ? 'noreferrer' : undefined}
+          >
+            {content}
+          </Dropdown.Item>
         )
       }
       return (
-        <DropdownMenuItem
+        <Dropdown.Item
           key={item.id}
-          disabled={item.disabled || item.loading}
+          isDisabled={item.disabled || item.loading}
           aria-keyshortcuts={item.ariaKeyShortcuts}
-          onSelect={item.onClick}
+          onAction={item.onClick}
         >
           {content}
-        </DropdownMenuItem>
+        </Dropdown.Item>
       )
     }
     if (item.kind === 'toggle') {
       return (
-        <DropdownMenuCheckboxItem
-          key={item.id}
-          checked={item.pressed}
-          disabled={item.disabled}
-          onCheckedChange={(checked) => item.onPressedChange(Boolean(checked))}
+        <Dropdown.Section
+          selectionMode='multiple'
+          selectedKeys={item.pressed ? [item.id] : []}
         >
-          {item.icon ? <item.icon data-icon='inline-start' /> : null}
-          {item.label}
-        </DropdownMenuCheckboxItem>
+          <Dropdown.Item
+            key={item.id}
+            isDisabled={item.disabled}
+            id={item.id}
+            onAction={() =>
+              ((checked) => item.onPressedChange(Boolean(checked)))(
+                !item.pressed
+              )
+            }
+          >
+            <Dropdown.ItemIndicator />
+            {item.icon ? <item.icon data-icon='inline-start' /> : null}
+            {item.label}
+          </Dropdown.Item>
+        </Dropdown.Section>
       )
     }
     return (
-      <div key={item.id}>
-        <DropdownMenuLabel className='flex items-center gap-2 text-muted-foreground'>
+      <Fragment key={item.id}>
+        <Dropdown.Item
+          id={`${item.id}-label`}
+          textValue={item.label}
+          isDisabled
+        >
           {item.icon ? <item.icon className='size-4' /> : null}
           {item.label}
-        </DropdownMenuLabel>
+        </Dropdown.Item>
         <FilePreviewToolbarMenuOptions item={item} />
-      </div>
+      </Fragment>
     )
   })
 }
-
 function FilePreviewToolbarMenuOptions({
   item,
 }: {
-  readonly item: Extract<FilePreviewToolbarItem, { readonly kind: 'menu' }>
+  readonly item: Extract<
+    FilePreviewToolbarItem,
+    {
+      readonly kind: 'menu'
+    }
+  >
 }) {
   if (item.selectedItemId) {
     return (
-      <DropdownMenuRadioGroup
-        value={item.selectedItemId}
-        onValueChange={(itemId) => item.items.find((option) => option.id === itemId)?.onSelect()}
+      <Dropdown.Section
+        selectionMode='single'
+        selectedKeys={[item.selectedItemId]}
+        onSelectionChange={(keys) =>
+          ((itemId) =>
+            item.items.find((option) => option.id === itemId)?.onSelect())(
+            String(Array.from(keys)[0])
+          )
+        }
       >
         {item.items.map((option) => (
-          <DropdownMenuRadioItem key={option.id} value={option.id} disabled={option.disabled}>
+          <Dropdown.Item
+            key={option.id}
+            id={option.id}
+            isDisabled={option.disabled}
+          >
+            <Dropdown.ItemIndicator type='dot' />
             {option.label}
-          </DropdownMenuRadioItem>
+          </Dropdown.Item>
         ))}
-      </DropdownMenuRadioGroup>
+      </Dropdown.Section>
     )
   }
   return item.items.map((option) => (
-    <DropdownMenuItem key={option.id} disabled={option.disabled} onSelect={option.onSelect}>
+    <Dropdown.Item
+      key={option.id}
+      isDisabled={option.disabled}
+      onAction={option.onSelect}
+    >
       {option.label}
-    </DropdownMenuItem>
+    </Dropdown.Item>
   ))
 }
-
 export function getCompactPrimaryToolbarItems(
-  items: readonly FilePreviewToolbarItem[],
+  items: readonly FilePreviewToolbarItem[]
 ): readonly FilePreviewToolbarItem[] {
-  return items.filter((item) => item.kind !== 'status' && item.compactPlacement === 'primary')
+  return items.filter(
+    (item) => item.kind !== 'status' && item.compactPlacement === 'primary'
+  )
 }
-
 export function getCompactOverflowToolbarItems(
-  items: readonly FilePreviewToolbarItem[],
+  items: readonly FilePreviewToolbarItem[]
 ): readonly FilePreviewToolbarItem[] {
-  return items.filter((item) => item.kind === 'status' || item.compactPlacement !== 'primary')
+  return items.filter(
+    (item) => item.kind === 'status' || item.compactPlacement !== 'primary'
+  )
 }

@@ -1,9 +1,8 @@
 import { useAccount } from "@/game-center/runtime/account"
 import { useEffect, useState } from "react"
-import { Button } from "@/game-center/ui/button"
+import { Button } from "@heroui/react"
 import { GameQueryFeedback } from "../../components/GameQueryFeedback"
-import { ScrollArea } from "@/game-center/ui/scroll-area"
-import { Skeleton } from "@/game-center/ui/skeleton"
+import { Skeleton } from "@heroui/react"
 import { SystemAppWindowShell } from "@/game-center/runtime/page-shell"
 import { SystemAppTopBarActionButton } from "@/game-center/runtime/page-shell"
 import { useGameMutation } from "../../hooks/useGameQuery"
@@ -14,7 +13,9 @@ import { HandRecord } from "./components/HandRecord"
 import { AgentProfiles } from "./components/AgentProfiles"
 import { usePokerRoom } from "./hooks/usePokerRoom"
 import { usePokerEvents } from "./hooks/usePokerEvents"
-import { PracticeBots, PracticeBotAddButton } from "./components/PracticeBots"
+import { PracticeBots } from "./components/PracticeBots"
+import { PracticePreparation } from "./components/PracticePreparation"
+import { currentRoomSeats } from "./hooks/usePracticePreparation"
 import { usePracticeBots } from "./hooks/usePracticeBots"
 const tabs = [
   { id: "rooms", label: "房间" },
@@ -28,6 +29,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
     mutation = useGameMutation()
   const events = usePokerEvents(code, room.perspective, !!room.table, identityKey)
   const bots = usePracticeBots(room.table, room.refresh)
+  const preparing = room.table && bots.canManage && room.table.handNo === 0 && !room.table.handId && room.table.mySeatNo === null && !room.table.handoffPending && currentRoomSeats(room.table).every(seat => seat.participantKind === "bot")
   const nudge = (seatNo: number) => {
     void mutation.run(() => gameApi().poker.seat.nudge({ roomCode: code, seatNo }))
   }
@@ -35,7 +37,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
     <div className="flex h-full min-h-0 flex-col">
       <GameQueryFeedback query={room} />
       <div className="min-h-0 flex-1">
-        {room.table ? (
+        {room.table && preparing ? <PracticePreparation key={`${identityKey}:${code}`} table={room.table} onRefresh={room.refresh} onBack={onBack} /> : room.table ? (
           <Table
             identityKey={identityKey}
             table={room.table}
@@ -45,12 +47,11 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
             onRefresh={room.refresh}
             events={events.events}
             animate={events.animate}
-            actions={<PracticeBotAddButton controls={bots} />}
-            extras={bots.canManage ? <PracticeBots controls={bots} /> : null}
+            members={<PracticeBots controls={bots} table={room.table} />}
             onBack={onBack}
           />
         ) : room.error ? (
-          <Button className="m-4" variant="outline" onClick={onBack}>
+          <Button className="m-4" variant="outline" onPress={onBack}>
             返回房间
           </Button>
         ) : (
@@ -95,7 +96,7 @@ export function PokerApp({
         {tab === "rooms" && roomCode ? (
           <Room key={roomCode} code={roomCode} onBack={() => onOpenRoom(null)} />
         ) : (
-          <ScrollArea className={tab === "rooms" ? "game-center h-full" : "h-full"}>
+          <div className="game-center h-full min-h-0 overflow-y-auto overscroll-contain">
             {tab === "rooms" ? (
               <Lobby onRoom={onOpenRoom} />
             ) : tab === "records" ? (
@@ -103,7 +104,7 @@ export function PokerApp({
             ) : (
               <AgentProfiles />
             )}
-          </ScrollArea>
+          </div>
         )}
       </div>
     </SystemAppWindowShell>

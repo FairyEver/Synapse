@@ -4,10 +4,14 @@ import { act, useImperativeHandle, type Ref } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriveHostedDocumentImageDto } from '@synapse/shared'
-import { driveBrowserApi, type DriveDocumentImageUploadContext } from '@/lib/api'
+import {
+  driveBrowserApi,
+  type DriveDocumentImageUploadContext,
+} from '@/lib/api'
 import { useDriveDocumentImageUpload } from './drive-document-image-upload'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 vi.mock('../shared/drive-telemetry', () => ({
   startDriveOperation: () => vi.fn(),
@@ -45,19 +49,25 @@ afterEach(() => {
 describe('useDriveDocumentImageUpload', () => {
   it('invalidates an upload when the current file changes', async () => {
     const upload = deferred<DriveHostedDocumentImageDto>()
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(
+      upload.promise
+    )
     const apiRef = { current: null } as { current: HarnessApi | null }
     const onError = vi.fn()
     renderHarness(harnessProps(apiRef, onError))
 
     let uploadPromise: Promise<string> | undefined
-    act(() => { uploadPromise = apiRef.current?.uploadDocumentImage(imageFile('old.png')) })
+    act(() => {
+      uploadPromise = apiRef.current?.uploadDocumentImage(imageFile('old.png'))
+    })
     expect(uploading()).toBe(true)
 
-    renderHarness(harnessProps(apiRef, onError, {
-      itemId: 'file-2',
-      imageUploadContext: { kind: 'owner', itemId: 'file-2' },
-    }))
+    renderHarness(
+      harnessProps(apiRef, onError, {
+        itemId: 'file-2',
+        imageUploadContext: { kind: 'owner', itemId: 'file-2' },
+      })
+    )
     expect(uploading()).toBe(false)
 
     await act(async () => {
@@ -70,14 +80,18 @@ describe('useDriveDocumentImageUpload', () => {
 
   it('invalidates an upload when the current version changes', async () => {
     const upload = deferred<DriveHostedDocumentImageDto>()
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(
+      upload.promise
+    )
     const apiRef = { current: null } as { current: HarnessApi | null }
     const onError = vi.fn()
     const props = harnessProps(apiRef, onError)
     renderHarness(props)
 
     let uploadPromise: Promise<string> | undefined
-    act(() => { uploadPromise = apiRef.current?.uploadDocumentImage(imageFile('old.png')) })
+    act(() => {
+      uploadPromise = apiRef.current?.uploadDocumentImage(imageFile('old.png'))
+    })
     renderHarness({ ...props, currentVersionId: 'version-2' })
 
     expect(uploading()).toBe(false)
@@ -91,13 +105,17 @@ describe('useDriveDocumentImageUpload', () => {
 
   it('invalidates an upload explicitly without replacing the active error', async () => {
     const upload = deferred<DriveHostedDocumentImageDto>()
-    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(upload.promise)
+    vi.spyOn(driveBrowserApi, 'uploadHostedDocumentImage').mockReturnValue(
+      upload.promise
+    )
     const apiRef = { current: null } as { current: HarnessApi | null }
     const onError = vi.fn()
     renderHarness(harnessProps(apiRef, onError))
 
     let uploadPromise: Promise<string> | undefined
-    act(() => { uploadPromise = apiRef.current?.uploadDocumentImage(imageFile('old.png')) })
+    act(() => {
+      uploadPromise = apiRef.current?.uploadDocumentImage(imageFile('old.png'))
+    })
     act(() => apiRef.current?.invalidatePendingUploads())
 
     expect(uploading()).toBe(false)
@@ -122,8 +140,12 @@ describe('useDriveDocumentImageUpload', () => {
     let resultsPromise: Promise<PromiseSettledResult<string>[]> | undefined
     act(() => {
       resultsPromise = Promise.allSettled([
-        apiRef.current?.uploadOptionalDocumentImage(imageFile('first.png')) as Promise<string>,
-        apiRef.current?.uploadOptionalDocumentImage(imageFile('second.png')) as Promise<string>,
+        apiRef.current?.uploadOptionalDocumentImage(
+          imageFile('first.png')
+        ) as Promise<string>,
+        apiRef.current?.uploadOptionalDocumentImage(
+          imageFile('second.png')
+        ) as Promise<string>,
       ])
     })
     expect(uploading()).toBe(true)
@@ -162,18 +184,26 @@ function ImageUploadHarness({
     telemetryComponent: 'drive-test-editor',
     onError,
   })
-  useImperativeHandle(apiRef, () => ({
-    invalidatePendingUploads: upload.invalidatePendingUploads,
-    uploadDocumentImage: upload.uploadDocumentImage,
-    uploadOptionalDocumentImage: upload.uploadOptionalDocumentImage,
-  }), [upload.invalidatePendingUploads, upload.uploadDocumentImage, upload.uploadOptionalDocumentImage])
+  useImperativeHandle(
+    apiRef,
+    () => ({
+      invalidatePendingUploads: upload.invalidatePendingUploads,
+      uploadDocumentImage: upload.uploadDocumentImage,
+      uploadOptionalDocumentImage: upload.uploadOptionalDocumentImage,
+    }),
+    [
+      upload.invalidatePendingUploads,
+      upload.uploadDocumentImage,
+      upload.uploadOptionalDocumentImage,
+    ]
+  )
   return <div data-uploading={upload.uploadingImage} />
 }
 
 function harnessProps(
   apiRef: Ref<HarnessApi>,
   onError: (message: string | null) => void,
-  overrides: Partial<Omit<HarnessProps, 'apiRef' | 'onError'>> = {},
+  overrides: Partial<Omit<HarnessProps, 'apiRef' | 'onError'>> = {}
 ): HarnessProps {
   return {
     itemId: 'file-1',

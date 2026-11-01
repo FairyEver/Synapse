@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react"
 import type { GameSessionView } from "@synapse/shared/game-contracts"
 import { useAccount } from "./runtime/account"
-import { Button } from "./ui/button"
-import { ScrollArea } from "./ui/scroll-area"
+import { Button } from "@heroui/react"
 import { SystemAppWindowShell } from "./runtime/page-shell"
 import { parseGamePath, gamePath, type GameRoute } from "./runtime/routes"
 import { useHallOverview } from "./hooks/useHallOverview"
@@ -38,8 +37,8 @@ export function GameHallApp({ openRequest }: { openRequest?: OpenRequest | null 
     if (game) navigate({ entry: game.entry, roomCode: s.roomCode, tab: "rooms" })
   }
   const grant = () => { void mutation.run(async () => { await gameApi().hall.account({ claimGrant: true }); await hall.refresh() }) }
-  if (!hall.authenticated) return <SystemAppWindowShell><div className="flex items-center gap-3 p-6 text-sm"><span>登录后进入游戏</span><Button onClick={() => void account.startLogin()}>登录</Button></div></SystemAppWindowShell>
-  if (!route) return <SystemAppWindowShell><div className="flex items-center gap-3 p-6" role="alert">页面不存在<Button onClick={() => navigate({ entry:null, roomCode:null, tab:"rooms" })}>返回大厅</Button></div></SystemAppWindowShell>
+  if (!hall.authenticated) return <SystemAppWindowShell><div className="flex items-center gap-3 p-6 text-sm"><span>登录后进入游戏</span><Button onPress={() => void account.startLogin()}>登录</Button></div></SystemAppWindowShell>
+  if (!route) return <SystemAppWindowShell><div className="flex items-center gap-3 p-6" role="alert">页面不存在<Button onPress={() => navigate({ entry:null, roomCode:null, tab:"rooms" })}>返回大厅</Button></div></SystemAppWindowShell>
   const Selected = route.entry ? GAME_RENDERERS[route.entry]?.Page : null
   if (Selected) return <Selected key={account.state.status === "authenticated" ? account.state.profile.user.id : ""}
     roomCode={route.roomCode} tab={route.tab}
@@ -47,9 +46,9 @@ export function GameHallApp({ openRequest }: { openRequest?: OpenRequest | null 
     onOpenRoom={roomCode => navigate({ ...route, roomCode, tab:"rooms" })}
     onBack={() => navigate({ entry:null, roomCode:null, tab:"rooms" })} />
   return <SystemAppWindowShell left={<span className="text-sm font-medium">游戏</span>}>
-    <ScrollArea className="game-hall game-center h-full">
+    <div className="game-hall game-center h-full min-h-0 overflow-y-auto overscroll-contain">
       <GameQueryFeedback query={hall} />
       {(hall.data || !hall.error) && <HallHome overview={hall.data} onEnter={enter} onSession={session} previews={previews} icons={icons} artwork={artwork} onGrant={grant} />}
-    </ScrollArea>
+    </div>
   </SystemAppWindowShell>
 }

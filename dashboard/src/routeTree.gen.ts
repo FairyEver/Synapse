@@ -19,10 +19,10 @@ import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-p
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedWebhookDeliveriesIndexRouteImport } from './routes/_authenticated/webhook-deliveries/index'
+import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenticated/tables/index'
 import { Route as AuthenticatedSkillRepositoriesIndexRouteImport } from './routes/_authenticated/skill-repositories/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
-import { Route as AuthenticatedDriveIndexRouteImport } from './routes/_authenticated/drive/index'
 import { Route as NotificationsNotificationIdOpenRouteImport } from './routes/notifications/$notificationId/open'
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
 import { Route as AuthenticatedSkillRepositoriesExploreRouteImport } from './routes/_authenticated/skill-repositories/explore'
@@ -32,7 +32,6 @@ import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/deskto
 import { Route as ShareShareIdItemsBrowserItemIdRouteImport } from './routes/share/$shareId_/items/$browserItemId'
 import { Route as AuthenticatedSkillsOwnerHandleRepositoryNameRouteImport } from './routes/_authenticated/skills/$ownerHandle/$repositoryName'
 import { Route as AuthenticatedDriveItemsBrowserItemIdRouteImport } from './routes/_authenticated/drive/items/$browserItemId'
-import { Route as AuthenticatedDriveFoldersFolderIdRouteImport } from './routes/_authenticated/drive/folders/$folderId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -86,6 +85,12 @@ const AuthenticatedWebhookDeliveriesIndexRoute =
     path: '/webhook-deliveries/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedTablesIndexRoute =
+  AuthenticatedTablesIndexRouteImport.update({
+    id: '/tables/',
+    path: '/tables/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSkillRepositoriesIndexRoute =
   AuthenticatedSkillRepositoriesIndexRouteImport.update({
     id: '/skill-repositories/',
@@ -104,11 +109,6 @@ const AuthenticatedMyDevicesIndexRoute =
     path: '/my-devices/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedDriveIndexRoute = AuthenticatedDriveIndexRouteImport.update({
-  id: '/drive/',
-  path: '/drive/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const NotificationsNotificationIdOpenRoute =
   NotificationsNotificationIdOpenRouteImport.update({
     id: '/notifications/$notificationId/open',
@@ -162,12 +162,6 @@ const AuthenticatedDriveItemsBrowserItemIdRoute =
     path: '/drive/items/$browserItemId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedDriveFoldersFolderIdRoute =
-  AuthenticatedDriveFoldersFolderIdRouteImport.update({
-    id: '/drive/folders/$folderId',
-    path: '/drive/folders/$folderId',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -183,13 +177,12 @@ export interface FileRoutesByFullPath {
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
-  '/drive/': typeof AuthenticatedDriveIndexRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
+  '/tables/': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
-  '/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/skills/$ownerHandle/$repositoryName': typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
   '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
@@ -207,13 +200,12 @@ export interface FileRoutesByTo {
   '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
-  '/drive': typeof AuthenticatedDriveIndexRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories': typeof AuthenticatedSkillRepositoriesIndexRoute
+  '/tables': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
-  '/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/skills/$ownerHandle/$repositoryName': typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
   '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
@@ -234,13 +226,12 @@ export interface FileRoutesById {
   '/_authenticated/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
-  '/_authenticated/drive/': typeof AuthenticatedDriveIndexRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
+  '/_authenticated/tables/': typeof AuthenticatedTablesIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
-  '/_authenticated/drive/folders/$folderId': typeof AuthenticatedDriveFoldersFolderIdRoute
   '/_authenticated/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
   '/_authenticated/skills/$ownerHandle/$repositoryName': typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
   '/share/$shareId_/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
@@ -261,13 +252,12 @@ export interface FileRouteTypes {
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
-    | '/drive/'
     | '/my-devices/'
     | '/settings/'
     | '/skill-repositories/'
+    | '/tables/'
     | '/webhook-deliveries/'
     | '/webhooks/'
-    | '/drive/folders/$folderId'
     | '/drive/items/$browserItemId'
     | '/skills/$ownerHandle/$repositoryName'
     | '/share/$shareId/items/$browserItemId'
@@ -285,13 +275,12 @@ export interface FileRouteTypes {
     | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
-    | '/drive'
     | '/my-devices'
     | '/settings'
     | '/skill-repositories'
+    | '/tables'
     | '/webhook-deliveries'
     | '/webhooks'
-    | '/drive/folders/$folderId'
     | '/drive/items/$browserItemId'
     | '/skills/$ownerHandle/$repositoryName'
     | '/share/$shareId/items/$browserItemId'
@@ -311,13 +300,12 @@ export interface FileRouteTypes {
     | '/_authenticated/skill-repositories/explore'
     | '/_authenticated/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
-    | '/_authenticated/drive/'
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
     | '/_authenticated/skill-repositories/'
+    | '/_authenticated/tables/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
-    | '/_authenticated/drive/folders/$folderId'
     | '/_authenticated/drive/items/$browserItemId'
     | '/_authenticated/skills/$ownerHandle/$repositoryName'
     | '/share/$shareId_/items/$browserItemId'
@@ -407,6 +395,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWebhookDeliveriesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tables/': {
+      id: '/_authenticated/tables/'
+      path: '/tables'
+      fullPath: '/tables/'
+      preLoaderRoute: typeof AuthenticatedTablesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/skill-repositories/': {
       id: '/_authenticated/skill-repositories/'
       path: '/skill-repositories'
@@ -426,13 +421,6 @@ declare module '@tanstack/react-router' {
       path: '/my-devices'
       fullPath: '/my-devices/'
       preLoaderRoute: typeof AuthenticatedMyDevicesIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/drive/': {
-      id: '/_authenticated/drive/'
-      path: '/drive'
-      fullPath: '/drive/'
-      preLoaderRoute: typeof AuthenticatedDriveIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/notifications/$notificationId/open': {
@@ -498,13 +486,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDriveItemsBrowserItemIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/drive/folders/$folderId': {
-      id: '/_authenticated/drive/folders/$folderId'
-      path: '/drive/folders/$folderId'
-      fullPath: '/drive/folders/$folderId'
-      preLoaderRoute: typeof AuthenticatedDriveFoldersFolderIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
   }
 }
 
@@ -530,12 +511,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSkillRepositoriesRepositoryIdRoute: typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
   AuthenticatedSkillRepositoriesExploreRoute: typeof AuthenticatedSkillRepositoriesExploreRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
-  AuthenticatedDriveIndexRoute: typeof AuthenticatedDriveIndexRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
   AuthenticatedSkillRepositoriesIndexRoute: typeof AuthenticatedSkillRepositoriesIndexRoute
+  AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
-  AuthenticatedDriveFoldersFolderIdRoute: typeof AuthenticatedDriveFoldersFolderIdRoute
   AuthenticatedDriveItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsBrowserItemIdRoute
   AuthenticatedSkillsOwnerHandleRepositoryNameRoute: typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
 }
@@ -548,15 +528,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSkillRepositoriesExploreRoute:
     AuthenticatedSkillRepositoriesExploreRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
-  AuthenticatedDriveIndexRoute: AuthenticatedDriveIndexRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
   AuthenticatedSkillRepositoriesIndexRoute:
     AuthenticatedSkillRepositoriesIndexRoute,
+  AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
-  AuthenticatedDriveFoldersFolderIdRoute:
-    AuthenticatedDriveFoldersFolderIdRoute,
   AuthenticatedDriveItemsBrowserItemIdRoute:
     AuthenticatedDriveItemsBrowserItemIdRoute,
   AuthenticatedSkillsOwnerHandleRepositoryNameRoute:

@@ -3,10 +3,10 @@ import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// 复用已安装的 V2 React / HeroUI，不安装依赖、不启动服务。
+// 复用已安装的 Dashboard React / HeroUI，不安装依赖、不启动服务。
 const directory = path.dirname(fileURLToPath(import.meta.url))
 const repository = path.resolve(directory, '../../..')
-const dashboard = path.join(repository, 'dashboard-v2')
+const dashboard = path.join(repository, 'dashboard')
 const requireDashboard = createRequire(path.join(dashboard, 'package.json'))
 const { build } = await import(requireDashboard.resolve('vite'))
 const { default: react } = await import(requireDashboard.resolve('@vitejs/plugin-react'))

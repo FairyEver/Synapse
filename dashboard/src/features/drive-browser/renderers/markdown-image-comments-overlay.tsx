@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { Button } from '@heroui/react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react'
 import type { DriveMarkdownProjectionImageDto } from '@synapse/shared'
 import { MessageSquarePlus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { InlineToolbar, type InlineToolbarAction } from './inline-toolbar'
-
 const HOVER_INTENT_DELAY = 120
-
 type ImageElementPosition = {
   readonly imageId: string
   readonly element: HTMLElement
@@ -15,12 +21,10 @@ type ImageElementPosition = {
   readonly width: number
   readonly height: number
 }
-
 export type MarkdownImageThreadMarker = {
   readonly imageId: string
   readonly threadIds: readonly string[]
 }
-
 export function MarkdownImageCommentsOverlay({
   contentKey,
   rootRef,
@@ -46,12 +50,16 @@ export function MarkdownImageCommentsOverlay({
   readonly onAddComment: (image: DriveMarkdownProjectionImageDto) => void
   readonly onFocusThreads: (marker: MarkdownImageThreadMarker) => void
 }) {
-  const imageById = useMemo(() => new Map(images.map((image) => [image.imageId, image])), [images])
+  const imageById = useMemo(
+    () => new Map(images.map((image) => [image.imageId, image])),
+    [images]
+  )
   const [hoveredImageId, setHoveredImageId] = useState<string | null>(null)
-  const [positions, setPositions] = useState<readonly ImageElementPosition[]>([])
+  const [positions, setPositions] = useState<readonly ImageElementPosition[]>(
+    []
+  )
   const hoveredImageIdRef = useRef<string | null>(null)
   const hoverTimerRef = useRef<number | null>(null)
-
   const updateHoveredImage = useCallback((imageId: string | null) => {
     hoveredImageIdRef.current = imageId
     setHoveredImageId(imageId)
@@ -68,12 +76,11 @@ export function MarkdownImageCommentsOverlay({
       updateHoveredImage(null)
     }, HOVER_INTENT_DELAY)
   }, [cancelHoverTimer, updateHoveredImage])
-
   useEffect(() => {
     const root = rootRef.current
     const container = containerRef.current
     if (!root || !container || images.length === 0) {
-      setPositions((current) => current.length === 0 ? current : [])
+      setPositions((current) => (current.length === 0 ? current : []))
       return
     }
     let frame: number | null = null
@@ -84,31 +91,41 @@ export function MarkdownImageCommentsOverlay({
       if (!currentRoot || !currentContainer) return
       const containerRect = currentContainer.getBoundingClientRect()
       const next = images.flatMap((image): ImageElementPosition[] => {
-        const element = findVisibleMarkdownImageElement(currentRoot, image.imageId)
+        const element = findVisibleMarkdownImageElement(
+          currentRoot,
+          image.imageId
+        )
         if (!element) return []
         const rect = element.getBoundingClientRect()
         if (rect.width <= 0 || rect.height <= 0) return []
-        return [{
-          imageId: image.imageId,
-          element,
-          top: rect.top - containerRect.top,
-          left: rect.left - containerRect.left,
-          width: rect.width,
-          height: rect.height,
-        }]
+        return [
+          {
+            imageId: image.imageId,
+            element,
+            top: rect.top - containerRect.top,
+            left: rect.left - containerRect.left,
+            width: rect.width,
+            height: rect.height,
+          },
+        ]
       })
-      setPositions((current) => samePositions(current, next) ? current : next)
+      setPositions((current) => (samePositions(current, next) ? current : next))
     }
     const scheduleMeasure = () => {
       if (frame !== null) return
       frame = window.requestAnimationFrame(measure)
     }
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleMeasure)
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(scheduleMeasure)
     observer?.observe(root)
     observer?.observe(container)
     root.addEventListener('load', scheduleMeasure, true)
     root.addEventListener('scroll', scheduleMeasure, true)
-    scrollRef.current?.addEventListener('scroll', scheduleMeasure, { passive: true })
+    scrollRef.current?.addEventListener('scroll', scheduleMeasure, {
+      passive: true,
+    })
     window.addEventListener('resize', scheduleMeasure)
     measure()
     return () => {
@@ -120,17 +137,26 @@ export function MarkdownImageCommentsOverlay({
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
   }, [containerRef, contentKey, images, rootRef, scrollRef])
-
   useLayoutEffect(() => {
     const root = rootRef.current
     if (!root || images.length === 0) return
-    const activateFromTarget = (target: EventTarget | null, deferImageSwitch: boolean) => {
-      const element = target instanceof Element ? target.closest<HTMLElement>('[data-drive-markdown-image-id]') : null
+    const activateFromTarget = (
+      target: EventTarget | null,
+      deferImageSwitch: boolean
+    ) => {
+      const element =
+        target instanceof Element
+          ? target.closest<HTMLElement>('[data-drive-markdown-image-id]')
+          : null
       if (!element || !root.contains(element) || element.hidden) return
       const imageId = element.dataset.driveMarkdownImageId
       if (!imageId || !imageById.has(imageId)) return
       cancelHoverTimer()
-      if (deferImageSwitch && hoveredImageIdRef.current && hoveredImageIdRef.current !== imageId) {
+      if (
+        deferImageSwitch &&
+        hoveredImageIdRef.current &&
+        hoveredImageIdRef.current !== imageId
+      ) {
         hoverTimerRef.current = window.setTimeout(() => {
           hoverTimerRef.current = null
           updateHoveredImage(imageId)
@@ -139,28 +165,44 @@ export function MarkdownImageCommentsOverlay({
       }
       updateHoveredImage(imageId)
     }
-    const onPointerOver = (event: PointerEvent) => activateFromTarget(event.target, true)
+    const onPointerOver = (event: PointerEvent) =>
+      activateFromTarget(event.target, true)
     const onPointerOut = (event: PointerEvent) => {
-      const from = event.target instanceof Element
-        ? event.target.closest<HTMLElement>('[data-drive-markdown-image-id]')
-        : null
+      const from =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>('[data-drive-markdown-image-id]')
+          : null
       if (!from) return
-      const to = event.relatedTarget instanceof Element
-        ? event.relatedTarget.closest<HTMLElement>('[data-drive-markdown-image-id]')
-        : null
-      if (to?.dataset.driveMarkdownImageId === from.dataset.driveMarkdownImageId) return
+      const to =
+        event.relatedTarget instanceof Element
+          ? event.relatedTarget.closest<HTMLElement>(
+              '[data-drive-markdown-image-id]'
+            )
+          : null
+      if (
+        to?.dataset.driveMarkdownImageId === from.dataset.driveMarkdownImageId
+      )
+        return
       scheduleClose()
     }
-    const onFocusIn = (event: FocusEvent) => activateFromTarget(event.target, false)
+    const onFocusIn = (event: FocusEvent) =>
+      activateFromTarget(event.target, false)
     const onFocusOut = (event: FocusEvent) => {
-      const from = event.target instanceof Element
-        ? event.target.closest<HTMLElement>('[data-drive-markdown-image-id]')
-        : null
+      const from =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>('[data-drive-markdown-image-id]')
+          : null
       if (!from) return
-      const to = event.relatedTarget instanceof Element
-        ? event.relatedTarget.closest<HTMLElement>('[data-drive-markdown-image-id]')
-        : null
-      if (to?.dataset.driveMarkdownImageId === from.dataset.driveMarkdownImageId) return
+      const to =
+        event.relatedTarget instanceof Element
+          ? event.relatedTarget.closest<HTMLElement>(
+              '[data-drive-markdown-image-id]'
+            )
+          : null
+      if (
+        to?.dataset.driveMarkdownImageId === from.dataset.driveMarkdownImageId
+      )
+        return
       scheduleClose()
     }
     root.addEventListener('pointerover', onPointerOver)
@@ -174,36 +216,63 @@ export function MarkdownImageCommentsOverlay({
       root.removeEventListener('focusout', onFocusOut)
       cancelHoverTimer()
     }
-  }, [cancelHoverTimer, imageById, images.length, rootRef, scheduleClose, updateHoveredImage])
-
-  const positionById = useMemo(() => new Map(positions.map((position) => [position.imageId, position])), [positions])
-  const hoveredImage = hoveredImageId ? imageById.get(hoveredImageId) ?? null : null
-  const hoveredPosition = hoveredImageId ? positionById.get(hoveredImageId) ?? null : null
-  const activePosition = activeImageId ? positionById.get(activeImageId) ?? null : null
-  const pendingTargetPosition = commentTargetImageId ? positionById.get(commentTargetImageId) ?? null : null
-  const commentTargetPosition = pendingTargetPosition ?? (canCreate ? hoveredPosition : null)
+  }, [
+    cancelHoverTimer,
+    imageById,
+    images.length,
+    rootRef,
+    scheduleClose,
+    updateHoveredImage,
+  ])
+  const positionById = useMemo(
+    () => new Map(positions.map((position) => [position.imageId, position])),
+    [positions]
+  )
+  const hoveredImage = hoveredImageId
+    ? (imageById.get(hoveredImageId) ?? null)
+    : null
+  const hoveredPosition = hoveredImageId
+    ? (positionById.get(hoveredImageId) ?? null)
+    : null
+  const activePosition = activeImageId
+    ? (positionById.get(activeImageId) ?? null)
+    : null
+  const pendingTargetPosition = commentTargetImageId
+    ? (positionById.get(commentTargetImageId) ?? null)
+    : null
+  const commentTargetPosition =
+    pendingTargetPosition ?? (canCreate ? hoveredPosition : null)
   const highlightedPosition = commentTargetPosition ?? activePosition
-  const commentActions = useMemo<readonly InlineToolbarAction[]>(() => hoveredImage
-    ? [{
-        id: 'add-comment',
-        label: '添加评论',
-        icon: MessageSquarePlus,
-        onSelect: () => onAddComment(hoveredImage),
-      }]
-    : [], [hoveredImage, onAddComment])
-
+  const commentActions = useMemo<readonly InlineToolbarAction[]>(
+    () =>
+      hoveredImage
+        ? [
+            {
+              id: 'add-comment',
+              label: '添加评论',
+              icon: MessageSquarePlus,
+              onSelect: () => onAddComment(hoveredImage),
+            },
+          ]
+        : [],
+    [hoveredImage, onAddComment]
+  )
   return (
     <>
       {highlightedPosition ? (
         <div
           aria-hidden
-          data-drive-markdown-image-comment-target={commentTargetPosition ? 'true' : undefined}
-          data-drive-markdown-image-active={commentTargetPosition ? undefined : 'true'}
+          data-drive-markdown-image-comment-target={
+            commentTargetPosition ? 'true' : undefined
+          }
+          data-drive-markdown-image-active={
+            commentTargetPosition ? undefined : 'true'
+          }
           className={cn(
             'pointer-events-none absolute z-10 ring-2',
             commentTargetPosition
               ? 'ring-inset ring-primary'
-              : 'ring-ring ring-offset-2 ring-offset-background',
+              : 'ring-accent ring-offset-2 ring-offset-background'
           )}
           style={{
             top: highlightedPosition.top,
@@ -224,14 +293,16 @@ export function MarkdownImageCommentsOverlay({
             size='sm'
             data-drive-markdown-image-comment-count={marker.threadIds.length}
             className='absolute z-20 h-7 min-w-7 rounded-full px-2'
-            style={{ top: position.top + 6, left: position.left + position.width - 30 }}
+            style={{
+              top: position.top + 6,
+              left: position.left + position.width - 30,
+            }}
             aria-label={`${marker.threadIds.length} 条图片评论`}
             onPointerDown={(event) => {
               event.preventDefault()
               event.stopPropagation()
             }}
-            onClick={(event) => {
-              event.stopPropagation()
+            onPress={() => {
               onFocusThreads(marker)
             }}
           >
@@ -255,24 +326,41 @@ export function MarkdownImageCommentsOverlay({
     </>
   )
 }
-
-function findVisibleMarkdownImageElement(root: HTMLElement, imageId: string): HTMLElement | null {
-  const candidates = Array.from(root.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]'))
-    .filter((element) => element.dataset.driveMarkdownImageId === imageId && !element.hidden)
-  return candidates.find((element) => element.hasAttribute('data-drive-markdown-image-fallback-host'))
-    ?? candidates.find((element) => element.tagName === 'IMG')
-    ?? null
+function findVisibleMarkdownImageElement(
+  root: HTMLElement,
+  imageId: string
+): HTMLElement | null {
+  const candidates = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-drive-markdown-image-id]')
+  ).filter(
+    (element) =>
+      element.dataset.driveMarkdownImageId === imageId && !element.hidden
+  )
+  return (
+    candidates.find((element) =>
+      element.hasAttribute('data-drive-markdown-image-fallback-host')
+    ) ??
+    candidates.find((element) => element.tagName === 'IMG') ??
+    null
+  )
 }
-
-function samePositions(left: readonly ImageElementPosition[], right: readonly ImageElementPosition[]): boolean {
-  return left.length === right.length && left.every((value, index) => {
-    const candidate = right[index]
-    return Boolean(candidate
-      && value.imageId === candidate.imageId
-      && value.element === candidate.element
-      && value.top === candidate.top
-      && value.left === candidate.left
-      && value.width === candidate.width
-      && value.height === candidate.height)
-  })
+function samePositions(
+  left: readonly ImageElementPosition[],
+  right: readonly ImageElementPosition[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => {
+      const candidate = right[index]
+      return Boolean(
+        candidate &&
+        value.imageId === candidate.imageId &&
+        value.element === candidate.element &&
+        value.top === candidate.top &&
+        value.left === candidate.left &&
+        value.width === candidate.width &&
+        value.height === candidate.height
+      )
+    })
+  )
 }

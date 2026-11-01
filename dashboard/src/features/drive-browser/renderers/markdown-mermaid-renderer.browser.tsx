@@ -1,4 +1,5 @@
-import '@/styles/index.css'
+import '../reader.css'
+import '@/styles/globals.css'
 import { afterEach, describe, expect, it } from 'vitest'
 import { renderDriveMermaidDiagrams } from './markdown-mermaid-renderer'
 
@@ -29,10 +30,18 @@ describe('drive markdown Mermaid renderer in Chromium', () => {
 
     await renderDriveMermaidDiagrams({ root })
 
-    const diagrams = root.querySelectorAll('[data-drive-mermaid-diagram="true"]')
+    const diagrams = root.querySelectorAll(
+      '[data-drive-mermaid-diagram="true"]'
+    )
     expect(diagrams).toHaveLength(4)
-    expect(root.querySelectorAll('[data-drive-mermaid-rendered="true"] svg')).toHaveLength(4)
-    expect(Array.from(root.querySelectorAll('svg')).every((svg) => svg.hasAttribute('viewBox'))).toBe(true)
+    expect(
+      root.querySelectorAll('[data-drive-mermaid-rendered="true"] svg')
+    ).toHaveLength(4)
+    expect(
+      Array.from(root.querySelectorAll('svg')).every((svg) =>
+        svg.hasAttribute('viewBox')
+      )
+    ).toBe(true)
     expect(root.querySelector('[data-drive-mermaid-error="true"]')).toBeNull()
   })
 })

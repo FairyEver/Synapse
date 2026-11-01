@@ -5,7 +5,7 @@ import { ArrowRight, Check, ChevronDown, ChevronUp, Layers, Trophy } from 'lucid
 import { scenarios, format, signed, delta, winnerIds, type Scenario, type Player } from './model'
 import './preview.css'
 
-const faces = import.meta.glob('../../../../dashboard-v2/src/game-center/games/poker/assets/cards/*.svg', { eager: true, query: '?raw', import: 'default' }) as Record<string, string>
+const faces = import.meta.glob('../../../../dashboard/src/game-center/games/poker/assets/cards/*.svg', { eager: true, query: '?raw', import: 'default' }) as Record<string, string>
 const art = Object.fromEntries(Object.entries(faces).map(([path, svg]) => [path.split('/').pop()!.replace('.svg', ''), `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`]))
 const suits: Record<string, string> = { s: '黑桃', h: '红桃', d: '方片', c: '梅花' }
 

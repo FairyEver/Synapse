@@ -40,8 +40,8 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 | 主进程 service / IPC handler | `.claude/rules/api.md` |
 | 测试 | `.claude/rules/testing.md` |
 | 子包开发端口 | `.claude/rules/workspace-dev-ports.md` |
-| 游戏中心、游戏系统界面与局内 UI 分层 | `docs/agents/game-ui.md`；V2 同时阅读 `dashboard-v2/CLAUDE.md`、`dashboard-v2/DESIGN.md` |
-| Dashboard V2、HeroUI v3 UI 与 AI 编码工具 | `dashboard-v2/CLAUDE.md`、`dashboard-v2/DESIGN.md`；使用 `.agents/skills/heroui-react/` |
+| 游戏中心、游戏系统界面与局内 UI 分层 | `docs/agents/game-ui.md`；同时阅读 `dashboard/CLAUDE.md`、`dashboard/DESIGN.md` |
+| Dashboard、HeroUI v3 UI 与 AI 编码工具 | `dashboard/CLAUDE.md`、`dashboard/DESIGN.md`；使用 `.agents/skills/heroui-react/` |
 | 文档站文案 | `.claude/rules/document-copy.md` |
 | System App、Dock、Workflow/Automation/MCP/Deep Link 注册 | `docs/agents/capability-registry.md` |
 | Workflow 数据、分享包、App Capability Package、DataRepository | `docs/agents/workflow-and-capabilities.md` |
@@ -65,7 +65,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 - 使用当前 shadcn/Radix 组件、主题 token 和现有模块实现；禁止自定义颜色、hex/rgb/hsl、Tailwind 任意颜色值、装饰性渐变、glow、emoji heading、卡片套卡片和普通场景的内联样式。
 - 桌面文字按钮默认使用 `Button` 标准尺寸；仅在表格/列表行内、紧凑工具栏、附件标签等确有布局约束的位置使用 `sm`/`xs`。纯图标小按钮也必须有同类空间依据；不得因按钮是次要操作、ghost 或想让界面显得紧凑而缩小。具体判定见 `docs/agents/ui-and-product.md`。
 - 桌面菜单项沿用对应共享组件的默认尺寸；未获用户明确要求，不得额外放大行高、最小高度、内边距或字号。自定义候选菜单也遵守此规则；多行内容自然撑高，具体判定见 `docs/agents/ui-and-product.md`。
-- 菜单与浮层的视觉验收必须覆盖实际展开状态及对应的桌面/窄屏呈现；按所属子包组件文档核对图标与文字比例、内容分组和对齐、长内容、选中/键盘焦点及视口边界。关闭状态的顶栏截图、源码检查或构建通过不能替代展开状态验收；HeroUI 具体组合要求见 `dashboard-v2/CLAUDE.md`。
+- 菜单与浮层的视觉验收必须覆盖实际展开状态及对应的桌面/窄屏呈现；按所属子包组件文档核对图标与文字比例、内容分组和对齐、长内容、选中/键盘焦点及视口边界。关闭状态的顶栏截图、源码检查或构建通过不能替代展开状态验收；HeroUI 具体组合要求见 `dashboard/CLAUDE.md`。
 - UI 文案只保留必要标题、label、操作和空/错/加载状态；禁止功能介绍、实现解释、重复状态、营销文案和 AI 自称。
 - 写 UI 前必须检查 `desktop/components.json`、`desktop/src/styles/globals.css`、`desktop/src/components/ui/` 和当前模块实现。
 

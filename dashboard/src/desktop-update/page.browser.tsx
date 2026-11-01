@@ -30,7 +30,8 @@ describe('UpdateHandoffPage in Chromium', () => {
 
     const pendingButton = screen.getByRole('button', { name: '正在申请更新凭证' })
     await expect.element(pendingButton).toBeDisabled()
-    await expect.element(pendingButton).toHaveAttribute('aria-busy', 'true')
+    await expect.element(pendingButton).toHaveAttribute('data-pending', 'true')
+    await expect.element(screen.getByRole('region', { name: '更新 Synapse' })).toHaveAttribute('aria-busy', 'true')
     expect(fetchMock).toHaveBeenCalledOnce()
 
     response.resolve(jsonResponse({

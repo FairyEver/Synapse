@@ -1,12 +1,33 @@
-import { useEffect, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
-import { startDriveOperation, trackDriveEvent, type DriveTelemetryAction } from './drive-telemetry'
+import {
+  useEffect,
+  type KeyboardEvent,
+  type ReactNode,
+  type SyntheticEvent,
+} from 'react'
+import {
+  startDriveOperation,
+  trackDriveEvent,
+  type DriveTelemetryAction,
+} from './drive-telemetry'
 
 export type DriveTelemetryScope = 'console' | 'owner' | 'share'
 
 const PAGE_EVENT_KEYS = {
-  console: { open: 'web.drive.page.console.open', close: 'web.drive.page.console.close', duration: 'web.drive.page.console.duration' },
-  owner: { open: 'web.drive.page.owner.open', close: 'web.drive.page.owner.close', duration: 'web.drive.page.owner.duration' },
-  share: { open: 'web.drive.page.share.open', close: 'web.drive.page.share.close', duration: 'web.drive.page.share.duration' },
+  console: {
+    open: 'web.drive.page.console.open',
+    close: 'web.drive.page.console.close',
+    duration: 'web.drive.page.console.duration',
+  },
+  owner: {
+    open: 'web.drive.page.owner.open',
+    close: 'web.drive.page.owner.close',
+    duration: 'web.drive.page.owner.duration',
+  },
+  share: {
+    open: 'web.drive.page.share.open',
+    close: 'web.drive.page.share.close',
+    duration: 'web.drive.page.share.duration',
+  },
 } as const
 
 export function DriveTelemetryBoundary({
@@ -38,8 +59,11 @@ export function DriveTelemetryBoundary({
 
   useEffect(() => {
     const portalSelector = '[data-drive-telemetry-scope="portal"]'
-    const interactiveSelector = '[data-drive-telemetry-event],button,input,textarea,select,form,a,[role="button"],[role="link"],[role="menuitem"],[role="tab"]'
-    const actions: ReadonlyArray<readonly [keyof DocumentEventMap, DriveTelemetryAction]> = [
+    const interactiveSelector =
+      '[data-drive-telemetry-event],button,input,textarea,select,form,a,[role="button"],[role="link"],[role="menuitem"],[role="tab"]'
+    const actions: ReadonlyArray<
+      readonly [keyof DocumentEventMap, DriveTelemetryAction]
+    > = [
       ['change', 'change'],
       ['click', 'click'],
       ['dblclick', 'click'],
@@ -56,7 +80,9 @@ export function DriveTelemetryBoundary({
           if (!source?.closest(portalSelector)) return
           const target = source.closest<HTMLElement>(interactiveSelector)
           if (!target) return
-          const eventKey = stableEventKey(target.dataset.driveTelemetryEvent) ?? `web.drive.ui.${action}`
+          const eventKey =
+            stableEventKey(target.dataset.driveTelemetryEvent) ??
+            `web.drive.ui.${action}`
           trackDriveEvent({ eventKey, component: 'drive-web', action })
         } catch {
           return
@@ -72,7 +98,9 @@ export function DriveTelemetryBoundary({
         if (!source?.closest(portalSelector)) return
         const target = source.closest<HTMLElement>(interactiveSelector)
         if (!target) return
-        const eventKey = stableEventKey(target.dataset.driveTelemetryEvent) ?? 'web.drive.ui.select'
+        const eventKey =
+          stableEventKey(target.dataset.driveTelemetryEvent) ??
+          'web.drive.ui.select'
         trackDriveEvent({ eventKey, component: 'drive-web', action: 'select' })
       } catch {
         return
@@ -80,22 +108,29 @@ export function DriveTelemetryBoundary({
     }
     document.addEventListener('keydown', keyboardListener, true)
     return () => {
-      for (const [eventName, listener] of listeners) document.removeEventListener(eventName, listener, true)
+      for (const [eventName, listener] of listeners)
+        document.removeEventListener(eventName, listener, true)
       document.removeEventListener('keydown', keyboardListener, true)
     }
   }, [])
 
-  const capture = (action: DriveTelemetryAction) => (event: SyntheticEvent<HTMLElement>) => {
-    try {
-      const target = event.target instanceof Element
-        ? event.target.closest<HTMLElement>('[data-drive-telemetry-event],button,input,textarea,select,form,a,[role="button"],[role="link"],[role="menuitem"],[role="tab"]')
-        : null
-      const eventKey = stableEventKey(target?.dataset.driveTelemetryEvent) ?? `web.drive.ui.${action}`
-      trackDriveEvent({ eventKey, component: 'drive-web', action })
-    } catch {
-      return
+  const capture =
+    (action: DriveTelemetryAction) => (event: SyntheticEvent<HTMLElement>) => {
+      try {
+        const target =
+          event.target instanceof Element
+            ? event.target.closest<HTMLElement>(
+                '[data-drive-telemetry-event],button,input,textarea,select,form,a,[role="button"],[role="link"],[role="menuitem"],[role="tab"]'
+              )
+            : null
+        const eventKey =
+          stableEventKey(target?.dataset.driveTelemetryEvent) ??
+          `web.drive.ui.${action}`
+        trackDriveEvent({ eventKey, component: 'drive-web', action })
+      } catch {
+        return
+      }
     }
-  }
 
   const captureKeyboardAction = (event: KeyboardEvent<HTMLElement>) => {
     if (!['Enter', 'Escape', ' '].includes(event.key)) return

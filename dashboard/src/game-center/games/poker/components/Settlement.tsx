@@ -14,16 +14,17 @@ export function Settlement({ settlement, compact = false }: { settlement: PokerS
       {mine && <b>本手净变化 {mine.delta > 0 ? "+" : ""}{amount(mine.delta)}</b>}
     </section>
   }
-  return <section className={compact ? "poker-result-log" : "poker-settlement"} aria-label={`第 ${settlement.handNo} 手结果`}>
+  return <section className="poker-result-log space-y-3 border-b border-separator py-4 font-sans text-sm text-foreground" aria-label={`第 ${settlement.handNo} 手结果`}>
     <strong>第 {settlement.handNo} 手结果{settlement.mixedControl && " · 人机混合"}</strong>
-    <div className="poker-result-seats">
-      {settlement.seats.map(s => <div key={s.seatNo} className="poker-winner">
-        <span className="poker-result-player"><span>{s.displayName}{s.isMe && " · 本人"}</span>{winners.has(s.seatNo) && <Trophy className="poker-result-winner" role="img" aria-label="获胜" />}</span>
-        <span className="poker-result-cards" data-card-size="xs">{s.hole?.map(card => <Card key={card} card={card} faceUp />)}</span>
+    <div className="divide-y divide-separator">
+      {settlement.seats.map(s => <div key={s.seatNo} className="flex flex-wrap items-center gap-2 py-2">
+        <span className="flex min-w-0 basis-full items-center gap-2 break-words"><span className="min-w-0">{s.displayName}{s.isMe && " · 本人"}</span>{winners.has(s.seatNo) && <Trophy className="size-4 shrink-0 text-accent" role="img" aria-label="获胜" />}</span>
+        <span className="flex gap-1" data-card-size="xs">{s.hole?.map(card => <Card key={card} card={card} faceUp />)}</span>
         <span>{s.folded ? "已弃牌" : s.handName ?? ""}</span>
-        <b>{s.delta > 0 ? "+" : ""}{amount(s.delta)}</b>
+        {settlement.rules.ruleOptions?.roll && <span className="text-xs text-muted">Roll 支出 {amount(s.rollPaid ?? 0)} · 补偿 {amount(s.rollReceived ?? 0)}</span>}
+        <b aria-label="总净变化" className="ml-auto tabular-nums">{s.delta > 0 ? "+" : ""}{amount(s.delta)}</b>
       </div>)}
     </div>
-    {settlement.pots.map((pot, i) => <p key={i}>{pot.refund ? "未跟注返还" : i === 0 ? "主池" : `边池 ${i}`} {amount(pot.amount)}{Object.entries(pot.shares).map(([seat,share]) => ` · ${settlement.seats.find(s => s.seatNo === Number(seat))?.displayName ?? `座位 ${Number(seat)+1}`} ${amount(share)}`)}</p>)}
+    {settlement.pots.map((pot, i) => <p key={i} className="break-words text-xs text-muted">{pot.refund ? "未跟注返还" : i === 0 ? "主池" : `边池 ${i}`} {amount(pot.amount)}{Object.entries(pot.shares).map(([seat,share]) => ` · ${settlement.seats.find(s => s.seatNo === Number(seat))?.displayName ?? `座位 ${Number(seat)+1}`} ${amount(share)}`)}</p>)}
   </section>
 }

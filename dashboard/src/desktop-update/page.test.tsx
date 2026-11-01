@@ -62,7 +62,8 @@ describe('UpdateHandoffPage', () => {
     })
 
     expect(buttonWithText('正在申请更新凭证').disabled).toBe(true)
-    expect(buttonWithText('正在申请更新凭证').getAttribute('aria-busy')).toBe('true')
+    expect(buttonWithText('正在申请更新凭证').getAttribute('data-pending')).toBe('true')
+    expect(updateRegion().getAttribute('aria-busy')).toBe('true')
     expect(fetchSpy).toHaveBeenCalledOnce()
     expect(fetchSpy).toHaveBeenCalledWith('/api/desktop/update-intent', expect.objectContaining({
       credentials: 'omit',
@@ -83,6 +84,8 @@ describe('UpdateHandoffPage', () => {
     expect(openSpy).toHaveBeenCalledOnce()
     expect(openSpy).toHaveBeenCalledWith('synapse://update?token=fresh-token', '_self')
     expect(buttonWithText('再次打开 Synapse').disabled).toBe(false)
+    expect(updateRegion().getAttribute('aria-busy')).toBe('false')
+    expect(document.activeElement).toBe(buttonWithText('再次打开 Synapse'))
 
     await act(async () => {
       buttonWithText('再次打开 Synapse').click()
@@ -115,6 +118,7 @@ describe('UpdateHandoffPage', () => {
     expect(document.body.textContent).toContain('暂时无法打开 Synapse，请重试。')
     expect(document.body.textContent).toContain('设置 → 关于 Synapse')
     expect(buttonWithText('重试').disabled).toBe(false)
+    expect(document.activeElement).toBe(buttonWithText('重试'))
     expect(openSpy).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -144,6 +148,12 @@ function buttonWithText(text: string): HTMLButtonElement {
     .find((item) => item.textContent?.includes(text))
   if (!(button instanceof HTMLButtonElement)) throw new Error(`${text} button not found`)
   return button
+}
+
+function updateRegion(): HTMLElement {
+  const region = document.querySelector('section[aria-labelledby="desktop-update-title"]')
+  if (!(region instanceof HTMLElement)) throw new Error('update region not found')
+  return region
 }
 
 function deferred<T>() {

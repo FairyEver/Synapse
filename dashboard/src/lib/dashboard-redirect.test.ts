@@ -63,6 +63,13 @@ describe('normalizeDashboardRedirect', () => {
     expect(normalizeDashboardRedirect('/settings')).toBe('/settings')
   })
 
+  describe.each(['console', 'dashboard'])('legacy %s reader login returns', (prefix) => {
+    it.each(['items', 'folders'])('normalizes %s targets before stripping the app prefix', (kind) => {
+      expect(normalizeDashboardRedirect(`/${prefix}/drive/${kind}/doc%2Fname/?surface=console&versions=1#discussion=annotation&threadId=thread`)).toBe('/drive/items/doc%2Fname?surface=standalone&versions=1#discussion=annotation&threadId=thread')
+      expect(isRootPublicDashboardRedirect(`/${prefix}/drive/${kind}/doc`)).toBe(true)
+    })
+  })
+
   it('normalizes absolute deployment redirects without keeping their origin', () => {
     expect(normalizeDashboardRedirect('https://example.com/dashboard/users?page=2#profile')).toBe('/users?page=2#profile')
     expect(normalizeDashboardRedirect('https://example.com/console/settings')).toBe('/settings')
@@ -71,6 +78,19 @@ describe('normalizeDashboardRedirect', () => {
   it('rejects sign-in self redirects', () => {
     expect(normalizeDashboardRedirect('/sign-in')).toBeUndefined()
     expect(normalizeDashboardRedirect('https://example.com/console/sign-in')).toBeUndefined()
+  })
+
+  it.each(['javascript:/share/public', 'data:/drive/items/doc', 'https://other.test//share/public'])('rejects targets that could retain an unsafe scheme or network path: %s', (target) => {
+    expect(normalizeDashboardRedirect(target)).toBeUndefined()
+  })
+
+  it('keeps absolute legacy file targets on this deployment', () => {
+    expect(normalizeDashboardRedirect('https://other.test/console/drive/folders/doc?surface=console#comment')).toBe('/drive/items/doc?surface=standalone#comment')
+  })
+
+  it('upgrades folder targets already stripped by the old login page', () => {
+    expect(normalizeDashboardRedirect('/drive/folders/doc?surface=console&versions=1#comment')).toBe('/drive/items/doc?surface=standalone&versions=1#comment')
+    expect(isRootPublicDashboardRedirect('/drive/folders/doc')).toBe(true)
   })
 })
 

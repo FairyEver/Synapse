@@ -5,7 +5,7 @@ import { userNicknameMaxLength } from '@synapse/shared'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import { dashboardApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { ProfileSettings } from './profile-settings'
@@ -16,16 +16,31 @@ vi.mock('@/lib/api', () => ({
   dashboardApi: {
     getMe: vi.fn(),
     updateMe: vi.fn(),
+    randomizeAvatar: vi.fn(),
+    uploadAvatar: vi.fn(),
     createMyPasswordResetLink: vi.fn(),
   },
 }))
 
-vi.mock('sonner', () => ({
-  toast: {
-    error: vi.fn(),
-    success: vi.fn(),
-  },
-}))
+vi.mock('@heroui/react', async (importOriginal) => ({ ...(await importOriginal<typeof import('@heroui/react')>()), toast: { danger: vi.fn(), success: vi.fn() } }))
+
+vi.mock('react-avatar-editor', async () => {
+  const React = await import('react')
+  const MockAvatarEditor = React.forwardRef(function MockAvatarEditor(_props, ref) {
+    React.useImperativeHandle(ref, () => ({
+      getImageScaledToCanvas: () => {
+        const canvas = document.createElement('canvas')
+        Object.defineProperty(canvas, 'toBlob', {
+          configurable: true,
+          value: (callback: BlobCallback) => callback(new Blob(['avatar'], { type: 'image/png' })),
+        })
+        return canvas
+      },
+    }))
+    return React.createElement('div', { 'data-testid': 'avatar-editor' })
+  })
+  return { default: MockAvatarEditor }
+})
 
 const mockedDashboardApi = vi.mocked(dashboardApi)
 
@@ -101,6 +116,61 @@ describe('ProfileSettings', () => {
     await waitFor(() => inputById('user-nickname'))
 
     expect(inputById('user-nickname').value).toBe('liyang')
+  })
+
+  it('randomizes the system avatar and refreshes the account summary state', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile({
+      user: { ...profile().user, avatarUrl: '/api/avatars/system/current' },
+    }))
+    mockedDashboardApi.randomizeAvatar.mockResolvedValue(profile({
+      user: { ...profile().user, avatarUrl: '/api/avatars/system/next' },
+    }))
+
+    renderProfileSettings()
+    await waitFor(() => inputById('user-handle'))
+    await click(buttonByText('随机头像'))
+
+    await waitFor(() => expect(mockedDashboardApi.randomizeAvatar).toHaveBeenCalledOnce())
+    await waitFor(() => expect(useAuthStore.getState().auth.user?.avatarUrl).toBe('/api/avatars/system/next'))
+  })
+
+  it('keeps the current avatar when randomization fails', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile({
+      user: { ...profile().user, avatarUrl: '/api/avatars/system/current' },
+    }))
+    mockedDashboardApi.randomizeAvatar.mockRejectedValue(new Error('头像服务暂不可用'))
+
+    renderProfileSettings('/api/avatars/system/current')
+    await waitFor(() => inputById('user-handle'))
+    await click(buttonByText('随机头像'))
+
+    await waitFor(() => expect(toast.danger).toHaveBeenCalledWith('头像服务暂不可用'))
+    expect(useAuthStore.getState().auth.user?.avatarUrl).toBe('/api/avatars/system/current')
+    expect(document.body.textContent).toContain('随机头像')
+  })
+
+  it('crops and uploads a selected image', async () => {
+    mockedDashboardApi.getMe.mockResolvedValue(profile())
+    mockedDashboardApi.uploadAvatar.mockResolvedValue(profile({
+      user: { ...profile().user, avatarUrl: '/api/avatars/users/custom' },
+    }))
+
+    renderProfileSettings()
+    await waitFor(() => expect(document.querySelector('input[type="file"]')).toBeTruthy())
+    const input = document.querySelector('input[type="file"]')
+    if (!(input instanceof HTMLInputElement)) throw new Error('avatar file input not found')
+    const file = new File(['source'], 'avatar.png', { type: 'image/png' })
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(document.body.textContent).toContain('裁剪头像'))
+    await click(buttonByText('使用头像'))
+
+    await waitFor(() => expect(mockedDashboardApi.uploadAvatar).toHaveBeenCalledOnce())
+    expect(mockedDashboardApi.uploadAvatar.mock.calls[0]?.[0]).toBeInstanceOf(Blob)
+    await waitFor(() => expect(useAuthStore.getState().auth.user?.avatarUrl).toBe('/api/avatars/users/custom'))
   })
 
   it('saves a nickname change', async () => {
@@ -240,15 +310,16 @@ describe('ProfileSettings', () => {
     await waitFor(() => inputById('user-handle'))
     await click(buttonByText('生成重置链接'))
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('请求失败'))
+    await waitFor(() => expect(toast.danger).toHaveBeenCalledWith('请求失败'))
     expect(document.getElementById('password-reset-link')).toBeNull()
   })
 })
 
-function renderProfileSettings() {
+function renderProfileSettings(avatarUrl: string | null = null) {
   useAuthStore.getState().auth.setUser({
     email: 'u@example.test',
     handle: 'liyang',
+    avatarUrl,
     sessionId: 'session-1',
   })
 
@@ -279,6 +350,7 @@ function profile(overrides: Partial<Awaited<ReturnType<typeof dashboardApi.getMe
       status: 'active' as const,
       handle: 'liyang',
       nickname: 'liyang',
+      avatarUrl: null,
     },
     ...overrides,
   }

@@ -23,9 +23,7 @@ export type DriveBrowserInput =
       itemId?: string
       initialPassword?: string
     }
-  | {
-      context: 'console-root'
-    }
+
 
 export type DriveBrowserState =
   | { status: 'loading' }
@@ -351,7 +349,6 @@ function fingerprintInitialPassword(value: string | undefined) {
 }
 
 export async function loadDriveBrowser(input: DriveBrowserInput, options: DriveBrowserLoadOptions = {}) {
-  if (input.context === 'console-root') return driveBrowserApi.getConsoleRoot(options)
   if (input.context === 'owner') {
     return driveBrowserApi.getOwnerItem(input.itemId, input.surface, options)
   }

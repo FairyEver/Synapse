@@ -61,7 +61,7 @@
 
 ## 参考模板与金手指
 
-- `templates/` 是只读外部参考，除非用户明确要求，不得修改。管理后台优先参考 `templates/shadcn-admin/`。
+- `templates/` 是只读外部参考，除非用户明确要求，不得修改。Dashboard 页面以 `dashboard/CLAUDE.md`、`dashboard/DESIGN.md` 和现有 HeroUI 组件为准。
 - 金手指使用稳定命名空间字符串，如 `model:flow:disable`；它是隐藏入口，不是安全边界。
 - 触发输入与稳定定义分离。`action` 每次执行一次；`state` 通过统一状态管理器切换，持久化成功后回调。
 - 状态不得散落在组件、hook 或 `localStorage`。点击字符按 index 匹配以区分重复字符。

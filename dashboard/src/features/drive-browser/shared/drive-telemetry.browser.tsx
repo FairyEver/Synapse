@@ -10,13 +10,14 @@ import {
   resetDriveTelemetryForTests,
   trackDriveEvent,
 } from './drive-telemetry'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const sendClientTelemetryBatch = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/api-client', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/lib/api-client')>(),
+  ...(await importOriginal<typeof import('@/lib/api-client')>()),
   sendClientTelemetryBatch,
 }))
 
@@ -56,7 +57,9 @@ describe('Drive Web telemetry', () => {
     await settlePromises()
 
     expect(sendClientTelemetryBatch).toHaveBeenCalledTimes(1)
-    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as { events: Array<Record<string, unknown>> }
+    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as {
+      events: Array<Record<string, unknown>>
+    }
     expect(body.events).toHaveLength(1)
     expect(body.events[0]).toMatchObject({
       eventKey: 'web.drive.item.open',
@@ -89,7 +92,11 @@ describe('Drive Web telemetry', () => {
   })
 
   it('does not downgrade an event to anonymous after the Web identity changes', async () => {
-    useAuthStore.getState().auth.setUser({ email: 'user@example.com', handle: 'user', sessionId: 'session-1' })
+    useAuthStore.getState().auth.setUser({
+      email: 'user@example.com',
+      handle: 'user',
+      sessionId: 'session-1',
+    })
     trackDriveEvent({
       eventKey: 'web.drive.item.open',
       component: 'drive-web',
@@ -108,15 +115,19 @@ describe('Drive Web telemetry', () => {
       throw new Error('storage blocked')
     })
 
-    expect(() => trackDriveEvent({
-      eventKey: 'web.drive.item.open',
-      component: 'drive-web',
-      action: 'click',
-    })).not.toThrow()
+    expect(() =>
+      trackDriveEvent({
+        eventKey: 'web.drive.item.open',
+        component: 'drive-web',
+        action: 'click',
+      })
+    ).not.toThrow()
     flushDriveTelemetry()
     await settlePromises()
 
-    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as { events: Array<Record<string, unknown>> }
+    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as {
+      events: Array<Record<string, unknown>>
+    }
     expect(body.events[0]?.clientInstanceId).toEqual(expect.any(String))
     expect(body.events[0]?.sessionId).toEqual(expect.any(String))
   })
@@ -134,7 +145,9 @@ describe('Drive Web telemetry', () => {
     flushDriveTelemetry()
     await settlePromises()
 
-    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as { events: unknown[] }
+    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as {
+      events: unknown[]
+    }
     expect(body.events).toHaveLength(1)
   })
 
@@ -146,7 +159,9 @@ describe('Drive Web telemetry', () => {
     flushDriveTelemetry()
     await settlePromises()
 
-    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as { events: Array<Record<string, unknown>> }
+    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as {
+      events: Array<Record<string, unknown>>
+    }
     expect(body.events[0]).toMatchObject({
       eventKey: 'web.drive.operation.items.get-usage',
       category: 'operation',
@@ -164,7 +179,9 @@ describe('Drive Web telemetry', () => {
     flushDriveTelemetry()
     await settlePromises()
 
-    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as { events: Array<Record<string, unknown>> }
+    const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as {
+      events: Array<Record<string, unknown>>
+    }
     expect(body.events[0]).toMatchObject({
       eventKey: 'web.drive.operation.items.get-usage',
       outcome: 'failure',
@@ -176,8 +193,13 @@ describe('Drive Web telemetry', () => {
     const callback = vi.fn()
     render(
       <DriveTelemetryBoundary scope='console'>
-        <button data-drive-telemetry-event='web.drive.folder-create.open' onClick={callback}>新建</button>
-      </DriveTelemetryBoundary>,
+        <button
+          data-drive-telemetry-event='web.drive.folder-create.open'
+          onClick={callback}
+        >
+          新建
+        </button>
+      </DriveTelemetryBoundary>
     )
 
     const button = host?.querySelector('button')
@@ -194,12 +216,20 @@ describe('Drive Web telemetry', () => {
     const sendBeacon = vi.fn(() => {
       throw new Error('beacon unavailable')
     })
-    Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: sendBeacon })
+    Object.defineProperty(navigator, 'sendBeacon', {
+      configurable: true,
+      value: sendBeacon,
+    })
     const callback = vi.fn()
     render(
       <DriveTelemetryBoundary scope='console'>
-        <button data-drive-telemetry-event='web.drive.file-upload.choose' onClick={callback}>上传</button>
-      </DriveTelemetryBoundary>,
+        <button
+          data-drive-telemetry-event='web.drive.file-upload.choose'
+          onClick={callback}
+        >
+          上传
+        </button>
+      </DriveTelemetryBoundary>
     )
 
     const button = host?.querySelector('button')
@@ -215,7 +245,11 @@ describe('Drive Web telemetry', () => {
   })
 
   it('captures Drive dialog and menu interactions rendered through portals', async () => {
-    render(<DriveTelemetryBoundary scope='console'><div /></DriveTelemetryBoundary>)
+    render(
+      <DriveTelemetryBoundary scope='console'>
+        <div />
+      </DriveTelemetryBoundary>
+    )
     const portal = document.createElement('div')
     portal.dataset.driveTelemetryScope = 'portal'
     const button = document.createElement('button')
@@ -228,10 +262,17 @@ describe('Drive Web telemetry', () => {
       flushDriveTelemetry()
       await settlePromises()
 
-      const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as { events: Array<Record<string, unknown>> }
-      expect(body.events).toEqual(expect.arrayContaining([
-        expect.objectContaining({ eventKey: 'web.drive.share.create', action: 'click' }),
-      ]))
+      const body = sendClientTelemetryBatch.mock.calls[0]?.[0] as {
+        events: Array<Record<string, unknown>>
+      }
+      expect(body.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            eventKey: 'web.drive.share.create',
+            action: 'click',
+          }),
+        ])
+      )
     } finally {
       portal.remove()
     }

@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" class="card" face="4D" viewBox="-120 -168 240 336" width="240" height="336">
-  <rect x="-119.5" y="-167.5" width="239" height="335" rx="12" fill="white" stroke="#171b21" />
-  <g fill="#bd263a">
-    <path id="rank" d="M10.637 -16V-40.41H-53.039V-62.152L5.445 -144H38.039V-63.45H53.039V-40.41H38.039V-16H10.637ZM-24.014 -63.45H10.637V-110.252L-24.014 -63.45Z" />
-    <path id="suit" d="M-56 74C-49 74 0 11 0 4C0 11 49 74 56 74C49 74 0 137 0 144C0 137 -49 74 -56 74Z" />
-  </g>
-</svg>

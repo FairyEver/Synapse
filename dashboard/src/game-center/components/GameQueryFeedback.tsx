@@ -1,4 +1,4 @@
-import { Button } from "@/game-center/ui/button"
+import { Button } from "@heroui/react"
 
 type QueryState = {
   error: string | null
@@ -14,8 +14,8 @@ export function GameQueryFeedback({ query }: { query: QueryState }) {
       <Button
         type="button"
         variant="outline"
-        disabled={query.loading || !query.online}
-        onClick={() => void query.refresh()}
+        isDisabled={query.loading || !query.online}
+        onPress={() => void query.refresh()}
       >
         重试
       </Button>

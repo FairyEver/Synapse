@@ -12,14 +12,21 @@ import type {
 import { DriveCodeRenderer } from './code-renderer'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import { DrivePreviewToolbarItemView } from './drive-preview-header'
-import { DriveRendererToolbarProvider, useDriveRendererToolbar } from './drive-renderer-toolbar-context'
-
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+import {
+  DriveRendererToolbarProvider,
+  useDriveRendererToolbar,
+} from './drive-renderer-toolbar-context'
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
 
 const monacoMockState = vi.hoisted(() => ({
   ctrlCmd: 1 << 11,
   keyS: 49,
-  saveCommand: null as null | { readonly keybinding: number; readonly handler: () => void },
+  saveCommand: null as null | {
+    readonly keybinding: number
+    readonly handler: () => void
+  },
 }))
 
 vi.mock('@monaco-editor/react', async () => {
@@ -35,8 +42,10 @@ vi.mock('@monaco-editor/react', async () => {
       readonly value?: string
       readonly onChange?: (value?: string) => void
       readonly onMount?: (
-        editor: { addCommand: (keybinding: number, handler: () => void) => string },
-        monaco: { KeyMod: { CtrlCmd: number }; KeyCode: { KeyS: number } },
+        editor: {
+          addCommand: (keybinding: number, handler: () => void) => string
+        },
+        monaco: { KeyMod: { CtrlCmd: number }; KeyCode: { KeyS: number } }
       ) => void
       readonly options?: { readonly readOnly?: boolean }
     }) => {
@@ -48,7 +57,10 @@ vi.mock('@monaco-editor/react', async () => {
               return 'drive-save'
             },
           },
-          { KeyMod: { CtrlCmd: monacoMockState.ctrlCmd }, KeyCode: { KeyS: monacoMockState.keyS } },
+          {
+            KeyMod: { CtrlCmd: monacoMockState.ctrlCmd },
+            KeyCode: { KeyS: monacoMockState.keyS },
+          }
         )
       }, [])
       return React.createElement('textarea', {
@@ -91,11 +103,17 @@ describe('DriveCodeRenderer', () => {
     const editContext = createEditContext()
     renderRenderer({ editContext })
 
-    expect(monacoMockState.saveCommand?.keybinding).toBe(monacoMockState.ctrlCmd | monacoMockState.keyS)
-    expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe('Meta+S Control+S')
-    expect(buttonWithText('保存').className).toContain('bg-primary')
-    expect(buttonWithText('重新加载').className).toContain('hover:bg-accent')
-    expect(buttonWithText('重新加载').className.split(/\s+/u)).not.toContain('border')
+    expect(monacoMockState.saveCommand?.keybinding).toBe(
+      monacoMockState.ctrlCmd | monacoMockState.keyS
+    )
+    expect(buttonWithText('保存').getAttribute('aria-keyshortcuts')).toBe(
+      'Meta+S Control+S'
+    )
+    expect(buttonWithText('保存').className).toContain('button--primary')
+    expect(buttonWithText('重新加载').className).toContain('button--ghost')
+    expect(buttonWithText('重新加载').className.split(/\s+/u)).not.toContain(
+      'border'
+    )
 
     monacoMockState.saveCommand?.handler()
     expect(editContext.saveText).not.toHaveBeenCalled()
@@ -114,7 +132,11 @@ describe('DriveCodeRenderer', () => {
 
   it('asks before reloading dirty source text and then reloads from the returned snapshot', async () => {
     const editContext = createEditContext({
-      reload: vi.fn(async () => baseSnapshot({ preview: { ...basePreview(), text: 'const answer = 42' } })),
+      reload: vi.fn(async () =>
+        baseSnapshot({
+          preview: { ...basePreview(), text: 'const answer = 42' },
+        })
+      ),
     })
     renderRenderer({ editContext })
 
@@ -133,9 +155,15 @@ describe('DriveCodeRenderer', () => {
   })
 
   it('downloads the dirty source draft without reloading it from the discard dialog', async () => {
-    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-draft')
-    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
-    const clickAnchor = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:local-draft')
+    const revokeObjectURL = vi
+      .spyOn(URL, 'revokeObjectURL')
+      .mockImplementation(() => undefined)
+    const clickAnchor = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
     const editContext = createEditContext()
     renderRenderer({ editContext })
 
@@ -237,7 +265,9 @@ describe('DriveCodeRenderer', () => {
     })
 
     expect(editor().readOnly).toBe(true)
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1')
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe(
+      '/console/sign-in?redirect=%2Fshare%2Fshare-1'
+    )
   })
 
   it('updates the login action redirect after switching shared files', () => {
@@ -249,21 +279,27 @@ describe('DriveCodeRenderer', () => {
     }
     window.history.pushState(null, '', '/share/share-1/items/file-a')
     const { rerender } = renderRenderer({ edit: loginEdit })
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-a')
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe(
+      '/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-a'
+    )
 
     window.history.pushState(null, '', '/share/share-1/items/file-b')
     rerender({ edit: loginEdit })
 
-    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe('/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-b')
+    expect(anchorWithText('登录后编辑').getAttribute('href')).toBe(
+      '/console/sign-in?redirect=%2Fshare%2Fshare-1%2Fitems%2Ffile-b'
+    )
   })
 })
 
-function renderRenderer(input: {
-  readonly current?: DriveBrowserItemDto
-  readonly preview?: DriveBrowserPreviewDto
-  readonly edit?: DriveBrowserEditDto | null
-  readonly editContext?: DriveRendererEditContext
-} = {}) {
+function renderRenderer(
+  input: {
+    readonly current?: DriveBrowserItemDto
+    readonly preview?: DriveBrowserPreviewDto
+    readonly edit?: DriveBrowserEditDto | null
+    readonly editContext?: DriveRendererEditContext
+  } = {}
+) {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
@@ -299,7 +335,9 @@ function ToolbarHost() {
   const toolbar = useDriveRendererToolbar()
   return (
     <div data-testid='toolbar' data-unsaved={String(toolbar.hasUnsavedChanges)}>
-      {toolbar.items.map((item) => <DrivePreviewToolbarItemView key={item.id} item={item} />)}
+      {toolbar.items.map((item) => (
+        <DrivePreviewToolbarItemView key={item.id} item={item} />
+      ))}
     </div>
   )
 }
@@ -323,12 +361,16 @@ function baseCurrent(): DriveBrowserItemDto {
   }
 }
 
-function baseSnapshot(input: Partial<DriveBrowserSnapshotDto> = {}): DriveBrowserSnapshotDto {
+function baseSnapshot(
+  input: Partial<DriveBrowserSnapshotDto> = {}
+): DriveBrowserSnapshotDto {
   return {
     context: 'owner',
     surface: 'standalone',
     current: baseCurrent(),
-    breadcrumbs: [{ id: 'root', name: 'root', browserUrl: '/drive/items/root' }],
+    breadcrumbs: [
+      { id: 'root', name: 'root', browserUrl: '/drive/items/root' },
+    ],
     children: [],
     preview: basePreview(),
     edit: editable(),
@@ -393,18 +435,25 @@ async function click(element: HTMLElement) {
 
 function editor(): HTMLTextAreaElement {
   const element = document.querySelector('[data-monaco-editor="true"]')
-  if (!(element instanceof HTMLTextAreaElement)) throw new Error('code editor not found')
+  if (!(element instanceof HTMLTextAreaElement))
+    throw new Error('code editor not found')
   return element
 }
 
 function buttonWithText(text: string): HTMLButtonElement {
-  const element = Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.includes(text))
-  if (!(element instanceof HTMLButtonElement)) throw new Error(`button not found: ${text}`)
+  const element = Array.from(document.querySelectorAll('button')).find(
+    (button) => button.textContent?.includes(text)
+  )
+  if (!(element instanceof HTMLButtonElement))
+    throw new Error(`button not found: ${text}`)
   return element
 }
 
 function anchorWithText(text: string): HTMLAnchorElement {
-  const element = Array.from(document.querySelectorAll('a')).find((anchor) => anchor.textContent?.includes(text))
-  if (!(element instanceof HTMLAnchorElement)) throw new Error(`anchor not found: ${text}`)
+  const element = Array.from(document.querySelectorAll('a')).find((anchor) =>
+    anchor.textContent?.includes(text)
+  )
+  if (!(element instanceof HTMLAnchorElement))
+    throw new Error(`anchor not found: ${text}`)
   return element
 }

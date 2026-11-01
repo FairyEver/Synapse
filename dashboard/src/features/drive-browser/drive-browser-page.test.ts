@@ -11,8 +11,6 @@ import {
   DriveSingleFileReaderView,
   getDriveBrowserAnnotationContext,
 } from './drive-browser-page'
-import { AdminDriveStorageSummary } from './admin-drive-storage-summary'
-import { AccessLogTable, AdminPublicAssets } from './admin-public-assets'
 import { DriveFinder } from './finder/drive-finder'
 import {
   findDriveRendererOption,
@@ -120,82 +118,6 @@ describe('drive browser view model', () => {
     history.replaceState(null, '', '/')
   })
 
-  it('renders admin public asset controls without marketing copy', () => {
-    const queryClient = new QueryClient()
-    const assetsHtml = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client: queryClient },
-        createElement(AdminPublicAssets)
-      )
-    )
-    const summaryHtml = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client: queryClient },
-        createElement(AdminDriveStorageSummary)
-      )
-    )
-
-    expect(assetsHtml).toContain('按名称筛选...')
-    expect(assetsHtml).toContain('访问')
-    expect(assetsHtml).not.toContain('让您的')
-    expect(summaryHtml).toContain('普通文件')
-    expect(summaryHtml).toContain('公开素材')
-    expect(summaryHtml).toContain('隐藏')
-    const adminPublicAssetsSource = readFileSync(
-      'src/features/drive-browser/admin-public-assets.tsx',
-      'utf8'
-    )
-    expect(adminPublicAssetsSource).toContain('访问日志')
-    expect(adminPublicAssetsSource).toContain('历史版本')
-  })
-
-  it('renders admin storage totals outside lifecycle bucket columns', () => {
-    const queryClient = new QueryClient()
-    queryClient.setQueryData(['admin-drive-storage-summary'], {
-      normalDrive: {
-        active: { count: 1, bytes: '1024' },
-        trashed: { count: 2, bytes: '2048' },
-        hidden: { count: 3, bytes: '4096' },
-      },
-      publicAssets: {
-        active: { count: 4, bytes: '8192' },
-        trashed: { count: 5, bytes: '16384' },
-        hidden: { count: 6, bytes: '32768' },
-      },
-      publicAssetRevisions: { count: 7, bytes: '65536' },
-      documentImages: { count: 8, bytes: '131072' },
-      total: {
-        quotaBytes: '131072',
-        adminVisibleBytes: '262144',
-      },
-    })
-
-    const summaryHtml = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client: queryClient },
-        createElement(AdminDriveStorageSummary)
-      )
-    )
-
-    expect(summaryHtml).toContain('配额计入')
-    expect(summaryHtml).toContain('后台留存')
-    expect(summaryHtml).toContain('文档图片')
-    expect(summaryHtml).not.toContain('>合计<')
-  })
-
-  it('renders access log pagination controls when more pages exist', () => {
-    const html = renderToStaticMarkup(
-      createElement(AccessLogTable, {
-        data: [],
-        isLoading: false,
-        page: 1,
-        pageSize: 20,
-        total: 41,
-        onPageChange: () => undefined,
-      })
-    )
-
-    expect(html).toContain('下一页')
-    expect(html).toContain('1 / 3')
-  })
-
   it('formats drive file metadata from shared helpers', () => {
     expect(formatDriveBrowserSize({ ...baseCurrent(), size: '7372' })).toBe('7.2 KB')
     expect(formatDriveBrowserSize({ ...baseCurrent(), type: 'folder' })).toBe('-')
@@ -256,7 +178,6 @@ describe('drive browser view model', () => {
     ])
     expect(getDrivePreviewSystemActions(standaloneFile).map((action) => action.id)).toEqual([
       'download',
-      'open-in-drive',
       'versions',
       'renderer-select',
     ])
@@ -267,11 +188,10 @@ describe('drive browser view model', () => {
     }).map((action) => action.id)).toEqual([
       'download',
       'pdf-export',
-      'open-in-drive',
       'versions',
       'renderer-select',
     ])
-    expect(getDrivePreviewSystemMenuSections(standaloneFile).flatMap((section) => section.items.map((item) => item.id))).toContain('open-in-drive')
+    expect(getDrivePreviewSystemMenuSections(standaloneFile).flatMap((section) => section.items.map((item) => item.id))).not.toContain('open-in-drive')
   })
 
   it('keeps renderer selection primary and file actions in the shared overflow menu', () => {
@@ -313,7 +233,6 @@ describe('drive browser view model', () => {
     expect(headerHtml.indexOf('打开方式')).toBeLessThan(headerHtml.indexOf('aria-label="更多操作"'))
     expect(getDrivePreviewSystemMenuSections(snapshot, 'markdown')[0]?.items.map((item) => item.id)).toEqual([
       'download',
-      'open-in-drive',
       'versions',
     ])
     expect(floatingHtml).toContain('文件操作')
@@ -465,7 +384,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('暂无同级文件')
   })
 
-  it('prepends the console home breadcrumb for drive item pages', () => {
+  it('does not prepend a removed console home breadcrumb', () => {
     const snapshot = createSnapshot({
       surface: 'console',
       breadcrumbs: [
@@ -474,11 +393,11 @@ describe('drive browser view model', () => {
       ],
     })
 
-    expect(getDriveFinderBreadcrumbs(snapshot).map((item) => item.name)).toEqual(['我的空间', '文档', '记录.md'])
-    expect(getDriveFinderBreadcrumbs(snapshot)[0]?.browserUrl).toBe('/console/drive')
+    expect(getDriveFinderBreadcrumbs(snapshot).map((item) => item.name)).toEqual(['文档', '记录.md'])
+    expect(getDriveFinderBreadcrumbs(snapshot)).toEqual(snapshot.breadcrumbs)
   })
 
-  it('renames the console root breadcrumb without changing standalone pages', () => {
+  it('retains only the supplied breadcrumb content', () => {
     const consoleRoot = createSnapshot({
       surface: 'console',
       breadcrumbs: [{ id: 'root', name: '网盘', browserUrl: '/console/drive' }],
@@ -488,7 +407,7 @@ describe('drive browser view model', () => {
       breadcrumbs: [{ id: 'folder', name: '文档', browserUrl: '/drive/items/folder' }],
     })
 
-    expect(getDriveFinderBreadcrumbs(consoleRoot).map((item) => item.name)).toEqual(['我的空间'])
+    expect(getDriveFinderBreadcrumbs(consoleRoot).map((item) => item.name)).toEqual(['网盘'])
     expect(getDriveFinderBreadcrumbs(standalone).map((item) => item.name)).toEqual(['文档'])
   })
 
@@ -597,7 +516,7 @@ describe('drive browser view model', () => {
     expect(html).not.toContain('只读')
     expect(html).not.toContain('rounded-lg')
     expect(html).not.toContain('border')
-    expect(html).not.toContain('bg-card')
+    expect(html).not.toContain('bg-surface')
     expect(html).not.toContain('min-h-96')
     expect(html).toContain('class="flex h-full min-h-0 w-full flex-col overflow-hidden"')
     expect(html).not.toContain('h-svh')
@@ -1045,7 +964,7 @@ describe('drive browser view model', () => {
     expect(getDriveFloatingMenuNewWindowUrl(snapshot)).toBeNull()
   })
 
-  it('links standalone owner files back to their console drive location', () => {
+  it('does not expose retired console locations from standalone files', () => {
     const owner = createSnapshot({
       context: 'owner',
       surface: 'standalone',
@@ -1058,7 +977,7 @@ describe('drive browser view model', () => {
     })
     const shared = createSnapshot({ context: 'share' })
 
-    expect(getDriveFloatingMenuDriveBrowserUrl(owner)).toBe('/console/drive/items/file%2Fa?surface=console')
+    expect(getDriveFloatingMenuDriveBrowserUrl(owner)).toBeNull()
     expect(getDriveFloatingMenuDriveBrowserUrl(shared)).toBeNull()
   })
 

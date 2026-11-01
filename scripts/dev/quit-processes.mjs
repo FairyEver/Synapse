@@ -8,12 +8,11 @@ import { clearDevProcessState, readDevProcessState, writeDevProcessState } from 
 const execFileAsync = promisify(execFile)
 const currentFilePath = fileURLToPath(import.meta.url)
 const defaultWorkspaceRoot = path.resolve(path.dirname(currentFilePath), "../..")
-const DEV_SCRIPT_NAMES = ["dev:document", "dev:desktop", "dev:server", "dev:dashboard-v2"]
+const DEV_SCRIPT_NAMES = ["dev:document", "dev:desktop", "dev:server"]
 const DEV_PORTS_BY_SCRIPT = {
   "dev:document": [19773],
   "dev:desktop": [19731],
   "dev:server": [],
-  "dev:dashboard-v2": [19703],
 }
 const DEV_PORTS = Object.values(DEV_PORTS_BY_SCRIPT).flat()
 
@@ -28,7 +27,6 @@ const RELATIVE_DEV_COMMAND_MATCHERS = [
   /nest.*start.*--watch/u,
   /admin[/\\]vite\.config\.ts/u,
   /dashboard[/\\].*vite\.js.*(?:--port 3000|--open http:\/\/localhost:19700\/console\/)/u,
-  /dashboard-v2[/\\].*vite\.js(?:\s|$)/u,
   /max.*dev.*--port 3000/u,
   /nodemon/u,
   /electron[/\\]cli\.js \./u,
@@ -72,11 +70,6 @@ const DEV_COMMAND_MATCHERS_BY_SCRIPT = {
     /pnpm(?:\.cjs)?.*@synapse[/\\]server.*\brun dev\b/u,
     /pnpm(?:\.cjs)?.*@synapse[/\\]dashboard\s+run dev\b/u,
     /pnpm(?:\.cjs)?.*\bdev:(?:server|api|admin|dashboard)(?=\s|$)/u,
-  ],
-  "dev:dashboard-v2": [
-    /dashboard-v2[/\\].*vite\.js(?:\s|$)/u,
-    /pnpm(?:\.cjs)?.*@synapse[/\\]dashboard-v2\s+run dev\b/u,
-    /pnpm(?:\.cjs)?.*\bdev:dashboard-v2\b/u,
   ],
 }
 
