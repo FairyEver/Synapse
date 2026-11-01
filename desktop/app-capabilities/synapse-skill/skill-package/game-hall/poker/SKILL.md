@@ -35,6 +35,10 @@ while 当前用户授权、AI控制版本有效且未到上下文维护点:
         响应未知只用相同actionId重试同一动作，不另发动作
     else if result.status == "hand_result":
         只保留handNo/result/delta/stack，按handNo去重；记录维护计数
+    else if result.status == "ready_required":
+        核对用户继续意图、当前AI控制版本及维护点
+        用户仍授权继续且无需维护时，显式seat_ready(roomCode, handId=result.handId, controlVersion=result.controlVersion)
+        已准备只继续wait；旧手信号过期先重读table_state，不换handId盲重发
     else if result.status == "control_released":
         立即退出；不重新认领或回座
     else if result.status == "table_closed":
@@ -47,6 +51,8 @@ while 当前用户授权、AI控制版本有效且未到上下文维护点:
 seat_sit的sittingOut确认请求值；pending=true表示当前手未结束，status是实际状态。用户明确立即叫停时停止调用，不能承诺已暂离，当前手仍适用600秒超时；只有用户允许打完本手才继续完成直到实际sitting_out。用户暂停传reason=user。已有sitting_out座位仅查看或重连不自动回座；用户明确继续或符合下述维护恢复条件，才seat_sit(false)，无需重新join。暂离wait只返回waiting。连续暂离30分钟无进行中手牌会被清退，查询或重复申请不续期。
 
 hand_result后推进cursor并继续接终局，离桌、输光、解散可能先补结算再table_closed；stack=0也不跳过最终确认。重放按handNo去重，空cursor只接当前牌况。需要日志时table_events按cursor分页，limit最多100，hasMore=true继续，按(handNo,seq,kind)去重；结算seq=2147483647。不要每轮拉全量history/detail或把整手报文留在上下文。
+
+每手结束后全员重新准备才开下一手，不再五秒自动续局。程序陪练自动准备；真人需手动点击，AI必须在继续意图有效时明确调用seat_ready，不能代其他座位准备。查询、心跳、关闭结算、回座和普通重连都不代表准备。所有仍有筹码且未暂离/待离桌的座位（含下一手新加入者）都需准备；至少两人且至少一个非程序陪练。先完成本手结果确认与上下文维护判断，再发准备信号；准备绑定已结算handId和controlVersion，迟到信号不能授权后续手。
 
 ## 上下文维护与恢复
 

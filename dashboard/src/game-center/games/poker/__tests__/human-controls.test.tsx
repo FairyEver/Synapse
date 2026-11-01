@@ -6,8 +6,8 @@ import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { HumanControls } from "../components/HumanControls"
 import { canvasFit, mergeTableEvents } from "../lib/table-layout"
 import { betPresets } from "../lib/action-view"
-const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), join: vi.fn(), sit: vi.fn(), leave: vi.fn() }))
-vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { action: { act: api.act }, control: { set: api.control }, seat: { join: api.join, sit: api.sit, leave: api.leave } } }) }))
+const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), join: vi.fn(), sit: vi.fn(), leave: vi.fn(), ready: vi.fn() }))
+vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { action: { act: api.act }, control: { set: api.control }, seat: { join: api.join, sit: api.sit, leave: api.leave, ready: api.ready } } }) }))
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const table: PokerTableView = { roomCode: "1234", name: null, status: "running", buyIn: 1000, maxSeats: 2, handId: "hand", handNo: 1, street: "flop", board: [], pot: 20, dealerSeat: 0, actionOnSeat: 0, deadlineMs: 20000, cursor: "1:3", mySeatNo: 0, seats: [{ seatNo: 0, displayName: "本人", isMe: true, stack: 100, status: "active", streetBet: 2, aiState: "online", controller: "human" }], recentActions: [], deckRemaining: 40, actionSeq: 3, controlVersion: 4, controller: "human", legalActions: ["fold", "call", "raise", "allin"], toCall: 4, minRaiseTo: 10, maxRaiseTo: 102 }
@@ -15,6 +15,18 @@ afterEach(() => { vi.clearAllMocks(); document.body.replaceChildren() })
 async function render(value = table) { const host = document.createElement("div"), root = createRoot(host); document.body.append(host); await act(async () => root.render(<HumanControls table={value} perspective="owner" onRefresh={vi.fn()} />)); return { host, root } }
 function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
 describe("真人牌桌操作", () => {
+ it("旧版Web回退也必须提供显式准备，不因刷新自动续局", async () => {
+  const value={...table,status:"paused",street:"settled",awaitingReady:true,actionOnSeat:null,seats:[{...table.seats[0],status:"waiting",nextHandEligible:true,readyForNextHand:false}]}
+  api.ready.mockResolvedValue({handId:"hand",started:false})
+  const {host,root}=await render(value)
+  expect(api.ready).not.toHaveBeenCalled()
+  expect(button(host,"准备下一手")).toBeDefined()
+  await act(async()=>button(host,"准备下一手").click())
+  expect(api.ready).toHaveBeenCalledWith({roomCode:"1234",handId:"hand",controlVersion:4})
+  await act(async()=>root.render(<HumanControls table={{...value,seats:[{...value.seats[0],readyForNextHand:true}]}} perspective="owner" onRefresh={vi.fn()} />))
+  expect(button(host,"已准备").disabled).toBe(true)
+  await act(async()=>root.unmount())
+ })
  it("上手历史座位不能阻止离桌后重新申请入座，实际容量由服务端裁决", async () => {
   api.join.mockResolvedValue({seatNo:0})
   const departed={...table,mySeatNo:null,controller:null,seats:[{...table.seats[0],status:"folded"},{...table.seats[0],seatNo:1,isMe:false}]}

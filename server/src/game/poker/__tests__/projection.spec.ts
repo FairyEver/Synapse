@@ -32,6 +32,10 @@ describe("结算白名单投影", () => {
     expect(v.rules.variant).toBe("short32")
     expect(v.seats[0]).toMatchObject({ handName: "同花", delta: 100, payout: 200, isMe: true })
     expect(v.seats[1].handName).toBe("葫芦")
+    expect(v.seats[0].bestFive).toHaveLength(5)
+    expect(v.seats[0].bestFive).toEqual(expect.arrayContaining(["Ts", "Js"]))
+    expect(v.pots[0].reason).toContain("同花胜过")
+    expect(v.pots[0].reason).toContain("短牌")
     expect(v.pots[0]).toMatchObject({ winners: [0], shares: { 0: 200 } })
     expect(v.mixedControl).toBe(true)
     expect(JSON.stringify(v)).not.toContain("userId")
@@ -42,6 +46,8 @@ describe("结算白名单投影", () => {
     const f = fixture(); f.seats[1].folded = true
     const v = projectSettlement(f.hand, f.seats, f.actions, "new-at-same-seat", policy({ perspective: "owner", everJoined: true }))!
     expect(v.seats.every((s) => !s.isMe && s.hole === undefined && s.handName === undefined)).toBe(true)
+    expect(v.seats.every(s => s.bestFive === undefined)).toBe(true)
+    expect(v.pots[0].reason).not.toContain("同花")
   })
   it("旧归档缺规则和分池winner数据可投影，未结算不伪造结果", () => {
     const f = fixture(); delete f.hand.rules; delete f.hand.result.deltas; delete f.hand.result.pots[0].winners; delete f.hand.result.pots[0].shares
@@ -50,6 +56,25 @@ describe("结算白名单投影", () => {
     expect(v.seats[0].delta).toBe(100)
     expect(projectSettlement({ ...f.hand, status: "running" }, f.seats, [], "me", policy())).toBeNull()
   })
+})
+
+it("相同牌型解释具体比较点数，平分和弃牌不虚构胜因", () => {
+  const f = fixture()
+  f.hand.rules.variant = "standard52"
+  f.hand.board = ["As", "Kd", "8c", "5h", "2d"]
+  f.seats[0].holeCards = ["Ah", "Qs"]
+  f.seats[1].holeCards = ["Ad", "Js"]
+  const project = () => projectSettlement(f.hand, f.seats, [], "me", policy({ perspective: "owner" }))!
+  expect(project().pots[0].reason).toContain("Q")
+  expect(project().pots[0].reason).toContain("J")
+  f.hand.board = ["As", "Ks", "Qs", "Js", "Ts"]
+  f.seats[0].holeCards = ["Qh", "Qd"]; f.seats[1].holeCards = ["9h", "9d"]
+  f.hand.result.pots[0].winners = [0, 1]
+  expect(project().pots[0].reason).toContain("平分")
+  f.hand.result.pots[0].winners = [0]
+  f.hand.result.pots[0].eligible = [0]
+  f.seats[1].folded = true
+  expect(project().pots[0].reason).toContain("弃牌")
 })
 
 it("不同选手分别真人和MCP不标混打，必须同一身份同一座位的来源切换", () => {

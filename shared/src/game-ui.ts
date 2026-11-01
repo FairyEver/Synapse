@@ -45,6 +45,7 @@ export interface GameBridge {
       remove: (input: Room & { botId: string }) => Promise<{ pending: boolean }>
     }
     seat: {
+      ready: (input: Room & { handId: string; controlVersion: number }) => Promise<{ handId: string; started: boolean }>
       join: (input: Room & { agentId?: string; modelName?: string; controlVersion?: number }) => Promise<{ roomCode: string; seatNo: number }>
       leave: (input: Room & { controlVersion?: number }) => Promise<{ pending: boolean }>
       sit: (input: Room & { sittingOut: boolean; controlVersion?: number; reason?: "user" | "context_maintenance" }) => Promise<{ sittingOut: boolean; pending: boolean; status: string }>
@@ -153,6 +154,9 @@ export interface GameUiRoute {
 
 const roomPath = (params: Record<string, unknown>) => `/game/poker/rooms/${encodeURIComponent(String(params.roomCode))}`
 export const pokerUiRoutes = {
+  "app.game.poker.seat.ready": {
+    method: "POST", bareResponse: true, path: params => `${roomPath(params)}/ready`,
+  },
   "app.game.poker.seat.join": {
     method: "POST",
     bareResponse: true,

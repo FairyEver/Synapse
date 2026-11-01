@@ -6,8 +6,8 @@ import { startHand, type HandState } from "./engine/hand-runner"
 import { orderedDeck, shuffle } from "./engine/deck"
 import { after } from "./engine/seat-order"
 import { resolveRules, type PokerRules } from "./engine/rules"
+import { nextHandEligible, preparedForNextHand } from "./poker-ready"
 export const ACTION_WINDOW_MS = 600000
-export const SETTLEMENT_WINDOW_MS = 5000
 export function engine(hand: GamePokerHand): HandState {
   const state = hand.engineState as unknown as HandState
   const saved = hand.rules && typeof hand.rules === "object" && !Array.isArray(hand.rules) ? hand.rules : {}
@@ -32,24 +32,16 @@ export async function startNext(
     })
     return
   }
-  const eligible = c.seats.filter(
-    (s) => s.stack > 0 && s.status !== "sitting_out" && !s.sitPending && !s.leavePending,
-  )
-  if (eligible.length < 2 || !eligible.some((s) => s.participantKind !== "bot")) {
+  const eligible = c.seats.filter(nextHandEligible)
+  if (eligible.length < 2 || !eligible.some((s) => s.participantKind !== "bot") ||
+      (c.room.handNo > 0 && !eligible.every(preparedForNextHand))) {
     c.room = await c.tx.gamePokerRoom.update({
       where: { id: c.room.id },
-      data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null, botActionAt: null, nextHandAt: c.room.nextHandAt && c.room.nextHandAt > c.now ? c.room.nextHandAt : null },
+      data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null, botActionAt: null, nextHandAt: null },
     })
     await c.tx.gameSession.updateMany({
       where: { gameKind: "poker", gameRoomId: c.room.id, status: { not: "closed" } },
       data: { needsAction: false, deadlineAt: null },
-    })
-    return
-  }
-  if (c.room.nextHandAt && c.now < c.room.nextHandAt) {
-    c.room = await c.tx.gamePokerRoom.update({
-      where: { id: c.room.id },
-      data: { actionDeadlineAt: null, botActionAt: null },
     })
     return
   }
@@ -128,7 +120,7 @@ export async function saveHand(
     where: { id: c.room.id },
     data: {
       actionDeadlineAt: deadlineAt,
-      nextHandAt: settled ? new Date(c.now.getTime() + SETTLEMENT_WINDOW_MS) : null,
+      nextHandAt: null,
       botActionAt: !settled && c.room.mode === "practice" && c.seats.some((s) => s.seatNo === state.actionOnSeat && s.participantKind === "bot")
         ? new Date(c.now.getTime() + 1000) : null,
     },

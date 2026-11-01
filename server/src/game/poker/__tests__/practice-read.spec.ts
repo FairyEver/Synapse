@@ -13,8 +13,8 @@ import { PokerNudgeService } from "../poker-nudge.service"
 import { gameTestDatabaseUrl } from "./test-database"
 const url = gameTestDatabaseUrl()
 describe("陪练MCP注册", () => {
-  it("提供26项可检索能力，机器人管理不含行动或身份覆盖参数", () => {
-    expect(GAME_TOOLS).toHaveLength(26)
+  it("提供27项可检索能力，机器人管理不含行动或身份覆盖参数", () => {
+    expect(GAME_TOOLS).toHaveLength(27)
     expect(GAME_TOOLS.find((t) => t.id === "app.game.poker.bot.add")?.inputSchema.required).toEqual(["roomCode", "creationId"])
     expect(GAME_TOOLS.find((t) => t.id === "app.game.poker.bot.remove")?.inputSchema.required).toEqual(["roomCode", "botId"])
   })

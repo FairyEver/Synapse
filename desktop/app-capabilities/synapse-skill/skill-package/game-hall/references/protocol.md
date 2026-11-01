@@ -54,3 +54,7 @@ checkpoint_get返回{checkpoint:null|检查点}，checkpoint_save返回{checkpoi
 
 
 离桌删除座位仍保留永久控制历史。无座位先table_state或room_get检查requiresJoinApproval：false明确表示无控制历史，可按用户原入座授权首次join；true表示有历史，controller=null、handoffPending仅表示Web 游戏中心通过control.set(request_ai)明确授权AI重新入座，必须授权有效且携匹配controlVersion。标记缺失或未知不推定首次，不能按版本0判断。seat_join可带controlVersion；有历史必须当前版本匹配且入座授权有效，不能用旧MCP裸join绕过接管并重新扣点。cancel_ai撤销该授权；已有座位仍用control_claim接受交接。首次无控制历史的旧MCP入座兼容不变，未核实历史不能推定为首次。
+
+## 每手准备屏障
+
+首局入座行为保持；每手结算后nextHandAt为空，所有仍可参赛座位重新准备后才发下一手。程序陪练自动准备；真人通过Web点击；AI必须显式app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait可返回ready_required，携当前结算手牌和控制版本；已准备返回waiting。先补hand_result和处理维护点，再按用户继续意图准备。暂离/离桌/无筹码/历史回显座位不计入，新加入及回座者不自动准备。旧handId返回POKER_STALE_ACTION，重读而不把信号迁移到新手；响应丢失先table_state核对，本手仍等待时才以相同参数重试。准备不修改资金，也不构成未来多手的准备授权。

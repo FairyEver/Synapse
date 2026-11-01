@@ -1,7 +1,8 @@
 import type { GamePokerAction, GamePokerHand, GamePokerHandSeat } from "@prisma/client"
 import type { PokerSettlementView } from "@synapse/shared/game-contracts"
 import type { ArchivedHand } from "./poker-archive.service"
-import { handRankName } from "./engine/hand"
+import { bestFive, handRankName } from "./engine/hand"
+import { settlementReason } from "./settlement-reason"
 import { resolveRules, type PokerRules } from "./engine/rules"
 
 export type PokerViewPolicy = {
@@ -51,7 +52,7 @@ export function projectSettlement(
     sources.add(action.actionSource ?? (action.isAuto ? "timeout" : "mcp"))
     controlSources.set(key, sources)
   }
-  return {
+  const settlement: PokerSettlementView = {
     handId: hand.id,
     handNo: hand.handNo,
     board,
@@ -70,7 +71,7 @@ export function projectSettlement(
         payout: amount(payouts[s.seatNo]),
         endingStack,
         ...(visible ? { hole } : {}),
-        ...(visible && board.length + hole.length >= 5 ? { handName: handRankName([...hole, ...board], rules.variant) } : {}),
+        ...(visible && !s.folded && board.length + hole.length >= 5 ? { handName: handRankName([...hole, ...board], rules.variant), bestFive: bestFive([...hole, ...board], rules.variant) } : {}),
       }
     }),
     pots: (Array.isArray(result.pots) ? result.pots : []).map((entry: unknown) => {
@@ -85,4 +86,6 @@ export function projectSettlement(
     }),
     mixedControl: [...controlSources.values()].some((sources) => sources.has("human") && sources.has("mcp")),
   }
+  settlement.pots = settlement.pots.map(pot => ({ ...pot, reason: settlementReason(pot, settlement) }))
+  return settlement
 }

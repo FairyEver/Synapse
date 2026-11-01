@@ -74,13 +74,14 @@ export class GameApiService {
             buyIn: [500, 1000, 2000, 5000],
             actionWindowSeconds: 600,
             heartbeatSeconds: 60,
+            nextHand: "首局沿用入座开局；每手结束后所有有资格座位重新准备，真人手动点击、AI显式seat_ready、程序陪练自动准备。未全员准备不开下一手。",
             timeout: "能check就记录check，否则fold；两者均立即撤出本手、离桌退款，不自动跟注。",
             headsUp: "按钮即小盲，翻前先行动、翻后后行动。",
             privacy: "MCP决策接口不提供教学明牌；Web 游戏中心从未入座可全牌旁观，曾参与点数房不能通过旁观读暗牌，陪练旁观只额外公开机器人牌。persona、版本、note及检查点仅本人可读。",
             practice: "mode=practice为陪练房，整桌练习筹码不扣兑大厅点数、不计正式战绩。房主可bot_add/移除程序机器人；真人可在 Web 游戏中心操作或交给外部AI，机器人不调用模型。没有可参与真人时不开新手。",
           },
           tools: GAME_TOOLS.filter((t) => t.id.startsWith("app.game.poker.")),
-          loop: "guide → overview → 无座位lobby_list/seat_join；已有座位先检查status，sitting_out仅在用户明确要求继续时seat_sit(false)后wait，未经继续指令不自动回座；已保存且有效的context_maintenance继续意图可在核对控制版本后恢复。每次独立wait(roomCode,cursor,25000)；your_turn按现读persona与合法动作提交act(UUID,handId,street,controlVersion,expectedActionSeq)，更新cursor；hand_result只记简要结果；control_released停止，不抢回控制权。每10手或15分钟检查上下文，必要时reason=context_maintenance申请暂离，pending=true表示当前手尚未结束，立即停止调用仍适用600秒超时离桌，不能承诺保留座位。完成本手并确认sitting_out后checkpoint.save，只有宿主原生压缩能力真实可调用时执行并确认，缺失或失败则安全停止提示手动处理；恢复重读guide/overview/checkpoint，不自动重新扣点入座。",
+          loop: "guide → overview → 无座位lobby_list/seat_join；已有座位先检查status，sitting_out仅在用户明确要求继续时seat_sit(false)后wait，未经继续指令不自动回座；已保存且有效的context_maintenance继续意图可在核对控制版本后恢复。每次独立wait(roomCode,cursor,25000)；your_turn按现读persona与合法动作提交act(UUID,handId,street,controlVersion,expectedActionSeq)，更新cursor；hand_result只记简要结果；ready_required时先检查继续意图和维护点，再用handId/controlVersion显式seat_ready，查询和wait不会准备；control_released停止，不抢回控制权。每10手或15分钟检查上下文，必要时reason=context_maintenance申请暂离，pending=true表示当前手尚未结束，立即停止调用仍适用600秒超时离桌，不能承诺保留座位。完成本手并确认sitting_out后checkpoint.save，只有宿主原生压缩能力真实可调用时执行并确认，缺失或失败则安全停止提示手动处理；恢复重读guide/overview/checkpoint，不自动重新扣点入座。",
           persona:
             "使用会话口述覆盖时，act传personaSource=session，行动不绑定游戏内版本；口述优先于游戏设置，仅本会话生效；未经用户明确要求不写回。模型自述可选，不确定留空。",
           errors: {
@@ -116,6 +117,8 @@ export class GameApiService {
         return this.poker.join(userId, p.roomCode, p, new Date(), caller)
       case "app.game.poker.seat.leave":
         return this.poker.leave(userId, p.roomCode, new Date(), caller, p.controlVersion)
+      case "app.game.poker.seat.ready":
+        return this.poker.ready(userId, p.roomCode, p.handId, p.controlVersion, new Date(), caller)
       case "app.game.poker.seat.sit":
         return this.poker.sit(userId, p.roomCode, p.sittingOut, new Date(), caller, p.controlVersion, p.reason)
       case "app.game.poker.seat.nudge":

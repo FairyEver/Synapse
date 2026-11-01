@@ -148,6 +148,7 @@ export const gameResponseFixtures: Record<string, unknown> = {
     recentActions: [publicAction],
   },
   "app.game.poker.seat.join": { roomCode: "4821", seatNo: 0 },
+  "app.game.poker.seat.ready": { handId: "hand", started: false },
   "app.game.poker.seat.leave": { pending: false },
   "app.game.poker.seat.sit": { sittingOut: true, pending: false, status: "sitting_out" },
   "app.game.poker.seat.nudge": { notificationId: "notification" },

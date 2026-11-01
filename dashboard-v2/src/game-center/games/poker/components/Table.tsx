@@ -8,6 +8,7 @@ import { SidePanel } from "./SidePanel"
 import { HumanControls, type PokerControlPanel } from "./HumanControls"
 import { ChipMotion } from "./ChipMotion"
 import { Settlement } from "./Settlement"
+import { SettlementPanel } from "./SettlementPanel"
 import { amount, projectTable, streetLabel } from "../lib/view"
 import { TABLE_CONTROLS_BREAKPOINT } from "../lib/table-layout"
 import { fitTableScene, tableSceneVariables } from "../lib/table-scene"
@@ -84,6 +85,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           <Button type="button" variant="tertiary" isIconOnly={compact} aria-label="返回房间" onPress={onBack}><ArrowLeft aria-hidden="true" />{!compact && "返回房间"}</Button>
           <span className="poker-room-summary text-sm"><strong>#{table.roomCode}</strong><span className="text-muted">第 {table.handNo} 手{table.mode === "practice" && " · 陪练"}</span></span>
           <div className="poker-perspective flex items-center gap-2">
+            <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} />
             <Button ref={logTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label={panelOpen ? "收起日志" : "日志"} aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{!compact && (panelOpen ? "收起日志" : "日志")}</Button>
             {view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
           </div>

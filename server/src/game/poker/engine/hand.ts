@@ -32,7 +32,7 @@ function five(cards: readonly Card[], variant: PokerVariant): HandRank {
     groups[0].count === 3 ? 3 : groups[0].count === 2 ? (groups[1].count === 2 ? 2 : 1) : 0
   return { category, kickers: groups.map((g) => g.value) }
 }
-export function evaluate(cards: readonly Card[], variant: PokerVariant = "standard52"): HandRank {
+function evaluateBest(cards: readonly Card[], variant: PokerVariant): { rank: HandRank; cards: Card[] } {
   if (
     cards.length < 5 ||
     cards.length > 7 ||
@@ -41,15 +41,23 @@ export function evaluate(cards: readonly Card[], variant: PokerVariant = "standa
   )
     throw new Error("无效牌面")
   let best: HandRank = { category: -1, kickers: [] }
+  let bestCards: Card[] = []
   for (let a = 0; a < cards.length - 4; a++)
     for (let b = a + 1; b < cards.length - 3; b++)
       for (let c = b + 1; c < cards.length - 2; c++)
         for (let d = c + 1; d < cards.length - 1; d++)
           for (let e = d + 1; e < cards.length; e++) {
-            const rank = five([cards[a], cards[b], cards[c], cards[d], cards[e]], variant)
-            if (compare(rank, best) > 0) best = rank
+            const selected = [cards[a], cards[b], cards[c], cards[d], cards[e]]
+            const rank = five(selected, variant)
+            if (compare(rank, best) > 0) { best = rank; bestCards = selected }
           }
-  return best
+  return { rank: best, cards: bestCards }
+}
+export function evaluate(cards: readonly Card[], variant: PokerVariant = "standard52"): HandRank { return evaluateBest(cards, variant).rank }
+export function bestFive(cards: readonly Card[], variant: PokerVariant = "standard52"): Card[] {
+  const selected = evaluateBest(cards, variant).cards
+  const ranks = selected.map(card => card[0])
+  return selected.sort((a, b) => ranks.filter(rank => rank === b[0]).length - ranks.filter(rank => rank === a[0]).length || "23456789TJQKA".indexOf(b[0]) - "23456789TJQKA".indexOf(a[0]))
 }
 export function compareHands(a: readonly Card[], b: readonly Card[], variant: PokerVariant = "standard52"): number {
   return compare(evaluate(a, variant), evaluate(b, variant))

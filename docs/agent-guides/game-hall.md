@@ -14,7 +14,7 @@ Web德州扑克音效由本地打包的 Kenney Casino Audio CC0 素材提供，�
 
 Web筹码与轮次反馈以权威 table 快照为单一时序，按 handId/actionSeq 去重；events 游标流继续用于日志。首次载入、超过三秒断流、后台切回、身份/视角/控制版本/布局变化建立基线，不补播历史动作；快速跨街优先最新状态，不排队到下一手。筹码从实际座位牌框到独立本轮下注锚点，本轮结束再进入实际底池，收池包含盲注及新增投入。赢家座位显示赢池金额和净变化，返还与赢池分开；本人赢池且净盈利才有短庆祝，资金、控制和倒计时不依赖动画回调。画布根据实际可用区域宽高比自动使用横向、方形或纵向场景，座位、卡牌、文字和下注统一 contain 等比缩放，不单独逆缩放字号/座位宽度；减弱动态效果移除位移和庆祝，保留静态动作、下注及结果。MCP/IPC 和系统 Skill 操作协议不变。
 
-游戏中心位于独立 `/game/` Web 页面，由 Console 侧栏在新标签页打开；桌面不再提供游戏 UI 或入口。namespace `game` 和 26 项 MCP 保持兼容，历史 `synapse://app/game-hall` 与房间深链改为受控打开浏览器。
+游戏中心位于独立 `/game/` Web 页面，由 Console 侧栏在新标签页打开；桌面不再提供游戏 UI 或入口。namespace `game`，当前 27 项 MCP，历史 `synapse://app/game-hall` 与房间深链改为受控打开浏览器。
 
 Web创建扑克房间使用独立深色游戏弹窗：房间类型、牌组、盲注和带入直接点选，座位数在 2–10 人之间步进调节；提交期间禁用草稿修改，关闭后恢复入口焦点。仅改变Web呈现，创建参数、默认值及 creationId 重试语义不变，MCP schema 与系统 Skill 无需变更。
 
@@ -70,7 +70,7 @@ pnpm --filter @synapse/desktop run test --maxWorkers=4
 
 控制权和版本由服务端决定；Webcontrol.set(takeover|request_ai|cancel_ai)必须带controlVersion，AI只对用户已申请的handoff调用control.claim。接管即时提升epoch、旧AI动作和seat.sit/leave写权失效，已提交动作不回滚，截止时间不重置。act带controlVersion/expectedActionSeq，省略版本只兼容初始epoch0；响应未知保持actionId确认原动作。human动作不绑定persona/note，程序机器人仍rules_bot。
 
-UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/control与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Web UI 通过 REST 调用 join/act/control.set/events，没有 wait/control.claim/checkpoint；桌面游戏 bridge 已移除。game 26 项公共能力；桌面游戏 IPC 为 0；room.close/control.set两个私有UI操作不进capability/MCP。
+UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/ready/control与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Web UI 通过 REST 调用 join/act/control.set/events，没有 wait/control.claim/checkpoint；桌面游戏 bridge 已移除。game 27 项公共能力；桌面游戏 IPC 为 0；room.close/control.set两个私有UI操作不进capability/MCP。
 
 table.events可传perspective=owner|public，MCP默认owner且固定decision投影；UI默认public，玩家日志必须随牌桌传owner，不能混入教学明牌。返回{events,cursor,hasMore}，limit最大100，按(handNo,seq,kind)去重并推进返回cursor；结算seq=2147483647，重连直接呈现最新状态，不重放旧动画。扑克房间获准隐藏业务顶栏/底栏，三种内部场景按可用比例自动选择并 contain 等比缩放、日志可折叠/窄屏抽屉；大厅使用独立 Web 页面壳。
 
@@ -86,3 +86,7 @@ table.events可传perspective=owner|public，MCP默认owner且固定decision投�
 
 
 永久扑克控制历史独立于座位保存，离桌/清退不能抹去旧AI写入失效边界。无座位时table.requiresJoinApproval=false明确表示没有历史，可按用户原入座授权首次join；true表示有历史，此时table.controller=null，controlVersion取历史版本，handoffPending表示joinPending。不能按版本0判断历史；缺少标记先核实。UI可在无座位通过control.set(request_ai/cancel_ai)授权/撤销AI重新入座；MCP seat.join有历史时必须该授权有效且携匹配controlVersion。未授权不自动入座、不重扣点，控制记录不存在的首次旧MCP入座才兼容省略版本；control.claim仅用于有座位交接。本次仅扩展既有join输入和私有control.set语义，26 项 game 能力、0 项游戏 IPC与全局计数不变。
+
+## 每手结算与准备（2026-11-01）
+
+每手结束弹出HeroUI完整结算，允许关闭/重开，关闭不代准备。服务端结算投影新增仅根据已获准公开牌面计算的bestFive和分池reason，暗牌不泄露。取代旧五秒自动续局：所有当前可参赛者显式准备，陪练自动、真人按钮、AI调用app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait的ready_required可用于空游标重连，已准备仍waiting；先处理未读hand_result与上下文维护。旧手、旧控制版本及他人座位不能授权下一手。复用座位status=ready，无新增数据库迁移；先更新API与MCP契约再上线Web。本次开发不部署。

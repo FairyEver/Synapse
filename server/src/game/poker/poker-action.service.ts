@@ -9,6 +9,8 @@ import { reject } from "./poker-error"
 import { assertController, type PokerCaller } from "./poker-control"
 import { resolveRules } from "./engine/rules"
 import { canSeeHole, projectSettlement, type PokerViewPolicy } from "./poker-projection"
+import { nextHandEligible, preparedForNextHand } from "./poker-ready"
+import { currentHand } from "./poker-current-hand"
 export interface ActionInput {
   handId: string
   street: string
@@ -253,10 +255,8 @@ export class PokerActionService {
       await c.tx.gamePokerSeat.update({ where: { id: me.id }, data: { lastSeenAt: c.now } })
       me.lastSeenAt = c.now
     }
-    const hand = c.room.currentHandId
-      ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } })
-      : null
-    const h = hand ? engine(hand) : null
+    const { hot, archived, hand } = await currentHand(c)
+    const h = hot ? engine(hot) : null
     const session = await c.tx.gameSession.findUnique({ where: { userId_gameKind_gameRoomId: { userId, gameKind: "poker", gameRoomId: c.room.id } } })
     const controlHistory = !me ? await c.tx.gamePokerControlHistory.findUnique({ where: { roomId_userId: { roomId: c.room.id, userId } } }) : null
     const policy: PokerViewPolicy = { audience, perspective: me ? perspective : "public", everJoined: !!session, mode: c.room.mode }
@@ -269,7 +269,7 @@ export class PokerActionService {
       h && own && participating
         ? legalActions(h, me!.seatNo)
         : { actions: [], toCall: 0, minRaiseTo: 0, maxRaiseTo: 0 }
-    const records = hand
+    const records = archived ? [...archived.actions].sort((a, b) => b.seq - a.seq).slice(0, 30) : hand
       ? await c.tx.gamePokerAction.findMany({
           where: { handId: hand.id },
           orderBy: { seq: "desc" },
@@ -277,7 +277,7 @@ export class PokerActionService {
         })
       : []
     const participants =
-      hand
+      archived ? archived.seats : hand
         ? await c.tx.gamePokerHandSeat.findMany({
             where: { handId: hand.id },
             take: 10,
@@ -297,7 +297,7 @@ export class PokerActionService {
             take: 30,
           })
         : []
-    const sources = hand?.status === "settled" ? await c.tx.gamePokerAction.groupBy({
+    const sources = archived ? archived.actions : hand?.status === "settled" ? await c.tx.gamePokerAction.groupBy({
       by: ["userId", "seatNo", "actionSource", "isAuto"], where: { handId: hand.id },
       orderBy: [{ userId: "asc" }, { seatNo: "asc" }, { actionSource: "asc" }, { isAuto: "asc" }], take: 100,
     }) : []
@@ -342,6 +342,7 @@ export class PokerActionService {
       requiresJoinApproval: !!controlHistory,
       pauseReason: own ? me?.pauseReason ?? null : null,
       nextHandAt: c.room.nextHandAt?.toISOString() ?? null,
+      awaitingReady: hand?.status === "settled" && c.room.status !== "closed",
       settlement: hand ? projectSettlement(hand, participants, sources as unknown as Parameters<typeof projectSettlement>[2], userId, policy) : null,
       ownerUserId: c.room.ownerUserId,
       name: c.room.name,
@@ -351,7 +352,7 @@ export class PokerActionService {
       handId: hand?.id ?? null,
       handNo: c.room.handNo,
       street: hand?.street ?? null,
-      board: h?.board ?? [],
+      board: h?.board ?? (Array.isArray(hand?.board) ? hand.board.filter((card): card is string => typeof card === "string") : []),
       pot: hand?.pot ?? 0,
       dealerSeat: c.room.dealerSeat,
       actionOnSeat: h?.actionOnSeat ?? null,
@@ -371,6 +372,8 @@ export class PokerActionService {
         return {
           seatNo: s.seatNo,
           isHistorical: "ghost" in s,
+          nextHandEligible: !("ghost" in s) && nextHandEligible(s),
+          readyForNextHand: !("ghost" in s) && hand?.status === "settled" && preparedForNextHand(s),
           inCurrentHand: !!p,
           participantKind: s.participantKind,
           ...(s.participantKind === "bot" && !("ghost" in s) ? { botId: s.id, leavePending: s.leavePending } : {}),

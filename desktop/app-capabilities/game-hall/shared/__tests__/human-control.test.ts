@@ -9,6 +9,16 @@ import { POKER_HUMAN_ACTION_SCHEMA } from "../../games/poker/shared/ui-operation
 
 const request = (suffix: string) => z.fromJSONSchema(GAME_TOOLS.find(t => t.id === `app.game.poker.${suffix}`)!.inputSchema as Parameters<typeof z.fromJSONSchema>[0])
 describe("扑克人工操作和接管协议", () => {
+  it("逐手准备绑定handId和控制版本，不接受代替其他座位或冒充来源", () => {
+    const ready = request("seat.ready")
+    const input = { roomCode: "1234", handId: "hand", controlVersion: 2 }
+    expect(ready.safeParse(input).success).toBe(true)
+    for (const extra of [{ seatNo: 1 }, { source: "human" }, { controller: "ai" }]) expect(ready.safeParse({ ...input, ...extra }).success).toBe(false)
+    expect(ready.safeParse({ roomCode: "1234" }).success).toBe(false)
+    expect(pokerUiRoutes["app.game.poker.seat.ready"].path(input)).toBe("/game/poker/rooms/1234/ready")
+    expect(GAME_RESPONSE_SCHEMAS["app.game.poker.seat.ready"]?.safeParse({ handId: "hand", started: false }).success).toBe(true)
+    expect(GAME_RESPONSE_SCHEMAS["app.game.poker.table.wait"]?.safeParse({ status: "ready_required", handId: "hand", handNo: 1, controlVersion: 2, cursor: "1:2147483647" }).success).toBe(true)
+  })
   it("人工入座/操作/接管及事件具有专用UI入口，控制认领和检查点只向Agent开放", () => {
     const ids = GAME_UI_OPERATIONS.map(m => m.id)
     for (const suffix of ["seat.join", "action.act", "control.set", "table.events"]) expect(ids).toContain(`app.game.poker.${suffix}`)

@@ -8,6 +8,8 @@ import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
 import { resolveRules, type PokerVariant } from "./engine/rules"
 import type { PokerResumeCheckpoint } from "@synapse/shared/game-contracts"
+import { nextHandEligible } from "./poker-ready"
+import { currentHand } from "./poker-current-hand"
 
 export type RoomContext = {
   tx: Prisma.TransactionClient
@@ -201,6 +203,23 @@ export class PokerService {
       now,
     )
   }
+  async ready(userId: string, code: string, handId: string, controlVersion: number, now = new Date(), caller: PokerCaller = "mcp") {
+    return this.withRoom(code, async (c) => {
+      const seat = c.seats.find(s => s.userId === userId && s.participantKind !== "bot")
+      if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
+      assertController(seat, caller, controlVersion)
+      if (c.room.status === "closed") reject("POKER_ROOM_CLOSED", "房间已解散。")
+      const { hand } = await currentHand(c)
+      if (!hand || hand.id !== handId || hand.status !== "settled")
+        reject("POKER_STALE_ACTION", "结算已变化，请重新读取牌桌后准备。")
+      if (!nextHandEligible(seat)) reject("POKER_SEAT_SITTING_OUT", "当前座位不能参加下一手，请先回座。")
+      seat.status = "ready"
+      seat.lastSeenAt = now
+      await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { status: "ready", lastSeenAt: now } })
+      await startNext(this, c)
+      return { handId, started: c.room.handNo > hand.handNo }
+    }, now)
+  }
   async leave(userId: string, code: string, now = new Date(), caller: PokerCaller = "mcp", controlVersion?: number) {
     return this.withRoom(
       code,
@@ -293,7 +312,7 @@ export class PokerService {
         return { controller: null, controlVersion: next, handoffPending: joinPending }
       }
       const patch = changeControl(seat, action, controlVersion)
-      const updated = await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { ...patch, checkpoint: Prisma.DbNull, lastSeenAt: now } })
+      const updated = await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { ...patch, ...(seat.status === "ready" ? { status: "waiting" } : {}), checkpoint: Prisma.DbNull, lastSeenAt: now } })
       await c.tx.gamePokerControlHistory.upsert({ where: { roomId_userId: { roomId: c.room.id, userId } }, create: { roomId: c.room.id, userId, controlVersion: updated.controlVersion }, update: { controlVersion: updated.controlVersion, joinPending: false } })
       return { controller: updated.controller, controlVersion: updated.controlVersion, handoffPending: updated.handoffPending }
     }, now)
@@ -303,7 +322,7 @@ export class PokerService {
       const seat = c.seats.find((s) => s.userId === userId && s.participantKind !== "bot")
       if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
       const patch = claimControl(seat, controlVersion)
-      const updated = await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { ...patch, checkpoint: Prisma.DbNull, lastSeenAt: now } })
+      const updated = await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { ...patch, ...(seat.status === "ready" ? { status: "waiting" } : {}), checkpoint: Prisma.DbNull, lastSeenAt: now } })
       await c.tx.gamePokerControlHistory.upsert({ where: { roomId_userId: { roomId: c.room.id, userId } }, create: { roomId: c.room.id, userId, controlVersion: updated.controlVersion }, update: { controlVersion: updated.controlVersion, joinPending: false } })
       return { controller: updated.controller, controlVersion: updated.controlVersion, handoffPending: updated.handoffPending }
     }, now)

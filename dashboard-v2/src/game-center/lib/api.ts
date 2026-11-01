@@ -22,7 +22,7 @@ const bridge: GameBridge = {
     lobby: { list: input => call("app.game.poker.lobby.list", input) },
     room: { close: input => call("app.game.poker.room.close", input), create: input => call("app.game.poker.room.create", input), get: input => call("app.game.poker.room.get", input) },
     bot: { add: input => call("app.game.poker.bot.add", input), remove: input => call("app.game.poker.bot.remove", input) },
-    seat: { join: input => call("app.game.poker.seat.join", input), leave: input => call("app.game.poker.seat.leave", input), sit: input => call("app.game.poker.seat.sit", input), nudge: input => call("app.game.poker.seat.nudge", input) },
+    seat: { ready: input => call("app.game.poker.seat.ready", input), join: input => call("app.game.poker.seat.join", input), leave: input => call("app.game.poker.seat.leave", input), sit: input => call("app.game.poker.seat.sit", input), nudge: input => call("app.game.poker.seat.nudge", input) },
     control: { set: input => call("app.game.poker.control.set", input) },
     action: { act: input => call("app.game.poker.action.act", input) },
     table: { state: input => call("app.game.poker.table.state", input), events: input => call("app.game.poker.table.events", input) },

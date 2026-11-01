@@ -82,6 +82,10 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
   const join = () => void execute(() => gameApi().poker.seat.join({roomCode: table.roomCode}))
   const sit = () => void execute(() => gameApi().poker.seat.sit({roomCode: table.roomCode, controlVersion: version, sittingOut: mine?.status !== "sitting_out", reason: "user"}))
   const leave = () => void execute(() => gameApi().poker.seat.leave({roomCode: table.roomCode, controlVersion: version}))
+  const ready = () => {
+    if (table.awaitingReady && table.status !== "closed" && table.handId && mine?.nextHandEligible && !mine.readyForNextHand && controller === "human" && version != null)
+      void execute(() => gameApi().poker.seat.ready({ roomCode: table.roomCode, handId: table.handId!, controlVersion: version }))
+  }
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(pokerConnectInstruction(table.roomCode))
@@ -92,5 +96,5 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
   const requestAIJoin = () => {
     if (version != null) void execute(() => gameApi().poker.control.set({roomCode:table.roomCode, controlVersion:version, action:"request_ai"}), copy)
   }
-  return {requestAIJoin, busy, error, to, setTo, uncertain, mine, controller, version, handoff, act, retry, control, join, sit, leave, copy}
+  return {requestAIJoin, busy, error, to, setTo, uncertain, mine, controller, version, handoff, act, retry, control, join, sit, leave, ready, copy}
 }

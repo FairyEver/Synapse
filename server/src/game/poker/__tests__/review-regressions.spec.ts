@@ -31,7 +31,7 @@ const url = gameTestDatabaseUrl()
     await poker.join(b, code, {})
     return { a, b, code }
   }
-  it("盲注直接结算保留五秒结果，到期继续开局或暂停", async () => {
+  it("盲注直接结算保留结果，全员准备后继续开局或暂停", async () => {
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
@@ -44,7 +44,7 @@ const url = gameTestDatabaseUrl()
     if (state.status === "running" && state.street === "settled") {
       expect(state.actionOnSeat).toBeNull()
       expect(state.deadlineMs).toBeNull()
-      expect(state.nextHandAt).not.toBeNull()
+      expect(state.nextHandAt).toBeNull()
       await advanceNextHand(actions, code)
       state = await actions.state(b, code)
     }

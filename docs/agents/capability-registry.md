@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-01 每手结算与准备：新增 `app.game.poker.seat.ready`，game 26→27（大厅3、扑克24），全局 capability 369→370、MCP索引365→366。新增Web POST `/game/poker/rooms/:code/ready`，无桌面IPC/preload增量；System App 22、默认Dock9、Workflow/Automation及两条兼容游戏路径不变。wait新增ready_required，结算增加bestFive/分池reason及准备投影；本人控制版本与结算handId共同约束逐手确认。系统Skill、生成参考与Agent指南同步，旧条目为历史基线。
+
 - 2026-11-01 牌桌响应座位增加可选 `isHistorical` / `inCurrentHand`，分别标识结算历史回显和实际本手参与；同步 shared 响应校验与游戏系统 Skill。仅补充响应信息，不修改动作输入、权限或数据库，不新增工具。当前 game 26 项 capability/MCP、全局 369 capability / 365 MCP 索引、22 个 System App、默认 9 项 Dock 及两条兼容游戏深链均不变；底部操作条与按需信息面板仅属于 Web UI。
 
 - 2026-10-31 游戏完整迁移 Web：System App 23→22，游戏启动台/Dock/UI 及 24 项 IPC/preload 移除；默认 Dock 仍为 9 项。本机 game 26 项 capability/MCP 保留，全局仍 369 capability/365 MCP 索引。`control.set`/`room.close` 仍仅 Web UI 私有操作，无 MCP 索引；历史两条游戏声明式深链保留但受控打开浏览器。UI 类型、操作和校验归入 shared 双入口契约，Web Cookie 绑定预期账号，Bearer 兼容。以下历史条目保持当次基线，当前游戏 UI 边界以本条为准。
@@ -87,7 +89,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
-| 游戏（独立 Web，本机仅后台能力） | 否 | 否 | — | — | 26 | 大厅根、扑克房间（2条兼容路径，打开浏览器） |
+| 游戏（独立 Web，本机仅后台能力） | 否 | 否 | — | — | 27 | 大厅根、扑克房间（2条兼容路径，打开浏览器） |
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
@@ -258,14 +260,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `mail` | 44 | 44 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
-| `game` | 26 | 26 |
-| 合计 | 369 | 365 |
+| `game` | 27 | 27 |
+| 合计 | 370 | 366 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 365 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 366 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

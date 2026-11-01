@@ -62,6 +62,7 @@ export interface PokerSettlementView {
     payout: number
     endingStack: number
     handName?: string
+    bestFive?: string[]
   }[]
   pots: {
     amount: number
@@ -69,6 +70,7 @@ export interface PokerSettlementView {
     winners: number[]
     shares: Record<string, number>
     refund: boolean
+    reason?: string
   }[]
   mixedControl: boolean
 }
@@ -86,6 +88,8 @@ export interface PokerTableEventsView {
   hasMore: boolean
 }
 export interface PokerSeatView {
+  nextHandEligible?: boolean
+  readyForNextHand?: boolean
   /** Previous-hand participant retained for results, not an occupied room seat. */
   isHistorical?: boolean
   /** Matched to this hand by both account identity and seat number. */
@@ -120,6 +124,7 @@ export interface PokerActionView {
   personaVersion?: { versionNo: number; persona: string } | null
 }
 export interface PokerTableView {
+  awaitingReady?: boolean
   requiresJoinApproval?: boolean
   variant?: PokerVariant
   smallBlind?: number
@@ -295,6 +300,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     true,
   ],
   ["poker.seat.leave", "点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场，接管后须提交当前controlVersion。", { ...room, controlVersion }, ["roomCode"], true],
+  ["poker.seat.ready", "每手结算后本人显式准备下一手，携当前结算handId和controlVersion；所有可参与座位准备后才开局。陪练自动准备，AI必须调用本工具，真人由Web点击；查询、wait和回座不会准备，旧手请求不得用于新手。", { ...room, handId: str(), controlVersion }, ["roomCode", "handId", "controlVersion"], true],
   [
     "poker.seat.sit",
     "主动暂离或回座；当前手结束后生效。sittingOut确认请求，pending表示尚未生效，status是实际座位状态。",
@@ -311,7 +317,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.table.wait",
-    "循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。",
+    "循环调用，单次最多阻塞25秒。行动窗口另为600秒。每轮重新读取persona；ready_required时按handId/controlVersion显式seat_ready，已准备只等待；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。",
     { ...room, cursor: str(64), timeoutMs: integer(0, 25000) },
     ["roomCode"],
     false,

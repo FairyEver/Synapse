@@ -164,6 +164,9 @@ export class PokerWaitService implements OnModuleDestroy {
         }
         if (!seat || c.room.status === "closed") return { status: "table_closed", cursor }
         const view = await this.actions.view(c, userId, "owner", false)
+        const ownSeat = view.awaitingReady ? view.seats.find(s => s.isMe && !s.isHistorical) : undefined
+        if (view.awaitingReady && ownSeat?.nextHandEligible && !ownSeat.readyForNextHand)
+          return { status: "ready_required", handId: view.handId, handNo: view.handNo, controlVersion: view.controlVersion, cursor: `${view.handNo}:${MAX_CURSOR_VALUE}` }
         if (view.actionOnSeat === view.mySeatNo && view.mySeatNo !== null)
           return {
             status: "your_turn",

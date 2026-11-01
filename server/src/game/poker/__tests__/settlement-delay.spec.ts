@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest"
-import type { PokerService, RoomContext } from "../poker.service"
+import { PokerService, type RoomContext } from "../poker.service"
 import { engine, saveHand, startNext } from "../poker-lifecycle"
 import { act, startHand } from "../engine/hand-runner"
 import { orderedDeck } from "../engine/deck"
+import { PokerActionService } from "../poker-action.service"
 
 function fixture() {
   const now = new Date("2026-10-30T00:00:00Z")
   const room: any = { id: "r", code: "1234", mode: "points", variant: "short32", smallBlind: 5, bigBlind: 10, status: "running", handNo: 1, dealerSeat: 0, currentHandId: "h1", nextHandAt: null }
-  const seats = [0, 1].map((seatNo) => ({ id: `s${seatNo}`, userId: `u${seatNo}`, seatNo, stack: 100, status: "active", participantKind: "human", joinedHandNo: 1 }))
+  const seats = [0, 1].map((seatNo) => ({ id: `s${seatNo}`, userId: `u${seatNo}`, seatNo, stack: 100, status: "active", participantKind: "human", controller: "human", controlVersion: 0, joinedHandNo: 1, lastSeenAt: now }))
   const hands: any[] = [{ id: "h1", handNo: 1, status: "running" }]
   const handSeats = seats.map((s) => ({ ...s, handId: "h1" }))
   const tx: any = {
@@ -18,51 +19,104 @@ function fixture() {
     },
     gamePokerRoom: { update: async ({ data }: any) => Object.assign(room, data) },
     gamePokerHandSeat: { findMany: async () => handSeats, update: async () => {}, createMany: async ({ data }: any) => handSeats.push(...data) },
-    gamePokerSeat: { update: async () => {} },
+    gamePokerSeat: { update: async ({ where, data }: any) => Object.assign(c.seats.find(s => s.id === where.id)!, data) },
     gameSession: { updateMany: async () => {} },
     gamePokerHandSummary: { create: async () => {} },
   }
   const c = { room, seats, tx, now } as unknown as RoomContext
-  const poker = { refund: async (_: unknown, seat: any) => { c.seats = c.seats.filter((s) => s.id !== seat.id) } } as unknown as PokerService
+  const poker = Object.assign(Object.create(PokerService.prototype), {
+    withRoom: async (_code: string, work: (context: RoomContext) => Promise<unknown>, time = c.now) => { c.now = time; return work(c) },
+    refund: async (_: unknown, seat: any) => { c.seats = c.seats.filter((s) => s.id !== seat.id) },
+  }) as PokerService
   let h = startHand(seats, 0, orderedDeck("short32"), { variant: "short32", smallBlind: 5, bigBlind: 10 })
   h = act(h, 0, { action: "fold" })
   return { c, poker, hands, settled: h }
 }
-describe("结算展示与持久下一手时间", () => {
-  it("保存本手规则和净输赢，五秒内保留结算且无行动计时", async () => {
+describe("结算展示与全员准备屏障", () => {
+  it("保存本手规则和净输赢，结算清除准备且不自动排定下一手", async () => {
     const f = fixture()
+    f.c.seats[0].status = "ready"
     await saveHand(f.poker, f.c, f.hands[0], f.settled)
     expect(f.hands[0].rules).toEqual({ variant: "short32", smallBlind: 5, bigBlind: 10 })
     expect(f.hands[0].result.deltas).toEqual({ 0: -5, 1: 5 })
-    expect(f.c.room.nextHandAt).toEqual(new Date(f.c.now.getTime() + 5000))
+    expect(f.c.room.nextHandAt).toBeNull()
+    expect(f.c.seats.every(s => s.status === "waiting")).toBe(true)
     await startNext(f.poker, f.c)
     expect(f.hands).toHaveLength(1)
     expect(f.c.room.actionDeadlineAt).toBeNull()
     expect(f.c.room.botActionAt).toBeNull()
   })
-  it("五秒到期按房间规则仅发下一手并清除时间，重启可读旧快照", async () => {
+  it("时间经过再久也不续局，最后一位准备后才按房规发一手", async () => {
     const f = fixture()
     await saveHand(f.poker, f.c, f.hands[0], f.settled)
-    f.c.now = new Date(f.c.now.getTime() + 5000)
+    f.c.now = new Date(f.c.now.getTime() + 600000)
     await startNext(f.poker, f.c)
+    expect(f.hands).toHaveLength(1)
+    await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")
+    expect(f.hands).toHaveLength(1)
+    await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")
+    expect(f.hands).toHaveLength(1)
+    await f.poker.ready("u1", "1234", "h1", 0, f.c.now, "human")
     expect(f.hands).toHaveLength(2)
     expect(f.c.room.nextHandAt).toBeNull()
     expect(engine(f.hands[1])).toMatchObject({ variant: "short32", smallBlind: 5, bigBlind: 10 })
     expect(f.hands[1].engineState.deck).toHaveLength(28)
   })
-  it("结算后人数不足暂停仍保留五秒，下次可参与也不能提前开局", async () => {
+  it("替补加入也必须准备，旧nextHandAt不能绕过屏障", async () => {
     const f = fixture()
     await saveHand(f.poker, f.c, f.hands[0], f.settled)
     f.c.seats = f.c.seats.slice(0, 1)
     await startNext(f.poker, f.c)
     expect(f.c.room.status).toBe("paused")
-    expect(f.c.room.nextHandAt).toEqual(new Date(f.c.now.getTime() + 5000))
+    expect(f.c.room.nextHandAt).toBeNull()
+    f.c.seats[0].status = "ready"
     f.c.seats.push({ id: "replacement", userId: "replacement", seatNo: 1, stack: 100, status: "waiting", participantKind: "human" } as any)
     f.c.now = new Date(f.c.now.getTime() + 1)
     await startNext(f.poker, f.c)
     expect(f.hands).toHaveLength(1)
-    f.c.now = new Date(f.c.now.getTime() + 4999)
+    f.c.room.nextHandAt = new Date(f.c.now.getTime() - 1)
     await startNext(f.poker, f.c)
+    expect(f.hands).toHaveLength(1)
+    f.c.seats[1].status = "ready"
+    await startNext(f.poker, f.c)
+    expect(f.hands).toHaveLength(2)
+  })
+  it("陪练自动准备，AI必须通过MCP明确准备且不能代真人准备", async () => {
+    const f = fixture()
+    f.c.seats[1].participantKind = "bot"
+    f.c.seats[0].controller = "ai"
+    await saveHand(f.poker, f.c, f.hands[0], f.settled)
+    await startNext(f.poker, f.c)
+    expect(f.hands).toHaveLength(1)
+    await expect(f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")).rejects.toMatchObject({ response: { code: "POKER_CONTROL_RELEASED" } })
+    await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "mcp")
+    expect(f.hands).toHaveLength(2)
+    await expect(f.poker.ready("u0", "1234", "h1", 0, f.c.now, "mcp")).rejects.toMatchObject({ response: { code: "POKER_STALE_ACTION" } })
+    expect(f.hands).toHaveLength(2)
+  })
+  it("拒绝旧控制版本、旁观者、暂离座位和非结算阶段的准备", async () => {
+    const f = fixture()
+    await expect(f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")).rejects.toBeDefined()
+    await saveHand(f.poker, f.c, f.hands[0], f.settled)
+    await expect(f.poker.ready("viewer", "1234", "h1", 0, f.c.now, "human")).rejects.toBeDefined()
+    await expect(f.poker.ready("u0", "1234", "h1", 9, f.c.now, "human")).rejects.toBeDefined()
+    f.c.seats[0].status = "sitting_out"
+    await expect(f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")).rejects.toBeDefined()
+    expect(f.hands).toHaveLength(1)
+  })
+  it("当前结算已归档并清空指针也不能被误作首局，仍可读取并逐手准备", async () => {
+    const f = fixture()
+    await saveHand(f.poker, f.c, f.hands[0], f.settled)
+    f.c.room.currentHandId = null
+    ;(f.c.tx as any).gamePokerHandArchive = { findFirst: async () => ({ data: { hand: f.hands[0], seats: f.settled.seats.map(s => ({ ...s, userId: `u${s.seatNo}`, displayName: `选手${s.seatNo}`, holeCards: s.hole, endingStack: s.stack, participantKind: "human" })), actions: [], summaries: [] } }) }
+    ;(f.c.tx.gameSession as any).findUnique = async () => null
+    await startNext(f.poker, f.c)
+    expect(f.hands).toHaveLength(1)
+    const view = await new PokerActionService(f.poker).view(f.c, "u0", "owner", false)
+    expect(view).toMatchObject({ handId: "h1", awaitingReady: true, settlement: { handId: "h1" } })
+    await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")
+    expect(f.hands).toHaveLength(1)
+    await f.poker.ready("u1", "1234", "h1", 0, f.c.now, "human")
     expect(f.hands).toHaveLength(2)
   })
   it("关桌不等待五秒", async () => {
@@ -83,9 +137,8 @@ describe("结算展示与持久下一手时间", () => {
 import { vi } from "vitest"
 import { Logger } from "@nestjs/common"
 import { PokerDeadlineTask } from "../poker-deadline.task"
-import type { PokerActionService } from "../poker-action.service"
 
-it("下一手后台轮转绕过前100坏房，持久到期时间支持新任务实例恢复且单次只发一手", async () => {
+it("旧部署留下的到期后台轮转也不能自动越过未准备座位", async () => {
   const rooms = Array.from({ length: 101 }, (_, i) => {
     const f = fixture()
     f.c.room.id = f.c.room.code = String(i).padStart(3, "0")
@@ -122,9 +175,9 @@ it("下一手后台轮转绕过前100坏房，持久到期时间支持新任务�
     expect(rooms[100].hands).toHaveLength(1)
     await task.scan(new Date(rooms[0].c.now.getTime() + 1000))
     expect(attempts).toHaveLength(101)
-    expect(rooms[100].hands).toHaveLength(2)
+    expect(rooms[100].hands).toHaveLength(1)
     expect(rooms[100].c.room.nextHandAt).toBeNull()
     await new PokerDeadlineTask(actions).scan(new Date(rooms[0].c.now.getTime() + 2000))
-    expect(rooms[100].hands).toHaveLength(2)
+    expect(rooms[100].hands).toHaveLength(1)
   } finally { warn.mockRestore() }
 })

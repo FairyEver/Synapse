@@ -282,6 +282,37 @@
 }
 ```
 
+## app_game_poker_seat_ready
+
+每手结算后本人显式准备下一手，携当前结算handId和controlVersion；所有可参与座位准备后才开局。陪练自动准备，AI必须调用本工具，真人由Web点击；查询、wait和回座不会准备，旧手请求不得用于新手。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "handId": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    }
+  },
+  "required": [
+    "roomCode",
+    "handId",
+    "controlVersion"
+  ],
+  "additionalProperties": false
+}
+```
+
 ## app_game_poker_seat_sit
 
 主动暂离或回座；当前手结束后生效。sittingOut确认请求，pending表示尚未生效，status是实际座位状态。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
@@ -346,7 +377,7 @@
 
 ## app_game_poker_table_wait
 
-循环调用，单次最多阻塞25秒；非轮次仅waiting/cursor。行动窗口另为600秒。每轮重新读取persona；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+循环调用，单次最多阻塞25秒。行动窗口另为600秒。每轮重新读取persona；ready_required时按handId/controlVersion显式seat_ready，已准备只等待；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

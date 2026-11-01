@@ -21,7 +21,7 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
   popoverContainer?: HTMLElement | null
 }) {
   const { busy, error, to, setTo, uncertain, mine, controller, version, handoff,
-    act, retry, control, join, sit, leave, copy, requestAIJoin } = useHumanControls(table, onRefresh, identityKey)
+    act, retry, control, join, sit, leave, ready, copy, requestAIJoin } = useHumanControls(table, onRefresh, identityKey)
   const [allInAction, setAllInAction] = useState<PokerIntent["action"] | null>(null)
   const [localPanel, setLocalPanel] = useState<PokerControlPanel | null>(null)
   const panel = activePanel === undefined ? localPanel : activePanel
@@ -73,6 +73,7 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
   const closeBet = (open: boolean) => { if (!open) { setAllInAction(null); setPanel(null) } }
   return <div ref={controlsRef} className="poker-human-controls" data-acting={acting} data-compact-controls={compact} aria-label="本人牌桌操作" onKeyDown={event => { if (event.key === "Escape" && confirmAllIn) { event.stopPropagation(); cancelConfirmation() } }}>
     <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status">{state}</span>{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
+    {table.awaitingReady && table.status !== "closed" && perspective === "owner" && controller === "human" && mine?.nextHandEligible && <PokerButton tone="primary" disabled={busy || mine.readyForNextHand} onClick={ready}>{mine.readyForNextHand ? "已准备" : "准备下一手"}</PokerButton>}
     {error && <p role="alert">{error}{uncertain && "，请重试确认结果"}</p>}
     {uncertain && <PokerButton disabled={busy} onClick={retry}>重试出牌</PokerButton>}
     {acting && <div className="poker-action-dock">

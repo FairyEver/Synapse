@@ -16,11 +16,11 @@ const settlement = z.object({
   seats: z.array(z.object({
     seatNo: z.number(), displayName: z.string(), participantKind: z.enum(["human", "bot"]),
     isMe: z.boolean(), folded: z.boolean(), hole: z.array(z.string()).optional(),
-    delta: z.number(), payout: z.number(), endingStack: z.number(), handName: z.string().optional(),
+    delta: z.number(), payout: z.number(), endingStack: z.number(), handName: z.string().optional(), bestFive: z.array(z.string()).length(5).optional(),
   }).passthrough()),
   pots: z.array(z.object({
     amount: z.number(), eligible: z.array(z.number()), winners: z.array(z.number()),
-    shares: z.record(z.string(), z.number()), refund: z.boolean(),
+    shares: z.record(z.string(), z.number()), refund: z.boolean(), reason: z.string().optional(),
   }).passthrough()),
   mixedControl: z.boolean(),
 }).passthrough()
@@ -43,6 +43,8 @@ const action = z
   .passthrough()
 const seat = z
   .object({
+    nextHandEligible: z.boolean().optional(),
+    readyForNextHand: z.boolean().optional(),
     isHistorical: z.boolean().optional(),
     inCurrentHand: z.boolean().optional(),
     controller: controlFields.controller.optional(),
@@ -73,6 +75,7 @@ const table = z
     handoffPending: controlFields.handoffPending.optional(),
     pauseReason: z.enum(["user", "context_maintenance"]).nullable().optional(),
     nextHandAt: z.string().nullable().optional(),
+    awaitingReady: z.boolean().optional(),
     settlement: settlement.nullable().optional(),
     mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),
@@ -159,6 +162,7 @@ const page = <T extends z.ZodType>(item: T) =>
     })
     .passthrough()
 const wait = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ready_required"), handId: z.string(), handNo: z.number(), controlVersion: controlFields.controlVersion, cursor: z.string() }).passthrough(),
   z.object({ status: z.literal("control_released"), cursor: z.string(), controlVersion: controlFields.controlVersion.optional(), handoffPending: controlFields.handoffPending.optional() }).passthrough(),
   z.object({ status: z.literal("waiting"), cursor: z.string() }).passthrough(),
   z
@@ -242,6 +246,7 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "app.game.poker.room.get": table,
   "app.game.poker.seat.join": z.object({ roomCode: z.string(), seatNo: z.number() }).passthrough(),
   "app.game.poker.seat.leave": z.object({ pending: z.boolean() }).passthrough(),
+  "app.game.poker.seat.ready": z.object({ handId: z.string(), started: z.boolean() }).passthrough(),
   "app.game.poker.seat.sit": z
     .object({ sittingOut: z.boolean(), pending: z.boolean(), status: z.string() })
     .passthrough(),
