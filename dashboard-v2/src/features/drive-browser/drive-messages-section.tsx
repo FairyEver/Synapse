@@ -38,9 +38,11 @@ type Editor =
 export function DriveMessagesSection({
   messages,
   sectionRef,
+  fieldVariant = 'primary',
 }: {
   readonly messages: Messages
   readonly sectionRef?: Ref<HTMLElement>
+  readonly fieldVariant?: 'primary' | 'secondary'
 }) {
   const [draft, setDraft] = useState('')
   const [composerExpanded, setComposerExpanded] = useState(false)
@@ -164,6 +166,7 @@ export function DriveMessagesSection({
         editor?.kind === 'reply' ? '回复' : cancel ? '保存' : '发布留言'
       }
       busy={busy}
+      fieldVariant={fieldVariant}
       imageUploadContext={messages.imageUploadContext}
       expanded={Boolean(editor) || composerExpanded}
       onExpand={() => {
@@ -185,7 +188,7 @@ export function DriveMessagesSection({
       data-drive-messages-section
     >
       <h2 id='drive-messages-heading' className='mb-4 text-lg font-semibold'>
-        留言
+        文档留言
       </h2>
       {messages.loading ? <p className='text-sm text-muted'>加载中</p> : null}
       {messages.error ? (

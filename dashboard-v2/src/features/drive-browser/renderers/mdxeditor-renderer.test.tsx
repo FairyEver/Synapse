@@ -1651,7 +1651,7 @@ describe('DriveMDXeditorRenderer', () => {
     expect(
       document.querySelector('[data-mdxeditor-resizable-panel="outline"]')
     ).not.toBeNull()
-    expect(buttonWithText('评论 1')).not.toBeNull()
+    expect(buttonWithText('批注 1')).not.toBeNull()
     const commentsPanel = document.querySelector(
       '[data-mdxeditor-resizable-panel="comments"]'
     )
@@ -1733,7 +1733,7 @@ describe('DriveMDXeditorRenderer', () => {
     expect(
       document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
     ).not.toBeNull()
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     expect(
       document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
     ).toBeNull()
@@ -1755,7 +1755,7 @@ describe('DriveMDXeditorRenderer', () => {
     })
 
     expect(annotationsMock.input).toEqual({ context: 'owner', itemId: 'file' })
-    expect(buttonWithText('评论 1')).not.toBeNull()
+    expect(buttonWithText('批注 1')).not.toBeNull()
     expect(
       document.querySelector('[data-mdxeditor-resizable-panel="comments"]')
     ).not.toBeNull()

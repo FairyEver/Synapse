@@ -579,17 +579,17 @@ function CommentsRailHeader({
       data-markdown-comments-header='true'
       className={cn(
         'flex shrink-0 items-center justify-between border-b bg-background px-3 text-sm font-medium',
-        compact ? 'sticky top-0 z-10 h-12 pr-14' : 'h-10'
+        compact ? 'sticky top-0 z-10 h-12 pr-14' : 'h-12'
       )}
     >
-      <span>评论</span>
+      <span>批注</span>
       <div className='flex items-center gap-1'>
-        <span className='text-xs font-normal text-muted'>{count}</span>
+        <span className='text-xs font-normal tabular-nums text-muted'>{count}</span>
         <Button
           type='button'
           variant='ghost'
           isIconOnly
-          className={compact ? 'size-11' : 'size-7'}
+          className={compact ? 'size-11' : 'size-10'}
           aria-label='上一条评论'
           isDisabled={!onNavigatePrevious}
           onPress={onNavigatePrevious}
@@ -600,7 +600,7 @@ function CommentsRailHeader({
           type='button'
           variant='ghost'
           isIconOnly
-          className={compact ? 'size-11' : 'size-7'}
+          className={compact ? 'size-11' : 'size-10'}
           aria-label='下一条评论'
           isDisabled={!onNavigateNext}
           onPress={onNavigateNext}
@@ -612,7 +612,7 @@ function CommentsRailHeader({
             type='button'
             variant='ghost'
             isIconOnly
-            className={compact ? 'size-11' : 'size-7'}
+            className={compact ? 'size-11' : 'size-10'}
             aria-label='刷新评论'
             isDisabled={loading}
             onPress={onRefresh}
@@ -871,7 +871,7 @@ function ThreadView({
       className={cn(
         'relative cursor-default overflow-hidden rounded-lg border bg-surface p-4 text-sm transition-colors hover:border-accent/60 focus-within:border-accent contain-inline-size',
         emphasized ? 'border-accent' : 'border-border',
-        active && 'ring-2 ring-inset ring-amber-500/90'
+        active && 'ring-2 ring-inset ring-accent'
       )}
       onClick={(event) => {
         if (
@@ -891,15 +891,15 @@ function ThreadView({
               variant='ghost'
               size='sm'
               className={cn(
-                'min-w-0 flex-1 justify-start',
+                'h-auto min-h-10 min-w-0 flex-1 items-start justify-start py-2',
                 compact && 'min-h-11'
               )}
               aria-label={`查看评论：${quote}`}
               aria-current={active ? 'true' : undefined}
               onPress={() => onFocusThread(thread.id)}
             >
-              <Quote aria-hidden className='text-muted' />
-              <span className='min-w-0 w-0 max-w-full flex-1 truncate text-left'>
+              <Quote aria-hidden className='mt-0.5 shrink-0 text-muted' />
+              <span className='line-clamp-2 min-w-0 w-0 max-w-full flex-1 whitespace-normal break-words text-left'>
                 {quote}
               </span>
             </Button>
@@ -1143,15 +1143,12 @@ function CommentView({
         </Avatar>
         <div className='min-w-0 flex-1 space-y-1'>
           <div className='flex min-h-9 items-center justify-between gap-2'>
-            <div className='flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5'>
-              <span className='truncate text-sm font-medium'>{authorName}</span>
-              <RelativeTime
-                value={comment.createdAt}
-                className='text-xs text-muted'
-              />
-              {comment.editedAt ? (
-                <span className='text-xs text-muted'>已编辑</span>
-              ) : null}
+            <div className='min-w-0 space-y-0.5'>
+              <div className='truncate text-sm font-medium' title={authorName}>{authorName}</div>
+              <div className='flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted'>
+                <RelativeTime value={comment.createdAt} />
+                {comment.editedAt ? <span>已编辑</span> : null}
+              </div>
             </div>
             {(comment.permissions.canEdit || comment.permissions.canDelete) &&
             !actionsHidden ? (
@@ -1294,7 +1291,9 @@ function CommentComposer({
       onClick={(event) => event.stopPropagation()}
     >
       {label ? <div className='mb-2 text-xs text-muted'>{label}</div> : null}
-      <TextArea variant={dataAttribute === 'draft' ? 'primary' : 'secondary'}
+      <TextArea
+        fullWidth
+        variant={dataAttribute === 'draft' ? 'primary' : 'secondary'}
         ref={textareaRef}
         value={value}
         aria-label={ariaLabel}
@@ -1534,7 +1533,10 @@ function annotationQuoteExcerpt(thread: DriveAnnotationThreadDto): string {
     const fileName = pathSegments[pathSegments.length - 1]?.trim()
     return fileName || '图片'
   }
-  return thread.target.quote.exact.replace(/\s+/gu, ' ').trim()
+  const quote = thread.anchor?.selectors.kind !== 'image'
+    ? thread.anchor?.selectors.quote.exact ?? thread.target.quote.exact
+    : thread.target.quote.exact
+  return quote.replace(/\s+/gu, ' ').trim()
 }
 export function getCommentActionErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message

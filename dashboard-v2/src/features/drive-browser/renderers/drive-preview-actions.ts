@@ -93,6 +93,14 @@ export function getDrivePreviewFileIdentity(snapshot: DriveBrowserSnapshotDto): 
   }
 }
 
+export function getDrivePreviewDisplayName(snapshot: DriveBrowserSnapshotDto, rendererId: DriveRendererId | null): string {
+  if (rendererId === 'markdown' || rendererId === 'mdxeditor') {
+    const title = snapshot.preview?.outline?.find((item) => item.depth === 1)?.text.trim()
+    if (title) return title
+  }
+  return snapshot.current.name
+}
+
 export function getDrivePreviewSystemActions(
   snapshot: DriveBrowserSnapshotDto,
   selectedRendererId: DriveRendererId | null = null,

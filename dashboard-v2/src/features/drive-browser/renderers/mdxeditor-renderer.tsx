@@ -563,7 +563,7 @@ export function DriveMDXeditorRenderer({
       items.push({
         kind: 'toggle',
         id: 'mdxeditor-comments',
-        label: `评论 ${comments.railThreads.length}`,
+        label: `批注 ${comments.railThreads.length}`,
         icon: MessageSquare,
         compactPlacement: 'primary',
         pressed: comments.isCompact

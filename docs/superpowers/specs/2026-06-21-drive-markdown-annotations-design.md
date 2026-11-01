@@ -823,6 +823,15 @@ Future target examples:
 - Status changes preserve comment-activity ordering, record an audit and publish the existing `annotation.changed` event after persistence. Repeating the same desired status does not write, audit or publish again. Concurrent writes never restore a deleted discussion.
 - PATCH the owner/share annotation `/:threadId/status` with `{ status }` and return the updated DTO. MCP uses `app.drive.link.annotation.thread.status.update` via the authenticated link-intake `annotations/threads/status` endpoint and the same service/permissions.
 - This addition does not include document-message status, filters, batch actions, tasks, assignments or notifications.
+### Dashboard V2 reader presentation (2026-11-01)
+
+- The rail quote uses the current V2 text anchor selector quote, matching the authoritative highlighted anchor after reattachment; legacy threads without a V2 text anchor fall back to the original target quote. Image quotes retain their existing alt/file-name behavior. This changes presentation only, never stored targets, selectors or permissions.
+- Markdown reading keeps a continuous semantic surface behind the body and document messages. Keep the full-width body coordinate space, native scroll node, anchored rail and transform-only scroll synchronization. Blank space above an anchored card represents its document position and must not be removed by pinning the card to the rail header.
+- Markdown's resizable outline defaults to 224px (160–288px), and its comment rail to 384px (320–480px); the document takes the remaining width. Compact layouts retain mutually exclusive drawers. The rich editor retains its existing panel sizes.
+- V2 labels the annotation panel `批注` and the footer `文档留言`. Reading/rich-text header identity prefers the first top-level document heading, falls back to the filename, and keeps the complete filename available in file metadata. Source/code views keep the filename.
+- Quotes show up to two lines beside the single status control and expose the complete quote on hover/focus. Author and timestamp metadata use separate visual levels; replies remain a linear stream, without recursive indentation. Active reading highlights and cards share the theme accent.
+- The document-message composer uses the full content-column width and always exposes its publish action, disabled while empty, uploading or submitting. Expanding still enables rich editing and image upload; errors retain drafts and successful publishing resets the composer. Field variants follow the nearest actual surface.
+
 ## 2026-10-12：新评论与回复通知
 
 新线程首评只产生一次创建通知；新回复按所有者、讨论发起人、直接被回复者去重，排除作者和失效账号。状态变更、编辑、删除不通知，历史创建不补发；首评/回复保存原分享来源。通知与内容在同一事务提交，删除与回复创建共用文档行锁。定位使用完整线程/评论 ID，已解决或未定位讨论可展开，打开不改变状态或重挂原文锚点。完整边界见 [文档互动通知设计](2026-10-12-drive-discussion-notifications-design.md)。

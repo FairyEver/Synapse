@@ -80,9 +80,6 @@ import {
   type MarkdownRenderedTextSegment,
 } from './markdown-rendered-text'
 import {
-  DRIVE_DOCUMENT_OUTLINE_PANEL_DEFAULT_SIZE as MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE,
-  DRIVE_DOCUMENT_OUTLINE_PANEL_MAX_SIZE as MARKDOWN_OUTLINE_PANEL_MAX_SIZE,
-  DRIVE_DOCUMENT_OUTLINE_PANEL_MIN_SIZE as MARKDOWN_OUTLINE_PANEL_MIN_SIZE,
   DriveDocumentOutlineTree,
   flattenDriveDocumentOutline,
 } from './drive-document-outline'
@@ -90,13 +87,16 @@ import {
   useRegisterDriveRendererToolbarItems,
   type DriveRendererToolbarItem,
 } from './drive-renderer-toolbar-context'
-const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = 22
-const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = 17
-const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = 32
+// Pixel bounds keep auxiliary rails readable without consuming ultrawide documents.
+const MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE = '224px'
+const MARKDOWN_OUTLINE_PANEL_MIN_SIZE = '160px'
+const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = '288px'
+const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = '384px'
+const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = '320px'
+const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = '480px'
 const COMMENT_SCROLL_SAFE_INSET = 24
 const USER_DOCUMENT_SCROLL_IDLE_DELAY_MS = 160
 type MarkdownDocumentScrollSource = 'idle' | 'user' | 'outline'
-type ResizablePanelPercent = `${number}%`
 type MarkdownWidthMode = 'reading' | 'wide'
 type MarkdownAnnotationOverlayRect = {
   readonly key: string
@@ -672,7 +672,7 @@ function DriveMarkdownBody({
       items.push({
         kind: 'toggle',
         id: 'markdown-comments',
-        label: `评论 ${commentCount}`,
+        label: `批注 ${commentCount}`,
         icon: MessageSquare,
         compactPlacement: 'primary',
         pressed: isCompact ? compactPanel === 'comments' : commentsOpen,
@@ -1057,32 +1057,12 @@ function DriveMarkdownBody({
     setPreviewImage(null)
   }
   const outlinePanelOpen = outline.length > 0 && outlineOpen
-  const outlinePanelSize = outlinePanelOpen
-    ? MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE
-    : 0
-  const commentsPanelSize = commentsOpen
-    ? MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE
-    : 0
-  const documentPanelSize = 100 - outlinePanelSize - commentsPanelSize
-  const outlinePanelDefaultSize = resizablePanelPercent(
-    MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE
-  )
-  const outlinePanelMinSize = resizablePanelPercent(
-    MARKDOWN_OUTLINE_PANEL_MIN_SIZE
-  )
-  const outlinePanelMaxSize = resizablePanelPercent(
-    MARKDOWN_OUTLINE_PANEL_MAX_SIZE
-  )
-  const documentPanelDefaultSize = resizablePanelPercent(documentPanelSize)
-  const commentsPanelDefaultSize = resizablePanelPercent(
-    MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE
-  )
-  const commentsPanelMinSize = resizablePanelPercent(
-    MARKDOWN_COMMENTS_PANEL_MIN_SIZE
-  )
-  const commentsPanelMaxSize = resizablePanelPercent(
-    MARKDOWN_COMMENTS_PANEL_MAX_SIZE
-  )
+  const outlinePanelDefaultSize = MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE
+  const outlinePanelMinSize = MARKDOWN_OUTLINE_PANEL_MIN_SIZE
+  const outlinePanelMaxSize = MARKDOWN_OUTLINE_PANEL_MAX_SIZE
+  const commentsPanelDefaultSize = MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE
+  const commentsPanelMinSize = MARKDOWN_COMMENTS_PANEL_MIN_SIZE
+  const commentsPanelMaxSize = MARKDOWN_COMMENTS_PANEL_MAX_SIZE
   const commentBottomCompensation =
     commentsOpen && !isCompact
       ? Math.max(
@@ -1128,7 +1108,7 @@ function DriveMarkdownBody({
     <div
       ref={documentScrollRef}
       data-testid='markdown-document-scroll'
-      className='h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain'
+      className='h-full min-h-0 min-w-0 overflow-y-auto overscroll-contain bg-surface'
       onScroll={handleDocumentScroll}
       onWheelCapture={markDocumentScrollAsUserControlled}
       onTouchMoveCapture={markDocumentScrollAsUserControlled}
@@ -1138,7 +1118,7 @@ function DriveMarkdownBody({
           markDocumentScrollAsUserControlled()
       }}
     >
-      <div ref={documentInnerRef} className='min-h-full px-4 py-6 md:px-6'>
+      <div ref={documentInnerRef} className='min-h-full px-4 py-6 md:px-8'>
         <div
           ref={documentContentRef}
           data-markdown-width-mode={widthMode}
@@ -1203,10 +1183,10 @@ function DriveMarkdownBody({
                     className={cn(
                       'absolute mix-blend-multiply',
                       rect.kind === 'pending'
-                        ? 'bg-amber-200/60 ring-1 ring-amber-400/80'
+                        ? 'bg-warning/25 ring-1 ring-warning'
                         : rect.threadId === activeThreadId
-                          ? 'bg-amber-300/80 ring-2 ring-amber-500/90'
-                          : 'bg-amber-200/45'
+                          ? 'bg-accent/20 ring-2 ring-accent'
+                          : 'bg-warning/20'
                     )}
                     style={{
                       top: rect.top,
@@ -1233,6 +1213,7 @@ function DriveMarkdownBody({
           <DriveMessagesSection
             key={current.id}
             messages={messages}
+            fieldVariant='secondary'
             sectionRef={messagesSectionRef}
           />
         ) : null}
@@ -1367,7 +1348,6 @@ function DriveMarkdownBody({
               </>
             ) : null}
             <Panel
-              defaultSize={documentPanelDefaultSize}
               minSize='35%'
               data-markdown-resizable-panel='document'
               className='h-full min-h-0 min-w-0 overflow-hidden'
@@ -1446,7 +1426,7 @@ function DriveMarkdownBody({
             >
               <Drawer.CloseTrigger />
               <Drawer.Header className='sr-only'>
-                <Drawer.Heading>评论</Drawer.Heading>
+                <Drawer.Heading>批注</Drawer.Heading>
                 <p>查看和管理文档评论</p>
               </Drawer.Header>
               <div
@@ -1546,9 +1526,6 @@ function normalizeWheelDelta(
   if (event.deltaMode === 1) return event.deltaY * 16
   if (event.deltaMode === 2) return event.deltaY * pageHeight
   return event.deltaY
-}
-function resizablePanelPercent(value: number): ResizablePanelPercent {
-  return `${value}%`
 }
 function driveMarkdownAnnotationStateKey(
   currentId: string,

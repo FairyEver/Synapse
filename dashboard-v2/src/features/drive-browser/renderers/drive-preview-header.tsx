@@ -20,6 +20,7 @@ import { DriveBrowserItemIcon } from '../shared/drive-icons'
 import { DriveShareViewerStatus } from '../shared/drive-share-viewer-status'
 import {
   getDrivePreviewFileIdentity,
+  getDrivePreviewDisplayName,
   getDrivePreviewSystemActions,
 } from './drive-preview-actions'
 import type {
@@ -55,6 +56,7 @@ export function DrivePreviewHeader({
   >
 }) {
   const identity = getDrivePreviewFileIdentity(snapshot)
+  const displayName = getDrivePreviewDisplayName(snapshot, selectedRendererId)
   const systemActions = getDrivePreviewSystemActions(
     snapshot,
     selectedRendererId,
@@ -98,16 +100,19 @@ export function DrivePreviewHeader({
             data-drive-preview-file-name='true'
             className='min-w-0 truncate text-left focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
           >
-            {identity.name}
+            {displayName}
           </Tooltip.Trigger>
           <Tooltip.Content placement='bottom' offset={6}>
             <span
               data-drive-preview-file-metadata='true'
-              className='flex items-center gap-2 whitespace-nowrap'
+              className='flex max-w-sm flex-col gap-1'
             >
-              <span>{identity.sizeLabel}</span>
-              <span>{identity.kindLabel}</span>
-              <RelativeTime value={identity.updatedAt} />
+              <span className='break-words'>{identity.name}</span>
+              <span className='flex items-center gap-2'>
+                <span>{identity.sizeLabel}</span>
+                <span>{identity.kindLabel}</span>
+                <RelativeTime value={identity.updatedAt} />
+              </span>
             </span>
           </Tooltip.Content>
         </Tooltip>
@@ -198,6 +203,7 @@ function DrivePreviewCompactHeader({
   readonly onOpenVersions: (itemId: string) => void
 }) {
   const identity = getDrivePreviewFileIdentity(snapshot)
+  const displayName = getDrivePreviewDisplayName(snapshot, selectedRendererId)
   const primaryItems = getCompactPrimaryToolbarItems(rendererItems)
   const overflowItems = getCompactOverflowToolbarItems(rendererItems)
   const showViewerStatus = snapshot.context === 'share'
@@ -212,7 +218,7 @@ function DrivePreviewCompactHeader({
       <div className='flex min-h-14 min-w-0 items-center gap-3 px-3'>
         <DriveBrowserItemIcon item={snapshot.current} />
         <span className='min-w-0 flex-1 truncate text-sm font-medium'>
-          {identity.name}
+          {displayName}
         </span>
         <Dropdown>
           <Button

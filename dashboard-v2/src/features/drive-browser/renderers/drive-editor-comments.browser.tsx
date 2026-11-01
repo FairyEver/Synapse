@@ -18,6 +18,7 @@ import { DriveRendererShell } from './drive-renderer-shell'
 import { createMarkdownRenderedTextModel } from './markdown-rendered-text'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import { DriveRendererToolbarProvider } from './drive-renderer-toolbar-context'
+import { DriveMessagesSection } from '../drive-messages-section'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -299,6 +300,35 @@ async function nextAnimationFrame(): Promise<void> {
 }
 
 describe('rendered Markdown comment geometry in Chromium', () => {
+  it('keeps the message composer full-width and enables publishing after rich-text input on a narrow surface', async () => {
+    const create = vi.fn(async () => ({ id: 'new-message' }))
+    const messages = {
+      messages: [], canPost: true, loading: false, refreshing: false, error: null, create,
+    }
+    const screen = await render(
+      <div className='w-96 bg-surface p-4'>
+        <DriveMessagesSection messages={messages as never} fieldVariant='secondary' />
+      </div>
+    )
+    try {
+      const composer = await waitForElement('[data-drive-message-editor]')
+      const input = composer.querySelector('textarea')!
+      const publish = () => [...composer.querySelectorAll('button')].find((button) => button.textContent === '发布留言')!
+      expect(publish().disabled).toBe(true)
+      expect(Math.abs(input.getBoundingClientRect().width - composer.clientWidth)).toBeLessThan(2)
+      await userEvent.click(input)
+      const editor = await waitForElement('[data-drive-message-editor] [contenteditable="true"]')
+      await userEvent.type(editor, 'Visual acceptance draft')
+      await expect.poll(() => publish().disabled).toBe(false)
+      await userEvent.click(publish())
+      expect(create).toHaveBeenCalledExactlyOnceWith('Visual acceptance draft')
+      await waitForElement('[data-drive-message-editor] textarea')
+      expect(create.mock.calls).toHaveLength(1)
+    } finally {
+      await screen.unmount()
+    }
+  })
+
   it('keeps the native scroll node and anchor geometry across image loading, split resizing and menus', async () => {
     const imageSource = (height: number) =>
       `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="${height}"><rect width="640" height="${height}" fill="currentColor"/></svg>`)}`
@@ -360,6 +390,17 @@ describe('rendered Markdown comment geometry in Chromium', () => {
         '[data-drive-annotation-overlay-thread-id="thread-target"]'
       const overlay = await waitForElement(overlaySelector)
       await expectElementAlignedToRange(overlay, rangeForText(body, 'Target'))
+      const outlinePanel = await waitForElement('[data-markdown-resizable-panel="outline"]')
+      const commentsPanel = await waitForElement('[data-markdown-resizable-panel="comments"]')
+      await expect.poll(() => Math.round(outlinePanel.getBoundingClientRect().width)).toBe(224)
+      await expect.poll(() => Math.round(commentsPanel.getBoundingClientRect().width)).toBe(384)
+      const colorPixel = (element: HTMLElement) => {
+        const context = document.createElement('canvas').getContext('2d')!
+        context.fillStyle = getComputedStyle(element).backgroundColor
+        context.fillRect(0, 0, 1, 1)
+        return [...context.getImageData(0, 0, 1, 1).data]
+      }
+      expect(colorPixel(scroller)).toEqual(colorPixel(body))
       const image = body.querySelector('img')!
       image.src = imageSource(180)
       await expect.poll(() => image.naturalHeight).toBe(180)
@@ -385,7 +426,9 @@ describe('rendered Markdown comment geometry in Chromium', () => {
       await userEvent.click(
         await waitForElement('button[aria-label="查看评论：Target"]')
       )
-      await waitForElement('[data-markdown-comment-reply-composer]')
+      const replyComposer = await waitForElement('[data-markdown-comment-reply-composer]')
+      const replyInput = replyComposer.querySelector('textarea')!
+      expect(Math.abs(replyInput.getBoundingClientRect().width - replyComposer.clientWidth)).toBeLessThan(2)
       await expectElementAlignedToRange(
         await waitForElement(overlaySelector),
         rangeForText(body, 'Target')

@@ -71,6 +71,7 @@ export function DriveMessageComposer({
   imageUploadContext,
   expanded = true,
   onExpand,
+  fieldVariant = 'primary',
 }: {
   readonly value: string
   readonly onChange: (value: string) => void
@@ -82,6 +83,7 @@ export function DriveMessageComposer({
   readonly imageUploadContext?: DriveDocumentImageUploadContext
   readonly expanded?: boolean
   readonly onExpand?: () => void
+  readonly fieldVariant?: 'primary' | 'secondary'
 }) {
   const editorRef = useRef<MDXEditorMethods | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -230,7 +232,7 @@ export function DriveMessageComposer({
       data-drive-message-editor
       role='group'
       aria-label={label}
-      className='space-y-2'
+      className='w-full min-w-0 space-y-3'
       onPasteCapture={handlePaste}
       onDropCapture={handleDrop}
       onDragOverCapture={(event) => {
@@ -245,6 +247,8 @@ export function DriveMessageComposer({
     >
       {!expanded ? (
         <TextArea
+          fullWidth
+          variant={fieldVariant}
           aria-label={label}
           placeholder='写下留言…'
           rows={3}
@@ -257,6 +261,8 @@ export function DriveMessageComposer({
         <>
           {sourceFallback ? (
             <TextArea
+              fullWidth
+              variant={fieldVariant}
               autoFocus
               aria-label={label}
               value={value}
@@ -298,56 +304,58 @@ export function DriveMessageComposer({
               void insertImages(files)
             }}
           />
-          <div className='flex flex-wrap items-center gap-2'>
-            <Button
-              type='button'
-              isDisabled={busy || uploadingImage || !value.trim() || tooLong}
-              onPress={() => {
-                if (!pendingRef.current) onSubmit()
-              }}
-            >
-              {submitLabel}
-            </Button>
-            <Button
-              type='button'
-              variant='ghost'
-              isDisabled={busy || uploadingImage || !imageUploadContext}
-              onPress={() => fileInputRef.current?.click()}
-            >
-              <ImagePlus data-icon='inline-start' />
-              插入图片
-            </Button>
-            {onCancel ? (
-              <Button
-                type='button'
-                variant='ghost'
-                isDisabled={busy}
-                onPress={() => {
-                  invalidatePendingUploads()
-                  onCancel()
-                }}
-              >
-                取消
-              </Button>
-            ) : null}
-            {uploadingImage ? (
-              <span role='status' className='text-sm text-muted'>
-                上传中
-              </span>
-            ) : null}
-          </div>
-          {tooLong ? (
-            <p role='alert' className='text-sm text-danger'>
-              留言内容不能超过 4000 字符。
-            </p>
-          ) : null}
-          {error ? (
-            <p role='alert' className='text-sm text-danger'>
-              {error}
-            </p>
-          ) : null}
         </>
       )}
+      <div className='flex flex-wrap items-center gap-2'>
+        <Button
+          type='button'
+          isDisabled={busy || uploadingImage || !value.trim() || tooLong}
+          onPress={() => {
+            if (!pendingRef.current) onSubmit()
+          }}
+        >
+          {busy ? '提交中' : submitLabel}
+        </Button>
+        {expanded ? (
+          <Button
+            type='button'
+            variant='ghost'
+            isDisabled={busy || uploadingImage || !imageUploadContext}
+            onPress={() => fileInputRef.current?.click()}
+          >
+            <ImagePlus data-icon='inline-start' />
+            插入图片
+          </Button>
+        ) : null}
+        {onCancel ? (
+          <Button
+            type='button'
+            variant='ghost'
+            isDisabled={busy}
+            onPress={() => {
+              invalidatePendingUploads()
+              onCancel()
+            }}
+          >
+            取消
+          </Button>
+        ) : null}
+        {uploadingImage ? (
+          <span role='status' className='text-sm text-muted'>
+            上传中
+          </span>
+        ) : null}
+      </div>
+      {tooLong ? (
+        <p role='alert' className='text-sm text-danger'>
+          留言内容不能超过 4000 字符。
+        </p>
+      ) : null}
+      {error ? (
+        <p role='alert' className='text-sm text-danger'>
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }

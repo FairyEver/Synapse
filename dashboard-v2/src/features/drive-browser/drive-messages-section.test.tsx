@@ -100,6 +100,12 @@ async function renderSection(overrides: Record<string, unknown> = {}) {
   return methods
 }
 
+it('shows a disabled publish action before expanding the empty message composer', async () => {
+  await renderSection({ messages: [] })
+  expect(document.querySelector('textarea[aria-label="新建留言"]')).not.toBeNull()
+  expect(button('发布留言').disabled).toBe(true)
+})
+
 function button(label: string) {
   const result = [...document.querySelectorAll('button')].find(
     (item) => item.textContent === label
@@ -164,7 +170,7 @@ describe('DriveMessagesSection', () => {
       document.querySelector('textarea[aria-label="新建留言"]')
     ).not.toBeNull()
     expect(document.querySelector('[role="toolbar"]')).toBeNull()
-    expect(document.body.textContent).not.toContain('发布留言')
+    expect(button('发布留言').disabled).toBe(true)
     await expandComposer()
     const editor = document.querySelector(
       '[data-drive-message-editor] [contenteditable="true"]'
@@ -183,7 +189,7 @@ describe('DriveMessagesSection', () => {
     expect(
       document.querySelector('textarea[aria-label="新建留言"]')
     ).not.toBeNull()
-    expect(document.body.textContent).not.toContain('发布留言')
+    expect(button('发布留言').disabled).toBe(true)
   })
 
   it('keeps permitted actions in menus and requires a cancellable deletion confirmation', async () => {
@@ -363,7 +369,7 @@ describe('DriveMessagesSection', () => {
       document.querySelector('textarea[aria-label="新建留言"]')
     ).not.toBeNull()
     expect(document.querySelector('[data-drive-message-editor] img')).toBeNull()
-    expect(document.body.textContent).not.toContain('发布留言')
+    expect(button('发布留言').disabled).toBe(true)
   })
 
   it('keeps an edited reply intact when an upload fails and rejects oversize images before uploading', async () => {

@@ -764,9 +764,9 @@ describe('DriveMarkdownRenderer', () => {
     )
     expect(outlineRailContent?.className).toContain('h-full')
     expect(outlineRailContent?.className).toContain('min-h-0')
-    expect(outlineRail?.getAttribute('data-panel-size')).toBe('16%')
-    expect(outlineRail?.getAttribute('data-panel-min-size')).toBe('12%')
-    expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('32%')
+    expect(outlineRail?.getAttribute('data-panel-size')).toBe('224px')
+    expect(outlineRail?.getAttribute('data-panel-min-size')).toBe('160px')
+    expect(outlineRail?.getAttribute('data-panel-max-size')).toBe('288px')
     expect(outlineAside?.className).not.toContain('px-4')
     expect(outlineAside?.className).not.toContain('md:px-6')
     expect(outlineAside?.className).toContain('py-6')
@@ -1015,7 +1015,7 @@ describe('DriveMarkdownRenderer', () => {
       currentItem: current({ name: 'notes.md', mimeType: null }),
     })
 
-    expect(buttonWithText('评论 0')).not.toBeNull()
+    expect(buttonWithText('批注 0')).not.toBeNull()
   })
 
   it('enables comments for Markdown MIME without a .md extension', () => {
@@ -1023,7 +1023,7 @@ describe('DriveMarkdownRenderer', () => {
       currentItem: current({ name: 'notes', mimeType: 'text/markdown' }),
     })
 
-    expect(buttonWithText('评论 0')).not.toBeNull()
+    expect(buttonWithText('批注 0')).not.toBeNull()
   })
 
   it('does not enable comments for non-markdown files', () => {
@@ -1031,7 +1031,7 @@ describe('DriveMarkdownRenderer', () => {
       currentItem: current({ name: 'notes.txt', mimeType: 'text/plain' }),
     })
 
-    expect(queryButtonWithText('评论 0')).toBeNull()
+    expect(queryButtonWithText('批注 0')).toBeNull()
   })
 
   it('keeps empty markdown code fallback editable', () => {
@@ -1172,10 +1172,10 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('批注')
     expect(document.body.textContent).toContain('1')
     expect(document.body.textContent).toContain('Comment body')
-    expect(toolbarButtonTexts()).toEqual(['目录', '评论 1', '留言 0', '宽度'])
+    expect(toolbarButtonTexts()).toEqual(['目录', '批注 1', '留言 0', '宽度'])
     expect(
       commentRailTitle()?.querySelector('button[aria-label="刷新评论"]')
     ).not.toBeNull()
@@ -1186,12 +1186,12 @@ describe('DriveMarkdownRenderer', () => {
     expect(
       commentRailPanelGroup()?.hasAttribute('data-markdown-resizable-panel')
     ).toBe(true)
-    expect(commentRailPanelGroup()?.getAttribute('data-panel-size')).toBe('22%')
+    expect(commentRailPanelGroup()?.getAttribute('data-panel-size')).toBe('384px')
     expect(commentRailPanelGroup()?.getAttribute('data-panel-min-size')).toBe(
-      '17%'
+      '320px'
     )
     expect(commentRailPanelGroup()?.getAttribute('data-panel-max-size')).toBe(
-      '32%'
+      '480px'
     )
     expect(commentRailShell()?.className).toContain('overflow-hidden')
     expect(commentRailShell()?.className).not.toContain('gap-6')
@@ -1234,7 +1234,7 @@ describe('DriveMarkdownRenderer', () => {
       document.querySelector('[data-markdown-sheet="comments"]')
     ).toBeNull()
 
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
     expect(
       document.querySelector('[data-markdown-sheet="comments"]')
@@ -1272,7 +1272,7 @@ describe('DriveMarkdownRenderer', () => {
     await click(outlineLink)
     expect(document.querySelector('[data-markdown-sheet="outline"]')).toBeNull()
 
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await click(elementWithText('Comment body'))
     expect(
       document.querySelector('[data-markdown-sheet="comments"]')
@@ -1292,7 +1292,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await click(buttonByLabel('查看 1 条未定位评论'))
     await click(elementWithText('Lost comment'))
 
@@ -1308,7 +1308,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await click(elementWithText('Comment body'))
     await inputValue(textarea(), 'Saved reply')
     await keyDown(textarea(), { key: 'Escape' })
@@ -1325,7 +1325,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     await openDropdown(buttonByLabel('评论操作：user@example.com'))
     await click(
       Array.from(
@@ -1406,17 +1406,17 @@ describe('DriveMarkdownRenderer', () => {
     renderMarkdown()
 
     await act(async () => undefined)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     expect(
       document.querySelector('[data-markdown-resizable-panel="comments"]')
     ).toBeNull()
 
     await setPreviewWidth(390)
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     expect(
       document.querySelector('[data-markdown-sheet="comments"]')
     ).not.toBeNull()
-    await click(buttonWithText('评论 1'))
+    await click(buttonWithText('批注 1'))
     expect(
       document.querySelector('[data-markdown-sheet="comments"]')
     ).toBeNull()
@@ -1448,7 +1448,7 @@ describe('DriveMarkdownRenderer', () => {
 
     await act(async () => undefined)
 
-    expect(toolbarButtonTexts()).toEqual(['评论 1', '留言 0', '宽度'])
+    expect(toolbarButtonTexts()).toEqual(['批注 1', '留言 0', '宽度'])
     expect(document.body.textContent).toContain('Reply body')
   })
 
@@ -1496,7 +1496,7 @@ describe('DriveMarkdownRenderer', () => {
       document.querySelector('[data-markdown-comment-draft-card="true"]')
     ).toBeNull()
     expect(document.querySelector('[data-slot="modal-dialog"]')).toBeNull()
-    expect(toolbarButtonTexts()).toContain('评论 0')
+    expect(toolbarButtonTexts()).toContain('批注 0')
     await inputValue(textarea(), 'New comment')
     await click(buttonWithText('评论'))
 
@@ -1659,7 +1659,7 @@ describe('DriveMarkdownRenderer', () => {
       document.querySelector('[data-drive-annotation-overlay-layer="true"]')
         ?.className
     ).not.toContain('opacity-0')
-    expect(pendingOverlay()?.className).toContain('bg-amber-200/60')
+    expect(pendingOverlay()?.className).toContain('bg-warning/25')
   })
 
   it('creates one selection anchor for the pointer release event sequence', async () => {
@@ -1816,7 +1816,7 @@ describe('DriveMarkdownRenderer', () => {
       dispatchPointerUpOnMarkdownBody()
     })
 
-    expect(document.body.textContent).not.toContain('评论')
+    expect(document.body.textContent).not.toContain('批注')
     expect(document.body.textContent).not.toContain('添加评论')
     expect(document.querySelector('textarea')).toBeNull()
     expect(pendingOverlay()).toBeNull()
@@ -1832,7 +1832,7 @@ describe('DriveMarkdownRenderer', () => {
       dispatchPointerUpOnMarkdownBody()
     })
 
-    expect(document.body.textContent).not.toContain('评论')
+    expect(document.body.textContent).not.toContain('批注')
     expect(document.body.textContent).not.toContain('添加评论')
     expect(pendingOverlay()).toBeNull()
   })
@@ -1974,7 +1974,7 @@ describe('DriveMarkdownRenderer', () => {
     const overlay = threadOverlay('thread-1')
     expect(overlay).not.toBeNull()
     expect(overlay?.className).toContain('mix-blend-multiply')
-    expect(overlay?.className).toContain('bg-amber-200/45')
+    expect(overlay?.className).toContain('bg-warning/20')
     expect(
       document.querySelector('[data-drive-annotation-thread-id]')
     ).toBeNull()
@@ -1989,7 +1989,7 @@ describe('DriveMarkdownRenderer', () => {
       )
     })
 
-    expect(document.body.textContent).toContain('评论')
+    expect(document.body.textContent).toContain('批注')
     expect(document.body.textContent).toContain('1')
     expect(scrollIntoViewMock).not.toHaveBeenCalled()
     expect(scrollContainerScrollToMock).not.toHaveBeenCalled()
@@ -2253,8 +2253,8 @@ describe('DriveMarkdownRenderer', () => {
     await click(elementWithText('First comment'))
 
     expect(threadOverlay('thread-1')?.className).toContain('ring-2')
-    expect(threadOverlay('thread-1')?.className).toContain('bg-amber-300/80')
-    expect(threadOverlay('thread-1')?.className).toContain('ring-amber-500/90')
+    expect(threadOverlay('thread-1')?.className).toContain('bg-accent/20')
+    expect(threadOverlay('thread-1')?.className).toContain('ring-accent')
     expect(threadOverlay('thread-2')?.className).not.toContain('ring-1')
   })
 

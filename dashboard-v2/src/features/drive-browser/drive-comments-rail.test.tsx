@@ -494,6 +494,36 @@ describe('DriveCommentsRail', () => {
     expect(onFocusThread).toHaveBeenCalledWith('thread-1')
   })
 
+  it('shows the current V2 anchor quote after a thread has been reanchored', async () => {
+    const item = thread({ quote: 'Old selection' })
+    const anchoredItem = {
+      ...item,
+      thread: {
+        ...item.thread,
+        anchor: {
+          schemaVersion: 2,
+          baseVersionId: 'version-1',
+          selectors: {
+            schemaVersion: 2,
+            quote: { exact: 'Current selection', prefix: '', suffix: '' },
+            position: { start: 0, end: 17 },
+          },
+          positionStatus: 'attached',
+          quoteStatus: 'exact',
+          resolvedSourceRange: { start: 0, end: 17 },
+          resolvedRenderedRange: { start: 0, end: 17 },
+          confidence: 1,
+          lastResolvedVersionId: 'version-1',
+        },
+      },
+    }
+    const onFocusThread = vi.fn()
+    renderRail({ threads: [anchoredItem], onFocusThread })
+    expect(buttonWithLabel('查看评论：Old selection')).toBeNull()
+    await click(requiredButtonWithLabel('查看评论：Current selection'))
+    expect(onFocusThread).toHaveBeenCalledWith(item.thread.id)
+  })
+
   it('keeps a long unbroken quote within the comment rail', () => {
     const quote =
       'https://example.com/wiki/document?openbrd=1&blockId=long-unbroken-comment-anchor'
@@ -510,7 +540,7 @@ describe('DriveCommentsRail', () => {
     expect(action.className).toContain('min-w-0')
     expect(action.className).toContain('flex-1')
     expect(excerpt?.className).toContain('max-w-full')
-    expect(excerpt?.className).toContain('truncate')
+    expect(excerpt?.className).toContain('line-clamp-2')
   })
 
   it('marks the active thread quote action as current', () => {
@@ -775,7 +805,7 @@ describe('DriveCommentsRail', () => {
     expect(threadCard('thread-1').querySelector('time')).not.toBeNull()
     expect(threadCard('thread-1').className).toContain('bg-surface')
     expect(threadCard('thread-1').className).toContain('ring-inset')
-    expect(threadCard('thread-1').className).toContain('ring-amber-500/90')
+    expect(threadCard('thread-1').className).toContain('ring-accent')
     expect(threadCard('thread-1').querySelector('.bg-amber-400')).toBeNull()
     expect(buttonWithText('回复').className).toContain('button--ghost')
     expect(buttonWithText('回复').className).toContain('button')

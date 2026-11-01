@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { getDrivePreviewDriveBrowserUrl, getDrivePreviewSystemActions } from './drive-preview-actions'
+import { getDrivePreviewDisplayName, getDrivePreviewDriveBrowserUrl, getDrivePreviewSystemActions } from './drive-preview-actions'
 
 const snapshot: DriveBrowserSnapshotDto = {
   context: 'owner', surface: 'standalone',
@@ -14,6 +14,13 @@ const snapshot: DriveBrowserSnapshotDto = {
 }
 
 describe('standalone reader actions', () => {
+  it('uses the document heading for reading and keeps file identity for source views and untitled documents', () => {
+    const titled = { ...snapshot, preview: { outline: [{ id: 'title', text: '文档标题', depth: 1, children: [] }] } } as DriveBrowserSnapshotDto
+    expect(getDrivePreviewDisplayName(titled, 'markdown')).toBe('文档标题')
+    expect(getDrivePreviewDisplayName(titled, 'mdxeditor')).toBe('文档标题')
+    expect(getDrivePreviewDisplayName(titled, 'code')).toBe('notes.md')
+    expect(getDrivePreviewDisplayName(snapshot, 'markdown')).toBe('notes.md')
+  })
   it('retains download and version actions without linking to the removed console cloud drive', () => {
     const actions = getDrivePreviewSystemActions(snapshot)
     expect(actions.map((action) => action.id)).toContain('download')
