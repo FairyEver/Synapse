@@ -119,9 +119,11 @@
 |---|---|---|---|
 | G1 大厅 | 总/可用/游戏中点数与累计盈亏；可进入游戏；当前会话继续；符合既有条件时领取每日补助；查询错误恢复 | D / Overview 指标 Card、D / Shell、HeroUI Button；保留必要游戏预览素材 | hall-home/account/query/session 测试；登录、会话恢复、补助条件 |
 | G2 房间与建房 | 点数/陪练筛选；加入房间；名称、规则（52/32 张）、盲注、座位数、带入/初始筹码；草稿按 userId 隔离；创建请求幂等/忙碌/重试；关闭后的焦点返回 | T / Transactions 房间列表；D / Settings + 标准 Modal/RadioGroup/Input/Button 建房 | room-list/room-creation/unified-lobby/profile-room-filter 测试；全部选项、边界、异步结果、键盘 |
-| G3 牌桌 | 入座、离座、控制权、下注/跟注/弃牌等真人动作、陪练机器人、视角、提醒、音效开关、牌桌日志及结算；保留身份/epoch/未知写结果规则 | 实际牌桌/卡牌/筹码/下注/动画/音效/三场景缩放保护；Tabs/Popover 底层 HeroUI，专属皮肤和 Portal 定位保留 | table/adaptive/responsive/human-controls/action-identity/event-history/motion/audio 测试；850px 两侧布局、浮层、焦点与音画 |
+| G3 牌桌 | 入座、离座、控制权、下注/跟注/弃牌等真人动作、陪练机器人、视角、提醒、音效开关、牌桌日志及结算；保留身份/epoch/未知写结果规则 | 实际牌桌/卡牌/筹码/直接玩法按钮/动画/音效/三场景缩放保护；日志、管理、金额表单与确认按系统层规则使用标准 HeroUI，Portal 定位不要求继承游戏皮肤 | table/adaptive/responsive/human-controls/action-identity/event-history/motion/audio 测试；850px 两侧布局、浮层、焦点与音画 |
 | G4 记录 | 点数/陪练筛选；前后页；选择某手查看规则、牌面、座位、盈亏、各轮动作、动作来源/档案版本 | T / Transactions 的主从记录布局；真实牌面素材保留 | record-streets/event-history 测试；分页、详情及动作归属 |
 | G5 选手档案 | 列表/选择；新增或编辑选手资料、规则/模式相关字段；保存；历史版本查看与比较；房间内相关档案绑定/展示 | D / Settings 的表单分区；D / Employees 列表；版本对照用 HeroUI Table | agent-profiles/profile-room-filter/practice 测试；保存、版本对照、切身份与房间绑定 |
+
+2026-11-01 分层规则补充：上表 G3 的系统皮肤边界是后续改造要求，非本轮已实现结论；当前混用点和源码证据见 [游戏 UI 分层规则](../docs/agents/game-ui.md#现状对照2026-11-01)。原迁移验收记录仍只证明当时迁移结果。
 
 游戏前端 bridge 的现有 operation 清单与 V1 对照未发现丢失；本次不改变服务端玩法或 MCP 协议。
 

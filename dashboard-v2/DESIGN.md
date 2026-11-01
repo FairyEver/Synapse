@@ -34,7 +34,16 @@ All application entry documents use `data-theme="light"` and `color-scheme: ligh
 - Histories, logs and search/filter/sort lists follow https://template-4.heroui.pro/transactions.
 - Use standard HeroUI components and variants, not a reskinned legacy dashboard component layer. See MIGRATION.md for the per-feature mapping.
 - Reading/editing content preserves typography, native scrolling and annotation geometry; change outer controls only.
-- Game surfaces retain scoped bespoke visuals; administrative chrome and room forms use standard HeroUI components.
+- Games run as content within a system shell. Follow [the game UI boundary contract](../docs/agents/game-ui.md): system surfaces use the standard HeroUI light theme; gameplay surfaces retain scoped bespoke visuals.
+
+## Game system shell and gameplay boundaries
+
+- System UI owns the hall, room discovery/waiting/management, rankings when introduced, records, profiles and settings, plus in-game menus, logs, AI inspection, bot/seat/control management, forms and confirmations. Use the same HeroUI components, tokens, typography and interaction vocabulary throughout.
+- Gameplay UI owns the scene, table, cards, chips, HUD, turn/deadline indicators, direct play actions and immediate result feedback. Keep these in the game's visual language, including actions outside the scaled canvas.
+- For poker, fold/check/call/bet/raise buttons are gameplay actions. The amount-entry panel (input, slider and presets) and all-in confirmation are system UI. An immediate winner summary is gameplay feedback; a full result in the log or history uses system layout with card artwork as content.
+- During play, expose system panels on demand, retaining only necessary entry points. The shell need not have a permanent border or Console navigation. Waiting/lobby screens may occupy the whole page as system UI.
+- Classify by responsibility, not DOM position, floating presentation or component import. System overlays must retain the default light tokens and typography even when portalled inside a game container. Do not recolor HeroUI Tabs/Popover/form controls with the poker palette. Game artwork inside a system list does not theme its surrounding controls.
+- This contract supersedes older game-wide palette, dark room-form and game-themed management-overlay instructions for V2. It does not claim the existing table chrome has been migrated. Preserve gameplay geometry, authorization, timing, privacy and action semantics during later implementation.
 
 ## Design Direction
 

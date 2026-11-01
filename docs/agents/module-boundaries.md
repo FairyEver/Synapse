@@ -309,6 +309,8 @@
 
 ## 游戏大厅与德州扑克
 
+- 2026-11-01 游戏 UI 长期边界：游戏作为内容运行在独立系统外壳内，系统页面与按需展开的功能面板、表单、确认使用系统设计语言，局内场景/HUD/直接玩法操作使用独立游戏语言，详见 [game-ui.md](./game-ui.md)。V2 系统层固定 HeroUI v3 默认浅色；本节旧游戏调色板、深色建房与浮层皮肤描述仅保留为 V1/历史实现记录，不约束 V2 的后续视觉改造。现有 V2 混用点尚待改造；业务、响应式、几何和安全约束继续有效。
+
 - 2026-10-31 完整迁移：UI、素材、动画和音效仅位于 `dashboard/src/game-center/`，使用现有 Web 工程的独立 HTML 入口。Console 普通账号侧栏以新标签页打开 `/game/`，游戏不加载 Console Layout。游戏固定配色是独立页面例外，Console 继续仅浅色。
 - Web 复用 HttpOnly 用户会话；合法 `/game/` 地址登录后整页回跳。Cookie 游戏请求携带 `X-Synapse-Game-User-Id` 与认证身份比较，身份变化拒绝并清空旧页面状态；Cookie 写操作校验同源，invoke 仅允许无专用 REST 的 UI 操作。Bearer、本机 26 项 MCP、权限审计和控制语义保持兼容；浏览器与本机须登录同账号才共用原座位。
 - 桌面启动台、Dock、窗口注册及 24 项游戏 UI IPC/preload 均移除，后台 service/dispatcher 与公开 API 保留。历史两条游戏深链经 PermissionGuard/AuditSink 改为打开浏览器，新的提醒使用同站 Web 地址。不修改历史通知、游戏数据或 APNS 环境。关闭页面/退出 Web 登录不自动改变座位和控制权。

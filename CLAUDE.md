@@ -40,6 +40,7 @@ Renderer 只能通过窄而类型化的 `window.synapse.*` preload bridge 访问
 | 主进程 service / IPC handler | `.claude/rules/api.md` |
 | 测试 | `.claude/rules/testing.md` |
 | 子包开发端口 | `.claude/rules/workspace-dev-ports.md` |
+| 游戏中心、游戏系统界面与局内 UI 分层 | `docs/agents/game-ui.md`；V2 同时阅读 `dashboard-v2/CLAUDE.md`、`dashboard-v2/DESIGN.md` |
 | Dashboard V2、HeroUI v3 UI 与 AI 编码工具 | `dashboard-v2/CLAUDE.md`、`dashboard-v2/DESIGN.md`；使用 `.agents/skills/heroui-react/` |
 | 文档站文案 | `.claude/rules/document-copy.md` |
 | System App、Dock、Workflow/Automation/MCP/Deep Link 注册 | `docs/agents/capability-registry.md` |
