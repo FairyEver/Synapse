@@ -67,4 +67,14 @@
 
 ## 修复上线验证
 
-待部署和线上复验完成后补入实际结果。
+- 修复提交：`245cbb0e6`（修复云表包含筛选与登录异常并覆盖全部API流程），本地提交，未推送。
+- 沿用此前用户对后端、Dashboard V2、文档站的部署授权，执行现有 `deploy.sh` 全部19步，467秒完成；保持 `DASHBOARD_UI=v2`，未启用风险迁移或历史邮件清理开关，未执行版本发布、iOS发布或用户通知。
+- 生产地址：`https://synapse.d2.pub`；服务器 `root@120.53.17.64`，部署目录 `/www/wwwroot/synapse`。
+- 后端镜像：`synapse-server:deploy-20261101_180756`；ID `sha256:0918bfaf3120d5986f467e1e5ab902c98f4eba6653271ba8d56a925db66e19c7`；启动时间 `2026-11-01T10:15:30.169660296Z`（北京时间18:15:30）。后端、PDF渲染器、PostgreSQL均healthy。
+- 镜像内再次核实查询括号修复和Console401转换存在，Node为22.23.4。部署构建中的后端、Dashboard V2、文档站均通过；数据库恢复预演和最终备份恢复核验成功，本轮无待执行迁移。
+- `production-routes.mjs` 根据线上OpenAPI逐项执行19条开放路由（无效API密钥）和19条Console路由（无效Cookie），**38/38返回预期401**；开放路由统一 `INVALID_API_KEY`。本次探测被鉴权拒绝，不产生业务写入。
+- 上线后补充11项冒烟均通过：健康、V2标记/云表入口、API文档、19操作的OpenAPI、匿名目录拒绝、Cookie不升级身份、无效密钥优先拒绝、无凭据CORS，以及已取消分发产物的预期404。生产完整授权读写和压力测试未执行。
+- 入口：[云表Console](https://synapse.d2.pub/console/tables)、[API文档](https://synapse.d2.pub/document/open-api/api/cloud-tables)、[OpenAPI](https://synapse.d2.pub/api/open/openapi.json)。
+- 回滚镜像：`synapse-server:rollback-20261101_180756`、`synapse-pdf-renderer:rollback-20261101_180756`；切换前备份 `/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_180756.sql`，PDF回滚状态 `/www/wwwroot/synapse/backups/pdf-renderer-rollback-20261101_180756.state`。本次无数据库结构修改，应用回滚会重新引入上述两个已修复问题。
+- 原始证据增加 `deploy.log`、`candidate-runtime.log`、`production-runtime.log`、`production-routes.json`、`production-smoke-final.json`；本地证据目录同上，尚无在线报告链接。
+- 交付检查时出现其他任务未提交改动（研究文档及 `server/test/poker-roll-research/`），本次未修改或提交。部署继续按原有白名单并明确排除此测试研究目录，未将这些改动混入部署内容。
