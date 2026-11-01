@@ -29,11 +29,12 @@
 
 ### HeroUI 组合与表面规则（必须遵守）
 
-- **图标**：优先使用组件自带的 Indicator、CloseTrigger、`Link.Icon` 等插槽。文档/外链使用 `Link.Icon` 内置箭头；自定义 SVG 放入 `Link.Icon` 时填充插槽尺寸（`size-full`），不得保留会溢出的固有尺寸。普通 Button、菜单图标使用库默认尺寸，不用全局 SVG 样式修补。HeroUI 不提供独立的通用图标包，不虚构图标导出。
+- **图标**：优先使用组件自带的 Indicator、CloseTrigger、`Link.Icon` 等插槽。文档/外链使用 `Link.Icon` 内置箭头；自定义 SVG 放入 `Link.Icon` 时填充插槽尺寸（`size-full`），不得保留会溢出的固有尺寸。普通 Button 的图标由库控制尺寸；`Dropdown.Item` 中的自定义 Lucide/SVG 必须按官方菜单示例显式使用 `size-4 shrink-0 text-muted`（危险操作使用对应语义色）并标记 `aria-hidden`，不得依赖 Button 的 `data-icon` 写法或 Lucide 的默认 24px 尺寸。选中标记使用原生 `Dropdown.ItemIndicator`，不混用动作图标与选择状态。不用全局 SVG 样式修补。HeroUI 不提供独立的通用图标包，不虚构图标导出。
+- **菜单内容与分组**：菜单文字使用 `Label`，必要的次要说明使用 `Description`，复杂内容显式提供 `textValue` 以保留键盘按文字查找。命令操作与打开方式等单选状态使用 `Dropdown.Section`、`Header` 和必要的分隔线组织；同一单选集合必须放在同一个 Section，不为每个选项单建 Section。文件信息等非交互内容与操作分层，标题和元信息共用对齐线，长文件名必须在受限宽度内真正省略并保留完整名称。沿用菜单默认行高、内边距、字号、圆角和阴影，不通过放大菜单项或覆盖组件基础视觉掩盖图标与结构问题。
 - **弹窗间距**：Modal、Drawer、AlertDialog 使用相邻的 `Header`、`Body`、`Footer` 分区。字段、说明、列表放入 `Body`，不得把输入框、div 或整个内容 form 直接放在 `Footer` 前，绕过库的原生兄弟选择器间距。完整 form 包住三个分区时使用 `flex min-h-0 flex-1 flex-col`，字段间距只加在 Body 内；不得额外叠加外层 gap 或全局 margin 补丁。正文/评论、灯箱等特殊浮层保留明确的专用几何布局。
 - **背景与控件变体**：按控件实际所在的最近一层背景选择变体。默认白色 Card/Surface、Modal/Drawer/AlertDialog、Popover 等白色表面内，官方支持表面变体的表单控件必须显式使用 `variant="secondary"`，避免白底白控件；页面 `bg-background`、灰色表面上的控件保留适合背景的 `primary` 默认值。不得不分上下文地全站改成 secondary，也不得通过改主题、全局 CSS、字面色或额外边框代替标准变体。
 - **复合控件**：上述表面规则同时检查 Input、TextArea、InputGroup、Select、SearchField、ComboBox、NumberField、InputOTP、Checkbox、RadioGroup，以及 DateField.Group/TimeField.Group。variant 应传给文档规定的拥有者：密码框传至 InputGroup，选择器传至 Select，日期/时间字段传至 Group；不要给 TextField、DatePicker 根节点或不支持该属性的控件硬加 variant。跨组件渲染的表单也必须追踪实际背景；共用业务控件应透传原生 variant，不能暗中固定全局样式。按钮的主次操作 variant 不按表单背景规则批量改动。
-- **验证**：新增或修改控件时检查桌面与窄屏的默认、聚焦、无效、禁用和只读状态；运行 `check:ui` 及相关浏览器回归。源码检查不能替代实际背景对比、图标测量和滚动验证；阅读器外围变更必须保留正文滚动节点、锚点、分栏和评论定位，并运行既有几何回归。
+- **验证**：新增或修改控件时检查桌面与窄屏的默认、聚焦、无效、禁用和只读状态；运行 `check:ui` 及相关浏览器回归。涉及菜单/Popover 时必须实际展开每一种响应式呈现并查看截图，核对图标与文字的计算尺寸、分组/元信息对齐、截断、悬停/选中/键盘焦点和视口边界；不能只检查顶栏关闭状态。源码检查不能替代实际背景对比、图标测量和滚动验证；阅读器外围变更必须保留正文滚动节点、锚点、分栏和评论定位，并运行既有几何回归。
 
 ## 游戏 UI：系统外壳与局内界面
 

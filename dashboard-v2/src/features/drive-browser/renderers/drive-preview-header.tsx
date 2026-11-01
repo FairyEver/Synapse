@@ -1,6 +1,8 @@
 import {
   Button,
+  Description,
   Dropdown,
+  Header,
   Label,
   Link,
   Separator,
@@ -9,6 +11,7 @@ import {
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { ChevronDown, MoreHorizontal } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
+import { cn } from '@/lib/utils'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
 import {
   FilePreviewToolbarItemView,
@@ -207,6 +210,12 @@ function DrivePreviewCompactHeader({
   const primaryItems = getCompactPrimaryToolbarItems(rendererItems)
   const overflowItems = getCompactOverflowToolbarItems(rendererItems)
   const showViewerStatus = snapshot.context === 'share'
+  const fileActions = systemActions.filter(
+    (action) => action.kind !== 'renderer-select'
+  )
+  const rendererAction = systemActions.find(
+    (action) => action.kind === 'renderer-select'
+  )
   const hasMenuActions =
     overflowItems.length > 0 || systemActions.length > 0 || showViewerStatus
   return (
@@ -236,20 +245,29 @@ function DrivePreviewCompactHeader({
             data-drive-telemetry-scope='portal'
             className='w-72'
           >
-            <div className='px-3 py-2'>
-              <Label className='min-w-0 truncate'>{identity.name}</Label>
-              <div className='px-2 pb-2 text-xs text-muted'>
-                {identity.sizeLabel} / {identity.kindLabel} /{' '}
+            <div
+              data-drive-preview-file-metadata='true'
+              className='min-w-0 space-y-1 px-4 py-3'
+            >
+              <p
+                data-drive-preview-menu-file-name
+                className='truncate text-sm font-medium'
+                title={identity.name}
+              >
+                {identity.name}
+              </p>
+              <Description>
+                {identity.sizeLabel} · {identity.kindLabel} ·{' '}
                 <RelativeTime value={identity.updatedAt} />
-              </div>
+              </Description>
             </div>
             <Dropdown.Menu aria-label='操作'>
               {hasMenuActions ? <Separator /> : null}
               <FilePreviewToolbarMenuItems items={overflowItems} />
-              {overflowItems.length > 0 && systemActions.length > 0 ? (
+              {overflowItems.length > 0 && fileActions.length > 0 ? (
                 <Separator />
               ) : null}
-              {systemActions.map((action) => (
+              {fileActions.map((action) => (
                 <DrivePreviewHeaderMenuAction
                   key={action.id}
                   action={action}
@@ -258,6 +276,20 @@ function DrivePreviewCompactHeader({
                   onOpenVersions={onOpenVersions}
                 />
               ))}
+              {rendererAction ? (
+                <>
+                  {overflowItems.length > 0 || fileActions.length > 0 ? (
+                    <Separator />
+                  ) : null}
+                  <DrivePreviewHeaderMenuAction
+                    action={rendererAction}
+                    selectedRendererId={selectedRendererId}
+                    onRendererChange={onRendererChange}
+                    onOpenVersions={onOpenVersions}
+                    showRendererHeading
+                  />
+                </>
+              ) : null}
             </Dropdown.Menu>
             {showViewerStatus ? (
               <>
@@ -370,28 +402,12 @@ function DrivePreviewHeaderAction({
       </Button>
       <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
         <Dropdown.Menu aria-label='操作'>
-          {action.options.map((option) => (
-            <Dropdown.Section
-              key={option.id}
-              selectionMode='single'
-              selectedKeys={option.id === selectedRendererId ? [option.id] : []}
-            >
-              <Dropdown.Item
-                data-drive-telemetry-event='web.drive.renderer.select'
-                key={option.id}
-                isDisabled={Boolean(option.disabledReason)}
-                id={option.id}
-                onAction={() =>
-                  (() => {
-                    if (!option.disabledReason) onRendererChange(option.id)
-                  })()
-                }
-              >
-                <Dropdown.ItemIndicator />
-                <DriveRendererOptionMenuLabel option={option} />
-              </Dropdown.Item>
-            </Dropdown.Section>
-          ))}
+          <DrivePreviewHeaderMenuAction
+            action={action}
+            selectedRendererId={selectedRendererId}
+            onRendererChange={onRendererChange}
+            onOpenVersions={onOpenVersions}
+          />
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown>
@@ -402,103 +418,121 @@ function DrivePreviewHeaderMenuAction({
   selectedRendererId,
   onRendererChange,
   onOpenVersions,
+  showRendererHeading = false,
 }: {
   readonly action: DrivePreviewSystemAction
   readonly selectedRendererId: DriveRendererId | null
   readonly onRendererChange: (id: DriveRendererId) => void
   readonly onOpenVersions: (itemId: string) => void
+  readonly showRendererHeading?: boolean
 }) {
   if (action.kind === 'link') {
     return (
       <Dropdown.Item
+        textValue={action.label}
         data-drive-telemetry-event='web.drive.preview.action'
         href={action.href}
         target={action.external ? '_blank' : undefined}
         rel={action.external ? 'noreferrer' : undefined}
       >
-        <action.icon data-icon='inline-start' />
-        {action.label}
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
+        <Label>{action.label}</Label>
       </Dropdown.Item>
     )
   }
   if (action.kind === 'copy-share-link') {
     return (
       <Dropdown.Item
+        textValue={action.label}
         data-drive-telemetry-event='web.drive.preview.copy-share-link'
         onAction={() => {
           void copyDrivePreviewShareLink(action)
         }}
       >
-        <action.icon data-icon='inline-start' />
-        {action.label}
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
+        <Label>{action.label}</Label>
       </Dropdown.Item>
     )
   }
   if (action.kind === 'versions') {
     return (
       <Dropdown.Item
+        textValue={action.label}
         data-drive-telemetry-event='web.drive.preview.versions'
         onAction={() => onOpenVersions(action.itemId)}
       >
-        <action.icon data-icon='inline-start' />
-        {action.label}
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
+        <Label>{action.label}</Label>
       </Dropdown.Item>
     )
   }
   if (action.kind === 'pdf-export') {
     return (
       <Dropdown.Item
+        textValue={action.label}
         data-drive-telemetry-event='web.drive.preview.export-pdf'
         isDisabled={action.exporting || Boolean(action.disabledReason)}
         onAction={() => {
           void action.onExport()
         }}
       >
-        <action.icon data-icon='inline-start' />
+        <action.icon aria-hidden className='size-4 shrink-0 text-muted' />
         {action.disabledReason ? (
           <span className='flex min-w-0 flex-col gap-0.5'>
-            <span>{action.label}</span>
-            <span className='text-xs text-muted'>{action.disabledReason}</span>
+            <Label>{action.label}</Label>
+            <Description>{action.disabledReason}</Description>
           </span>
         ) : (
-          action.label
+          <Label>{action.label}</Label>
         )}
       </Dropdown.Item>
     )
   }
-  return action.options.map((option) => (
+  return (
     <Dropdown.Section
-      key={option.id}
+      aria-label='打开方式'
       selectionMode='single'
-      selectedKeys={option.id === selectedRendererId ? [option.id] : []}
+      selectedKeys={selectedRendererId ? [selectedRendererId] : []}
     >
-      <Dropdown.Item
-        data-drive-telemetry-event='web.drive.renderer.select'
-        key={option.id}
-        isDisabled={Boolean(option.disabledReason)}
-        id={option.id}
-        onAction={() =>
-          (() => {
+      {showRendererHeading ? <Header>打开方式</Header> : null}
+      {action.options.map((option) => (
+        <Dropdown.Item
+          data-drive-telemetry-event='web.drive.renderer.select'
+          key={option.id}
+          isDisabled={Boolean(option.disabledReason)}
+          id={option.id}
+          textValue={option.label}
+          onAction={() => {
             if (!option.disabledReason) onRendererChange(option.id)
-          })()
-        }
-      >
-        <Dropdown.ItemIndicator />
-        <DriveRendererOptionMenuLabel option={option} />
-      </Dropdown.Item>
+          }}
+        >
+          <Dropdown.ItemIndicator />
+          <DriveRendererOptionMenuLabel
+            option={option}
+            alignWithActionIcons={showRendererHeading}
+          />
+        </Dropdown.Item>
+      ))}
     </Dropdown.Section>
-  ))
+  )
 }
 export function DriveRendererOptionMenuLabel({
   option,
+  alignWithActionIcons = false,
 }: {
   readonly option: DriveRendererOption
+  readonly alignWithActionIcons?: boolean
 }) {
-  if (!option.disabledReason) return <>{option.label}</>
   return (
-    <span className='flex min-w-0 flex-col gap-0.5'>
-      <span>{option.label}</span>
-      <span className='text-xs text-muted'>{option.disabledReason}</span>
+    <span
+      className={cn(
+        'flex min-w-0 flex-col gap-0.5',
+        // Native selection padding reserves 10px less than a 16px action icon plus the menu gap.
+        alignWithActionIcons && 'ps-2.5'
+      )}
+    >
+      <Label>{option.label}</Label>
+      {option.disabledReason ? <Description>{option.disabledReason}</Description> : null}
     </span>
   )
 }

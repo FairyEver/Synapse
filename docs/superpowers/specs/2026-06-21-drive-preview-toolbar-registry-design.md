@@ -138,6 +138,12 @@ Renderers must not render a file-level top bar with `border-b` for save, reload,
 
 ## UI Rules
 
+### Dashboard V2 expanded menus (2026-11-01)
+
+- V2 follows `dashboard-v2/CLAUDE.md` and `DESIGN.md` for HeroUI rather than the historical V1 shadcn presentation below. Regular and compact preview headers share system-action menu items with explicit 16px decorative icons, standard Label/Description slots and textValue for keyboard search.
+- Compact file metadata uses one alignment container with real filename truncation and access to the full name. File commands remain in their existing order; renderer choices form a separate, labeled single-selection Section. Regular renderer selection reuses the same choice presentation. Do not change action permissions, renderer availability, document geometry or the system action model for this presentation fix.
+- Keep native menu dimensions, selection indicators, radius and elevation. Acceptance includes screenshots of both expanded variants and actual geometry/keyboard checks, including narrow viewports and long file names.
+
 - Use existing shadcn/Radix components and Tailwind token classes.
 - Do not add custom colors, gradients, glow, decorative shadows, nested cards, or one-off CSS.
 - Keep copy short and operational.
