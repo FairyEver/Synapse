@@ -69,6 +69,7 @@ export function projectSettlement(
         folded: s.folded,
         delta: amount(deltas[s.seatNo], endingStack - s.startingStack),
         payout: amount(payouts[s.seatNo]),
+        ...(rules.ruleOptions?.roll ? { rollPaid: amount(object(result.rollPaid)[s.seatNo]), rollReceived: amount(object(result.rollReceived)[s.seatNo]), pokerDelta: amount(deltas[s.seatNo], endingStack - s.startingStack) + amount(object(result.rollPaid)[s.seatNo]) - amount(object(result.rollReceived)[s.seatNo]) } : {}),
         endingStack,
         ...(visible ? { hole } : {}),
         ...(visible && !s.folded && board.length + hole.length >= 5 ? { handName: handRankName([...hole, ...board], rules.variant), bestFive: bestFive([...hole, ...board], rules.variant) } : {}),

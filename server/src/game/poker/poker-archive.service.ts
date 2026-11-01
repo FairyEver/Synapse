@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common"
 import { Interval } from "@nestjs/schedule"
 import {
   type GamePokerAction,
+  type GamePokerRoll,
   type GamePokerHand,
   type GamePokerHandSeat,
   type GamePokerHandSummary,
@@ -13,6 +14,7 @@ export interface ArchivedHand {
   seats: GamePokerHandSeat[]
   actions: GamePokerAction[]
   summaries: GamePokerHandSummary[]
+  rolls: GamePokerRoll[]
 }
 export function archiveData(data: Prisma.JsonValue): ArchivedHand {
   if (
@@ -25,7 +27,7 @@ export function archiveData(data: Prisma.JsonValue): ArchivedHand {
     !Array.isArray(data.summaries)
   )
     throw new Error("归档手牌数据无效。")
-  return data as unknown as ArchivedHand
+  return { ...data, rolls: Array.isArray(data.rolls) ? data.rolls : [] } as unknown as ArchivedHand
 }
 @Injectable()
 export class PokerArchiveService {

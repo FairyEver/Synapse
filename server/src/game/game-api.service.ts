@@ -1,3 +1,5 @@
+import { PokerRollService } from "./poker/poker-roll.service"
+import type { PokerRollStartInput, PokerRollChooseInput } from "@synapse/shared/game-contracts"
 import { BadRequestException, Injectable } from "@nestjs/common"
 import { z } from "zod"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
@@ -21,6 +23,7 @@ export class GameApiService {
     private readonly nudge: PokerNudgeService,
     private readonly bots: PokerBotService = new PokerBotService(poker),
     private readonly events: PokerEventsService = new PokerEventsService(poker),
+    private readonly rolls: PokerRollService = new PokerRollService(poker),
   ) {}
   async run(
     userId: string,
@@ -73,6 +76,7 @@ export class GameApiService {
             variants: { standard52: "标准52张", short32: "7至A共32张；同花大于葫芦，顺子大于三条，A789T为最小顺子。" },
             buyIn: [500, 1000, 2000, 5000],
             actionWindowSeconds: 600,
+            roll: "建房ruleOptions.roll默认关闭；开启后翻前/翻牌/转牌本人行动时可按table.state或wait的normal/super确切报价换牌。费用独立于底池，补偿其他未弃牌原入座者并冻结到手末；普通一张立即替换，超级三选一强制完成。Roll不续600秒时限；超时先选第一张再撤出。候选及旧牌位置只给本人，教学无额外权限。",
             heartbeatSeconds: 60,
             nextHand: "首局沿用入座开局；每手结束后所有有资格座位重新准备，真人手动点击、AI显式seat_ready、程序陪练自动准备。未全员准备不开下一手。",
             timeout: "能check就记录check，否则fold；两者均立即撤出本手、离桌退款，不自动跟注。",
@@ -81,10 +85,15 @@ export class GameApiService {
             practice: "mode=practice为陪练房，整桌练习筹码不扣兑大厅点数、不计正式战绩。房主可bot_add/移除程序机器人；真人可在 Web 游戏中心操作或交给外部AI，机器人不调用模型。没有可参与真人时不开新手。",
           },
           tools: GAME_TOOLS.filter((t) => t.id.startsWith("app.game.poker.")),
-          loop: "guide → overview → 无座位lobby_list/seat_join；已有座位先检查status，sitting_out仅在用户明确要求继续时seat_sit(false)后wait，未经继续指令不自动回座；已保存且有效的context_maintenance继续意图可在核对控制版本后恢复。每次独立wait(roomCode,cursor,25000)；your_turn按现读persona与合法动作提交act(UUID,handId,street,controlVersion,expectedActionSeq)，更新cursor；hand_result只记简要结果；ready_required时先检查继续意图和维护点，再用handId/controlVersion显式seat_ready，查询和wait不会准备；control_released停止，不抢回控制权。每10手或15分钟检查上下文，必要时reason=context_maintenance申请暂离，pending=true表示当前手尚未结束，立即停止调用仍适用600秒超时离桌，不能承诺保留座位。完成本手并确认sitting_out后checkpoint.save，只有宿主原生压缩能力真实可调用时执行并确认，缺失或失败则安全停止提示手动处理；恢复重读guide/overview/checkpoint，不自动重新扣点入座。",
+          loop: "guide → overview → 无座位lobby_list/seat_join；已有座位先检查status，sitting_out仅在用户明确要求继续时seat_sit(false)后wait，未经继续指令不自动回座；已保存且有效的context_maintenance继续意图可在核对控制版本后恢复。每次独立wait(roomCode,cursor,25000)；your_turn按现读persona与合法动作提交act(UUID,handId,street,controlVersion,expectedActionSeq)，更新cursor；可选roll.start须携带当前报价expectedFee与UUID/handId/street/expectedActionSeq/controlVersion；roll_choice_required优先按原rollId和候选下标调用roll.choose，不能再次付费或普通下注；未知写结果只原参数原UUID重试，重读state恢复候选；更新cursor；hand_result只记简要结果；ready_required时先检查继续意图和维护点，再用handId/controlVersion显式seat_ready，查询和wait不会准备；control_released停止，不抢回控制权。每10手或15分钟检查上下文，必要时reason=context_maintenance申请暂离，pending=true表示当前手尚未结束，立即停止调用仍适用600秒超时离桌，不能承诺保留座位。完成本手并确认sitting_out后checkpoint.save，只有宿主原生压缩能力真实可调用时执行并确认，缺失或失败则安全停止提示手动处理；恢复重读guide/overview/checkpoint，不自动重新扣点入座。",
           persona:
             "使用会话口述覆盖时，act传personaSource=session，行动不绑定游戏内版本；口述优先于游戏设置，仅本会话生效；未经用户明确要求不写回。模型自述可选，不确定留空。",
           errors: {
+            POKER_ROLL_CHOICE_REQUIRED: "读取table.state或wait，完成原roll.choose。",
+            POKER_ROLL_PRICE_CHANGED: "重新读取报价，确认后使用新UUID。",
+            POKER_ROLL_INSUFFICIENT_STACK: "余额须严格大于费用，改为正常下注。",
+            POKER_ROLL_STREET_INVALID: "河牌禁止换牌，继续正常行动。",
+            POKER_ROLL_VERSION_UNSUPPORTED: "停止操作并报告不支持的规则版本。",
             POKER_NOT_YOUR_TURN: "重新wait",
             POKER_STALE_ACTION: "重新wait，不重试旧动作",
             POKER_ILLEGAL_ACTION: "按返回legalActions与数额改正",
@@ -129,6 +138,10 @@ export class GameApiService {
         return this.actions.state(userId, p.roomCode, "owner", true)
       case "app.game.poker.action.act":
         return this.actions.act(userId, p.roomCode, p as ActionInput, new Date(), caller)
+      case "app.game.poker.roll.start":
+        return this.rolls.start(userId, p as PokerRollStartInput, new Date(), caller)
+      case "app.game.poker.roll.choose":
+        return this.rolls.choose(userId, p as PokerRollChooseInput, new Date(), caller)
       case "app.game.poker.control.claim":
         return this.poker.claim(userId, p.roomCode, p.controlVersion)
       case "app.game.poker.checkpoint.get":

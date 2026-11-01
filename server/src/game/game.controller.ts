@@ -128,6 +128,12 @@ export class GameController {
   ) {
     return this.api.run(r.user!.id, "app.game.poker.action.act", this.uiParams(b, "app.game.poker.action.act", code), undefined, "human")
   }
+  @Post("/poker/rooms/:code/roll/start") rollStart(@Req() r: AuthenticatedUserRequest, @Param("code") code: string, @Body() b: unknown) {
+    return this.api.run(r.user!.id, "app.game.poker.roll.start", this.uiParams(b, "app.game.poker.roll.start", code), undefined, "human")
+  }
+  @Post("/poker/rooms/:code/roll/choose") rollChoose(@Req() r: AuthenticatedUserRequest, @Param("code") code: string, @Body() b: unknown) {
+    return this.api.run(r.user!.id, "app.game.poker.roll.choose", this.uiParams(b, "app.game.poker.roll.choose", code), undefined, "human")
+  }
   @Post("/poker/rooms/:code/close") close(
     @Req() r: AuthenticatedUserRequest,
     @Param("code") code: string,

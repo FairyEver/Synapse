@@ -1,3 +1,4 @@
+import { publicRoll } from "./poker-roll-projection"
 import { Injectable } from "@nestjs/common"
 import type { GamePokerAction, GamePokerHand, GamePokerHandSeat } from "@prisma/client"
 import type { PokerActionView, PokerTableEvent, PokerTableEventsView } from "@synapse/shared/game-contracts"
@@ -84,10 +85,15 @@ export class PokerEventsService {
         const actions = archive
           ? archive.actions.filter((a) => a.seq > afterSeq && timestamp(a.createdAt) >= since.getTime()).sort((a, b) => a.seq - b.seq).slice(0, remaining)
           : await c.tx.gamePokerAction.findMany({ where: { handId: hand.id, seq: { gt: afterSeq }, createdAt: { gte: since } }, orderBy: { seq: "asc" }, take: remaining })
-        for (const action of actions) events.push({
-          kind: "action", handId: hand.id, handNo: hand.handNo, seq: action.seq,
-          action: projectAction(action, seats, userId, policy),
-        })
+        const rollIds = actions.filter(a => a.rollId).map(a => a.rollId!)
+        const rolls = archive?.rolls ?? (rollIds.length ? await c.tx.gamePokerRoll.findMany({ where: { handId: hand.id, id: { in: rollIds } }, take: 101 }) : [])
+        for (const action of actions) {
+          if (action.action.startsWith("roll_")) {
+            const roll = rolls.find(r => r.id === action.rollId)
+            if (!roll) throw new Error("Roll event audit missing")
+            events.push({ kind: "roll", handId: hand.id, handNo: hand.handNo, seq: action.seq, roll: publicRoll(roll, action, seats) })
+          } else events.push({ kind: "action", handId: hand.id, handNo: hand.handNo, seq: action.seq, action: projectAction(action, seats, userId, policy) })
+        }
         if (events.length > limit) break
         if (hand.status === "settled" && timestamp(hand.endedAt) >= since.getTime()) {
           // Bound source groups by the ten immutable hand participants.

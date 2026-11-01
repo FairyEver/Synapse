@@ -1,3 +1,4 @@
+import { PokerRollService } from "./poker/poker-roll.service"
 import { Module } from "@nestjs/common"
 import { UserAuthModule } from "../auth/user-auth.module"
 import { NotificationModule } from "../notifications/notification.module"
@@ -23,6 +24,7 @@ import { GameWebGuard } from "./game-web.guard"
     GameApiService,
     PokerService,
     PokerActionService,
+    PokerRollService,
     PokerReadService,
     PokerWaitService,
     PokerNudgeService,

@@ -52,6 +52,7 @@ export async function startNext(
       )[0]
     : eligible[0].seatNo
   const rules = resolveRules(c.room as unknown as Partial<PokerRules>)
+  await poker.lockFunds(c)
   const state = startHand(eligible, dealerSeat, shuffle(orderedDeck(rules.variant), randomInt), rules)
   const hand = await c.tx.gamePokerHand.create({
     data: {
@@ -84,6 +85,8 @@ export async function startNext(
       userId: eligible.find((p) => p.seatNo === s.seatNo)!.userId,
       participantKind: eligible.find((p) => p.seatNo === s.seatNo)!.participantKind,
       displayName: eligible.find((p) => p.seatNo === s.seatNo)!.displayName,
+      admissionId: eligible.find((p) => p.seatNo === s.seatNo)!.id,
+      originalHoleCards: s.hole,
       holeCards: s.hole,
       startingStack: s.startingStack,
     })),
@@ -96,7 +99,10 @@ export async function saveHand(
   c: RoomContext,
   hand: GamePokerHand,
   state: HandState,
+  options: { preserveDeadline?: boolean } = {},
 ): Promise<void> {
+  await poker.lockFunds(c)
+  const participants = await c.tx.gamePokerHandSeat.findMany({ where: { handId: hand.id }, take: 10 })
   const rules = resolveRules(state)
   const settled = state.street === "settled"
   const pot = settled ? 0 : state.seats.reduce((sum, s) => sum + s.total, 0)
@@ -111,11 +117,11 @@ export async function saveHand(
       status: settled ? "settled" : "running",
       showdownSeats: state.showdownSeats,
       ...(settled
-        ? { endedAt: c.now, result: json({ payouts: state.payouts, pots: state.pots, deltas: Object.fromEntries(state.seats.map((s) => [s.seatNo, s.stack - s.startingStack])) }) }
+        ? { endedAt: c.now, result: json({ payouts: state.payouts, pots: state.pots, ...(state.roll ? { rollPaid: state.roll.paid, rollReceived: state.roll.credits } : {}), deltas: Object.fromEntries(state.seats.map((s) => [s.seatNo, s.stack - s.startingStack])) }) }
         : {}),
     },
   })
-  const deadlineAt = settled ? null : new Date(c.now.getTime() + ACTION_WINDOW_MS)
+  const deadlineAt = settled ? null : options.preserveDeadline ? c.room.actionDeadlineAt : new Date(c.now.getTime() + ACTION_WINDOW_MS)
   c.room = await c.tx.gamePokerRoom.update({
     where: { id: c.room.id },
     data: {
@@ -125,9 +131,14 @@ export async function saveHand(
         ? new Date(c.now.getTime() + 1000) : null,
     },
   })
-  for (const s of c.seats) {
+  for (const participant of participants) {
+    const p = state.seats.find(p => p.seatNo === participant.seatNo)
+    if (p) await c.tx.gamePokerHandSeat.update({ where: { id: participant.id }, data: { holeCards: p.hole } })
+  }
+  const active = c.seats.filter(s => participants.some(p => p.userId === s.userId && p.seatNo === s.seatNo && (p.admissionId ? p.admissionId === s.id : (s.joinedHandNo ?? 0) <= hand.handNo)))
+  for (const s of active) {
     const p = state.seats.find((p) => p.seatNo === s.seatNo)
-    if (!p || (s.joinedHandNo ?? 0) > hand.handNo) continue
+    if (!p) continue
     s.stack = p.stack
     s.status = settled
       ? s.sitPending
@@ -145,6 +156,7 @@ export async function saveHand(
     if (s.participantKind !== "bot") await c.tx.gameSession.updateMany({
       where: {
         userId: s.userId,
+        ...(participants.find(p => p.userId === s.userId && p.admissionId === s.id) ? { admissionId: s.id } : {}),
         gameKind: "poker",
         gameRoomId: c.room.id,
         status: { not: "closed" },
@@ -159,10 +171,7 @@ export async function saveHand(
     })
   }
   if (settled) {
-    const participants = await c.tx.gamePokerHandSeat.findMany({
-      where: { handId: hand.id },
-      take: 10,
-    })
+    if (state.roll) await poker.hall.releaseTransfers(c.tx, hand.id, active.map(s => ({ admissionId: s.id, userId: s.userId, gameKind: "poker", gameRoomId: c.room.id, funding: c.room.mode === "practice" ? "practice" : "points" })), c.now)
     for (const p of state.seats) {
       const participant = participants.find((s) => s.seatNo === p.seatNo)!
       await c.tx.gamePokerHandSeat.update({

@@ -1,3 +1,4 @@
+import { privateRoll, publicRoll } from "./poker-roll-projection"
 import type { PokerStats, PokerAgentView } from "@synapse/shared/game-contracts"
 import { Injectable } from "@nestjs/common"
 import { Prisma, type GamePokerHandSummary } from "@prisma/client"
@@ -21,6 +22,8 @@ export class PokerReadService {
         ownerUserId: true,
         mode: true,
         variant: true,
+        ruleOptions: true,
+        rollPricingVersion: true,
         maxSeats: true,
         buyIn: true,
         status: true,
@@ -89,7 +92,7 @@ export class PokerReadService {
       ) records ORDER BY "createdAt" DESC,"id" DESC LIMIT ${limit + 1} OFFSET ${offset}`
     const rooms = await this.poker.prisma.gamePokerRoom.findMany({
       where: { id: { in: rows.map((r) => r.roomId) } },
-      select: { id: true, code: true, variant: true, smallBlind: true, bigBlind: true },
+      select: { id: true, code: true, variant: true, smallBlind: true, bigBlind: true, ruleOptions: true, rollPricingVersion: true },
       take: limit + 1,
     })
     return {
@@ -119,7 +122,8 @@ export class PokerReadService {
         })
         let hand: ArchivedHand["hand"],
           participants: ArchivedHand["seats"],
-          actions: ArchivedHand["actions"]
+          actions: ArchivedHand["actions"],
+          rolls: ArchivedHand["rolls"] = []
         if (hot) {
           hand = hot
           participants = await tx.gamePokerHandSeat.findMany({
@@ -129,6 +133,13 @@ export class PokerReadService {
           })
           if (!participants.some((s) => s.userId === userId))
             reject("POKER_SEAT_NOT_FOUND", "只能读取本人参与的手牌。")
+          let afterRollSeq = 0
+          for (;;) {
+            const page = await tx.gamePokerRoll.findMany({ where: { handId: hot.id, startSeq: { gt: afterRollSeq } }, orderBy: { startSeq: "asc" }, take: 1000 })
+            rolls.push(...page)
+            if (page.length < 1000) break
+            afterRollSeq = page.at(-1)!.startSeq
+          }
           actions = []
           let afterSeq = 0
           for (;;) {
@@ -152,6 +163,7 @@ export class PokerReadService {
           hand = data.hand
           participants = data.seats
           actions = data.actions
+          rolls = data.rolls
         }
         if (!participants.some((s) => s.userId === userId))
           reject("POKER_SEAT_NOT_FOUND", "只能读取本人参与的手牌。")
@@ -193,7 +205,9 @@ export class PokerReadService {
               ? { hole: s.holeCards }
               : {}),
           })),
-          actions: actions.map((a) => ({
+          rollHistory: actions.filter(a => a.rollId && a.action.startsWith("roll_")).flatMap(a => { const roll = rolls.find(r => r.id === a.rollId); return roll ? [publicRoll(roll, a, participants)] : [] }),
+          privateRolls: rolls.filter(r => r.userId === userId && participants.some(p => p.userId === userId && p.admissionId === r.admissionId && p.seatNo === r.seatNo)).map(privateRoll),
+          actions: actions.filter(a => !a.action.startsWith("roll_")).map((a) => ({
             seq: a.seq,
             seatNo: a.seatNo,
             street: a.street,
@@ -294,7 +308,7 @@ export class PokerReadService {
       ), contributions AS (
         SELECT all_moves.*,COALESCE(blinds."bigBlind",2) AS "bigBlind",sum("amount") OVER(PARTITION BY "handId","street","seatNo" ORDER BY "seq")
           + CASE WHEN "street"='preflop' THEN COALESCE(blinds.blind,0) ELSE 0 END AS "streetBetAfter"
-        FROM all_moves LEFT JOIN blinds USING("handId","seatNo")
+        FROM all_moves LEFT JOIN blinds USING("handId","seatNo") WHERE "action" NOT IN ('roll_start','roll_choose')
       ), prior_bets AS (
         SELECT *,GREATEST(CASE WHEN "street"='preflop' THEN "bigBlind" ELSE 0 END,
           max("streetBetAfter") OVER(PARTITION BY "handId","street" ORDER BY "seq" ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)) AS "priorBet"

@@ -6,7 +6,7 @@ import { HallService } from "../hall/hall.service"
 import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
-import { resolveRules, type PokerVariant } from "./engine/rules"
+import { resolveRules, ROLL_PRICING_VERSION, type PokerVariant } from "./engine/rules"
 import type { PokerResumeCheckpoint } from "@synapse/shared/game-contracts"
 import { nextHandEligible } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
@@ -49,7 +49,7 @@ export class PokerService {
           async (tx) => {
             const [room] = await tx.$queryRaw<
               GamePokerRoom[]
-            >`SELECT "id", "code", "name", "ownerUserId", "mode", "variant", "nextHandAt", "botActionAt", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
+            >`SELECT "id", "code", "name", "ownerUserId", "mode", "variant", "ruleOptions", "rollPricingVersion", "nextHandAt", "botActionAt", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
             if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
             const seats = await tx.gamePokerSeat.findMany({
               where: { roomId: room.id },
@@ -75,7 +75,7 @@ export class PokerService {
   }
   async createRoom(
     userId: string,
-    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice"; variant?: PokerVariant; blindPreset?: string },
+    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice"; variant?: PokerVariant; blindPreset?: string; ruleOptions?: { roll?: boolean } },
   ) {
     if (
       !Number.isInteger(input.maxSeats) ||
@@ -88,7 +88,8 @@ export class PokerService {
     let rules
     try {
       const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)
-      rules = resolveRules({ variant: input.variant, smallBlind, bigBlind })
+      if (input.ruleOptions && (Object.keys(input.ruleOptions).some(key => key !== "roll") || (input.ruleOptions.roll !== undefined && typeof input.ruleOptions.roll !== "boolean"))) throw new Error("Invalid rule options")
+      rules = resolveRules({ variant: input.variant, smallBlind, bigBlind, ...(input.ruleOptions ? { ruleOptions: input.ruleOptions } : {}), ...(input.ruleOptions?.roll ? { rollPricingVersion: ROLL_PRICING_VERSION } : {}) })
     } catch {
       reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库和盲注档位。")
     }
@@ -167,10 +168,13 @@ export class PokerService {
         const seatNo = Array.from({ length: room.maxSeats }, (_, i) => i).find(
           (n) => !seats.some((s) => s.seatNo === n),
         )!
+        const admissionId = randomUUID()
+        await this.lockFunds(c, [userId])
         await this.hall.join(
           tx,
           userId,
           {
+            admissionId,
             gameKind: "poker",
             gameRoomId: room.id,
             roomCode: code,
@@ -183,6 +187,7 @@ export class PokerService {
         )
         const seat = await tx.gamePokerSeat.create({
           data: {
+            id: admissionId,
             roomId: room.id,
             userId,
             seatNo,
@@ -245,7 +250,14 @@ export class PokerService {
       now,
     )
   }
+  /** Lock the complete points participant set before any session/asset mutation. */
+  async lockFunds(c: RoomContext, additional: string[] = []) {
+    if (c.room.mode === "practice" || !(c.room.ruleOptions as { roll?: boolean } | null)?.roll) return
+    const participants = c.room.currentHandId ? await c.tx.gamePokerHandSeat.findMany({ where: { handId: c.room.currentHandId }, take: 10 }) : []
+    await this.hall.lockAccounts(c.tx, [...additional, ...participants.filter(p => p.participantKind !== "bot").map(p => p.userId), ...c.seats.filter(s => s.participantKind !== "bot").map(s => s.userId)])
+  }
   async refund(c: RoomContext, seat: GamePokerSeat) {
+    await this.lockFunds(c)
     if (seat.participantKind !== "bot")
       await this.hall.leave(c.tx, seat.userId, "poker", c.room.id, c.room.mode === "practice" ? 0 : seat.stack, c.now)
     await c.tx.gamePokerSeat.delete({ where: { id: seat.id } })
@@ -370,6 +382,7 @@ export class PokerService {
           return { pending: true }
         }
         if (hand && hand.status !== "settled") {
+          await this.hall.voidTransfers(c.tx, hand.id, now)
           await c.tx.gamePokerHand.update({
             where: { id: hand.id },
             data: { status: "cancelled", endedAt: now,
