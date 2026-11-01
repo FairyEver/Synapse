@@ -3,7 +3,10 @@ export interface PokerRules {
   variant: PokerVariant
   smallBlind: number
   bigBlind: number
+  ruleOptions?: { roll?: boolean }
+  rollPricingVersion?: string
 }
+export const ROLL_PRICING_VERSION = "roll-v1"
 export const BLIND_LEVELS = [[1, 2], [2, 4], [5, 10], [10, 20]] as const
 /** Missing historical snapshots retain the original 52-card, 1/2 rules. */
 export function resolveRules(input: Partial<PokerRules> = {}): PokerRules {
@@ -12,5 +15,10 @@ export function resolveRules(input: Partial<PokerRules> = {}): PokerRules {
   if (!["standard52", "short32"].includes(variant) ||
       !BLIND_LEVELS.some(([small, big]) => small === smallBlind && big === bigBlind))
     throw new Error("无效扑克规则")
-  return { variant, smallBlind, bigBlind }
+  if (input.ruleOptions?.roll && input.rollPricingVersion !== ROLL_PRICING_VERSION)
+    throw new Error("POKER_ROLL_VERSION_UNSUPPORTED")
+  return { variant, smallBlind, bigBlind,
+    ...(input.ruleOptions ? { ruleOptions: { ...input.ruleOptions } } : {}),
+    ...(input.rollPricingVersion !== undefined ? { rollPricingVersion: input.rollPricingVersion } : {}),
+  }
 }

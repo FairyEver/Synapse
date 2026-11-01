@@ -4,10 +4,15 @@ import { compareHands } from "./hand"
 import { after, seatOrder } from "./seat-order"
 import { splitPots, distribute } from "./pots"
 import { applyBet, betToMatch, type Decision, type EngineSeat, type BettingState } from "./betting"
+import { assertHandIntegrity, type RollState } from "./roll"
+export { quoteRoll, startRoll, chooseRollCard, assertHandIntegrity, ROLL_PRICING_VERSION } from "./roll"
+export type { RollHistory, RollKind, RollState, RollQuote, RollOffer } from "./roll"
 export { legalActions } from "./betting"
 export interface HandState extends BettingState, PokerRules {
   street: "preflop" | "flop" | "turn" | "river" | "settled"
   dealerSeat: number
+  burnedCards?: string[]
+  roll?: RollState
   board: string[]
   deck: string[]
   seats: EngineSeat[]
@@ -38,6 +43,7 @@ export function startHand(
     street: "preflop",
     dealerSeat,
     board: [],
+    burnedCards: [],
     deck: [...deck],
     currentBet: snapshot.bigBlind,
     minRaise: snapshot.bigBlind,
@@ -59,6 +65,14 @@ export function startHand(
   for (let n = 0; n < 2; n++)
     for (const no of order.postflop)
       h.seats.find((s) => s.seatNo === no)!.hole.push(h.deck.shift()!)
+  if (snapshot.ruleOptions?.roll) h.roll = {
+    counts: Object.fromEntries(h.seats.map(s => [s.seatNo, 0])),
+    paid: Object.fromEntries(h.seats.map(s => [s.seatNo, 0])),
+    credits: Object.fromEntries(h.seats.map(s => [s.seatNo, 0])),
+    released: false,
+    originalHoles: Object.fromEntries(h.seats.map(s => [s.seatNo, [...s.hole]])),
+    history: [], pending: null,
+  }
   for (const [no, blind] of [
     [order.smallBlind, snapshot.smallBlind],
     [order.bigBlind, snapshot.bigBlind],
@@ -72,20 +86,27 @@ export function startHand(
   }
   h.actionOnSeat = order.preflop.find((no) => !h.seats.find((s) => s.seatNo === no)!.allIn) ?? null
   progress(h, order.bigBlind)
+  assertHandIntegrity(h)
   return h
 }
 export function act(state: HandState, seatNo: number, decision: Decision): HandState {
+  if (state.roll?.pending) throw new Error("POKER_ROLL_CHOICE_REQUIRED")
+  assertHandIntegrity(state)
   const h = applyBet(state, seatNo, decision)
   progress(h, seatNo)
+  assertHandIntegrity(h)
   return h
 }
 /** Timeout checks are recorded by the service, but the departed seat always forfeits the hand. */
 export function removeFromHand(state: HandState, seatNo: number): HandState {
+  if (state.roll?.pending) throw new Error("POKER_ROLL_CHOICE_REQUIRED")
+  assertHandIntegrity(state)
   const h = structuredClone(state)
   const p = h.seats.find((s) => s.seatNo === seatNo)
   if (!p) return h
   p.folded = true
   progress(h, seatNo)
+  assertHandIntegrity(h)
   return h
 }
 function progress(h: HandState, last: number): void {
@@ -111,7 +132,8 @@ function progress(h: HandState, last: number): void {
     settle(h, true)
     return
   }
-  h.deck.shift() // burn
+  const burned = h.deck.shift()!
+  h.burnedCards?.push(burned)
   const count = h.street === "preflop" ? 3 : 1
   h.board.push(...h.deck.splice(0, count))
   h.street = h.street === "preflop" ? "flop" : h.street === "flop" ? "turn" : "river"
@@ -170,11 +192,12 @@ function settle(h: HandState, showdown: boolean): void {
       h.seats.find((s) => s.seatNo === Number(no))!.stack += amount
     }
   }
-  if (
-    h.seats.reduce((sum, s) => sum + s.stack, 0) !==
-    h.seats.reduce((sum, s) => sum + s.startingStack, 0)
-  )
-    throw new Error("筹码不守恒")
   h.street = "settled"
   h.actionOnSeat = null
+  assertHandIntegrity(h)
+  if (h.roll && !h.roll.released) {
+    for (const s of h.seats) s.stack += h.roll.credits[s.seatNo] ?? 0
+    h.roll.released = true
+    assertHandIntegrity(h)
+  }
 }
