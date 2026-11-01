@@ -35,15 +35,16 @@ const url = gameTestDatabaseUrl()
     let now = new Date(Date.now() + 2000)
     for (let step = 0; step < 1400; step++) {
       const state = await actions.state(u, code)
-      if (state.handNo >= 51 || state.status !== "running") break
+      if (state.handNo >= 51) break
       if (state.street === "settled") { now = await advanceNextHand(actions, code); continue }
+      if (state.status !== "running") break
       const active = state.seats.find((s) => s.seatNo === state.actionOnSeat)!
       if (active.participantKind === "bot") await scopedBotTask(actions, code).scan(now)
       else await actions.act(u, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: state.toCall ? "call" : "check" }, now)
       now = new Date(now.getTime() + 1100)
     }
     expect((await actions.state(u, code)).handNo).toBeGreaterThanOrEqual(51)
-    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, netProfit: 0 })
+    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, pending: 0, netProfit: 0 })
   }, 30000)
   it("最后真人暂离后本手结束即暂停，机器人不自转", async () => {
     const { u, code } = await room()

@@ -56,7 +56,7 @@ suite("真实Postgres房间事务", () => {
     })
     const view = await hall.overview(userId)
     expect(view.sessions).toHaveLength(1001)
-    expect(view.points).toEqual({ available: 500, inPlay: 2002, total: 2502, netProfit: 1001 })
+    expect(view.points).toEqual({ available: 500, inPlay: 2002, pending: 0, total: 2502, netProfit: 1001 })
   })
   it("大厅截止时间按UTC解释数据库timestamp，不受服务器本地时区影响", async () => {
     const a = randomUUID(),

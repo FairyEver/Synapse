@@ -37,6 +37,7 @@ const url = gameTestDatabaseUrl()
       total: 1000000,
       available: 1000000,
       inPlay: 0,
+      pending: 0,
       netProfit: 0,
     })
     expect((await hall.overview(t.userId)).sessions).toEqual([])

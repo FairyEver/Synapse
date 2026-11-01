@@ -31,7 +31,7 @@ function ScopedSettlementPanel({ table, onOpen, compact, ready }: Props & { read
       <Modal.Container size="lg" placement="center" scroll="inside"><Modal.Dialog className="poker-result-dialog sm:max-w-3xl">
         <Modal.CloseTrigger aria-label="关闭结算，返回牌桌" />
         <Modal.Header><p className="pr-8 text-xs text-muted">第 {currentSettlement.handNo} 手 · {currentSettlement.rules.variant === "short32" ? "32 张短牌" : "标准德州扑克"} · 盲注 {currentSettlement.rules.smallBlind} / {currentSettlement.rules.bigBlind}</p><Modal.Heading>本局结算</Modal.Heading></Modal.Header>
-        <Modal.Body className="min-h-0 text-foreground"><SettlementDetails key={currentSettlement.handId} settlement={currentSettlement} />
+        <Modal.Body className="min-h-0 text-foreground"><SettlementDetails key={currentSettlement.handId} settlement={currentSettlement} mode={table.mode} />
           {table.awaitingReady && <section className="mt-5 border-t border-separator pt-4" aria-label="下一手准备状态"><h3 className="mb-3 text-sm font-medium">下一手准备 <span className="text-muted">{progress.ready} / {progress.seats.length}</span></h3><ul className="poker-result-ready-list">{progress.seats.map(seat => <li key={seat.seatNo}><span className="min-w-0">{seat.displayName}{seat.isMe && "（你）"}</span><span className="flex shrink-0 items-center gap-1 text-xs text-muted">{seat.readyForNextHand && <Check size={13} aria-hidden="true" />}{seat.readyForNextHand ? "已准备" : "待准备"}</span></li>)}</ul></section>}
           {ready.error && <div className="mt-4 space-y-2"><p role="alert" className="text-sm text-danger">{ready.error}</p><Button variant="secondary" onPress={() => { void ready.refresh() }}>刷新牌桌</Button></div>}
         </Modal.Body>

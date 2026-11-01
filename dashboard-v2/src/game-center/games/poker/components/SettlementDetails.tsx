@@ -1,12 +1,13 @@
 import { useRef, useState } from "react"
 import { Accordion, Button, Chip, Tabs } from "@heroui/react"
 import { Trophy } from "lucide-react"
-import type { PokerSettlementView } from "@synapse/shared/game-contracts"
+import type { GameFunding, PokerSettlementView } from "@synapse/shared/game-contracts"
 import { Card } from "./Card"
 import { amount } from "../lib/view"
 import { invested, settlementView } from "../lib/settlement-view"
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${amount(Math.abs(n))}`
-export function SettlementDetails({ settlement }: { settlement: PokerSettlementView }) {
+export function SettlementDetails({ settlement, mode = "points" }: { settlement: PokerSettlementView; mode?: GameFunding }) {
+  const unit = mode === "practice" ? "筹码" : "点数"
   const view = settlementView(settlement)
   const [selected, setSelected] = useState(view.won[0]?.seatNo ?? settlement.seats[0]?.seatNo)
   const best = useRef<HTMLElement>(null)
@@ -17,7 +18,7 @@ export function SettlementDetails({ settlement }: { settlement: PokerSettlementV
   return <div className="poker-result-details">
     <section className="poker-result-outcome" aria-label="本局输赢">
       <div className="poker-result-winner"><span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-soft-foreground"><Trophy aria-hidden="true" /></span><div className="min-w-0"><h2>{view.title}</h2><p className="text-sm text-muted">{view.pots[0]?.reason ?? "查看全员结算和底池分配"}</p></div></div>
-      {view.mine && <div className="poker-result-net"><span className="text-xs text-muted">你的本局净{view.mine.delta > 0 ? "赢" : view.mine.delta < 0 ? "输" : "变化"}</span><strong className={view.mine.delta > 0 ? "text-success-soft-foreground" : ""}>{signed(view.mine.delta)}<small className="text-muted">点数</small></strong><span className="text-xs text-muted">收回 {amount(view.mine.payout)} · 下注投入 {amount(invested(view.mine))}</span>{settlement.rules.ruleOptions?.roll && <span className="text-xs text-muted">Roll 支出 {amount(view.mine.rollPaid ?? 0)} · 补偿 {amount(view.mine.rollReceived ?? 0)}</span>}</div>}
+      {view.mine && <div className="poker-result-net"><span className="text-xs text-muted">你的本局净{view.mine.delta > 0 ? "赢" : view.mine.delta < 0 ? "输" : "变化"}</span><strong className={view.mine.delta > 0 ? "text-success-soft-foreground" : ""}>{signed(view.mine.delta)}<small className="text-muted">{unit}</small></strong><span className="text-xs text-muted">收回 {amount(view.mine.payout)} · 下注投入 {amount(invested(view.mine))}</span>{settlement.rules.ruleOptions?.roll && <span className="text-xs text-muted">Roll 支出 {amount(view.mine.rollPaid ?? 0)} · 补偿 {amount(view.mine.rollReceived ?? 0)}</span>}</div>}
     </section>
     <section className="poker-result-board" aria-label="公共牌"><div className="flex flex-wrap justify-between gap-2 text-sm"><span>公共牌</span><span className="text-muted">底池 {amount(view.total)}</span></div><div className="poker-result-cards" data-card-size="sm">{Array.from({ length: 5 }, (_, i) => <Card key={i} card={settlement.board[i]} />)}</div></section>
     {player?.bestFive && <section ref={best} className="poker-result-best rounded-xl bg-surface-secondary" aria-label={`${player.displayName}的最佳五张牌`} aria-live="polite">

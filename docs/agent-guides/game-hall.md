@@ -105,4 +105,6 @@ V2 牌桌底部和结算 Footer 共用准备/接管执行器与进度，关闭�
 
 V2使用既有玩法入口打开HeroUI系统Modal，原手牌槽/两档报价/次数/确认和候选单选均按需显示；超级可关闭后重开，下注持续禁止。AI控制时先本人接管，原候选不变。账号/房间隔离未知写入，手/阶段/序号/控制变化清理未提交选择；表格公开视角移除私有候选与报价。结算/记录分别展示Roll支出、补偿与总净变化，不以获胜标签代替盈亏。
 
-当前game29、全局372 capability/368 MCP，Web27项UI操作、游戏IPC0，无新增System App/Dock/Workflow/Automation/Deep Link。两个REST路径为 `/game/poker/rooms/:code/roll/start` 和 `/game/poker/rooms/:code/roll/choose`；服务端只信入口来源。权威Skill/API参考位置不变。部署必须先应用20261101090000_game_roll_frozen_transfers迁移；本轮未执行迁移、真实DB或浏览器验收、部署。不得把既有系统UI浏览器验收记录当作本次Roll验收。
+当前game29、全局372 capability/368 MCP，Web27项UI操作、游戏IPC0，无新增System App/Dock/Workflow/Automation/Deep Link。两个REST路径为 `/game/poker/rooms/:code/roll/start` 和 `/game/poker/rooms/:code/roll/choose`；服务端只信入口来源。权威Skill/API参考位置不变。部署必须先应用20261101090000_game_roll_frozen_transfers迁移；2026-11-01 开发阶段未执行迁移、真实DB或浏览器验收、部署。不得把既有系统UI浏览器验收记录当作本次Roll验收。
+
+2026-11-02 后续授权验收已完成本机 `_e2e` 专用库迁移、真实 game PostgreSQL 套件、真人浏览器、真实 Codex MCP 与自主陪练机器人流程，详见 [Roll 真实验收记录](../superpowers/acceptance/2026-11-02-poker-roll-live-acceptance.md)。此结果不代表生产已迁移或部署；陪练结算净变化单位为筹码，点数房为点数，练习资产不兑换点数。

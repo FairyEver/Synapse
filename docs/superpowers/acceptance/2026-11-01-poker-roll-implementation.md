@@ -1,5 +1,7 @@
 # Roll 玩法实现与验证记录
 
+后续用户已授权并完成本机专用数据库与真实浏览器验收，见 [2026-11-02 真实验收记录](2026-11-02-poker-roll-live-acceptance.md)。本文“未执行”描述保留为开发阶段的历史状态；生产库仍未迁移，未部署或 push。
+
 工作仓库 `/Users/liyang/Documents/code/github/Synapse`，分支 `main`，2026-11-01。按用户批准的 [实施计划](../plans/2026-11-01-poker-roll-implementation.md) 原地开发，不新建分支或 worktree，不新增依赖。本记录区分已验证逻辑与未执行的真实环境验收。
 
 ## 实现范围与版本

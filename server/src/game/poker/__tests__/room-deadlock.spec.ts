@@ -99,6 +99,7 @@ const url = gameTestDatabaseUrl()
       total: 1000000,
       available: 1000000,
       inPlay: 0,
+      pending: 0,
       netProfit: 0,
     })
     expect(await db.gameSession.count({ where: { userId, status: "closed" } })).toBe(2)
@@ -113,6 +114,7 @@ const url = gameTestDatabaseUrl()
       total: 1000000,
       available: 999000,
       inPlay: 1000,
+      pending: 0,
       netProfit: 0,
     })
     expect(await db.gamePokerSeat.count({ where: { userId } })).toBe(1)

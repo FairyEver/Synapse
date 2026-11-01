@@ -9,7 +9,7 @@ import { PokerBotService } from "../poker-bot.service"
 import { gameTestDatabaseUrl } from "./test-database"
 import { startHand } from "../engine/hand-runner"
 import { orderedDeck } from "../engine/deck"
-import { saveHand } from "../poker-lifecycle"
+import { engine, saveHand } from "../poker-lifecycle"
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("程序机器人陪练生命周期", () => {
   const db = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://localhost/unused_e2e" } } }) as PrismaService
@@ -31,7 +31,7 @@ const url = gameTestDatabaseUrl()
     await poker.join(u, code, {})
     const state = await actions.state(u, code)
     expect(state).toMatchObject({ mode: "practice", handNo: 1, status: "running" })
-    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, netProfit: 0 })
+    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, pending: 0, netProfit: 0 })
     expect((await hall.overview(u)).sessions[0]).toMatchObject({ funding: "practice" })
     expect(state.seats.find((s) => s.participantKind === "bot")?.hole).toBeUndefined()
     await expect(actions.act(seat.userId, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "call" })).rejects.toThrow()
@@ -82,7 +82,7 @@ const url = gameTestDatabaseUrl()
     await poker.join(u, code2, {})
     await poker.leave(u, code2)
     await poker.close(u, code)
-    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, netProfit: 0 })
+    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, pending: 0, netProfit: 0 })
     expect(await db.gameSession.findMany({ where: { userId: u } })).toEqual(expect.arrayContaining([expect.objectContaining({ inPlay: 0, buyIn: 0, returned: 0, status: "closed" })]))
   })
   it.each(["leave", "close", "timeout"])("手中%s和计分桌退款并发仍不兑换练习筹码", async (exit) => {
@@ -100,7 +100,7 @@ const url = gameTestDatabaseUrl()
       if (exit !== "close") await actions.act(u, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "fold" })
     }
     expect((await actions.state(u, code)).status).toBe(exit === "close" ? "closed" : "paused")
-    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, netProfit: 0 })
+    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, pending: 0, netProfit: 0 })
     expect(await db.gameSession.findFirst({ where: { userId: u, funding: "practice" } })).toMatchObject({ status: "closed", buyIn: 0, inPlay: 0, returned: 0 })
   })
   it.each(["bot", "human"])("%s输光立即移出，不补筹码也不增加账户点数", async (loser) => {
@@ -112,7 +112,7 @@ const url = gameTestDatabaseUrl()
       const prefix = loser === "bot" ? ["Ks", "As", "Kh", "Ah"] : ["As", "Ks", "Ah", "Kh"]
       prefix.push("4d", "2s", "3h", "7d", "5c", "9c", "6h", "Jd")
       const deck = [...prefix, ...orderedDeck().filter((card) => !prefix.includes(card))]
-      const h = startHand(c.seats.map((s) => ({ seatNo: s.seatNo, stack: s.participantKind === loser ? 2 : 1000 })), 0, deck)
+      const h = startHand(c.seats.map((s) => ({ seatNo: s.seatNo, stack: s.participantKind === loser ? 2 : 1000 })), 0, deck, engine(hand))
       for (const seat of h.seats) await c.tx.gamePokerHandSeat.updateMany({ where: { handId: hand.id, seatNo: seat.seatNo }, data: { startingStack: seat.startingStack, holeCards: seat.hole } })
       await saveHand(poker, c, hand, h)
     })
@@ -127,6 +127,6 @@ const url = gameTestDatabaseUrl()
     expect(after.seats.find((s) => s.seatNo === losingSeatNo)).toMatchObject({ stack: 0, status: "left" })
     if (loser === "human") expect(after.mySeatNo).toBeNull()
     expect(await db.gamePokerBot.count({ where: { id: bot.botId } })).toBe(1)
-    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, netProfit: 0 })
+    expect((await hall.overview(u)).points).toEqual({ total: 1000000, available: 1000000, inPlay: 0, pending: 0, netProfit: 0 })
   })
 })

@@ -98,3 +98,8 @@ it("Roll支出与补偿分列，总净变化不替代普通下注投入",async()
   expect(fields).toMatchObject({投入:"30",收回:"40","Roll 支出":"8","Roll 补偿":"10",总净变化:"+12"})
   await act(async()=>screen.root.unmount())
 })
+it.each(["points","practice"] as const)("%s结算的Roll净变化使用实际资金单位",async mode=>{
+  const screen=await render({...table,mode})
+  expect(document.querySelector('.poker-result-net strong small')?.textContent).toBe(mode==="practice"?"筹码":"点数")
+  await act(async()=>screen.root.unmount())
+})
