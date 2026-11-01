@@ -104,8 +104,8 @@ export default function MailPage({ search }: {
       <Drawer.Backdrop isOpen={selectedId !== null} onOpenChange={(open) => { if (!open)
         setSelectedId(null); }}>
         <Drawer.Content placement="right"><Drawer.Dialog className='sm:max-w-xl'><Drawer.CloseTrigger />
-          <Drawer.Header>
-            <Drawer.Heading>{detailQuery.data?.subject ?? '站内信详情'}</Drawer.Heading>
+          <Drawer.Header className='pe-10'>
+            <Drawer.Heading className='min-w-0 wrap-anywhere'>{detailQuery.data?.subject ?? '站内信详情'}</Drawer.Heading>
             <p className='sr-only'>查看站内信正文和往来记录</p>
           </Drawer.Header>
           <Drawer.Body>

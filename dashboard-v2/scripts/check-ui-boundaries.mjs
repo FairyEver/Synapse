@@ -59,6 +59,16 @@ async function inspect(directory) {
         const name = tag(node)
         const [rootName, slot] = name.split('.')
         const component = heroComponents.get(rootName)
+        if (ts.isJsxElement(node) && slot === 'Dialog' && ['Modal', 'Drawer', 'AlertDialog'].includes(component)) {
+          let hasStandardHeader = false
+          const findHeader = (child) => {
+            if (tag(child) === `${rootName}.Header`) hasStandardHeader = true
+            ts.forEachChild(child, findHeader)
+          }
+          ts.forEachChild(node, findHeader)
+          const classes = attribute(node, 'className')?.getText(source) ?? ''
+          if (hasStandardHeader && /(?:^|[\s'"`])(?:[\w-]+:)*(?:p|px|py|ps|pe|pt|pb|pl|pr)-0(?=[\s'"`]|$)/u.test(classes)) report(node, 'HeroUI standard dialog headers rely on Dialog padding; do not reset it to zero')
+        }
         const isSurfaceField = (!slot && surfaceFieldComponents.has(component)) || (slot === 'Group' && ['DateField', 'TimeField'].includes(component))
         if (isSurfaceField && isOnWhiteSurface(node)) {
           const variant = attribute(node, 'variant')

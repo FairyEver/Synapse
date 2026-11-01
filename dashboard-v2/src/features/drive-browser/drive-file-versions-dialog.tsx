@@ -133,59 +133,55 @@ export function DriveFileVersionsDialog({
         <Modal.Container>
           <Modal.Dialog
             data-drive-telemetry-scope='portal'
-            className='gap-0 overflow-hidden p-0 sm:max-w-3xl'
+            className='sm:max-w-3xl'
             aria-describedby={undefined}
           >
             <Modal.CloseTrigger />
-            <div>
-              <Modal.Header>
-                <Modal.Heading>{'\u5386\u53F2\u7248\u672C'}</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body className='px-6 py-4'>
-                <div className='h-105 w-[calc(100%+0.75rem)] overflow-y-auto py-1 pe-3'>
-                  <DriveFileVersionContent
-                    itemId={itemId}
-                    versions={versions}
-                    loading={versionsQuery.isLoading}
-                    error={
-                      versions.length === 0 &&
-                      versionsQuery.error instanceof Error
-                        ? versionsQuery.error.message
-                        : null
-                    }
-                    loadMoreError={
-                      versions.length > 0 &&
-                      versionsQuery.isFetchNextPageError &&
-                      versionsQuery.error instanceof Error
-                        ? versionsQuery.error.message
-                        : null
-                    }
-                    pinningVersionId={pinMutation.variables?.versionId ?? null}
-                    pinning={pinMutation.isPending}
-                    hasMore={versionsQuery.hasNextPage}
-                    loadingMore={versionsQuery.isFetchingNextPage}
-                    onRetry={() => {
-                      void versionsQuery.refetch()
-                    }}
-                    onLoadMore={() => {
-                      void versionsQuery.fetchNextPage()
-                    }}
-                    onPin={(version) =>
-                      pinMutation.mutate({
-                        versionId: version.id,
-                        isPinned: !version.isPinned,
-                      })
-                    }
-                    onRestore={(version) =>
-                      setConfirmTarget({ action: 'restore', version })
-                    }
-                    onDelete={(version) =>
-                      setConfirmTarget({ action: 'delete', version })
-                    }
-                  />
-                </div>
-              </Modal.Body>
-            </div>
+            <Modal.Header>
+              <Modal.Heading>{'\u5386\u53F2\u7248\u672C'}</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <DriveFileVersionContent
+                itemId={itemId}
+                versions={versions}
+                loading={versionsQuery.isLoading}
+                error={
+                  versions.length === 0 &&
+                  versionsQuery.error instanceof Error
+                    ? versionsQuery.error.message
+                    : null
+                }
+                loadMoreError={
+                  versions.length > 0 &&
+                  versionsQuery.isFetchNextPageError &&
+                  versionsQuery.error instanceof Error
+                    ? versionsQuery.error.message
+                    : null
+                }
+                pinningVersionId={pinMutation.variables?.versionId ?? null}
+                pinning={pinMutation.isPending}
+                hasMore={versionsQuery.hasNextPage}
+                loadingMore={versionsQuery.isFetchingNextPage}
+                onRetry={() => {
+                  void versionsQuery.refetch()
+                }}
+                onLoadMore={() => {
+                  void versionsQuery.fetchNextPage()
+                }}
+                onPin={(version) =>
+                  pinMutation.mutate({
+                    versionId: version.id,
+                    isPinned: !version.isPinned,
+                  })
+                }
+                onRestore={(version) =>
+                  setConfirmTarget({ action: 'restore', version })
+                }
+                onDelete={(version) =>
+                  setConfirmTarget({ action: 'delete', version })
+                }
+              />
+            </Modal.Body>
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>

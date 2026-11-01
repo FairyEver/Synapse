@@ -463,7 +463,7 @@ function ApiKeyUsageDialog({ apiKey, onOpenChange, }: {
     ], []);
     return (<Modal.Backdrop isOpen={Boolean(apiKey)} onOpenChange={onOpenChange}><Modal.Container><Modal.Dialog className='sm:max-w-5xl'>
         <Modal.Header>
-          <Modal.Heading>{apiKey?.name ?? ''} 使用记录</Modal.Heading>
+          <Modal.Heading className='min-w-0 wrap-anywhere'>{apiKey?.name ?? ''} 使用记录</Modal.Heading>
           <p className='sr-only'>API 密钥使用记录</p>
         </Modal.Header>
         <Modal.Body>

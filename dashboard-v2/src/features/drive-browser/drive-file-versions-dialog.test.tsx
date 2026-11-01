@@ -59,7 +59,7 @@ afterEach(() => {
 })
 
 describe('DriveFileVersionContent', () => {
-  it('renders a labelled HeroUI dialog with a bounded scroll body', async () => {
+  it('renders labelled version history in the native dialog body', async () => {
     vi.mocked(driveFileVersionsApi.list).mockResolvedValue({
       items: [],
       page: { limit: 100, offset: 0, nextOffset: null, hasMore: false },
@@ -70,9 +70,11 @@ describe('DriveFileVersionContent', () => {
         '历史版本'
       )
     )
-    expect(
-      document.querySelector('[data-slot="modal-body"] .h-105')
-    ).not.toBeNull()
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-slot="modal-body"]')?.textContent
+      ).toContain('暂无历史版本')
+    })
     expect(
       document.querySelector('[data-slot="modal-close-trigger"]')
     ).not.toBeNull()

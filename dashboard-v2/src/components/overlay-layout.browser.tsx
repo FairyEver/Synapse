@@ -105,3 +105,28 @@ describe('overlay spacing and icon sizing', () => {
     })
   }
 })
+
+for (const width of [390, 1280]) {
+  it(`keeps an 80-character API key usage title inside the dialog at ${width}px`, async () => {
+    await page.viewport(width, 800)
+    const name = 'A'.repeat(80)
+    vi.spyOn(dashboardApi, 'listApiKeys').mockResolvedValue([{
+      id: 'long-title-key', name, prefix: 'fixture', scopes: [], lastUsedAt: null, createdAt: '2026-11-01T00:00:00Z',
+    }])
+    vi.spyOn(dashboardApi, 'listApiKeyCapabilities').mockResolvedValue([])
+    vi.spyOn(dashboardApi, 'listApiKeyUsageLogs').mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 10 })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    await render(<QueryClientProvider client={client}><ApiKeysSettings /></QueryClientProvider>)
+    await page.getByRole('button', { name: '使用记录', exact: true }).click()
+    const heading = page.getByRole('heading', { name: `${name} 使用记录`, exact: true }).element()
+    const dialog = page.getByRole('dialog').element()
+    await expect.poll(() => dialog.closest('[data-slot="modal-backdrop"]')!.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')).toBe(false)
+    const bounds = dialog.getBoundingClientRect()
+    const range = document.createRange()
+    range.selectNodeContents(heading)
+    for (const rect of range.getClientRects()) {
+      expect(rect.left).toBeGreaterThanOrEqual(bounds.left + 20)
+      expect(rect.right).toBeLessThanOrEqual(bounds.right - 20)
+    }
+  })
+}

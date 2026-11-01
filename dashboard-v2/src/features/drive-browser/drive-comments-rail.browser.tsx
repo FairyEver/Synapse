@@ -1,7 +1,7 @@
 import './reader.css'
 import '@/styles/globals.css'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { userEvent } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { render } from 'vitest-browser-react'
 import {
   DriveCommentsRail,
@@ -71,6 +71,57 @@ describe('未定位评论弹窗横向布局', () => {
     expect.soft(measurements.sendRight).toBeLessThanOrEqual(dialogRight + 0.5)
   })
 })
+
+
+for (const width of [390, 1280]) {
+  describe(`未定位评论弹窗几何 ${width}px`, () => {
+    it('标题保留内边距且少量评论按内容收缩', async () => {
+      await page.viewport(width, 900)
+      await openDialog([orphanedThread('内部子工作流')])
+      const dialog = await waitForElement('[data-markdown-comments-unlocated-dialog]')
+      const header = dialog.querySelector('[data-slot="modal-header"]') as HTMLElement
+      const close = dialog.querySelector('[data-slot="modal-close-trigger"]') as HTMLElement
+      const card = dialog.querySelector('[data-markdown-comment-thread-id]') as HTMLElement
+      await vi.waitFor(() => expect(dialog.getAnimations().some((animation) => animation.playState === 'running')).toBe(false))
+      const bounds = dialog.getBoundingClientRect()
+      const title = header.getBoundingClientRect()
+      expect.soft(title.left - bounds.left).toBeGreaterThanOrEqual(20)
+      expect.soft(title.top - bounds.top).toBeGreaterThanOrEqual(20)
+      expect.soft(bounds.bottom - card.getBoundingClientRect().bottom).toBeLessThan(80)
+      expect.soft(close.getBoundingClientRect().right).toBeLessThan(bounds.right)
+      expect.soft(bounds.right).toBeLessThanOrEqual(width)
+      await page.screenshot({ path: `/tmp/synapse-unlocated-${width}.png` })
+    })
+
+    it('长评论只在正文区域滚动，标题和关闭按钮保持可见', async () => {
+      await page.viewport(width, 600)
+      const items = Array.from({ length: 12 }, (_, index) => {
+        const item = orphanedThread(LONG_QUOTE)
+        return { ...item, thread: { ...item.thread, id: `thread-${index}`, comments: item.thread.comments.map((comment) => ({ ...comment, id: `comment-${index}`, threadId: `thread-${index}` })) } }
+      })
+      await openDialog(items)
+      const dialog = await waitForElement('[data-markdown-comments-unlocated-dialog]')
+      const scroll = await waitForElement('[data-drive-comments-dialog-scroll]')
+      expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight)
+      const header = dialog.querySelector('[data-slot="modal-header"]')!
+      const headerTop = header.getBoundingClientRect().top
+      scroll.scrollTop = scroll.scrollHeight
+      expect(header.getBoundingClientRect().top).toBe(headerTop)
+      expect(dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(600)
+      expect(scroll.getBoundingClientRect().bottom).toBeLessThanOrEqual(dialog.getBoundingClientRect().bottom)
+    })
+  })
+}
+
+async function openDialog(threads: readonly DriveCommentsRailItem[]) {
+  await render(<DriveCommentsRail mode='anchored' threads={threads} activeThreadId={null} canReply={false}
+    onFocusThread={vi.fn()} onReply={vi.fn(async () => undefined)} onUpdateComment={vi.fn(async () => undefined)}
+    onUpdateThreadStatus={vi.fn(async () => undefined)} onDeleteComment={vi.fn(async () => undefined)} />)
+  await userEvent.click(await waitForElement('[data-markdown-comments-unlocated] button'))
+  const dialog = await waitForElement('[data-markdown-comments-unlocated-dialog]')
+  const backdrop = dialog.closest('[data-slot="modal-backdrop"]')!
+  await vi.waitFor(() => expect(backdrop.getAnimations({ subtree: true }).some((animation) => animation.playState === 'running')).toBe(false))
+}
 
 async function waitForElement(selector: string): Promise<HTMLElement> {
   let found: HTMLElement | null = null

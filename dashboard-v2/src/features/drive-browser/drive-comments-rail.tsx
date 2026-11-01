@@ -510,47 +510,40 @@ function UnlocatedCommentsDialog({
         <Modal.Dialog
           data-drive-telemetry-scope='portal'
           data-markdown-comments-unlocated-dialog='true'
-          className='h-[min(44rem,calc(100svh-2rem))] gap-0 overflow-hidden p-0 sm:max-w-2xl'
+          className='max-h-[min(44rem,calc(100svh-2rem))] sm:max-w-2xl'
         >
           <Modal.CloseTrigger aria-label='关闭' />
-          <div className='flex min-h-0 flex-1 flex-col'>
-            <Modal.Header>
-              <Modal.Heading>{'\u672A\u5B9A\u4F4D\u8BC4\u8BBA'}</Modal.Heading>
-              <p>{`${threads.length} 条评论无法定位到当前文档`}</p>
-            </Modal.Header>
-            <Modal.Body>
-              <div
-                data-drive-comments-dialog-scroll='true'
-                className='h-full min-h-0 overflow-y-auto'
-              >
-                <div className='space-y-2 p-4'>
-                  {threads.map((item) => (
-                    <div
-                      key={item.thread.id}
-                      data-markdown-comment-thread-id={item.thread.id}
-                    >
-                      <ThreadView
-                        notificationLoading={loading}
-                        thread={item.thread}
-                        positionUnavailable={
-                          item.placement.status === 'unavailable' &&
-                          item.thread.anchorStatus !== 'orphaned'
-                        }
-                        active={item.thread.id === activeThreadId}
-                        canReply={canReply}
-                        compact={compact}
-                        onFocusThread={onFocusThread}
-                        onReply={onReply}
-                        onUpdateThreadStatus={onUpdateThreadStatus}
-                        onUpdateComment={onUpdateComment}
-                        onDeleteComment={onDeleteComment}
-                      />
-                    </div>
-                  ))}
+          <Modal.Header>
+            <Modal.Heading>{'\u672A\u5B9A\u4F4D\u8BC4\u8BBA'}</Modal.Heading>
+            <p>{`${threads.length} 条评论无法定位到当前文档`}</p>
+          </Modal.Header>
+          <Modal.Body data-drive-comments-dialog-scroll='true'>
+            <div className='space-y-2'>
+              {threads.map((item) => (
+                <div
+                  key={item.thread.id}
+                  data-markdown-comment-thread-id={item.thread.id}
+                >
+                  <ThreadView
+                    notificationLoading={loading}
+                    thread={item.thread}
+                    positionUnavailable={
+                      item.placement.status === 'unavailable' &&
+                      item.thread.anchorStatus !== 'orphaned'
+                    }
+                    active={item.thread.id === activeThreadId}
+                    canReply={canReply}
+                    compact={compact}
+                    onFocusThread={onFocusThread}
+                    onReply={onReply}
+                    onUpdateThreadStatus={onUpdateThreadStatus}
+                    onUpdateComment={onUpdateComment}
+                    onDeleteComment={onDeleteComment}
+                  />
                 </div>
-              </div>
-            </Modal.Body>
-          </div>
+              ))}
+            </div>
+          </Modal.Body>
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>

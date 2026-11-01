@@ -326,7 +326,7 @@ export function DriveDocumentEditorRecoveryDialogs({
               <AlertDialog.Heading>放弃本地修改？</AlertDialog.Heading>
               <p>重新加载会用服务器内容覆盖当前未保存编辑。</p>
             </AlertDialog.Header>
-            <AlertDialog.Footer>
+            <AlertDialog.Footer className='flex-wrap'>
               <Button slot='close' variant='tertiary'>
                 取消
               </Button>
@@ -363,7 +363,7 @@ export function DriveDocumentEditorRecoveryDialogs({
               <AlertDialog.Heading>文件已有新内容</AlertDialog.Heading>
               <p>你的编辑仍保留，可以下载到本地或重新加载。</p>
             </AlertDialog.Header>
-            <AlertDialog.Footer>
+            <AlertDialog.Footer className='flex-wrap'>
               <Button slot='close' variant='tertiary'>
                 取消
               </Button>

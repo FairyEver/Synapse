@@ -11,8 +11,8 @@ type DetailSheetProps = {
 export function WebhookDeliveryHistoryDetailSheet({ delivery, open, onOpenChange, }: DetailSheetProps) {
     return (<Drawer.Backdrop isOpen={open} onOpenChange={onOpenChange}>
       <Drawer.Content placement="right"><Drawer.Dialog className='sm:max-w-xl'><Drawer.CloseTrigger />
-        <Drawer.Header>
-          <Drawer.Heading>{delivery?.webhook.name ?? '详情'}</Drawer.Heading>
+        <Drawer.Header className='pe-10'>
+          <Drawer.Heading className='min-w-0 wrap-anywhere'>{delivery?.webhook.name ?? '详情'}</Drawer.Heading>
         </Drawer.Header>
         {delivery ? (<Drawer.Body className='flex flex-col gap-4'>
             <div className='flex flex-wrap items-center gap-2'>
