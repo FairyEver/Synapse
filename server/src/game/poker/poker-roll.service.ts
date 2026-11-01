@@ -37,10 +37,16 @@ export class PokerRollService {
       return previous.response as unknown as PokerRollResult
     }
     const seat = c.seats.find(s => s.userId === userId)
-    if (!seat || (source === "rules_bot" ? c.room.mode !== "practice" || seat.participantKind !== "bot" : source !== "timeout" && seat.participantKind === "bot")) reject("POKER_SEAT_NOT_FOUND", "座位不存在。")
+    if (!seat || (source === "rules_bot"
+      ? c.room.mode !== "practice" || seat.participantKind !== "bot"
+      : source !== "timeout" && seat.participantKind === "bot"))
+      reject("POKER_SEAT_NOT_FOUND", "座位不存在。")
     if (source === "human" || source === "mcp") assertController(seat, source, input.controlVersion)
     const hand = c.room.currentHandId ? await c.tx.gamePokerHand.findUnique({ where: { id: c.room.currentHandId } }) : null
-    if (c.room.status !== "running" || !hand || hand.status !== "running" || hand.id !== input.handId || hand.actionSeq !== input.expectedActionSeq || !c.room.actionDeadlineAt || (source !== "timeout" && c.now >= c.room.actionDeadlineAt)) reject("POKER_STALE_ACTION", "行动已过期，请重新读取牌桌。")
+    if (c.room.status !== "running" || !hand || hand.status !== "running" ||
+        hand.id !== input.handId || hand.actionSeq !== input.expectedActionSeq ||
+        !c.room.actionDeadlineAt || (source !== "timeout" && c.now >= c.room.actionDeadlineAt))
+      reject("POKER_STALE_ACTION", "行动已过期，请重新读取牌桌。")
     const participants = await c.tx.gamePokerHandSeat.findMany({ where: { handId: hand.id }, take: 10 })
     const participant = participants.find(p => p.admissionId === seat.id && p.userId === userId && p.seatNo === seat.seatNo)
     const state = engine(hand)
@@ -67,16 +73,70 @@ export class PokerRollService {
     const rollId = operation === "start" ? input.actionId : (input as PokerRollChooseInput).rollId
     const record = next.roll!.history.find(r => r.id === rollId)!, seq = hand.actionSeq + 1
     if (operation === "start") {
-      await c.tx.gamePokerRoll.create({ data: { id: rollId, roomId: c.room.id, handId: hand.id, userId, admissionId: seat.id, seatNo: seat.seatNo, startSeq: seq, data: json(record), createdAt: c.now, completedAt: record.selectedIndex === null ? null : c.now } })
+      await c.tx.gamePokerRoll.create({ data: {
+        id: rollId,
+        roomId: c.room.id,
+        handId: hand.id,
+        userId,
+        admissionId: seat.id,
+        seatNo: seat.seatNo,
+        startSeq: seq,
+        data: json(record),
+        createdAt: c.now,
+        completedAt: record.selectedIndex === null ? null : c.now,
+      } })
       await this.poker.hall.freezeTransfers(c.tx, Object.entries(record.compensations).filter(([, amount]) => amount > 0).map(([seatNo, amount]) => {
         const recipient = participants.find(p => p.seatNo === Number(seatNo))
         if (!recipient?.admissionId) throw new Error("Roll recipient admission missing")
-        return { sourceId: rollId, settlementId: hand.id, gameKind: "poker", gameRoomId: c.room.id, userId: recipient.userId, admissionId: recipient.admissionId, funding: c.room.mode === "practice" ? "practice" as const : "points" as const, amount }
+        return {
+          sourceId: rollId,
+          settlementId: hand.id,
+          gameKind: "poker",
+          gameRoomId: c.room.id,
+          userId: recipient.userId,
+          admissionId: recipient.admissionId,
+          funding: c.room.mode === "practice" ? "practice" as const : "points" as const,
+          amount,
+        }
       }), c.now)
-    } else await c.tx.gamePokerRoll.update({ where: { id: rollId }, data: { data: json(record), chooseSeq: seq, completedAt: c.now } })
-    const result: PokerRollResult = { ok: true, handId: hand.id, rollId, actionSeq: seq, cursor: `${hand.handNo}:${seq}`, status: next.roll!.pending ? "choice_required" : "completed" }
-    await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq, seatNo: seat.seatNo, street: hand.street, action: `roll_${operation}`, actionSource: source, isAuto: source === "timeout", amount: 0, rollId, potAfter: next.seats.reduce((n,s) => n+s.total,0), elapsedMs: Math.max(0,c.now.getTime() - (c.room.actionDeadlineAt.getTime() - ACTION_WINDOW_MS)), actionId: input.actionId, response: json(result), createdAt: c.now } })
-    await c.tx.gamePokerActionReceipt.create({ data: { actionId: input.actionId, userId, roomId: c.room.id, requestHash, response: json(result), createdAt: c.now } })
+    } else await c.tx.gamePokerRoll.update({
+      where: { id: rollId },
+      data: { data: json(record), chooseSeq: seq, completedAt: c.now },
+    })
+    const result: PokerRollResult = {
+      ok: true,
+      handId: hand.id,
+      rollId,
+      actionSeq: seq,
+      cursor: `${hand.handNo}:${seq}`,
+      status: next.roll!.pending ? "choice_required" : "completed",
+    }
+    await c.tx.gamePokerAction.create({ data: {
+      handId: hand.id,
+      roomId: c.room.id,
+      userId,
+      seq,
+      seatNo: seat.seatNo,
+      street: hand.street,
+      action: `roll_${operation}`,
+      actionSource: source,
+      isAuto: source === "timeout",
+      amount: 0,
+      rollId,
+      potAfter: next.seats.reduce((n,s) => n+s.total,0),
+      elapsedMs: Math.max(0,c.now.getTime() - (c.room.actionDeadlineAt.getTime() - ACTION_WINDOW_MS)),
+      actionId: input.actionId,
+      response: json(result),
+      createdAt: c.now,
+    } })
+    await c.tx.gamePokerActionReceipt.create({ data: {
+      actionId: input.actionId,
+      userId,
+      roomId: c.room.id,
+      requestHash,
+      response: json(result),
+      createdAt: c.now,
+    } })
     await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: seq } })
     if (source === "human" || source === "mcp") await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { lastSeenAt: c.now } })
     await saveHand(this.poker, c, hand, next, { preserveDeadline: true })

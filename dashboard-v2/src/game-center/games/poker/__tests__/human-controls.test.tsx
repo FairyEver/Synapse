@@ -1,10 +1,12 @@
 /** @vitest-environment jsdom */
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { HumanControls } from "../components/HumanControls"
 import { canvasFit, mergeTableEvents } from "../lib/table-layout"
+import { projectTable } from "../lib/view"
+import { rollIntentStore } from "../lib/roll-intent-store"
 import { betPresets } from "../lib/action-view"
 const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), join: vi.fn(), sit: vi.fn(), leave: vi.fn(), state: vi.fn(), rollStart: vi.fn(), rollChoose: vi.fn() }))
 vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { roll: {start:api.rollStart,choose:api.rollChoose}, table: { state: api.state }, action: { act: api.act }, control: { set: api.control }, seat: { join: api.join, sit: api.sit, leave: api.leave } } }) }))
@@ -84,6 +86,46 @@ describe("真人牌桌操作", () => {
   await act(async()=>button(host,"完成换牌").click())
   expect(document.body.querySelectorAll('input[type="radio"]')).toHaveLength(3)
   expect(button(document.body,"确认选择").disabled).toBe(true)
+  await act(async()=>root.unmount())
+ })
+
+ it("超级待选时旁观快捷入口可切回本人，恢复原候选且不新抽", async () => {
+  api.rollChoose.mockResolvedValue({ok:true})
+  const pending={rollId:"super-public-original",cardIndex:1,candidates:["2c","3c","4c"]}
+  const value={...table,hole:["As","Kd"],roll:{enabled:true,count:1,pending,pendingSeatNo:0}}
+  function Perspective() {
+    const [perspective,setPerspective]=useState<"owner"|"public">("public")
+    return <HumanControls identityKey="pending-public-switch" table={projectTable(value,perspective)} perspective={perspective} onPerspective={setPerspective} onRefresh={vi.fn()}/>
+  }
+  const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+  await act(async()=>root.render(<Perspective/>))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(button(host,"切回玩家视角").disabled).toBe(false)
+  await act(async()=>button(host,"切回玩家视角").click())
+  expect([...document.querySelectorAll('[role="dialog"] [aria-label]')].map(el=>el.getAttribute("aria-label"))).toEqual(expect.arrayContaining(["候选 1 2c","候选 2 3c","候选 3 4c"]))
+  expect(button(host,"弃牌").disabled).toBe(true)
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="2"]')!.click())
+  await act(async()=>button(document.body,"确认选择").click())
+  expect(api.rollChoose).toHaveBeenCalledWith(expect.objectContaining({rollId:pending.rollId,candidateIndex:2}))
+  expect(api.rollStart).not.toHaveBeenCalled()
+  await act(async()=>root.unmount())
+ })
+ it("未知Roll请求不阻挡纯视角切换，也不因此重新提交", async () => {
+  const scope={identityKey:"unknown-public-switch",roomCode:table.roomCode}
+  const intent={operation:"start" as const,input:{roomCode:table.roomCode,handId:table.handId!,street:"flop" as const,expectedActionSeq:3,controlVersion:4,actionId:"12345678-1234-4234-a234-123456789012",kind:"super" as const,cardIndex:1,expectedFee:8}}
+  rollIntentStore.save(scope,intent)
+  const value={...table,roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true}}}
+  function Perspective() {
+    const [perspective,setPerspective]=useState<"owner"|"public">("public")
+    return <HumanControls identityKey={scope.identityKey} table={projectTable(value,perspective)} perspective={perspective} onPerspective={setPerspective} onRefresh={vi.fn()}/>
+  }
+  const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+  await act(async()=>root.render(<Perspective/>))
+  expect(button(host,"切回玩家视角").disabled).toBe(false)
+  await act(async()=>button(host,"切回玩家视角").click())
+  expect(button(host,"弃牌").disabled).toBe(true)
+  expect(rollIntentStore.getSnapshot(scope).intent).toEqual(intent)
+  expect(api.rollStart).not.toHaveBeenCalled();expect(api.rollChoose).not.toHaveBeenCalled()
   await act(async()=>root.unmount())
  })
 

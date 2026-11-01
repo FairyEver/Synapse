@@ -137,7 +137,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const recovery = mine && table.status !== "closed" && !acting ? <div className="flex flex-wrap gap-2 font-sans text-foreground scheme-light" aria-label="恢复牌桌操作">
     {controller !== "human" && <Button isDisabled={busy || uncertain || roll.blocked || version == null} onPress={() => void takeover()}>本人接管</Button>}
     {controller === "human" && mine.status === "sitting_out" && <Button isDisabled={disabled || version == null} onPress={() => void sit()}>回到牌桌</Button>}
-    {controller === "human" && perspective === "public" && onPerspective && <Button isDisabled={disabled} onPress={() => onPerspective("owner")}>切回玩家视角</Button>}
+    {controller === "human" && perspective === "public" && onPerspective && <Button isDisabled={busy || uncertain || nextHand.busy} onPress={() => onPerspective("owner")}>切回玩家视角</Button>}
     {handoff && <><Button variant="secondary" isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
   </div> : null
   const rollEntry = perspective === "owner" && mine && table.roll?.enabled && table.status === "running" && (acting || rollPending || roll.uncertain) && <PokerButton className="poker-roll-trigger" disabled={busy || uncertain || nextHand.busy} aria-expanded={panel === "roll"} onClick={() => {setAllInAction(null);setPanel("roll")}}>{rollPending ? "完成换牌" : roll.uncertain ? "核对换牌" : "Roll 换牌"}</PokerButton> || (roll.uncertain || roll.storageError ? <Button size="sm" variant="secondary" isDisabled={roll.busy} onPress={()=>void roll.retry()}>{roll.storageError ? "重试恢复记录" : "核对原换牌请求"}</Button> : null)

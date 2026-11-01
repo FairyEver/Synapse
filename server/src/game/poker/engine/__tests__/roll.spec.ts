@@ -17,6 +17,8 @@ describe("Roll pricing and compatibility", () => {
     expect(quoteRoll(startHand([{ seatNo: 0, stack: 10 }, { seatNo: 1, stack: 10 }], 0, orderedDeck()), 0).enabled).toBe(false)
     expect(() => resolveRules({ ruleOptions: { roll: true } })).toThrow()
     expect(() => resolveRules({ ...rules, rollPricingVersion: "future" })).toThrow()
+    expect(() => resolveRules({ ...rules, rollPricingVersion: null })).toThrow("POKER_ROLL_VERSION_UNSUPPORTED")
+    expect(resolveRules({ ruleOptions: {}, rollPricingVersion: null })).not.toHaveProperty("rollPricingVersion")
   })
   it.each([['preflop', 3, 8], ['flop', 6, 14], ['turn', 16, 31]] as const)("prices %s using public capped money", (street, normal, superFee) => {
     const h = hand(2)

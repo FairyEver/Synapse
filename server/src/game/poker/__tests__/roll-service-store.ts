@@ -1,3 +1,4 @@
+import type { GamePokerRoom } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import { createHallStore } from "../../hall/__tests__/hall-store"
 import { HallService } from "../../hall/hall.service"
@@ -5,10 +6,10 @@ import { PokerService } from "../poker.service"
 import { startNext } from "../poker-lifecycle"
 import type { RoomContext } from "../poker.service"
 // Only persistence is doubled. Room transactions, engine and Hall accounting are real.
-export async function rollStore(mode = "points", count = 3) {
+export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePokerRoom, "ruleOptions" | "rollPricingVersion">) {
   const db = createHallStore(10000), hall = new HallService(db.prisma)
   const now = new Date("2026-11-01T00:00:00Z")
-  const room: any = { id: "room", code: "1234", ownerUserId: "u", name: "table", status: "waiting", mode, maxSeats: 10, buyIn: 500, variant: "standard52", smallBlind: 1, bigBlind: 2, ruleOptions: { roll: true }, rollPricingVersion: "roll-v1", handNo: 0, dealerSeat: 0, currentHandId: null, createdAt: now }
+  const room: any = { id: "room", code: "1234", ownerUserId: "u", name: "table", status: "waiting", mode, maxSeats: 10, buyIn: 500, variant: "standard52", smallBlind: 1, bigBlind: 2, ruleOptions: { roll: true }, rollPricingVersion: "roll-v1", handNo: 0, dealerSeat: 0, currentHandId: null, createdAt: now, ...rules }
   const seats: any[] = [], hands: any[] = [], participants: any[] = [], actions: any[] = [], receipts: any[] = [], rolls: any[] = [], summaries: any[] = [], archives: any[] = []
   const matches = (row: any, where: any = {}): boolean => Object.entries(where).every(([k, v]: any) => {
     if (k === "OR") return v.some((part: any) => matches(row, part))

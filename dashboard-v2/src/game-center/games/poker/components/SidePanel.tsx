@@ -24,6 +24,9 @@ export function SidePanel({
   const recentResults = [...settlements.values()].sort((a, b) => b.handNo - a.handNo).slice(0, 2)
   const [selectedTab, setSelectedTab] = useState("log")
   const canSeeAi = perspective === "owner" && table.mySeatNo !== null
+  const myHandSeat = perspective === "owner" && table.handId
+    ? table.seats.find(seat => seat.isMe && seat.seatNo === table.mySeatNo && !seat.isHistorical && seat.inCurrentHand === true && seat.status !== "left")
+    : undefined
   const tab = selectedTab === "ai" && !canSeeAi ? "log" : selectedTab
   return (
     <aside id={id} className="h-full overflow-y-auto overscroll-contain p-4 pt-12 font-sans text-foreground scheme-light" aria-label="日志和AI判断">
@@ -33,6 +36,10 @@ export function SidePanel({
           {perspective === "owner" && table.mySeatNo !== null && <Tabs.Tab id="ai">AI 判断<Tabs.Indicator /></Tabs.Tab>}
         </Tabs.List></Tabs.ListContainer>
         <Tabs.Panel id="log">
+      {myHandSeat?.pendingCompensation != null && <dl aria-label="本手筹码" className="grid grid-cols-2 gap-x-4 gap-y-2 py-4 text-sm">
+        <dt className="text-muted">可用筹码</dt><dd className="text-right tabular-nums">{amount(myHandSeat.stack)}</dd>
+        <dt className="text-muted">本手待结算补偿</dt><dd className="text-right tabular-nums">{amount(myHandSeat.pendingCompensation)}</dd>
+      </dl>}
       {recentResults.map(result => <Settlement key={result.handId} settlement={result} compact />)}
       <section className="space-y-4 py-4">
         <h3 className="flex items-center gap-2 text-sm font-medium">

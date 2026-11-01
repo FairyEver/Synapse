@@ -52,14 +52,32 @@ describe("visible-information Roll policy", () => {
     o.variant = "short32"; o.hole = ["7s", "8h"]; o.board = []
     expect(chooseBotRollCandidate(o, 0, ["9c", "As", "8c"])).toBe(2)
   })
-  it("handles known returned cards and invalidates certainty after public opponent Roll or a new board", () => {
-    const o = observation(); o.hole = ["2s", "3h"]
+  it("stops a marginal Roll when an opponent may have taken the known returned cards", () => {
+    const o = observation()
+    o.hole = ["Kh", "3h"]
+    o.originalPlayerCount = 10; o.remainingDeckCount = 32
+    o.effectivePot = 5000; o.effectiveFuture = 1000
     o.privateHistory = [{ ordinal: 0, boardCount: 0, oldCard: "As", candidates: ["Kh", "Kd", "Kc"], selectedIndex: 0 }]
     o.history = [{ seatNo: 0, kind: "super", count: 1, fee: 2 }]
-    expect(() => chooseBotRoll(o)).not.toThrow()
+    o.quote.normal = { fee: 336, available: true }
+    o.quote.super.available = false
+    expect(chooseBotRoll(o)).toEqual({ kind: "normal", cardIndex: 1, fee: 336 })
     o.history.push({ seatNo: 1, kind: "normal", count: 1, fee: 1 })
-    expect(() => chooseBotRoll(o)).not.toThrow()
-    o.board = ["Ac", "Ad", "Tc"]
-    expect(() => chooseBotRoll(o)).not.toThrow()
+    expect(chooseBotRoll(o)).toBeNull()
+  })
+  it("does not treat preflop returns as certain after the flop is dealt", () => {
+    const o = observation()
+    o.hole = ["Kh", "3h"]; o.board = ["Ac", "Ad", "Tc"]; o.street = "flop"
+    o.originalPlayerCount = 10; o.remainingDeckCount = 28; o.burnedCount = 1
+    o.effectivePot = 5000; o.effectiveFuture = 1000
+    o.history = [{ seatNo: 0, kind: "super", count: 1, fee: 2 }]
+    o.privateHistory = [{ ordinal: 0, boardCount: 0, oldCard: "As", candidates: ["Kh", "Kd", "Kc"], selectedIndex: 0 }]
+    o.quote.normal = { fee: 175, available: true }
+    o.quote.super.available = false
+    expect(chooseBotRoll(o)).toBeNull()
+    // The same visible returns made on this street remain usable knowledge.
+    const returnedAfterFlop = structuredClone(o)
+    returnedAfterFlop.privateHistory[0].boardCount = 3
+    expect(chooseBotRoll(returnedAfterFlop)).toEqual({ kind: "normal", cardIndex: 1, fee: 175 })
   })
 })
