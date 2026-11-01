@@ -138,6 +138,13 @@ Renderers must not render a file-level top bar with `border-b` for save, reload,
 
 ## UI Rules
 
+### Dashboard V2 document toolbar (2026-11-01)
+
+- The current V2 contract is defined in `dashboard-v2/CLAUDE.md` and `DESIGN.md`. Reading and rich-text editing use a host-owned HeroUI `Toolbar`. Renderer contributions declare an optional `group` label; the host joins adjacent contributions with the same label without knowing renderer-specific action IDs.
+- Outline, annotations and messages share a native `ButtonGroup` with `Button` children. Only the outer ends are rounded; internal joins are straight. Grouped toggles preserve `aria-pressed` and their existing panel behavior, while messages remains an ordinary jump action. Standalone toggles may use `ToggleButton`; do not put `ToggleButton` inside `ButtonGroup` and compensate for unsupported connected styling with a rounded background or CSS overrides.
+- These three controls use text and counts. Width, renderer selection and more actions stay outside their group and retain dropdown arrows. This does not remove icons or selection indicators from expanded menus or annotation-rail controls.
+- Compact mode preserves the group, touch height, overflow handling and original panel exclusivity. Keep document scrolling, outline anchors, annotation geometry and message focus unchanged. Visual acceptance includes actual regular/compact group corners and dropdown indicators as well as interaction regressions; respect repository authorization before starting browsers or applications.
+
 ### Dashboard V2 expanded menus (2026-11-01)
 
 - V2 follows `dashboard-v2/CLAUDE.md` and `DESIGN.md` for HeroUI rather than the historical V1 shadcn presentation below. Regular and compact preview headers share system-action menu items with explicit 16px decorative icons, standard Label/Description slots and textValue for keyboard search.
