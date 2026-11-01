@@ -1,0 +1,272 @@
+{
+  "standard52:2:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_2_preflop.jsonl.gz",
+    "sha256": "9c66906454008f48cc2048128aef038978ae7e4f971395f7900b1430b0e170e6"
+  },
+  "standard52:2:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_2_flop.jsonl.gz",
+    "sha256": "d33180e37126c07fd7101a81b3691cc40a180f3b7869c7b3d9677fb05c46e247"
+  },
+  "standard52:2:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_2_turn.jsonl.gz",
+    "sha256": "22ecbd16747c08dfda9c0659e9a8ad5de35cf718d5b132c0a2f85b2103aafa15"
+  },
+  "standard52:3:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_3_preflop.jsonl.gz",
+    "sha256": "d56f3efe07193219b22896c6c599c7a14af65666443e42855a156cd07d590681"
+  },
+  "standard52:3:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_3_flop.jsonl.gz",
+    "sha256": "9d1405796c2bdf0cc4957bebda7df996c2d495218ab10276fa58197c96b40611"
+  },
+  "standard52:3:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_3_turn.jsonl.gz",
+    "sha256": "fe3fece44c2c1c878c77b1d2f7059241fff09d2564e0305f3184712847e5567b"
+  },
+  "standard52:4:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_4_preflop.jsonl.gz",
+    "sha256": "12ee1dbc401a9ef3527a6df19fe5d9867dff3031ee3f276ee0eb8a95d794f076"
+  },
+  "standard52:4:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_4_flop.jsonl.gz",
+    "sha256": "444866637a8dc2995dcc87ccfddff1c5116aa91215232e597586901318f7701d"
+  },
+  "standard52:4:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_4_turn.jsonl.gz",
+    "sha256": "e131ec3629ed0c671fafd2aae97fc289db262c5c317b81bff86eda9c1e5ae669"
+  },
+  "standard52:5:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_5_preflop.jsonl.gz",
+    "sha256": "79e28d5f657902baecf42410c49a0eedf8ed0adf197d76fe4870fbce704d6907"
+  },
+  "standard52:5:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_5_flop.jsonl.gz",
+    "sha256": "3b5ec6613c7dbc32464f9b0d8138b2420091fd1de4a77856d07d334f219b5911"
+  },
+  "standard52:5:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_5_turn.jsonl.gz",
+    "sha256": "39d33734735d275c858aa5beb3bfedf7fc90ae93722bed4e01bd47152ceb19a0"
+  },
+  "standard52:6:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_6_preflop.jsonl.gz",
+    "sha256": "acf498e1b66f76cc02690a60222a97a18d3155404114219d3c51e610e94558eb"
+  },
+  "standard52:6:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_6_flop.jsonl.gz",
+    "sha256": "ffaa33858ed4f668b29d59f85b7235ed0d722263f1eb884e8d3bdf10236fa32e"
+  },
+  "standard52:6:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_6_turn.jsonl.gz",
+    "sha256": "a55e482cb58394a52ac4e1dfae4dd2802472bb5b4b36b2700c59f1a3ce907bfd"
+  },
+  "standard52:7:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_7_preflop.jsonl.gz",
+    "sha256": "c0a49c0b76abe2e2a41da9bb6c75a4e20d7621f07b2e178b1d9e4a28525fb1af"
+  },
+  "standard52:7:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_7_flop.jsonl.gz",
+    "sha256": "d07dfbabfb97cbcf5fd5286fd87c89583918ead4283b8055d643b18cdbf40724"
+  },
+  "standard52:7:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_7_turn.jsonl.gz",
+    "sha256": "a472ef5cee5153be401a0fd35aad5adb6ea43bdaadcc6f4a5840efd1d8c4acb1"
+  },
+  "standard52:8:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_8_preflop.jsonl.gz",
+    "sha256": "4d1f35a86d3cc19dcb5edb890b364bf8d67b4f22d1a17dd549d7660555bf6078"
+  },
+  "standard52:8:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_8_flop.jsonl.gz",
+    "sha256": "095794e69d94810843e5f93da800fd46f81317dbdd14bc0603f222052aa99626"
+  },
+  "standard52:8:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_8_turn.jsonl.gz",
+    "sha256": "1ac0f4114f28946bdabf69868ef98c7e585dbc7ba416bdb231eb69973e85bcd2"
+  },
+  "standard52:9:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_9_preflop.jsonl.gz",
+    "sha256": "e49db6d69faab50081d0401fcae0635cfc182bcd34f65cd542d81a28bb9a29a7"
+  },
+  "standard52:9:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_9_flop.jsonl.gz",
+    "sha256": "7f2ea34b466b09cb478048d23852add1f878334798d487bc9d88c4f79f223ab6"
+  },
+  "standard52:9:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_9_turn.jsonl.gz",
+    "sha256": "6113b6a6f5a39b709e2485d771314244b5bf64ae3945e7b49139cd8e5123f777"
+  },
+  "standard52:10:preflop": {
+    "rows": 512,
+    "file": "break-even/standard52_10_preflop.jsonl.gz",
+    "sha256": "8aa514946d8ce145aab6308cd5b4ce752d34e6815e8b15eec8e8a24628652d98"
+  },
+  "standard52:10:flop": {
+    "rows": 512,
+    "file": "break-even/standard52_10_flop.jsonl.gz",
+    "sha256": "c036777965880a3f51482a3210c20a95db7b266c8e955c4c9573b5d6c5fa4513"
+  },
+  "standard52:10:turn": {
+    "rows": 512,
+    "file": "break-even/standard52_10_turn.jsonl.gz",
+    "sha256": "9f3c9605a02e13b7ec46eebb49253b03ab9ca1172af6c9de5fe7316cb2c2ca1f"
+  },
+  "short32:2:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_2_preflop.jsonl.gz",
+    "sha256": "15680a1d5d8df2b7d9d9dad4aa963865b10507fb4b08bc27baf24a8e44a76f17"
+  },
+  "short32:2:flop": {
+    "rows": 512,
+    "file": "break-even/short32_2_flop.jsonl.gz",
+    "sha256": "641e6b62ffe90c8ca006f6f39cf237c08774c8135b49c86a1d20ae5d8cb6b207"
+  },
+  "short32:2:turn": {
+    "rows": 512,
+    "file": "break-even/short32_2_turn.jsonl.gz",
+    "sha256": "41eb16c0ddc60c327111496ee8673ad1fab8def8bc191604c93fae0293fdaa8d"
+  },
+  "short32:3:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_3_preflop.jsonl.gz",
+    "sha256": "3d4ad5f47564a1b7fbe0778c38182cd3154ba566bdf905dc949e4b2d3887e7ad"
+  },
+  "short32:3:flop": {
+    "rows": 512,
+    "file": "break-even/short32_3_flop.jsonl.gz",
+    "sha256": "5766f96f13cabe306afb6a6fa75dace067c8c13dd24b679ee45804d9e35d3a91"
+  },
+  "short32:3:turn": {
+    "rows": 512,
+    "file": "break-even/short32_3_turn.jsonl.gz",
+    "sha256": "906d3103325415c534a86f7a90e6780b9de7e3a4ff02ef9958f68e057191448c"
+  },
+  "short32:4:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_4_preflop.jsonl.gz",
+    "sha256": "6b5b3896a9d53712d19d9618d5a959c5c09651156ede4b2e092f4775e1c3c7d0"
+  },
+  "short32:4:flop": {
+    "rows": 512,
+    "file": "break-even/short32_4_flop.jsonl.gz",
+    "sha256": "67ce1019a686548850158a8838f4237e400dc647d0acd3a9ebed1ba12dcdac86"
+  },
+  "short32:4:turn": {
+    "rows": 512,
+    "file": "break-even/short32_4_turn.jsonl.gz",
+    "sha256": "35d727214d210d7a9ba6e1a839dd39d491284fdd833e38eced192dca38b88ccb"
+  },
+  "short32:5:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_5_preflop.jsonl.gz",
+    "sha256": "b338753bb2fff51caef5029e02bab4c402248614b2ea20b439d3fd452128f6aa"
+  },
+  "short32:5:flop": {
+    "rows": 512,
+    "file": "break-even/short32_5_flop.jsonl.gz",
+    "sha256": "d068f92e2f79bb4cffa52738ef78543dbaebb57af2c28c6fb0226c12b4c4c7ae"
+  },
+  "short32:5:turn": {
+    "rows": 512,
+    "file": "break-even/short32_5_turn.jsonl.gz",
+    "sha256": "fe4dc2aa248e85fa9e07e6488507ad4c11764d62ae30ce17da1b24be25ac9ce2"
+  },
+  "short32:6:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_6_preflop.jsonl.gz",
+    "sha256": "b919146a053c6a7d0cf792014f137bf3c0a0011370669b2b9f634bd95a0e4d1d"
+  },
+  "short32:6:flop": {
+    "rows": 512,
+    "file": "break-even/short32_6_flop.jsonl.gz",
+    "sha256": "39e9c0f7b36d5bb87b977186987a622e1d4b47be4be7b56f84efa659f4b7ea66"
+  },
+  "short32:6:turn": {
+    "rows": 512,
+    "file": "break-even/short32_6_turn.jsonl.gz",
+    "sha256": "d610145bac9b12134d4221d192c8a08f857a149bec1716c68520ac9dd1835921"
+  },
+  "short32:7:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_7_preflop.jsonl.gz",
+    "sha256": "81b60559b5bcb87ccd127ab285b966676f853763dbabb503d7b3d8a6d1169c4b"
+  },
+  "short32:7:flop": {
+    "rows": 512,
+    "file": "break-even/short32_7_flop.jsonl.gz",
+    "sha256": "b10b67ccbf200f9443afc3c598291c3d61870f638fdedfd7790e6c57e45732e8"
+  },
+  "short32:7:turn": {
+    "rows": 512,
+    "file": "break-even/short32_7_turn.jsonl.gz",
+    "sha256": "bde6bdec749d8dba2413c06e99d463247b852b289372c0d1de6606c2b5944e3a"
+  },
+  "short32:8:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_8_preflop.jsonl.gz",
+    "sha256": "3db4bacea57d4f9ffc4d41edb8a9403e68f43ace7a4b2d0172838b04756b7ff1"
+  },
+  "short32:8:flop": {
+    "rows": 512,
+    "file": "break-even/short32_8_flop.jsonl.gz",
+    "sha256": "f43b35b932f996d7292f15e1a135e48ebdfa7aceb720c09567a51b9f9aabd513"
+  },
+  "short32:8:turn": {
+    "rows": 512,
+    "file": "break-even/short32_8_turn.jsonl.gz",
+    "sha256": "c881d5ef03a7ccfb299ef88decafafff3d4f22d9c665ec964f8f5919f49fd348"
+  },
+  "short32:9:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_9_preflop.jsonl.gz",
+    "sha256": "c92d44696528af25e3ce65c961745b53b14d52666187b8b70de409063dc37c70"
+  },
+  "short32:9:flop": {
+    "rows": 512,
+    "file": "break-even/short32_9_flop.jsonl.gz",
+    "sha256": "9a9e9c57856efd84037fbbc3b073ccf9cf81a904d3188b85c3f468fe2e2ac35f"
+  },
+  "short32:9:turn": {
+    "rows": 512,
+    "file": "break-even/short32_9_turn.jsonl.gz",
+    "sha256": "20049d75a082a0b26f98e40bee6d33621c4da55eff706afc3bf0bcc3d6530ed3"
+  },
+  "short32:10:preflop": {
+    "rows": 512,
+    "file": "break-even/short32_10_preflop.jsonl.gz",
+    "sha256": "76b7507bcf7ddf883f31ce0aa6f2c0f185607f7a264e92cdf3d8a5eebf952dcc"
+  },
+  "short32:10:flop": {
+    "rows": 512,
+    "file": "break-even/short32_10_flop.jsonl.gz",
+    "sha256": "39317d178424aa2c2f919558c1e96242bdf22c5989530aad5ef31f40bca224c7"
+  },
+  "short32:10:turn": {
+    "rows": 512,
+    "file": "break-even/short32_10_turn.jsonl.gz",
+    "sha256": "ca6d21fd24d61e24fb4e531c4001b2874dac2973f00de9be8a190df240330325"
+  }
+}

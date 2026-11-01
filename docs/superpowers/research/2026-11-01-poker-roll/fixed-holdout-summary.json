@@ -1,0 +1,2787 @@
+{
+  "model": {
+    "scale": 0.1,
+    "curve": "linear",
+    "growth": 1,
+    "coefficients": {
+      "normal": [
+        2.0769729295825945,
+        0,
+        0.002398960264309668
+      ],
+      "super": [
+        9.291026560456745,
+        0.17829001771254815,
+        0.009794183477432333
+      ]
+    },
+    "cells": {
+      "standard52:2:preflop": {
+        "normal": [
+          0,
+          0,
+          0.07488902674613357
+        ],
+        "super": [
+          0,
+          0,
+          0.17404326257395553
+        ]
+      },
+      "standard52:2:flop": {
+        "normal": [
+          0,
+          0.9999489008863852,
+          0
+        ],
+        "super": [
+          0,
+          0,
+          0.09895976279230116
+        ]
+      },
+      "standard52:2:turn": {
+        "normal": [
+          0,
+          0,
+          0.0161223223681551
+        ],
+        "super": [
+          0,
+          0.5003803488838836,
+          0.08278763018722606
+        ]
+      },
+      "standard52:3:preflop": {
+        "normal": [
+          0,
+          0,
+          0.004562506909464524
+        ],
+        "super": [
+          0,
+          0,
+          0.03688708744161691
+        ]
+      },
+      "standard52:3:flop": {
+        "normal": [
+          0,
+          0,
+          0.006260766182445117
+        ],
+        "super": [
+          0,
+          0,
+          0.03782209451040422
+        ]
+      },
+      "standard52:3:turn": {
+        "normal": [
+          0.3474646642029606,
+          0,
+          0.018206953789576232
+        ],
+        "super": [
+          0,
+          0,
+          0.07593571686405785
+        ]
+      },
+      "standard52:4:preflop": {
+        "normal": [
+          0,
+          2.4087182110108873,
+          0
+        ],
+        "super": [
+          0,
+          2.721667954119778,
+          0
+        ]
+      },
+      "standard52:4:flop": {
+        "normal": [
+          1.6242468400153096,
+          0,
+          0
+        ],
+        "super": [
+          9.704011314842552,
+          0,
+          0.013147610786626369
+        ]
+      },
+      "standard52:4:turn": {
+        "normal": [
+          0,
+          0.20231753651730736,
+          0
+        ],
+        "super": [
+          0,
+          0,
+          0.02628144128354547
+        ]
+      },
+      "standard52:5:preflop": {
+        "normal": [
+          0,
+          0.4440719728731353,
+          0.0022360340610580983
+        ],
+        "super": [
+          0,
+          0,
+          0.018485293340668986
+        ]
+      },
+      "standard52:5:flop": {
+        "normal": [
+          0,
+          0,
+          0.009859836651152625
+        ],
+        "super": [
+          3.77458697397999,
+          0,
+          0
+        ]
+      },
+      "standard52:5:turn": {
+        "normal": [
+          0,
+          0.02342495494397599,
+          0
+        ],
+        "super": [
+          9.745513026291263,
+          0.08264648980006208,
+          0
+        ]
+      },
+      "standard52:6:preflop": {
+        "normal": [
+          0,
+          0,
+          0.0014922273267730145
+        ],
+        "super": [
+          1.9955252898876221,
+          0,
+          0
+        ]
+      },
+      "standard52:6:flop": {
+        "normal": [
+          0,
+          0,
+          0.008068707746284208
+        ],
+        "super": [
+          2.9701357578667547,
+          0,
+          0.006876182873354664
+        ]
+      },
+      "standard52:6:turn": {
+        "normal": [
+          0,
+          0.2879047523307523,
+          0
+        ],
+        "super": [
+          0,
+          0.28501502857917616,
+          0
+        ]
+      },
+      "standard52:7:preflop": {
+        "normal": [
+          0,
+          0.24643475497723213,
+          0
+        ],
+        "super": [
+          0,
+          0,
+          0.000055981403931493314
+        ]
+      },
+      "standard52:7:flop": {
+        "normal": [
+          0,
+          0,
+          0.010538850859953776
+        ],
+        "super": [
+          0,
+          0.2997276157355131,
+          0.018872557819996295
+        ]
+      },
+      "standard52:7:turn": {
+        "normal": [
+          0,
+          0.09939619747130218,
+          0
+        ],
+        "super": [
+          0.4895951209558762,
+          0.2812111204802963,
+          0.00418132682269863
+        ]
+      },
+      "standard52:8:preflop": {
+        "normal": [
+          0,
+          0.24154147211537577,
+          0
+        ],
+        "super": [
+          0,
+          0.28032973698271063,
+          0.0044456654205121335
+        ]
+      },
+      "standard52:8:flop": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          0,
+          1.3366821099192057,
+          0
+        ]
+      },
+      "standard52:8:turn": {
+        "normal": [
+          1.3453868593278144,
+          0,
+          0.0024880237982016187
+        ],
+        "super": [
+          0,
+          0.4886031653127122,
+          0.015153675722091508
+        ]
+      },
+      "standard52:9:preflop": {
+        "normal": [
+          0,
+          0,
+          0.0072361076621136056
+        ],
+        "super": [
+          0,
+          0,
+          0.009158759923931973
+        ]
+      },
+      "standard52:9:flop": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          1.250830998436805,
+          0,
+          0.0043558859394543705
+        ]
+      },
+      "standard52:9:turn": {
+        "normal": [
+          0,
+          0.09523657590556264,
+          0
+        ],
+        "super": [
+          2.8899335268379858,
+          0.2318256888465222,
+          0.005100586457138232
+        ]
+      },
+      "standard52:10:preflop": {
+        "normal": [
+          0,
+          0,
+          0.006064205990573342
+        ],
+        "super": [
+          0,
+          0,
+          0.006345247702589385
+        ]
+      },
+      "standard52:10:flop": {
+        "normal": [
+          0,
+          0.40126805024221135,
+          0.00235874989416735
+        ],
+        "super": [
+          0,
+          1.0215066841356688,
+          0.007307111359312179
+        ]
+      },
+      "standard52:10:turn": {
+        "normal": [
+          0,
+          0,
+          0.001820534655055021
+        ],
+        "super": [
+          0,
+          0.024079946139312147,
+          0.015457888179691806
+        ]
+      },
+      "short32:2:preflop": {
+        "normal": [
+          0,
+          2.109903693217741,
+          0.02007625808535017
+        ],
+        "super": [
+          0,
+          0,
+          0.007331192520462857
+        ]
+      },
+      "short32:2:flop": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          24.543431466177655,
+          0,
+          0.008067726386921978
+        ]
+      },
+      "short32:2:turn": {
+        "normal": [
+          0,
+          0,
+          0.06853012569802207
+        ],
+        "super": [
+          0,
+          0,
+          0.19083070752884082
+        ]
+      },
+      "short32:3:preflop": {
+        "normal": [
+          0,
+          0,
+          0.01745360302781391
+        ],
+        "super": [
+          0,
+          0,
+          0.039849005352087206
+        ]
+      },
+      "short32:3:flop": {
+        "normal": [
+          0,
+          0,
+          0.0410399069652035
+        ],
+        "super": [
+          0,
+          2.0768484472617557,
+          0.0412751309251893
+        ]
+      },
+      "short32:3:turn": {
+        "normal": [
+          0,
+          0.07112774143571282,
+          0.0038171856565794074
+        ],
+        "super": [
+          0,
+          0.5926516355899845,
+          0.07165206667100149
+        ]
+      },
+      "short32:4:preflop": {
+        "normal": [
+          0,
+          0.37998088477660513,
+          0.021015663781881685
+        ],
+        "super": [
+          0,
+          0,
+          0.022646361868537593
+        ]
+      },
+      "short32:4:flop": {
+        "normal": [
+          0,
+          0,
+          0.04948653222345638
+        ],
+        "super": [
+          0,
+          0,
+          0.08487209016667145
+        ]
+      },
+      "short32:4:turn": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          0,
+          0.16043876059126363,
+          0.08614602094873584
+        ]
+      },
+      "short32:5:preflop": {
+        "normal": [
+          0,
+          0.7451022161289503,
+          0.018755402429057984
+        ],
+        "super": [
+          0,
+          0.841713445489505,
+          0.027810244149188337
+        ]
+      },
+      "short32:5:flop": {
+        "normal": [
+          0,
+          0.18569836815832372,
+          0.023315746041376307
+        ],
+        "super": [
+          0,
+          0,
+          0.0666875885918178
+        ]
+      },
+      "short32:5:turn": {
+        "normal": [
+          0,
+          0.3142519846161792,
+          0
+        ],
+        "super": [
+          0,
+          1.3191528974712543,
+          0.024997372868255624
+        ]
+      },
+      "short32:6:preflop": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          0,
+          0,
+          0
+        ]
+      },
+      "short32:6:flop": {
+        "normal": [
+          0,
+          0,
+          0.021155175968832433
+        ],
+        "super": [
+          0,
+          0,
+          0.039431596276534316
+        ]
+      },
+      "short32:6:turn": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          1.4997926496349263,
+          0.21968297471831363,
+          0.024816851966268618
+        ]
+      },
+      "short32:7:preflop": {
+        "normal": [
+          0,
+          0,
+          0.004420025636639089
+        ],
+        "super": [
+          3.1951073986127474,
+          0,
+          0.00859741003673529
+        ]
+      },
+      "short32:7:flop": {
+        "normal": [
+          0,
+          0,
+          0.004310242337551365
+        ],
+        "super": [
+          14.405013432485669,
+          0,
+          0.012104375586812873
+        ]
+      },
+      "short32:7:turn": {
+        "normal": [
+          0,
+          0,
+          0.0016727565889872466
+        ],
+        "super": [
+          7.55927922253378,
+          0,
+          0.03606825182245833
+        ]
+      },
+      "short32:8:preflop": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          0,
+          0.37900555967243404,
+          0
+        ]
+      },
+      "short32:8:flop": {
+        "normal": [
+          0,
+          1.9856248770261116,
+          0.010991637841555624
+        ],
+        "super": [
+          0,
+          1.831027088822148,
+          0.01671187129349646
+        ]
+      },
+      "short32:8:turn": {
+        "normal": [
+          20.132372397356235,
+          0.052995132675317864,
+          0
+        ],
+        "super": [
+          41.03369065008017,
+          0,
+          0.0022262181581475444
+        ]
+      },
+      "short32:9:preflop": {
+        "normal": [
+          0,
+          0,
+          0.008679467407909881
+        ],
+        "super": [
+          0,
+          0,
+          0.009817996218636573
+        ]
+      },
+      "short32:9:flop": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          7.036822265016164,
+          0,
+          0.004771640768353877
+        ]
+      },
+      "short32:9:turn": {
+        "normal": [
+          0,
+          0,
+          0
+        ],
+        "super": [
+          0.15087378626128903,
+          0,
+          0
+        ]
+      },
+      "short32:10:preflop": {
+        "normal": [
+          0,
+          0,
+          0.001973333779660123
+        ],
+        "super": [
+          0,
+          0,
+          0.0020973564119884597
+        ]
+      },
+      "short32:10:flop": {
+        "normal": [
+          0,
+          0.21414761034674795,
+          0.004790100147195218
+        ],
+        "super": [
+          0,
+          0,
+          0.012265490839833387
+        ]
+      },
+      "short32:10:turn": {
+        "normal": [
+          0,
+          0,
+          0.006486411342444664
+        ],
+        "super": [
+          0,
+          0.3670508060701132,
+          0.01320701130355064
+        ]
+      }
+    },
+    "history": {
+      "normal": 0,
+      "super": 0
+    },
+    "historyByKind": {
+      "normal": {
+        "normal": 0,
+        "super": 0
+      },
+      "super": {
+        "normal": 0,
+        "super": 0
+      }
+    }
+  },
+  "rows": 110592,
+  "chosen": 84913,
+  "chosenNet": {
+    "n": 84913,
+    "mean": 98.93876791539485,
+    "sd": 1270.6204243332534,
+    "halfWidth": 8.546431398724753,
+    "lower": 90.3923365166701,
+    "upper": 107.4851993141196
+  },
+  "byKind": {
+    "normal": {
+      "n": 11180,
+      "mean": 67.3017084078711,
+      "sd": 1155.2004392439244,
+      "halfWidth": 21.413739490043458,
+      "lower": 45.88796891782765,
+      "upper": 88.71544789791456
+    },
+    "super": {
+      "n": 73733,
+      "mean": 103.73583741336958,
+      "sd": 1287.157433415355,
+      "halfWidth": 9.290878660388731,
+      "lower": 94.44495875298085,
+      "upper": 113.02671607375831
+    }
+  },
+  "allOpportunitiesNet": {
+    "n": 110592,
+    "mean": 75.96559968171226,
+    "sd": 1114.1559232940106,
+    "halfWidth": 6.566594351962007,
+    "lower": 69.39900532975025,
+    "upper": 82.53219403367427
+  },
+  "meanCompensation": 21.231062373408648,
+  "meanRolls": 2.335955584490741,
+  "normalForced": {
+    "n": 110238,
+    "mean": 72.24345098786274,
+    "sd": 1270.6176344739185,
+    "halfWidth": 7.500760301294474,
+    "lower": 64.74269068656827,
+    "upper": 79.74421128915722
+  },
+  "superForced": {
+    "n": 109564,
+    "mean": 80.24393687707553,
+    "sd": 1280.7411300150013,
+    "halfWidth": 7.5837409294822855,
+    "lower": 72.66019594759324,
+    "upper": 87.82767780655782
+  },
+  "groups": {
+    "standard52:2:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2043,
+      "superAvailable": 2031,
+      "normal": {
+        "n": 2043,
+        "mean": 8.202227116984847,
+        "sd": 707.0830965312887,
+        "halfWidth": 43.91206992156501,
+        "lower": -35.70984280458016,
+        "upper": 52.114297038549864
+      },
+      "super": {
+        "n": 2031,
+        "mean": 6.964081733136366,
+        "sd": 721.3242863459832,
+        "halfWidth": 44.92863564483335,
+        "lower": -37.96455391169698,
+        "upper": 51.89271737796972
+      },
+      "targetNormal": 0.5043538913362705,
+      "targetSuper": 1.1670137863121663,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1044,
+        "mean": 17.875766283524904,
+        "sd": 941.3024878337466,
+        "halfWidth": 57.09985804302803,
+        "lower": -39.224091759503125,
+        "upper": 74.97562432655293
+      },
+      "paid": 12.260205078125017,
+      "meanNormalFee": 5.043538913362704,
+      "meanSuperFee": 11.670137863121663
+    },
+    "standard52:2:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2042,
+      "superAvailable": 2028,
+      "normal": {
+        "n": 2042,
+        "mean": 30.195837414299675,
+        "sd": 803.9358183397555,
+        "halfWidth": 49.93915011975782,
+        "lower": -19.743312705458145,
+        "upper": 80.1349875340575
+      },
+      "super": {
+        "n": 2028,
+        "mean": 4.985108481262339,
+        "sd": 791.4928940830454,
+        "halfWidth": 49.3356304469485,
+        "lower": -44.35052196568616,
+        "upper": 54.32073892821084
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.9881434911242609,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1585,
+        "mean": 5.807318611987382,
+        "sd": 836.1730559225306,
+        "halfWidth": 41.16589928767444,
+        "lower": -35.35858067568706,
+        "upper": 46.973217899661826
+      },
+      "paid": 18.942822265625022,
+      "meanNormalFee": 0.9625612144955973,
+      "meanSuperFee": 9.881434911242609
+    },
+    "standard52:2:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2045,
+      "superAvailable": 2038,
+      "normal": {
+        "n": 2045,
+        "mean": 3.431613691931558,
+        "sd": 754.0194727447135,
+        "halfWidth": 46.8040616870766,
+        "lower": -43.37244799514504,
+        "upper": 50.23567537900816
+      },
+      "super": {
+        "n": 2038,
+        "mean": 6.011432777232576,
+        "sd": 753.9218960349103,
+        "halfWidth": 46.87830542680699,
+        "lower": -40.86687264957441,
+        "upper": 52.88973820403957
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.9329146221786069,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1439,
+        "mean": 10.155003474635203,
+        "sd": 791.8096551127337,
+        "halfWidth": 40.91160028049318,
+        "lower": -30.75659680585798,
+        "upper": 51.066603755128384
+      },
+      "paid": 15.592065429687494,
+      "meanNormalFee": 1.7434474327628364,
+      "meanSuperFee": 9.329146221786068
+    },
+    "standard52:3:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2045,
+      "superAvailable": 2041,
+      "normal": {
+        "n": 2045,
+        "mean": 1.3676528117359517,
+        "sd": 925.1325208788928,
+        "halfWidth": 57.42551902316232,
+        "lower": -56.05786621142637,
+        "upper": 58.793171834898274
+      },
+      "super": {
+        "n": 2041,
+        "mean": 9.515972562469363,
+        "sd": 974.1120664669021,
+        "halfWidth": 60.525036239644564,
+        "lower": -51.0090636771752,
+        "upper": 70.04100880211392
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.6766536011758956,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1707,
+        "mean": 12.054335090802597,
+        "sd": 981.4982443560683,
+        "halfWidth": 46.56170102624113,
+        "lower": -34.507365935438536,
+        "upper": 58.61603611704373
+      },
+      "paid": 17.292431640624994,
+      "meanNormalFee": 1.035158924205374,
+      "meanSuperFee": 6.766536011758955
+    },
+    "standard52:3:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2042,
+      "superAvailable": 2035,
+      "normal": {
+        "n": 2042,
+        "mean": 35.290083251714044,
+        "sd": 975.5578574975333,
+        "halfWidth": 60.6000245102768,
+        "lower": -25.30994125856276,
+        "upper": 95.89010776199085
+      },
+      "super": {
+        "n": 2035,
+        "mean": 41.34877149877146,
+        "sd": 1004.3689600595658,
+        "halfWidth": 62.49693414694319,
+        "lower": -21.148162648171727,
+        "upper": 103.84570564571465
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.7021203931203925,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1807,
+        "mean": 43.94180962921972,
+        "sd": 986.4843548513247,
+        "halfWidth": 45.48489505534,
+        "lower": -1.5430854261202782,
+        "upper": 89.42670468455972
+      },
+      "paid": 22.770996093749975,
+      "meanNormalFee": 1.3334965719882457,
+      "meanSuperFee": 7.021203931203925
+    },
+    "standard52:3:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2042,
+      "normal": {
+        "n": 2046,
+        "mean": 4.355791788856316,
+        "sd": 887.6677870138894,
+        "halfWidth": 55.086513051986785,
+        "lower": -50.73072126313047,
+        "upper": 59.4423048408431
+      },
+      "super": {
+        "n": 2042,
+        "mean": 10.58552889324192,
+        "sd": 892.9093613776843,
+        "halfWidth": 55.46603798953062,
+        "lower": -44.8805090962887,
+        "upper": 66.05156688277253
+      },
+      "targetNormal": 0.3362047898338222,
+      "targetSuper": 1.331505876591578,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1667,
+        "mean": 17.103569286142775,
+        "sd": 913.0886113941297,
+        "halfWidth": 43.83300020121926,
+        "lower": -26.72943091507648,
+        "upper": 60.936569487362036
+      },
+      "paid": 16.83688964843751,
+      "meanNormalFee": 3.3620478983382216,
+      "meanSuperFee": 13.31505876591578
+    },
+    "standard52:4:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2029,
+      "superAvailable": 2023,
+      "normal": {
+        "n": 2029,
+        "mean": 46.80473139477573,
+        "sd": 1206.7701395517695,
+        "halfWidth": 75.20230796869278,
+        "lower": -28.39757657391705,
+        "upper": 122.00703936346851
+      },
+      "super": {
+        "n": 2023,
+        "mean": 70.17508650519027,
+        "sd": 1265.3298543829833,
+        "halfWidth": 78.96842041966833,
+        "lower": -8.793333914478069,
+        "upper": 149.1435069248586
+      },
+      "targetNormal": 0.25907097092163567,
+      "targetSuper": 0.3116114681166582,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1778,
+        "mean": 82.72030371203591,
+        "sd": 1273.1977409616213,
+        "halfWidth": 59.18151143744763,
+        "lower": 23.538792274588282,
+        "upper": 141.90181514948355
+      },
+      "paid": 10.795825195312508,
+      "meanNormalFee": 2.5907097092163567,
+      "meanSuperFee": 3.1161146811665814
+    },
+    "standard52:4:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2029,
+      "normal": {
+        "n": 2046,
+        "mean": 77.41175464320628,
+        "sd": 1217.3000660425466,
+        "halfWidth": 75.54269396416419,
+        "lower": 1.869060679042093,
+        "upper": 152.95444860737047
+      },
+      "super": {
+        "n": 2029,
+        "mean": 108.81306062099556,
+        "sd": 1268.3689637588786,
+        "halfWidth": 79.04096256968663,
+        "lower": 29.77209805130893,
+        "upper": 187.8540231906822
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.5760275998028591,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1772,
+        "mean": 88.53916478555306,
+        "sd": 1214.0393633291187,
+        "halfWidth": 56.52713584189796,
+        "lower": 32.012028943655096,
+        "upper": 145.06630062745103
+      },
+      "paid": 21.247412109374988,
+      "meanNormalFee": 0.5244868035190672,
+      "meanSuperFee": 5.760275998028591
+    },
+    "standard52:4:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2044,
+      "superAvailable": 2039,
+      "normal": {
+        "n": 2044,
+        "mean": 125.42727495107634,
+        "sd": 1246.2573762723823,
+        "halfWidth": 77.37754268888364,
+        "lower": 48.049732262192705,
+        "upper": 202.80481763996
+      },
+      "super": {
+        "n": 2039,
+        "mean": 110.33928396272687,
+        "sd": 1314.3239738839075,
+        "halfWidth": 81.70364920827802,
+        "lower": 28.635634754448844,
+        "upper": 192.0429331710049
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.8016846493379088,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1700,
+        "mean": 114.54814705882362,
+        "sd": 1309.0927657892812,
+        "halfWidth": 62.23031990752405,
+        "lower": 52.31782715129957,
+        "upper": 176.77846696634765
+      },
+      "paid": 19.607055664062507,
+      "meanNormalFee": 1.439310176125237,
+      "meanSuperFee": 8.016846493379088
+    },
+    "standard52:5:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2044,
+      "normal": {
+        "n": 2046,
+        "mean": -6.13548387096773,
+        "sd": 878.27843528796,
+        "halfWidth": 54.50383262360259,
+        "lower": -60.63931649457032,
+        "upper": 48.36834875263486
+      },
+      "super": {
+        "n": 2044,
+        "mean": -3.2314823874755425,
+        "sd": 868.9811534772673,
+        "halfWidth": 53.95324238733067,
+        "lower": -57.18472477480621,
+        "upper": 50.721759999855124
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.7864383561643812,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1774,
+        "mean": -9.005467869222098,
+        "sd": 763.8255066998335,
+        "halfWidth": 35.54458274448642,
+        "lower": -44.55005061370852,
+        "upper": 26.53911487526432
+      },
+      "paid": 16.678759765625003,
+      "meanNormalFee": 1.5225073313783006,
+      "meanSuperFee": 7.864383561643812
+    },
+    "standard52:5:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2044,
+      "normal": {
+        "n": 2046,
+        "mean": 6.318328445747802,
+        "sd": 1287.545748437374,
+        "halfWidth": 79.90197088814232,
+        "lower": -73.5836424423945,
+        "upper": 86.22029933389013
+      },
+      "super": {
+        "n": 2044,
+        "mean": 35.57805772994123,
+        "sd": 1353.744254888946,
+        "halfWidth": 84.05118065243559,
+        "lower": -48.47312292249436,
+        "upper": 119.62923838237683
+      },
+      "targetNormal": 0.4142913000977517,
+      "targetSuper": 0.46378424657534056,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1812,
+        "mean": 43.579001103752695,
+        "sd": 1375.765166238714,
+        "halfWidth": 63.34630446084826,
+        "lower": -19.767303357095564,
+        "upper": 106.92530556460096
+      },
+      "paid": 19.66701660156253,
+      "meanNormalFee": 4.142913000977517,
+      "meanSuperFee": 4.637842465753406
+    },
+    "standard52:5:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2043,
+      "superAvailable": 2015,
+      "normal": {
+        "n": 2043,
+        "mean": 94.2272883015174,
+        "sd": 1327.9231796635477,
+        "halfWidth": 82.46817920257315,
+        "lower": 11.75910909894425,
+        "upper": 176.69546750409057
+      },
+      "super": {
+        "n": 2015,
+        "mean": 90.51607940446644,
+        "sd": 1334.9337760417513,
+        "halfWidth": 83.4775767968502,
+        "lower": 7.038502607616238,
+        "upper": 173.99365620131664
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.2687196029776686,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1759,
+        "mean": 94.59107447413288,
+        "sd": 1386.111811301656,
+        "halfWidth": 64.77708726914766,
+        "lower": 29.813987204985224,
+        "upper": 159.36816174328055
+      },
+      "paid": 10.410327148437494,
+      "meanNormalFee": 0.5176211453744508,
+      "meanSuperFee": 2.687196029776686
+    },
+    "standard52:6:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2039,
+      "normal": {
+        "n": 2048,
+        "mean": 10.62519531249999,
+        "sd": 871.5389256483824,
+        "halfWidth": 54.059179544963804,
+        "lower": -43.433984232463814,
+        "upper": 64.6843748574638
+      },
+      "super": {
+        "n": 2039,
+        "mean": 29.698209906817088,
+        "sd": 947.5036794566494,
+        "halfWidth": 58.90062860309409,
+        "lower": -29.202418696277004,
+        "upper": 88.59883850991118
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.25,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1822,
+        "mean": 43.59267288693742,
+        "sd": 891.9427492489474,
+        "halfWidth": 40.95612543546955,
+        "lower": 2.6365474514678695,
+        "upper": 84.54879832240698
+      },
+      "paid": 6.131909179687509,
+      "meanNormalFee": 1.013354492187496,
+      "meanSuperFee": 1.4610838646395257
+    },
+    "standard52:6:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2045,
+      "superAvailable": 2041,
+      "normal": {
+        "n": 2045,
+        "mean": -9.41391198044012,
+        "sd": 1352.4452035531228,
+        "halfWidth": 83.94999204075266,
+        "lower": -93.36390402119278,
+        "upper": 74.53608006031254
+      },
+      "super": {
+        "n": 2041,
+        "mean": 16.85455658990691,
+        "sd": 1411.4789953094646,
+        "halfWidth": 87.70019413932097,
+        "lower": -70.84563754941406,
+        "upper": 104.55475072922788
+      },
+      "targetNormal": 0.43377506112469527,
+      "targetSuper": 0.4864233219010283,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1596,
+        "mean": 33.620081453634086,
+        "sd": 1455.8855328981479,
+        "halfWidth": 71.42773164934911,
+        "lower": -37.80765019571503,
+        "upper": 105.0478131029832
+      },
+      "paid": 18.642333984375014,
+      "meanNormalFee": 4.337750611246952,
+      "meanSuperFee": 4.864233219010283
+    },
+    "standard52:6:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2034,
+      "superAvailable": 2027,
+      "normal": {
+        "n": 2034,
+        "mean": 173.54127335299887,
+        "sd": 1576.8865263661864,
+        "halfWidth": 98.14600026812694,
+        "lower": 75.39527308487193,
+        "upper": 271.6872736211258
+      },
+      "super": {
+        "n": 2027,
+        "mean": 194.23781450419352,
+        "sd": 1426.4918937411423,
+        "halfWidth": 88.93855542099928,
+        "lower": 105.29925908319424,
+        "upper": 283.17636992519283
+      },
+      "targetNormal": 0.3460471976401171,
+      "targetSuper": 0.38885545140601924,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1703,
+        "mean": 215.6201409277746,
+        "sd": 1457.3975043444075,
+        "halfWidth": 69.21923079951367,
+        "lower": 146.40091012826093,
+        "upper": 284.83937172728827
+      },
+      "paid": 16.64970703125002,
+      "meanNormalFee": 3.4604719764011707,
+      "meanSuperFee": 3.8885545140601923
+    },
+    "standard52:7:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2047,
+      "superAvailable": 2044,
+      "normal": {
+        "n": 2047,
+        "mean": 135.28314606741557,
+        "sd": 1392.9714263693968,
+        "halfWidth": 86.42331564667695,
+        "lower": 48.85983042073862,
+        "upper": 221.70646171409254
+      },
+      "super": {
+        "n": 2044,
+        "mean": 123.79633072407043,
+        "sd": 1326.4107725444683,
+        "halfWidth": 82.35410127123126,
+        "lower": 41.44222945283917,
+        "upper": 206.1504319953017
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.25,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1867,
+        "mean": 131.4343331547938,
+        "sd": 1289.9702482463679,
+        "halfWidth": 58.514514535808516,
+        "lower": 72.91981861898527,
+        "upper": 189.9488476906023
+      },
+      "paid": 11.003295898437509,
+      "meanNormalFee": 0.5880801172447501,
+      "meanSuperFee": 1.0145303326810198
+    },
+    "standard52:7:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2043,
+      "normal": {
+        "n": 2046,
+        "mean": 26.077248289345054,
+        "sd": 1245.0081850829042,
+        "halfWidth": 77.26219272653032,
+        "lower": -51.184944437185266,
+        "upper": 103.33944101587537
+      },
+      "super": {
+        "n": 2043,
+        "mean": 29.843954968184057,
+        "sd": 1243.9203612780752,
+        "halfWidth": 77.25134167294318,
+        "lower": -47.407386704759126,
+        "upper": 107.09529664112725
+      },
+      "targetNormal": 0.6690640273704775,
+      "targetSuper": 1.2635046500244735,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1564,
+        "mean": 31.072186700767286,
+        "sd": 1052.096789761126,
+        "halfWidth": 52.14268521272643,
+        "lower": -21.07049851195914,
+        "upper": 83.21487191349371
+      },
+      "paid": 25.580126953125,
+      "meanNormalFee": 6.690640273704775,
+      "meanSuperFee": 12.635046500244734
+    },
+    "standard52:7:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2042,
+      "normal": {
+        "n": 2046,
+        "mean": 164.63216031280567,
+        "sd": 1562.2803379669003,
+        "halfWidth": 96.95133414470675,
+        "lower": 67.68082616809892,
+        "upper": 261.5834944575124
+      },
+      "super": {
+        "n": 2042,
+        "mean": 133.1526689520078,
+        "sd": 1400.3676445127223,
+        "halfWidth": 86.98849886623373,
+        "lower": 46.16417008577406,
+        "upper": 220.1411678182415
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.7008202742409382,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1693,
+        "mean": 195.1665386887182,
+        "sd": 1369.9755901502465,
+        "halfWidth": 65.25900102489538,
+        "lower": 129.9075376638228,
+        "upper": 260.4255397136136
+      },
+      "paid": 29.73876953125004,
+      "meanNormalFee": 1.646187683284453,
+      "meanSuperFee": 7.008202742409381
+    },
+    "standard52:8:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2045,
+      "normal": {
+        "n": 2048,
+        "mean": 93.2377197265625,
+        "sd": 1289.14514659164,
+        "halfWidth": 79.96215302405466,
+        "lower": 13.275566702507845,
+        "upper": 173.19987275061715
+      },
+      "super": {
+        "n": 2045,
+        "mean": 135.26317848410775,
+        "sd": 1316.1355055265767,
+        "halfWidth": 81.69614925856638,
+        "lower": 53.567029225541376,
+        "upper": 216.95932774267413
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.41103667481662565,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1858,
+        "mean": 146.88272335845016,
+        "sd": 1330.5270369958118,
+        "halfWidth": 60.500215359743564,
+        "lower": 86.3825079987066,
+        "upper": 207.3829387181937
+      },
+      "paid": 35.55439453124999,
+      "meanNormalFee": 0.6325195312500027,
+      "meanSuperFee": 4.110366748166256
+    },
+    "standard52:8:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2043,
+      "superAvailable": 2012,
+      "normal": {
+        "n": 2043,
+        "mean": 95.52457170827222,
+        "sd": 1230.0018784726615,
+        "halfWidth": 76.38696039561988,
+        "lower": 19.13761131265234,
+        "upper": 171.9115321038921
+      },
+      "super": {
+        "n": 2012,
+        "mean": 113.00899602385678,
+        "sd": 1353.3053893333517,
+        "halfWidth": 84.6894788939592,
+        "lower": 28.319517129897577,
+        "upper": 197.698474917816
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.40631709741550837,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1529,
+        "mean": 131.71435578809678,
+        "sd": 1355.1117436421248,
+        "halfWidth": 67.92465443322816,
+        "lower": 63.789701354868626,
+        "upper": 199.63901022132495
+      },
+      "paid": 15.30993652343748,
+      "meanNormalFee": 0.42476749877631037,
+      "meanSuperFee": 4.063170974155083
+    },
+    "standard52:8:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2045,
+      "superAvailable": 2013,
+      "normal": {
+        "n": 2045,
+        "mean": 120.00022004889958,
+        "sd": 1237.1437278227993,
+        "halfWidth": 76.79291244564766,
+        "lower": 43.20730760325192,
+        "upper": 196.79313249454725
+      },
+      "super": {
+        "n": 2013,
+        "mean": 104.3519374068555,
+        "sd": 1231.7700798539793,
+        "halfWidth": 77.06468378362105,
+        "lower": 27.28725362323445,
+        "upper": 181.41662119047655
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 2.0195851962245426,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1626,
+        "mean": 150.7283825338254,
+        "sd": 1212.1651973054459,
+        "halfWidth": 58.919304473674664,
+        "lower": 91.80907806015074,
+        "upper": 209.64768700750005
+      },
+      "paid": 55.15234374999997,
+      "meanNormalFee": 2.198386308068459,
+      "meanSuperFee": 20.195851962245424
+    },
+    "standard52:9:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2047,
+      "normal": {
+        "n": 2048,
+        "mean": 22.393652343749977,
+        "sd": 732.9287850906126,
+        "halfWidth": 45.46157104504441,
+        "lower": -23.06791870129443,
+        "upper": 67.85522338879439
+      },
+      "super": {
+        "n": 2047,
+        "mean": 52.92989741084512,
+        "sd": 899.3736311466421,
+        "halfWidth": 55.79931485850319,
+        "lower": -2.8694174476580656,
+        "upper": 108.72921226934831
+      },
+      "targetNormal": 0.6371533203124988,
+      "targetSuper": 0.818016609672691,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1476,
+        "mean": 58.17994579945799,
+        "sd": 576.5056401396355,
+        "halfWidth": 29.411451159731246,
+        "lower": 28.768494639726743,
+        "upper": 87.59139695918924
+      },
+      "paid": 10.70922851562501,
+      "meanNormalFee": 6.371533203124988,
+      "meanSuperFee": 8.180166096726909
+    },
+    "standard52:9:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2046,
+      "normal": {
+        "n": 2048,
+        "mean": 93.93740234375007,
+        "sd": 1317.0042732874276,
+        "halfWidth": 81.69017857482746,
+        "lower": 12.247223768922609,
+        "upper": 175.6275809185775
+      },
+      "super": {
+        "n": 2046,
+        "mean": 94.68069403714559,
+        "sd": 1308.0530332719843,
+        "halfWidth": 81.17460331913634,
+        "lower": 13.506090718009247,
+        "upper": 175.85529735628194
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.42669843597262863,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1704,
+        "mean": 117.27250586854457,
+        "sd": 1378.1757817615921,
+        "halfWidth": 65.43737811080446,
+        "lower": 51.83512775774011,
+        "upper": 182.70988397934903
+      },
+      "paid": 21.203710937499995,
+      "meanNormalFee": 0.42739257812500103,
+      "meanSuperFee": 4.266984359726286
+    },
+    "standard52:9:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2019,
+      "normal": {
+        "n": 2048,
+        "mean": 243.64697265625026,
+        "sd": 1494.430607469101,
+        "halfWidth": 92.69544956532992,
+        "lower": 150.95152309092032,
+        "upper": 336.3424222215802
+      },
+      "super": {
+        "n": 2019,
+        "mean": 252.39982664685456,
+        "sd": 1486.522975160524,
+        "halfWidth": 92.86479489722136,
+        "lower": 159.53503174963322,
+        "upper": 345.2646215440759
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 1.0202649826646857,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1526,
+        "mean": 308.18987549148085,
+        "sd": 1525.915897281942,
+        "halfWidth": 76.56131816918437,
+        "lower": 231.62855732229647,
+        "upper": 384.7511936606652
+      },
+      "paid": 29.05698242187501,
+      "meanNormalFee": 2.274438476562496,
+      "meanSuperFee": 10.202649826646857
+    },
+    "standard52:10:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2046,
+      "normal": {
+        "n": 2048,
+        "mean": 56.31350097656247,
+        "sd": 919.9384384707831,
+        "halfWidth": 57.06126915514208,
+        "lower": -0.7477681785796051,
+        "upper": 113.37477013170455
+      },
+      "super": {
+        "n": 2046,
+        "mean": 108.66427174975551,
+        "sd": 1126.7244698635827,
+        "halfWidth": 69.921791827016,
+        "lower": 38.74247992273952,
+        "upper": 178.5860635767715
+      },
+      "targetNormal": 0.6041870117187496,
+      "targetSuper": 0.6594012707722404,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1646,
+        "mean": 120.78712029161599,
+        "sd": 1031.6867850270075,
+        "halfWidth": 49.84126122907461,
+        "lower": 70.94585906254139,
+        "upper": 170.6283815206906
+      },
+      "paid": 29.771435546874972,
+      "meanNormalFee": 6.041870117187496,
+      "meanSuperFee": 6.5940127077224036
+    },
+    "standard52:10:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2030,
+      "superAvailable": 2018,
+      "normal": {
+        "n": 2030,
+        "mean": 83.26487684729042,
+        "sd": 1159.4810126748237,
+        "halfWidth": 72.23759184594168,
+        "lower": 11.027285001348744,
+        "upper": 155.50246869323212
+      },
+      "super": {
+        "n": 2018,
+        "mean": 69.29090683845388,
+        "sd": 1144.0233733379307,
+        "halfWidth": 71.48615756728562,
+        "lower": -2.1952507288317378,
+        "upper": 140.7770644057395
+      },
+      "targetNormal": 0.38717241379310313,
+      "targetSuper": 1.09896184340932,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1004,
+        "mean": 172.16080677290807,
+        "sd": 1463.900409893033,
+        "halfWidth": 90.55256305087211,
+        "lower": 81.60824372203597,
+        "upper": 262.71336982378017
+      },
+      "paid": 35.974633789062494,
+      "meanNormalFee": 3.871724137931031,
+      "meanSuperFee": 10.9896184340932
+    },
+    "standard52:10:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2047,
+      "superAvailable": 2045,
+      "normal": {
+        "n": 2047,
+        "mean": 197.0444308744504,
+        "sd": 1371.6380016735986,
+        "halfWidth": 85.09973839203435,
+        "lower": 111.94469248241604,
+        "upper": 282.14416926648477
+      },
+      "super": {
+        "n": 2045,
+        "mean": 225.13777506112467,
+        "sd": 1456.484256679648,
+        "halfWidth": 90.40798210123955,
+        "lower": 134.72979295988512,
+        "upper": 315.5457571623642
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 1.5593863080684631,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1650,
+        "mean": 291.32733333333323,
+        "sd": 1459.3009669866562,
+        "halfWidth": 70.41399247107606,
+        "lower": 220.91334086225717,
+        "upper": 361.74132580440926
+      },
+      "paid": 49.13068847656246,
+      "meanNormalFee": 1.9477772349780151,
+      "meanSuperFee": 15.593863080684631
+    },
+    "short32:2:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2033,
+      "superAvailable": 2025,
+      "normal": {
+        "n": 2033,
+        "mean": -5.394564682734883,
+        "sd": 632.7972124565146,
+        "halfWidth": 39.3952177692143,
+        "lower": -44.78978245194918,
+        "upper": 34.00065308647942
+      },
+      "super": {
+        "n": 2025,
+        "mean": -4.744938271604948,
+        "sd": 670.207001070491,
+        "halfWidth": 41.80652633270639,
+        "lower": -46.551464604311334,
+        "upper": 37.061588061101446
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.28030617283950593,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1566,
+        "mean": -9.833844189016618,
+        "sd": 582.0303234452217,
+        "halfWidth": 28.827421901151368,
+        "lower": -38.661266090167985,
+        "upper": 18.99357771213475
+      },
+      "paid": 4.9844726562499995,
+      "meanNormalFee": 2.3727004426955247,
+      "meanSuperFee": 2.8030617283950594
+    },
+    "short32:2:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 1955,
+      "normal": {
+        "n": 2046,
+        "mean": 23.25034213098728,
+        "sd": 761.9766980807035,
+        "halfWidth": 47.28642847943708,
+        "lower": -24.036086348449796,
+        "upper": 70.53677061042436
+      },
+      "super": {
+        "n": 1955,
+        "mean": 38.26419437340158,
+        "sd": 784.5548707462533,
+        "halfWidth": 49.8078252436471,
+        "lower": -11.543630870245522,
+        "upper": 88.07201961704868
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.5419718670076724,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1474,
+        "mean": 37.18449796472189,
+        "sd": 766.4564616903266,
+        "halfWidth": 39.128645964852076,
+        "lower": -1.944148000130184,
+        "upper": 76.31314392957397
+      },
+      "paid": 8.351538085937499,
+      "meanNormalFee": 0.4253910068426209,
+      "meanSuperFee": 5.419718670076724
+    },
+    "short32:2:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2044,
+      "superAvailable": 2033,
+      "normal": {
+        "n": 2044,
+        "mean": -18.69192759295499,
+        "sd": 677.4824300007841,
+        "halfWidth": 42.06348274956725,
+        "lower": -60.75541034252224,
+        "upper": 23.37155515661226
+      },
+      "super": {
+        "n": 2033,
+        "mean": 18.04099852434824,
+        "sd": 648.1175461079325,
+        "halfWidth": 40.34899548601501,
+        "lower": -22.307996961666774,
+        "upper": 58.38999401036325
+      },
+      "targetNormal": 0.6453228962818006,
+      "targetSuper": 1.7816355140186937,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1420,
+        "mean": 27.780422535211276,
+        "sd": 633.8383829953034,
+        "halfWidth": 32.96783547154861,
+        "lower": -5.187412936337335,
+        "upper": 60.74825800675988
+      },
+      "paid": 21.338037109375012,
+      "meanNormalFee": 6.453228962818006,
+      "meanSuperFee": 17.816355140186936
+    },
+    "short32:3:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2045,
+      "superAvailable": 2041,
+      "normal": {
+        "n": 2045,
+        "mean": -14.787481662591652,
+        "sd": 904.3399632312669,
+        "halfWidth": 56.13486780532427,
+        "lower": -70.92234946791592,
+        "upper": 41.34738614273262
+      },
+      "super": {
+        "n": 2041,
+        "mean": 6.061366976972075,
+        "sd": 900.3070211075396,
+        "halfWidth": 55.939267108125655,
+        "lower": -49.87790013115358,
+        "upper": 62.00063408509773
+      },
+      "targetNormal": 0.32010757946210283,
+      "targetSuper": 0.7190029397354251,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 863,
+        "mean": -6.207937427578212,
+        "sd": 139.41858304090215,
+        "halfWidth": 9.30189296867963,
+        "lower": -15.509830396257842,
+        "upper": 3.0939555411014172
+      },
+      "paid": 0.689746093750001,
+      "meanNormalFee": 3.201075794621028,
+      "meanSuperFee": 7.19002939735425
+    },
+    "short32:3:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2043,
+      "superAvailable": 2015,
+      "normal": {
+        "n": 2043,
+        "mean": -2.6874694077337216,
+        "sd": 1023.3585837632427,
+        "halfWidth": 63.553766036120685,
+        "lower": -66.2412354438544,
+        "upper": 60.86629662838696
+      },
+      "super": {
+        "n": 2015,
+        "mean": 41.21352357320095,
+        "sd": 1067.49008637222,
+        "halfWidth": 66.75348789903283,
+        "lower": -25.539964325831882,
+        "upper": 107.96701147223379
+      },
+      "targetNormal": 0.7273935389133647,
+      "targetSuper": 0.9767369727047154,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1623,
+        "mean": 51.530745532963614,
+        "sd": 1065.4281037993462,
+        "halfWidth": 51.834744219867815,
+        "lower": -0.30399868690420107,
+        "upper": 103.36548975283142
+      },
+      "paid": 18.7779052734375,
+      "meanNormalFee": 7.273935389133646,
+      "meanSuperFee": 9.767369727047154
+    },
+    "short32:3:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2045,
+      "superAvailable": 2035,
+      "normal": {
+        "n": 2045,
+        "mean": 15.798386308068455,
+        "sd": 1090.8665537147708,
+        "halfWidth": 67.71308609124081,
+        "lower": -51.91469978317235,
+        "upper": 83.51147239930927
+      },
+      "super": {
+        "n": 2035,
+        "mean": 49.11410319410322,
+        "sd": 1076.8494744505863,
+        "halfWidth": 67.00703961113787,
+        "lower": -17.892936417034647,
+        "upper": 116.12114280524109
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 1.4896756756756768,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1512,
+        "mean": 33.944047619047616,
+        "sd": 1134.5236726615874,
+        "halfWidth": 57.186529078973045,
+        "lower": -23.24248145992543,
+        "upper": 91.13057669802066
+      },
+      "paid": 24.856494140625017,
+      "meanNormalFee": 1.1269926650366744,
+      "meanSuperFee": 14.896756756756767
+    },
+    "short32:4:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2042,
+      "normal": {
+        "n": 2046,
+        "mean": -22.581011730205294,
+        "sd": 982.7588624323828,
+        "halfWidth": 60.98763489486643,
+        "lower": -83.56864662507172,
+        "upper": 38.40662316466114
+      },
+      "super": {
+        "n": 2042,
+        "mean": -44.85078354554357,
+        "sd": 1001.3120329187509,
+        "halfWidth": 62.19983086699174,
+        "lower": -107.05061441253531,
+        "upper": 17.349047321448168
+      },
+      "targetNormal": 0.6611094819159326,
+      "targetSuper": 0.7226077375122406,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1652,
+        "mean": -50.900605326876544,
+        "sd": 726.0886231536506,
+        "halfWidth": 35.013915704792865,
+        "lower": -85.91452103166941,
+        "upper": -15.88668962208368
+      },
+      "paid": 8.66557617187499,
+      "meanNormalFee": 6.611094819159325,
+      "meanSuperFee": 7.226077375122406
+    },
+    "short32:4:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2043,
+      "superAvailable": 2037,
+      "normal": {
+        "n": 2043,
+        "mean": 4.995007342143895,
+        "sd": 1211.8628356879276,
+        "halfWidth": 75.26046915437686,
+        "lower": -70.26546181223297,
+        "upper": 80.25547649652076
+      },
+      "super": {
+        "n": 2037,
+        "mean": 32.94747177221401,
+        "sd": 1274.8887339311063,
+        "halfWidth": 79.29109332684197,
+        "lower": -46.343621554627966,
+        "upper": 112.23856509905599
+      },
+      "targetNormal": 1.3987665198237904,
+      "targetSuper": 2.4018900343642606,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1578,
+        "mean": 45.35193282636247,
+        "sd": 1267.229936235505,
+        "halfWidth": 62.52561840533109,
+        "lower": -17.173685578968616,
+        "upper": 107.87755123169356
+      },
+      "paid": 43.36945800781246,
+      "meanNormalFee": 13.987665198237904,
+      "meanSuperFee": 24.018900343642603
+    },
+    "short32:4:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2043,
+      "superAvailable": 2037,
+      "normal": {
+        "n": 2043,
+        "mean": 60.74018600097896,
+        "sd": 1316.1996147319862,
+        "halfWidth": 81.74010918431051,
+        "lower": -20.999923183331553,
+        "upper": 142.48029518528946
+      },
+      "super": {
+        "n": 2037,
+        "mean": 76.33105056455567,
+        "sd": 1338.190976024951,
+        "halfWidth": 83.22814591196004,
+        "lower": -6.897095347404374,
+        "upper": 159.5591964765157
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 2.5512420225822314,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1484,
+        "mean": 97.18857816711584,
+        "sd": 1351.2825146276534,
+        "halfWidth": 68.75199076242703,
+        "lower": 28.436587404688808,
+        "upper": 165.94056892954285
+      },
+      "paid": 37.846386718750026,
+      "meanNormalFee": 0.4253793441018121,
+      "meanSuperFee": 25.51242022582231
+    },
+    "short32:5:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2043,
+      "normal": {
+        "n": 2046,
+        "mean": -15.837145650048875,
+        "sd": 979.5025384361714,
+        "halfWidth": 60.785555314033346,
+        "lower": -76.62270096408221,
+        "upper": 44.94840966398447
+      },
+      "super": {
+        "n": 2043,
+        "mean": -39.14517865883501,
+        "sd": 964.7595716978745,
+        "halfWidth": 59.91458426558714,
+        "lower": -99.05976292442215,
+        "upper": 20.76940560675213
+      },
+      "targetNormal": 0.8413514173998042,
+      "targetSuper": 1.2233627019089557,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1234,
+        "mean": -45.82508103727719,
+        "sd": 1013.6016457295558,
+        "halfWidth": 56.55432177840743,
+        "lower": -102.37940281568461,
+        "upper": 10.72924074113024
+      },
+      "paid": 18.023803710937482,
+      "meanNormalFee": 8.413514173998042,
+      "meanSuperFee": 12.233627019089555
+    },
+    "short32:5:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2047,
+      "superAvailable": 2042,
+      "normal": {
+        "n": 2047,
+        "mean": 44.910161211529065,
+        "sd": 1403.5582449367523,
+        "halfWidth": 87.08014747066157,
+        "lower": -42.16998625913251,
+        "upper": 131.99030868219063
+      },
+      "super": {
+        "n": 2042,
+        "mean": 59.60195886385891,
+        "sd": 1343.8085375542546,
+        "halfWidth": 83.4751416197916,
+        "lower": -23.87318275593269,
+        "upper": 143.0771004836505
+      },
+      "targetNormal": 0.9517244748412316,
+      "targetSuper": 2.6127522037218425,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1558,
+        "mean": 86.78119383825414,
+        "sd": 1365.4315135685035,
+        "halfWidth": 67.80196283153283,
+        "lower": 18.979231006721307,
+        "upper": 154.58315666978697
+      },
+      "paid": 47.80419921875006,
+      "meanNormalFee": 9.517244748412315,
+      "meanSuperFee": 26.127522037218423
+    },
+    "short32:5:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2026,
+      "superAvailable": 1952,
+      "normal": {
+        "n": 2026,
+        "mean": 224.68121915103626,
+        "sd": 1632.1082710450828,
+        "halfWidth": 101.78338325359185,
+        "lower": 122.89783589744441,
+        "upper": 326.4646024046281
+      },
+      "super": {
+        "n": 1952,
+        "mean": 199.60105020491807,
+        "sd": 1648.4213952731654,
+        "halfWidth": 104.73117439779168,
+        "lower": 94.86987580712639,
+        "upper": 304.33222460270974
+      },
+      "targetNormal": 0.2790918065152996,
+      "targetSuper": 2.1354841188524585,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1491,
+        "mean": 167.89087860496323,
+        "sd": 1511.5782199656308,
+        "halfWidth": 76.72693948898777,
+        "lower": 91.16393911597547,
+        "upper": 244.617818093951
+      },
+      "paid": 32.16567382812501,
+      "meanNormalFee": 2.790918065152996,
+      "meanSuperFee": 21.354841188524585
+    },
+    "short32:6:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2047,
+      "superAvailable": 2042,
+      "normal": {
+        "n": 2047,
+        "mean": 83.78263312164144,
+        "sd": 1427.2723858882403,
+        "halfWidth": 88.5514301186351,
+        "lower": -4.7687969969936574,
+        "upper": 172.33406324027652
+      },
+      "super": {
+        "n": 2042,
+        "mean": 50.60695396669933,
+        "sd": 1304.9901799620106,
+        "halfWidth": 81.06381008936556,
+        "lower": -30.45685612266623,
+        "upper": 131.67076405606488
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.25,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1820,
+        "mean": 91.29541208791215,
+        "sd": 1355.8691267718411,
+        "halfWidth": 62.292842582016455,
+        "lower": 29.0025695058957,
+        "upper": 153.5882546699286
+      },
+      "paid": 5.368481445312506,
+      "meanNormalFee": 0.42638006839277093,
+      "meanSuperFee": 0.8509304603330089
+    },
+    "short32:6:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2044,
+      "normal": {
+        "n": 2046,
+        "mean": 58.16920821114368,
+        "sd": 1230.568341709896,
+        "halfWidth": 76.36609101812911,
+        "lower": -18.19688280698543,
+        "upper": 134.5352992292728
+      },
+      "super": {
+        "n": 2044,
+        "mean": 84.84515655577302,
+        "sd": 1390.6715025198177,
+        "halfWidth": 86.34391707618074,
+        "lower": -1.4987605204077283,
+        "upper": 171.18907363195376
+      },
+      "targetNormal": 1.075351906158358,
+      "targetSuper": 1.9987402152641878,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1504,
+        "mean": 112.84704122340422,
+        "sd": 1449.1641946492634,
+        "halfWidth": 73.24023824425943,
+        "lower": 39.60680297914479,
+        "upper": 186.08727946766365
+      },
+      "paid": 42.75190429687496,
+      "meanNormalFee": 10.75351906158358,
+      "meanSuperFee": 19.987402152641877
+    },
+    "short32:6:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2045,
+      "superAvailable": 2042,
+      "normal": {
+        "n": 2045,
+        "mean": 192.7013936430317,
+        "sd": 1657.5978947425276,
+        "halfWidth": 102.89165853434716,
+        "lower": 89.80973510868455,
+        "upper": 295.59305217737887
+      },
+      "super": {
+        "n": 2042,
+        "mean": 191.818290891283,
+        "sd": 1675.5342206534492,
+        "halfWidth": 104.08138693061915,
+        "lower": 87.73690396066385,
+        "upper": 295.8996778219022
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 1.5653158667972547,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1555,
+        "mean": 210.3431832797428,
+        "sd": 1615.226245080786,
+        "halfWidth": 80.28311915422688,
+        "lower": 130.0600641255159,
+        "upper": 290.62630243396967
+      },
+      "paid": 26.777954101562496,
+      "meanNormalFee": 0.42606356968215264,
+      "meanSuperFee": 15.653158667972546
+    },
+    "short32:7:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2044,
+      "normal": {
+        "n": 2046,
+        "mean": 18.504472140762502,
+        "sd": 893.2561729190478,
+        "halfWidth": 55.43331474695382,
+        "lower": -36.92884260619132,
+        "upper": 73.93778688771633
+      },
+      "super": {
+        "n": 2044,
+        "mean": 36.455968688845424,
+        "sd": 1070.5302770271874,
+        "halfWidth": 66.46701057704246,
+        "lower": -30.011041888197035,
+        "upper": 102.92297926588788
+      },
+      "targetNormal": 0.2993157380254156,
+      "targetSuper": 0.6229452054794516,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1398,
+        "mean": 8.309084406294705,
+        "sd": 682.1230802687892,
+        "halfWidth": 35.75734215464815,
+        "lower": -27.448257748353445,
+        "upper": 44.06642656094286
+      },
+      "paid": 5.233300781249999,
+      "meanNormalFee": 2.993157380254156,
+      "meanSuperFee": 6.229452054794516
+    },
+    "short32:7:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2043,
+      "superAvailable": 2018,
+      "normal": {
+        "n": 2043,
+        "mean": 75.78869309838468,
+        "sd": 1372.02383189251,
+        "halfWidth": 85.20696752004939,
+        "lower": -9.418274421664705,
+        "upper": 160.99566061843407
+      },
+      "super": {
+        "n": 2018,
+        "mean": 75.27185332011892,
+        "sd": 1333.835396316825,
+        "halfWidth": 83.3468699435059,
+        "lower": -8.075016623386972,
+        "upper": 158.61872326362482
+      },
+      "targetNormal": 0.2900685266764572,
+      "targetSuper": 1.0491997026759166,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1610,
+        "mean": 84.38714285714293,
+        "sd": 1293.448260309187,
+        "halfWidth": 63.181829083958945,
+        "lower": 21.20531377318399,
+        "upper": 147.5689719411019
+      },
+      "paid": 26.907519531249985,
+      "meanNormalFee": 2.900685266764572,
+      "meanSuperFee": 10.491997026759165
+    },
+    "short32:7:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2041,
+      "normal": {
+        "n": 2046,
+        "mean": 167.25957966764403,
+        "sd": 1880.257924406781,
+        "halfWidth": 116.68425306089772,
+        "lower": 50.575326606746316,
+        "upper": 283.94383272854174
+      },
+      "super": {
+        "n": 2041,
+        "mean": 131.68500734933875,
+        "sd": 1868.1320979839056,
+        "halfWidth": 116.07367039504886,
+        "lower": 15.611336954289882,
+        "upper": 247.75867774438763
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 2.373292503674668,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1562,
+        "mean": 195.74756722151116,
+        "sd": 1768.323762513977,
+        "halfWidth": 87.69550625232229,
+        "lower": 108.05206096918887,
+        "upper": 283.44307347383346
+      },
+      "paid": 30.87631835937501,
+      "meanNormalFee": 1.249266862170084,
+      "meanSuperFee": 23.73292503674668
+    },
+    "short32:8:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2043,
+      "normal": {
+        "n": 2046,
+        "mean": 45.56304985337244,
+        "sd": 1223.9705136359114,
+        "halfWidth": 75.95664578689573,
+        "lower": -30.393595933523294,
+        "upper": 121.51969564026817
+      },
+      "super": {
+        "n": 2043,
+        "mean": 81.28715124816452,
+        "sd": 1254.2299262931854,
+        "halfWidth": 77.89159787765986,
+        "lower": 3.3955533705046577,
+        "upper": 159.17874912582437
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.25,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1798,
+        "mean": 109.15075083426039,
+        "sd": 1280.403918950204,
+        "halfWidth": 59.18453262590108,
+        "lower": 49.966218208359315,
+        "upper": 168.33528346016146
+      },
+      "paid": 8.372192382812498,
+      "meanNormalFee": 0.42695503421309977,
+      "meanSuperFee": 1.1079295154185012
+    },
+    "short32:8:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 1961,
+      "superAvailable": 1957,
+      "normal": {
+        "n": 1961,
+        "mean": 12.811805201427848,
+        "sd": 1328.8709604126987,
+        "halfWidth": 84.23481988879311,
+        "lower": -71.42301468736527,
+        "upper": 97.04662509022096
+      },
+      "super": {
+        "n": 1957,
+        "mean": 67.15697496167599,
+        "sd": 1429.8024876141355,
+        "halfWidth": 90.72527075586923,
+        "lower": -23.568295794193247,
+        "upper": 157.88224571754523
+      },
+      "targetNormal": 1.4262774094849588,
+      "targetSuper": 1.8408150229943794,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1263,
+        "mean": 65.46690419635796,
+        "sd": 1028.127712723495,
+        "halfWidth": 56.7024026453066,
+        "lower": 8.76450155105136,
+        "upper": 122.16930684166456
+      },
+      "paid": 17.701513671874984,
+      "meanNormalFee": 14.262774094849588,
+      "meanSuperFee": 18.408150229943793
+    },
+    "short32:8:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 1981,
+      "superAvailable": 1905,
+      "normal": {
+        "n": 1981,
+        "mean": 339.4149924280666,
+        "sd": 2221.5094275490364,
+        "halfWidth": 140.10497608125624,
+        "lower": 199.3100163468104,
+        "upper": 479.5199685093229
+      },
+      "super": {
+        "n": 1905,
+        "mean": 342.60934383202107,
+        "sd": 2282.657973192812,
+        "halfWidth": 146.80504834772097,
+        "lower": 195.8042954843001,
+        "upper": 489.41439217974204
+      },
+      "targetNormal": 0.48064109035840663,
+      "targetSuper": 0.9405354330708674,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1468,
+        "mean": 471.6448228882831,
+        "sd": 2361.7664314271183,
+        "halfWidth": 120.81754011531174,
+        "lower": 350.82728277297133,
+        "upper": 592.4623630035949
+      },
+      "paid": 18.996582031249996,
+      "meanNormalFee": 4.806410903584066,
+      "meanSuperFee": 9.405354330708674
+    },
+    "short32:9:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2047,
+      "superAvailable": 2046,
+      "normal": {
+        "n": 2047,
+        "mean": 16.8901563263312,
+        "sd": 1124.3038493406943,
+        "halfWidth": 69.75452950072047,
+        "lower": -52.864373174389264,
+        "upper": 86.64468582705166
+      },
+      "super": {
+        "n": 2046,
+        "mean": 19.32754154447703,
+        "sd": 1067.3708222306836,
+        "halfWidth": 66.23844820134316,
+        "lower": -46.91090665686613,
+        "upper": 85.56598974582019
+      },
+      "targetNormal": 0.7664753297508563,
+      "targetSuper": 0.8846016617790806,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1466,
+        "mean": 27.884004092769448,
+        "sd": 1136.6236839561107,
+        "halfWidth": 58.18429646918027,
+        "lower": -30.30029237641082,
+        "upper": 86.06830056194971
+      },
+      "paid": 33.07128906250001,
+      "meanNormalFee": 7.664753297508563,
+      "meanSuperFee": 8.846016617790806
+    },
+    "short32:9:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2047,
+      "superAvailable": 2042,
+      "normal": {
+        "n": 2047,
+        "mean": 133.42774792379106,
+        "sd": 1691.645852803387,
+        "halfWidth": 104.9537992895265,
+        "lower": 28.47394863426456,
+        "upper": 238.38154721331756
+      },
+      "super": {
+        "n": 2042,
+        "mean": 129.45386875612152,
+        "sd": 1582.534651645801,
+        "halfWidth": 98.3044090527869,
+        "lower": 31.149459703334628,
+        "upper": 227.75827780890842
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.5584108716944173,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1607,
+        "mean": 143.64010578718128,
+        "sd": 1667.1443622554257,
+        "halfWidth": 81.51196093425537,
+        "lower": 62.128144852925914,
+        "upper": 225.15206672143665
+      },
+      "paid": 7.219140624999994,
+      "meanNormalFee": 0.42699071812408507,
+      "meanSuperFee": 5.584108716944172
+    },
+    "short32:9:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2045,
+      "normal": {
+        "n": 2048,
+        "mean": 299.2706298828127,
+        "sd": 2192.159102614419,
+        "halfWidth": 135.97364275060545,
+        "lower": 163.29698713220728,
+        "upper": 435.2442726334182
+      },
+      "super": {
+        "n": 2045,
+        "mean": 252.41995110024448,
+        "sd": 1947.1108471110156,
+        "halfWidth": 120.86252344124077,
+        "lower": 131.5574276590037,
+        "upper": 373.28247454148527
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.25,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1651,
+        "mean": 273.68373712901257,
+        "sd": 1959.1504110913227,
+        "halfWidth": 94.50402685418769,
+        "lower": 179.17971027482488,
+        "upper": 368.1877639832003
+      },
+      "paid": 2.4419677734374985,
+      "meanNormalFee": 0.42727050781250103,
+      "meanSuperFee": 0.8543276283618603
+    },
+    "short32:10:preflop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2044,
+      "normal": {
+        "n": 2046,
+        "mean": 32.68330889540568,
+        "sd": 1096.4316500788452,
+        "halfWidth": 68.04189279624569,
+        "lower": -35.35858390084001,
+        "upper": 100.72520169165136
+      },
+      "super": {
+        "n": 2044,
+        "mean": 49.174437377690765,
+        "sd": 1145.9803410802326,
+        "halfWidth": 71.15154899045245,
+        "lower": -21.97711161276169,
+        "upper": 120.32598636814322
+      },
+      "targetNormal": 0.25,
+      "targetSuper": 0.2606678082191776,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1710,
+        "mean": 45.3056140350877,
+        "sd": 1152.0735740498758,
+        "halfWidth": 54.60573173503279,
+        "lower": -9.30011769994509,
+        "upper": 99.91134577012049
+      },
+      "paid": 13.524169921874984,
+      "meanNormalFee": 2.1504643206256104,
+      "meanSuperFee": 2.606678082191776
+    },
+    "short32:10:flop": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2046,
+      "superAvailable": 2040,
+      "normal": {
+        "n": 2046,
+        "mean": 29.453225806451584,
+        "sd": 1412.7814463301547,
+        "halfWidth": 87.67379499561935,
+        "lower": -58.22056918916776,
+        "upper": 117.12702080207093
+      },
+      "super": {
+        "n": 2040,
+        "mean": 47.48539215686272,
+        "sd": 1493.3515448441215,
+        "halfWidth": 92.8099650880377,
+        "lower": -45.32457293117498,
+        "upper": 140.29535724490043
+      },
+      "targetNormal": 0.5492106549364618,
+      "targetSuper": 1.2226372549019593,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1343,
+        "mean": 95.42371556217418,
+        "sd": 1211.8424678170365,
+        "halfWidth": 64.81331470627718,
+        "lower": 30.610400855896998,
+        "upper": 160.23703026845135
+      },
+      "paid": 9.845336914062498,
+      "meanNormalFee": 5.4921065493646175,
+      "meanSuperFee": 12.226372549019592
+    },
+    "short32:10:turn": {
+      "intervalMethod": "normal approximation, per-cell Bonferroni over two tiers and planned looks",
+      "diagnosticZ": 2.807033770114134,
+      "n": 2048,
+      "normalAvailable": 2048,
+      "superAvailable": 2018,
+      "normal": {
+        "n": 2048,
+        "mean": 174.48007812499984,
+        "sd": 1604.3119960288138,
+        "halfWidth": 99.51109203176401,
+        "lower": 74.96898609323583,
+        "upper": 273.9911701567638
+      },
+      "super": {
+        "n": 2018,
+        "mean": 188.3973240832507,
+        "sd": 1711.8041220010894,
+        "halfWidth": 106.96485932158676,
+        "lower": 81.43246476166395,
+        "upper": 295.3621834048375
+      },
+      "targetNormal": 0.6281494140625006,
+      "targetSuper": 2.2020936570862233,
+      "precisionMet": false,
+      "voluntary": {
+        "n": 1595,
+        "mean": 228.12993730407518,
+        "sd": 1790.4272508882716,
+        "halfWidth": 87.86833699916366,
+        "lower": 140.26160030491152,
+        "upper": 315.9982743032389
+      },
+      "paid": 38.80510253906252,
+      "meanNormalFee": 6.281494140625005,
+      "meanSuperFee": 22.020936570862233
+    }
+  },
+  "countBreakdown": {
+    "0": {
+      "n": 55516,
+      "net": {
+        "n": 46003,
+        "mean": 78.1919113970829,
+        "sd": 1051.0205246183853,
+        "halfWidth": 9.604487404405356,
+        "lower": 68.58742399267754,
+        "upper": 87.79639880148827
+      },
+      "meanFee": 16.459427912673778
+    },
+    "1": {
+      "n": 27748,
+      "net": {
+        "n": 21656,
+        "mean": 109.90018008865941,
+        "sd": 1300.5624723541462,
+        "halfWidth": 17.322005345616077,
+        "lower": 92.57817474304333,
+        "upper": 127.22218543427549
+      },
+      "meanFee": 22.952479457978953
+    },
+    "2": {
+      "n": 13558,
+      "net": {
+        "n": 7246,
+        "mean": 82.2754692243998,
+        "sd": 1504.5290354432059,
+        "halfWidth": 34.64236075381573,
+        "lower": 47.63310847058407,
+        "upper": 116.91782997821554
+      },
+      "meanFee": 20.368129517627857
+    },
+    "3": {
+      "n": 13770,
+      "net": {
+        "n": 10008,
+        "mean": 182.64975519584348,
+        "sd": 1820.0651266224186,
+        "halfWidth": 35.659015727089304,
+        "lower": 146.99073946875419,
+        "upper": 218.30877092293278
+      },
+      "meanFee": 37.84949527959359
+    }
+  }
+}

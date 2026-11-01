@@ -1,0 +1,11 @@
+{
+  "status": "UNVALIDATED_RESEARCH_CANDIDATE",
+  "modelFile": "recommended-model.json",
+  "filenameIsNotProductApproval": true,
+  "netGatePassed": true,
+  "calibrationGatePassed": true,
+  "precisionGroups": 0,
+  "totalGroups": 54,
+  "fixedPerGroup": 2048,
+  "productEnabled": false
+}

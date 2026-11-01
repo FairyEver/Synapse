@@ -1,0 +1,39 @@
+{
+  "method": "Independent NumPy whole-hand bootstrap, fixed group sizes; no adaptive additions",
+  "numpy": "1.26.4",
+  "generator": "PCG64",
+  "seed": 2026110191,
+  "repetitions": 1000,
+  "fixedPerGroup": 2048,
+  "sourceSha256": "d7c365369aad6c7873815283500d2e357c6b6bf621ffc0984f8c39176e18b7fc",
+  "statistics": {
+    "all": {
+      "n": 110592,
+      "mean": 75.96559968171294,
+      "normalHalfWidth": 6.56659435196175,
+      "bootstrapLower": 69.8067329350224,
+      "bootstrapUpper": 83.03469635009763
+    },
+    "chosen": {
+      "n": 84913,
+      "mean": 98.93876791539577,
+      "normalHalfWidth": 8.546431398724783,
+      "bootstrapLower": 90.89360899000364,
+      "bootstrapUpper": 108.1132747019286
+    },
+    "normal": {
+      "n": 11180,
+      "mean": 67.3017084078712,
+      "normalHalfWidth": 21.413739490043458,
+      "bootstrapLower": 44.65370412128875,
+      "bootstrapUpper": 89.01608531630256
+    },
+    "super": {
+      "n": 73733,
+      "mean": 103.73583741336985,
+      "normalHalfWidth": 9.290878660388714,
+      "bootstrapLower": 94.46323723185803,
+      "bootstrapUpper": 112.85338312108424
+    }
+  }
+}

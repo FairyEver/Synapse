@@ -1,0 +1,20 @@
+{
+  "createdAt": "2026-11-01T07:34:11.453Z",
+  "samples": 128,
+  "workers": 2,
+  "seed": "20261101/multi-history-final",
+  "usedForModelSelection": false,
+  "scope": "Two or three prior actors; singles, repeated mixed tiers, last prior actor later folds; exact current funding matching from admission; no heads-up multi-prior opportunity exists",
+  "modelSha256": "67393c3b28ef96028d80577e48f1633a2b2042ac4d072f5d0c89f9f2745e3f46",
+  "fitSha256": "a4060da382c91e54d3a5c4606da0a3a36103d836033cfe15f1e16e07232e43ce",
+  "source": {
+    "multi-history.ts": "1d0ddd4113c054d39f8456b242b8df91faf8858a6d433cf27c63bae8486d8c0b",
+    "multi-history.cjs": "db16ecf9df2a9c6662d24397c29c507dafb75e486dd96276ea726b7859de2750",
+    "history.ts": "2f5cc4f7eae89e0db654492e44fdf120a6cd281327b99134e55671ad17ec5b0c",
+    "policies.ts": "d793d15c417cc1b39cacccad537bc011dee7209835317b427c8ec9d341bdfacd",
+    "simulator.ts": "e41e0e4275420268221bc79cd8ce2ebaf87fde829423a391a24266e9d5e8fb2d",
+    "math.ts": "f8f2c2643fc816c18c8850518171dcbfbff41549f146b2c7cfdc17a405fb4152",
+    "loader.cjs": "05d7f03806e696d97bb656ca15cd34a9fbc96ea1f849cabf24fe804fd9cd618b",
+    "engine.cjs": "cc313e986ca50b7171129fb385b0e0c3a0f0975a8fc046403e94aa807146262e"
+  }
+}

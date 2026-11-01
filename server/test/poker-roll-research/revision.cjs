@@ -1,0 +1,13 @@
+/* A failed study may suggest a NEW candidate, never retrofit its old holdout. */
+const fs=require("node:fs"),path=require("node:path"),zlib=require("node:zlib"),crypto=require("node:crypto")
+const {load}=require("./loader.cjs"),{fitNonnegative}=load("calibration.ts")
+const out=process.argv[2];if(!out)throw new Error("Result directory required")
+const read=name=>JSON.parse(fs.readFileSync(path.join(out,name),"utf8")),completion=read("completion.json")
+if(completion.netGatePassed&&completion.calibrationGatePassed&&completion.precisionGroups===completion.totalGroups){process.stdout.write("All gates passed; no failed-model revision generated.\n");process.exit(0)}
+const records=Object.values(read("break-even-index.json")).flatMap(record=>zlib.gunzipSync(fs.readFileSync(path.join(out,record.file))).toString().trim().split("\n").map(line=>JSON.parse(line))).filter(r=>r.available)
+function fit(data){return Object.fromEntries(["normal","super"].map(kind=>[kind,fitNonnegative(data.map(r=>r.x),data.map(r=>r[kind][0]))]))}
+const model=read("recommended-model.json"),cells=Object.fromEntries([...new Set(records.map(r=>r.group))].map(group=>[group,fit(records.filter(r=>r.group===group))]))
+const revised={...model,cells,coefficients:fit(records)}
+const hash=name=>crypto.createHash("sha256").update(fs.readFileSync(path.join(out,name))).digest("hex")
+fs.writeFileSync(path.join(out,"revision-candidate.json"),JSON.stringify({status:"UNVALIDATED_NEXT_ITERATION_ONLY",reason:"Original independent study failed at least one frozen gate. Preserve original data/model; do not relax assertions or reuse its holdout to certify this revision.",change:"Refit public base coefficients from zero-current-fee interventions WITH full future Roll/betting. Includes every negative outcome. Replaces single-intervention/no-future-Roll initialization; keeps previously selected curve/scale and zero-or-evidenced history rules, with no claim these remain optimal.",trainingRows:records.length,trainingSource:"Independent current-fee audit is now explicitly training for this new version only; it was not used to select the original model",model:revised,requires:"New training/calibration and untouched final seeds, depth-stratified variance reduction/inner continuations, same precision and net-benefit gates. No product use until these pass.",provenance:{breakEvenIndexSha256:hash("break-even-index.json"),valuationManifestSha256:hash("valuation-manifest.json"),oldModelSha256:hash("recommended-model.json"),sourceSha256:crypto.createHash("sha256").update(fs.readFileSync(__filename)).digest("hex")}},null,2)+"\n")
+process.stdout.write(JSON.stringify({revised:true,status:"unvalidated",rows:records.length})+"\n")

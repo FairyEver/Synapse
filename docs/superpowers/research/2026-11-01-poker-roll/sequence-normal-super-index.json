@@ -1,0 +1,272 @@
+{
+  "standard52:2:preflop": {
+    "file": "sequence-normal-super/standard52_2_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "81853f8c98806c8e1fbc309e6143e82d0f2e746f4383933836ce5ba62b160b99"
+  },
+  "standard52:2:flop": {
+    "file": "sequence-normal-super/standard52_2_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "094933703c51982ab6a98b47d5b091969c743f74d69b2bc44554abe26ea79699"
+  },
+  "standard52:2:turn": {
+    "file": "sequence-normal-super/standard52_2_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "03d3a1838f34c4f0df862ceb67e42f387728bd5af34e40c4ceeb2f712ccf878c"
+  },
+  "standard52:3:preflop": {
+    "file": "sequence-normal-super/standard52_3_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "eb16c872d153c253430fd93e9717db7b370fd60f13a5728a06c4bb0e43bb7d0d"
+  },
+  "standard52:3:flop": {
+    "file": "sequence-normal-super/standard52_3_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "3947a65a05bb20a5ce6047e1a56bd875c372e81a0f44b2173c30d8bb921e2bfb"
+  },
+  "standard52:3:turn": {
+    "file": "sequence-normal-super/standard52_3_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "37730d6fb70a470681c1b8453080718a831ecd5c61727fa48f0e8bacd9a8d496"
+  },
+  "standard52:4:preflop": {
+    "file": "sequence-normal-super/standard52_4_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "b9d1d573e36b7ccc89991fcb13ce62cba85d62b038dfa341888d95f4325e255a"
+  },
+  "standard52:4:flop": {
+    "file": "sequence-normal-super/standard52_4_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "e1c5fe1e556eb26c669a229ba8a2934ad7fd5fda1645d17a29eb91e66cee512f"
+  },
+  "standard52:4:turn": {
+    "file": "sequence-normal-super/standard52_4_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "dbcb2467f9e6f7b22471561aa59feaa8eb35c1a9c5eedc5326007f25d3761f84"
+  },
+  "standard52:5:preflop": {
+    "file": "sequence-normal-super/standard52_5_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "832f783f4eca6b6e139bc74cc2b0c65ba6b0a5b367304cd63e422fb9cb215b57"
+  },
+  "standard52:5:flop": {
+    "file": "sequence-normal-super/standard52_5_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "2c00d4d7e4cf53ab217bb59f8ffc3c9b7ec414d5409c02476e36f54ea479ef6b"
+  },
+  "standard52:5:turn": {
+    "file": "sequence-normal-super/standard52_5_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "8c07eac8e5708a79e890daaec7c6eafc277c44753c241bbb10615513d675ecc8"
+  },
+  "standard52:6:preflop": {
+    "file": "sequence-normal-super/standard52_6_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "e4948ab70ec808a03db12e4984c3203ad43dac351f62d24bccb95d07e3fd4f8c"
+  },
+  "standard52:6:flop": {
+    "file": "sequence-normal-super/standard52_6_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "d124e7193b30b26c48c71aed5a24d3f6588022eba896ebd6430907aa82b5355d"
+  },
+  "standard52:6:turn": {
+    "file": "sequence-normal-super/standard52_6_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "1d0a2ae6ee2e7602aff4806f281b5120c9716ec88778f8c8b149d19094013a47"
+  },
+  "standard52:7:preflop": {
+    "file": "sequence-normal-super/standard52_7_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "29cb828488572a2ec2541b57556754bfae3d6007e1df5fdeb6cb3ec796d79940"
+  },
+  "standard52:7:flop": {
+    "file": "sequence-normal-super/standard52_7_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "4a649df65cdf8f468d5d894425f1e1b8ee06ec15ef7fbe5b01bcc235c9eb16e0"
+  },
+  "standard52:7:turn": {
+    "file": "sequence-normal-super/standard52_7_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "a4b57e57fad541333c8ccbada14afcdb610d5dfc3257ca35a06a63acdd80413e"
+  },
+  "standard52:8:preflop": {
+    "file": "sequence-normal-super/standard52_8_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "593d086dde5d9f727ba3150afbae936fbb0a938f9343761326f2d898ce207d3e"
+  },
+  "standard52:8:flop": {
+    "file": "sequence-normal-super/standard52_8_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "b2d9877a4e82ef09c60c512f00f85dde66fb726cc483048f07075f0ba71166ea"
+  },
+  "standard52:8:turn": {
+    "file": "sequence-normal-super/standard52_8_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "c16f527ae51498b6eeffeb7099488a94976d1b582fe13328bc6de2ebae970a2b"
+  },
+  "standard52:9:preflop": {
+    "file": "sequence-normal-super/standard52_9_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "18ada1c358fba27a4cf616777475b2dafebc055ffeaf6d5b2e06070272583b81"
+  },
+  "standard52:9:flop": {
+    "file": "sequence-normal-super/standard52_9_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "ef0449c6286e4132e52aa7df7ebdbf587e09e296b8b31a2ca7477773a5195703"
+  },
+  "standard52:9:turn": {
+    "file": "sequence-normal-super/standard52_9_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "c3bad4daf7d969438733d9bae2fe60fac8e7c04eddd999726c788dfbc397780b"
+  },
+  "standard52:10:preflop": {
+    "file": "sequence-normal-super/standard52_10_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "76c3ce4723da6f2aeb4b75bce8c5bcc3e1e74a72034959e65c07abff63b26087"
+  },
+  "standard52:10:flop": {
+    "file": "sequence-normal-super/standard52_10_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "cec1579431334bf121de1775799e2eb337805ecda1da51d97cdcec7b4e0d0ed0"
+  },
+  "standard52:10:turn": {
+    "file": "sequence-normal-super/standard52_10_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "8c9f5ae2b619e3ca57dac3b8592eb2a6a430c1cf4b4d20e14df2ffa2fe0d420c"
+  },
+  "short32:2:preflop": {
+    "file": "sequence-normal-super/short32_2_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "3d687fc3ba44ec913b63f276d6b82e59218afd7a0a34e716e6503fd2ef221c8e"
+  },
+  "short32:2:flop": {
+    "file": "sequence-normal-super/short32_2_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "e6d974145330ce819759212943fe3878040e3c644bfe240ae3c9c97cfccf585b"
+  },
+  "short32:2:turn": {
+    "file": "sequence-normal-super/short32_2_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "a0f1279f2c3d09a5322b02040a84e2904a3e6dea2691e49f4ff63ae83587246c"
+  },
+  "short32:3:preflop": {
+    "file": "sequence-normal-super/short32_3_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "2e76e9ee2ae11da393169895996787009a8261adccfc30caf3418985592d4d69"
+  },
+  "short32:3:flop": {
+    "file": "sequence-normal-super/short32_3_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "104c9318baa4a61e004328938296ea7067f5f794b7e4a83f7b38e6dc4dc7ad2c"
+  },
+  "short32:3:turn": {
+    "file": "sequence-normal-super/short32_3_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "77fb87249b92e28b3e35099ecdb6721252340ab4408f8cd48245ebabebc143e2"
+  },
+  "short32:4:preflop": {
+    "file": "sequence-normal-super/short32_4_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "d0dc567295c39b5a6d8a448dbfff7335f4dce909c410a3568eafced0c2a565b3"
+  },
+  "short32:4:flop": {
+    "file": "sequence-normal-super/short32_4_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "f792636f0644aed66ad80b5618d56559a77e5cef819605562b7549873a74fd98"
+  },
+  "short32:4:turn": {
+    "file": "sequence-normal-super/short32_4_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "d4eb862b59ac62066f4eecbc70e4d25693b77b9dfd9c1fdc3fefa5fec8557b80"
+  },
+  "short32:5:preflop": {
+    "file": "sequence-normal-super/short32_5_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "d9418833c59af6684275d1fe464e21f0940cdb24fe72566f45a4cd54166d6b86"
+  },
+  "short32:5:flop": {
+    "file": "sequence-normal-super/short32_5_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "3e097726da9cfe391a24089486f036851d77987e281ddbe89e2fa43030b407c4"
+  },
+  "short32:5:turn": {
+    "file": "sequence-normal-super/short32_5_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "cbe2645b30d9b7aa44f82ba62afaf0cacf0f3071acb20eb1328fae254292ab65"
+  },
+  "short32:6:preflop": {
+    "file": "sequence-normal-super/short32_6_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "cd54a411cccfb7127a8f40fa1a523c3094d4d63187087b5f610a0e4eb2ac1d4f"
+  },
+  "short32:6:flop": {
+    "file": "sequence-normal-super/short32_6_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "e4c0930345c13583f1e9ed735bc5445bd5aadb727ae911056ff244c2ecfc5251"
+  },
+  "short32:6:turn": {
+    "file": "sequence-normal-super/short32_6_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "680c581c9dc2d3e7dbce31e2fa45a425fe7db4381bf04f58ff3bac8ec7863c55"
+  },
+  "short32:7:preflop": {
+    "file": "sequence-normal-super/short32_7_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "3a4ef6a41965d598ff7ae9c87fd6403d4256fc4c75ae90e856a32649c4dfb87c"
+  },
+  "short32:7:flop": {
+    "file": "sequence-normal-super/short32_7_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "83ba2f2c92f02396eb02635cd9372ad343e4186827f05e56d8b5f938befdb146"
+  },
+  "short32:7:turn": {
+    "file": "sequence-normal-super/short32_7_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "29761ff4cd32d02e56c9f43eb1b06d7fde3af3dfb528d7192173ea81db2b8184"
+  },
+  "short32:8:preflop": {
+    "file": "sequence-normal-super/short32_8_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "c796cc182d958c714c1048fae55566d66de59202b8d4f8d8d9780fc950c463f1"
+  },
+  "short32:8:flop": {
+    "file": "sequence-normal-super/short32_8_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "9b153fb3fe8ef8a5497c4fe8ff04a8e6d4b83e25251f21bedcdb85e3f30000f9"
+  },
+  "short32:8:turn": {
+    "file": "sequence-normal-super/short32_8_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "1eb0c7118e5c0771e51b29ad42acf40e066c935d818f52fb760acc0b0f54dc96"
+  },
+  "short32:9:preflop": {
+    "file": "sequence-normal-super/short32_9_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "40c9d06f12abdba4123fced84aa5789372d57151ba3a8066823e32ea28305ca0"
+  },
+  "short32:9:flop": {
+    "file": "sequence-normal-super/short32_9_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "88168cf814bc340fff218210f11261a28d37b3120a940c764cf42eeeaff059e6"
+  },
+  "short32:9:turn": {
+    "file": "sequence-normal-super/short32_9_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "4d9e175794d6459047f1f079e64b5bf5cec4fd05d9b7949f9d9d406d408e20e1"
+  },
+  "short32:10:preflop": {
+    "file": "sequence-normal-super/short32_10_preflop.jsonl.gz",
+    "rows": 256,
+    "sha256": "57ef9bae21680467d43728ed5b356c9a6fd91f425430b896a8a3e8e6cf2f8252"
+  },
+  "short32:10:flop": {
+    "file": "sequence-normal-super/short32_10_flop.jsonl.gz",
+    "rows": 256,
+    "sha256": "5bacecd42c584c61992e71f1796bab7092ee1baa2420ef10b08b395993a6f099"
+  },
+  "short32:10:turn": {
+    "file": "sequence-normal-super/short32_10_turn.jsonl.gz",
+    "rows": 256,
+    "sha256": "f9270e70d1207b5dae582f12a5174640ab59c75e02cf14deea0880134e7b61fe"
+  }
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "name": "loader.cjs",
+    "rows": 768,
+    "ms": 66178.62654099999,
+    "sha256": "b3a4d2536e5acbc4906c85958fc22a8d5e4038f20a3d3acb204e0d52eab0f674"
+  },
+  {
+    "name": "fast-loader.cjs",
+    "rows": 768,
+    "ms": 29291.47387500001,
+    "sha256": "b3a4d2536e5acbc4906c85958fc22a8d5e4038f20a3d3acb204e0d52eab0f674",
+    "stats": {
+      "hits": 2919639,
+      "misses": 1136700
+    }
+  }
+]

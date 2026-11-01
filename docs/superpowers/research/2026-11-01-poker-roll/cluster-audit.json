@@ -1,0 +1,1558 @@
+{
+  "method": "Post-study cluster-robust mean SE by group + actual whole-hand seed, G/(G-1) correction, original Bonferroni z and fee targets. Does not overwrite frozen results, select prices or certify a revised model.",
+  "source": {
+    "cluster-statistics.ts": "151bcb003a727202a3adb4db5b8b9b100fef0df5d8e28e67114398f966cc5645",
+    "cluster-audit.cjs": "cc1552d360484ddc37d7af3a0e4334ba7c3bab2f07edf12927c505ecf2bcf35c"
+  },
+  "finalIndexSha256": "4e120880056e322d596483e8c57a83160e27b5920414d9fc318edf4f287801c9",
+  "duplicates": [
+    {
+      "group": "standard52:8:flop",
+      "seed": 4190722082,
+      "records": [
+        {
+          "id": "final-holdout:standard52:8:flop:2620",
+          "depth": 250,
+          "shape": "allin",
+          "count": 1,
+          "folded": 0
+        },
+        {
+          "id": "final-holdout:standard52:8:flop:19117",
+          "depth": 500,
+          "shape": "short",
+          "count": 3,
+          "folded": 0
+        }
+      ]
+    },
+    {
+      "group": "standard52:10:turn",
+      "seed": 2074590971,
+      "records": [
+        {
+          "id": "final-holdout:standard52:10:turn:10140",
+          "depth": 250,
+          "shape": "allin",
+          "count": 1,
+          "folded": 0
+        },
+        {
+          "id": "final-holdout:standard52:10:turn:30225",
+          "depth": 25,
+          "shape": "deep",
+          "count": 1,
+          "folded": 0
+        }
+      ]
+    },
+    {
+      "group": "short32:2:preflop",
+      "seed": 1872166930,
+      "records": [
+        {
+          "id": "final-holdout:short32:2:preflop:26473",
+          "depth": 25,
+          "shape": "short",
+          "count": 2,
+          "folded": 1
+        },
+        {
+          "id": "final-holdout:short32:2:preflop:29244",
+          "depth": 250,
+          "shape": "allin",
+          "count": 0,
+          "folded": 0
+        }
+      ]
+    },
+    {
+      "group": "short32:2:turn",
+      "seed": 1496673018,
+      "records": [
+        {
+          "id": "final-holdout:short32:2:turn:5029",
+          "depth": 500,
+          "shape": "equal",
+          "count": 1,
+          "folded": 0
+        },
+        {
+          "id": "final-holdout:short32:2:turn:25773",
+          "depth": 500,
+          "shape": "short",
+          "count": 0,
+          "folded": 0
+        }
+      ]
+    },
+    {
+      "group": "short32:6:flop",
+      "seed": 1074804605,
+      "records": [
+        {
+          "id": "final-holdout:short32:6:flop:22253",
+          "depth": 500,
+          "shape": "short",
+          "count": 0,
+          "folded": 0
+        },
+        {
+          "id": "final-holdout:short32:6:flop:31865",
+          "depth": 25,
+          "shape": "allin",
+          "count": 1,
+          "folded": 0
+        }
+      ]
+    },
+    {
+      "group": "short32:8:flop",
+      "seed": 2172018596,
+      "records": [
+        {
+          "id": "final-holdout:short32:8:flop:9764",
+          "depth": 250,
+          "shape": "equal",
+          "count": 0,
+          "folded": 1
+        },
+        {
+          "id": "final-holdout:short32:8:flop:14935",
+          "depth": 2500,
+          "shape": "deep",
+          "count": 0,
+          "folded": 0
+        }
+      ]
+    },
+    {
+      "group": "short32:9:turn",
+      "seed": 1591031712,
+      "records": [
+        {
+          "id": "final-holdout:short32:9:turn:5868",
+          "depth": 250,
+          "shape": "short",
+          "count": 1,
+          "folded": 0
+        },
+        {
+          "id": "final-holdout:short32:9:turn:6556",
+          "depth": 250,
+          "shape": "allin",
+          "count": 3,
+          "folded": 0
+        }
+      ]
+    }
+  ],
+  "precisionGroups": 0,
+  "totalGroups": 54,
+  "groups": {
+    "standard52:2:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32675,
+        "clusters": 32675,
+        "mean": -10.785672532517092,
+        "se": 3.7116537462827544,
+        "halfWidth": 10.41873740878633,
+        "lower": -21.20440994130342,
+        "upper": -0.3669351237307623,
+        "target": 0.5019744452945741
+      },
+      "super": {
+        "n": 32515,
+        "clusters": 32515,
+        "mean": -4.5285698908196,
+        "se": 3.7024393008402092,
+        "halfWidth": 10.392872149256231,
+        "lower": -14.921442040075831,
+        "upper": 5.864302258436631,
+        "target": 1.1607302783331348
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:2:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32669,
+        "clusters": 32669,
+        "mean": 24.30463436285157,
+        "se": 4.264976338780204,
+        "halfWidth": 11.971932611693772,
+        "lower": 12.332701751157797,
+        "upper": 36.27656697454534,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32437,
+        "clusters": 32437,
+        "mean": 23.790791380213996,
+        "se": 4.286192152864332,
+        "halfWidth": 12.031486118288381,
+        "lower": 11.759305261925615,
+        "upper": 35.82227749850237,
+        "target": 0.9921242716650872
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:2:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32689,
+        "clusters": 32689,
+        "mean": 5.39538376824007,
+        "se": 4.182830108379451,
+        "halfWidth": 11.741345368871283,
+        "lower": -6.345961600631213,
+        "upper": 17.136729137111352,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32534,
+        "clusters": 32534,
+        "mean": 16.703654638224577,
+        "se": 4.169490716519153,
+        "halfWidth": 11.70390124544664,
+        "lower": 4.999753392777938,
+        "upper": 28.407555883671215,
+        "target": 0.9381673018995562
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:3:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32723,
+        "clusters": 32723,
+        "mean": 2.721021911193988,
+        "se": 5.343703649844434,
+        "halfWidth": 14.999956602595478,
+        "lower": -12.27893469140149,
+        "upper": 17.72097851378947,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32621,
+        "clusters": 32621,
+        "mean": 4.830212133288381,
+        "se": 5.309527264085425,
+        "halfWidth": 14.904022333629493,
+        "lower": -10.073810200341113,
+        "upper": 19.734234466917876,
+        "target": 0.6783947457159661
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:3:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32689,
+        "clusters": 32689,
+        "mean": 23.049984704334676,
+        "se": 5.32287557250304,
+        "halfWidth": 14.941491486131639,
+        "lower": 8.108493218203037,
+        "upper": 37.991476190466315,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32576,
+        "clusters": 32576,
+        "mean": 28.24142006385081,
+        "se": 5.3177994778139865,
+        "halfWidth": 14.927242716919167,
+        "lower": 13.314177346931643,
+        "upper": 43.16866278076998,
+        "target": 0.6955458005893795
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:3:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32708,
+        "clusters": 32708,
+        "mean": 9.773593616240646,
+        "se": 4.94463049344218,
+        "halfWidth": 13.879744775828312,
+        "lower": -4.106151159587666,
+        "upper": 23.65333839206896,
+        "target": 0.33631649749296344
+      },
+      "super": {
+        "n": 32581,
+        "clusters": 32581,
+        "mean": 22.567858567876936,
+        "se": 5.0206489958771,
+        "halfWidth": 14.093131279316637,
+        "lower": 8.474727288560299,
+        "upper": 36.66098984719358,
+        "target": 1.3353878027071084
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:4:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32352,
+        "clusters": 32352,
+        "mean": 32.9873500865481,
+        "se": 6.59542318305444,
+        "halfWidth": 18.513575603027466,
+        "lower": 14.473774483520632,
+        "upper": 51.50092568957557,
+        "target": 0.2580222242828819
+      },
+      "super": {
+        "n": 32287,
+        "clusters": 32287,
+        "mean": 35.312168984421206,
+        "se": 6.60327243087384,
+        "halfWidth": 18.535608706726517,
+        "lower": 16.77656027769469,
+        "upper": 53.847777691147726,
+        "target": 0.30975903614457
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:4:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32717,
+        "clusters": 32717,
+        "mean": 52.5666320261635,
+        "se": 6.4578723057381975,
+        "halfWidth": 18.12746564529195,
+        "lower": 34.43916638087155,
+        "upper": 70.69409767145544,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32470,
+        "clusters": 32470,
+        "mean": 63.15233138281516,
+        "se": 6.644376477014071,
+        "halfWidth": 18.650989152330474,
+        "lower": 44.50134223048469,
+        "upper": 81.80332053514564,
+        "target": 0.576188019710513
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:4:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32721,
+        "clusters": 32721,
+        "mean": 88.90460866110412,
+        "se": 7.052849727603124,
+        "halfWidth": 19.79758736092224,
+        "lower": 69.10702130018188,
+        "upper": 108.70219602202636,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32633,
+        "clusters": 32633,
+        "mean": 99.79376551343714,
+        "se": 7.120289317297912,
+        "halfWidth": 19.98689256663815,
+        "lower": 79.80687294679899,
+        "upper": 119.78065808007528,
+        "target": 0.8108157386694214
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:5:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32740,
+        "clusters": 32740,
+        "mean": 6.29736102626758,
+        "se": 5.196622017939327,
+        "halfWidth": 14.587093494874347,
+        "lower": -8.289732468606768,
+        "upper": 20.884454521141926,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32695,
+        "clusters": 32695,
+        "mean": 7.608787276341952,
+        "se": 5.377749369511327,
+        "halfWidth": 15.095524087428286,
+        "lower": -7.486736811086334,
+        "upper": 22.704311363770238,
+        "target": 0.7843774277412159
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:5:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32717,
+        "clusters": 32717,
+        "mean": 42.4018614176116,
+        "se": 7.092428984358177,
+        "halfWidth": 19.908687671229693,
+        "lower": 22.493173746381906,
+        "upper": 62.31054908884129,
+        "target": 0.4138880398569522
+      },
+      "super": {
+        "n": 32655,
+        "clusters": 32655,
+        "mean": 55.17115908742924,
+        "se": 7.175171784384565,
+        "halfWidth": 20.140949505137563,
+        "lower": 35.030209582291675,
+        "upper": 75.3121085925668,
+        "target": 0.46312356453832565
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:5:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32723,
+        "clusters": 32723,
+        "mean": 140.11689942853707,
+        "se": 8.151643919429494,
+        "halfWidth": 22.88193976378413,
+        "lower": 117.23495966475294,
+        "upper": 162.99883919232119,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32236,
+        "clusters": 32236,
+        "mean": 153.17868221863765,
+        "se": 8.367048900713437,
+        "halfWidth": 23.48658882049896,
+        "lower": 129.6920933981387,
+        "upper": 176.6652710391366,
+        "target": 0.26866903461969915
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:6:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32750,
+        "clusters": 32750,
+        "mean": 32.88042290076348,
+        "se": 5.159504326859422,
+        "halfWidth": 14.48290288254439,
+        "lower": 18.397520018219087,
+        "upper": 47.36332578330787,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32704,
+        "clusters": 32704,
+        "mean": 40.08797394814098,
+        "se": 5.36740734421652,
+        "halfWidth": 15.06649367317439,
+        "lower": 25.021480274966585,
+        "upper": 55.15446762131537,
+        "target": 0.25
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:6:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32723,
+        "clusters": 32723,
+        "mean": 36.961265776365224,
+        "se": 7.3208645368753205,
+        "halfWidth": 20.549913981439992,
+        "lower": 16.41135179492523,
+        "upper": 57.511179757805216,
+        "target": 0.43509366500628516
+      },
+      "super": {
+        "n": 32660,
+        "clusters": 32660,
+        "mean": 42.60882731169627,
+        "se": 7.472796630973874,
+        "halfWidth": 20.97639250033879,
+        "lower": 21.632434811357477,
+        "upper": 63.58521981203506,
+        "target": 0.48734093692589425
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:6:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32608,
+        "clusters": 32608,
+        "mean": 189.99891897693766,
+        "se": 8.515051807248248,
+        "halfWidth": 23.90203797721722,
+        "lower": 166.09688099972044,
+        "upper": 213.90095695415488,
+        "target": 0.34565904072618975
+      },
+      "super": {
+        "n": 32479,
+        "clusters": 32479,
+        "mean": 207.12048400504972,
+        "se": 8.567028956308972,
+        "halfWidth": 24.047939589904928,
+        "lower": 183.0725444151448,
+        "upper": 231.16842359495465,
+        "target": 0.38800363311678543
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:7:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32754,
+        "clusters": 32754,
+        "mean": 122.97790193564153,
+        "se": 7.239425658625001,
+        "halfWidth": 20.321312299991135,
+        "lower": 102.65658963565039,
+        "upper": 143.29921423563266,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32714,
+        "clusters": 32714,
+        "mean": 129.23056642416043,
+        "se": 7.360416855039489,
+        "halfWidth": 20.660938674213114,
+        "lower": 108.56962774994732,
+        "upper": 149.89150509837356,
+        "target": 0.25
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:7:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32740,
+        "clusters": 32740,
+        "mean": 22.708141417226567,
+        "se": 7.0244884985602924,
+        "halfWidth": 19.71797643323707,
+        "lower": 2.990164983989498,
+        "upper": 42.42611785046364,
+        "target": 0.6762368662186782
+      },
+      "super": {
+        "n": 32680,
+        "clusters": 32680,
+        "mean": 26.763041615667202,
+        "se": 7.077752538168036,
+        "halfWidth": 19.867490391148703,
+        "lower": 6.895551224518499,
+        "upper": 46.630532006815905,
+        "target": 1.2773344553243575
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:7:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32738,
+        "clusters": 32738,
+        "mean": 200.66174476143917,
+        "se": 8.07127792247723,
+        "halfWidth": 22.656349696370235,
+        "lower": 178.00539506506894,
+        "upper": 223.3180944578094,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32683,
+        "clusters": 32683,
+        "mean": 207.20530857020518,
+        "se": 8.100150870141668,
+        "halfWidth": 22.737397035507048,
+        "lower": 184.46791153469812,
+        "upper": 229.94270560571223,
+        "target": 0.7021316892573898
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:8:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32754,
+        "clusters": 32754,
+        "mean": 109.25777156988411,
+        "se": 7.036139926611555,
+        "halfWidth": 19.750682385247018,
+        "lower": 89.5070891846371,
+        "upper": 129.00845395513113,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32725,
+        "clusters": 32725,
+        "mean": 109.01163025210064,
+        "se": 6.969846375353309,
+        "halfWidth": 19.56459414812433,
+        "lower": 89.44703610397632,
+        "upper": 128.576224400225,
+        "target": 0.41186829640947
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:8:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32767,
+      "normal": {
+        "n": 32690,
+        "clusters": 32689,
+        "mean": 96.87368155399274,
+        "se": 7.151850268789086,
+        "halfWidth": 20.07548522329081,
+        "lower": 76.79819633070193,
+        "upper": 116.94916677728355,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32213,
+        "clusters": 32212,
+        "mean": 97.5686244683817,
+        "se": 7.340985925636684,
+        "halfWidth": 20.606395399194735,
+        "lower": 76.96222906918696,
+        "upper": 118.17501986757644,
+        "target": 0.4041197653121601
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:8:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32690,
+        "clusters": 32690,
+        "mean": 169.5662771489753,
+        "se": 7.476390965005363,
+        "halfWidth": 20.986481917346254,
+        "lower": 148.57979523162905,
+        "upper": 190.55275906632156,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32169,
+        "clusters": 32169,
+        "mean": 162.61409897727663,
+        "se": 7.506047392079033,
+        "halfWidth": 21.06972850964297,
+        "lower": 141.54437046763366,
+        "upper": 183.6838274869196,
+        "target": 2.0286048680406803
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:9:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32757,
+        "clusters": 32757,
+        "mean": 12.720572702018043,
+        "se": 4.112113165579076,
+        "halfWidth": 11.5428405223114,
+        "lower": 1.1777321797066431,
+        "upper": 24.26341322432944,
+        "target": 0.6412659889489142
+      },
+      "super": {
+        "n": 32736,
+        "clusters": 32736,
+        "mean": 30.93556176686219,
+        "se": 4.714141187252652,
+        "halfWidth": 13.232753509704132,
+        "lower": 17.702808257158058,
+        "upper": 44.16831527656632,
+        "target": 0.8231557001466202
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:9:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32750,
+        "clusters": 32750,
+        "mean": 103.16204580152663,
+        "se": 6.892048328488505,
+        "halfWidth": 19.346212403325904,
+        "lower": 83.81583339820072,
+        "upper": 122.50825820485254,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32726,
+        "clusters": 32726,
+        "mean": 107.40071349996941,
+        "se": 6.9259860971984235,
+        "halfWidth": 19.441476866176966,
+        "lower": 87.95923663379244,
+        "upper": 126.84219036614638,
+        "target": 0.43022932836276007
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:9:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32745,
+        "clusters": 32745,
+        "mean": 202.69454725912303,
+        "se": 7.927739111903525,
+        "halfWidth": 22.253431407767827,
+        "lower": 180.4411158513552,
+        "upper": 224.94797866689086,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32359,
+        "clusters": 32359,
+        "mean": 216.19578787972293,
+        "se": 8.14962641511204,
+        "halfWidth": 22.876276561033684,
+        "lower": 193.31951131868925,
+        "upper": 239.0720644407566,
+        "target": 1.0163129268518813
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:10:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32756,
+        "clusters": 32756,
+        "mean": 46.511570399315936,
+        "se": 5.636523014888206,
+        "halfWidth": 15.821910448816725,
+        "lower": 30.689659950499212,
+        "upper": 62.33348084813266,
+        "target": 0.6091346623519309
+      },
+      "super": {
+        "n": 32741,
+        "clusters": 32741,
+        "mean": 68.34300113008122,
+        "se": 6.106678349952319,
+        "halfWidth": 17.141652351541016,
+        "lower": 51.20134877854021,
+        "upper": 85.48465348162223,
+        "target": 0.6637549250175847
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:10:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32477,
+        "clusters": 32477,
+        "mean": 50.815771161129575,
+        "se": 6.336979640714055,
+        "halfWidth": 17.788115852010083,
+        "lower": 33.027655309119496,
+        "upper": 68.60388701313965,
+        "target": 0.3882332111956133
+      },
+      "super": {
+        "n": 32231,
+        "clusters": 32231,
+        "mean": 61.52593155657555,
+        "se": 6.583060776273645,
+        "halfWidth": 18.478873909713887,
+        "lower": 43.04705764686166,
+        "upper": 80.00480546628944,
+        "target": 1.102720517514254
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "standard52:10:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32767,
+      "normal": {
+        "n": 32744,
+        "clusters": 32743,
+        "mean": 215.73120113608542,
+        "se": 7.751168148677116,
+        "halfWidth": 21.757790751169715,
+        "lower": 193.9734103849157,
+        "upper": 237.48899188725514,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32714,
+        "clusters": 32713,
+        "mean": 221.4734777159635,
+        "se": 7.861137569162087,
+        "halfWidth": 22.06647862815091,
+        "lower": 199.40699908781258,
+        "upper": 243.53995634411442,
+        "target": 1.5627208534572956
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:2:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32767,
+      "normal": {
+        "n": 32543,
+        "clusters": 32542,
+        "mean": -6.330900654518653,
+        "se": 3.729238019497621,
+        "halfWidth": 10.468097057523373,
+        "lower": -16.798997712042027,
+        "upper": 4.13719640300472,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32409,
+        "clusters": 32408,
+        "mean": 4.043424665987971,
+        "se": 3.733623364957582,
+        "halfWidth": 10.480406870323101,
+        "lower": -6.43698220433513,
+        "upper": 14.523831536311071,
+        "target": 0.28152750779104513
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:2:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32713,
+        "clusters": 32713,
+        "mean": 19.1625393574421,
+        "se": 4.27985437972951,
+        "halfWidth": 12.013695775071616,
+        "lower": 7.148843582370484,
+        "upper": 31.176235132513717,
+        "target": 0.25
+      },
+      "super": {
+        "n": 31388,
+        "clusters": 31388,
+        "mean": 20.382295781827438,
+        "se": 4.478340295017589,
+        "halfWidth": 12.570852442177266,
+        "lower": 7.811443339650172,
+        "upper": 32.95314822400471,
+        "target": 0.543588632598442
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:2:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32767,
+      "normal": {
+        "n": 32678,
+        "clusters": 32677,
+        "mean": -4.422323887630853,
+        "se": 3.6733612836163947,
+        "halfWidth": 10.311249172941023,
+        "lower": -14.733573060571876,
+        "upper": 5.888925285310171,
+        "target": 0.6512312565028493
+      },
+      "super": {
+        "n": 32485,
+        "clusters": 32484,
+        "mean": 7.833046021240528,
+        "se": 3.5907831255172376,
+        "halfWidth": 10.079449494482864,
+        "lower": -2.246403473242336,
+        "upper": 17.912495515723393,
+        "target": 1.799409727566606
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:3:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32719,
+        "clusters": 32719,
+        "mean": -12.085516061004341,
+        "se": 5.092077845837799,
+        "halfWidth": 14.293634473316734,
+        "lower": -26.379150534321077,
+        "upper": 2.208118412312393,
+        "target": 0.3227841621076458
+      },
+      "super": {
+        "n": 32622,
+        "clusters": 32622,
+        "mean": -10.917888234933486,
+        "se": 5.290870913310264,
+        "halfWidth": 14.851653326976521,
+        "lower": -25.769541561910007,
+        "upper": 3.9337650920430356,
+        "target": 0.7259055238796118
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:3:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32704,
+        "clusters": 32704,
+        "mean": 38.123659185420884,
+        "se": 5.871542405254955,
+        "halfWidth": 16.481617814207826,
+        "lower": 21.642041371213057,
+        "upper": 54.605276999628714,
+        "target": 0.7274240154109877
+      },
+      "super": {
+        "n": 32265,
+        "clusters": 32265,
+        "mean": 57.5264326669766,
+        "se": 5.9167003571733225,
+        "halfWidth": 16.608377710231874,
+        "lower": 40.918054956744726,
+        "upper": 74.13481037720848,
+        "target": 0.9761444289477867
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:3:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32711,
+        "clusters": 32711,
+        "mean": 48.081090458867024,
+        "se": 5.704640277371348,
+        "halfWidth": 16.01311790493463,
+        "lower": 32.06797255393239,
+        "upper": 64.09420836380166,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32512,
+        "clusters": 32512,
+        "mean": 55.79400990403532,
+        "se": 5.644903957934165,
+        "halfWidth": 15.845436038972135,
+        "lower": 39.94857386506318,
+        "upper": 71.63944594300746,
+        "target": 1.4985739111712557
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:4:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32739,
+        "clusters": 32739,
+        "mean": -17.3946088762637,
+        "se": 5.118074325556211,
+        "halfWidth": 14.366607469790406,
+        "lower": -31.761216346054105,
+        "upper": -3.028001406473294,
+        "target": 0.6531409022877874
+      },
+      "super": {
+        "n": 32684,
+        "clusters": 32684,
+        "mean": -6.695487088483676,
+        "se": 5.488561162141184,
+        "halfWidth": 15.406576531467179,
+        "lower": -22.102063619950854,
+        "upper": 8.711089442983504,
+        "target": 0.7136629543507387
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:4:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32722,
+        "clusters": 32722,
+        "mean": 22.671817126092584,
+        "se": 6.540100948884014,
+        "halfWidth": 18.358284223472918,
+        "lower": 4.3135329026196665,
+        "upper": 41.0301013495655,
+        "target": 1.387983772385574
+      },
+      "super": {
+        "n": 32642,
+        "clusters": 32642,
+        "mean": 48.80173549414881,
+        "se": 6.6051804503399545,
+        "halfWidth": 18.540964581801934,
+        "lower": 30.260770912346874,
+        "upper": 67.34270007595075,
+        "target": 2.3824705900373657
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:4:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32717,
+        "clusters": 32717,
+        "mean": 64.35097808478737,
+        "se": 7.036655462018431,
+        "halfWidth": 19.75212951054381,
+        "lower": 44.59884857424356,
+        "upper": 84.10310759533118,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32617,
+        "clusters": 32617,
+        "mean": 72.96778826992093,
+        "se": 7.074066688019819,
+        "halfWidth": 19.857144085311077,
+        "lower": 53.11064418460985,
+        "upper": 92.82493235523201,
+        "target": 2.5392954594230606
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:5:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32727,
+        "clusters": 32727,
+        "mean": -23.18386500443064,
+        "se": 5.5190820715624405,
+        "halfWidth": 15.492249754907242,
+        "lower": -38.67611475933788,
+        "upper": -7.691615249523398,
+        "target": 0.8413322333241686
+      },
+      "super": {
+        "n": 32675,
+        "clusters": 32675,
+        "mean": -17.74738638102531,
+        "se": 5.650626578855467,
+        "halfWidth": 15.86149962915179,
+        "lower": -33.6088860101771,
+        "upper": -1.885886751873521,
+        "target": 1.2227859219586712
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:5:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32729,
+        "clusters": 32729,
+        "mean": 23.115310580830315,
+        "se": 7.513948568474994,
+        "halfWidth": 21.091907378610063,
+        "lower": 2.0234032022202513,
+        "upper": 44.20721795944038,
+        "target": 0.9570726267224624
+      },
+      "super": {
+        "n": 32645,
+        "clusters": 32645,
+        "mean": 31.491643436973586,
+        "se": 7.508954626738417,
+        "halfWidth": 21.077889215509508,
+        "lower": 10.413754221464078,
+        "upper": 52.56953265248309,
+        "target": 2.6283994486138607
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:5:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32486,
+        "clusters": 32486,
+        "mean": 176.63093948162114,
+        "se": 8.600378842833763,
+        "halfWidth": 24.14155384760949,
+        "lower": 152.48938563401165,
+        "upper": 200.77249332923063,
+        "target": 0.27814720187155
+      },
+      "super": {
+        "n": 31281,
+        "clusters": 31281,
+        "mean": 183.5018653495734,
+        "se": 8.880099622025275,
+        "halfWidth": 24.926739521002705,
+        "lower": 158.5751258285707,
+        "upper": 208.4286048705761,
+        "target": 2.115481442409114
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:6:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32750,
+        "clusters": 32750,
+        "mean": 38.31576488549603,
+        "se": 7.415529198958839,
+        "halfWidth": 20.815640884744873,
+        "lower": 17.500124000751157,
+        "upper": 59.1314057702409,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32701,
+        "clusters": 32701,
+        "mean": 38.622299012262744,
+        "se": 7.297904519899561,
+        "halfWidth": 20.485464438426643,
+        "lower": 18.1368345738361,
+        "upper": 59.10776345068939,
+        "target": 0.25
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:6:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32767,
+      "normal": {
+        "n": 32721,
+        "clusters": 32720,
+        "mean": 47.69677271477019,
+        "se": 7.759059223860313,
+        "halfWidth": 21.77994126569146,
+        "lower": 25.91683144907873,
+        "upper": 69.47671398046165,
+        "target": 1.0828156229944228
+      },
+      "super": {
+        "n": 32668,
+        "clusters": 32667,
+        "mean": 62.0185931186482,
+        "se": 8.061005560747216,
+        "halfWidth": 22.627514830095254,
+        "lower": 39.39107828855295,
+        "upper": 84.64610794874345,
+        "target": 2.014065446308343
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:6:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32728,
+        "clusters": 32728,
+        "mean": 189.55659374236197,
+        "se": 9.268881099558087,
+        "halfWidth": 26.018062257632174,
+        "lower": 163.5385314847298,
+        "upper": 215.57465599999415,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32661,
+        "clusters": 32661,
+        "mean": 197.5986283334862,
+        "se": 9.439214592824,
+        "halfWidth": 26.4961941254111,
+        "lower": 171.1024342080751,
+        "upper": 224.0948224588973,
+        "target": 1.5657894736841653
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:7:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32754,
+        "clusters": 32754,
+        "mean": 2.0587622885754397,
+        "se": 4.474436498587135,
+        "halfWidth": 12.55989435376533,
+        "lower": -10.50113206518989,
+        "upper": 14.61865664234077,
+        "target": 0.30049734383587057
+      },
+      "super": {
+        "n": 32721,
+        "clusters": 32721,
+        "mean": 11.313726658720622,
+        "se": 5.32426188558832,
+        "halfWidth": 14.94538291377797,
+        "lower": -3.6316562550573472,
+        "upper": 26.25910957249859,
+        "target": 0.6255047217383215
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:7:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32724,
+        "clusters": 32724,
+        "mean": 93.24260023224542,
+        "se": 8.256996310756778,
+        "halfWidth": 23.177667484002093,
+        "lower": 70.06493274824334,
+        "upper": 116.42026771624751,
+        "target": 0.2913267021146712
+      },
+      "super": {
+        "n": 32347,
+        "clusters": 32347,
+        "mean": 98.62154450180832,
+        "se": 8.459787261568263,
+        "halfWidth": 23.746908531203484,
+        "lower": 74.87463597060483,
+        "upper": 122.3684530330118,
+        "target": 1.0529981141991336
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:7:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32738,
+        "clusters": 32738,
+        "mean": 179.51850449019426,
+        "se": 9.824886340727247,
+        "halfWidth": 27.57878774595446,
+        "lower": 151.9397167442398,
+        "upper": 207.09729223614872,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32640,
+        "clusters": 32640,
+        "mean": 175.13211703431432,
+        "se": 9.987460829860307,
+        "halfWidth": 28.035139827110015,
+        "lower": 147.0969772072043,
+        "upper": 203.16725686142433,
+        "target": 2.3715393688725324
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:8:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32752,
+        "clusters": 32752,
+        "mean": 48.278494443087254,
+        "se": 7.3502422800519245,
+        "halfWidth": 20.63237829862646,
+        "lower": 27.646116144460795,
+        "upper": 68.91087274171372,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32714,
+        "clusters": 32714,
+        "mean": 68.32474934278896,
+        "se": 7.474001329594215,
+        "halfWidth": 20.9797741300489,
+        "lower": 47.34497521274007,
+        "upper": 89.30452347283786,
+        "target": 0.25
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:8:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32767,
+      "normal": {
+        "n": 31259,
+        "clusters": 31258,
+        "mean": 6.752895166192128,
+        "se": 8.275882899790194,
+        "halfWidth": 23.23068277722116,
+        "lower": -16.47778761102903,
+        "upper": 29.983577943413287,
+        "target": 1.4261876579545318
+      },
+      "super": {
+        "n": 31194,
+        "clusters": 31193,
+        "mean": 52.0822754375843,
+        "se": 9.039314267695877,
+        "halfWidth": 25.37366040809684,
+        "lower": 26.70861502948746,
+        "upper": 77.45593584568114,
+        "target": 1.8416230685388286
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:8:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 31755,
+        "clusters": 31755,
+        "mean": 252.14374586679432,
+        "se": 11.700594302522767,
+        "halfWidth": 32.84396333758644,
+        "lower": 219.29978252920787,
+        "upper": 284.98770920438074,
+        "target": 0.4809283577389636
+      },
+      "super": {
+        "n": 30494,
+        "clusters": 30494,
+        "mean": 278.32863678100614,
+        "se": 12.39527103989324,
+        "halfWidth": 34.79394439869806,
+        "lower": 243.5346923823081,
+        "upper": 313.1225811797042,
+        "target": 0.9412800878861511
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:9:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32753,
+        "clusters": 32753,
+        "mean": -4.20483009189998,
+        "se": 6.025310515386666,
+        "halfWidth": 16.91325009211417,
+        "lower": -21.118080184014147,
+        "upper": 12.708420000214188,
+        "target": 0.761967758678619
+      },
+      "super": {
+        "n": 32728,
+        "clusters": 32728,
+        "mean": 6.149289599120041,
+        "se": 6.2785118403863045,
+        "halfWidth": 17.6239947620258,
+        "lower": -11.474705162905757,
+        "upper": 23.77328436114584,
+        "target": 0.879519830114877
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:9:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32745,
+        "clusters": 32745,
+        "mean": 127.4840739044126,
+        "se": 9.411419034815237,
+        "halfWidth": 26.41817105542134,
+        "lower": 101.06590284899126,
+        "upper": 153.90224495983392,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32682,
+        "clusters": 32682,
+        "mean": 133.32100850621086,
+        "se": 9.523753225959846,
+        "halfWidth": 26.73349692350271,
+        "lower": 106.58751158270815,
+        "upper": 160.05450542971357,
+        "target": 0.5613372804601966
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:9:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32767,
+      "normal": {
+        "n": 32749,
+        "clusters": 32748,
+        "mean": 287.4427127545876,
+        "se": 11.88718527026878,
+        "halfWidth": 33.367730485247776,
+        "lower": 254.07498226933984,
+        "upper": 320.81044323983537,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32718,
+        "clusters": 32717,
+        "mean": 276.8657054220912,
+        "se": 11.731931368096701,
+        "halfWidth": 32.93192753890875,
+        "lower": 243.93377788318244,
+        "upper": 309.797632961,
+        "target": 0.25
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:10:preflop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32757,
+        "clusters": 32757,
+        "mean": 32.80130201178371,
+        "se": 6.109381969933487,
+        "halfWidth": 17.149241504129712,
+        "lower": 15.652060507654,
+        "upper": 49.950543515913424,
+        "target": 0.25
+      },
+      "super": {
+        "n": 32727,
+        "clusters": 32727,
+        "mean": 37.57833440278702,
+        "se": 6.145502454223824,
+        "halfWidth": 17.250632923325565,
+        "lower": 20.327701479461457,
+        "upper": 54.82896732611259,
+        "target": 0.26005255599351357
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:10:flop": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32736,
+        "clusters": 32736,
+        "mean": 36.91626344086018,
+        "se": 8.014186181538772,
+        "halfWidth": 22.496091251561374,
+        "lower": 14.420172189298803,
+        "upper": 59.41235469242155,
+        "target": 0.5546905547409674
+      },
+      "super": {
+        "n": 32696,
+        "clusters": 32696,
+        "mean": 59.371852826033994,
+        "se": 8.319054675004438,
+        "halfWidth": 23.35186740816332,
+        "lower": 36.01998541787067,
+        "upper": 82.72372023419732,
+        "target": 1.235249418889143
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    },
+    "short32:10:turn": {
+      "n": 32768,
+      "uniqueWholeHandSeeds": 32768,
+      "normal": {
+        "n": 32742,
+        "clusters": 32742,
+        "mean": 160.83216969030596,
+        "se": 10.142474101747228,
+        "halfWidth": 28.470267316112484,
+        "lower": 132.36190237419348,
+        "upper": 189.30243700641844,
+        "target": 0.6290909229735487
+      },
+      "super": {
+        "n": 32285,
+        "clusters": 32285,
+        "mean": 167.87615610964815,
+        "se": 10.513617433711492,
+        "halfWidth": 29.512079182488854,
+        "lower": 138.3640769271593,
+        "upper": 197.388235292137,
+        "target": 2.201130555985745
+      },
+      "precisionMet": false,
+      "originalPrecisionMet": false
+    }
+  }
+}

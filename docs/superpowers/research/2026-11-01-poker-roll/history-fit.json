@@ -1,0 +1,47 @@
+{
+  "coefficients": {
+    "normal": {
+      "normal": 0,
+      "super": 0
+    },
+    "super": {
+      "normal": 0,
+      "super": 0
+    }
+  },
+  "details": {
+    "normal:normal": {
+      "n": 6912,
+      "estimate": -3.4296870998864075,
+      "se": 2.013651298938797,
+      "lower": -8.459194017502336,
+      "upper": 1.5998198177295202,
+      "enabled": false
+    },
+    "normal:super": {
+      "n": 6912,
+      "estimate": -1.1082869715837276,
+      "se": 2.248409354148863,
+      "lower": -6.7241502574881125,
+      "upper": 4.507576314320657,
+      "enabled": false
+    },
+    "super:normal": {
+      "n": 6912,
+      "estimate": -0.015570104025293486,
+      "se": 0.7939302789022505,
+      "lower": -1.9985737312908392,
+      "upper": 1.967433523240252,
+      "enabled": false
+    },
+    "super:super": {
+      "n": 6912,
+      "estimate": 0.05054437131746474,
+      "se": 0.8355601682775738,
+      "lower": -2.0364384387902725,
+      "upper": 2.137527181425202,
+      "enabled": false
+    }
+  },
+  "interpretation": "Signed first-order log price correction; exact current-funding matched samples, finite assigned strategy model. Zero applied coefficient means insufficient evidence, not proven zero effect."
+}

@@ -1,0 +1,33 @@
+{
+  "createdAt": "2026-11-01T08:46:46.007Z",
+  "samples": 256,
+  "workers": 2,
+  "seed": "20261101/personal-sequence-final",
+  "modes": [
+    "none",
+    "normal",
+    "super",
+    "normal-super",
+    "super-normal",
+    "adaptive"
+  ],
+  "opponents": "adaptive in every branch",
+  "reference": "hero never Rolls again this hand",
+  "usedForModelSelection": false,
+  "source": {
+    "engine.cjs": "cc313e986ca50b7171129fb385b0e0c3a0f0975a8fc046403e94aa807146262e",
+    "loader.cjs": "05d7f03806e696d97bb656ca15cd34a9fbc96ea1f849cabf24fe804fd9cd618b",
+    "run.cjs": "6383aefa922b2a3322dfdbbc2665b7637905742abde05e8aeef3d55abc3baf48",
+    "math.ts": "f8f2c2643fc816c18c8850518171dcbfbff41549f146b2c7cfdc17a405fb4152",
+    "simulator.ts": "e41e0e4275420268221bc79cd8ce2ebaf87fde829423a391a24266e9d5e8fb2d",
+    "policies.ts": "d793d15c417cc1b39cacccad537bc011dee7209835317b427c8ec9d341bdfacd",
+    "calibration.ts": "daa4a9e5bb68b8ff3e22684bb6938c612da7aa881c0890875385cdb84b6bcbfd",
+    "study.ts": "8d1f63fe850570ad3f9b1eea55a15b3de0653de6000949d2822d3a9845b66d1e",
+    "history.ts": "2f5cc4f7eae89e0db654492e44fdf120a6cd281327b99134e55671ad17ec5b0c",
+    "fast-loader.cjs": "009b0744a6737120070473835b14d3dbb869462dac0a2dc09ccb1692c3f3295f",
+    "personal-sequence.ts": "14fa3b5f49d0d773bd65155d794f6e29f974bd048e36cbd01485434c7e8ad4d5",
+    "personal-sequence.cjs": "746914412887b8b1fb6c908cc8d8fd7c0f52fc6a249d94f246242460edb8cdac"
+  },
+  "modelSha256": "67393c3b28ef96028d80577e48f1633a2b2042ac4d072f5d0c89f9f2745e3f46",
+  "fitSha256": "a4060da382c91e54d3a5c4606da0a3a36103d836033cfe15f1e16e07232e43ce"
+}

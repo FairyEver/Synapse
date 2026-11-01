@@ -1,0 +1,31 @@
+{
+  "createdAt": "2026-11-01T07:00:23.423Z",
+  "samples": 512,
+  "workers": 2,
+  "seed": "20261101/current-fee-audit",
+  "modelSha256": "67393c3b28ef96028d80577e48f1633a2b2042ac4d072f5d0c89f9f2745e3f46",
+  "fitSha256": "a4060da382c91e54d3a5c4606da0a3a36103d836033cfe15f1e16e07232e43ce",
+  "source": {
+    "valuation.ts": "fb48db1867aa1a95e6700b7eddd0b69da898cb616891ed42dc4ecb2bdfa7e3e1",
+    "valuation.cjs": "0faaaf57a1ea42715b8fbcfe91e316096e1ffe40625a5af7465dade629c98a7a",
+    "loader.cjs": "05d7f03806e696d97bb656ca15cd34a9fbc96ea1f849cabf24fe804fd9cd618b",
+    "engine.cjs": "cc313e986ca50b7171129fb385b0e0c3a0f0975a8fc046403e94aa807146262e",
+    "math.ts": "f8f2c2643fc816c18c8850518171dcbfbff41549f146b2c7cfdc17a405fb4152",
+    "simulator.ts": "e41e0e4275420268221bc79cd8ce2ebaf87fde829423a391a24266e9d5e8fb2d",
+    "policies.ts": "d793d15c417cc1b39cacccad537bc011dee7209835317b427c8ec9d341bdfacd",
+    "study.ts": "8d1f63fe850570ad3f9b1eea55a15b3de0653de6000949d2822d3a9845b66d1e"
+  },
+  "fractions": [
+    0,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.2,
+    0.4,
+    0.7,
+    0.9
+  ],
+  "futurePriceParameters": "unchanged",
+  "usedForModelSelection": false
+}

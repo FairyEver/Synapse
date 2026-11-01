@@ -1,0 +1,183 @@
+{
+  "rows": 55296,
+  "exactMatches": 55296,
+  "groups": {
+    "normal:normal": {
+      "n": 6912,
+      "conditional": {
+        "n": 6912,
+        "mean": -35.4017650462963,
+        "sd": 2776.1895871686506,
+        "halfWidth": 65.44904705682464,
+        "lower": -100.85081210312094,
+        "upper": 30.047282010528342
+      },
+      "overall": {
+        "n": 6912,
+        "mean": -36.616464120370374,
+        "sd": 2776.030969744119,
+        "halfWidth": 65.44530762947062,
+        "lower": -102.061771749841,
+        "upper": 28.828843509100246
+      },
+      "controlValue": 186.6390335648148,
+      "evidence": "unresolved",
+      "provenEquivalentToZero": false
+    },
+    "normal:super": {
+      "n": 6912,
+      "conditional": {
+        "n": 6912,
+        "mean": -6.824001736111111,
+        "sd": 2774.4776507875695,
+        "halfWidth": 65.40868792383115,
+        "lower": -72.23268965994227,
+        "upper": 58.58468618772004
+      },
+      "overall": {
+        "n": 6912,
+        "mean": -8.05714699074074,
+        "sd": 2774.536060840632,
+        "halfWidth": 65.4100649487754,
+        "lower": -73.46721193951615,
+        "upper": 57.35291795803466
+      },
+      "controlValue": 188.2662037037037,
+      "evidence": "unresolved",
+      "provenEquivalentToZero": false
+    },
+    "super:normal": {
+      "n": 6912,
+      "conditional": {
+        "n": 6912,
+        "mean": -18.843605324074073,
+        "sd": 2779.6989773809514,
+        "halfWidth": 65.5317814083283,
+        "lower": -84.37538673240238,
+        "upper": 46.68817608425422
+      },
+      "overall": {
+        "n": 6912,
+        "mean": -23.279152199074073,
+        "sd": 2769.218553908164,
+        "halfWidth": 65.28470399970453,
+        "lower": -88.56385619877861,
+        "upper": 42.00555180063046
+      },
+      "controlValue": 155.8584346064815,
+      "evidence": "unresolved",
+      "provenEquivalentToZero": false
+    },
+    "super:super": {
+      "n": 6912,
+      "conditional": {
+        "n": 6912,
+        "mean": -58.859375,
+        "sd": 2790.1653709896145,
+        "halfWidth": 65.77852806099739,
+        "lower": -124.63790306099739,
+        "upper": 6.919153060997388
+      },
+      "overall": {
+        "n": 6912,
+        "mean": -56.14684606481482,
+        "sd": 2790.3447006796605,
+        "halfWidth": 65.78275578282762,
+        "lower": -121.92960184764243,
+        "upper": 9.635909718012805
+      },
+      "controlValue": 179.08138020833334,
+      "evidence": "unresolved",
+      "provenEquivalentToZero": false
+    },
+    "normal-super:normal": {
+      "n": 7680,
+      "conditional": {
+        "n": 7680,
+        "mean": -94.04798177083333,
+        "sd": 2734.189309546074,
+        "halfWidth": 61.151067420887614,
+        "lower": -155.19904919172095,
+        "upper": -32.89691434994572
+      },
+      "overall": {
+        "n": 7680,
+        "mean": -86.1044921875,
+        "sd": 2724.374409430901,
+        "halfWidth": 60.93155386468405,
+        "lower": -147.03604605218405,
+        "upper": -25.172938322815952
+      },
+      "controlValue": 202.1146484375,
+      "evidence": "negative",
+      "provenEquivalentToZero": false
+    },
+    "normal-super:super": {
+      "n": 7680,
+      "conditional": {
+        "n": 7680,
+        "mean": -72.92337239583334,
+        "sd": 2839.9260603427538,
+        "halfWidth": 63.51590556660724,
+        "lower": -136.43927796244057,
+        "upper": -9.407466829226102
+      },
+      "overall": {
+        "n": 7680,
+        "mean": -62.00794270833333,
+        "sd": 2821.7733556441467,
+        "halfWidth": 63.10991419467832,
+        "lower": -125.11785690301164,
+        "upper": 1.1019714863449863
+      },
+      "controlValue": 214.59915364583333,
+      "evidence": "negative",
+      "provenEquivalentToZero": false
+    },
+    "mixed-then-fold:normal": {
+      "n": 6144,
+      "conditional": {
+        "n": 6144,
+        "mean": -43.877685546875,
+        "sd": 2621.7266984377147,
+        "halfWidth": 65.55682086541572,
+        "lower": -109.43450641229072,
+        "upper": 21.679135318540716
+      },
+      "overall": {
+        "n": 6144,
+        "mean": -43.877685546875,
+        "sd": 2621.7266984377147,
+        "halfWidth": 65.55682086541572,
+        "lower": -109.43450641229072,
+        "upper": 21.679135318540716
+      },
+      "controlValue": 161.18758138020834,
+      "evidence": "unresolved",
+      "provenEquivalentToZero": false
+    },
+    "mixed-then-fold:super": {
+      "n": 6144,
+      "conditional": {
+        "n": 6144,
+        "mean": 5.206705729166667,
+        "sd": 2654.3857635277177,
+        "halfWidth": 66.37346757424815,
+        "lower": -61.16676184508149,
+        "upper": 71.58017330341482
+      },
+      "overall": {
+        "n": 6144,
+        "mean": 5.206705729166667,
+        "sd": 2654.3857635277177,
+        "halfWidth": 66.37346757424815,
+        "lower": -61.16676184508149,
+        "upper": 71.58017330341482
+      },
+      "controlValue": 141.987060546875,
+      "evidence": "unresolved",
+      "provenEquivalentToZero": false
+    }
+  },
+  "interpretation": "Controlled history uses different initial funding to exactly match current public funding. Assigned prior actions and finite strategies do not identify universal causal effects. CI crossing zero means unresolved, not zero effect."
+}
