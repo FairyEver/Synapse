@@ -41,6 +41,13 @@
 - 生产迁移预查无待应用 migration；正式结果以 deploy.sh 本轮检查为准。
 - 日志位于本机 `/tmp/synapse-v2-cutover-final-tests.log`、`/tmp/synapse-v2-cutover-final-build.log` 与 `/tmp/synapse-v1-rollback-build.log`，尚无在线链接。
 
+## 首次上线与缓存补修
+
+- 首次部署 `deploy-20261101_110516` 成功，服务与渲染器健康，线上标识为 V2；未执行业务 schema 迁移。
+- 浏览器验收复现普通导航命中旧 V1 HTML，新 query 命中 V2；补充入口 HTML/JSON 缓存重新校验，其他静态资源不改。配置回归先 2 项失败，修复后 45 项通过。
+- 缓存补修需再次部署；已缓存的旧 HTML 无法由服务器追溯修改，旧页需刷新一次。
+- 首次部署日志 `/tmp/synapse-v2-cutover-deploy.log`、浏览器证据 `/tmp/synapse-v2-cutover-stale-html-evidence.json`，均为本机文件，尚无在线链接。
+
 ## 回滚
 
 保留 V1 源码与构建选择。部署失败沿用 deploy.sh 的旧镜像恢复流程；需要主动回切时使用 `DASHBOARD_UI=v1 bash deploy.sh`。不恢复数据库或删除云盘对象来回滚前端。

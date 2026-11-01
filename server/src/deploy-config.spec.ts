@@ -643,6 +643,15 @@ describe("server deployment configuration", () => {
     expect(viteConfig).not.toContain("download|zip")
   })
 
+  it("revalidates dashboard HTML and its deployment marker without disabling asset caching", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    expect(nginx).toMatch(/map \$sent_http_content_type \$dashboard_cache_control \{[\s\S]*?default "";[\s\S]*?~\^text\/html "no-cache, must-revalidate";[\s\S]*?application\/json "no-cache, must-revalidate";/u)
+    for (const entry of ["/console/", "/admin/", "/drive/items/", "/notifications/", "/share/", "= /drive", "= /drive/"]) {
+      const location = nginx.slice(nginx.indexOf(`location ${entry} {`)).split("\n  }")[0]
+      expect(location, entry).toContain("add_header Cache-Control $dashboard_cache_control always;")
+    }
+  })
+
   it("serves independent console and admin bundles with explicit legacy redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
     const deployScript = readRepoFile("deploy.sh")
@@ -656,7 +665,7 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("return 301 /console/;")
     expect(nginx).toContain("location = /admin")
     expect(nginx).toContain(
-      "location /admin/ {\n    root /app/dashboard/dist;\n    try_files /admin.html =404;\n  }",
+      "location /admin/ {\n    root /app/dashboard/dist;\n    try_files /admin.html =404;\n    add_header Cache-Control $dashboard_cache_control always;\n  }",
     )
     expect(nginx).not.toContain("location = /admin/")
     expect(nginx).not.toContain("/admin/admin.html")
