@@ -4,8 +4,8 @@ import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { SettlementPanel } from "../components/SettlementPanel"
-const api = vi.hoisted(() => ({ ready: vi.fn() }))
-vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { seat: { ready: api.ready } } }) }))
+const api = vi.hoisted(() => ({ ready: vi.fn(), control: vi.fn() }))
+vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { seat: { ready: api.ready }, control: { set: api.control } } }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 import { table } from "./settlement-fixture"
 afterEach(() => { vi.resetAllMocks(); document.body.replaceChildren() })
@@ -65,5 +65,27 @@ it("同一手暂离再回座后必须能够重新准备，不能沿用本机旧�
   await screen.update(table)
   expect(button("准备下一手")).toBeDefined()
   expect(button("准备下一手").disabled).toBe(false)
+  await act(async () => screen.root.unmount())
+})
+it("结算内直接接管，不代准备，接回后提示重新准备且弹窗保持打开", async () => {
+  api.control.mockResolvedValue({ controller: "human", controlVersion: 4 })
+  const screen = await render({ ...table, controller: "ai", seats: table.seats.map(s => s.isMe ? { ...s, readyForNextHand: true } : s) })
+  await act(async () => { button("本人接管").click(); button("本人接管").click() })
+  expect(api.control).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", controlVersion: 3, action: "takeover" })
+  expect(api.ready).not.toHaveBeenCalled()
+  await screen.update({ ...table, controlVersion: 4 })
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  expect(document.body.textContent).toContain("已接管，请重新准备")
+  expect(button("准备下一手").disabled).toBe(false)
+  await screen.update({ ...table, handId: "h2", handNo: 2, awaitingReady: false, settlement: null, status: "running" })
+  expect(document.body.textContent).not.toContain("已接管，请重新准备")
+  await act(async () => screen.root.unmount())
+})
+it("结算接管失败显示错误，仍不代准备", async () => {
+  api.control.mockRejectedValue(new Error("版本已变化"))
+  const screen = await render({ ...table, controller: "ai" })
+  await act(async () => button("本人接管").click())
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("版本已变化")
+  expect(api.ready).not.toHaveBeenCalled()
   await act(async () => screen.root.unmount())
 })

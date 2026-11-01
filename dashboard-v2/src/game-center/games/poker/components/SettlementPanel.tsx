@@ -3,17 +3,21 @@ import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { Button, Modal } from "@heroui/react"
 import { Check, ClipboardList } from "lucide-react"
 import { readinessView } from "../lib/settlement-view"
-import { usePokerReady } from "../hooks/usePokerReady"
+import { usePokerReady, type PokerReadyControls } from "../hooks/usePokerReady"
 import { SettlementDetails } from "./SettlementDetails"
 import "../styles/settlement.css"
-type Props = { table: PokerTableView; perspective: "owner" | "public"; identityKey?: string; onRefresh: () => void | Promise<void>; onOpen?: () => void; compact?: boolean }
+type Props = { table: PokerTableView; perspective: "owner" | "public"; identityKey?: string; onRefresh: () => void | Promise<void>; onOpen?: () => void; compact?: boolean; ready?: PokerReadyControls }
 export function SettlementPanel(props: Props) {
-  return <ScopedSettlementPanel key={`${props.identityKey}:${props.table.roomCode}:${props.perspective}`} {...props} />
+  const key = `${props.identityKey}:${props.table.roomCode}:${props.perspective}`
+  return props.ready ? <ScopedSettlementPanel key={key} {...props} ready={props.ready} /> : <LocalSettlementPanel key={key} {...props} />
 }
-function ScopedSettlementPanel({ table, perspective, identityKey, onRefresh, onOpen, compact }: Props) {
+function LocalSettlementPanel(props: Props) {
+  const ready = usePokerReady(props.table, props.perspective, props.identityKey, props.onRefresh)
+  return <ScopedSettlementPanel {...props} ready={ready} />
+}
+function ScopedSettlementPanel({ table, onOpen, compact, ready }: Props & { ready: PokerReadyControls }) {
   const settlement = table.settlement
   const [dismissed, setDismissed] = useState<string | null>(null)
-  const ready = usePokerReady(table, perspective, identityKey, onRefresh)
   const progress = readinessView(table)
   const currentSettlement = settlement?.handId === table.handId ? settlement : null
   const open = !!currentSettlement && dismissed !== currentSettlement.handId
@@ -32,8 +36,9 @@ function ScopedSettlementPanel({ table, perspective, identityKey, onRefresh, onO
           {ready.error && <div className="mt-4 space-y-2"><p role="alert" className="text-sm text-danger">{ready.error}</p><Button variant="secondary" onPress={() => { void ready.refresh() }}>刷新牌桌</Button></div>}
         </Modal.Body>
         <Modal.Footer className="poker-result-footer flex-wrap">
-          <p role="status" className="poker-result-waiting text-xs text-muted">{table.status === "closed" ? "房间已解散" : !table.awaitingReady ? "本手已结束" : ready.controller === "ai" && progress.mine && !ready.prepared ? "等待 AI 确认准备" : `已准备 ${progress.ready} / ${progress.seats.length}，全员准备后开局`}</p>
+          <div role="status" className="poker-result-waiting text-xs text-muted"><p>{table.status === "closed" ? "房间已解散" : !table.awaitingReady ? "本手已结束" : ready.summary}</p>{table.awaitingReady && ready.controller === "ai" && progress.mine && !ready.prepared && <p>等待 AI 确认准备</p>}{ready.notice && <p>{ready.notice}</p>}</div>
           <Button variant="secondary" onPress={close}>返回牌桌</Button>
+          {ready.canTakeover && <Button isPending={ready.busy} isDisabled={ready.busy} onPress={() => { void ready.takeover() }}>本人接管</Button>}
           {ready.canReady && <Button isPending={ready.busy} isDisabled={ready.prepared || ready.busy} onPress={() => { void ready.ready() }}>{ready.prepared ? "已准备" : "准备下一手"}</Button>}
         </Modal.Footer>
       </Modal.Dialog></Modal.Container>

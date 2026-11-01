@@ -92,3 +92,5 @@ table.events可传perspective=owner|public，MCP默认owner且固定decision投�
 ## 每手结算与准备（2026-11-01）
 
 每手结束弹出HeroUI完整结算，允许关闭/重开，关闭不代准备。服务端结算投影新增仅根据已获准公开牌面计算的bestFive和分池reason，暗牌不泄露。取代旧五秒自动续局：所有当前可参赛者显式准备，陪练自动、真人按钮、AI调用app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait的ready_required可用于空游标重连，已准备仍waiting；先处理未读hand_result与上下文维护。旧手、旧控制版本及他人座位不能授权下一手。复用座位status=ready，无新增数据库迁移；先更新API与MCP契约再上线Web。本次开发不部署。
+
+V2 牌桌底部和结算 Footer 共用准备/接管执行器与进度，关闭结算后仍可直接准备，显示人数和等待对象；长名单摘要只列前两人及待准备总人数，完整名单见结算。AI 控制时可在结算内本人接管，保持弹窗打开，再明确点击准备。接回清除原准备时提示“已接管，请重新准备”；换手、换房、换账号或确认准备后清除提示。接管和准备请求未结束时两个表面同步禁用，暂离/历史座位不计入屏障，旁观不代准备。不改变 MCP schema、控制版本及资金规则。
