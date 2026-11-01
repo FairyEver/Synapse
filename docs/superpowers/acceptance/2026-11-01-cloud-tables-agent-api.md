@@ -33,3 +33,14 @@
 - `git diff --check`：通过。
 
 原始日志位于 `/Users/liyang/Documents/code/github/Synapse/.superpowers/cloud-tables/agent-api-contract/`（Git忽略，无在线报告链接）。本轮不做生产数据写入或压力测试，不以本地测试冒充生产完整授权CRUD。
+
+## 上线验证（2026-11-01 19:02）
+
+- 实现与文档提交 `1b9f91f11`（完善云表Agent全流程管理的API契约与授权指引），本地提交未推送。
+- 沿用此前用户的部署授权，运行 `deploy.sh` 全部19步、476秒完成，保持Dashboard V2。后端、V2和文档站构建通过，数据库预演与恢复核验通过，无待执行迁移；未开启风险迁移/邮件清理开关，未进行桌面/iOS发布或用户通知。
+- 生产 `https://synapse.d2.pub`，服务器 `root@120.53.17.64`，目录 `/www/wwwroot/synapse`。后端镜像 `synapse-server:deploy-20261101_185417`，ID `sha256:e9d79efca26c4b67f7bab5ddb0b25b174cd2d5158646b8a51d32653bdcb80585`；启动时间 `2026-11-01T11:02:04.146492527Z`，后端、PDF、PostgreSQL均healthy。
+- 直接读取线上OpenAPI验证全部19操作摘要、8项表主管理操作的认证/管理scope说明、建表all_owned要求，以及仅5项实际写入声明幂等键，全部通过。
+- 线上API文档包含“管理操作的身份边界”“从零建表到管理数据”和复制Markdown入口，未出现独立Skill下载入口；V2标记与健康检查通过。
+- 根据线上契约逐项验证19条开放路由（无效密钥）及19条Console路由（无效Cookie），38/38正确返回401；未执行生产数据写入。
+- 回滚镜像 `synapse-server:rollback-20261101_185417`、`synapse-pdf-renderer:rollback-20261101_185417`；最终备份 `/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_185417.sql`，PDF状态 `/www/wwwroot/synapse/backups/pdf-renderer-rollback-20261101_185417.state`。无数据库结构修改，应用回滚将恢复此前的OpenAPI说明和文档。
+- 线上入口：[API文档](https://synapse.d2.pub/document/open-api/api/cloud-tables)、[OpenAPI](https://synapse.d2.pub/api/open/openapi.json)。原始证据增加 `deploy.log`、`production.json`、`production-authentication.json`、`production-runtime.log`，目录同上。
