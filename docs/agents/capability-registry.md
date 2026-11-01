@@ -1,6 +1,6 @@
 # 能力注册清单
 
-- 2026-11-01 云端数据表：新增服务端REST、Console及独立HTTP Skill；不注册桌面System App、Dock、capability、MCP、Workflow、Automation或Deep Link。各注册数量不因云表变化；该Skill随文档站分发，不依赖桌面系统Skill包。
+- 2026-11-01 云端数据表：新增服务端REST及Console，API文档可整页复制为Markdown供AI调用；按用户后续决定不提供独立Skill。不注册桌面System App、Dock、capability、MCP、Workflow、Automation或Deep Link，各注册数量不因云表变化。
 
 - 2026-11-01 点数与 AI 接入：既有 lobby.list 增加可选本人 myControl 响应投影及说明，房间列表与牌桌共用 Web 接入面板；不新增权限、输入参数、注册能力或数据库字段。game 仍为 27 项 capability/MCP（大厅3、扑克24），游戏 IPC 为0；全局370 capability/366 MCP、System App22、默认Dock9及现有路径/例外不变。schema、工具描述和系统 Skill 同步，控制/资金/逐手准备协议不变。
 

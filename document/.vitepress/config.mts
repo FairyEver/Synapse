@@ -1,4 +1,4 @@
-import { cp, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
@@ -16,12 +16,7 @@ export default defineConfig({
   title: 'Synapse',
   description: 'Synapse 文档',
   cleanUrls: true,
-  srcExclude: ['README.md', 'public/**'],
-
-  async buildEnd(siteConfig) {
-    // vite.publicDir 复用 Dashboard 的图标目录，独立 Skill 仍从文档站原样分发。
-    await cp(fileURLToPath(new URL('../public/skills', import.meta.url)), resolve(siteConfig.outDir, 'skills'), { recursive: true })
-  },
+  srcExclude: ['README.md'],
 
   async transformPageData(pageData, { siteConfig }) {
     if (!pageData.filePath) return

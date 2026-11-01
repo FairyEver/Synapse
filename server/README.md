@@ -20,7 +20,7 @@ Synapse 后端服务，包含 API 和 Admin 管理后台。
 
 ### 云端数据表
 
-Console为`/console/tables`，开放API为`/api/open/v1/tables`，权威契约`/api/open/openapi.json`；独立HTTP Skill随文档站`/document/skills/synapse-cloud-tables/`分发，无桌面或MCP依赖。部署迁移`20261101090000_cloud_tables`后启动服务，不修改既有分享网页。
+Console为`/console/tables`，开放API为`/api/open/v1/tables`，权威契约`/api/open/openapi.json`；文档站`/document/open-api/api/cloud-tables`可整页复制为Markdown供AI调用，不提供独立Skill，无桌面或MCP依赖。部署迁移`20261101090000_cloud_tables`后启动服务，不修改既有分享网页。
 
 `CLOUD_TABLE_*`执行预算见`.env.example`，Compose完整透传；专用连接数为执行并发加认证并发，核心`DATABASE_POOL_SIZE`不变。默认8个执行槽/owner2个，排队128/owner32/16MiB/5秒，SQL2秒、锁250毫秒。无账号容量或调用次数额度。v1必须单服务实例；扩容前实现全局调度，不能将每进程限制当成集群限制。云表使用现有数据库灾备，不新增COS存储。
 

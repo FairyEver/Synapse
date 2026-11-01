@@ -65,7 +65,7 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 
 ## 可用 API
 
-[云端数据表](/open-api/api/cloud-tables) 包含完整的 19 项接口、字段类型、请求／响应示例、错误码和独立 HTTP Skill。表中列出常用入口，其余操作见完整文档。
+[云端数据表](/open-api/api/cloud-tables) 包含完整的 19 项接口、字段类型、请求／响应示例和错误码，可整页复制为 Markdown 供 AI 调用。表中列出常用入口，其余操作见完整文档。
 
 | operationId | 方法 | 路径 | 认证 | 文档 |
 |---|---|---|---|---|

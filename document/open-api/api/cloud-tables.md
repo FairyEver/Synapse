@@ -583,7 +583,7 @@ Console 按读取权限导出 JSON／CSV，CSV 处理公式注入，单次导出
 | 503 | `SERVER_BUSY` | 遵守 `Retry-After`，退避重试，不扩大并发 |
 | 500 | `INTERNAL_ERROR` | 保留 `X-Request-Id` 排查；写入结果不明确时按原幂等键重试 |
 
-## 交给 AI 与独立 Skill
+## 交给 AI 调用
 
 复制本页 Markdown 时，另行向 AI 提供任务目标、已有表的 ID，以及私有环境变量名；无需把真实密钥粘贴进对话。调用顺序与约定：
 
@@ -592,5 +592,3 @@ Console 按读取权限导出 JSON／CSV，CSV 处理公式注入，单次导出
 3. 区分直接对象、分页 `data`、批量 `data`；写入不返回正文。不要混用表的 `schemaVersion` 与记录 `version`。
 4. 分页直到 `nextCursor` 为 `null`；导入同时按 100 条和 1 MiB 拆批，每批使用独立且重试稳定的幂等键。
 5. 修改、删除、开放匿名或新增协作者须符合用户授权。缺权限时请表主配置，不擅自公开表、扩大密钥范围或把密钥写进 HTML。
-
-独立 HTTP Skill 下载：<a href="/document/skills/synapse-cloud-tables/SKILL.md" download>SKILL.md</a>、<a href="/document/skills/synapse-cloud-tables/references/http.md" download>HTTP 参考</a>。安装时保留 `synapse-cloud-tables/SKILL.md`、`references/http.md` 的相对目录，配置 `SY_API_BASE_URL/SY_API_KEY`。Skill 直接调用 HTTP，无需 MCP 或桌面在线；不安装 Skill 也可以根据本页调用。
