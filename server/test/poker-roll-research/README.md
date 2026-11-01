@@ -73,6 +73,16 @@ node server/test/poker-roll-research/replay.cjs --out docs/superpowers/research/
 
 冻结补偿仅在手末释放；当前行动点补偿与后来另一次行动的费用分开。`paid` 是当前行动点新付费用，`totalPaid` 是本手剩余路径总支出。`voluntary` 是相对立即正常出牌的完整续局净增益，既不是绝对赢池率，也不是金融投资收益。
 
+## 用户放宽精度后的首版试玩定价
+
+用户随后明确只需少量系数、公式与报价示例，不再要求原高精度门槛。新增 `playtest.cjs`，复用原模拟器、策略和完整续局，仅检查六项简单阶段系数；原模型、原统计门槛和原结果均不覆盖。它不是重新训练的最优策略，也不宣称精确公允价格。
+
+```bash
+node server/test/poker-roll-research/playtest.cjs --out work/poker-roll-playtest-v2 --price-scale 0.1 --phase playtest-v2-fixed --samples 256 --workers 4
+```
+
+输出目录必须不存在，失败结果也不覆盖。首轮偏高价格另存于 `docs/superpowers/research/2026-11-01-poker-roll-playtest/`；下调后的公式与结果见 `docs/superpowers/research/2026-11-01-poker-roll-playtest-v2/REPORT.md`。每轮固定预算，新阶段种子，不自适应追求小误差；保存原始配对行、源文件快照、模型与策略指纹。置信区间仅作描述，不把同一手的多条分支算成独立手。
+
 独立费用扫描固定未来规则参数，仅改变本次费用为各手当前余额的比例。表中的 BB 是不同局面费用的平均值，过零区间不是某个统一固定 BB 收费的精确根；也不能仅凭它与公式平均报价的大小关系判断公式合理性。
 
 若原模型未通过冻结门槛，`revision.cjs` 保留原模型与全部失败结果，另存 `revision-candidate.json`：改用零本次费用且开放完整未来 Roll 的样本重拟合基础系数。它明确成为新版本的训练，不能再拿旧最终检验认证；新版本尚未检验，不是推荐上线价格。精度不足本身不证明原报价错误，该修订也不通过抬价放宽精度目标。

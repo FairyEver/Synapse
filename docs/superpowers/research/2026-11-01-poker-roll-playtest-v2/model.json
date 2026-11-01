@@ -1,0 +1,671 @@
+{
+  "scale": 0.0005,
+  "curve": "linear",
+  "growth": 1,
+  "coefficients": {
+    "normal": [
+      0,
+      10,
+      1
+    ],
+    "super": [
+      0,
+      30,
+      3
+    ]
+  },
+  "cells": {
+    "standard52:2:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:2:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:2:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:3:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:3:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:3:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:4:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:4:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:4:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:5:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:5:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:5:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:6:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:6:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:6:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:7:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:7:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:7:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:8:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:8:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:8:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:9:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:9:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:9:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "standard52:10:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "standard52:10:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "standard52:10:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:2:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:2:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:2:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:3:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:3:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:3:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:4:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:4:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:4:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:5:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:5:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:5:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:6:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:6:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:6:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:7:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:7:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:7:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:8:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:8:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:8:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:9:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:9:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:9:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    },
+    "short32:10:preflop": {
+      "normal": [
+        0,
+        10,
+        1
+      ],
+      "super": [
+        0,
+        30,
+        3
+      ]
+    },
+    "short32:10:flop": {
+      "normal": [
+        0,
+        20,
+        2
+      ],
+      "super": [
+        0,
+        50,
+        5
+      ]
+    },
+    "short32:10:turn": {
+      "normal": [
+        0,
+        40,
+        4
+      ],
+      "super": [
+        0,
+        80,
+        8
+      ]
+    }
+  },
+  "history": {
+    "normal": 0,
+    "super": 0
+  }
+}

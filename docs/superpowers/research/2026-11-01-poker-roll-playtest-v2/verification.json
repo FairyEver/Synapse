@@ -1,0 +1,23 @@
+{
+  "rawFiles": 54,
+  "rows": 13824,
+  "rawAndSourceHashes": "pass",
+  "modelAndPolicyHashes": "pass",
+  "independentIntegerQuoteMismatches": 0,
+  "independentChosenMean": "pass",
+  "duplicateUnderlyingHandsInNewBatch": 0,
+  "priorRowsScanned": 2225856,
+  "priorUnderlyingHandMatches": [
+    {
+      "file": "docs/superpowers/research/2026-11-01-poker-roll/final/standard52_5_preflop.jsonl.gz",
+      "id": "final-holdout:standard52:5:preflop:24908",
+      "handKey": [
+        "standard52",
+        5,
+        1021246955
+      ]
+    }
+  ],
+  "warning": "Prior 32-bit seed reuse is preserved and disclosed. This is a descriptive playtest check, not a fully isolated certification holdout.",
+  "verifierSha256": "a177ec271c5e0a2cab7fd8a585580db786e6a9154d879800ca8cdc3ea4eb1b8e"
+}
