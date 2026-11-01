@@ -3,7 +3,7 @@ import { Button, Tabs } from "@heroui/react"
 import { track } from "./tracking"
 
 export function SystemAppTopBarActionButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
-  return <Button variant="tertiary" onPress={onClick}>{children}</Button>
+  return <Button variant="tertiary" size="lg" onPress={onClick}>{children}</Button>
 }
 /** Independent browser shell: game routes do not load Console navigation. */
 export function SystemAppWindowShell({ children, immersive, left, actions, tabs, value, onValueChange }: {
@@ -22,12 +22,12 @@ export function SystemAppWindowShell({ children, immersive, left, actions, tabs,
     }}>
     {!immersive && <header className="game-web-header">
       <div className="game-web-header-title min-w-0 font-semibold">{left}</div>
-      {tabs && <Tabs selectedKey={value} onSelectionChange={key => onValueChange?.(String(key))} className="mx-auto">
+      {tabs && <Tabs selectedKey={value} onSelectionChange={key => onValueChange?.(String(key))} className="game-web-header-tabs">
         <Tabs.ListContainer>
-          <Tabs.List className="w-max" aria-label="游戏页面">{tabs.map(tab => <Tabs.Tab className="whitespace-nowrap" key={tab.id} id={tab.id}>{tab.label}<Tabs.Indicator /></Tabs.Tab>)}</Tabs.List>
+          <Tabs.List className="w-max" aria-label="游戏页面">{tabs.map(tab => <Tabs.Tab className="whitespace-nowrap after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']" key={tab.id} id={tab.id}>{tab.label}<Tabs.Indicator /></Tabs.Tab>)}</Tabs.List>
         </Tabs.ListContainer>
       </Tabs>}
-      <div className="game-web-header-actions ms-auto flex items-center gap-2">{actions}</div>
+      <div className="game-web-header-actions flex items-center gap-2">{actions}</div>
     </header>}
     <main className="game-web-content">{children}</main>
   </div>
