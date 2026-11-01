@@ -11,6 +11,7 @@ import {
   Tooltip,
 } from '@heroui/react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
+import { ChevronDown } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
 import { cn } from '@/lib/utils'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
@@ -159,6 +160,7 @@ export function DrivePreviewHeader({
               aria-label='更多操作'
             >
               更多
+              <ChevronDown data-icon='inline-end' />
             </Button>
             <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
               <Dropdown.Menu aria-label='操作'>
@@ -239,6 +241,7 @@ function DrivePreviewCompactHeader({
             aria-label='更多操作'
           >
             更多
+            <ChevronDown data-icon='inline-end' />
           </Button>
           <Dropdown.Popover
             isNonModal
@@ -399,6 +402,7 @@ function DrivePreviewHeaderAction({
         size='sm'
       >
         {action.label}
+        <ChevronDown data-icon='inline-end' />
       </Button>
       <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
         <Dropdown.Menu aria-label='操作'>
