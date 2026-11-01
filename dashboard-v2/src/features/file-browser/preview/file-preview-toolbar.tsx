@@ -49,10 +49,12 @@ export function FilePreviewToolbarItemView({
   item,
   compact = false,
   defaultButtonVariant = 'outline',
+  showIcons = true,
 }: {
   readonly item: FilePreviewToolbarItem
   readonly compact?: boolean
   readonly defaultButtonVariant?: 'primary' | 'outline' | 'ghost'
+  readonly showIcons?: boolean
 }) {
   if (item.kind === 'status') {
     return (
@@ -67,7 +69,7 @@ export function FilePreviewToolbarItemView({
       <>
         {item.loading ? (
           <Loader2 className='animate-spin' />
-        ) : item.icon ? (
+        ) : showIcons && item.icon ? (
           <item.icon data-icon='inline-start' />
         ) : null}
         {item.label}
@@ -88,7 +90,7 @@ export function FilePreviewToolbarItemView({
           rel={item.external ? 'noreferrer' : undefined}
         >
           {item.loading ? (<Link.Icon><Loader2 className='size-full animate-spin' /></Link.Icon>)
-            : item.icon ? (<Link.Icon><item.icon className='size-full' /></Link.Icon>) : null}
+            : showIcons && item.icon ? (<Link.Icon><item.icon className='size-full' /></Link.Icon>) : null}
           {item.label}
         </Link>
       )
@@ -120,7 +122,7 @@ export function FilePreviewToolbarItemView({
         className={buttonClassName}
         onChange={item.onPressedChange}
       >
-        {item.icon ? <item.icon data-icon='inline-start' /> : null}
+        {showIcons && item.icon ? <item.icon data-icon='inline-start' /> : null}
         {item.label}
       </ToggleButton>
     )
@@ -133,9 +135,9 @@ export function FilePreviewToolbarItemView({
         size='sm'
         className={buttonClassName}
       >
-        {item.icon ? <item.icon data-icon='inline-start' /> : null}
+        {showIcons && item.icon ? <item.icon data-icon='inline-start' /> : null}
         {item.label}
-        <ChevronDown data-icon='inline-end' />
+        {showIcons ? <ChevronDown data-icon='inline-end' /> : null}
       </Button>
       <Dropdown.Popover isNonModal>
         <Dropdown.Menu aria-label='操作'>

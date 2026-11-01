@@ -10,7 +10,6 @@ import {
   Tooltip,
 } from '@heroui/react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
-import { ChevronDown, MoreHorizontal } from 'lucide-react'
 import { RelativeTime } from '@/components/relative-time'
 import { cn } from '@/lib/utils'
 import { useFilePreviewLayoutMode } from '@/features/file-browser/preview/file-preview-layout'
@@ -157,11 +156,10 @@ export function DrivePreviewHeader({
               data-drive-telemetry-event='web.drive.preview.menu'
               type='button'
               variant='ghost'
-              isIconOnly
-              className='size-8'
+              size='sm'
               aria-label='更多操作'
             >
-              <MoreHorizontal />
+              更多
             </Button>
             <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
               <Dropdown.Menu aria-label='操作'>
@@ -238,11 +236,10 @@ function DrivePreviewCompactHeader({
             data-drive-telemetry-event='web.drive.preview.menu'
             type='button'
             variant='outline'
-            isIconOnly
-            className='size-11'
+            className='min-h-11'
             aria-label='更多操作'
           >
-            <MoreHorizontal />
+            更多
           </Button>
           <Dropdown.Popover
             isNonModal
@@ -405,7 +402,6 @@ function DrivePreviewHeaderAction({
         size='sm'
       >
         {action.label}
-        <ChevronDown data-icon='inline-end' />
       </Button>
       <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
         <Dropdown.Menu aria-label='操作'>
@@ -555,6 +551,7 @@ export function DrivePreviewToolbarItemView({
       item={item}
       compact={compact}
       defaultButtonVariant='ghost'
+      showIcons={false}
     />
   )
 }
