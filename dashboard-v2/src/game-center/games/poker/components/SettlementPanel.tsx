@@ -28,7 +28,7 @@ function ScopedSettlementPanel({ table, onOpen, compact, ready }: Props & { read
   return <>
     <Button variant="tertiary" isIconOnly={compact} aria-label="本局结算" onPress={() => setDismissed(null)}><ClipboardList aria-hidden="true" />{!compact && "本局结算"}</Button>
     <Modal.Backdrop isOpen={open} onOpenChange={value => { if (!value) close() }} className="font-sans text-foreground scheme-light" isDismissable>
-      <Modal.Container size="lg" placement="center" scroll="inside"><Modal.Dialog className="poker-result-dialog sm:max-w-5xl">
+      <Modal.Container size="lg" placement="center" scroll="inside"><Modal.Dialog className="poker-result-dialog sm:max-w-3xl">
         <Modal.CloseTrigger aria-label="关闭结算，返回牌桌" />
         <Modal.Header><p className="pr-8 text-xs text-muted">第 {currentSettlement.handNo} 手 · {currentSettlement.rules.variant === "short32" ? "32 张短牌" : "标准德州扑克"} · 盲注 {currentSettlement.rules.smallBlind} / {currentSettlement.rules.bigBlind}</p><Modal.Heading>本局结算</Modal.Heading></Modal.Header>
         <Modal.Body className="min-h-0 text-foreground"><SettlementDetails key={currentSettlement.handId} settlement={currentSettlement} />
