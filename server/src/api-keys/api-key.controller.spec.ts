@@ -44,7 +44,7 @@ describe("ApiKeyController", () => {
     const request = { user: { id: "user-1" }, ip: "203.0.113.12" }
 
     await expect(controller.list(request as never)).resolves.toEqual([])
-    expect(controller.capabilities()).toEqual([{
+    expect(controller.capabilities().filter(c => !c.scope.startsWith("tables."))).toEqual([{
       scope: "drive.public_link.download",
       name: "获取公共链接文件",
       description: "允许通过开放接口下载 Drive 分享、Drive Site 和公开素材。",
@@ -60,6 +60,7 @@ describe("ApiKeyController", () => {
       description: "允许通过开放接口向账号设备发送通知。",
       documentationUrl: "http://localhost:19773/document/open-api/api/notification-send",
     }])
+    expect(controller.capabilities().filter(c => c.scope.startsWith("tables.")).map(c => c.scope)).toEqual(["tables.manage", "tables.records.read", "tables.records.create", "tables.records.update", "tables.records.delete"])
     await expect(controller.create({ name: " CLI ", scopes: ["drive.public_link.download"] }, request as never)).resolves.toEqual({
       apiKey: { id: "key-1" },
       secret: "syn_sk_secret",

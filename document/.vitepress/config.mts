@@ -99,6 +99,7 @@ export default defineConfig({
           text: 'API',
           collapsed: false,
           items: [
+            { text: '云端数据表', link: '/open-api/api/cloud-tables' },
             {
               text: '获取公共链接文件',
               link: '/open-api/api/share-link-download'

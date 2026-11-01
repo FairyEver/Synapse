@@ -32,6 +32,8 @@ describe("ApiKeyService", () => {
         scopes: true,
         lastUsedAt: true,
         createdAt: true,
+        tableAccessMode: true,
+        tableIds: true,
       },
     })
   })
@@ -63,6 +65,8 @@ describe("ApiKeyService", () => {
       createdAt: createdAt.toISOString(),
     })
     expect(createInput?.data).toEqual({
+      tableAccessMode: "selected",
+      tableIds: [],
       userId: "user-1",
       name: "CLI",
       keyHash: hashApiKeySecret(result.secret),

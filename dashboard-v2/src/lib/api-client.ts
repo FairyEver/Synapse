@@ -16,7 +16,8 @@ async function readErrorDetails(response: Response): Promise<{ readonly code?: s
   const fallback = response.statusText || '请求失败'
 
   try {
-    const payload = (await response.json()) as { code?: unknown; message?: unknown }
+    const payload = (await response.json()) as { code?: unknown; message?: unknown; error?: { code?: unknown; message?: unknown } }
+    if (typeof payload.error?.message === 'string') return { code: typeof payload.error.code === 'string' ? payload.error.code : undefined, message: payload.error.message, details: payload }
     const code = typeof payload.code === 'string' ? payload.code : undefined
 
     if (typeof payload.message === 'string') {

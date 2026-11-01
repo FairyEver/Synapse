@@ -18,6 +18,18 @@ Synapse 后端服务，包含 API 和 Admin 管理后台。
 
 ## 本地开发
 
+### 云端数据表
+
+Console为`/console/tables`，开放API为`/api/open/v1/tables`，权威契约`/api/open/openapi.json`；独立HTTP Skill随文档站`/document/skills/synapse-cloud-tables/`分发，无桌面或MCP依赖。部署迁移`20261101090000_cloud_tables`后启动服务，不修改既有分享网页。
+
+`CLOUD_TABLE_*`执行预算见`.env.example`，Compose完整透传；专用连接数为执行并发加认证并发，核心`DATABASE_POOL_SIZE`不变。默认8个执行槽/owner2个，排队128/owner32/16MiB/5秒，SQL2秒、锁250毫秒。无账号容量或调用次数额度。v1必须单服务实例；扩容前实现全局调度，不能将每进程限制当成集群限制。云表使用现有数据库灾备，不新增COS存储。
+
+维护每10秒发现到期数据；默认1秒工作时间片（`CLOUD_TABLE_MAINTENANCE_MS`），单批有界并参与共享公平队列，有积压时1秒后续跑。日志/回执和数据清理分开事务，避免某张表的锁冲突阻止日志回收。字段定义含归档总量最多1MiB，单字段及默认值合计分别64KiB；列表不加载字段定义。JSON请求深度32/节点50000，避免递归校验绕过成本边界。
+
+开放接口忽略Cookie，仅个人密钥或匿名；官方Console使用登录态。分享页访问者登录接入暂缓，既有同源用户HTML与Console的隔离风险尚未修复，分享内容仍按可信团队程序使用。不要将密钥放进用户网页。表、记录及归档字段30天后分块清理，操作日志30天，幂等凭据24小时；不保存记录修改历史。
+
+真实数据库自动验收：`pnpm --filter @synapse/server run test:cloud-tables:e2e`。未配置测试URL时自动创建临时PostgreSQL16容器，退出清理本次容器；显式URL仅允许loopback且库名以`_e2e`结尾，不得指定业务库。测试覆盖HTTP身份/CORS、事务/幂等/撤权/schema竞争、真实SQL取消及多账号压力，输出基线和负载P95证据。
+
 ### 云端待办
 
 账号 API 为 `GET /api/todos`、`GET /api/todos/:id`、`POST /api/todos`、`PATCH /api/todos/:id`、`PATCH /api/todos/:id/completion`、`DELETE /api/todos/:id`。使用既有用户登录态，不接收调用方指定账号；PostgreSQL 为唯一权威存储。写入要求稳定 UUID，修改 / 完成 / 删除还要求当前版本；冲突不自动覆盖。

@@ -20,3 +20,4 @@ export * from "./user-profile.js"
 export * from "./todos.js"
 
 export * from "./drive-discussion.js"
+export type * from './cloud-tables.js'

@@ -19,6 +19,7 @@ import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-p
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedWebhookDeliveriesIndexRouteImport } from './routes/_authenticated/webhook-deliveries/index'
+import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenticated/tables/index'
 import { Route as AuthenticatedSkillRepositoriesIndexRouteImport } from './routes/_authenticated/skill-repositories/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
@@ -82,6 +83,12 @@ const AuthenticatedWebhookDeliveriesIndexRoute =
   AuthenticatedWebhookDeliveriesIndexRouteImport.update({
     id: '/webhook-deliveries/',
     path: '/webhook-deliveries/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTablesIndexRoute =
+  AuthenticatedTablesIndexRouteImport.update({
+    id: '/tables/',
+    path: '/tables/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSkillRepositoriesIndexRoute =
@@ -173,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
+  '/tables/': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
@@ -195,6 +203,7 @@ export interface FileRoutesByTo {
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/skill-repositories': typeof AuthenticatedSkillRepositoriesIndexRoute
+  '/tables': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
@@ -220,6 +229,7 @@ export interface FileRoutesById {
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
+  '/_authenticated/tables/': typeof AuthenticatedTablesIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/_authenticated/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/my-devices/'
     | '/settings/'
     | '/skill-repositories/'
+    | '/tables/'
     | '/webhook-deliveries/'
     | '/webhooks/'
     | '/drive/items/$browserItemId'
@@ -267,6 +278,7 @@ export interface FileRouteTypes {
     | '/my-devices'
     | '/settings'
     | '/skill-repositories'
+    | '/tables'
     | '/webhook-deliveries'
     | '/webhooks'
     | '/drive/items/$browserItemId'
@@ -291,6 +303,7 @@ export interface FileRouteTypes {
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
     | '/_authenticated/skill-repositories/'
+    | '/_authenticated/tables/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
     | '/_authenticated/drive/items/$browserItemId'
@@ -380,6 +393,13 @@ declare module '@tanstack/react-router' {
       path: '/webhook-deliveries'
       fullPath: '/webhook-deliveries/'
       preLoaderRoute: typeof AuthenticatedWebhookDeliveriesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tables/': {
+      id: '/_authenticated/tables/'
+      path: '/tables'
+      fullPath: '/tables/'
+      preLoaderRoute: typeof AuthenticatedTablesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/skill-repositories/': {
@@ -493,6 +513,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
   AuthenticatedSkillRepositoriesIndexRoute: typeof AuthenticatedSkillRepositoriesIndexRoute
+  AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
   AuthenticatedDriveItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsBrowserItemIdRoute
@@ -510,6 +531,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
   AuthenticatedSkillRepositoriesIndexRoute:
     AuthenticatedSkillRepositoriesIndexRoute,
+  AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,

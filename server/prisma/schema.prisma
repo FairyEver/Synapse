@@ -167,6 +167,8 @@ model UserApiKey {
   keyHash               String                 @unique @db.VarChar(64)
   keyPrefix             String                 @db.VarChar(24)
   scopes                String[]               @default([])
+  tableAccessMode       String                 @default("selected") @db.VarChar(16)
+  tableIds              String[]               @default([])
   lastUsedAt            DateTime?
   revokedAt             DateTime?
   createdAt             DateTime               @default(now())
@@ -174,6 +176,84 @@ model UserApiKey {
   openApiUsageLogs      OpenApiUsageLog[]
 
   @@index([userId, revokedAt, createdAt])
+}
+
+model CloudTable {
+  id            String   @id @default(cuid())
+  ownerId       String
+  name          String   @db.VarChar(100)
+  schemaVersion Int      @default(1)
+  anonymous     Json     @default("{}")
+  members       Json     @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+  fields        CloudTableField[]
+  records       CloudTableRecord[]
+  receipts      CloudTableReceipt[]
+
+  @@index([ownerId, deletedAt, id])
+  @@index([members], type: Gin)
+  @@index([deletedAt])
+}
+
+model CloudTableField {
+  id         String @id @default(cuid())
+  tableId    String
+  table      CloudTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  key        String @db.VarChar(64)
+  definition Json
+  position   Int
+  archivedAt DateTime?
+  @@unique([tableId, key])
+  @@index([tableId, archivedAt, position])
+  @@index([archivedAt])
+}
+
+model CloudTableRecord {
+  id            String @id @default(cuid())
+  tableId       String
+  table         CloudTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  values        Json
+  creatorUserId String?
+  version       Int @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+  @@index([tableId, deletedAt, createdAt, id])
+  @@index([tableId, id])
+  @@index([tableId, creatorUserId, deletedAt, createdAt, id])
+  @@index([deletedAt, id])
+  @@index([values], type: Gin)
+}
+
+model CloudTableReceipt {
+  id          String @id @default(cuid())
+  tableId     String
+  table       CloudTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  namespace   String @db.VarChar(200)
+  key         String @db.VarChar(120)
+  fingerprint String @db.VarChar(64)
+  result      Json
+  createdAt   DateTime @default(now())
+  @@unique([namespace, key])
+  @@index([tableId])
+  @@index([createdAt])
+}
+
+model CloudTableOperationLog {
+  id         String @id @default(cuid())
+  ownerId    String
+  tableId    String?
+  actorId    String?
+  apiKeyId   String?
+  requestId  String @unique @db.VarChar(64)
+  operation  String @db.VarChar(64)
+  status     Int
+  durationMs Int
+  createdAt  DateTime @default(now())
+  @@index([ownerId, tableId, id])
+  @@index([createdAt])
 }
 
 model OpenApiDownloadGrant {

@@ -59,6 +59,8 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 
 ## 可用 API
 
+[云端数据表](/open-api/api/cloud-tables) 提供有类型的数据表、记录增删改查、权限和30天回收站，并提供独立HTTP Skill。云表匿名浏览器调用支持无凭据CORS；不能使用登录Cookie访问私有数据。
+
 | operationId | 方法 | 路径 | 认证 | 文档 |
 |---|---|---|---|---|
 | `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | `Authorization: Bearer` 与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |

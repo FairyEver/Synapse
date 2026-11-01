@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
+import type { CloudKeyResources, CloudMember } from "@synapse/shared"
 import type { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
@@ -17,11 +18,14 @@ const apiKeySelect = {
   scopes: true,
   lastUsedAt: true,
   createdAt: true,
+  tableAccessMode: true,
+  tableIds: true,
 } satisfies Prisma.UserApiKeySelect
 
 type ApiKeyRecord = Prisma.UserApiKeyGetPayload<{ select: typeof apiKeySelect }>
 
 export type UserApiKeyDto = {
+  readonly tableResources?: CloudKeyResources
   readonly id: string
   readonly name: string
   readonly prefix: string
@@ -60,12 +64,13 @@ export class ApiKeyService {
 
   async createForUser(
     userId: string,
-    input: { readonly name: string; readonly scopes: readonly ApiKeyScope[] },
+    input: { readonly name: string; readonly scopes: readonly ApiKeyScope[]; readonly tableResources?: CloudKeyResources },
     ipAddress = "system",
   ): Promise<UserApiKeyCreateResult> {
     assertValidApiKeyScopes(input.scopes, false)
     const secret = createApiKeySecret()
     const apiKey = await this.prisma.$transaction(async (tx) => {
+      if (input.tableResources) await this.assertTableResources(tx, userId, input.tableResources)
       const created = await tx.userApiKey.create({
         data: {
           userId,
@@ -73,6 +78,8 @@ export class ApiKeyService {
           keyHash: hashApiKeySecret(secret),
           keyPrefix: getApiKeyPrefix(secret),
           scopes: [...input.scopes],
+          tableAccessMode: input.tableResources?.mode ?? "selected",
+          tableIds: input.tableResources?.tableIds ?? [],
         },
         select: apiKeySelect,
       })
@@ -219,10 +226,29 @@ export class ApiKeyService {
       }, "API key last-used update failed")
     }
   }
+
+  private async assertTableResources(tx: Prisma.TransactionClient, userId: string, resources: CloudKeyResources): Promise<void> {
+    if (resources.mode === "all_owned") return
+    const tables = await tx.cloudTable.findMany({ where: { id: { in: resources.tableIds }, deletedAt: null }, select: { id: true, ownerId: true, members: true }, take: 500 })
+    if (tables.length !== resources.tableIds.length || tables.some(t => t.ownerId !== userId && !(t.members as unknown as CloudMember[]).some(m => m.userId === userId && Object.values(m.permissions).some(p => p !== "none")))) throw new BadRequestException("表资源不存在或未获授权。")
+  }
+
+  async updateTableResourcesForUser(userId: string, id: string, resources: CloudKeyResources, ipAddress = "system"): Promise<UserApiKeyDto> {
+    return this.prisma.$transaction(async tx => {
+      await this.assertTableResources(tx, userId, resources)
+      const existing = await tx.userApiKey.findFirst({ where: { id, userId, revokedAt: null }, select: apiKeySelect })
+      if (!existing) throw new NotFoundException("API key not found")
+      const result = await tx.userApiKey.updateMany({ where: { id, userId, revokedAt: null }, data: { tableAccessMode: resources.mode, tableIds: resources.tableIds } })
+      if (!result.count) throw new NotFoundException("API key not found")
+      await this.auditLog.recordWithClient(tx, { adminEmail: userId, action: "api_key.table_resources.update", targetType: "api_key", targetId: id, detail: { previous: { mode: existing.tableAccessMode, tableIds: existing.tableIds }, resources }, ipAddress })
+      return toUserApiKeyDto({ ...existing, tableAccessMode: resources.mode, tableIds: resources.tableIds })
+    })
+  }
 }
 
 function toUserApiKeyDto(apiKey: ApiKeyRecord): UserApiKeyDto {
   return {
+    ...(apiKey.tableAccessMode ? { tableResources: { mode: apiKey.tableAccessMode as CloudKeyResources["mode"], tableIds: apiKey.tableIds ?? [] } } : {}),
     id: apiKey.id,
     name: apiKey.name,
     prefix: apiKey.keyPrefix,

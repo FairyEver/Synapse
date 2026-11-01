@@ -1,4 +1,5 @@
 import "reflect-metadata"
+import { cloudTableCors, registerCloudTableIngress, registerCloudTableBodyErrors } from "./cloud-tables/cloud-table-http"
 import { NestFactory } from "@nestjs/core"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import cookieParser from "cookie-parser"
@@ -21,7 +22,9 @@ async function bootstrap(): Promise<void> {
   app.set("trust proxy", env.trustProxy)
   app.useLogger(app.get(Logger))
   app.useGlobalFilters(new AllExceptionsFilter(await app.resolve(PinoLogger)))
+  registerCloudTableIngress(app)
   registerHttpBodyParsers(app)
+  registerCloudTableBodyErrors(app)
   app.use(cookieParser())
   app.use(
     helmet({
@@ -29,12 +32,12 @@ async function bootstrap(): Promise<void> {
     }),
   )
   app.enableCors((request, callback) => {
-    callback(null, isProblemFeedbackPublicPath(request.originalUrl ?? request.url ?? "")
+    callback(null, cloudTableCors(request.originalUrl ?? request.url ?? "") ?? (isProblemFeedbackPublicPath(request.originalUrl ?? request.url ?? "")
       ? { origin: false, preflightContinue: true }
       : {
           origin: process.env.NODE_ENV === "production" ? false : true,
           credentials: true,
-        })
+        }))
   })
   app.enableShutdownHooks()
   const liveDesktopGateway = app.get(LiveDesktopGateway)

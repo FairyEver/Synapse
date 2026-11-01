@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { cloudTableConfig } from "../cloud-tables/cloud-table-config"
 
 export type TrustProxySetting = boolean | number | string
 
@@ -254,6 +255,7 @@ const envSchema = z
   })
 
 export interface ServerEnv {
+  readonly cloudTables: ReturnType<typeof cloudTableConfig>
   readonly databaseUrl: string
   readonly adminAccessSecret: string
   readonly userAccessJwtSecret: string
@@ -316,6 +318,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
   }
 
   return {
+    cloudTables: cloudTableConfig(source),
     databaseUrl: result.data.DATABASE_URL,
     adminAccessSecret: result.data.ADMIN_ACCESS_SECRET,
     userAccessJwtSecret: result.data.USER_ACCESS_JWT_SECRET,

@@ -1,0 +1,10 @@
+export type CloudFieldType = 'text' | 'integer' | 'number' | 'boolean' | 'date' | 'datetime' | 'singleSelect' | 'multiSelect' | 'url' | 'json'
+export type CloudAction = 'read' | 'create' | 'update' | 'delete'
+export type CloudRange = 'none' | 'own' | 'all'
+export type CloudField = { key: string; name: string; type: CloudFieldType; required?: boolean; defaultValue?: unknown; options?: { key: string; name: string }[]; archivedAt?: string | null }
+export type CloudMember = { userId: string; handle?: string; permissions: Partial<Record<CloudAction, CloudRange>> }
+export type CloudTableDto = { id: string; ownerId: string; viewerId?: string; name: string; schemaVersion: number; fields: CloudField[]; anonymous: Partial<Record<CloudAction, boolean>>; members?: CloudMember[]; deletedAt: string | null; createdAt: string; permissions: Record<CloudAction | 'manage', CloudRange> }
+export type CloudRecordDto = { id: string; values: Record<string, unknown>; creatorUserId: string | null; version: number; createdAt: string; updatedAt: string; deletedAt: string | null }
+export type CloudPage<T> = { data: T[]; nextCursor: string | null }
+export type CloudTableSummary = Pick<CloudTableDto, 'id' | 'ownerId' | 'name' | 'schemaVersion' | 'deletedAt' | 'createdAt' | 'permissions' | 'viewerId'>
+export type CloudKeyResources = { mode: 'selected' | 'all_owned'; tableIds: string[] }

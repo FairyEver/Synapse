@@ -1,4 +1,5 @@
 import { GameModule } from "./game/game.module"
+import { CloudTableModule } from "./cloud-tables/cloud-table.module"
 import { TodosModule } from "./todos/todos.module"
 import { todoLogRequest } from "./todos/todo-log"
 import { Module } from "@nestjs/common"
@@ -49,6 +50,7 @@ type RequestLogObject = {
 function hasSensitiveRequestUrl(url: string): boolean {
   const pathname = url.split("?")[0] ?? ""
   return pathname === "/api/game"
+    || /^\/api\/(?:open\/v1|console)\/tables(?:\/|$)/u.test(pathname)
     || pathname.startsWith("/api/game/")
     || pathname === "/api/todos"
     || pathname.startsWith("/api/todos/")
@@ -61,6 +63,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
 
 @Module({
   imports: [
+    CloudTableModule,
     ThrottlerModule.forRoot([{ name: "default", ttl: RATE_LIMIT_TTL_MS, limit: DEFAULT_API_RATE_LIMIT_PER_MINUTE }]),
     ScheduleModule.forRoot(),
     LoggerModule.forRoot({

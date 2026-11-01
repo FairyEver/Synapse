@@ -26,6 +26,7 @@ export class OpenApiExceptionFilter implements ExceptionFilter {
       return
     }
     response.setHeader("X-Request-Id", requestId)
+    if (error.statusCode === 503) response.setHeader("Retry-After", "1")
     response.setHeader("Cache-Control", "no-store")
     response.status(error.statusCode).json({
       requestId,

@@ -6,6 +6,7 @@ import { PinoLogger } from "nestjs-pino"
 import { AppModule } from "../app.module"
 import { AllExceptionsFilter } from "../common/all-exceptions.filter"
 import { registerHttpBodyParsers } from "../common/http-body-parser"
+import { registerCloudTableIngress, registerCloudTableBodyErrors } from "../cloud-tables/cloud-table-http"
 
 export async function createTestApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
@@ -13,9 +14,11 @@ export async function createTestApp(): Promise<INestApplication> {
   }).compile()
 
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false })
+  registerCloudTableIngress(app)
   registerHttpBodyParsers(app)
+  registerCloudTableBodyErrors(app)
   app.use(cookieParser())
-  app.useGlobalFilters(new AllExceptionsFilter(app.get(PinoLogger)))
+  app.useGlobalFilters(new AllExceptionsFilter(await app.resolve(PinoLogger)))
   await app.init()
   return app
 }

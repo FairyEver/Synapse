@@ -6,6 +6,13 @@ export const NOTIFICATION_SEND_SCOPE = "notification.send"
 export const LEGACY_SHARE_LINK_DOWNLOAD_SCOPE = "drive.share_link.download"
 
 export const API_KEY_CAPABILITIES = [
+  ...([
+    ["tables.manage", "管理云端数据表"],
+    ["tables.records.read", "查询云表记录"],
+    ["tables.records.create", "新增云表记录"],
+    ["tables.records.update", "修改云表记录"],
+    ["tables.records.delete", "删除云表记录"],
+  ] as const).map(([scope, name]) => ({ scope, name, description: "仅在明确授权的表资源和当前表权限内执行。", documentationPath: "/open-api/api/cloud-tables" })),
   {
     scope: PUBLIC_LINK_DOWNLOAD_SCOPE,
     name: "获取公共链接文件",

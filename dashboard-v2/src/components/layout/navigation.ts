@@ -1,6 +1,7 @@
 import { Activity, Archive, ChartNoAxesCombined, FileText, FolderKanban, Gamepad2, History, KeyRound, LayoutDashboard, Mail, MessageSquareWarning, MonitorSmartphone, ScrollText, Settings, Store, Users, UsersRound, Webhook, type LucideIcon } from 'lucide-react'
 export type NavigationItem = { title: string; path: string; icon: LucideIcon; external?: boolean }
 export const userNavigation: NavigationItem[] = [
+  { title: '云端数据表', path: '/tables', icon: ScrollText },
   { title: '我的 Skills', path: '/skill-repositories', icon: FolderKanban },
   { title: '探索 Skills', path: '/skill-repositories/explore', icon: Store },
   { title: 'Webhooks', path: '/webhooks', icon: Webhook },

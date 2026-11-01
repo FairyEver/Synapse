@@ -392,6 +392,7 @@ export type DashboardMe = {
 }
 
 export type DashboardApiKey = {
+  tableResources?: import('@synapse/shared').CloudKeyResources
   id: string
   name: string
   prefix: string
