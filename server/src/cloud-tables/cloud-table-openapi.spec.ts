@@ -12,4 +12,23 @@ describe("cloud table machine contract", () => {
     expect(querySchema.safeParse({ filters: Array.from({ length: 21 }, () => ({ field: "x", op: "eq", value: 1 })) }).success).toBe(false)
     expect(recordCreateSchema.safeParse({ values: {}, creatorUserId: "forged" }).success).toBe(false)
   })
+  it("publishes owner and scope requirements for Agent management operations", () => {
+    const operations = Object.values(cloudTableOpenApiPaths()).flatMap(methods => Object.values(methods)) as { operationId: string; summary: string; description: string; security: unknown[] }[]
+    const create = operations.find(o => o.operationId === "createCloudTable")!
+    expect(create.description).toContain("tables.manage")
+    expect(create.description).toContain("all_owned")
+    for (const id of ["updateCloudTable", "setCloudTablePermissions", "deleteCloudTable", "restoreCloudTable", "resolveCloudTableCollaborator", "listCloudTableLogs", "listDeletedCloudTableRecords", "restoreCloudTableRecord"]) {
+      const operation = operations.find(o => o.operationId === id)!
+      expect(operation.summary).toEqual(expect.any(String))
+      expect(operation.description, id).toContain("仅表主")
+      expect(operation.description, id).toContain("tables.manage")
+      expect(operation.security).toEqual([{ ApiKeyBearer: [] }])
+    }
+  })
+  it("advertises idempotency only on writes with transactional receipts", () => {
+    const operations = Object.values(cloudTableOpenApiPaths()).flatMap(methods => Object.values(methods)) as { operationId: string; parameters: { name: string }[] }[]
+    expect(operations.filter(o => o.parameters.some(p => p.name === "Idempotency-Key")).map(o => o.operationId).sort()).toEqual([
+      "createCloudTable", "createCloudTableRecord", "updateCloudTableRecord", "deleteCloudTableRecord", "mutateCloudTableRecords",
+    ].sort())
+  })
 })
