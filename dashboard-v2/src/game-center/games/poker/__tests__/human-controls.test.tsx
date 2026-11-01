@@ -6,8 +6,9 @@ import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { HumanControls } from "../components/HumanControls"
 import { canvasFit, mergeTableEvents } from "../lib/table-layout"
 import { betPresets } from "../lib/action-view"
-const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), join: vi.fn(), sit: vi.fn(), leave: vi.fn() }))
-vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { action: { act: api.act }, control: { set: api.control }, seat: { join: api.join, sit: api.sit, leave: api.leave } } }) }))
+const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), join: vi.fn(), sit: vi.fn(), leave: vi.fn(), state: vi.fn() }))
+vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { table: { state: api.state }, action: { act: api.act }, control: { set: api.control }, seat: { join: api.join, sit: api.sit, leave: api.leave } } }) }))
+vi.mock("@/game-center/runtime/account", () => ({ useAccount: () => ({state:{status:"authenticated",connectivity:"online",profile:{user:{id:"human-controls-user"}}}}) }))
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const table: PokerTableView = { roomCode: "1234", name: null, status: "running", buyIn: 1000, maxSeats: 2, handId: "hand", handNo: 1, street: "flop", board: [], pot: 20, dealerSeat: 0, actionOnSeat: 0, deadlineMs: 20000, cursor: "1:3", mySeatNo: 0, seats: [{ seatNo: 0, displayName: "本人", isMe: true, stack: 100, status: "active", streetBet: 2, aiState: "online", controller: "human" }], recentActions: [], deckRemaining: 40, actionSeq: 3, controlVersion: 4, controller: "human", legalActions: ["fold", "call", "raise", "allin"], toCall: 4, minRaiseTo: 10, maxRaiseTo: 102 }
@@ -129,21 +130,25 @@ describe("真人牌桌操作", () => {
   await act(async()=>done({ok:true}))
   await act(async()=>root.unmount())
  })
- it("无座位接入AI先授权再复制，等待时可取消", async () => {
+ it("无座位接入AI先打开统一面板，明确授权后才复制，等待时可取消", async () => {
   api.control.mockResolvedValue({controller:null,controlVersion:5,handoffPending:true})
   const copy=vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:copy}})
   const {host,root}=await render({...table,mySeatNo:null,seats:[],controller:null})
+  api.state.mockResolvedValue({...table,mySeatNo:null,seats:[],controller:null})
   await act(async()=>button(host,"接入 AI").click())
+  expect(api.control).not.toHaveBeenCalled()
+  await act(async()=>button(document.body,"允许 AI 接入并复制指令").click())
   expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"request_ai"})
   expect(copy).toHaveBeenCalledOnce()
   expect(copy.mock.calls[0][0]).toContain("seat.join 并携带该 controlVersion")
   expect(api.control.mock.invocationCallOrder[0]).toBeLessThan(copy.mock.invocationCallOrder[0])
   await act(async()=>root.render(<HumanControls table={{...table,mySeatNo:null,seats:[],controller:null,controlVersion:5,handoffPending:true}} perspective="public" onRefresh={vi.fn()} />))
   expect(host.textContent).toContain("等待 AI 入座")
-  await act(async()=>button(host,"复制 AI 接入指令").click())
+  await act(async()=>button(document.body,"复制接入指令").click())
   expect(api.control).toHaveBeenCalledTimes(1)
-  await act(async()=>button(host,"取消 AI 接入").click())
+  api.state.mockResolvedValue({...table,mySeatNo:null,seats:[],controller:null,controlVersion:5,handoffPending:true})
+  await act(async()=>button(document.body,"取消 AI 接入").click())
   expect(api.control).toHaveBeenLastCalledWith({roomCode:"1234",controlVersion:5,action:"cancel_ai"})
   await act(async()=>root.unmount())
  })

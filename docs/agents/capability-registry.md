@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-01 点数与 AI 接入：既有 lobby.list 增加可选本人 myControl 响应投影及说明，房间列表与牌桌共用 Web 接入面板；不新增权限、输入参数、注册能力或数据库字段。game 仍为 27 项 capability/MCP（大厅3、扑克24），游戏 IPC 为0；全局370 capability/366 MCP、System App22、默认Dock9及现有路径/例外不变。schema、工具描述和系统 Skill 同步，控制/资金/逐手准备协议不变。
+
 - 2026-11-01 每手结算与准备：新增 `app.game.poker.seat.ready`，game 26→27（大厅3、扑克24），全局 capability 369→370、MCP索引365→366。新增Web POST `/game/poker/rooms/:code/ready`，无桌面IPC/preload增量；System App 22、默认Dock9、Workflow/Automation及两条兼容游戏路径不变。wait新增ready_required，结算增加bestFive/分池reason及准备投影；本人控制版本与结算handId共同约束逐手确认。系统Skill、生成参考与Agent指南同步，旧条目为历史基线。
 
 - 2026-11-01 牌桌响应座位增加可选 `isHistorical` / `inCurrentHand`，分别标识结算历史回显和实际本手参与；同步 shared 响应校验与游戏系统 Skill。仅补充响应信息，不修改动作输入、权限或数据库，不新增工具。当前 game 26 项 capability/MCP、全局 369 capability / 365 MCP 索引、22 个 System App、默认 9 项 Dock 及两条兼容游戏深链均不变；底部操作条与按需信息面板仅属于 Web UI。

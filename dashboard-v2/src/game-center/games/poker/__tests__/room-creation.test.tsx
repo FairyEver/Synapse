@@ -2,6 +2,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { tableResponse } from "../../../../../../shared/test/game-response-fixtures"
 import { Lobby } from "../components/Lobby"
 
 const settings = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }))
@@ -22,7 +23,7 @@ vi.mock("../../../lib/api", () => ({
 vi.mock("../components/LobbyView", () => ({
   LobbyView: ({ onCreate, onConnect }: { onCreate: () => void; onConnect:(code:string)=>void }) => <><button onClick={onCreate}>打开创建</button><button onClick={()=>onConnect("1234")}>接入测试房</button></>,
 }))
-vi.mock("@heroui/react", async (original) => ({ ...await original<typeof import("@heroui/react")>(), toast: Object.assign(vi.fn(), { danger: vi.fn(), update: vi.fn() }) }))
+vi.mock("@heroui/react", async (original) => ({ ...await original<typeof import("@heroui/react")>(), toast: Object.assign(vi.fn(), { danger: vi.fn(), success: vi.fn(), update: vi.fn() }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 const roots = new Set<Root>()
@@ -229,17 +230,20 @@ describe("建房请求身份", () => {
     expect(onRoom).toHaveBeenCalledWith("1234")
   })
   it("大厅接入AI先授权，复制失败重试不再次改变控制版本", async () => {
-    api.state.mockReset().mockResolvedValueOnce({mySeatNo:null,controlVersion:4,handoffPending:false}).mockResolvedValueOnce({mySeatNo:null,controlVersion:5,handoffPending:true})
-    api.control.mockReset().mockResolvedValue({controlVersion:5,handoffPending:true})
+    let current={...tableResponse,roomCode:"1234",mySeatNo:null,seats:[],controller:null as "human"|"ai"|null,controlVersion:4,handoffPending:false}
+    api.state.mockReset().mockImplementation(async()=>current)
+    api.control.mockReset().mockImplementation(async()=>{current={...current,controlVersion:5,handoffPending:true};return {controller:null,controlVersion:5,handoffPending:true}})
     const copy=vi.fn().mockRejectedValueOnce(new Error("拒绝剪贴板")).mockResolvedValueOnce(undefined)
     Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:copy}})
     const host=document.createElement("div"),root=createRoot(host)
     roots.add(root);document.body.append(host)
     await act(async()=>root.render(<Lobby onRoom={vi.fn()} />))
     await act(async()=>[...host.querySelectorAll("button")].find(b=>b.textContent==="接入测试房")!.click())
-    const button=[...document.querySelectorAll("button")].find(b=>b.textContent==="复制接入指令")!
-    await act(async()=>button.click())
-    await act(async()=>button.click())
+    const button=(label:string)=>[...document.querySelectorAll("button")].find(b=>b.textContent===label)!
+    expect(api.control).not.toHaveBeenCalled()
+    await act(async()=>button("允许 AI 接入并复制指令").click())
+    expect(document.body.textContent).toContain("授权保持不变")
+    await act(async()=>button("复制接入指令").click())
     expect(api.control).toHaveBeenCalledOnce()
     expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"request_ai"})
     expect(copy).toHaveBeenCalledTimes(2)

@@ -8,10 +8,12 @@ export function Seat({
   origin = 0,
   acting,
   showWager = true,
+  hasStarted = true,
   dealer,
   dealt,
   deadlineMs, result, feedback, feedbackKey, turnPulse, celebrate, departed,
 }: {
+  hasStarted?: boolean
   showWager?: boolean
   departed?: boolean
   result?: PokerSettlementView | null
@@ -86,7 +88,7 @@ export function Seat({
           : seat.status === "folded" && !departed ? <strong className="poker-folded-label">已弃牌</strong>
           : feedback && !acting && !waiting && !departed ? <span key={feedbackKey} className="poker-action-receipt">{actionLabel[feedback.action]}{feedback.amount > 0 && ` +${amount(feedback.amount)}`}</span>
           : <span className="poker-ai-state" data-acting={acting}>
-            {seat.status === "sitting_out" ? "已暂离" : waiting ? "下一手加入" : acting ? seat.isMe && seat.controller === "human" ? "轮到你" : "行动中" : seat.status === "allin" ? "已全下" : stateLabel}
+            {seat.status === "sitting_out" ? "已暂离" : waiting ? hasStarted ? "下一手加入" : "等待开局" : acting ? seat.isMe && seat.controller === "human" ? "轮到你" : "行动中" : seat.status === "allin" ? "已全下" : stateLabel}
           </span>}
         <span className="poker-wager" data-seat={seat.seatNo} data-visible={showWager && seat.streetBet > 0} aria-label={`${seat.isMe ? "你" : seat.displayName} 本轮下注 ${amount(seat.streetBet)}`}><Coins aria-hidden="true" /><span title={amount(seat.streetBet)}>{amount(seat.streetBet)}</span></span>
       </div>

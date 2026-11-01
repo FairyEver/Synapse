@@ -126,6 +126,7 @@ const stats = z
   .passthrough()
 const room = z
   .object({
+    myControl: z.object({ ...controlFields, seatNo: z.number().int().nonnegative().nullable() }).optional(),
     rules: rules.optional(),
     mode: z.enum(["points", "practice"]).optional(),
     roomCode: z.string(),

@@ -164,6 +164,7 @@ export interface PokerTableView {
   deckRemaining: number
 }
 export interface PokerRoomView {
+  myControl?: PokerControlView & { seatNo: number | null }
   rules?: PokerRules
   mode?: GameFunding
   roomCode: string
@@ -269,7 +270,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ["poker.guide", "第一次接触这个游戏先读，不需要入座；规则、循环、参数与错误码。", {}, [], false],
   [
     "poker.lobby.list",
-    "列出房间；mode默认points，practice仅陪练，all合并两类并统一分页。Pagination: offset-based. Continue with nextOffset until null.",
+    "列出房间；mode默认points，practice仅陪练，all合并两类并统一分页；myControl仅返回本人当前控制和待接入状态，缺失时进入房间读取，不据此自动授权或入座。Pagination: offset-based. Continue with nextOffset until null.",
     { ...page, mode: { type: "string", enum: ["points", "practice", "all"] } },
     [],
     false,

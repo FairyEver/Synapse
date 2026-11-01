@@ -60,7 +60,7 @@
 
 ## app_game_poker_lobby_list
 
-列出房间；mode默认points，practice仅陪练，all合并两类并统一分页。Pagination: offset-based. Continue with nextOffset until null. 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+列出房间；mode默认points，practice仅陪练，all合并两类并统一分页；myControl仅返回本人当前控制和待接入状态，缺失时进入房间读取，不据此自动授权或入座。Pagination: offset-based. Continue with nextOffset until null. 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

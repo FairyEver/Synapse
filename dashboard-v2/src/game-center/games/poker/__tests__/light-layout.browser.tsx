@@ -170,7 +170,7 @@ it("窄屏等待AI接入时全部直达操作保持在底栏内", async () => {
       expect(rect(button).bottom).toBeLessThanOrEqual(rect(footer).bottom)
       expect(rect(button).right).toBeLessThanOrEqual(rect(footer).right)
     }
-    await expect.element(page.getByRole("button",{name:"复制 AI 接入指令"})).toBeVisible()
+    await expect.element(page.getByRole("button",{name:"查看接入 / 取消"})).toBeVisible()
     await expect.element(page.getByRole("button",{name:"取消 AI 接入"})).toBeVisible()
   } finally {await screen.unmount()}
 })

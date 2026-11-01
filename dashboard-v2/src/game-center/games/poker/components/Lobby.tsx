@@ -1,7 +1,7 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
 import { LobbyView } from "./LobbyView"
 import { useEffect, useRef, useState } from "react"
-import { pokerConnectInstruction } from "../lib/connect-instruction"
+import { PokerAIConnectDialog } from "./PokerAIConnectDialog"
 import { useAccount } from "@/game-center/runtime/account"
 import { toast } from "@heroui/react"
 import { Button } from "@heroui/react"
@@ -24,6 +24,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
   useEffect(() => {
     creation.current = null
     setCreateOpen(false)
+    setConnect(null)
   }, [userId])
   const openCreate = async () => {
     creation.current = null
@@ -58,24 +59,6 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
       setClosing(null)
       await lobby.refresh()
     }
-  }
-  const copy = async () => {
-    if (!connect) return
-    const roomCode = connect
-    const result = await mutation.run(async () => {
-      const table = await gameApi().poker.table.state({roomCode, perspective:"public"})
-      if (table.mySeatNo === null && !table.handoffPending) {
-        if (table.controlVersion == null) throw new Error("请更新客户端后接入 AI")
-        await gameApi().poker.control.set({roomCode, controlVersion:table.controlVersion, action:"request_ai"})
-      }
-      try {
-        await navigator.clipboard.writeText(pokerConnectInstruction(roomCode))
-      } catch {
-        throw new Error("复制失败，请重试")
-      }
-      return true
-    })
-    if (result) toast("接入指令已复制")
   }
   return (
     <>
@@ -145,25 +128,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
           </Modal.Footer>
         </Modal.Dialog></Modal.Container>
       </Modal.Backdrop>
-      <Modal.Backdrop
-        isOpen={!!connect}
-        onOpenChange={(open) => {
-          if (!open) setConnect(null)
-        }}
-      >
-        <Modal.Container><Modal.Dialog><Modal.CloseTrigger />
-          <Modal.Header>
-            <Modal.Heading>接入 AI · #{connect}</Modal.Heading>
-            <p className="text-sm text-muted">将指令发到你的 AI 会话</p>
-          </Modal.Header>
-          <Modal.Body><p className="text-sm">{connect && pokerConnectInstruction(connect)}</p></Modal.Body>
-          <Modal.Footer>
-            <Button type="button" isDisabled={mutation.busy} onPress={() => void copy()}>
-              复制接入指令
-            </Button>
-          </Modal.Footer>
-        </Modal.Dialog></Modal.Container>
-      </Modal.Backdrop>
+      {connect && <PokerAIConnectDialog key={`${userId}:${connect}`} open onOpenChange={open => { if (!open) setConnect(null) }} roomCode={connect} onChanged={lobby.refresh} />}
     </>
   )
 }

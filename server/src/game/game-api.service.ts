@@ -101,7 +101,7 @@ export class GameApiService {
           },
         }
       case "app.game.poker.lobby.list":
-        return this.read.lobby(p.offset ?? 0, p.limit ?? 50, p.mode)
+        return this.read.lobby(p.offset ?? 0, p.limit ?? 50, p.mode, userId)
       case "app.game.poker.room.create":
         return this.poker.createRoom(
           userId,

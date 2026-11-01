@@ -8,7 +8,7 @@ import { resolveRules, type PokerRules } from "./engine/rules"
 @Injectable()
 export class PokerReadService {
   constructor(private readonly poker: PokerService) {}
-  async lobby(offset = 0, limit = 50, mode: "points" | "practice" | "all" = "points") {
+  async lobby(offset = 0, limit = 50, mode: "points" | "practice" | "all" = "points", userId?: string) {
     const rooms = await this.poker.prisma.gamePokerRoom.findMany({
       where: { status: { not: "closed" }, ...(mode === "all" ? {} : { mode }) },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -33,20 +33,32 @@ export class PokerReadService {
       where: { roomId: { in: rooms.map((r) => r.id) } },
       _count: true,
     })
+    const page = rooms.slice(0, limit)
+    const where = { userId, roomId: { in: page.map(room => room.id) } }
+    const [mine, histories] = userId && page.length ? await Promise.all([
+      this.poker.prisma.gamePokerSeat.findMany({ where, take: limit, select: { roomId: true, seatNo: true, controller: true, controlVersion: true, handoffPending: true } }),
+      this.poker.prisma.gamePokerControlHistory.findMany({ where, take: limit, select: { roomId: true, controlVersion: true, joinPending: true } }),
+    ]) : [[], []]
     return {
-      items: rooms.slice(0, limit).map((r) => ({
-        roomCode: r.code,
-        name: r.name,
-        ownerUserId: r.ownerUserId,
-        mode: r.mode as "points" | "practice",
-        rules: resolveRules(r as unknown as Partial<PokerRules>),
-        maxSeats: r.maxSeats,
-        buyIn: r.buyIn,
-        status: r.status,
-        smallBlind: r.smallBlind,
-        bigBlind: r.bigBlind,
-        players: seats.find((s) => s.roomId === r.id)?._count ?? 0,
-      })),
+      items: page.map((r) => {
+        const seat = mine.find(seat => seat.roomId === r.id), history = histories.find(history => history.roomId === r.id)
+        const myControl = seat ? { seatNo: seat.seatNo, controller: seat.controller as "human" | "ai", controlVersion: seat.controlVersion, handoffPending: seat.handoffPending }
+          : history ? { seatNo: null, controller: null, controlVersion: history.controlVersion, handoffPending: history.joinPending } : undefined
+        return {
+          ...(myControl ? { myControl } : {}),
+          roomCode: r.code,
+          name: r.name,
+          ownerUserId: r.ownerUserId,
+          mode: r.mode as "points" | "practice",
+          rules: resolveRules(r as unknown as Partial<PokerRules>),
+          maxSeats: r.maxSeats,
+          buyIn: r.buyIn,
+          status: r.status,
+          smallBlind: r.smallBlind,
+          bigBlind: r.bigBlind,
+          players: seats.find((s) => s.roomId === r.id)?._count ?? 0,
+        }
+      }),
       nextOffset: rooms.length > limit ? offset + limit : null,
     }
   }

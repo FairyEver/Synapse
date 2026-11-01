@@ -4,6 +4,9 @@ import { Bot, Clock3, MoreHorizontal, UserRound } from "lucide-react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { PokerButton } from "./PokerButton"
 import { PokerControlPopover } from "./PokerControlPopover"
+import { PokerJoinSummary } from "./PokerJoinSummary"
+import { PokerAIConnectDialog } from "./PokerAIConnectDialog"
+import { copyPokerInvitation } from "../lib/room-entry"
 import { BetDecisionContext } from "./BetDecisionContext"
 import { useHumanControls, type PokerIntent } from "../hooks/useHumanControls"
 import { actionState, betPresets } from "../lib/action-view"
@@ -25,7 +28,12 @@ export function HumanControls({ table, perspective, onPerspective, onRefresh, id
   popoverContainer?: HTMLElement | null
 }) {
   const { busy, error, to, setTo, uncertain, mine, controller, version, handoff,
-    act, retry, control, join, sit, leave, copy, requestAIJoin } = useHumanControls(table, onRefresh, identityKey)
+    act, retry, control, join, sit, leave } = useHumanControls(table, onRefresh, identityKey)
+  const [aiOpen, setAIOpen] = useState(false)
+  const openAI = () => { setPanel(null); setAIOpen(true) }
+  const canInvite = table.status !== "running" && table.status !== "closed" && table.seats.filter(seat => !seat.isHistorical && seat.status !== "left").length < table.maxSeats
+  useEffect(() => { setAIOpen(false) }, [identityKey, table.roomCode])
+  const joinLabel = table.mode === "points" ? `带入 ${amount(table.buyIn)} 点入座` : "本人入座"
   const [allInAction, setAllInAction] = useState<PokerIntent["action"] | null>(null)
   const [localPanel, setLocalPanel] = useState<PokerControlPanel | null>(null)
   const panel = activePanel === undefined ? localPanel : activePanel
@@ -97,10 +105,10 @@ export function HumanControls({ table, perspective, onPerspective, onRefresh, id
     {canBet && <Button fullWidth isDisabled={disabled || confirmAllIn || !validAmount} onPress={() => submit(raise ? "raise" : "bet")} aria-label={`确认${raise ? "加注" : "下注"} ${amount(numeric)}`}>{raise ? "加注到" : "下注到"} {amount(Number.isFinite(numeric) ? numeric : 0)}</Button>}
   </div>
   const sessionControls = <div className="flex flex-col items-stretch gap-3">
-      {!mine && table.status !== "closed" && <>{handoff ? <><Button fullWidth isDisabled={busy} onPress={() => void copy()}>复制 AI 接入指令</Button><Button fullWidth variant="tertiary" isDisabled={busy} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接入</Button></> : <><Button isDisabled={busy} fullWidth onPress={() => void manage(join)}><UserRound aria-hidden="true" />本人入座</Button><Button fullWidth variant="secondary" isDisabled={busy || version == null} onPress={() => void manage(requestAIJoin)}><Bot aria-hidden="true" />接入 AI</Button></>}</>}
+      {!mine && table.status !== "closed" && <>{handoff ? <><Button fullWidth isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button fullWidth variant="tertiary" isDisabled={busy} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接入</Button></> : <><Button isDisabled={busy} fullWidth onPress={() => void manage(join)}><UserRound aria-hidden="true" />{joinLabel}</Button><Button fullWidth variant="secondary" isDisabled={busy || version == null} onPress={openAI}><Bot aria-hidden="true" />接入 AI</Button></>}</>}
       {mine && table.status !== "closed" && <>
-        {controller !== "human" ? <Button fullWidth isDisabled={disabled || version == null} onPress={() => void manage(() => control("takeover"))}>本人接管</Button> : handoff ? <Button fullWidth variant="tertiary" isDisabled={disabled} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接管</Button> : <Button fullWidth variant="secondary" isDisabled={disabled || version == null} onPress={() => void manage(() => control("request_ai"))}>交给 AI</Button>}
-        {handoff && <Button fullWidth variant="secondary" onPress={() => void copy()}>复制 AI 接入指令</Button>}
+        {controller !== "human" ? <Button fullWidth isDisabled={disabled || version == null} onPress={() => void manage(() => control("takeover"))}>本人接管</Button> : handoff ? <Button fullWidth variant="tertiary" isDisabled={disabled} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接管</Button> : <Button fullWidth variant="secondary" isDisabled={disabled || version == null} onPress={openAI}>交给 AI</Button>}
+        {handoff && <Button fullWidth variant="secondary" onPress={openAI}>查看接入 / 取消</Button>}
         <Button fullWidth variant="secondary" isDisabled={disabled || version == null || controller !== "human"} onPress={() => void manage(sit)}>{mine.status === "sitting_out" ? "回到牌桌" : table.pauseReason === "user" ? "本手后暂离" : "暂离"}</Button>
         <Button fullWidth variant="danger-soft" isDisabled={disabled || version == null || controller !== "human"} onPress={() => void manage(leave)}>离桌</Button>
       </>}
@@ -110,13 +118,14 @@ export function HumanControls({ table, perspective, onPerspective, onRefresh, id
     {controller !== "human" && <Button isDisabled={disabled || version == null} onPress={() => void control("takeover")}>本人接管</Button>}
     {controller === "human" && mine.status === "sitting_out" && <Button isDisabled={disabled || version == null} onPress={() => void sit()}>回到牌桌</Button>}
     {controller === "human" && perspective === "public" && onPerspective && <Button isDisabled={disabled} onPress={() => onPerspective("owner")}>切回玩家视角</Button>}
-    {handoff && <><Button variant="secondary" isDisabled={busy} onPress={() => void copy()}>复制 AI 接入指令</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
+    {handoff && <><Button variant="secondary" isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
   </div> : null
   return <div ref={controlsRef} className="poker-human-controls" data-acting={acting} data-compact-controls={compact} aria-label="本人牌桌操作" onKeyDown={event => { if (event.key === "Escape" && confirmAllIn) { event.stopPropagation(); cancelConfirmation() } }}>
     <span ref={betAnchor} className="poker-bet-popover-anchor" aria-hidden="true" />
-    <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status">{state}</span>{acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={() => void copy()}>复制接入指令</Button>}{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
+    <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status">{state}</span>{acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={openAI}>查看 AI 接入</Button>}{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
     {(error || uncertain) && <div className="space-y-3 rounded-xl bg-surface p-4 font-sans text-foreground scheme-light"><p role="alert" className="text-sm text-danger">{error}{uncertain && "，请重试确认结果"}</p>{uncertain && <Button isDisabled={busy} onPress={retry}>重试出牌</Button>}</div>}
-    {!mine && table.status !== "closed" && <div className="poker-join-controls font-sans text-foreground scheme-light">{sessionControls}</div>}
+    {!mine && table.status !== "closed" && <div className="space-y-2 font-sans text-foreground scheme-light"><PokerJoinSummary table={table} /><div className="poker-join-controls">{sessionControls}</div></div>}
+    {canInvite && <div className="mt-2 flex flex-wrap items-center gap-2 font-sans text-foreground scheme-light"><Button variant="secondary" onPress={() => void copyPokerInvitation(table.roomCode)}>邀请玩家</Button></div>}
     {recovery}
     {acting && <div className="poker-action-dock">
       <div className="poker-action-buttons">
@@ -134,5 +143,6 @@ export function HumanControls({ table, perspective, onPerspective, onRefresh, id
     {!menuTrigger && mine && table.status !== "closed" && <div className="poker-local-menu font-sans text-foreground scheme-light"><Button ref={localMenuTrigger} variant="tertiary" aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" />座位管理</Button></div>}
     <PokerControlPopover open={panel === "menu"} onOpenChange={open => { if (!open) setPanel(null) }} trigger={managementTrigger} container={popoverContainer ?? controlsRef.current} title="更多操作" id={menuId} side={menuTrigger ? "bottom" : "top"} restoreFocus={panel === null && !confirmAllIn}>{mine && sessionControls}{menuContent && <div className="mt-4 space-y-3 border-t border-separator pt-4">{menuContent}</div>}</PokerControlPopover>
     {confirmation}
+    {aiOpen && <PokerAIConnectDialog key={`${identityKey}:${table.roomCode}`} open onOpenChange={setAIOpen} roomCode={table.roomCode} table={table} onChanged={onRefresh} />}
   </div>
 }

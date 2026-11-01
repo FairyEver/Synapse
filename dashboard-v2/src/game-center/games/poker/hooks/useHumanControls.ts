@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
-import { pokerConnectInstruction } from "../lib/connect-instruction"
 import { gameApi } from "../../../lib/api"
 export type PokerIntent = Parameters<ReturnType<typeof gameApi>["poker"]["action"]["act"]>[0]
 // Keep an unresolved command stable across room navigation and perspective changes.
@@ -88,15 +87,5 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
   const join = () => execute(() => gameApi().poker.seat.join({roomCode: table.roomCode}))
   const sit = () => execute(() => gameApi().poker.seat.sit({roomCode: table.roomCode, controlVersion: version, sittingOut: mine?.status !== "sitting_out", reason: "user"}))
   const leave = () => execute(() => gameApi().poker.seat.leave({roomCode: table.roomCode, controlVersion: version}))
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(pokerConnectInstruction(table.roomCode))
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "复制失败")
-    }
-  }
-  const requestAIJoin = () => {
-    return version != null ? execute(() => gameApi().poker.control.set({roomCode:table.roomCode, controlVersion:version, action:"request_ai"}), copy) : Promise.resolve(false)
-  }
-  return {requestAIJoin, busy, error, to, setTo, uncertain, mine, controller, version, handoff, act, retry, control, join, sit, leave, copy}
+  return {busy, error, to, setTo, uncertain, mine, controller, version, handoff, act, retry, control, join, sit, leave}
 }
