@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import { Checkbox, Input, Label, ListBox, Modal, Select, TextArea, TextField, Button } from '@heroui/react'
 
-export function CloudInput({ label, value, onChange, required = false, disabled = false, multiline = false }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; disabled?: boolean; multiline?: boolean }) {
-  return <TextField isRequired={required} isDisabled={disabled} value={value} onChange={onChange}><Label>{label}</Label>{multiline ? <TextArea variant='secondary' rows={5} /> : <Input variant='secondary' />}</TextField>
+export function CloudInput({ label, value, onChange, required = false, disabled = false, multiline = false, variant = 'secondary' }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; disabled?: boolean; multiline?: boolean; variant?: 'primary' | 'secondary' }) {
+  return <TextField isRequired={required} isDisabled={disabled} value={value} onChange={onChange}><Label>{label}</Label>{multiline ? <TextArea variant={variant} rows={5} /> : <Input variant={variant} />}</TextField>
 }
-export function CloudSelect({ label, value, items, onChange }: { label: string; value: string; items: { key: string; name: string }[]; onChange: (v: string) => void }) {
-  return <Select aria-label={label} selectedKey={value} onSelectionChange={key => key !== null && onChange(String(key))} variant='secondary'><Label>{label}</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox items={items}>{item => <ListBox.Item id={item.key} textValue={item.name}>{item.name}<ListBox.ItemIndicator /></ListBox.Item>}</ListBox></Select.Popover></Select>
+export function CloudSelect({ label, value, items, onChange, variant = 'secondary' }: { label: string; value: string; items: { key: string; name: string }[]; onChange: (v: string) => void; variant?: 'primary' | 'secondary' }) {
+  return <Select aria-label={label} selectedKey={value} onSelectionChange={key => key !== null && onChange(String(key))} variant={variant}><Label>{label}</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox items={items}>{item => <ListBox.Item id={item.key} textValue={item.name}>{item.name}<ListBox.ItemIndicator /></ListBox.Item>}</ListBox></Select.Popover></Select>
 }
 export function CloudCheck({ label, selected, onChange }: { label: string; selected: boolean; onChange: (v: boolean) => void }) {
   return <Checkbox variant='secondary' isSelected={selected} onChange={onChange}><Checkbox.Content><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control><Label>{label}</Label></Checkbox.Content></Checkbox>
