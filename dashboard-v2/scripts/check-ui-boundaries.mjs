@@ -4,6 +4,7 @@ import path from 'node:path'
 import ts from 'typescript'
 const root = fileURLToPath(new URL('../', import.meta.url))
 const violations = []
+const surfaceFieldComponents = new Set(['Input', 'TextArea', 'InputGroup', 'InputOTP', 'SearchField', 'Select', 'ComboBox', 'NumberField', 'Checkbox', 'RadioGroup', 'PasswordInput'])
 async function inspect(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const filename = path.join(directory, entry.name)
@@ -19,10 +20,35 @@ async function inspect(directory) {
       if (!bindings || !ts.isNamedImports(bindings)) continue
       for (const binding of bindings.elements) {
         if (statement.moduleSpecifier.text === '@heroui/react') heroComponents.set(binding.name.text, binding.propertyName?.text ?? binding.name.text)
+        if (statement.moduleSpecifier.text.endsWith('/password-input') && (binding.propertyName?.text ?? binding.name.text) === 'PasswordInput') heroComponents.set(binding.name.text, 'PasswordInput')
         if (statement.moduleSpecifier.text === 'lucide-react') iconNames.add(binding.name.text)
       }
     }
     const tag = (node) => !node ? '' : ts.isJsxElement(node) ? node.openingElement.tagName.getText(source) : ts.isJsxSelfClosingElement(node) ? node.tagName.getText(source) : ''
+    const attributes = (node) => (ts.isJsxElement(node) ? node.openingElement : node)?.attributes?.properties ?? []
+    const attribute = (node, name) => attributes(node).find((item) => ts.isJsxAttribute(item) && item.name.getText(source) === name)?.initializer
+    const isOnWhiteSurface = (node) => {
+      for (let parent = node.parent; parent; parent = parent.parent) {
+        if (!ts.isJsxElement(parent)) continue
+        const classes = attribute(parent, 'className')?.getText(source) ?? ''
+        // The nearest painted background wins, including reader panels inside overlays.
+        if (/\bbg-(?:background|surface-secondary|surface-tertiary)\b/u.test(classes)) return false
+        if (/\bbg-(?:surface|overlay)(?=[\s'"`]|$)/u.test(classes)) return true
+        const [parentRoot, parentSlot] = tag(parent).split('.')
+        const owner = heroComponents.get(parentRoot)
+        if (['Card', 'Surface'].includes(owner) && !parentSlot) {
+          const variant = attribute(parent, 'variant')
+          if (variant && ts.isStringLiteral(variant)) {
+            if (variant.text === 'transparent') continue
+            return variant.text === 'default'
+          }
+          return !variant
+        }
+        if (parentSlot === 'Dialog' && ['Modal', 'Drawer', 'AlertDialog'].includes(owner)) return true
+        if ((parentSlot === 'Content' && owner === 'Popover') || (parentSlot === 'Popover' && ['Select', 'ComboBox'].includes(owner))) return true
+      }
+      return false
+    }
     const report = (node, message) => violations.push(`${path.relative(root, filename)}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${message}`)
     const visit = (node) => {
       let specifier
@@ -33,6 +59,11 @@ async function inspect(directory) {
         const name = tag(node)
         const [rootName, slot] = name.split('.')
         const component = heroComponents.get(rootName)
+        const isSurfaceField = (!slot && surfaceFieldComponents.has(component)) || (slot === 'Group' && ['DateField', 'TimeField'].includes(component))
+        if (isSurfaceField && isOnWhiteSurface(node)) {
+          const variant = attribute(node, 'variant')
+          if (!variant || (ts.isStringLiteral(variant) && variant.text !== 'secondary')) report(node, 'HeroUI form controls on white surfaces require variant="secondary" on the owning component')
+        }
         if (ts.isJsxElement(node) && slot === 'Footer' && ['Modal', 'Drawer', 'AlertDialog'].includes(component)) {
           const siblings = node.parent.children?.filter((child) => !ts.isJsxText(child) || child.text.trim()) ?? []
           const previous = tag(siblings[siblings.indexOf(node) - 1])
@@ -65,4 +96,4 @@ const styles = await readFile(path.join(root, 'src/styles/globals.css'), 'utf8')
 if (!styles.startsWith('@import "tailwindcss";\n@import "@heroui/styles";')) violations.push('globals.css: HeroUI import order')
 for (const html of ['index.html', 'admin.html', 'game.html', 'desktop-update.html']) if (!(await readFile(path.join(root, html), 'utf8')).includes('data-theme="light"')) violations.push(`${html}: fixed light theme missing`)
 if (violations.length) { process.stderr.write(`${violations.join('\n')}\n`); process.exitCode = 1 }
-else process.stdout.write('V2 UI boundaries: direct HeroUI components, independent source graph, fixed light theme, link icon slots and dialog spacing.\n')
+else process.stdout.write('V2 UI boundaries: direct HeroUI components, independent source graph, fixed light theme, link icon slots, dialog spacing and surface field variants.\n')

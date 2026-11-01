@@ -1294,7 +1294,7 @@ function CommentComposer({
       onClick={(event) => event.stopPropagation()}
     >
       {label ? <div className='mb-2 text-xs text-muted'>{label}</div> : null}
-      <TextArea
+      <TextArea variant={dataAttribute === 'draft' ? 'primary' : 'secondary'}
         ref={textareaRef}
         value={value}
         aria-label={ariaLabel}

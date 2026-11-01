@@ -283,7 +283,7 @@ function UserFilter({
       </Button>
       <Popover.Content className='w-72' placement='bottom start'>
         <Popover.Dialog className='grid gap-2'>
-          <Input aria-label='搜索用户' placeholder='搜索用户' value={search} onChange={(event) => setSearch(event.target.value)} />
+          <Input variant="secondary" aria-label='搜索用户' placeholder='搜索用户' value={search} onChange={(event) => setSearch(event.target.value)} />
           {isLoading ? <p role='status' className='text-sm text-muted'>加载中</p> : null}
           <ListBox aria-label='用户筛选' selectionMode='single' selectedKeys={[value?.id ?? allValue]} onAction={(key) => {
             onChange(data?.data.find((item) => item.id === key) ?? null)
@@ -449,7 +449,7 @@ function FunnelChart({ funnels }: { funnels: TelemetryStats['insights']['funnels
       <Card.Header className='flex-row items-center justify-between gap-3'>
         <Card.Title>关键漏斗</Card.Title>
         {funnels.length > 0 ? (
-          <Select aria-label='漏斗类型' value={active?.funnelKey} onChange={(key) => (setSelected)(String(key ?? ''))}>
+          <Select variant="secondary" aria-label='漏斗类型' value={active?.funnelKey} onChange={(key) => (setSelected)(String(key ?? ''))}>
             <Select.Trigger  aria-label='漏斗类型'>
               <Select.Value />
             <Select.Indicator /></Select.Trigger>

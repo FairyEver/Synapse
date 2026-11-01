@@ -80,3 +80,15 @@
 - `check:ui` 增加链接图标插槽及 Footer 邻接结构检查；设计约束同步至 DESIGN.md，避免重新引入同类问题。
 
 专项扫描记录位于忽略目录 `.superpowers/sdd/dashboard-v2-icon-dialog/`；本机截图位于 `/tmp/synapse-v2-webhook-dialog-final.png`、`/tmp/synapse-v2-permissions-dialog-final.png`，尚无在线链接。
+
+## 2026-11-01 表面背景与控件变体专项
+
+- 对照官方 Input 的 In Surface 说明及 InputGroup、TextArea、Select、Checkbox、RadioGroup 等文档，并核对安装的 3.2.7 实现。白色表面内使用 secondary，灰色画布上保留 primary；复合组件按文档把 variant 传给实际拥有者，不给按钮或所有输入控件统一改样式。
+- 扫描 74 处控件使用，42 处改为 secondary：登录/注册/密码重置和管理解锁、分享密码卡片、用户及团队编辑、Webhook、API 密钥、Skill 仓库、统计卡片和浮层搜索等。评论回复/编辑使用 secondary，灰色草稿区继续使用 primary；共用密码组件透传原生 InputGroup variant。
+- 页面筛选、分页所在灰色容器、个人资料、专业文档源码/留言编辑等已有区分度的控件保留默认变体。内部建房表单同样遵循表面规则，实际牌桌控件不变。未引入新依赖、主题覆盖或额外边框。
+- 评论创建浮层同时移除无效的旧背景 token，改用 HeroUI overlay 语义背景；没有改变尺寸、滚动节点、坐标计算或定位事件。
+- 9 项新增 Chromium 测试在 390px/1280px 比较控件与实际卡片/弹窗背景，覆盖普通输入、密码输入组、多行文本、选择器、未勾选复选框，以及灰底默认变体和密码显示切换。修复前 8 项背景对比失败，修复后全部通过。
+- 全量 Chromium 更新为 15 个文件、73 项通过，既有评论几何回归继续通过。单元测试为 132 个文件、1,047 项通过；类型检查、UI 边界和生产构建通过，仍有既有专业编辑器大分包提示。浏览器测试预编译已有表单依赖，避免首次加载触发 React 模块重新优化。
+- 图标、原生浮层间距及表面变体规则明确写入 CLAUDE.md，并同步 DESIGN.md。UI 边界检查新增白色表面内控件 variant 检查；跨组件表单由实际页面测试和人工背景追踪覆盖，静态检查不代表所有背景状态已穷举。
+
+扫描与修改清单位于忽略目录 `.superpowers/sdd/dashboard-v2-surface/`。本次只使用既有本地服务查看弹窗，不提交真实写操作；未启动开发服务、部署或推送。截图保存在 `/tmp/synapse-v2-surface-webhook.png`，尚无在线链接。

@@ -84,7 +84,7 @@ export function SkillRepositoryFileBrowser({ tree, selectedFilePath, fileContent
             <Modal.Body className='space-y-4'>
               <TextField className='grid gap-2'>
                 <Label htmlFor='skill-repository-rename-path'>路径</Label>
-                <Input id='skill-repository-rename-path' value={renamePath} onChange={(event) => setRenamePath(event.target.value)}></Input>
+                <Input variant="secondary" id='skill-repository-rename-path' value={renamePath} onChange={(event) => setRenamePath(event.target.value)}></Input>
               </TextField>
             </Modal.Body>
             <Modal.Footer>

@@ -50,8 +50,8 @@ export function UserAuthForm({ className, redirectTo, ...props }: UserAuthFormPr
         }
     }
     return <form noValidate onSubmit={form.handleSubmit(onSubmit)} className={cn('grid gap-5', className)} {...props}>
-      <TextField isInvalid={Boolean(form.formState.errors.email)}><Label htmlFor='auth-email'>邮箱</Label><Input id='auth-email' type='email' inputMode='email' autoCapitalize='none' autoCorrect='off' spellCheck={false} autoComplete='email' {...form.register('email')} value={form.watch('email')}/><FieldError>{form.formState.errors.email?.message}</FieldError></TextField>
-      <TextField isInvalid={Boolean(form.formState.errors.password)}><Label htmlFor='auth-password'>密码</Label><PasswordInput id='auth-password' autoComplete='current-password' {...form.register('password')} value={form.watch('password')}/><FieldError>{form.formState.errors.password?.message}</FieldError></TextField>
+      <TextField isInvalid={Boolean(form.formState.errors.email)}><Label htmlFor='auth-email'>邮箱</Label><Input variant="secondary" id='auth-email' type='email' inputMode='email' autoCapitalize='none' autoCorrect='off' spellCheck={false} autoComplete='email' {...form.register('email')} value={form.watch('email')}/><FieldError>{form.formState.errors.email?.message}</FieldError></TextField>
+      <TextField isInvalid={Boolean(form.formState.errors.password)}><Label htmlFor='auth-password'>密码</Label><PasswordInput variant="secondary" id='auth-password' autoComplete='current-password' {...form.register('password')} value={form.watch('password')}/><FieldError>{form.formState.errors.password?.message}</FieldError></TextField>
       <p className='text-sm text-muted'>忘记密码请联系管理员</p>
       <Button type='submit' isPending={isLoading} isDisabled={isLoading} fullWidth>登录</Button>
     </form>;

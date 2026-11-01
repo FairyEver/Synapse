@@ -27,6 +27,14 @@
 - `src/styles/globals.css` 必须先导入 `tailwindcss`，再导入 `@heroui/styles`，并由 `src/main.tsx` 加载；使用 Vite 的 Tailwind 插件，不另加 v3 配置或 PostCSS 链。
 - 保持界面文案必要、克制，复用库组件与主题 token，不内联样式、不堆叠装饰、不覆盖组件基础视觉。
 
+### HeroUI 组合与表面规则（必须遵守）
+
+- **图标**：优先使用组件自带的 Indicator、CloseTrigger、`Link.Icon` 等插槽。文档/外链使用 `Link.Icon` 内置箭头；自定义 SVG 放入 `Link.Icon` 时填充插槽尺寸（`size-full`），不得保留会溢出的固有尺寸。普通 Button、菜单图标使用库默认尺寸，不用全局 SVG 样式修补。HeroUI 不提供独立的通用图标包，不虚构图标导出。
+- **弹窗间距**：Modal、Drawer、AlertDialog 使用相邻的 `Header`、`Body`、`Footer` 分区。字段、说明、列表放入 `Body`，不得把输入框、div 或整个内容 form 直接放在 `Footer` 前，绕过库的原生兄弟选择器间距。完整 form 包住三个分区时使用 `flex min-h-0 flex-1 flex-col`，字段间距只加在 Body 内；不得额外叠加外层 gap 或全局 margin 补丁。正文/评论、灯箱等特殊浮层保留明确的专用几何布局。
+- **背景与控件变体**：按控件实际所在的最近一层背景选择变体。默认白色 Card/Surface、Modal/Drawer/AlertDialog、Popover 等白色表面内，官方支持表面变体的表单控件必须显式使用 `variant="secondary"`，避免白底白控件；页面 `bg-background`、灰色表面上的控件保留适合背景的 `primary` 默认值。不得不分上下文地全站改成 secondary，也不得通过改主题、全局 CSS、字面色或额外边框代替标准变体。
+- **复合控件**：上述表面规则同时检查 Input、TextArea、InputGroup、Select、SearchField、ComboBox、NumberField、InputOTP、Checkbox、RadioGroup，以及 DateField.Group/TimeField.Group。variant 应传给文档规定的拥有者：密码框传至 InputGroup，选择器传至 Select，日期/时间字段传至 Group；不要给 TextField、DatePicker 根节点或不支持该属性的控件硬加 variant。跨组件渲染的表单也必须追踪实际背景；共用业务控件应透传原生 variant，不能暗中固定全局样式。按钮的主次操作 variant 不按表单背景规则批量改动。
+- **验证**：新增或修改控件时检查桌面与窄屏的默认、聚焦、无效、禁用和只读状态；运行 `check:ui` 及相关浏览器回归。源码检查不能替代实际背景对比、图标测量和滚动验证；阅读器外围变更必须保留正文滚动节点、锚点、分栏和评论定位，并运行既有几何回归。
+
 ## 运行与验证
 
 - 从仓库根运行 `pnpm dev`，或单独运行 `pnpm dev:dashboard-v2`；默认地址 `http://localhost:19703/console/`，端口占用时直接失败。

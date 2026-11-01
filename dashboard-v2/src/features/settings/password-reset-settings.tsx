@@ -49,7 +49,7 @@ export function PasswordResetSettings() {
             <div className='grid gap-3'>
               <TextField className='grid gap-2'>
                 <Label htmlFor='password-reset-link'>重置链接</Label>
-                <Input id='password-reset-link' readOnly value={passwordResetLink?.resetUrl ?? ''} onFocus={(event) => event.currentTarget.select()}></Input>
+                <Input variant="secondary" id='password-reset-link' readOnly value={passwordResetLink?.resetUrl ?? ''} onFocus={(event) => event.currentTarget.select()}></Input>
               </TextField>
               <p className='text-sm text-muted'>
                 有效至 {passwordResetLink ? formatExactDateTime(new Date(passwordResetLink.expiresAt)) : ''}

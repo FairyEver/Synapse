@@ -24,7 +24,7 @@ export function WebhookUrlDialog({ open, title, url, onOpenChange, }: WebhookUrl
         <Modal.Body>
           <TextField className='grid gap-2'>
             <Label htmlFor='webhook-url'>URL</Label>
-            <Input id='webhook-url' readOnly value={url}></Input>
+            <Input variant="secondary" id='webhook-url' readOnly value={url}></Input>
           </TextField>
         </Modal.Body>
         <Modal.Footer>

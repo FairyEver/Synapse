@@ -32,7 +32,7 @@ export function TeamNameDialog({ open, title, initialName, submitText, isPending
         </Modal.Header><Modal.Body>
         <TextField className='grid gap-2'>
           <Label htmlFor='team-name'>团队名称</Label>
-          <Input id='team-name' value={name} autoComplete='off' aria-invalid={Boolean(message)} onChange={(event) => setName(event.target.value)}/>
+          <Input variant="secondary" id='team-name' value={name} autoComplete='off' aria-invalid={Boolean(message)} onChange={(event) => setName(event.target.value)}/>
           {message ? (<p className='text-sm text-danger'>{message}</p>) : null}
         </TextField>
         </Modal.Body><Modal.Footer>

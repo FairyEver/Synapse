@@ -316,7 +316,7 @@ function DriveBrowserPasswordForm({
         <Card.Content className='space-y-5'>
           <div className='space-y-2'>
             <Label htmlFor={passwordInputId}>访问密码</Label>
-            <Input
+            <Input variant="secondary"
               id={passwordInputId}
               type='password'
               value={password}

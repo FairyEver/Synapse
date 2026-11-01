@@ -60,7 +60,7 @@ export function AdminAccessPage({ redirectTo }: { redirectTo?: string }) {
             <Controller control={form.control} name='accessSecret' render={({ field, fieldState }) => (
               <TextField isInvalid={Boolean(fieldState.error)}>
                 <Label htmlFor='admin-access-secret'>密钥</Label>
-                <PasswordInput id='admin-access-secret' autoComplete='off' {...field} />
+                <PasswordInput variant="secondary" id='admin-access-secret' autoComplete='off' {...field} />
                 <FieldError>{fieldState.error?.message}</FieldError>
               </TextField>
             )} />

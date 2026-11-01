@@ -38,7 +38,7 @@ export function UserPasswordResetLinkDialog({ open, user, result, isPending, onG
         {result ? (<div className='grid gap-3'>
             <TextField className='grid gap-2'>
               <Label htmlFor='password-reset-link'>重置链接</Label>
-              <Input id='password-reset-link' readOnly value={result.resetUrl} onFocus={(event) => event.currentTarget.select()}/>
+              <Input variant="secondary" id='password-reset-link' readOnly value={result.resetUrl} onFocus={(event) => event.currentTarget.select()}/>
             </TextField>
             <p className='text-sm text-muted'>
               有效至 {formatExactDateTime(new Date(result.expiresAt))}

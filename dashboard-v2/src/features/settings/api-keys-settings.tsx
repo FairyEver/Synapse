@@ -247,7 +247,7 @@ export function ApiKeysSettings() {
             <Modal.Body className='space-y-4'>
               <TextField className='space-y-2'>
                 <Label htmlFor='api-key-name'>名称</Label>
-                <Input id='api-key-name' value={name} maxLength={80} onChange={(event) => setName(event.target.value)} autoFocus></Input>
+                <Input variant="secondary" id='api-key-name' value={name} maxLength={80} onChange={(event) => setName(event.target.value)} autoFocus></Input>
               </TextField>
               <ApiKeyPermissionSelector idPrefix='api-key-create' capabilities={capabilities} selectedScopes={selectedScopes} onToggle={toggleScope} isLoading={capabilitiesLoading} isError={capabilitiesIsError} onRetry={() => void refetchCapabilities()} disabled={createApiKey.isPending}/>
             </Modal.Body>
@@ -293,7 +293,7 @@ export function ApiKeysSettings() {
           </Modal.Header>
           <Modal.Body>
             <div className='flex items-center gap-2'>
-              <Input value={created?.secret ?? ''} readOnly className='font-mono'></Input>
+              <Input variant="secondary" value={created?.secret ?? ''} readOnly className='font-mono'></Input>
               <Button type='button' variant="outline" isIconOnly onPress={() => void copySecret()}>
                 <Copy />
                 <span className='sr-only'>复制密钥</span>
@@ -314,7 +314,7 @@ export function ApiKeysSettings() {
             <Modal.Body className='space-y-4'>
               <TextField className='space-y-2'>
                 <Label htmlFor='api-key-rename-name'>名称</Label>
-                <Input id='api-key-rename-name' value={renameName} maxLength={80} onChange={(event) => setRenameName(event.target.value)} autoFocus></Input>
+                <Input variant="secondary" id='api-key-rename-name' value={renameName} maxLength={80} onChange={(event) => setRenameName(event.target.value)} autoFocus></Input>
               </TextField>
             </Modal.Body>
             <Modal.Footer>
@@ -369,7 +369,7 @@ function ApiKeyPermissionSelector({ idPrefix, capabilities, selectedScopes, onTo
                 const checkboxId = `${idPrefix}-${capability.scope}`;
                 const descriptionId = `${checkboxId}-description`;
                 return (<div key={capability.scope} className='flex items-start gap-3 px-3 py-3 hover:bg-surface-secondary/50'>
-                  <Checkbox id={checkboxId} className='mt-2' isSelected={selectedScopes.includes(capability.scope)} aria-describedby={descriptionId} onChange={(checked) => onToggle(capability.scope, checked === true)}><Checkbox.Content><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Content></Checkbox>
+                  <Checkbox variant="secondary" id={checkboxId} className='mt-2' isSelected={selectedScopes.includes(capability.scope)} aria-describedby={descriptionId} onChange={(checked) => onToggle(capability.scope, checked === true)}><Checkbox.Content><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control></Checkbox.Content></Checkbox>
                   <div className='min-w-0 flex-1 space-y-1'>
                     <div className='flex items-center justify-between gap-3'>
                       <label htmlFor={checkboxId} className='min-w-0 cursor-pointer truncate text-sm font-medium'>

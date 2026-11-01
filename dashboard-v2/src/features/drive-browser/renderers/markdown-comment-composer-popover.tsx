@@ -117,13 +117,13 @@ export function MarkdownCommentComposerPopover({
       data-markdown-comment-composer-popover='true'
       data-markdown-comment-draft-composer='true'
       className={cn(
-        'fixed z-50 w-72 rounded-lg border bg-popover p-3 text-popover-foreground',
+        'fixed z-50 w-72 rounded-lg border bg-overlay p-3 text-overlay-foreground',
         !position && 'invisible pointer-events-none'
       )}
       style={position ?? { top: 0, left: 0 }}
       onClick={(event) => event.stopPropagation()}
     >
-      <TextArea
+      <TextArea variant="secondary"
         ref={textareaRef}
         rows={3}
         value={value}

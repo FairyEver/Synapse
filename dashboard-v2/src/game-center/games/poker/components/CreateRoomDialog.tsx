@@ -54,11 +54,11 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
               <fieldset disabled={busy} className="space-y-5">
                 <TextField isDisabled={busy}>
                   <Label htmlFor="poker-room-name">房间名称</Label>
-                  <Input autoFocus id="poker-room-name" value={value.name} maxLength={48}
+                  <Input variant="secondary" autoFocus id="poker-room-name" value={value.name} maxLength={48}
                     onChange={event => update({ name: event.target.value })}
                     onBlur={() => track({ component: "input", name: "poker-room-name", action: "change" })} />
                 </TextField>
-                <RadioGroup id="poker-room-mode" orientation="horizontal" value={value.mode} isDisabled={busy}
+                <RadioGroup variant="secondary" id="poker-room-mode" orientation="horizontal" value={value.mode} isDisabled={busy}
                   onChange={mode => update({ mode: mode as GameFunding })} aria-describedby={`poker-room-mode-hint-${value.mode}`}>
                   <Label>房间类型</Label>
                   <div className="flex flex-wrap gap-4">
@@ -68,7 +68,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                   <p id="poker-room-mode-hint-points" aria-hidden={value.mode !== "points"} className={value.mode !== "points" ? "hidden" : "text-sm text-muted"}>使用大厅点数</p>
                   <p id="poker-room-mode-hint-practice" aria-hidden={value.mode !== "practice"} className={value.mode !== "practice" ? "hidden" : "text-sm text-muted"}>不影响大厅点数</p>
                 </RadioGroup>
-                <RadioGroup id="poker-variant" orientation="horizontal" value={value.variant} isDisabled={busy}
+                <RadioGroup variant="secondary" id="poker-variant" orientation="horizontal" value={value.variant} isDisabled={busy}
                   onChange={variant => update({ variant: variant as PokerVariant })} aria-describedby={`poker-variant-hint-${value.variant}`}>
                   <Label>牌局规则</Label>
                   <div className="flex flex-wrap gap-4">
@@ -78,7 +78,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                   <p id="poker-variant-hint-standard52" aria-hidden={value.variant !== "standard52"} className={value.variant !== "standard52" ? "hidden" : "text-sm text-muted"}>完整 52 张牌，葫芦大于同花</p>
                   <p id="poker-variant-hint-short32" aria-hidden={value.variant !== "short32"} className={value.variant !== "short32" ? "hidden" : "text-sm text-muted"}>同花大于葫芦，A789T 是最小顺子</p>
                 </RadioGroup>
-                <RadioGroup id="poker-blinds" orientation="horizontal" value={value.blindPreset} isDisabled={busy}
+                <RadioGroup variant="secondary" id="poker-blinds" orientation="horizontal" value={value.blindPreset} isDisabled={busy}
                   onChange={blindPreset => update({ blindPreset: blindPreset as PokerBlindPreset })}>
                   <Label>盲注</Label>
                   <div className="flex flex-wrap gap-4">{["1/2", "2/4", "5/10", "10/20"].map(blind =>
@@ -92,7 +92,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                     <Button isIconOnly variant="secondary" aria-label="增加座位" isDisabled={busy || value.maxSeats >= 10} onPress={() => changeSeats(1)}><Plus /></Button>
                   </div>
                 </div>
-                <RadioGroup id="poker-buyin" orientation="horizontal" value={String(value.buyIn)} isDisabled={busy}
+                <RadioGroup variant="secondary" id="poker-buyin" orientation="horizontal" value={String(value.buyIn)} isDisabled={busy}
                   onChange={buyIn => update({ buyIn: Number(buyIn) })}>
                   <Label>{value.mode === "practice" ? "初始筹码" : "带入点数"}</Label>
                   <div className="flex flex-wrap gap-4">{[500, 1000, 2000, 5000].map(amount =>

@@ -179,7 +179,7 @@ export function WebhookFormDialog({ form, isSaving, onFormChange, onSubmit, }: {
           <form id='webhook-form' className='grid gap-4' onSubmit={onSubmit}>
             <TextField className='grid gap-2'>
               <Label htmlFor='webhook-name'>名称</Label>
-              <Input id='webhook-name' value={form?.name ?? ''} maxLength={80} autoFocus disabled={isSaving} onChange={(event) => {
+              <Input variant="secondary" id='webhook-name' value={form?.name ?? ''} maxLength={80} autoFocus disabled={isSaving} onChange={(event) => {
               if (!form)
                   return;
               onFormChange({ ...form, name: event.target.value });

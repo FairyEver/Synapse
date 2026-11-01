@@ -43,8 +43,8 @@ export function ResetPasswordForm({ className, onComplete, token, ...props }: Re
         }
     }
     return <form noValidate onSubmit={form.handleSubmit(onSubmit)} className={cn('grid gap-5', className)} {...props}>
-      <TextField isInvalid={Boolean(form.formState.errors.password)}><Label htmlFor='auth-password'>新密码</Label><PasswordInput id='auth-password' autoComplete='new-password' {...form.register('password')} value={form.watch('password')}/><FieldError>{form.formState.errors.password?.message}</FieldError></TextField>
-      <TextField isInvalid={Boolean(form.formState.errors.confirmPassword)}><Label htmlFor='auth-confirmPassword'>确认密码</Label><PasswordInput id='auth-confirmPassword' autoComplete='new-password' {...form.register('confirmPassword')} value={form.watch('confirmPassword')}/><FieldError>{form.formState.errors.confirmPassword?.message}</FieldError></TextField>
+      <TextField isInvalid={Boolean(form.formState.errors.password)}><Label htmlFor='auth-password'>新密码</Label><PasswordInput variant="secondary" id='auth-password' autoComplete='new-password' {...form.register('password')} value={form.watch('password')}/><FieldError>{form.formState.errors.password?.message}</FieldError></TextField>
+      <TextField isInvalid={Boolean(form.formState.errors.confirmPassword)}><Label htmlFor='auth-confirmPassword'>确认密码</Label><PasswordInput variant="secondary" id='auth-confirmPassword' autoComplete='new-password' {...form.register('confirmPassword')} value={form.watch('confirmPassword')}/><FieldError>{form.formState.errors.confirmPassword?.message}</FieldError></TextField>
       <Button type='submit' isPending={isLoading} isDisabled={isLoading} fullWidth>更新密码</Button>
     </form>;
 }

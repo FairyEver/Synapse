@@ -147,7 +147,7 @@ export default function MyDevicesPage() {
               <Modal.Body className='space-y-4'>
                 <TextField className='space-y-2'>
                   <Label htmlFor='device-display-name'>名称</Label>
-                  <Input id='device-display-name' value={displayName} maxLength={maxDeviceNameLength} onChange={(event) => setDisplayName(event.target.value)}></Input>
+                  <Input variant="secondary" id='device-display-name' value={displayName} maxLength={maxDeviceNameLength} onChange={(event) => setDisplayName(event.target.value)}></Input>
                 </TextField>
               </Modal.Body>
               <Modal.Footer>

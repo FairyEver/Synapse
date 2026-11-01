@@ -89,7 +89,7 @@ export function AddMembersDialog({ open, teamId, organizationId, onOpenChange, }
           <p className='sr-only'>添加团队成员。</p>
         </Modal.Header><Modal.Body>
         <div className='grid gap-3'>
-          <Input value={query} placeholder='搜索邮箱或用户名' autoComplete='off' aria-label='搜索邮箱或用户名' onChange={(event) => {
+          <Input variant="secondary" value={query} placeholder='搜索邮箱或用户名' autoComplete='off' aria-label='搜索邮箱或用户名' onChange={(event) => {
             setQuery(event.target.value);
             // 换搜索词必须回到第一页，否则会先按旧页码去查新词。
             setPage(1);
@@ -99,7 +99,7 @@ export function AddMembersDialog({ open, teamId, organizationId, onOpenChange, }
                 {candidatesQuery.isLoading ? '加载中…' : '没有可以添加的用户'}
               </p>) : (<div className='flex flex-col py-1'>
                 {candidates.map((candidate) => (<div key={candidate.id} className='flex items-center gap-2 px-3 py-1.5'>
-                    <Checkbox className='min-w-0 flex-1' isSelected={picked.has(candidate.id)} onChange={(checked) => toggle(candidate.id, checked)}>
+                    <Checkbox variant="secondary" className='min-w-0 flex-1' isSelected={picked.has(candidate.id)} onChange={(checked) => toggle(candidate.id, checked)}>
                       <Checkbox.Content className='w-full min-w-0'>
                         <Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>
                         <span className='min-w-0 flex-1'>

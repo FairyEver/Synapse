@@ -414,7 +414,7 @@ export default function UsersPage() {
             </Modal.Header><Modal.Body>
             <TextField className='grid gap-2'>
               <Label htmlFor='user-handle'>用户名</Label>
-              <Input id='user-handle' value={handleDraft} maxLength={userHandleMaxLength} onChange={(event) => setHandleDraft(event.target.value)}/>
+              <Input variant="secondary" id='user-handle' value={handleDraft} maxLength={userHandleMaxLength} onChange={(event) => setHandleDraft(event.target.value)}/>
               {handleError ? (<p className='text-sm text-danger'>{handleError}</p>) : null}
             </TextField>
             </Modal.Body><Modal.Footer>
@@ -440,7 +440,7 @@ export default function UsersPage() {
             </Modal.Header><Modal.Body>
             <TextField className='grid gap-2'>
               <Label htmlFor='user-nickname'>昵称</Label>
-              <Input id='user-nickname' value={nicknameDraft} onChange={(event) => setNicknameDraft(event.target.value)}/>
+              <Input variant="secondary" id='user-nickname' value={nicknameDraft} onChange={(event) => setNicknameDraft(event.target.value)}/>
               {nicknameError ? (<p className='text-sm text-danger'>{nicknameError}</p>) : null}
             </TextField>
             </Modal.Body><Modal.Footer>
@@ -468,7 +468,7 @@ export default function UsersPage() {
             </Modal.Header><Modal.Body>
             <TextField className='grid gap-2'>
               <Label htmlFor='admin-note'>备注</Label>
-              <TextArea id='admin-note' value={adminNoteDraft} maxLength={500} rows={5} onChange={(event) => setAdminNoteDraft(event.target.value)}/>
+              <TextArea variant="secondary" id='admin-note' value={adminNoteDraft} maxLength={500} rows={5} onChange={(event) => setAdminNoteDraft(event.target.value)}/>
               <div className='text-xs text-muted'>
                 {adminNoteDraft.length}/500
               </div>

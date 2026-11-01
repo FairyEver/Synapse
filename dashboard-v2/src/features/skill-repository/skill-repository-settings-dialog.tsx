@@ -52,19 +52,19 @@ export function SkillRepositorySettingsDialog({ repository, open, saving, deleti
             <Modal.Body className='space-y-4'>
               <TextField className='grid gap-2'>
                 <Label htmlFor='skill-repository-name'>仓库名</Label>
-                <Input id='skill-repository-name' value={name} onChange={(event) => setName(event.target.value)}></Input>
+                <Input variant="secondary" id='skill-repository-name' value={name} onChange={(event) => setName(event.target.value)}></Input>
               </TextField>
               <TextField className='grid gap-2'>
                 <Label htmlFor='skill-repository-title'>标题</Label>
-                <Input id='skill-repository-title' value={title} onChange={(event) => setTitle(event.target.value)}></Input>
+                <Input variant="secondary" id='skill-repository-title' value={title} onChange={(event) => setTitle(event.target.value)}></Input>
               </TextField>
               <TextField className='grid gap-2'>
                 <Label htmlFor='skill-repository-description'>描述</Label>
-                <TextArea id='skill-repository-description' value={description} onChange={(event) => setDescription(event.target.value)}></TextArea>
+                <TextArea variant="secondary" id='skill-repository-description' value={description} onChange={(event) => setDescription(event.target.value)}></TextArea>
               </TextField>
               <div className='grid gap-2'>
                 <Label>可见性</Label>
-                <Select value={visibility} onChange={(value) => {
+                <Select variant="secondary" value={visibility} onChange={(value) => {
               if (value === 'private' || value === 'public')
                   setVisibility(value);
           }}>
@@ -79,7 +79,7 @@ export function SkillRepositorySettingsDialog({ repository, open, saving, deleti
               </div>
               {repository.forkedFromRepositoryId ? (<TextField className='grid gap-2'>
                   <Label>Fork 来源</Label>
-                  <Input value={repository.forkedFromRepositoryId} readOnly></Input>
+                  <Input variant="secondary" value={repository.forkedFromRepositoryId} readOnly></Input>
                 </TextField>) : null}
               {error ? (<div className='flex items-center justify-between gap-3 text-sm text-danger'>
                   <span>{error}</span>
@@ -105,7 +105,7 @@ export function SkillRepositorySettingsDialog({ repository, open, saving, deleti
             </p>
           </AlertDialog.Header>
           <AlertDialog.Body>
-            <Input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)}></Input>
+            <Input variant="secondary" value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)}></Input>
           </AlertDialog.Body>
           <AlertDialog.Footer>
             <Button slot="close" variant="tertiary">取消</Button>
