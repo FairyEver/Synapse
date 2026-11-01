@@ -30,6 +30,8 @@ Console为`/console/tables`，开放API为`/api/open/v1/tables`，权威契约`/
 
 真实数据库自动验收：`pnpm --filter @synapse/server run test:cloud-tables:e2e`。未配置测试URL时自动创建临时PostgreSQL16容器，退出清理本次容器；显式URL仅允许loopback且库名以`_e2e`结尾，不得指定业务库。测试覆盖HTTP身份/CORS、事务/幂等/撤权/schema竞争、真实SQL取消及多账号压力，输出基线和负载P95证据。
 
+文档驱动的Agent模拟：`pnpm --filter @synapse/server run test:cloud-tables:agent`。在上述隔离库中增加独立客户端，读取线上公开文档的“复制Markdown”内容及OpenAPI，仅向其提供测试用户密钥和任务输入；建表、字段/权限、CRUD及恢复全部通过开放HTTP完成，并验证协作者即使有管理scope和目标表资源也不能管理他人的表。此命令需要联网读取已发布文档，不对生产表执行写入；普通本地E2E不依赖该线上文档检查。
+
 ### 云端待办
 
 账号 API 为 `GET /api/todos`、`GET /api/todos/:id`、`POST /api/todos`、`PATCH /api/todos/:id`、`PATCH /api/todos/:id/completion`、`DELETE /api/todos/:id`。使用既有用户登录态，不接收调用方指定账号；PostgreSQL 为唯一权威存储。写入要求稳定 UUID，修改 / 完成 / 删除还要求当前版本；冲突不自动覆盖。

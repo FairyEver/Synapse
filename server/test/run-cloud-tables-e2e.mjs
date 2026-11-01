@@ -29,10 +29,11 @@ try {
   // 专用数据库测试不得继承真实外部存储/推送凭据。
   for (const prefix of ["DRIVE_COS", "SKILL_REPOSITORY_COS", "PLATFORM_MEDIA_COS", "MAIL_COS", "BACKUP_COS"]) for (const suffix of ["SECRET_ID", "SECRET_KEY", "BUCKET", "REGION"]) env[`${prefix}_${suffix}`] = ""
   for (const name of ["APNS_KEY_ID", "APNS_TEAM_ID", "APNS_KEY_PATH"]) env[name] = ""
+  const suites = ["test/cloud-tables.e2e.spec.ts", "test/cloud-tables-http.e2e.spec.ts", ...(process.argv.includes("--agent") ? ["test/cloud-tables-agent.e2e.spec.ts"] : [])]
   const commands = [
     ["--filter", "@synapse/shared", "run", "build"],
     ["exec", "prisma", "migrate", "deploy"],
-    ["exec", "vitest", "run", "--config", "vitest.e2e.config.ts", "test/cloud-tables.e2e.spec.ts", "test/cloud-tables-http.e2e.spec.ts", "--no-file-parallelism"],
+    ["exec", "vitest", "run", "--config", "vitest.e2e.config.ts", ...suites, "--no-file-parallelism"],
   ]
   for (const args of commands) {
     const result = spawnSync("pnpm", args, { env, stdio: "inherit" })
