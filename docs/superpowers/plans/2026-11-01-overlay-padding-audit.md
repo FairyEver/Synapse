@@ -7,9 +7,9 @@
 - [x] 浏览器几何回归先复现标题留白和短内容高度失败。
 - [x] 修复未定位评论和全量扫描发现的同类浮层问题。
 - [x] 将原因、默认内边距归属、例外和真实展开验收写入 V2 规则，并增强自动约束。
-- [ ] V2 单元测试、真实 Chromium 全量回归、构建及部署配置验证。
-- [ ] 独立审阅、本地提交，仅提交本次文件；bash deploy.sh 部署 Web/服务端。
-- [ ] 线上资源/版本标识、服务健康、修复后展开布局验收；保存备份和回滚位置。
+- [x] V2 单元测试、真实 Chromium 全量回归、构建及部署配置验证。
+- [x] 独立审阅、本地提交，仅提交本次文件；bash deploy.sh 部署 Web/服务端。
+- [x] 线上资源/版本标识、服务健康、修复后展开布局验收；保存备份和回滚位置。
 
 ## 根因与全量扫描结果
 
@@ -39,3 +39,16 @@ HeroUI 3.2.7 的 Dialog 默认 p-6 承担四边留白，Header 自身没有 padd
 日志与截图是本机文件，尚无在线链接：`/tmp/synapse-overlay-all-unit.log`、`/tmp/synapse-overlay-all-browser.log`、`/tmp/synapse-overlay-build.log`、`/tmp/synapse-overlay-final-browser.log`；截图 `/tmp/synapse-unlocated-{390,1280}.png`、`/tmp/synapse-version-history-{390,1280}-{0,1,long}.png`、`/tmp/synapse-drawer-title-*.png`。
 
 最终API补修后的相关验证：5文件98项功能单测通过，19文件110项非并行模块Chromium回归通过，check:ui和diff检查通过。
+
+
+## 最终验证与生产部署（2026-11-01）
+
+- 本次修复提交 `5d316554d`（当前仓库 main，本地提交未 push）；按用户选择等待并行任务完成，没有导出临时副本、建立分支或 worktree。待并行任务提交 `723658538` 且工作区干净后，基于该稳定 HEAD 最终重验和部署。
+- 最终 V2 单元测试 136 文件、1099 项全部通过；完整 Chromium 21 文件、142 项全部通过。最终 Web 构建、服务端生产构建通过；部署配置45项、选择器7项与 bash/diff 检查通过。稳定源码的最终验证没有再出现之前的超时或并行修改失败。
+- 最终日志：本机 `/tmp/synapse-overlay-final-stable-unit.log`、`/tmp/synapse-overlay-final-stable-browser.log`、`/tmp/synapse-overlay-final-stable-build.log`、`/tmp/synapse-overlay-final-stable-server-build.log`，尚无在线链接。
+- `bash deploy.sh` 成功（491秒）；部署日志 `/tmp/synapse-overlay-production-deploy.log`，尚无在线链接。没有待应用的 Prisma migration，线上与临时库预演均确认无需迁移。
+- 服务端和 PDF 渲染器镜像均为 `deploy-20261101_123051`，服务端、渲染器与 Postgres healthy。`https://synapse.d2.pub/console/dashboard-ui.json` 返回 `{"ui":"v2"}`；console/admin/文件/分享入口均使用新资源，HTML保留no-cache重新校验。控制台入口资源 `dashboard-DgqbrRRJ.js`，管理员入口 `admin-DUz_LjjC.js`。
+- 使用同一个既有实际文件的历史版本弹窗在线对照：上线前标题左/上内距0px，高483.98px；上线后内距约24px，高184.70px（同样一条版本记录）。关闭弹窗可回正文，既有分享的实际Markdown内容可加载。未为验收创建API密钥、评论或版本等生产业务数据。原截图文档没有提供URL，未声称在该原文档上逐项操作；未定位评论由真实Chromium夹具与部署同一组件代码验证。
+- 浏览器证据本机 `/tmp/synapse-overlay-production-before.json`、`/tmp/synapse-overlay-production-after.json`，上线截图 `/tmp/synapse-overlay-production-after.png`，尚无在线链接。记录中的错误来自浏览器扩展IO/资源错误，未出现此次读取页面的HTTP失败。
+- 回滚镜像 `synapse-server:rollback-20261101_123051`、`synapse-pdf-renderer:rollback-20261101_123051`；最终切换前数据库备份 `/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_123051.sql`，env备份 `/www/wwwroot/synapse/backups/env/synapse-env-before-sync-20261101_123051.env`，PDF回滚状态 `/www/wwwroot/synapse/backups/pdf-renderer-rollback-20261101_123051.state`。Drive使用COS，本轮跳过本地Drive打包。前端回滚不需要恢复业务数据库。
+- 已知验证边界：服务端全量测试类型检查存在并行任务报告的既有通知测试错误，本任务直接验证的服务端生产构建通过；部署日志仍有既有pnpm脚本前二次依赖校验缺失patch提示，最终构建和健康检查成功，本轮未扩展修复该构建流程。
