@@ -1,4 +1,4 @@
-import { Button, Dropdown, Link } from '@heroui/react'
+import { Button, Dropdown, Link, ToggleButton } from '@heroui/react'
 import { Fragment } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ChevronDown, Loader2 } from 'lucide-react'
@@ -112,18 +112,17 @@ export function FilePreviewToolbarItemView({
   }
   if (item.kind === 'toggle') {
     return (
-      <Button
-        type='button'
-        variant={item.pressed ? 'secondary' : 'ghost'}
+      <ToggleButton
+        variant='ghost'
         size='sm'
         isDisabled={item.disabled}
-        aria-pressed={item.pressed}
+        isSelected={item.pressed}
         className={buttonClassName}
-        onPress={() => item.onPressedChange(!item.pressed)}
+        onChange={item.onPressedChange}
       >
         {item.icon ? <item.icon data-icon='inline-start' /> : null}
         {item.label}
-      </Button>
+      </ToggleButton>
     )
   }
   return (

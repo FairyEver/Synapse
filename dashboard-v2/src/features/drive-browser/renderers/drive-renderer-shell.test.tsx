@@ -264,6 +264,76 @@ describe('DriveRendererShell', () => {
     )
   })
 
+  it.each(['regular', 'compact'] as const)(
+    'navigates %s document actions with arrow keys and preserves independent toggles',
+    async (mode) => {
+      vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+        ...originalMatchMedia(query),
+        matches: mode === 'compact',
+      }))
+      const onOutlineChange = vi.fn()
+      const onCommentsChange = vi.fn()
+      const onMessages = vi.fn()
+      host = document.createElement('div')
+      document.body.append(host)
+      root = createRoot(host)
+      act(() => {
+        root?.render(
+          <FilePreviewLayout>
+            <DrivePreviewHeader
+              snapshot={markdownSnapshot()}
+              rendererItems={[
+                {
+                  kind: 'toggle', id: 'outline', label: '目录', pressed: true,
+                  compactPlacement: 'primary', onPressedChange: onOutlineChange,
+                },
+                {
+                  kind: 'button', id: 'disabled', label: '保存', disabled: true,
+                  compactPlacement: 'primary',
+                },
+                {
+                  kind: 'toggle', id: 'comments', label: '批注 3', pressed: true,
+                  compactPlacement: 'primary', onPressedChange: onCommentsChange,
+                },
+                {
+                  kind: 'button', id: 'messages', label: '留言 0',
+                  compactPlacement: 'primary', onClick: onMessages,
+                },
+              ]}
+              rendererOptions={[]}
+              selectedRendererId='markdown'
+              onRendererChange={vi.fn()}
+              onOpenVersions={vi.fn()}
+            />
+          </FilePreviewLayout>
+        )
+      })
+      const outline = buttonWithText('目录')
+      const comments = buttonWithText('批注 3')
+      const messages = buttonWithText('留言 0')
+      expect(outline.getAttribute('aria-pressed')).toBe('true')
+      expect(comments.getAttribute('aria-pressed')).toBe('true')
+      act(() => outline.focus())
+      await act(async () => {
+        outline.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+        )
+      })
+      expect(document.activeElement).toBe(comments)
+      await click(comments)
+      expect(onCommentsChange).toHaveBeenCalledExactlyOnceWith(false)
+      expect(onOutlineChange).not.toHaveBeenCalled()
+      await act(async () => {
+        comments.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })
+        )
+      })
+      expect(document.activeElement).toBe(messages)
+      await click(messages)
+      expect(onMessages).toHaveBeenCalledOnce()
+    }
+  )
+
   it('uses a flat active state and stable numerals for preview toggles', () => {
     host = document.createElement('div')
     document.body.append(host)
@@ -284,8 +354,7 @@ describe('DriveRendererShell', () => {
 
     const comments = buttonWithText('评论 5')
     expect(comments.getAttribute('aria-pressed')).toBe('true')
-    expect(comments.className).toContain('button--secondary')
-    expect(comments.className).toContain('button')
+    expect(comments.getAttribute('data-selected')).toBe('true')
     expect(comments.className).toContain('tabular-nums')
   })
 

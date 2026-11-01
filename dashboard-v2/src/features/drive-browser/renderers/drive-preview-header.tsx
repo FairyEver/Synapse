@@ -6,6 +6,7 @@ import {
   Label,
   Link,
   Separator,
+  Toolbar,
   Tooltip,
 } from '@heroui/react'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
@@ -120,7 +121,10 @@ export function DrivePreviewHeader({
           </Tooltip.Content>
         </Tooltip>
       </div>
-      <div className='flex shrink-0 flex-wrap items-center gap-2'>
+      <Toolbar
+        aria-label='文档工具栏'
+        className='flex shrink-0 flex-wrap items-center gap-2'
+      >
         {rendererItems.length > 0 ? (
           <div
             data-drive-preview-renderer-actions='true'
@@ -186,7 +190,7 @@ export function DrivePreviewHeader({
             <DriveShareViewerStatus snapshot={snapshot} />
           </div>
         ) : null}
-      </div>
+      </Toolbar>
     </header>
   )
 }
@@ -308,11 +312,14 @@ function DrivePreviewCompactHeader({
         </Dropdown>
       </div>
       {primaryItems.length > 0 ? (
-        <div className='flex min-h-14 max-w-full items-center gap-2 overflow-x-auto border-t px-3 py-1.5'>
+        <Toolbar
+          aria-label='文档工具栏'
+          className='flex min-h-14 w-full max-w-full items-center gap-2 overflow-x-auto border-t px-3 py-1.5'
+        >
           {primaryItems.map((item) => (
             <DrivePreviewToolbarItemView key={item.id} item={item} compact />
           ))}
-        </div>
+        </Toolbar>
       ) : null}
     </header>
   )
