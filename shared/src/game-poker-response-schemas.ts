@@ -6,7 +6,14 @@ const controlFields = {
   handoffPending: z.boolean(),
 }
 const control = z.object(controlFields).passthrough()
-const rules = z.object({ variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
+const ruleOptions = z.object({ roll: z.boolean().optional() }).strict()
+const rollOffer = z.object({ fee: z.number().int().nonnegative(), available: z.boolean(), reason: z.string().optional() }).strict()
+const rollPending = z.object({ rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3) }).strict()
+const roll = z.object({ enabled: z.boolean(), pricingVersion: z.string().optional(), count: z.number().int().nonnegative().optional(), normal: rollOffer.optional(), super: rollOffer.optional(), pending: rollPending.nullable().optional(), pendingSeatNo: z.number().int().nonnegative().nullable().optional() }).strict()
+const rollPublic = z.object({ kind: z.enum(["normal", "super"]), phase: z.enum(["start", "choose"]), fee: z.number().int().positive(), count: z.number().int().positive(), seatNo: z.number(), displayName: z.string(), source: z.enum(["human", "mcp", "rules_bot", "timeout"]), compensations: z.record(z.string(), z.number().int().nonnegative()) }).strict()
+const rollPrivate = z.object({ rollId: z.string(), kind: z.enum(["normal", "super"]), cardIndex: z.number().int().min(0).max(1), oldCard: z.string(), candidates: z.array(z.string()).min(1).max(3), selectedIndex: z.number().int().min(0).max(2).nullable(), fee: z.number().int().positive(), street: z.enum(["preflop", "flop", "turn"]), count: z.number().int().positive() }).strict()
+const rollResult = z.object({ ok: z.literal(true), handId: z.string(), rollId: z.string(), actionSeq: z.number().int().nonnegative(), cursor: z.string(), status: z.enum(["completed", "choice_required"]) }).passthrough()
+const rules = z.object({ ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
 const checkpoint = z.object({
   roomCode: z.string(), cursor: z.string(), controlVersion: z.number().int().nonnegative(),
   sessionStyle: z.string(), continueIntent: z.boolean(), pauseReason: z.literal("context_maintenance"), savedAt: z.string(),
@@ -16,6 +23,7 @@ const settlement = z.object({
   seats: z.array(z.object({
     seatNo: z.number(), displayName: z.string(), participantKind: z.enum(["human", "bot"]),
     isMe: z.boolean(), folded: z.boolean(), hole: z.array(z.string()).optional(),
+    rollPaid: z.number().optional(), rollReceived: z.number().optional(), pokerDelta: z.number().optional(),
     delta: z.number(), payout: z.number(), endingStack: z.number(), handName: z.string().optional(), bestFive: z.array(z.string()).length(5).optional(),
   }).passthrough()),
   pots: z.array(z.object({
@@ -43,6 +51,9 @@ const action = z
   .passthrough()
 const seat = z
   .object({
+    rollCount: z.number().int().nonnegative().optional(),
+    rollPaid: z.number().int().nonnegative().optional(),
+    pendingCompensation: z.number().int().nonnegative().optional(),
     nextHandEligible: z.boolean().optional(),
     readyForNextHand: z.boolean().optional(),
     isHistorical: z.boolean().optional(),
@@ -65,6 +76,7 @@ const seat = z
   .passthrough()
 const table = z
   .object({
+    rules: rules.optional(), ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), roll: roll.optional(),
     requiresJoinApproval: z.boolean().optional(),
     variant: z.enum(["standard52", "short32"]).optional(),
     smallBlind: z.number().optional(),
@@ -163,12 +175,14 @@ const page = <T extends z.ZodType>(item: T) =>
     })
     .passthrough()
 const wait = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("roll_choice_required"), handId: z.string(), handNo: z.number(), rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3), controlVersion: controlFields.controlVersion, actionSeq: z.number().int().nonnegative(), deadlineMs: z.number().nullable(), cursor: z.string() }).passthrough(),
   z.object({ status: z.literal("ready_required"), handId: z.string(), handNo: z.number(), controlVersion: controlFields.controlVersion, cursor: z.string() }).passthrough(),
   z.object({ status: z.literal("control_released"), cursor: z.string(), controlVersion: controlFields.controlVersion.optional(), handoffPending: controlFields.handoffPending.optional() }).passthrough(),
   z.object({ status: z.literal("waiting"), cursor: z.string() }).passthrough(),
   z
     .object({
       status: z.literal("your_turn"),
+      rules: rules.optional(), roll: roll.optional(),
       controlVersion: controlFields.controlVersion.optional(),
       actionSeq: z.number().int().nonnegative().optional(),
       handId: z.string(),
@@ -212,10 +226,13 @@ const wait = z.discriminatedUnion("status", [
 ])
 
 const tableEvent = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("roll"), handId: z.string(), handNo: z.number(), seq: z.number(), roll: rollPublic }).passthrough(),
   z.object({ kind: z.literal("action"), handId: z.string(), handNo: z.number(), seq: z.number(), action }).passthrough(),
   z.object({ kind: z.literal("settlement"), handId: z.string(), handNo: z.number(), seq: z.literal(2147483647), settlement }).passthrough(),
 ])
 export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  "app.game.poker.roll.start": rollResult,
+  "app.game.poker.roll.choose": rollResult,
   "app.game.poker.control.claim": control,
   "app.game.poker.control.set": control,
   "app.game.poker.checkpoint.get": z.object({ checkpoint: checkpoint.nullable() }).passthrough(),
@@ -274,6 +291,7 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "app.game.poker.hand.history": page(summary),
   "app.game.poker.hand.detail": z
     .object({
+      rollHistory: z.array(rollPublic).optional(), privateRolls: z.array(rollPrivate).optional(),
       rules: rules.optional(),
       handId: z.string(),
       handNo: z.number(),

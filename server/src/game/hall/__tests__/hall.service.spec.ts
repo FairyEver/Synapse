@@ -51,7 +51,7 @@ describe("跨游戏点数与会话", () => {
     db.sessions[1].needsAction = true
     db.sessions[1].deadlineAt = new Date(600000)
     const view = await hall.overview("u", new Date(1000))
-    expect(view.points).toEqual({ total: 1000000, available: 998500, inPlay: 1500, netProfit: 0 })
+    expect(view.points).toEqual({ total: 1000000, available: 998500, inPlay: 1500, pending: 0, netProfit: 0 })
     expect(view.sessions).toHaveLength(2)
     expect(view.next).toEqual({ game: "other", roomCode: "5678" })
     expect(view.sessions[0].deadlineMs).toBe(599000)
@@ -92,7 +92,7 @@ describe("跨游戏点数与会话", () => {
     await expect(hall.grant("u", new Date(86399999))).rejects.toThrow()
     await expect(hall.grant("u", new Date(86400000))).resolves.toMatchObject({ points: 10000 })
     db.account.points = 0
-    db.sessions.push({ userId: "u", status: "active" })
+    db.sessions.push({ userId: "u", funding: "points", status: "active" })
     await expect(hall.grant("u", new Date(172800000))).rejects.toThrow()
   })
 })

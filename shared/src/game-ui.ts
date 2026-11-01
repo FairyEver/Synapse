@@ -1,5 +1,9 @@
 import { GAME_TOOLS } from "./game.js"
 import type {
+  PokerRuleOptions,
+  PokerRollResult,
+  PokerRollStartInput,
+  PokerRollChooseInput,
   GameFunding,
   HallOverview,
   GamePage,
@@ -36,6 +40,7 @@ export interface GameBridge {
         creationId?: string
         variant?: PokerVariant
         blindPreset?: PokerBlindPreset
+        ruleOptions?: PokerRuleOptions
         mode?: GameFunding
       }) => Promise<{ roomCode: string }>
       get: (input: Room) => Promise<PokerTableView>
@@ -53,6 +58,10 @@ export interface GameBridge {
     }
     control: {
       set: (input: Room & { controlVersion: number; action: "takeover" | "request_ai" | "cancel_ai" }) => Promise<PokerControlView>
+    }
+    roll: {
+      start: (input: PokerRollStartInput) => Promise<PokerRollResult>
+      choose: (input: PokerRollChooseInput) => Promise<PokerRollResult>
     }
     action: {
       act: (input: Room & {
@@ -154,6 +163,8 @@ export interface GameUiRoute {
 
 const roomPath = (params: Record<string, unknown>) => `/game/poker/rooms/${encodeURIComponent(String(params.roomCode))}`
 export const pokerUiRoutes = {
+  "app.game.poker.roll.start": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/roll/start` },
+  "app.game.poker.roll.choose": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/roll/choose` },
   "app.game.poker.seat.ready": {
     method: "POST", bareResponse: true, path: params => `${roomPath(params)}/ready`,
   },

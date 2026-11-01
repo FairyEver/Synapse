@@ -15,15 +15,15 @@ describe("游戏工具目录", () => {
     expect(result.tools.some((t) => t.name.startsWith("app_game_poker_"))).toBe(true)
   })
   it("实际全局数量和私有UI例外与能力表一致", () => {
-    expect(CAPABILITY_DOMAINS.flatMap(d => d.capabilities)).toHaveLength(370)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(366)
-    expect(buildAllMcpTools()).toHaveLength(366)
+    expect(CAPABILITY_DOMAINS.flatMap(d => d.capabilities)).toHaveLength(372)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(368)
+    expect(buildAllMcpTools()).toHaveLength(368)
     expect(getActionDomainId("app.game.poker.control.set")).toBeNull()
     expect(getActionDomainId("app.game.poker.room.close")).toBeNull()
   })
-  it("27个工具全部注册到game域并保持规范名称与schema", () => {
+  it("29个工具全部注册到game域并保持规范名称与schema", () => {
     const tools = buildGameTools()
-    expect(tools).toHaveLength(27)
+    expect(tools).toHaveLength(29)
     for (const definition of GAME_TOOLS) {
       expect(isCanonicalCapabilityId(definition.id)).toBe(true)
       expect(getActionDomainId(definition.id)).toBe("game")

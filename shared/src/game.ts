@@ -18,7 +18,7 @@ export interface GameSessionView {
   deadlineMs: number | null
 }
 export interface HallOverview {
-  points: { total: number; available: number; inPlay: number; netProfit: number }
+  points: { total: number; available: number; inPlay: number; pending?: number; netProfit: number }
   sessions: GameSessionView[]
   games: GameDefinition[]
   next: { game: string; roomCode: string | null } | null
@@ -27,7 +27,21 @@ export type PokerVariant = "standard52" | "short32"
 export type PokerController = "human" | "ai" | null
 export type PokerPauseReason = "user" | "context_maintenance" | null
 export type PokerBlindPreset = "1/2" | "2/4" | "5/10" | "10/20"
+export interface PokerRuleOptions { roll?: boolean }
+export type PokerRollKind = "normal" | "super"
+export interface PokerRollOffer { fee: number; available: boolean; reason?: string }
+export interface PokerRollQuote { enabled: boolean; pricingVersion?: string; count: number; normal: PokerRollOffer; super: PokerRollOffer }
+export interface PokerRollPending { rollId: string; cardIndex: number; candidates: string[] }
+export interface PokerRollView { enabled: boolean; pricingVersion?: string; count?: number; normal?: PokerRollOffer; super?: PokerRollOffer; pending?: PokerRollPending | null; pendingSeatNo?: number | null }
+export interface PokerRollPublicView { kind: PokerRollKind; phase: "start" | "choose"; fee: number; count: number; seatNo: number; displayName: string; source: "human" | "mcp" | "rules_bot" | "timeout"; compensations: Record<string, number> }
+export interface PokerRollPrivateView { rollId: string; kind: PokerRollKind; cardIndex: number; oldCard: string; candidates: string[]; selectedIndex: number | null; fee: number; street: "preflop" | "flop" | "turn"; count: number }
+export interface PokerRollChoiceRequiredView extends PokerRollPending { status: "roll_choice_required"; handId: string; handNo: number; controlVersion: number; actionSeq: number; deadlineMs: number | null; cursor: string }
+export interface PokerRollResult { ok: true; handId: string; rollId: string; actionSeq: number; cursor: string; status: "completed" | "choice_required" }
+export interface PokerRollStartInput { roomCode: string; handId: string; street: "preflop" | "flop" | "turn"; expectedActionSeq: number; controlVersion: number; actionId: string; kind: PokerRollKind; cardIndex: number; expectedFee: number }
+export interface PokerRollChooseInput { roomCode: string; handId: string; rollId: string; candidateIndex: number; expectedActionSeq: number; controlVersion: number; actionId: string }
 export interface PokerRules {
+  ruleOptions?: PokerRuleOptions
+  rollPricingVersion?: string
   variant: PokerVariant
   smallBlind: number
   bigBlind: number
@@ -58,6 +72,9 @@ export interface PokerSettlementView {
     isMe: boolean
     folded: boolean
     hole?: string[]
+    rollPaid?: number
+    rollReceived?: number
+    pokerDelta?: number
     delta: number
     payout: number
     endingStack: number
@@ -75,10 +92,11 @@ export interface PokerSettlementView {
   mixedControl: boolean
 }
 export interface PokerTableEvent {
-  kind: "action" | "settlement"
+  kind: "action" | "settlement" | "roll"
   handId: string
   handNo: number
   seq: number
+  roll?: PokerRollPublicView
   action?: PokerActionView
   settlement?: PokerSettlementView
 }
@@ -88,6 +106,9 @@ export interface PokerTableEventsView {
   hasMore: boolean
 }
 export interface PokerSeatView {
+  rollCount?: number
+  rollPaid?: number
+  pendingCompensation?: number
   nextHandEligible?: boolean
   readyForNextHand?: boolean
   /** Previous-hand participant retained for results, not an occupied room seat. */
@@ -124,6 +145,10 @@ export interface PokerActionView {
   personaVersion?: { versionNo: number; persona: string } | null
 }
 export interface PokerTableView {
+  rules?: PokerRules
+  ruleOptions?: PokerRuleOptions
+  rollPricingVersion?: string
+  roll?: PokerRollView
   awaitingReady?: boolean
   requiresJoinApproval?: boolean
   variant?: PokerVariant
@@ -206,6 +231,8 @@ export interface PokerSummaryView {
   createdAt: string
 }
 export interface PokerDetailView {
+  rollHistory?: PokerRollPublicView[]
+  privateRolls?: PokerRollPrivateView[]
   rules?: PokerRules
   mode?: GameFunding
   handId: string
@@ -279,6 +306,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     "poker.room.create",
     "创建2–10人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。",
     {
+      ruleOptions: { type: "object", properties: { roll: { type: "boolean" } }, additionalProperties: false },
       variant: { type: "string", enum: ["standard52", "short32"] },
       blindPreset: { type: "string", enum: ["1/2", "2/4", "5/10", "10/20"] },
       creationId: { type: "string", format: "uuid", maxLength: 36 },
@@ -290,6 +318,8 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     ["maxSeats", "buyIn"],
     true,
   ],
+  ["poker.roll.start", "按本人当前报价确认换牌；不续行动时限，超级换牌后必须完成选牌；未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
+  ["poker.roll.choose", "从本人待选超级换牌候选中选一张；候选仅本人可见，未知结果复用原actionId。", { ...room, handId: str(), rollId: str(), candidateIndex: integer(0, 2), expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "handId", "rollId", "candidateIndex", "expectedActionSeq", "controlVersion", "actionId"], true],
   ["poker.room.get", "只读旁观快照，不返回底牌、私密提示词或note。", room, ["roomCode"], false],
   ["poker.bot.add", "仅陪练房房主添加一个程序机器人，不调用模型、不影响大厅点数；同次重试复用creationId。", { ...room, creationId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "creationId"], true],
   ["poker.bot.remove", "仅陪练房房主移除本房机器人；本手参与者手后移除，不能控制其动作或真人座位。", { ...room, botId: str() }, ["roomCode", "botId"], true],

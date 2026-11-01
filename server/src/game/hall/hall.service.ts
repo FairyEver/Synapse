@@ -1,9 +1,22 @@
+import { randomUUID } from "node:crypto"
 import { BadRequestException, Injectable } from "@nestjs/common"
-import { Prisma, type GameAccount } from "@prisma/client"
+import { Prisma, type GameAccount, type GamePendingTransfer } from "@prisma/client"
 import { PrismaService } from "../../prisma/prisma.service"
 import { GAME_REGISTRY } from "./game-registry"
 
+export type PendingTransferInput = Pick<GamePendingTransfer, "sourceId" | "gameKind" | "gameRoomId" | "settlementId" | "userId" | "admissionId" | "amount"> & { funding: "points" | "practice" }
+
+/** Trusted service-side participants, never accepted directly from client requests. */
+export interface ActiveGameAdmission {
+  admissionId: string
+  userId: string
+  gameKind: string
+  gameRoomId: string
+  funding: "points" | "practice"
+}
+
 type JoinSession = {
+  admissionId?: string
   gameKind: string
   gameRoomId: string
   roomCode: string
@@ -25,6 +38,62 @@ export class HallService {
       GameAccount[]
     >`SELECT "userId", "points", "netProfit", "lastGrantAt", "updatedAt" FROM "GameAccount" WHERE "userId" = ${userId} FOR UPDATE`
     return account
+  }
+
+  /** Acquire all points accounts before any game/session financial writes. */
+  async lockAccounts(tx: Prisma.TransactionClient, userIds: readonly string[]): Promise<GameAccount[]> {
+    const accounts: GameAccount[] = []
+    for (const userId of [...new Set(userIds)].sort()) accounts.push(await this.lockAccount(tx, userId))
+    return accounts
+  }
+
+  async freezeTransfers(tx: Prisma.TransactionClient, records: readonly PendingTransferInput[], now: Date): Promise<void> {
+    if (records.length > 10 || records.some(r => !Number.isInteger(r.amount) || r.amount <= 0 || r.amount > 2147483647 || !["points", "practice"].includes(r.funding) || !r.sourceId || !r.settlementId || !r.admissionId || !r.userId || !r.gameKind || !r.gameRoomId))
+      throw new BadRequestException("冻结资产必须为正整数，每批至多十个收款入座。")
+    await this.lockAccounts(tx, records.filter(r => r.funding === "points").map(r => r.userId))
+    for (const record of records) {
+      // A unique conflict waits for the original transaction; never overwrite a prior intent.
+      await tx.gamePendingTransfer.createMany({ data: [{ ...record, createdAt: now }], skipDuplicates: true })
+      const stored = await tx.gamePendingTransfer.findUniqueOrThrow({ where: { sourceId_admissionId: { sourceId: record.sourceId, admissionId: record.admissionId } } })
+      if (Object.keys(record).some(key => stored[key as keyof PendingTransferInput] !== record[key as keyof PendingTransferInput]))
+        throw new BadRequestException("冻结资产请求与原记录不一致。")
+    }
+  }
+
+  async releaseTransfers(tx: Prisma.TransactionClient, settlementId: string, activeAdmissions: readonly ActiveGameAdmission[], now: Date): Promise<GamePendingTransfer[]> {
+    const where = { settlementId, status: "pending" }
+    const users = await tx.gamePendingTransfer.groupBy({ by: ["userId"], where: { ...where, funding: "points" } })
+    await this.lockAccounts(tx, users.map(r => r.userId))
+    const released: GamePendingTransfer[] = []
+    for (;;) {
+      const page = await tx.gamePendingTransfer.findMany({ where, orderBy: { id: "asc" }, take: 100 })
+      if (!page.length) break
+      for (const transfer of page) {
+        const active = activeAdmissions.some(a => a.admissionId === transfer.admissionId && a.userId === transfer.userId && a.gameKind === transfer.gameKind && a.gameRoomId === transfer.gameRoomId && a.funding === transfer.funding)
+        const session = active && transfer.funding === "points" ? await tx.gameSession.findFirst({ where: {
+          userId: transfer.userId, gameKind: transfer.gameKind, gameRoomId: transfer.gameRoomId,
+          admissionId: transfer.admissionId, funding: transfer.funding, status: { not: "closed" },
+        } }) : null
+        const releasedTo = session || (active && transfer.funding === "practice") ? "table" : transfer.funding === "points" ? "account" : "discard"
+        // CAS also prevents duplicate practice release (which has no account lock).
+        const data = { status: releasedTo === "discard" ? "voided" : "released", releasedTo, releasedAt: now }
+        const changed = await tx.gamePendingTransfer.updateMany({ where: { id: transfer.id, status: "pending" }, data })
+        if (!changed.count) continue
+        if (releasedTo === "account") await tx.gameAccount.update({ where: { userId: transfer.userId }, data: {
+          points: { increment: transfer.amount }, netProfit: { increment: transfer.amount },
+        } })
+        // Table projection already includes engine credits; do not increment session.inPlay again.
+        released.push({ ...transfer, ...data })
+      }
+    }
+    return released
+  }
+
+  async voidTransfers(tx: Prisma.TransactionClient, settlementId: string, now: Date): Promise<void> {
+    // Cancellation only destroys practice chips; confirmed points must be released to their owner.
+    if (await tx.gamePendingTransfer.count({ where: { settlementId, funding: "points", status: "pending" } }))
+      throw new BadRequestException("已确权点数不能作废，必须结算释放。")
+    await tx.gamePendingTransfer.updateMany({ where: { settlementId, funding: "practice", status: "pending" }, data: { status: "voided", releasedTo: "discard", releasedAt: now } })
   }
 
   async join(tx: Prisma.TransactionClient, userId: string, input: JoinSession, now: Date) {
@@ -52,6 +121,7 @@ export class HallService {
       data: { points: { increment: -input.buyIn } },
     })
     const data = {
+      admissionId: input.admissionId ?? randomUUID(),
       funding,
       roomCode: input.roomCode,
       seatNo: input.seatNo,
@@ -123,15 +193,21 @@ export class HallService {
         deadlineAt: string | null
       }
       const [summary] = await tx.$queryRaw<
-        { sessions: SessionRow[]; inPlay: number; activeProfit: number }[]
+        { sessions: SessionRow[]; inPlay: number; activeProfit: number; pending: number }[]
       >`
-        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        WITH active AS (
+          SELECT * FROM "GameSession" WHERE "userId" = ${userId} AND "status" <> 'closed'
+        ), frozen AS (
+          SELECT COALESCE(sum("amount"), 0)::float8 AS pending FROM "GamePendingTransfer"
+          WHERE "userId" = ${userId} AND "funding" = 'points' AND "status" = 'pending'
+        )
+        SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object(
           'gameKind', "gameKind", 'funding', "funding", 'roomCode', "roomCode", 'seatNo', "seatNo",
           'status', "status", 'needsAction', "needsAction", 'deadlineAt', "deadlineAt" AT TIME ZONE 'UTC'
-        )), '[]'::jsonb) AS sessions,
-        COALESCE(sum("inPlay"), 0)::float8 AS "inPlay",
-        COALESCE(sum("inPlay" - "buyIn"), 0)::float8 AS "activeProfit"
-        FROM "GameSession" WHERE "userId" = ${userId} AND "status" <> 'closed'`
+        )) FROM active), '[]'::jsonb) AS sessions,
+        COALESCE((SELECT sum("inPlay") FROM active WHERE "funding" = 'points'), 0)::float8 AS "inPlay",
+        COALESCE((SELECT sum("inPlay" - "buyIn") FROM active WHERE "funding" = 'points'), 0)::float8 AS "activeProfit",
+        (SELECT pending FROM frozen) AS pending`
       const sessions = summary.sessions
         .map((s) => ({
           game: s.gameKind,
@@ -153,10 +229,11 @@ export class HallService {
       const inPlay = summary.inPlay
       return {
         points: {
-          total: account.points + inPlay,
+          total: account.points + inPlay + summary.pending,
+          pending: summary.pending,
           available: account.points,
           inPlay,
-          netProfit: account.netProfit + summary.activeProfit,
+          netProfit: account.netProfit + summary.activeProfit + summary.pending,
         },
         sessions,
         games: GAME_REGISTRY,
@@ -169,7 +246,9 @@ export class HallService {
     return this.prisma.$transaction(async (tx) => {
       const account = await this.lockAccount(tx, userId)
       const seated = await tx.gameSession.count({ where: { userId, funding: "points", status: { not: "closed" } } })
+      const pending = await tx.gamePendingTransfer.count({ where: { userId, funding: "points", status: "pending" } })
       if (
+        pending ||
         account.points !== 0 ||
         seated ||
         (account.lastGrantAt && now.getTime() - account.lastGrantAt.getTime() < 86400000)

@@ -85,6 +85,7 @@ const url = gameTestDatabaseUrl()
       total: 1000000,
       available: 990000,
       inPlay: 10000,
+      pending: 0,
       netProfit: 0,
     })
   }, 10000)

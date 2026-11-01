@@ -2,7 +2,7 @@ import { z } from "zod"
 import { POKER_RESPONSE_SCHEMAS } from "./game-poker-response-schemas.js"
 
 const points = z
-  .object({ total: z.number(), available: z.number(), inPlay: z.number(), netProfit: z.number() })
+  .object({ total: z.number(), available: z.number(), inPlay: z.number(), pending: z.number().optional(), netProfit: z.number() })
   .passthrough()
 const game = z
   .object({

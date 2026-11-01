@@ -154,6 +154,8 @@ export const gameResponseFixtures: Record<string, unknown> = {
   "app.game.poker.seat.nudge": { notificationId: "notification" },
   "app.game.poker.table.wait": { status: "waiting", cursor: "1:1" },
   "app.game.poker.table.state": tableResponse,
+  "app.game.poker.roll.start": { ok: true, handId: "hand", rollId: "roll", actionSeq: 2, cursor: "1:2", status: "choice_required" },
+  "app.game.poker.roll.choose": { ok: true, handId: "hand", rollId: "roll", actionSeq: 3, cursor: "1:3", status: "completed" },
   "app.game.poker.action.act": { ok: true, handId: "hand", actionSeq: 1, cursor: "1:1" },
   "app.game.poker.agent.list": [agentResponse],
   "app.game.poker.agent.upsert": {

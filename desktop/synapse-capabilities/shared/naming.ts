@@ -1,5 +1,6 @@
 const CAPABILITY_ACTIONS = [
   "ready",
+  "choose",
   "state", "overview", "guide", "account", "join", "leave", "sit", "nudge", "wait", "act", "versions", "history", "detail",
   "claim",
   "save",
