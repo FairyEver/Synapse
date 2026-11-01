@@ -62,12 +62,25 @@ PG 测试自动创建仅绑定 loopback 的临时容器／`cloud_tables_e2e` 数
 - [云端数据表 Console](https://synapse.d2.pub/console/tables)
 - [API 文档](https://synapse.d2.pub/document/open-api/api/cloud-tables)
 - [OpenAPI](https://synapse.d2.pub/api/open/openapi.json)
-- [原始 Skill](https://synapse.d2.pub/document/skills/synapse-cloud-tables/SKILL.md)
-- [HTTP 参考](https://synapse.d2.pub/document/skills/synapse-cloud-tables/references/http.md)
+- 原始 Skill 与 HTTP 参考下载入口属于历史交付，已按后续决定撤下。
 
 回滚与备份定位（均在服务器，未下载凭据内容）：
 
-- 最新回滚镜像：`synapse-server:rollback-20261101_170828`、`synapse-pdf-renderer:rollback-20261101_170828`，回到首轮已支持云表、尚未修复 Skill 下载的版本。
-- 最新最终备份：`/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_170828.sql`；对应 globals、env、PDF 状态在 `backups/globals/synapse-globals-before-deploy-20261101_170828.sql`、`backups/env/synapse-env-before-sync-20261101_170828.env`、`backups/pdf-renderer-rollback-20261101_170828.state`。
+- 该轮回滚镜像：`synapse-server:rollback-20261101_170828`、`synapse-pdf-renderer:rollback-20261101_170828`，回到首轮已支持云表、尚未修复 Skill 下载的版本。
+- 该轮最终备份：`/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_170828.sql`；对应 globals、env、PDF 状态在 `backups/globals/synapse-globals-before-deploy-20261101_170828.sql`、`backups/env/synapse-env-before-sync-20261101_170828.env`、`backups/pdf-renderer-rollback-20261101_170828.state`。
 - 云表迁移前最终备份：`/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_165412.sql`，原应用镜像为 `synapse-server:rollback-20261101_165412`。恢复数据库会影响部署后的新数据，不能作为普通应用回滚步骤自动执行。
 - 本机部署日志和冒烟结果：`.superpowers/cloud-tables/deploy-production.log`、`deploy-production-skill-fix.log`、`deploy-smoke.json`、`deploy-runtime-final.log`。这些是仓库根目录下的忽略文件，本记录保留了关键结果和持久恢复点。
+
+## 取消独立 Skill 并上线（2026-11-01 17:38）
+
+用户明确取消云表独立 Skill。提交 `9db140345` 删除两个原始 Markdown 文件、下载入口、专用复制构建和分发测试，Console 链接改为“API 文档”，同步当前规格、边界、能力例外与待发布说明。API 文档保留全部 19 项操作和整页 Markdown 复制。
+
+本地文档站与 Dashboard V2 构建通过，8 项既有 Markdown／部署地址测试通过；检查构建产物确认两个原始下载文件不存在，文档仍含 19 项接口与复制按钮，共享图标完整。未增加或修改数据库迁移。
+
+经前述部署授权继续运行 `deploy.sh`、显式选择 V2，在线预演和最终备份均完成实际恢复验证，无待执行迁移。当前镜像为 `synapse-server:deploy-20261101_173031`，ID `sha256:76f9ded301bd179633d6bcb9cbd25cf0207ef7e516d605980498184eca862ea5`；Server、PDF renderer、PostgreSQL 全部 healthy。直接检查运行镜像确认两个文件与旧 Console 文案均不存在。
+
+公开 HTTP 验证 **11 项通过**：健康、V2 标记、Console 云表页面、完整 API 文档、19 项 OpenAPI 契约均正常；两个旧下载地址按取消要求返回 404；匿名／Cookie 目录访问和无效密钥均返回 401；无凭据 CORS 预检为 204。未使用真实用户密钥写入数据或执行生产压测。
+
+本轮恢复点：`synapse-server:rollback-20261101_173031`、`synapse-pdf-renderer:rollback-20261101_173031`；最终数据库备份为 `/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_173031.sql`。对应 env、globals 和 PDF 状态在同一 `backups` 目录、沿用 `20261101_173031` 标识。应用回滚会恢复旧的 Skill 分发行为，无需回滚数据库。
+
+本机证据位于忽略目录 `.superpowers/cloud-tables/`：`remove-skill-document-build.log`、`remove-skill-v2-build.log`、`remove-skill-copy-tests.log`、`deploy-remove-skill.log`、`deploy-remove-skill-smoke.json`、`deploy-remove-skill-runtime.log`。
