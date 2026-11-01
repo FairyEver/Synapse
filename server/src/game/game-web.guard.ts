@@ -3,6 +3,9 @@ import { GAME_WEB_IDENTITY_HEADER, GAME_WEB_INVOKE_OPERATIONS } from "@synapse/s
 import type { AuthenticatedUserRequest } from "../auth/user-auth.guard"
 import { resolvePublicAppUrl } from "../common/public-app-url"
 
+// Only the two fixed local Web entrypoints may share development Cookie calls.
+const localWebOrigins = new Set(["http://localhost:19700", "http://localhost:19703"])
+
 /** UserAuthGuard runs first. Browser-only checks never change Bearer callers. */
 @Injectable()
 export class GameWebGuard implements CanActivate {
@@ -15,7 +18,9 @@ export class GameWebGuard implements CanActivate {
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
       const origin = request.headers.origin
       const expectedOrigin = new URL(resolvePublicAppUrl({ configuredPublicAppUrl: process.env.APP_PUBLIC_URL, request })).origin
-      if ((origin && origin !== expectedOrigin) || request.headers["sec-fetch-site"] === "cross-site"
+      const isLocalDevOrigin = process.env.NODE_ENV !== "production"
+        && localWebOrigins.has(expectedOrigin) && !!origin && localWebOrigins.has(origin)
+      if ((origin && origin !== expectedOrigin && !isLocalDevOrigin) || request.headers["sec-fetch-site"] === "cross-site"
         || (!origin && request.headers["sec-fetch-site"] !== "same-origin")) {
         throw new ForbiddenException("游戏请求来源无效。")
       }

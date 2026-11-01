@@ -16,6 +16,51 @@ describe("浏览器游戏认证边界", () => {
     vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
     expect(check(request())).toBe(true)
   })
+  it.each(["development", undefined])("本地环境%s允许V2页面通过V1公开地址访问游戏", nodeEnv => {
+    vi.stubEnv("NODE_ENV", nodeEnv)
+    vi.stubEnv("APP_PUBLIC_URL", "http://localhost:19700")
+    expect(check(request({ headers: { "x-synapse-game-user-id": "alice", origin: "http://localhost:19703", "sec-fetch-site": "same-origin" } }))).toBe(true)
+  })
+  it("本地公开地址选用V2时仍允许V1页面访问", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("APP_PUBLIC_URL", "http://localhost:19703")
+    expect(check(request({ headers: { "x-synapse-game-user-id": "alice", origin: "http://localhost:19700" } }))).toBe(true)
+  })
+  it.each(["http://localhost:19700", "https://synapse.test"])("生产环境配置%s时不接受V2本地来源", publicUrl => {
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("APP_PUBLIC_URL", publicUrl)
+    expect(() => check(request({ headers: { "x-synapse-game-user-id": "alice", origin: "http://localhost:19703" } }))).toThrow("游戏请求来源无效。")
+  })
+  it("生产环境仍允许配置的精确来源", () => {
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
+    expect(check(request())).toBe(true)
+  })
+  it("非本地公开地址不启用开发来源例外", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
+    expect(() => check(request({ headers: { "x-synapse-game-user-id": "alice", origin: "http://localhost:19703" } }))).toThrow("游戏请求来源无效。")
+  })
+  it.each(["https://evil.test", "http://localhost:19704", "https://localhost:19703", "http://localhost.evil.test:19703", "http://127.0.0.1:19703", "null"])("本地环境拒绝固定列表以外的来源%s", origin => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("APP_PUBLIC_URL", "http://localhost:19700")
+    expect(() => check(request({ headers: { "x-synapse-game-user-id": "alice", origin } }))).toThrow("游戏请求来源无效。")
+  })
+  it("V2开发来源不能绕过跨站拦截", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("APP_PUBLIC_URL", "http://localhost:19700")
+    expect(() => check(request({ headers: { "x-synapse-game-user-id": "alice", origin: "http://localhost:19703", "sec-fetch-site": "cross-site" } }))).toThrow("游戏请求来源无效。")
+  })
+  it("V2开发来源不能绕过账号绑定", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("APP_PUBLIC_URL", "http://localhost:19700")
+    expect(() => check(request({ headers: { "x-synapse-game-user-id": "bob", origin: "http://localhost:19703" } }))).toThrow("登录账号已变更，请重新载入。")
+  })
+  it("V2开发来源不能绕过invoke操作白名单", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("APP_PUBLIC_URL", "http://localhost:19700")
+    expect(() => check(request({ headers: { "x-synapse-game-user-id": "alice", origin: "http://localhost:19703" }, body: { operation: "app.game.poker.control.claim", params: {} } }))).toThrow("此操作不能通过浏览器调用。")
+  })
   it.each([undefined, "bob"])("预期身份%s与Cookie身份不一致时拒绝，不能读写另一个账号", (identity) => {
     const r = request({ method: "GET", path: "/api/game/poker/rooms/1234/state", headers: { "x-synapse-game-user-id": identity } })
     try { check(r); expect.fail("应拒绝身份变更") } catch (error) {

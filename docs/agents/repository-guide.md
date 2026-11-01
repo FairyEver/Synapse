@@ -57,6 +57,8 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 游戏 Web 隔离验收仍使用根 `pnpm dev:server`：显式 `GAME_E2E_DATABASE_URL` 只允许本机、库名以 `_e2e` 结尾的 PostgreSQL，并覆盖本地业务数据库配置；可结合既有 `SYNAPSE_SERVER_API_PORT` 将测试 API 与运行中的业务 API 分开。省略该变量时普通开发行为不变。依赖容器已有可用镜像时，`SYNAPSE_SERVER_REUSE_INFRA=1` 使用 `--no-build` 启动依赖，避免重复拉取/构建；默认仍构建。
 
+游戏 Web 的 Cookie 写请求仅在 `NODE_ENV !== production` 且 `APP_PUBLIC_URL` 的 origin 为 `http://localhost:19700` 或 `http://localhost:19703` 时，允许这两个固定开发来源互通；不扩展到其他端口、域名、协议或回环地址。生产环境仍要求 Origin 与 `APP_PUBLIC_URL` 精确匹配；开发例外不绕过跨站拦截、账号绑定或 invoke 操作白名单。
+
 ## 配置规则
 
 - `desktop/config.ts` 集中放置桌面端全局配置常量；每个常量必须有中文注释说明用途和影响范围。
