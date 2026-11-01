@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react"
-import { Button, Form, Input, Label, Modal, Radio, RadioGroup, TextField } from "@heroui/react"
+import { Button, Form, Input, Label, Modal, Radio, RadioGroup, Switch, TextField } from "@heroui/react"
 import { Minus, Plus } from "lucide-react"
 import type { GameFunding, PokerBlindPreset, PokerVariant } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
@@ -10,6 +10,7 @@ export interface PokerRoomDraft {
   variant: PokerVariant
   blindPreset: PokerBlindPreset
   maxSeats: number
+  roll?: boolean
   buyIn: number
 }
 
@@ -78,6 +79,9 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                   <p id="poker-variant-hint-standard52" aria-hidden={value.variant !== "standard52"} className={value.variant !== "standard52" ? "hidden" : "text-sm text-muted"}>完整 52 张牌，葫芦大于同花</p>
                   <p id="poker-variant-hint-short32" aria-hidden={value.variant !== "short32"} className={value.variant !== "short32" ? "hidden" : "text-sm text-muted"}>同花大于葫芦，A789T 是最小顺子</p>
                 </RadioGroup>
+                <Switch isSelected={value.roll ?? false} onChange={roll => update({roll})} isDisabled={busy}>
+                  <Switch.Control><Switch.Thumb /></Switch.Control><Switch.Content><Label>Roll 换牌</Label></Switch.Content>
+                </Switch>
                 <RadioGroup variant="secondary" id="poker-blinds" orientation="horizontal" value={value.blindPreset} isDisabled={busy}
                   onChange={blindPreset => update({ blindPreset: blindPreset as PokerBlindPreset })}>
                   <Label>盲注</Label>

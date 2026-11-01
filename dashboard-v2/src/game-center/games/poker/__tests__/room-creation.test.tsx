@@ -69,6 +69,7 @@ describe("建房请求身份", () => {
     for (const value of ["practice", "short32", "10/20", "5000"]) {
       await act(async () => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!.click())
     }
+    await act(async () => document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
     await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="增加座位"]')!.click())
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     await act(async () => root.unmount()); roots.delete(root)
@@ -80,7 +81,7 @@ describe("建房请求身份", () => {
     }
     expect(document.querySelector("#poker-seats")?.textContent).toContain("7")
     const saved = settings.update.mock.calls.at(-1)![1]
-    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 7, buyIn: 5000 })
+    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 7, buyIn: 5000, roll: true })
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     identity.user = { id: "another", nickname: "另一人", handle: "other" }
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
@@ -225,9 +226,21 @@ describe("建房请求身份", () => {
     }
     await submit()
     const second = api.create.mock.calls[1][0].creationId
-    if (mode === "retry") expect(second).toBe(first)
+    if (mode !== "change") expect(second).toBe(first)
     else expect(second).not.toBe(first)
     expect(onRoom).toHaveBeenCalledWith("1234")
+  })
+  it("成功确认后再建同配置房间使用新UUID，Roll开关进入请求意图",async()=>{
+    api.create.mockReset().mockResolvedValue({roomCode:"5678"})
+    const host=document.createElement("div"),root=createRoot(host);roots.add(root);document.body.append(host)
+    await act(async()=>root.render(<Lobby onRoom={vi.fn()}/>))
+    await open(host)
+    await act(async()=>document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
+    await submit();const first=api.create.mock.calls[0][0]
+    await open(host);await submit();const second=api.create.mock.calls[1][0]
+    expect(first.ruleOptions).toEqual({roll:true});expect(second.ruleOptions).toEqual({roll:true})
+    expect(second.creationId).not.toBe(first.creationId)
+    expect(second).not.toHaveProperty("roll")
   })
   it("大厅接入AI先授权，复制失败重试不再次改变控制版本", async () => {
     let current={...tableResponse,roomCode:"1234",mySeatNo:null,seats:[],controller:null as "human"|"ai"|null,controlVersion:4,handoffPending:false}
@@ -251,7 +264,7 @@ describe("建房请求身份", () => {
   })
   it("关闭旧表单再打开后，旧创建响应不关闭新表单或导航", async () => {
     let resolve!: (value: { roomCode: string }) => void
-    api.create.mockReset().mockImplementationOnce(() => new Promise((done) => { resolve = done }))
+    api.create.mockReset().mockImplementationOnce(() => new Promise((done) => { resolve = done })).mockResolvedValueOnce({roomCode:"5678"})
     const host = document.createElement("div"), root = createRoot(host), onRoom = vi.fn()
     roots.add(root)
     document.body.append(host)
@@ -263,5 +276,9 @@ describe("建房请求身份", () => {
     await act(async () => resolve({ roomCode: "1234" }))
     expect(onRoom).not.toHaveBeenCalled()
     expect(document.querySelector("form")).not.toBeNull()
+    const first=api.create.mock.calls[0][0].creationId
+    await submit()
+    expect(api.create.mock.calls[1][0].creationId).not.toBe(first)
+    expect(onRoom).toHaveBeenCalledWith("5678")
   })
 })

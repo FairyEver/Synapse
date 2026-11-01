@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-01 Roll 完整接入：新增 `app.game.poker.roll.start` / `app.game.poker.roll.choose`（MCP `app_game_poker_roll_start` / `app_game_poker_roll_choose`），game 27→29（大厅3、扑克26），全局 capability 370→372、MCP索引366→368；当前实际注册为372/368。Web增加两个身份/同源保护的POST `/game/poker/rooms/:code/roll/start`、`/roll/choose`，游戏UI可调用27项，桌面游戏IPC为0。无新System App、Dock、Workflow、Automation或Deep Link；System App22、默认Dock9及两条兼容游戏路径保留。room.close/control.set仍UI私有，table.wait/control.claim/checkpoint仅Agent可用。建房ruleOptions.roll缺省false，服务端roll-v1固定；候选仅原手本人可见，超级待选与控制释放优先于普通行动，幂等永久回执匹配全部参数，Skill和生成API参考同步。下面日期相同的27/370/366及更早计数均为当次历史基线。
+
 - 2026-11-01 云端数据表：新增服务端REST及Console，API文档可整页复制为Markdown供AI调用；按用户后续决定不提供独立Skill。不注册桌面System App、Dock、capability、MCP、Workflow、Automation或Deep Link，各注册数量不因云表变化。
 
 - 2026-11-01 点数与 AI 接入：既有 lobby.list 增加可选本人 myControl 响应投影及说明，房间列表与牌桌共用 Web 接入面板；不新增权限、输入参数、注册能力或数据库字段。game 仍为 27 项 capability/MCP（大厅3、扑克24），游戏 IPC 为0；全局370 capability/366 MCP、System App22、默认Dock9及现有路径/例外不变。schema、工具描述和系统 Skill 同步，控制/资金/逐手准备协议不变。
@@ -93,7 +95,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
-| 游戏（独立 Web，本机仅后台能力） | 否 | 否 | — | — | 27 | 大厅根、扑克房间（2条兼容路径，打开浏览器） |
+| 游戏（独立 Web，本机仅后台能力） | 否 | 否 | — | — | 29 | 大厅根、扑克房间（2条兼容路径，打开浏览器） |
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |

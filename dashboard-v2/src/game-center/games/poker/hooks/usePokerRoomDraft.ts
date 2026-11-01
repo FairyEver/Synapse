@@ -4,13 +4,13 @@ import { roomPreferencesStore, type PokerRoomPreferences } from "../../../runtim
 import type { PokerRoomDraft } from "../components/CreateRoomDialog"
 
 const defaults: PokerRoomPreferences = {
-  mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000,
+  mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000, roll: false,
 }
 // Serialize config read/merge/write, including choices made immediately before unmount.
 let pendingSave: Promise<void> = Promise.resolve()
 
-function roomPreferences({ mode, variant, blindPreset, maxSeats, buyIn }: PokerRoomPreferences): PokerRoomPreferences {
-  return { mode, variant, blindPreset, maxSeats, buyIn }
+function roomPreferences({ mode, variant, blindPreset, maxSeats, buyIn, roll = false }: PokerRoomPreferences): PokerRoomPreferences {
+  return { mode, variant, blindPreset, maxSeats, buyIn, roll }
 }
 
 export function usePokerRoomDraft(userId: string | null, nickname: string) {
@@ -49,7 +49,8 @@ export function usePokerRoomDraft(userId: string | null, nickname: string) {
     })
   }
   const createParams = () => ({
-    ...draft,
+    mode:draft.mode, variant:draft.variant, blindPreset:draft.blindPreset, maxSeats:draft.maxSeats, buyIn:draft.buyIn,
+    ruleOptions: {roll:draft.roll ?? false},
     // The server adds the authoritative room code only for automatic names.
     name: !draft.name.trim() || draft.name === initialName.current ? undefined : draft.name,
   })

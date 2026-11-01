@@ -2,6 +2,8 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type R
 import { AlertDialog, Button, Description, FieldError, Input, Label, Slider, TextField } from "@heroui/react"
 import { Bot, ChevronUp, Clock3, MoreHorizontal, UserRound } from "lucide-react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
+import { usePokerRoll } from "../hooks/usePokerRoll"
+import { PokerRollDialog } from "./PokerRollDialog"
 import { PokerButton } from "./PokerButton"
 import { PokerControlPopover } from "./PokerControlPopover"
 import { PokerJoinSummary } from "./PokerJoinSummary"
@@ -12,7 +14,7 @@ import { usePokerReady, type PokerReadyControls } from "../hooks/usePokerReady"
 import { actionState, betPresets } from "../lib/action-view"
 import { amount, remaining } from "../lib/view"
 
-export type PokerControlPanel = "bet" | "menu"
+export type PokerControlPanel = "bet" | "menu" | "roll"
 type Props = {
   table: PokerTableView
   perspective: "owner" | "public"
@@ -38,6 +40,8 @@ function LocalHumanControls(props: Props) {
 function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, identityKey, compact = false, activePanel, onPanelChange, menuTrigger, menuId, popoverContainer, menuContent, nextHand }: Props & { nextHand: PokerReadyControls }) {
   const { busy, error, to, setTo, uncertain, mine, controller, version, handoff,
     act, retry, control, join, sit, leave } = useHumanControls(table, onRefresh, identityKey)
+  const roll = usePokerRoll(table, perspective, onRefresh, identityKey)
+  const rollPending = !!table.roll?.pending || (table.mySeatNo !== null && table.roll?.pendingSeatNo === table.mySeatNo)
   const awaitingReady = table.status !== "closed" && !!table.awaitingReady
   const takeover = () => awaitingReady ? nextHand.takeover() : control("takeover")
   const [aiOpen, setAIOpen] = useState(false)
@@ -53,7 +57,9 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const setPanel = useCallback((next: PokerControlPanel | null) => { if (onPanelChange) onPanelChange(next); else setLocalPanel(next) }, [onPanelChange])
   const controlsRef = useRef<HTMLDivElement>(null), betTrigger = useRef<HTMLButtonElement>(null), localMenuTrigger = useRef<HTMLButtonElement>(null)
   const managementTrigger = menuTrigger ?? localMenuTrigger
-  const confirmAllIn = allInAction !== null
+  const confirmAllIn = allInAction !== null && panel === "bet"
+  const rollEpoch = `${identityKey}:${table.roomCode}:${table.handId}:${table.street}:${table.actionSeq}:${version}:${perspective}`
+  const autoOpened = useRef("")
   const betId = useId()
   const allInTrigger = useRef<HTMLButtonElement>(null)
   const wasConfirming = useRef(false)
@@ -66,16 +72,22 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     wasConfirming.current = confirmAllIn
   }, [confirmAllIn])
   useEffect(() => { setAllInAction(null); setLocalPanel(null) }, [table.handId, table.actionSeq, version, perspective, compact, table.actionOnSeat, table.status])
+  useEffect(() => {
+    if (perspective !== "owner" || !table.roll?.pending) return
+    const key = `${identityKey}:${table.roomCode}:${table.handId}:${table.roll.pending.rollId}:${controller}`
+    if (key !== autoOpened.current) { autoOpened.current = key; setPanel("roll") }
+  }, [identityKey,table.roomCode,table.handId,table.roll?.pending?.rollId,controller,perspective,setPanel])
+  useEffect(() => { if (perspective !== "owner") setPanel(null) },[perspective,setPanel])
   const legal = table.legalActions ?? [], numeric = Number(to)
   const validAmount = to.trim() !== "" && Number.isSafeInteger(numeric) && numeric >= (table.minRaiseTo ?? Infinity) && numeric <= (table.maxRaiseTo ?? -1)
   const acting = perspective === "owner" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" && !!table.handId && version != null
-  const disabled = busy || uncertain || nextHand.busy
+  const disabled = busy || uncertain || nextHand.busy || roll.blocked || rollPending
   const canBet = legal.includes("bet") || legal.includes("raise")
   const raise = legal.includes("raise")
   const contribution = Math.max(0, Math.min(mine?.stack ?? 0, numeric - (mine?.streetBet ?? 0)))
   const pendingState = mine?.leavePending ? "本手后离桌" : table.pauseReason === "user" && mine?.status !== "sitting_out" ? "本手后暂离" : null
   const baseState = perspective === "public" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" ? "旁观视角 · 切回玩家视角出牌" : actionState(table, acting, handoff)
-  const controlState = handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState
+  const controlState = rollPending ? "请先完成换牌" : handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState
   const state = busy ? "正在提交…" : pendingState && table.status === "running" ? `${controlState} · ${pendingState}` : controlState
   const presets = betPresets(table)
   const amountError = !to.trim() ? "请输入金额" : !Number.isSafeInteger(numeric) ? "请输入整数金额" : numeric < (table.minRaiseTo ?? Infinity) ? `至少${raise ? "加注" : "下注"}到 ${amount(table.minRaiseTo ?? 0)}` : numeric > (table.maxRaiseTo ?? -1) ? `最多${raise ? "加注" : "下注"}到 ${amount(table.maxRaiseTo ?? 0)}` : null
@@ -115,7 +127,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const sessionControls = <div className="flex flex-col items-stretch gap-3">
       {!mine && table.status !== "closed" && <>{handoff ? <><Button fullWidth isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button fullWidth variant="tertiary" isDisabled={busy} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接入</Button></> : <><Button isDisabled={busy} fullWidth onPress={() => void manage(join)}><UserRound aria-hidden="true" />{joinLabel}</Button><Button fullWidth variant="secondary" isDisabled={busy || version == null} onPress={openAI}><Bot aria-hidden="true" />接入 AI</Button></>}</>}
       {mine && table.status !== "closed" && <>
-        {controller !== "human" ? <Button fullWidth isDisabled={disabled || version == null} onPress={() => void manage(takeover)}>本人接管</Button> : handoff ? <Button fullWidth variant="tertiary" isDisabled={disabled} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接管</Button> : <Button fullWidth variant="secondary" isDisabled={disabled || version == null} onPress={openAI}>交给 AI</Button>}
+        {controller !== "human" ? <Button fullWidth isDisabled={busy || uncertain || roll.blocked || version == null} onPress={() => void manage(takeover)}>本人接管</Button> : handoff ? <Button fullWidth variant="tertiary" isDisabled={disabled} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接管</Button> : <Button fullWidth variant="secondary" isDisabled={disabled || version == null} onPress={openAI}>交给 AI</Button>}
         {handoff && <Button fullWidth variant="secondary" onPress={openAI}>查看接入 / 取消</Button>}
         <Button fullWidth variant="secondary" isDisabled={disabled || version == null || controller !== "human"} onPress={() => void manage(sit)}>{mine.status === "sitting_out" ? "回到牌桌" : table.pauseReason === "user" ? "本手后暂离" : "暂离"}</Button>
         <Button fullWidth variant="danger-soft" isDisabled={disabled || version == null || controller !== "human"} onPress={() => void manage(leave)}>离桌</Button>
@@ -123,7 +135,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     </div>
   const closeBet = (open: boolean) => { if (!open) { setAllInAction(null); setPanel(null) } }
   const recovery = mine && table.status !== "closed" && !acting ? <div className="flex flex-wrap gap-2 font-sans text-foreground scheme-light" aria-label="恢复牌桌操作">
-    {controller !== "human" && <Button isDisabled={disabled || version == null} onPress={() => void takeover()}>本人接管</Button>}
+    {controller !== "human" && <Button isDisabled={busy || uncertain || roll.blocked || version == null} onPress={() => void takeover()}>本人接管</Button>}
     {controller === "human" && mine.status === "sitting_out" && <Button isDisabled={disabled || version == null} onPress={() => void sit()}>回到牌桌</Button>}
     {controller === "human" && perspective === "public" && onPerspective && <Button isDisabled={disabled} onPress={() => onPerspective("owner")}>切回玩家视角</Button>}
     {handoff && <><Button variant="secondary" isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
@@ -140,6 +152,10 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {!mine && table.status !== "closed" && <div className="space-y-2 font-sans text-foreground scheme-light"><PokerJoinSummary table={table} /><div className="poker-join-controls">{sessionControls}</div></div>}
     {canInvite && <div className="mt-2 flex flex-wrap items-center gap-2 font-sans text-foreground scheme-light"><Button variant="secondary" onPress={() => void copyPokerInvitation(table.roomCode)}>邀请玩家</Button></div>}
     {recovery}
+    {roll.uncertain && panel !== "roll" && <div className="space-y-2 rounded-xl bg-surface p-4 font-sans text-foreground scheme-light"><p role="status" className="text-sm">换牌结果待核对</p>{roll.error&&<p role="alert" className="text-sm text-danger">{roll.error}</p>}<Button isDisabled={roll.busy} onPress={()=>void roll.retry()}>核对原换牌请求</Button></div>}
+    {perspective === "owner" && mine && table.roll?.enabled && table.status === "running" && (acting || rollPending || roll.uncertain) && <PokerButton disabled={busy || uncertain || nextHand.busy} aria-expanded={panel === "roll"} onClick={() => {setAllInAction(null);setPanel("roll")}}>{rollPending ? "完成换牌" : roll.uncertain ? "核对换牌" : "Roll 换牌"}</PokerButton>}
+    {perspective === "owner" && <PokerRollDialog table={table} open={panel === "roll"} onOpenChange={open=>setPanel(open?"roll":null)} controls={roll} onTakeover={()=>void takeover()} disabled={busy||uncertain||nextHand.busy} epoch={rollEpoch}/>}
+
     {acting && <div className="poker-action-dock">
       {canBet && <div className="poker-bet-presets font-sans text-foreground scheme-light" role="group" aria-label="下注金额选择">
         {presets.map(preset => <Button key={preset.label} size="sm" variant={numeric === preset.to ? "secondary" : "tertiary"} aria-pressed={numeric === preset.to} isDisabled={disabled || confirmAllIn} onPress={() => setTo(String(preset.to))}>{preset.label}</Button>)}

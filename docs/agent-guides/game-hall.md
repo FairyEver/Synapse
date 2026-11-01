@@ -14,7 +14,7 @@ Web德州扑克音效由本地打包的 Kenney Casino Audio CC0 素材提供，�
 
 Web筹码与轮次反馈以权威 table 快照为单一时序，按 handId/actionSeq 去重；events 游标流继续用于日志。首次载入、超过三秒断流、后台切回、身份/视角/控制版本/布局变化建立基线，不补播历史动作；快速跨街优先最新状态，不排队到下一手。筹码从实际座位牌框到独立本轮下注锚点，本轮结束再进入实际底池，收池包含盲注及新增投入。赢家座位显示赢池金额和净变化，返还与赢池分开；本人赢池且净盈利才有短庆祝，资金、控制和倒计时不依赖动画回调。画布根据实际可用区域宽高比自动使用横向、方形或纵向场景，座位、卡牌、文字和下注统一 contain 等比缩放，不单独逆缩放字号/座位宽度；减弱动态效果移除位移和庆祝，保留静态动作、下注及结果。MCP/IPC 和系统 Skill 操作协议不变。
 
-游戏中心位于独立 `/game/` Web 页面，由 Console 侧栏在新标签页打开；桌面不再提供游戏 UI 或入口。namespace `game`，当前 27 项 MCP，历史 `synapse://app/game-hall` 与房间深链改为受控打开浏览器。
+游戏中心位于独立 `/game/` Web 页面，由 Console 侧栏在新标签页打开；桌面不再提供游戏 UI 或入口。namespace `game`，当前 29 项 MCP，历史 `synapse://app/game-hall` 与房间深链改为受控打开浏览器。
 
 Web创建扑克房间使用独立深色游戏弹窗：房间类型、牌组、盲注和带入直接点选，座位数在 2–10 人之间步进调节；提交期间禁用草稿修改，关闭后恢复入口焦点。仅改变Web呈现，创建参数、默认值及 creationId 重试语义不变，MCP schema 与系统 Skill 无需变更。
 
@@ -72,7 +72,7 @@ pnpm --filter @synapse/desktop run test --maxWorkers=4
 
 控制权和版本由服务端决定；Webcontrol.set(takeover|request_ai|cancel_ai)必须带controlVersion，AI只对用户已申请的handoff调用control.claim。接管即时提升epoch、旧AI动作和seat.sit/leave写权失效，已提交动作不回滚，截止时间不重置。act带controlVersion/expectedActionSeq，省略版本只兼容初始epoch0；响应未知保持actionId确认原动作。human动作不绑定persona/note，程序机器人仍rules_bot。
 
-UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/ready/control与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Web UI 通过 REST 调用 join/act/control.set/events，没有 wait/control.claim/checkpoint；桌面游戏 bridge 已移除。game 27 项公共能力；桌面游戏 IPC 为 0；room.close/control.set两个私有UI操作不进capability/MCP。
+UI REST使用/game/poker/rooms/:code下POST join/actions/sit/leave/ready/control/roll/start/roll/choose与GET state/events，账号网络层加/api。UI请求沿{operation,params}封装，返回bare DTO；MCP经/game/invoke返回信封，仅可信Agent来源能提交MCP act。不要接受客户端source/controller。Web UI 通过 REST 调用 join/act/control.set/events，没有 wait/control.claim/checkpoint；桌面游戏 bridge 已移除。game 29 项公共能力；桌面游戏 IPC 为 0；room.close/control.set两个私有UI操作不进capability/MCP。
 
 table.events可传perspective=owner|public，MCP默认owner且固定decision投影；UI默认public，玩家日志必须随牌桌传owner，不能混入教学明牌。返回{events,cursor,hasMore}，limit最大100，按(handNo,seq,kind)去重并推进返回cursor；结算seq=2147483647，重连直接呈现最新状态，不重放旧动画。扑克房间获准隐藏业务顶栏/底栏，三种内部场景按可用比例自动选择并 contain 等比缩放、日志可折叠/窄屏抽屉；大厅使用独立 Web 页面壳。
 
@@ -94,3 +94,15 @@ table.events可传perspective=owner|public，MCP默认owner且固定decision投�
 每手结束弹出HeroUI完整结算，允许关闭/重开，关闭不代准备。服务端结算投影新增仅根据已获准公开牌面计算的bestFive和分池reason，暗牌不泄露。取代旧五秒自动续局：所有当前可参赛者显式准备，陪练自动、真人按钮、AI调用app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait的ready_required可用于空游标重连，已准备仍waiting；先处理未读hand_result与上下文维护。旧手、旧控制版本及他人座位不能授权下一手。复用座位status=ready，无新增数据库迁移；先更新API与MCP契约再上线Web。本次开发不部署。
 
 V2 牌桌底部和结算 Footer 共用准备/接管执行器与进度，关闭结算后仍可直接准备，显示人数和等待对象；长名单摘要只列前两人及待准备总人数，完整名单见结算。AI 控制时可在结算内本人接管，保持弹窗打开，再明确点击准备。接回清除原准备时提示“已接管，请重新准备”；换手、换房、换账号或确认准备后清除提示。接管和准备请求未结束时两个表面同步禁用，暂离/历史座位不计入屏障，旁观不代准备。不改变 MCP schema、控制版本及资金规则。
+
+## Roll 已实施协议（2026-11-01）
+
+建房可显式ruleOptions.roll=true，缺省关闭；服务端roll-v1写入房间和每手快照，不接受客户端价格版本。normal指定一张旧底牌后随机一张，super先付费生成三候选再必须选择；只本人可读候选/旧牌位置。两档共享本手次数和原deadline，河牌关闭，费用不计普通下注。机器人使用可见信息的有限策略，不称最优、不读暗牌。
+
+外部AI：读table_state或your_turn的roll报价→按用户会话风格/预算决定→roll_start携当前手/street/actionSeq/controlVersion、新UUID、kind/cardIndex和确切expectedFee→choice_required时先从原候选roll_choose→重读当前报价和合法动作→正常act。wait的roll_choice_required仍在control_released/未读终局之后，优先于your_turn。收到control_released立即停，不为选牌重新claim；响应丢失先读状态并用原UUID、operation和全部参数确认原回执，不能换UUID重抽或静默改价。有限试玩价格不保证盈利。
+
+冻结补偿按扣费当时其他未弃牌原参与者（含全下者）确权，本手不能花。普通派彩后释放：仍在原入座的stack/session投影只入账一次，已离场points归原账号余额和盈亏，不归后来同seatNo或新session；practice离场/取消清零。Hall独立汇总通用pending，不读取扑克表；total=available+inPlay+pending，netProfit含pending，旧响应缺字段按0，pending未释放不能领取补助。结算delta保留总净变化，pokerDelta=delta+rollPaid-rollReceived，payout仍仅普通派彩；公开事件choose保留fee作审计但不再次收费。
+
+V2使用既有玩法入口打开HeroUI系统Modal，原手牌槽/两档报价/次数/确认和候选单选均按需显示；超级可关闭后重开，下注持续禁止。AI控制时先本人接管，原候选不变。账号/房间隔离未知写入，手/阶段/序号/控制变化清理未提交选择；表格公开视角移除私有候选与报价。结算/记录分别展示Roll支出、补偿与总净变化，不以获胜标签代替盈亏。
+
+当前game29、全局372 capability/368 MCP，Web27项UI操作、游戏IPC0，无新增System App/Dock/Workflow/Automation/Deep Link。两个REST路径为 `/game/poker/rooms/:code/roll/start` 和 `/game/poker/rooms/:code/roll/choose`；服务端只信入口来源。权威Skill/API参考位置不变。部署必须先应用20261101090000_game_roll_frozen_transfers迁移；本轮未执行迁移、真实DB或浏览器验收、部署。不得把既有系统UI浏览器验收记录当作本次Roll验收。

@@ -322,6 +322,12 @@
 
 ## 游戏大厅与德州扑克
 
+- 当前 Roll 产品边界（2026-11-01）：建房 `ruleOptions.roll?:boolean` 缺省false，服务端价格 `roll-v1` 随房间/手牌固定；两种资金模式和牌组共用规则。normal/super共用个人本手次数，preflop/flop/turn当前行动者可用、河牌关闭，支付后至少留一筹码。费用独立下注，不消耗行动、不续deadline；超级原候选必须先选，断线/接管不重抽，超时选首张后原超时撤出。
+- 通用 `GamePendingTransfer` 记录冻结补偿；每次join使用新admissionId，Poker按原handSeat身份生成/释放，Hall不读扑克表。补偿派彩后按原入座到账，离场points归原账号及盈亏，practice离场清零；引擎stack已包含释放的只标table、不能再次加款。overview.points.pending计入total和netProfit，不计available，pending未释放禁止领取补助。永久Roll审计/回执与归档保留完整牌序和请求指纹，候选/旧槽/原牌仅原手本人可读，教学不扩权。
+- 当前注册：game 29项capability/MCP（大厅3、扑克26）、全局372 capability/368 MCP；游戏桌面IPC0，Web27项UI操作，两条兼容深链仅受控打开浏览器。新增roll.start/choose与已有join/act/ready共用版本和房锁；room.close/control.set仍UI私有，wait/claim/checkpoint仍Agent专用。下列26/27及旧IPC数量为历史基线。
+- Web Roll入口属于直接玩法按钮；档位、原手牌位置、确切费用确认及三选一采用HeroUI标准系统Modal/RadioGroup，与金额/全下/日志/管理面板互斥。可关闭/重开但不撤销待选；pending或Roll未知写入禁止正常下注，AI控制需先本人接管。未知写结果保留账号/房间隔离的原UUID与完整参数，先读状态再确认原回执；新手/控制变更清理未提交选择，迟到回调不作用于新上下文。公开本地视角剥离本人Roll报价/候选。
+- Roll上线必须先应用 `20261101090000_game_roll_frozen_transfers` 迁移，再部署API，最后Web/MCP；本轮只生成迁移与本地验证，未执行业务库或部署。已有候选/确权补偿后，不能回滚到忽略这些资产或控制版本的旧API；先阻止新建并按原版本完成已有手和审计。
+
 - 2026-11-01 游戏 UI 长期边界：游戏作为内容运行在独立系统外壳内，系统页面与按需展开的功能面板、表单、确认使用系统设计语言，局内场景/HUD/直接玩法操作使用独立游戏语言，详见 [game-ui.md](./game-ui.md)。V2 系统层固定 HeroUI v3 默认浅色；本节旧游戏调色板、深色建房与浮层皮肤描述仅保留为 V1/历史实现记录，不约束 V2 的后续视觉改造。V2 牌桌功能入口、日志/AI 判断、机器人/座位管理、金额表单及全下确认已采用系统 UI，玩法画布/HUD/直接操作保留游戏视觉；业务、响应式、几何和安全约束继续有效。
 
 - 2026-10-31 完整迁移：UI、素材、动画和音效仅位于 `dashboard/src/game-center/`，使用现有 Web 工程的独立 HTML 入口。Console 普通账号侧栏以新标签页打开 `/game/`，游戏不加载 Console Layout。游戏固定配色是独立页面例外，Console 继续仅浅色。
@@ -336,7 +342,7 @@
 - 独立 Web 入口为 `/game/`；桌面不注册游戏 System App；大厅只拥有GameAccount与GameSession，游戏注册表驱动入口。大厅不得join游戏内部表或按具体gameKind分支。
 - GameAccount.points存可用余额，GameSession.inPlay保存占用；总额=可用+占用，初始1,000,000。入座扣点、座位与会话同事务，账户/房间行锁；同房间账号与位置唯一约束由数据库保证。
 - 首个游戏为无限注德州扑克，不托管模型。2026-10-30用户批准Web本人入座、出牌与接管；真人与AI共用同账号同房唯一座位、筹码和当前手。Web UI 通过专用 REST 开放 join/act/control.set/events，不开放 table.wait/claim/checkpoint；桌面游戏 UI IPC 与 preload bridge 已移除。MCP act仅AI来源，UI专用路由由服务端确定human来源，客户端不能指定source/controller，人工动作不绑定persona/note；程序机器人仅陪练房允许。
-- MCP为game域26项索引能力（大厅3、扑克23），公开仍仅search/invoke。Web24项窄IPC，room.close与control.set为UI私有，不进入capability/MCP目录；control.claim、checkpoint.get/save、table.wait仅Agent使用，table.events两端共用。bot.add/remove不授予机器人动作控制权，深链仅打开房间，不自动入座或交接。
+- MCP为game域29项索引能力（大厅3、扑克26），公开仍仅search/invoke。Web27项UI操作、桌面游戏IPC为0，room.close与control.set为UI私有，不进入capability/MCP目录；control.claim、checkpoint.get/save、table.wait仅Agent使用，table.events两端共用。bot.add/remove不授予机器人动作控制权，深链仅打开房间，不自动入座或交接。
 - 座位不签发令牌，当前账号+roomCode重连；同账号可同时参加多个游戏/多个房间。modelName为可空公开自述，仅展示，不校验后端身份、不参与规则或统计逻辑。
 - persona、历史版本、note仅本人可读，所有查询服务端白名单投影。玩家/MCP/机器人决策不返回对手未摊牌或弃牌暗牌；合法摊牌按实际手牌参与身份判定。Web教学旁观仅从未入座账号可看全牌，包括closed的GameSession为永久参与证据；参与点数房不能看他人暗牌，参与陪练房仅程序机器人可教学明牌，不扩大他人历史读取。UI公开投影剥离私密配置与合法动作，但保留服务端已授权hole和本人mySeatNo。版本与动作不可改写，行动与生效版本同事务保存；口述风格personaSource=session绑定null且不写回设置。
 - 行动窗口600秒，60秒无调用仅标离线。超时能check则记check，否则fold；两者都立即撤出本手并退款离场，不能继续争夺底池。超时任务与act同一房间锁，成功actionId先按账号/房间查幂等结果。

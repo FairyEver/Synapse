@@ -4,6 +4,14 @@ const identity = { id: 'alice' }
 const create = () => new GameWebClient({ getIdentity: () => identity.id, onSessionInvalid: vi.fn() })
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 describe('浏览器游戏请求', () => {
+  it.each(["start","choose"])("Roll %s走窄POST并完整保留UUID和原参数",async(operation)=>{
+    const result={ok:true,handId:"h",rollId:"r",actionSeq:4,cursor:"1:4",status:operation==="start"?"choice_required":"completed"}
+    const fetch=vi.spyOn(globalThis,"fetch").mockResolvedValue(Response.json(result))
+    const client=create(),params={roomCode:"1234",handId:"h",actionId:"8529bfca-a8e8-4de4-89da-162f516d2f01",controlVersion:2,expectedActionSeq:3,...(operation==="start"?{street:"flop",kind:"super",cardIndex:1,expectedFee:8}:{rollId:"r",candidateIndex:2})}
+    expect(await client.call(`app.game.poker.roll.${operation}`,params)).toEqual(result)
+    expect(fetch).toHaveBeenCalledWith(`/api/game/poker/rooms/1234/roll/${operation}`,expect.objectContaining({method:"POST",body:JSON.stringify({operation:`app.game.poker.roll.${operation}`,params})}))
+    client.dispose()
+  })
   it('真人动作使用REST且保留同一个actionId与Cookie身份绑定', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ ok: true, handId: 'h', actionSeq: 1, cursor: '1:1' }))
     const client=create(),params={ roomCode:'1234',actionId:'stable-action' }

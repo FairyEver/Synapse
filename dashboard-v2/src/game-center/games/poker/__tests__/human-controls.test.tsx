@@ -6,8 +6,8 @@ import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { HumanControls } from "../components/HumanControls"
 import { canvasFit, mergeTableEvents } from "../lib/table-layout"
 import { betPresets } from "../lib/action-view"
-const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), join: vi.fn(), sit: vi.fn(), leave: vi.fn(), state: vi.fn() }))
-vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { table: { state: api.state }, action: { act: api.act }, control: { set: api.control }, seat: { join: api.join, sit: api.sit, leave: api.leave } } }) }))
+const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), join: vi.fn(), sit: vi.fn(), leave: vi.fn(), state: vi.fn(), rollStart: vi.fn(), rollChoose: vi.fn() }))
+vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { roll: {start:api.rollStart,choose:api.rollChoose}, table: { state: api.state }, action: { act: api.act }, control: { set: api.control }, seat: { join: api.join, sit: api.sit, leave: api.leave } } }) }))
 vi.mock("@/game-center/runtime/account", () => ({ useAccount: () => ({state:{status:"authenticated",connectivity:"online",profile:{user:{id:"human-controls-user"}}}}) }))
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -17,6 +17,50 @@ async function render(value = table) { const host = document.createElement("div"
 function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label") === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
 async function openManagement(host: HTMLElement) { await act(async () => button(host, "更多牌桌操作").click()) }
 describe("真人牌桌操作", () => {
+ it("Roll面板选择档位和原手牌后明确确认才支付，行动点变化清理未提交选择",async()=>{
+  api.rollStart.mockResolvedValue({ok:true})
+  const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true},pending:null}}
+  const {host,root}=await render(value)
+  await act(async()=>button(host,"Roll 换牌").click())
+  expect(api.rollStart).not.toHaveBeenCalled();expect(button(document.body,"确认支付 3 换牌").disabled).toBe(true)
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="super"]')!.click())
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="1"]')!.click())
+  await act(async()=>button(document.body,"确认支付 8 换牌").click())
+  expect(api.rollStart).toHaveBeenCalledWith(expect.objectContaining({kind:"super",cardIndex:1,expectedFee:8,expectedActionSeq:3,controlVersion:4}))
+  await act(async()=>root.render(<HumanControls table={{...value,actionSeq:4}} perspective="owner" onRefresh={vi.fn()}/>))
+  await act(async()=>button(host,"Roll 换牌").click())
+  expect(button(document.body,"确认支付 3 换牌").disabled).toBe(true)
+  await act(async()=>root.unmount())
+ })
+ it("AI待选可在面板接管，原候选保留后本人明确选择，不再收款",async()=>{
+  api.control.mockResolvedValue({});api.rollChoose.mockResolvedValue({ok:true})
+  const pending={rollId:"ai-pending",cardIndex:0,candidates:["2c","3c","4c"]}
+  const value={...table,controller:"ai" as const,roll:{enabled:true,count:1,pending,pendingSeatNo:0}}
+  const {host,root}=await render(value)
+  await act(async()=>button(document.querySelector('[role="dialog"]') as HTMLElement,"本人接管").click())
+  expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"takeover"})
+  expect(api.rollChoose).not.toHaveBeenCalled()
+  await act(async()=>root.render(<HumanControls table={{...value,controller:"human",controlVersion:5}} perspective="owner" onRefresh={vi.fn()}/>))
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="2"]')!.click())
+  await act(async()=>button(document.body,"确认选择").click())
+  expect(api.rollChoose).toHaveBeenCalledWith(expect.objectContaining({rollId:"ai-pending",candidateIndex:2,controlVersion:5}))
+  expect(api.rollStart).not.toHaveBeenCalled()
+  await act(async()=>root.unmount())
+ })
+
+ it("超级待选即使旧响应仍列合法下注也禁用，候选可关闭重开并保留原牌", async()=>{
+  const pending={rollId:"super-old",cardIndex:1,candidates:["2c","3c","4c"]}
+  const {host,root}=await render({...table,hole:["As","Kd"],roll:{enabled:true,count:1,pending,pendingSeatNo:0}})
+  expect(button(host,"弃牌").disabled).toBe(true)
+  expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("选择替换牌")
+  await act(async()=>button(document.body,"稍后选择").click())
+  expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+  await act(async()=>button(host,"完成换牌").click())
+  expect(document.body.querySelectorAll('input[type="radio"]')).toHaveLength(3)
+  expect(button(document.body,"确认选择").disabled).toBe(true)
+  await act(async()=>root.unmount())
+ })
+
  it("已暂离可以直接回座，旁观时直接切回玩家，AI 控制时直接接管", async () => {
   api.sit.mockResolvedValue({}); api.control.mockResolvedValue({})
   const {host,root}=await render({...table,status:"paused",actionOnSeat:null,seats:[{...table.seats[0],status:"sitting_out"}]})

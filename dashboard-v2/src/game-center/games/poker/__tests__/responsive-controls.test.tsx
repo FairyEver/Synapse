@@ -151,6 +151,35 @@ describe("窄屏精简出牌", () => {
 })
 
 describe("统一底部操作与按需侧栏", () => {
+  it("Roll与日志/金额/全下/管理互斥，关闭回入口且画布节点保持",async()=>{
+    const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+    const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true}}}
+    await act(async()=>root.render(<Table table={value} perspective="owner" identityKey="panel-roll-user" onPerspective={()=>{}} onBack={()=>{}}/>))
+    const canvas=host.querySelector('.poker-canvas'),style=canvas!.getAttribute('style')
+    await click(host,"日志")
+    button(host,"Roll 换牌").focus()
+    await click(host,"Roll 换牌")
+    expect(host.querySelector('.poker-information-drawer')!.hasAttribute('hidden')).toBe(true)
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Roll 换牌")
+    await click(document.body,"取消")
+    await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve))})
+    expect(document.activeElement).toBe(button(host,"Roll 换牌"))
+    await click(host,"自定义")
+    expect(host.querySelector('input[type="number"]')).not.toBeNull()
+    await click(host,"全下")
+    expect(host.querySelector('[role="alertdialog"]')).not.toBeNull()
+    await click(host,"Roll 换牌")
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(host.querySelector('input[type="number"]')).toBeNull()
+    await click(document.body,"取消")
+    await click(host,"更多牌桌操作")
+    await click(host,"Roll 换牌")
+    expect(button(host,"离桌")).toBeUndefined()
+    expect(host.querySelector('.poker-canvas')).toBe(canvas)
+    expect(canvas!.getAttribute('style')).toBe(style)
+    await act(async()=>root.unmount())
+  })
+
   it("按内容宽度切换，日志、金额和更多互斥且不改变画布尺寸", async () => {
     const host=document.createElement("div"),root=createRoot(host)
     document.body.append(host)

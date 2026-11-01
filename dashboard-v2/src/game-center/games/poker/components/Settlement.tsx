@@ -21,7 +21,8 @@ export function Settlement({ settlement, compact = false }: { settlement: PokerS
         <span className="flex min-w-0 basis-full items-center gap-2 break-words"><span className="min-w-0">{s.displayName}{s.isMe && " · 本人"}</span>{winners.has(s.seatNo) && <Trophy className="size-4 shrink-0 text-accent" role="img" aria-label="获胜" />}</span>
         <span className="flex gap-1" data-card-size="xs">{s.hole?.map(card => <Card key={card} card={card} faceUp />)}</span>
         <span>{s.folded ? "已弃牌" : s.handName ?? ""}</span>
-        <b className="ml-auto tabular-nums">{s.delta > 0 ? "+" : ""}{amount(s.delta)}</b>
+        {settlement.rules.ruleOptions?.roll && <span className="text-xs text-muted">Roll 支出 {amount(s.rollPaid ?? 0)} · 补偿 {amount(s.rollReceived ?? 0)}</span>}
+        <b aria-label="总净变化" className="ml-auto tabular-nums">{s.delta > 0 ? "+" : ""}{amount(s.delta)}</b>
       </div>)}
     </div>
     {settlement.pots.map((pot, i) => <p key={i} className="break-words text-xs text-muted">{pot.refund ? "未跟注返还" : i === 0 ? "主池" : `边池 ${i}`} {amount(pot.amount)}{Object.entries(pot.shares).map(([seat,share]) => ` · ${settlement.seats.find(s => s.seatNo === Number(seat))?.displayName ?? `座位 ${Number(seat)+1}`} ${amount(share)}`)}</p>)}

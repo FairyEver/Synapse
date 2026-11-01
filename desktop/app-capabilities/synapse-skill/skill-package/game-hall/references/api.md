@@ -98,6 +98,15 @@
 {
   "type": "object",
   "properties": {
+    "ruleOptions": {
+      "type": "object",
+      "properties": {
+        "roll": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "variant": {
       "type": "string",
       "enum": [
@@ -148,6 +157,132 @@
   "required": [
     "maxSeats",
     "buyIn"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_roll_start
+
+按本人当前报价确认换牌；不续行动时限，超级换牌后必须完成选牌；未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "handId": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "street": {
+      "type": "string",
+      "enum": [
+        "preflop",
+        "flop",
+        "turn"
+      ]
+    },
+    "expectedActionSeq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "actionId": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "super"
+      ]
+    },
+    "cardIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "expectedFee": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    }
+  },
+  "required": [
+    "roomCode",
+    "handId",
+    "street",
+    "expectedActionSeq",
+    "controlVersion",
+    "actionId",
+    "kind",
+    "cardIndex",
+    "expectedFee"
+  ],
+  "additionalProperties": false
+}
+```
+
+## app_game_poker_roll_choose
+
+从本人待选超级换牌候选中选一张；候选仅本人可见，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "roomCode": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}$"
+    },
+    "handId": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "rollId": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "candidateIndex": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "expectedActionSeq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "controlVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "actionId": {
+      "type": "string",
+      "format": "uuid",
+      "maxLength": 36
+    }
+  },
+  "required": [
+    "roomCode",
+    "handId",
+    "rollId",
+    "candidateIndex",
+    "expectedActionSeq",
+    "controlVersion",
+    "actionId"
   ],
   "additionalProperties": false
 }

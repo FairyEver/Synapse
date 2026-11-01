@@ -12,7 +12,7 @@ Web 的列表与牌桌共用 AI 接入面板，首次“允许 AI 接入并复�
 
 创建房间或新选手时生成creationId(UUID)，同一创建意图响应丢失后重试复用。新开另一桌需新UUID；同一新选手草稿编辑仍复用，返回选手id后只传id更新，不与creationId同传。同名同内容但明确另建也用新UUID，不按内容合并。入座和重连仍按账号+roomCode，没有座位令牌。
 
-建房variant默认standard52；short32为7到A的32张牌，同花大于葫芦，A789T为最小顺子。blindPreset可选1/2、2/4、5/10、10/20，默认1/2；房间模式、牌组和盲注创建后固定，按当前房规判断合法动作。完整规则见[规则](../references/rules.md)。
+建房variant默认standard52；short32为7到A的32张牌，同花大于葫芦，A789T为最小顺子。ruleOptions.roll缺省false；开启时同时允许普通/超级，点数/陪练与两种牌组均适用，服务端把roll-v1固定到房间和每手，客户端不传价格版本。blindPreset可选1/2、2/4、5/10、10/20，默认1/2；房间模式、牌组和盲注创建后固定，按当前房规判断合法动作。完整规则见[规则](../references/rules.md)。
 
 入座可传modelName，仅为自述展示，不校验或影响规则；不确定真实模型就留空，不编造。可绑定本人的agentId，空提示词合法。会话口述风格优先于每轮现读persona，仅本会话生效；只有明确要求保存才agent_upsert，不把临时风格写回游戏设置。
 
@@ -29,8 +29,16 @@ sessionStyle = 当前会话口述风格或安全恢复的检查点风格
 cursor = 当前游标或已验证检查点游标
 while 当前用户授权、AI控制版本有效且未到上下文维护点:
     result = table_wait(roomCode, cursor, timeoutMs=25000)
-    if result.status == "your_turn":
+    if result.status == "roll_choice_required":
+        核对当前AI控制权；从原三个私有候选中选一张
+        roll_choose携原rollId、候选下标、当前controlVersion/actionSeq及新actionId(UUID)
+        未知结果复用该UUID与全部参数核对；重读table_state，再恢复循环
+    else if result.status == "your_turn":
         按sessionStyle或现读persona判断；只读决策投影，不读取教学明牌
+        先读roll报价、可用状态、共享次数和累计成本，决定本次是否换牌
+        若选择Roll：确认当前确切fee；roll_start携kind/cardIndex/expectedFee及手牌/阶段/版本/UUID
+        start后重读；choice_required必须先完成原选择；完成后重新报价或正常act，不能沿用旧actionSeq
+        不换牌时继续下面正常下注流程
         以legalActions/toCall/minRaiseTo/maxRaiseTo为硬边界
         生成actionId(UUID)，携带handId/street/controlVersion/expectedActionSeq及action/to?
         action_act；有会话风格时personaSource=session；note最多200字单行
@@ -56,11 +64,31 @@ hand_result后推进cursor并继续接终局，离桌、输光、解散可能先
 
 每手结束后全员重新准备才开下一手，不再五秒自动续局。程序陪练自动准备；真人需手动点击，AI必须在继续意图有效时明确调用seat_ready，不能代其他座位准备。查询、心跳、关闭结算、回座和普通重连都不代表准备。所有仍有筹码且未暂离/待离桌的座位（含下一手新加入者）都需准备；至少两人且至少一个非程序陪练。先完成本手结果确认与上下文维护判断，再发准备信号；准备绑定已结算handId和controlVersion，迟到信号不能授权后续手。
 
+## Roll 决策
+
+Roll 是可选玩法，不要求每轮使用。遵守用户会话风格、预算与风险限制，比较保留现有牌、普通随机换一张和超级三选一；不承诺必赚或把有限程序策略当最优。普通与超级共享本人本手次数，跨阶段不重置；每次费用提高累计成本。先指定第0或1张旧牌，超级开始后不能改槽、撤回或重抽；只有本人可读旧牌位置和三个候选，教学权限也不扩候选。候选不可转述到公开日志。
+
+每次从table_state或your_turn读取roll.{enabled,count,normal,super}，以available及当前fee为硬边界；需stack严格大于费用。只在翻前/翻牌/转牌当前本人行动点使用，河牌关闭。费用独立于下注、不计跟注额，不续600秒。补偿给当时其他未弃牌者（含全下者），本手冻结不可花；普通派彩后按原入座释放，已离座点数归原账号，练习补偿离桌清零。Hall pending计入total/netProfit，不计available；结算delta为含Roll的总净变化。
+
+以下仅为参数示例，必须替换为当前真实room/hand/street/报价/版本/序号及新UUID，不照抄：
+
+```json
+{"tool":"app_game_poker_roll_start","params":{"roomCode":"123456","handId":"current-hand","street":"preflop","expectedActionSeq":3,"controlVersion":2,"actionId":"8529bfca-a8e8-4de4-89da-162f516d2f01","kind":"super","cardIndex":1,"expectedFee":8}}
+```
+
+返回choice_required后，读取原pending的rollId/candidates，再明确选择；choose不再次收费或增加次数：
+
+```json
+{"tool":"app_game_poker_roll_choose","params":{"roomCode":"123456","handId":"current-hand","rollId":"8529bfca-a8e8-4de4-89da-162f516d2f01","candidateIndex":0,"expectedActionSeq":4,"controlVersion":2,"actionId":"8529bfca-a8e8-4de4-89da-162f516d2f02"}}
+```
+
+恢复顺序：读报价→决定→start→必须choose→重读→正常act。pending存在时不能普通下注或再次start。关闭网页/面板、断线、重启和接管不取消原候选；原deadline到期先取第一张候选再执行超时撤出。control_released或用户接管立即停止AI写入，不能为完成候选重新claim。未知start/choose结果保留原operation、UUID与全部参数，先重读再同请求确认永久回执；控制变化后仅确认旧成功动作，不提交新的过期意图。费用过期只重读并重新决定，不自动接受新费用。每个新动作才新UUID，不将旧UUID跨档、跨槽、跨候选、跨账号或跨房复用。
+
 ## 上下文维护与恢复
 
 每完成10手或运行15分钟检查上下文；宿主报告压力时提前维护。没有可靠用量读数时按上述周期维护，不能无限循环耗尽上下文。
 
-1. 保存继续意图，携当前controlVersion申请seat_sit(true, reason=context_maintenance)。本手仍在进行时保持合法行动，直至完成本手、实际status=sitting_out且pending=false；确认没有尚未确认的act。申请暂离不等于实际安全点。
+1. 保存继续意图，携当前controlVersion申请seat_sit(true, reason=context_maintenance)。本手仍在进行时保持合法行动，直至完成本手、实际status=sitting_out且pending=false；确认没有尚未确认的act/start/choose且没有待选候选。申请暂离不等于实际安全点。
 2. 调用checkpoint_save(roomCode, controlVersion, cursor, sessionStyle?, continueIntent)。检查点由服务端按本人私有保存，含pauseReason=context_maintenance和savedAt；不写项目文件，不保存对手暗牌、完整报文或凭证。
 3. 只有宿主确实提供原生上下文压缩能力时才调用并检查成功结果。不得用shell执行或伪称执行`/compact`。能力不可用、压缩失败或结果不明时，保留已确认暂离与检查点，安全退出并提示用户手动压缩/继续；不得继续循环等到上下文耗尽。
 4. 压缩或新会话恢复后，重新读取本Skill、poker_guide、overview、checkpoint_get及table_state。核对roomCode、controlVersion、AI控制权、continueIntent=true、pauseReason=context_maintenance与实际sitting_out；当前用户的新指令优先。只有维护检查点仍有效、未被真人接管或改为用户暂停时才回座继续，恢复临时sessionStyle和cursor。
@@ -68,7 +96,7 @@ hand_result后推进cursor并继续接终局，离桌、输光、解散可能先
 
 行动窗口600秒（10分钟），正常行动通常几秒；wait单次25秒独立。60秒无调用仅标掉线，600秒无行动能check则记check，否则fold，但都会撤出本手并离场退款，不能继续争夺底池。lastAutoAction仅通知一次，收到后overview核对。
 
-一桌一个会话最可靠。必须多桌时按overview.deadlineMs排序、timeoutMs=1000短轮询轮转，优先最急行动点。网络/协议错误按[协议与错误恢复](../references/protocol.md)处理；GAME_INVALID_RESPONSE不代表写入失败，未知act保持原actionId、创建保持原creationId。
+一桌一个会话最可靠。必须多桌时按overview.deadlineMs排序、timeoutMs=1000短轮询轮转，优先最急行动点。网络/协议错误按[协议与错误恢复](../references/protocol.md)处理；GAME_INVALID_RESPONSE不代表写入失败，未知act/start/choose保持原actionId、创建保持原creationId。
 
 ## 程序机器人陪练房
 

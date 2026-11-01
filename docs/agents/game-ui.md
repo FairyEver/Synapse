@@ -78,3 +78,11 @@
 - 陪练标签内容保持挂载以保留请求上下文，仅在选中时显示；未选中的管理内容不再出现在日志下。完整结算的长连续英文姓名可以换行，遮蔽的手牌仍不渲染。
 - 专项 Chromium 固定数据回归实际展开宽窄屏日志、AI 判断、陪练、管理、金额表单和确认，比较真实系统控件背景/字体，检查金额校验、滑块同步、焦点返回、边界、画布稳定及带控制版本的动作。截图位于 `dashboard-v2/src/game-center/games/poker/__tests__/.superpowers/sdd/2026-11-01-poker-system-ui/`，为本机生成产物，无在线链接。
 - 验证记录见 [实施计划](../superpowers/plans/2026-11-01-poker-system-ui.md)。本次不部署、不 push、不修改数据库或 MCP/Skill 协议；没有连接真实账号或业务库，固定数据截图不代表线上验收。
+
+## Roll 界面与状态边界（2026-11-01）
+
+- V2建房使用HeroUI Switch，按当前浏览器账号记忆，旧配置无字段默认关闭；房间列表及入座摘要标明Roll。相同未确认创建意图关闭重开保持UUID，成功后再次建房是新意图。
+- 直接Roll入口使用PokerButton；费用/档位/旧槽确认和超级三选一属于系统层，使用HeroUI默认浅色Modal/RadioGroup，保留原生焦点锁、Escape与关闭/焦点返回。Modal与日志、金额、全下和管理共用父面板互斥；不改变850px底部操作条、390px窄屏与三场景contain画布。保留邻近下注底部预设/锚点自定义、结算宽度768。
+- 只有owner与真人控制可新换牌/选择；AI控制先接管，候选保留。超级待选可关闭重开，不代表撤销；正常下注持续禁用。未提交槽位/候选在手/street/actionSeq/control/perspective变化后清理；未知写入保留原账号/房间的UUID与完整参数，先重读再确认原回执，不静默改价。迟到回调不得改写新上下文。public本地投影只保留Roll规则版本及公开pendingSeatNo，移除候选/报价。
+- Roll日志start显示支出，choose仅显示完成；choose保留fee作审计不能重复收费或补偿。完整结算与历史展示Roll paid/received及总净变化，普通投入按pokerDelta计算；Hall展示pending并按0兼容旧响应。候选与旧牌记录只展示服务端授权本人的privateRolls。
+- 本轮完成Node/jsdom行为测试、typecheck及UI边界检查；按用户范围未启动浏览器、应用或Playwright，实际展开的宽窄屏尺寸、截图、键盘与焦点视觉验收尚未执行，旧系统UI验收不能替代本次。

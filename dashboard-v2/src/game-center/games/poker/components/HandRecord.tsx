@@ -10,6 +10,7 @@ import { gameApi } from "../../../lib/api"
 import { Card } from "./Card"
 import { PersonaBadge } from "./PersonaBadge"
 import "../../../styles/responsive-lists.css"
+import { rollAmounts, rollEventLabel } from "../lib/roll-view"
 import { recordStreets } from "../lib/record-streets"
 import { actionLabel, amount } from "../lib/view"
 export function HandRecord() {
@@ -130,12 +131,13 @@ export function HandRecord() {
                     {s.displayName}{s.participantKind === "bot" && " · 机器人"}
                     {s.endingStack !== null && (
                       <span className="ml-2 text-muted tabular-nums">
-                        {s.endingStack > s.startingStack ? "赢 " : "净盈亏 "}
+                        总净变化{" "}
                         {s.endingStack > s.startingStack ? "+" : ""}
                         {amount(s.endingStack - s.startingStack)}
                       </span>
                     )}
                   </p>
+                  {detail.data!.rules?.ruleOptions?.roll && <p className="text-xs text-muted">Roll 支出 {amount(rollAmounts(detail.data!.rollHistory,s.seatNo).paid)} · 补偿 {amount(rollAmounts(detail.data!.rollHistory,s.seatNo).received)}</p>}
                   <div className="flex gap-1" data-card-size="xs">
                     {s.hole?.map((card, i) => (
                       <Card key={i} card={card} />
@@ -144,6 +146,8 @@ export function HandRecord() {
                 </div>
               ))}
             </div>
+            {!!detail.data.rollHistory?.length && <section className="space-y-3"><h4 className="text-sm font-medium">Roll 记录</h4><ol className="space-y-2 text-sm">{detail.data.rollHistory.map((event,index)=><li key={index}>{rollEventLabel(event)}</li>)}</ol></section>}
+            {!!detail.data.privateRolls?.length && <section className="space-y-3"><h4 className="text-sm font-medium">本人的换牌</h4>{detail.data.privateRolls.map(record=><div key={record.rollId} className="space-y-2 text-sm"><p>第 {record.count} 次 · 替换第 {record.cardIndex+1} 张 · 支出 {amount(record.fee)}</p><div className="flex flex-wrap gap-3" data-card-size="xs"><span><Card card={record.oldCard}/><span className="text-xs text-muted">原牌</span></span>{record.candidates.map((card,index)=><span key={index}><Card card={card}/><span className="text-xs text-muted">{index===record.selectedIndex?"已选":"候选"}</span></span>)}</div></div>)}</section>}
             {streets.map((street) => (
               <section key={street.street} className="space-y-3">
                 <h4 className="text-sm font-medium">{street.label}</h4>

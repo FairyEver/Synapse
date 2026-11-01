@@ -16,6 +16,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     [createOpen, setCreateOpen] = useState(false),
     [connect, setConnect] = useState<string | null>(null),
     [closing, setClosing] = useState<string | null>(null)
+  const dialogGeneration = useRef(0)
   const creation = useRef<{ key: string; id: string } | null>(null)
   const { state: account } = useAccount(),
     userId = account.status === "authenticated" ? account.profile.user.id : null
@@ -23,11 +24,12 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
   const { draft, changeDraft, loadDraft, createParams } = usePokerRoomDraft(userId, nickname)
   useEffect(() => {
     creation.current = null
+    dialogGeneration.current++
     setCreateOpen(false)
     setConnect(null)
   }, [userId])
   const openCreate = async () => {
-    creation.current = null
+    dialogGeneration.current++
     if (await loadDraft()) setCreateOpen(true)
   }
   const lobby = useGameQuery(
@@ -38,6 +40,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
+    const generation = dialogGeneration.current
     const params = createParams(),
       key = JSON.stringify(params)
     const result = await mutation.run(async () => {
@@ -47,8 +50,11 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
       return { room, intent }
     })
     if (result && creation.current === result.intent) {
-      setCreateOpen(false)
-      onRoom(result.room.roomCode)
+      creation.current = null
+      if (dialogGeneration.current === generation) {
+        setCreateOpen(false)
+        onRoom(result.room.roomCode)
+      }
     }
   }
   const closeRoom = async () => {
@@ -97,7 +103,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
       <CreateRoomDialog
         open={createOpen}
         onOpenChange={(open) => {
-          if (!open) creation.current = null
+          dialogGeneration.current++
           setCreateOpen(open)
         }}
         value={draft}

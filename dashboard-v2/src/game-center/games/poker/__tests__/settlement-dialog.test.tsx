@@ -89,3 +89,12 @@ it("结算接管失败显示错误，仍不代准备", async () => {
   expect(api.ready).not.toHaveBeenCalled()
   await act(async () => screen.root.unmount())
 })
+
+it("Roll支出与补偿分列，总净变化不替代普通下注投入",async()=>{
+  const settlement={...table.settlement!,rules:{...table.settlement!.rules,ruleOptions:{roll:true}},seats:table.settlement!.seats.map((seat,index)=>index?seat:{...seat,delta:12,payout:40,endingStack:112,rollPaid:8,rollReceived:10,pokerDelta:10})}
+  const screen=await render({...table,settlement})
+  const money=document.querySelector('[data-player-seat="0"] .poker-result-money')!
+  const fields=Object.fromEntries([...money.children].map(node=>[node.querySelector('dt')!.textContent,node.querySelector('dd')!.textContent]))
+  expect(fields).toMatchObject({投入:"30",收回:"40","Roll 支出":"8","Roll 补偿":"10",总净变化:"+12"})
+  await act(async()=>screen.root.unmount())
+})

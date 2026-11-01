@@ -4,6 +4,7 @@ import { Tabs } from "@heroui/react"
 import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
 import { Settlement } from "./Settlement"
 import { PersonaBadge } from "./PersonaBadge"
+import { rollEventLabel } from "../lib/roll-view"
 import { actionLabel, amount, streetLabel } from "../lib/view"
 export function SidePanel({
   table,
@@ -38,6 +39,7 @@ export function SidePanel({
           <ListOrdered className="size-4" aria-hidden="true" />
           日志
         </h3>
+        {events.some(event=>event.roll) && <ol className="space-y-2 text-sm" aria-label="换牌日志">{events.filter(event=>event.roll).map(event=><li key={`${event.handId}:${event.seq}`}>{rollEventLabel(event.roll!)}</li>)}</ol>}
         {table.recentActions.length === 0 ? (
           <p className="text-sm text-muted">暂无行动</p>
         ) : (

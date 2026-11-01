@@ -23,7 +23,7 @@ export function RoomList({ rooms, myRoomCodes, userId, onRoom, onConnect, onClos
         return <Table.Row key={room.roomCode} id={room.roomCode}>
           <Table.Cell><div className="flex items-center gap-3"><span className="flex gap-1" data-card-size="xs" aria-hidden="true"><Card faceUp={false} /><Card faceUp={false} /></span><div>
             <Button variant="ghost" size="sm" onPress={() => onRoom(room.roomCode)}>{room.name || `房间 #${room.roomCode}`}</Button>
-            <p className="text-xs text-muted">#{room.roomCode} · {room.rules?.variant === "short32" ? "短牌 32 张" : "标准 52 张"}</p>
+            <p className="text-xs text-muted">#{room.roomCode} · {room.rules?.variant === "short32" ? "短牌 32 张" : "标准 52 张"}{room.rules?.ruleOptions?.roll && " · Roll"}</p>
           </div></div></Table.Cell>
           <Table.Cell><Chip size="sm">{room.mode === "practice" ? "陪练房" : "点数房"}</Chip></Table.Cell>
           <Table.Cell><Chip size="sm" color={room.status === "running" ? "success" : "default"}>{statusLabels[room.status] ?? room.status}</Chip><p className="mt-1 text-xs text-muted">{pending ? "等待你的 AI 接入" : ai ? "你的 AI 已接管" : mine ? "已在桌" : room.players >= room.maxSeats ? "满员 · 可观看" : "可加入"}</p></Table.Cell>
