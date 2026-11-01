@@ -689,7 +689,7 @@ function DriveMarkdownBody({
         label: `留言 ${messages.messages.length}`,
         icon: MessageSquarePlus,
         compactPlacement: 'primary',
-        variant: 'ghost',
+        variant: 'tertiary',
         onClick: () => {
           const section = messagesSectionRef.current
           if (!section) return

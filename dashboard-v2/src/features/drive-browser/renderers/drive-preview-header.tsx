@@ -561,8 +561,8 @@ function DrivePreviewToolbarItems({
         key={groupItems[0].id}
         aria-label={label}
         size='sm'
-        variant='ghost'
-        className='shrink-0 rounded-full bg-default'
+        variant='tertiary'
+        className='shrink-0'
       >
         {controls}
       </ButtonGroup>

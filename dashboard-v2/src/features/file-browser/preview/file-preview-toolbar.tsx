@@ -17,7 +17,7 @@ export type FilePreviewToolbarItem = FilePreviewToolbarItemBase &
     | {
         readonly kind: 'button'
         readonly icon?: LucideIcon
-        readonly variant?: 'primary' | 'outline' | 'secondary' | 'ghost'
+        readonly variant?: 'primary' | 'outline' | 'secondary' | 'tertiary' | 'ghost'
         readonly ariaKeyShortcuts?: string
         readonly disabled?: boolean
         readonly loading?: boolean
@@ -114,6 +114,22 @@ export function FilePreviewToolbarItemView({
     )
   }
   if (item.kind === 'toggle') {
+    if (item.group) {
+      return (
+        <Button
+          type='button'
+          variant={item.pressed ? 'secondary' : 'tertiary'}
+          size='sm'
+          isDisabled={item.disabled}
+          aria-pressed={item.pressed}
+          className={buttonClassName}
+          onPress={() => item.onPressedChange(!item.pressed)}
+        >
+          {showIcons && item.icon ? <item.icon data-icon='inline-start' /> : null}
+          {item.label}
+        </Button>
+      )
+    }
     return (
       <ToggleButton
         variant='ghost'
