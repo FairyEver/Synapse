@@ -53,7 +53,7 @@
 | `pnpm --filter @synapse/server test` | 191文件、2268项通过；24文件/137项按原有配置跳过 |
 | Dashboard V2单测 | 143文件、1148项通过；实际运行了完整单测集 |
 | `pnpm --filter @synapse/server exec tsc -p tsconfig.build.json --noEmit` | 生产源码类型检查通过 |
-| 服务端全源码类型检查 | 仍被既有 `src/notifications/notification.service.spec.ts:274 TS2493` 阻塞；修复前已存在，本次未修改此文件，不能报告全源码类型检查通过 |
+| 服务端全源码类型检查 | 云表复验当时被既有 `src/notifications/notification.service.spec.ts:274 TS2493` 阻塞；后续已专项修复并复验，见文末 |
 | `git diff --check` | 通过 |
 
 固定负载：两个正常账号各2万条记录、40次查询；同一热点表64次100条批量请求混合匿名和多个密钥。正常账号成功率100%，基线P95 **25.97ms**，过载时P95 **30.01ms**（约1.16倍），核心连接池探针P95 **0.59ms**；热点34次成功、30次受控503。该结果仅代表本机固定负载，不能推断所有生产数据规模。
@@ -78,3 +78,10 @@
 - 回滚镜像：`synapse-server:rollback-20261101_180756`、`synapse-pdf-renderer:rollback-20261101_180756`；切换前备份 `/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_180756.sql`，PDF回滚状态 `/www/wwwroot/synapse/backups/pdf-renderer-rollback-20261101_180756.state`。本次无数据库结构修改，应用回滚会重新引入上述两个已修复问题。
 - 原始证据增加 `deploy.log`、`candidate-runtime.log`、`production-runtime.log`、`production-routes.json`、`production-smoke-final.json`；本地证据目录同上，尚无在线报告链接。
 - 交付检查时出现其他任务未提交改动（研究文档及 `server/test/poker-roll-research/`），本次未修改或提交。部署继续按原有白名单并明确排除此测试研究目录，未将这些改动混入部署内容。
+
+## 通知模块类型检查补验（2026-11-01 18:22）
+
+- 用户要求修复上述阻塞后，先重跑 `pnpm --filter @synapse/server typecheck`，再次复现 `TS2493`。原因是测试的 `findMany` mock声明为零参数函数，导致调用参数被推断为空元组，现有断言读取 `call[0]` 时出错。
+- 仅为该mock补充 `Prisma.UserNotificationFindManyArgs` 参数类型，保留原有断言及通知业务行为；无需部署或更新产品发布说明。
+- 修复后 `pnpm --filter @synapse/server typecheck` 完整通过（包含共享包构建，以及服务端生产源码和单元测试源码的类型检查）。通知服务专项 `pnpm --filter @synapse/server exec vitest run src/notifications/notification.service.spec.ts` 28/28通过；`git diff --check` 通过。
+- 原始证据：上述本地目录中的 `notification-typecheck-before.log`、`notification-typecheck-after.log`、`notification-tests.log`。

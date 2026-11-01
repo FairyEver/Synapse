@@ -18,7 +18,7 @@ const record: StoredNotification = {
 function harness() {
   const prisma = { userNotification: {
     create: vi.fn(async (): Promise<StoredNotification> => record), upsert: vi.fn(async (): Promise<StoredNotification> => record), findUnique: vi.fn(async () => record),
-    findMany: vi.fn(async () => [record]), findFirst: vi.fn(async (): Promise<StoredNotification | null> => record),
+    findMany: vi.fn(async (_input: Prisma.UserNotificationFindManyArgs) => [record]), findFirst: vi.fn(async (): Promise<StoredNotification | null> => record),
     count: vi.fn(async () => 1), updateMany: vi.fn(async () => ({ count: 1 })),
     deleteMany: vi.fn(async (_input: unknown) => ({ count: 1 })),
   }, mailMessage: { findMany: vi.fn(async (): Promise<{ id: string; subject: string }[]> => []) },
