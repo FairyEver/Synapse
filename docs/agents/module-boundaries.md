@@ -3,6 +3,7 @@
 ## 云端数据表
 
 - 服务端逻辑表/JSONB域，区别于桌面Database/Data Store。Console、开放REST API及独立HTTP Skill共享业务规则，无桌面入口或MCP。
+- 文档站的`vite.publicDir`复用Dashboard图标目录；独立Skill原始文件由`buildEnd`复制到产物`skills/`，并从页面编译中排除`public/**`。发布验收须实际GET原始`SKILL.md`及其参考文件，不能只验证API说明页。
 - `/api/open/v1/tables`只接受个人API密钥或匿名，忽略Cookie和普通登录Token；无效密钥不降级。仅该开放路由支持无凭据CORS，旧开放接口不变。官方Console单独使用登录态。分享页登录接入暂缓；不宣称修复既有同源用户HTML与Console的通用隔离风险，分享内容仍按可信团队程序使用。
 - scope、密钥表范围、表ACL和记录归属共同约束操作。selected默认无资源；只有all_owned加tables.manage可API建表，受限key不能自行扩权。协作者用本人身份，禁止向网页注入表主key。
 - 独立连接池、有界队列覆盖认证/数据/管理/维护，按表owner分配公平预算。不能通过多个key、匿名或协作者绕过。v1单服务实例，多副本前需全局协调。无账号容量/表数/行数/总字节配额或低固定RPM。

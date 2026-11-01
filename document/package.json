@@ -6,7 +6,7 @@
   "description": "Synapse 文档站（VitePress）",
   "scripts": {
     "dev": "vitepress dev",
-    "build": "vitepress build",
+    "build": "vitepress build && node --test .vitepress/skill-distribution.test.mjs",
     "preview": "vitepress preview"
   },
   "devDependencies": {
