@@ -4,14 +4,16 @@ import { Bot, Clock3, MoreHorizontal, UserRound } from "lucide-react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { PokerButton } from "./PokerButton"
 import { PokerControlPopover } from "./PokerControlPopover"
+import { BetDecisionContext } from "./BetDecisionContext"
 import { useHumanControls, type PokerIntent } from "../hooks/useHumanControls"
 import { actionState, betPresets } from "../lib/action-view"
 import { amount, remaining } from "../lib/view"
 
 export type PokerControlPanel = "bet" | "menu"
-export function HumanControls({ table, perspective, onRefresh, identityKey, compact = false, activePanel, onPanelChange, menuTrigger, menuId, popoverContainer, menuContent }: {
+export function HumanControls({ table, perspective, onPerspective, onRefresh, identityKey, compact = false, activePanel, onPanelChange, menuTrigger, menuId, popoverContainer, menuContent }: {
   table: PokerTableView
   perspective: "owner" | "public"
+  onPerspective?: (value: "owner" | "public") => void
   onRefresh: () => void | Promise<void>
   identityKey?: string
   compact?: boolean
@@ -31,6 +33,7 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
   if (panelEpoch.current.panel !== panel) panelEpoch.current = { panel, generation: panelEpoch.current.generation + 1 }
   const setPanel = useCallback((next: PokerControlPanel | null) => { if (onPanelChange) onPanelChange(next); else setLocalPanel(next) }, [onPanelChange])
   const controlsRef = useRef<HTMLDivElement>(null), betTrigger = useRef<HTMLButtonElement>(null), localMenuTrigger = useRef<HTMLButtonElement>(null)
+  const betAnchor = useRef<HTMLSpanElement>(null)
   const managementTrigger = menuTrigger ?? localMenuTrigger
   const confirmAllIn = allInAction !== null
   const betId = useId()
@@ -52,7 +55,10 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
   const canBet = legal.includes("bet") || legal.includes("raise")
   const raise = legal.includes("raise")
   const contribution = Math.max(0, Math.min(mine?.stack ?? 0, numeric - (mine?.streetBet ?? 0)))
-  const state = busy ? "正在提交…" : perspective === "public" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" ? "旁观视角 · 切回玩家视角出牌" : actionState(table, acting, handoff)
+  const pendingState = mine?.leavePending ? "本手后离桌" : table.pauseReason === "user" && mine?.status !== "sitting_out" ? "本手后暂离" : null
+  const baseState = perspective === "public" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" ? "旁观视角 · 切回玩家视角出牌" : actionState(table, acting, handoff)
+  const controlState = handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState
+  const state = busy ? "正在提交…" : pendingState && table.status === "running" ? `${controlState} · ${pendingState}` : controlState
   const presets = betPresets(table)
   const amountError = !to.trim() ? "请输入金额" : !Number.isSafeInteger(numeric) ? "请输入整数金额" : numeric < (table.minRaiseTo ?? Infinity) ? `至少${raise ? "加注" : "下注"}到 ${amount(table.minRaiseTo ?? 0)}` : numeric > (table.maxRaiseTo ?? -1) ? `最多${raise ? "加注" : "下注"}到 ${amount(table.maxRaiseTo ?? 0)}` : null
   const manage = async (work: () => Promise<boolean>) => {
@@ -75,6 +81,7 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
     </AlertDialog.Dialog></AlertDialog.Container>
   </AlertDialog.Backdrop>
   const betEditor = <div className="space-y-4 font-sans text-foreground scheme-light">
+    <BetDecisionContext table={table} />
     <TextField isDisabled={disabled || confirmAllIn} isInvalid={!validAmount}>
       <Label htmlFor={betId}>{raise ? "加注到" : "下注到"}</Label>
       <Input variant="secondary" id={betId} type="number" inputMode="numeric" min={table.minRaiseTo} max={table.maxRaiseTo} step={1} value={to} onChange={e => setTo(e.target.value)} />
@@ -99,10 +106,18 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
       </>}
     </div>
   const closeBet = (open: boolean) => { if (!open) { setAllInAction(null); setPanel(null) } }
+  const recovery = mine && table.status !== "closed" && !acting ? <div className="flex flex-wrap gap-2 font-sans text-foreground scheme-light" aria-label="恢复牌桌操作">
+    {controller !== "human" && <Button isDisabled={disabled || version == null} onPress={() => void control("takeover")}>本人接管</Button>}
+    {controller === "human" && mine.status === "sitting_out" && <Button isDisabled={disabled || version == null} onPress={() => void sit()}>回到牌桌</Button>}
+    {controller === "human" && perspective === "public" && onPerspective && <Button isDisabled={disabled} onPress={() => onPerspective("owner")}>切回玩家视角</Button>}
+    {handoff && <><Button variant="secondary" isDisabled={busy} onPress={() => void copy()}>复制 AI 接入指令</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
+  </div> : null
   return <div ref={controlsRef} className="poker-human-controls" data-acting={acting} data-compact-controls={compact} aria-label="本人牌桌操作" onKeyDown={event => { if (event.key === "Escape" && confirmAllIn) { event.stopPropagation(); cancelConfirmation() } }}>
-    <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status">{state}</span>{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
+    <span ref={betAnchor} className="poker-bet-popover-anchor" aria-hidden="true" />
+    <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status">{state}</span>{acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={() => void copy()}>复制接入指令</Button>}{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
     {(error || uncertain) && <div className="space-y-3 rounded-xl bg-surface p-4 font-sans text-foreground scheme-light"><p role="alert" className="text-sm text-danger">{error}{uncertain && "，请重试确认结果"}</p>{uncertain && <Button isDisabled={busy} onPress={retry}>重试出牌</Button>}</div>}
     {!mine && table.status !== "closed" && <div className="poker-join-controls font-sans text-foreground scheme-light">{sessionControls}</div>}
+    {recovery}
     {acting && <div className="poker-action-dock">
       <div className="poker-action-buttons">
         {legal.includes("fold") && <PokerButton className="poker-fold-action" disabled={disabled || confirmAllIn} onClick={() => act("fold")}>弃牌</PokerButton>}
@@ -113,7 +128,7 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
       </div>
 
     </div>}
-    {<PokerControlPopover open={acting && panel === "bet" && canBet} onOpenChange={closeBet} trigger={betTrigger} container={popoverContainer ?? controlsRef.current} title={raise ? "加注" : "下注"} id={`${betId}-panel`} restoreFocus={panel === null && !confirmAllIn}>
+    {<PokerControlPopover open={acting && panel === "bet" && canBet} onOpenChange={closeBet} trigger={betTrigger} anchor={!compact && popoverContainer ? betAnchor : undefined} container={popoverContainer ?? controlsRef.current} title={raise ? "加注" : "下注"} id={`${betId}-panel`} restoreFocus={panel === null && !confirmAllIn}>
       {betEditor}
     </PokerControlPopover>}
     {!menuTrigger && mine && table.status !== "closed" && <div className="poker-local-menu font-sans text-foreground scheme-light"><Button ref={localMenuTrigger} variant="tertiary" aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" />座位管理</Button></div>}

@@ -105,7 +105,7 @@ describe("统一底部操作与按需侧栏", () => {
   it("按内容宽度切换，日志、金额和更多互斥且不改变画布尺寸", async () => {
     const host=document.createElement("div"),root=createRoot(host)
     document.body.append(host)
-    await act(async()=>root.render(<Table table={table} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} extras={<span>陪练设置</span>} />))
+    await act(async()=>root.render(<Table table={table} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} members={<span>陪练设置</span>} />))
     const surface=host.querySelector(".poker-table")!,viewport=host.querySelector(".poker-canvas-viewport")!
     const resize=async(width:number)=>act(async()=>{
       for(const observer of [...observers]) if(observer.elements.has(surface)) observer.callback([
@@ -122,7 +122,7 @@ describe("统一底部操作与按需侧栏", () => {
     await click(host,"更多牌桌操作")
     expect(button(host,"日志").getAttribute("aria-expanded")).toBe("false")
     expect(button(host,"交给 AI")).toBeDefined()
-    await act(async()=>root.render(<Table table={{...table,actionSeq:4}} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} extras={<span>陪练设置</span>} />))
+    await act(async()=>root.render(<Table table={{...table,actionSeq:4}} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} members={<span>陪练设置</span>} />))
     expect(button(host,"交给 AI")).toBeDefined()
     await act(async()=>{ const target=button(host,"加注"); target.dispatchEvent(new MouseEvent("pointerdown",{button:0,bubbles:true})); target.focus(); target.click() })
     await act(async()=>new Promise(resolve=>setTimeout(resolve,10)))
@@ -136,7 +136,7 @@ describe("统一底部操作与按需侧栏", () => {
     await click(host,"加注")
     expect(host.querySelector('input[type="number"]')).not.toBeNull()
     await click(host,"日志")
-    await click(host,"陪练")
+    await click(host,"成员管理")
     expect(host.textContent).toContain("陪练设置")
     await act(async()=>root.unmount())
   })

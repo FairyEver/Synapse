@@ -22,6 +22,7 @@
 .poker-join-controls > div { flex-direction: row; flex-wrap: wrap; gap: 0.5rem; }
 .poker-join-controls .button { width: auto; flex: 1; }
 .poker-system-popover { width: min(22rem, calc(100vw - 1rem)); max-height: var(--available-height); overflow-y: auto; }
+.poker-bet-popover-anchor { position: absolute; right: 0.75rem; top: 0; width: 1px; height: 1px; pointer-events: none; }
 .poker-human-controls > .space-y-3 { position: absolute; bottom: calc(100% + 0.5rem); left: 0.75rem; right: 0.75rem; max-height: 12rem; overflow-y: auto; }
 .poker-local-menu { position: absolute; right: 0.75rem; top: 0.5rem; }
 .poker-immersive[data-control-layout] .poker-results-anchor { inset: 0.5rem 0.5rem auto; }

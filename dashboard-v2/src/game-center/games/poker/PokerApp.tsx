@@ -13,7 +13,9 @@ import { HandRecord } from "./components/HandRecord"
 import { AgentProfiles } from "./components/AgentProfiles"
 import { usePokerRoom } from "./hooks/usePokerRoom"
 import { usePokerEvents } from "./hooks/usePokerEvents"
-import { PracticeBots, PracticeBotAddButton } from "./components/PracticeBots"
+import { PracticeBots } from "./components/PracticeBots"
+import { PracticePreparation } from "./components/PracticePreparation"
+import { currentRoomSeats } from "./hooks/usePracticePreparation"
 import { usePracticeBots } from "./hooks/usePracticeBots"
 const tabs = [
   { id: "rooms", label: "房间" },
@@ -27,6 +29,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
     mutation = useGameMutation()
   const events = usePokerEvents(code, room.perspective, !!room.table, identityKey)
   const bots = usePracticeBots(room.table, room.refresh)
+  const preparing = room.table && bots.canManage && room.table.handNo === 0 && !room.table.handId && room.table.mySeatNo === null && !room.table.handoffPending && currentRoomSeats(room.table).every(seat => seat.participantKind === "bot")
   const nudge = (seatNo: number) => {
     void mutation.run(() => gameApi().poker.seat.nudge({ roomCode: code, seatNo }))
   }
@@ -34,7 +37,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
     <div className="flex h-full min-h-0 flex-col">
       <GameQueryFeedback query={room} />
       <div className="min-h-0 flex-1">
-        {room.table ? (
+        {room.table && preparing ? <PracticePreparation key={`${identityKey}:${code}`} table={room.table} onRefresh={room.refresh} onBack={onBack} /> : room.table ? (
           <Table
             identityKey={identityKey}
             table={room.table}
@@ -44,8 +47,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
             onRefresh={room.refresh}
             events={events.events}
             animate={events.animate}
-            actions={onComplete => <PracticeBotAddButton controls={bots} onAdded={onComplete} />}
-            extras={bots.canManage ? <PracticeBots controls={bots} /> : null}
+            members={<PracticeBots controls={bots} table={room.table} />}
             onBack={onBack}
           />
         ) : room.error ? (

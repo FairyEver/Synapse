@@ -69,7 +69,7 @@ describe.each([
         <Button variant="secondary">标准控件</Button><Input variant="secondary" aria-label="标准输入" />
       </div>
       <div data-testid="poker-fixture" className={`${width} h-[800px]`}>
-        <Table table={table} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} extras={<PracticeBots controls={botControls} />} />
+        <Table table={table} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} members={<PracticeBots controls={botControls} />} />
       </div>
     </>)
     try {
@@ -87,15 +87,15 @@ describe.each([
       expect(getComputedStyle(drawer).backgroundColor).toBe(referenceStyle.backgroundColor)
       expect(getComputedStyle(drawer).fontFamily).toBe(referenceStyle.fontFamily)
       expect(drawer.scrollWidth).toBeLessThanOrEqual(drawer.clientWidth)
-      await expect.element(page.getByText("陪练机器人很长的名字", { exact: true })).not.toBeVisible()
+      expect(drawer.textContent).not.toContain("陪练机器人很长的名字")
       inside(drawer, surface)
       if (mode === "compact") expect(drawer.getBoundingClientRect().bottom).toBeLessThanOrEqual(document.querySelector(".poker-controls-anchor")!.getBoundingClientRect().top + 1)
       await page.getByTestId("poker-fixture").screenshot({ path: `.superpowers/sdd/2026-11-01-poker-system-ui/${mode}-log.png` })
       await page.getByRole("tab", { name: "AI 判断", exact: true }).click()
       await expect.element(page.getByText("自己的判断", { exact: true })).toBeVisible()
-      await page.getByRole("tab", { name: "陪练", exact: true }).click()
+      await button("成员管理").click()
       await expect.element(button("移除 陪练机器人很长的名字")).toBeVisible()
-      await button("关闭日志").click()
+      await button("关闭成员管理").click()
       const transform = canvas.style.transform
 
       await button("更多牌桌操作").click()

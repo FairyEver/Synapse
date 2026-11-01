@@ -1,5 +1,5 @@
 import { ListOrdered, LockKeyhole } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useState } from "react"
 import { Tabs } from "@heroui/react"
 import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
 import { Settlement } from "./Settlement"
@@ -10,10 +10,8 @@ export function SidePanel({
   perspective,
   id,
   events = [],
-  extras,
 }: {
   events?: PokerTableEvent[]
-  extras?: ReactNode
   id?: string
   table: PokerTableView
   perspective: "owner" | "public"
@@ -25,14 +23,13 @@ export function SidePanel({
   const recentResults = [...settlements.values()].sort((a, b) => b.handNo - a.handNo).slice(0, 2)
   const [selectedTab, setSelectedTab] = useState("log")
   const canSeeAi = perspective === "owner" && table.mySeatNo !== null
-  const tab = (selectedTab === "ai" && !canSeeAi) || (selectedTab === "practice" && !extras) ? "log" : selectedTab
+  const tab = selectedTab === "ai" && !canSeeAi ? "log" : selectedTab
   return (
     <aside id={id} className="h-full overflow-y-auto overscroll-contain p-4 pt-12 font-sans text-foreground scheme-light" aria-label="日志和AI判断">
       <Tabs selectedKey={tab} onSelectionChange={key => setSelectedTab(String(key))} variant="secondary" className="w-full">
         <Tabs.ListContainer><Tabs.List aria-label="牌局信息">
           <Tabs.Tab id="log">日志<Tabs.Indicator /></Tabs.Tab>
           {perspective === "owner" && table.mySeatNo !== null && <Tabs.Tab id="ai">AI 判断<Tabs.Indicator /></Tabs.Tab>}
-          {extras && <Tabs.Tab id="practice">陪练<Tabs.Indicator /></Tabs.Tab>}
         </Tabs.List></Tabs.ListContainer>
         <Tabs.Panel id="log">
       {recentResults.map(result => <Settlement key={result.handId} settlement={result} compact />)}
@@ -89,7 +86,6 @@ export function SidePanel({
           )}
         </section></Tabs.Panel>
       )}
-      {extras && <Tabs.Panel id="practice" shouldForceMount className={tab === "practice" ? undefined : "hidden"}>{extras}</Tabs.Panel>}
       </Tabs>
     </aside>
   )

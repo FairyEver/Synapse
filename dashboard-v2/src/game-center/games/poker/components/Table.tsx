@@ -1,11 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import { ArrowLeft, Bell, Eye, ListOrdered, MoreHorizontal, UserRound, Volume2, VolumeX, X } from "lucide-react"
+import { ArrowLeft, Bell, Eye, ListOrdered, MoreHorizontal, UserRound, UsersRound, Volume2, VolumeX, X } from "lucide-react"
 import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
 import { Button } from "@heroui/react"
 import { Card } from "./Card"
 import { Seat, EmptySeat } from "./Seat"
 import { SidePanel } from "./SidePanel"
 import { HumanControls, type PokerControlPanel } from "./HumanControls"
+import { PokerMembersPanel } from "./PokerMembersPanel"
 import { ChipMotion } from "./ChipMotion"
 import { Settlement } from "./Settlement"
 import { SettlementPanel } from "./SettlementPanel"
@@ -19,7 +20,7 @@ import "../styles/table-tokens.css"
 import "../styles/responsive-controls.css"
 import "../styles/adaptive-table.css"
 const NO_EVENTS: PokerTableEvent[] = []
-export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, actions, extras, identityKey }: {
+export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, members, identityKey }: {
   table: PokerTableView
   perspective: "owner" | "public"
   onPerspective: (v: "owner" | "public") => void
@@ -29,23 +30,20 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   events?: PokerTableEvent[]
   animate?: PokerTableEvent[]
   identityKey?: string
-  extras?: ReactNode
-  actions?: ReactNode | ((onComplete: () => void) => ReactNode)
+  members?: ReactNode
 }) {
-  const [panel, setPanel] = useState<PokerControlPanel | "log" | null>(null), [fit, setFit] = useState(fitTableScene(1440,900))
-  const panelEpoch = useRef({ panel, generation: 0 })
-  if (panelEpoch.current.panel !== panel) panelEpoch.current = { panel, generation: panelEpoch.current.generation + 1 }
-  const menuGeneration = panelEpoch.current.generation
-  const completeMenu = () => { if (panelEpoch.current.generation === menuGeneration && panelEpoch.current.panel === "menu") setPanel(null) }
+  const [panel, setPanel] = useState<PokerControlPanel | "log" | "members" | null>(null), [fit, setFit] = useState(fitTableScene(1440,900))
   const [compact, setCompact] = useState(false)
   const panelOpen = panel === "log"
   const surface = useRef<HTMLElement>(null), viewport = useRef<HTMLDivElement>(null), menuTrigger = useRef<HTMLButtonElement>(null), logTrigger = useRef<HTMLButtonElement>(null)
+  const membersTrigger = useRef<HTMLButtonElement>(null)
   const panelId = useId(), menuId = useId()
   const [soundEnabled, setSoundEnabled] = useState(true)
   usePokerAudio(table, perspective, identityKey ?? "", soundEnabled)
   const controlVersion = table.controlVersion ?? table.seats.find(seat => seat.seatNo === table.mySeatNo)?.controlVersion
   useEffect(() => { setPanel(current => current === "bet" ? null : current) }, [table.handId, table.actionSeq, controlVersion, perspective, table.actionOnSeat, table.status])
   useEffect(() => { setPanel(null) }, [compact])
+  useEffect(() => { if (table.status === "closed") setPanel(null) }, [table.status])
   const view = projectTable(table, perspective)
   const motion = useTableMotion(table, `${identityKey}:${perspective}:${table.controlVersion}:${fit.scene.mode}:${fit.scale}`)
   const dealt = useDealAnimation(table.handId, table.seats.length + table.board.length, 0, table)
@@ -85,6 +83,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           <Button type="button" variant="tertiary" isIconOnly={compact} aria-label="返回房间" onPress={onBack}><ArrowLeft aria-hidden="true" />{!compact && "返回房间"}</Button>
           <span className="poker-room-summary text-sm"><strong>#{table.roomCode}</strong><span className="text-muted">第 {table.handNo} 手{table.mode === "practice" && " · 陪练"}</span></span>
           <div className="poker-perspective flex items-center gap-2">
+            {members && view.status !== "closed" && <Button ref={membersTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label="成员管理" aria-expanded={panel === "members"} onPress={() => setPanel(panel === "members" ? null : "members")}><UsersRound aria-hidden="true" />{!compact && "成员"}</Button>}
             <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} />
             <Button ref={logTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label={panelOpen ? "收起日志" : "日志"} aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{!compact && (panelOpen ? "收起日志" : "日志")}</Button>
             {view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
@@ -112,11 +111,11 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
         <div className="poker-information-slot">
           <div className="poker-information-drawer bg-surface font-sans text-foreground scheme-light" hidden={!panelOpen} inert={!panelOpen}>
             <Button type="button" isIconOnly size="sm" variant="tertiary" className="poker-close-log" aria-label="关闭日志" onPress={() => { setPanel(null); logTrigger.current?.focus() }}><X aria-hidden="true" /></Button>
-            <SidePanel id={panelId} table={view} perspective={perspective} events={events} extras={extras} />
+            <SidePanel id={panelId} table={view} perspective={perspective} events={events} />
           </div>
         </div>
-        <div className="poker-controls-anchor"><HumanControls identityKey={identityKey} table={view} perspective={perspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
-            {typeof actions === "function" ? actions(completeMenu) : actions}
+        <PokerMembersPanel open={panel === "members"} onOpenChange={open => setPanel(open ? "members" : null)} compact={compact} trigger={membersTrigger} container={surface.current}>{members}</PokerMembersPanel>
+        <div className="poker-controls-anchor"><HumanControls identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" || panel === "members" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
             <Button fullWidth type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
             {canNudge && <Button fullWidth variant="tertiary" isDisabled={(view.deadlineMs ?? 600000) > 540000} onPress={() => { onNudge(active.seatNo); setPanel(null) }}><Bell aria-hidden="true" />提醒玩家</Button>}
             {table.seats.some(s => s.isMe) && <Button fullWidth variant="tertiary" aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onPress={() => { onPerspective(perspective === "owner" ? "public" : "owner"); setPanel(null) }}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "旁观视角" : "玩家视角"}</Button>}

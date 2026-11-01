@@ -16,6 +16,41 @@ async function render(value = table) { const host = document.createElement("div"
 function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label") === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
 async function openManagement(host: HTMLElement) { await act(async () => button(host, "更多牌桌操作").click()) }
 describe("真人牌桌操作", () => {
+ it("已暂离可以直接回座，旁观时直接切回玩家，AI 控制时直接接管", async () => {
+  api.sit.mockResolvedValue({}); api.control.mockResolvedValue({})
+  const {host,root}=await render({...table,status:"paused",actionOnSeat:null,seats:[{...table.seats[0],status:"sitting_out"}]})
+  await act(async()=>button(host,"回到牌桌").click())
+  expect(api.sit).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,sittingOut:false,reason:"user"})
+  const perspective=vi.fn()
+  await act(async()=>root.render(<HumanControls table={table} perspective="public" onPerspective={perspective} onRefresh={vi.fn()} />))
+  await act(async()=>button(host,"切回玩家视角").click())
+  expect(perspective).toHaveBeenCalledWith("owner")
+  await act(async()=>root.render(<HumanControls table={{...table,controller:"ai"}} perspective="owner" onRefresh={vi.fn()} />))
+  await act(async()=>button(host,"本人接管").click())
+  expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"takeover"})
+  await act(async()=>root.unmount())
+ })
+ it.each(["sit","leave"])("%s 延后生效在行动状态旁持续显示", async kind => {
+  const value={...table,...(kind==="sit"?{pauseReason:"user" as const}:{seats:[{...table.seats[0],leavePending:true}]})}
+  const {host,root}=await render(value)
+  expect(host.querySelector('[role="status"]')?.textContent).toContain(kind==="sit"?"本手后暂离":"本手后离桌")
+  expect(host.querySelector('[role="status"]')?.textContent).toContain("轮到你")
+  await act(async()=>root.unmount())
+ })
+ it("金额表单保留合法手牌、公共牌和决策金额，旁观不展开旧表单", async () => {
+  const value={...table,board:["2s","3h","4d"],seats:[{...table.seats[0],hole:["As","Kh"]}]}
+  const {host,root}=await render(value)
+  await act(async()=>button(host,"加注").click())
+  const context=host.querySelector('[aria-label="下注决策信息"]')!
+  expect(context).not.toBeNull()
+  expect(context.querySelectorAll('[data-face="up"]')).toHaveLength(5)
+  expect(context.textContent).toContain("底池20")
+  expect(context.textContent).toContain("筹码100")
+  expect(context.textContent).toContain("跟注4")
+  await act(async()=>root.render(<HumanControls table={value} perspective="public" onRefresh={vi.fn()} />))
+  expect(host.querySelector('[aria-label="下注决策信息"]')).toBeNull()
+  await act(async()=>root.unmount())
+ })
  it("上手历史座位不能阻止离桌后重新申请入座，实际容量由服务端裁决", async () => {
   api.join.mockResolvedValue({seatNo:0})
   const departed={...table,mySeatNo:null,controller:null,seats:[{...table.seats[0],status:"folded"},{...table.seats[0],seatNo:1,isMe:false}]}
