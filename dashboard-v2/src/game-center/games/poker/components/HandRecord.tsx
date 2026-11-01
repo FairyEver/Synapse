@@ -1,13 +1,15 @@
 import { GameQueryFeedback } from "../../../components/GameQueryFeedback"
-import { useState } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import type { GameFunding } from "@synapse/shared/game-contracts"
 import { ModeFilter } from "./ModeFilter"
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@heroui/react"
 import { Skeleton } from "@heroui/react"
 import { useGameQuery } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 import { Card } from "./Card"
 import { PersonaBadge } from "./PersonaBadge"
+import "../../../styles/responsive-lists.css"
 import { recordStreets } from "../lib/record-streets"
 import { actionLabel, amount } from "../lib/view"
 export function HandRecord() {
@@ -17,6 +19,21 @@ export function HandRecord() {
       roomCode: string
       handNo: number
     } | null>(null)
+  const container = useRef<HTMLDivElement>(null)
+  const listScroll = useRef(0)
+  const selectedButton = useRef<HTMLButtonElement | null>(null)
+  const hadSelection = useRef(false)
+  useLayoutEffect(() => {
+    const scroller = container.current?.closest<HTMLElement>(".game-center") ?? container.current?.parentElement
+    if (scroller && window.innerWidth < 1024) {
+      if (selected) scroller.scrollTop = 0
+      else if (hadSelection.current) {
+        scroller.scrollTop = listScroll.current
+        selectedButton.current?.focus({ preventScroll: true })
+      }
+    }
+    hadSelection.current = !!selected
+  }, [selected])
   const history = useGameQuery(
     () => gameApi().poker.hand.history({ offset, limit: 50, mode }),
     `poker:history:${mode}:${offset}`,
@@ -33,8 +50,8 @@ export function HandRecord() {
     detail.data!.actions.some(a => a.seatNo === seat.seatNo && a.actionSource === "mcp"),
   )
   return (
-    <div className="grid grid-cols-1 lg:min-h-full lg:grid-cols-3">
-      <div className="space-y-3 border-b border-separator p-4 lg:border-r lg:border-b-0">
+    <div ref={container} data-detail={!!selected} className="poker-records grid grid-cols-1 lg:min-h-full lg:grid-cols-3">
+      <div className="poker-record-list space-y-3 border-b border-separator p-4 lg:border-r lg:border-b-0">
         <h2 className="font-medium">牌局记录</h2>
         <ModeFilter value={mode} label="记录类型" onChange={(value) => { setMode(value); setOffset(0); setSelected(null) }} />
         <GameQueryFeedback query={history} />
@@ -47,8 +64,14 @@ export function HandRecord() {
             <Button
               key={hand.handId}
               type="button"
-              variant="ghost" className="h-auto w-full justify-between gap-3 whitespace-normal py-3 text-left"
-              onPress={() => setSelected({ roomCode: hand.roomCode, handNo: hand.handNo })}
+              aria-pressed={selected?.roomCode === hand.roomCode && selected.handNo === hand.handNo}
+              variant={selected?.roomCode === hand.roomCode && selected.handNo === hand.handNo ? "secondary" : "ghost"} className="h-auto w-full justify-between gap-3 whitespace-normal py-3 text-left"
+              onPress={event => {
+                const scroller = container.current?.closest<HTMLElement>(".game-center") ?? container.current?.parentElement
+                listScroll.current = scroller?.scrollTop ?? 0
+                selectedButton.current = event.target as HTMLButtonElement
+                setSelected({ roomCode: hand.roomCode, handNo: hand.handNo })
+              }}
             >
               <span>
                 #{hand.roomCode} · 第 {hand.handNo} 手
@@ -81,7 +104,8 @@ export function HandRecord() {
           </Button>
         </div>
       </div>
-      <div className="space-y-6 p-6 lg:col-span-2">
+      <div className="poker-record-detail space-y-6 p-4 lg:col-span-2 lg:p-6">
+        {selected && <Button variant="tertiary" className="lg:hidden" onPress={() => setSelected(null)}><ArrowLeft aria-hidden="true" />返回记录列表</Button>}
         <GameQueryFeedback query={detail} />
         {!selected ? (
           <p className="text-sm text-muted">选择一手牌查看记录</p>

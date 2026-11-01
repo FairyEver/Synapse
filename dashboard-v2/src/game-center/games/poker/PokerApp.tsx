@@ -44,7 +44,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
             onRefresh={room.refresh}
             events={events.events}
             animate={events.animate}
-            actions={<PracticeBotAddButton controls={bots} />}
+            actions={onComplete => <PracticeBotAddButton controls={bots} onAdded={onComplete} />}
             extras={bots.canManage ? <PracticeBots controls={bots} /> : null}
             onBack={onBack}
           />

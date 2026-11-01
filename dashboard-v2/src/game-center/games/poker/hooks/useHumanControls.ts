@@ -14,6 +14,8 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
   const [to, setTo] = useState(String(table.minRaiseTo ?? 0))
   const [uncertain, setUncertain] = useState(!!restored)
   const pending = useRef(false), intent = useRef<PokerIntent | null>(restored ?? null), mounted = useRef(true)
+  const context = useRef(key)
+  context.current = key
   const mine = table.seats.find(s => s.seatNo === table.mySeatNo)
   const controller = table.controller ?? mine?.controller
   const version = table.controlVersion ?? mine?.controlVersion
@@ -32,29 +34,33 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
   }, [point, table.handId, table.minRaiseTo, seq, version, key])
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const execute = async (work: () => Promise<unknown>, after?: () => Promise<void>) => {
-    if (pending.current) return
+    if (pending.current) return false
     pending.current = true
     setBusy(true)
     setError(null)
     const submitted = intent.current
+    const submittedKey = key
+    let applied = false
     try {
       await work()
+      applied = true
       if (key && unresolved.get(key) === submitted) unresolved.delete(key)
-      if (mounted.current) {
+      if (mounted.current && context.current === submittedKey) {
         if (intent.current === submitted) intent.current = null
         setUncertain(false)
-        await onRefresh()
         await after?.()
+        await onRefresh()
       }
     } catch (cause) {
-      if (mounted.current) {
-        setError(cause instanceof Error ? cause.message : "操作失败")
-        setUncertain(!!intent.current)
+      if (mounted.current && context.current === submittedKey) {
+        setError(applied ? "操作已完成，刷新失败，请重新读取牌桌" : cause instanceof Error ? cause.message : "操作失败")
+        setUncertain(!applied && !!intent.current)
       }
     } finally {
       pending.current = false
       if (mounted.current) setBusy(false)
     }
+    return applied && mounted.current && context.current === submittedKey
   }
   const act = (action: PokerIntent["action"]) => {
     if (!table.handId || !table.street || !["preflop", "flop", "turn", "river"].includes(table.street) || version == null || intent.current || pending.current) return
@@ -77,11 +83,11 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
     if (submitted) void execute(() => gameApi().poker.action.act(submitted))
   }
   const control = (action: "takeover" | "request_ai" | "cancel_ai") => {
-    if (version != null) void execute(() => gameApi().poker.control.set({roomCode: table.roomCode, controlVersion: version, action}))
+    return version != null ? execute(() => gameApi().poker.control.set({roomCode: table.roomCode, controlVersion: version, action})) : Promise.resolve(false)
   }
-  const join = () => void execute(() => gameApi().poker.seat.join({roomCode: table.roomCode}))
-  const sit = () => void execute(() => gameApi().poker.seat.sit({roomCode: table.roomCode, controlVersion: version, sittingOut: mine?.status !== "sitting_out", reason: "user"}))
-  const leave = () => void execute(() => gameApi().poker.seat.leave({roomCode: table.roomCode, controlVersion: version}))
+  const join = () => execute(() => gameApi().poker.seat.join({roomCode: table.roomCode}))
+  const sit = () => execute(() => gameApi().poker.seat.sit({roomCode: table.roomCode, controlVersion: version, sittingOut: mine?.status !== "sitting_out", reason: "user"}))
+  const leave = () => execute(() => gameApi().poker.seat.leave({roomCode: table.roomCode, controlVersion: version}))
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(pokerConnectInstruction(table.roomCode))
@@ -90,7 +96,7 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
     }
   }
   const requestAIJoin = () => {
-    if (version != null) void execute(() => gameApi().poker.control.set({roomCode:table.roomCode, controlVersion:version, action:"request_ai"}), copy)
+    return version != null ? execute(() => gameApi().poker.control.set({roomCode:table.roomCode, controlVersion:version, action:"request_ai"}), copy) : Promise.resolve(false)
   }
   return {requestAIJoin, busy, error, to, setTo, uncertain, mine, controller, version, handoff, act, retry, control, join, sit, leave, copy}
 }

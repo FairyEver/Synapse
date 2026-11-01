@@ -3,6 +3,8 @@ import type { PokerRoomView } from "@synapse/shared/game-contracts"
 import { Card } from "./Card"
 import { amount } from "../lib/view"
 
+import "../../../styles/responsive-lists.css"
+
 const statusLabels: Record<string, string> = { running: "进行中", waiting: "等待中", paused: "已暂停", closed: "已结束" }
 export function RoomList({ rooms, myRoomCodes, userId, onRoom, onConnect, onClose }: {
   rooms: PokerRoomView[]
@@ -12,7 +14,7 @@ export function RoomList({ rooms, myRoomCodes, userId, onRoom, onConnect, onClos
   onConnect: (code: string) => void
   onClose: (code: string) => void
 }) {
-  return <Table><Table.ScrollContainer><Table.Content aria-label="房间列表" className="min-w-3xl">
+  return <div className="game-responsive-list"><Table><Table.ScrollContainer><Table.Content aria-label="房间列表" className="game-room-table min-w-3xl">
     <Table.Header><Table.Column isRowHeader>房间</Table.Column><Table.Column>类型</Table.Column><Table.Column>状态</Table.Column><Table.Column>人数</Table.Column><Table.Column>带入 / 盲注</Table.Column><Table.Column>操作</Table.Column></Table.Header>
     <Table.Body>
       {rooms.map(room => {
@@ -30,5 +32,5 @@ export function RoomList({ rooms, myRoomCodes, userId, onRoom, onConnect, onClos
         </Table.Row>
       })}
     </Table.Body>
-  </Table.Content></Table.ScrollContainer></Table>
+  </Table.Content></Table.ScrollContainer></Table></div>
 }

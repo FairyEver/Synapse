@@ -4,6 +4,8 @@
 
 座位只按当前账号+roomCode定位，不存在seatToken。同账号可同时玩多个游戏、多个房间，同一房间只能一个座位。
 
+table_state/room_get 的 seats 可选返回 isHistorical、inCurrentHand。isHistorical=true 仅为上一手结果回显，不占当前房间容量、不能管理；inCurrentHand 按账号与座位共同匹配，false 表示未参与当前手，不能据牌背或座位编号推断已发牌。旧响应缺字段时不推断参与状态。机器人管理须使用当前有效 botId，leavePending=true 的真实座位仍占位；最终可入座容量以服务端裁决为准。两个展示标记不授予控制权或扩展底牌可见性。
+
 seat_sit返回的sittingOut是请求确认；pending表示当前手尚未结束，status为实际座位状态。pending时立即停止调用仍适用600秒超时离桌，不能承诺已保留暂离座位。
 
 连续暂离30分钟且房间无进行中的手牌时自动离桌退款；重复seat_sit(true)或查询不会延长该期限。手中申请暂离从本手结束实际生效时计时，实际回座后再次暂离重新计时。

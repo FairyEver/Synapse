@@ -43,6 +43,8 @@ const action = z
   .passthrough()
 const seat = z
   .object({
+    isHistorical: z.boolean().optional(),
+    inCurrentHand: z.boolean().optional(),
     controller: controlFields.controller.optional(),
     controlVersion: controlFields.controlVersion.optional(),
     handoffPending: controlFields.handoffPending.optional(),

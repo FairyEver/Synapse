@@ -370,6 +370,8 @@ export class PokerActionService {
         const visible = canSeeHole(userId, s.userId, s.participantKind, p?.folded ?? false, h?.showdownSeats.includes(s.seatNo) ?? false, participating, policy)
         return {
           seatNo: s.seatNo,
+          isHistorical: "ghost" in s,
+          inCurrentHand: !!p,
           participantKind: s.participantKind,
           ...(s.participantKind === "bot" && !("ghost" in s) ? { botId: s.id, leavePending: s.leavePending } : {}),
           controller: s.participantKind === "bot" ? null : s.controller ?? "ai",

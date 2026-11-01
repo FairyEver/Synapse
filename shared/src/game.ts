@@ -86,6 +86,10 @@ export interface PokerTableEventsView {
   hasMore: boolean
 }
 export interface PokerSeatView {
+  /** Previous-hand participant retained for results, not an occupied room seat. */
+  isHistorical?: boolean
+  /** Matched to this hand by both account identity and seat number. */
+  inCurrentHand?: boolean
   controller?: PokerController
   controlVersion?: number
   handoffPending?: boolean

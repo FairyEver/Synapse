@@ -56,7 +56,7 @@ function inside(inner: Element, outer: Element) {
 }
 
 describe.each([
-  { mode: "wide", width: "w-[1280px]", layout: "right" },
+  { mode: "wide", width: "w-[1280px]", layout: "bottom" },
   { mode: "compact", width: "w-[390px]", layout: "bottom" },
 ])("poker system surfaces: $mode", ({ mode, width, layout }) => {
   it("keeps panels in the system theme while preserving gameplay, focus and action intent", async () => {
@@ -78,7 +78,7 @@ describe.each([
       const reference = document.querySelector<HTMLElement>('[data-testid="system-reference"]')!
       const referenceStyle = getComputedStyle(reference)
       const canvas = await element(".poker-canvas")
-      const gameButton = await element(".poker-action-buttons .poker-button")
+      const gameButton = await element('.poker-action-buttons [data-tone="primary"]')
       expect(getComputedStyle(gameButton).fontFamily).toContain("Game Geist")
       expect(getComputedStyle(surface).backgroundColor).not.toBe(referenceStyle.backgroundColor)
 
@@ -109,13 +109,13 @@ describe.each([
       await userEvent.keyboard("{Escape}")
       await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe("更多牌桌操作")
 
-      if (mode === "compact") await button("加注").click()
+      await button("加注").click()
       const input = await element('.poker-table input[type="number"]')
       const standardInput = document.querySelector<HTMLElement>('[aria-label="标准输入"]')!
       expect(getComputedStyle(input).backgroundColor).toBe(getComputedStyle(standardInput).backgroundColor)
       expect(getComputedStyle(input).fontFamily).toBe(getComputedStyle(standardInput).fontFamily)
       await page.getByRole("spinbutton").fill("103")
-      await expect.element(button(mode === "compact" ? "确认加注 103" : "加注 103")).toBeDisabled()
+      await expect.element(button("确认加注 103")).toBeDisabled()
       await page.getByRole("spinbutton").fill("18")
       input.focus()
       expect(input.matches(":focus")).toBe(true)
@@ -137,7 +137,7 @@ describe.each([
       await expect.poll(() => document.activeElement?.textContent).toBe("全下")
       expect((input as HTMLInputElement).value).toBe("18")
       expect(canvas.style.transform).toBe(transform)
-      await button(mode === "compact" ? "确认加注 18" : "加注 18").click()
+      await button("确认加注 18").click()
       expect(api.act).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: "raise", to: 18, controlVersion: 4, expectedActionSeq: 3 }))
     } finally { await screen.unmount() }
   })

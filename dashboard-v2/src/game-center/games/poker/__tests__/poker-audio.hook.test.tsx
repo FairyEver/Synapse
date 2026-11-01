@@ -71,6 +71,7 @@ describe("牌桌声音生命周期", () => {
     await show(soundTable)
     await show(wager(8))
     expect(audio.play).toHaveBeenCalledTimes(1)
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
     const toggle = host.querySelector<HTMLButtonElement>('[aria-label="关闭音效"]')!
     await act(async () => toggle.click())
     expect(toggle.getAttribute("aria-label")).toBe("开启音效")

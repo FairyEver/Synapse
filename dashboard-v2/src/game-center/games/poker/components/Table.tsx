@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import { ArrowLeft, Bell, Coins, Eye, ListOrdered, MoreHorizontal, UserRound, Volume2, VolumeX, X } from "lucide-react"
+import { ArrowLeft, Bell, Eye, ListOrdered, MoreHorizontal, UserRound, Volume2, VolumeX, X } from "lucide-react"
 import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
 import { Button } from "@heroui/react"
 import { Card } from "./Card"
@@ -12,7 +12,6 @@ import { amount, projectTable, streetLabel } from "../lib/view"
 import { TABLE_CONTROLS_BREAKPOINT } from "../lib/table-layout"
 import { fitTableScene, tableSceneVariables } from "../lib/table-scene"
 import { useTableMotion } from "../hooks/useTableMotion"
-import { seatPosition } from "../lib/view"
 import { useDealAnimation } from "../hooks/useDealAnimation"
 import { usePokerAudio } from "../hooks/usePokerAudio"
 import "../styles/table-tokens.css"
@@ -30,9 +29,13 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   animate?: PokerTableEvent[]
   identityKey?: string
   extras?: ReactNode
-  actions?: ReactNode
+  actions?: ReactNode | ((onComplete: () => void) => ReactNode)
 }) {
   const [panel, setPanel] = useState<PokerControlPanel | "log" | null>(null), [fit, setFit] = useState(fitTableScene(1440,900))
+  const panelEpoch = useRef({ panel, generation: 0 })
+  if (panelEpoch.current.panel !== panel) panelEpoch.current = { panel, generation: panelEpoch.current.generation + 1 }
+  const menuGeneration = panelEpoch.current.generation
+  const completeMenu = () => { if (panelEpoch.current.generation === menuGeneration && panelEpoch.current.panel === "menu") setPanel(null) }
   const [compact, setCompact] = useState(false)
   const panelOpen = panel === "log"
   const surface = useRef<HTMLElement>(null), viewport = useRef<HTMLDivElement>(null), menuTrigger = useRef<HTMLButtonElement>(null), logTrigger = useRef<HTMLButtonElement>(null)
@@ -43,7 +46,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   useEffect(() => { setPanel(current => current === "bet" ? null : current) }, [table.handId, table.actionSeq, controlVersion, perspective, table.actionOnSeat, table.status])
   useEffect(() => { setPanel(null) }, [compact])
   const view = projectTable(table, perspective)
-  const motion = useTableMotion(table, `${identityKey}:${perspective}:${table.controlVersion}:${panelOpen}:${fit.scene.mode}:${fit.scale}`)
+  const motion = useTableMotion(table, `${identityKey}:${perspective}:${table.controlVersion}:${fit.scene.mode}:${fit.scale}`)
   const dealt = useDealAnimation(table.handId, table.seats.length + table.board.length, 0, table)
   useLayoutEffect(() => {
     const element = viewport.current, container = surface.current
@@ -75,18 +78,14 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const active = view.status === "closed" ? undefined : view.seats.find(s => s.seatNo === view.actionOnSeat)
   const canNudge = onNudge && perspective === "owner" && view.mySeatNo !== null && active && active.seatNo !== view.mySeatNo && active.participantKind !== "bot"
   const stage = view.status === "closed" ? "房间已解散" : streetLabel[view.street ?? ""] ?? (view.status === "paused" ? "等待对手" : "等待开局")
-  return <section ref={surface} onKeyDown={e => { if (e.key === "Escape" && panel === "log") { setPanel(null); logTrigger.current?.focus() } }} className="poker-table poker-immersive" data-control-layout={compact ? "bottom" : "right"} data-panel-open={panelOpen} aria-label={`牌桌 ${table.roomCode}`}>
+  return <section ref={surface} onKeyDown={e => { if (e.key === "Escape" && panel === "log") { setPanel(null); logTrigger.current?.focus() } }} className="poker-table poker-immersive" data-control-layout="bottom" data-compact-controls={compact} data-panel-open={panelOpen} aria-label={`牌桌 ${table.roomCode}`}>
     <div className="poker-table-layout">
         <div className="poker-edge-controls bg-surface font-sans text-foreground scheme-light">
-          <Button type="button" variant="tertiary" onPress={onBack}><ArrowLeft aria-hidden="true" />返回房间</Button>
-          <span className="flex items-center gap-2 text-sm text-muted"><strong>#{table.roomCode}</strong><span>第 {table.handNo} 手</span>{table.mode === "practice" && <span>陪练</span>}</span>
+          <Button type="button" variant="tertiary" isIconOnly={compact} aria-label="返回房间" onPress={onBack}><ArrowLeft aria-hidden="true" />{!compact && "返回房间"}</Button>
+          <span className="poker-room-summary text-sm"><strong>#{table.roomCode}</strong><span className="text-muted">第 {table.handNo} 手{table.mode === "practice" && " · 陪练"}</span></span>
           <div className="poker-perspective flex items-center gap-2">
-            {actions}
-            <Button type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
-            {canNudge && <Button type="button" variant="tertiary" isDisabled={(view.deadlineMs ?? 600000) > 540000} onPress={() => onNudge(active.seatNo)}><Bell aria-hidden="true" />提醒玩家</Button>}
-            {table.seats.some(s => s.isMe) && <Button type="button" variant="tertiary" aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onPress={() => onPerspective(perspective === "owner" ? "public" : "owner")}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "玩家视角" : "旁观视角"}</Button>}
-            <Button ref={logTrigger} type="button" variant="tertiary" aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{panelOpen ? "收起日志" : "日志"}</Button>
-            {compact && view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
+            <Button ref={logTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label={panelOpen ? "收起日志" : "日志"} aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{!compact && (panelOpen ? "收起日志" : "日志")}</Button>
+            {view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
           </div>
         </div>
       <div className="poker-table-main">
@@ -98,15 +97,11 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
               <div className="poker-center">
                 <div className="poker-pot-row"><div className="poker-deck" aria-label={`剩余 ${view.deckRemaining} 张`}><span className="poker-deck-stack" data-card-size="xs"><Card faceUp={false} /></span><span>{view.deckRemaining}<small>张</small></span></div><div className="poker-pot-value"><span className="poker-pot-label">底池</span><strong className="poker-pot">{amount(view.pot)}</strong></div></div>
                 <div className="poker-board" data-card-size="md">{Array.from({length:5},(_,i) => <span key={i} className="poker-deal-slot" data-dealt={dealt >= view.seats.length+i+1 || !view.board[i]}><Card card={view.board[i]} faceUp={!view.board[i] || dealt >= view.seats.length+i+1} /></span>)}</div>
-                <div className="poker-board-caption"><span className="poker-street">{stage}</span><span>{view.variant === "short32" ? "短牌 32 张" : "标准 52 张"} · 盲注 <b>{view.smallBlind ?? 1} / {view.bigBlind ?? 2}</b></span></div>
+                <div className="poker-board-caption"><span className="poker-street">{stage}</span><span className="poker-rules-caption"><span>{view.variant === "short32" ? "短牌 32 张" : "标准 52 张"}</span><span>盲注 <b>{view.smallBlind ?? 1} / {view.bigBlind ?? 2}</b></span></span></div>
                 {view.status === "paused" && view.pauseReason && <p className="poker-pause-reason">{({user:"牌局已暂停",all_humans_away:"真人均已暂离",no_human:"等待本人或 AI 入座",insufficient_players:"等待对手",insufficient_chips:"等待有筹码的玩家"} as Record<string,string>)[view.pauseReason] ?? "等待可参与的玩家"}</p>}
               </div>
-              {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status !== "closed" && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
-              {view.seats.map(seat => {
-                const point = fit.scene.wagers[seatPosition(seat.seatNo,view.maxSeats,view.mySeatNo ?? 0)]
-                return <div key={seat.seatNo} className="poker-wager" data-seat={seat.seatNo} data-visible={view.street !== "settled" && seat.streetBet>0} style={{left:point.x,top:point.y}} aria-label={`${seat.isMe ? "你" : seat.displayName} 本轮下注 ${amount(seat.streetBet)}`}><Coins aria-hidden="true" />{amount(seat.streetBet)}</div>
-              })}
-              <ChipMotion transfers={motion.transfers} layout={`${fit.scene.mode}:${fit.scale}:${panelOpen}`} />
+              {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
+              <ChipMotion transfers={motion.transfers} layout={`${fit.scene.mode}:${fit.scale}`} />
             </div>
           </div>
         </div>
@@ -118,7 +113,12 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
             <SidePanel id={panelId} table={view} perspective={perspective} events={events} extras={extras} />
           </div>
         </div>
-        <div className="poker-controls-anchor"><HumanControls identityKey={identityKey} table={view} perspective={perspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} /></div>
+        <div className="poker-controls-anchor"><HumanControls identityKey={identityKey} table={view} perspective={perspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
+            {typeof actions === "function" ? actions(completeMenu) : actions}
+            <Button fullWidth type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
+            {canNudge && <Button fullWidth variant="tertiary" isDisabled={(view.deadlineMs ?? 600000) > 540000} onPress={() => { onNudge(active.seatNo); setPanel(null) }}><Bell aria-hidden="true" />提醒玩家</Button>}
+            {table.seats.some(s => s.isMe) && <Button fullWidth variant="tertiary" aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onPress={() => { onPerspective(perspective === "owner" ? "public" : "owner"); setPanel(null) }}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "旁观视角" : "玩家视角"}</Button>}
+          </>} /></div>
       </div>
     </div>
   </section>

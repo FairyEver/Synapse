@@ -101,7 +101,7 @@ describe("窄屏精简出牌", () => {
   })
 })
 
-describe("牌桌共用侧栏", () => {
+describe("统一底部操作与按需侧栏", () => {
   it("按内容宽度切换，日志、金额和更多互斥且不改变画布尺寸", async () => {
     const host=document.createElement("div"),root=createRoot(host)
     document.body.append(host)
@@ -132,6 +132,8 @@ describe("牌桌共用侧栏", () => {
     expect((host.querySelector(".poker-canvas") as HTMLElement).style.transform).toBe(transform)
     await resize(1024)
     expect(button(host,"更多牌桌操作").getAttribute("aria-expanded")).toBe("false")
+    expect(host.querySelector('input[type="number"]')).toBeNull()
+    await click(host,"加注")
     expect(host.querySelector('input[type="number"]')).not.toBeNull()
     await click(host,"日志")
     await click(host,"陪练")

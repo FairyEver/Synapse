@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-01 牌桌响应座位增加可选 `isHistorical` / `inCurrentHand`，分别标识结算历史回显和实际本手参与；同步 shared 响应校验与游戏系统 Skill。仅补充响应信息，不修改动作输入、权限或数据库，不新增工具。当前 game 26 项 capability/MCP、全局 369 capability / 365 MCP 索引、22 个 System App、默认 9 项 Dock 及两条兼容游戏深链均不变；底部操作条与按需信息面板仅属于 Web UI。
+
 - 2026-10-31 游戏完整迁移 Web：System App 23→22，游戏启动台/Dock/UI 及 24 项 IPC/preload 移除；默认 Dock 仍为 9 项。本机 game 26 项 capability/MCP 保留，全局仍 369 capability/365 MCP 索引。`control.set`/`room.close` 仍仅 Web UI 私有操作，无 MCP 索引；历史两条游戏声明式深链保留但受控打开浏览器。UI 类型、操作和校验归入 shared 双入口契约，Web Cookie 绑定预期账号，Bearer 兼容。以下历史条目保持当次基线，当前游戏 UI 边界以本条为准。
 
 - 2026-10-31 建房默认名称使用当前昵称和实际房间号，桌面五项选项通过既有 config IPC 按账号保存在本机。room.create 描述与系统 Skill 同步，输入 schema 不变；game 仍为26项能力/24项IPC，全局369 capability/365 MCP索引，System App、Dock、Workflow、Automation、Deep Link及权限无增量。

@@ -23,12 +23,13 @@ function PracticeTable({ table, onRefresh }: { table: PokerTableView; onRefresh:
   return <Table table={table} perspective="owner" onPerspective={() => {}} onBack={() => {}} actions={<PracticeBotAddButton controls={controls} />} extras={controls.canManage ? <BotManager controls={controls} /> : null} />
 }
 describe("陪练房操作", () => {
-  it("进房无需打开日志即可添加，侧栏直接显示列表且共用重试意图", async () => {
+  it("进房通过更多菜单添加无需打开日志，侧栏直接显示列表且共用重试意图", async () => {
     api.add.mockReset().mockRejectedValueOnce(new Error("丢响应")).mockResolvedValue({ botId: "new", seatNo: 1 })
     const host = document.createElement("div"), root = createRoot(host), refresh = vi.fn()
     try {
       await act(async () => root.render(<PracticeTable table={table} onRefresh={refresh} />))
-      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-edge-controls button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
+      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
       expect(quickAdd.textContent).toBe("添加机器人")
       expect(quickAdd.closest("[hidden], [inert], details")).toBeNull()
       expect(host.querySelector(".poker-information-drawer")!.hasAttribute("hidden")).toBe(true)
@@ -43,7 +44,8 @@ describe("陪练房操作", () => {
       await act(async () => manager.querySelector<HTMLButtonElement>("button")!.click())
       expect(api.add.mock.calls[1][0].creationId).toBe(first)
       expect(refresh).toHaveBeenCalledTimes(1)
-      expect(quickAdd.textContent).toBe("添加机器人")
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
+      expect([...host.querySelectorAll(".poker-system-popover button")].find(b => b.textContent === "添加机器人")).toBeDefined()
     } finally { await act(async () => root.unmount()) }
   })
   it("添加进行中同时禁用牌桌和侧栏入口，避免连点重复提交", async () => {
@@ -52,7 +54,8 @@ describe("陪练房操作", () => {
     const host = document.createElement("div"), root = createRoot(host)
     try {
       await act(async () => root.render(<PracticeTable table={table} onRefresh={() => {}} />))
-      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-edge-controls button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
+      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
       await act(async () => { quickAdd.click(); quickAdd.click() })
       expect(api.add).toHaveBeenCalledTimes(1)
       expect(quickAdd.disabled).toBe(true)
@@ -65,12 +68,13 @@ describe("陪练房操作", () => {
     const host = document.createElement("div"), root = createRoot(host)
     try {
       await act(async () => root.render(<PracticeTable table={{ ...table, maxSeats: 2, mySeatNo: null }} onRefresh={() => {}} />))
-      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-edge-controls button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!.click())
+      const quickAdd = [...host.querySelectorAll<HTMLButtonElement>(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? ""))!
       expect(quickAdd.disabled).toBe(true)
       expect(quickAdd.textContent).toBe("座位已满")
       for (const value of [{ ...table, mode: "points" as const }, { ...table, ownerUserId: "other" }, { ...table, status: "closed" as const }]) {
         await act(async () => root.render(<PracticeTable table={value} onRefresh={() => {}} />))
-        expect([...host.querySelectorAll(".poker-edge-controls button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? "")) ?? null).toBeNull()
+        expect([...host.querySelectorAll(".poker-system-popover button")].find(b => /^(添加机器人|重试添加机器人|座位已满)$/.test(b.textContent ?? "")) ?? null).toBeNull()
         expect([...host.querySelectorAll('[role="tab"]')].some(tab => tab.textContent === "陪练")).toBe(false)
       }
     } finally { await act(async () => root.unmount()) }
