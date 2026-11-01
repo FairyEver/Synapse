@@ -552,6 +552,7 @@ export function DriveMDXeditorRenderer({
       items.push({
         kind: 'toggle',
         id: 'mdxeditor-outline',
+        group: '文档导航',
         label: '目录',
         icon: ListTree,
         compactPlacement: 'primary',
@@ -563,6 +564,7 @@ export function DriveMDXeditorRenderer({
       items.push({
         kind: 'toggle',
         id: 'mdxeditor-comments',
+        group: '文档导航',
         label: `批注 ${comments.railThreads.length}`,
         icon: MessageSquare,
         compactPlacement: 'primary',
@@ -576,6 +578,7 @@ export function DriveMDXeditorRenderer({
       items.push({
         kind: 'button',
         id: 'mdxeditor-messages',
+        group: '文档导航',
         label: `留言 ${messages.messages.length}`,
         icon: MessageSquarePlus,
         compactPlacement: 'primary',

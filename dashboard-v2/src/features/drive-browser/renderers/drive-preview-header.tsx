@@ -1,5 +1,6 @@
 import {
   Button,
+  ButtonGroup,
   Description,
   Dropdown,
   Header,
@@ -129,9 +130,7 @@ export function DrivePreviewHeader({
             data-drive-preview-renderer-actions='true'
             className='flex items-center gap-1'
           >
-            {rendererItems.map((item) => (
-              <DrivePreviewToolbarItemView key={item.id} item={item} />
-            ))}
+            <DrivePreviewToolbarItems items={rendererItems} />
           </div>
         ) : null}
         {showActionSeparator ? (
@@ -313,9 +312,7 @@ function DrivePreviewCompactHeader({
           aria-label='文档工具栏'
           className='flex min-h-14 w-full max-w-full items-center gap-2 overflow-x-auto border-t px-3 py-1.5'
         >
-          {primaryItems.map((item) => (
-            <DrivePreviewToolbarItemView key={item.id} item={item} compact />
-          ))}
+          <DrivePreviewToolbarItems items={primaryItems} compact />
         </Toolbar>
       ) : null}
     </header>
@@ -538,6 +535,39 @@ export function DriveRendererOptionMenuLabel({
       {option.disabledReason ? <Description>{option.disabledReason}</Description> : null}
     </span>
   )
+}
+function DrivePreviewToolbarItems({
+  items,
+  compact = false,
+}: {
+  readonly items: readonly DriveRendererToolbarItem[]
+  readonly compact?: boolean
+}) {
+  const groups: { label?: string; items: DriveRendererToolbarItem[] }[] = []
+  for (const item of items) {
+    const previous = groups.at(-1)
+    if (item.group && previous?.label === item.group) {
+      previous.items.push(item)
+    } else {
+      groups.push({ label: item.group, items: [item] })
+    }
+  }
+  return groups.map(({ label, items: groupItems }) => {
+    const controls = groupItems.map((item) => (
+      <DrivePreviewToolbarItemView key={item.id} item={item} compact={compact} />
+    ))
+    return label ? (
+      <ButtonGroup
+        key={groupItems[0].id}
+        aria-label={label}
+        size='sm'
+        variant='ghost'
+        className='shrink-0 rounded-full bg-default'
+      >
+        {controls}
+      </ButtonGroup>
+    ) : controls
+  })
 }
 export function DrivePreviewToolbarItemView({
   item,

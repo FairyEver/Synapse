@@ -285,18 +285,22 @@ describe('DriveRendererShell', () => {
               rendererItems={[
                 {
                   kind: 'toggle', id: 'outline', label: '目录', pressed: true,
+                  group: '文档导航',
                   compactPlacement: 'primary', onPressedChange: onOutlineChange,
                 },
                 {
                   kind: 'button', id: 'disabled', label: '保存', disabled: true,
+                  group: '文档导航',
                   compactPlacement: 'primary',
                 },
                 {
                   kind: 'toggle', id: 'comments', label: '批注 3', pressed: true,
+                  group: '文档导航',
                   compactPlacement: 'primary', onPressedChange: onCommentsChange,
                 },
                 {
                   kind: 'button', id: 'messages', label: '留言 0',
+                  group: '文档导航',
                   compactPlacement: 'primary', onClick: onMessages,
                 },
               ]}
@@ -311,6 +315,12 @@ describe('DriveRendererShell', () => {
       const outline = buttonWithText('目录')
       const comments = buttonWithText('批注 3')
       const messages = buttonWithText('留言 0')
+      const group = document.querySelector('[role="group"][aria-label="文档导航"]')
+      expect(group).not.toBeNull()
+      expect(group?.contains(outline)).toBe(true)
+      expect(group?.contains(comments)).toBe(true)
+      expect(group?.contains(messages)).toBe(true)
+      expect(messages.hasAttribute('aria-pressed')).toBe(false)
       expect(outline.getAttribute('aria-pressed')).toBe('true')
       expect(comments.getAttribute('aria-pressed')).toBe('true')
       act(() => outline.focus())

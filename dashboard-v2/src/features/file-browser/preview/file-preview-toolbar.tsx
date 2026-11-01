@@ -7,6 +7,7 @@ type FilePreviewToolbarItemBase = {
   readonly id: string
   readonly label: string
   readonly compactPlacement?: 'primary' | 'overflow'
+  readonly group?: string
 }
 export type FilePreviewToolbarItem = FilePreviewToolbarItemBase &
   (

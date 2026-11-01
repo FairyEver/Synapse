@@ -661,6 +661,7 @@ function DriveMarkdownBody({
       items.push({
         kind: 'toggle',
         id: 'markdown-outline',
+        group: '文档导航',
         label: '目录',
         icon: ListTree,
         compactPlacement: 'primary',
@@ -672,6 +673,7 @@ function DriveMarkdownBody({
       items.push({
         kind: 'toggle',
         id: 'markdown-comments',
+        group: '文档导航',
         label: `批注 ${commentCount}`,
         icon: MessageSquare,
         compactPlacement: 'primary',
@@ -683,6 +685,7 @@ function DriveMarkdownBody({
       items.push({
         kind: 'button',
         id: 'markdown-messages',
+        group: '文档导航',
         label: `留言 ${messages.messages.length}`,
         icon: MessageSquarePlus,
         compactPlacement: 'primary',
