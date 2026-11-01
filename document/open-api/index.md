@@ -18,11 +18,13 @@ OpenAPI 3.1 契约由服务端提供：
 
 ## 快速开始
 
-1. 在 Console 的“设置 > API 秘钥”中创建 API 密钥，选择“获取公共链接文件”。
-2. 使用 API 密钥调用创建下载地址接口。
-3. 在十分钟内对响应中的临时地址发起 `GET` 请求。
+1. 在 Console 的“设置 > API 密钥”中创建密钥，选择目标接口需要的操作权限。
+2. 如果访问云端数据表，再为密钥选择“表资源”，并确认当前账号获得表授权。
+3. 按对应文档的认证方式、请求体和响应约定调用接口。
 
-完整示例：[获取公共链接文件](/open-api/api/share-link-download)
+云表的建表、字段、记录增删改查、批量操作和授权示例：[云端数据表](/open-api/api/cloud-tables)。页面可以完整复制为 Markdown 交给 AI 调用。
+
+下载示例：[获取公共链接文件](/open-api/api/share-link-download)。先创建下载地址，再于十分钟内执行响应中的 `GET` 地址。
 
 发送消息步骤：[使用 API 发送消息](/open-api/guide/send-message)。此接口需要单独的 `notification.send` 权限。
 
@@ -30,17 +32,19 @@ OpenAPI 3.1 契约由服务端提供：
 
 ## 创建 API 密钥
 
-在 Console 的“设置 > API 秘钥”中创建密钥，并选择“获取公共链接文件”。该权限对应的 scope 是：
+在 Console 的“设置 > API 密钥”中创建密钥，按需选择 scope。例如“获取公共链接文件”对应：
 
 ```text
 drive.public_link.download
 ```
 
+云表使用独立的 `tables.manage`、`tables.records.read/create/update/delete` 五项 scope，并额外检查密钥的表资源和表授权。已有密钥不会自动获得云表权限。
+
 完整密钥只显示一次。创建后可以编辑或清空 API 权限，不会轮换密钥；撤销密钥后无法恢复。移除下载权限或撤销密钥会使新请求以及尚未开始的临时下载失效。
 
 ## Bearer 认证
 
-创建下载地址时通过 `Authorization` header 传入 API 密钥。认证格式固定为单个 `Bearer` scheme 和一个不含空白的密钥：
+公共链接下载、文章留言和私有云表调用通过 `Authorization` header 传入 API 密钥。格式为单个 `Bearer` scheme 和一个不含空白的密钥：
 
 ```http
 Authorization: Bearer syn_sk_example000000000000000000000000000000000000
@@ -48,21 +52,27 @@ Authorization: Bearer syn_sk_example000000000000000000000000000000000000
 
 Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 header。
 
+云表可逐操作显式开放匿名访问，此时不发送 `Authorization`；无效密钥不会降级为匿名。匿名开放不代表可以使用访问者的登录身份操作私有表。
+
 发送通知接口是例外：它的三种请求形状都把 API 密钥放在请求里（请求体的 `key` 字段或 URL 路径段），不接受这个 header，也不读取 cookie。
 
 ## 集成要求
 
-- API 密钥仅用于服务端、CLI 或自动化客户端。开放接口不提供浏览器跨域调用所需的 CORS。
+- API 密钥仅用于服务端、CLI 或自动化客户端，不放进网页。云表开放接口支持匿名浏览器调用所需的无凭据 CORS；其它开放接口不提供这一 CORS 例外。
 - API 密钥和临时下载地址均属于 bearer credential，不得写入浏览器代码、公开仓库、日志、工单或公开消息。
 - 公共链接下载响应中的 `requestId` 与 `X-Request-Id` 响应头一致，可用于 Console 使用记录和问题排查。
-- 公共链接下载接口不设置额外请求频率限制；发送通知接口每分钟最多 60 次。
+- 公共链接下载接口不设置额外请求频率限制；发送通知接口每分钟最多 60 次；云表采用公平并发和队列预算，繁忙时返回 `503` 与 `Retry-After`，详见云表文档。
 
 ## 可用 API
 
-[云端数据表](/open-api/api/cloud-tables) 提供有类型的数据表、记录增删改查、权限和30天回收站，并提供独立HTTP Skill。云表匿名浏览器调用支持无凭据CORS；不能使用登录Cookie访问私有数据。
+[云端数据表](/open-api/api/cloud-tables) 包含完整的 19 项接口、字段类型、请求／响应示例、错误码和独立 HTTP Skill。表中列出常用入口，其余操作见完整文档。
 
 | operationId | 方法 | 路径 | 认证 | 文档 |
 |---|---|---|---|---|
+| `createCloudTable` | `POST` | `/tables` | Bearer + `tables.manage` + 自己的全部表 | [创建云表](/open-api/api/cloud-tables#创建表) |
+| `getCloudTableSchema` | `GET` | `/tables/{id}/schema` | 获授权的密钥，或表已开放的匿名身份 | [读取表结构](/open-api/api/cloud-tables#读取列表与表结构) |
+| `queryCloudTableRecords` | `POST` | `/tables/{id}/records/query` | Bearer + 读取授权，或显式开放的匿名查询 | [查询记录](/open-api/api/cloud-tables#查询记录) |
+| `mutateCloudTableRecords` | `POST` | `/tables/{id}/records/batch` | 逐操作检查 scope、表资源及表授权，或显式开放的匿名操作 | [批量写入](/open-api/api/cloud-tables#批量新增、修改与删除) |
 | `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | `Authorization: Bearer` 与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
 | `createPublicLinkArticleMessage` | `POST` | `/drive/public-links/messages` | `Authorization: Bearer` 与 `drive.public_link.message.create` | [给分享文章留言](/open-api/api/article-message-create) |
 | `sendNotification` | `POST` | `/notifications` | 请求体 `key` 与 `notification.send` | [发送通知](/open-api/api/notification-send#整体式) |
