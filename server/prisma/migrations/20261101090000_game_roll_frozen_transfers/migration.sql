@@ -57,7 +57,8 @@ BEGIN
       WHERE a."id"=OLD."handId" AND h."status"='settled'
         AND h."endedAt" <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - INTERVAL '90 days'
         AND a."data"->'hand'=to_jsonb(h)-'engineState'
-        AND a."data"->'rolls' @> jsonb_build_array(to_jsonb(OLD))) THEN RETURN OLD;
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(a."data"->'rolls') AS archived_roll(value)
+          WHERE archived_roll.value = to_jsonb(OLD))) THEN RETURN OLD;
   END IF;
   RAISE EXCEPTION 'Roll records can only be removed by validated archival';
 END;
