@@ -86,6 +86,8 @@ describe("cloud tables real PostgreSQL", () => {
     await expect(request(actor, t.id, "records.query", { filters: [{ field: "n", op: "gt", value: 10 }], cursor: first.nextCursor })).rejects.toMatchObject({ code: "INVALID_CURSOR" })
     const filtered = await request(actor, t.id, "records.query", { filters: [{ field: "n", op: "gte", value: 20 }] })
     expect(filtered.data).toHaveLength(2)
+    const empty = await request(actor, t.id, "records.query", { filters: [{ field: "n", op: "eq", value: null }] })
+    expect(empty.data.map((r: any) => r.values.n)).toEqual([null])
   })
   it("rejects incompatible field changes and restores archived field values", async () => {
     const t = await request(actor, null, "table.create", { name: "schema", fields: [{ key: "x", name: "文字", type: "text" }] })

@@ -44,7 +44,7 @@ export function queryPlan(tableId: string, fields: CloudField[], query: CloudQue
     if (filter.value === null) fail("INVALID_QUERY", "范围或文本筛选不能使用空值。")
     if (filter.op === "contains") {
       if (c.timestamp || !["text", "url"].includes(c.field.type) || typeof filter.value !== "string") fail("INVALID_QUERY", "仅文本字段支持包含筛选。")
-      return Prisma.sql`position(${filter.value} in ${x}) > 0`
+      return Prisma.sql`position(${filter.value} in (${x})) > 0`
     }
     if (c.field.type === "boolean" || c.field.type === "singleSelect") fail("INVALID_QUERY", "该字段不支持范围筛选。")
     const operator = { gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op]

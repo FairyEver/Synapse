@@ -32,7 +32,7 @@ try {
   const commands = [
     ["--filter", "@synapse/shared", "run", "build"],
     ["exec", "prisma", "migrate", "deploy"],
-    ["exec", "vitest", "run", "--config", "vitest.e2e.config.ts", "test/cloud-tables.e2e.spec.ts"],
+    ["exec", "vitest", "run", "--config", "vitest.e2e.config.ts", "test/cloud-tables.e2e.spec.ts", "test/cloud-tables-http.e2e.spec.ts", "--no-file-parallelism"],
   ]
   for (const args of commands) {
     const result = spawnSync("pnpm", args, { env, stdio: "inherit" })

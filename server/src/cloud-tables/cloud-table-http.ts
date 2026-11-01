@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common"
+import { CanActivate, ExecutionContext, HttpException, Injectable } from "@nestjs/common"
 import type { NextFunction, Request, Response } from "express"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import { UserAuthGuard, type AuthenticatedUserRequest } from "../auth/user-auth.guard"
@@ -26,7 +26,11 @@ export class CloudTableGuard implements CanActivate {
     const owner = req.params.id ? this.service.routingOwner(String(req.params.id)) : "root-authentication"
     return this.service.authentication.run(owner, 0, async () => {
       if (!isCloudTableOpenPath(req.path)) {
-        await this.users.canActivate(context)
+        try { await this.users.canActivate(context) }
+        catch (error) {
+          if (error instanceof HttpException && error.getStatus() === 401) throw new OpenApiHttpError(401, "UNAUTHENTICATED", "未登录或登录已过期。")
+          throw error
+        }
         req.cloudActor = { userId: (req as AuthenticatedUserRequest).user!.id, console: true }
         return true
       }
