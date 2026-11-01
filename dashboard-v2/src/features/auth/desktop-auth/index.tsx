@@ -1,7 +1,6 @@
-import { Button, Card } from '@heroui/react';
+import { Button, Card, Spinner } from '@heroui/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate } from '@tanstack/react-router';
-import { Loader2 } from 'lucide-react';
 import { DESKTOP_CLIENT_ID, DESKTOP_PKCE_CHALLENGE_METHOD, DESKTOP_REDIRECT_URI, } from '@synapse/shared';
 import { useAuthStore } from '@/stores/auth-store';
 import { dashboardApi, type DesktopAuthorizeInput } from '@/lib/api';
@@ -88,6 +87,7 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
         authorizeState.status === 'error'
         ? authorizeState.deepLinkUrl
         : undefined;
+    const isOpening = authorizeState.status === 'idle' || authorizeState.status === 'opening';
     function clearProtocolFallback() {
         protocolFallbackCleanupRef.current?.();
         protocolFallbackCleanupRef.current = null;
@@ -169,10 +169,8 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
         return <Navigate to='/sign-in' search={{ redirect }} replace/>;
     }
     return (<AuthLayout>
-      <DesktopAuthCard title='打开 Synapse'>
-        <div className='flex flex-col gap-4'>
-          <DesktopAuthStatus state={authorizeState}/>
-          <Button isDisabled={authorizeState.status === 'opening' && !deepLinkUrl} onPress={() => {
+      <DesktopAuthCard title='打开 Synapse' actions={<>
+          <Button fullWidth isPending={isOpening} isDisabled={isOpening} onPress={() => {
             if (authorizeState.status === 'error') {
                 setRetryKey((value) => value + 1);
                 return;
@@ -182,17 +180,18 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
                 openDeepLink(deepLinkUrl);
             }
         }}>
-            {authorizeState.status === 'opening' ? (<Loader2 className='animate-spin'/>) : null}
+            {isOpening ? <Spinner color='current' size='sm' /> : null}
             {authorizeState.status === 'error'
-            ? '重试'
+            ? '重试打开 Synapse'
             : authorizeState.status === 'opened'
-                ? '再次打开'
-                : '打开'}
+                ? '再次打开 Synapse'
+                : '正在打开 Synapse'}
           </Button>
-          <Button type='button' variant="outline" onPress={() => navigate({ to: '/settings', replace: true })}>
+          <Button fullWidth type='button' variant='secondary' onPress={() => navigate({ to: '/settings', replace: true })}>
             返回首页
           </Button>
-        </div>
+        </>}>
+        <DesktopAuthStatus state={authorizeState}/>
       </DesktopAuthCard>
     </AuthLayout>);
 }
@@ -200,20 +199,22 @@ function DesktopAuthStatus({ state }: {
     state: AuthorizeState;
 }) {
     if (state.status === 'error') {
-        return <p className='text-sm text-danger'>{state.message}</p>;
+        return <p role='alert' className='text-sm wrap-anywhere text-danger'>{state.message}</p>;
     }
-    return (<p className='text-sm text-muted'>
-      {state.status === 'opened' ? '已发送到 Synapse。' : '正在打开 Synapse。'}
+    return (<p role='status' className='text-sm text-muted'>
+      {state.status === 'opened' ? '请在 Synapse 中继续登录。' : '正在打开 Synapse。'}
     </p>);
 }
-function DesktopAuthCard({ children, title, }: {
+function DesktopAuthCard({ children, title, actions, }: {
     children: React.ReactNode;
     title: string;
+    actions?: React.ReactNode;
 }) {
-    return (<Card className='w-full max-w-sm gap-4 sm:min-w-sm'>
+    return (<Card className='w-full max-w-sm gap-4'>
       <Card.Header>
         <Card.Title className='text-lg'>{title}</Card.Title>
       </Card.Header>
       <Card.Content>{children}</Card.Content>
+      {actions ? <Card.Footer className='flex-col gap-3'>{actions}</Card.Footer> : null}
     </Card>);
 }
