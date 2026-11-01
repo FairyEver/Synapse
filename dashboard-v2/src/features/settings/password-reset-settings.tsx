@@ -45,15 +45,17 @@ export function PasswordResetSettings() {
               重新生成会使旧链接失效，重置密码后需重新登录。关闭后无法再次查看。
             </p>
           </Modal.Header>
-          <div className='grid gap-3'>
-            <TextField className='grid gap-2'>
-              <Label htmlFor='password-reset-link'>重置链接</Label>
-              <Input id='password-reset-link' readOnly value={passwordResetLink?.resetUrl ?? ''} onFocus={(event) => event.currentTarget.select()}></Input>
-            </TextField>
-            <p className='text-sm text-muted'>
-              有效至 {passwordResetLink ? formatExactDateTime(new Date(passwordResetLink.expiresAt)) : ''}
-            </p>
-          </div>
+          <Modal.Body>
+            <div className='grid gap-3'>
+              <TextField className='grid gap-2'>
+                <Label htmlFor='password-reset-link'>重置链接</Label>
+                <Input id='password-reset-link' readOnly value={passwordResetLink?.resetUrl ?? ''} onFocus={(event) => event.currentTarget.select()}></Input>
+              </TextField>
+              <p className='text-sm text-muted'>
+                有效至 {passwordResetLink ? formatExactDateTime(new Date(passwordResetLink.expiresAt)) : ''}
+              </p>
+            </div>
+          </Modal.Body>
           <Modal.Footer>
             <Button variant="outline" onPress={closeDialog}>
               关闭

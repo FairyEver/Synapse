@@ -72,19 +72,21 @@ export function SkillRepositoryFileBrowser({ tree, selectedFilePath, fileContent
             if (!open)
                 setRenameRow(null);
         }}><Modal.Container><Modal.Dialog>
-          <Modal.Header>
-            <Modal.Heading>重命名</Modal.Heading>
-          </Modal.Header>
-          <form className='space-y-4' onSubmit={(event) => {
+          <form className='flex min-h-0 flex-1 flex-col' onSubmit={(event) => {
             event.preventDefault();
             if (!renameRow)
                 return;
             void onRenameFile({ fromPath: renameRow.file.path, toPath: renamePath }).then(() => setRenameRow(null));
         }}>
-            <TextField className='grid gap-2'>
-              <Label htmlFor='skill-repository-rename-path'>路径</Label>
-              <Input id='skill-repository-rename-path' value={renamePath} onChange={(event) => setRenamePath(event.target.value)}></Input>
-            </TextField>
+            <Modal.Header>
+              <Modal.Heading>重命名</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body className='space-y-4'>
+              <TextField className='grid gap-2'>
+                <Label htmlFor='skill-repository-rename-path'>路径</Label>
+                <Input id='skill-repository-rename-path' value={renamePath} onChange={(event) => setRenamePath(event.target.value)}></Input>
+              </TextField>
+            </Modal.Body>
             <Modal.Footer>
               <Button type='button' variant="outline" onPress={() => setRenameRow(null)}>取消</Button>
               <Button type='submit'>保存</Button>

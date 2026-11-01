@@ -175,16 +175,18 @@ export function WebhookFormDialog({ form, isSaving, onFormChange, onSubmit, }: {
             {form?.mode === 'edit' ? '重命名 Webhook' : '新建 Webhook'}
           </Modal.Heading>
         </Modal.Header>
-        <form id='webhook-form' className='grid gap-4' onSubmit={onSubmit}>
-          <TextField className='grid gap-2'>
-            <Label htmlFor='webhook-name'>名称</Label>
-            <Input id='webhook-name' value={form?.name ?? ''} maxLength={80} autoFocus disabled={isSaving} onChange={(event) => {
-            if (!form)
-                return;
-            onFormChange({ ...form, name: event.target.value });
-        }}></Input>
-          </TextField>
-        </form>
+        <Modal.Body>
+          <form id='webhook-form' className='grid gap-4' onSubmit={onSubmit}>
+            <TextField className='grid gap-2'>
+              <Label htmlFor='webhook-name'>名称</Label>
+              <Input id='webhook-name' value={form?.name ?? ''} maxLength={80} autoFocus disabled={isSaving} onChange={(event) => {
+              if (!form)
+                  return;
+              onFormChange({ ...form, name: event.target.value });
+          }}></Input>
+            </TextField>
+          </form>
+        </Modal.Body>
         <Modal.Footer>
           <Button variant="outline" isDisabled={isSaving} onPress={() => onFormChange(null)}>
             取消

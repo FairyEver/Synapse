@@ -293,12 +293,13 @@ function DrivePreviewHeaderAction({
   if (action.kind === 'link') {
     return (
       <Link
+        className='gap-1'
         data-drive-telemetry-event='web.drive.preview.action'
         href={action.href}
         target={action.external ? '_blank' : undefined}
         rel={action.external ? 'noreferrer' : undefined}
       >
-        <action.icon data-icon='inline-start' />
+        <Link.Icon><action.icon className='size-full' /></Link.Icon>
         {action.label}
       </Link>
     )

@@ -21,10 +21,12 @@ export function WebhookUrlDialog({ open, title, url, onOpenChange, }: WebhookUrl
         <Modal.Header>
           <Modal.Heading>{title}</Modal.Heading>
         </Modal.Header>
-        <TextField className='grid gap-2'>
-          <Label htmlFor='webhook-url'>URL</Label>
-          <Input id='webhook-url' readOnly value={url}></Input>
-        </TextField>
+        <Modal.Body>
+          <TextField className='grid gap-2'>
+            <Label htmlFor='webhook-url'>URL</Label>
+            <Input id='webhook-url' readOnly value={url}></Input>
+          </TextField>
+        </Modal.Body>
         <Modal.Footer>
           <Button variant="outline" onPress={() => onOpenChange(false)}>
             关闭

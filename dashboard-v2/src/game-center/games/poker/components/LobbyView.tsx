@@ -30,7 +30,7 @@ export function LobbyView({
     <div className="space-y-8 p-6 lg:p-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Spade aria-hidden="true" />
+          <Spade className="size-6 shrink-0" aria-hidden="true" />
           <h1 className="text-2xl font-semibold">德州牌桌</h1>
           <span className="text-sm text-muted">无限注</span>
         </div>
@@ -52,7 +52,7 @@ export function LobbyView({
           !feedback && <Skeleton className="h-64 w-full" />
         ) : rooms.length === 0 ? (
           <p className="flex min-h-40 items-center justify-center gap-3 text-muted">
-            <Spade aria-hidden="true" />
+            <Spade className="size-5 shrink-0" aria-hidden="true" />
             暂无房间
           </p>
         ) : (

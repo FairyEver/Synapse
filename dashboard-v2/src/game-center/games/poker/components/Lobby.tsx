@@ -133,14 +133,16 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
             <Modal.Heading>解散房间 #{closing}？</Modal.Heading>
             <p className="text-sm text-muted">{lobby.data?.items.find((r) => r.roomCode === closing)?.mode === "practice" ? "仅你与机器人参与时立即解散，有其他玩家时本手结束后解散；不兑换大厅点数。" : "本手结束后退还所有玩家的剩余筹码。"}</p>
           </Modal.Header>
-          <Button
-            type="button"
-            variant="danger"
-            isDisabled={mutation.busy}
-            onPress={() => void closeRoom()}
-          >
-            解散房间
-          </Button>
+          <Modal.Footer>
+            <Button
+              type="button"
+              variant="danger"
+              isDisabled={mutation.busy}
+              onPress={() => void closeRoom()}
+            >
+              解散房间
+            </Button>
+          </Modal.Footer>
         </Modal.Dialog></Modal.Container>
       </Modal.Backdrop>
       <Modal.Backdrop
@@ -154,10 +156,12 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
             <Modal.Heading>接入 AI · #{connect}</Modal.Heading>
             <p className="text-sm text-muted">将指令发到你的 AI 会话</p>
           </Modal.Header>
-          <p className="text-sm">{connect && pokerConnectInstruction(connect)}</p>
-          <Button type="button" isDisabled={mutation.busy} onPress={() => void copy()}>
-            复制接入指令
-          </Button>
+          <Modal.Body><p className="text-sm">{connect && pokerConnectInstruction(connect)}</p></Modal.Body>
+          <Modal.Footer>
+            <Button type="button" isDisabled={mutation.busy} onPress={() => void copy()}>
+              复制接入指令
+            </Button>
+          </Modal.Footer>
         </Modal.Dialog></Modal.Container>
       </Modal.Backdrop>
     </>

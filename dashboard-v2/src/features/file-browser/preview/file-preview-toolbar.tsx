@@ -82,12 +82,14 @@ export function FilePreviewToolbarItemView({
         <Link
           isDisabled={item.disabled}
           aria-keyshortcuts={item.ariaKeyShortcuts}
-          className={buttonClassName}
+          className={cn('gap-1', buttonClassName)}
           href={item.href}
           target={item.external ? '_blank' : undefined}
           rel={item.external ? 'noreferrer' : undefined}
         >
-          {content}
+          {item.loading ? (<Link.Icon><Loader2 className='size-full animate-spin' /></Link.Icon>)
+            : item.icon ? (<Link.Icon><item.icon className='size-full' /></Link.Icon>) : null}
+          {item.label}
         </Link>
       )
     }

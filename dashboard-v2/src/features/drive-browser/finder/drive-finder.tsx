@@ -111,10 +111,11 @@ function DriveFinderToolbar({
         ) : null}
         {actions.directoryDownloadUrl ? (
           <Link
+            className='gap-1'
             data-drive-telemetry-event='web.drive.folder.download'
             href={actions.directoryDownloadUrl}
           >
-            <Download data-icon='inline-start' />
+            <Link.Icon><Download className='size-full' /></Link.Icon>
             下载整个目录
           </Link>
         ) : null}

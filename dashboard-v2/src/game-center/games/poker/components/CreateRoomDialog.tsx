@@ -42,14 +42,14 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
       <Modal.Container>
         <Modal.Dialog data-track="poker-create-room">
           <Modal.CloseTrigger data-slot="dialog-close" aria-label="关闭" />
-          <Modal.Header><Modal.Heading>创建房间</Modal.Heading></Modal.Header>
-          <Form aria-busy={busy} onSubmit={event => {
+          <Form className='flex min-h-0 flex-1 flex-col' aria-busy={busy} onSubmit={event => {
             event.preventDefault()
             if (!busy) {
               track({ component: "button", name: "poker-create-room", action: "click" })
               onCreate()
             }
           }}>
+            <Modal.Header><Modal.Heading>创建房间</Modal.Heading></Modal.Header>
             <Modal.Body>
               <fieldset disabled={busy} className="space-y-5">
                 <TextField isDisabled={busy}>

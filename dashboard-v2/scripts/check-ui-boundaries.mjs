@@ -10,11 +10,49 @@ async function inspect(directory) {
     if (entry.isDirectory()) { await inspect(filename); continue }
     if (!/\.[cm]?[jt]sx?$/u.test(entry.name)) continue
     const source = ts.createSourceFile(filename, await readFile(filename, 'utf8'), ts.ScriptTarget.Latest, true)
+    const isProduct = !/\.(?:test|browser)\.[jt]sx?$/u.test(entry.name)
+    const heroComponents = new Map()
+    const iconNames = new Set()
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue
+      const bindings = statement.importClause?.namedBindings
+      if (!bindings || !ts.isNamedImports(bindings)) continue
+      for (const binding of bindings.elements) {
+        if (statement.moduleSpecifier.text === '@heroui/react') heroComponents.set(binding.name.text, binding.propertyName?.text ?? binding.name.text)
+        if (statement.moduleSpecifier.text === 'lucide-react') iconNames.add(binding.name.text)
+      }
+    }
+    const tag = (node) => !node ? '' : ts.isJsxElement(node) ? node.openingElement.tagName.getText(source) : ts.isJsxSelfClosingElement(node) ? node.tagName.getText(source) : ''
+    const report = (node, message) => violations.push(`${path.relative(root, filename)}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${message}`)
     const visit = (node) => {
       let specifier
       if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) specifier = node.moduleSpecifier.text
       if (ts.isCallExpression(node) && node.arguments[0] && ts.isStringLiteral(node.arguments[0]) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require'))) specifier = node.arguments[0].text
       if (specifier && /(?:components\/ui(?:\/|$)|game-center\/ui(?:\/|$)|@radix-ui\/|^sonner$|(?:^|\/)dashboard\/|@synapse\/desktop)/u.test(specifier)) violations.push(`${path.relative(root, filename)}: ${specifier}`)
+      if (isProduct) {
+        const name = tag(node)
+        const [rootName, slot] = name.split('.')
+        const component = heroComponents.get(rootName)
+        if (ts.isJsxElement(node) && slot === 'Footer' && ['Modal', 'Drawer', 'AlertDialog'].includes(component)) {
+          const siblings = node.parent.children?.filter((child) => !ts.isJsxText(child) || child.text.trim()) ?? []
+          const previous = tag(siblings[siblings.indexOf(node) - 1])
+          // HeroUI's native spacing depends on adjacent Body/Footer or Header/Footer slots.
+          if (previous !== `${rootName}.Body` && previous !== `${rootName}.Header`) report(node, 'HeroUI dialog actions must follow Body or Header to retain native spacing')
+        }
+        if (iconNames.has(name) || name === 'svg' || name.endsWith('.icon')) {
+          let inIconSlot = false
+          for (let parent = node.parent; parent; parent = parent.parent) {
+            const parentName = tag(parent)
+            const [parentRoot, parentSlot] = parentName.split('.')
+            if (heroComponents.get(parentRoot) !== 'Link') continue
+            if (parentSlot === 'Icon') inIconSlot = true
+            if (!parentSlot) {
+              if (!inIconSlot) report(node, 'HeroUI Link icons must use Link.Icon')
+              break
+            }
+          }
+        }
+      }
       ts.forEachChild(node, visit)
     }
     visit(source)
@@ -27,4 +65,4 @@ const styles = await readFile(path.join(root, 'src/styles/globals.css'), 'utf8')
 if (!styles.startsWith('@import "tailwindcss";\n@import "@heroui/styles";')) violations.push('globals.css: HeroUI import order')
 for (const html of ['index.html', 'admin.html', 'game.html', 'desktop-update.html']) if (!(await readFile(path.join(root, html), 'utf8')).includes('data-theme="light"')) violations.push(`${html}: fixed light theme missing`)
 if (violations.length) { process.stderr.write(`${violations.join('\n')}\n`); process.exitCode = 1 }
-else process.stdout.write('V2 UI boundaries: direct HeroUI components, independent source graph, fixed light theme.\n')
+else process.stdout.write('V2 UI boundaries: direct HeroUI components, independent source graph, fixed light theme, link icon slots and dialog spacing.\n')

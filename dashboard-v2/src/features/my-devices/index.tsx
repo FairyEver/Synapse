@@ -140,14 +140,16 @@ export default function MyDevicesPage() {
       <Main>
         {isLoading ? (<div className='text-muted'>加载中...</div>) : (<ServerDataTable columns={columns} data={devices} page={page} pageSize={pageSize} total={data?.total ?? 0} error={isError ? error : null} onRetry={() => void refetch()} onPageChange={setPage} onPageSizeChange={setPageSize} sorting={sorting} onSortingChange={setSorting}/>)}
         <Modal.Backdrop isOpen={Boolean(editingDevice)} onOpenChange={closeRenameDialog}><Modal.Container><Modal.Dialog>
-            <Modal.Header>
-              <Modal.Heading>重命名设备</Modal.Heading>
-            </Modal.Header>
-            <form className='space-y-4' onSubmit={handleRenameSubmit}>
-              <TextField className='space-y-2'>
-                <Label htmlFor='device-display-name'>名称</Label>
-                <Input id='device-display-name' value={displayName} maxLength={maxDeviceNameLength} onChange={(event) => setDisplayName(event.target.value)}></Input>
-              </TextField>
+            <form className='flex min-h-0 flex-1 flex-col' onSubmit={handleRenameSubmit}>
+              <Modal.Header>
+                <Modal.Heading>重命名设备</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body className='space-y-4'>
+                <TextField className='space-y-2'>
+                  <Label htmlFor='device-display-name'>名称</Label>
+                  <Input id='device-display-name' value={displayName} maxLength={maxDeviceNameLength} onChange={(event) => setDisplayName(event.target.value)}></Input>
+                </TextField>
+              </Modal.Body>
               <Modal.Footer>
                 <Button type='button' variant="outline" onPress={closeRenameDialog} isDisabled={renameDevice.isPending}>
                   取消

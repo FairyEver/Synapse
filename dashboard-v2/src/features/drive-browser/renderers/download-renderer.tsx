@@ -25,8 +25,8 @@ export function DriveDownloadRenderer({
             : '该文件格式暂不支持在线预览。'}
         </p>
         {current.downloadUrl ? (
-          <Link className='mt-5' href={current.downloadUrl}>
-            <FileDown data-icon='inline-start' />
+          <Link className='mt-5 gap-1' href={current.downloadUrl}>
+            <Link.Icon><FileDown className='size-full' /></Link.Icon>
             下载文件
           </Link>
         ) : null}

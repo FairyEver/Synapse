@@ -5,7 +5,7 @@ import { Button, Card, Checkbox, Chip, Input, Label, Modal, Separator, Skeleton,
 import { useMemo, useRef, useState } from 'react';
 import { formatBytes } from '@synapse/shared';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Copy, FileText, List, Pencil, Plus, ShieldCheck } from 'lucide-react';
+import { Copy, List, Pencil, Plus, ShieldCheck } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { dashboardApi, type DashboardApiKey, type DashboardApiKeyCapability, type DashboardApiKeyCreateResult, type DashboardApiKeyUsageLog, } from '@/lib/api';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -239,16 +239,18 @@ export function ApiKeysSettings() {
       </div>
 
       <Modal.Backdrop isOpen={createOpen} onOpenChange={(open) => open ? setCreateOpen(true) : closeCreateDialog()}><Modal.Container><Modal.Dialog>
-          <form className='space-y-4' onSubmit={submitCreate}>
+          <form className='flex min-h-0 flex-1 flex-col' onSubmit={submitCreate}>
             <Modal.Header>
               <Modal.Heading>创建密钥</Modal.Heading>
               <p>完整密钥只会显示一次。</p>
             </Modal.Header>
-            <TextField className='space-y-2'>
-              <Label htmlFor='api-key-name'>名称</Label>
-              <Input id='api-key-name' value={name} maxLength={80} onChange={(event) => setName(event.target.value)} autoFocus></Input>
-            </TextField>
-            <ApiKeyPermissionSelector idPrefix='api-key-create' capabilities={capabilities} selectedScopes={selectedScopes} onToggle={toggleScope} isLoading={capabilitiesLoading} isError={capabilitiesIsError} onRetry={() => void refetchCapabilities()} disabled={createApiKey.isPending}/>
+            <Modal.Body className='space-y-4'>
+              <TextField className='space-y-2'>
+                <Label htmlFor='api-key-name'>名称</Label>
+                <Input id='api-key-name' value={name} maxLength={80} onChange={(event) => setName(event.target.value)} autoFocus></Input>
+              </TextField>
+              <ApiKeyPermissionSelector idPrefix='api-key-create' capabilities={capabilities} selectedScopes={selectedScopes} onToggle={toggleScope} isLoading={capabilitiesLoading} isError={capabilitiesIsError} onRetry={() => void refetchCapabilities()} disabled={createApiKey.isPending}/>
+            </Modal.Body>
             <Modal.Footer>
               <Button type='button' variant="outline" onPress={closeCreateDialog}>
                 取消
@@ -261,12 +263,14 @@ export function ApiKeysSettings() {
         </Modal.Dialog></Modal.Container></Modal.Backdrop>
 
       <Modal.Backdrop isOpen={Boolean(editTarget)} onOpenChange={(open) => !open && closePermissionEditor()}><Modal.Container><Modal.Dialog>
-          <form className='space-y-4' onSubmit={submitPermissionUpdate}>
+          <form className='flex min-h-0 flex-1 flex-col' onSubmit={submitPermissionUpdate}>
             <Modal.Header>
               <Modal.Heading>编辑 API 权限</Modal.Heading>
               <p>{editTarget?.name ?? ''}</p>
             </Modal.Header>
-            <ApiKeyPermissionSelector idPrefix='api-key-edit' capabilities={capabilities} selectedScopes={editScopes} onToggle={(scope, checked) => (setEditScopes((current) => toggleScopeValue(current, scope, checked)))} isLoading={capabilitiesLoading} isError={capabilitiesIsError} onRetry={() => void refetchCapabilities()} disabled={updateApiKeyPermissions.isPending}/>
+            <Modal.Body className='space-y-4'>
+              <ApiKeyPermissionSelector idPrefix='api-key-edit' capabilities={capabilities} selectedScopes={editScopes} onToggle={(scope, checked) => (setEditScopes((current) => toggleScopeValue(current, scope, checked)))} isLoading={capabilitiesLoading} isError={capabilitiesIsError} onRetry={() => void refetchCapabilities()} disabled={updateApiKeyPermissions.isPending}/>
+            </Modal.Body>
             <Modal.Footer>
               <Button type='button' variant="outline" onPress={closePermissionEditor}>
                 取消
@@ -287,28 +291,32 @@ export function ApiKeysSettings() {
             <Modal.Heading>密钥已创建</Modal.Heading>
             <p>请立即复制，关闭后无法再次查看。</p>
           </Modal.Header>
-          <div className='flex items-center gap-2'>
-            <Input value={created?.secret ?? ''} readOnly className='font-mono'></Input>
-            <Button type='button' variant="outline" isIconOnly onPress={() => void copySecret()}>
-              <Copy />
-              <span className='sr-only'>复制密钥</span>
-            </Button>
-          </div>
+          <Modal.Body>
+            <div className='flex items-center gap-2'>
+              <Input value={created?.secret ?? ''} readOnly className='font-mono'></Input>
+              <Button type='button' variant="outline" isIconOnly onPress={() => void copySecret()}>
+                <Copy />
+                <span className='sr-only'>复制密钥</span>
+              </Button>
+            </div>
+          </Modal.Body>
           <Modal.Footer>
             <Button type='button' onPress={() => setCreated(null)}>完成</Button>
           </Modal.Footer>
         </Modal.Dialog></Modal.Container></Modal.Backdrop>
 
       <Modal.Backdrop isOpen={Boolean(renameTarget)} onOpenChange={(open) => !open && closeRenameDialog()}><Modal.Container><Modal.Dialog>
-          <form className='space-y-4' onSubmit={submitRename}>
+          <form className='flex min-h-0 flex-1 flex-col' onSubmit={submitRename}>
             <Modal.Header>
               <Modal.Heading>重命名密钥</Modal.Heading>
               <p>{renameTarget?.prefix ?? ''}...</p>
             </Modal.Header>
-            <TextField className='space-y-2'>
-              <Label htmlFor='api-key-rename-name'>名称</Label>
-              <Input id='api-key-rename-name' value={renameName} maxLength={80} onChange={(event) => setRenameName(event.target.value)} autoFocus></Input>
-            </TextField>
+            <Modal.Body className='space-y-4'>
+              <TextField className='space-y-2'>
+                <Label htmlFor='api-key-rename-name'>名称</Label>
+                <Input id='api-key-rename-name' value={renameName} maxLength={80} onChange={(event) => setRenameName(event.target.value)} autoFocus></Input>
+              </TextField>
+            </Modal.Body>
             <Modal.Footer>
               <Button type='button' variant="outline" onPress={closeRenameDialog}>
                 取消
@@ -368,8 +376,7 @@ function ApiKeyPermissionSelector({ idPrefix, capabilities, selectedScopes, onTo
                         {capability.name}
                       </label>
                       <HeroLink target='_blank' rel='noreferrer' aria-label={`${capability.name} API 文档`} href={capability.documentationUrl}>
-                          <FileText />
-                          文档
+                          文档<HeroLink.Icon />
                         </HeroLink>
                     </div>
                     <span id={descriptionId} className='block text-sm text-muted'>
@@ -459,7 +466,9 @@ function ApiKeyUsageDialog({ apiKey, onOpenChange, }: {
           <Modal.Heading>{apiKey?.name ?? ''} 使用记录</Modal.Heading>
           <p className='sr-only'>API 密钥使用记录</p>
         </Modal.Header>
-        <ServerDataTable columns={columns} data={data?.data ?? []} page={page} pageSize={pageSize} total={data?.total ?? 0} onPageChange={setPage} onPageSizeChange={setPageSize} error={isError ? error : null} onRetry={() => void refetch()} isLoading={isLoading} emptyMessage='暂无使用记录'/>
+        <Modal.Body>
+          <ServerDataTable columns={columns} data={data?.data ?? []} page={page} pageSize={pageSize} total={data?.total ?? 0} onPageChange={setPage} onPageSizeChange={setPageSize} error={isError ? error : null} onRetry={() => void refetch()} isLoading={isLoading} emptyMessage='暂无使用记录'/>
+        </Modal.Body>
       </Modal.Dialog></Modal.Container></Modal.Backdrop>);
 }
 const usageOperationLabels = {

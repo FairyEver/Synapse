@@ -1,6 +1,5 @@
 import { Button, Chip, Input, Link, ListBox, Select, toast } from '@heroui/react'
 import { useMemo, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
 import type { SkillRepositoryStatus } from '@synapse/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef, type SortingState } from '@tanstack/react-table'
@@ -138,7 +137,7 @@ export default function SkillRepositoryAdminPage({
           <div className='flex justify-end gap-2'>
             {row.original.owner.handle ? (
               <Link href={`/console/skills/${encodeURIComponent(row.original.owner.handle)}/${encodeURIComponent(row.original.name)}`} target='_blank' rel='noreferrer' aria-label={`打开 ${row.original.title}`}>
-                <ExternalLink className='size-4' />打开
+                打开<Link.Icon />
               </Link>
             ) : null}
             <Button

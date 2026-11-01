@@ -424,7 +424,7 @@ function DriveFileVersionRow({
               label={`下载 v${version.versionNumber}`}
               tooltip='下载'
             >
-              <Download />
+              <Download className='size-4' />
             </DriveVersionActionButton>
           ) : null}
           {canModify ? (
@@ -514,7 +514,7 @@ function DriveVersionActionButton({
       data-drive-telemetry-event={telemetryEvent}
       href={href}
     >
-      {children}
+      <Link.Icon className='size-4'>{children}</Link.Icon>
     </Link>
   ) : (
     <Button

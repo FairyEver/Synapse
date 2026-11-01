@@ -37,10 +37,7 @@ export function SkillRepositorySettingsDialog({ repository, open, saving, deleti
     const canDelete = deleteConfirm === repository.name;
     return (<>
       <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}><Modal.Container><Modal.Dialog>
-          <Modal.Header>
-            <Modal.Heading>设置</Modal.Heading>
-          </Modal.Header>
-          <form className='space-y-4' onSubmit={(event) => {
+          <form className='flex min-h-0 flex-1 flex-col' onSubmit={(event) => {
             event.preventDefault();
             void onSave({
                 name,
@@ -49,41 +46,46 @@ export function SkillRepositorySettingsDialog({ repository, open, saving, deleti
                 visibility,
             });
         }}>
-            <TextField className='grid gap-2'>
-              <Label htmlFor='skill-repository-name'>仓库名</Label>
-              <Input id='skill-repository-name' value={name} onChange={(event) => setName(event.target.value)}></Input>
-            </TextField>
-            <TextField className='grid gap-2'>
-              <Label htmlFor='skill-repository-title'>标题</Label>
-              <Input id='skill-repository-title' value={title} onChange={(event) => setTitle(event.target.value)}></Input>
-            </TextField>
-            <TextField className='grid gap-2'>
-              <Label htmlFor='skill-repository-description'>描述</Label>
-              <TextArea id='skill-repository-description' value={description} onChange={(event) => setDescription(event.target.value)}></TextArea>
-            </TextField>
-            <div className='grid gap-2'>
-              <Label>可见性</Label>
-              <Select value={visibility} onChange={(value) => {
-            if (value === 'private' || value === 'public')
-                setVisibility(value);
-        }}>
-                <Select.Trigger>
-                  <Select.Value></Select.Value>
-                <Select.Indicator /></Select.Trigger>
-                <Select.Popover><ListBox>
-                  <ListBox.Item id='private' textValue='private'>私有<ListBox.ItemIndicator /></ListBox.Item>
-                  <ListBox.Item id='public' textValue='public'>公开<ListBox.ItemIndicator /></ListBox.Item>
-                </ListBox></Select.Popover>
-              </Select>
-            </div>
-            {repository.forkedFromRepositoryId ? (<TextField className='grid gap-2'>
-                <Label>Fork 来源</Label>
-                <Input value={repository.forkedFromRepositoryId} readOnly></Input>
-              </TextField>) : null}
-            {error ? (<div className='flex items-center justify-between gap-3 text-sm text-danger'>
-                <span>{error}</span>
-                {error.includes('用户名') ? (<HeroLink href={consoleHref('/settings')}>设置</HeroLink>) : null}
-              </div>) : null}
+            <Modal.Header>
+              <Modal.Heading>设置</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body className='space-y-4'>
+              <TextField className='grid gap-2'>
+                <Label htmlFor='skill-repository-name'>仓库名</Label>
+                <Input id='skill-repository-name' value={name} onChange={(event) => setName(event.target.value)}></Input>
+              </TextField>
+              <TextField className='grid gap-2'>
+                <Label htmlFor='skill-repository-title'>标题</Label>
+                <Input id='skill-repository-title' value={title} onChange={(event) => setTitle(event.target.value)}></Input>
+              </TextField>
+              <TextField className='grid gap-2'>
+                <Label htmlFor='skill-repository-description'>描述</Label>
+                <TextArea id='skill-repository-description' value={description} onChange={(event) => setDescription(event.target.value)}></TextArea>
+              </TextField>
+              <div className='grid gap-2'>
+                <Label>可见性</Label>
+                <Select value={visibility} onChange={(value) => {
+              if (value === 'private' || value === 'public')
+                  setVisibility(value);
+          }}>
+                  <Select.Trigger>
+                    <Select.Value></Select.Value>
+                  <Select.Indicator /></Select.Trigger>
+                  <Select.Popover><ListBox>
+                    <ListBox.Item id='private' textValue='private'>私有<ListBox.ItemIndicator /></ListBox.Item>
+                    <ListBox.Item id='public' textValue='public'>公开<ListBox.ItemIndicator /></ListBox.Item>
+                  </ListBox></Select.Popover>
+                </Select>
+              </div>
+              {repository.forkedFromRepositoryId ? (<TextField className='grid gap-2'>
+                  <Label>Fork 来源</Label>
+                  <Input value={repository.forkedFromRepositoryId} readOnly></Input>
+                </TextField>) : null}
+              {error ? (<div className='flex items-center justify-between gap-3 text-sm text-danger'>
+                  <span>{error}</span>
+                  {error.includes('用户名') ? (<HeroLink href={consoleHref('/settings')}>设置</HeroLink>) : null}
+                </div>) : null}
+            </Modal.Body>
             <Modal.Footer className='gap-2 sm:justify-between'>
               <Button type='button' variant="danger" onPress={() => setDeleteOpen(true)}>
                 删除
@@ -102,7 +104,9 @@ export function SkillRepositorySettingsDialog({ repository, open, saving, deleti
               输入仓库名确认删除。
             </p>
           </AlertDialog.Header>
-          <Input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)}></Input>
+          <AlertDialog.Body>
+            <Input value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)}></Input>
+          </AlertDialog.Body>
           <AlertDialog.Footer>
             <Button slot="close" variant="tertiary">取消</Button>
             <Button isDisabled={!canDelete || deleting} onPress={() => { void onDelete(); }}>

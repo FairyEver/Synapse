@@ -16,8 +16,8 @@ export function DriveShareViewerStatus({
   if (snapshot.context !== 'share') return null
   if (!user) {
     return (
-      <Link className={className} href={buildShareSignInUrl(snapshot)}>
-        <LogIn data-icon='inline-start' />
+      <Link className={cn('gap-1', className)} href={buildShareSignInUrl(snapshot)}>
+        <Link.Icon><LogIn className='size-full' /></Link.Icon>
         登录
       </Link>
     )

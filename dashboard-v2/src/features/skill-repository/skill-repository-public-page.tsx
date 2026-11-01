@@ -65,8 +65,8 @@ export function SkillRepositoryPublicPage({ ownerHandle, repositoryName, }: {
             <GitFork data-icon='inline-start'/>
             Fork
           </Button>
-          {isOwner ? (<HeroLink href={consoleHref('/skill-repositories/$repositoryId', { params: { repositoryId: detail.id } })}>
-                <Settings data-icon='inline-start'/>
+          {isOwner ? (<HeroLink className='gap-1' href={consoleHref('/skill-repositories/$repositoryId', { params: { repositoryId: detail.id } })}>
+                <HeroLink.Icon><Settings className='size-full' /></HeroLink.Icon>
                 设置
               </HeroLink>) : null}
         </div>

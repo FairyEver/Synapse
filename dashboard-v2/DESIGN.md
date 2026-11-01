@@ -44,6 +44,8 @@ All application entry documents use `data-theme="light"` and `color-scheme: ligh
 - Compose interfaces from HeroUI components before creating custom primitives.
 - Keep interactions accessible, keyboard friendly, and visibly focused.
 - Use semantic tokens from the default light theme.
+- Let HeroUI Button and menu slots size their SVGs. Use `Link.Icon` for link icons, preferring its built-in external arrow for documentation links. Custom SVGs inside `Link.Icon` must fill that slot (`size-full`); do not retain an unrelated intrinsic SVG size. HeroUI does not provide a separate general-purpose icon pack.
+- Keep modal, drawer and confirmation content in adjacent `Header`, `Body`, `Footer` slots. HeroUI 3.2.7 supplies their spacing through sibling selectors; do not put fields directly before `Footer` or add a second outer gap. A form wrapping these sections uses `flex min-h-0 flex-1 flex-col`, with field spacing inside `Body`. Reader/lightbox layouts retain their deliberate custom geometry.
 
 ## Colors
 
