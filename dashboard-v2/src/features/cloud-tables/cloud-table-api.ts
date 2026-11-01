@@ -1,7 +1,9 @@
 import type { CloudTableDto, CloudTableSummary, CloudPage, CloudRecordDto, CloudKeyResources } from '@synapse/shared'
 import { requestJson } from '@/lib/api-client'
 const base = '/api/console/tables'
+export type CloudCollaborator = { id: string; handle: string; nickname: string }
 export const cloudTableApi = {
+  searchCollaborators: (id: string, query: string, signal?: AbortSignal) => requestJson<{ data: CloudCollaborator[]; hasMore: boolean }>(`${base}/${encodeURIComponent(id)}/collaborators/search?query=${encodeURIComponent(query)}`, { signal }),
   list: (trash = false, cursor?: string, signal?: AbortSignal) => requestJson<CloudPage<CloudTableSummary>>(`${base}${trash ? '/trash' : ''}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { signal }),
   get: (id: string, signal?: AbortSignal) => requestJson<CloudTableDto>(`${base}/${encodeURIComponent(id)}`, { signal }),
   send: <T = unknown>(path: string, method: string, body?: unknown, idempotencyKey: string = crypto.randomUUID()) => requestJson<T>(`${base}${path}`, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }), headers: { 'Idempotency-Key': idempotencyKey } }),

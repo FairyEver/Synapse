@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Button, toast } from '@heroui/react'
-import type { CloudField, CloudFieldType, CloudMember, CloudRange } from '@synapse/shared'
+import { toast } from '@heroui/react'
+import type { CloudField, CloudFieldType } from '@synapse/shared'
 import type { CloudTablesModel } from './use-cloud-tables'
 import { CloudCheck, CloudInput, CloudModal, CloudSelect } from './cloud-table-controls'
 import { fieldInput, fieldTypes, parseFieldInput, parseOptions } from './cloud-table-forms'
-import { cloudTableApi } from './cloud-table-api'
+import { PermissionDialog } from './cloud-table-permissions'
 
-const actions = [{ key: 'read', name: '查询' }, { key: 'create', name: '新增' }, { key: 'update', name: '修改' }, { key: 'delete', name: '删除' }] as const
 export function CloudTableDialogs({ model: m }: { model: CloudTablesModel }) {
   const d = m.dialog
   if (!d) return null
@@ -51,29 +50,5 @@ function RecordDialog({ model: m, record }: { model: CloudTablesModel; record?: 
   async function save() { try { await m.saveRecord(draft, record) } catch (e) { if (!m.mutation.isError) toast.danger(e instanceof Error ? e.message : '记录无效') } }
   return <CloudModal title={record ? '编辑记录' : '新增记录'} onClose={() => m.setDialog(null)} onSave={() => void save()} pending={m.mutation.isPending}>
     {fields.map(f => f.type === 'boolean' || f.type === 'singleSelect' ? <CloudSelect key={f.key} label={f.name} value={draft[f.key] || '_null'} onChange={v => set(f.key, v === '_null' ? '' : v)} items={[{ key: '_null', name: '空' }, ...(f.type === 'boolean' ? [{ key: 'true', name: '是' }, { key: 'false', name: '否' }] : f.options ?? [])]} /> : <CloudInput key={f.key} label={f.name} value={draft[f.key] ?? ''} onChange={v => set(f.key, v)} required={f.required} multiline={f.type === 'json' || f.type === 'multiSelect'} />)}
-  </CloudModal>
-}
-function PermissionDialog({ model: m }: { model: CloudTablesModel }) {
-  const table = m.table!, [anonymous, setAnonymous] = useState(table.anonymous), [members, setMembers] = useState<CloudMember[]>(table.members ?? [])
-  const [handle, setHandle] = useState(''), [acknowledged, setAcknowledged] = useState(false), [resolving, setResolving] = useState(false)
-  const danger = Boolean((anonymous.update && !table.anonymous.update) || (anonymous.delete && !table.anonymous.delete))
-  async function add() {
-    setResolving(true)
-    try {
-      const user = await cloudTableApi.send<{ id: string; handle: string }>(`/${table.id}/collaborators/resolve`, 'POST', { handle })
-      if (members.some(m => m.userId === user.id) || user.id === table.ownerId) throw new Error('该用户已在列表中')
-      setMembers(m => [...m, { userId: user.id, handle: user.handle, permissions: { read: 'all', create: 'none', update: 'none', delete: 'none' } }]); setHandle('')
-    } catch (e) { toast.danger(e instanceof Error ? e.message : '查找失败') } finally { setResolving(false) }
-  }
-  async function save() {
-    if (danger && !acknowledged) { toast.danger('请确认匿名修改或删除权限'); return }
-    await m.mutation.mutateAsync({ path: `/${table.id}/permissions`, method: 'PATCH', body: { version: table.schemaVersion, anonymous, members: members.map(({ userId, permissions }) => ({ userId, permissions })) } })
-  }
-  function memberPermission(index: number, action: typeof actions[number]['key'], range: string) { setMembers(current => current.map((member, i) => i === index ? { ...member, permissions: { ...member.permissions, [action]: range as CloudRange } } : member)) }
-  return <CloudModal title='访问权限' onClose={() => m.setDialog(null)} onSave={() => void save().catch(() => undefined)} pending={m.mutation.isPending}>
-    <div className='flex flex-wrap gap-4'>{actions.map(a => <CloudCheck key={a.key} label={`匿名${a.name}`} selected={Boolean(anonymous[a.key])} onChange={checked => setAnonymous(v => ({ ...v, [a.key]: checked }))} />)}</div>
-    {danger && <CloudCheck label='确认允许任何人修改或删除全部记录' selected={acknowledged} onChange={setAcknowledged} />}
-    <div className='flex flex-wrap items-end gap-3'><div className='min-w-0 flex-1'><CloudInput label='协作者 SY 用户名' value={handle} onChange={setHandle} /></div><Button variant='secondary' isPending={resolving} onPress={() => void add()}>添加</Button></div>
-    {members.map((member, index) => <div key={member.userId} className='space-y-3 border-t border-separator pt-3'><div className='flex items-center justify-between gap-3'><span className='break-all'>{member.handle ?? member.userId}</span><Button variant='danger-soft' onPress={() => setMembers(v => v.filter(m => m.userId !== member.userId))}>移除</Button></div><div className='grid gap-3 sm:grid-cols-2'>{actions.map(a => <CloudSelect key={a.key} label={a.name} value={member.permissions[a.key] ?? 'none'} onChange={v => memberPermission(index, a.key, v)} items={[{ key: 'none', name: '禁止' }, ...(a.key !== 'create' ? [{ key: 'own', name: '本人记录' }] : []), { key: 'all', name: '全部记录' }]} />)}</div></div>)}
   </CloudModal>
 }

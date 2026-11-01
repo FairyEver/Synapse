@@ -144,6 +144,18 @@ export class CloudTableService {
       table.fields = await tx.cloudTableField.findMany({ where: { tableId, ...(archived ? {} : { archivedAt: null }) }, orderBy: { position: "asc" }, take: 100 })
     }
     const fields = this.fields(table)
+    if (op === "member.search") {
+      if (!actor.console) fail("FORBIDDEN", "用户搜索仅供登录后的控制台使用。", 403)
+      permission("manage")
+      const query = (input as { query?: unknown }).query
+      if (typeof query !== "string" || !query.trim() || query.length > 320) fail("INVALID_REQUEST", "请输入邮箱、用户名或昵称，最多320个字符。")
+      const term = query.trim().replace(/[\\%_]/gu, "\\$&")
+      const users = await tx.user.findMany({
+        where: { status: "active", id: { not: table.ownerId }, OR: ["email", "handle", "nickname"].map(field => ({ [field]: { contains: term, mode: "insensitive" as const } })) },
+        select: { id: true, handle: true, nickname: true }, orderBy: [{ handle: "asc" }, { id: "asc" }], take: 21,
+      })
+      return { data: users.slice(0, 20), hasMore: users.length > 20 }
+    }
     if (op === "member.resolve") {
       permission("manage")
       const handle = (input as { handle?: unknown }).handle
@@ -197,9 +209,9 @@ export class CloudTableService {
       permission("manage"); const change = parse(permissionsSchema, input)
       if (table.schemaVersion !== change.version) fail("VERSION_CONFLICT", "权限已变化，请刷新。", 409)
       if (new Set(change.members.map(m => m.userId)).size !== change.members.length || change.members.some(m => m.userId === table.ownerId)) fail("INVALID_MEMBERS", "协作者重复或包含表主。")
-      const users = await tx.user.findMany({ where: { id: { in: change.members.map(m => m.userId) }, status: "active" }, select: { id: true, handle: true }, take: 100 })
+      const users = await tx.user.findMany({ where: { id: { in: change.members.map(m => m.userId) }, status: "active" }, select: { id: true, handle: true, nickname: true }, take: 100 })
       if (users.length !== change.members.length) fail("INVALID_MEMBERS", "协作者账号不存在或已停用。")
-      const members = change.members.map(m => ({ ...m, handle: users.find(u => u.id === m.userId)!.handle }))
+      const members = change.members.map(m => { const user = users.find(u => u.id === m.userId)!; return { ...m, handle: user.handle, nickname: user.nickname } })
       await tx.cloudTable.update({ where: { id: tableId }, data: { anonymous: change.anonymous, members, schemaVersion: { increment: 1 } } })
       return { schemaVersion: table.schemaVersion + 1 }
     }

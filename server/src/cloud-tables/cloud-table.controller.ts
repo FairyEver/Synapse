@@ -29,6 +29,7 @@ export class CloudTableController {
   @Patch(":id") update(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"table.update",b) }
   @Patch(":id/permissions") permissions(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"permissions",b) }
   @Post(":id/collaborators/resolve") resolve(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"member.resolve",b) }
+  @Get(":id/collaborators/search") searchCollaborators(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query("query") query?: string) { return this.call(r,s,id,"member.search",{query}) }
   @Delete(":id") delete(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"table.delete",b) }
   @Post(":id/restore") restore(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string) { return this.call(r,s,id,"table.restore") }
   @Get(":id/logs") logs(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query("cursor") cursor?: string) { return this.call(r,s,id,"logs",{cursor}) }
