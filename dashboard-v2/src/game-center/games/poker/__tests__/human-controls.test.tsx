@@ -13,12 +13,14 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const table: PokerTableView = { roomCode: "1234", name: null, status: "running", buyIn: 1000, maxSeats: 2, handId: "hand", handNo: 1, street: "flop", board: [], pot: 20, dealerSeat: 0, actionOnSeat: 0, deadlineMs: 20000, cursor: "1:3", mySeatNo: 0, seats: [{ seatNo: 0, displayName: "本人", isMe: true, stack: 100, status: "active", streetBet: 2, aiState: "online", controller: "human" }], recentActions: [], deckRemaining: 40, actionSeq: 3, controlVersion: 4, controller: "human", legalActions: ["fold", "call", "raise", "allin"], toCall: 4, minRaiseTo: 10, maxRaiseTo: 102 }
 afterEach(() => { vi.clearAllMocks(); document.body.replaceChildren() })
 async function render(value = table) { const host = document.createElement("div"), root = createRoot(host); document.body.append(host); await act(async () => root.render(<HumanControls table={value} perspective="owner" onRefresh={vi.fn()} />)); return { host, root } }
-function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
+function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label") === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
+async function openManagement(host: HTMLElement) { await act(async () => button(host, "更多牌桌操作").click()) }
 describe("真人牌桌操作", () => {
  it("上手历史座位不能阻止离桌后重新申请入座，实际容量由服务端裁决", async () => {
   api.join.mockResolvedValue({seatNo:0})
   const departed={...table,mySeatNo:null,controller:null,seats:[{...table.seats[0],status:"folded"},{...table.seats[0],seatNo:1,isMe:false}]}
   const {host,root}=await render(departed)
+  await openManagement(host)
   expect(button(host,"本人入座").disabled).toBe(false)
   await act(async()=>button(host,"本人入座").click())
   expect(api.join).toHaveBeenCalledWith({roomCode:"1234"})
@@ -96,12 +98,14 @@ describe("真人牌桌操作", () => {
   const copy=vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:copy}})
   const {host,root}=await render({...table,mySeatNo:null,seats:[],controller:null})
+  await openManagement(host)
   await act(async()=>button(host,"接入 AI").click())
   expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"request_ai"})
   expect(copy).toHaveBeenCalledOnce()
   expect(copy.mock.calls[0][0]).toContain("seat.join 并携带该 controlVersion")
   expect(api.control.mock.invocationCallOrder[0]).toBeLessThan(copy.mock.invocationCallOrder[0])
   await act(async()=>root.render(<HumanControls table={{...table,mySeatNo:null,seats:[],controller:null,controlVersion:5,handoffPending:true}} perspective="public" onRefresh={vi.fn()} />))
+  await openManagement(host)
   expect(host.textContent).toContain("等待 AI 入座")
   await act(async()=>button(host,"复制 AI 接入指令").click())
   expect(api.control).toHaveBeenCalledTimes(1)
@@ -112,6 +116,7 @@ describe("真人牌桌操作", () => {
  it("本人入座与暂离离桌带控制版本", async () => {
   api.join.mockResolvedValue({seatNo:0});api.sit.mockResolvedValue({pending:true});api.leave.mockResolvedValue({})
   const {host,root}=await render({...table,mySeatNo:null,seats:[]})
+  await openManagement(host)
   await act(async()=>button(host,"本人入座").click())
   expect(api.join).toHaveBeenCalledWith({roomCode:"1234"})
   await act(async()=>root.render(<HumanControls table={table} perspective="owner" onRefresh={vi.fn()} />))
@@ -121,8 +126,8 @@ describe("真人牌桌操作", () => {
   expect(api.leave).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4})
   await act(async()=>root.unmount())
  })
- it("等待 AI 接入时本人仍可出牌并可取消交接", async () => { const {host,root} = await render({...table,handoffPending:true}); expect(button(host,"跟注 4").disabled).toBe(false); api.control.mockResolvedValue({}); await act(async()=>button(host,"取消 AI 接管").click()); expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"cancel_ai"}); await act(async()=>root.unmount()) });
- it("AI 座位立即接管，旁观视角不显示出牌控件", async () => { api.control.mockResolvedValue({}); const {host,root} = await render({...table,controller:"ai"}); expect(button(host,"暂离").disabled).toBe(true); expect(button(host,"离桌").disabled).toBe(true); await act(async()=>button(host,"本人接管").click()); expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"takeover"}); await act(async()=>root.render(<HumanControls table={table} perspective="public" onRefresh={vi.fn()} />)); expect(host.querySelector('input')).toBeNull(); expect(button(host,"弃牌")).toBeUndefined(); await act(async()=>root.unmount()) });
+ it("等待 AI 接入时本人仍可出牌并可取消交接", async () => { const {host,root} = await render({...table,handoffPending:true}); expect(button(host,"跟注 4").disabled).toBe(false); api.control.mockResolvedValue({}); await openManagement(host); await act(async()=>button(host,"取消 AI 接管").click()); expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"cancel_ai"}); await act(async()=>root.unmount()) });
+ it("AI 座位立即接管，旁观视角不显示出牌控件", async () => { api.control.mockResolvedValue({}); const {host,root} = await render({...table,controller:"ai"}); await openManagement(host); expect(button(host,"暂离").disabled).toBe(true); expect(button(host,"离桌").disabled).toBe(true); await act(async()=>button(host,"本人接管").click()); expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"takeover"}); await act(async()=>root.render(<HumanControls table={table} perspective="public" onRefresh={vi.fn()} />)); expect(host.querySelector('input')).toBeNull(); expect(button(host,"弃牌")).toBeUndefined(); await act(async()=>root.unmount()) });
 })
 describe("完整画布与事件", () => {
  it.each([[1440,900],[1280,720],[960,640],[640,480]])("%sx%s 等比例完整呈现", (w,h)=>{ const fit=canvasFit(w,h); expect(fit.width).toBeLessThanOrEqual(w); expect(fit.height).toBeLessThanOrEqual(h); expect(fit.width/fit.height).toBeCloseTo(1440/900) });

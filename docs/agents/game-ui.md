@@ -33,11 +33,11 @@
 
 本规则确立后，V2 的视觉归属以本文件为准。旧的大厅整体游戏调色板、深色建房弹窗、所有牌桌浮层继承游戏主题及管理按钮一律使用 PokerButton 的描述不再作为 V2 目标；V1 代码与历史规格不在此次修改范围。模块边界、接入指南及 V2 迁移清单已标注这一关系。
 
-本次仅记录规则并核对源码，没有改造运行界面、增加排位/等待页面或验证浏览器呈现。历史迁移/测试通过记录不代表现有界面符合本次分层规则。不改变玩法协议、服务端、MCP/Skill 能力、数据库或发布流程；游戏内容继续遵守发布静默规则。
+初次规则提交仅记录规则并核对源码；随后用户明确授权实施，落实情况见下文。未增加排位或等待页面。历史迁移/测试通过记录不代替本次分层验收。不改变玩法协议、服务端、MCP/Skill 能力、数据库或发布流程；游戏内容继续遵守发布静默规则。
 
 ## 现状对照（2026-11-01）
 
-核对对象为 `dashboard-v2/src/game-center/`；[游戏注册表](../../dashboard-v2/src/game-center/game-registry.tsx) 仅注册德州扑克 `/poker`。点数/陪练与标准/短牌是同一游戏的模式/规则，不是其他游戏。未发现独立排位页；房间中的等待主要是牌桌 HUD 状态。
+以下为改造前的源码快照，用于记录改造依据；不是当前未完成清单。核对对象为 `dashboard-v2/src/game-center/`；[游戏注册表](../../dashboard-v2/src/game-center/game-registry.tsx) 仅注册德州扑克 `/poker`。点数/陪练与标准/短牌是同一游戏的模式/规则，不是其他游戏。未发现独立排位页；房间中的等待主要是牌桌 HUD 状态。
 
 | 现有表面及源码 | 应属层 | 源码现状与处理方向 |
 | --- | --- | --- |
@@ -54,4 +54,13 @@
 | [SidePanel](../../dashboard-v2/src/game-center/games/poker/components/SidePanel.tsx) 的日志/AI 判断/提示词、[PracticeBots](../../dashboard-v2/src/game-center/games/poker/components/PracticeBots.tsx) | 系统 | HeroUI Tabs 仍被游戏变量重染，机器人管理使用 PokerButton；需统一系统侧栏与管理控件，保留仅本人可读与房主权限 |
 | [Settlement](../../dashboard-v2/src/game-center/games/poker/components/Settlement.tsx) | 分两种用途 | `compact=false` 桌上短摘要保留游戏反馈；`compact` 日志内完整结果改用系统布局并复用牌面，不按组件名一刀切 |
 
-优先改造交叉最多的 `HumanControls`、`PokerControlPopover`、`SidePanel` 和 `PracticeBots`，再统一 Table 边缘系统入口；大厅/房间/记录/档案沿用既有系统方向，纯牌桌场景保留。相关样式证据为 [responsive-controls.css](../../dashboard-v2/src/game-center/games/poker/styles/responsive-controls.css) 中的 Tabs token 重映射和 `.poker-control-popover` 覆盖，以及 [table-tokens.css](../../dashboard-v2/src/game-center/games/poker/styles/table-tokens.css) 中的游戏按钮/表单样式。
+实施顺序采用先改造交叉最多的 `HumanControls`、`PokerControlPopover`、`SidePanel` 和 `PracticeBots`，再统一 Table 边缘系统入口；大厅/房间/记录/档案沿用既有系统方向，纯牌桌场景保留。相关样式证据为 [responsive-controls.css](../../dashboard-v2/src/game-center/games/poker/styles/responsive-controls.css) 中的 Tabs token 重映射和 `.poker-control-popover` 覆盖，以及 [table-tokens.css](../../dashboard-v2/src/game-center/games/poker/styles/table-tokens.css) 中的游戏按钮/表单样式。
+
+## V2 实施与验证（2026-11-01）
+
+- 已将 Table 边缘系统入口、日志/AI 判断、陪练管理、完整结算、金额字段/滑块/预设及全下确认分为标准 HeroUI 系统表面；游戏画布、座位、HUD、直接出牌 PokerButton、即时结算与音画实现保留。
+- 宽屏座位管理也改为按需菜单，窄屏仍从顶部“更多”进入，二者分别使用实际触发按钮定位并返回焦点。Popover 使用 HeroUI 导出的 `popoverVariants` 官方样式与原有显式 triggerRef/Portal，避免无触发子节点的 DialogTrigger 根组件；不手工重制浮层皮肤。
+- 移除了系统 Tabs/Popover 的游戏 token 覆盖。系统表面明确恢复默认字体、文字与 light color-scheme；游戏牌面内容可以继续继承游戏素材参数。全下使用独立 AlertDialog，取消保留金额与触发焦点，只有显式确认才调用原动作。
+- 陪练标签内容保持挂载以保留请求上下文，仅在选中时显示；未选中的管理内容不再出现在日志下。完整结算的长连续英文姓名可以换行，遮蔽的手牌仍不渲染。
+- 专项 Chromium 固定数据回归实际展开宽窄屏日志、AI 判断、陪练、管理、金额表单和确认，比较真实系统控件背景/字体，检查金额校验、滑块同步、焦点返回、边界、画布稳定及带控制版本的动作。截图位于 `dashboard-v2/src/game-center/games/poker/__tests__/.superpowers/sdd/2026-11-01-poker-system-ui/`，为本机生成产物，无在线链接。
+- 验证记录见 [实施计划](../superpowers/plans/2026-11-01-poker-system-ui.md)。本次不部署、不 push、不修改数据库或 MCP/Skill 协议；没有连接真实账号或业务库，固定数据截图不代表线上验收。

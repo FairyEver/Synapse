@@ -26,30 +26,6 @@
 .poker-information-slot { flex: 1; min-height: 0; position: relative; }
 .poker-information-drawer { position: relative; height: 100%; min-height: 0; }
 .poker-information-drawer[hidden] { display: none; }
-.poker-immersive[data-control-layout] .poker-side-panel {
-  position: static;
-  width: 100%;
-  height: 100%;
-  padding-top: 0.75rem;
-  box-shadow: none;
-  opacity: 1;
-  visibility: visible;
-  translate: none;
-}
-.poker-information-tabs {
-  --foreground: var(--game-fg);
-  --muted: var(--game-muted);
-  --default: var(--game-panel);
-  --accent: var(--game-fg);
-  --border: var(--game-line);
-  --focus: var(--brass);
-  padding-top: 0.25rem;
-}
-.poker-information-tabs > .tabs__list-container { margin-inline: 1.25rem; }
-.poker-information-tabs .tabs__tab { color: var(--game-muted); }
-.poker-information-tabs .tabs__tab[data-selected] { color: var(--game-fg); }
-.poker-information-tabs .tabs__panel { outline: none; }
-.poker-immersive[data-control-layout] .poker-close-log { top: 0.25rem; right: 0.25rem; }
 .poker-immersive[data-control-layout] .poker-controls-anchor {
   width: 100%;
   min-height: 0;
@@ -75,34 +51,11 @@
   padding-inline: 0.5rem;
   font-size: 0.875rem;
 }
-.poker-immersive[data-control-layout] .poker-bet-editor { flex-direction: column; gap: 0.5rem; }
-.poker-immersive[data-control-layout] .poker-bet-input { grid-template-columns: minmax(0, 1fr) 6rem; }
-.poker-immersive[data-control-layout] .poker-bet-input label { position: static; width: auto; height: auto; clip-path: none; overflow: visible; }
-.poker-immersive[data-control-layout] .poker-bet-input input[type="range"] { grid-column: 1 / -1; }
-.poker-immersive[data-control-layout] .poker-seat-controls { justify-content: space-between; gap: 0.25rem; }
-.poker-immersive[data-control-layout] .poker-seat-controls .poker-button { padding-inline: 0.5rem; }
-.poker-control-popover {
-  --overlay: var(--game-panel);
-  --overlay-foreground: var(--game-fg);
-  --foreground: var(--game-fg);
-  --focus: var(--brass);
+.poker-system-popover {
   width: min(20rem, calc(100vw - 1rem));
-  background: var(--game-panel);
-  color: var(--game-fg);
-  border: 1px solid var(--game-line);
-  border-radius: 0.5rem;
-  box-shadow: 0 4px 12px var(--table-soft-shadow);
   max-height: var(--available-height);
   overflow-y: auto;
-  padding: 1rem;
-  color-scheme: dark;
 }
-.poker-control-popover-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
-.poker-control-popover-heading > .poker-button { background: transparent; padding: 0.25rem; }
-.poker-control-popover .poker-seat-controls { flex-direction: column; align-items: stretch; }
-.poker-control-popover .poker-seat-controls .poker-button { justify-content: flex-start; }
-.poker-control-popover .poker-bet-editor { min-height: 0; }
-.poker-control-popover .poker-allin-confirm { min-height: 0; }
 
 /* Compact controls keep only the current legal actions in the bottom row. */
 .poker-immersive[data-control-layout="bottom"] .poker-table-layout {
@@ -127,8 +80,6 @@
   z-index: 5;
   pointer-events: none;
 }
-.poker-immersive[data-control-layout="bottom"] .poker-information-drawer { pointer-events: auto; background: var(--game-panel); border-left: 1px solid var(--game-line); }
-.poker-immersive[data-control-layout="bottom"] .poker-room-heading { display: none; }
+.poker-immersive[data-control-layout="bottom"] .poker-information-drawer { pointer-events: auto; border-left: 1px solid var(--separator); }
+
 .poker-immersive[data-control-layout="bottom"] .poker-perspective { gap: 0.125rem; }
-.poker-immersive[data-control-layout="bottom"] .poker-control,
-.poker-immersive[data-control-layout="bottom"] .poker-perspective > .poker-button { padding-inline: 0.375rem; }

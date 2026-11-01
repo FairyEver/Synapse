@@ -43,7 +43,7 @@ All application entry documents use `data-theme="light"` and `color-scheme: ligh
 - For poker, fold/check/call/bet/raise buttons are gameplay actions. The amount-entry panel (input, slider and presets) and all-in confirmation are system UI. An immediate winner summary is gameplay feedback; a full result in the log or history uses system layout with card artwork as content.
 - During play, expose system panels on demand, retaining only necessary entry points. The shell need not have a permanent border or Console navigation. Waiting/lobby screens may occupy the whole page as system UI.
 - Classify by responsibility, not DOM position, floating presentation or component import. System overlays must retain the default light tokens and typography even when portalled inside a game container. Do not recolor HeroUI Tabs/Popover/form controls with the poker palette. Game artwork inside a system list does not theme its surrounding controls.
-- This contract supersedes older game-wide palette, dark room-form and game-themed management-overlay instructions for V2. It does not claim the existing table chrome has been migrated. Preserve gameplay geometry, authorization, timing, privacy and action semantics during later implementation.
+- This contract supersedes older game-wide palette, dark room-form and game-themed management-overlay instructions for V2. The poker system surfaces now follow this separation; implementation and validation scope are recorded in the boundary contract. Preserve gameplay geometry, authorization, timing, privacy and action semantics during later implementation.
 
 ## Design Direction
 

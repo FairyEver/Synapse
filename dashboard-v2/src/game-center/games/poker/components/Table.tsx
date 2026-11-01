@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { ArrowLeft, Bell, Coins, Eye, ListOrdered, MoreHorizontal, UserRound, Volume2, VolumeX, X } from "lucide-react"
 import type { PokerTableView, PokerTableEvent } from "@synapse/shared/game-contracts"
+import { Button } from "@heroui/react"
 import { Card } from "./Card"
 import { Seat, EmptySeat } from "./Seat"
 import { SidePanel } from "./SidePanel"
@@ -76,16 +77,16 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const stage = view.status === "closed" ? "房间已解散" : streetLabel[view.street ?? ""] ?? (view.status === "paused" ? "等待对手" : "等待开局")
   return <section ref={surface} onKeyDown={e => { if (e.key === "Escape" && panel === "log") { setPanel(null); logTrigger.current?.focus() } }} className="poker-table poker-immersive" data-control-layout={compact ? "bottom" : "right"} data-panel-open={panelOpen} aria-label={`牌桌 ${table.roomCode}`}>
     <div className="poker-table-layout">
-        <div className="poker-edge-controls">
-          <button type="button" className="poker-control poker-back" onClick={onBack}><ArrowLeft aria-hidden="true" />返回房间</button>
-          <span className="poker-room-heading"><strong>#{table.roomCode}</strong><span>第 {table.handNo} 手</span>{table.mode === "practice" && <span>陪练</span>}</span>
-          <div className="poker-perspective">
+        <div className="poker-edge-controls bg-surface font-sans text-foreground scheme-light">
+          <Button type="button" variant="tertiary" onPress={onBack}><ArrowLeft aria-hidden="true" />返回房间</Button>
+          <span className="flex items-center gap-2 text-sm text-muted"><strong>#{table.roomCode}</strong><span>第 {table.handNo} 手</span>{table.mode === "practice" && <span>陪练</span>}</span>
+          <div className="poker-perspective flex items-center gap-2">
             {actions}
-            <button type="button" className="poker-control" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onClick={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</button>
-            {canNudge && <button type="button" className="poker-control" disabled={(view.deadlineMs ?? 600000) > 540000} onClick={() => onNudge(active.seatNo)}><Bell aria-hidden="true" />提醒玩家</button>}
-            {table.seats.some(s => s.isMe) && <button type="button" className="poker-control" aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onClick={() => onPerspective(perspective === "owner" ? "public" : "owner")}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "玩家视角" : "旁观视角"}</button>}
-            <button ref={logTrigger} type="button" className="poker-control poker-log-toggle" aria-expanded={panelOpen} aria-controls={panelId} onClick={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{panelOpen ? "收起日志" : "日志"}</button>
-            {compact && view.status !== "closed" && <button ref={menuTrigger} type="button" className="poker-control" aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onClick={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></button>}
+            <Button type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
+            {canNudge && <Button type="button" variant="tertiary" isDisabled={(view.deadlineMs ?? 600000) > 540000} onPress={() => onNudge(active.seatNo)}><Bell aria-hidden="true" />提醒玩家</Button>}
+            {table.seats.some(s => s.isMe) && <Button type="button" variant="tertiary" aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onPress={() => onPerspective(perspective === "owner" ? "public" : "owner")}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "玩家视角" : "旁观视角"}</Button>}
+            <Button ref={logTrigger} type="button" variant="tertiary" aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{panelOpen ? "收起日志" : "日志"}</Button>
+            {compact && view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
           </div>
         </div>
       <div className="poker-table-main">
@@ -112,8 +113,8 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
       </div>
       <div className="poker-interaction-rail">
         <div className="poker-information-slot">
-          <div className="poker-information-drawer" hidden={!panelOpen} inert={!panelOpen}>
-            <button type="button" className="poker-control poker-close-log" aria-label="关闭日志" onClick={() => { setPanel(null); logTrigger.current?.focus() }}><X aria-hidden="true" /></button>
+          <div className="poker-information-drawer bg-surface font-sans text-foreground scheme-light" hidden={!panelOpen} inert={!panelOpen}>
+            <Button type="button" isIconOnly size="sm" variant="tertiary" className="poker-close-log" aria-label="关闭日志" onPress={() => { setPanel(null); logTrigger.current?.focus() }}><X aria-hidden="true" /></Button>
             <SidePanel id={panelId} table={view} perspective={perspective} events={events} extras={extras} />
           </div>
         </div>

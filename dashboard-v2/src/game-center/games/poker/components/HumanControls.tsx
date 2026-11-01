@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react"
-import { Bot, Clock3, UserRound } from "lucide-react"
+import { AlertDialog, Button, Input, Label, Slider, TextField } from "@heroui/react"
+import { Bot, Clock3, MoreHorizontal, UserRound } from "lucide-react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { PokerButton } from "./PokerButton"
 import { PokerControlPopover } from "./PokerControlPopover"
@@ -26,7 +27,8 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
   const [localPanel, setLocalPanel] = useState<PokerControlPanel | null>(null)
   const panel = activePanel === undefined ? localPanel : activePanel
   const setPanel = useCallback((next: PokerControlPanel | null) => { if (onPanelChange) onPanelChange(next); else setLocalPanel(next) }, [onPanelChange])
-  const controlsRef = useRef<HTMLDivElement>(null), betTrigger = useRef<HTMLButtonElement>(null)
+  const controlsRef = useRef<HTMLDivElement>(null), betTrigger = useRef<HTMLButtonElement>(null), localMenuTrigger = useRef<HTMLButtonElement>(null)
+  const managementTrigger = compact ? menuTrigger ?? localMenuTrigger : localMenuTrigger
   const confirmAllIn = allInAction !== null
   const betId = useId()
   const allInTrigger = useRef<HTMLButtonElement>(null)
@@ -54,27 +56,42 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
     if (mine && mine.stack > 0 && contribution >= mine.stack) openConfirmation(action)
     else { if (compact) setPanel(null); act(action) }
   }
-  const confirmation = <div className="poker-allin-confirm"><PokerButton autoFocus disabled={disabled} onClick={cancelConfirmation}>取消</PokerButton><PokerButton tone="danger" disabled={disabled} onClick={() => { if (allInAction) { act(allInAction); setAllInAction(null); if (compact) setPanel(null) } }}>确认全下 {amount(mine?.stack ?? 0)}</PokerButton></div>
-  const betEditor = <div className="poker-bet-editor">{confirmAllIn ? confirmation : <>
-        <div className="poker-bet-input"><label htmlFor={betId}>{raise ? "加注到" : "下注到"}<span className="poker-contribution">追加 <b>{validAmount ? amount(contribution) : "—"}</b></span></label><input id={betId} type="number" inputMode="numeric" min={table.minRaiseTo} max={table.maxRaiseTo} step={1} value={to} disabled={disabled} aria-invalid={!validAmount} onChange={e => setTo(e.target.value)} /><input type="range" aria-label="下注金额" min={table.minRaiseTo ?? 0} max={table.maxRaiseTo ?? 0} step={1} value={Number.isFinite(numeric) ? Math.min(table.maxRaiseTo ?? 0, Math.max(table.minRaiseTo ?? 0,numeric)) : table.minRaiseTo ?? 0} disabled={disabled} onChange={e => setTo(e.target.value)} /></div>
-        <div className="poker-bet-presets">{presets.map(preset => <PokerButton key={preset.label} aria-pressed={numeric === preset.to} disabled={disabled} onClick={() => setTo(String(preset.to))}>{preset.label}</PokerButton>)}{legal.includes("allin") && <PokerButton ref={allInTrigger} tone="danger" disabled={disabled} onClick={() => openConfirmation("allin")} aria-expanded={confirmAllIn}>全下</PokerButton>}</div>
-        {compact && canBet && <PokerButton className="poker-raise-action" disabled={disabled || !validAmount} onClick={() => submit(raise ? "raise" : "bet")} aria-label={`确认${raise ? "加注" : "下注"} ${amount(numeric)}`}>{raise ? "加注到" : "下注到"} {amount(Number.isFinite(numeric) ? numeric : 0)}</PokerButton>}
-      </>}</div>
-  const sessionControls = <div className="poker-seat-controls" onClick={event => { if (compact && event.target instanceof Element && event.target.closest("button:not(:disabled)")) setPanel(null) }}>
-      {!mine && table.status !== "closed" && <><PokerButton tone="primary" disabled={busy} onClick={join}><UserRound aria-hidden="true" />本人入座</PokerButton>{handoff ? <><PokerButton onClick={() => void copy()}>复制 AI 接入指令</PokerButton><PokerButton disabled={busy} onClick={() => control("cancel_ai")}>取消 AI 接入</PokerButton></> : <PokerButton disabled={busy || version == null} onClick={requestAIJoin}><Bot aria-hidden="true" />接入 AI</PokerButton>}</>}
+  const confirmation = <AlertDialog.Backdrop isOpen={confirmAllIn} onOpenChange={open => { if (!open) cancelConfirmation() }} isKeyboardDismissDisabled={false} UNSTABLE_portalContainer={popoverContainer ?? controlsRef.current ?? undefined} className="font-sans text-foreground scheme-light">
+    <AlertDialog.Container size="sm"><AlertDialog.Dialog aria-label="确认全下">
+      <AlertDialog.Header><AlertDialog.Heading>确认全下</AlertDialog.Heading></AlertDialog.Header>
+      <AlertDialog.Body><p>投入全部剩余筹码 {amount(mine?.stack ?? 0)}</p></AlertDialog.Body>
+      <AlertDialog.Footer>
+        <Button autoFocus variant="tertiary" isDisabled={disabled} onPress={cancelConfirmation}>取消</Button>
+        <Button variant="danger" isDisabled={disabled} onPress={() => { if (allInAction) { act(allInAction); setAllInAction(null); if (compact) setPanel(null) } }}>确认全下 {amount(mine?.stack ?? 0)}</Button>
+      </AlertDialog.Footer>
+    </AlertDialog.Dialog></AlertDialog.Container>
+  </AlertDialog.Backdrop>
+  const betEditor = <div className="space-y-4 font-sans text-foreground scheme-light">
+    <TextField isDisabled={disabled || confirmAllIn} isInvalid={!validAmount}>
+      <Label htmlFor={betId}>{raise ? "加注到" : "下注到"}</Label>
+      <Input variant="secondary" id={betId} type="number" inputMode="numeric" min={table.minRaiseTo} max={table.maxRaiseTo} step={1} value={to} onChange={e => setTo(e.target.value)} />
+    </TextField>
+    <p className="text-sm text-muted">追加 <b className="font-medium text-foreground">{validAmount ? amount(contribution) : "—"}</b></p>
+    <Slider aria-label="下注金额" minValue={table.minRaiseTo ?? 0} maxValue={table.maxRaiseTo ?? 0} step={1} value={Number.isFinite(numeric) ? Math.min(table.maxRaiseTo ?? 0, Math.max(table.minRaiseTo ?? 0, numeric)) : table.minRaiseTo ?? 0} isDisabled={disabled || confirmAllIn} onChange={value => setTo(String(value))}>
+      <Slider.Track><Slider.Fill /><Slider.Thumb /></Slider.Track>
+    </Slider>
+    <div className="flex flex-wrap gap-2">{presets.map(preset => <Button key={preset.label} size="sm" variant="secondary" aria-pressed={numeric === preset.to} isDisabled={disabled || confirmAllIn} onPress={() => setTo(String(preset.to))}>{preset.label}</Button>)}{legal.includes("allin") && <Button ref={allInTrigger} size="sm" variant="danger-soft" isDisabled={disabled || confirmAllIn} onPress={() => openConfirmation("allin")} aria-expanded={confirmAllIn}>全下</Button>}</div>
+    {compact && canBet && <Button fullWidth isDisabled={disabled || confirmAllIn || !validAmount} onPress={() => submit(raise ? "raise" : "bet")} aria-label={`确认${raise ? "加注" : "下注"} ${amount(numeric)}`}>{raise ? "加注到" : "下注到"} {amount(Number.isFinite(numeric) ? numeric : 0)}</Button>}
+  </div>
+  const sessionControls = <div className="flex flex-col items-stretch gap-3" onClick={event => { if (compact && event.target instanceof Element && event.target.closest("button:not(:disabled)")) setPanel(null) }}>
+      {!mine && table.status !== "closed" && <><Button isDisabled={busy} fullWidth onPress={join}><UserRound aria-hidden="true" />本人入座</Button>{handoff ? <><Button fullWidth variant="secondary" onPress={() => void copy()}>复制 AI 接入指令</Button><Button fullWidth variant="tertiary" isDisabled={busy} onPress={() => control("cancel_ai")}>取消 AI 接入</Button></> : <Button fullWidth variant="secondary" isDisabled={busy || version == null} onPress={requestAIJoin}><Bot aria-hidden="true" />接入 AI</Button>}</>}
       {mine && table.status !== "closed" && <>
-        {controller !== "human" ? <PokerButton tone="primary" disabled={disabled || version == null} onClick={() => control("takeover")}>本人接管</PokerButton> : handoff ? <PokerButton disabled={disabled} onClick={() => control("cancel_ai")}>取消 AI 接管</PokerButton> : <PokerButton disabled={disabled || version == null} onClick={() => control("request_ai")}>交给 AI</PokerButton>}
-        {handoff && <PokerButton onClick={() => void copy()}>复制 AI 接入指令</PokerButton>}
-        <PokerButton disabled={disabled || version == null || controller !== "human"} onClick={sit}>{mine.status === "sitting_out" ? "回到牌桌" : table.pauseReason === "user" ? "本手后暂离" : "暂离"}</PokerButton>
-        <PokerButton disabled={disabled || version == null || controller !== "human"} onClick={leave}>离桌</PokerButton>
+        {controller !== "human" ? <Button fullWidth isDisabled={disabled || version == null} onPress={() => control("takeover")}>本人接管</Button> : handoff ? <Button fullWidth variant="tertiary" isDisabled={disabled} onPress={() => control("cancel_ai")}>取消 AI 接管</Button> : <Button fullWidth variant="secondary" isDisabled={disabled || version == null} onPress={() => control("request_ai")}>交给 AI</Button>}
+        {handoff && <Button fullWidth variant="secondary" onPress={() => void copy()}>复制 AI 接入指令</Button>}
+        <Button fullWidth variant="secondary" isDisabled={disabled || version == null || controller !== "human"} onPress={sit}>{mine.status === "sitting_out" ? "回到牌桌" : table.pauseReason === "user" ? "本手后暂离" : "暂离"}</Button>
+        <Button fullWidth variant="danger-soft" isDisabled={disabled || version == null || controller !== "human"} onPress={leave}>离桌</Button>
       </>}
     </div>
-  const connectHelp = handoff && <p className="poker-connect-help">复制接入指令，发给你的 AI；连接后接手当前座位。</p>
+  const connectHelp = handoff && <p className="mt-3 text-sm text-muted">复制接入指令，发给你的 AI；连接后接手当前座位。</p>
   const closeBet = (open: boolean) => { if (!open) { setAllInAction(null); setPanel(null) } }
   return <div ref={controlsRef} className="poker-human-controls" data-acting={acting} data-compact-controls={compact} aria-label="本人牌桌操作" onKeyDown={event => { if (event.key === "Escape" && confirmAllIn) { event.stopPropagation(); cancelConfirmation() } }}>
     <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status">{state}</span>{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
-    {error && <p role="alert">{error}{uncertain && "，请重试确认结果"}</p>}
-    {uncertain && <PokerButton disabled={busy} onClick={retry}>重试出牌</PokerButton>}
+    {(error || uncertain) && <div className="space-y-3 rounded-xl bg-surface p-4 font-sans text-foreground scheme-light"><p role="alert" className="text-sm text-danger">{error}{uncertain && "，请重试确认结果"}</p>{uncertain && <Button isDisabled={busy} onPress={retry}>重试出牌</Button>}</div>}
     {acting && <div className="poker-action-dock">
       <div className="poker-action-buttons">
         {legal.includes("fold") && <PokerButton className="poker-fold-action" disabled={disabled || confirmAllIn} onClick={() => act("fold")}>弃牌</PokerButton>}
@@ -83,13 +100,13 @@ export function HumanControls({ table, perspective, onRefresh, identityKey, comp
         {canBet && (compact ? <PokerButton ref={betTrigger} className="poker-raise-action" disabled={disabled || confirmAllIn} aria-expanded={panel === "bet"} aria-controls={`${betId}-panel`} onClick={() => setPanel("bet")}>{raise ? "加注" : "下注"}</PokerButton> : <PokerButton className="poker-raise-action" disabled={disabled || !validAmount || confirmAllIn} onClick={() => submit(raise ? "raise" : "bet")} aria-label={`${raise ? "加注" : "下注"} ${amount(numeric)}`}>{raise ? "加注" : "下注"}<span>到 {amount(Number.isFinite(numeric) ? numeric : 0)}</span></PokerButton>)}
         {!canBet && legal.includes("allin") && <PokerButton ref={betTrigger} tone="danger" disabled={disabled || confirmAllIn} onClick={() => openConfirmation("allin")} aria-expanded={confirmAllIn}>全下</PokerButton>}
       </div>
-      {!compact && (canBet || confirmAllIn) && betEditor}
+      {!compact && canBet && <div className="rounded-xl bg-surface p-4">{betEditor}</div>}
     </div>}
-    {compact ? <>
-      <PokerControlPopover open={acting && (panel === "bet" || confirmAllIn)} onOpenChange={closeBet} trigger={betTrigger} container={popoverContainer ?? controlsRef.current} title={raise ? "加注" : "下注"} id={`${betId}-panel`} restoreFocus={panel === null && !confirmAllIn} onEscape={confirmAllIn ? cancelConfirmation : undefined}>
-        {betEditor}
-      </PokerControlPopover>
-      {menuTrigger && <PokerControlPopover open={panel === "menu"} onOpenChange={open => { if (!open) setPanel(null) }} trigger={menuTrigger} container={popoverContainer ?? controlsRef.current} title="更多操作" id={menuId} side="bottom" restoreFocus={panel === null && !confirmAllIn}>{sessionControls}{connectHelp}</PokerControlPopover>}
-    </> : <>{sessionControls}{connectHelp}</>}
+    {compact && <PokerControlPopover open={acting && panel === "bet" && canBet} onOpenChange={closeBet} trigger={betTrigger} container={popoverContainer ?? controlsRef.current} title={raise ? "加注" : "下注"} id={`${betId}-panel`} restoreFocus={panel === null && !confirmAllIn}>
+      {betEditor}
+    </PokerControlPopover>}
+    {!compact && table.status !== "closed" && <div className="flex justify-end rounded-xl bg-surface p-2 font-sans text-foreground scheme-light"><Button ref={localMenuTrigger} variant="tertiary" aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" />座位管理</Button></div>}
+    <PokerControlPopover open={panel === "menu"} onOpenChange={open => { if (!open) setPanel(null) }} trigger={managementTrigger} container={popoverContainer ?? controlsRef.current} title="更多操作" id={menuId} side={compact ? "bottom" : "top"} restoreFocus={panel === null && !confirmAllIn}>{sessionControls}{connectHelp}</PokerControlPopover>
+    {confirmation}
   </div>
 }

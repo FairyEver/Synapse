@@ -27,8 +27,8 @@ export function SidePanel({
   const canSeeAi = perspective === "owner" && table.mySeatNo !== null
   const tab = (selectedTab === "ai" && !canSeeAi) || (selectedTab === "practice" && !extras) ? "log" : selectedTab
   return (
-    <aside id={id} className="poker-side-panel" aria-label="日志和AI判断">
-      <Tabs selectedKey={tab} onSelectionChange={key => setSelectedTab(String(key))} variant="secondary" className="poker-information-tabs">
+    <aside id={id} className="h-full overflow-y-auto overscroll-contain p-4 pt-12 font-sans text-foreground scheme-light" aria-label="日志和AI判断">
+      <Tabs selectedKey={tab} onSelectionChange={key => setSelectedTab(String(key))} variant="secondary" className="w-full">
         <Tabs.ListContainer><Tabs.List aria-label="牌局信息">
           <Tabs.Tab id="log">日志<Tabs.Indicator /></Tabs.Tab>
           {perspective === "owner" && table.mySeatNo !== null && <Tabs.Tab id="ai">AI 判断<Tabs.Indicator /></Tabs.Tab>}
@@ -36,23 +36,23 @@ export function SidePanel({
         </Tabs.List></Tabs.ListContainer>
         <Tabs.Panel id="log">
       {recentResults.map(result => <Settlement key={result.handId} settlement={result} compact />)}
-      <section className="poker-log">
-        <h3>
-          <ListOrdered aria-hidden="true" />
+      <section className="space-y-4 py-4">
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          <ListOrdered className="size-4" aria-hidden="true" />
           日志
         </h3>
         {table.recentActions.length === 0 ? (
-          <p className="poker-panel-empty">暂无行动</p>
+          <p className="text-sm text-muted">暂无行动</p>
         ) : (
-          <ol className="poker-action-list">
+          <ol className="divide-y divide-separator text-sm">
             {table.recentActions.map((action) => {
               const displayName = action.displayName ?? `座位 ${action.seatNo + 1}`
               return (
-                <li key={`${table.handId}:${action.seq}`}>
-                  <span className="poker-action-seq">{String(action.seq).padStart(2, "0")}</span>
-                  <span className="poker-action-player">
-                    <span title={displayName}>{displayName}</span>
-                    <small>
+                <li key={`${table.handId}:${action.seq}`} className="flex min-w-0 items-start gap-3 py-3">
+                  <span className="text-xs text-muted tabular-nums">{String(action.seq).padStart(2, "0")}</span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="break-words" title={displayName}>{displayName}</span>
+                    <small className="text-muted">
                       {streetLabel[action.street] ?? action.street}
                       {action.isAuto && " · 自动"}
                       {action.actionSource === "rules_bot" && " · 机器人"}
@@ -62,7 +62,7 @@ export function SidePanel({
                       <PersonaBadge version={action.personaVersion} />
                     )}
                   </span>
-                  <span className="poker-action-decision">
+                  <span className="flex shrink-0 flex-col items-end gap-1">
                     {actionLabel[action.action] ?? action.action}
                     {action.amount > 0 && <strong>{amount(action.amount)}</strong>}
                   </span>
@@ -74,22 +74,22 @@ export function SidePanel({
       </section>
         </Tabs.Panel>
       {perspective === "owner" && table.mySeatNo !== null && (
-        <Tabs.Panel id="ai"><section className="poker-judgment">
-          <h3>
-            <LockKeyhole aria-hidden="true" />
+        <Tabs.Panel id="ai"><section className="space-y-4 py-4">
+          <h3 className="flex flex-wrap items-center gap-2 text-sm font-medium">
+            <LockKeyhole className="size-4" aria-hidden="true" />
             AI 的判断
-            <span className="poker-private-label">仅你可见</span>
+            <span className="text-xs text-muted">仅你可见</span>
           </h3>
-          <p className="poker-judgment-text">{myNote ?? "暂无判断"}</p>
+          <p className="whitespace-pre-wrap break-words text-sm">{myNote ?? "暂无判断"}</p>
           {table.persona && (
-            <details>
-              <summary>当前风格提示词</summary>
-              <p>{table.persona}</p>
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted">当前风格提示词</summary>
+              <p className="mt-3 whitespace-pre-wrap break-words">{table.persona}</p>
             </details>
           )}
         </section></Tabs.Panel>
       )}
-      {extras && <Tabs.Panel id="practice" shouldForceMount>{extras}</Tabs.Panel>}
+      {extras && <Tabs.Panel id="practice" shouldForceMount className={tab === "practice" ? undefined : "hidden"}>{extras}</Tabs.Panel>}
       </Tabs>
     </aside>
   )

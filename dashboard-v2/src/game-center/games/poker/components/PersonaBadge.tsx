@@ -4,11 +4,11 @@ export function PersonaBadge({
   version?: { versionNo: number; persona: string } | null
 }) {
   return version ? (
-    <details className="persona-version">
-      <summary>v{version.versionNo}</summary>
-      <p className="whitespace-pre-wrap break-words">{version.persona || "空提示词"}</p>
+    <details className="text-xs text-muted">
+      <summary className="cursor-pointer">v{version.versionNo}</summary>
+      <p className="mt-2 max-w-prose whitespace-pre-wrap break-words">{version.persona || "空提示词"}</p>
     </details>
   ) : (
-    <span className="persona-version">—</span>
+    <span className="text-xs text-muted">—</span>
   )
 }

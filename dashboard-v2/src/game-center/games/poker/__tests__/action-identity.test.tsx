@@ -52,7 +52,7 @@ describe("牌桌日志行动人", () => {
     const host = document.createElement("div"),
       root = createRoot(host)
     await act(async () => root.render(<SidePanel table={table} perspective="public" />))
-    expect(host.querySelector(".poker-action-player > span")?.textContent).toBe(
+    expect(host.querySelector('[aria-label="日志和AI判断"] ol')?.textContent).toContain(
       displayName ?? "座位 2",
     )
     expect(host.textContent).not.toContain("新玩家")
