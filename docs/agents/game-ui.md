@@ -83,6 +83,6 @@
 
 - V2建房使用HeroUI Switch，按当前浏览器账号记忆，旧配置无字段默认关闭；房间列表及入座摘要标明Roll。相同未确认创建意图关闭重开保持UUID，成功后再次建房是新意图。
 - 直接Roll入口使用PokerButton；费用/档位/旧槽确认和超级三选一属于系统层，使用HeroUI默认浅色Modal/RadioGroup，保留原生焦点锁、Escape与关闭/焦点返回。Modal与日志、金额、全下和管理共用父面板互斥；不改变850px底部操作条、390px窄屏与三场景contain画布。保留邻近下注底部预设/锚点自定义、结算宽度768。
-- 只有owner与真人控制可新换牌/选择；AI控制先接管，候选保留。超级待选可关闭重开，不代表撤销；正常下注持续禁用。未提交槽位/候选在手/street/actionSeq/control/perspective变化后清理；未知写入保留原账号/房间的UUID与完整参数，先重读再确认原回执，不静默改价。迟到回调不得改写新上下文。public本地投影只保留Roll规则版本及公开pendingSeatNo，移除候选/报价。
+- 只有owner与真人控制可新换牌/选择；AI控制先接管，候选保留。超级待选可关闭重开，不代表撤销；正常下注持续禁用。未提交槽位/候选在手/street/actionSeq/control/perspective变化后清理；未知写入在发送前写入按账号/房间隔离的sessionStorage并读回确认，保留原UUID与完整参数供当前标签页硬刷新恢复；不承诺关闭标签页后永久保存。存储不可用或损坏时只禁止新的Roll写入，普通下注仍按已有合法动作/待选和真实未确认请求约束。先重读再确认原回执，不静默改价。迟到回调不得改写新上下文。public本地投影只保留Roll规则版本及公开pendingSeatNo，移除候选/报价。
 - Roll日志start显示支出，choose仅显示完成；choose保留fee作审计不能重复收费或补偿。完整结算与历史展示Roll paid/received及总净变化，普通投入按pokerDelta计算；Hall展示pending并按0兼容旧响应。候选与旧牌记录只展示服务端授权本人的privateRolls。
 - 本轮完成Node/jsdom行为测试、typecheck及UI边界检查；按用户范围未启动浏览器、应用或Playwright，实际展开的宽窄屏尺寸、截图、键盘与焦点视觉验收尚未执行，旧系统UI验收不能替代本次。

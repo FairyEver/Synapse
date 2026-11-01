@@ -15,7 +15,7 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
   if(open&&!prior.current) origin.current=document.activeElement instanceof HTMLElement?document.activeElement:null
   useLayoutEffect(()=>{if(!open&&prior.current&&origin.current?.isConnected) origin.current.focus();prior.current=open},[open])
   useEffect(()=>{setKind("normal");setCard("");setCandidate("")},[epoch,table.roll?.normal?.fee,table.roll?.super?.fee,pending?.rollId])
-  const blocked=disabled||controls.blocked||!controls.canControl
+  const blocked=disabled||controls.blocked||controls.storageError||!controls.canControl
   return <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange} className="font-sans text-foreground scheme-light">
     <Modal.Container size="sm"><Modal.Dialog>
       <Modal.CloseTrigger aria-label="关闭换牌" />
@@ -42,7 +42,7 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
       </div></Modal.Body>
       <Modal.Footer className="flex-wrap">
         <Button variant="tertiary" onPress={()=>onOpenChange(false)}>{pending?"稍后选择":"取消"}</Button>
-        {controls.uncertain?<Button isDisabled={controls.busy} onPress={()=>void controls.retry()}>核对原换牌请求</Button>:pending&&!controls.canControl?<Button isDisabled={disabled||controls.blocked} onPress={onTakeover}>本人接管</Button>:pending?<Button isDisabled={blocked||candidate===""} onPress={()=>void controls.choose(Number(candidate))}>确认选择</Button>:<Button isDisabled={blocked||card===""||!offer?.available} onPress={()=>void controls.start(kind,Number(card),offer!.fee)}>确认支付 {amount(offer?.fee??0)} 换牌</Button>}
+        {controls.storageError?<Button isDisabled={controls.busy} onPress={()=>void controls.retry()}>重试恢复记录</Button>:controls.uncertain?<Button isDisabled={controls.busy} onPress={()=>void controls.retry()}>核对原换牌请求</Button>:pending&&!controls.canControl?<Button isDisabled={disabled||controls.blocked} onPress={onTakeover}>本人接管</Button>:pending?<Button isDisabled={blocked||candidate===""} onPress={()=>void controls.choose(Number(candidate))}>确认选择</Button>:<Button isDisabled={blocked||card===""||!offer?.available} onPress={()=>void controls.start(kind,Number(card),offer!.fee)}>确认支付 {amount(offer?.fee??0)} 换牌</Button>}
       </Modal.Footer>
     </Modal.Dialog></Modal.Container>
   </Modal.Backdrop>

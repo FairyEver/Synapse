@@ -12,22 +12,48 @@ vi.mock("@/game-center/runtime/account", () => ({ useAccount: () => ({state:{sta
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const table: PokerTableView = { roomCode: "1234", name: null, status: "running", buyIn: 1000, maxSeats: 2, handId: "hand", handNo: 1, street: "flop", board: [], pot: 20, dealerSeat: 0, actionOnSeat: 0, deadlineMs: 20000, cursor: "1:3", mySeatNo: 0, seats: [{ seatNo: 0, displayName: "本人", isMe: true, stack: 100, status: "active", streetBet: 2, aiState: "online", controller: "human" }], recentActions: [], deckRemaining: 40, actionSeq: 3, controlVersion: 4, controller: "human", legalActions: ["fold", "call", "raise", "allin"], toCall: 4, minRaiseTo: 10, maxRaiseTo: 102 }
-afterEach(() => { vi.resetAllMocks(); document.body.replaceChildren() })
-async function render(value = table) { const host = document.createElement("div"), root = createRoot(host); document.body.append(host); await act(async () => root.render(<HumanControls table={value} perspective="owner" onRefresh={vi.fn()} />)); return { host, root } }
+afterEach(() => { vi.resetAllMocks(); sessionStorage.clear(); document.body.replaceChildren() })
+async function render(value = table, identityKey?: string) { const host = document.createElement("div"), root = createRoot(host); document.body.append(host); await act(async () => root.render(<HumanControls identityKey={identityKey} table={value} perspective="owner" onRefresh={vi.fn()} />)); return { host, root } }
 function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label") === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
 async function openManagement(host: HTMLElement) { await act(async () => button(host, "更多牌桌操作").click()) }
 describe("真人牌桌操作", () => {
+ it("关闭Roll的房间在会话存储不可读时仍可正常弃牌",async()=>{
+  api.act.mockResolvedValue({ok:true})
+  const failure=vi.spyOn(Storage.prototype,"getItem").mockImplementation(()=>{throw new Error("denied")})
+  const {host,root}=await render({...table,roll:{enabled:false}},"no-roll-storage-denied")
+  expect(button(host,"弃牌").disabled).toBe(false)
+  await act(async()=>button(host,"弃牌").click())
+  expect(api.act).toHaveBeenCalledOnce();expect(api.rollStart).not.toHaveBeenCalled()
+  failure.mockRestore();await act(async()=>root.unmount())
+ })
+ it("新Roll保存失败未付费，关闭提示后仍可正常弃牌",async()=>{
+  api.act.mockResolvedValue({ok:true})
+  const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true},pending:null}}
+  const {host,root}=await render(value,"failed-save-roll-user")
+  await act(async()=>button(host,"Roll 换牌").click())
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="0"]')!.click())
+  const failure=vi.spyOn(Storage.prototype,"setItem").mockImplementation(()=>{throw new Error("denied")})
+  await act(async()=>button(document.body,"确认支付 3 换牌").click())
+  expect(api.rollStart).not.toHaveBeenCalled()
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("恢复记录")
+  await act(async()=>button(document.body,"取消").click())
+  expect(button(host,"弃牌").disabled).toBe(false)
+  await act(async()=>button(host,"弃牌").click())
+  expect(api.act).toHaveBeenCalledOnce()
+  failure.mockRestore();await act(async()=>root.unmount())
+ })
+
  it("Roll面板选择档位和原手牌后明确确认才支付，行动点变化清理未提交选择",async()=>{
   api.rollStart.mockResolvedValue({ok:true})
   const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true},pending:null}}
-  const {host,root}=await render(value)
+  const {host,root}=await render(value,"human-controls-test")
   await act(async()=>button(host,"Roll 换牌").click())
   expect(api.rollStart).not.toHaveBeenCalled();expect(button(document.body,"确认支付 3 换牌").disabled).toBe(true)
   await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="super"]')!.click())
   await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="1"]')!.click())
   await act(async()=>button(document.body,"确认支付 8 换牌").click())
   expect(api.rollStart).toHaveBeenCalledWith(expect.objectContaining({kind:"super",cardIndex:1,expectedFee:8,expectedActionSeq:3,controlVersion:4}))
-  await act(async()=>root.render(<HumanControls table={{...value,actionSeq:4}} perspective="owner" onRefresh={vi.fn()}/>))
+  await act(async()=>root.render(<HumanControls identityKey="human-controls-test" table={{...value,actionSeq:4}} perspective="owner" onRefresh={vi.fn()}/>))
   await act(async()=>button(host,"Roll 换牌").click())
   expect(button(document.body,"确认支付 3 换牌").disabled).toBe(true)
   await act(async()=>root.unmount())
@@ -36,11 +62,11 @@ describe("真人牌桌操作", () => {
   api.control.mockResolvedValue({});api.rollChoose.mockResolvedValue({ok:true})
   const pending={rollId:"ai-pending",cardIndex:0,candidates:["2c","3c","4c"]}
   const value={...table,controller:"ai" as const,roll:{enabled:true,count:1,pending,pendingSeatNo:0}}
-  const {host,root}=await render(value)
+  const {host,root}=await render(value,"human-controls-test")
   await act(async()=>button(document.querySelector('[role="dialog"]') as HTMLElement,"本人接管").click())
   expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"takeover"})
   expect(api.rollChoose).not.toHaveBeenCalled()
-  await act(async()=>root.render(<HumanControls table={{...value,controller:"human",controlVersion:5}} perspective="owner" onRefresh={vi.fn()}/>))
+  await act(async()=>root.render(<HumanControls identityKey="human-controls-test" table={{...value,controller:"human",controlVersion:5}} perspective="owner" onRefresh={vi.fn()}/>))
   await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="2"]')!.click())
   await act(async()=>button(document.body,"确认选择").click())
   expect(api.rollChoose).toHaveBeenCalledWith(expect.objectContaining({rollId:"ai-pending",candidateIndex:2,controlVersion:5}))
@@ -50,7 +76,7 @@ describe("真人牌桌操作", () => {
 
  it("超级待选即使旧响应仍列合法下注也禁用，候选可关闭重开并保留原牌", async()=>{
   const pending={rollId:"super-old",cardIndex:1,candidates:["2c","3c","4c"]}
-  const {host,root}=await render({...table,hole:["As","Kd"],roll:{enabled:true,count:1,pending,pendingSeatNo:0}})
+  const {host,root}=await render({...table,hole:["As","Kd"],roll:{enabled:true,count:1,pending,pendingSeatNo:0}},"pending-reopen-user")
   expect(button(host,"弃牌").disabled).toBe(true)
   expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("选择替换牌")
   await act(async()=>button(document.body,"稍后选择").click())

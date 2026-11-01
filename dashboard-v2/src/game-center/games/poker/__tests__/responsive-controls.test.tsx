@@ -4,10 +4,13 @@ import { createRoot } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { HumanControls } from "../components/HumanControls"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
+const responsiveCss=readFileSync(resolve(process.cwd(),"src/game-center/games/poker/styles/responsive-controls.css"),"utf8")
 import { Table } from "../components/Table"
 
-const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn() }))
-vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { action: { act: api.act }, control: { set: api.control } } }) }))
+const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), rollStart:vi.fn() }))
+vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: {roll:{start:api.rollStart}, action: { act: api.act }, control: { set: api.control } } }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const observers = new Set<{ callback: ResizeObserverCallback; elements: Set<Element> }>()
 vi.stubGlobal("ResizeObserver", class {
@@ -151,6 +154,51 @@ describe("窄屏精简出牌", () => {
 })
 
 describe("统一底部操作与按需侧栏", () => {
+  it("Roll未知结果关闭面板后仍只占原工具行，不追加恢复块挤压正常动作",async()=>{
+    api.rollStart.mockRejectedValueOnce(new Error("响应丢失"))
+    const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+    const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true}}}
+    await act(async()=>root.render(<Table table={value} perspective="owner" identityKey="uncertain-roll-band" onPerspective={()=>{}} onBack={()=>{}}/>))
+    await click(host,"Roll 换牌")
+    await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="0"]')!.click())
+    await click(document.body,"确认支付 3 换牌")
+    await click(document.body,"取消")
+    const controls=host.querySelector('.poker-human-controls')!
+    expect([...controls.children].map(node=>node.className)).toEqual(["poker-control-state","poker-action-dock"])
+    expect(button(host,"核对换牌").closest('.poker-bet-presets')).not.toBeNull()
+    expect(controls.querySelector('[role="status"]')?.textContent).toContain("待核对")
+    expect(controls.querySelectorAll('.poker-action-buttons button')).toHaveLength(3)
+    expect(button(host,"弃牌").disabled).toBe(true)
+    await act(async()=>root.unmount())
+  })
+
+  it.each([390,850,1280])("Roll与预设/三个动作在%s宽度共享原9rem底栏的两层结构",async(width)=>{
+    const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+    const style=document.createElement("style");style.textContent=responsiveCss;document.head.append(style)
+    const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true}}}
+    await act(async()=>root.render(<Table table={value} perspective="owner" identityKey="roll-band" onPerspective={()=>{}} onBack={()=>{}}/>))
+    const surface=host.querySelector('.poker-table')!,viewport=host.querySelector('.poker-canvas-viewport')!
+    await act(async()=>{
+      for(const observer of observers) observer.callback([{target:surface,contentRect:{width,height:700}},{target:viewport,contentRect:{width,height:500}}] as ResizeObserverEntry[],{} as ResizeObserver)
+      await new Promise(resolve=>requestAnimationFrame(resolve))
+    })
+    const controls=host.querySelector('.poker-human-controls')!,presets=controls.querySelector('.poker-bet-presets')!,roll=button(host,"Roll 换牌")
+    expect(roll.closest('.poker-bet-presets')).toBe(presets)
+    expect([...presets.querySelectorAll('button')].map(node=>node.textContent)).toEqual(expect.arrayContaining(["Roll 换牌","最小","半池","一池","自定义"]))
+    expect(controls.querySelectorAll('.poker-action-buttons button')).toHaveLength(3)
+    expect([...controls.children].filter(node=>node===roll)).toHaveLength(0)
+    const styles=(element:Element,property:string)=>[...style.sheet!.cssRules].reverse().flatMap(rule=>"selectorText" in rule && "style" in rule && element.matches((rule as CSSStyleRule).selectorText) && (rule as CSSStyleRule).style.getPropertyValue(property) ? [(rule as CSSStyleRule).style.getPropertyValue(property)] : [])[0] ?? "0"
+    expect(styles(host.querySelector('.poker-table-layout')!,"grid-template-rows")).toBe("3.5rem minmax(0, 1fr) 9rem")
+    const rem=(value:string)=>parseFloat(value)*(value.endsWith('rem')?16:1)
+    // HeroUI small buttons reserve h-9 on narrow screens; evaluate the real local
+    // CSS cascade against rendered DOM, without claiming jsdom measures geometry.
+    const rowHeight=Math.max(36,rem(styles(roll,"min-height")))
+    const minimum=rem(styles(controls.querySelector('.poker-control-state')!,"min-height"))+rem(styles(controls,"gap"))+rowHeight+rem(styles(presets,"margin-bottom"))+rem(styles(controls.querySelector('.poker-action-buttons button')!,"min-height"))+2*rem(styles(host.querySelector('.poker-controls-anchor')!,"padding").split(" ")[0])+1
+    expect(minimum).toBeLessThanOrEqual(144)
+    expect(surface.getAttribute("data-compact-controls")).toBe(String(width<=850))
+    await act(async()=>root.unmount());style.remove()
+  })
+
   it("Roll与日志/金额/全下/管理互斥，关闭回入口且画布节点保持",async()=>{
     const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
     const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true}}}

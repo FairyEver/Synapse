@@ -16,7 +16,7 @@ Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true})
 const table:PokerTableView={roomCode:"1234",name:null,status:"running",buyIn:1000,maxSeats:2,handId:"h",handNo:1,street:"flop",board:[],pot:20,dealerSeat:0,actionOnSeat:0,deadlineMs:10000,cursor:"1:3",mySeatNo:0,seats:[{seatNo:0,isMe:true,displayName:"我",stack:100,status:"active",streetBet:2,aiState:"online"}],recentActions:[],deckRemaining:40,actionSeq:3,controlVersion:4,controller:"human",hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true},pending:null}}
 let current:ReturnType<typeof usePokerRoll>
 function Harness({value=table,identity="roll-user",refresh=vi.fn()}:{value?:PokerTableView;identity?:string;refresh?:()=>Promise<void>|void}){current=usePokerRoll(value,"owner",refresh,identity);return null}
-afterEach(()=>{vi.resetAllMocks();localStorage.clear();document.body.replaceChildren()})
+afterEach(()=>{vi.resetAllMocks();localStorage.clear();sessionStorage.clear();document.body.replaceChildren()})
 async function mount(value=table,identity="roll-user",refresh=vi.fn()){const host=document.createElement("div"),root=createRoot(host);document.body.append(host);await act(async()=>root.render(<Harness value={value} identity={identity} refresh={refresh}/>));return root}
 describe("Roll决策与恢复",()=>{
  it("换牌序号推进不模拟普通下注、旧动作或筹码声音",()=>{
@@ -101,6 +101,39 @@ describe("Roll决策与恢复",()=>{
   await act(async()=>current.retry())
   expect(api.choose.mock.calls[1][0]).toEqual(input)
   await act(async()=>second.unmount())
+ })
+ it.each(["hand","control","sequence"].flatMap(change=>["success","rejection"].map(outcome=>[change,outcome])))("%s变化后的旧%s立即同步解除恢复状态，不刷新新epoch",async(change,outcome)=>{
+  let resolve!:(v:unknown)=>void,reject!:(reason:Error)=>void
+  api.start.mockImplementationOnce(()=>new Promise((done,fail)=>{resolve=done;reject=fail}))
+  const refresh=vi.fn(),identity=`stale-${outcome}-${change}`,root=await mount(table,identity,refresh)
+  await act(async()=>{void current.start("normal",0,3)})
+  const value={...table,...(change==="hand"?{handId:"new-hand"}:change==="control"?{controlVersion:5}:{actionSeq:4})}
+  await act(async()=>root.render(<Harness value={value} identity={identity} refresh={refresh}/>))
+  expect(current.uncertain).toBe(true)
+  await act(async()=>outcome==="success"?resolve({ok:true}):reject(Object.assign(new Error("过期"),{code:"POKER_STALE_ACTION"})))
+  expect(current.uncertain).toBe(false);expect(current.blocked).toBe(false)
+  expect(refresh).not.toHaveBeenCalled()
+  await act(async()=>root.unmount())
+ })
+ it("硬刷新后只读取原持久参数确认，新的手/控制/序号不改写原意图",async()=>{
+  const identity="hard-reload-hook",input={roomCode:"1234",handId:"original-hand",street:"turn",expectedActionSeq:9,controlVersion:2,actionId:"8529bfca-a8e8-4de4-89da-162f516d2f04",kind:"super",cardIndex:1,expectedFee:17}
+  const key=`synapse.game.poker-roll-intent.v1:${JSON.stringify([identity,"1234"])}`
+  sessionStorage.setItem(key,JSON.stringify({version:1,identityKey:identity,roomCode:"1234",intent:{operation:"start",input}}))
+  api.start.mockResolvedValue({ok:true});api.state.mockResolvedValue(table)
+  const root=await mount({...table,handId:"new-hand",controlVersion:12,actionSeq:55},identity)
+  expect(current.uncertain).toBe(true);expect(api.start).not.toHaveBeenCalled()
+  await act(async()=>current.retry())
+  expect(api.start).toHaveBeenCalledExactlyOnceWith(input)
+  expect(sessionStorage.getItem(key)).toBeNull();expect(current.blocked).toBe(false)
+  await act(async()=>root.unmount())
+ })
+ it("存储不可用时不发送需付费请求并显式提示",async()=>{
+  const failure=vi.spyOn(Storage.prototype,"setItem").mockImplementation(()=>{throw new Error("denied")})
+  const root=await mount(table,"storage-unavailable")
+  await act(async()=>current.start("super",0,8))
+  expect(api.start).not.toHaveBeenCalled();expect(current.error).toContain("恢复记录");expect(current.blocked).toBe(false)
+  failure.mockRestore()
+  await act(async()=>root.unmount())
  })
  it("公开本地视角抹除本人候选与报价",()=>{
   const publicView=projectTable({...table,roll:{...table.roll!,pending:{rollId:"r",cardIndex:0,candidates:["2c","3c","4c"]},pendingSeatNo:0}},"public")
