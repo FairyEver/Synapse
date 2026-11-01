@@ -53,10 +53,10 @@ describe("亮色牌桌交互修复", () => {
     expect(host.textContent).toContain("暂离失败")
     await act(async () => root.unmount())
   })
-  it("所有宽度的加注先打开金额表单，校验给出范围和原因", async () => {
+  it("自定义金额校验给出范围和原因", async () => {
     const { host, root } = await mount(<HumanControls table={table} perspective="owner" onRefresh={() => {}} />)
     expect(host.querySelector("input")).toBeNull()
-    await act(async () => button(host, "加注").click())
+    await act(async () => button(host, "自定义").click())
     expect(api.act).not.toHaveBeenCalled()
     const input = host.querySelector("input")!
     for (const [value, error] of [["", "请输入金额"], ["1.5", "请输入整数金额"], ["0", "至少加注到 10"], ["101", "最多加注到 100"]]) {

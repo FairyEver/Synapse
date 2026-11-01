@@ -1,6 +1,6 @@
 /* One stable board viewport, native toolbar and reserved bottom action row. */
-.poker-immersive[data-control-layout] .poker-table-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: 3.5rem minmax(0, 1fr) 6.75rem; }
-.poker-immersive[data-entry-controls="true"] .poker-table-layout { grid-template-rows: 3.5rem minmax(0, 1fr) minmax(6.75rem, max-content); }
+.poker-immersive[data-control-layout] .poker-table-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: 3.5rem minmax(0, 1fr) 9rem; }
+.poker-immersive[data-entry-controls="true"] .poker-table-layout { grid-template-rows: 3.5rem minmax(0, 1fr) minmax(9rem, max-content); }
 .poker-immersive[data-control-layout] .poker-edge-controls { position: static; grid-area: 1 / 1; min-width: 0; padding: 0.5rem 0.75rem; gap: 0.5rem; flex-wrap: nowrap; }
 .poker-room-summary { display: flex; align-items: center; gap: 0.75rem; min-width: 0; white-space: nowrap; }
 .poker-immersive[data-compact-controls="true"] .poker-room-summary { flex-direction: column; align-items: flex-start; gap: 0; font-size: 0.75rem; }
@@ -16,6 +16,7 @@
 .poker-immersive[data-control-layout] .poker-control-state { min-height: 1.25rem; justify-content: flex-start; font-size: 0.8125rem; }
 .poker-immersive[data-control-layout] .poker-action-clock { margin-left: auto; min-width: 0; }
 .poker-immersive[data-control-layout] .poker-action-dock { display: block; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.poker-bet-presets { display: flex; justify-content: flex-end; gap: 0.5rem; margin-bottom: 0.5rem; }
 .poker-immersive[data-control-layout] .poker-action-buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .poker-immersive[data-control-layout] .poker-action-buttons .poker-button { min-height: 3rem; padding: 0.5rem; font-size: 1rem; flex-direction: row; }
 .poker-immersive[data-control-layout] .poker-fold-action { background: var(--default); color: var(--foreground); }
@@ -23,7 +24,6 @@
 .poker-join-controls > div { flex-direction: row; flex-wrap: wrap; gap: 0.5rem; }
 .poker-join-controls .button { width: auto; flex: 1; }
 .poker-system-popover { width: min(22rem, calc(100vw - 1rem)); max-height: var(--available-height); overflow-y: auto; }
-.poker-bet-popover-anchor { position: absolute; right: 0.75rem; top: 0; width: 1px; height: 1px; pointer-events: none; }
 .poker-human-controls > .space-y-3 { position: absolute; bottom: calc(100% + 0.5rem); left: 0.75rem; right: 0.75rem; max-height: 12rem; overflow-y: auto; }
 .poker-local-menu { position: absolute; right: 0.75rem; top: 0.5rem; }
 .poker-immersive[data-control-layout] .poker-results-anchor { inset: 0.5rem 0.5rem auto; }

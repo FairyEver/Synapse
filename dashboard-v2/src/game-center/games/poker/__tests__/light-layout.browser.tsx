@@ -140,7 +140,7 @@ it("菜单首次单击、外部关闭后重开、键盘和触摸指针都只需�
     const trigger = page.getByRole("button",{name:"更多牌桌操作"})
     await trigger.click()
     await expect.element(page.getByRole("dialog",{name:"更多操作"})).toBeVisible()
-    await page.getByRole("button",{name:"加注",exact:true}).click()
+    await page.getByRole("button",{name:"自定义",exact:true}).click()
     await expect.element(page.getByRole("dialog",{name:"加注",exact:true})).toBeVisible()
     expect(api.act).not.toHaveBeenCalled()
     await userEvent.keyboard("{Escape}")

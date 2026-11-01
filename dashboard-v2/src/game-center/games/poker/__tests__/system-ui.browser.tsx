@@ -109,7 +109,7 @@ describe.each([
       await userEvent.keyboard("{Escape}")
       await expect.poll(() => document.activeElement?.getAttribute("aria-label")).toBe("更多牌桌操作")
 
-      await button("加注").click()
+      await button("自定义").click()
       const input = await element('.poker-table input[type="number"]')
       const standardInput = document.querySelector<HTMLElement>('[aria-label="标准输入"]')!
       expect(getComputedStyle(input).backgroundColor).toBe(getComputedStyle(standardInput).backgroundColor)

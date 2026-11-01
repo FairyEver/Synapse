@@ -38,18 +38,15 @@ describe("真人牌桌操作", () => {
   expect(host.querySelector('[role="status"]')?.textContent).toContain("轮到你")
   await act(async()=>root.unmount())
  })
- it("金额表单保留合法手牌、公共牌和决策金额，旁观不展开旧表单", async () => {
-  const value={...table,board:["2s","3h","4d"],seats:[{...table.seats[0],hole:["As","Kh"]}]}
-  const {host,root}=await render(value)
-  await act(async()=>button(host,"加注").click())
-  const context=host.querySelector('[aria-label="下注决策信息"]')!
-  expect(context).not.toBeNull()
-  expect(context.querySelectorAll('[data-face="up"]')).toHaveLength(5)
-  expect(context.textContent).toContain("底池20")
-  expect(context.textContent).toContain("筹码100")
-  expect(context.textContent).toContain("跟注4")
-  await act(async()=>root.render(<HumanControls table={value} perspective="public" onRefresh={vi.fn()} />))
+ it("自定义只显示金额设置，关闭不丢选择，旁观不保留旧表单", async () => {
+  const {host,root}=await render()
+  await act(async()=>button(host,"自定义").click())
   expect(host.querySelector('[aria-label="下注决策信息"]')).toBeNull()
+  expect(host.querySelector('input[type="number"]')).not.toBeNull()
+  expect(button(host,"确认加注 10").closest('[role="dialog"]')).toBeNull()
+  await act(async()=>root.render(<HumanControls table={table} perspective="public" onRefresh={vi.fn()} />))
+  expect(host.querySelector('input[type="number"]')).toBeNull()
+  expect(button(host,"半池")).toBeUndefined()
   await act(async()=>root.unmount())
  })
  it("上手历史座位不能阻止离桌后重新申请入座，实际容量由服务端裁决", async () => {
@@ -65,7 +62,7 @@ describe("真人牌桌操作", () => {
   api.act.mockResolvedValue({ok:true})
   const {host,root}=await render({...table,...(action === "call" ? {toCall:100} : {pot:500})})
   expect(host.querySelector('[role="timer"]')?.textContent).toBe("0:20")
-  if(action === "raise") { await act(async()=>button(host,"加注").click()); await act(async()=>button(host,"一池").click()) }
+  if(action === "raise") { await act(async()=>button(host,"自定义").click()); await act(async()=>button(host,"一池").click()) }
   await act(async()=>button(host,action === "raise" ? "确认加注 102" : "跟注 100").click())
   expect(api.act).not.toHaveBeenCalled()
   await act(async()=>button(host,"确认全下 100").click())
@@ -80,7 +77,7 @@ describe("真人牌桌操作", () => {
   api.act.mockResolvedValue({ok:true})
   const {host,root}=await render()
   expect(host.querySelector('[role="status"]')?.textContent).toContain("轮到你")
-  await act(async()=>button(host,"加注").click())
+  await act(async()=>button(host,"自定义").click())
   await act(async()=>button(host,"半池").click())
   expect(host.querySelector<HTMLInputElement>('input[type="number"]')?.value).toBe("18")
   await act(async()=>button(host,"全下").click())
@@ -93,7 +90,7 @@ describe("真人牌桌操作", () => {
  })
  it("按服务端金额边界提交，防重并在未知结果重试复用同一动作", async () => {
   api.act.mockRejectedValueOnce(new Error("响应丢失")).mockResolvedValueOnce({ ok: true }); const {host,root} = await render();
-  await act(async () => button(host,"加注").click()); await act(async () => button(host,"确认加注 10").click()); const first = api.act.mock.calls[0][0]; expect(first).toMatchObject({ roomCode:"1234", action:"raise", to:10, handId:"hand", street:"flop", expectedActionSeq:3, controlVersion:4 }); expect(first.actionId).toMatch(/^[0-9a-f-]{36}$/i);
+  await act(async () => button(host,"自定义").click()); await act(async () => button(host,"确认加注 10").click()); const first = api.act.mock.calls[0][0]; expect(first).toMatchObject({ roomCode:"1234", action:"raise", to:10, handId:"hand", street:"flop", expectedActionSeq:3, controlVersion:4 }); expect(first.actionId).toMatch(/^[0-9a-f-]{36}$/i);
   expect(button(host,"弃牌").disabled).toBe(true); await act(async () => button(host,"重试出牌").click()); expect(api.act.mock.calls[1][0]).toEqual(first); await act(async () => root.unmount());
  });
  it("未确认动作在离开再进入房间后仍使用原 actionId", async () => {
@@ -111,7 +108,7 @@ describe("真人牌桌操作", () => {
  })
  it("金额越界时不可下注，合法金额可通过原生输入调整", async () => {
   const {host,root}=await render()
-  await act(async()=>button(host,"加注").click())
+  await act(async()=>button(host,"自定义").click())
   const input=host.querySelector("input")!
   await act(async()=>{ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,"103"); input.dispatchEvent(new Event("input",{bubbles:true})) })
   expect(button(host,"确认加注 103").disabled).toBe(true)
