@@ -95,6 +95,50 @@ describe('dashboardApi.passwordReset', () => {
   })
 })
 
+describe('dashboardApi.profileAvatar', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('randomizes the current avatar and uploads cropped png bytes', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ user: { id: 'user-1', avatarUrl: '/api/avatars/system/next' } }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    ))
+    const image = new Blob(['avatar'], { type: 'image/png' })
+
+    await dashboardApi.randomizeAvatar()
+    await dashboardApi.uploadAvatar(image)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/console/me/avatar/random',
+      expect.objectContaining({ credentials: 'include', method: 'POST' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/console/me/avatar',
+      expect.objectContaining({
+        body: image,
+        credentials: 'include',
+        headers: { 'Content-Type': 'image/png' },
+        method: 'PUT',
+      }),
+    )
+  })
+
+  it('surfaces avatar upload errors', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ message: '头像必须是 256×256 的 PNG 图片。' }),
+      { headers: { 'Content-Type': 'application/json' }, status: 400 },
+    ))
+
+    await expect(dashboardApi.uploadAvatar(new Blob(['bad']))).rejects.toThrow('头像必须是 256×256 的 PNG 图片。')
+  })
+})
+
 describe('driveAnnotationApi', () => {
   afterEach(() => {
     vi.restoreAllMocks()

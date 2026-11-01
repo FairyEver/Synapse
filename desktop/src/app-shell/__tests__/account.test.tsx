@@ -56,6 +56,7 @@ function Probe() {
     <button
       data-loading={String(account.isLoading)}
       data-pending={account.pendingAction ?? ""}
+      data-user={account.state.status === "authenticated" ? account.state.profile.user.id : ""}
       onClick={() => {
         void account.startLogin()
       }}
@@ -148,5 +149,71 @@ describe("AccountProvider", () => {
     })
 
     expect(button?.dataset.pending).toBe("")
+  })
+
+  it("silently refreshes the authenticated profile when the window regains focus", async () => {
+    const accountBridge = installBridge(async () => ({ status: "unauthenticated" }))
+    const initial = {
+      status: "authenticated",
+      connectivity: "online",
+      profile: {
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          status: "active",
+          handle: "user",
+          nickname: "用户",
+          avatarUrl: "https://example.com/old.webp",
+        },
+        syncedAt: "2026-11-01T00:00:00.000Z",
+      },
+    } satisfies SynapseAccountState
+    const refreshed = {
+      ...initial,
+      profile: {
+        ...initial.profile,
+        user: { ...initial.profile.user, avatarUrl: "https://example.com/new.webp" },
+      },
+    } satisfies SynapseAccountState
+    accountBridge.state.get.mockResolvedValue(initial)
+    accountBridge.refresh.mockResolvedValue(refreshed)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+
+    await act(async () => {
+      root?.render(
+        <AccountProvider>
+          <Probe />
+        </AccountProvider>,
+      )
+      await Promise.resolve()
+    })
+    expect(container.querySelector("button")?.dataset.user).toBe("user-1")
+
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-11-01T10:00:00.000Z"))
+    try {
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"))
+        await Promise.resolve()
+      })
+      expect(accountBridge.refresh).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"))
+        await Promise.resolve()
+      })
+      expect(accountBridge.refresh).toHaveBeenCalledTimes(1)
+
+      vi.setSystemTime(new Date("2026-11-01T10:01:01.000Z"))
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"))
+        await Promise.resolve()
+      })
+      expect(accountBridge.refresh).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

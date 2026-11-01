@@ -26,6 +26,7 @@ import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { NotificationModule } from "./notifications/notification.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
+import { ProfileAvatarModule } from "./profile-avatar/profile-avatar.module"
 import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { TeamModule } from "./team/team.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
@@ -106,6 +107,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
     }),
     PrismaModule,
     UserAuthModule,
+    ProfileAvatarModule,
     ClientTelemetryModule,
     LiveModule,
     MobileLiveModule,

@@ -63,6 +63,8 @@ export class DashboardAuthController {
     return {
       email: session.user.email,
       handle: session.user.handle,
+      nickname: session.user.nickname,
+      avatarUrl: session.user.avatarUrl,
       sessionId: session.sessionId,
     }
   }
@@ -87,6 +89,8 @@ export class DashboardAuthController {
       userId: me.user.id,
       email: me.user.email,
       handle: me.user.handle,
+      nickname: me.user.nickname,
+      avatarUrl: me.user.avatarUrl,
       sessionId: session.sessionId,
     }
   }

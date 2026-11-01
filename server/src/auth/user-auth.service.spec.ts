@@ -10,6 +10,10 @@ import { UserAuthService, type UserMeResponse } from "./user-auth.service"
 
 function createPrismaMock() {
   const tx = {
+    systemAvatar: {
+      count: vi.fn().mockResolvedValue(0),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
       findUniqueOrThrow: vi.fn(),
@@ -710,6 +714,30 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("assigns a random system avatar during registration", async () => {
+    const prisma = createPrismaMock()
+    prisma.__tx.systemAvatar.count.mockResolvedValue(1)
+    prisma.__tx.systemAvatar.findMany.mockResolvedValue([{
+      id: "avatar-1",
+      publicUrl: "/api/avatars/system/avatar-1",
+    }])
+    const service = createService(prisma)
+
+    await expect(service.register({
+      email: "new@example.com",
+      handle: "new-user",
+      password: "StrongPassword123!",
+    })).resolves.toEqual({ ok: true })
+
+    expect(prisma.__tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        avatarUrl: "/api/avatars/system/avatar-1",
+        avatarSource: "system",
+        systemAvatarId: "avatar-1",
+      }),
+    }))
+  })
+
   it("returns success when registration success audit logging fails", async () => {
     const warnSpy = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined)
     const prisma = createPrismaMock()
@@ -1405,11 +1433,12 @@ describe("UserAuthService", () => {
       handle: "ada",
       nickname: "Ada L.",
       contactEmail: null,
+      avatarUrl: null,
     })
     const service = createService(prisma)
 
     const expected: UserMeResponse = {
-      user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada", nickname: "Ada L.", contactEmail: null },
+      user: { id: "user-1", email: "u@example.com", status: "active", handle: "ada", nickname: "Ada L.", contactEmail: null, avatarUrl: null },
     }
 
     await expect(service.getMe("user-1")).resolves.toEqual(expected)
@@ -1423,6 +1452,7 @@ describe("UserAuthService", () => {
         handle: true,
         nickname: true,
         contactEmail: true,
+        avatarUrl: true,
       },
     })
   })
@@ -1511,6 +1541,8 @@ describe("UserAuthService", () => {
         status: "active",
         handle: "new-name",
         nickname: "Old Name",
+        contactEmail: null,
+        avatarUrl: null,
       },
     })
 
@@ -1533,6 +1565,7 @@ describe("UserAuthService", () => {
         handle: true,
         nickname: true,
         contactEmail: true,
+        avatarUrl: true,
       },
     })
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -1573,6 +1606,8 @@ describe("UserAuthService", () => {
         status: "active",
         handle: "liyang",
         nickname: "李 阳",
+        contactEmail: null,
+        avatarUrl: null,
       },
     })
 
@@ -1586,6 +1621,7 @@ describe("UserAuthService", () => {
         handle: true,
         nickname: true,
         contactEmail: true,
+        avatarUrl: true,
       },
     })
     expect(prisma.__tx.userHandleRedirect.upsert).not.toHaveBeenCalled()
@@ -1723,6 +1759,8 @@ describe("UserAuthService", () => {
           status: "active",
           handle: "grace-hopper",
           nickname: "Grace",
+          contactEmail: null,
+          avatarUrl: null,
         },
       })
 

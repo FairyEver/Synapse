@@ -221,6 +221,18 @@ function publicAppUrl(): string {
   return SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl
 }
 
+function normalizeAvatarUrl(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    return new URL(value, `${publicAppUrl().replace(/\/+$/u, "")}/`).toString()
+  } catch (error) {
+    logger.warn("Ignored invalid account avatar URL.", {
+      errorName: error instanceof Error ? error.name : typeof error,
+    })
+    return null
+  }
+}
+
 function drivePublicLinksPageQuery(input?: DrivePublicLinksPageInput): string {
   const params = new URLSearchParams()
   if (input?.offset !== undefined) params.set("offset", String(input.offset))
@@ -2748,7 +2760,13 @@ export class AccountService {
     })
     if (!response.ok) throw await createHttpError("GET", url, response, "账号信息同步失败。")
     const payload = await response.json() as { readonly user: SynapseAccountProfile["user"] }
-    return { user: payload.user, syncedAt: new Date().toISOString() }
+    return {
+      user: {
+        ...payload.user,
+        avatarUrl: normalizeAvatarUrl(payload.user.avatarUrl),
+      },
+      syncedAt: new Date().toISOString(),
+    }
   }
 
   private async getAuthenticatedJson<T>(url: string, errorMessage: string): Promise<T> {

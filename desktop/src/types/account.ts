@@ -5,6 +5,8 @@ export type SynapseAccountUser = {
   status: "active" | "disabled"
   /// 服务器返回的展示昵称。旧版本缓存下来的 profile 没有这个字段，渲染时回退到 handle。
   nickname?: string
+  /// 服务器返回的头像地址；主进程会把相对头像路径解析成完整 URL，旧缓存允许缺失。
+  avatarUrl?: string | null
 }
 
 export type SynapseAccountProfile = {

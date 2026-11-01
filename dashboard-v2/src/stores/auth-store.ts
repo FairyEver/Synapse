@@ -4,6 +4,8 @@ import { create } from 'zustand'
 export interface AuthUser {
   email: string
   handle: string | null
+  nickname?: string
+  avatarUrl?: string | null
   sessionId: string
 }
 

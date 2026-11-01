@@ -25,6 +25,7 @@ import { hashPassword, verifyPassword } from "./password"
 import { createPasswordResetLink } from "./password-reset"
 import { createOpaqueToken, hashToken } from "./token"
 import { PrismaService } from "../prisma/prisma.service"
+import { selectRandomSystemAvatar } from "../profile-avatar/system-avatar-selection"
 
 export const userAuthOptionsToken = "USER_AUTH_OPTIONS"
 
@@ -42,7 +43,7 @@ export interface UserWebSession {
   readonly token: string
   readonly sessionId: string
   readonly expiresAt: Date
-  readonly user: Pick<User, "id" | "email" | "handle">
+  readonly user: Pick<User, "id" | "email" | "handle" | "nickname" | "avatarUrl">
 }
 
 type RefreshFailureCode = "refresh_invalid" | "refresh_expired" | "refresh_revoked" | "account_disabled"
@@ -52,7 +53,7 @@ export interface UserRegistrationResult {
 }
 
 export interface UserMeResponse {
-  readonly user: Pick<User, "id" | "email" | "status" | "handle" | "nickname" | "contactEmail">
+  readonly user: Pick<User, "id" | "email" | "status" | "handle" | "nickname" | "contactEmail" | "avatarUrl">
 }
 
 export type PasswordResetValidationResult =
@@ -176,6 +177,7 @@ function toUserMeResponse(user: {
   readonly handle: string
   readonly nickname: string
   readonly contactEmail: string | null
+  readonly avatarUrl: string | null
 }): UserMeResponse {
   return {
     user: {
@@ -184,7 +186,8 @@ function toUserMeResponse(user: {
       status: user.status,
       handle: user.handle,
       nickname: user.nickname,
-      contactEmail: user.contactEmail,
+      contactEmail: user.contactEmail ?? null,
+      avatarUrl: user.avatarUrl ?? null,
     },
   }
 }
@@ -221,12 +224,18 @@ export class UserAuthService {
         })
         if (existingHandle) throw new BadRequestException("用户名已被使用。")
 
+        const avatar = await selectRandomSystemAvatar(tx)
         const user = await tx.user.create({
           data: {
             email,
             handle,
             nickname: buildDefaultUserNickname(handle),
             passwordHash: await hashPassword(input.password),
+            ...(avatar ? {
+              avatarUrl: avatar.publicUrl,
+              avatarSource: "system" as const,
+              systemAvatarId: avatar.id,
+            } : {}),
           },
           select: {
             id: true,
@@ -377,7 +386,16 @@ export class UserAuthService {
       targetId: user.id,
       ipAddress,
     })
-    return { ...session, user: { id: user.id, email: user.email, handle: user.handle } }
+    return {
+      ...session,
+      user: {
+        id: user.id,
+        email: user.email,
+        handle: user.handle,
+        nickname: user.nickname,
+        avatarUrl: user.avatarUrl,
+      },
+    }
   }
 
   async issueRemoteWebSession(input: {
@@ -768,6 +786,7 @@ export class UserAuthService {
         handle: true,
         nickname: true,
         contactEmail: true,
+        avatarUrl: true,
       },
     })
 
@@ -807,6 +826,7 @@ export class UserAuthService {
           handle: true,
           nickname: true,
           contactEmail: true,
+          avatarUrl: true,
         },
       })
       const data: Prisma.UserUpdateInput = {}
@@ -867,6 +887,7 @@ export class UserAuthService {
             handle: true,
             nickname: true,
             contactEmail: true,
+            avatarUrl: true,
           },
         })
       } catch (error) {
@@ -1110,11 +1131,19 @@ export class UserAuthService {
   private async authenticateCredentials(
     input: { email: string; password: string },
     ipAddress: string,
-  ): Promise<Pick<User, "id" | "email" | "handle">> {
+  ): Promise<Pick<User, "id" | "email" | "handle" | "nickname" | "avatarUrl">> {
     const email = input.email.trim().toLowerCase()
     const user = await this.prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true, handle: true, passwordHash: true, status: true },
+      select: {
+        id: true,
+        email: true,
+        handle: true,
+        nickname: true,
+        avatarUrl: true,
+        passwordHash: true,
+        status: true,
+      },
     })
     const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false
     if (!user || !passwordMatches || user.status !== "active") {

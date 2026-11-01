@@ -1,12 +1,15 @@
 import { TextField } from '@heroui/react';
-import { Button, Chip, Input, Label, toast } from '@heroui/react';
-import { useEffect, useState } from 'react';
+import { Avatar, Button, Chip, Input, Label, toast } from '@heroui/react';
+import { useEffect, useRef, useState } from 'react';
 import { normalizeUserHandle, normalizeUserNickname, normalizeUserContactEmail, userContactEmailMaxLength, userHandleMaxLength, } from '@synapse/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { dashboardApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
+import { AvatarCropDialog } from './avatar-crop-dialog';
 import { PasswordResetSettings } from './password-reset-settings';
 const maxHandleLength = userHandleMaxLength;
+const avatarSourceMaxBytes = 10 * 1024 * 1024;
+const avatarSourceTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
 type HandleError = 'format' | 'unavailable';
 function getHandleError(value: string): HandleError | null {
     if (!value)
@@ -49,24 +52,41 @@ export function ProfileSettings() {
     const [handle, setHandle] = useState('');
     const [nickname, setNickname] = useState('');
     const [contactEmail, setContactEmail] = useState('');
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const avatarInputRef = useRef<HTMLInputElement>(null);
     const { data, error, isError, isLoading, refetch } = useQuery({
         queryKey: ['dashboard-me'],
         queryFn: dashboardApi.getMe,
         enabled: Boolean(authUser),
     });
+    const applyProfile = (nextData: Awaited<ReturnType<typeof dashboardApi.getMe>>) => {
+        queryClient.setQueryData(['dashboard-me'], nextData);
+        if (authUser) {
+            setAuthUser({
+                ...authUser,
+                email: nextData.user.email,
+                handle: nextData.user.handle,
+                nickname: nextData.user.nickname,
+                avatarUrl: nextData.user.avatarUrl,
+            });
+        }
+    };
     const updateProfile = useMutation({
         mutationFn: dashboardApi.updateMe,
         onSuccess: (nextData) => {
-            queryClient.setQueryData(['dashboard-me'], nextData);
-            if (authUser) {
-                setAuthUser({
-                    ...authUser,
-                    email: nextData.user.email,
-                    handle: nextData.user.handle,
-                });
-            }
+            applyProfile(nextData);
             toast.success('已保存');
         },
+        onError: (mutationError: Error) => toast.danger(mutationError.message),
+    });
+    const randomizeAvatar = useMutation({
+        mutationFn: dashboardApi.randomizeAvatar,
+        onSuccess: applyProfile,
+        onError: (mutationError: Error) => toast.danger(mutationError.message),
+    });
+    const uploadAvatar = useMutation({
+        mutationFn: dashboardApi.uploadAvatar,
+        onSuccess: applyProfile,
         onError: (mutationError: Error) => toast.danger(mutationError.message),
     });
     useEffect(() => {
@@ -111,6 +131,31 @@ export function ProfileSettings() {
     const contactEmailChanged = nextContactEmail !== (data.user.contactEmail ?? null);
     const isInvalid = isHandleInvalid || isNicknameInvalid || contactEmailError !== null;
     const hasChanged = handleChanged || nicknameChanged || contactEmailChanged;
+    const avatarBusy = randomizeAvatar.isPending || uploadAvatar.isPending;
+    const displayName = data.user.nickname.trim() || data.user.handle || data.user.email;
+    const avatarFallback = Array.from(displayName)[0]?.toLocaleUpperCase() || '?';
+
+    function chooseAvatarFile(file: File | undefined) {
+        if (!file) return;
+        if (!avatarSourceTypes.has(file.type)) {
+            toast.danger('请选择 PNG、JPEG 或 WebP 图片。');
+            return;
+        }
+        if (file.size > avatarSourceMaxBytes) {
+            toast.danger('图片不能超过 10 MB。');
+            return;
+        }
+        setAvatarFile(file);
+    }
+
+    async function uploadCroppedAvatar(blob: Blob) {
+        try {
+            await uploadAvatar.mutateAsync(blob);
+            setAvatarFile(null);
+        } catch {
+            // The mutation shows the server or network error and keeps the crop dialog open.
+        }
+    }
     function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (isInvalid || !hasChanged)
@@ -125,6 +170,42 @@ export function ProfileSettings() {
 
       <div className='w-full pb-8'>
         <div className='max-w-4xl space-y-8'>
+          <div className='grid gap-3 text-sm md:grid-cols-3 md:items-center'>
+            <span className='text-muted'>头像</span>
+            <div className='flex min-w-0 flex-wrap items-center gap-3 md:col-span-2'>
+              <Avatar size='lg'>
+                {data.user.avatarUrl ? <Avatar.Image src={data.user.avatarUrl} alt={`${displayName}的头像`} /> : null}
+                <Avatar.Fallback>{avatarFallback}</Avatar.Fallback>
+              </Avatar>
+              <Button
+                variant='secondary'
+                isDisabled={avatarBusy}
+                isPending={randomizeAvatar.isPending}
+                onPress={() => randomizeAvatar.mutate()}
+              >
+                随机头像
+              </Button>
+              <Button
+                variant='outline'
+                isDisabled={avatarBusy}
+                onPress={() => avatarInputRef.current?.click()}
+              >
+                上传头像
+              </Button>
+              <input
+                ref={avatarInputRef}
+                className='hidden'
+                type='file'
+                accept='image/png,image/jpeg,image/webp'
+                aria-label='选择头像图片'
+                onChange={(event) => {
+                  chooseAvatarFile(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+            </div>
+          </div>
+
           <div className='grid gap-3 text-sm'>
             <div className='grid gap-1 sm:grid-cols-3 sm:items-center'>
               <span className='text-muted'>登录邮箱</span>
@@ -165,5 +246,11 @@ export function ProfileSettings() {
           <PasswordResetSettings />
         </div>
       </div>
+      <AvatarCropDialog
+        file={avatarFile}
+        isUploading={uploadAvatar.isPending}
+        onCancel={() => !uploadAvatar.isPending && setAvatarFile(null)}
+        onCropped={uploadCroppedAvatar}
+      />
     </section>);
 }

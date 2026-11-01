@@ -12,6 +12,11 @@ enum UserStatus {
   disabled
 }
 
+enum UserAvatarSource {
+  system
+  custom
+}
+
 enum AuditActorType {
   user
   platform_admin
@@ -41,6 +46,13 @@ model User {
   nickname                       String                          @db.VarChar(24)
   /// 用户自填的联系邮箱，同团队活跃成员可查询；不用于认证，默认空。
   contactEmail                   String?                         @db.VarChar(320)
+  avatarUrl                      String?                         @db.VarChar(512)
+  avatarSource                   UserAvatarSource?
+  systemAvatarId                 String?                         @db.VarChar(128)
+  systemAvatar                   SystemAvatar?                   @relation("SelectedSystemAvatar", fields: [systemAvatarId], references: [id], onDelete: Restrict)
+  customAvatarAssetId            String?                         @unique
+  customAvatarAsset              UserAvatarAsset?                @relation("SelectedCustomAvatar", fields: [customAvatarAssetId], references: [id], onDelete: SetNull)
+  avatarAssets                   UserAvatarAsset[]               @relation("UserAvatarAssets")
   adminNote                      String?                         @db.VarChar(500)
   passwordHash                   String
   passwordChangedAt              DateTime?
@@ -90,6 +102,38 @@ model User {
   mailAttachments                 MailAttachment[]
   createdAt                      DateTime                        @default(now())
   updatedAt                      DateTime                        @updatedAt
+}
+
+model SystemAvatar {
+  id            String   @id @db.VarChar(128)
+  storageKey    String   @unique @db.VarChar(255)
+  publicUrl     String   @unique @db.VarChar(512)
+  mimeType      String   @default("image/webp") @db.VarChar(64)
+  sortOrder     Int      @unique
+  selectedBy    User[]   @relation("SelectedSystemAvatar")
+  createdAt     DateTime @default(now())
+}
+
+/// Custom avatar bytes live in Platform Media COS. Status transitions are persisted
+/// before object deletion so a transient COS failure remains retryable.
+model UserAvatarAsset {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation("UserAvatarAssets", fields: [userId], references: [id], onDelete: Cascade)
+  storageKey    String   @unique @db.VarChar(255)
+  publicUrl     String   @unique @db.VarChar(512)
+  mimeType      String   @db.VarChar(64)
+  byteSize      Int
+  status        String   @db.VarChar(24)
+  deletePending Boolean  @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  currentFor    User?    @relation("SelectedCustomAvatar")
+
+  @@index([userId, status, createdAt])
+  @@index([status, createdAt])
+  @@index([deletePending, updatedAt])
 }
 
 model UserNotification {

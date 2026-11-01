@@ -75,6 +75,8 @@ export type DashboardSession = {
   userId?: string
   email: string
   handle: string | null
+  nickname?: string
+  avatarUrl?: string | null
   sessionId: string
 }
 
@@ -388,6 +390,7 @@ export type DashboardMe = {
     status: 'active' | 'disabled'
     handle: string
     nickname: string
+    avatarUrl: string | null
   }
 }
 
@@ -963,6 +966,22 @@ export const dashboardApi = {
       method: 'PATCH',
       body: JSON.stringify(input),
     }),
+  randomizeAvatar: () =>
+    request<DashboardMe>(`${consoleApiBasePath}/me/avatar/random`, {
+      method: 'POST',
+    }),
+  uploadAvatar: async (image: Blob) => {
+    const response = await fetch(`${consoleApiBasePath}/me/avatar`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'image/png' },
+      body: image,
+    })
+    if (!response.ok) {
+      throw new ApiError(await readErrorMessage(response), response.status)
+    }
+    return (await response.json()) as DashboardMe
+  },
   createMyPasswordResetLink: () =>
     request<PasswordResetLinkResult>(`${consoleApiBasePath}/me/password-reset-link`, {
       cache: 'no-store',

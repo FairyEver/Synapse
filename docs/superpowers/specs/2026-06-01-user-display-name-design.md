@@ -2,6 +2,9 @@
 
 Date: 2026-06-01
 
+> 2026-11-01 更新：本文件中和头像排除有关的约束仅代表当时的阶段边界，现由
+> `2026-11-01-user-avatar-design.md` 取代；昵称和用户名规则仍然有效。
+
 ## Summary
 
 Add a display name for ordinary user accounts. Users edit their own display name in the web dashboard personal center. The desktop app remains read-only and shows the synced display name after login or account sync.

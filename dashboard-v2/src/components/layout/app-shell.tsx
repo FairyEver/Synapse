@@ -4,10 +4,23 @@ import { Avatar, Button, Drawer, ScrollShadow, toast } from '@heroui/react';
 import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { adminApi, dashboardApi } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
+import type { AuthUser } from '@/stores/auth-store';
 import { useAdminAuthStore } from '@/stores/admin-auth-store';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { adminNavigation, userNavigation, getActiveNavigationPath } from './navigation';
 const SidebarContext = createContext<() => void>(() => undefined);
+
+export function AccountSummary({ mode, user }: { mode: 'user' | 'admin'; user: AuthUser | null }) {
+    const name = mode === 'admin'
+      ? '平台管理员'
+      : user?.nickname?.trim() || user?.handle || user?.email || '账户';
+    const fallback = Array.from(name)[0]?.toLocaleUpperCase() || '?';
+    return <div className='flex items-center gap-3 px-2 py-3'><Avatar>
+      {mode === 'user' && user?.avatarUrl ? <Avatar.Image src={user.avatarUrl} alt={name} /> : null}
+      <Avatar.Fallback>{fallback}</Avatar.Fallback>
+    </Avatar><div className='min-w-0'><div className='truncate font-semibold'>{name}</div><div className='truncate text-sm text-muted'>{mode === 'admin' ? 'Synapse 管理' : user?.email}</div></div></div>;
+}
+
 export function SidebarToggle() {
     const toggle = useContext(SidebarContext);
     return <Button isIconOnly variant="ghost" aria-label='切换导航' onPress={toggle}><PanelLeftOpen /></Button>;
@@ -24,7 +37,6 @@ export function AppShell({ mode, children }: {
     const user = useAuthStore((s) => s.auth.user);
     const items = mode === 'admin' ? adminNavigation : userNavigation;
     const base = mode === 'admin' ? '/admin' : '/console';
-    const name = mode === 'admin' ? '平台管理员' : user?.handle || user?.email || '账户';
     const toggle = () => {
         if (window.matchMedia('(min-width: 768px)').matches)
             setCollapsed(!collapsed);
@@ -54,7 +66,7 @@ export function AppShell({ mode, children }: {
     const pathname = location.pathname.startsWith(`${base}/`) ? location.pathname.slice(base.length) : location.pathname;
     const activePath = getActiveNavigationPath(items, pathname);
     const navigation = <div className='flex h-full min-h-0 flex-col gap-5 p-4'>
-    <div className='flex items-center gap-3 px-2 py-3'><Avatar><Avatar.Fallback>{name.slice(0, 1).toUpperCase()}</Avatar.Fallback></Avatar><div className='min-w-0'><div className='truncate font-semibold'>{name}</div><div className='truncate text-sm text-muted'>{mode === 'admin' ? 'Synapse 管理' : user?.email}</div></div></div>
+    <AccountSummary mode={mode} user={user} />
     <ScrollShadow className='min-h-0 flex-1'><nav aria-label={mode === 'admin' ? '管理导航' : '账户导航'} className='flex flex-col gap-1'>
       {items.map(({ title, path, icon: Icon, external }) => {
         const active = path === activePath;

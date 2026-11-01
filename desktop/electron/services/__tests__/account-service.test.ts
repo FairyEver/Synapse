@@ -322,6 +322,32 @@ describe("AccountService", () => {
     vi.useRealTimers()
   })
 
+  it("resolves a relative profile avatar URL for the renderer", async () => {
+    const fetch = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith("/auth/refresh")) return jsonResponse({ accessToken: "access", refreshToken: "refresh-next" })
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({
+          user: {
+            ...storedProfile.user,
+            avatarUrl: "/api/avatars/system/avatar-1",
+          },
+        })
+      }
+      throw new Error("Unexpected test endpoint")
+    })
+    const { namespace, service: account } = await createTestAccountService({ fetch: fetch as typeof globalThis.fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    await expect(account.refreshFromStorage()).resolves.toMatchObject({
+      status: "authenticated",
+      profile: {
+        user: {
+          avatarUrl: `${expectedPublicAppUrl.replace(/\/+$/u, "")}/api/avatars/system/avatar-1`,
+        },
+      },
+    })
+  })
+
   it.each([
     { retryAfter: "120", delayMs: 120_000 },
     { retryAfter: null, delayMs: 60_000 },

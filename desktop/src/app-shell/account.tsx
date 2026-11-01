@@ -45,6 +45,8 @@ function AccountProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [pendingAction, setPendingAction] = useState<AccountPendingAction | null>(null)
   const stateRef = useRef(state)
+  const lastProfileSyncAtRef = useRef(0)
+  const profileSyncInFlightRef = useRef(false)
   stateRef.current = state
 
   useEffect(() => {
@@ -76,6 +78,52 @@ function AccountProvider({ children }: { children: ReactNode }) {
       unsubscribe()
     }
   }, [])
+
+  useEffect(() => {
+    const bridge = getSynapseBridge()
+    if (!bridge?.account) return
+
+    let cancelled = false
+    const syncVisibleAccount = () => {
+      const current = stateRef.current
+      if (
+        document.visibilityState !== "visible"
+        || current.status !== "authenticated"
+        || current.connectivity !== "online"
+        || pendingAction !== null
+        || profileSyncInFlightRef.current
+        || Date.now() - lastProfileSyncAtRef.current < 60_000
+      ) return
+
+      lastProfileSyncAtRef.current = Date.now()
+      profileSyncInFlightRef.current = true
+      void bridge.account.refresh()
+        .then((nextState) => {
+          if (
+            !cancelled
+            && nextState.status === "authenticated"
+            && stateRef.current.status === "authenticated"
+            && nextState.profile.user.id === stateRef.current.profile.user.id
+          ) {
+            setState(nextState)
+          }
+        })
+        .catch((error) => {
+          logger.warn("Failed to refresh account profile after window focus.", { error })
+        })
+        .finally(() => {
+          profileSyncInFlightRef.current = false
+        })
+    }
+
+    window.addEventListener("focus", syncVisibleAccount)
+    document.addEventListener("visibilitychange", syncVisibleAccount)
+    return () => {
+      cancelled = true
+      window.removeEventListener("focus", syncVisibleAccount)
+      document.removeEventListener("visibilitychange", syncVisibleAccount)
+    }
+  }, [pendingAction])
 
   const runAccountAction = useCallback(async (
     action: AccountPendingAction,

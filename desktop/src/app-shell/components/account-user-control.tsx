@@ -2,6 +2,7 @@ import { CircleUserRound, LoaderCircle, LogIn, LogOut, RefreshCw, Settings } fro
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -47,6 +48,27 @@ function getAccountDetail(state: SynapseAccountState): string {
 
 function isAccountOffline(state: SynapseAccountState): boolean {
   return state.status === "authenticated" && state.connectivity === "offline"
+}
+
+function AccountAvatar({
+  state,
+  className,
+  loading = false,
+}: {
+  state: SynapseAccountState
+  className?: string
+  loading?: boolean
+}) {
+  const avatarUrl = state.status === "authenticated" ? state.profile.user.avatarUrl : null
+
+  return (
+    <Avatar className={className}>
+      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+      <AvatarFallback className="text-muted-foreground">
+        {loading ? <LoaderCircle className="size-4 animate-spin" /> : <CircleUserRound className="size-4" />}
+      </AvatarFallback>
+    </Avatar>
+  )
 }
 
 function AccountUserControl({
@@ -123,9 +145,7 @@ function AccountUserControl({
     return (
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-            {isBusy ? <LoaderCircle className="size-4 animate-spin" /> : <CircleUserRound className="size-4" />}
-          </div>
+          <AccountAvatar state={state} className="size-9 rounded-lg" loading={isBusy && state.status !== "authenticated"} />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{getAccountTitle(state)}</p>
             <p className="truncate text-sm text-muted-foreground">{getAccountDetail(state)}</p>
@@ -193,7 +213,7 @@ function AccountUserControl({
     <DropdownMenu data-track="account-user-menu">
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className={toolbarButtonClassName} aria-label={label} title={label}>
-          <CircleUserRound />
+          <AccountAvatar state={state} className="size-7" />
           {isAccountOffline(state) ? (
             <span aria-hidden="true" className="absolute bottom-2 right-2 size-1.5 rounded-full bg-muted-foreground" />
           ) : null}
@@ -201,11 +221,14 @@ function AccountUserControl({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem className="h-auto py-2" onSelect={handleOpenDashboard}>
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="truncate text-sm font-medium">{getAccountTitle(state)}</span>
-            {getAccountDisplayName(state) ? (
-              <span className="truncate text-xs text-muted-foreground">{state.profile.user.email}</span>
-            ) : null}
+          <div className="flex min-w-0 items-center gap-3">
+            <AccountAvatar state={state} className="size-8" />
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="truncate text-sm font-medium">{getAccountTitle(state)}</span>
+              {getAccountDisplayName(state) ? (
+                <span className="truncate text-xs text-muted-foreground">{state.profile.user.email}</span>
+              ) : null}
+            </div>
           </div>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

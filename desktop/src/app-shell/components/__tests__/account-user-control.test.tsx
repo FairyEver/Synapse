@@ -156,6 +156,32 @@ describe("AccountUserControl", () => {
     expect(container.textContent).toContain("user@example.com")
   })
 
+  it("renders the synchronized avatar in the panel and toolbar", () => {
+    accountState.current = createAuthenticatedState()
+    if (accountState.current.status !== "authenticated") throw new Error("expected authenticated state")
+    accountState.current.profile.user.avatarUrl = "https://example.com/avatar.webp"
+    const originalImage = window.Image
+    window.Image = class LoadedImage {
+      complete = true
+      naturalWidth = 1
+      referrerPolicy: ReferrerPolicy = ""
+      crossOrigin: string | null = null
+      src = ""
+      addEventListener() {}
+      removeEventListener() {}
+    } as unknown as typeof Image
+
+    try {
+      const panel = renderControl("panel")
+      const toolbar = renderControl("toolbar")
+
+      expect(panel.querySelector("img")?.getAttribute("src")).toBe("https://example.com/avatar.webp")
+      expect(toolbar.querySelector("img")?.getAttribute("src")).toBe("https://example.com/avatar.webp")
+    } finally {
+      window.Image = originalImage
+    }
+  })
+
   it("falls back to email when handle is empty", () => {
     accountState.current = {
       status: "authenticated",
