@@ -10,6 +10,7 @@ import type { CloudTablesModel } from './use-cloud-tables'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 let root: Root, host: HTMLDivElement, client: QueryClient
+let mountedModel: CloudTablesModel
 afterEach(async () => { await act(async () => root?.unmount()); host?.remove(); client?.clear(); vi.restoreAllMocks() })
 const table: CloudTableDto = { id: 'table', ownerId: 'owner', name: '报名', schemaVersion: 1, fields: [], members: [], anonymous: {}, deletedAt: null, createdAt: '', permissions: { read: 'all', create: 'all', update: 'all', delete: 'all', manage: 'all' } }
 async function mount(anonymous = {}) {
@@ -17,9 +18,17 @@ async function mount(anonymous = {}) {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const model = { table: { ...table, anonymous }, dialog: { kind: 'permissions' }, setDialog: vi.fn(), mutation: { mutateAsync, isPending: false } } as unknown as CloudTablesModel
+  mountedModel = model
   await act(async () => root.render(<QueryClientProvider client={client}><CloudTableDialogs model={model} /></QueryClientProvider>))
   return mutateAsync
 }
+it('keeps permission drafts on their original schema version after a background revocation', async () => {
+  const save = await mount({ read: true })
+  const updated = { ...mountedModel, table: { ...mountedModel.table!, schemaVersion: 2, anonymous: {}, members: [] } }
+  await act(async () => root.render(<QueryClientProvider client={client}><CloudTableDialogs model={updated} /></QueryClientProvider>))
+  await click('保存')
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ body: { version: 1, anonymous: { read: true }, members: [] } }))
+})
 async function click(text: string) {
   const button = Array.from(document.querySelectorAll('button')).find(b => b.textContent === text)
   if (!button) throw new Error(`Button missing: ${text}`)

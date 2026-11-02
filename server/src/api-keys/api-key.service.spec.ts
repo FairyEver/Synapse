@@ -6,6 +6,17 @@ import { ApiKeyService } from "./api-key.service"
 const createdAt = new Date("2026-08-21T08:00:00.000Z")
 
 describe("ApiKeyService", () => {
+  it.each([true, false])("matches anonymous fallback for existing members when selecting table resources: %s", async anonymousRead => {
+    const row = { id: "table", ownerId: "other", members: [{ userId: "user-1", permissions: { read: "none", create: "none", update: "none", delete: "none" } }], anonymous: { read: anonymousRead } }
+    const tx = {
+      cloudTable: { findMany: vi.fn().mockResolvedValue([row]) },
+      userApiKey: { findFirst: vi.fn().mockResolvedValue({ id: "key", name: "CLI", keyPrefix: "syn_sk_test", scopes: [], createdAt, lastUsedAt: null, tableAccessMode: "selected", tableIds: [] }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    }
+    const service = new ApiKeyService({ $transaction: (work: (client: typeof tx) => unknown) => work(tx) } as never, { recordWithClient: vi.fn() } as never)
+    const result = service.updateTableResourcesForUser("user-1", "key", { mode: "selected", tableIds: ["table"] })
+    if (anonymousRead) await expect(result).resolves.toMatchObject({ tableResources: { mode: "selected", tableIds: ["table"] } })
+    else await expect(result).rejects.toBeInstanceOf(BadRequestException)
+  })
   it("lists only active API keys owned by the current user", async () => {
     const { service, prisma } = createService()
     prisma.userApiKey.findMany.mockResolvedValue([

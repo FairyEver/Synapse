@@ -7,8 +7,8 @@ import type { CloudAction, CloudField, CloudMember, CloudRange, CloudTableDto } 
 import { CloudTableMaintenance } from "./cloud-table-maintenance"
 import { CloudTableDatabase } from "./cloud-table-database"
 import { CloudTableScheduler } from "./cloud-table-scheduler"
-import { authorize, assertJsonBudget, fail, normalizeValues, validateFields } from "./cloud-table-validation"
-import { batchSchema, createTableSchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
+import { authorize, assertJsonBudget, fail, normalizeValues, parseCloudTableInput as parse, validateFields } from "./cloud-table-validation"
+import { batchSchema, createTableSchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, resolveCollaboratorSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
 import { filterPlan, queryPlan, stableJson } from "./cloud-table-query"
 import { OpenApiHttpError } from "../open-api/open-api.types"
 
@@ -18,7 +18,6 @@ type Tx = Prisma.TransactionClient
 type Table = CloudTable & { fields: { key: string; definition: Prisma.JsonValue; archivedAt: Date | null; position: number }[] }
 const retentionMs = 30 * 86400000
 const json = (value: unknown) => value as Prisma.InputJsonValue
-const parse = <T>(schema: { safeParse(v: unknown): { success: boolean; data?: T } }, input: unknown): T => { const r = schema.safeParse(input); if (!r.success) fail("INVALID_REQUEST", "请求参数无效。"); return r.data! }
 const selectRow = { id: true, tableId: true, values: true, creatorUserId: true, version: true, createdAt: true, updatedAt: true, deletedAt: true } as const
 
 @Injectable()
@@ -54,6 +53,7 @@ export class CloudTableService {
   }
   async execute(actor: CloudActor, tableId: string | null, operation: string, input: unknown, context: CloudContext): Promise<unknown> {
     assertJsonBudget(input)
+    if (tableId !== null) assertJsonBudget(tableId)
     const bytes = Buffer.byteLength(JSON.stringify(input ?? {}))
     if (bytes > 1048576) fail("REQUEST_TOO_LARGE", "请求不能超过1 MiB。", 413)
     const ownerId = tableId ? await this.resolveOwner(tableId) : actor.userId
@@ -62,7 +62,12 @@ export class CloudTableService {
     return this.scheduler.run(ownerId, bytes, async () => {
       const started = Date.now(); let status = 200, loggedTableId = tableId
       try {
-        const result = await this.db.transaction(tx => this.perform(tx, actor, tableId, operation, input ?? {}, context))
+        const result = await this.db.transaction(async tx => {
+          if (context.signal?.aborted) fail("REQUEST_ABORTED", "请求已取消。", 499)
+          const result = await this.perform(tx, actor, tableId, operation, input ?? {}, context)
+          if (context.signal?.aborted) fail("REQUEST_ABORTED", "请求已取消。", 499)
+          return result
+        })
         if (operation === "table.create" && result && typeof result === "object" && "id" in result) { loggedTableId = String(result.id); this.rememberOwner(loggedTableId, ownerId) }
         return result
       }
@@ -114,10 +119,16 @@ export class CloudTableService {
       if (op !== "table.list" && op !== "table.trash") fail("INVALID_OPERATION", "操作不存在。", 404)
       if (key && !key.scopes.some(s => s.startsWith("tables."))) fail("INSUFFICIENT_SCOPE", "密钥缺少数据表权限。", 403)
       const cursor = typeof (input as { cursor?: unknown }).cursor === "string" ? (input as { cursor: string }).cursor : undefined
+      const memberAccess: Prisma.CloudTableWhereInput[] = []
+      for (const action of ["read", "create", "update", "delete"] as const) {
+        if (key && !key.scopes.includes(`tables.records.${action}`)) continue
+        for (const range of action === "create" ? ["all"] : ["own", "all"]) memberAccess.push({ members: { array_contains: [{ userId: actor.userId, permissions: { [action]: range } }] } })
+        memberAccess.push({ AND: [{ members: { array_contains: [{ userId: actor.userId }] } }, { anonymous: { path: [action], equals: true } }] })
+      }
       const tables = await tx.cloudTable.findMany({ where: {
         ...(cursor ? { id: { gt: cursor } } : {}),
         deletedAt: op === "table.trash" ? { gte: new Date(Date.now() - retentionMs) } : null,
-        OR: op === "table.trash" ? [{ ownerId: actor.userId }] : [{ ownerId: actor.userId }, { members: { array_contains: [{ userId: actor.userId }] } }],
+        OR: op === "table.trash" ? [{ ownerId: actor.userId }] : [{ ownerId: actor.userId }, ...memberAccess],
         ...(key ? key.tableAccessMode === "all_owned" ? { ownerId: actor.userId } : { id: { ...(cursor ? { gt: cursor } : {}), in: key.tableIds } } : {}),
       }, orderBy: { id: "asc" }, take: 51 })
       return { data: tables.slice(0, 50).map(t => { const { fields: _fields, members: _members, anonymous: _anonymous, ...summary } = this.dto({ ...t, fields: [] }, actor, key?.scopes); return summary }), nextCursor: tables.length > 50 ? tables[49]!.id : null }
@@ -158,9 +169,8 @@ export class CloudTableService {
     }
     if (op === "member.resolve") {
       permission("manage")
-      const handle = (input as { handle?: unknown }).handle
-      if (typeof handle !== "string" || !handle.trim() || handle.length > 64) fail("INVALID_REQUEST", "请输入有效的SY用户名。")
-      const user = await tx.user.findUnique({ where: { handle: handle.trim() }, select: { id: true, handle: true, status: true } })
+      const { handle } = parse(resolveCollaboratorSchema, input)
+      const user = await tx.user.findUnique({ where: { handle }, select: { id: true, handle: true, status: true } })
       if (!user || user.status !== "active") fail("NOT_FOUND", "用户不存在。", 404)
       return { id: user.id, handle: user.handle }
     }
@@ -217,6 +227,7 @@ export class CloudTableService {
     }
     if (op === "table.delete" || op === "table.restore") {
       permission("manage")
+      if (op === "table.restore" && !table.deletedAt) fail("NOT_DELETED", "数据表未删除，无需恢复。", 409)
       if (op === "table.delete" && parse(deleteRecordSchema, input).version !== table.schemaVersion) fail("VERSION_CONFLICT", "表已变化。", 409)
       await tx.cloudTable.update({ where: { id: tableId }, data: { deletedAt: op === "table.delete" ? new Date() : null, ...(op === "table.restore" ? { anonymous: {} } : {}), schemaVersion: { increment: 1 } } })
       return { id: tableId, schemaVersion: table.schemaVersion + 1 }
@@ -270,7 +281,8 @@ export class CloudTableService {
       const body = input as { id: string }, row = await tx.cloudTableRecord.findFirst({ where: { tableId, id: body.id, deletedAt: { gte: new Date(Date.now() - retentionMs) } }, select: selectRow })
       if (!row) fail("NOT_FOUND", "回收记录不存在或已过期。", 404)
       try { normalizeValues(fields, {}, row.values as Record<string, unknown>) } catch { fail("INCOMPATIBLE_SCHEMA", "记录与当前结构不兼容，请先恢复字段定义。", 409) }
-      await tx.cloudTableRecord.update({ where: { id: row.id }, data: { deletedAt: null, version: { increment: 1 } } })
+      const changed = await tx.cloudTableRecord.updateMany({ where: { id: row.id, tableId, version: row.version, deletedAt: { gte: new Date(Date.now() - retentionMs) } }, data: { deletedAt: null, version: { increment: 1 } } })
+      if (!changed.count) fail("VERSION_CONFLICT", "记录已变化，请重新读取。", 409)
       return { id: row.id, version: row.version + 1 }
     }
     const operations = op === "records.batch" ? parse(batchSchema, input).operations : op === "records.create" ? [{ action: "create" as const, ...parse(recordCreateSchema, input) }] : op === "records.update" ? [{ action: "update" as const, id: (input as { id: string }).id, ...parse(recordUpdateSchema, this.withoutId(input)) }] : op === "records.delete" ? [{ action: "delete" as const, id: (input as { id: string }).id, ...parse(deleteRecordSchema, this.withoutId(input)) }] : fail("INVALID_OPERATION", "操作不存在。", 404)
@@ -315,7 +327,7 @@ export class CloudTableService {
   private withoutId(input: unknown) { const { id: _id, ...rest } = input as Record<string, unknown>; return rest }
   private recordDto(row: CloudTableRecord, fields: CloudField[]) {
     const stored = row.values as Record<string, unknown>
-    return { id: row.id, values: Object.fromEntries(fields.filter(f => !f.archivedAt).map(f => [f.key, stored[f.key] ?? null])), creatorUserId: row.creatorUserId, version: row.version, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), deletedAt: row.deletedAt?.toISOString() ?? null }
+    return { id: row.id, values: Object.fromEntries(fields.filter(f => !f.archivedAt).map(f => [f.key, Object.hasOwn(stored, f.key) ? stored[f.key] : null])), creatorUserId: row.creatorUserId, version: row.version, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), deletedAt: row.deletedAt?.toISOString() ?? null }
   }
   @Cron("*/10 * * * * *")
   async cleanup(now = new Date()): Promise<void> { await this.maintenance.cleanup(now) }

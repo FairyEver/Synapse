@@ -3,8 +3,9 @@ import type { INestApplication } from "@nestjs/common"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { z } from "zod"
 import { hashPassword } from "../src/auth/password"
-import { cloudTableOpenApiPaths } from "../src/cloud-tables/cloud-table-openapi"
+import { CLOUD_TABLE_JSON_SCHEMA, cloudTableOpenApiPaths } from "../src/cloud-tables/cloud-table-openapi"
 import { createTestApp } from "../src/test/test-app"
 import { requireLoopbackE2eDatabase } from "./e2e-database-guard.mjs"
 
@@ -31,6 +32,7 @@ describe("cloud table complete real HTTP contract", () => {
   const password = randomUUID()
   const userIds = [owner, member]
   const covered = new Map<string, Set<string>>()
+  const responseParsers = new Map<string, z.ZodType>()
   let httpRequests = 0
 
   async function call(method: string, path: string, auth: Headers = {}, body?: unknown, status = method === "POST" ? 201 : 200, extra: Headers = {}) {
@@ -46,6 +48,19 @@ describe("cloud table complete real HTTP contract", () => {
         const prefix = path.startsWith("/api/open/") ? "/api/open/v1" : "/api/console"
         const template = path.split("?")[0]!.slice(prefix.length).replace(/\/tables\/[^/]+/u, part => part === "/tables/trash" ? part : "/tables/{id}").replace(/\/records\/[^/]+/u, part => ["/records/query", "/records/count", "/records/exists", "/records/batch", "/records/trash"].includes(part) ? part : "/records/{recordId}")
         const set = covered.get(prefix) ?? new Set<string>(); set.add(`${method.toLowerCase()} ${template}`); covered.set(prefix, set)
+        const operation = (cloudTableOpenApiPaths()[template] as Record<string, any> | undefined)?.[method.toLowerCase()]
+        if (operation) {
+          const key = `${method} ${template} ${status}`
+          let parser = responseParsers.get(key)
+          if (!parser) {
+            const schema = operation.responses[String(status)].content["application/json"].schema
+            const standalone = JSON.parse(JSON.stringify({ ...schema, $defs: { CloudTableJsonValue: CLOUD_TABLE_JSON_SCHEMA } }, (key, value: unknown) => key === "$ref" && value === "#/components/schemas/CloudTableJsonValue" ? "#/$defs/CloudTableJsonValue" : value))
+            parser = z.fromJSONSchema(standalone)
+            responseParsers.set(key, parser)
+          }
+          const parsed = parser.safeParse(result)
+          expect(parsed.success, `${key}: ${parsed.success ? "" : JSON.stringify(parsed.error.issues)}`).toBe(true)
+        }
       }
     }
     return result
@@ -165,6 +180,22 @@ describe("cloud table complete real HTTP contract", () => {
     for (const suffix of ["count", "exists"]) await denied("POST", `${path}/records/${suffix}`, auth, {}, 401, "INVALID_API_KEY")
   })
 
+  it("keeps mixed-case public routes under API-key identity and strict body protection", async () => {
+    const t = await call("POST", "/api/open/v1/tables", ownerKey, { name: "case-boundary", fields: [{ key: "text", name: "文本", type: "text" }] })
+    const path = `/api/open/v1/TABLES/${t.id}`
+    for (const suffix of ["query", "count", "exists"]) await denied("POST", `${path}/records/${suffix}`, ownerCookie, {}, 403, "FORBIDDEN")
+    await denied("POST", `${path}/records/count`, { ...ownerCookie, Authorization: "Bearer invalid" }, {}, 401, "INVALID_API_KEY")
+    expect(await call("POST", `${path}/records/count`, ownerKey, {})).toEqual({ count: 0 })
+    let nested: unknown = null
+    for (let i = 0; i < 34; i++) nested = [nested]
+    await denied("POST", `${path}/records`, ownerKey, { values: { text: nested } }, 400, "JSON_TOO_COMPLEX")
+    await denied("POST", `${path}/records`, ownerKey, { values: { text: "\u0000" } }, 400, "INVALID_VALUE")
+    await denied("POST", `${path}/collaborators/resolve`, ownerKey, { handle: member, extra: true }, 400, "INVALID_REQUEST")
+    const row = await call("POST", `${path}/records`, ownerKey, { values: { text: "keep" } })
+    for (const [method, body] of [["PATCH", { id: "ignored", version: 1, values: {} }], ["DELETE", { id: "ignored", version: 1 }]] as const) {
+      await denied(method, `${path}/records/${row.id}`, ownerKey, body, 400, "INVALID_REQUEST")
+    }
+  })
   it("enforces collaborator own-row permissions, owner-only management and immediate ACL/key changes", async () => {
     const root = "/api/open/v1/tables", table = await call("POST", root, ownerKey, { name: "权限矩阵", fields: [{ key: "text", name: "文本", type: "text" }] }), path = `${root}/${table.id}`
     const ownerRow = await call("POST", `${path}/records`, ownerKey, { values: { text: "owner" } })

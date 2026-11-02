@@ -5,7 +5,8 @@ import { CloudTableService } from "./cloud-table.service"
 import { CloudTableGuard, type CloudRequest } from "./cloud-table-http"
 import { OpenApiExceptionFilter } from "../open-api/open-api-exception.filter"
 import { openApiRequestId, type OpenApiRequest } from "../open-api/open-api.types"
-import { CLOUD_TABLE_BASE } from "./cloud-table-contract"
+import { CLOUD_TABLE_BASE, deleteRecordSchema, recordUpdateSchema } from "./cloud-table-contract"
+import { parseCloudTableInput } from "./cloud-table-validation"
 
 @Controller([CLOUD_TABLE_BASE, "/api/console/tables"])
 @SkipThrottle()
@@ -16,6 +17,7 @@ export class CloudTableController {
   private async call(req: CloudRequest, res: Response, id: string | null, op: string, body: unknown = {}) {
     const abort = new AbortController(), close = () => { if (!res.writableEnded) abort.abort() }
     res.once("close", close)
+    if (res.destroyed || req.aborted) abort.abort()
     const requestId = openApiRequestId(req as OpenApiRequest)
     res.setHeader("X-Request-Id", requestId); res.setHeader("Cache-Control", "no-store")
     try { return await this.service.execute(req.cloudActor, id, op, body, { requestId, idempotencyKey: req.headers["idempotency-key"] as string | undefined, signal: abort.signal }) }
@@ -40,7 +42,7 @@ export class CloudTableController {
   @Get(":id/records/trash") recordTrash(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query("cursor") cursor?: string) { return this.call(r,s,id,"records.trash",{cursor}) }
   @Post(":id/records") insert(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"records.create",b) }
   @Get(":id/records/:recordId") record(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Param("recordId") recordId: string) { return this.call(r,s,id,"records.get",{id:recordId}) }
-  @Patch(":id/records/:recordId") patch(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Param("recordId") recordId: string, @Body() b: Record<string,unknown>) { return this.call(r,s,id,"records.update",{...b,id:recordId}) }
-  @Delete(":id/records/:recordId") remove(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Param("recordId") recordId: string, @Body() b: Record<string,unknown>) { return this.call(r,s,id,"records.delete",{...b,id:recordId}) }
+  @Patch(":id/records/:recordId") patch(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Param("recordId") recordId: string, @Body() b: unknown) { return this.call(r,s,id,"records.update",{...parseCloudTableInput(recordUpdateSchema,b),id:recordId}) }
+  @Delete(":id/records/:recordId") remove(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Param("recordId") recordId: string, @Body() b: unknown) { return this.call(r,s,id,"records.delete",{...parseCloudTableInput(deleteRecordSchema,b),id:recordId}) }
   @Post(":id/records/:recordId/restore") restoreRecord(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Param("recordId") recordId: string) { return this.call(r,s,id,"records.restore",{id:recordId}) }
 }

@@ -76,6 +76,96 @@ describe("cloud tables real PostgreSQL", () => {
     await request(actor, tableId, "table.restore")
     expect((await request(actor, tableId, "table.get")).anonymous).toEqual({})
   })
+  it("refuses to restore an active table without changing its public permissions", async () => {
+    const t = await request(actor, null, "table.create", { name: "active-restore", fields: [] })
+    await request(actor, t.id, "permissions", { version: 1, anonymous: { read: true }, members: [] })
+    await expect(request(actor, t.id, "table.restore")).rejects.toMatchObject({ statusCode: 409, code: "NOT_DELETED" })
+    expect(await request(actor, t.id, "table.get")).toMatchObject({ schemaVersion: 2, anonymous: { read: true } })
+  })
+  it("restores a deleted record once under concurrent requests and returns the committed version", async () => {
+    const t = await request(actor, null, "table.create", { name: "restore-race", fields: [] })
+    const row = await request(actor, t.id, "records.create", { values: {} })
+    await request(actor, t.id, "records.delete", { id: row.id, version: 1 })
+    let release!: () => void, entered!: () => void
+    const ready = new Promise<void>(r => { entered = r }), gate = new Promise<void>(r => { release = r })
+    const held = prisma.$transaction(async tx => { await tx.$queryRaw`SELECT "id" FROM "CloudTableRecord" WHERE "id" = ${row.id} FOR UPDATE`; entered(); await gate })
+    await ready
+    const pending = Promise.allSettled([request(actor, t.id, "records.restore", { id: row.id }), request(actor, t.id, "records.restore", { id: row.id })])
+    try {
+      for (let i = 0; i < 20; i++) {
+        const [waiting] = await prisma.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS "count" FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%CloudTableRecord%'`
+        if (waiting!.count >= 2n) break
+        await new Promise(r => setTimeout(r, 5))
+      }
+    } finally { release(); await held }
+    const results = await pending
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1)
+    expect(results.find(r => r.status === "fulfilled")).toMatchObject({ value: { id: row.id, version: 3 } })
+    expect((await request(actor, t.id, "records.get", { id: row.id })).version).toBe(3)
+  })
+  it("lists only collaborator tables with usable ACL and key scope intersection", async () => {
+    const t = await request(actor, null, "table.create", { name: "revoked-list", fields: [] })
+    const who = { userId: member, console: true }
+    await request(actor, t.id, "permissions", { version: 1, anonymous: {}, members: [{ userId: member, permissions: { read: "none", create: "none", update: "none", delete: "none" } }] })
+    expect((await request(who, null, "table.list")).data.some((item: any) => item.id === t.id)).toBe(false)
+    await request(actor, t.id, "permissions", { version: 2, anonymous: {}, members: [{ userId: member, permissions: { create: "all" } }] })
+    const key = await prisma.userApiKey.create({ data: { userId: member, name: "read-only", keyHash: randomUUID(), keyPrefix: "test", scopes: ["tables.records.read"], tableIds: [t.id] } })
+    try {
+      const reader = { userId: member, apiKeyId: key.id, console: false }
+      expect((await request(who, null, "table.list")).data.some((item: any) => item.id === t.id)).toBe(true)
+      expect((await request(reader, null, "table.list")).data.some((item: any) => item.id === t.id)).toBe(false)
+      await request(actor, t.id, "permissions", { version: 3, anonymous: { read: true }, members: [{ userId: member, permissions: { create: "all" } }] })
+      expect((await request(reader, null, "table.list")).data.some((item: any) => item.id === t.id)).toBe(true)
+    } finally { await prisma.userApiKey.delete({ where: { id: key.id } }) }
+  })
+  it("assigns listable member tables using effective anonymous access without accepting nonmembers", async () => {
+    const t = await request(actor, null, "table.create", { name: "anonymous-member-resource", fields: [] })
+    const permissions = { read: "none", create: "none", update: "none", delete: "none" }
+    await request(actor, t.id, "permissions", { version: 1, anonymous: { read: true }, members: [{ userId: member, permissions }] })
+    const key = await prisma.userApiKey.create({ data: { userId: member, name: "resource-fallback", keyHash: randomUUID(), keyPrefix: "test", scopes: ["tables.records.read"], tableIds: [] } })
+    const keys = new ApiKeyService(prisma, new AuditLogService(prisma)), resources = { mode: "selected" as const, tableIds: [t.id] }
+    try {
+      await expect(keys.updateTableResourcesForUser(member, key.id, resources)).resolves.toMatchObject({ tableResources: resources })
+      expect(await request({ userId: member, apiKeyId: key.id, console: false }, t.id, "records.count")).toEqual({ count: 0 })
+      await request(actor, t.id, "permissions", { version: 2, anonymous: {}, members: [{ userId: member, permissions }] })
+      await expect(keys.updateTableResourcesForUser(member, key.id, resources)).rejects.toThrow("表资源不存在或未获授权")
+      await request(actor, t.id, "permissions", { version: 3, anonymous: { read: true }, members: [] })
+      await expect(keys.updateTableResourcesForUser(member, key.id, resources)).rejects.toThrow("表资源不存在或未获授权")
+    } finally { await prisma.userApiKey.delete({ where: { id: key.id } }) }
+  })
+  it("compares timezone-equivalent system filters and honors explicit id primary order", async () => {
+    const t = await request(actor, null, "table.create", { name: "system-sort", fields: [{ key: "n", name: "数值", type: "integer" }] })
+    const rows = []
+    for (const n of [2, 1, 3]) rows.push(await request(actor, t.id, "records.create", { values: { n } }))
+    const expected = rows.map(row => row.id).sort().reverse()
+    const sort = [{ field: "$id", direction: "desc" }, { field: "n", direction: "asc" }]
+    const first = await request(actor, t.id, "records.query", { sort, limit: 1 })
+    const next = await request(actor, t.id, "records.query", { sort, limit: 2, cursor: first.nextCursor })
+    expect([...first.data, ...next.data].map(row => row.id)).toEqual(expected)
+    await prisma.cloudTableRecord.updateMany({ where: { tableId: t.id }, data: { createdAt: new Date("2026-11-01T00:00:00Z") } })
+    expect(await request(actor, t.id, "records.count", { filters: [{ field: "$createdAt", op: "eq", value: "2026-11-01T08:00:00+08:00" }] })).toEqual({ count: 3 })
+  })
+  it("returns null for new constructor fields and filters URL fragments", async () => {
+    const t = await request(actor, null, "table.create", { name: "constructor", fields: [{ key: "url", name: "链接", type: "url" }] })
+    const row = await request(actor, t.id, "records.create", { values: { url: "https://example.com/path" } })
+    await request(actor, t.id, "table.update", { version: 1, fields: [{ key: "url", name: "链接", type: "url" }, { key: "constructor", name: "构造器", type: "text" }] })
+    expect((await request(actor, t.id, "records.get", { id: row.id })).values).toEqual({ url: "https://example.com/path", constructor: null })
+    const page = await request(actor, t.id, "records.query", { filters: [{ field: "url", op: "contains", value: "example.com/path" }] })
+    expect(page.data).toHaveLength(1); expect(page.data[0].values.constructor).toBeNull()
+  })
+  it("rolls back an in-flight write and its receipt when the request is canceled before commit", async () => {
+    const t = await request(actor, null, "table.create", { name: "canceled-write", fields: [] })
+    let release!: () => void, entered!: () => void
+    const ready = new Promise<void>(r => { entered = r }), gate = new Promise<void>(r => { release = r })
+    const held = prisma.$transaction(async tx => { await tx.$queryRaw`SELECT "id" FROM "CloudTable" WHERE "id" = ${t.id} FOR UPDATE`; entered(); await gate })
+    await ready
+    const abort = new AbortController(), key = randomUUID()
+    const result = Promise.allSettled([service.execute(actor, t.id, "records.create", { values: {} }, { requestId: randomUUID(), signal: abort.signal, idempotencyKey: key })])
+    await new Promise(r => setTimeout(r, 30)); abort.abort(); release(); await held
+    expect((await result)[0]).toMatchObject({ status: "rejected", reason: { code: "REQUEST_ABORTED" } })
+    expect(await prisma.cloudTableRecord.count({ where: { tableId: t.id } })).toBe(0)
+    expect(await prisma.cloudTableReceipt.count({ where: { tableId: t.id, key } })).toBe(0)
+  })
   it("queries numeric values and nulls in stable, query-bound cursor order", async () => {
     const t = await request(actor, null, "table.create", { name: "query", fields: [{ key: "n", name: "数值", type: "number" }] })
     for (const n of [20, null, 3, 100]) await request(actor, t.id, "records.create", { values: { n } })

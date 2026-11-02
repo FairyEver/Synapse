@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from '@heroui/react'
 import type { CloudField, CloudRecordDto, CloudTableDto } from '@synapse/shared'
 import { cloudTableApi } from './cloud-table-api'
-import { downloadData, exportCsv, fieldInput, parseFieldInput } from './cloud-table-forms'
+import { downloadData, exportCsv, fieldInput, recordValues } from './cloud-table-forms'
 import { useAuthStore } from '@/stores/auth-store'
 
 export type CloudDialog = { kind: 'create' } | { kind: 'field'; field?: CloudField } | { kind: 'record'; record?: CloudRecordDto } | { kind: 'permissions' } | { kind: 'deleteTable' } | { kind: 'rename' } | null
@@ -21,7 +21,8 @@ export function useCloudTables() {
   const tables = useQuery({ queryKey: ['cloud-tables', session, 'list', listTrash, listCursor], queryFn: ({ signal }) => cloudTableApi.list(listTrash, listCursor, signal) })
   const detail = useQuery({ queryKey: ['cloud-tables', session, 'detail', selected], queryFn: ({ signal }) => cloudTableApi.get(selected!, signal), enabled: Boolean(selected && !listTrash) })
   const table = detail.data
-  const records = useQuery({ queryKey: ['cloud-tables', session, 'records', selected, tab, cursor, filters, sort], queryFn: ({ signal }) => tab === 'trash' ? cloudTableApi.trash(selected!, cursor, signal) : cloudTableApi.query(selected!, { cursor, filters, sort }, signal), enabled: Boolean(table && !listTrash && (tab === 'trash' ? table.permissions.manage !== 'none' : table.permissions.read !== 'none') && ['records', 'trash'].includes(tab)) })
+  useEffect(() => { setCursor(undefined); setHistory([]); setFilters([]); setSort([]) }, [table?.id, table?.schemaVersion])
+  const records = useQuery({ queryKey: ['cloud-tables', session, 'records', selected, table?.schemaVersion, tab, cursor, filters, sort], queryFn: ({ signal }) => tab === 'trash' ? cloudTableApi.trash(selected!, cursor, signal) : cloudTableApi.query(selected!, { cursor, filters, sort }, signal), enabled: Boolean(table && !listTrash && (tab === 'trash' ? table.permissions.manage !== 'none' : table.permissions.read !== 'none') && ['records', 'trash'].includes(tab)) })
   const logs = useQuery({ queryKey: ['cloud-tables', session, 'logs', selected, cursor], queryFn: ({ signal }) => cloudTableApi.logs(selected!, cursor, signal), enabled: Boolean(table && !listTrash && tab === 'logs' && table.permissions.manage !== 'none') })
   const mutation = useMutation({ mutationFn: ({ path, method, body }: { path: string; method: string; body?: unknown }) => {
     const signature = JSON.stringify({ path, method, body })
@@ -37,16 +38,16 @@ export function useCloudTables() {
   function nextList(value: string | null | undefined) { if (value) { setListHistory(h => [...h, listCursor]); setListCursor(value) } }
   function previousList() { setListHistory(h => { setListCursor(h.at(-1)); return h.slice(0, -1) }) }
   function toggleTrash(value: boolean) { setListTrash(value); setListCursor(undefined); setListHistory([]); select(null) }
-  async function saveRecord(draft: Record<string, string>, record?: CloudRecordDto) {
-    if (!table) return
-    const values = Object.fromEntries(table.fields.filter(f => !f.archivedAt).map(f => [f.key, parseFieldInput(f.type, draft[f.key] ?? '')]))
-    await mutation.mutateAsync({ path: `/${table.id}/records${record ? `/${record.id}` : ''}`, method: record ? 'PATCH' : 'POST', body: { values, ...(record ? { version: record.version } : {}) } })
+  async function saveRecord(draft: Record<string, string>, record?: CloudRecordDto, original = table) {
+    if (!original) return
+    const values = recordValues(original.fields, draft, record?.values)
+    await mutation.mutateAsync({ path: `/${original.id}/records${record ? `/${record.id}` : ''}`, method: record ? 'PATCH' : 'POST', body: { values, ...(record ? { version: record.version } : {}) } })
   }
-  async function saveField(field: CloudField) {
-    if (!table) return
-    const active = table.fields.filter(f => !f.archivedAt).map(({ archivedAt: _a, ...f }) => f)
+  async function saveField(field: CloudField, original = table) {
+    if (!original) return
+    const active = original.fields.filter(f => !f.archivedAt).map(({ archivedAt: _a, ...f }) => f)
     const fields = active.some(f => f.key === field.key) ? active.map(f => f.key === field.key ? field : f) : [...active, field]
-    await mutation.mutateAsync({ path: `/${table.id}`, method: 'PATCH', body: { version: table.schemaVersion, fields } })
+    await mutation.mutateAsync({ path: `/${original.id}`, method: 'PATCH', body: { version: original.schemaVersion, fields } })
   }
   async function archiveField(field: CloudField) {
     if (!table) return

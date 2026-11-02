@@ -10,7 +10,7 @@ const actions = [{ key: 'read', name: '查看' }, { key: 'create', name: '新增
 const publicLabels = { read: '查看全部记录', create: '新增记录', update: '修改全部记录', delete: '删除全部记录' }
 
 export function PermissionDialog({ model: m }: { model: CloudTablesModel }) {
-  const table = m.table!
+  const [table] = useState(m.table!)
   const [anonymous, setAnonymous] = useState(table.anonymous)
   const [members, setMembers] = useState<CloudMember[]>(table.members ?? [])
   const [confirming, setConfirming] = useState(false)

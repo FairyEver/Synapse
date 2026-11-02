@@ -35,4 +35,24 @@ describe("cloud table read query", () => {
     expect(() => plan({ fields: ["score"], filterMode: "any", cursor: projected })).toThrow()
     expect(() => plan({ fields: ["title"], filterMode: "all", cursor: projected })).toThrow()
   })
+  it("normalizes system timestamps to UTC before comparing PostgreSQL timestamps", () => {
+    const result = plan({ filters: [{ field: "$createdAt", op: "eq", value: "2026-11-01T08:00:00+08:00" }] })
+    expect(result.filter.values).toContain("2026-11-01T00:00:00.000Z")
+    expect(result.filter.values).not.toContain("2026-11-01T08:00:00+08:00")
+  })
+  it.each(["1", "2026-02-30T00:00:00Z", "0000-01-01T00:00:00Z", "2026-11-01T00:00:00.0001Z"])("rejects invalid system timestamp %s as a query error", value => {
+    expect(() => plan({ filters: [{ field: "$updatedAt", op: "eq", value }] })).toThrowError(expect.objectContaining({ code: "INVALID_QUERY" }))
+  })
+  it("accepts literal URL fragments for contains without requiring a complete URL", () => {
+    expect(() => queryPlan("table", [{ key: "url", name: "链接", type: "url" }], querySchema.parse({ filters: [{ field: "url", op: "contains", value: "example.com/path" }] }), "actor", 1, "secret")).not.toThrow()
+  })
+  it("preserves explicitly requested id priority and invalidates old reordered cursors", () => {
+    const sort = [{ field: "$id", direction: "desc" }, { field: "score", direction: "asc" }]
+    const result = plan({ sort })
+    expect(result.order.sql.indexOf('r."id" DESC')).toBeLessThan(result.order.sql.indexOf("::numeric ASC"))
+    const binding = createHash("sha256").update(stableJson({ tableId: "table", identity: "actor", schemaVersion: 1, filters: [], sort })).digest("hex")
+    const data = Buffer.from(JSON.stringify({ binding, values: [10, "row"] })).toString("base64url")
+    const cursor = `${data}.${createHmac("sha256", "secret").update(data).digest("base64url")}`
+    expect(() => plan({ sort, cursor })).toThrowError(expect.objectContaining({ code: "INVALID_CURSOR" }))
+  })
 })

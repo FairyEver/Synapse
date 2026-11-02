@@ -3,12 +3,18 @@ import { OpenApiHttpError } from "../open-api/open-api.types"
 import { fieldSchema, CLOUD_TABLE_FIELD_BYTES, CLOUD_TABLE_JSON_DEPTH, CLOUD_TABLE_JSON_NODES } from "./cloud-table-contract"
 
 export function fail(code: string, message: string, status = 400): never { throw new OpenApiHttpError(status, code, message) }
+export function parseCloudTableInput<T>(schema: { safeParse(v: unknown): { success: boolean; data?: T } }, input: unknown): T { const r = schema.safeParse(input); if (!r.success) fail("INVALID_REQUEST", "请求参数无效。"); return r.data! }
+function validateJsonString(value: string): void {
+  if (/[\u0000\uD800-\uDFFF]/u.test(value)) fail("INVALID_VALUE", "字符串不能包含空字符或未配对的Unicode代理码点。")
+}
 export function assertJsonBudget(value: unknown): void {
   const stack = [{ value, depth: 0 }]; let nodes = 0
   while (stack.length) {
     const item = stack.pop()!
     if (++nodes > CLOUD_TABLE_JSON_NODES || item.depth > CLOUD_TABLE_JSON_DEPTH) fail("JSON_TOO_COMPLEX", "JSON超过32层或50000节点，请拆分请求。")
+    if (typeof item.value === "string") validateJsonString(item.value)
     if (item.value && typeof item.value === "object") {
+      for (const key of Object.keys(item.value)) validateJsonString(key)
       const values = Object.values(item.value)
       if (nodes + stack.length + values.length > CLOUD_TABLE_JSON_NODES) fail("JSON_TOO_COMPLEX", "JSON节点过多，请拆分请求。")
       for (const child of values) stack.push({ value: child, depth: item.depth + 1 })

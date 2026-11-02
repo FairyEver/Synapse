@@ -112,6 +112,13 @@ function createService(
 }
 
 describe("UserAuthService", () => {
+  it("uses a supplied transaction client for Web session verification", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSessionRefreshToken.findUnique.mockRejectedValue(new Error("core pool must not be used"))
+    const service = createService(prisma)
+    const client = { userSessionRefreshToken: { findUnique: async () => null } }
+    await expect(service.verifyWebSession("web-cookie", client as never)).resolves.toBeNull()
+  })
   it("rejects login for unknown users", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)

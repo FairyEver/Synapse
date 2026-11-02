@@ -1,5 +1,6 @@
 import type { Request } from "express"
 import type { PinoLogger } from "nestjs-pino"
+import type { Prisma } from "@prisma/client"
 import { formatAuditError } from "./audit-error"
 import type { AuditLogService } from "./audit-log.service"
 
@@ -9,13 +10,14 @@ interface AuthGuardFailureAuditInput {
   readonly logger?: Pick<PinoLogger, "warn">
   readonly request: Pick<Request, "ip" | "method" | "path">
   readonly tokenPresent?: boolean
+  readonly client?: Prisma.TransactionClient
   /** @deprecated The value is never recorded; callers should pass tokenPresent. */
   readonly token?: string
 }
 
 export async function recordAuthGuardFailure(input: AuthGuardFailureAuditInput): Promise<void> {
   try {
-    await input.auditLog?.record({
+    const entry = {
       adminEmail: "unknown",
       action: input.action,
       targetType: "auth",
@@ -26,7 +28,9 @@ export async function recordAuthGuardFailure(input: AuthGuardFailureAuditInput):
         tokenPresent: input.tokenPresent ?? Boolean(input.token),
       },
       ipAddress: input.request.ip ?? "",
-    })
+    }
+    if (input.auditLog && input.client) await input.auditLog.recordWithClient(input.client, entry)
+    else await input.auditLog?.record(entry)
   } catch (auditError) {
     input.logger?.warn({
       action: input.action,

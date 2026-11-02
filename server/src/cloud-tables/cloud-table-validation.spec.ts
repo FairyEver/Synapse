@@ -3,6 +3,12 @@ import { normalizeValues, validateFields, authorize, assertJsonBudget } from "./
 
 const fields = [{ key: "name", name: "姓名", type: "text" as const, required: true }, { key: "done", name: "完成", type: "boolean" as const, defaultValue: false }]
 describe("cloud table validation and ACL", () => {
+  it.each(["\u0000", "\ud800", { key: "\udfff" }, { ["bad\u0000key"]: 1 }])("rejects PostgreSQL-incompatible JSON strings before database IO: %j", value => {
+    expect(() => assertJsonBudget(value)).toThrowError(expect.objectContaining({ code: "INVALID_VALUE" }))
+  })
+  it("accepts well-formed supplementary Unicode in values and object keys", () => {
+    expect(() => assertJsonBudget({ "😀": ["文字😀"] })).not.toThrow()
+  })
   it("bounds JSON depth and node work before recursive schema validation", () => {
     let nested: unknown = null
     for (let i = 0; i < 40; i++) nested = [nested]

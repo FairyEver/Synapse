@@ -52,4 +52,22 @@ describe("cloud table machine contract", () => {
       "createCloudTable", "createCloudTableRecord", "updateCloudTableRecord", "deleteCloudTableRecord", "mutateCloudTableRecords",
     ].sort())
   })
+  it("describes the actual required response fields for summaries, permissions and logs", () => {
+    const paths = cloudTableOpenApiPaths() as Record<string, Record<string, any>>
+    const response = (path: string, method: string, status: string) => paths[path]![method].responses[status].content["application/json"].schema
+    const summary = response("/tables", "get", "200").properties.data.items
+    expect(summary.required).toEqual(expect.arrayContaining(["id", "ownerId", "viewerId", "name", "schemaVersion", "permissions"]))
+    expect(summary.properties).not.toHaveProperty("fields")
+    expect(summary.properties).not.toHaveProperty("members")
+    const permissions = response("/tables/{id}/permissions", "patch", "200")
+    expect(permissions.required).toEqual(["schemaVersion"])
+    expect(Object.keys(permissions.properties)).toEqual(["schemaVersion"])
+    const log = response("/tables/{id}/logs", "get", "200").properties.data.items
+    expect(log.required).toEqual(expect.arrayContaining(["requestId", "operation", "status", "durationMs", "createdAt"]))
+    expect(log.properties.tableId.type).toEqual(["string", "null"])
+    const details = response("/tables/{id}", "get", "200").anyOf
+    expect(details).toHaveLength(2)
+    expect(details.some((detail: any) => detail.required.includes("ownerId"))).toBe(true)
+    expect(details.some((detail: any) => detail.required.length === 3 && detail.required.includes("fields"))).toBe(true)
+  })
 })

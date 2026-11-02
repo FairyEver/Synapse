@@ -188,9 +188,9 @@ export class ApiKeyService {
     return { ok: true }
   }
 
-  async verifyOpenApiSecret(secret: string): Promise<OpenApiPrincipal | null> {
+  async verifyOpenApiSecret(secret: string, client: Pick<Prisma.TransactionClient, "userApiKey"> = this.prisma): Promise<OpenApiPrincipal | null> {
     if (!isApiKeySecret(secret)) return null
-    const apiKey = await this.prisma.userApiKey.findUnique({
+    const apiKey = await client.userApiKey.findUnique({
       where: { keyHash: hashApiKeySecret(secret) },
       select: {
         id: true,
@@ -229,8 +229,8 @@ export class ApiKeyService {
 
   private async assertTableResources(tx: Prisma.TransactionClient, userId: string, resources: CloudKeyResources): Promise<void> {
     if (resources.mode === "all_owned") return
-    const tables = await tx.cloudTable.findMany({ where: { id: { in: resources.tableIds }, deletedAt: null }, select: { id: true, ownerId: true, members: true }, take: 500 })
-    if (tables.length !== resources.tableIds.length || tables.some(t => t.ownerId !== userId && !(t.members as unknown as CloudMember[]).some(m => m.userId === userId && Object.values(m.permissions).some(p => p !== "none")))) throw new BadRequestException("表资源不存在或未获授权。")
+    const tables = await tx.cloudTable.findMany({ where: { id: { in: resources.tableIds }, deletedAt: null }, select: { id: true, ownerId: true, members: true, anonymous: true }, take: 500 })
+    if (tables.length !== resources.tableIds.length || tables.some(t => t.ownerId !== userId && !(t.members as unknown as CloudMember[]).some(m => m.userId === userId && (Object.values(m.permissions).some(p => p !== "none") || Object.values(t.anonymous as Record<string, boolean>).some(Boolean))))) throw new BadRequestException("表资源不存在或未获授权。")
   }
 
   async updateTableResourcesForUser(userId: string, id: string, resources: CloudKeyResources, ipAddress = "system"): Promise<UserApiKeyDto> {

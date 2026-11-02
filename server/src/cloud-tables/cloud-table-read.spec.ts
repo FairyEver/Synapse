@@ -24,6 +24,11 @@ function setup(count: bigint) {
   return (input: unknown = {}) => service.execute({ userId: "owner", console: true }, "table", "records.count", input, { requestId: "count" })
 }
 describe("cloud table count boundaries", () => {
+  it("rejects PostgreSQL-incompatible table IDs before owner lookup", async () => {
+    const db = { config: cloudTableConfig(), transaction: async () => { throw new Error("database lookup must not run") } } as unknown as CloudTableDatabase
+    const service = new CloudTableService(db); services.push(service)
+    await expect(service.execute({ userId: "owner", console: true }, "bad\u0000id", "table.get", {}, { requestId: "bad-id" })).rejects.toMatchObject({ code: "INVALID_VALUE" })
+  })
   it.each([0n, 9007199254740991n])("returns an exact safe integer for %s", async count => {
     await expect(setup(count)()).resolves.toEqual({ count: Number(count) })
   })

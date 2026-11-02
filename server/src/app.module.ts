@@ -1,5 +1,6 @@
 import { GameModule } from "./game/game.module"
 import { CloudTableModule } from "./cloud-tables/cloud-table.module"
+import { cloudTableLogRequest } from "./cloud-tables/cloud-table-log"
 import { TodosModule } from "./todos/todos.module"
 import { todoLogRequest } from "./todos/todo-log"
 import { Module } from "@nestjs/common"
@@ -70,8 +71,8 @@ function hasSensitiveRequestUrl(url: string): boolean {
       pinoHttp: {
         autoLogging: {
           ignore(request) {
-            const candidate = request as typeof request & { readonly originalUrl?: unknown }
-            const url = typeof candidate.originalUrl === "string"
+            const candidate = request as typeof request & { readonly originalUrl?: unknown; readonly path?: unknown }
+            const url = typeof candidate.path === "string" ? candidate.path : typeof candidate.originalUrl === "string"
               ? candidate.originalUrl
               : typeof candidate.url === "string" ? candidate.url : ""
             return hasSensitiveRequestUrl(url)
@@ -80,7 +81,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
         redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret"],
         serializers: {
           req(request: RequestLogObject) {
-            return todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
+            return cloudTableLogRequest(request) ?? todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
           },
         },
         transport: {

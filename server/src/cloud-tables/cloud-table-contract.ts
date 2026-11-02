@@ -24,8 +24,9 @@ export const permissionsSchema = z.object({
 export const recordCreateSchema = z.object({ values: z.record(z.string(), cloudJsonValue) }).strict()
 export const recordUpdateSchema = recordCreateSchema.extend({ version: versionSchema }).strict()
 export const deleteRecordSchema = z.object({ version: versionSchema }).strict()
+export const resolveCollaboratorSchema = z.object({ handle: z.string().trim().min(1).max(64) }).strict()
 export const filterSchema = z.object({
-  filters: z.array(z.object({ field: z.string().min(1).max(64), op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte", "in", "contains"]), value: cloudJsonValue }).strict()).max(20).default([]),
+  filters: z.array(z.object({ field: z.string().min(1).max(64), op: z.enum(["eq", "ne", "gt", "gte", "lt", "lte", "in", "contains"]), value: cloudJsonValue }).strict()).max(20).default([]).describe("活动业务字段或系统字段的条件；系统时间使用有效ISO时间，带Z或时区偏移，小数秒最多3位；contains允许text/url的字面子串。"),
   filterMode: z.enum(["all", "any"]).default("all"),
 }).strict()
 export const querySchema = filterSchema.extend({

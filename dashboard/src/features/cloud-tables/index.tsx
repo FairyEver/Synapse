@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useCloudTables, type CloudTablesModel } from './use-cloud-tables'
 import { CloudTableDialogs } from './cloud-table-dialogs'
 import { CloudInput, CloudSelect } from './cloud-table-controls'
-import { fieldInput, fieldTypes, parseFieldInput, canChangeRecord } from './cloud-table-forms'
+import { fieldInput, fieldTypes, filterOperators, parseFieldInput, canChangeRecord } from './cloud-table-forms'
 
 const actions = [
   { key: 'read', name: '查看' },
@@ -136,9 +136,9 @@ function Records({ model: m, table, onDelete }: { model: CloudTablesModel; table
       header: ({ column }: HeaderContext<CloudRecordDto, unknown>) => <DataTableColumnHeader column={column} title={f.name} />,
       cell: ({ row }: { row: { original: CloudRecordDto } }) => <span className='block max-w-xs truncate' title={fieldInput(row.original.values[f.key])}>{fieldInput(row.original.values[f.key]) || '—'}</span>,
     })),
-    { id: 'createdAt', header: '创建时间', meta: { label: '创建时间' }, enableSorting: false, cell: ({ row }) => <RelativeTime value={row.original.createdAt} /> },
+    { id: '$createdAt', header: '创建时间', meta: { label: '创建时间' }, enableSorting: false, cell: ({ row }) => <RelativeTime value={row.original.createdAt} /> },
     {
-      id: 'actions', header: '操作', enableSorting: false, enableHiding: false,
+      id: '$actions', header: '操作', enableSorting: false, enableHiding: false,
       cell: ({ row }) => <div className='flex gap-2'>
         {trash ? <Button size='sm' variant='secondary' isPending={m.mutation.isPending} onPress={() => m.mutation.mutate({ path: `/${table.id}/records/${row.original.id}/restore`, method: 'POST' })}>恢复</Button> : <>
           {canChangeRecord(table, row.original, 'update') && <Button size='sm' variant='secondary' onPress={() => m.setDialog({ kind: 'record', record: row.original })}>编辑</Button>}
@@ -164,7 +164,7 @@ function Records({ model: m, table, onDelete }: { model: CloudTablesModel; table
       </div>
     </div>}
     {!trash && table.permissions.read === 'none' ? <p className='text-muted'>没有查询权限</p> : <>
-      <CloudDataTable columns={columns} data={m.records.data?.data ?? []} isLoading={m.records.isLoading} error={m.records.error} onRetry={() => void m.records.refetch()} sorting={sorted} onSortingChange={trash ? undefined : changeSorting} toolbar={trash ? undefined : <RecordFilter model={m} />} emptyMessage={trash ? '回收站为空' : '暂无记录'} />
+      <CloudDataTable columns={columns} data={m.records.data?.data ?? []} isLoading={m.records.isLoading} error={m.records.error} onRetry={() => void m.records.refetch()} sorting={sorted} onSortingChange={trash ? undefined : changeSorting} toolbar={trash ? undefined : <RecordFilter key={table.schemaVersion} model={m} />} emptyMessage={trash ? '回收站为空' : '暂无记录'} />
       <CursorPager previous={m.previous} next={() => m.next(m.records.data?.nextCursor)} hasPrevious={Boolean(m.history.length)} hasNext={Boolean(m.records.data?.nextCursor)} />
     </>}
   </div>
@@ -256,8 +256,8 @@ function RecordFilter({ model: m }: { model: CloudTablesModel }) {
   }
   if (!fields.length) return null
   return <div className='grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-4'>
-    <CloudSelect label='筛选字段' value={field} onChange={setField} items={fields.map(f => ({ key: f.key, name: f.name }))} variant='primary' />
-    <CloudSelect label='条件' value={op} onChange={setOp} items={[{ key: 'eq', name: '等于' }, { key: 'ne', name: '不等于' }, { key: 'contains', name: '包含' }, { key: 'gt', name: '大于' }, { key: 'lt', name: '小于' }]} variant='primary' />
+    <CloudSelect label='筛选字段' value={field} onChange={key => { setField(key); setOp('eq'); setValue('') }} items={fields.map(f => ({ key: f.key, name: f.name }))} variant='primary' />
+    <CloudSelect label='条件' value={op} onChange={setOp} items={filterOperators(fields.find(f => f.key === field)?.type)} variant='primary' />
     <CloudInput label='值' value={value} onChange={setValue} variant='primary' />
     <div className='flex flex-wrap gap-2'><Button variant='secondary' onPress={apply}>筛选</Button><Button variant='ghost' onPress={() => { setValue(''); m.query([], m.sort) }}>清除</Button></div>
   </div>

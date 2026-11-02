@@ -436,13 +436,13 @@ export class UserAuthService {
     return { token: web.token, expiresAt: web.expiresAt, userId: input.userId }
   }
 
-  async verifyWebSession(token: string): Promise<{
+  async verifyWebSession(token: string, client: Prisma.TransactionClient = this.prisma): Promise<{
     readonly userId: string
     readonly sessionId: string
     readonly expiresAt: Date
   } | null> {
     const now = new Date()
-    const record = await this.prisma.userSessionRefreshToken.findUnique({
+    const record = await client.userSessionRefreshToken.findUnique({
       where: { refreshTokenHash: hashToken(token) },
       select: {
         replacedAt: true,
@@ -464,13 +464,13 @@ export class UserAuthService {
       record.session.revokedAt || record.session.expiresAt <= now || record.session.user.status !== "active"
     ) return null
     if (record.session.sourceSessionId) {
-      const source = await this.prisma.userSession.findUnique({
+      const source = await client.userSession.findUnique({
         where: { id: record.session.sourceSessionId },
         select: { userId: true, revokedAt: true, expiresAt: true },
       })
       if (!source || source.userId !== record.session.user.id || source.revokedAt || source.expiresAt <= now) return null
     }
-    await this.prisma.userSession.update({
+    await client.userSession.update({
       where: { id: record.session.id },
       data: { lastUsedAt: now },
     })
@@ -908,10 +908,10 @@ export class UserAuthService {
     return toUserMeResponse(user)
   }
 
-  async verifyAccessToken(token: string): Promise<{ userId: string }> {
+  async verifyAccessToken(token: string, client: Prisma.TransactionClient = this.prisma): Promise<{ userId: string }> {
     try {
       const payload = this.jwt.verify<UserJwtPayload>(token)
-      const user = await this.prisma.user.findUnique({
+      const user = await client.user.findUnique({
         where: { id: payload.sub },
         select: {
           id: true,

@@ -1,10 +1,12 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 import { Prisma } from "@prisma/client"
+import { z } from "zod"
 import type { CloudField } from "@synapse/shared"
 import type { CloudFilter, CloudQuery } from "./cloud-table-contract"
 import { fail, validateValue } from "./cloud-table-validation"
 
 type Sort = { expression: Prisma.Sql; direction: "asc" | "desc"; timestamp: boolean }
+const systemTimestamp = z.iso.datetime({ offset: true }).refine(value => !value.startsWith("0000-") && !/\.\d{4}/u.test(value))
 export function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`
   if (value && typeof value === "object") return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableJson((value as Record<string, unknown>)[k])}`).join(",")}}`
@@ -25,7 +27,7 @@ export function filterPlan(fields: CloudField[], query: CloudFilter): Prisma.Sql
   const filters = query.filters.map(filter => {
     const c = column(fields, filter.field), x = c.expression
     const scalar = (value: unknown) => {
-      if (c.timestamp) { if (typeof value !== "string" || Number.isNaN(Date.parse(value))) fail("INVALID_QUERY", "时间筛选无效。"); return Prisma.sql`${value}::timestamp` }
+      if (c.timestamp) { const parsed = systemTimestamp.safeParse(value); if (!parsed.success) fail("INVALID_QUERY", "系统时间筛选需要有效的ISO时间及UTC或时区偏移。"); return Prisma.sql`${new Date(parsed.data).toISOString()}::timestamp` }
       validateValue({ ...c.field, required: false }, value)
       if (c.field.type === "datetime" && typeof value === "string") return Prisma.sql`${new Date(value).toISOString()}`
       return Prisma.sql`${value}`
@@ -34,6 +36,10 @@ export function filterPlan(fields: CloudField[], query: CloudFilter): Prisma.Sql
       if (!Array.isArray(filter.value) || !filter.value.length || filter.value.length > 100) fail("INVALID_QUERY", "集合筛选需要1至100个值。")
       return Prisma.sql`(${Prisma.join(filter.value.map(v => Prisma.sql`${x} IS NOT DISTINCT FROM ${scalar(v)}`), " OR ")})`
     }
+    if (filter.op === "contains") {
+      if (c.timestamp || !["text", "url"].includes(c.field.type) || typeof filter.value !== "string") fail("INVALID_QUERY", "仅文本字段支持包含筛选。")
+      return Prisma.sql`position(${filter.value} in (${x})) > 0`
+    }
     const value = scalar(filter.value)
     if (filter.op === "eq" && filter.value !== null && !filter.field.startsWith("$")) {
       const normalized = c.field.type === "datetime" && typeof filter.value === "string" ? new Date(filter.value).toISOString() : filter.value
@@ -41,10 +47,6 @@ export function filterPlan(fields: CloudField[], query: CloudFilter): Prisma.Sql
     }
     if (filter.op === "eq" || filter.op === "ne") return Prisma.sql`${x} IS ${Prisma.raw(filter.op === "ne" ? "DISTINCT" : "NOT DISTINCT")} FROM ${value}`
     if (filter.value === null) fail("INVALID_QUERY", "范围或文本筛选不能使用空值。")
-    if (filter.op === "contains") {
-      if (c.timestamp || !["text", "url"].includes(c.field.type) || typeof filter.value !== "string") fail("INVALID_QUERY", "仅文本字段支持包含筛选。")
-      return Prisma.sql`position(${filter.value} in (${x})) > 0`
-    }
     if (c.field.type === "boolean" || c.field.type === "singleSelect") fail("INVALID_QUERY", "该字段不支持范围筛选。")
     const operator = { gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op]
     return Prisma.sql`${x} ${Prisma.raw(operator)} ${value}`
@@ -57,9 +59,10 @@ export function queryPlan(tableId: string, fields: CloudField[], query: CloudQue
   const values = query.fields === undefined ? Prisma.sql`r."values"` : query.fields.length === 0 ? Prisma.sql`'{}'::jsonb` : Prisma.sql`(SELECT jsonb_object_agg(k, r."values" -> k) FROM unnest(ARRAY[${Prisma.join(query.fields)}]::text[]) AS selected(k))`
   const sortInput = query.sort.length ? query.sort : [{ field: "$createdAt", direction: "asc" as const }]
   if (new Set(sortInput.map(s => s.field)).size !== sortInput.length) fail("INVALID_QUERY", "排序字段不能重复。")
-  const sorts: Sort[] = sortInput.filter(s => s.field !== "$id").map(s => ({ ...column(fields, s.field), direction: s.direction }))
-  sorts.push({ ...column(fields, "$id"), direction: sortInput.find(s => s.field === "$id")?.direction ?? "asc" })
-  const binding = createHash("sha256").update(stableJson({ tableId, identity, schemaVersion, filters: query.filters, sort: sortInput, ...(query.filterMode === "any" ? { filterMode: "any" } : {}), ...(query.fields === undefined ? {} : { fields: query.fields }) })).digest("hex")
+  const sorts: Sort[] = sortInput.map(s => ({ ...column(fields, s.field), direction: s.direction }))
+  const idIndex = sortInput.findIndex(s => s.field === "$id")
+  if (idIndex < 0) sorts.push({ ...column(fields, "$id"), direction: "asc" })
+  const binding = createHash("sha256").update(stableJson({ tableId, identity, schemaVersion, filters: query.filters, sort: sortInput, ...(idIndex >= 0 && idIndex < sortInput.length - 1 ? { sortVersion: 2 } : {}), ...(query.filterMode === "any" ? { filterMode: "any" } : {}), ...(query.fields === undefined ? {} : { fields: query.fields }) })).digest("hex")
   function encode(values: unknown[]): string {
     const data = Buffer.from(JSON.stringify({ binding, values })).toString("base64url")
     return `${data}.${createHmac("sha256", secret).update(data).digest("base64url")}`

@@ -46,7 +46,7 @@ export SY_RECORD_ID='替换为实际记录ID'
 
 表资源范围：
 
-- **指定表**：仅包含明确选择的表，可以是自己的表或已获授权的协作表。
+- **指定表**：仅包含明确选择的表，可以是自己的表或已获授权的协作表。Console 的已选列表可移除已删除、撤权或不在当前页的表 ID；不会自动清除其他页的选择。已有协作成员可沿用表开放的匿名操作，但仍需相应 scope。
 - **自己的全部表**：包含自己当前及以后创建的表，不包含他人的协作表。
 
 已有密钥不会自动获得云表权限。API 建表必须同时具备 `tables.manage` 和“自己的全部表”；指定表密钥不能建表或自行扩大资源范围。管理 scope 不替代记录的读写 scope。
@@ -221,7 +221,7 @@ curl --fail-with-body "$SY_API_BASE_URL/api/open/v1/tables/$SY_TABLE_ID/schema" 
 
 表只要有任意匿名操作，匿名也能发现其活动结构，但只能得到 `{ "id", "schemaVersion", "fields" }`，不能据此读取记录。私有表的匿名结构请求返回 `403`。
 
-列表每页 50 项；有 `nextCursor` 时使用 `GET /tables?cursor=...` 继续，游标须 URL 编码。没有总数。
+列表每页 50 项；有 `nextCursor` 时使用 `GET /tables?cursor=...` 继续，游标须 URL 编码。没有总数。协作表只有在当前表授权与密钥 scope 存在可用操作交集时才列出；所有操作已撤销或 scope 不匹配时不再返回摘要。仅开放匿名访问不构成公开目录。
 
 ### 修改表与归档字段
 
@@ -318,7 +318,7 @@ curl --fail-with-body --request POST "$SY_API_BASE_URL/api/open/v1/tables/$SY_TA
 | `lt` / `lte` | 小于／小于等于 | 同上 |
 | `contains` | 包含子串 | 仅 `text/url`，大小写敏感，按字面子串匹配，不是正则 |
 
-字段可引用活动 key 或系统字段 `$id/$createdAt/$updatedAt/$creatorUserId`，系统时间筛选使用 ISO 时间字符串。`json`、`multiSelect` 不支持筛选或排序，也不支持 JSON 深层路径。文本排序按数据库固定字符顺序，不是地区语言排序；空值最后，始终加入稳定 ID 排序。
+字段可引用活动 key 或系统字段 `$id/$createdAt/$updatedAt/$creatorUserId`。系统时间筛选须为有效 ISO 时间字符串，带 `Z` 或时区偏移，例如 `2026-11-01T08:00:00+08:00`，服务端按同一 UTC 时刻比较；小数秒最多3位（毫秒），不接受无时区、非法日期或年份0000。业务 `datetime` 字段仍按字段类型约定使用 `Z` 格式。`json`、`multiSelect` 不支持筛选或排序，也不支持 JSON 深层路径。文本排序按数据库固定字符顺序，不是地区语言排序；空值最后，按请求中的字段顺序排序，未指定 `$id` 时追加稳定 ID 排序。
 
 `fields` 只选择 `values` 内返回的业务字段，`id`、`version`、创建者和时间等系统元数据仍返回。筛选和排序可使用未返回的字段。投影在数据库内执行；它不是字段级权限，不能用来限制其他调用方可读取哪些字段。
 
@@ -344,6 +344,8 @@ AND／OR 只组合业务条件；表范围、未删除和本人记录权限始�
 ```json
 {
   "filters": [{ "field": "status", "op": "eq", "value": "new" }, { "field": "score", "op": "gte", "value": 80 }],
+  "filterMode": "any",
+  "fields": ["name", "status"],
   "sort": [{ "field": "score", "direction": "desc" }],
   "limit": 50,
   "cursor": "替换为上一页的nextCursor"
@@ -551,7 +553,7 @@ POST /api/open/v1/tables/{id}/restore
 Authorization: Bearer syn_sk_...
 ```
 
-无需请求体或版本。成功返回 `201` 和 `{ "id": "table_example", "schemaVersion": 4 }`。整表恢复后匿名权限全部关闭，重新开放需表主明确设置；协作者配置保留。
+无需请求体或版本。成功返回 `201` 和 `{ "id": "table_example", "schemaVersion": 4 }`。只允许恢复已删除表；活动表返回 `409 NOT_DELETED`，不会修改权限或结构版本。整表恢复后匿名权限全部关闭，重新开放需表主明确设置；协作者配置保留。
 
 ### 查询与恢复已删除记录
 
@@ -567,7 +569,7 @@ POST /api/open/v1/tables/{id}/records/{recordId}/restore
 Authorization: Bearer syn_sk_...
 ```
 
-无需请求体。成功返回 `201` 和 `{ "id": "record_example", "version": 4 }`，实际版本由服务端递增。恢复按当前结构校验，不兼容返回 `409 INCOMPATIBLE_SCHEMA`。表已删除时先恢复表，再访问记录回收站。
+无需请求体。成功返回 `201` 和 `{ "id": "record_example", "version": 4 }`，实际版本由服务端递增。恢复按当前结构校验，不兼容返回 `409 INCOMPATIBLE_SCHEMA`；并发恢复或其他变化导致版本冲突时返回 `409 VERSION_CONFLICT`，不重复增加版本。已经恢复或不在回收站的记录返回 `404 NOT_FOUND`。表已删除时先恢复表，再访问记录回收站。
 
 ### 操作记录
 
@@ -626,6 +628,7 @@ Authorization: Bearer syn_sk_...
 | 字段数量 | 每表最多 100 个，包含仍在保留期的归档字段 |
 | 字段定义 | 单字段最多 64 KiB，含归档定义合计最多 1 MiB，活动默认值合计最多 64 KiB |
 | JSON 复杂度 | 请求最多 32 层、50000 节点 |
+| 字符串兼容 | 字符串和对象 key 不允许空字符 `\u0000` 或未配对的 Unicode 代理码点；返回 `400 INVALID_VALUE`，正常中文及 emoji 可用 |
 | 查询 | 最多 20 筛选、3 排序；默认 50、最多 100 条，记录查询数据约 1 MiB 响应预算 |
 | 查询投影 | 最多 100 个不同的活动业务字段 key；`[]` 只返回系统元数据及空 `values` |
 | 计数／存在判断 | 最多 20 筛选，不分页、不排序；沿用读取权限、公平队列和 SQL 超时 |
@@ -658,6 +661,7 @@ Console 按读取权限导出 JSON／CSV，CSV 处理公式注入，单次导出
 | 403 | `FORBIDDEN` | 检查表授权、本人范围或是否由表主执行管理操作 |
 | 404 | `NOT_FOUND` | 不存在、已删除、过期或不在可见范围；停止猜测 ID |
 | 409 | `VERSION_CONFLICT` | 读最新版本并解决冲突 |
+| 409 | `NOT_DELETED` | 表当前未删除，无需恢复；权限和版本保持不变 |
 | 409 | `IDEMPOTENCY_CONFLICT` | 同键已有不同请求，核对原操作，不盲目重试不同内容 |
 | 409 | `INCOMPATIBLE_SCHEMA`、`FIELD_EXPIRED` | 结构／恢复不兼容或过期，由表主处理 |
 | 413 | `REQUEST_TOO_LARGE`、`RECORD_TOO_LARGE` | 缩小请求或单行，拆批不能解决单行超限 |
