@@ -28,4 +28,18 @@
 
 最终日志位于 `/tmp/synapse-game-mobile-verified-browser.log`、`/tmp/synapse-game-mobile-verified-unit.log`。
 
-本轮保留资金、隐私、控制版本、动作幂等和准备/开局规则；没有新增接口、MCP工具、Skill能力、依赖或数据库迁移。没有推送或部署，游戏内容按规则不进入发布说明。回滚代码提交即可，不涉及数据回滚。
+本轮保留资金、隐私、控制版本、动作幂等和准备/开局规则；没有新增接口、MCP工具、Skill能力、依赖或数据库迁移。开发提交未推送，游戏内容按规则不进入发布说明。后续正式Web部署记录如下，不涉及数据回滚。
+
+## 正式 Web 部署（2026-11-02）
+
+用户随后明确授权部署Web到正式环境。代码提交为 `02d6fc604639ab214bc6c230c6b14e07c42e6410`，包含前一轮入口修复 `a89a60040`；Dashboard正式构建通过，保留既有大分块提示。
+
+- 目标：`root@120.53.17.64:/www/wwwroot/synapse`；公网入口：<https://synapse.d2.pub/game/poker>。
+- 19:30:53（Asia/Shanghai）完成静态热更新：先备份、校验454个构建文件及已有hash冲突，再添加7个新hash资源、逐个原子替换入口文件；旧448个资源全部校验保留，已打开的旧页面仍可加载其资源。远端Dashboard源码已同步为本次构建输入。
+- 公网462项页面/资源请求全部200且SHA256与本地构建一致；游戏大厅、房间、记录、档案深链和Console/Admin/更新页均通过，入口缓存为 `no-cache, must-revalidate`。`/healthz`为200/`status=ok`，未登录的两个游戏只读API均为401。没有创建正式房间、出牌或修改正式业务数据。
+- 本次未重建或重启API/PDF/数据库，也未同步生产环境变量或执行迁移。原API容器ID `e0f95a133939669d5f4dca07a9a303d2528170b3c5ae51b8d2b9636075f19487`、镜像 `synapse-server:deploy-20261102_183706`、启动时间及后端/Nginx配置校验和保持一致。
+- 这是已有容器的静态产物更新，未生成新Docker镜像。普通容器重启会保留；以后重建容器须用已同步的当前源码重新构建，或恢复本次归档产物，不能仅复用旧镜像。
+
+远端部署、源代码和回滚备份：`/www/wwwroot/synapse/backups/web/20261102-02d6fc604/`。其中 `previous-dist/` 为部署前静态目录，`dashboard-dist.tar.gz`、`dashboard-source.tar`、`manifest.json`为本次产物与来源，`dashboard-source-before.tar.gz`为同步前源码，`production-verification.json`为公网证据。`rollback-web.sh`已通过bash语法检查但未执行；它核对原容器及本次入口校验和后只恢复旧Web入口/资源，不恢复数据库或自动覆盖后续部署。
+
+本机构建日志：`/tmp/synapse-web-production-build-20261102.log`；部署产物、脚本和公网证据：`/tmp/synapse-web-deploy-20261102-02d6fc604/`。以上本地/远端文件没有在线分享链接。本次仅部署Web，没有桌面/iOS发版、推送Git或发送发布通知。
