@@ -43,3 +43,11 @@
 远端部署、源代码和回滚备份：`/www/wwwroot/synapse/backups/web/20261102-02d6fc604/`。其中 `previous-dist/` 为部署前静态目录，`dashboard-dist.tar.gz`、`dashboard-source.tar`、`manifest.json`为本次产物与来源，`dashboard-source-before.tar.gz`为同步前源码，`production-verification.json`为公网证据。`rollback-web.sh`已通过bash语法检查但未执行；它核对原容器及本次入口校验和后只恢复旧Web入口/资源，不恢复数据库或自动覆盖后续部署。
 
 本机构建日志：`/tmp/synapse-web-production-build-20261102.log`；部署产物、脚本和公网证据：`/tmp/synapse-web-deploy-20261102-02d6fc604/`。以上本地/远端文件没有在线分享链接。本次仅部署Web，没有桌面/iOS发版、推送Git或发送发布通知。
+
+## 按用户要求还原字号（2026-11-02）
+
+用户要求还原本轮调整的全部字号，代码提交 `63d94311c01d430eed0fa074762a9e9d064e58ba`：横向场景恢复原HUD/座位状态24/22px与姓名/筹码20/28px，紧凑规则文字恢复原text-sm，新增卡片的正文/说明与原表格字号一致；保留布局、换行、滚动及操作修复。横向场景测试不再以缩放后的12/14px阈值强制放大文字，其他几何、可达性和交互断言保留。
+
+179项游戏浏览器回归和Dashboard正式构建（含类型与UI边界检查）通过。19:41:18（Asia/Shanghai）静态热更新到正式环境，公网462项页面/资源校验全部通过，健康正常；API容器和后端配置保持不变。游戏入口SHA256为 `c305e7c8c4e106ca025b47e5604e5fab41e11f3c460b19df7388e7a262fc06a7`。
+
+本次远端备份、产物、源码和未执行的回滚脚本位于 `/www/wwwroot/synapse/backups/web/20261102-font-restore-63d94311c/`；本机证据位于 `/tmp/synapse-web-font-restore-20261102-63d94311c/`，测试/构建日志为 `/tmp/synapse-game-font-restore-{browser,build}.log`。部署仍使用上节的静态热更新方式，旧hash资源保留，后续容器重建注意事项不变。
