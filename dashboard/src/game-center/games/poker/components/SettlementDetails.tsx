@@ -5,6 +5,7 @@ import type { GameFunding, PokerSettlementView } from "@synapse/shared/game-cont
 import { Card } from "./Card"
 import { amount } from "../lib/view"
 import { invested, settlementView } from "../lib/settlement-view"
+import { HandRankGuide } from "./HandRankGuide"
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${amount(Math.abs(n))}`
 export function SettlementDetails({ settlement, mode = "points" }: { settlement: PokerSettlementView; mode?: GameFunding }) {
   const unit = mode === "practice" ? "筹码" : "点数"
@@ -12,8 +13,6 @@ export function SettlementDetails({ settlement, mode = "points" }: { settlement:
   const [selected, setSelected] = useState(view.won[0]?.seatNo ?? settlement.seats[0]?.seatNo)
   const best = useRef<HTMLElement>(null)
   const player = settlement.seats.find(s => s.seatNo === selected)
-  const shortDeck = settlement.rules.variant === "short32"
-  const ranks = ["皇家同花顺", "同花顺", "四条", ...(shortDeck ? ["同花", "葫芦"] : ["葫芦", "同花"]), "顺子", "三条", "两对", "一对", "高牌"]
   const choose = (seatNo: number) => { setSelected(seatNo); requestAnimationFrame(() => best.current?.scrollIntoView({ block: "nearest" })) }
   return <div className="poker-result-details">
     <section className="poker-result-outcome" aria-label="本局输赢">
@@ -29,13 +28,7 @@ export function SettlementDetails({ settlement, mode = "points" }: { settlement:
       <Accordion.Item id="hand-ranks">
         <Accordion.Heading><Accordion.Trigger>查看牌型大小<Accordion.Indicator /></Accordion.Trigger></Accordion.Heading>
         <Accordion.Panel><Accordion.Body>
-          <div className="space-y-3 text-sm">
-            <p className="font-medium">{shortDeck ? "32 张短牌" : "标准德州扑克"} · 从大到小</p>
-            <ol className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2" aria-label="牌型从大到小">
-              {ranks.map((rank, index) => <li key={rank} className="flex items-baseline gap-3"><span className="w-5 shrink-0 text-right tabular-nums text-muted" aria-hidden="true">{index + 1}</span><span>{rank}</span></li>)}
-            </ol>
-            <p className="text-muted">比较最好的五张牌；同牌型逐项比点数，花色不分大小。{shortDeck ? "短牌 A、7、8、9、10 可组成最小顺子。" : "A、2、3、4、5 可组成最小顺子。"}</p>
-          </div>
+          <HandRankGuide variant={settlement.rules.variant} />
         </Accordion.Body></Accordion.Panel>
       </Accordion.Item>
     </Accordion>

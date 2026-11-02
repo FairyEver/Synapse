@@ -61,6 +61,39 @@ const state: PokerTableView = {
   deckRemaining: 48,
 }
 describe("牌桌", () => {
+  it.each([undefined, "standard52", "short32"] as const)("顶栏按当前%s规则展示牌型排序，关闭返回入口且不重挂画布", async (variant) => {
+    const host = document.createElement("div"), root = createRoot(host)
+    document.body.append(host)
+    const refresh = vi.fn(), perspective = vi.fn()
+    await act(async () => root.render(<Table table={{...state, variant, ruleOptions: {roll: true}}} perspective="public" onPerspective={perspective} onRefresh={refresh} onBack={() => {}} />))
+    try {
+      const trigger = host.querySelector<HTMLButtonElement>('.poker-perspective [aria-label="牌型大小"]')
+      expect(trigger).not.toBeNull()
+      const canvas = host.querySelector(".poker-canvas")
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="日志"]')!.click())
+      trigger!.focus()
+      await act(async () => trigger!.click())
+      const dialog = document.querySelector('[role="dialog"]')!
+      expect(dialog).not.toBeNull()
+      expect(host.querySelector(".poker-information-drawer")?.hasAttribute("hidden")).toBe(true)
+      const ranks = [...dialog.querySelectorAll("ol li")].map(item => item.lastElementChild?.textContent)
+      expect(ranks).toEqual(variant === "short32"
+        ? ["皇家同花顺", "同花顺", "四条", "同花", "葫芦", "顺子", "三条", "两对", "一对", "高牌"]
+        : ["皇家同花顺", "同花顺", "四条", "葫芦", "同花", "顺子", "三条", "两对", "一对", "高牌"])
+      expect(dialog.textContent).toContain(variant === "short32" ? "短牌 32 张" : "标准 52 张")
+      expect(dialog.textContent).toContain(variant === "short32" ? "A、7、8、9、10" : "A、2、3、4、5")
+      await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭牌型大小"]')!.click())
+      await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)) })
+      expect(document.querySelector('[role="dialog"]')).toBeNull()
+      expect(document.activeElement).toBe(trigger)
+      expect(host.querySelector(".poker-canvas")).toBe(canvas)
+      expect(refresh).not.toHaveBeenCalled()
+      expect(perspective).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      host.remove()
+    }
+  })
   it("仅权威新增行动播放追加，轮询与重新入桌不重播", async () => {
     const host=document.createElement("div"), root=createRoot(host)
     const render=async(table: PokerTableView)=>act(async()=>root.render(<Table table={table} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))

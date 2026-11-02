@@ -10,6 +10,7 @@ import { PokerMembersPanel } from "./PokerMembersPanel"
 import { ChipMotion } from "./ChipMotion"
 import { Settlement } from "./Settlement"
 import { SettlementPanel } from "./SettlementPanel"
+import { HandRankDialog } from "./HandRankDialog"
 import { amount, projectTable, streetLabel } from "../lib/view"
 import { TABLE_CONTROLS_BREAKPOINT } from "../lib/table-layout"
 import { fitTableScene, tableSceneVariables } from "../lib/table-scene"
@@ -33,7 +34,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   identityKey?: string
   members?: ReactNode
 }) {
-  const [panel, setPanel] = useState<PokerControlPanel | "log" | "members" | null>(null), [fit, setFit] = useState(fitTableScene(1440,900))
+  const [panel, setPanel] = useState<PokerControlPanel | "log" | "members" | "ranks" | null>(null), [fit, setFit] = useState(fitTableScene(1440,900))
   const [compact, setCompact] = useState(false)
   const panelOpen = panel === "log"
   const surface = useRef<HTMLElement>(null), viewport = useRef<HTMLDivElement>(null), menuTrigger = useRef<HTMLButtonElement>(null), logTrigger = useRef<HTMLButtonElement>(null)
@@ -88,6 +89,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
             {members && view.status !== "closed" && <Button ref={membersTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label="成员管理" aria-expanded={panel === "members"} onPress={() => setPanel(panel === "members" ? null : "members")}><UsersRound aria-hidden="true" />{!compact && "成员"}</Button>}
             <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} ready={nextHand} />
             <Button ref={logTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label={panelOpen ? "收起日志" : "日志"} aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{!compact && (panelOpen ? "收起日志" : "日志")}</Button>
+            <HandRankDialog variant={view.variant} open={panel === "ranks"} onOpenChange={open => setPanel(open ? "ranks" : null)} compact={compact} />
             {view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
           </div>
         </div>
@@ -117,7 +119,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           </div>
         </div>
         <PokerMembersPanel open={panel === "members"} onOpenChange={open => setPanel(open ? "members" : null)} compact={compact} trigger={membersTrigger} container={surface.current}>{members}</PokerMembersPanel>
-        <div className="poker-controls-anchor"><HumanControls nextHand={nextHand} identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" || panel === "members" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
+        <div className="poker-controls-anchor"><HumanControls nextHand={nextHand} identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" || panel === "members" || panel === "ranks" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
             <Button fullWidth type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
             {canNudge && <Button fullWidth variant="tertiary" isDisabled={(view.deadlineMs ?? 600000) > 540000} onPress={() => { onNudge(active.seatNo); setPanel(null) }}><Bell aria-hidden="true" />提醒玩家</Button>}
             {table.seats.some(s => s.isMe) && <Button fullWidth variant="tertiary" isDisabled={nextHand.busy} aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onPress={() => { onPerspective(perspective === "owner" ? "public" : "owner"); setPanel(null) }}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "旁观视角" : "玩家视角"}</Button>}
