@@ -93,11 +93,14 @@ describe("房间行交互", () => {
     expect(host.textContent).toContain("已在桌")
     expect(host.textContent).toContain("5,000")
     expect(host.textContent).toContain("1 / 2")
-    const buttons = [...host.querySelectorAll("button")]
-    expect(buttons).toHaveLength(2)
-    await act(async () => buttons[0].click())
-    await act(async () => buttons[1].click())
-    expect(onRoom.mock.calls).toEqual([["5001"], ["5002"]])
+    for (const layout of ["game-wide-list", "game-compact-list"]) {
+      onRoom.mockClear()
+      const buttons = [...host.querySelectorAll(`.${layout} button`)]
+      expect(buttons).toHaveLength(2)
+      await act(async () => buttons[0].click())
+      await act(async () => buttons[1].click())
+      expect(onRoom.mock.calls).toEqual([["5001"], ["5002"]])
+    }
     expect(host.querySelector('input[type="range"]')).toBeNull()
     await act(async () => root.unmount())
   })

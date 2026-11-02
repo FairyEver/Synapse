@@ -100,7 +100,7 @@ it("窄屏房间和会话无需横向滚动即可继续游戏", async () => {
   const screen = await render(<div className="p-4"><MySessions sessions={[{game:"poker",gameName:"德州扑克",roomCode:"1234",funding:"practice",status:"active",seatNo:0,needsAction:true,deadlineMs:20000}]} onOpen={onOpen} /><RoomList rooms={[{roomCode:"1234",name:"很长的房间名称",mode:"practice",ownerUserId:"owner",maxSeats:4,players:2,status:"running",buyIn:1000,smallBlind:5,bigBlind:10}]} userId="owner" myRoomCodes={["1234"]} onRoom={onRoom} onConnect={() => {}} onClose={() => {}} /></div>)
   try {
     await stable()
-    const button = document.querySelector<HTMLButtonElement>(".game-session-table button")!
+    const button = document.querySelector<HTMLButtonElement>(".game-compact-list button")!
     expect(rect(button).right).toBeLessThanOrEqual(390)
     expect(rect(button).left).toBeGreaterThanOrEqual(0)
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390)

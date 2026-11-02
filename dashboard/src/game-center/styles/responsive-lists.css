@@ -5,23 +5,6 @@
   .game-wide-list { display: none; }
   .game-compact-list { display: block; }
 }
-@container (max-width: 850px) {
-  .game-session-table, .game-room-table { display: block; min-width: 0; width: 100%; }
-  .game-session-table thead, .game-room-table thead { display: none; }
-  .game-session-table tbody, .game-room-table tbody { display: block; }
-  .game-session-table tbody tr, .game-room-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; padding: 1rem; }
-  .game-session-table td, .game-room-table td { min-width: 0; padding: 0; white-space: normal; }
-  .game-session-table td:first-child { grid-area: 1 / 1; }
-  .game-session-table td:nth-child(2) { grid-area: 2 / 1; }
-  .game-session-table td:nth-child(3) { grid-area: 1 / 2; }
-  .game-session-table td:nth-child(4) { grid-area: 2 / 2; text-align: right; }
-  .game-session-table td:nth-child(5) { grid-column: 1 / -1; }
-  .game-session-table .button { width: 100%; }
-  .game-room-table td:first-child, .game-room-table td:last-child { grid-column: 1 / -1; }
-  .game-room-table td:first-child .button { height: auto; white-space: normal; text-align: left; }
-  .game-room-table td:nth-child(3), .game-room-table td:nth-child(5) { text-align: right; }
-  .game-room-table td:nth-child(4) { align-self: center; }
-}
 @media (max-width: 1023px) {
   .poker-records[data-detail="true"] .poker-record-list { display: none; }
   .poker-records[data-detail="false"] .poker-record-detail { display: none; }
