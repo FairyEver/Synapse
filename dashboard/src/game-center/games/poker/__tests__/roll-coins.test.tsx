@@ -64,7 +64,7 @@ describe("Roll coin controls",()=>{
  it("zero coins keeps paid candidates selectable and both rerolls disabled",async()=>{
   api.choose.mockResolvedValue({ok:true})
   await mount({...table,roll:{...table.roll!,coins:{balance:0,limit:12},normal:{fee:3,coinCost:1,available:false,reason:"POKER_ROLL_INSUFFICIENT_COINS"},super:{fee:8,coinCost:3,available:false,reason:"POKER_ROLL_INSUFFICIENT_COINS"},pending:{rollId:"paid",cardIndex:1,candidates:["2c","3c","4c"]}}})
-  expect(document.body.textContent).toContain("本手钻石已用完")
+  expect(document.body.textContent).not.toContain("本手钻石已用完")
   expect(button("普通重抽 · 1 钻石 + 3 筹码").disabled).toBe(true)
   expect(button("超级重抽 · 3 钻石 + 8 筹码").disabled).toBe(true)
   await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="1"]')!.click())

@@ -76,7 +76,6 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
           {coins&&controls.canControl&&!controls.storageError&&!controls.uncertain&&<div className="space-y-2" aria-label="重新抽牌">
             {choices.map(choice=><div key={choice.kind} className="space-y-1">
               <Button fullWidth variant="secondary" aria-label={`${choice.label}重抽 · ${choice.cost}`} isDisabled={blocked||!choice.offer?.available} onPress={()=>{if(choice.offer) void controls.start(choice.kind,pending.cardIndex,choice.offer.fee)}}>{choice.label}重抽 · <PokerRollCost offer={choice.offer} unit={unit}/></Button>
-              {choice.reason&&<p className="text-xs text-muted"><PokerDiamondText text={choice.reason}/></p>}
             </div>)}
           </div>}
           <p className="text-xs text-muted">重新抽牌会放回当前候选，已付费用不退。关闭不会撤销换牌。</p>
