@@ -20,12 +20,15 @@ function webEntrypoints(): Plugin {
 }
 
 const target = `http://localhost:${process.env.SYNAPSE_SERVER_API_PORT || '19701'}`
+const dashboardPort = Number(process.env.SYNAPSE_DASHBOARD_PORT || 19700)
 export default defineConfig({
+  ...(dashboardPort !== 19700 ? { cacheDir: `node_modules/.vite-${dashboardPort}` } : {}),
   base: '/console/',
   plugins: [webEntrypoints(), tanstackRouter({ target: 'react', autoCodeSplitting: true }), react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   server: {
-    host: '::', port: 19700, strictPort: true,
+    host: '::', port: dashboardPort, strictPort: true,
+    open: process.env.SYNAPSE_DASHBOARD_OPEN === 'false' ? false : `http://localhost:${dashboardPort}/console/`,
     proxy: {
       '/api': { target, changeOrigin: true, ws: true },
       '/files': { target, changeOrigin: true },

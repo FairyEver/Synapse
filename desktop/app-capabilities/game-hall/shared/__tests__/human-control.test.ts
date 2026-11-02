@@ -26,8 +26,9 @@ describe("扑克人工操作和接管协议", () => {
     expect(pokerUiRoutes["app.game.poker.control.set" as keyof typeof pokerUiRoutes]?.path({ roomCode: "1234" })).toBe("/game/poker/rooms/1234/control")
   })
   it("建房允许两种牌组和盲注预设，拒绝请求冒充控制者", () => {
-    expect(request("room.create").safeParse({ maxSeats: 6, buyIn: 500, variant: "short32", blindPreset: "5/10" }).success).toBe(true)
-    expect(request("room.create").safeParse({ maxSeats: 6, buyIn: 500, blindPreset: "3/6" }).success).toBe(false)
+    expect(request("room.create").safeParse({ maxSeats: 6, buyIn: 1000, variant: "short32", blindPreset: "5/10" }).success).toBe(true)
+    expect(request("room.create").safeParse({ maxSeats: 6, buyIn: 1000, blindPreset: "3/6" }).success).toBe(false)
+    expect(request("room.create").safeParse({ maxSeats: 6, buyIn: 500 }).success).toBe(false)
     expect(request("seat.join").safeParse({ roomCode: "1234", controller: "human" }).success).toBe(false)
   })
   it("无座位投影明确区分首次入座和需要重新授权，拒绝损坏授权标记", () => {

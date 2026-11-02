@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  cacheDir: 'node_modules/.vite-browser',
   plugins: [tailwindcss(), react()],
   optimizeDeps: { include: ['@tanstack/react-table', '@tanstack/react-query', '@tanstack/react-router', '@mdxeditor/editor', 'react-hook-form', 'zod', '@hookform/resolvers/zod'] },
   resolve: {

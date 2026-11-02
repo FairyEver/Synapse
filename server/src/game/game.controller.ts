@@ -51,7 +51,9 @@ export class GameController {
       cancel = () => abort.abort()
     response.once("close", cancel)
     return this.api
-      .run(req.user!.id, parsed.data.operation, parsed.data.params, abort.signal)
+      .run(req.user!.id, parsed.data.operation, parsed.data.params, abort.signal,
+        parsed.data.operation === "app.game.poker.room.create" ? gameWebCaller(req) : "mcp",
+        { rulesSupported: !!(req as GameWebRequest).gameRulesSupported })
       .then((data) => ({ ok: true, data }))
       .catch((error: unknown) => {
         if (error instanceof HttpException && error.getStatus() < 500)

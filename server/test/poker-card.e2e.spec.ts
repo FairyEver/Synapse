@@ -8,6 +8,8 @@ import { PokerActionService } from "../src/game/poker/poker-action.service"
 import { PokerCardService } from "../src/game/poker/poker-card.service"
 import { PokerReadService } from "../src/game/poker/poker-read.service"
 import { PokerArchiveService } from "../src/game/poker/poker-archive.service"
+import { PokerBotService } from "../src/game/poker/poker-bot.service"
+import * as botPolicy from "../src/game/poker/bot-policy"
 import { quoteCardPlay } from "../src/game/poker/engine/cards/commands"
 import { createCardRegistry } from "../src/game/poker/engine/cards/catalog-v1"
 import type { HandState } from "../src/game/poker/engine/hand-runner"
@@ -58,6 +60,23 @@ async function fixture(humans = 2, now = new Date()) {
 }
 
 describe("真实PostgreSQL卡牌与暂存事务", () => {
+  it("真人卡牌陪练中机器人零持牌，仍可正额跟注且取消后不产生大厅收益", async () => {
+    const user = randomUUID(), now = new Date(), code = (await poker.createRoom(user, { maxSeats: 2, buyIn: 1000, mode: "practice", ruleOptions: { cards: true } }, "human", true)).roomCode
+    await poker.join(user, code, {}, now, "human")
+    await new PokerBotService(poker).add(user, code, randomUUID())
+    await prepareAndStartInitialHand(poker, code, now)
+    const view = await actions.state(user, code, "owner", false, now, "desktop")
+    expect(view.cards!.ownHand).toHaveLength(3)
+    await actions.act(user, code, { handId: view.handId!, street: "preflop", expectedActionSeq: view.actionSeq!, controlVersion: view.controlVersion!, actionId: randomUUID(), action: "raise", to: 4, expectedPaymentVersion: view.paymentVersion }, now, "human")
+    const room = await db.gamePokerRoom.findUniqueOrThrow({ where: { code } }), spy = vi.spyOn(botPolicy, "chooseBotAction").mockReturnValue({ action: "call" })
+    try { await actions.actBot(code, { handId: view.handId!, scheduledAt: room.botActionAt! }, room.botActionAt!) }
+    finally { spy.mockRestore() }
+    const h = (await db.gamePokerHand.findUniqueOrThrow({ where: { id: view.handId! } })).engineState as unknown as HandState, bot = h.participants!.find(p => p.kind === "bot")!
+    expect(h.cards!.hands[bot.admissionId] ?? []).toEqual([])
+    expect(await db.gamePokerAction.findFirstOrThrow({ where: { handId: view.handId!, actionSource: "rules_bot" } })).toMatchObject({ action: "call", amount: 2 })
+    await poker.close(user, code)
+    expect((await hall.overview(user)).points).toMatchObject({ total: 1000000, available: 1000000, pending: 0, inPlay: 0 })
+  })
   it("90天热冷归档保留根帧、卡牌去向、私有投影和永久幂等回执", async () => {
     const f = await fixture(2, new Date(Date.now() - 91 * 86400000)), input = await f.input("11")
     const result = await cards.play(f.users[0], input, "human", f.now)

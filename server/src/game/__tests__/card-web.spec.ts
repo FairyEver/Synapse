@@ -46,6 +46,19 @@ async function fixture(cardMode = true) {
   return { f, app, input, close: async () => { wait.onModuleDestroy(); await app.close() } }
 }
 describe("真人卡牌HTTP边界", () => {
+  it("网页invoke建房保留经过认证的真人来源与规则版本，Bearer和旧版本拒绝", async () => {
+    const x = await fixture(), create = vi.spyOn(x.f.poker, "createRoom").mockResolvedValue({ roomCode: "654321" })
+    const params = { maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }, body = { operation: "app.game.poker.room.create", params }
+    try {
+      await request(x.app.getHttpServer()).post("/api/game/invoke").set(headers).set("Cookie", cookie).send(body).expect(201)
+      expect(create).toHaveBeenCalledWith("u", params, "human", true)
+      create.mockClear()
+      await request(x.app.getHttpServer()).post("/api/game/invoke").set(headers).set("Authorization", "Bearer test-bearer").send(body).expect(403)
+      const { "x-synapse-poker-rules": _version, ...old } = headers
+      await request(x.app.getHttpServer()).post("/api/game/invoke").set(old).set("Cookie", cookie).send(body).expect(403)
+      expect(create).not.toHaveBeenCalled()
+    } finally { await x.close() }
+  })
   it("真实Cookie通过且幂等；Bearer附带伪造版本/身份/Cookie仍不能取真人回执", async () => {
     const x = await fixture(), body = x.input(), path = `/api/game/poker/rooms/${x.f.room.code}/card/play`
     try {

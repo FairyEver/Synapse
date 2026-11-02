@@ -101,6 +101,9 @@
     "ruleOptions": {
       "type": "object",
       "properties": {
+        "cards": {
+          "type": "boolean"
+        },
         "roll": {
           "type": "boolean"
         },
@@ -222,6 +225,10 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 2147483647
+    },
+    "expectedPaymentVersion": {
+      "type": "string",
+      "maxLength": 200
     }
   },
   "required": [
@@ -621,6 +628,10 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 2147483647
+    },
+    "expectedPaymentVersion": {
+      "type": "string",
+      "maxLength": 200
     },
     "handId": {
       "type": "string",

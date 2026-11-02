@@ -129,3 +129,10 @@ Dashboard使用既有玩法入口打开HeroUI系统Modal，原手牌槽/两档�
 当前game29、全局372 capability/368 MCP，Web27项UI操作、游戏IPC0，无新增System App/Dock/Workflow/Automation/Deep Link。两个REST路径为 `/game/poker/rooms/:code/roll/start` 和 `/game/poker/rooms/:code/roll/choose`；服务端只信入口来源。权威Skill/API参考位置不变。部署必须先应用20261101090000_game_roll_frozen_transfers迁移；2026-11-01 开发阶段未执行迁移、真实DB或浏览器验收、部署。不得把既有系统UI浏览器验收记录当作本次Roll验收。
 
 2026-11-02 后续授权验收已完成本机 `_e2e` 专用库迁移、真实 game PostgreSQL 套件、真人浏览器、真实 Codex MCP 与自主陪练机器人流程，详见 [Roll 真实验收记录](../superpowers/acceptance/2026-11-02-poker-roll-live-acceptance.md)。此结果不代表生产已迁移或部署；陪练结算净变化单位为筹码，点数房为点数，练习资产不兑换点数。
+
+
+### 卡牌验收后的入口与素材
+
+卡牌房 cards-v1/chips-v2 的真人建房同时覆盖既有 REST 与网页 invoke，来源只由认证会话决定；Bearer 与无版本请求拒绝。用牌和选牌仅为两个私有 Web 路由，MCP 工具总数仍30；不可用时不自动把用户选择改为普通房。卡牌房 AI 收到 POKER_CARD_AI_DISABLED 必须停止，不能 claim、重放真人回执或读暗牌。
+
+第二摞统一为暂存；新资金的原支付和原入座不可改写，盗取、退款、最终分配另留流水，名义豁免不变成资产。正式60张GPT封面本地打包并带版本/提示词/实际尺寸/哈希清单；不要改成远程兜底。隔离数据库、两局实牌和宽窄屏展开证据见[验收记录](../superpowers/acceptance/2026-11-03-poker-card-mode.md)。业务库迁移及生产开关尚未执行。

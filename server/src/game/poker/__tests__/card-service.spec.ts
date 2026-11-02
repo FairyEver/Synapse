@@ -9,6 +9,8 @@ import { quoteCardPlay } from "../engine/cards/commands"
 import { createCardRegistry } from "../engine/cards/catalog-v1"
 import type { PokerCardPlayInput } from "@synapse/shared/game-contracts"
 import type { HandState } from "../engine/hand-runner"
+import * as botPolicy from "../bot-policy"
+import * as botRollPolicy from "../bot-roll-policy"
 
 async function fixture() { return rollStore("points", 2, { ruleOptions: { cards: true, roll: true }, rollPricingVersion: "roll-v1", cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2" }) }
 function request(f: Awaited<ReturnType<typeof fixture>>, definitionId = "59", selections: Record<string, string | number> = {}): PokerCardPlayInput {
@@ -24,6 +26,19 @@ function request(f: Awaited<ReturnType<typeof fixture>>, definitionId = "59", se
   return input
 }
 describe("卡牌房间原子服务", () => {
+  it("卡牌陪练机器人不持卡，仍能用锁内真实报价完成正额跟注", async () => {
+    const f = await rollStore("practice", 1, { ruleOptions: { cards: true, roll: true }, rollPricingVersion: "roll-v1", cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2" }, { bots: 1 })
+    const actions = new PokerActionService(f.poker), view = await actions.state("u", f.room.code, "owner", false, f.now, "desktop")
+    await actions.act("u", f.room.code, { handId: view.handId!, street: "preflop", expectedActionSeq: view.actionSeq, controlVersion: view.controlVersion, actionId: randomUUID(), action: "raise", to: 4, expectedPaymentVersion: view.paymentVersion }, f.now, "human")
+    const h = f.hands[0].engineState as HandState, bot = h.participants!.find(p => p.kind === "bot")!, stack = h.seats.find(s => s.seatNo === bot.seatNo)!.stack
+    const roll = vi.spyOn(botRollPolicy, "chooseBotRoll").mockReturnValue(null), decision = vi.spyOn(botPolicy, "chooseBotAction").mockReturnValue({ action: "call" })
+    try { await actions.actBot(f.room.code, { handId: f.hands[0].id, scheduledAt: f.room.botActionAt! }, new Date(f.room.botActionAt!)) }
+    finally { roll.mockRestore(); decision.mockRestore() }
+    const next = f.hands[0].engineState as HandState
+    expect(next.seats.find(s => s.seatNo === bot.seatNo)!.stack).toBe(stack - 2)
+    expect(next.cards!.hands[bot.admissionId] ?? []).toEqual([])
+    expect(f.actions.at(-1)).toMatchObject({ action: "call", actionSource: "rules_bot", amount: 2 })
+  })
   it("本人下注预演返回豁免额度，公开投影不返回报价", async () => {
     const f = await fixture()
     await new PokerCardService(f.poker).play("u", request(f, "31"), "human", f.now)

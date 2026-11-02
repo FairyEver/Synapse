@@ -2,7 +2,7 @@ import { PokerRollService } from "./poker/poker-roll.service"
 import type { PokerRollStartInput, PokerRollChooseInput } from "@synapse/shared/game-contracts"
 import { BadRequestException, Injectable } from "@nestjs/common"
 import { z } from "zod"
-import { GAME_TOOLS, POKER_BUY_IN_PRESETS } from "@synapse/shared/game-contracts"
+import { GAME_TOOLS, POKER_BUY_IN_PRESETS, POKER_MAX_SEATS } from "@synapse/shared/game-contracts"
 import { HallService } from "./hall/hall.service"
 import { PokerService } from "./poker/poker.service"
 import { PokerActionService, type ActionInput } from "./poker/poker-action.service"
@@ -75,13 +75,15 @@ export class GameApiService {
           cards: { available: pokerCardModeEnabled(), supportedVersions: [...SUPPORTED_POKER_RULES], humanPlay: true, aiPlay: false, botReceivesCards: false, botUsesCards: false },
           rules: {
             game: "无限注德州扑克",
-            seats: "2–10",
+            seats: `2–${POKER_MAX_SEATS}`,
             blinds: [[1, 2], [2, 4], [5, 10], [10, 20]],
             variants: { standard52: "标准52张", short32: "7至A共32张；同花大于葫芦，顺子大于三条，A789T为最小顺子。" },
             buyIn: POKER_BUY_IN_PRESETS,
             actionWindowSeconds: 600,
             roll: "建房ruleOptions.roll默认关闭；ruleOptions.rollCoins可设置每手钻石（默认12，正整数），normal/super消耗固定1/3、不可配置；开启后翻前/翻牌/转牌本人行动时可按table.state或wait的normal/super确切报价换牌。费用独立于底池，补偿其他未弃牌原入座者并冻结到手末；普通一张立即替换，超级三选一强制完成。Roll不续600秒时限；超时先选第一张再撤出。候选及旧牌位置只给本人，教学无额外权限。",
             heartbeatSeconds: 60,
+            cards: "卡牌模式仅真人同源网页参与，每局真人初始随机3张，机器人不领牌。能力牌池共享，消耗不回收；结算清空。与Roll独立。MCP不得创建或加入卡牌房，不提供用牌或选牌工具。",
+            chips: "新房chips-v2区分名义下注、有限豁免和真实支付；Roll/卡费进入通用暂存，原入座待分可被盗取或退款，最终释放才到手。NULL版本旧房继续原冻结规则，不能按新版本重解释。",
             nextHand: "首局房主免准备，其他可参与者须准备；后续每手结束后房主也须准备，真人手动点击、AI显式seat_ready、程序陪练自动准备。Web房主结算内准备成功返回牌桌，满足准备条件后仍须从牌桌显式room_start，入座/准备/调度均不自动开局。首局handId为null，后续使用当前结算handId。",
             timeout: "能check就记录check，否则fold；两者均立即撤出本手、离桌退款，不自动跟注。",
             headsUp: "按钮即小盲，翻前先行动、翻后后行动。",
@@ -93,6 +95,9 @@ export class GameApiService {
           persona:
             "使用会话口述覆盖时，act传personaSource=session，行动不绑定游戏内版本；口述优先于游戏设置，仅本会话生效；未经用户明确要求不写回。模型自述可选，不确定留空。",
           errors: {
+            POKER_CARD_AI_DISABLED: "停止在此房间的AI操作；仅可读取公开信息，不尝试claim或接入。",
+            POKER_CARD_MODE_UNAVAILABLE: "停止新建卡牌房，不把不可用设置静默改成普通房。",
+            POKER_CARD_VERSION_UNSUPPORTED: "停止写入，使用支持cards-v1/chips-v2的客户端。",
             POKER_ROLL_CHOICE_REQUIRED: "读取table.state或wait，完成原roll.choose。",
             POKER_ROLL_PRICE_CHANGED: "重新读取报价，确认后使用新UUID。",
             POKER_ROLL_INSUFFICIENT_STACK: "余额须严格大于费用，改为正常下注。",

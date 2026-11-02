@@ -213,7 +213,9 @@ export class PokerActionService {
         legal: legalActions(h, seat.seatNo),
       }, randomInt(1000000) / 1000000)
       const actionId = rollActionId(hand.id, hand.actionSeq, seat.id, "act")
-      return this.submit(c, seat.userId, { ...decision, handId: hand.id, street: hand.street, actionId }, "rules_bot")
+      return this.submit(c, seat.userId, { ...decision, handId: hand.id, street: hand.street, actionId,
+        ...(h.chipRulesVersion === "chips-v2" ? { expectedPaymentVersion: betPaymentVersion(h, seat.seatNo, hand.id, hand.actionSeq, seat.controlVersion) } : {}),
+      }, "rules_bot")
     }, at)
   }
   async expire(code: string, at?: Date) {

@@ -21,7 +21,7 @@ paths:
 
 | 子项目 | 本地默认端口 | 配置位置 |
 | --- | --- | --- |
-| Console / Admin / Drive 网页 | 19700 | `dashboard/vite.config.ts`、`dashboard/package.json` |
+| Console / Admin / Drive 网页 | 19700 | `dashboard/vite.config.ts`、`dashboard/package.json`；可由 `SYNAPSE_DASHBOARD_PORT` 覆盖 |
 | Server API（含 WebSocket） | 19701 | `server/package.json`、根 `package.json`；可由 `SYNAPSE_SERVER_API_PORT` 覆盖 |
 | PDF renderer 宿主机映射 | 19702 | `server/compose.dev.yml`、`scripts/dev/run-server-with-env.mjs`；可由 `PDF_RENDERER_HOST_PORT` 覆盖 |
 | Electron renderer | 19731 | `desktop/scripts/dev/dev-renderer.mjs`、`dev-electron-app.mjs`、`dev.mjs`；可由 `SYNAPSE_DEV_PORT` 覆盖 |
@@ -33,6 +33,8 @@ paths:
 根 `pnpm dev` 和 `pnpm dev:prod` 启动 Desktop、Server、Document；Server 入口同时启动 API、Dashboard、Postgres 和 PDF renderer。Dashboard 不再占用独立 mprocs 栏目，统一随 `pnpm dev:server` 启停。Auto 与模板是按需命令，不随根 `pnpm dev` 启动。
 
 Server 入口等待 API 的 `/readyz` 返回成功后才启动 Dashboard，由 Vite 在网页监听后使用系统默认浏览器打开控制台。就绪探测覆盖数据库、PDF renderer 和已配置的对象存储；总等待上限 180 秒，单次请求上限 10 秒，重试间隔与请求超时独立。失败或超时时不打开 Web 端。
+
+隔离页面验收可同时指定 `SYNAPSE_DASHBOARD_PORT`、`SYNAPSE_SERVER_API_PORT`、`APP_PUBLIC_URL` 和专用 `GAME_E2E_DATABASE_URL`，并用 `SYNAPSE_DASHBOARD_OPEN=false` 禁止自动打开默认浏览器。HTTP 端口仍在本项目保留范围内。已有同仓库开发服务运行时，不得调用会匹配全部服务的停止入口；只停止本次启动并记录的进程组及专用 Compose project。
 
 ## 地址与边界
 

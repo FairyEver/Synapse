@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @synapse/shared run build && vite --open http://localhost:19700/console/",
+    "dev": "pnpm --filter @synapse/shared run build && vite",
     "build": "pnpm --filter @synapse/shared build && pnpm check:ui && tsc --noEmit && vite build",
     "preview": "vite preview --port 19700 --strictPort",
     "tsc": "tsc --noEmit",

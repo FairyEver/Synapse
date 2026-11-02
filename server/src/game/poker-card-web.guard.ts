@@ -11,10 +11,11 @@ export class PokerCardWebGuard implements CanActivate {
   constructor(private readonly poker: PokerService) {}
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<GameWebRequest>()
-    if (["GET", "HEAD", "OPTIONS"].includes(request.method) || /\/invoke\/?$/i.test(request.path)) return true
+    const invokeCreation = /\/invoke\/?$/i.test(request.path) && request.body?.operation === "app.game.poker.room.create"
+    if (["GET", "HEAD", "OPTIONS"].includes(request.method) || /\/invoke\/?$/i.test(request.path) && !invokeCreation) return true
     const payload = request.body?.params ?? request.body
     const cardRoute = /\/card\/(?:play|choose)\/?$/i.test(request.path)
-    const creation = /\/poker\/rooms\/?$/i.test(request.path)
+    const creation = invokeCreation || /\/poker\/rooms\/?$/i.test(request.path)
     let required = cardRoute || creation && payload?.ruleOptions?.cards === true
     if (!required && typeof request.params.code === "string") {
       const code = request.params.code

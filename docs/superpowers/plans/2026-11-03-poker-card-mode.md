@@ -299,11 +299,11 @@
 **Files:** Create `dashboard/src/game-center/games/poker/__tests__/card-mode.browser.tsx`；Modify `docs/superpowers/acceptance/2026-11-03-poker-card-mode.md`、`docs/agents/game-ui.md`、`docs/agents/module-boundaries.md`、`docs/agents/capability-registry.md`、`docs/agent-guides/game-hall.md`、`CONTEXT.md`、`desktop/app-capabilities/synapse-skill/skill-package/game-hall/poker/SKILL.md`、`desktop/app-capabilities/synapse-skill/skill-package/game-hall/references/api.md`。
 **Interfaces:** 最终验收消费T1–T17产物；无新增玩法/接口。系统Skill/API参考必须与实际导出一致，不把UI私有用牌操作公开为MCP。
 
-- [ ] **1. 写几何/键盘回归。** 覆盖桌面、390×667/844、320px与568/667短横屏，实际展开持牌/目标/候选/暂存/结算；断言标题留白、Footer可见、长正文单一滚动、标准按钮、焦点返回、850px切换和画布不重挂。只构造夹具不能声称浏览器通过。 断言示例：`expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth); expect(canvasAfter).toBe(canvasBefore)`。
-- [ ] **2. 获明确浏览器/应用启动授权后运行。** `pnpm --filter @synapse/dashboard test:browser src/game-center/games/poker/__tests__/card-mode.browser.tsx`用于既有组件几何回归；真实页面只经根`pnpm dev:server`启动，显式隔离库，按browser-skill优先bsk操作。组件测试运行器是既有Vitest Browser专用能力，不以登录浏览器替代其断言。已运行服务足够时不重启，停止用根`pnpm quit:server`。
-- [ ] **3. 同步规则和导出。** 根目录运行`node desktop/scripts/docs/generate-game-reference.mjs`，核对生成参考无新增卡牌MCP工具，补齐AI禁入错误处理和新资金版本说明。运行`pnpm --filter @synapse/desktop exec vitest run app-capabilities/game-hall/shared/__tests__/roll-skill-contract.test.ts app-capabilities/game-hall/shared/__tests__/human-control.test.ts`及`pnpm --filter @synapse/desktop run check:hard-constraints`；涉及实际Electron打包边界再按规则加typecheck/packaged-asar。
-- [ ] **4. 写最终可访问证据并自查。** 报告记录全部命令/退出码、迁移实际状态、60张素材清单、截图绝对路径（无在线链接则明确）、未验证项和版本回滚前提。核对私有Web恰新增2、公开MCP新增0、规则/Skill/归档一致，无游戏发布文案。当前任务不部署或打开生产开关。
-- [ ] **5. 本地提交及最终审查。** `git commit -m 'docs: 完成卡牌模式验收记录与能力边界同步'`；按用户选定执行方法做最终独立审查并修复实际问题。报告提交范围、已验证与未验证项目；T16未齐、T17/T18未验收或有资金/隐私缺口均不得宣称完整交付。
+- [x] **1. 写几何/键盘回归。** 覆盖桌面、390×667/844、320px与568/667短横屏，实际展开持牌/目标/候选/暂存/结算；断言标题留白、Footer可见、长正文单一滚动、标准按钮、焦点返回、850px切换和画布不重挂。只构造夹具不能声称浏览器通过。 断言示例：`expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth); expect(canvasAfter).toBe(canvasBefore)`。
+- [x] **2. 获明确浏览器/应用启动授权后运行。** `pnpm --filter @synapse/dashboard test:browser src/game-center/games/poker/__tests__/card-mode.browser.tsx`用于既有组件几何回归；真实页面只经根`pnpm dev:server`启动，显式隔离库，按browser-skill优先bsk操作。组件测试运行器是既有Vitest Browser专用能力，不以登录浏览器替代其断言。已运行服务足够时不重启，停止用根`pnpm quit:server`。
+- [x] **3. 同步规则和导出。** 根目录运行`node desktop/scripts/docs/generate-game-reference.mjs`，核对生成参考无新增卡牌MCP工具，补齐AI禁入错误处理和新资金版本说明。运行`pnpm --filter @synapse/desktop exec vitest run app-capabilities/game-hall/shared/__tests__/roll-skill-contract.test.ts app-capabilities/game-hall/shared/__tests__/human-control.test.ts`及`pnpm --filter @synapse/desktop run check:hard-constraints`；涉及实际Electron打包边界再按规则加typecheck/packaged-asar。
+- [x] **4. 写最终可访问证据并自查。** 报告记录全部命令/退出码、迁移实际状态、60张素材清单、截图绝对路径（无在线链接则明确）、未验证项和版本回滚前提。核对私有Web恰新增2、公开MCP新增0、规则/Skill/归档一致，无游戏发布文案。当前任务不部署或打开生产开关。
+- [x] **5. 本地提交及最终审查。** `git commit -m 'docs: 完成卡牌模式验收记录与能力边界同步'`；按用户选定执行方法做最终独立审查并修复实际问题。报告提交范围、已验证与未验证项目；T16未齐、T17/T18未验收或有资金/隐私缺口均不得宣称完整交付。
 
 
 ## 验证命令与放行层级
