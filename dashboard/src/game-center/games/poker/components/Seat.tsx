@@ -1,6 +1,7 @@
-import type { PokerSeatView, PokerSettlementView, PokerTableView } from "@synapse/shared/game-contracts"
+import { chipBreakdown, type PokerSeatView, type PokerSettlementView, type PokerTableView } from "@synapse/shared/game-contracts"
 import { Coins } from "lucide-react"
 import { Card } from "./Card"
+import { PokerChipPile } from "./PokerChipPile"
 import { actionLabel, amount, seatPosition } from "../lib/view"
 export function Seat({
   seat,
@@ -13,7 +14,9 @@ export function Seat({
   dealt,
   deadlineMs, result, feedback, feedbackKey, turnPulse, celebrate, departed,
   onInspect,
+  displayStack = seat.stack,
 }: {
+  displayStack?: number
   onInspect?: (trigger: HTMLButtonElement) => void
   hasStarted?: boolean
   showWager?: boolean
@@ -77,7 +80,7 @@ export function Seat({
           <span className="poker-seat-name" title={seat.displayName}>
             {seat.isMe ? "你" : seat.displayName}
           </span>
-          <span className="poker-stack">{amount(seat.stack)}</span>
+          <span className="poker-stack">{amount(displayStack)}</span>
         </span>
         {dealer && (
           <span className="poker-dealer" role="img" aria-label="按钮位">
@@ -94,6 +97,7 @@ export function Seat({
           </span>}
         <span className="poker-wager" data-seat={seat.seatNo} data-visible={showWager && seat.streetBet > 0} aria-label={`${seat.isMe ? "你" : seat.displayName} 本轮下注 ${amount(seat.streetBet)}`}><Coins aria-hidden="true" /><span title={amount(seat.streetBet)}>{amount(seat.streetBet)}</span></span>
       </div>
+      <PokerChipPile chips={chipBreakdown(displayStack)} label={`${seat.isMe ? "你" : seat.displayName}剩余筹码`} seed={seat.seatNo+1} className="poker-seat-bank" />
       {onInspect && <button type="button" className="poker-seat-info-trigger" aria-label={`查看${seat.isMe ? "你" : seat.displayName}的玩家信息`} onClick={event => onInspect(event.currentTarget)} />}
     </div>
   )

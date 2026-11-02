@@ -1,0 +1,42 @@
+/* Playing objects only. These physical denomination colors never theme a system panel. */
+.poker-table { --poker-chip-size: 44px; --poker-chip-shadow: color-mix(in oklch,var(--foreground) 20%,transparent); }
+.poker-chip { display:block; width:var(--poker-chip-size); height:var(--poker-chip-size); color:var(--surface); transform:rotateX(44deg) rotateZ(var(--chip-turn,0deg)); filter:drop-shadow(0 1px 0 color-mix(in oklch,var(--chip-color) 60%,var(--foreground))) drop-shadow(0 2px 0 var(--chip-color)) drop-shadow(0 3px 0 color-mix(in oklch,var(--chip-color) 70%,var(--foreground))); }
+.poker-chip[data-chip-value="1"] { --chip-color:oklch(.84 .012 260); color:var(--foreground); }
+.poker-chip[data-chip-value="5"] { --chip-color:oklch(.57 .21 25); }
+.poker-chip[data-chip-value="10"] { --chip-color:oklch(.56 .19 254); }
+.poker-chip[data-chip-value="25"] { --chip-color:oklch(.53 .14 153); }
+.poker-chip[data-chip-value="100"] { --chip-color:oklch(.29 .022 280); }
+.poker-chip[data-chip-value="200"] { --chip-color:oklch(.48 .19 305); }
+.poker-chip[data-chip-value="500"] { --chip-color:oklch(.55 .12 65); }
+.poker-chip svg { display:block; width:100%; height:100%; overflow:visible; }
+.poker-chip-disc { fill:var(--chip-color); stroke:color-mix(in oklch,var(--chip-color) 65%,var(--foreground)); stroke-width:1.5; }
+.poker-chip-edge { fill:var(--surface); opacity:.92; }
+.poker-chip-ring,.poker-chip-dots { fill:none; stroke:currentColor; stroke-width:1; }
+.poker-chip-ring { opacity:.68; }.poker-chip-dots { opacity:.3; stroke-dasharray:1.2 2.5; }
+.poker-chip text { fill:currentColor; font:750 23px -apple-system,BlinkMacSystemFont,sans-serif; }
+.poker-chip[data-chip-value="100"] text,.poker-chip[data-chip-value="200"] text,.poker-chip[data-chip-value="500"] text { font-size:19px; }
+.poker-chip-pile { position:relative; width:180px; height:104px; flex:none; pointer-events:none; filter:drop-shadow(0 4px 3px var(--poker-chip-shadow)); }
+.poker-placed-chip { position:absolute; left:calc(50% + var(--chip-x) * var(--poker-chip-size) - var(--poker-chip-size) / 2); bottom:calc(22px + var(--chip-y) * var(--poker-chip-size)); }
+.poker-chip-anchor { position:absolute; left:50%; bottom:44px; width:1px; height:1px; }
+.poker-chip-overflow { position:absolute; top:100%; left:50%; transform:translateX(-50%); max-width:230px; font-size:var(--scene-label); line-height:1.2; white-space:normal; color:var(--foreground); }
+.poker-canvas[data-table-shape] .poker-pot-row { display:flex; justify-content:center; gap:26px; width:auto; }
+.poker-canvas[data-table-shape] .poker-pot-row::after { content:none; }
+.poker-canvas[data-table-shape] .poker-pot-value { gap:4px; width:190px; }
+.poker-canvas[data-table-shape] .poker-roll-pot { font-size:56px; line-height:1.15; color:var(--foreground); }
+.poker-canvas[data-table-shape] .poker-seat-bank { position:absolute; left:calc(100% + 6px); bottom:0; width:150px; height:78px; --poker-chip-size:36px; }
+.poker-canvas[data-table-shape] .poker-seat[data-position="6"] .poker-seat-bank,.poker-canvas[data-table-shape] .poker-seat[data-position="7"] .poker-seat-bank,.poker-canvas[data-table-shape] .poker-seat[data-position="8"] .poker-seat-bank,.poker-canvas[data-table-shape] .poker-seat[data-position="9"] .poker-seat-bank { left:auto; right:calc(100% + 6px); }
+.poker-canvas[data-table-shape="portrait"] .poker-seat-bank { --poker-chip-size:44px; }
+.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="2"] .poker-seat-bank,.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="3"] .poker-seat-bank,.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="7"] .poker-seat-bank,.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="8"] .poker-seat-bank { left:50%; right:auto; bottom:auto; top:calc(100% + 4px); transform:translateX(-50%); }
+.poker-canvas[data-table-shape="portrait"] .poker-pot-value { width:180px; }
+.poker-canvas[data-table-shape="portrait"] .poker-pot-row { gap:22px; }
+.poker-chip-motion .poker-chip-transfer { display:contents; position:static; padding:0; background:none; box-shadow:none; animation:none; }
+.poker-flying-chip { position:absolute; left:0; top:0; will-change:transform; }
+.poker-flying-chip[data-fallback="true"] { animation:poker-physical-flight 620ms cubic-bezier(.22,.65,.3,1) both; }
+@keyframes poker-physical-flight { from{transform:translate(var(--chip-from-x),var(--chip-from-y)) translate(-50%,-50%)}to{transform:translate(var(--chip-to-x),var(--chip-to-y)) translate(-50%,-50%)} }
+.poker-rolling-amount { position:relative; letter-spacing:0; font-variant-numeric:tabular-nums; }
+.poker-number-reels { display:inline-flex; align-items:baseline; height:1.15em; vertical-align:top; }
+.poker-number-digit { display:inline-block; position:relative; overflow:hidden; width:1ch; height:1.15em; line-height:1.15; }
+.poker-number-track { display:block; height:1.15em; will-change:transform; }
+.poker-number-track::before { display:block; white-space:pre; line-height:1.15; content:"0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9\a 0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9\a 0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9"; }
+.poker-number-comma { width:.4ch; height:1.15em; }.poker-number-comma::before { content:","; }
+@media(prefers-reduced-motion:reduce) { .poker-flying-chip[data-fallback="true"]{animation-duration:1ms;animation-delay:0ms!important;} }

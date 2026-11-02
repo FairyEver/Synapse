@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 筹码呈现：既有牌桌Web响应追加可选公开 `chipState`（普通/ Roll逐笔面额计数及最近32笔资金动作），仅desktop展示投影提供，decision/MCP不提供。共享响应schema、系统Skill及Agent指南同步，动作输入和工具描述的操作语义不变；无新注册项、权限或数据库字段，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
+
 - 2026-11-02 扑克房间上限：既有 `app.game.poker.room.create` 的 `maxSeats` 改为2–6，Web、服务端入座和陪练容量同步；MCP描述、schema、Skill规则及API参考同步。未新增或删除注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
 
 - 2026-11-02 Roll 统计：既有 `table.state`/`room.get` 追加可选公开 rollStats（本手/房间总量，以及最多10个当前/历史回显座位对应账号的本手/房间汇总）。不增加输入参数、capability、MCP、Web 操作、System App、Dock、Workflow、Automation 或 Deep Link，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0均不变。统计在点击玩家区域后的系统信息弹窗内展示，不常驻牌桌；按身份和 Roll ID 去重，候选/旧槽不公开，schema、描述、系统 Skill 与生成参考同步。

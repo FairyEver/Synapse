@@ -111,12 +111,13 @@ describe("牌桌", () => {
     expect(host.querySelectorAll('[data-motion]')).toHaveLength(0)
     await act(async()=>second.unmount())
   })
-  it("翻牌收池包含原盲注并先追加后归集", async () => {
+  it("翻牌时实际追加直接飞入底池，不把本轮累计再飞一次", async () => {
     const host=document.createElement("div"), root=createRoot(host)
     const render=async(table: PokerTableView)=>act(async()=>root.render(<Table table={table} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
     await render({...state,actionSeq:0,recentActions:[]})
     await render({...state,actionSeq:1,street:"flop",pot:4,seats:state.seats.map(s=>({...s,streetBet:0})),recentActions:[{seq:1,seatNo:0,street:"preflop",action:"call",amount:1,potAfter:4,isAuto:false}]})
-    expect([...host.querySelectorAll('[data-motion="collect"]')].map(e=>e.textContent)).toEqual(["2","2"])
+    expect(host.querySelectorAll('[data-motion="collect"]')).toHaveLength(0)
+    expect(host.querySelectorAll('[data-motion="bet"]')).toHaveLength(1)
     await act(async()=>root.unmount())
   })
   it("结算后重新进入仍可在日志查看完整分池结果，轮询事件不重复结算", async () => {

@@ -10,6 +10,15 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 import { table } from "./settlement-fixture"
 afterEach(() => { vi.resetAllMocks(); document.body.replaceChildren() })
 const button = (text: string) => [...document.querySelectorAll("button")].find(b => b.textContent?.includes(text))!
+it("派发屏障未释放时自动与手动结算均等待，释放后自动打开",async()=>{
+  const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+  await act(async()=>root.render(<SettlementPanel table={table} perspective="owner" onRefresh={()=>{}} blocked />))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(button("本局结算").disabled).toBe(true)
+  await act(async()=>root.render(<SettlementPanel table={table} perspective="owner" onRefresh={()=>{}} blocked={false} />))
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  await act(async()=>root.unmount())
+})
 async function render(value = table) {
   const host = document.createElement("div"); document.body.append(host)
   const root = createRoot(host), refresh = vi.fn()

@@ -27,6 +27,8 @@ export type PokerVariant = "standard52" | "short32"
 export const POKER_MAX_SEATS = 6
 export type PokerController = "human" | "ai" | null
 export type PokerPauseReason = "user" | "context_maintenance" | null
+export * from "./game-poker-chips.js"
+import type { PokerChipState } from "./game-poker-chips.js"
 export type PokerBlindPreset = "1/2" | "2/4" | "5/10" | "10/20"
 export interface PokerRuleOptions { roll?: boolean }
 export type PokerRollKind = "normal" | "super"
@@ -153,6 +155,8 @@ export interface PokerActionView {
   personaVersion?: { versionNo: number; persona: string } | null
 }
 export interface PokerTableView {
+  /** Desktop-only public artwork inventory; values retain each individual payment's denominations. */
+  chipState?: PokerChipState
   rollStats?: PokerRollStats
   rules?: PokerRules
   ruleOptions?: PokerRuleOptions

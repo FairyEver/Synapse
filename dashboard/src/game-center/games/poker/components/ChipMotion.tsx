@@ -1,24 +1,63 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react"
-import { amount } from "../lib/view"
-import type { ChipTransfer } from "../lib/table-motion"
-type Point = { x: number; y: number }
-type Flight = ChipTransfer & { from: Point; to: Point }
-/** Measure real anchors in felt coordinates; canvas scaling and seat rotation stay aligned. */
-export function ChipMotion({transfers,layout}: {transfers:ChipTransfer[];layout:string}) {
-  const layer=useRef<HTMLDivElement>(null), [flights,setFlights]=useState<Flight[]>([])
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react"
+import type { PokerChipValue } from "@synapse/shared/game-contracts"
+import type { PresentedTransfer } from "../lib/chip-presentation"
+import { useReducedMotion } from "../hooks/useReducedMotion"
+import { PokerChip } from "./PokerChip"
+type Point={x:number;y:number}
+type Running={cancelled:boolean;complete:boolean;animations:Animation[];timer?:ReturnType<typeof setTimeout>;remaining:number}
+function visibleChips(transfer:PresentedTransfer):PokerChipValue[] {
+  const result:PokerChipValue[]=[]
+  for(const entry of transfer.chips)for(let i=0;i<entry.count&&result.length<24;i++)result.push(entry.value)
+  return result
+}
+/** Measure actual contained-scene anchors; completion comes from the animations, not a guessed gate. */
+export function ChipMotion({transfers,layout,scope,onStart,onComplete}: {transfers:PresentedTransfer[];layout:string;scope:string;onStart:(id:string)=>void;onComplete:(id:string)=>void}) {
+  const layer=useRef<HTMLDivElement>(null),running=useRef(new Map<string,Running>()),reduced=useReducedMotion()
+  const callbacks=useRef({onStart,onComplete});callbacks.current={onStart,onComplete}
+  const geometry=useRef(`${scope}:${layout}`)
+  const cancel=(job:Running)=>{job.cancelled=true;job.animations.forEach(a=>a.cancel());if(job.timer)clearTimeout(job.timer)}
+  const complete=(id:string,job:Running)=>{if(job.cancelled||job.complete||running.current.get(id)!==job)return;job.complete=true;callbacks.current.onComplete(id)}
   useLayoutEffect(()=>{
+    const key=`${scope}:${layout}`
+    if(geometry.current!==key){running.current.forEach(cancel);running.current.clear();geometry.current=key}
+    const ids=new Set(transfers.map(t=>t.id))
+    for(const [id,job] of running.current)if(!ids.has(id)){cancel(job);running.current.delete(id)}
     const root=layer.current?.parentElement
-    if (!root) return
-    const bounds=root.getBoundingClientRect(), scale=bounds.width/root.offsetWidth || 1
-    const point=(selector:string):Point=>{
+    if(!root)return
+    const bounds=root.getBoundingClientRect(),scale=bounds.width/root.offsetWidth||1
+    const point=(selector:string):Point|null=>{
       const rect=root.querySelector(selector)?.getBoundingClientRect()
-      return rect ? {x:(rect.x+rect.width/2-bounds.x)/scale,y:(rect.y+rect.height/2-bounds.y)/scale} : {x:0,y:0}
+      return rect?{x:(rect.x+rect.width/2-bounds.x)/scale,y:(rect.y+rect.height/2-bounds.y)/scale}:null
     }
-    const pot=point(".poker-pot")
-    setFlights(transfers.map(t=>{
-      const seat=point(`[data-seat="${t.seatNo}"] .poker-seat-plate`), bet=point(`.poker-wager[data-seat="${t.seatNo}"]`)
-      return {...t,from:t.kind === "bet" ? seat : t.kind === "collect" ? bet : pot,to:t.kind === "bet" ? bet : t.kind === "collect" ? pot : seat}
-    }))
-  },[transfers,layout])
-  return <div ref={layer} className="poker-chip-motion" aria-hidden="true">{flights.map(t=><span key={t.id} className="poker-chip-transfer" data-motion={t.kind} style={{"--chip-from-x":`${t.from.x}px`,"--chip-from-y":`${t.from.y}px`,"--chip-to-x":`${t.to.x}px`,"--chip-to-y":`${t.to.y}px`,animationDelay:`${t.delay}ms`} as CSSProperties}>{amount(t.amount)}</span>)}</div>
+    transfers.forEach((transfer,batch)=>{
+      const existing=running.current.get(transfer.id)
+      if(existing){
+        if(reduced&&!existing.complete){existing.animations.forEach(a=>a.cancel());if(existing.timer)clearTimeout(existing.timer);queueMicrotask(()=>complete(transfer.id,existing))}
+        return
+      }
+      const elements=[...layer.current!.querySelectorAll<HTMLElement>(`[data-transfer-id="${CSS.escape(transfer.id)}"] .poker-flying-chip`)]
+      const job:Running={cancelled:false,complete:false,animations:[],remaining:elements.length};running.current.set(transfer.id,job)
+      const center=point(`[data-chip-anchor="${transfer.fund}"]`),seat=point(`[data-seat="${transfer.seatNo}"] .poker-seat-bank`)
+      callbacks.current.onStart(transfer.id)
+      if(reduced||!center||!seat||!elements.length){queueMicrotask(()=>complete(transfer.id,job));return}
+      const from=transfer.direction==="in"?seat:center,to=transfer.direction==="in"?center:seat
+      let fallback=false
+      elements.forEach((element,index)=>{
+        const delay=Math.min(index,20)*28+Math.min(batch,6)*36
+        const spread=(index%3-1)*2
+        const transform=(x:number,y:number,scale=1)=>`translate(${x+spread}px,${y}px) translate(-50%,-50%) scale(${scale})`
+        const frames=[{transform:transform(from.x,from.y,.8),opacity:1},{transform:transform(from.x+(to.x-from.x)*.55,from.y+(to.y-from.y)*.55-28,1.04),offset:.55,opacity:1},{transform:transform(to.x,to.y,.9),opacity:1}]
+        if(typeof element.animate==="function")job.animations.push(element.animate(frames,{duration:620,delay,easing:"cubic-bezier(.22,.65,.3,1)",fill:"both"}))
+        else {
+          fallback=true;element.dataset.fallback="true"
+          element.style.setProperty("--chip-from-x",`${from.x}px`);element.style.setProperty("--chip-from-y",`${from.y}px`)
+          element.style.setProperty("--chip-to-x",`${to.x}px`);element.style.setProperty("--chip-to-y",`${to.y}px`);element.style.animationDelay=`${delay}ms`
+        }
+      })
+      if(fallback)job.timer=setTimeout(()=>complete(transfer.id,job),620+Math.min(elements.length-1,20)*28+Math.min(batch,6)*36+120)
+      else void Promise.allSettled(job.animations.map(a=>a.finished)).then(()=>complete(transfer.id,job))
+    })
+  },[transfers,layout,scope,reduced])
+  useEffect(()=>()=>{running.current.forEach(cancel);running.current.clear()},[])
+  return <div ref={layer} className="poker-chip-motion" aria-hidden="true">{transfers.map(transfer=><span key={transfer.id} className="poker-chip-transfer" data-motion={transfer.kind} data-fund={transfer.fund} data-transfer-id={transfer.id}>{visibleChips(transfer).map((value,index)=><span key={index} className="poker-flying-chip" style={{"--chip-turn":`${(index*13)%17-8}deg`} as CSSProperties} onAnimationEnd={event=>{if(event.target!==event.currentTarget)return;const job=running.current.get(transfer.id);if(job&&--job.remaining===0)complete(transfer.id,job)}}><PokerChip value={value}/></span>)}</span>)}</div>
 }

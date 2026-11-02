@@ -6,7 +6,7 @@ import { readinessView } from "../lib/settlement-view"
 import { usePokerReady, type PokerReadyControls } from "../hooks/usePokerReady"
 import { SettlementDetails } from "./SettlementDetails"
 import "../styles/settlement.css"
-type Props = { table: PokerTableView; perspective: "owner" | "public"; identityKey?: string; onRefresh: () => void | Promise<void>; onOpen?: () => void; compact?: boolean; ready?: PokerReadyControls }
+type Props = { table: PokerTableView; perspective: "owner" | "public"; identityKey?: string; onRefresh: () => void | Promise<void>; onOpen?: () => void; compact?: boolean; ready?: PokerReadyControls; blocked?: boolean }
 export function SettlementPanel(props: Props) {
   const key = `${props.identityKey}:${props.table.roomCode}:${props.perspective}`
   return props.ready ? <ScopedSettlementPanel key={key} {...props} ready={props.ready} /> : <LocalSettlementPanel key={key} {...props} />
@@ -15,18 +15,18 @@ function LocalSettlementPanel(props: Props) {
   const ready = usePokerReady(props.table, props.perspective, props.identityKey, props.onRefresh)
   return <ScopedSettlementPanel {...props} ready={ready} />
 }
-function ScopedSettlementPanel({ table, onOpen, compact, ready }: Props & { ready: PokerReadyControls }) {
+function ScopedSettlementPanel({ table, onOpen, compact, ready, blocked = false }: Props & { ready: PokerReadyControls }) {
   const settlement = table.settlement
   const [dismissed, setDismissed] = useState<string | null>(null)
   const progress = readinessView(table)
   const currentSettlement = settlement?.handId === table.handId ? settlement : null
-  const open = !!currentSettlement && dismissed !== currentSettlement.handId
+  const open = !blocked && !!currentSettlement && dismissed !== currentSettlement.handId
   const openCallback = useRef(onOpen); openCallback.current = onOpen
   useEffect(() => { if (open) openCallback.current?.() }, [open])
   if (!currentSettlement) return null
   const close = () => setDismissed(currentSettlement.handId)
   return <>
-    <Button variant="tertiary" isIconOnly={compact} aria-label="本局结算" onPress={() => setDismissed(null)}><ClipboardList aria-hidden="true" />{!compact && "本局结算"}</Button>
+    <Button variant="tertiary" isDisabled={blocked} isIconOnly={compact} aria-label="本局结算" onPress={() => setDismissed(null)}><ClipboardList aria-hidden="true" />{!compact && "本局结算"}</Button>
     <Modal.Backdrop isOpen={open} onOpenChange={value => { if (!value) close() }} className="font-sans text-foreground scheme-light" isDismissable>
       <Modal.Container size="lg" placement="center" scroll="inside"><Modal.Dialog className="poker-result-dialog sm:max-w-3xl">
         <Modal.CloseTrigger aria-label="关闭结算，返回牌桌" />

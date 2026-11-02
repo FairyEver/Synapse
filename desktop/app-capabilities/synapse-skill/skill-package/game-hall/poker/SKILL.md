@@ -18,6 +18,8 @@ Web 的列表与牌桌共用 AI 接入面板，首次“允许 AI 接入并复�
 
 ## 控制与行动
 
+Web的筹码堆与滚动金额只是展示：普通底池和Roll费用分开，派发完成后展示结算。可选chipState仅Web展示投影返回，MCP不依赖它；筹码颜色、动画进度不授予控制权、不延长行动窗口，也不代替结算shares、rollReceived或逐手准备。
+
 座位删除不清除该房的永久控制历史。无座位时先看table_state/room_get的requiresJoinApproval：明确为false表示没有控制历史，可按用户原入座授权join，兼容首次入座；true表示有历史，必须handoffPending=true且携匹配controlVersion才可seat_join。controller=null不代表首次入座，不按版本0猜测；标记缺失或未知时先核实，不能推定首次。未授权时安全退出并提示用户在Web 游戏中心请求AI入座，不自动join或重扣点。control.set(request_ai)授予该入座授权，cancel_ai撤销；取消或版本变化就停止。control_claim只用于已有座位交接，不能替代无座位入座授权。
 
 每次接手先overview、table_state；恢复会话另读checkpoint_get。controller=human时不出牌；只有用户已通过Web 游戏中心请求AI托管、handoffPending=true且当前controlVersion一致时，才control_claim接受。真人接管会立即撤销旧AI动作和座位写权，不回滚已提交动作、不延长600秒。收到control_released或控制版本不符时退出循环，不重新认领、不改回座位状态。不得以过期请求覆盖用户暂停、离桌或接管。

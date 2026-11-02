@@ -80,8 +80,11 @@ const seat = z
     hole: z.array(z.string()).optional(),
   })
   .passthrough()
+const chipCount = z.object({value:z.union([z.literal(1),z.literal(5),z.literal(10),z.literal(25),z.literal(100),z.literal(200),z.literal(500)]),count:z.number().int().positive()}).strict()
+const chipState = z.object({pot:z.array(chipCount).max(7),roll:z.array(chipCount).max(7),recent:z.array(z.object({id:z.string(),seq:z.number().int().nonnegative(),seatNo:z.number().int().nonnegative(),amount:z.number().int().nonnegative(),fund:z.enum(["pot","roll"])}).strict()).max(32)}).strict()
 const table = z
   .object({
+    chipState: chipState.optional(),
     rollStats: rollStats.optional(),
     rules: rules.optional(), ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), roll: roll.optional(),
     requiresJoinApproval: z.boolean().optional(),
