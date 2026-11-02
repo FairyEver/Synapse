@@ -12,7 +12,7 @@ function Composition({ direction, rows, total, status, filter, onSelect }: {
   const source = direction === "source", title = source ? "费用来源" : "费用去向"
   return <section aria-label={title} className="min-w-0 space-y-3">
     <div className="flex items-baseline justify-between gap-3"><h3 className="font-medium">{title}</h3><span className="text-xs text-muted tabular-nums">合计 {amount(total)}</span></div>
-    <div className="space-y-1">{rows.map(row => <Button key={row.key} size="sm" fullWidth variant={filter?.direction === direction && filter.key === row.key ? "secondary" : "ghost"} className="h-auto min-w-0 justify-start whitespace-normal text-left" aria-label={`查看${row.displayName}的${source ? "支付" : "补偿"}流水`} aria-pressed={filter?.direction === direction && filter.key === row.key} onPress={() => onSelect({ direction, key: row.key })}>
+    <div className="space-y-1">{rows.map(row => <Button key={row.key} size="sm" fullWidth variant={filter?.direction === direction && filter.key === row.key ? "secondary" : "ghost"} className="h-auto min-w-0 justify-start py-2 whitespace-normal text-left" aria-label={`查看${row.displayName}的${source ? "支付" : "补偿"}流水`} aria-pressed={filter?.direction === direction && filter.key === row.key} onPress={() => onSelect({ direction, key: row.key })}>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 flex-wrap items-baseline gap-x-2"><span className="min-w-0 wrap-anywhere">{row.displayName}</span>{row.isMe && <span className="text-xs text-muted">你</span>}{row.folded && <span className="text-xs text-muted">已弃牌</span>}</span>
         <span className="text-xs text-muted">{row.count} {source ? "次 Roll" : `笔补偿 · ${status}`}</span>
