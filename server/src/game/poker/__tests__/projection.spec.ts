@@ -27,6 +27,47 @@ function fixture() {
   return { hand, seats, actions }
 }
 describe("结算白名单投影", () => {
+  it("按可见牌力排列三条K、Q、J，净赚更多不提前，暗牌末尾且不影响排序", () => {
+    const f = fixture()
+    f.hand.board = ["Qd", "Jh", "Kc", "7d", "Th"]
+    f.hand.showdownSeats = [0, 1, 2]
+    const seat = f.seats[0]
+    f.seats = [
+      { ...seat, seatNo: 1, userId: "jacks", holeCards: ["Jd", "Js"] },
+      { ...seat, seatNo: 3, userId: "hidden", holeCards: ["Ah", "Ad"] },
+      { ...seat, seatNo: 0, userId: "me", holeCards: ["Kd", "Kh"] },
+      { ...seat, seatNo: 2, userId: "queens", holeCards: ["Qh", "Qs"] },
+    ]
+    f.hand.result.deltas = { 0: -52, 1: 69, 2: -17, 3: 0 }
+    const project = () => projectSettlement(f.hand, f.seats, [], "me", policy({ perspective: "owner", everJoined: true }))!
+    expect(project().seats.map(s => s.seatNo)).toEqual([0, 2, 1, 3])
+    expect(project().seats[3]).not.toHaveProperty("hole")
+    f.seats[1].holeCards = ["7h", "7s"]
+    expect(project().seats.map(s => s.seatNo)).toEqual([0, 2, 1, 3])
+    expect(f.seats.map(s => s.seatNo)).toEqual([1, 3, 0, 2])
+  })
+  it("排序沿用标准与短牌的同花葫芦规则", () => {
+    const f = fixture()
+    f.seats.reverse()
+    const project = () => projectSettlement(f.hand, f.seats, [], "me", policy({ perspective: "owner" }))!
+    expect(project().seats.map(s => s.seatNo)).toEqual([0, 1])
+    f.hand.rules.variant = "standard52"
+    expect(project().seats.map(s => s.seatNo)).toEqual([1, 0])
+  })
+  it("同牌型按踢脚比较，完全平手保留原顺序", () => {
+    const f = fixture()
+    f.hand.rules.variant = "standard52"
+    f.hand.board = ["As", "Kd", "8c", "5h", "2d"]
+    f.seats[0].holeCards = ["Ah", "Qs"]
+    f.seats[1].holeCards = ["Ad", "Js"]
+    f.seats.reverse()
+    const project = () => projectSettlement(f.hand, f.seats, [], "me", policy({ perspective: "owner" }))!
+    expect(project().seats.map(s => s.seatNo)).toEqual([0, 1])
+    f.hand.board = ["As", "Ks", "Qs", "Js", "Ts"]
+    f.seats[0].holeCards = ["9h", "9d"]
+    f.seats[1].holeCards = ["Qh", "Qd"]
+    expect(project().seats.map(s => s.seatNo)).toEqual([1, 0])
+  })
   it("结果保留规则、净盈亏、主边池及来源混打标识，摊牌显示规则中文牌型", () => {
     const f = fixture(), v = projectSettlement(f.hand, f.seats, f.actions, "me", policy({ perspective: "owner", everJoined: true }))!
     expect(v.rules.variant).toBe("short32")
@@ -53,7 +94,7 @@ describe("结算白名单投影", () => {
     const f = fixture(); delete f.hand.rules; delete f.hand.result.deltas; delete f.hand.result.pots[0].winners; delete f.hand.result.pots[0].shares
     const v = projectSettlement(f.hand, f.seats, [], "me", policy({ perspective: "owner" }))!
     expect(v.rules).toEqual({ variant: "standard52", smallBlind: 1, bigBlind: 2 })
-    expect(v.seats[0].delta).toBe(100)
+    expect(v.seats.find(s => s.isMe)?.delta).toBe(100)
     expect(projectSettlement({ ...f.hand, status: "running" }, f.seats, [], "me", policy())).toBeNull()
   })
 })

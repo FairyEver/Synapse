@@ -23,9 +23,6 @@
 .poker-result-money { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; text-align: right; font-variant-numeric: tabular-nums; }
 .poker-result-money dt { font-size: 12px; font-weight: 400; color: var(--muted); margin-bottom: 6px; }
 .poker-result-money dd { font-size: 14px; margin: 0; }
-.poker-result-ready-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 24px; }
-.poker-result-ready-list li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; min-width: 0; }
-.poker-result-waiting { flex: 1 1 160px; min-width: 0; line-height: 1.7; }
 @media (max-width: 640px) {
   .poker-result-winner { flex-basis: 100%; }
   .poker-result-winner h2 { font-size: 20px; }
@@ -36,7 +33,5 @@
   .poker-result-best { padding: 16px; }
   .poker-result-player { grid-template-columns: minmax(0,1fr) 72px max-content; }
   .poker-result-money { grid-column: 1/-1; grid-row: 2; text-align: left; }
-  .poker-result-ready-list { grid-template-columns: 1fr; }
-  .poker-result-waiting { flex-basis: 100%; order: -1; }
   .poker-result-footer > button { flex-grow: 1; }
 }

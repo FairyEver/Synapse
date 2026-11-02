@@ -36,7 +36,7 @@ for (const [width, height] of [[1360, 900], [390, 667], [390, 844], [320, 568]])
       await expect.poll(() => dialog.closest('[data-slot="modal-container"]')?.hasAttribute('data-entering')).toBe(false)
       await expect.poll(() => getComputedStyle(dialog.closest('.modal__backdrop')!).opacity).toBe('1')
       inside(dialog)
-      for (const selector of ['.poker-result-details', '.poker-result-players', '.poker-result-best', '.poker-result-ready-list', '.poker-result-footer']) {
+      for (const selector of ['.poker-result-details', '.poker-result-players', '.poker-result-best', '.poker-result-footer']) {
         const node = dialog.querySelector<HTMLElement>(selector)!
         expect(node.scrollWidth, selector).toBeLessThanOrEqual(node.clientWidth + 1)
       }
@@ -50,7 +50,8 @@ for (const [width, height] of [[1360, 900], [390, 667], [390, 844], [320, 568]])
       expect(body.scrollHeight).toBeGreaterThan(body.clientHeight)
       body.scrollTop = body.scrollHeight
       await expect.poll(() => body.scrollTop).toBeGreaterThan(0)
-      const last = dialog.querySelector('.poker-result-ready-list li:last-child')!
+      expect(dialog.querySelector('[aria-label="下一手准备状态"]')).toBeNull()
+      const last = dialog.querySelector('.poker-result-players li:last-child')!
       inside(last)
       await page.screenshot({ path: `.superpowers/sdd/2026-11-01-poker-settlement-ready/${width}x${height}-bottom.png` })
       await page.getByRole('button', { name: '准备下一手', exact: true }).click()

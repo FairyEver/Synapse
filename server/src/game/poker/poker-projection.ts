@@ -1,7 +1,7 @@
 import type { GamePokerAction, GamePokerHand, GamePokerHandSeat } from "@prisma/client"
 import type { PokerSettlementView } from "@synapse/shared/game-contracts"
 import type { ArchivedHand } from "./poker-archive.service"
-import { bestFive, handRankName } from "./engine/hand"
+import { bestFive, compareHands, handRankName } from "./engine/hand"
 import { settlementReason } from "./settlement-reason"
 import { resolveRules, type PokerRules } from "./engine/rules"
 
@@ -87,6 +87,11 @@ export function projectSettlement(
     }),
     mixedControl: [...controlSources.values()].some((sources) => sources.has("human") && sources.has("mcp")),
   }
+  // Sort only the visible projection so hidden cards cannot leak through row order.
+  settlement.seats.sort((a, b) => {
+    if (a.bestFive && b.bestFive) return compareHands(b.bestFive, a.bestFive, rules.variant)
+    return Number(!!b.bestFive) - Number(!!a.bestFive) || Number(!!b.hole?.length) - Number(!!a.hole?.length)
+  })
   settlement.pots = settlement.pots.map(pot => ({ ...pot, reason: settlementReason(pot, settlement) }))
   return settlement
 }

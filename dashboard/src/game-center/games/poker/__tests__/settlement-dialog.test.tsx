@@ -30,6 +30,10 @@ it("自动展示一次，关闭和轮询不准备，重开保留本手且不渲�
   const screen = await render()
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("本局结算")
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("600")
+  const dialog = document.querySelector('[role="dialog"]')!
+  expect(dialog.querySelector('[aria-label="下一手准备状态"]')).toBeNull()
+  expect(dialog.textContent).not.toContain("已准备 0 / 2")
+  expect(dialog.textContent).not.toContain("等待 本人")
   const folded = document.querySelector('[data-player-seat="1"]')!
   expect(folded.querySelector('[data-face="up"]')).toBeNull()
   expect(folded.textContent).toContain("未公开")
@@ -56,7 +60,7 @@ it("显式准备携带手牌和控制版本，重复点击不重发，成功后�
 })
 it("AI控制、旁观、暂离不允许真人代准备；失败保持可核对且不静默准备", async () => {
   const screen = await render({ ...table, controller: "ai" })
-  expect(document.body.textContent).toContain("等待 AI 确认准备")
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("等待 AI 确认准备")
   expect(button("准备下一手")).toBeUndefined()
   await screen.update(table)
   api.ready.mockRejectedValue(new Error("响应未知"))
@@ -76,7 +80,7 @@ it("同一手暂离再回座后必须能够重新准备，不能沿用本机旧�
   expect(button("准备下一手").disabled).toBe(false)
   await act(async () => screen.root.unmount())
 })
-it("结算内直接接管，不代准备，接回后提示重新准备且弹窗保持打开", async () => {
+it("结算内直接接管，不代准备，接回后可准备且弹窗保持打开", async () => {
   api.control.mockResolvedValue({ controller: "human", controlVersion: 4 })
   const screen = await render({ ...table, controller: "ai", seats: table.seats.map(s => s.isMe ? { ...s, readyForNextHand: true } : s) })
   await act(async () => { button("本人接管").click(); button("本人接管").click() })
@@ -84,7 +88,7 @@ it("结算内直接接管，不代准备，接回后提示重新准备且弹窗�
   expect(api.ready).not.toHaveBeenCalled()
   await screen.update({ ...table, controlVersion: 4 })
   expect(document.querySelector('[role="dialog"]')).not.toBeNull()
-  expect(document.body.textContent).toContain("已接管，请重新准备")
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("已接管，请重新准备")
   expect(button("准备下一手").disabled).toBe(false)
   await screen.update({ ...table, handId: "h2", handNo: 2, awaitingReady: false, settlement: null, status: "running" })
   expect(document.body.textContent).not.toContain("已接管，请重新准备")

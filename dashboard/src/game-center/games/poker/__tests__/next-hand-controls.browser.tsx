@@ -24,7 +24,7 @@ for (const [width, height] of [[1360, 900], [390, 667], [320, 568]]) {
     try {
       await expect.element(page.getByRole("dialog")).toBeVisible()
       await page.getByRole("dialog").getByRole("button", { name: "本人接管", exact: true }).click()
-      await expect.element(page.getByRole("dialog").getByText("已接管，请重新准备", { exact: true })).toBeVisible()
+      await expect.element(page.getByRole("dialog").getByRole("button", { name: "准备下一手", exact: true })).toBeEnabled()
       expect(api.ready).not.toHaveBeenCalled()
       await page.getByRole("button", { name: "返回牌桌", exact: true }).click()
       const dock = page.getByRole("region", { name: "牌桌 1234" })

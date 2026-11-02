@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { Button, Modal } from "@heroui/react"
-import { Check, ClipboardList } from "lucide-react"
-import { readinessView } from "../lib/settlement-view"
+import { ClipboardList } from "lucide-react"
 import { usePokerReady, type PokerReadyControls } from "../hooks/usePokerReady"
 import { SettlementDetails } from "./SettlementDetails"
 import "../styles/settlement.css"
@@ -18,7 +17,6 @@ function LocalSettlementPanel(props: Props) {
 function ScopedSettlementPanel({ table, onOpen, compact, ready, blocked = false }: Props & { ready: PokerReadyControls }) {
   const settlement = table.settlement
   const [dismissed, setDismissed] = useState<string | null>(null)
-  const progress = readinessView(table)
   const currentSettlement = settlement?.handId === table.handId ? settlement : null
   const open = !blocked && !!currentSettlement && dismissed !== currentSettlement.handId
   const openCallback = useRef(onOpen); openCallback.current = onOpen
@@ -32,11 +30,9 @@ function ScopedSettlementPanel({ table, onOpen, compact, ready, blocked = false 
         <Modal.CloseTrigger aria-label="关闭结算，返回牌桌" />
         <Modal.Header><p className="pr-8 text-xs text-muted">第 {currentSettlement.handNo} 手 · {currentSettlement.rules.variant === "short32" ? "32 张短牌" : "标准德州扑克"} · 盲注 {currentSettlement.rules.smallBlind} / {currentSettlement.rules.bigBlind}</p><Modal.Heading>本局结算</Modal.Heading></Modal.Header>
         <Modal.Body className="min-h-0 text-foreground"><SettlementDetails key={currentSettlement.handId} settlement={currentSettlement} mode={table.mode} />
-          {table.awaitingReady && <section className="mt-5 border-t border-separator pt-4" aria-label="下一手准备状态"><h3 className="mb-3 text-sm font-medium">下一手准备 <span className="text-muted">{progress.ready} / {progress.seats.length}</span></h3><ul className="poker-result-ready-list">{progress.seats.map(seat => <li key={seat.seatNo}><span className="min-w-0">{seat.displayName}{seat.isMe && "（你）"}</span><span className="flex shrink-0 items-center gap-1 text-xs text-muted">{seat.readyForNextHand && <Check size={13} aria-hidden="true" />}{seat.readyForNextHand ? "已准备" : "待准备"}</span></li>)}</ul></section>}
           {ready.error && <div className="mt-4 space-y-2"><p role="alert" className="text-sm text-danger">{ready.error}</p><Button variant="secondary" onPress={() => { void ready.refresh() }}>刷新牌桌</Button></div>}
         </Modal.Body>
         <Modal.Footer className="poker-result-footer flex-wrap">
-          <div role="status" className="poker-result-waiting text-xs text-muted"><p>{table.status === "closed" ? "房间已解散" : !table.awaitingReady ? "本手已结束" : ready.summary}</p>{table.awaitingReady && ready.controller === "ai" && progress.mine && !ready.prepared && <p>等待 AI 确认准备</p>}{ready.notice && <p>{ready.notice}</p>}</div>
           <Button variant="secondary" onPress={close}>返回牌桌</Button>
           {ready.canTakeover && <Button isPending={ready.busy} isDisabled={ready.busy} onPress={() => { void ready.takeover() }}>本人接管</Button>}
           {ready.canReady && <Button isPending={ready.busy} isDisabled={ready.prepared || ready.busy} onPress={async () => { if (await ready.ready() && table.isRoomOwner) close() }}>{ready.prepared ? "已准备" : "准备下一手"}</Button>}
