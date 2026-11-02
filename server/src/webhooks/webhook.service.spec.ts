@@ -91,12 +91,12 @@ describe("WebhookService", () => {
 
     const result = await service.createForUser("user-1", { name: " GitHub " }, "https://synapse.test", "203.0.113.10")
 
-    expect(result.url).toBe("https://synapse.test/webhooks/wh_public/whsec_secret")
+    expect(result.url).toBe("https://synapse.test/webhooks/whsec_secret")
     expect(result.webhook.publicId).toBe("wh_public")
     expect(result.webhook.name).toBe("GitHub")
     expect(result.webhook.enabled).toBe(true)
-    expect(result.webhook.url).toBe("https://synapse.test/webhooks/wh_public/whsec_secret")
-    expect(result.webhook.maskedUrl).toBe("https://synapse.test/webhooks/wh_public/***")
+    expect(result.webhook.url).toBe("https://synapse.test/webhooks/whsec_secret")
+    expect(result.webhook.maskedUrl).toBe("https://synapse.test/webhooks/***")
     expect(tx.userWebhook.create.mock.calls[0]?.[0]?.data).toMatchObject({
       userId: "user-1",
       publicId: "wh_public",
@@ -144,7 +144,7 @@ describe("WebhookService", () => {
     const serializedAudit = JSON.stringify(tx.auditLog.create.mock.calls)
     expect(serializedAudit).not.toContain("whsec_")
     expect(serializedAudit).not.toContain("secretHash")
-    expect(serializedAudit).not.toContain("https://synapse.test/webhooks/wh_public/whsec_secret")
+    expect(serializedAudit).not.toContain("https://synapse.test/webhooks/whsec_secret")
   })
 
   it("rolls back webhook creation when audit insert fails before returning the copyable URL", async () => {
@@ -215,8 +215,8 @@ describe("WebhookService", () => {
         publicId: "wh_public",
         name: "GitHub",
         enabled: true,
-        url: "https://synapse.test/webhooks/wh_public/whsec_secret",
-        maskedUrl: "https://synapse.test/webhooks/wh_public/***",
+        url: "https://synapse.test/webhooks/whsec_secret",
+        maskedUrl: "https://synapse.test/webhooks/***",
         createdAt: "2026-06-06T10:00:00.000Z",
         updatedAt: "2026-06-06T10:00:00.000Z",
         lastDeliveryAt: "2026-06-06T11:00:00.000Z",
@@ -252,7 +252,7 @@ describe("WebhookService", () => {
       name: "GitHub",
       enabled: true,
       url: null,
-      maskedUrl: "https://synapse.test/webhooks/wh_public/***",
+      maskedUrl: "https://synapse.test/webhooks/***",
       createdAt: "2026-06-06T10:00:00.000Z",
       updatedAt: "2026-06-06T10:00:00.000Z",
     })
@@ -288,8 +288,8 @@ describe("WebhookService", () => {
 
     const reset = await service.resetSecret("user-1", "webhook-1", "https://synapse.test")
 
-    expect(reset.url).toBe("https://synapse.test/webhooks/wh_public/whsec_new")
-    expect(reset.webhook.url).toBe("https://synapse.test/webhooks/wh_public/whsec_new")
+    expect(reset.url).toBe("https://synapse.test/webhooks/whsec_new")
+    expect(reset.webhook.url).toBe("https://synapse.test/webhooks/whsec_new")
     expect(tx.userWebhook.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "webhook-1", userId: "user-1", deletedAt: null },
       data: expect.objectContaining({ secret: "whsec_new" }),
@@ -344,7 +344,7 @@ describe("WebhookService", () => {
     const serializedAudit = JSON.stringify(tx.auditLog.create.mock.calls)
     expect(serializedAudit).not.toContain("whsec_")
     expect(serializedAudit).not.toContain("secretHash")
-    expect(serializedAudit).not.toContain("https://synapse.test/webhooks/wh_public/whsec_new")
+    expect(serializedAudit).not.toContain("https://synapse.test/webhooks/whsec_new")
   })
 
   it("soft-deletes webhooks without deleting delivery history", async () => {
@@ -510,7 +510,7 @@ describe("WebhookService", () => {
         id: "delivery-new",
         webhookId: "webhook-1",
         method: "POST",
-        path: "/webhooks/wh_public/***",
+        path: "/webhooks/***",
         query: { q: "1" },
         headers: { "content-type": "application/json" },
         bodyKind: "json",
@@ -542,7 +542,7 @@ describe("WebhookService", () => {
       id: "delivery-new",
       webhookId: "webhook-1",
       method: "POST",
-      path: "/webhooks/wh_public/***",
+      path: "/webhooks/***",
       query: { q: "1" },
       headers: { "content-type": "application/json" },
       bodyKind: "json",
@@ -586,7 +586,7 @@ describe("WebhookService", () => {
         id: "delivery-1",
         webhookId: "webhook-1",
         method: "POST",
-        path: "/webhooks/wh_public/***",
+        path: "/webhooks/***",
         query: {},
         headers: {},
         bodyKind: "json",
@@ -615,7 +615,7 @@ describe("WebhookService", () => {
       webhookPublicId: "wh_public",
       webhookName: "GitHub",
       method: "POST",
-      path: "/webhooks/wh_public/***",
+      path: "/webhooks/***",
       query: { event: "push" },
       headers: { "x-github-event": "push" },
       bodyKind: "json",
@@ -685,7 +685,7 @@ describe("WebhookService", () => {
       webhookPublicId: "wh_public",
       webhookName: "GitHub",
       method: "POST",
-      path: "/webhooks/wh_public/***",
+      path: "/webhooks/***",
       query: {},
       headers: {},
       bodyKind: "json",
@@ -809,7 +809,7 @@ describe("WebhookService", () => {
       webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
       request: {
         method: "POST",
-        url: "https://synapse.test/webhooks/wh_public/***",
+        url: "https://synapse.test/webhooks/***",
         query: { event: "push", secret: "[redacted]" },
         headers: { "x-github-event": "push", authorization: "[redacted]" },
         body: {
@@ -857,6 +857,34 @@ describe("WebhookService", () => {
     expect(harness.deliveries[0]?.bodyPreview).toContain("\"marker\":0")
     expect(harness.deliveries.at(-1)?.bodyPreview).toContain("\"marker\":104")
     expect(harness.prisma.webhookDelivery.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it("rotates the public token while preserving IDs, configuration, and delivery history", async () => {
+    const harness = createWebhookReceiveHarness()
+    await harness.receive()
+    const firstDelivery = harness.deliveries[0]
+    const tx = {
+      userWebhook: {
+        updateMany: vi.fn().mockImplementation(({ data }) => {
+          Object.assign(harness.webhook, data)
+          return Promise.resolve({ count: 1 })
+        }),
+        findFirst: vi.fn().mockImplementation(() => Promise.resolve(harness.webhook)),
+      },
+      auditLog: { create: vi.fn() },
+    }
+    harness.prisma.$transaction.mockImplementation((callback) => callback(tx))
+    const reset = await harness.service.resetSecret("user-1", "webhook-1", "https://synapse.test")
+    const token = new URL(reset.url).pathname.split("/")[2]!
+    expect(new URL(reset.url).pathname.split("/")).toHaveLength(3)
+    expect(reset.webhook).toMatchObject({ id: "webhook-1", publicId: "wh_public", name: "GitHub", enabled: true })
+    expect(token).not.toBe("whsec_secret")
+    await expect(harness.receive()).rejects.toThrow("Webhook not found")
+    await expect(harness.receive({ secret: token, path: `/webhooks/${token}` })).resolves.toMatchObject({ response: { ok: true } })
+    expect(harness.deliveries).toHaveLength(2)
+    expect(harness.deliveries[0]).toBe(firstDelivery)
+    expect(harness.deliveries.map((row) => row.webhookId)).toEqual(["webhook-1", "webhook-1"])
+    expect(JSON.stringify(harness.live.broadcastToUser.mock.calls)).not.toContain(token)
   })
 
   it("rejects invalid secrets without broadcasting", async () => {
@@ -1246,7 +1274,7 @@ function createWebhookReceiveHarness(input: {
       }),
   }
   prisma.userWebhook.findFirst.mockImplementation(({ where }) => {
-    if (where.publicId === webhook.publicId) {
+    if (where.secretHash === webhook.secretHash) {
       return Promise.resolve(webhook)
     }
     return Promise.resolve(null)
@@ -1385,11 +1413,11 @@ function createWebhookReceiveHarness(input: {
   return {
     service,
     prisma,
+    webhook,
     live,
     deliveries,
     receipts,
     receive: (overrides: {
-      readonly publicId?: string
       readonly secret?: string
       readonly method?: string
       readonly path?: string
@@ -1400,10 +1428,9 @@ function createWebhookReceiveHarness(input: {
       readonly remoteAddress?: string
       readonly publicAppUrl?: string
     } = {}) => service.receivePublicWebhook({
-      publicId: overrides.publicId ?? "wh_public",
       secret: overrides.secret ?? "whsec_secret",
       method: overrides.method ?? "POST",
-      path: overrides.path ?? "/webhooks/wh_public/whsec_secret",
+      path: overrides.path ?? "/webhooks/whsec_secret",
       query: overrides.query ?? {},
       headers: overrides.headers ?? {},
       body: overrides.body ?? Buffer.from(JSON.stringify({ ok: true })),

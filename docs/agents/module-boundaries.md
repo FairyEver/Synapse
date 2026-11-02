@@ -402,3 +402,11 @@ RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选
 - 扑克永久control history作为独立tombstone保留，删除座位不清除接管失效边界。无座位时Table.requiresJoinApproval明确标识是否有控制历史；false可按用户原授权首次入座，true必须新的入座授权。有历史控制投影为controller=null、历史controlVersion及joinPending映射的handoffPending；不得按版本0推断历史，缺失标记先核实；UI私有control.set可request_ai/cancel_ai入座授权。MCP join有历史必须joinPending和匹配controlVersion，禁止旧AI裸join重新扣点；仅首次无历史旧MCP兼容。Skill无座位先读table.state/room.get，未授权退出，不自动入座；control.claim不替代入座授权。不新增capability或IPC。
 
 - table.events的perspective可选owner/public，MCP默认owner且始终decision投影不带教学牌；UI事件默认public兼容旧调用，玩家视角传owner，日志和牌桌使用一致授权投影，不能因事件补读混入教学机器人牌。不新增能力或IPC。
+
+## 云端 Webhook 调用地址
+
+- 外部入口固定为 `/webhooks/<随机令牌>`，只按令牌的 SHA-256 哈希查找未删除且启用的 Webhook；哈希必须唯一。令牌使用 32 个随机字节生成的 Base64URL 值，不接受旧双段路径。
+- `UserWebhook.id` 与供桌面自动化匹配的稳定 `publicId` 属于内部关联标识，不拼入调用地址。重置调用地址只轮换 `secret` / `secretHash`，不改变标识、配置、调用历史或桌面自动化关联。管理接口沿用 `reset-secret` 命名。
+- 完整令牌仅供所属用户在管理接口中复制；历史、Live 下行与应用日志中的路径统一为 `/webhooks/***`，Nginx Webhook location 关闭 access log。MCP Webhook 列表仍只返回稳定标识和状态，不返回令牌。
+- `20261102120000_webhook_single_token` 是用户明确授权的唯一一次旧数据切换：按回执、投递历史、Webhook 的顺序清空所有用户的旧数据（包括软删除项），随后建立令牌哈希唯一索引。由 Prisma migration 在部署时执行，不在服务启动或每次重置时清理；日常删除仍保留历史，每个 Webhook 最近 100 条的策略不变。
+- 部署须保留部署前数据库备份并完成既有迁移预演；风险扫描会识别本迁移的删除与唯一索引，按既有 `ALLOW_RISKY_MIGRATIONS=1` 流程审查放行，不修改风险检测策略。代码回退不能恢复已清空数据，恢复旧数据必须使用部署前备份。

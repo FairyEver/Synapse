@@ -32,10 +32,10 @@ describe("webhook sanitize", () => {
 
   it("redacts webhook URL secrets before request logs are serialized", () => {
     const sanitized = sanitizeWebhookLogUrl(
-      "/webhooks/wh_public_id/whsec_secret_value?run=abc&source=e2e",
+      "/webhooks/whsec_secret_value?run=abc&source=e2e",
     )
 
-    expect(sanitized).toBe("/webhooks/wh_public_id/***?run=abc&source=e2e")
+    expect(sanitized).toBe("/webhooks/***?run=abc&source=e2e")
     expect(sanitized).not.toContain("whsec_secret_value")
   })
 
@@ -51,7 +51,7 @@ describe("webhook sanitize", () => {
 
   it("redacts webhook URL query secrets before request logs are serialized", () => {
     const request = sanitizeWebhookLogRequest({
-      originalUrl: "/webhooks/wh_public_id/whsec_secret_value?token=raw-token&signature=raw-signature&run=abc",
+      originalUrl: "/webhooks/whsec_secret_value?token=raw-token&signature=raw-signature&run=abc",
       query: {
         token: "raw-token",
         signature: "raw-signature",
@@ -60,7 +60,7 @@ describe("webhook sanitize", () => {
     })
 
     expect(request).toMatchObject({
-      url: "/webhooks/wh_public_id/***?token=[redacted]&signature=[redacted]&run=abc",
+      url: "/webhooks/***?token=[redacted]&signature=[redacted]&run=abc",
       query: {
         token: "[redacted]",
         signature: "[redacted]",
@@ -91,21 +91,19 @@ describe("webhook sanitize", () => {
 
   it("redacts webhook route params before request logs are serialized", () => {
     const request = sanitizeWebhookLogRequest({
-      url: "/webhooks/wh_public_id/whsec_secret_value?run=abc",
+      url: "/webhooks/whsec_secret_value?run=abc",
       params: {
-        path: ["webhooks", "wh_public_id", "whsec_secret_value"],
-        publicId: "wh_public_id",
-        secret: "whsec_secret_value",
+        path: ["webhooks", "whsec_secret_value"],
+        token: "whsec_secret_value",
       },
     })
 
     expect(JSON.stringify(request)).not.toContain("whsec_secret_value")
     expect(request).toMatchObject({
-      url: "/webhooks/wh_public_id/***?run=abc",
+      url: "/webhooks/***?run=abc",
       params: {
-        path: ["webhooks", "wh_public_id", "[redacted]"],
-        publicId: "wh_public_id",
-        secret: "[redacted]",
+        path: ["webhooks", "[redacted]"],
+        token: "[redacted]",
       },
     })
   })
@@ -114,7 +112,7 @@ describe("webhook sanitize", () => {
     const requestLike = {
       id: "req-1",
       query: { run: "abc" },
-      params: { path: ["webhooks", "wh_public_id", "whsec_secret_value"] },
+      params: { path: ["webhooks", "whsec_secret_value"] },
       headers: {
         "x-test": "ok",
         "user-agent": "Browser/1.0",
@@ -128,7 +126,7 @@ describe("webhook sanitize", () => {
     }
     Object.defineProperties(requestLike, {
       method: { value: "POST" },
-      originalUrl: { value: "/webhooks/wh_public_id/whsec_secret_value?run=abc" },
+      originalUrl: { value: "/webhooks/whsec_secret_value?run=abc" },
     })
 
     const request = sanitizeWebhookLogRequest(requestLike)
@@ -136,9 +134,9 @@ describe("webhook sanitize", () => {
     expect(request).toMatchObject({
       id: "req-1",
       method: "POST",
-      url: "/webhooks/wh_public_id/***?run=abc",
+      url: "/webhooks/***?run=abc",
       query: { run: "abc" },
-      params: { path: ["webhooks", "wh_public_id", "[redacted]"] },
+      params: { path: ["webhooks", "[redacted]"] },
       headers: {
         "x-test": "ok",
         "user-agent": "[redacted]",

@@ -37,3 +37,8 @@ Dashboard 保持上述普通用户/管理身份隔离，但两套导航与路由
 
 - `docs/superpowers/specs/2026-07-31-separate-admin-access-domain-design.md`
 - `docs/adr/0212-authenticate-platform-administration-with-an-environment-secret.md`
+
+## Webhook 调用地址与迁移
+
+- 外部入口为 `/webhooks/<随机令牌>`；重置只更换令牌，旧地址立即失效，内部 ID、桌面自动化 publicId、配置和历史保留。调用地址在所属用户管理接口中可复制，历史与日志仅显示 `/webhooks/***`。
+- `20261102120000_webhook_single_token` 在部署时一次性清空所有旧 Webhook、投递记录和客户端回执，不保留双段路径兼容。后续重置和日常删除不清空历史；部署预演、备份和风险放行见 `docs/agents/module-boundaries.md`。

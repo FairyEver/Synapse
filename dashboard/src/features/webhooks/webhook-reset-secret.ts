@@ -1,6 +1,6 @@
 import type { DashboardWebhookDto } from '@synapse/shared'
 
-export const webhookResetSecretDialogTitle = '重置 Webhook secret'
+export const webhookResetSecretDialogTitle = '重置调用地址'
 
 export function getWebhookResetSecretDialogDescription(webhook: Pick<DashboardWebhookDto, 'name'> | null): string {
   const name = webhook?.name ? `「${webhook.name}」` : '该 Webhook'

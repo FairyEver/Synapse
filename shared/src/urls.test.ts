@@ -52,16 +52,15 @@ describe("shared URL helpers", () => {
     })).toBe("https://synapse.test/console/reset-password?token=reset+token")
     expect(buildWebhookUrl({
       publicAppUrl: "https://synapse.test/",
-      publicId: "wh/id",
       secret: "whsec/value",
-    })).toBe("https://synapse.test/webhooks/wh%2Fid/whsec%2Fvalue")
+    })).toBe("https://synapse.test/webhooks/whsec%2Fvalue")
   })
 
   it("masks webhook URLs without leaking the secret segment", () => {
-    expect(maskWebhookUrl("https://synapse.test/webhooks/wh_abc/whsec_secret?x=1"))
-      .toBe("https://synapse.test/webhooks/wh_abc/***?x=1")
-    expect(maskWebhookUrl("/webhooks/wh_abc/whsec_secret"))
-      .toBe("/webhooks/wh_abc/***")
+    expect(maskWebhookUrl("https://synapse.test/webhooks/whsec_secret?x=1"))
+      .toBe("https://synapse.test/webhooks/***?x=1")
+    expect(maskWebhookUrl("/webhooks/whsec_secret"))
+      .toBe("/webhooks/***")
   })
 
   it("derives live websocket URLs from API base URLs", () => {

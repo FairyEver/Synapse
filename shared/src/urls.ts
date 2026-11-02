@@ -45,24 +45,12 @@ export function buildPasswordResetUrl(input: {
 
 export function buildWebhookUrl(input: {
   readonly publicAppUrl: string
-  readonly publicId: string
   readonly secret: string
 }): string {
-  return `${normalizePublicAppUrl(input.publicAppUrl)}${WEBHOOK_PUBLIC_PATH_PREFIX}/${encodeURIComponent(input.publicId)}/${encodeURIComponent(input.secret)}`
+  return `${normalizePublicAppUrl(input.publicAppUrl)}${WEBHOOK_PUBLIC_PATH_PREFIX}/${encodeURIComponent(input.secret)}`
 }
 
 export function maskWebhookUrl(url: string): string {
-  try {
-    const parsed = new URL(url)
-    const parts = parsed.pathname.split("/")
-    if (parts.length >= 4 && parts[1] === "webhooks") {
-      parts[3] = "***"
-      parsed.pathname = parts.join("/")
-      return parsed.toString()
-    }
-  } catch {
-    return maskWebhookPath(url)
-  }
   return maskWebhookPath(url)
 }
 
@@ -88,5 +76,5 @@ function normalizeApiBaseUrl(value: string): string {
 }
 
 function maskWebhookPath(value: string): string {
-  return value.replace(/\/webhooks\/([^/]+)\/[^/?#]+/u, "/webhooks/$1/***")
+  return value.replace(/(\/webhooks\/)[^?#]+/u, "$1***")
 }

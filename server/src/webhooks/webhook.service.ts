@@ -201,7 +201,7 @@ export class WebhookService implements OnModuleInit {
     })
     return {
       webhook: this.toDashboardWebhookDto(webhook, publicAppUrl),
-      url: buildWebhookUrl(publicAppUrl, publicId, secret),
+      url: buildWebhookUrl(publicAppUrl, secret),
     }
   }
 
@@ -302,7 +302,7 @@ export class WebhookService implements OnModuleInit {
     })
     return {
       webhook: this.toDashboardWebhookDto(webhook, publicAppUrl),
-      url: buildWebhookUrl(publicAppUrl, webhook.publicId, secret),
+      url: buildWebhookUrl(publicAppUrl, secret),
     }
   }
 
@@ -405,7 +405,6 @@ export class WebhookService implements OnModuleInit {
   }
 
   async receivePublicWebhook(input: {
-    readonly publicId: string
     readonly secret: string
     readonly method: string
     readonly path: string
@@ -425,7 +424,7 @@ export class WebhookService implements OnModuleInit {
       throw new PayloadTooLargeException("Webhook body is too large")
     }
 
-    const webhook = await this.findEnabledPublicWebhook(input.publicId, input.secret)
+    const webhook = await this.findEnabledPublicWebhook(input.secret)
     const contentType = firstHeader(input.contentType)
     const sanitizedHeaders = sanitizeWebhookHeaders(input.headers)
     const sanitizedQuery = sanitizeWebhookQuery(input.query)
@@ -433,7 +432,7 @@ export class WebhookService implements OnModuleInit {
     const receivedAt = new Date()
     const receivedAtIso = receivedAt.toISOString()
     const maskedPath = maskWebhookUrl(input.path)
-    const maskedUrl = maskWebhookUrl(buildWebhookUrl(input.publicAppUrl, webhook.publicId, input.secret))
+    const maskedUrl = maskWebhookUrl(buildWebhookUrl(input.publicAppUrl, input.secret))
 
     const delivery = await this.prisma.webhookDelivery.create({
       data: {
@@ -664,9 +663,9 @@ export class WebhookService implements OnModuleInit {
     }
   }
 
-  private async findEnabledPublicWebhook(publicId: string, secret: string): Promise<PublicWebhookRecord> {
+  private async findEnabledPublicWebhook(secret: string): Promise<PublicWebhookRecord> {
     const webhook = await this.prisma.userWebhook.findFirst({
-      where: { publicId, deletedAt: null },
+      where: { secretHash: hashWebhookSecret(secret), deletedAt: null },
       select: {
         id: true,
         userId: true,
@@ -694,13 +693,13 @@ export class WebhookService implements OnModuleInit {
   private toDashboardWebhookDto(webhook: WebhookRecord, publicAppUrl: string): DashboardWebhookDto {
     const latestDelivery = webhook.deliveries?.[0]
     const lastDeliveryStatus = normalizeWebhookDeliveryStatus(latestDelivery?.status)
-    const url = webhook.secret ? buildWebhookUrl(publicAppUrl, webhook.publicId, webhook.secret) : null
+    const url = webhook.secret ? buildWebhookUrl(publicAppUrl, webhook.secret) : null
     const dto: DashboardWebhookDto = {
       id: webhook.id,
       publicId: webhook.publicId,
       name: webhook.name,
       enabled: webhook.enabled,
-      maskedUrl: maskWebhookUrl(buildWebhookUrl(publicAppUrl, webhook.publicId, "secret")),
+      maskedUrl: maskWebhookUrl(buildWebhookUrl(publicAppUrl, "secret")),
       url,
       createdAt: webhook.createdAt.toISOString(),
       updatedAt: webhook.updatedAt.toISOString(),

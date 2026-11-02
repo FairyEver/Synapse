@@ -33,12 +33,12 @@ describe("webhook-token", () => {
   })
 
   it("builds encoded webhook URLs", () => {
-    expect(buildWebhookUrl("https://synapse.test/", "wh_public/id", "whsec_secret/value"))
-      .toBe("https://synapse.test/webhooks/wh_public%2Fid/whsec_secret%2Fvalue")
+    expect(buildWebhookUrl("https://synapse.test/", "whsec_secret/value"))
+      .toBe("https://synapse.test/webhooks/whsec_secret%2Fvalue")
   })
 
   it("masks public URLs without exposing the secret", () => {
-    expect(maskWebhookUrl("https://synapse.test/webhooks/wh_abc/whsec_secret?source=test"))
-      .toBe("https://synapse.test/webhooks/wh_abc/***?source=test")
+    expect(maskWebhookUrl("https://synapse.test/webhooks/whsec_secret?source=test"))
+      .toBe("https://synapse.test/webhooks/***?source=test")
   })
 })

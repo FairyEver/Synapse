@@ -64,13 +64,13 @@ describe("WebhookDashboardController", () => {
 
   it("creates webhooks with configured public URLs", async () => {
     const service = {
-      createForUser: vi.fn().mockResolvedValue({ url: "https://synapse.test/webhooks/wh_id/whsec_secret" }),
+      createForUser: vi.fn().mockResolvedValue({ url: "https://synapse.test/webhooks/whsec_secret" }),
     }
     const controller = new WebhookDashboardController(service as unknown as WebhookService)
 
     await expect(controller.create({ name: " GitHub " }, createRequest() as never))
       .resolves
-      .toEqual({ url: "https://synapse.test/webhooks/wh_id/whsec_secret" })
+      .toEqual({ url: "https://synapse.test/webhooks/whsec_secret" })
     expect(service.createForUser).toHaveBeenCalledWith(
       "user-1",
       { name: "GitHub" },
@@ -121,13 +121,13 @@ describe("WebhookDashboardController", () => {
 
   it("resets webhook secrets with configured public URLs", async () => {
     const service = {
-      resetSecret: vi.fn().mockResolvedValue({ url: "https://synapse.test/webhooks/wh_id/whsec_new" }),
+      resetSecret: vi.fn().mockResolvedValue({ url: "https://synapse.test/webhooks/whsec_new" }),
     }
     const controller = new WebhookDashboardController(service as unknown as WebhookService)
 
     await expect(controller.resetSecret("webhook-1", createRequest() as never))
       .resolves
-      .toEqual({ url: "https://synapse.test/webhooks/wh_id/whsec_new" })
+      .toEqual({ url: "https://synapse.test/webhooks/whsec_new" })
     expect(service.resetSecret).toHaveBeenCalledWith("user-1", "webhook-1", "https://synapse.test", "203.0.113.20")
   })
 
@@ -206,7 +206,7 @@ describe("WebhookPublicController", () => {
     const controller = new WebhookPublicController(service as unknown as WebhookService)
     const request = {
       method: "POST",
-      path: "/webhooks/wh_public/whsec_secret",
+      path: "/webhooks/whsec_secret",
       query: { event: "push" },
       headers: { "content-type": "application/json" },
       body: Buffer.from("{\"ok\":true}"),
@@ -215,15 +215,14 @@ describe("WebhookPublicController", () => {
       get: (name: string) => name.toLowerCase() === "host" ? "synapse.test" : undefined,
     }
 
-    await expect(controller.receive("wh_public", "whsec_secret", request as never))
+    await expect(controller.receive("whsec_secret", request as never))
       .resolves
       .toEqual({ ok: true, deliveryId: "delivery-1", acceptedAt: "2026-06-06T12:00:00.000Z" })
 
     expect(service.receivePublicWebhook).toHaveBeenCalledWith(expect.objectContaining({
-      publicId: "wh_public",
       secret: "whsec_secret",
       method: "POST",
-      path: "/webhooks/wh_public/whsec_secret",
+      path: "/webhooks/whsec_secret",
       query: { event: "push" },
       body: Buffer.from("{\"ok\":true}"),
       contentType: "application/json",
@@ -241,7 +240,7 @@ describe("WebhookPublicController", () => {
     const controller = new WebhookPublicController(service as unknown as WebhookService)
     const request = {
       method: "POST",
-      path: "/webhooks/wh_public/whsec_secret",
+      path: "/webhooks/whsec_secret",
       query: {},
       headers: { host: "evil.example.com" },
       body: Buffer.from("{}"),
@@ -252,7 +251,7 @@ describe("WebhookPublicController", () => {
 
     vi.stubEnv("APP_PUBLIC_URL", "")
 
-    await expect(controller.receive("wh_public", "whsec_secret", request as never))
+    await expect(controller.receive("whsec_secret", request as never))
       .rejects
       .toThrow("APP_PUBLIC_URL 未配置，无法生成公开链接。")
     expect(service.receivePublicWebhook).not.toHaveBeenCalled()

@@ -9,7 +9,7 @@ import { WebhookService } from "./webhook.service"
 
 type SupertestChain = {
   readonly set: (name: string, value: string) => SupertestChain
-  readonly send: (body: Buffer) => SupertestChain
+  readonly send: (body: Buffer | string) => SupertestChain
   readonly expect: (status: number) => Promise<unknown>
 }
 
@@ -29,6 +29,7 @@ describe("WebhookPublicController HTTP route", () => {
   let app: NestExpressApplication
 
   beforeEach(async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
     receivePublicWebhook.mockReset()
     const moduleRef = await Test.createTestingModule({
       imports: [WebhookPublicTestModule],
@@ -41,11 +42,35 @@ describe("WebhookPublicController HTTP route", () => {
 
   afterEach(async () => {
     await app.close()
+    vi.unstubAllEnvs()
+  })
+
+  it("accepts a single token without a public ID in the URL", async () => {
+    receivePublicWebhook.mockResolvedValue({ response: { ok: true } })
+    await request(app.getHttpServer())
+      .post("/webhooks/whsec_secret")
+      .set("content-type", "application/json")
+      .send('{"ok":true}')
+      .expect(202)
+    expect(receivePublicWebhook).toHaveBeenCalledWith(expect.objectContaining({
+      secret: "whsec_secret",
+      body: Buffer.from('{"ok":true}'),
+    }))
+    expect(receivePublicWebhook.mock.calls[0]?.[0]).not.toHaveProperty("publicId")
+  })
+
+  it("does not accept legacy two-part webhook URLs", async () => {
+    await request(app.getHttpServer())
+      .post("/webhooks/wh_public/whsec_secret")
+      .set("content-type", "application/json")
+      .send(Buffer.from("{}"))
+      .expect(404)
+    expect(receivePublicWebhook).not.toHaveBeenCalled()
   })
 
   it("returns 413 before receive service for public webhook bodies over 256KB", async () => {
     await request(app.getHttpServer())
-      .post("/webhooks/wh_public/whsec_secret")
+      .post("/webhooks/whsec_secret")
       .set("content-type", "application/octet-stream")
       .send(Buffer.alloc(256 * 1024 + 1))
       .expect(413)

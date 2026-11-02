@@ -519,7 +519,7 @@ model UserWebhook {
   userId     String
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   publicId   String            @unique
-  secretHash String
+  secretHash String            @unique
   secret     String?
   name       String            @db.VarChar(80)
   enabled    Boolean           @default(true)

@@ -150,7 +150,7 @@ fi
 check_body_contains "console" "http://127.0.0.1:3000/console/" '<div id="root">'
 check_body_contains "admin" "http://127.0.0.1:3000/admin/" '<title>Synapse 管理</title>'
 check_redirect "dashboard redirect" "http://127.0.0.1:3000/dashboard" "/console/"
-check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found/test"
+check_not_redirect_to_dashboard "webhook route" "http://127.0.0.1:3000/webhooks/not-found"
 check_not_redirect_to_dashboard "drive share route" "http://127.0.0.1:3000/share/shr_not_found"
 
 if [ "$failed" -ne 0 ]; then

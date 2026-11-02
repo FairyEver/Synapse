@@ -527,7 +527,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("<title>Synapse 管理</title>")
     expect(deployScript).toContain('echo "管理面板: https://synapse.d2.pub/admin"')
     expect(deployScript).not.toContain('管理面板: https://synapse.d2.pub/console')
-    expect(deployScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
+    expect(deployScript).toContain("http://127.0.0.1:3000/webhooks/not-found")
     expect(deployScript).toContain("http://127.0.0.1:3000/share/shr_not_found")
     expect(deployScript).toContain("Location: /console/")
     expect(deployScript).toContain("webhook route")
@@ -536,7 +536,7 @@ describe("server deployment configuration", () => {
     expect(deployScript).toContain("docker compose --env-file .env ps")
     expect(deployScript).toContain("docker compose --env-file .env logs --tail=80 server")
 
-    expect(restartScript).toContain("http://127.0.0.1:3000/webhooks/not-found/test")
+    expect(restartScript).toContain("http://127.0.0.1:3000/webhooks/not-found")
     expect(restartScript).toContain("http://127.0.0.1:3000/admin/")
     expect(restartScript).toContain("<title>Synapse 管理</title>")
     expect(restartScript).toContain("webhook route")
@@ -584,6 +584,7 @@ describe("server deployment configuration", () => {
   it("routes public webhooks through nginx instead of dashboard redirects", () => {
     const nginx = readRepoFile("server/nginx.conf")
 
+    expect(nginx.match(/location \/webhooks\/ \{[^}]*\}/u)?.[0]).toContain("access_log off;")
     expect(nginx).toContain("location /webhooks/")
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })

@@ -139,8 +139,8 @@ export function summarizeWebhookBody(body: Buffer, contentType = ""): WebhookBod
 
 function sanitizeWebhookLogPath(path: string): string {
   return path.replace(
-    /^((?:https?:\/\/[^/?#]+)?\/webhooks\/[^/?#]+)\/[^/?#]+(.*)$/iu,
-    "$1/***$2",
+    /^((?:https?:\/\/[^/?#]+)?\/webhooks\/)[^?#]+/iu,
+    "$1***",
   )
 }
 
@@ -164,7 +164,7 @@ function sanitizeWebhookLogParams(params: unknown): unknown {
     }
 
     if (key === "path" && isWebhookPathParams(value)) {
-      result[key] = value.map((part, index) => index === 2 ? "[redacted]" : part)
+      result[key] = value.map((part, index) => index >= 1 ? "[redacted]" : part)
       continue
     }
 
@@ -188,10 +188,9 @@ function sanitizeWebhookLogHeaders(headers: unknown): Record<string, string> | u
 
 function isWebhookPathParams(value: unknown): value is readonly string[] {
   return Array.isArray(value)
-    && value.length >= 3
+    && value.length >= 2
     && value[0] === "webhooks"
     && typeof value[1] === "string"
-    && typeof value[2] === "string"
 }
 
 function resolveRequestLogUrl(request: WebhookLogRequestLike): string | undefined {

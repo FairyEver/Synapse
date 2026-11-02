@@ -31,6 +31,6 @@ export function verifyWebhookSecret(secret: string, hash: string): boolean {
   }
 }
 
-export function buildWebhookUrl(publicAppUrl: string, publicId: string, secret: string): string {
-  return buildSharedWebhookUrl({ publicAppUrl, publicId, secret })
+export function buildWebhookUrl(publicAppUrl: string, secret: string): string {
+  return buildSharedWebhookUrl({ publicAppUrl, secret })
 }

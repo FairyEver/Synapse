@@ -93,16 +93,14 @@ export class WebhookDeliveryDashboardController {
 export class WebhookPublicController {
   constructor(private readonly webhooks: WebhookService) {}
 
-  @All("/webhooks/:publicId/:secret")
+  @All("/webhooks/:token")
   @HttpCode(202)
   async receive(
-    @Param("publicId") publicId: string,
-    @Param("secret") secret: string,
+    @Param("token") token: string,
     @Req() request: Request,
   ) {
     const result = await this.webhooks.receivePublicWebhook({
-      publicId,
-      secret,
+      secret: token,
       method: request.method,
       path: request.path,
       query: normalizeRequestQuery(request.query),
