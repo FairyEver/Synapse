@@ -9,3 +9,9 @@ export function buildAccountDashboardHomeUrl(
 ): string {
   return new URL("/console/", normalizedPublicAppUrl(publicAppUrl)).toString()
 }
+
+export function buildAccountWebhookCreationUrl(
+  publicAppUrl: string = SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl,
+): string {
+  return new URL("webhooks?action=create", buildAccountDashboardHomeUrl(publicAppUrl)).toString()
+}

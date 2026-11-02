@@ -55,6 +55,25 @@ afterEach(() => {
 })
 
 describe('WebhooksPage pagination', () => {
+  it('opens the creation form when arriving from the desktop creation link', async () => {
+    vi.mocked(dashboardApi.listWebhooks).mockResolvedValue({ data: [], total: 0 })
+    host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    await act(async () => {
+      root?.render(
+        <QueryClientProvider client={queryClient}>
+          <WebhooksPage createOnOpen />
+        </QueryClientProvider>
+      )
+    })
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('新建 Webhook')
+    expect(document.querySelector('#webhook-name')).not.toBeNull()
+  })
+
   it('keeps a later page while its request is pending', async () => {
     vi.mocked(dashboardApi.listWebhooks).mockImplementation(({ page }) => {
       if (page === 1) return Promise.resolve({ data: [], total: 30 })

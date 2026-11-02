@@ -23,10 +23,12 @@ type OneTimeUrlState = {
     title: string;
     url: string;
 };
-export default function WebhooksPage() {
+export default function WebhooksPage({ createOnOpen = false }: { createOnOpen?: boolean }) {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE);
-    const [form, setForm] = useState<WebhookFormState | null>(null);
+    const [form, setForm] = useState<WebhookFormState | null>(() => createOnOpen
+        ? { mode: 'create', webhook: null, name: '' }
+        : null);
     const [oneTimeUrl, setOneTimeUrl] = useState<OneTimeUrlState | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<DashboardWebhookDto | null>(null);
     const [resetSecretTarget, setResetSecretTarget] = useState<DashboardWebhookDto | null>(null);

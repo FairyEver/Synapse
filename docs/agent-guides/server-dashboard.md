@@ -11,6 +11,7 @@ Synapse 服务端产品界面仍由一个工作区和一套部署产物提供：
 - `/admin/**` 是平台管理 SPA，只包含系统、用户、设备、Skill 仓库、全局 Webhook 历史、审计、问题反馈、备份、全局云盘和日志。
 - 两个 SPA 共用构建、主题和无身份耦合的 UI/底层工具，但不得共享导航、认证状态或业务路由。
 - `/` 继续进入 `/console/`；公共页面、桌面授权和公开分享不得迁入 `/admin`。
+- `/console/webhooks?action=create` 打开 Webhook 列表并直接显示创建表单，未登录时沿用普通用户登录及回跳流程。桌面自动化的 Webhook 创建按钮使用当前部署配置中的站点地址打开该入口，编辑器重新获得焦点时刷新可选列表。
 
 Dashboard 保持上述普通用户/管理身份隔离，但两套导航与路由均移除云盘管理（包括公开素材、文档图片、存储）。独立 `/drive/items/:id`、`/share/:shareId` 及子项、评论通知、编辑和下载保留。旧 `/console/drive/items/:id`、`/console/drive/folders/:id` 以及对应 `/dashboard` 前缀整页跳转 `/drive/items/:id?surface=standalone`，保留其他 query 和 hash；旧全盘列表和管理路由不提供页面。
 

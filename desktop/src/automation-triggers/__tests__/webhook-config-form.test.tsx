@@ -132,6 +132,49 @@ describe("WebhookTriggerConfigForm", () => {
     await waitForText("Webhook 已停用")
   })
 
+  it("opens Webhook creation in the web console even when the list is empty", async () => {
+    installAccountBridge({ state: { get: vi.fn().mockResolvedValue(authenticatedState) } })
+    const openExternal = vi.fn().mockResolvedValue(undefined)
+    Object.assign(window.synapse!, { shell: { openExternal } })
+    await renderForm()
+
+    const button = Array.from(document.querySelectorAll("button"))
+      .find((item) => item.textContent?.includes("创建 Webhook"))
+    expect(button).toBeDefined()
+    await act(async () => { button?.click() })
+
+    const url = new URL(openExternal.mock.calls[0]?.[0] as string)
+    expect(url.pathname).toBe("/console/webhooks")
+    expect(url.searchParams.get("action")).toBe("create")
+  })
+
+  it("shows an error when opening Webhook creation fails", async () => {
+    installAccountBridge({ state: { get: vi.fn().mockResolvedValue(authenticatedState) } })
+    Object.assign(window.synapse!, {
+      shell: { openExternal: vi.fn().mockRejectedValue(new Error("Browser unavailable")) },
+    })
+    await renderForm()
+    const button = Array.from(document.querySelectorAll("button"))
+      .find((item) => item.textContent?.includes("创建 Webhook"))
+    await act(async () => { button?.click() })
+
+    expect(document.body.textContent).toContain("无法打开 Webhook 创建页面")
+  })
+
+  it("refreshes the list on return so a newly created Webhook becomes selectable", async () => {
+    installAccountBridge({
+      state: { get: vi.fn().mockResolvedValue(authenticatedState) },
+      listWebhooks: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([webhook]),
+    })
+    await renderForm({ webhookPublicId: webhook.publicId, webhookName: webhook.name })
+    expect(document.body.textContent).toContain("Webhook 不存在或已删除")
+
+    await act(async () => { window.dispatchEvent(new Event("focus")) })
+
+    expect(document.body.textContent).not.toContain("Webhook 不存在或已删除")
+    expect(document.querySelector('[role="combobox"]')?.textContent).toContain(webhook.name)
+  })
+
   async function renderForm(
     value: { readonly webhookPublicId: string; readonly webhookName?: string } = {
       webhookPublicId: "",

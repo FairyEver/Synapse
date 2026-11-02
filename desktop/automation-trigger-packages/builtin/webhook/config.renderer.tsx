@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
+import { ExternalLink } from "lucide-react"
 import type { DashboardWebhookDto } from "@synapse/shared"
 
+import { createRendererLogger } from "@/app-shell/logging"
+import { buildAccountWebhookCreationUrl } from "@/lib/account-dashboard-url"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
 import {
   Field,
   FieldContent,
@@ -18,6 +22,22 @@ import type { WebhookTriggerConfig } from "./schema"
 
 type WebhookLoadStatus = "loading" | "ready" | "error" | "logged-out"
 
+const logger = createRendererLogger("automation.webhook-config")
+
+function useOpenWebhookCreation() {
+  const [error, setError] = useState(false)
+  const open = useCallback(async () => {
+    setError(false)
+    try {
+      await requireBridgeDomain("shell").openExternal(buildAccountWebhookCreationUrl())
+    } catch (error) {
+      logger.warn("Failed to open Webhook creation page.", { error })
+      setError(true)
+    }
+  }, [])
+  return { open, error }
+}
+
 export function WebhookTriggerConfigForm({
   value,
   onChange,
@@ -27,6 +47,7 @@ export function WebhookTriggerConfigForm({
 }) {
   const [webhooks, setWebhooks] = useState<DashboardWebhookDto[]>([])
   const [status, setStatus] = useState<WebhookLoadStatus>("loading")
+  const creation = useOpenWebhookCreation()
 
   const loadWebhooks = useCallback(() => {
     const accountBridge = window.synapse?.account
@@ -56,7 +77,8 @@ export function WebhookTriggerConfigForm({
 
   useEffect(() => {
     loadWebhooks()
-    return window.synapse?.account?.state.onChanged((event) => {
+    window.addEventListener("focus", loadWebhooks)
+    const unsubscribe = window.synapse?.account?.state.onChanged((event) => {
       if (event.state.status === "authenticated") {
         loadWebhooks()
         return
@@ -65,6 +87,10 @@ export function WebhookTriggerConfigForm({
       setWebhooks([])
       setStatus("logged-out")
     })
+    return () => {
+      window.removeEventListener("focus", loadWebhooks)
+      unsubscribe?.()
+    }
   }, [loadWebhooks])
 
   const selectedWebhook = webhooks.find((webhook) => webhook.publicId === value.webhookPublicId)
@@ -75,8 +101,17 @@ export function WebhookTriggerConfigForm({
   return (
     <div className="grid gap-4">
       <Field>
-        <FieldLabel>Webhook</FieldLabel>
+        <div className="flex items-center justify-between gap-2">
+          <FieldLabel>Webhook</FieldLabel>
+          <Button type="button" variant="ghost" onClick={() => void creation.open()}>
+            创建 Webhook
+            <ExternalLink data-icon="inline-end" />
+          </Button>
+        </div>
         <FieldContent>
+          {creation.error ? (
+            <div role="alert" className="text-sm text-destructive">无法打开 Webhook 创建页面</div>
+          ) : null}
           {status === "loading" ? (
             <div className="text-sm text-muted-foreground">加载中...</div>
           ) : status === "logged-out" ? (
