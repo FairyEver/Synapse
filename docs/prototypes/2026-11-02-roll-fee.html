@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roll 费用 · 交互原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --background: oklch(0.9702 0 0);
+      --foreground: oklch(0.2103 0.0059 285.89);
+      --surface: white;
+      --surface-secondary: oklch(0.9524 0.0013 286.37);
+      --muted: oklch(0.5517 0.0138 285.94);
+      --accent: oklch(0.6204 0.195 253.83);
+      --accent-foreground: oklch(0.9911 0 0);
+      --border: oklch(90% 0.004 286.32);
+      --separator: oklch(92% 0.004 286.33);
+      --backdrop: color-mix(in oklch, var(--foreground) 40%, transparent);
+      --accent-soft: color-mix(in oklch, var(--accent) 8%, var(--surface));
+      --accent-strong: color-mix(in oklch, var(--accent) 80%, var(--foreground));
+      --muted-readable: color-mix(in oklch, var(--muted) 85%, var(--foreground));
+      --chip-silver: oklch(.84 .012 260);
+      --chip-red: oklch(.57 .21 25);
+      --chip-blue: oklch(.56 .19 254);
+      --chip-green: oklch(.53 .14 153);
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--background); color: var(--foreground); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    button, summary { -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; cursor: pointer; color: inherit; }
+    button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    ::selection { background: var(--accent-soft); color: var(--foreground); }
+    .num { font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted-readable); }
+    .topbar { max-width: 1184px; margin: auto; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .topbar h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    .badge { display: inline-flex; align-items: center; flex: none; padding: 3px 9px; border-radius: 6px; background: var(--surface-secondary); color: var(--muted-readable); font-size: 12px; font-weight: 400; }
+    main { max-width: 1120px; margin: 12px auto 40px; padding: 0 24px; }
+    .scene { min-height: 650px; position: relative; display: grid; place-content: center; justify-items: center; background: var(--surface); border-radius: 40px; padding: 112px 20px 80px; }
+    .hand { color: var(--muted-readable); font-size: 13px; }
+    .fee-trigger { display: flex; flex-direction: column; align-items: center; border: 0; padding: 16px 32px 12px; border-radius: 24px; background: transparent; transition: background 160ms; }
+    .fee-trigger:hover { background: var(--background); }
+    .fee-trigger .label { font-size: 27px; line-height: 1.4; }
+    .fee-trigger .amount { font-size: 76px; font-weight: 700; line-height: 1.2; letter-spacing: -.03em; }
+    .open-label { display: flex; align-items: center; gap: 5px; color: var(--accent-strong); font-size: 13px; margin-top: 4px; }
+    .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .chip-pile { height: 118px; width: 230px; position: relative; margin-top: 4px; }
+    .chip-stack { position: absolute; left: var(--x); bottom: var(--y); width: 68px; height: 52px; }
+    .chip { position: absolute; bottom: calc(var(--level) * 5px); width: 68px; height: 68px; transform: scaleY(.72); border-radius: 50%; color: var(--surface); box-shadow: 0 3px 0 color-mix(in oklch, var(--chip-color) 70%, var(--foreground)); }
+    .chip svg { width: 100%; height: 100%; overflow: visible; }
+    .chip .disc { fill: var(--chip-color); stroke: color-mix(in oklch, var(--chip-color) 65%, var(--foreground)); stroke-width: 1.5; }
+    .chip .edge { fill: var(--surface); }
+    .chip .ring { fill: none; stroke: var(--surface); stroke-width: 1; }
+    .chip text { font-size: 23px; font-weight: 700; fill: currentColor; }
+    .board { display: flex; gap: 10px; margin-top: 34px; }
+    .card { display: flex; flex-direction: column; align-items: flex-start; width: 56px; height: 78px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); font-family: Georgia, serif; font-size: 25px; font-weight: 600; line-height: 1.25; }
+    .card.red { color: var(--chip-red); }
+    .card.empty { background: var(--background); border-style: dashed; }
+    .seat { position: absolute; display: flex; align-items: center; gap: 9px; }
+    .seat-a { left: 11%; top: 72px; }.seat-b { right: 11%; top: 72px; }.seat-c { right: 6%; top: 300px; }.seat-d { right: 17%; bottom: 62px; }.seat-e { left: 12%; bottom: 62px; }
+    .avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--surface-secondary); font-weight: 600; flex: none; }
+    .seat small { display: block; color: var(--muted-readable); font-size: 12px; }
+    .page-note { text-align: center; color: var(--muted-readable); font-size: 12px; margin: 20px 0 0; }
+    dialog { width: min(960px, calc(100% - 48px)); max-height: min(88dvh, 920px); margin: auto; padding: 0; border: 0; border-radius: 20px; color: var(--foreground); background: var(--surface); overflow: hidden; }
+    dialog::backdrop { background: var(--backdrop); }
+    .dialog-layout { display: flex; flex-direction: column; max-height: min(88dvh, 920px); }
+    .dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 26px 32px 20px; flex: none; }
+    .dialog-header h2 { font-size: 21px; line-height: 1.4; margin: 0 0 5px; font-weight: 600; }
+    .dialog-header p { color: var(--muted-readable); font-size: 13px; margin: 0; }
+    .icon-button { display: grid; place-items: center; border: 0; background: transparent; width: 36px; height: 36px; border-radius: 50%; flex: none; }
+    .icon-button:hover { background: var(--surface-secondary); }
+    .dialog-body { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border) var(--surface); padding: 0 32px 24px; }
+    .summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-bottom: 24px; border-bottom: 1px solid var(--separator); }
+    .total-label { color: var(--muted-readable); font-size: 13px; }
+    .total { display: flex; gap: 8px; align-items: baseline; font-size: 44px; font-weight: 650; line-height: 1.3; letter-spacing: -.025em; }
+    .unit { font-size: 13px; font-weight: 400; color: var(--muted-readable); letter-spacing: 0; }
+    .pending { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; font-size: 13px; }
+    .pending strong { color: var(--accent-strong); font-weight: 500; }
+    .composition { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding-top: 24px; }
+    .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    h3 { font-size: 15px; margin: 0; font-weight: 600; }
+    .section-total { font-size: 13px; color: var(--muted-readable); }
+    .people { display: grid; gap: 2px; }
+    .person { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center; width: 100%; padding: 9px 8px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
+    .person:hover { background: var(--background); }
+    .person[aria-pressed="true"] { background: var(--accent-soft); }
+    .person[aria-pressed="true"] .person-amount { color: var(--accent-strong); }
+    .person .avatar { width: 30px; height: 30px; font-size: 12px; }
+    .person-name { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+    .tag { color: var(--muted-readable); font-size: 11px; }
+    .person-meta { font-size: 12px; color: var(--muted-readable); }
+    .person-amount { font-weight: 600; font-size: 16px; text-align: right; }
+    .percentage { font-size: 11px; color: var(--muted-readable); font-weight: 400; }
+    .composition-note { margin: 12px 8px 0; color: var(--muted-readable); font-size: 12px; }
+    .ledger-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-top: 28px; margin-bottom: 12px; }
+    .filter { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: var(--accent-strong); font-size: 12px; }
+    .clear { border: 0; padding: 5px 8px; border-radius: 6px; background: var(--accent-soft); font-size: 12px; color: var(--accent-strong); }
+    .ledger-labels, .event-summary { display: grid; grid-template-columns: 54px minmax(80px,1fr) 90px 80px 96px 18px; align-items: center; gap: 12px; }
+    .ledger-labels { padding: 8px 12px; background: var(--background); color: var(--muted-readable); border-radius: 7px; font-size: 12px; }
+    .align-right { text-align: right; }
+    .event { border-bottom: 1px solid var(--separator); }
+    .event summary { list-style: none; cursor: pointer; padding: 13px 12px; border-radius: 6px; }
+    .event summary::-webkit-details-marker { display: none; }
+    .event summary:hover { background: var(--background); }
+    .event .chevron { width: 16px; height: 16px; transition: transform 150ms; color: var(--muted-readable); }
+    .event[open] .chevron { transform: rotate(90deg); }
+    .event-type { color: var(--muted-readable); font-size: 13px; }
+    .event-amount { font-weight: 600; }
+    .event-detail { padding: 2px 24px 18px 78px; }
+    .allocation-title { color: var(--muted-readable); font-size: 12px; margin: 0 0 8px; }
+    .allocations { display: grid; grid-template-columns: repeat(2,1fr); column-gap: 32px; row-gap: 6px; }
+    .allocation { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+    .allocation.selected { color: var(--accent-strong); font-weight: 500; }
+    .ledger-foot { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px; font-size: 13px; }
+    .dialog-footer { padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-top: 1px solid var(--separator); flex: none; }
+    .dialog-footer p { margin: 0; color: var(--muted-readable); font-size: 12px; }
+    .button { min-height: 40px; border: 0; border-radius: var(--radius); padding: 9px 22px; background: var(--accent-strong); color: var(--accent-foreground); white-space: nowrap; }
+    .button:hover { background: color-mix(in oklch, var(--accent) 70%, var(--foreground)); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+    @media (max-width: 650px) {
+      .topbar { padding: 20px; }.topbar h1 { font-size: 14px; } main { padding: 0 12px; margin-top: 0; }
+      .scene { border-radius: 24px; min-height: 610px; padding-top: 130px; }
+      .seat { gap: 6px; font-size: 12px; }.seat-a { left: 7%; top: 32px; }.seat-b { right: 7%; top: 32px; }.seat-c { right: 5%; top: 125px; }.seat-d { right: 8%; bottom: 28px; }.seat-e { left: 8%; bottom: 28px; }
+      .seat .avatar { width: 28px; height: 28px; }.fee-trigger .amount { font-size: 68px; }.fee-trigger .label { font-size: 23px; }
+      dialog { width: calc(100% - 24px); max-height: calc(100dvh - 24px); border-radius: 16px; }
+      .dialog-layout { max-height: calc(100dvh - 24px); }.dialog-header { padding: 20px 20px 16px; }.dialog-body { padding: 0 20px 20px; }
+      .dialog-header h2 { font-size: 19px; }.summary { padding-bottom: 20px; }.total { font-size: 38px; }
+      .composition { grid-template-columns: 1fr; gap: 26px; padding-top: 20px; }.people { gap: 1px; }
+      .person { padding: 8px; }.ledger-labels, .event-summary { grid-template-columns: 24px minmax(48px,1fr) 56px 56px 14px; gap: 6px; font-size: 12px; }
+      .stage-col { display: none; }.ledger-labels { padding: 8px; }.event summary { padding: 13px 8px; }.event-type { font-size: 12px; }
+      .event-detail { padding: 0 8px 16px 44px; }.allocations { grid-template-columns: 1fr; }.ledger-heading { padding-top: 24px; }
+      .dialog-footer { padding: 14px 20px; gap: 12px; }.dialog-footer p { max-width: 210px; }.button { padding-inline: 18px; }
+    }
+    @media (max-width: 360px) {
+      .fee-trigger { padding-inline: 12px; }.board { gap: 8px; }.card { width: 44px; height: 64px; padding: 5px 7px; font-size: 22px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <header class="topbar"><h1>Roll 费用 · 交互原型</h1><span class="badge">示例数据</span></header>
+  <main>
+    <div class="scene">
+      <div class="seat seat-a"><span class="avatar">林</span><div>林舟（你）<small>1 号位</small></div></div>
+      <div class="seat seat-b"><span class="avatar">满</span><div>小满<small>2 号位</small></div></div>
+      <div class="seat seat-c"><span class="avatar">川</span><div>阿川<small>3 号位</small></div></div>
+      <div class="seat seat-d"><span class="avatar">M</span><div>Momo<small>4 号位</small></div></div>
+      <div class="seat seat-e"><span class="avatar">陈</span><div>老陈<small>5 号位 · 已弃牌</small></div></div>
+      <span class="hand">第 28 手 · 翻牌圈</span>
+      <button class="fee-trigger" id="open-fees" aria-haspopup="dialog" aria-controls="fee-dialog" aria-label="Roll 费用 403 筹码，查看来源与去向">
+        <span class="label">Roll 费用</span><span class="amount num" id="scene-total">403</span>
+        <span class="chip-pile" id="chip-pile" aria-hidden="true"></span>
+        <span class="open-label">查看明细<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></span>
+      </button>
+      <div class="board" aria-label="公共牌示意：红桃 J、黑桃 8、方块 2"><span class="card red">J<span>♥</span></span><span class="card">8<span>♠</span></span><span class="card red">2<span>♦</span></span><span class="card empty"></span><span class="card empty"></span></div>
+    </div>
+    <p class="page-note">点击金额或筹码打开弹窗 · 示例仅演示费用流转</p>
+  </main>
+  <dialog id="fee-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
+    <div class="dialog-layout">
+      <header class="dialog-header">
+        <div><h2 id="dialog-title">Roll 费用明细</h2><p id="dialog-description">第 28 手 · 本手累计 · 筹码</p></div>
+        <button class="icon-button" id="close-fees" aria-label="关闭费用明细" autofocus><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </header>
+      <div class="dialog-body">
+        <section class="summary" aria-label="费用汇总"><div><div class="total-label">累计 Roll 费用</div><div class="total num"><span id="dialog-total">403</span><span class="unit">筹码</span></div></div><div class="pending"><strong>全部待结算</strong><span class="muted">本手结束到账</span></div></section>
+        <div class="composition">
+          <section aria-labelledby="source-title"><div class="section-heading"><h3 id="source-title">费用来源</h3><span class="section-total num" id="source-total"></span></div><div class="people" id="sources"></div><p class="composition-note">从支付玩家的桌上筹码中扣除</p></section>
+          <section aria-labelledby="destination-title"><div class="section-heading"><h3 id="destination-title">费用去向</h3><span class="section-total num" id="destination-total"></span></div><div class="people" id="destinations"></div><p class="composition-note">扣费时确定归属，之后弃牌仍保留补偿</p></section>
+        </div>
+        <section aria-labelledby="ledger-title">
+          <div class="ledger-heading"><h3 id="ledger-title">逐笔流水</h3><div class="filter" id="filter" aria-live="polite"></div></div>
+          <div class="ledger-labels" aria-hidden="true"><span>序号</span><span>支付玩家</span><span>类型</span><span class="stage-col">阶段</span><span class="align-right" id="amount-heading">支付筹码</span><span></span></div>
+          <div id="ledger"></div><div class="ledger-foot"><span class="muted" id="ledger-count"></span><span class="num" id="ledger-total"></span></div>
+        </section>
+      </div>
+      <footer class="dialog-footer"><p>费用全额分给其他合资格玩家，不进入底池。</p><button class="button" id="done">关闭</button></footer>
+    </div>
+  </dialog>
+  <script>
+    // Synthetic public ledger: no private cards, real accounts, API calls or persistent writes.
+    const players = [
+      { id: 'lin', name: '林舟', initial: '林', seat: 1, self: true },
+      { id: 'man', name: '小满', initial: '满', seat: 2 },
+      { id: 'chuan', name: '阿川', initial: '川', seat: 3 },
+      { id: 'momo', name: 'Momo', initial: 'M', seat: 4 },
+      { id: 'chen', name: '老陈', initial: '陈', seat: 5, folded: true }
+    ];
+    // Each fee is independently split among the other eligible players at that moment.
+    const events = [
+      { id: 1, payer: 'lin', type: '普通 Roll', stage: '翻牌前', fee: 40, shares: { man: 10, chuan: 10, momo: 10, chen: 10 } },
+      { id: 2, payer: 'man', type: '超级 Roll', stage: '翻牌前', fee: 120, shares: { lin: 30, chuan: 30, momo: 30, chen: 30 } },
+      { id: 3, payer: 'chuan', type: '普通 Roll', stage: '翻牌圈', fee: 63, shares: { lin: 21, man: 21, momo: 21 } },
+      { id: 4, payer: 'lin', type: '超级 Roll', stage: '翻牌圈', fee: 180, shares: { man: 60, chuan: 60, momo: 60 } }
+    ];
+    const sum = values => values.reduce((total, value) => total + value, 0);
+    const format = value => value.toLocaleString('zh-CN');
+    const playerById = id => players.find(player => player.id === id);
+    const total = sum(events.map(event => event.fee));
+    function summarize() {
+      return players.map(player => {
+        const paid = events.filter(event => event.payer === player.id);
+        const received = events.filter(event => Object.hasOwn(event.shares, player.id));
+        return { ...player, paid: sum(paid.map(event => event.fee)), received: sum(received.map(event => event.shares[player.id])), paidCount: paid.length, receivedCount: received.length };
+      });
+    }
+    function filteredEvents(selection) {
+      if (!selection) return events;
+      return events.filter(event => selection.direction === 'source' ? event.payer === selection.id : Object.hasOwn(event.shares, selection.id));
+    }
+    function displayedAmount(event, selection) {
+      return selection?.direction === 'destination' ? event.shares[selection.id] : event.fee;
+    }
+    const rows = summarize();
+    let selection = null;
+    const dialog = document.getElementById('fee-dialog');
+    const trigger = document.getElementById('open-fees');
+    const arrow = '<svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
+    function renderPeople() {
+      for (const direction of ['source', 'destination']) {
+        const key = direction === 'source' ? 'paid' : 'received';
+        const countKey = direction === 'source' ? 'paidCount' : 'receivedCount';
+        const container = document.getElementById(direction === 'source' ? 'sources' : 'destinations');
+        const people = rows.filter(player => player[key] > 0).sort((a, b) => b[key] - a[key]);
+        container.innerHTML = people.map(player => {
+          const selected = selection?.direction === direction && selection.id === player.id;
+          const tag = player.self ? '你' : player.folded ? '已弃牌' : '';
+          const meta = direction === 'source' ? `${player[countKey]} 次 Roll` : `${player[countKey]} 笔补偿 · 待结算`;
+          return `<button class="person" data-direction="${direction}" data-player="${player.id}" aria-pressed="${selected}" aria-label="查看${player.name}的${direction === 'source' ? '支付' : '补偿'}流水，${player[key]} 筹码"><span class="avatar" aria-hidden="true">${player.initial}</span><span><span class="person-name">${player.name}${tag ? `<span class="tag">${tag}</span>` : ''}</span><span class="person-meta">${meta}</span></span><span class="person-amount num">${format(player[key])}<span class="percentage"> · ${(player[key] / total * 100).toFixed(1)}%</span></span></button>`;
+        }).join('');
+        document.getElementById(`${direction}-total`).textContent = `合计 ${format(sum(people.map(player => player[key])))}`;
+      }
+    }
+    function renderLedger() {
+      const filtered = filteredEvents(selection);
+      const receiving = selection?.direction === 'destination';
+      document.getElementById('amount-heading').textContent = receiving ? '收到筹码' : '支付筹码';
+      document.getElementById('filter').innerHTML = selection ? `<span>${playerById(selection.id).name} · ${receiving ? '补偿收入' : 'Roll 支出'}</span><button class="clear" id="clear-filter" aria-label="清除玩家筛选">查看全部</button>` : '<span class="muted">展开查看分配</span>';
+      document.getElementById('ledger').innerHTML = filtered.map(event => {
+        const allocations = Object.entries(event.shares).map(([id, value]) => `<div class="allocation${receiving && selection.id === id ? ' selected' : ''}"><span>${playerById(id).name}${playerById(id).self ? '（你）' : ''}</span><span class="num">+${format(value)}</span></div>`).join('');
+        return `<details class="event"${selection ? ' open' : ''}><summary class="event-summary"><span class="muted num">${String(event.id).padStart(2, '0')}</span><span>${playerById(event.payer).name}</span><span class="event-type">${event.type}</span><span class="stage-col muted">${event.stage}</span><span class="event-amount align-right num">${format(displayedAmount(event, selection))}</span>${arrow}<span class="sr-only">，${event.stage}，展开补偿分配</span></summary><div class="event-detail"><p class="allocation-title">${format(event.fee)} 筹码 → ${Object.keys(event.shares).length} 位玩家 · 本手结束到账</p><div class="allocations">${allocations}</div></div></details>`;
+      }).join('');
+      document.getElementById('ledger-count').textContent = `${filtered.length} 笔${receiving ? '补偿' : ' Roll'}`;
+      document.getElementById('ledger-total').textContent = `${receiving ? '收到' : '支付'}合计 ${format(sum(filtered.map(event => displayedAmount(event, selection))))}`;
+    }
+    function render() { renderPeople(); renderLedger(); }
+    function closeDialog() { dialog.close(); }
+    trigger.addEventListener('click', () => { selection = null; render(); dialog.showModal(); });
+    document.getElementById('close-fees').addEventListener('click', closeDialog);
+    document.getElementById('done').addEventListener('click', closeDialog);
+    dialog.addEventListener('close', () => trigger.focus());
+    // Native dialog provides Escape, focus trapping and background inertness.
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) {
+        const rect = dialog.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog();
+      }
+      const person = event.target.closest('[data-player]');
+      if (person) {
+        const next = { id: person.dataset.player, direction: person.dataset.direction };
+        selection = selection?.id === next.id && selection.direction === next.direction ? null : next;
+        render();
+        // The render replaces buttons; keep keyboard focus on the same player.
+        dialog.querySelector(`[data-direction="${next.direction}"][data-player="${next.id}"]`).focus({ preventScroll: true });
+      }
+      if (event.target.closest('#clear-filter')) { selection = null; render(); document.getElementById('ledger-title').setAttribute('tabindex', '-1'); document.getElementById('ledger-title').focus({ preventScroll: true }); }
+    });
+    function renderChips() {
+      const stacks = [
+        { value: 25, count: 6, x: 42, y: 34, token: '--chip-green' },
+        { value: 5, count: 5, x: 126, y: 45, token: '--chip-red' },
+        { value: 25, count: 5, x: 86, y: 51, token: '--chip-green' },
+        { value: 1, count: 2, x: 172, y: 7, token: '--chip-silver' },
+        { value: 1, count: 1, x: 0, y: 15, token: '--chip-silver' },
+        { value: 10, count: 10, x: 104, y: 0, token: '--chip-blue' }
+      ];
+      const edgePath = Array.from({ length: 8 }, (_, i) => {
+        const angle = i * Math.PI / 4;
+        return [[28,3],[36,3],[35,12],[29,12]].map(([x,y], index) => `${index ? 'L' : 'M'}${32 + (x-32)*Math.cos(angle) - (y-32)*Math.sin(angle)} ${32 + (x-32)*Math.sin(angle) + (y-32)*Math.cos(angle)}`).join('') + 'Z';
+      }).join('');
+      const pile = document.getElementById('chip-pile');
+      for (const stack of stacks) {
+        const element = document.createElement('span');
+        element.className = 'chip-stack';
+        element.style.setProperty('--x', `${stack.x}px`);
+        element.style.setProperty('--y', `${stack.y}px`);
+        element.style.setProperty('--chip-color', `var(${stack.token})`);
+        if (stack.value === 1) element.style.color = 'var(--foreground)';
+        for (let level = 0; level < stack.count; level++) {
+          const chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.style.setProperty('--level', level);
+          chip.innerHTML = `<svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="31" class="disc"/><path d="${edgePath}" class="edge"/><circle cx="32" cy="32" r="23" class="ring"/><text x="32" y="33" text-anchor="middle" dominant-baseline="middle">${stack.value}</text></svg>`;
+          if (stack.value === 1) chip.style.color = 'var(--foreground)';
+          element.append(chip);
+        }
+        pile.append(element);
+      }
+    }
+    document.getElementById('scene-total').textContent = format(total);
+    document.getElementById('dialog-total').textContent = format(total);
+    renderChips();
+    render();
+  </script>
+</body>
+</html>
