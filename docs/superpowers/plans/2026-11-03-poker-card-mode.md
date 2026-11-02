@@ -154,11 +154,11 @@
 **Files:** Create `server/src/game/poker/engine/cards/poker-operations.ts`、`server/src/game/poker/engine/__tests__/card-poker-operations.spec.ts`；Modify `server/src/game/poker/engine/hand-runner.ts`、`server/src/game/poker/engine/roll.ts`。
 **Interfaces:** Consumes T2执行注册/`PendingChoice`及现有`orderedDeck/shuffle`；Produces `registerPokerCardOperations`、实体牌公开标记与私有观察记录类型，供T7/T8/T11使用。
 
-- [ ] **1. 写失败测试。** `replace_draw_before_return`断言01旧牌不在本次新牌候选；`reset_return_before_draw`断言02可以抽回原牌；`all_holes_shuffle_protected_excluded`断言保护者两张不进入混洗；`peek_skips_burn`预览跳过烧牌且洗牌后失效；`public_marker_moves_with_card`交换后公开的是原实体而非旧槽的新牌。52/32张各覆盖。 断言示例：`expect(new Set(allPhysicalCards).size).toBe(variant==="short32"?32:52)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-poker-operations.spec.ts`。
-- [ ] **3. 实现领域操作。** 把单张替换/整副交换/重洗/查看/公开和候选保留封装为注册操作，Roll复用同一保留区约束；候选第一项回退确定化。扑克候选、能力牌候选类型不同但全局最多一个待选；所有移牌后执行唯一性/完整牌量断言。
-- [ ] **4. 同命令验证绿灯。** 加入候选不足取实际数量、红/黑牌不存在仍消费但不换、公开标记回堆不暴露位置、已弃牌/候场不可选、全下/机器人可被影响、同槽Roll重抽旧行为回归。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 统一卡牌与Roll的扑克牌操作及候选保留'`。
+- [x] **1. 写失败测试。** `replace_draw_before_return`断言01旧牌不在本次新牌候选；`reset_return_before_draw`断言02可以抽回原牌；`all_holes_shuffle_protected_excluded`断言保护者两张不进入混洗；`peek_skips_burn`预览跳过烧牌且洗牌后失效；`public_marker_moves_with_card`交换后公开的是原实体而非旧槽的新牌。52/32张各覆盖。 断言示例：`expect(new Set(allPhysicalCards).size).toBe(variant==="short32"?32:52)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-poker-operations.spec.ts`。
+- [x] **3. 实现领域操作。** 把单张替换/整副交换/重洗/查看/公开和候选保留封装为注册操作，Roll复用同一保留区约束；候选第一项回退确定化。扑克候选、能力牌候选类型不同但全局最多一个待选；所有移牌后执行唯一性/完整牌量断言。
+- [x] **4. 同命令验证绿灯。** 加入候选不足取实际数量、红/黑牌不存在仍消费但不换、公开标记回堆不暴露位置、已弃牌/候场不可选、全下/机器人可被影响、同槽Roll重抽旧行为回归。
+- [x] **5. 本地提交。** `git commit -m 'feat: 统一卡牌与Roll的扑克牌操作及候选保留'`。
 
 
 ## Task 7: 持续状态、防护、驱散与时间

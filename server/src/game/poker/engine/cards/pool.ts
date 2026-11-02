@@ -7,11 +7,13 @@ export interface CardInstance { id: string; definitionId: string }
 export interface CardParticipant { admissionId: string; userId: string; seatNo: number; kind: "human" | "bot"; folded: boolean; allIn: boolean; active?: boolean }
 export interface CardUseRecord { id: string; instanceId: string; cardId: string; seatNo: number; seq: number; status: "completed" | "blocked" | "choice_required" }
 export interface CardPrivateResult { id: string; ownerAdmissionId: string; cardId: string; label: string; values: string[]; valid: boolean; deckRevision?: number }
+export interface PublicCardMarker { id: string; card: string; cardId: string; ownerAdmissionId: string; sourceInstanceId?: string; expiresStreet?: string; parentEffectId?: string; dispellable: boolean }
 export interface CardModeState {
   version: "cards-v1"; initialCount: number; generatedCount: number; catalogIds: string[]
   pool: CardInstance[]; hands: Record<string, CardInstance[]>; reserved: CardInstance[]; spent: CardInstance[]
   participants: CardParticipant[]; effects: EffectInstance[]; used: CardUseRecord[]; privateResults: CardPrivateResult[]
   pending: PendingChoice | null; dealtStages: string[]; deckRevision: number
+  publicMarkers?: PublicCardMarker[]
 }
 export type CardPoolOperation =
   | { kind: "deal"; stage: "initial" | "flop" | "turn" | "river"; dealerSeat: number }
@@ -22,6 +24,11 @@ export type CardPoolOperation =
   | { kind: "choose"; admissionId: string; choiceId: string; index: number }
   | { kind: "clear" }
 export interface CardPoolResult { state: CardModeState; drawn: CardInstance[]; generated: CardInstance[] }
+export function invalidatePokerObservations(h: { cards?: CardModeState }): void {
+  if (!h.cards) return
+  h.cards.deckRevision++
+  for (const record of h.cards.privateResults) if (record.deckRevision !== undefined) record.valid = false
+}
 const reject = (): never => { throw new CardRuleError("POKER_CARD_INVALID_SELECTION") }
 function count(value: number): void { if (!Number.isSafeInteger(value) || value < 0 || value > POKER_CARD_LIMITS.instances) reject() }
 function allInstances(state: CardModeState): CardInstance[] { return [...state.pool, ...Object.values(state.hands).flat(), ...state.reserved, ...state.spent] }
