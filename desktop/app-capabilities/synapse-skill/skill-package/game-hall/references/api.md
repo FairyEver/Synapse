@@ -328,7 +328,7 @@
 
 ## app_game_poker_room_get
 
-只读旁观快照，不返回底牌、私密提示词或note。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+只读旁观快照，不返回底牌、私密提示词或note；可选公开rollLedger按本手身份快照列出全部成功start及原补偿分配，status区分待结算、已释放和已取消，缺失不等于零。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -582,7 +582,7 @@
 
 ## app_game_poker_table_state
 
-本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断钻石额度。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断钻石额度。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。可选rollLedger按本手身份快照列出全部成功start及原补偿分配，status区分待结算、已释放和已取消，缺失不等于零。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

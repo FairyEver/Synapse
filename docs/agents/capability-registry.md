@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 Roll费用明细：既有 `table.state`/`room.get` 追加可选公开只读 `rollLedger`，包含本手handId、pending/released/cancelled状态、参赛身份快照players和按成功start排序去重的全部entries及原补偿分配。保留弃牌/离桌者归属，不按当前占座者重写；不暴露账号/入座标识、旧牌或候选，缺失不当作零。共享schema、MCP描述及系统Skill/API/协议同步；不新增查询、数据库字段、输入参数、工具或权限，注册表数量及所有既有例外不变。
+
 - 2026-11-02 建房金额档位：既有 `app.game.poker.room.create` 的 buyIn 枚举及 poker.guide 同步为1000/5000/10000/50000，两类房间一致；Web与系统Skill同步，旧房间金额不变。未新增能力、MCP、Web/IPC路由，表格数量与既有例外保持不变。
 
 - 2026-11-02 房主手动开局：首局房主免准备，其他可参与者准备后由房主开始；后续房主也须准备，结算准备成功返回牌桌，全员准备后从牌桌显式开始，结算无开始入口；新增 `app.game.poker.room.start`（MCP `app_game_poker_room_start`）及受身份/同源保护的 Web POST `/game/poker/rooms/:code/start`。game 29→30（大厅3、扑克27），全局 capability 372→373、MCP索引368→369，游戏Web27→28，桌面游戏IPC仍0；System App22、默认Dock9、Workflow/Automation/Deep Link及既有UI私有例外不变。seat.ready输入/响应及wait的ready_required允许首局handId=null；table增加可选isRoomOwner/canStart，公开视角不授予开局操作。无数据库迁移，Skill与Agent指南同步；以下既有计数为历史基线。

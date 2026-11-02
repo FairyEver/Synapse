@@ -4,6 +4,7 @@ import { PokerRollService, rollActionId } from "./poker-roll.service"
 import { botRollObservation, chooseBotRoll, chooseBotRollCandidate } from "./bot-roll-policy"
 import { projectRollView } from "./poker-roll-projection"
 import { projectRollStats } from "./poker-roll-stats"
+import { projectRollLedger } from "./poker-roll-ledger"
 import { projectChipState } from "./poker-chip-projection"
 import { chooseBotAction } from "./bot-policy"
 import type { ActionKind } from "./engine/betting"
@@ -361,12 +362,17 @@ export class PokerActionService {
     const rollEnabled = !!(c.room.ruleOptions as { roll?: boolean } | null)?.roll
     const statSeats = [...c.seats, ...participants.filter(p => !c.seats.some(s => s.seatNo === p.seatNo))]
     const rollStats = rollEnabled ? await projectRollStats(c, hand?.id ?? null, statSeats) : undefined
+    const rollLedger = rollEnabled && hand ? projectRollLedger({
+      roomId: c.room.id, userId, hand, participants, state: h,
+      archivedRolls: archived?.rolls, archivedActions: archived?.actions,
+    }) : undefined
     const chipState = audience === "desktop" && hand ? await projectChipState(c.tx,hand,participants,
       archived ? archived.rolls.map(r=>({id:r.id,seatNo:r.seatNo,fee:(r.data as unknown as {fee:number}).fee})) : h?.roll?.history ?? [],
       archived?.actions) : undefined
     return {
       ...(chipState ? {chipState} : {}),
       ...(rollStats ? { rollStats } : {}),
+      ...(rollLedger ? { rollLedger } : {}),
       roomCode: c.room.code,
       mode: c.room.mode,
       ...resolveRules(c.room as unknown as Parameters<typeof resolveRules>[0]),

@@ -76,6 +76,8 @@ hand_result后推进cursor并继续接终局，离桌、输光、解散可能先
 
 ## Roll 决策
 
+table_state/room_get可选返回公开只读rollLedger={handId,status,players,entries}：status为pending（本手冻结待结算）、released（已结算释放）或cancelled（已取消，不代表到账）；players仅含房间作用域不透明key、seatNo、displayName、isMe、folded，身份和姓名来自本手参赛快照，不按当前占座者重写。entries按真实顺序保留本手所有成功start，每项为id/payerKey/kind/street/fee/compensations，compensations仅含接收者key和amount；每笔全额守恒，choose不新增，超级待选重抽保留每次已付费start。接收者后来弃牌或离桌仍保留原分配，同座新账号不继承；不公开账号ID、入座ID、旧牌、候选或槽位。缺字段表示暂不可用，entries=[]才表示暂无费用；不可从动画筹码堆、recentActions或rollStats倒推完整明细，不因查询明细发起写入。Web点击Roll费用查看本手来源、去向和逐笔分配，不增加工具、请求参数或权限。
+
 table_state/room_get可选返回rollStats：hand为本手、room为房间创建以来累计（含本手），均有players/count/paid；seats按当前/历史回显seatNo映射该账号的hand/room次数和支出，以房间作用域不透明key区分同名玩家。按账号累计，不按座位号或显示名合并；换座/重进不重置，同座位换人不继承。成功start计一次，超级choose不重复计数和花费；缺统计不推断为零。统计是公开行为，不代表掌握对手牌力，不为查询统计调用Roll写入，也不按他人次数替代本人报价。Web通过点击玩家区域查看，不常驻牌桌；不增加工具或输入参数。
 
 Roll 是可选玩法，不要求每轮使用。遵守用户会话风格、预算与风险限制，比较保留现有牌、普通随机换一张和超级三选一；不承诺必赚或把有限程序策略当最优。普通与超级共享本人本手次数，跨阶段不重置；每次费用提高累计成本。先指定第0或1张旧牌，超级开始后不能改槽、撤回或重抽；只有本人可读旧牌位置和三个候选，教学权限也不扩候选。候选不可转述到公开日志。

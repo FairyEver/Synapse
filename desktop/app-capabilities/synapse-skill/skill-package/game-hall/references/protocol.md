@@ -12,6 +12,8 @@ Web牌桌可选 `chipState` 仅为公开展示投影：pot/roll分别按每笔�
 
 Roll公开统计：table_state/room_get的rollStats.hand/room各含players/count/paid，room从创建以来累计且包含hand。seats最多10项，含seatNo、不透明key、hand/room的count/paid；按账号累计并映射到当前/历史回显座位，离桌重进/换座不重置，同座位换人不继承。只计算成功start，choose不重复。公开统计无私牌、旧槽或额外账号ID，不授予操作权限；旧响应无字段按不可用处理。Web点击玩家区域查看统计，保持桌面简洁，不新增分页或工具输入参数。
 
+Roll公开账本：table_state/room_get可选rollLedger={handId,status,players,entries}，所有视角均为同一公开白名单。status=pending|released|cancelled，分别表示冻结待结算、结算释放、已取消；取消练习手不得标记到账。players最多10项，仅key/seatNo/displayName/isMe/folded；key为房间作用域身份散列，姓名及身份取本手不可变参赛快照，弃牌状态取本手状态，同座新账号不继承。entries不截断，每个成功start一项{id,payerKey,kind,street,fee,compensations:[{key,amount}]}，street=preflop|flop|turn，fee为正安全整数、amount为非负安全整数，各笔分配和等于fee。热history按原顺序，归档按startSeq顺序，并按唯一Roll ID去重；choose不重复记费，超级待选重抽的各次start分别保留。付款时的原接收者后来弃牌或离桌仍保留归属。禁止公开userId/admissionId、旧牌/候选/cardIndex、persona/note；不能从当前占座者重建身份或重新分配。来源缺失/不完整时不返回该字段，旧响应按不可用，已知entries=[]才为空；不从近期事件、统计或筹码动画反推完整明细。此为既有响应只读扩展，不新增查询、数据库字段、工具、输入参数或操作权限。
+
 陪练mode=practice与点数房固定隔离，overview的funding标注会话类型。bot_add仅房主，必传UUID creationId；bot_remove按botId管理机器人，pending手后移除；POKER_BOT_NOT_ALLOWED表示房间、权限或目标不允许，不得改用act控制。创建重试保留UUID，不跨房复用，移除后旧标识不复活，查询座位确认。练习离桌丢弃本桌筹码，不扣兑点数；机器人actionSource=rules_bot不是真人超时提示。
 
 座位只按当前账号+roomCode定位，不存在seatToken。同账号可同时玩多个游戏、多个房间，同一房间只能一个座位。

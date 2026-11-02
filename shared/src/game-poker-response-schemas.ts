@@ -20,6 +20,35 @@ const rollStats = z.object({
   seats: z.array(z.object({ seatNo: z.number().int().min(0).max(9), key: z.string(), hand: z.object(rollAmounts).strict(), room: z.object(rollAmounts).strict() }).strict()).max(10),
 }).strict()
 const rollPrivate = z.object({ rollId: z.string(), kind: z.enum(["normal", "super"]), cardIndex: z.number().int().min(0).max(1), oldCard: z.string(), candidates: z.array(z.string()).min(1).max(3), selectedIndex: z.number().int().min(0).max(2).nullable(), fee: z.number().int().positive(), street: z.enum(["preflop", "flop", "turn"]), count: z.number().int().positive() }).strict()
+const ledgerKey = z.string().min(1)
+const ledgerAmount = z.number().int().nonnegative()
+const rollLedger = z.object({
+  handId: ledgerKey,
+  status: z.enum(["pending", "released", "cancelled"]),
+  players: z.array(z.object({ key: ledgerKey, seatNo: z.number().int().min(0).max(9), displayName: z.string(), isMe: z.boolean(), folded: z.boolean() }).strict()).max(10),
+  entries: z.array(z.object({
+    id: ledgerKey, payerKey: ledgerKey, kind: z.enum(["normal", "super"]), street: z.enum(["preflop", "flop", "turn"]), fee: ledgerAmount.positive(),
+    compensations: z.array(z.object({ key: ledgerKey, amount: ledgerAmount }).strict()).max(9),
+  }).strict()),
+}).strict().superRefine((ledger, ctx) => {
+  const keys = new Set(ledger.players.map(player => player.key))
+  const seats = new Set(ledger.players.map(player => player.seatNo))
+  if (keys.size !== ledger.players.length || seats.size !== ledger.players.length || ledger.players.filter(player => player.isMe).length > 1)
+    ctx.addIssue({ code: "custom", message: "账本玩家身份重复。" })
+  const ids = new Set<string>()
+  for (const entry of ledger.entries) {
+    if (ids.has(entry.id) || !keys.has(entry.payerKey)) ctx.addIssue({ code: "custom", message: "账本付款记录无效。" })
+    ids.add(entry.id)
+    const recipients = new Set<string>()
+    for (const recipient of entry.compensations) {
+      if (!keys.has(recipient.key) || recipient.key === entry.payerKey || recipients.has(recipient.key))
+        ctx.addIssue({ code: "custom", message: "账本收款身份无效。" })
+      recipients.add(recipient.key)
+    }
+    const sum = entry.compensations.reduce((total, recipient) => total + BigInt(recipient.amount), 0n)
+    if (sum !== BigInt(entry.fee)) ctx.addIssue({ code: "custom", message: "账本费用分配不守恒。" })
+  }
+})
 const rollResult = z.object({ ok: z.literal(true), handId: z.string(), rollId: z.string(), actionSeq: z.number().int().nonnegative(), cursor: z.string(), status: z.enum(["completed", "choice_required"]) }).passthrough()
 const rules = z.object({ ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
 const checkpoint = z.object({
@@ -88,6 +117,7 @@ const table = z
   .object({
     chipState: chipState.optional(),
     rollStats: rollStats.optional(),
+    rollLedger: rollLedger.optional(),
     rules: rules.optional(), ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), roll: roll.optional(),
     requiresJoinApproval: z.boolean().optional(),
     variant: z.enum(["standard52", "short32"]).optional(),
