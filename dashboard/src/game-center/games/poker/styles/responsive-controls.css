@@ -16,7 +16,6 @@
 .poker-immersive[data-control-layout] .poker-control-state { min-height: 1.25rem; justify-content: flex-start; font-size: 0.8125rem; }
 .poker-immersive[data-control-layout] .poker-action-clock { margin-left: auto; min-width: 0; }
 .poker-immersive[data-control-layout] .poker-action-dock { display: block; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.poker-bet-presets .poker-roll-trigger { flex: none; min-height: 2.25rem; padding: 0.25rem 0.5rem; }
 .poker-bet-presets { display: flex; justify-content: flex-end; gap: 0.5rem; margin-bottom: 0.5rem; }
 .poker-immersive[data-control-layout] .poker-action-buttons { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .poker-immersive[data-control-layout] .poker-action-buttons .poker-button { min-height: 3rem; padding: 0.5rem; font-size: 1rem; flex-direction: row; }
