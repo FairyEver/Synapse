@@ -85,6 +85,8 @@
 
 ## 实施判断与代价记录
 
+后续本地启用：用户要求在其现有 `pnpm dev` 环境开放并复测后，已设置本机 `server/.env.local` 的卡牌开关为true，通过原mprocs仅重启Server；`localhost:5433/synapse` 已完成108项迁移。真实dev主流程12项及机器人普通行动补充1项通过，测试账号和房间已收尾。浏览器独立登录验收受无痕权限限制，本轮使用真实HTTP与查库证据。详情见[本地dev启用与复测](/Users/liyang/Documents/code/github/Synapse/docs/superpowers/acceptance/2026-11-03-poker-card-mode-local-dev.md)。上文“默认关闭”和“仅隔离库”等描述保留对应实施阶段的历史范围，当前本地状态以该后续记录为准；生产默认仍关闭。
+
 以下按发生顺序保留执行时的全部判断；上文事实和结果为最新验收状态，早期范围判断不替代最终验证。
 
 1. Ruling: Work on current main without worktree — explicit repository and approved-plan scope overrides skill isolation default — cost if wrong: less isolation; only task files are staged.
