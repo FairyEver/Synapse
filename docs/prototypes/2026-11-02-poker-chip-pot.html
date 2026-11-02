@@ -15,6 +15,10 @@
 @media(min-width:1500px){.stage{height:690px}.table{inset-inline:6%}.pot{top:22%}}
 @media(max-width:700px){.topbar{height:56px;padding-inline:16px}.room{gap:8px}.room span{font-size:12px}.stage{height:640px;--chip-size:37px;--pile-gap:40px;--stack-step:3.8px}.table{inset:45px 10px 35px;border-radius:45%}.seat{width:119px}.seat[data-seat="0"]{left:20%;top:22%}.seat[data-seat="1"]{left:80%;top:22%}.seat[data-seat="2"]{top:84%}.plate{padding:8px;gap:6px}.balance{font-size:20px}.avatar{width:22px;height:22px}.pot{top:33%;width:260px}.pot-amount{font-size:37px}.pile{height:100px}.board{top:63%;gap:5px}.board .card{width:39px;height:54px;font-size:21px}.caption{top:calc(63% + 37px);font-size:11px}.dock{padding:16px}.demo-row{flex-wrap:wrap;gap:10px}.legend{width:100%;justify-content:space-between;gap:3px}.demo-buttons{width:100%}.demo-buttons button{flex:1}.bet-form{gap:10px}.presets{order:2;flex-basis:100%;justify-content:space-between}.field{flex:1}.field select,.field input{flex:1;min-width:0;width:70px}.bet-form>.primary{flex-basis:100%;order:3}.status-row{align-items:flex-start;flex-direction:column;gap:6px}.hand{height:54px}.hand .card{width:35px;height:50px}.legend .chip{--chip-size:29px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.stage{height:clamp(600px,70vh,760px);min-height:600px}
+.bank{position:absolute;top:calc(100% + 8px);left:50%;translate:-50% 0;width:240px;height:82px;--chip-size:30px;--bank-gap:26px;--bank-step:3.3px;filter:drop-shadow(0 3px 3px var(--shadow));pointer-events:none}.bank .chip{--turn:0deg}.bank[data-empty="true"]::after{content:"0";position:absolute;inset:25px 0 auto;color:var(--muted);font-size:13px}.seat[data-seat="2"] .bank{top:auto;bottom:15px;left:calc(100% + 22px);translate:0 0}
+@media(max-width:1050px) and (min-width:701px){.bank{width:200px;--chip-size:26px;--bank-gap:22px;--bank-step:3px}.seat[data-seat="2"] .bank{left:calc(100% + 8px)}}
+@media(max-width:700px){.stage{height:790px}.seat[data-seat="0"]{left:24%;top:14%}.seat[data-seat="1"]{left:76%;top:14%}.seat[data-seat="2"]{top:75%}.pot{top:34%}.board{top:58%}.caption{top:calc(58% + 37px)}.bank{width:min(170px,calc(48vw - 8px));height:75px;--chip-size:25px;--bank-gap:clamp(15px,4.5vw,20px);--bank-step:3px}.seat[data-seat="2"] .bank{top:calc(100% + 8px);bottom:auto;left:50%;translate:-50% 0}}
 </style>
 </head>
 <body>
@@ -46,7 +50,9 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let total = 0, counts = {}, balances = [4990, 4990, 4990], generation = 0, busy = false;
   const animations = new Set();
+  const stackLimit = 12;
   function decompose(amount) {
+    if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('筹码金额必须为非负安全整数');
     const chips = [];
     for (const value of values) {
       const count = Math.floor(amount / value);
@@ -54,6 +60,44 @@
       amount %= value;
     }
     return chips;
+  }
+  // Make change before transferring: both hands must sum to the original balance.
+  function planBet(balance, amount) {
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > balance) throw new Error('下注不能超过剩余筹码');
+    const remaining = balance - amount;
+    return {remaining, kept: decompose(remaining), outgoing: decompose(amount)};
+  }
+  // Every chip is represented. Fixed-height columns wrap instead of clipping chips.
+  function bankLayout(chips) {
+    const columns = [];
+    for (const value of values) {
+      let count = chips.filter(chipValue => chipValue === value).length;
+      while (count > 0) {
+        const height = Math.min(stackLimit, count);
+        columns.push({value, height}); count -= height;
+      }
+    }
+    return columns;
+  }
+  function renderBank(seat, chips = decompose(balances[seat])) {
+    let bank = seats[seat].querySelector('.bank');
+    if (!bank) {
+      bank = document.createElement('div'); bank.className = 'bank'; bank.setAttribute('role', 'img');
+      seats[seat].append(bank);
+    }
+    const columns = bankLayout(chips), fragment = document.createDocumentFragment();
+    columns.forEach(({value,height},column) => {
+      for (let level = 0; level < height; level++) {
+        const node = chip(value);
+        node.style.left = `calc(50% + ${column - (columns.length - 1) / 2} * var(--bank-gap) - var(--chip-size) / 2)`;
+        node.style.bottom = `calc(5px + ${level} * var(--bank-step))`;
+        node.style.zIndex = String(column * stackLimit + level);
+        fragment.append(node);
+      }
+    });
+    bank.replaceChildren(fragment); bank.dataset.empty = String(!chips.length);
+    bank.setAttribute('aria-label', `${seats[seat].querySelector('.name').textContent}剩余 ${format(chips.reduce((sum,value) => sum + value,0))} 筹码，${chips.length} 枚`);
+    return bank;
   }
   function chip(value) {
     const node = document.createElement('span');
@@ -111,9 +155,9 @@
     });
     const count = document.createElement('span'); count.textContent = `（${chips.length} 枚）`; breakdown.append(count);
   }
-  async function fly(value, seat, index, run) {
+  async function fly(value, source, index, run) {
     const target = reserveChip(value);
-    const from = seats[seat].querySelector('.plate').getBoundingClientRect();
+    const from = source;
     const to = target.getBoundingClientRect(), bounds = stage.getBoundingClientRect();
     const x1 = from.x + from.width / 2 - bounds.x, y1 = from.y + from.height / 2 - bounds.y;
     const x2 = to.x + to.width / 2 - bounds.x, y2 = to.y + to.height / 2 - bounds.y;
@@ -122,7 +166,7 @@
     stage.append(flight);
     const transform = (x, y, turn = 0, scale = 1) => `translate(${x}px,${y}px) translate(-50%,-50%) rotateX(44deg) rotateZ(${turn}deg) scale(${scale})`;
     const animation = flight.animate([
-      {transform: transform(x1, y1, -14, .85), opacity: 0, offset: 0},
+      {transform: transform(x1, y1, 0, from.width / target.offsetWidth), opacity: 1, offset: 0},
       {transform: transform(x1 + (x2-x1)*.16, y1 + (y2-y1)*.16 - 16, 4, 1.06), opacity: 1, offset: .18},
       {transform: transform(x1 + (x2-x1)*.62, y1 + (y2-y1)*.62 - 38, 20, 1.08), opacity: 1, offset: .58},
       {transform: transform(x2, y2, 0), opacity: 1, offset: 1}
@@ -138,14 +182,19 @@
   }
   async function wager(seat, amount, run) {
     if (generation !== run) return;
-    if (!Number.isSafeInteger(amount) || amount < 1 || amount > balances[seat]) throw new Error('下注不能超过剩余筹码');
-    balances[seat] -= amount;
+    const plan = planBet(balances[seat], amount);
+    // Exchange large denominations for exact change, then measure the actual outgoing chips.
+    const bank = renderBank(seat, [...plan.kept, ...plan.outgoing]);
+    const sources = new Map(values.map(value => [value, [...bank.querySelectorAll(`[data-value="${value}"]`)]]));
+    const transfers = plan.outgoing.map(value => ({value,source:sources.get(value).pop().getBoundingClientRect()}));
+    balances[seat] = plan.remaining;
+    renderBank(seat, plan.kept);
     seats[seat].querySelector('.balance').textContent = format(balances[seat]);
     seats[seat].dataset.active = 'true';
     seats[seat].querySelector('.receipt').textContent = `下注 ${format(amount)}`;
     const name = seats[seat].querySelector('.name').textContent;
     status(`${name}下注 ${format(amount)}`);
-    await Promise.all(decompose(amount).map((value, index) => fly(value, seat, index, run)));
+    await Promise.all(transfers.map(({value,source}, index) => fly(value, source, index, run)));
     if (generation !== run) return;
     seats[seat].dataset.active = 'false';
     status(`${name}的筹码已入池`);
@@ -156,6 +205,7 @@
     stage.querySelectorAll('.flight').forEach(node => node.remove());
     pile.replaceChildren(); total = 0; counts = {}; balances = initial ? [4990,4990,4990] : [5000,5000,5000];
     seats.forEach((node,i) => { node.dataset.active = 'false'; node.querySelector('.balance').textContent = format(balances[i]); node.querySelector('.receipt').textContent = initial ? '已下注 10' : '等待下注'; });
+    seats.forEach((_,seat) => renderBank(seat));
     if (initial) for (let i = 0; i < 3; i++) { const node = reserveChip(10); node.style.visibility = 'visible'; total += 10; }
     $('#pot-amount').textContent = format(total); pile.setAttribute('aria-label', `底池 ${total}`);
     setBusy(false); status(initial ? '准备下注' : '底池已清空');
