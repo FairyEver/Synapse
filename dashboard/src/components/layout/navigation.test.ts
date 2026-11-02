@@ -14,4 +14,7 @@ describe('navigation selection', () => {
     expect(getActiveNavigationPath(userNavigation, '/game/')).toBeUndefined()
     expect(getActiveNavigationPath(userNavigation, '/webhooks-other')).toBeUndefined()
   })
+  it('keeps the game page available without a Console navigation entry', () => {
+    expect(userNavigation.some((item) => item.path === '/game/')).toBe(false)
+  })
 })

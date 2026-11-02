@@ -1,4 +1,4 @@
-import { Activity, Archive, ChartNoAxesCombined, FileText, FolderKanban, Gamepad2, History, KeyRound, LayoutDashboard, Mail, MessageSquareWarning, MonitorSmartphone, ScrollText, Settings, Store, Users, UsersRound, Webhook, type LucideIcon } from 'lucide-react'
+import { Activity, Archive, ChartNoAxesCombined, FileText, FolderKanban, History, KeyRound, LayoutDashboard, Mail, MessageSquareWarning, MonitorSmartphone, ScrollText, Settings, Store, Users, UsersRound, Webhook, type LucideIcon } from 'lucide-react'
 export type NavigationItem = { title: string; path: string; icon: LucideIcon; external?: boolean }
 export const userNavigation: NavigationItem[] = [
   { title: '云端数据表', path: '/tables', icon: ScrollText },
@@ -8,7 +8,6 @@ export const userNavigation: NavigationItem[] = [
   { title: 'Webhook 历史', path: '/webhook-deliveries', icon: History },
   { title: '我的设备', path: '/my-devices', icon: MonitorSmartphone },
   { title: '设置', path: '/settings', icon: Settings },
-  { title: '游戏', path: '/game/', icon: Gamepad2, external: true },
 ]
 export const adminNavigation: NavigationItem[] = [
   { title: '系统概览', path: '/system', icon: LayoutDashboard },
