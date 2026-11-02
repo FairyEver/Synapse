@@ -27,6 +27,7 @@ for (const [width, height] of [[1360, 900], [390, 667], [320, 568]]) {
       await expect.element(page.getByRole("dialog").getByRole("button", { name: "准备下一手", exact: true })).toBeEnabled()
       expect(api.ready).not.toHaveBeenCalled()
       await page.getByRole("button", { name: "返回牌桌", exact: true }).click()
+      await expect.element(page.getByRole("dialog")).not.toBeInTheDocument()
       const dock = page.getByRole("region", { name: "牌桌 1234" })
       await expect.element(dock.getByRole("button", { name: "准备下一手", exact: true })).toBeVisible()
       await userEvent.tab()
@@ -50,6 +51,7 @@ it("接管未返回时关闭结算，底部共享忙碌状态，不重复接管"
   try {
     await page.getByRole("dialog").getByRole("button", { name: "本人接管", exact: true }).click()
     await page.getByRole("button", { name: "返回牌桌", exact: true }).click()
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument()
     await expect.element(page.getByRole("button", { name: "本人接管", exact: true })).toBeDisabled()
     await page.getByRole("button", { name: "更多牌桌操作", exact: true }).click()
     await expect.element(page.getByRole("button", { name: "切换旁观视角", exact: true })).toBeDisabled()
@@ -75,6 +77,7 @@ it.each([[1360, 900], [320, 568]])("%i×%i 十人长等待姓名不挤出接管�
     for (const node of document.querySelectorAll('.poker-result-footer button')) inside(node)
     await page.screenshot({ path: `.superpowers/sdd/2026-11-01-poker-next-hand-controls/${width}-long-modal.png` })
     await page.getByRole("button", { name: "返回牌桌", exact: true }).click()
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument()
     await expect.element(page.getByRole("status")).toHaveTextContent("已准备 1 / 10")
     inside(page.getByRole("button", { name: "本人接管", exact: true }).element())
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width)

@@ -23,9 +23,9 @@ export function HallHome({ overview, onEnter, onSession, previews, onGrant, icon
       {points.available === 0 && (points.pending ?? 0) === 0 && overview.sessions.length === 0 && <Button onPress={onGrant}>领取每日补助</Button>}
     </header>
     <section aria-label="我的点数" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      {metrics.map(([label, value]) => <Card key={label}>
+      {metrics.map(([label, value]) => <Card key={label} className="min-w-0">
         <Card.Header><Card.Description>{label}</Card.Description></Card.Header>
-        <Card.Content><p className="text-3xl font-semibold tabular-nums">{formatGameAmount(value)}</p></Card.Content>
+        <Card.Content><p className="break-all text-3xl font-semibold tabular-nums">{formatGameAmount(value)}</p></Card.Content>
       </Card>)}
     </section>
     <section aria-label="游戏" className="grid gap-6 lg:grid-cols-2">

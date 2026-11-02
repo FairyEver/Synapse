@@ -69,18 +69,24 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   useLayoutEffect(() => {
     const element = viewport.current, container = surface.current
     if (!element || !container || typeof ResizeObserver === "undefined") return
-    let frame: number | undefined, width: number | undefined, height = 0, containerWidth: number | undefined
+    let frame: number | undefined, width: number | undefined, height = 0, containerWidth: number | undefined, containerHeight: number | undefined, centeredSize = ""
     const apply = () => {
       frame = undefined
       if (containerWidth !== undefined) setCompact(containerWidth <= TABLE_CONTROLS_BREAKPOINT)
       if (width !== undefined) {
         const next = fitTableScene(width, height)
         setFit(previous => previous.scale === next.scale && previous.scene.mode === next.scene.mode ? previous : next)
+        const size = `${containerWidth}:${containerHeight}:${width}:${height}`
+        const scroller = element.parentElement
+        if (scroller && centeredSize !== size) {
+          scroller.scrollTop = Math.max(0, (scroller.scrollHeight - scroller.clientHeight) / 2)
+          centeredSize = size
+        }
       }
     }
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
-        if (entry.target === container) containerWidth = entry.contentRect.width
+        if (entry.target === container) { containerWidth = entry.contentRect.width; containerHeight = entry.contentRect.height }
         if (entry.target === element) {
           width = entry.contentRect.width
           height = entry.contentRect.height
@@ -108,8 +114,10 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
     <div className="poker-table-layout">
         <div className="poker-edge-controls bg-surface font-sans text-foreground scheme-light">
           <Button type="button" variant="tertiary" isIconOnly={compact} aria-label="返回房间" onPress={onBack}><ArrowLeft aria-hidden="true" />{!compact && "返回房间"}</Button>
+          <div className="poker-room-details">
           <span className="poker-room-summary text-sm"><strong>#{table.roomCode}</strong><span className="text-muted">第 {table.handNo} 手{table.mode === "practice" && " · 陪练"}</span></span>
           <div className="poker-room-rules text-sm tabular-nums"><span>{view.variant === "short32" ? "短牌 32 张" : "标准 52 张"}</span><span>盲注 {view.smallBlind ?? 1} / {view.bigBlind ?? 2}</span></div>
+          </div>
           <div className="poker-perspective flex items-center gap-2">
             {members && view.status !== "closed" && <Button ref={membersTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label="成员管理" aria-expanded={panel === "members"} onPress={() => setPanel(panel === "members" ? null : "members")}><UsersRound aria-hidden="true" />{!compact && "成员"}</Button>}
             <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} ready={presentedReady} blocked={cash.blocked} />

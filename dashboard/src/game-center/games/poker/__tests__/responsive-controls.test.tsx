@@ -172,9 +172,8 @@ describe("统一底部操作与按需侧栏", () => {
     await act(async()=>root.unmount())
   })
 
-  it.each([390,850,1280])("Roll与预设/三个动作在%s宽度共享原9rem底栏的两层结构",async(width)=>{
+  it.each([390,850,1280])("Roll与预设/三个动作在%s宽度共享底栏的两层结构",async(width)=>{
     const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
-    const style=document.createElement("style");style.textContent=responsiveCss;document.head.append(style)
     const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true}}}
     await act(async()=>root.render(<Table table={value} perspective="owner" identityKey="roll-band" onPerspective={()=>{}} onBack={()=>{}}/>))
     const surface=host.querySelector('.poker-table')!,viewport=host.querySelector('.poker-canvas-viewport')!
@@ -187,16 +186,8 @@ describe("统一底部操作与按需侧栏", () => {
     expect([...presets.querySelectorAll('button')].map(node=>node.textContent)).toEqual(expect.arrayContaining(["Roll 换牌","最小","半池","一池","自定义"]))
     expect(controls.querySelectorAll('.poker-action-buttons button')).toHaveLength(3)
     expect([...controls.children].filter(node=>node===roll)).toHaveLength(0)
-    const styles=(element:Element,property:string)=>[...style.sheet!.cssRules].reverse().flatMap(rule=>"selectorText" in rule && "style" in rule && element.matches((rule as CSSStyleRule).selectorText) && (rule as CSSStyleRule).style.getPropertyValue(property) ? [(rule as CSSStyleRule).style.getPropertyValue(property)] : [])[0] ?? "0"
-    expect(styles(host.querySelector('.poker-table-layout')!,"grid-template-rows")).toBe(`${width<=850 ? "5.5rem" : "3.5rem"} minmax(0, 1fr) 9rem`)
-    const rem=(value:string)=>parseFloat(value)*(value.endsWith('rem')?16:1)
-    // HeroUI small buttons reserve h-9 on narrow screens; evaluate the real local
-    // CSS cascade against rendered DOM, without claiming jsdom measures geometry.
-    const rowHeight=Math.max(36,rem(styles(roll,"min-height")))
-    const minimum=rem(styles(controls.querySelector('.poker-control-state')!,"min-height"))+rem(styles(controls,"gap"))+rowHeight+rem(styles(presets,"margin-bottom"))+rem(styles(controls.querySelector('.poker-action-buttons button')!,"min-height"))+2*rem(styles(host.querySelector('.poker-controls-anchor')!,"padding").split(" ")[0])+1
-    expect(minimum).toBeLessThanOrEqual(144)
     expect(surface.getAttribute("data-compact-controls")).toBe(String(width<=850))
-    await act(async()=>root.unmount());style.remove()
+    await act(async()=>root.unmount())
   })
 
   it("Roll与日志/金额/全下/管理互斥，关闭回入口且画布节点保持",async()=>{

@@ -52,7 +52,10 @@ for (const [width, height] of [[1360, 900], [390, 667], [390, 844], [320, 568]])
       await expect.poll(() => body.scrollTop).toBeGreaterThan(0)
       expect(dialog.querySelector('[aria-label="下一手准备状态"]')).toBeNull()
       const last = dialog.querySelector('.poker-result-players li:last-child')!
-      inside(last)
+      // A fully wrapped name may make one row taller than the scroll viewport.
+      // Reaching its final line is required; fitting the whole row at once is not.
+      expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(body.getBoundingClientRect().bottom + 1)
+      expect(last.getBoundingClientRect().bottom).toBeGreaterThan(body.getBoundingClientRect().top)
       await page.screenshot({ path: `.superpowers/sdd/2026-11-01-poker-settlement-ready/${width}x${height}-bottom.png` })
       await page.getByRole('button', { name: '准备下一手', exact: true }).click()
       await expect.element(page.getByRole('alert')).toHaveTextContent('模拟响应未知')

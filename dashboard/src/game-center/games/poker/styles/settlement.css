@@ -32,6 +32,9 @@
   .poker-result-board > div:first-child { flex-basis: 100%; }
   .poker-result-best { padding: 16px; }
   .poker-result-player { grid-template-columns: minmax(0,1fr) 72px max-content; }
-  .poker-result-money { grid-column: 1/-1; grid-row: 2; text-align: left; }
+  .poker-result-money { grid-column: 1/-1; grid-row: 2; grid-template-columns: minmax(0,1fr); text-align: left; }
+  .poker-result-money > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+  .poker-result-money dt { flex-shrink: 0; margin-bottom: 0; }
+  .poker-result-money dd { min-width: 0; text-align: right; }
   .poker-result-footer > button { flex-grow: 1; }
 }

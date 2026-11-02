@@ -48,7 +48,12 @@ describe.each(sizes)("亮色牌桌 %s×%s", (width,height) => {
       }
       expect(parseFloat(getComputedStyle(document.querySelector(".poker-stack")!).fontSize) * scale).toBeGreaterThanOrEqual(13.99)
       for (const selector of [".poker-pot-label", ".poker-seat-meta", ".poker-ai-state[data-acting=true]", ".poker-control-state", '.poker-seat[data-mine=true] .poker-seat-avatar']) expect(contrast(document.querySelector(selector)!), selector).toBeGreaterThanOrEqual(4.5)
-      expect(rect(document.querySelector(".poker-edge-controls")!).height).toBe(56)
+      const header=document.querySelector(".poker-edge-controls")!
+      expect(rect(header).bottom).toBeLessThanOrEqual(rect(document.querySelector(".poker-table-main")!).top)
+      for(const button of header.querySelectorAll('button')) {
+        expect(rect(button).top).toBeGreaterThanOrEqual(rect(header).top)
+        expect(rect(button).bottom).toBeLessThanOrEqual(rect(header).bottom)
+      }
       const seats = [...document.querySelectorAll(".poker-seat")]
       const board = document.querySelector(".poker-board")!
       for (const seat of seats) {
@@ -84,6 +89,8 @@ it.each(sizes)("%s×%s 的10座结算、长姓名和公共牌互不遮挡", asyn
     expect(contrast(document.querySelector(".poker-seat-result")!)).toBeGreaterThanOrEqual(4.5)
     expect(contrast(document.querySelector(".poker-settlement b")!)).toBeGreaterThanOrEqual(4.5)
     for (const seat of seats) {
+      seat.scrollIntoView({block:"nearest",inline:"nearest"})
+      await stable()
       expect(overlap(seat,cards)).toBe(false)
       expect(overlap(seat,result)).toBe(false)
       expect(overlap(seat,footer)).toBe(false)

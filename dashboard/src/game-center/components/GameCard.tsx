@@ -12,7 +12,7 @@ export function GameCard({ game, onEnter, preview, available, artwork, icon: Ico
   icon?: ComponentType<{ className?: string }>
 }) {
   const enabled = available && game.status === "available"
-  return <Card aria-label={game.name}>
+  return <Card aria-label={game.name} className="min-w-0">
     <Card.Header className="flex-row items-center gap-3"><Icon className="size-5 text-muted" /><Card.Title>{game.name}</Card.Title></Card.Header>
     {artwork && <Card.Content><div className="poker-artwork flex justify-center" aria-hidden="true">{artwork}</div></Card.Content>}
     {preview && <Card.Content>{preview}</Card.Content>}

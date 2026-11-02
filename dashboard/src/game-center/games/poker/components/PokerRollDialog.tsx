@@ -33,7 +33,7 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
   useEffect(()=>{setKind(controls.continuation?.kind ?? (table.roll?.normal?.available?"normal":"super"));setCard(controls.continuation ? String(controls.continuation.cardIndex) : "");setCandidate("")},[epoch,table.roll?.normal?.available,table.roll?.super?.available,table.roll?.normal?.fee,table.roll?.super?.fee,pending?.rollId,controls.continuation])
   const blocked=disabled||controls.blocked||controls.storageError||!controls.canControl
   return <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange} className="font-sans text-foreground scheme-light">
-    <Modal.Container size="md"><Modal.Dialog>
+    <Modal.Container size="md" className="[@media(max-height:420px)]:py-4"><Modal.Dialog className="[@media(max-height:420px)]:max-w-xl">
       <Modal.CloseTrigger aria-label="关闭换牌" />
       <Modal.Header>
         <Modal.Heading className="pr-8 wrap-anywhere">{pending?"选择新牌":"Roll 换牌"}</Modal.Heading>

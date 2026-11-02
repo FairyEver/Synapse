@@ -8,10 +8,12 @@ import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 import { ModeFilter } from "./ModeFilter"
 import type { GameFunding, PokerAgentView } from "@synapse/shared/game-contracts"
-import { ListBox, Select, Table } from "@heroui/react"
+import { Card, ListBox, Select, Table } from "@heroui/react"
 import { useHallOverview } from "../../../hooks/useHallOverview"
 import { amount } from "../lib/view"
 import { PersonaVersions } from "./PersonaVersions"
+import "../../../styles/responsive-lists.css"
+import "../styles/system-pages.css"
 export function AgentProfiles() {
   const [roomCode, setRoomCode] = useState("all"), [mode, setMode] = useState<GameFunding>("points")
   const hall = useHallOverview(),
@@ -93,13 +95,14 @@ export function AgentProfiles() {
     }
   }
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="poker-agent-profiles mx-auto min-w-0 max-w-5xl space-y-6 p-4 sm:p-6">
       <GameQueryFeedback query={agents} />
       <div className="flex flex-wrap items-center gap-2">
         {agents.data?.map((agent) => (
           <Button
             type="button"
             key={agent.id}
+            className="h-auto min-h-10 min-w-0 max-w-full whitespace-normal py-2"
             variant={editing.id === agent.id ? "secondary" : "ghost"}
             onPress={() => selectDraft(agent)}
           >
@@ -116,7 +119,7 @@ export function AgentProfiles() {
       </div>
       <div className="grid gap-8 lg:grid-cols-2">
         <form
-          className="space-y-4"
+          className="min-w-0 space-y-4"
           onSubmit={(event) => {
             event.preventDefault()
             void save()
@@ -146,7 +149,7 @@ export function AgentProfiles() {
             保存选手
           </Button>
         </form>
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <ModeFilter value={mode} label="战绩类型" onChange={(value) => { setMode(value); setRoomCode("all") }} />
           <GameQueryFeedback query={stats} />
           {stats.data && (
@@ -181,8 +184,8 @@ export function AgentProfiles() {
                 </ListBox></Select.Popover>
               </Select>
               {stats.data?.comparison && (
-                <div className="overflow-auto">
-                  <Table><Table.ScrollContainer><Table.Content aria-label="同桌对比">
+                <div className="game-responsive-list min-w-0">
+                  <div className="game-wide-list"><Table><Table.ScrollContainer><Table.Content aria-label="同桌对比">
                     <Table.Header>
 
                         <Table.Column isRowHeader>选手</Table.Column>
@@ -214,7 +217,24 @@ export function AgentProfiles() {
                         </Table.Row>
                       ))}
                     </Table.Body>
-                  </Table.Content></Table.ScrollContainer></Table>
+                  </Table.Content></Table.ScrollContainer></Table></div>
+                  <ul aria-label="同桌对比" className="game-compact-list space-y-3">
+                    {stats.data.comparison.map(player => <li key={player.seatNo}>
+                      <Card>
+                        <Card.Content className="space-y-3">
+                          <p className="text-sm font-medium">{player.displayName}{player.isMe && "（我）"}</p>
+                          <dl className="grid grid-cols-2 gap-3 text-sm">
+                            {[
+                              ["入池", `${Math.round(player.vpip * 100)}%`],
+                              ["翻前加注", `${Math.round(player.pfr * 100)}%`],
+                              ["进攻", player.aggression.toFixed(2)],
+                              ["胜率", `${Math.round(player.winRate * 100)}%`],
+                            ].map(([label, value]) => <div key={label}><dt className="text-muted">{label}</dt><dd className="tabular-nums">{value}</dd></div>)}
+                          </dl>
+                        </Card.Content>
+                      </Card>
+                    </li>)}
+                  </ul>
                 </div>
               )}
             </section>
@@ -228,7 +248,7 @@ export function AgentProfiles() {
               ) : (
                 <ul className="divide-y">
                   {recent.data.items.map((hand) => (
-                    <li key={hand.handId} className="flex justify-between gap-3 py-2 text-sm">
+                    <li key={hand.handId} className="flex flex-wrap justify-between gap-3 py-2 text-sm">
                       <span>
                         #{hand.roomCode} · 第 {hand.handNo} 手
                       </span>

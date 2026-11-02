@@ -10,6 +10,7 @@ import { gameApi } from "../../../lib/api"
 import { Card } from "./Card"
 import { PersonaBadge } from "./PersonaBadge"
 import "../../../styles/responsive-lists.css"
+import "../styles/system-pages.css"
 import { rollAmounts, rollEventLabel } from "../lib/roll-view"
 import { recordStreets } from "../lib/record-streets"
 import { actionLabel, amount } from "../lib/view"
@@ -52,7 +53,7 @@ export function HandRecord() {
   )
   return (
     <div ref={container} data-detail={!!selected} className="poker-records grid grid-cols-1 lg:min-h-full lg:grid-cols-3">
-      <div className="poker-record-list space-y-3 border-b border-separator p-4 lg:border-r lg:border-b-0">
+      <div className="poker-record-list min-w-0 space-y-3 border-b border-separator p-4 lg:border-r lg:border-b-0">
         <h2 className="font-medium">牌局记录</h2>
         <ModeFilter value={mode} label="记录类型" onChange={(value) => { setMode(value); setOffset(0); setSelected(null) }} />
         <GameQueryFeedback query={history} />
@@ -105,7 +106,7 @@ export function HandRecord() {
           </Button>
         </div>
       </div>
-      <div className="poker-record-detail space-y-6 p-4 lg:col-span-2 lg:p-6">
+      <div className="poker-record-detail min-w-0 space-y-6 p-4 lg:col-span-2 lg:p-6">
         {selected && <Button variant="tertiary" className="lg:hidden" onPress={() => setSelected(null)}><ArrowLeft aria-hidden="true" />返回记录列表</Button>}
         <GameQueryFeedback query={detail} />
         {!selected ? (

@@ -21,6 +21,8 @@ it.each(dimensions)("%s×%s 常用档位外露，自定义在按钮上方就近�
   try {
     api.act.mockClear()
     const canvas = document.querySelector<HTMLElement>(".poker-canvas")!
+    await expect.poll(()=>document.querySelector(".poker-table")?.getAttribute("data-compact-controls")).toBe(String(width<=850))
+    await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())))
     const transform = canvas.style.transform
     const footer = document.querySelector(".poker-controls-anchor")!
     const before = footer.getBoundingClientRect()

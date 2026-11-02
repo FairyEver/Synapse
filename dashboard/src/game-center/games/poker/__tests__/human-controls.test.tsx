@@ -166,6 +166,16 @@ describe("真人牌桌操作", () => {
   await act(async()=>root.unmount())
  })
 
+ it("AI待选关闭面板后仍可从底部接管", async()=>{
+  api.control.mockResolvedValue({})
+  const {host,root}=await render({...table,controller:"ai",roll:{enabled:true,count:1,pending:{rollId:"ai-resume",cardIndex:0,candidates:["2c","3c","4c"]},pendingSeatNo:0}},"ai-resume")
+  await act(async()=>button(document.body,"关闭换牌").click())
+  expect(button(host,"本人接管").disabled).toBe(false)
+  await act(async()=>button(host,"本人接管").click())
+  expect(api.control).toHaveBeenCalledWith({roomCode:"1234",controlVersion:4,action:"takeover"})
+  expect(api.rollChoose).not.toHaveBeenCalled()
+  await act(async()=>root.unmount())
+ })
  it("超级待选即使旧响应仍列合法下注也禁用，候选可关闭重开并保留原牌", async()=>{
   const pending={rollId:"super-old",cardIndex:1,candidates:["2c","3c","4c"]}
   const {host,root}=await render({...table,hole:["As","Kd"],roll:{enabled:true,count:1,pending,pendingSeatNo:0}},"pending-reopen-user")
