@@ -89,18 +89,18 @@
 
 测试目录固定为`server/src/game/poker/engine/__tests__/`（纯引擎）、`server/src/game/poker/__tests__/`（服务）、`server/src/game/hall/__tests__/`（通用资金）、`shared/src/`、Dashboard模块`__tests__/`。纯函数fixture在新增`server/src/game/poker/__tests__/card-test-fixtures.ts`导出`makeCardHand(options)`和`sequenceRandomInt(values)`，使用真实`startHand`/`orderedDeck`建立有效状态；移牌到手中必须从共享池移走，不造重复实例。
 
-## Task T1: 版本、共享schema与私有操作契约
+## Task 1: 版本、共享schema与私有操作契约
 
 **Files:** Create `shared/src/game-poker-cards.ts`、`shared/src/game-reserve.ts`、`shared/src/game-poker-card-schemas.ts`、`shared/src/game-cards.test.ts`；Modify `shared/src/game.ts`、`shared/src/game-ui.ts`、`shared/src/game-response-schemas.ts`、`shared/src/game-poker-response-schemas.ts`、`shared/scripts/build-game-contracts.mjs`。
 **Interfaces:** Produces固定接口约定中的T1全部类型和strict schema；后续所有任务只从`@synapse/shared/game-contracts`/`game-ui`导入共享类型。GameReserveWriteBatch及私有通用账本类型不作为客户端写入schema暴露。
 
-- [ ] **1. 写契约失败测试。** `cards_flag_and_private_operations`断言旧房规合法、cards默认为false，cards+roll可共存；`GAME_TOOLS`不含card.play/card.choose，两项只在私有UI集合且路由为POST。`expect(z.fromJSONSchema(POKER_CARD_PLAY_SCHEMA).safeParse({...input,effectCode:"x"}).success).toBe(false)`；无版本旧响应仍合法，未知新规则不可授权行动。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/shared exec vitest run src/game-cards.test.ts`；预期缺少新导出或上述断言失败，而不是环境/依赖失败。
-- [ ] **3. 实现类型和schema。** 采用固定命名；定义公开/本人字段的区分、名义/减免/实付、可见状态、根帧和暂存complete标记。新增`/card/play`和`/card/choose`的UI路由元数据，但此时不开放新建卡牌房。构建脚本补齐新文件双模块产物。
-- [ ] **4. 验证绿灯。** 同一测试通过，再运行`pnpm --filter @synapse/shared build`与`pnpm --filter @synapse/shared typecheck`，预期exit 0。
-- [ ] **5. 本地提交。** 只暂存本任务文件，`git commit -m 'feat: 定义卡牌模式版本及私有用牌契约'`。
+- [x] **1. 写契约失败测试。** `cards_flag_and_private_operations`断言旧房规合法、cards默认为false，cards+roll可共存；`GAME_TOOLS`不含card.play/card.choose，两项只在私有UI集合且路由为POST。`expect(z.fromJSONSchema(POKER_CARD_PLAY_SCHEMA).safeParse({...input,effectCode:"x"}).success).toBe(false)`；无版本旧响应仍合法，未知新规则不可授权行动。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/shared exec vitest run src/game-cards.test.ts`；预期缺少新导出或上述断言失败，而不是环境/依赖失败。
+- [x] **3. 实现类型和schema。** 采用固定命名；定义公开/本人字段的区分、名义/减免/实付、可见状态、根帧和暂存complete标记。新增`/card/play`和`/card/choose`的UI路由元数据，但此时不开放新建卡牌房。构建脚本补齐新文件双模块产物。
+- [x] **4. 验证绿灯。** 同一测试通过，再运行`pnpm --filter @synapse/shared build`与`pnpm --filter @synapse/shared typecheck`，预期exit 0。
+- [x] **5. 本地提交。** 只暂存本任务文件，`git commit -m 'feat: 定义卡牌模式版本及私有用牌契约'`。
 
-## Task T2: 生命周期注册与有界执行器
+## Task 2: 生命周期注册与有界执行器
 
 **Files:** Create `server/src/game/poker/engine/cards/types.ts`、`server/src/game/poker/engine/cards/registry.ts`、`server/src/game/poker/engine/cards/runner.ts`、`server/src/game/poker/engine/__tests__/card-runtime.spec.ts`。
 **Interfaces:** Consumes T1；Produces `OperationRegistry.register`、`CardRegistry`、`runResolution`和固定上下文/帧类型；允许测试注册受控小操作，不接数据库或UI。
@@ -112,7 +112,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 建立支持前后钩子和有界触发的牌局执行器'`，只暂存本任务文件。
 
 
-## Task T3: 有限共享池与实例去向
+## Task 3: 有限共享池与实例去向
 
 **Files:** Create `server/src/game/poker/engine/cards/pool.ts`、`server/src/game/poker/engine/__tests__/card-pool.spec.ts`、`server/src/game/poker/__tests__/card-test-fixtures.ts`；Modify `server/src/game/poker/engine/cards/types.ts`、`server/src/game/poker/engine/hand-runner.ts`、`server/src/game/poker/engine/rules.ts`。
 **Interfaces:** Consumes T2的`CardDefinition`/`ResolutionContext`；Produces `CardModeState`、`CardPoolOperation`、`createCardPool`、`applyCardPoolOperation`。fixture导出`makeCardHand(options?:{humans?:number;bots?:number;actorSeatNo?:number;variant?:PokerVariant;bigBlind?:number;roll?:boolean}):HandState`及`sequenceRandomInt(values:readonly number[]):(max:number)=>number`，默认两真人、0号行动、standard52、1/2盲、Roll关闭；先用现有startHand建立合法手，再附测试能力牌状态。生产目录待T8提供。
@@ -125,7 +125,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 实现共享卡池发放抽取与生成实例守恒'`。
 
 
-## Task T4: 有限豁免、名义下注与真实边池
+## Task 4: 有限豁免、名义下注与真实边池
 
 **Files:** Create `server/src/game/poker/engine/chips/types.ts`、`server/src/game/poker/engine/chips/payment.ts`、`server/src/game/poker/engine/chips/funded-betting.ts`、`server/src/game/poker/engine/chips/funded-pots.ts`、`server/src/game/poker/engine/__tests__/funded-betting.spec.ts`、`server/src/game/poker/engine/__tests__/funded-pots.spec.ts`；Modify `server/src/game/poker/engine/betting.ts`、`server/src/game/poker/engine/pots.ts`。
 **Interfaces:** Produces `ChipPaymentInput/Modifier/Quote`、`FundedSeat/Pot`、`quoteChipPayment`、`applyFundedBet`、`splitFundedPots`；筹码模块不导入具体卡牌ID。
@@ -137,7 +137,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 支持有额度豁免的名义下注与真实边池结算'`。
 
 
-## Task T5: 可追溯暂存、盗取与退款
+## Task 5: 可追溯暂存、盗取与退款
 
 **Files:** Create `server/src/game/poker/engine/chips/reserve.ts`、`server/src/game/poker/engine/__tests__/reserve.spec.ts`；Modify `server/src/game/poker/engine/chips/types.ts`、`server/src/game/poker/engine/hand-runner.ts`。
 **Interfaces:** Produces `ReserveState/Operation/Result`、`ReserveLot/Claim/Movement`、`applyReserveOperation`；T9只持久化这里的已验证差量，不重算玩法。
@@ -149,7 +149,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 实现暂存来源账本及按份额盗取退款'`。
 
 
-## Task T6: 扑克牌操作、候选与实体公开标记
+## Task 6: 扑克牌操作、候选与实体公开标记
 
 **Files:** Create `server/src/game/poker/engine/cards/poker-operations.ts`、`server/src/game/poker/engine/__tests__/card-poker-operations.spec.ts`；Modify `server/src/game/poker/engine/hand-runner.ts`、`server/src/game/poker/engine/roll.ts`。
 **Interfaces:** Consumes T2执行注册/`PendingChoice`及现有`orderedDeck/shuffle`；Produces `registerPokerCardOperations`、实体牌公开标记与私有观察记录类型，供T7/T8/T11使用。
@@ -161,7 +161,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 统一卡牌与Roll的扑克牌操作及候选保留'`。
 
 
-## Task T7: 持续状态、防护、驱散与时间
+## Task 7: 持续状态、防护、驱散与时间
 
 **Files:** Create `server/src/game/poker/engine/cards/statuses.ts`、`server/src/game/poker/engine/cards/deadlines.ts`、`server/src/game/poker/engine/__tests__/card-statuses.spec.ts`、`server/src/game/poker/engine/__tests__/card-deadlines.spec.ts`；Modify `server/src/game/poker/engine/cards/types.ts`、`server/src/game/poker/engine/hand-runner.ts`。
 **Interfaces:** Produces `registerCardStatusOperations`、`TurnClock/DeadlineOperation`、`applyDeadlineOperation`；支付豁免通过T4的通用modifier接入，不让筹码模块读取卡牌ID。
@@ -173,7 +173,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 支持卡牌持续触发防护驱散与限时修正'`。
 
 
-## Task T8: 声明式接入完整60张与版本快照
+## Task 8: 声明式接入完整60张与版本快照
 
 **Files:** Create `server/src/game/poker/engine/cards/catalog-v1.ts`、`server/src/game/poker/engine/cards/commands.ts`、`server/src/game/poker/engine/cards/catalog/holes.ts`、`server/src/game/poker/engine/cards/catalog/information.ts`、`server/src/game/poker/engine/cards/catalog/draw.ts`、`server/src/game/poker/engine/cards/catalog/reserve.ts`、`server/src/game/poker/engine/cards/catalog/defense.ts`、`server/src/game/poker/engine/cards/catalog/table.ts`、`server/src/game/poker/engine/__tests__/card-catalog.spec.ts`、`server/src/game/poker/engine/__tests__/card-catalog-scenarios.ts`。
 **Interfaces:** Consumes T2–T7操作/状态；Produces `CARD_CATALOG_V1`、`createCardRegistry`、`planCardPlay`、`planCardChoice`和可验证目录/配方摘要。每个定义包括ID、规则文本、份数、目标、费用、步骤、时机、标签、状态策略和封面assetId。
@@ -185,7 +185,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 注册首批60种90张卡牌及完整效果定义'`。
 
 
-## Task T9: 通用暂存与根帧持久化、旧冻结兼容
+## Task 9: 通用暂存与根帧持久化、旧冻结兼容
 
 **Files:** Create `server/prisma/migrations/20261103000000_game_card_mode_and_reserve/migration.sql`、`server/src/game/hall/game-reserve.service.ts`、`server/src/game/hall/__tests__/reserve-store.spec.ts`、`server/src/game/poker/__tests__/card-migration.spec.ts`；Modify `server/prisma/schema.prisma`、`server/src/game/hall/hall.service.ts`、`server/src/game/hall/hall.module.ts`、`server/src/game/hall/__tests__/hall-store.ts`、`server/src/game/poker/__tests__/roll-service-store.ts`。
 **Interfaces:** Consumes T5的已验证差量；Produces固定接口中的`GameReserveService`。新增模型固定为`GameReserveLot`、`GameReserveClaim`、`GameReserveMovement`、`GamePokerResolution`，不复用旧冻结意图作为可变分录。
@@ -197,7 +197,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 持久化通用暂存及版本化卡牌结算帧'`。保留迁移未执行状态，真实约束验收交T17。
 
 
-## Task T10: 本人/公开/MCP投影与完整归档
+## Task 10: 本人/公开/MCP投影与完整归档
 
 **Files:** Create `server/src/game/poker/poker-card-projection.ts`、`server/src/game/poker/poker-reserve-projection.ts`、`server/src/game/poker/__tests__/card-projection.spec.ts`、`server/src/game/poker/__tests__/card-archive.spec.ts`；Modify `server/src/game/poker/poker-projection.ts`、`server/src/game/poker/poker-read.service.ts`、`server/src/game/poker/poker-events.service.ts`、`server/src/game/poker/poker-archive.service.ts`、`server/src/game/poker/poker-hand-log.ts`、`server/src/game/poker/poker-roll-stats.ts`、`server/src/game/poker/poker-roll-ledger.ts`、`server/src/game/poker/poker-chip-projection.ts`、`server/src/game/poker/poker-pot-contributions.ts`。
 **Interfaces:** Produces T10两项投影函数、版本化根帧读取和归档字段；Consumes T1/T8/T9及现有`PokerViewPolicy`。完整源保存在快照/审计，近期事件只为表现。
@@ -209,7 +209,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 隔离卡牌私密结果并归档暂存与触发过程'`。
 
 
-## Task T11: 接入开局、下注、Roll、用牌与超时协调
+## Task 11: 接入开局、下注、Roll、用牌与超时协调
 
 **Files:** Create `server/src/game/poker/engine/hand-transitions.ts`、`server/src/game/poker/engine/resolve-hand.ts`、`server/src/game/poker/poker-card.service.ts`、`server/src/game/poker/__tests__/card-service.spec.ts`、`server/src/game/poker/__tests__/card-lifecycle.spec.ts`；Modify `server/src/game/poker/poker.service.ts`、`server/src/game/poker/poker-action.service.ts`、`server/src/game/poker/poker-roll.service.ts`、`server/src/game/poker/poker-lifecycle.ts`、`server/src/game/poker/poker-deadline.task.ts`、`server/src/game/poker/engine/hand-runner.ts`、`server/src/game/poker/engine/roll.ts`、`server/src/game/poker/engine/rules.ts`、`docs/agents/module-boundaries.md`。
 **Interfaces:** Consumes T1–T10；Produces `nextHandTransition`、`resolveHandCommand`、`PokerCardService.play/choose`、统一存储的HandResolution与当前TurnClock。legacy走原版本，v2统一经协调器。
@@ -221,7 +221,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 将卡牌生命周期接入牌局行动和事务结算'`；同期更新`docs/agents/module-boundaries.md`的资金/生命周期版本边界，保留旧局规则。
 
 
-## Task T12: HTTP路由、服务端AI禁入与版本门槛
+## Task 12: HTTP路由、服务端AI禁入与版本门槛
 
 **Files:** Create `server/src/game/poker/poker-mode-policy.ts`、`server/src/game/__tests__/card-web.spec.ts`、`server/src/game/poker/__tests__/card-access.spec.ts`；Modify `server/src/game/game.controller.ts`、`server/src/game/game-web.guard.ts`、`server/src/game/game-api.service.ts`、`server/src/game/game.module.ts`、`server/src/game/poker/poker.service.ts`、`server/src/game/poker/poker-action.service.ts`、`server/src/game/poker/poker-roll.service.ts`、`server/src/game/poker/poker-wait.service.ts`、`server/src/game/poker/poker-read.service.ts`、`server/src/config/env.ts`、`server/src/config/env.spec.ts`、`server/.env.example`、`server/compose.yml`、`docs/agents/capability-registry.md`。
 **Interfaces:** Produces `assertPokerModeAccess`、`cardReadPolicy`；公开guide返回cards.available与受支持规则版本，来源只能由受信HTTP/MCP入口设置。新私有路由为POST`/api/game/poker/rooms/:code/card/play`和`/card/choose`。
@@ -233,7 +233,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 增加真人卡牌入口并在服务端禁止AI参赛'`。
 
 
-## Task T13: 建房、摘要、偏好和AI入口
+## Task 13: 建房、摘要、偏好和AI入口
 
 **Files:** Create `dashboard/src/game-center/games/poker/hooks/usePokerCardAvailability.ts`、`dashboard/src/game-center/games/poker/__tests__/card-room.test.tsx`；Modify `dashboard/src/game-center/games/poker/components/CreateRoomDialog.tsx`、`dashboard/src/game-center/games/poker/components/PokerJoinSummary.tsx`、`dashboard/src/game-center/games/poker/components/RoomList.tsx`、`dashboard/src/game-center/games/poker/components/LobbyView.tsx`、`dashboard/src/game-center/games/poker/components/PokerAIConnectDialog.tsx`、`dashboard/src/game-center/games/poker/hooks/usePokerRoomDraft.ts`、`dashboard/src/game-center/games/poker/hooks/usePokerAIConnect.ts`、`dashboard/src/game-center/runtime/preferences.ts`、`dashboard/src/game-center/runtime/web-client.ts`、`dashboard/src/game-center/lib/api.ts`。
 **Interfaces:** Consumes T1/T12 guide和房规；Produces带cards开关的`PokerRoomDraft`/偏好和两项`GameBridge.poker.card`方法。`usePokerCardAvailability(identityKey)`返回available/loading/error/reload，查询留在hook/API层。
@@ -245,7 +245,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 支持独立开启卡牌房并限制AI接入入口'`。
 
 
-## Task T14: 卡牌面板、目标选择和未知写恢复
+## Task 14: 卡牌面板、目标选择和未知写恢复
 
 **Files:** Create `dashboard/src/game-center/games/poker/hooks/usePokerCards.ts`、`dashboard/src/game-center/games/poker/lib/card-intent-store.ts`、`dashboard/src/game-center/games/poker/lib/card-view.ts`、`dashboard/src/game-center/games/poker/components/PokerCardsDialog.tsx`、`dashboard/src/game-center/games/poker/components/PokerCardSelection.tsx`、`dashboard/src/game-center/games/poker/styles/cards.css`、`dashboard/src/game-center/games/poker/__tests__/card-controls.test.tsx`、`dashboard/src/game-center/games/poker/__tests__/card-intent-store.test.ts`；Modify `dashboard/src/game-center/games/poker/components/HumanControls.tsx`、`dashboard/src/game-center/games/poker/components/Table.tsx`、`dashboard/src/game-center/games/poker/hooks/useHumanControls.ts`、`dashboard/src/game-center/games/poker/hooks/usePokerRoom.ts`。
 **Interfaces:** `usePokerCards(table:PokerTableView,perspective:"owner"|"public",onRefresh:()=>void|Promise<void>,identityKey:string)`返回`busy,error,uncertain,storageError,play(input),choose(index),retry()`；具体请求使用T1类型。store提供getSnapshot/save/clear/reload/subscribe，scope固定账号+房间。
@@ -257,7 +257,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 增加卡牌选择施放面板与可恢复操作意图'`。
 
 
-## Task T15: 暂存明细、真实筹码动画与状态表现
+## Task 15: 暂存明细、真实筹码动画与状态表现
 
 **Files:** Create `dashboard/src/game-center/games/poker/components/PokerReserveDialog.tsx`、`dashboard/src/game-center/games/poker/components/PokerCardStatuses.tsx`、`dashboard/src/game-center/games/poker/lib/reserve-view.ts`、`dashboard/src/game-center/games/poker/__tests__/reserve-view.test.tsx`、`dashboard/src/game-center/games/poker/__tests__/card-effects.test.tsx`；Modify `dashboard/src/game-center/games/poker/components/Table.tsx`、`dashboard/src/game-center/games/poker/components/Seat.tsx`、`dashboard/src/game-center/games/poker/components/HumanControls.tsx`、`dashboard/src/game-center/games/poker/components/MatchLog.tsx`、`dashboard/src/game-center/games/poker/components/MatchOverview.tsx`、`dashboard/src/game-center/games/poker/components/SettlementDetails.tsx`、`dashboard/src/game-center/games/poker/components/BetDecisionContext.tsx`、`dashboard/src/game-center/games/poker/hooks/usePokerChips.ts`、`dashboard/src/game-center/games/poker/hooks/usePokerEvents.ts`、`dashboard/src/game-center/games/poker/hooks/useTableMotion.ts`、`dashboard/src/game-center/games/poker/lib/chip-presentation.ts`、`dashboard/src/game-center/games/poker/lib/table-motion.ts`、`dashboard/src/game-center/games/poker/lib/action-view.ts`、`shared/src/game-poker-chips.ts`、`docs/agents/game-ui.md`。
 **Interfaces:** Consumes T10根帧和reserve投影；`projectReserveRows(view:PokerReserveView,filter:ReserveFilter):ReserveRow[]`在lib/reserve-view.ts导出，供明细使用；`ReserveFilter`只含可见付款人/待分人key及来源类型。
@@ -269,7 +269,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 展示通用暂存去向和卡牌触发的真实筹码变化'`。
 
 
-## Task T16: GPT生成全部60张正式封面
+## Task 16: GPT生成全部60张正式封面
 
 **Files:** Create `dashboard/src/game-center/games/poker/assets/ability-cards/v1/{01..60}.png`、`dashboard/src/game-center/games/poker/assets/ability-cards/v1/manifest.json`、`dashboard/src/game-center/games/poker/assets/ability-cards/v1/README.md`、`dashboard/src/game-center/games/poker/lib/card-artwork.ts`、`dashboard/scripts/check-poker-card-assets.mjs`；Modify `dashboard/package.json`、`dashboard/src/game-center/games/poker/components/PokerCardsDialog.tsx`。
 **Interfaces:** `manifest`每项含cardId、assetVersion、相对文件、实际尺寸、实际模型信息/未提供、完整提示词；`cardArtwork(cardId:string):string`仅映射已核对本地资源，不能返回生成占位图或私人远程URL。
@@ -282,7 +282,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'feat: 配齐60种卡牌的统一GPT生成封面'`；不将卡牌美术写进发布说明。
 
 
-## Task T17: 隔离PostgreSQL、组合模拟与兼容回归
+## Task 17: 隔离PostgreSQL、组合模拟与兼容回归
 
 **Files:** Create `server/test/run-poker-card-e2e.mjs`、`server/test/poker-card.e2e.spec.ts`、`server/test/poker-card-runner.spec.ts`、`server/src/game/poker/engine/__tests__/card-combinations.spec.ts`、`docs/superpowers/acceptance/2026-11-03-poker-card-mode.md`；Modify `server/package.json`。
 **Interfaces:** runner只接受显式`GAME_E2E_DATABASE_URL`且host为loopback、库名以`_e2e`结尾；校验成功才通过子进程env设置DATABASE_URL、迁移、执行唯一目标spec。不得打印URL/凭据，不采用当前业务库兜底。
@@ -294,7 +294,7 @@
 - [ ] **5. 本地提交。** `git commit -m 'test: 验证卡牌组合与暂存资金的真实事务一致性'`；若授权或环境缺失，保持本任务未完成并在报告写清，不能标记整版已验收。
 
 
-## Task T18: 真实展开验收、规则同步和完成审查
+## Task 18: 真实展开验收、规则同步和完成审查
 
 **Files:** Create `dashboard/src/game-center/games/poker/__tests__/card-mode.browser.tsx`；Modify `docs/superpowers/acceptance/2026-11-03-poker-card-mode.md`、`docs/agents/game-ui.md`、`docs/agents/module-boundaries.md`、`docs/agents/capability-registry.md`、`docs/agent-guides/game-hall.md`、`CONTEXT.md`、`desktop/app-capabilities/synapse-skill/skill-package/game-hall/poker/SKILL.md`、`desktop/app-capabilities/synapse-skill/skill-package/game-hall/references/api.md`。
 **Interfaces:** 最终验收消费T1–T17产物；无新增玩法/接口。系统Skill/API参考必须与实际导出一致，不把UI私有用牌操作公开为MCP。

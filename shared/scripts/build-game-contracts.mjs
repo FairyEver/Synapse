@@ -3,6 +3,7 @@ import ts from "typescript"
 const entries = [
   ["game", "game-contracts"], ["game-ui", "game-ui"],
   ["game-poker-chips", "game-poker-chips"],
+  ["game-poker-cards", "game-poker-cards"], ["game-reserve", "game-reserve"], ["game-poker-card-schemas", "game-poker-card-schemas"],
   ["game-response-schemas", "game-response-schemas"], ["game-poker-response-schemas", "game-poker-response-schemas"],
 ]
 for (const [sourceName, outputName] of entries) {

@@ -1,3 +1,7 @@
+import { POKER_CARD_PLAY_SCHEMA, POKER_CARD_CHOOSE_SCHEMA } from "./game-poker-card-schemas.js"
+export { POKER_CARD_PLAY_SCHEMA, POKER_CARD_CHOOSE_SCHEMA } from "./game-poker-card-schemas.js"
+export { GAME_POKER_RULES_HEADER, SUPPORTED_POKER_RULES } from "./game-poker-cards.js"
+import type { PokerCardPlayInput, PokerCardChooseInput, PokerCardResult } from "./game-poker-cards.js"
 import { GAME_TOOLS } from "./game.js"
 import type {
   PokerRuleOptions,
@@ -60,6 +64,7 @@ export interface GameBridge {
     control: {
       set: (input: Room & { controlVersion: number; action: "takeover" | "request_ai" | "cancel_ai" }) => Promise<PokerControlView>
     }
+    card: { play: (input: PokerCardPlayInput) => Promise<PokerCardResult>; choose: (input: PokerCardChooseInput) => Promise<PokerCardResult> }
     roll: {
       start: (input: PokerRollStartInput) => Promise<PokerRollResult>
       choose: (input: PokerRollChooseInput) => Promise<PokerRollResult>
@@ -73,6 +78,7 @@ export interface GameBridge {
         to?: number
         controlVersion?: number
         expectedActionSeq?: number
+        expectedPaymentVersion?: string
       }) => Promise<{ ok: true; handId: string; actionSeq: number; cursor: string }>
     }
     table: {
@@ -105,6 +111,8 @@ export function unwrapGameResult<T>(value: unknown): T {
 
 
 export const POKER_PRIVATE_UI_OPERATIONS = [
+  { id: "app.game.poker.card.play", name: "", description: "本人回合使用一张能力牌", mutates: true, inputSchema: POKER_CARD_PLAY_SCHEMA },
+  { id: "app.game.poker.card.choose", name: "", description: "完成本人能力牌候选选择", mutates: true, inputSchema: POKER_CARD_CHOOSE_SCHEMA },
   {
     id: "app.game.poker.control.set",
     name: "",
@@ -164,6 +172,8 @@ export interface GameUiRoute {
 
 const roomPath = (params: Record<string, unknown>) => `/game/poker/rooms/${encodeURIComponent(String(params.roomCode))}`
 export const pokerUiRoutes = {
+  "app.game.poker.card.play": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/card/play` },
+  "app.game.poker.card.choose": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/card/choose` },
   "app.game.poker.room.start": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/start` },
   "app.game.poker.roll.start": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/roll/start` },
   "app.game.poker.roll.choose": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/roll/choose` },

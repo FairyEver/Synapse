@@ -31,11 +31,15 @@ export const POKER_MAX_ROLL_COINS = 2147483647
 export type PokerController = "human" | "ai" | null
 export type PokerPauseReason = "user" | "context_maintenance" | null
 export * from "./game-poker-chips.js"
+export * from "./game-poker-cards.js"
+export * from "./game-reserve.js"
+import type { PokerCardView, PokerResolutionFrameView, PokerPaymentView } from "./game-poker-cards.js"
+import type { PokerReserveView } from "./game-reserve.js"
 import type { PokerChipState } from "./game-poker-chips.js"
 export type PokerBlindPreset = "1/2" | "2/4" | "5/10" | "10/20"
-export interface PokerRuleOptions { roll?: boolean; rollCoins?: number }
+export interface PokerRuleOptions { roll?: boolean; rollCoins?: number; cards?: boolean }
 export type PokerRollKind = "normal" | "super"
-export interface PokerRollOffer { fee: number; available: boolean; reason?: string; coinCost?: number }
+export interface PokerRollOffer { payment?: PokerPaymentView; fee: number; available: boolean; reason?: string; coinCost?: number }
 export interface PokerRollQuote { enabled: boolean; pricingVersion?: string; count: number; coins?: { balance: number; limit: number }; normal: PokerRollOffer; super: PokerRollOffer }
 export interface PokerRollPending { rollId: string; cardIndex: number; candidates: string[] }
 export interface PokerRollView { enabled: boolean; pricingVersion?: string; count?: number; coins?: { balance: number; limit: number }; normal?: PokerRollOffer; super?: PokerRollOffer; pending?: PokerRollPending | null; pendingSeatNo?: number | null }
@@ -65,9 +69,11 @@ export interface PokerRollLedger {
 export interface PokerRollPrivateView { rollId: string; kind: PokerRollKind; cardIndex: number; oldCard: string; candidates: string[]; selectedIndex: number | null; fee: number; street: "preflop" | "flop" | "turn"; count: number }
 export interface PokerRollChoiceRequiredView extends PokerRollPending { roll?: PokerRollView; status: "roll_choice_required"; handId: string; handNo: number; controlVersion: number; actionSeq: number; deadlineMs: number | null; cursor: string }
 export interface PokerRollResult { ok: true; handId: string; rollId: string; actionSeq: number; cursor: string; status: "completed" | "choice_required" }
-export interface PokerRollStartInput { roomCode: string; handId: string; street: "preflop" | "flop" | "turn"; expectedActionSeq: number; controlVersion: number; actionId: string; kind: PokerRollKind; cardIndex: number; expectedFee: number }
+export interface PokerRollStartInput { expectedPaymentVersion?: string; roomCode: string; handId: string; street: "preflop" | "flop" | "turn"; expectedActionSeq: number; controlVersion: number; actionId: string; kind: PokerRollKind; cardIndex: number; expectedFee: number }
 export interface PokerRollChooseInput { roomCode: string; handId: string; rollId: string; candidateIndex: number; expectedActionSeq: number; controlVersion: number; actionId: string }
 export interface PokerRules {
+  cardRulesVersion?: "cards-v1"
+  chipRulesVersion?: "chips-v2"
   ruleOptions?: PokerRuleOptions
   rollPricingVersion?: string
   variant: PokerVariant
@@ -129,6 +135,7 @@ export interface PokerTableEvent {
   settlement?: PokerSettlementView
 }
 export interface PokerTableEventsView {
+  frames?: PokerResolutionFrameView[]
   events: PokerTableEvent[]
   cursor: string
   hasMore: boolean
@@ -192,6 +199,9 @@ export interface PokerHandLogEntry {
 }
 export interface PokerHandLog { handId: string; complete: boolean; entries: PokerHandLogEntry[] }
 export interface PokerTableView {
+  cards?: PokerCardView
+  reserve?: PokerReserveView
+  paymentVersion?: string
   /** Public ordered current-hand actions. Missing/incomplete logs must not supply totals. */
   handLog?: PokerHandLog
   potContributions?: PokerPotContributions
@@ -362,7 +372,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     "poker.room.create",
     "创建2–6人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。ruleOptions.rollCoins可设置每手钻石（正整数，默认12），normal/super消耗固定1/3，不可配置。",
     {
-      ruleOptions: { type: "object", properties: { roll: { type: "boolean" }, rollCoins: integer(1, POKER_MAX_ROLL_COINS) }, additionalProperties: false },
+      ruleOptions: { type: "object", properties: { cards: { type: "boolean" }, roll: { type: "boolean" }, rollCoins: integer(1, POKER_MAX_ROLL_COINS) }, additionalProperties: false },
       variant: { type: "string", enum: ["standard52", "short32"] },
       blindPreset: { type: "string", enum: ["1/2", "2/4", "5/10", "10/20"] },
       creationId: { type: "string", format: "uuid", maxLength: 36 },
@@ -374,7 +384,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     ["maxSeats", "buyIn"],
     true,
   ],
-  ["poker.roll.start", "按本人当前报价确认换牌，另付筹码；有coins快照的每手额度由建房rollCoins确定（默认12），normal固定扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
+  ["poker.roll.start", "按本人当前报价确认换牌，另付筹码；有coins快照的每手额度由建房rollCoins确定（默认12），normal固定扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647), expectedPaymentVersion: str(200) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
   ["poker.roll.choose", "从本人待选超级换牌候选中选一张，不再扣筹码或钻石，零钻石仍可选择；候选仅本人可见，未知结果复用原actionId。", { ...room, handId: str(), rollId: str(), candidateIndex: integer(0, 2), expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "handId", "rollId", "candidateIndex", "expectedActionSeq", "controlVersion", "actionId"], true],
   ["poker.room.start", "仅房主手动开始：首局房主免准备，其他可参与座位须准备；后续房主也须准备且全员准备后才能开始。首局handId传null，后续传当前结算handId。入座、准备、回座、调度均不自动开局；已入座房主须携当前controlVersion并持有控制权。", { ...room, handId: { type: ["string", "null"], maxLength: 200 }, controlVersion }, ["roomCode", "handId"], true],
   ["poker.room.get", "只读旁观快照，不返回底牌、私密提示词或note；可选公开rollLedger按本手身份快照列出全部成功start及原补偿分配，status区分待结算、已释放和已取消，缺失不等于零。可选公开handLog按当前手seq合并实际盲注、下注与Roll支付，仅公开姓名/座位/阶段/金额/来源和Roll次数状态；choose不重复。原始动作最多1000条，complete=false或缺字段不能推算完整合计，不含私牌、候选、note或账号标识。可选公开potContributions包含本手全部普通累计投入（含实际盲注、弃牌投入、退款及边池，不含Roll），按原参赛身份显示来源；status为pending/settled/cancelled，结算或取消不表示仍在池中，缺失不等于零。", room, ["roomCode"], false],
@@ -424,6 +434,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
       ...room,
       controlVersion,
       expectedActionSeq: integer(0, 2147483647),
+      expectedPaymentVersion: str(200),
       handId: str(),
       street: { type: "string", enum: ["preflop", "flop", "turn", "river"] },
       actionId: { type: "string", format: "uuid" },

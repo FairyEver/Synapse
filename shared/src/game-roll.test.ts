@@ -8,7 +8,7 @@ describe("Roll线协议", () => {
     for (const op of ["start", "choose"]) {
       const tool = GAME_TOOLS.find(t => t.id === `app.game.poker.roll.${op}`)!
       expect(tool).toBeDefined()
-      expect(tool.inputSchema.required).toEqual(Object.keys(tool.inputSchema.properties))
+      expect(tool.inputSchema.required).toEqual(Object.keys(tool.inputSchema.properties).filter(key => key !== "expectedPaymentVersion"))
       expect(GAME_UI_ROUTES[tool.id].path({ roomCode: "1234" })).toBe(`/game/poker/rooms/1234/roll/${op}`)
       expect(GAME_RESPONSE_SCHEMAS[tool.id].safeParse({ ok: true, handId: "h", rollId: "r", actionSeq: 2, cursor: "1:2", status: "choice_required" }).success).toBe(true)
       expect(GAME_RESPONSE_SCHEMAS[tool.id].safeParse({ ok: true, handId: "h" }).success).toBe(false)

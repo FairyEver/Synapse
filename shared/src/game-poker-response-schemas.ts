@@ -1,3 +1,4 @@
+import { pokerCardResultSchema, pokerCardViewSchema, pokerReserveViewSchema, pokerResolutionFrameSchema, pokerPaymentSchema } from "./game-poker-card-schemas.js"
 import { z } from "zod"
 import { POKER_MAX_ROLL_COINS } from "./game.js"
 
@@ -7,9 +8,9 @@ const controlFields = {
   handoffPending: z.boolean(),
 }
 const control = z.object(controlFields).passthrough()
-const ruleOptions = z.object({ roll: z.boolean().optional(), rollCoins: z.number().int().min(1).max(POKER_MAX_ROLL_COINS).optional() }).strict()
+const ruleOptions = z.object({ cards: z.boolean().optional(), roll: z.boolean().optional(), rollCoins: z.number().int().min(1).max(POKER_MAX_ROLL_COINS).optional() }).strict()
 const rollCoins = z.object({ balance: z.number().int().nonnegative(), limit: z.number().int().positive() }).strict().refine(coins => coins.balance <= coins.limit)
-const rollOffer = z.object({ coinCost: z.number().int().positive().optional(), fee: z.number().int().nonnegative(), available: z.boolean(), reason: z.string().optional() }).strict()
+const rollOffer = z.object({ payment: pokerPaymentSchema.optional(), coinCost: z.number().int().positive().optional(), fee: z.number().int().nonnegative(), available: z.boolean(), reason: z.string().optional() }).strict()
 const rollPending = z.object({ rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3) }).strict()
 const roll = z.object({ coins: rollCoins.optional(), enabled: z.boolean(), pricingVersion: z.string().optional(), count: z.number().int().nonnegative().optional(), normal: rollOffer.optional(), super: rollOffer.optional(), pending: rollPending.nullable().optional(), pendingSeatNo: z.number().int().nonnegative().nullable().optional() }).strict()
 const rollPublic = z.object({ kind: z.enum(["normal", "super"]), phase: z.enum(["start", "choose"]), fee: z.number().int().positive(), count: z.number().int().positive(), seatNo: z.number(), displayName: z.string(), source: z.enum(["human", "mcp", "rules_bot", "timeout"]), compensations: z.record(z.string(), z.number().int().nonnegative()) }).strict()
@@ -50,7 +51,7 @@ const rollLedger = z.object({
   }
 })
 const rollResult = z.object({ ok: z.literal(true), handId: z.string(), rollId: z.string(), actionSeq: z.number().int().nonnegative(), cursor: z.string(), status: z.enum(["completed", "choice_required"]) }).passthrough()
-const rules = z.object({ ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
+const rules = z.object({ cardRulesVersion: z.literal("cards-v1").optional(), chipRulesVersion: z.literal("chips-v2").optional(), ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
 const checkpoint = z.object({
   roomCode: z.string(), cursor: z.string(), controlVersion: z.number().int().nonnegative(),
   sessionStyle: z.string(), continueIntent: z.boolean(), pauseReason: z.literal("context_maintenance"), savedAt: z.string(),
@@ -144,6 +145,7 @@ const handLog = z.object({
 })
 const table = z
   .object({
+    cards: pokerCardViewSchema.optional(), reserve: pokerReserveViewSchema.optional(), paymentVersion: z.string().optional(),
     handLog: handLog.optional(),
     potContributions: potContributions.optional(),
     chipState: chipState.optional(),
@@ -311,13 +313,15 @@ const tableEvent = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("settlement"), handId: z.string(), handNo: z.number(), seq: z.literal(2147483647), settlement }).passthrough(),
 ])
 export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
+  "app.game.poker.card.play": pokerCardResultSchema,
+  "app.game.poker.card.choose": pokerCardResultSchema,
   "app.game.poker.roll.start": rollResult,
   "app.game.poker.roll.choose": rollResult,
   "app.game.poker.control.claim": control,
   "app.game.poker.control.set": control,
   "app.game.poker.checkpoint.get": z.object({ checkpoint: checkpoint.nullable() }).passthrough(),
   "app.game.poker.checkpoint.save": z.object({ checkpoint }).passthrough(),
-  "app.game.poker.table.events": z.object({ events: z.array(tableEvent), cursor: z.string(), hasMore: z.boolean() }).passthrough(),
+  "app.game.poker.table.events": z.object({ frames: z.array(pokerResolutionFrameSchema).optional(), events: z.array(tableEvent), cursor: z.string(), hasMore: z.boolean() }).passthrough(),
   "app.game.poker.guide": z
     .object({
       rules: z.record(z.string(), z.unknown()),
