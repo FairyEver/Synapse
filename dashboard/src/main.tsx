@@ -1,3 +1,4 @@
+import { bootstrapDashboard } from '@/lib/dashboard-bootstrap';
 import { resolveWebEntrypoint } from '@/lib/web-entrypoints';
 import '@/styles/globals.css';
 import '@/lib/browser-compat';
@@ -37,21 +38,21 @@ async function bootstrap() {
       window.location.replace(entrypoint.location);
       return;
     }
-    try {
+    await bootstrapDashboard(window.location.href, async () => {
+      try {
         const session = await dashboardApi.getSession();
         useAuthStore.getState().auth.setUser(session);
-    }
-    catch {
-        // not logged in
-    }
-    ReactDOM.createRoot(document.getElementById('root')!).render(<StrictMode>
-      <QueryClientProvider client={queryClient}>
-
-
+      } catch {
+        useAuthStore.getState().auth.setUser(null);
+      }
+    }, () => {
+      ReactDOM.createRoot(document.getElementById('root')!).render(
+        <StrictMode>
+          <QueryClientProvider client={queryClient}>
             <RouterProvider router={dashboardRouter}/>
-
-
-      </QueryClientProvider>
-    </StrictMode>);
+          </QueryClientProvider>
+        </StrictMode>
+      );
+    });
 }
 bootstrap();

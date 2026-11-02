@@ -1,9 +1,10 @@
+import { useAuthStore } from '@/stores/auth-store'
 // @vitest-environment jsdom
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriveBrowserSnapshotDto, DriveFileContentUpdateResult } from '@synapse/shared'
 import { ApiError, driveBrowserApi } from '@/lib/api'
 
@@ -38,6 +39,8 @@ vi.mock('@/lib/api', () => ({
 
 let root: Root | null = null
 let host: HTMLDivElement | null = null
+
+beforeEach(() => { useAuthStore.getState().auth.setUser(null) })
 
 afterEach(() => {
   if (root) {

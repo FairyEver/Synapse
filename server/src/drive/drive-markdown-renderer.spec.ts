@@ -1,7 +1,43 @@
 import { describe, expect, it } from "vitest"
-import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import { prepareDriveMarkdownDocument, renderPreparedDriveMarkdownDocument, renderDriveMarkdownFragment } from "./drive-markdown-renderer"
 
 describe("drive markdown renderer", () => {
+  it("defers browser images after the first and explicitly loads all PDF images", async () => {
+    const source = '![首图](https://example.com/first.png)\n\n<img src="https://example.com/second.png" width="320" height="180">'
+    const browser = await renderDriveMarkdownFragment(source, { allowStandaloneRawImages: true, imageLoading: 'browser' })
+    const tags = browser.html.match(/<img\b[^>]+>/gu)!
+    expect(tags[0]).toContain('loading="eager"')
+    expect(tags[1]).toContain('loading="lazy"')
+    expect(tags[1]).toContain('decoding="async"')
+    expect(tags[1]).toContain('width="320"')
+    expect(tags[1]).toContain('height="180"')
+    const pdf = await renderDriveMarkdownFragment(source, { allowStandaloneRawImages: true, imageLoading: 'eager' })
+    expect(pdf.html).not.toContain('loading="lazy"')
+    expect(pdf.html.match(/loading="eager"/gu)).toHaveLength(2)
+  })
+
+  it("reuses parsed documents without leaking relative URLs between share requests", async () => {
+    const prepared = await prepareDriveMarkdownDocument('# Notes\n\n![图](./image.png)')
+    const before = JSON.stringify(prepared)
+    const [first, second] = await Promise.all([
+      renderPreparedDriveMarkdownDocument(prepared, { relativeImageUrls: new Map([['./image.png', '/share/first/items/image/download']]) }),
+      renderPreparedDriveMarkdownDocument(prepared, { relativeImageUrls: new Map([['./image.png', '/share/second/items/image/download']]) }),
+    ])
+    expect(first.html).toContain('/share/first/items/image/download')
+    expect(first.html).not.toContain('/share/second/')
+    expect(second.html).toContain('/share/second/items/image/download')
+    expect(first.outline).toEqual([{ id: 'notes', text: 'Notes', depth: 1, children: [] }])
+    expect(first.projection).toBe(prepared.projection)
+    expect(JSON.stringify(prepared)).toBe(before)
+  })
+
+  it("does not reuse a projection belonging to different source text", async () => {
+    const first = await renderDriveMarkdownFragment('before')
+    const result = await renderDriveMarkdownFragment('after', { projection: first.projection })
+    expect(result.projection.sourceSha256).not.toBe(first.projection.sourceSha256)
+    expect(result.renderedText).toBe('after')
+  })
+
   it("preserves column alignment when expanding a table to fit overflow cells", async () => {
     const result = await renderDriveMarkdownFragment([
       "| 左列 | 右列 |",

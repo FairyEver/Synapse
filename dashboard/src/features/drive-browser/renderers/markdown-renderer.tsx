@@ -47,7 +47,7 @@ import { useDriveMessages } from '../use-drive-messages'
 import { usePendingDriveDiscussion } from '../use-drive-discussion-location'
 import { DriveMessagesSection } from '../drive-messages-section'
 import { useDriveCollaboration } from '../collaboration/use-drive-collaboration'
-import { DriveCodeRenderer } from './code-renderer'
+import { DriveCodeRenderer } from './lazy-drive-renderers'
 import { syncDriveHierarchicalListMarkers } from './drive-hierarchical-list-markers'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import {

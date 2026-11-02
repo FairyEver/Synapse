@@ -385,6 +385,7 @@ export class DriveCollaborationService implements OnApplicationShutdown {
     const rendered = await renderDriveMarkdownFragment(body.toString("utf8"), {
       projection: room.projectionState.projection,
       allowStandaloneRawImages: isPlainDriveMarkdownName(room.itemName),
+      imageLoading: "browser",
     })
     await this.projections.persist({ itemId, versionId, projection: rendered.projection })
     this.bus.publish(itemId, {
@@ -542,6 +543,7 @@ export class DriveCollaborationService implements OnApplicationShutdown {
     const checkpointProjection = await this.projections.load(version.id)
     const currentProjection = await renderDriveMarkdownFragment(currentSource, {
       allowStandaloneRawImages: isPlainDriveMarkdownName(item.name),
+      imageLoading: "browser",
       previousProjection: checkpointProjection
         ? { source: checkpointSource.toString("utf8"), projection: checkpointProjection }
         : null,
@@ -708,6 +710,7 @@ export class DriveCollaborationService implements OnApplicationShutdown {
       const source = room.text.toString()
       void renderDriveMarkdownFragment(source, {
         allowStandaloneRawImages: isPlainDriveMarkdownName(room.itemName),
+        imageLoading: "browser",
         previousProjection: room.projectionState,
       }).then((rendered) => {
         room.projectionState = {

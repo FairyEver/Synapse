@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/stores/auth-store'
+import { shareSnapshotForSession } from './shared/share-session-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
@@ -73,6 +75,7 @@ type DriveBrowserUnlockVariables = {
 
 export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
   const queryClient = useQueryClient()
+  const sessionReady = useAuthStore((state) => state.auth.initialized !== false)
   const [unlockedSnapshotState, setUnlockedSnapshotState] = useState<KeyedDriveBrowserSnapshot | null>(null)
   const [pagedSnapshotState, setPagedSnapshotState] = useState<KeyedDriveBrowserSnapshot | null>(null)
   const loadingChildrenPageKeyRef = useRef<string | null>(null)
@@ -161,7 +164,8 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
     setUnlockedSnapshotState(null)
   }, [unlockedKeySignature])
 
-  const snapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
+  const rawSnapshot = unlockedSnapshot ?? pagedSnapshot ?? querySnapshot
+  const snapshot = useMemo(() => rawSnapshot ? shareSnapshotForSession(rawSnapshot, sessionReady) : null, [rawSnapshot, sessionReady])
   const reloadMutation = useMutation({
     mutationFn: async () => requireDriveBrowserSnapshot(await loadDriveBrowser(input)),
     onSuccess: (nextSnapshot) => {
@@ -178,6 +182,7 @@ export function useDriveBrowser(input: DriveBrowserInput): DriveBrowserState {
       readonly text: string
       readonly baseVersionId: string
     }) => {
+      if (input.context === 'share' && !sessionReady) throw new Error('正在确认登录状态，请稍后重试。')
       const result = await saveDriveBrowserText(input, variables.snapshot, {
         text: variables.text,
         baseVersionId: variables.baseVersionId,

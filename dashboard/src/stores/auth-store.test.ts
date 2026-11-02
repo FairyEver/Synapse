@@ -22,6 +22,7 @@ describe('useAuthStore', () => {
 
     expect(useAuthStore.getState().auth.user).toBeNull()
     expect(useAuthStore.getState().auth.isAuthenticated).toBe(false)
+    expect(useAuthStore.getState().auth.initialized).toBe(false)
   })
 
   it('updates the signed-in user via setUser', async () => {
@@ -31,6 +32,7 @@ describe('useAuthStore', () => {
 
     expect(useAuthStore.getState().auth.user).toEqual(sampleUser)
     expect(useAuthStore.getState().auth.isAuthenticated).toBe(true)
+    expect(useAuthStore.getState().auth.initialized).toBe(true)
   })
 
   it('setUser clears authentication when called with null', async () => {
@@ -41,6 +43,7 @@ describe('useAuthStore', () => {
 
     expect(useAuthStore.getState().auth.user).toBeNull()
     expect(useAuthStore.getState().auth.isAuthenticated).toBe(false)
+    expect(useAuthStore.getState().auth.initialized).toBe(true)
   })
 
   it('reset clears the signed-in user', async () => {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { PLATFORM_OBJECT_PATH_PREFIX, type DriveMarkdownOutlineItemDto, type DriveMarkdownProjectionDto } from "@synapse/shared"
 import {
   annotateMarkdownProjectionTree,
@@ -53,6 +54,7 @@ export type DriveMarkdownRenderResult = {
 }
 
 export type DriveMarkdownRenderOptions = {
+  readonly imageLoading?: "browser" | "eager"
   readonly relativeImageUrls?: ReadonlyMap<string, string | null>
   readonly pdfImageUrlsById?: ReadonlyMap<string, string | null>
   readonly pdfImageResourceKeysById?: ReadonlyMap<string, string | null>
@@ -79,43 +81,59 @@ export async function renderDriveMarkdownFragment(
   markdown: string,
   options: DriveMarkdownRenderOptions = {},
 ): Promise<DriveMarkdownRenderResult> {
-  return renderMarkdownBody(markdown, options)
+  const prepared = await prepareDriveMarkdownDocument(markdown, options)
+  return renderPreparedDriveMarkdownDocument(prepared, options)
 }
 
-async function renderMarkdownBody(markdown: string, options: DriveMarkdownRenderOptions): Promise<DriveMarkdownRenderResult> {
-  const pdfImageResourceKeysById = {
-    current: options.pdfImageResourceKeysById,
-  }
-  const outlineState: {
-    readonly counts: Map<string, number>
-    readonly items: MutableDriveMarkdownOutlineItem[]
-    sequence: number
-  } = {
-    counts: new Map<string, number>(),
-    items: [],
-    sequence: 0,
-  }
-  const [
-    { unified },
-    { default: remarkParse },
-    { default: remarkGfm },
-    { default: remarkRehype },
-    { default: rehypeSanitize, defaultSchema },
-    { default: rehypeStringify },
-  ] = await Promise.all([
-    import("unified"),
-    import("remark-parse"),
-    import("remark-gfm"),
-    import("remark-rehype"),
-    import("rehype-sanitize"),
-    import("rehype-stringify"),
-  ])
+/** Immutable, permission-independent parse output; resource URLs are resolved per request. */
+export type PreparedDriveMarkdownDocument = {
+  readonly sourceText: string
+  readonly tree: MarkdownAstNode & MarkdownProjectionNode
+  readonly projection: DriveMarkdownProjectionDto
+  readonly outline: readonly DriveMarkdownOutlineItemDto[]
+  readonly renderedText: string
+}
 
+export async function prepareDriveMarkdownDocument(
+  markdown: string,
+  options: DriveMarkdownRenderOptions = {},
+): Promise<PreparedDriveMarkdownDocument> {
+  const [{ unified }, { default: remarkParse }, { default: remarkGfm }] = await Promise.all([
+    import("unified"), import("remark-parse"), import("remark-gfm"),
+  ])
+  const tree = unified().use(remarkParse).use(remarkGfm).parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
+  normalizeTableColumnCounts(tree)
+  normalizeDriveMarkdownLooseImageNodes(tree)
+  if (options.allowStandaloneRawImages === true) visitRawImageAst(tree)
+  normalizeSafeTableHtmlBreaks(tree)
+  normalizeEscapedRawHtmlNodes(tree)
+  normalizeEscapedAutolinkNodes(tree)
+  const renderedText = extractDriveMarkdownRenderedText(tree)
+  const cachedProjection = options.projection?.parserVersion === DRIVE_MARKDOWN_PARSER_VERSION
+    && options.projection.sourceSha256 === createHash("sha256").update(markdown).digest("hex")
+    && options.projection.imageAnchorsVersion === 1 ? options.projection : null
+  const projection = cachedProjection ?? buildDriveMarkdownProjection(markdown, tree, {
+    previous: options.previousProjection ?? (options.projection ? { source: markdown, projection: options.projection } : null),
+  })
+  annotateMarkdownProjectionTree(tree, projection, markdown)
+  const outlineState = { counts: new Map<string, number>(), items: [] as MutableDriveMarkdownOutlineItem[], sequence: 0 }
+  createHeadingOutlinePlugin(outlineState)(tree)
+  return { sourceText: markdown, tree, projection, outline: outlineState.items, renderedText }
+}
+
+export async function renderPreparedDriveMarkdownDocument(
+  prepared: PreparedDriveMarkdownDocument,
+  options: DriveMarkdownRenderOptions = {},
+): Promise<DriveMarkdownRenderResult> {
+  const pdfImageResourceKeysById = {
+    current: options.pdfImageResourceKeys
+      ? new Map((prepared.projection.images ?? []).map((image) => [image.imageId, options.pdfImageResourceKeys?.get(image.resourceKey) ?? null]))
+      : options.pdfImageResourceKeysById,
+  }
+  const [{ unified }, { default: remarkRehype }, { default: rehypeSanitize, defaultSchema }, { default: rehypeStringify }] = await Promise.all([
+    import("unified"), import("remark-rehype"), import("rehype-sanitize"), import("rehype-stringify"),
+  ])
   const processor = unified()
-    .use(remarkParse)
-    .use(remarkGfm)
-    .use(() => createHeadingOutlinePlugin(outlineState))
-    .use(() => prepareStandaloneRawImagesPlugin(options.allowStandaloneRawImages === true))
     .use(escapeRawHtmlPlugin)
     .use(remarkRehype)
     .use(() => resolveRelativeResourceUrlsPlugin(options.relativeImageUrls ?? new Map()))
@@ -141,36 +159,30 @@ async function renderMarkdownBody(markdown: string, options: DriveMarkdownRender
         src: [...(defaultSchema.protocols?.src ?? []), "data", "blob"],
       },
     })
+    .use(() => applyImageLoadingPlugin(options.imageLoading))
     .use(wrapTablesPlugin)
     .use(openCompleteWebUrlsExternallyPlugin)
     .use(rehypeStringify)
-  const tree = processor.parse(markdown) as MarkdownAstNode & MarkdownProjectionNode
-  normalizeTableColumnCounts(tree)
-  normalizeDriveMarkdownLooseImageNodes(tree)
-  if (options.allowStandaloneRawImages === true) visitRawImageAst(tree)
-  normalizeSafeTableHtmlBreaks(tree)
-  normalizeEscapedRawHtmlNodes(tree)
-  normalizeEscapedAutolinkNodes(tree)
-  const renderedText = extractDriveMarkdownRenderedText(tree)
-  const cachedProjection = options.projection?.parserVersion === DRIVE_MARKDOWN_PARSER_VERSION ? options.projection : null
-  const projection = cachedProjection ?? buildDriveMarkdownProjection(markdown, tree, {
-    previous: options.previousProjection ?? (options.projection ? { source: markdown, projection: options.projection } : null),
-  })
-  if (options.pdfImageResourceKeys) {
-    pdfImageResourceKeysById.current = new Map(
-      (projection.images ?? []).map((image) => [
-        image.imageId,
-        options.pdfImageResourceKeys?.get(image.resourceKey) ?? null,
-      ]),
-    )
-  }
-  annotateMarkdownProjectionTree(tree, projection, markdown)
-  const transformed = await processor.run(tree as never)
+  const transformed = await processor.run(structuredClone(prepared.tree) as never)
   return {
     html: String(processor.stringify(transformed)),
-    outline: outlineState.items,
-    projection,
-    renderedText,
+    outline: prepared.outline,
+    projection: prepared.projection,
+    renderedText: prepared.renderedText,
+  }
+}
+
+function applyImageLoadingPlugin(policy: DriveMarkdownRenderOptions["imageLoading"]) {
+  return (tree: HtmlAstNode): void => {
+    let images = 0
+    const visit = (node: HtmlAstNode): void => {
+      if (node.tagName === "img" && policy) {
+        node.properties = { ...node.properties, loading: policy === "eager" || images === 0 ? "eager" : "lazy", decoding: "async" }
+        images += 1
+      }
+      for (const child of node.children ?? []) visit(child)
+    }
+    visit(tree)
   }
 }
 
@@ -194,11 +206,6 @@ function normalizeSafeTableHtmlBreaks(node: MarkdownAstNode, insideTableCell = f
   for (const child of node.children ?? []) normalizeSafeTableHtmlBreaks(child, childInsideTableCell)
 }
 
-function prepareStandaloneRawImagesPlugin(enabled: boolean) {
-  return (tree: MarkdownAstNode) => {
-    if (enabled) visitRawImageAst(tree)
-  }
-}
 
 function visitRawImageAst(node: MarkdownAstNode): void {
   if (node.type === "html" && typeof node.value === "string") {

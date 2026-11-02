@@ -43,6 +43,12 @@ import {
 } from './shared/drive-view-model'
 import { getDriveFinderBreadcrumbs } from './finder/drive-finder-breadcrumbs'
 
+// Static layout assertions isolate module delivery, covered by the lazy-component tests.
+vi.mock('./renderers/lazy-drive-renderers', async () => {
+  const [code, rich] = await Promise.all([import('./renderers/code-renderer'), import('./renderers/mdxeditor-renderer')])
+  return { DriveCodeRenderer: code.DriveCodeRenderer, DriveMDXeditorRenderer: rich.DriveMDXeditorRenderer, DriveFileVersionsDialog: () => null }
+})
+
 vi.mock('@mdxeditor/editor', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
 

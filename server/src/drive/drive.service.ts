@@ -79,7 +79,9 @@ import {
   verifyDrivePasswordInput,
   type DrivePasswordMaterial,
 } from "./drive-access-protection"
-import { renderDriveMarkdownFragment } from "./drive-markdown-renderer"
+import { renderDriveMarkdownFragment, renderPreparedDriveMarkdownDocument } from "./drive-markdown-renderer"
+import { loadDriveMarkdownPreview, type CachedDriveMarkdownPreview } from "./drive-markdown-preview-cache"
+import { measureDrivePreview, traceDrivePreview } from "./drive-preview-diagnostics"
 import type { DriveMarkdownPdfImageReference } from "./drive-markdown-pdf-render-task"
 import { DRIVE_MARKDOWN_PARSER_VERSION, driveMarkdownImageResourceKey, mapDriveMarkdownSourceRanges } from "./drive-markdown-projection"
 import { DriveMarkdownProjectionService } from "./drive-markdown-projection.service"
@@ -422,6 +424,11 @@ export class DriveService implements OnApplicationBootstrap {
   private readonly logger = new Logger(DriveService.name)
   private readonly reorganizationPlans = new Map<string, DriveReorganizationPlan>()
   private readonly markdownShareImageIds = new Map<string, ReadonlySet<string>>()
+  private readonly markdownPreviews = new AnnotationComputationCache<CachedDriveMarkdownPreview>({
+    maxEntries: 16,
+    maxBytes: 32 * 1024 * 1024,
+    sizeOf: (value) => JSON.stringify(value).length * 2 + 8 * value.document.renderedText.length,
+  })
   private readonly annotationDocuments = new AnnotationComputationCache<Pick<DriveAnnotationDocumentValue, "sourceText" | "renderedText" | "projection">>({
     maxEntries: 16,
     maxBytes: 32 * 1024 * 1024,
@@ -2282,33 +2289,35 @@ export class DriveService implements OnApplicationBootstrap {
     readonly surface: "standalone" | "console"
     readonly childrenPage?: DriveBrowserChildrenPageInput
   }): Promise<DriveBrowserSnapshotDto> {
-    const { root, current } = await this.resolveOwnedBrowserCurrent(input)
-    const route: DriveBrowserRouteContext = { context: "owner", surface: input.surface }
-    const children = current.type === DRIVE_ITEM_TYPE.folder
-      ? await this.listActiveChildrenPage(root.userId, current.id, input.childrenPage)
-      : emptyDriveBrowserChildrenPage(input.childrenPage)
-    const preview = await this.buildBrowserPreview(current, route)
-    const currentVersionId = await this.findCurrentDriveFileVersionId(current)
+    return traceDrivePreview("owner", async () => {
+      const { root, current } = await measureDrivePreview("access", () => this.resolveOwnedBrowserCurrent(input))
+      const route: DriveBrowserRouteContext = { context: "owner", surface: input.surface }
+      const children = current.type === DRIVE_ITEM_TYPE.folder
+        ? await this.listActiveChildrenPage(root.userId, current.id, input.childrenPage)
+        : emptyDriveBrowserChildrenPage(input.childrenPage)
+      const preview = await this.buildBrowserPreview(current, route)
+      const currentVersionId = await this.findCurrentDriveFileVersionId(current)
 
-    return {
-      context: "owner",
-      surface: input.surface,
-      current: buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(current), route }),
-      breadcrumbs: await this.buildOwnedBrowserBreadcrumbs(root.userId, root, current, route),
-      children: children.items.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
-      childrenPage: children.page,
-      preview,
-      edit: buildDriveBrowserEdit({
-        canWrite: true,
-        item: current,
+      return {
+        context: "owner",
+        surface: input.surface,
+        current: buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(current), route }),
+        breadcrumbs: await this.buildOwnedBrowserBreadcrumbs(root.userId, root, current, route),
+        children: children.items.map((item) => buildDriveBrowserItemDto({ item: toDriveBrowserSourceItem(item), route })),
+        childrenPage: children.page,
         preview,
-        currentVersionId,
-      }),
-      annotation: buildDriveBrowserAnnotationCapability({ item: current, canComment: true }),
-      collaboration: await this.buildCollaborationCapability(current, currentVersionId, true),
-      canDownload: current.type === DRIVE_ITEM_TYPE.file,
-      canZip: current.type === DRIVE_ITEM_TYPE.folder,
-    }
+        edit: buildDriveBrowserEdit({
+          canWrite: true,
+          item: current,
+          preview,
+          currentVersionId,
+        }),
+        annotation: buildDriveBrowserAnnotationCapability({ item: current, canComment: true }),
+        collaboration: await this.buildCollaborationCapability(current, currentVersionId, true),
+        canDownload: current.type === DRIVE_ITEM_TYPE.file,
+        canZip: current.type === DRIVE_ITEM_TYPE.folder,
+      }
+    })
   }
 
   async getOwnerConsoleRootBrowserSnapshot(userId: string, childrenPage?: DriveBrowserChildrenPageInput): Promise<DriveBrowserSnapshotDto> {
@@ -2406,12 +2415,13 @@ export class DriveService implements OnApplicationBootstrap {
     readonly actorUserId?: string | null
     readonly childrenPage?: DriveBrowserChildrenPageInput
   }): Promise<DriveBrowserSnapshotDto> {
-    const share = await this.resolvePublicShare({
-      shareId: input.shareId,
-      password: input.password,
-      cookie: input.cookie ?? input.accessCookie,
-    })
-    const { root, current } = await this.resolveShareBrowserCurrent(share, input.itemId)
+    return traceDrivePreview("share", async () => {
+      const share = await measureDrivePreview("access", () => this.resolvePublicShare({
+        shareId: input.shareId,
+        password: input.password,
+        cookie: input.cookie ?? input.accessCookie,
+    }))
+    const { root, current } = await measureDrivePreview("access", () => this.resolveShareBrowserCurrent(share, input.itemId))
     const route: DriveBrowserRouteContext = {
       context: "share",
       surface: "standalone",
@@ -2454,6 +2464,7 @@ export class DriveService implements OnApplicationBootstrap {
       canDownload: current.type === DRIVE_ITEM_TYPE.file,
       canZip: current.type === DRIVE_ITEM_TYPE.folder,
     }
+    })
   }
 
   async validateDiscussionWriteAccess(tx: Prisma.TransactionClient, input: DriveDiscussionWriteAccess): Promise<void> {
@@ -3779,10 +3790,20 @@ export class DriveService implements OnApplicationBootstrap {
     if (shouldReadDriveBrowserTextPreview(kind)) {
       if (kind === "markdown") {
         const plainMarkdown = isPlainDriveMarkdownItem(item)
-        const preview = await this.readTextPreview(storageKey)
-        const versionId = await this.findCurrentDriveFileVersionId(current)
+        const live = this.collaboration?.getLiveDocument(current.id) ?? null
+        const versionId = live?.checkpointVersionId ?? await this.findCurrentDriveFileVersionId(current)
+        const prepared = await loadDriveMarkdownPreview(this.markdownPreviews, {
+          itemId: current.id, versionId, storageKey, allowStandaloneRawImages: plainMarkdown, live,
+        }, {
+          readSource: () => this.readTextPreview(storageKey),
+          getRevision: async () => versionId ? await this.projections?.getRevision(versionId) ?? null : null,
+          loadProjection: async () => versionId ? await this.projections?.load(versionId) ?? null : null,
+          loadPrevious: async () => versionId ? await this.projections?.loadPrevious({ itemId: current.id, versionId }) ?? null : null,
+          persist: async (projection) => { if (versionId) await this.projections?.persist({ itemId: current.id, versionId, projection }) },
+        })
+        const preview = { text: prepared.document.sourceText, truncated: prepared.truncated }
         const relativeImages = plainMarkdown
-          ? await this.resolveDriveMarkdownRelativeImages(preview.text, current, route)
+          ? await measureDrivePreview("images", () => this.resolveDriveMarkdownRelativeImages(preview.text, current, route))
           : []
         const relativeImageUrls = new Map(relativeImages.map(({ reference, item: image }) => [
           reference.src,
@@ -3793,16 +3814,10 @@ export class DriveService implements OnApplicationBootstrap {
             reference.suffix,
           ) : null,
         ]))
-        const rendered = await renderDriveMarkdownFragment(preview.text, {
+        const rendered = await measureDrivePreview("render", () => renderPreparedDriveMarkdownDocument(prepared.document, {
           relativeImageUrls,
-          allowStandaloneRawImages: plainMarkdown,
-          previousProjection: versionId && this.projections
-            ? await this.projections.loadPrevious({ itemId: current.id, versionId })
-            : null,
-        })
-        if (versionId) {
-          await this.projections?.persist({ itemId: current.id, versionId, projection: rendered.projection })
-        }
+          imageLoading: "browser",
+        }))
         return buildDriveBrowserPreview({
           item,
           route,
@@ -3867,6 +3882,7 @@ export class DriveService implements OnApplicationBootstrap {
     signal?: AbortSignal,
     shareFileImageIdsOverride?: ReadonlySet<string>,
   ): Promise<ResolvedDriveMarkdownRelativeImage[]> {
+    if (references.length === 0) return []
     if (signal?.aborted) throw new Error("DRIVE_PDF_EXPORT_ABORTED")
     const shareRoot = route?.context === "share"
       ? await this.findActiveDriveItem(markdownItem.userId, route.rootItemId)

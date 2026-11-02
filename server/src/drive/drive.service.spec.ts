@@ -507,6 +507,7 @@ describe("DriveService", () => {
     let checkpointed = false
     const collaboration = {
       isEnabled: vi.fn(() => false),
+      getLiveDocument: vi.fn(() => null),
       prepareExternalChange: vi.fn(async (itemId: string) => {
         if (checkpointed) return
         checkpointed = true
@@ -3631,6 +3632,33 @@ describe("DriveService", () => {
     expect(snapshot.preview?.html).toContain(`src="${resolvedUrl}"`)
     expect(snapshot.preview?.relativeImages).toEqual([{ src: source, resolvedUrl }])
     expect(snapshot.preview?.text).toBe(`![赠品](${source})`)
+  })
+
+  it("reuses browser Markdown parsing after validating each share request", async () => {
+    const prisma = createPrismaMemory()
+    const objects = new Map<string, DriveTestObject>()
+    const storage = createDriveObjectStorage(objects)
+    const sourceProjection = { current: null as import('@synapse/shared').DriveMarkdownProjectionDto | null }
+    const projections = {
+      getRevision: vi.fn(async () => sourceProjection.current ? (await import('node:crypto')).createHash('sha256').update(JSON.stringify(sourceProjection.current)).digest('hex') : null),
+      load: vi.fn(async () => sourceProjection.current),
+      loadPrevious: vi.fn(async () => null),
+      persist: vi.fn(async ({ projection }: { projection: import('@synapse/shared').DriveMarkdownProjectionDto }) => { sourceProjection.current = projection }),
+    }
+    const service = new DriveService(prisma as unknown as PrismaService, storage, undefined, undefined, undefined, projections as never)
+    await prisma.user.create({ data: { id: 'user-1', email: 'user@example.com', passwordHash: 'hash' } })
+    const markdown = await createCompletedUpload(service, 'user-1', { parentId: null, name: 'note.md', mimeType: 'text/markdown' })
+    const record = await prisma.driveItem.findUniqueOrThrow({ where: { id: markdown.id } })
+    objects.set(record.storageKey, { body: '# Hello\n\nbody', contentType: 'text/markdown' })
+    const share = await service.createShare('user-1', markdown.id, 'https://synapse.test')
+    vi.mocked(storage.getObjectStream).mockClear()
+    const first = await service.getShareBrowserSnapshot({ shareId: share.shareId })
+    const second = await service.getShareBrowserSnapshot({ shareId: share.shareId })
+    expect(second.preview?.html).toBe(first.preview?.html)
+    expect(projections.persist).toHaveBeenCalledTimes(1)
+    expect(storage.getObjectStream).toHaveBeenCalledTimes(1)
+    await service.disableShare('user-1', share.id)
+    await expect(service.getShareBrowserSnapshot({ shareId: share.shareId })).rejects.toBeInstanceOf(NotFoundException)
   })
 
   it.each([

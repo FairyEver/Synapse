@@ -14,6 +14,7 @@ interface AuthState {
     user: AuthUser | null
     setUser: (user: AuthUser | null) => void
     isAuthenticated: boolean
+    initialized: boolean
     reset: () => void
   }
 }
@@ -22,18 +23,19 @@ export const useAuthStore = create<AuthState>()((set) => ({
   auth: {
     user: null,
     isAuthenticated: false,
+    initialized: false,
     setUser: (user) => {
       broadcastUserSessionChange()
       set((state) => ({
         ...state,
-        auth: { ...state.auth, user, isAuthenticated: !!user },
+        auth: { ...state.auth, user, isAuthenticated: !!user, initialized: true },
       }))
     },
     reset: () => {
       broadcastUserSessionChange()
       set((state) => ({
         ...state,
-        auth: { ...state.auth, user: null, isAuthenticated: false },
+        auth: { ...state.auth, user: null, isAuthenticated: false, initialized: true },
       }))
     },
   },

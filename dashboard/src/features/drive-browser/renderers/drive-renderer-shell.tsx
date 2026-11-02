@@ -18,7 +18,6 @@ import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { cn } from '@/lib/utils'
 import type { DriveDocumentImageUploadContext } from '@/lib/api'
-import { DriveFileVersionsDialog } from '../drive-file-versions-dialog'
 import { getDriveFileVersionItemId } from '../shared/drive-view-model'
 import type { DriveAnnotationContext } from '../use-drive-annotations'
 import { trackDriveEvent } from '../shared/drive-telemetry'
@@ -27,7 +26,6 @@ import {
   useDriveDiscussionLocation,
   usePendingDriveDiscussion,
 } from '../use-drive-discussion-location'
-import { DriveCodeRenderer } from './code-renderer'
 import { getDrivePreviewDriveBrowserUrl } from './drive-preview-actions'
 import {
   DrivePreviewFloatingMenu,
@@ -50,7 +48,7 @@ import { DriveDownloadRenderer } from './download-renderer'
 import { DriveIframeRenderer } from './iframe-renderer'
 import { DriveImageRenderer } from './image-renderer'
 import { DriveMarkdownRenderer } from './markdown-renderer'
-import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
+import { DriveCodeRenderer, DriveMDXeditorRenderer, DriveFileVersionsDialog } from './lazy-drive-renderers'
 import { useDriveMarkdownPdfExport } from './use-drive-markdown-pdf-export'
 const READING_CONTAINER_CLASSNAME =
   'mx-auto h-full w-full max-w-4xl px-4 md:px-6'

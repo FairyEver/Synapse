@@ -38,6 +38,7 @@ export async function executeDriveMarkdownPdfWorkerRequest(
   if (request.kind === "render-html") {
     const rendered = await renderDriveMarkdownFragment(request.markdown, {
       allowStandaloneRawImages: request.allowStandaloneRawImages,
+      imageLoading: "eager",
       pdfImageResourceKeys: request.imageResourceKeys,
     })
     return { kind: "html", html: rendered.html }
@@ -45,6 +46,7 @@ export async function executeDriveMarkdownPdfWorkerRequest(
 
   const rendered = await renderDriveMarkdownFragment(request.markdown, {
     allowStandaloneRawImages: request.allowStandaloneRawImages,
+    imageLoading: "eager",
   })
   const images = new Map<string, DriveMarkdownPdfImageReference>()
   let tooManyImages = false

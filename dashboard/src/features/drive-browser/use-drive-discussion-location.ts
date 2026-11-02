@@ -13,7 +13,12 @@ export function useDriveDiscussionLocation(itemId: string) {
     read()
     window.addEventListener('hashchange', read)
     window.addEventListener('popstate', read)
-    const unsubscribe = useAuthStore.subscribe(() => { setLocation(null); setRequestKey((value) => value + 1) })
+    const unsubscribe = useAuthStore.subscribe((state, previous) => {
+      // The initial optional identity lookup belongs to this navigation, not a new session.
+      if (!previous.auth.initialized && state.auth.initialized) return
+      setLocation(null)
+      setRequestKey((value) => value + 1)
+    })
     return () => { window.removeEventListener('hashchange', read); window.removeEventListener('popstate', read); unsubscribe() }
   }, [itemId])
   return { location, requestKey: `${itemId}:${requestKey}`, error, consume, cancel: consume, unavailable }

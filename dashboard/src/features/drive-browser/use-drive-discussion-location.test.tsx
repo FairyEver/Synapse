@@ -219,6 +219,7 @@ it('keeps an editing intent when an older notification target arrives after refr
       .find((button) => button.textContent === '回复')!
       .click()
   })
+  await act(async () => { await vi.dynamicImportSettled() })
   const editor = document.querySelector(
     '[data-drive-message-editor] [contenteditable="true"]'
   ) as HTMLElement

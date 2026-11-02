@@ -121,6 +121,7 @@ async function expandComposer() {
   if (input) {
     await act(async () => input.focus())
     await act(async () => {
+      await vi.dynamicImportSettled()
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
   }

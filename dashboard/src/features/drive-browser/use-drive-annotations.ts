@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth-store'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   DriveAnnotationCommentUpdateInput,
@@ -19,7 +20,10 @@ export function driveAnnotationsQueryKey(input: DriveAnnotationContext) {
     : ['drive-annotations', 'share', input.shareId, input.itemId ?? null] as const
 }
 
-export function useDriveAnnotations(input: DriveAnnotationContext | null | undefined) {
+export function useDriveAnnotations(requestedContext: DriveAnnotationContext | null | undefined) {
+  const sessionReady = useAuthStore((state) => state.auth.initialized !== false)
+  const sessionPending = requestedContext?.context === 'share' && !sessionReady
+  const input = sessionPending ? undefined : requestedContext
   const queryClient = useQueryClient()
   const queryKey = input ? driveAnnotationsQueryKey(input) : ['drive-annotations', 'disabled'] as const
   const query = useQuery({
@@ -91,7 +95,7 @@ export function useDriveAnnotations(input: DriveAnnotationContext | null | undef
   })
   return {
     threads: query.data ?? [] satisfies readonly DriveAnnotationThreadDto[],
-    loading: query.isLoading,
+    loading: sessionPending || query.isLoading,
     refreshing: query.isFetching,
     error: query.error instanceof Error ? query.error.message : null,
     refresh: query.refetch,

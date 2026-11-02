@@ -140,6 +140,8 @@ describe("DriveCollaborationService", () => {
     const html = service.getRoomPreview("item-1")?.html ?? ""
     expect(html).toMatch(/<img(?=[^>]*alt="Preview")(?=[^>]*data-drive-markdown-relative-src=)(?![^>]*\ssrc=)[^>]*>/u)
     expect(html).toContain('width="320"')
+    expect(html).toMatch(/<img(?=[^>]*alt="Preview")(?=[^>]*loading="eager")[^>]*>/u)
+    expect(html).toMatch(/<img(?=[^>]*alt="Unsafe")(?=[^>]*loading="lazy")[^>]*>/u)
     expect(html).not.toContain("onerror")
     expect(html).not.toContain("style=")
     expect(html).not.toContain("srcset=")
@@ -170,6 +172,7 @@ describe("DriveCollaborationService", () => {
       expect(service.getRoomPreview("item-1")?.html).toMatch(
         /<img(?=[^>]*alt="Live")(?=[^>]*data-drive-markdown-relative-src=)(?![^>]*\ssrc=)[^>]*>/u,
       )
+      expect(service.getRoomPreview("item-1")?.html).toContain('loading="eager"')
       clientDocument.destroy()
     } finally {
       vi.clearAllTimers()

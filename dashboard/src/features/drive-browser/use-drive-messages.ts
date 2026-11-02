@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/stores/auth-store'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DriveDocumentImageUploadContext, DriveMessageApiContext } from '@/lib/api'
 import { trackedDriveMessageApi as api } from './shared/drive-telemetry-api'
@@ -10,7 +11,10 @@ export function driveMessagesQueryKey(context: DriveMessageContext) {
     : ['drive-messages', 'share', context.shareId, context.itemId ?? null] as const
 }
 
-export function useDriveMessages(context: DriveMessageContext | undefined) {
+export function useDriveMessages(requestedContext: DriveMessageContext | undefined) {
+  const sessionReady = useAuthStore((state) => state.auth.initialized !== false)
+  const sessionPending = requestedContext?.context === 'share' && !sessionReady
+  const context = sessionPending ? undefined : requestedContext
   const client = useQueryClient()
   const queryKey = context ? driveMessagesQueryKey(context) : ['drive-messages', 'disabled'] as const
   const query = useQuery({
@@ -48,7 +52,7 @@ export function useDriveMessages(context: DriveMessageContext | undefined) {
     imageUploadContext: context ? { ...context, kind: context.context, purpose: 'message' } as DriveDocumentImageUploadContext : undefined,
     messages: query.data?.messages ?? [],
     canPost: query.data?.canPost ?? false,
-    loading: query.isLoading,
+    loading: sessionPending || query.isLoading,
     refreshing: query.isFetching,
     error: query.error instanceof Error ? query.error.message : null,
     refresh: query.refetch,

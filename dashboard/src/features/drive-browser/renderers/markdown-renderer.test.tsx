@@ -684,11 +684,12 @@ describe('DriveMarkdownRenderer', () => {
     ).toBe('/first.png')
   })
 
-  it('switches from the empty code fallback to rendered markdown without changing hook order', () => {
+  it('switches from the empty code fallback to rendered markdown without changing hook order', async () => {
     const { rerender } = renderMarkdown({
       previewData: preview({ html: '', text: '' }),
     })
 
+    await act(async () => { await vi.dynamicImportSettled() })
     expect(document.querySelector('[data-monaco-editor="true"]')).not.toBeNull()
     expect(() => rerender({ previewData: preview() })).not.toThrow()
     expect(
