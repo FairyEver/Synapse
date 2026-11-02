@@ -162,7 +162,7 @@ export function DrivePreviewHeader({
               更多
               <ChevronDown data-icon='inline-end' />
             </Button>
-            <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
+            <Dropdown.Popover data-drive-telemetry-scope='portal'>
               <Dropdown.Menu aria-label='操作'>
                 {overflowActions.map((action) => (
                   <DrivePreviewHeaderMenuAction
@@ -244,7 +244,6 @@ function DrivePreviewCompactHeader({
             <ChevronDown data-icon='inline-end' />
           </Button>
           <Dropdown.Popover
-            isNonModal
             data-drive-telemetry-scope='portal'
             className='w-72'
           >
@@ -404,7 +403,7 @@ function DrivePreviewHeaderAction({
         {action.label}
         <ChevronDown data-icon='inline-end' />
       </Button>
-      <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
+      <Dropdown.Popover data-drive-telemetry-scope='portal'>
         <Dropdown.Menu aria-label='操作'>
           <DrivePreviewHeaderMenuAction
             action={action}

@@ -923,7 +923,6 @@ function ThreadView({
                   <ChevronDown aria-hidden />
                 </Button>
                 <Dropdown.Popover
-                  isNonModal
                   ref={statusMenuRef}
                   data-drive-telemetry-scope='portal'
                   onClick={(event) => event.stopPropagation()}
@@ -1357,7 +1356,6 @@ function CommentActionsMenu({
         <MoreHorizontal aria-hidden />
       </Button>
       <Dropdown.Popover
-        isNonModal
         data-drive-telemetry-scope='portal'
         onClick={(event) => event.stopPropagation()}
       >

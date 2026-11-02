@@ -558,6 +558,30 @@ describe('DriveRendererShell', () => {
     expect(menuItemTexts()).toEqual(['下载', '导出为 PDF', '历史版本'])
   })
 
+  it.each(['打开方式', '更多'])('dismisses %s when clicking non-focusable content', async (label) => {
+    renderPreviewHeader(markdownSnapshot(), {
+      exporting: false,
+      disabledReason: null,
+      onExport: vi.fn(),
+    })
+    const trigger = buttonWithText(label)
+    await click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+
+    // A document paragraph does not move focus, so blur alone cannot dismiss it.
+    await act(async () => {
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+      document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }))
+      document.body.click()
+    })
+
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    await click(trigger)
+    expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1)
+  })
+
   it('closes the overflow menu after PDF export starts and exposes the busy state', async () => {
     const onExport = vi.fn(async () => undefined)
     const snapshot = markdownSnapshot()

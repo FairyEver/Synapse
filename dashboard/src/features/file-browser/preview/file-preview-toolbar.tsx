@@ -156,7 +156,7 @@ export function FilePreviewToolbarItemView({
         {item.label}
         <ChevronDown data-icon='inline-end' />
       </Button>
-      <Dropdown.Popover isNonModal>
+      <Dropdown.Popover>
         <Dropdown.Menu aria-label='操作'>
           <FilePreviewToolbarMenuOptions item={item} />
         </Dropdown.Menu>

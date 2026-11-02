@@ -79,7 +79,7 @@ function FileRendererShellChrome({
                 >
                   <MoreHorizontal />
                 </Button>
-                <Dropdown.Popover isNonModal>
+                <Dropdown.Popover>
                   <Dropdown.Menu aria-label='操作'>
                     <FilePreviewToolbarMenuItems items={overflowItems} />
                   </Dropdown.Menu>

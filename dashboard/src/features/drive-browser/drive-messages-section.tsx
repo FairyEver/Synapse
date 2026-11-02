@@ -542,7 +542,7 @@ function MessageActionsMenu({
       >
         <MoreHorizontal aria-hidden />
       </Button>
-      <Dropdown.Popover isNonModal data-drive-telemetry-scope='portal'>
+      <Dropdown.Popover data-drive-telemetry-scope='portal'>
         <Dropdown.Menu aria-label='操作'>
           {permissions.canEdit ? (
             <Dropdown.Item

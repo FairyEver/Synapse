@@ -1,10 +1,13 @@
 import '@/styles/globals.css'
 import type { DriveBrowserSnapshotDto } from '@synapse/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { userEvent } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { render } from 'vitest-browser-react'
 import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
+import { FileRendererShell } from '@/features/file-browser/renderers/renderer-shell'
+import { useRegisterFileRendererToolbarItems } from '@/features/file-browser/renderers/renderer-toolbar-context'
 import { DrivePreviewHeader } from './drive-preview-header'
+import { DrivePreviewFloatingMenu } from './drive-preview-floating-menu'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -12,6 +15,133 @@ describe.each([
   { mode: 'regular', widthClass: 'w-[1280px]' },
   { mode: 'compact', widthClass: 'w-[390px]' },
 ])('expanded $mode document menu', ({ mode, widthClass }) => {
+  it('dismisses the shared file renderer toolbar menu', async () => {
+    await page.viewport(mode === 'compact' ? 390 : 1440, 900)
+    const screen = await render(
+      <div className={widthClass}>
+        <FileRendererShell title='文件预览'><FileToolbarFixture /></FileRendererShell>
+        <p className='mt-96' data-testid='outside'>文件正文</p>
+      </div>
+    )
+    try {
+      await expect.poll(() => document.querySelector('[data-file-preview-header]')?.getAttribute('data-file-preview-header')).toBe(mode)
+      const trigger = document.querySelector<HTMLButtonElement>('button')!
+      await userEvent.click(trigger)
+      await waitForElement('[role="menu"]')
+      await userEvent.click(trigger, { force: true })
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+      await userEvent.click(trigger)
+      await waitForElement('[role="menu"]')
+      await userEvent.click(document.querySelector<HTMLElement>('[data-testid="outside"]')!, { force: true })
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+    } finally {
+      await screen.unmount()
+      await page.viewport(1440, 900)
+    }
+  })
+
+  it('dismisses by repeated click, outside click and Escape without stacking menus', async () => {
+    await page.viewport(mode === 'compact' ? 390 : 1440, 900)
+    const screen = await render(
+      <div className={widthClass}>
+        <FilePreviewLayout>
+          <DrivePreviewHeader
+            snapshot={snapshot()}
+            rendererItems={[{
+              id: 'width', kind: 'menu', label: '宽度', compactPlacement: 'primary',
+              selectedItemId: 'normal',
+              items: [{ id: 'normal', label: '标准', onSelect: vi.fn() }],
+            }]}
+            rendererOptions={[]}
+            selectedRendererId='markdown'
+            onRendererChange={vi.fn()}
+            onOpenVersions={vi.fn()}
+          />
+        </FilePreviewLayout>
+        <p className='mt-96' data-testid='outside'>文档正文</p>
+      </div>
+    )
+    try {
+      await expect.poll(() => document.querySelector('[data-file-preview-header]')?.getAttribute('data-file-preview-header')).toBe(mode)
+      const labels = mode === 'compact' ? ['宽度', '更多'] : ['宽度', '打开方式', '更多']
+      for (const label of labels) {
+        const trigger = [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === label)!
+        await userEvent.click(trigger)
+        await waitForElement('[role="menu"]')
+        await userEvent.click(trigger, { force: true })
+        await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+        expect(trigger.getAttribute('aria-expanded')).toBe('false')
+
+        await userEvent.click(trigger)
+        await waitForElement('[role="menu"]')
+        await userEvent.click(document.querySelector<HTMLElement>('[data-testid="outside"]')!, { force: true })
+        await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+
+        trigger.focus()
+        await userEvent.keyboard('{Enter}')
+        const menu = await waitForElement('[role="menu"]')
+        const popover = menu.closest<HTMLElement>('[data-slot="dropdown-popover"]')!
+        await expect.poll(() => popover.hasAttribute('data-entering')).toBe(false)
+        const rect = popover.getBoundingClientRect()
+        expect(rect.left).toBeGreaterThanOrEqual(0)
+        expect(rect.right).toBeLessThanOrEqual(window.innerWidth)
+        await page.screenshot({ path: `__screenshots__/drive-menu-${mode}-${label}.png` })
+        await userEvent.keyboard('{Escape}')
+        await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+        await expect.poll(() => document.activeElement).toBe(trigger)
+      }
+
+      const triggers = labels.map((label) => [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === label)!)
+      await userEvent.click(triggers[0])
+      await waitForElement('[role="menu"]')
+      // The native menu underlay consumes the first click on another trigger.
+      await userEvent.click(triggers[1], { force: true })
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+      await userEvent.click(triggers[1])
+      await expect.poll(() => document.querySelectorAll('[role="menu"]')).toHaveLength(1)
+
+    } finally {
+      await screen.unmount()
+      await page.viewport(1440, 900)
+    }
+  })
+
+  it('dismisses the HTML floating file menu and can reopen it', async () => {
+    await page.viewport(mode === 'compact' ? 390 : 1440, 900)
+    const screen = await render(
+      <>
+        <DrivePreviewFloatingMenu
+          snapshot={snapshot()}
+          rendererItems={[]}
+          rendererOptions={[]}
+          selectedRendererId='iframe'
+          onRendererChange={vi.fn()}
+          onOpenVersions={vi.fn()}
+        />
+        <p className='mt-96' data-testid='outside'>网页正文</p>
+      </>
+    )
+    try {
+      const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="文件操作"]')!
+      await userEvent.click(trigger)
+      await waitForElement('[role="menu"]')
+      await userEvent.click(trigger, { force: true })
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+      await userEvent.click(trigger)
+      await waitForElement('[role="menu"]')
+      await userEvent.click(document.querySelector<HTMLElement>('[data-testid="outside"]')!, { force: true })
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+      trigger.focus()
+      await userEvent.keyboard('{Enter}')
+      await waitForElement('[role="menu"]')
+      await userEvent.keyboard('{Escape}')
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+    } finally {
+      await screen.unmount()
+      await page.viewport(1440, 900)
+    }
+  })
+
   it('keeps menu icons proportional, groups content and retains menu interactions', async () => {
     const onOpenVersions = vi.fn()
     const onRendererChange = vi.fn()
@@ -131,6 +261,16 @@ function menuItem(label: string) {
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]')].find((element) => element.textContent?.trim() === label)
   if (!item) throw new Error(`Missing menu action: ${label}`)
   return item
+}
+
+const FILE_TOOLBAR_ITEMS = [{
+  id: 'view', kind: 'menu' as const, label: '视图',
+  items: [{ id: 'default', label: '默认', onSelect: () => undefined }],
+}]
+
+function FileToolbarFixture() {
+  useRegisterFileRendererToolbarItems('fixture', FILE_TOOLBAR_ITEMS)
+  return null
 }
 
 async function waitForElement(selector: string) {

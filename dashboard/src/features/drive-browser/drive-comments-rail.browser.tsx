@@ -74,6 +74,29 @@ describe('未定位评论弹窗横向布局', () => {
 
 
 for (const width of [390, 1280]) {
+  it(`dismisses comment and status menus inside a dialog at ${width}px`, async () => {
+    await page.viewport(width, 900)
+    const data = orphanedThread('评论引文')
+    await openDialog([{ ...data, thread: { ...data.thread, status: 'resolved' } }])
+    const dialog = document.querySelector<HTMLElement>('[data-markdown-comments-unlocated-dialog]')!
+    const triggers = [
+      dialog.querySelector<HTMLButtonElement>('button[aria-label="已解决"]')!,
+      dialog.querySelector<HTMLButtonElement>('button[aria-label^="评论操作："]')!,
+    ]
+    for (const trigger of triggers) {
+      await userEvent.click(trigger)
+      await waitForElement('[role="menu"]')
+      await userEvent.click(trigger, { force: true })
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+      expect(document.contains(dialog)).toBe(true)
+      await userEvent.click(trigger)
+      await waitForElement('[role="menu"]')
+      await userEvent.click(dialog.querySelector<HTMLElement>('[data-slot="modal-heading"]')!, { force: true })
+      await expect.poll(() => document.querySelector('[role="menu"]')).toBeNull()
+      expect(document.contains(dialog)).toBe(true)
+    }
+  })
+
   describe(`未定位评论弹窗几何 ${width}px`, () => {
     it('标题保留内边距且少量评论按内容收缩', async () => {
       await page.viewport(width, 900)

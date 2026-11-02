@@ -222,7 +222,6 @@ export function DrivePreviewFloatingMenu({
           <MoreHorizontal />
         </Button>
         <Dropdown.Popover
-          isNonModal
           data-drive-telemetry-scope='portal'
           className='w-64'
         >

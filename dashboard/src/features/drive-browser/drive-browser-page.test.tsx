@@ -534,7 +534,7 @@ describe('DriveBrowserPage', () => {
     ).toContain('overflow-y-auto')
   })
 
-  it('opens the renderer menu without applying modal side effects to the document', async () => {
+  it('restores document accessibility and scrolling after dismissing the renderer menu', async () => {
     renderPage(
       <DriveSingleFileReaderView
         snapshot={createSnapshot({
@@ -562,6 +562,13 @@ describe('DriveBrowserPage', () => {
     })
 
     expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    expect(host?.getAttribute('aria-hidden')).toBe('true')
+    await act(async () => {
+      document.querySelector('[role="menu"]')?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      )
+    })
+    expect(document.querySelector('[role="menu"]')).toBeNull()
     expect(host?.getAttribute('aria-hidden')).toBeNull()
     expect(document.body.style.overflow).not.toBe('hidden')
   })

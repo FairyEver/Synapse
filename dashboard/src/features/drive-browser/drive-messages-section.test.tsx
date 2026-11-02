@@ -146,6 +146,21 @@ async function selectAction(label: string) {
   await act(async () => item.click())
 }
 
+it.each(['[data-drive-message-id="message"]', '[data-drive-message-comment-id="one"]'])(
+  'dismisses the message actions on outside click: %s', async (selector) => {
+    await renderSection({ canPost: false })
+    await openActions(selector)
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    await act(async () => {
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+      document.body.click()
+    })
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    await openActions(selector)
+    expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1)
+  }
+)
+
 async function pasteImages(files: readonly File[]) {
   await expandComposer()
   const paste = new Event('paste', { bubbles: true, cancelable: true })
