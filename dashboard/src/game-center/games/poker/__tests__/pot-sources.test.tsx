@@ -63,7 +63,7 @@ describe("底池来源面板", () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("新占座者")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("57.1%")
     await act(async () => { button("关闭底池来源").click(); await new Promise(resolve => requestAnimationFrame(resolve)) })
-    await act(async () => button("日志").click())
+    await act(async () => button("对局信息").click())
     await act(async () => button("查看底池来源").click())
     expect(host.querySelector('.poker-information-drawer')?.hasAttribute('hidden')).toBe(true)
     await act(async () => root.unmount())

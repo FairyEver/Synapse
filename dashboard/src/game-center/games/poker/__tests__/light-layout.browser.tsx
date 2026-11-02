@@ -60,7 +60,7 @@ describe.each(sizes)("亮色牌桌 %s×%s", (width,height) => {
         for (const other of seats) if (seat !== other) expect(overlap(seat,other), `座位${seat.getAttribute("data-position")}/${other.getAttribute("data-position")}`).toBe(false)
       }
       const transform = canvas.style.transform
-      await page.getByRole("button",{name:"日志",exact:true}).click()
+      await page.getByRole("button",{name:"对局信息",exact:true}).click()
       const drawer = document.querySelector(".poker-information-drawer")!
       expect(rect(drawer).bottom).toBeLessThanOrEqual(rect(footer).top + 1)
       expect(canvas.style.transform).toBe(transform)
@@ -145,9 +145,9 @@ it("菜单首次单击、外部关闭后重开、键盘和触摸指针都只需�
     expect(api.act).not.toHaveBeenCalled()
     await userEvent.keyboard("{Escape}")
     await trigger.click()
-    await page.getByRole("button",{name:"日志",exact:true}).click()
+    await page.getByRole("button",{name:"对局信息",exact:true}).click()
     await expect.element(page.getByRole("dialog",{name:"更多操作"})).not.toBeInTheDocument()
-    await page.getByRole("button",{name:"关闭日志"}).click()
+    await page.getByRole("button",{name:"关闭对局信息"}).click()
     const native = document.querySelector<HTMLButtonElement>('[aria-label="更多牌桌操作"]')!
     native.focus()
     await userEvent.keyboard("{Enter}")

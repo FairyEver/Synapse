@@ -70,7 +70,7 @@ describe("牌桌", () => {
       const trigger = host.querySelector<HTMLButtonElement>('.poker-perspective [aria-label="牌型大小"]')
       expect(trigger).not.toBeNull()
       const canvas = host.querySelector(".poker-canvas")
-      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="日志"]')!.click())
+      await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="对局信息"]')!.click())
       await act(async () => trigger!.focus())
       await act(async () => trigger!.click())
       const dialog = document.querySelector('[role="dialog"]')!
@@ -120,11 +120,13 @@ describe("牌桌", () => {
     expect(host.querySelectorAll('[data-motion="bet"]')).toHaveLength(1)
     await act(async()=>root.unmount())
   })
-  it("结算后重新进入仍可在日志查看完整分池结果，轮询事件不重复结算", async () => {
+  it("结算后重新进入仍可在总览查看完整分池结果，轮询事件不重复结算", async () => {
     const settlement = {handId:"h",handNo:1,board:[],rules:{variant:"standard52" as const,smallBlind:1,bigBlind:2},mixedControl:false,seats:[{seatNo:0,displayName:"我",participantKind:"human" as const,isMe:true,folded:false,delta:3,payout:6,endingStack:1003,handName:"一对"}],pots:[{amount:6,eligible:[0],winners:[0],shares:{0:6},refund:false}]}
     const host=document.createElement("div"),root=createRoot(host)
     const render=async(events: Parameters<typeof Table>[0]["events"])=>act(async()=>root.render(<Table table={{...state,settlement}} events={events} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
     await render([])
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="对局信息"]')!.click())
+    await act(async () => ([...host.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent === "总览")!).click())
     expect(host.querySelector(".poker-result-log")?.textContent).toContain("主池 6")
     await render([{kind:"settlement",handId:"h",handNo:1,seq:2147483647,settlement}])
     expect(host.querySelectorAll(".poker-result-log")).toHaveLength(1)

@@ -113,7 +113,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           <div className="poker-perspective flex items-center gap-2">
             {members && view.status !== "closed" && <Button ref={membersTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label="成员管理" aria-expanded={panel === "members"} onPress={() => setPanel(panel === "members" ? null : "members")}><UsersRound aria-hidden="true" />{!compact && "成员"}</Button>}
             <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} ready={presentedReady} blocked={cash.blocked} />
-            <Button ref={logTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label={panelOpen ? "收起日志" : "日志"} aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{!compact && (panelOpen ? "收起日志" : "日志")}</Button>
+            <Button ref={logTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label={panelOpen ? "收起对局信息" : "对局信息"} aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{!compact && (panelOpen ? "收起对局信息" : "对局信息")}</Button>
             <HandRankDialog variant={view.variant} open={panel === "ranks"} onOpenChange={open => setPanel(open ? "ranks" : null)} compact={compact} />
             {view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
           </div>
@@ -142,8 +142,8 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
       <div className="poker-interaction-rail">
         <div className="poker-information-slot">
           <div className="poker-information-drawer bg-surface font-sans text-foreground scheme-light" hidden={!panelOpen} inert={!panelOpen}>
-            <Button type="button" isIconOnly size="sm" variant="tertiary" className="poker-close-log" aria-label="关闭日志" onPress={() => { setPanel(null); logTrigger.current?.focus() }}><X aria-hidden="true" /></Button>
-            <SidePanel id={panelId} table={view} perspective={perspective} events={events} />
+            <Button type="button" isIconOnly size="sm" variant="tertiary" className="poker-close-log" aria-label="关闭对局信息" onPress={() => { setPanel(null); logTrigger.current?.focus() }}><X aria-hidden="true" /></Button>
+            <SidePanel identityKey={identityKey} id={panelId} table={view} perspective={perspective} events={events} />
           </div>
         </div>
         <PokerMembersPanel open={panel === "members"} onOpenChange={open => setPanel(open ? "members" : null)} compact={compact} trigger={membersTrigger} container={surface.current}>{members}</PokerMembersPanel>

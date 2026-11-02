@@ -59,7 +59,7 @@ describe("Roll玩家信息", () => {
   })
   it("点击其他玩家只展示该玩家数据，日志面板互斥，关闭不提交动作", async()=>{
     const {host,root}=await mount()
-    await act(async()=>button("日志").click())
+    await act(async()=>button("对局信息").click())
     await act(async()=>button("查看玩家1的玩家信息").click())
     expect(host.querySelector(".poker-information-drawer")?.hasAttribute("hidden")).toBe(true)
     const info=document.querySelector('[aria-label="玩家换牌统计"]')!

@@ -5,6 +5,7 @@ import { botRollObservation, chooseBotRoll, chooseBotRollCandidate } from "./bot
 import { projectRollView } from "./poker-roll-projection"
 import { projectRollStats } from "./poker-roll-stats"
 import { projectRollLedger } from "./poker-roll-ledger"
+import { projectHandLog } from "./poker-hand-log"
 import { projectPotContributions } from "./poker-pot-contributions"
 import { projectChipState } from "./poker-chip-projection"
 import { chooseBotAction } from "./bot-policy"
@@ -295,13 +296,13 @@ export class PokerActionService {
       h && own && participating
         ? legalActions(h, me!.seatNo)
         : { actions: [], toCall: 0, minRaiseTo: 0, maxRaiseTo: 0 }
-    const records = archived ? archived.actions.filter(a => !a.action.startsWith("roll_")).sort((a, b) => b.seq - a.seq).slice(0, 30) : hand
+    const logRecords = archived ? [...archived.actions].sort((a, b) => b.seq - a.seq).slice(0, 1000) : hand
+      ? await c.tx.gamePokerAction.findMany({ where: { handId: hand.id }, orderBy: { seq: "desc" }, take: 1000 }) : []
+    const records = archived ? [...archived.actions].filter(a => !a.action.startsWith("roll_")).sort((a, b) => b.seq - a.seq).slice(0, 30) : hand
       ? await c.tx.gamePokerAction.findMany({
           where: { handId: hand.id, action: { notIn: ["roll_start", "roll_choose"] } },
-          orderBy: { seq: "desc" },
-          take: 30,
-        })
-      : []
+          orderBy: { seq: "desc" }, take: 30,
+        }) : []
     const participants =
       archived ? archived.seats : hand
         ? await c.tx.gamePokerHandSeat.findMany({
@@ -367,6 +368,11 @@ export class PokerActionService {
       roomId: c.room.id, userId, hand, participants, state: h,
       archivedRolls: archived?.rolls, archivedActions: archived?.actions,
     }) : undefined
+    const handLog = hand ? projectHandLog({
+      roomId: c.room.id, hand, participants, actions: logRecords,
+      rolls: h?.roll?.history ?? archived?.rolls.map(record => record.data as unknown as import("./engine/hand-runner").RollHistory) ?? [],
+      pendingRollId: h?.roll?.pending?.id ?? null,
+    }) : undefined
     const potContributions = hand ? projectPotContributions({
       roomId: c.room.id, userId, hand, participants, state: h, archivedActions: archived?.actions,
     }) : undefined
@@ -374,6 +380,7 @@ export class PokerActionService {
       archived ? archived.rolls.map(r=>({id:r.id,seatNo:r.seatNo,fee:(r.data as unknown as {fee:number}).fee})) : h?.roll?.history ?? [],
       archived?.actions) : undefined
     return {
+      ...(handLog ? { handLog } : {}),
       ...(potContributions ? { potContributions } : {}),
       ...(chipState ? {chipState} : {}),
       ...(rollStats ? { rollStats } : {}),

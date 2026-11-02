@@ -128,8 +128,23 @@ const potContributions = z.object({
   if (pot.players.reduce((sum, player) => sum + BigInt(player.amount), 0n) !== BigInt(pot.total))
     ctx.addIssue({ code: "custom", message: "底池来源金额不守恒。" })
 })
+const handLog = z.object({
+  handId: z.string().min(1), complete: z.boolean(),
+  entries: z.array(z.object({
+    seq: z.number().int().min(-1), seatNo: z.number().int().min(0).max(9), displayName: z.string(),
+    street: z.enum(["preflop", "flop", "turn", "river"]),
+    action: z.enum(["small_blind", "big_blind", "fold", "check", "call", "bet", "raise", "allin", "roll"]),
+    amount: z.number().int().nonnegative(), isAuto: z.boolean(),
+    actionSource: z.enum(["mcp", "human", "timeout", "rules_bot"]).optional(),
+    roll: z.object({ kind: z.enum(["normal", "super"]), count: z.number().int().positive(), status: z.enum(["pending", "completed", "replaced", "cancelled"]) }).strict().optional(),
+  }).strict()).max(1002),
+}).strict().superRefine((log, ctx) => {
+  if (log.entries.some((entry, index) => (index > 0 && entry.seq <= log.entries[index - 1].seq) || (entry.action === "roll") !== !!entry.roll))
+    ctx.addIssue({ code: "custom", message: "本手日志顺序或Roll记录无效。" })
+})
 const table = z
   .object({
+    handLog: handLog.optional(),
     potContributions: potContributions.optional(),
     chipState: chipState.optional(),
     rollStats: rollStats.optional(),
@@ -177,6 +192,8 @@ const table = z
     maxRaiseTo: z.number().optional(),
   })
   .passthrough().superRefine((table, ctx) => {
+    if (table.handLog && table.handLog.handId !== table.handId)
+      ctx.addIssue({ code: "custom", message: "日志不属于当前手牌。" })
     if (table.potContributions && table.potContributions.handId !== table.handId)
       ctx.addIssue({ code: "custom", message: "底池来源不属于当前手牌。" })
   })

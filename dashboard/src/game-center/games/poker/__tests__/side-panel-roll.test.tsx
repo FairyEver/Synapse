@@ -9,7 +9,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 afterEach(() => document.body.replaceChildren())
 const table: PokerTableView = {
-  roomCode: "1234", name: null, status: "running", buyIn: 1000, maxSeats: 3,
+  mode: "practice", roomCode: "1234", name: null, status: "running", buyIn: 1000, maxSeats: 3,
   handId: "hand", handNo: 1, street: "flop", board: [], pot: 20, dealerSeat: 0,
   actionOnSeat: 1, deadlineMs: 10000, cursor: "1:3", mySeatNo: 0, deckRemaining: 40,
   seats: [{ seatNo: 0, isMe: true, inCurrentHand: true, isHistorical: false,
@@ -26,6 +26,7 @@ async function mount(value = table, events: PokerTableEvent[] = []) {
   const host = document.createElement("div"), root = createRoot(host)
   document.body.append(host)
   await act(async () => root.render(<SidePanel table={value} perspective="owner" events={events} />))
+  await act(async () => ([...host.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent === "总览")!).click())
   return { host, root }
 }
 function funds(host: HTMLElement) {

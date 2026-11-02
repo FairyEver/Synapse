@@ -1,5 +1,10 @@
 # 游戏 UI：系统外壳与局内界面
 
+2026-11-02 对局信息：牌桌顶部入口由“日志”改为“对局信息”，固定“日志 / 总览 / AI”三个Tab。日志仅按阶段合并实际盲注、普通行动及成功Roll start，不含累计指标、玩家汇总、资产或完整结算；choose只更新原Roll状态，不新增收费。总览复用本手potContributions/rollLedger，按原参赛身份展示累计下注、普通/超级次数、支出和补偿，可展开各轮投入；缺字段显示不可用，不从recentActions或近期事件推算。完整结算仅在总览；AI判断/提示词仅本人视角且已入座可见，其他视角显示不可用。身份、房间、手牌、视角变化重置Tab，保留面板互斥、焦点返回、画布和850px行为。
+
+table_state/room_get可选公开handLog={handId,complete,entries}，绑定当前手牌。entries按seq排列，仅含seq/seatNo/displayName/street/action/amount/isAuto/actionSource及可选roll={kind,count,status}；street为preflop/flop/turn/river，action为small_blind/big_blind/fold/check/call/bet/raise/allin/roll，金额为实际追加或Roll费用。seq=-1/0为按本手初始筹码与规则恢复的实际小/大盲，正数沿用动作序号；choose不生成第二条，序号可有间隔。roll.status=pending/completed/replaced/cancelled，分别为待选/完成/被重抽替代/手牌取消，取消不表示费用到账。查询只取本手最近最多1000条原始动作，完整时额外含两笔盲注（最多1002项）；complete=false表示截断或缺口，不附加盲注，也不能算整手或各轮完整下注；缺字段表示不可用。姓名只取本手参赛快照，不公开userId/admissionId、底牌、候选、旧牌、槽位、note或persona。保留原recentActions最近30条普通行动及本人AI隐私；既有table.state/room.get只读扩展，无新工具、输入、路由、权限、迁移或写入。
+
+
 2026-11-02 底池来源：既有底池标题、金额和筹码堆作为同一个可键盘操作入口，打开最大宽800px的标准HeroUI来源面板，按本手玩家展示累计投入和占比，保留已弃牌者投入，包含实际盲注和各轮下注，不含Roll费用。公开可选potContributions只从本手引擎累计投入或完整归档动作/原始盲注投影，使用本手参与者姓名及不透明身份，不以当前占座者/余额或最近30条动作推算。进行中显示当前底池，结算/取消后明确显示本手累计投入及状态，缺字段显示暂不可用。与Roll费用/玩家/日志等面板互斥，换手/房间/账号/视角关闭旧信息，关闭/Escape返回入口；保留原生Modal留白、正文滚动和既有动画锚点/结算屏障。没有新增收费、查询、路由、工具、迁移或发布说明。
 
 2026-11-02 Roll费用明细：牌桌既有Roll费用标签、金额和筹码堆作为同一个可键盘操作入口，打开标准HeroUI浅色Modal，最大宽800px。来源与去向按本手真实成功start记录分别汇总，点击玩家筛选逐笔支付/补偿，可展开原分配；窄屏单列、正文滚动、Header/Footer保留原生留白。明细只读且不改变资金、钻石、控制权或倒计时；补偿资格与金额固定于扣费时，之后弃牌仍保留记录。显示待结算/已结算/已取消，取消的练习补偿不声称到账。table.state/room.get追加可选公开rollLedger，由热历史或归档与本手参与者快照白名单投影，不公开账号ID/入座ID/私牌；缺字段显示暂不可用，不从截断事件或当前占座者推算。账号、房间、手牌和视角切换关闭旧信息，接入既有面板互斥，关闭/Escape返回入口焦点。无新工具、接口、查询、数据库迁移或发布说明。

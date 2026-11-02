@@ -15,7 +15,7 @@
 .poker-immersive[data-control-layout] .poker-table-main { grid-area: 2 / 1; }
 .poker-immersive[data-control-layout] .poker-canvas-viewport { margin-top: 0; }
 .poker-interaction-rail { display: contents; }
-.poker-information-slot { grid-area: 2 / 1; position: relative; min-height: 0; justify-self: end; width: min(24rem, 100% - 1rem); z-index: 5; pointer-events: none; }
+.poker-information-slot { grid-area: 2 / 1; position: relative; min-height: 0; justify-self: end; width: min(54rem, 100% - 1rem); z-index: 5; pointer-events: none; }
 .poker-information-drawer { position: relative; height: 100%; min-height: 0; pointer-events: auto; border-left: 1px solid var(--separator); }
 .poker-information-drawer[hidden] { display: none; }
 .poker-immersive[data-control-layout] .poker-controls-anchor { grid-area: 3 / 1; width: 100%; min-height: 0; padding: 0.5rem 0.75rem; align-self: stretch; background: var(--surface); border-top: 1px solid var(--separator); }

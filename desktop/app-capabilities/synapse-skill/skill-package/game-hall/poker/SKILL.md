@@ -24,6 +24,8 @@ Web 的列表与牌桌共用 AI 接入面板，首次“允许 AI 接入并复�
 
 ## 控制与行动
 
+table_state/room_get可选公开handLog={handId,complete,entries}，绑定当前手牌。entries按seq排列，仅含seq/seatNo/displayName/street/action/amount/isAuto/actionSource及可选roll={kind,count,status}；street为preflop/flop/turn/river，action为small_blind/big_blind/fold/check/call/bet/raise/allin/roll，金额为实际追加或Roll费用。seq=-1/0为按本手初始筹码与规则恢复的实际小/大盲，正数沿用动作序号；choose不生成第二条，序号可有间隔。roll.status=pending/completed/replaced/cancelled，分别为待选/完成/被重抽替代/手牌取消，取消不表示费用到账。查询只取本手最近最多1000条原始动作，完整时额外含两笔盲注（最多1002项）；complete=false表示截断或缺口，不附加盲注，也不能算整手或各轮完整下注；缺字段表示不可用。姓名只取本手参赛快照，不公开userId/admissionId、底牌、候选、旧牌、槽位、note或persona。保留原recentActions最近30条普通行动及本人AI隐私；既有table.state/room.get只读扩展，无新工具、输入、路由、权限、迁移或写入。
+
 底池公开来源：table_state/room_get可选potContributions={handId,status,total,players}，所有视角/受众统一白名单。status=pending|settled|cancelled，分别为本手进行中、已结算、已取消；total始终是本手普通累计投入，结算后hand.pot可为0，不声称来源金额仍在池中、可下注或取消已到账。players最多10项，仅含房间作用域不透明key、seatNo、displayName、isMe、folded、amount，金额为安全非负整数，各玩家合计严格等于total。含实际短筹码盲注、跟注/下注/加注/全下、弃牌已投入及后来未跟注退款/边池的累计投入；Roll start/choose费用和补偿均独立排除。热手取引擎累计total；冷归档从本手不可变participants初始筹码、庄家和规则恢复实际盲注，再加完整归档普通actions，不从最近30条动作、当前席位余额或动画反推。姓名和归属只取本手快照，同座新账号不继承；不公开userId/admissionId、牌面、候选、persona或note。来源缺失、序号不全、身份或金额损坏时省略字段，旧响应按不可用；已知amount=0才是该玩家没有投入。Web点击原底池区域查看，只读不暂停、不行动、不改变权限、资金和动画。不新增查询、工具、输入参数、路由、数据库字段或迁移。
 
 Web的筹码堆与滚动金额只是展示：普通底池和Roll费用分开，派发完成后展示结算。可选chipState仅Web展示投影返回，MCP不依赖它；筹码颜色、动画进度不授予控制权、不延长行动窗口，也不代替结算shares、rollReceived或逐手准备。

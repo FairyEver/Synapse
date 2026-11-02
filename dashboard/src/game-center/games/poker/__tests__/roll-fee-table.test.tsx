@@ -24,7 +24,7 @@ describe("牌桌Roll费用入口", () => {
     const trigger = button("查看 Roll 费用明细")
     expect(trigger).toBeDefined()
     expect(trigger.querySelector('.poker-chip-pile[data-fund="roll"]')).not.toBeNull()
-    await act(async () => button("日志").click())
+    await act(async () => button("对局信息").click())
     await act(async () => trigger.click())
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("支付合计 403")
     expect(host.querySelector('.poker-information-drawer')?.hasAttribute('hidden')).toBe(true)

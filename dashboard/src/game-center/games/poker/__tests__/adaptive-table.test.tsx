@@ -38,7 +38,7 @@ describe("三种牌桌场景接入", () => {
       expect(host.querySelector('[data-mine="true"]')?.getAttribute("data-position")).toBe("0")
     }
     const style=canvas.getAttribute("style")
-    await act(async()=>{ [...host.querySelectorAll("button")].find(button=>button.textContent==="日志")!.click() })
+    await act(async()=>{ [...host.querySelectorAll("button")].find(button=>button.textContent==="对局信息")!.click() })
     expect(canvas.getAttribute("style")).toBe(style)
     await act(async()=>root.unmount())
     expect(observers[0].disconnect).toHaveBeenCalledOnce()

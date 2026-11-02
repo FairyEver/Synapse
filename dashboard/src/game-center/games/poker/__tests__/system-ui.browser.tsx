@@ -82,7 +82,7 @@ describe.each([
       expect(getComputedStyle(gameButton).fontFamily).toContain("Game Geist")
       expect(getComputedStyle(surface).backgroundColor).not.toBe(referenceStyle.backgroundColor)
 
-      await button("日志").click()
+      await button("对局信息").click()
       const drawer = await element(".poker-information-drawer:not([hidden])")
       expect(getComputedStyle(drawer).backgroundColor).toBe(referenceStyle.backgroundColor)
       expect(getComputedStyle(drawer).fontFamily).toBe(referenceStyle.fontFamily)
@@ -91,7 +91,7 @@ describe.each([
       inside(drawer, surface)
       if (mode === "compact") expect(drawer.getBoundingClientRect().bottom).toBeLessThanOrEqual(document.querySelector(".poker-controls-anchor")!.getBoundingClientRect().top + 1)
       await page.getByTestId("poker-fixture").screenshot({ path: `.superpowers/sdd/2026-11-01-poker-system-ui/${mode}-log.png` })
-      await page.getByRole("tab", { name: "AI 判断", exact: true }).click()
+      await page.getByRole("tab", { name: "AI", exact: true }).click()
       await expect.element(page.getByText("自己的判断", { exact: true })).toBeVisible()
       await button("成员管理").click()
       await expect.element(button("移除 陪练机器人很长的名字")).toBeVisible()
