@@ -145,6 +145,7 @@ export interface PokerTableEventsView {
   hasMore: boolean
 }
 export interface PokerSeatView {
+  publicHole?: { index: number; card: string }[]
   rollCount?: number
   rollPaid?: number
   pendingCompensation?: number
@@ -193,6 +194,8 @@ export interface PokerPotContributions {
   players: { key: string; seatNo: number; displayName: string; isMe: boolean; folded: boolean; amount: number }[]
 }
 export interface PokerHandLogEntry {
+  nominalAmount?: number
+  waivedAmount?: number
   seq: number
   seatNo: number
   displayName: string
@@ -209,6 +212,7 @@ export interface PokerTableView {
   cards?: PokerCardView
   reserve?: PokerReserveView
   paymentVersion?: string
+  betWaiverCap?: number
   /** Public ordered current-hand actions. Missing/incomplete logs must not supply totals. */
   handLog?: PokerHandLog
   potContributions?: PokerPotContributions

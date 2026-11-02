@@ -7,7 +7,7 @@ import { projectRollStats } from "./poker-roll-stats"
 import { projectRollLedger } from "./poker-roll-ledger"
 import { projectHandLog } from "./poker-hand-log"
 import { projectPotContributions } from "./poker-pot-contributions"
-import { projectChipState } from "./poker-chip-projection"
+import { projectChipState, projectFundedChipState } from "./poker-chip-projection"
 import { chooseBotAction } from "./bot-policy"
 import type { ActionKind } from "./engine/betting"
 import { act, legalActions, removeFromHand } from "./engine/hand-runner"
@@ -386,6 +386,7 @@ export class PokerActionService {
       street: a.street,
       action: a.action,
       amount: a.amount,
+      ...(a.nominalAmount == null ? {} : { nominalAmount: a.nominalAmount, waivedAmount: a.waivedAmount ?? 0 }),
       potAfter: a.potAfter,
       isAuto: a.isAuto,
       actionSource: a.actionSource ?? (a.isAuto ? "timeout" : "mcp"),
@@ -427,15 +428,19 @@ export class PokerActionService {
     const potContributions = hand ? projectPotContributions({
       roomId: c.room.id, userId, hand, participants, state: h, archivedActions: archived?.actions,
     }) : undefined
-    const chipState = audience === "desktop" && hand ? await projectChipState(c.tx,hand,participants,
+    let chipState = audience === "desktop" && hand ? await projectChipState(c.tx,hand,participants,
       archived ? archived.rolls.map(r=>({id:r.id,seatNo:r.seatNo,fee:(r.data as unknown as {fee:number}).fee})) : h?.roll?.history ?? [],
       archived?.actions) : undefined
+    if (chipState && hand && c.room.chipRulesVersion === "chips-v2") {
+      const roots = archived?.resolutions?.slice(-32) ?? await c.tx.gamePokerResolution.findMany({ where: { handId: hand.id }, orderBy: { seq: "desc" }, take: 32 })
+      chipState = projectFundedChipState(chipState, h?.reserve ?? archived?.reserve, participants, roots.map(root => root.data as unknown as import("./engine/cards/types").ResolutionFrame))
+    }
     const cardState = h ?? (archived?.cards ? { archived: true as const, cards: archived.cards, street: hand!.street, seats: participants.map(p => ({ seatNo: p.seatNo, hole: p.holeCards as string[] })) } : null)
     const cards = cardState ? projectCardView(cardState, { audience, perspective, handId: hand!.id, actionSeq: hand!.actionSeq, nowMs: c.now.getTime(), ...(own && me && participants.some(p => p.admissionId === me.id && p.userId === userId) ? { self: { userId, admissionId: me.id, seatNo: me.seatNo, controlVersion: me.controlVersion } } : {}) }) : undefined
     const reserve = hand ? projectReserveView({ roomId: c.room.id, handId: hand.id, status: hand.status, userId, participants, state: h?.reserve ?? archived?.reserve }) : undefined
     return {
       ...(cards ? { cards } : {}), ...(reserve ? { reserve } : {}),
-      ...(h?.chipRulesVersion === "chips-v2" && own && participating ? { paymentVersion: betPaymentVersion(h, me!.seatNo, hand!.id, hand!.actionSeq, me!.controlVersion) } : {}),
+      ...(h?.chipRulesVersion === "chips-v2" && own && participating ? { paymentVersion: betPaymentVersion(h, me!.seatNo, hand!.id, hand!.actionSeq, me!.controlVersion), betWaiverCap: fundedBetCapacity(h, me!.seatNo) } : {}),
       ...(handLog ? { handLog } : {}),
       ...(potContributions ? { potContributions } : {}),
       ...(chipState ? {chipState} : {}),
@@ -506,6 +511,7 @@ export class PokerActionService {
                 ? "offline"
                 : "online",
           ...(visible && p ? { hole: p.hole } : {}),
+          ...(!visible && p && h?.cards?.publicMarkers?.some(marker => p.hole.includes(marker.card) && (!marker.expiresStreet || marker.expiresStreet === h.street)) ? { publicHole: p.hole.flatMap((card, index) => h.cards!.publicMarkers!.some(marker => marker.card === card && (!marker.expiresStreet || marker.expiresStreet === h.street)) ? [{ index, card }] : []) } : {}),
         }
       }),
       recentActions,

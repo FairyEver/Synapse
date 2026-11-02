@@ -24,6 +24,27 @@ function request(f: Awaited<ReturnType<typeof fixture>>, definitionId = "59", se
   return input
 }
 describe("卡牌房间原子服务", () => {
+  it("本人下注预演返回豁免额度，公开投影不返回报价", async () => {
+    const f = await fixture()
+    await new PokerCardService(f.poker).play("u", request(f, "31"), "human", f.now)
+    const actions = new PokerActionService(f.poker), own = await actions.state("u", f.room.code, "owner", false, f.now, "desktop")
+    expect(own.betWaiverCap).toBe(20)
+    const publicView = await actions.state("u", f.room.code, "public", false, f.now, "desktop")
+    expect(publicView).not.toHaveProperty("betWaiverCap")
+  })
+  it("公开标记跟随实体牌换到新玩家，只公开指定槽位，净化不删原使用历史", async () => {
+    const f = await fixture(), h = f.hands[0].engineState as HandState, card = h.seats[0].hole[0]
+    h.cards!.publicMarkers = [{ id: "marker", card, cardId: "15", ownerAdmissionId: "admission-0", dispellable: true, expiresStreet: "preflop" }]
+    const service = new PokerActionService(f.poker)
+    let view = await service.state("outsider", f.room.code, "public", false, f.now, "decision")
+    expect(view.seats[0].publicHole).toEqual([{ index: 0, card }]); expect(view.seats[0]).not.toHaveProperty("hole")
+    ;[h.seats[0].hole[0], h.seats[1].hole[1]] = [h.seats[1].hole[1], h.seats[0].hole[0]]
+    view = await service.state("outsider", f.room.code, "public", false, f.now, "decision")
+    expect(view.seats[1].publicHole).toEqual([{ index: 1, card }]); expect(view.seats[0].publicHole ?? []).toEqual([])
+    h.cards!.publicMarkers = []
+    view = await service.state("outsider", f.room.code, "public", false, f.now, "decision")
+    expect(view.seats.every(s => !s.publicHole?.length)).toBe(true)
+  })
   it("超级Roll待选拦截所有主动卡牌，并允许原槽重抽；MCP读取保持公开", async () => {
     const f = await fixture(), rolls = new PokerRollService(f.poker)
     const start = (slot: number) => {

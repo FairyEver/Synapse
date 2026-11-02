@@ -12,6 +12,7 @@ export function projectTable(
   delete publicTable.minRaiseTo
   delete publicTable.maxRaiseTo
   delete publicTable.paymentVersion
+  delete publicTable.betWaiverCap
   return {
     ...publicTable,
     ...(table.cards ? { cards: { enabled: table.cards.enabled, version: table.cards.version, used: table.cards.used, statuses: table.cards.statuses } } : {}),

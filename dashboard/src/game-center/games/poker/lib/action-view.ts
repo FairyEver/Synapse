@@ -1,6 +1,12 @@
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { waitingForPlayers } from "./room-entry"
 
+export function betPaymentPreview(table: PokerTableView, nominalAmount: number) {
+  const nominal = Number.isSafeInteger(nominalAmount) && nominalAmount > 0 ? nominalAmount : 0
+  const waivedAmount = Math.min(nominal, Math.max(0, table.betWaiverCap ?? 0))
+  return { nominalAmount: nominal, waivedAmount, paidAmount: nominal - waivedAmount }
+}
+
 export function actionState(table: PokerTableView, acting: boolean, handoff: boolean | undefined) {
   const mine = table.seats.find(seat => seat.seatNo === table.mySeatNo)
   const active = table.seats.find(seat => seat.seatNo === table.actionOnSeat)

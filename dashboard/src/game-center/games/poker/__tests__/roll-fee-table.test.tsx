@@ -18,18 +18,18 @@ async function mount() {
   await render()
   return { host, root, render }
 }
-describe("牌桌Roll费用入口", () => {
+describe("牌桌暂存入口与旧账本适配", () => {
   it("费用标签金额筹码均在入口内；与日志互斥、关闭恢复焦点，不提交资金操作", async () => {
     const { host, root } = await mount()
-    const trigger = button("查看 Roll 费用明细")
+    const trigger = button("查看暂存明细")
     expect(trigger).toBeDefined()
     expect(trigger.querySelector('.poker-chip-pile[data-fund="roll"]')).not.toBeNull()
     await act(async () => button("对局信息").click())
     await act(async () => trigger.click())
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("支付合计 403")
+    expect([...document.querySelectorAll('[role="dialog"] dt')].find(node => node.textContent === "存入合计")?.nextElementSibling?.textContent).toBe("403")
     expect(host.querySelector('.poker-information-drawer')?.hasAttribute('hidden')).toBe(true)
     await act(async () => {
-      button("关闭费用明细").click()
+      button("关闭暂存明细").click()
       await new Promise(resolve => requestAnimationFrame(resolve))
     })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
@@ -45,7 +45,7 @@ describe("牌桌Roll费用入口", () => {
   })
   it.each(["hand", "room", "identity", "perspective"])("%s变化关闭旧费用明细", async context => {
     const { root, render } = await mount()
-    await act(async () => button("查看 Roll 费用明细").click())
+    await act(async () => button("查看暂存明细").click())
     expect(document.querySelector('[role="dialog"]')).not.toBeNull()
     await render({ ...feeTable, ...(context === "hand" ? { handId: "next" } : {}), ...(context === "room" ? { roomCode: "another" } : {}) }, context === "identity" ? "other" : "owner", context === "perspective" ? "public" : "owner")
     expect(document.querySelector('[role="dialog"]')).toBeNull()

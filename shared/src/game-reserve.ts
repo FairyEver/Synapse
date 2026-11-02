@@ -23,5 +23,5 @@ export interface PokerReserveView {
   handId: string; status: "pending" | "released" | "cancelled"; total: number; complete: boolean
   players: { key: string; seatNo: number; displayName: string; isMe: boolean; pending: number }[]
   lots: { id: string; payerKey: string; sourceType: string; originalAmount: number; remainingAmount: number; shares: { key: string; originalAmount: number; remainingAmount: number }[] }[]
-  movements: { id: string; seq: number; kind: GameReserveMovement["kind"]; amount: number; lotId: string; actorKey?: string; recipientKey?: string }[]
+  movements: { id: string; seq: number; kind: GameReserveMovement["kind"]; amount: number; lotId: string; actorKey?: string; recipientKey?: string; beneficiaryKey?: string }[]
 }

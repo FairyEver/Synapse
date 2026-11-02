@@ -55,15 +55,16 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
   view.privateResults = cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId).map(r => ({ id: r.id, cardId: r.cardId, label: r.label, values: [...r.values], valid: r.valid }))
   return view
 }
-const PUBLIC_FACTS = new Set(["ability.played", "ability.statusInstalled", "ability.statusRemoved", "ability.blocked", "poker.revealed", "poker.guessed", "poker.sparked", "chips.paid", "chips.deposited", "chips.stolen", "chips.refunded", "chips.distributed", "chips.discarded", "bet.completed", "bet.blinds", "turn.started", "street.started", "hand.settled"])
+const PUBLIC_FACTS = new Set(["ability.played", "ability.protected", "ability.statusInstalled", "ability.statusRemoved", "ability.blocked", "poker.revealed", "poker.guessed", "poker.sparked", "chips.paid", "chips.deposited", "chips.stolen", "chips.refunded", "chips.distributed", "chips.discarded", "bet.completed", "bet.blinds", "turn.started", "street.started", "hand.settled"])
 const amount = (n: unknown): n is number => Number.isSafeInteger(n) && Number(n) >= 0
 /** Private observations stay in the owner's panel, never in the shared animation feed. */
 export function projectResolutionFrame(frame: ResolutionFrame): PokerResolutionFrameView {
-  return { id: frame.id, handId: frame.handId, seq: frame.seq, events: frame.events.filter(e => e.audience === "public" && PUBLIC_FACTS.has(e.type)).map(e => {
-    const view: PokerResolutionEventView = { index: e.index, type: e.type }
+  return { id: frame.id, handId: frame.handId, seq: frame.seq, events: frame.events.filter(e => e.status === "blocked" && e.phase === "after" || e.audience === "public" && PUBLIC_FACTS.has(e.type)).map(e => {
+    const blocked = e.status === "blocked", view: PokerResolutionEventView = { index: e.index, type: blocked ? "ability.blocked" : e.type }
     if (amount(e.actorSeatNo)) view.actorSeatNo = e.actorSeatNo
     if (amount(e.data.targetSeatNo)) view.targetSeatNo = e.data.targetSeatNo
     if (e.cardId && /^(0[1-9]|[1-5][0-9]|60)$/.test(e.cardId)) view.cardId = e.cardId
+    if (blocked) return { ...view, status: "blocked" as const }
     for (const key of ["amount", "nominalAmount", "waivedAmount", "count"] as const) if (amount(e.data[key])) view[key] = e.data[key]
     if (e.status) view.status = e.status
     if (["completed", "blocked", "choice_required"].includes(String(e.data.status))) view.status = String(e.data.status)

@@ -58,7 +58,8 @@ describe("持续状态", () => {
   })
   it("群体不是单目标，护盾只排除其拥有者；全局状态不随来源弃牌消失", () => {
     const h = makeCardHand({ humans: 3 }); h.cards!.effects = [effect("counter"), effect("hole_guard", 2)]
-    const next = run(h, [op("poker.shuffleHoles", {})]).state
+    const resolution = run(h, [op("poker.shuffleHoles", {})]), next = resolution.state
+    expect(resolution.frame.events).toContainEqual(expect.objectContaining({ type: "ability.protected", audience: "public", data: { targetSeatNo: 2 } }))
     expect(next.cards!.effects.map(e => e.kind)).toEqual(["counter"])
     expect(next.seats[2].hole).toEqual(h.seats[2].hole)
     next.seats[0].folded = true

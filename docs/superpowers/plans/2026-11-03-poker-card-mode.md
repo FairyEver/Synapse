@@ -262,11 +262,11 @@
 **Files:** Create `dashboard/src/game-center/games/poker/components/PokerReserveDialog.tsx`、`dashboard/src/game-center/games/poker/components/PokerCardStatuses.tsx`、`dashboard/src/game-center/games/poker/lib/reserve-view.ts`、`dashboard/src/game-center/games/poker/__tests__/reserve-view.test.tsx`、`dashboard/src/game-center/games/poker/__tests__/card-effects.test.tsx`；Modify `dashboard/src/game-center/games/poker/components/Table.tsx`、`dashboard/src/game-center/games/poker/components/Seat.tsx`、`dashboard/src/game-center/games/poker/components/HumanControls.tsx`、`dashboard/src/game-center/games/poker/components/MatchLog.tsx`、`dashboard/src/game-center/games/poker/components/MatchOverview.tsx`、`dashboard/src/game-center/games/poker/components/SettlementDetails.tsx`、`dashboard/src/game-center/games/poker/components/BetDecisionContext.tsx`、`dashboard/src/game-center/games/poker/hooks/usePokerChips.ts`、`dashboard/src/game-center/games/poker/hooks/usePokerEvents.ts`、`dashboard/src/game-center/games/poker/hooks/useTableMotion.ts`、`dashboard/src/game-center/games/poker/lib/chip-presentation.ts`、`dashboard/src/game-center/games/poker/lib/table-motion.ts`、`dashboard/src/game-center/games/poker/lib/action-view.ts`、`shared/src/game-poker-chips.ts`、`docs/agents/game-ui.md`。
 **Interfaces:** Consumes T10根帧和reserve投影；`projectReserveRows(view:PokerReserveView,filter:ReserveFilter):ReserveRow[]`在lib/reserve-view.ts导出，供明细使用；`ReserveFilter`只含可见付款人/待分人key及来源类型。
 
-- [ ] **1. 写失败测试。** `reserve_rows_reconcile`显示120存入/60盗取/60退回且当前暂存0；`zero_paid_no_chip_motion`名义100实付0不飞100筹码；`root_frame_once`重复游标不重播。`marker_follows_and_cleanses`实体公开标记换人后显示正确，净化只解除持续公开、不删历史记录；本人情报不出现全局toast/其他人DOM。 断言示例：`expect(transfers.reduce((sum,t)=>sum+t.amount,0)).toBe(0)`（只有名义100/实付0、无其他资金动作的帧）。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/dashboard exec vitest run src/game-center/games/poker/__tests__/reserve-view.test.tsx src/game-center/games/poker/__tests__/card-effects.test.tsx src/game-center/games/poker/__tests__/chip-presentation.test.ts`。
-- [ ] **3. 实现资金呈现。** 第二堆统一“暂存”，新规则按存入/盗取/退款/分配画真实转移；旧资金视图通过版本适配为原冻结金额，不改历史。下注提示同时清楚表达名义与实付，底池来源/统计使用真实投入；原支出和退款分列。明细缺源/截断不伪造完整零账。
-- [ ] **4. 实现状态与屏障并验证绿灯。** 玩家防护和全场状态按需展开，不添常驻介绍；根帧按因果顺序播放，资金与滚动数字完成后才完整结算，减少动态模式直接落结果。新基线/重连/换视角不重播历史帧。同期更新`docs/agents/game-ui.md`的两摞资金与卡牌UI边界。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 展示通用暂存去向和卡牌触发的真实筹码变化'`。
+- [x] **1. 写失败测试。** `reserve_rows_reconcile`显示120存入/60盗取/60退回且当前暂存0；`zero_paid_no_chip_motion`名义100实付0不飞100筹码；`root_frame_once`重复游标不重播。`marker_follows_and_cleanses`实体公开标记换人后显示正确，净化只解除持续公开、不删历史记录；本人情报不出现全局toast/其他人DOM。 断言示例：`expect(transfers.reduce((sum,t)=>sum+t.amount,0)).toBe(0)`（只有名义100/实付0、无其他资金动作的帧）。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/dashboard exec vitest run src/game-center/games/poker/__tests__/reserve-view.test.tsx src/game-center/games/poker/__tests__/card-effects.test.tsx src/game-center/games/poker/__tests__/chip-presentation.test.ts`。
+- [x] **3. 实现资金呈现。** 第二堆统一“暂存”，新规则按存入/盗取/退款/分配画真实转移；旧资金视图通过版本适配为原冻结金额，不改历史。下注提示同时清楚表达名义与实付，底池来源/统计使用真实投入；原支出和退款分列。明细缺源/截断不伪造完整零账。
+- [x] **4. 实现状态与屏障并验证绿灯。** 玩家防护和全场状态按需展开，不添常驻介绍；根帧按因果顺序播放，资金与滚动数字完成后才完整结算，减少动态模式直接落结果。新基线/重连/换视角不重播历史帧。同期更新`docs/agents/game-ui.md`的两摞资金与卡牌UI边界。
+- [x] **5. 本地提交。** `git commit -m 'feat: 展示通用暂存去向和卡牌触发的真实筹码变化'`。
 
 
 ## Task 16: GPT生成全部60张正式封面

@@ -44,6 +44,7 @@ export function registerChipCardOperations(registry: OperationRegistry<HandState
     const protections = (h.cards?.effects ?? []).filter(e => e.kind === "theft_guard" && (e.remaining === null || e.remaining > 0)).sort((a, b) => a.installedSeq - b.installedSeq || a.id.localeCompare(b.id))
     const result = applyReserveOperation(h.reserve ?? emptyReserve(), { kind: "steal", ...input, protectedAdmissions: protections.map(e => e.ownerAdmissionId) }, api.context, after(h.seats.map(s => s.seatNo), h.dealerSeat))
     if (h.cards) consumeEffects(h, result.protectedAdmissions.map(id => protections.find(e => e.ownerAdmissionId === id)!.id))
+    for (const id of result.protectedAdmissions) api.emit("ability.protected", { targetSeatNo: protections.find(e => e.ownerAdmissionId === id)!.ownerSeatNo }, "public")
     applyHandReserveDelta(h, result)
     api.emit("chips.stolen", { amount: result.amount, status: result.amount ? "completed" : "blocked", targetSeatNo: input.targetSeatNo }, "public")
   } })

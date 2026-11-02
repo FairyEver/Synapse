@@ -39,6 +39,8 @@ export function Seat({
   dealt: boolean
   deadlineMs: number | null
 }) {
+  const publicHole = new Map(seat.publicHole?.map(card => [card.index, card.card]))
+  const hole = [seat.hole?.[0] ?? publicHole.get(0), seat.hole?.[1] ?? publicHole.get(1)]
   const won = seat.inCurrentHand !== false && !!result?.pots.some(p=>!p.refund && p.winners.includes(seat.seatNo))
   const wonChips = result?.pots.filter(p=>!p.refund).reduce((sum,p)=>sum+(p.shares[seat.seatNo] ?? 0),0) ?? 0
   const returned = result?.pots.filter(p=>p.refund).reduce((sum,p)=>sum+(p.shares[seat.seatNo] ?? 0),0) ?? 0
@@ -62,8 +64,8 @@ export function Seat({
     >
       <div className="poker-seat-objects">
         {!waiting && <div className="poker-seat-cards" data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!seat.hole}>
-          <Card card={seat.hole?.[0]} faceUp={!!seat.hole && dealt} />
-          <Card card={seat.hole?.[1]} faceUp={!!seat.hole && dealt} />
+          <Card card={hole[0]} faceUp={!!hole[0] && dealt} />
+          <Card card={hole[1]} faceUp={!!hole[1] && dealt} />
         </div>}
         <PokerChipPile chips={chipBreakdown(displayStack)} label={`${seat.isMe ? "你" : seat.displayName}剩余筹码`} seed={seat.seatNo+1} className="poker-seat-bank" />
       </div>
@@ -99,7 +101,7 @@ export function Seat({
       <div className="poker-seat-meta">
         {won && outcome ? <span className="poker-seat-result" title={`赢得 ${amount(wonChips)}${returned > 0 ? `，返还 ${amount(returned)}` : ""}，净变化 ${amount(outcome.delta)}`} aria-label={`赢得 ${amount(wonChips)}，净变化 ${amount(outcome.delta)}`}><strong>净 {outcome.delta > 0 ? "+" : ""}{amount(outcome.delta)}</strong></span>
           : seat.status === "folded" && !departed ? <strong className="poker-folded-label">已弃牌</strong>
-          : feedback && !acting && !waiting && !departed ? <span key={feedbackKey} className="poker-action-receipt">{actionLabel[feedback.action]}{feedback.amount > 0 && ` +${amount(feedback.amount)}`}</span>
+          : feedback && !acting && !waiting && !departed ? <span key={feedbackKey} className="poker-action-receipt">{actionLabel[feedback.action] ?? (feedback.action.startsWith("card_") ? "使用卡牌" : feedback.action)}{feedback.amount > 0 && ` +${amount(feedback.amount)}`}{!!feedback.waivedAmount && ` · 名义 ${amount(feedback.nominalAmount ?? feedback.amount)} / 实付 ${amount(feedback.amount)}`}</span>
           : <span className="poker-ai-state" data-acting={acting}>
             {seat.status === "sitting_out" ? "已暂离" : waiting ? hasStarted ? "下一手加入" : "等待开局" : acting ? seat.isMe && seat.controller === "human" ? "轮到你" : "行动中" : seat.status === "allin" ? "已全下" : stateLabel}
           </span>}

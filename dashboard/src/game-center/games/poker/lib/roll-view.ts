@@ -1,7 +1,7 @@
 import type { PokerRollOffer, PokerRollPublicView } from "@synapse/shared/game-contracts"
 import { amount } from "./view"
 export function rollOfferCost(offer: PokerRollOffer | undefined, unit: string) {
-  return `${offer?.coinCost != null ? `${offer.coinCost} 钻石 + ` : ""}${amount(offer?.fee ?? 0)} ${unit}`
+  return `${offer?.coinCost != null ? `${offer.coinCost} 钻石 + ` : ""}${amount(offer?.payment?.paidAmount ?? offer?.fee ?? 0)} ${unit}${offer?.payment?.waivedAmount ? `（豁免 ${amount(offer.payment.waivedAmount)}）` : ""}`
 }
 export function rollUnavailableReason(offer: PokerRollOffer | undefined, balance: number | undefined, unit: string) {
   if (offer?.available) return null

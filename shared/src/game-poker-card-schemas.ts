@@ -32,5 +32,5 @@ export const pokerReserveViewSchema = z.object({
   handId: z.string(), status: z.enum(["pending", "released", "cancelled"]), total: amount, complete: z.boolean(),
   players: z.array(z.object({ key: z.string(), seatNo: amount, displayName: z.string(), isMe: z.boolean(), pending: amount }).strict()).max(10),
   lots: z.array(z.object({ id: z.string(), payerKey: z.string(), sourceType: z.string(), originalAmount: amount, remainingAmount: amount, shares: z.array(z.object({ key: z.string(), originalAmount: amount, remainingAmount: amount }).strict()) }).strict()).max(1000),
-  movements: z.array(z.object({ id: z.string(), seq: amount, kind: z.enum(["deposit", "steal", "refund", "finalize"]), amount, lotId: z.string(), actorKey: z.string().optional(), recipientKey: z.string().optional() }).strict()).max(1000),
+  movements: z.array(z.object({ id: z.string(), seq: amount, kind: z.enum(["deposit", "steal", "refund", "finalize"]), amount, lotId: z.string(), actorKey: z.string().optional(), recipientKey: z.string().optional(), beneficiaryKey: z.string().optional() }).strict()).max(1000),
 }).strict()

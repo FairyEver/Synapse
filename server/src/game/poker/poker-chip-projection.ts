@@ -1,4 +1,6 @@
-import { addChipPayment, type PokerChipContribution, type PokerChipState } from "@synapse/shared/game-contracts"
+import { addChipPayment, chipBreakdown, type PokerChipContribution, type PokerChipState } from "@synapse/shared/game-contracts"
+import type { ReserveState } from "./engine/chips/types"
+import type { ResolutionFrame } from "./engine/cards/types"
 import type { Prisma } from "@prisma/client"
 import { seatOrder } from "./engine/seat-order"
 import { resolveRules } from "./engine/rules"
@@ -10,7 +12,7 @@ type RollPayment = { id: string; seatNo: number; fee: number }
 /** No cards, notes, identity or quote data crosses this public presentation boundary. */
 export async function projectChipState(tx: Pick<Prisma.TransactionClient,"gamePokerAction">, hand: ChipHand, seats: ChipSeat[], rolls: RollPayment[], archivedActions?: ChipAction[]): Promise<PokerChipState> {
   const result: PokerChipState = {pot:[],roll:[],recent:[]}
-  const append = (payment: PokerChipContribution) => {
+  const append = (payment: PokerChipContribution & { fund: "pot" | "roll" }) => {
     if (!payment.amount) return
     result[payment.fund] = addChipPayment(result[payment.fund],payment.amount)
     result.recent.push(payment)
@@ -48,4 +50,29 @@ export async function projectChipState(tx: Pick<Prisma.TransactionClient,"gamePo
     }
   }
   return result
+}
+
+/** Complete financial facts from bounded whole roots; private facts never enter the artwork payload. */
+export function projectFundedChipState(base: PokerChipState, reserve: ReserveState | undefined, participants: readonly { admissionId: string | null; seatNo: number }[], frames: readonly ResolutionFrame[]): PokerChipState {
+  const recent: PokerChipContribution[] = [], seats = new Map(participants.filter(p => p.admissionId).map(p => [p.admissionId!, p.seatNo]))
+  const append = (root: ResolutionFrame, index: number | string, seatNo: number | null | undefined, amount: unknown, fund: "pot" | "reserve", direction: "in" | "out", kind: PokerChipContribution["kind"]) => {
+    if (seatNo == null || !Number.isInteger(seatNo) || seatNo < 0 || !Number.isSafeInteger(amount) || Number(amount) <= 0) return
+    recent.push({ id: `${root.id}:${index}`, seq: root.seq, seatNo, amount: Number(amount), fund, direction, kind })
+  }
+  for (const root of [...frames].sort((a, b) => a.seq - b.seq)) for (const event of root.events) {
+    if (event.audience !== "public") continue
+    const target = typeof event.data.targetSeatNo === "number" ? event.data.targetSeatNo : event.actorSeatNo
+    if (event.type === "bet.completed") append(root, event.index, target, event.data.amount, "pot", "in", "bet")
+    if (event.type === "chips.deposited") append(root, event.index, target, event.data.amount, "reserve", "in", event.cardId ? "card" : "roll")
+    if (event.type === "chips.stolen" || event.type === "chips.refunded") append(root, event.index, event.actorSeatNo, event.data.amount, "reserve", "out", event.type === "chips.stolen" ? "steal" : "refund")
+    if (event.type === "chips.distributed") {
+      const credits = new Map<number, number>()
+      for (const move of reserve?.movements.filter(m => m.rootActionId === root.rootActionId && m.kind === "finalize") ?? []) {
+        const seatNo = move.toAdmissionId ? seats.get(move.toAdmissionId) : undefined
+        if (seatNo !== undefined) credits.set(seatNo, (credits.get(seatNo) ?? 0) + move.amount)
+      }
+      for (const [seatNo, amount] of credits) append(root, `${event.index}:${seatNo}`, seatNo, amount, "reserve", "out", "compensation")
+    }
+  }
+  return { pot: base.pot, roll: [], reserve: chipBreakdown((reserve?.lots ?? []).reduce((sum, lot) => sum + lot.remainingAmount, 0)), recent }
 }

@@ -5,6 +5,7 @@ import type { usePokerCards } from "../hooks/usePokerCards"
 import { abilityArt, cardPlayInput, cardUnavailableReason, validCardSelections } from "../lib/card-view"
 import { amount, remaining, streetLabel } from "../lib/view"
 import { Card } from "./Card"
+import { PokerCardStatuses } from "./PokerCardStatuses"
 import { PokerCardSelection } from "./PokerCardSelection"
 import "../styles/cards.css"
 
@@ -34,6 +35,7 @@ export function PokerCardsDialog({ table, open, onOpenChange, controls, disabled
         </RadioGroup>}
         {card && definition && <section className="space-y-4" aria-label="施放卡牌"><h3 className="font-semibold wrap-anywhere">{definition.name}</h3><p className="text-sm tabular-nums">{card.payment.nominalAmount ? `代价 ${amount(card.payment.nominalAmount)} ${unit} · 豁免 ${amount(card.payment.waivedAmount)} · 实付 ${amount(card.payment.paidAmount)} ${unit}` : "无需筹码"}</p><PokerCardSelection choices={card.choices} values={selections} onChange={setSelections} disabled={blocked || !card.available} /></section>}
       </>}
+      {cards && <PokerCardStatuses cards={cards} seats={table.seats} />}
       {!!cards?.privateResults?.length && <section aria-label="本人情报" className="space-y-2"><h3 className="text-sm font-medium">本人情报</h3>{cards.privateResults.map(result => <p key={result.id} className="text-sm wrap-anywhere">{result.label}：{result.values.map(value => result.label === "能力牌" ? cards.definitions?.[value]?.name ?? value : value).join("、")}{!result.valid && "（已失效）"}</p>)}</section>}
       {controls.error && <p role="alert" className="text-sm text-danger">{controls.error}</p>}
       {controls.uncertain && <p role="status" className="text-sm">结果待核对，保留原请求。</p>}

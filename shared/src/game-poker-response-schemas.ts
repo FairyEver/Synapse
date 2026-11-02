@@ -91,6 +91,7 @@ const action = z
   .passthrough()
 const seat = z
   .object({
+    publicHole: z.array(z.object({ index: z.number().int().min(0).max(1), card: z.string().regex(/^[2-9TJQKA][shdc]$/) }).strict()).max(2).optional(),
     rollCount: z.number().int().nonnegative().optional(),
     rollPaid: z.number().int().nonnegative().optional(),
     pendingCompensation: z.number().int().nonnegative().optional(),
@@ -115,7 +116,7 @@ const seat = z
   })
   .passthrough()
 const chipCount = z.object({value:z.union([z.literal(1),z.literal(5),z.literal(10),z.literal(25),z.literal(100),z.literal(200),z.literal(500)]),count:z.number().int().positive()}).strict()
-const chipState = z.object({pot:z.array(chipCount).max(7),roll:z.array(chipCount).max(7),recent:z.array(z.object({id:z.string(),seq:z.number().int().nonnegative(),seatNo:z.number().int().nonnegative(),amount:z.number().int().nonnegative(),fund:z.enum(["pot","roll"])}).strict()).max(32)}).strict()
+const chipState = z.object({pot:z.array(chipCount).max(7),roll:z.array(chipCount).max(7),reserve:z.array(chipCount).max(7).optional(),recent:z.array(z.object({id:z.string(),seq:z.number().int().nonnegative(),seatNo:z.number().int().nonnegative(),amount:z.number().int().nonnegative(),fund:z.enum(["pot","roll","reserve"]),direction:z.enum(["in","out"]).optional(),kind:z.enum(["bet","roll","card","steal","refund","compensation"]).optional()}).strict()).max(4096)}).strict()
 const potAmount = z.number().int().nonnegative()
 const potContributions = z.object({
   handId: z.string().min(1), status: z.enum(["pending", "settled", "cancelled"]), total: potAmount,
@@ -137,7 +138,7 @@ const handLog = z.object({
     seq: z.number().int().min(-1), seatNo: z.number().int().min(0).max(9), displayName: z.string(),
     street: z.enum(["preflop", "flop", "turn", "river"]),
     action: z.enum(["small_blind", "big_blind", "fold", "check", "call", "bet", "raise", "allin", "roll", "card"]),
-    amount: z.number().int().nonnegative(), isAuto: z.boolean(),
+    amount: z.number().int().nonnegative(), nominalAmount: z.number().int().nonnegative().optional(), waivedAmount: z.number().int().nonnegative().optional(), isAuto: z.boolean(),
     actionSource: z.enum(["mcp", "human", "timeout", "rules_bot"]).optional(),
     card: z.object({ id: z.string(), name: z.string(), status: z.enum(["completed", "blocked", "choice_required"]) }).strict().optional(),
     roll: z.object({ kind: z.enum(["normal", "super"]), count: z.number().int().positive(), status: z.enum(["pending", "completed", "replaced", "cancelled"]) }).strict().optional(),
@@ -148,7 +149,7 @@ const handLog = z.object({
 })
 const table = z
   .object({
-    cards: pokerCardViewSchema.optional(), reserve: pokerReserveViewSchema.optional(), paymentVersion: z.string().optional(),
+    cards: pokerCardViewSchema.optional(), reserve: pokerReserveViewSchema.optional(), paymentVersion: z.string().optional(), betWaiverCap: z.number().int().nonnegative().optional(),
     handLog: handLog.optional(),
     potContributions: potContributions.optional(),
     chipState: chipState.optional(),

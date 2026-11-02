@@ -62,6 +62,10 @@ describe("卡牌隐私白名单", () => {
     expect(JSON.stringify(projected)).not.toMatch(/As|Kh|Qd|Jc|root-secret|account-secret|discard-secret|admission/)
     expect(frame.events).toHaveLength(5)
   })
+  it("内部阻挡只转成公开的防护反馈，隐藏原操作输入", () => {
+    const frame: ResolutionFrame = { id: "guard", handId: "h", seq: 1, rootActionId: "secret-root", events: [{ id: "e", index: 0, type: "ability.resolve", phase: "after", audience: "internal", actorSeatNo: 0, cardId: "01", status: "blocked", data: { targetSeatNo: 1, steps: [{ input: { hole: "As", private: "secret" } }] } }] }
+    expect(projectResolutionFrame(frame).events).toEqual([{ index: 0, type: "ability.blocked", actorSeatNo: 0, targetSeatNo: 1, cardId: "01", status: "blocked" }])
+  })
   it("暂存详情截断不能把权威总额截断；缺失原入座来源不能显示零", () => {
     const h = fixture(), state: ReserveState = { revision: 1, finalized: false, lots: [], claims: [], movements: [] }
     for (let i = 0; i < 1001; i++) {

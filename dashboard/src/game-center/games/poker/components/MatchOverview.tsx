@@ -2,6 +2,7 @@ import { Accordion } from "@heroui/react"
 import type { PokerSettlementView, PokerTableView } from "@synapse/shared/game-contracts"
 import { matchOverview } from "../lib/match-information"
 import { amount, streetLabel } from "../lib/view"
+import { PokerCardStatuses } from "./PokerCardStatuses"
 import { Settlement } from "./Settlement"
 
 const value = (n: number | undefined) => n === undefined ? "暂不可用" : amount(n)
@@ -16,7 +17,7 @@ export function MatchOverview({ table, perspective, settlement }: { table: Poker
     <div className="grid grid-cols-3 gap-3"><Metric label="累计下注" value={summary.bet} unit={unit} /><Metric label="Roll 花费" value={summary.roll} unit={unit} /><Metric label="Roll 次数" value={summary.count} unit="次" /></div>
     {me && <dl aria-label="本手筹码" className="grid grid-cols-2 gap-x-4 gap-y-2 border-y border-separator py-4 text-sm">
       <dt className="text-muted">可用{unit}</dt><dd className="text-right tabular-nums">{amount(me.stack)}</dd>
-      {me.pendingCompensation != null && <><dt className="text-muted">本手待结算补偿</dt><dd className="text-right tabular-nums">{amount(me.pendingCompensation)}</dd></>}
+      {me.pendingCompensation != null && <><dt className="text-muted">本手暂存待分</dt><dd className="text-right tabular-nums">{amount(me.pendingCompensation)}</dd></>}
     </dl>}
     <section className="space-y-3" aria-label="玩家本手累计"><h3 className="text-sm font-medium">玩家本手累计</h3>
       {!summary.players.length ? <p className="text-sm text-muted">玩家累计暂不可用</p> : summary.players.map(p => <article key={p.key} className="min-w-0 space-y-3 border-b border-separator py-4 text-sm">
@@ -28,6 +29,8 @@ export function MatchOverview({ table, perspective, settlement }: { table: Poker
         </Accordion.Item></Accordion>
       </article>)}
     </section>
+    {table.reserve && <Metric label="当前暂存" value={table.reserve.total} unit={unit} />}
+    {table.cards && <PokerCardStatuses cards={table.cards} seats={table.seats} />}
     {settlement && <Settlement settlement={settlement} compact />}
   </section>
 }

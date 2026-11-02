@@ -86,23 +86,23 @@ export function registerCardStatusOperations(registry: OperationRegistry<HandSta
     const target = targetSeat(h, event)
     const hostileDispel = event.type === "ability.dispel" && dispelTarget(h, String(event.data.effectId))?.polarity === "positive"
     if (event.actorSeatNo === effect.ownerSeatNo || target !== effect.ownerSeatNo || !(hostileDispel || event.data.hostile === true && event.data.singleTarget === true)) return false
-    api.block(); return true
+    api.emit("ability.protected", { targetSeatNo: effect.ownerSeatNo }, "public"); api.block(); return true
   } })
   registry.registerHook({ kind: "hole_guard", event: "*", phase: "before", priority: 10, apply(h, effect, event, api) {
     if (event.actorSeatNo === effect.ownerSeatNo || !h.seats.some(s => s.seatNo === effect.ownerSeatNo && !s.folded)) return false
     if (event.type === "poker.shuffleHoles") {
       const excluded = (event.data.excludedSeatNos as number[] | undefined) ?? []
       if (excluded.includes(effect.ownerSeatNo)) return false
-      api.replaceInput({ ...event.data, excludedSeatNos: [...excluded, effect.ownerSeatNo] }); return true
+      api.replaceInput({ ...event.data, excludedSeatNos: [...excluded, effect.ownerSeatNo] }); api.emit("ability.protected", { targetSeatNo: effect.ownerSeatNo }, "public"); return true
     }
     if (!["poker.exchange", "poker.replace", "poker.reset"].includes(event.type) || targetSeat(h, event) !== effect.ownerSeatNo) return false
-    api.block(); return true
+    api.emit("ability.protected", { targetSeatNo: effect.ownerSeatNo }, "public"); api.block(); return true
   } })
   for (const kind of ["info_guard", "reflect"] as const) registry.registerHook({ kind, event: "*", phase: "before", priority: 10, apply(h, effect, event, api) {
     const privatePeek = event.type === "poker.peek" && ["one", "two", "suit", "rank"].includes(String(event.data.mode))
     const information = privatePeek || event.type === "poker.reveal" || event.type === "poker.guess"
     if (!information || targetSeat(h, event) !== effect.ownerSeatNo || observer(event) === effect.ownerSeatNo || kind === "reflect" && (!privatePeek || event.data.reflected)) return false
-    api.block()
+    api.emit("ability.protected", { targetSeatNo: effect.ownerSeatNo }, "public"); api.block()
     if (kind === "reflect") api.enqueue({ type: "poker.peek", input: { seatNo: observer(event)!, observerSeatNo: effect.ownerSeatNo, mode: "one", reflected: true }, cardId: effect.cardId })
     return true
   } })

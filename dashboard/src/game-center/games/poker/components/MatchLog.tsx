@@ -46,11 +46,11 @@ export function MatchLog({ table }: { table: PokerTableView }) {
               {log.entries.filter(e => e.street === street).map(entry => <li key={entry.seq} data-log-seq={entry.seq} className="flex min-w-0 items-start gap-3 py-3">
                 <LogActionIcon entry={entry} />
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="wrap-anywhere">{entry.displayName} · {entry.roll ? entry.roll.kind === "super" ? "超级 Roll" : "普通 Roll" : blindLabels[entry.action] ?? actionLabel[entry.action] ?? entry.action}</span>
-                  {entry.roll ? <small className="text-muted">本手第 {entry.roll.count} 次 · {rollStatus[entry.roll.status]}</small> :
+                  <span className="wrap-anywhere">{entry.displayName} · {entry.card ? entry.card.name : entry.roll ? entry.roll.kind === "super" ? "超级 Roll" : "普通 Roll" : blindLabels[entry.action] ?? actionLabel[entry.action] ?? entry.action}</span>
+                  {entry.card ? <small className="text-muted">{entry.card.status === "blocked" ? "被阻挡" : entry.card.status === "choice_required" ? "待选择" : "已完成"}</small> : entry.roll ? <small className="text-muted">本手第 {entry.roll.count} 次 · {rollStatus[entry.roll.status]}</small> :
                     entry.isAuto || entry.actionSource ? <small className="text-muted">{entry.isAuto ? "自动行动" : entry.actionSource === "human" ? "真人操作" : entry.actionSource === "rules_bot" ? "机器人" : "AI 操作"}</small> : null}
                 </span>
-                <span className="flex max-w-1/3 shrink-0 flex-col items-end text-right tabular-nums wrap-anywhere"><strong>{amount(entry.amount)}</strong><small className="text-muted">{entry.roll ? "花费" : entry.amount ? "追加" : "不追加"}</small></span>
+                <span className="flex max-w-1/3 shrink-0 flex-col items-end text-right tabular-nums wrap-anywhere"><strong>{amount(entry.amount)}</strong>{!!entry.waivedAmount && <small className="text-muted">名义 {amount(entry.nominalAmount ?? entry.amount)} · 豁免 {amount(entry.waivedAmount)}</small>}<small className="text-muted">{entry.card ? "实付代价" : entry.roll ? "花费" : entry.amount ? "追加" : "不追加"}</small></span>
               </li>)}
             </ol>
           </Accordion.Body></Accordion.Panel>

@@ -25,6 +25,7 @@ export function projectReserveView(input: ReserveProjectionInput): PokerReserveV
     lots: state.lots.slice(0, 1000).map(l => ({ id: l.id, payerKey: identities.get(l.payerAdmissionId)!.key, sourceType: l.sourceType, originalAmount: l.originalAmount, remainingAmount: l.remainingAmount,
       shares: state.claims.filter(c => c.lotId === l.id).map(c => ({ key: identities.get(c.admissionId)!.key, originalAmount: c.originalAmount, remainingAmount: c.remainingAmount })) })),
     movements: state.movements.slice(0, 1000).map(m => ({ id: m.id, seq: m.eventIndex, kind: m.kind, amount: m.amount, lotId: m.lotId,
+      ...(m.claimId && state.claims.some(c => c.id === m.claimId) ? { beneficiaryKey: identities.get(state.claims.find(c => c.id === m.claimId)!.admissionId)!.key } : {}),
       ...(m.actorAdmissionId ? { actorKey: identities.get(m.actorAdmissionId)!.key } : {}), ...(m.toAdmissionId ? { recipientKey: identities.get(m.toAdmissionId)!.key } : {}) })),
   }
 }

@@ -2,8 +2,8 @@
 export const POKER_CHIP_VALUES = [500,200,100,25,10,5,1] as const
 export type PokerChipValue = typeof POKER_CHIP_VALUES[number]
 export type PokerChipCount = { value: PokerChipValue; count: number }
-export type PokerChipContribution = { id: string; seq: number; seatNo: number; amount: number; fund: "pot" | "roll" }
-export type PokerChipState = { pot: PokerChipCount[]; roll: PokerChipCount[]; recent: PokerChipContribution[] }
+export type PokerChipContribution = { id: string; seq: number; seatNo: number; amount: number; fund: "pot" | "roll" | "reserve"; direction?: "in" | "out"; kind?: "bet" | "roll" | "card" | "steal" | "refund" | "compensation" }
+export type PokerChipState = { pot: PokerChipCount[]; roll: PokerChipCount[]; reserve?: PokerChipCount[]; recent: PokerChipContribution[] }
 export type PokerDisplayChipValue = PokerChipValue | 1000
 export type PokerDisplayChipCount = { value: PokerDisplayChipValue; count: number }
 export type PositionedPokerChip = { id: string; value: PokerDisplayChipValue; stack: number; level: number; x: number; y: number; rotation: number; depth: number }

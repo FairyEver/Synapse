@@ -16,7 +16,7 @@ import { copyPokerInvitation } from "../lib/room-entry"
 import { useHumanControls, type PokerIntent } from "../hooks/useHumanControls"
 import { usePokerReady, type PokerReadyControls } from "../hooks/usePokerReady"
 import { isPokerCardMode } from "../lib/card-mode"
-import { actionState, betPresets } from "../lib/action-view"
+import { actionState, betPresets, betPaymentPreview } from "../lib/action-view"
 import { amount, remaining } from "../lib/view"
 
 export type PokerControlPanel = "bet" | "menu" | "roll" | "cards"
@@ -100,7 +100,9 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const disabled = busy || uncertain || nextHand.busy || roll.blocked || rollPending || cards.blocked || cardPending
   const canBet = legal.includes("bet") || legal.includes("raise")
   const raise = legal.includes("raise")
-  const contribution = Math.max(0, Math.min(mine?.stack ?? 0, numeric - (mine?.streetBet ?? 0)))
+  const preview = betPaymentPreview(table, Math.max(0, numeric - (mine?.streetBet ?? 0)))
+  const callPreview = betPaymentPreview(table, table.toCall ?? 0)
+  const contribution = preview.paidAmount
   const pendingState = mine?.leavePending ? "本手后离桌" : table.pauseReason === "user" && mine?.status !== "sitting_out" ? "本手后暂离" : null
   const baseState = perspective === "public" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" ? "旁观视角 · 切回玩家视角出牌" : actionState(table, acting, handoff)
   const controlState = cards.uncertain ? "用牌结果待核对" : cardPending ? "请先完成卡牌选择" : roll.storageError ? "换牌恢复记录不可用" : roll.uncertain ? "换牌结果待核对" : rollPending ? "请先完成换牌" : handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState
@@ -112,14 +114,14 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     if (await work() && panelEpoch.current.generation === generation) setPanel(null)
   }
   const submit = (action: PokerIntent["action"]) => {
-    const contribution = action === "allin" ? mine?.stack ?? 0 : action === "call" ? table.toCall ?? 0 : action === "bet" || action === "raise" ? numeric - (mine?.streetBet ?? 0) : 0
+    const contribution = action === "allin" ? mine?.stack ?? 0 : action === "call" ? callPreview.paidAmount : action === "bet" || action === "raise" ? preview.paidAmount : 0
     if (mine && mine.stack > 0 && contribution >= mine.stack) openConfirmation(action)
     else { setPanel(null); act(action) }
   }
   const confirmation = <AlertDialog.Backdrop isOpen={confirmAllIn} onOpenChange={open => { if (!open) cancelConfirmation() }} isKeyboardDismissDisabled={false} UNSTABLE_portalContainer={popoverContainer ?? controlsRef.current ?? undefined} className="font-sans text-foreground scheme-light">
     <AlertDialog.Container size="sm"><AlertDialog.Dialog aria-label="确认全下">
       <AlertDialog.Header><AlertDialog.Heading>确认全下</AlertDialog.Heading></AlertDialog.Header>
-      <AlertDialog.Body><p>投入全部剩余筹码 {amount(mine?.stack ?? 0)}</p></AlertDialog.Body>
+      <AlertDialog.Body><p>投入全部剩余筹码 {amount(mine?.stack ?? 0)}</p>{!!table.betWaiverCap && <p className="text-sm text-muted">名义下注 {amount((mine?.stack ?? 0) + table.betWaiverCap)} · 豁免 {amount(table.betWaiverCap)}</p>}</AlertDialog.Body>
       <AlertDialog.Footer>
         <Button autoFocus variant="tertiary" isDisabled={disabled} onPress={cancelConfirmation}>取消</Button>
         <Button variant="danger" isDisabled={disabled} onPress={() => { if (allInAction) { act(allInAction); setAllInAction(null); setPanel(null) } }}>确认全下 {amount(mine?.stack ?? 0)}</Button>
@@ -127,6 +129,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     </AlertDialog.Dialog></AlertDialog.Container>
   </AlertDialog.Backdrop>
   const betEditor = <div className="space-y-4 font-sans text-foreground scheme-light">
+    {table.paymentVersion && <p className="text-sm tabular-nums">名义追加 {amount(preview.nominalAmount)} · 豁免 {amount(preview.waivedAmount)} · 实付 {amount(preview.paidAmount)}</p>}
     <TextField isDisabled={disabled || confirmAllIn} isInvalid={!validAmount}>
       <Label htmlFor={betId}>{raise ? "加注到" : "下注到"}</Label>
       <Input variant="secondary" id={betId} type="number" inputMode="numeric" min={table.minRaiseTo} max={table.maxRaiseTo} step={1} value={to} onChange={e => setTo(e.target.value)} />
@@ -184,7 +187,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
       <div className="poker-action-buttons">
         {legal.includes("fold") && <PokerButton className="poker-fold-action" disabled={disabled || confirmAllIn} onClick={() => act("fold")}>弃牌</PokerButton>}
         {legal.includes("check") && <PokerButton tone="primary" disabled={disabled || confirmAllIn} onClick={() => act("check")}>过牌{!compact && <span>无需跟注</span>}</PokerButton>}
-        {legal.includes("call") && <PokerButton ref={!canBet && !legal.includes("allin") ? betTrigger : undefined} tone="primary" disabled={disabled || confirmAllIn} onClick={() => submit("call")}>跟注 {amount(table.toCall ?? 0)}</PokerButton>}
+        {legal.includes("call") && <PokerButton ref={!canBet && !legal.includes("allin") ? betTrigger : undefined} tone="primary" disabled={disabled || confirmAllIn} onClick={() => submit("call")}>跟注 {amount(table.toCall ?? 0)}{callPreview.waivedAmount > 0 && <span>实付 {amount(callPreview.paidAmount)}</span>}</PokerButton>}
         {canBet && <PokerButton className="poker-raise-action" disabled={disabled || confirmAllIn || !validAmount} aria-label={`确认${raise ? "加注" : "下注"} ${amount(numeric)}`} onClick={() => submit(raise ? "raise" : "bet")}>{raise ? "加注到" : "下注到"} {validAmount ? amount(numeric) : "—"}</PokerButton>}
         {!canBet && legal.includes("allin") && <PokerButton ref={betTrigger} tone="danger" disabled={disabled || confirmAllIn} onClick={() => openConfirmation("allin")} aria-expanded={confirmAllIn}>全下</PokerButton>}
       </div>

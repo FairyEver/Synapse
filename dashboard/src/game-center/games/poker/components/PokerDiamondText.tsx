@@ -38,6 +38,6 @@ export function PokerRollCost({ offer, unit }: { offer: PokerRollOffer | undefin
       </span>
       <span>+</span>
     </>}
-    <span>{amount(offer?.fee ?? 0)}{unit}</span>
+    <span>{amount(offer?.payment?.paidAmount ?? offer?.fee ?? 0)}{unit}</span>{!!offer?.payment?.waivedAmount && <span className="text-xs text-muted">（豁免 {amount(offer.payment.waivedAmount)}）</span>}
   </span>
 }

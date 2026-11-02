@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { ArrowLeft, Bell, Eye, ListOrdered, MoreHorizontal, UserRound, UsersRound, Volume2, VolumeX, X } from "lucide-react"
-import { chipValue, type PokerTableView, type PokerTableEvent } from "@synapse/shared/game-contracts"
+import { chipValue, type PokerTableView, type PokerTableEvent, type PokerResolutionFrameView } from "@synapse/shared/game-contracts"
 import { Button } from "@heroui/react"
 import { Card } from "./Card"
 import { Seat, EmptySeat } from "./Seat"
@@ -14,7 +14,7 @@ import { Settlement } from "./Settlement"
 import { SettlementPanel } from "./SettlementPanel"
 import { HandRankDialog } from "./HandRankDialog"
 import { PokerPlayerInfoDialog } from "./PokerPlayerInfoDialog"
-import { PokerRollFeeDialog } from "./PokerRollFeeDialog"
+import { PokerReserveDialog } from "./PokerReserveDialog"
 import { PokerPotSourcesDialog } from "./PokerPotSourcesDialog"
 import { projectTable, streetLabel } from "../lib/view"
 import { TABLE_CONTROLS_BREAKPOINT } from "../lib/table-layout"
@@ -29,7 +29,8 @@ import "../styles/responsive-controls.css"
 import "../styles/adaptive-table.css"
 import "../styles/chips.css"
 const NO_EVENTS: PokerTableEvent[] = []
-export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, members, identityKey }: {
+const NO_FRAMES: PokerResolutionFrameView[] = []
+export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, animateFrames = NO_FRAMES, members, identityKey }: {
   table: PokerTableView
   perspective: "owner" | "public"
   onPerspective: (v: "owner" | "public") => void
@@ -38,6 +39,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   onRefresh?: () => void | Promise<void>
   events?: PokerTableEvent[]
   animate?: PokerTableEvent[]
+  animateFrames?: PokerResolutionFrameView[]
   identityKey?: string
   members?: ReactNode
 }) {
@@ -54,6 +56,14 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const [soundEnabled, setSoundEnabled] = useState(true)
   const chipLanded = usePokerAudio(table, perspective, identityKey ?? "", soundEnabled)
   const controlVersion = table.controlVersion ?? table.seats.find(seat => seat.seatNo === table.mySeatNo)?.controlVersion
+  const [cardFeedback, setCardFeedback] = useState<string | null>(null)
+  useEffect(() => {
+    const blocked = animateFrames.filter(frame => frame.handId === table.handId).flatMap(frame => frame.events).some(event => event.type === "ability.blocked" || event.type === "ability.protected" || event.status === "blocked")
+    if (!blocked) { setCardFeedback(null); return }
+    setCardFeedback("防护已触发")
+    const timer = setTimeout(() => setCardFeedback(null), 1800)
+    return () => clearTimeout(timer)
+  }, [animateFrames, table.handId, identityKey, perspective, controlVersion])
   useEffect(() => { setPanel(current => current === "bet" ? null : current) }, [table.handId, table.actionSeq, controlVersion, perspective, table.actionOnSeat, table.status])
   useEffect(() => { setPanel(null) }, [compact])
   useEffect(() => { setPanel(current => current === "playerInfo" ? null : current) }, [table.roomCode, identityKey, perspective])
@@ -64,7 +74,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const motion = useTableMotion(table, `${identityKey}:${perspective}:${table.controlVersion}:${fit.scene.mode}:${fit.scale}`)
   const cash = usePokerChips(view, `${identityKey}:${perspective}:${table.controlVersion}:${fit.scene.mode}:${fit.scale}`)
   const presentedReady = cash.blocked ? {...nextHand,busy:true} : nextHand
-  const showRoll = !!view.roll?.enabled || !!view.ruleOptions?.roll || chipValue(cash.funds.roll)>0
+  const showRoll = !!view.reserve || !!view.roll?.enabled || !!view.ruleOptions?.roll || chipValue(cash.funds.roll)>0
   const dealt = useDealAnimation(table.handId, table.seats.length + table.board.length, 0, table)
   useLayoutEffect(() => {
     const element = viewport.current, container = surface.current
@@ -135,10 +145,10 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
               <div className="poker-center">
                 <div className="poker-pot-row">
                   <button ref={potSourcesTrigger} type="button" className="poker-pot-value poker-pot-sources-trigger" aria-label="查看底池来源" aria-haspopup="dialog" aria-expanded={panel === "potSources"} onClick={() => setPanel("potSources")}><span className="poker-pot-label">底池</span><RollingAmount className="poker-pot" value={chipValue(cash.funds.pot)} scope={cash.scope} onAnimating={active=>cash.numberMotion("pot",active)} /><PokerChipPile chips={cash.funds.pot} label="底池" fund="pot" /></button>
-                  {showRoll && <button ref={rollFeesTrigger} type="button" className="poker-pot-value poker-roll-fee-trigger" aria-label="查看 Roll 费用明细" aria-haspopup="dialog" aria-expanded={panel === "rollFees"} onClick={() => setPanel("rollFees")}><span className="poker-pot-label">Roll 费用</span><RollingAmount className="poker-roll-pot" value={chipValue(cash.funds.roll)} scope={cash.scope} onAnimating={active=>cash.numberMotion("roll",active)} /><PokerChipPile chips={cash.funds.roll} label="Roll 费用" fund="roll" /></button>}
+                  {showRoll && <button ref={rollFeesTrigger} type="button" className="poker-pot-value poker-roll-fee-trigger" aria-label="查看暂存明细" aria-haspopup="dialog" aria-expanded={panel === "rollFees"} onClick={() => setPanel("rollFees")}><span className="poker-pot-label">暂存</span><RollingAmount className="poker-roll-pot" value={chipValue(cash.funds.roll)} scope={cash.scope} onAnimating={active=>cash.numberMotion("roll",active)} /><PokerChipPile chips={cash.funds.roll} label="暂存" fund="roll" /></button>}
                 </div>
                 <div className="poker-board" data-card-size="md">{Array.from({length:5},(_,i) => <span key={i} className="poker-deal-slot" data-dealt={dealt >= view.seats.length+i+1 || !view.board[i]}><Card card={view.board[i]} faceUp={!view.board[i] || dealt >= view.seats.length+i+1} /></span>)}</div>
-                <div className="poker-board-caption"><span className="poker-street">{stage}</span></div>
+                <div className="poker-board-caption"><span className="poker-street">{stage}</span>{cardFeedback && <span role="status">{cardFeedback}</span>}</div>
                 {view.status === "paused" && view.pauseReason && <p className="poker-pause-reason">{({user:"牌局已暂停",all_humans_away:"真人均已暂离",no_human:"等待本人或 AI 入座",insufficient_players:"等待对手",insufficient_chips:"等待有筹码的玩家"} as Record<string,string>)[view.pauseReason] ?? "等待可参与的玩家"}</p>}
               </div>
               {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} amountScope={`${cash.scope}:${view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? ""}`} onStackAnimating={active => cash.numberMotion(`seat:${seatNo}`, active)} displayStack={cash.banks[seatNo] ?? seat.stack} onInspect={trigger => { inspectedTrigger.current = trigger; setInspected({ seatNo, key: view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? seat.botId ?? seat.displayName }); setPanel("playerInfo") }} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} hasStarted={!!view.handId} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
@@ -156,7 +166,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
         </div>
         <PokerMembersPanel open={panel === "members"} onOpenChange={open => setPanel(open ? "members" : null)} compact={compact} trigger={membersTrigger} container={surface.current}>{members}</PokerMembersPanel>
         {panel === "playerInfo" && inspectedSeat && inspected?.key === inspectedKey && <PokerPlayerInfoDialog table={view} seat={inspectedSeat} onClose={closePlayerInfo} />}
-        {panel === "rollFees" && <PokerRollFeeDialog table={view} onClose={closeRollFees} />}
+        {panel === "rollFees" && <PokerReserveDialog table={view} onClose={closeRollFees} />}
         {panel === "potSources" && <PokerPotSourcesDialog table={view} onClose={closePotSources} />}
         <div className="poker-controls-anchor"><HumanControls nextHand={presentedReady} identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" || panel === "members" || panel === "ranks" || panel === "playerInfo" || panel === "rollFees" || panel === "potSources" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
             <Button fullWidth type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
