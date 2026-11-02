@@ -12,6 +12,7 @@ export { quoteRoll, startRoll, chooseRollCard, assertHandIntegrity, ROLL_PRICING
 export type { RollHistory, RollKind, RollState, RollQuote, RollOffer } from "./roll"
 export { legalActions } from "./betting"
 export interface HandState extends BettingState, PokerRules {
+  participants?: { admissionId: string; userId: string; seatNo: number; kind: "human" | "bot"; active?: boolean }[]
   cards?: CardModeState
   reserve?: ReserveState
   turnClock?: TurnClock | null

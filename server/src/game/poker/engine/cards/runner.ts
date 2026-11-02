@@ -13,12 +13,13 @@ export function runResolution<S>(input: S, operations: readonly DomainOperation[
     const item = queue.shift()!
     if (++count > POKER_CARD_LIMITS.operations || item.depth > POKER_CARD_LIMITS.depth) throw new CardRuleError("POKER_CARD_BUDGET_EXCEEDED")
     const operation = item.operation
+    const children: typeof queue = []
     let blocked = false
     let phase: "before" | "apply" | "after" = "apply"
     const operationId = `${context.rootActionId}:op${count}`
     const api: OperationApi = {
       context, operation,
-      enqueue(op) { queue.push({ operation: structuredClone(op), depth: item.depth + Math.max(1, dispatchDepth), parentId: operationId }) },
+      enqueue(op) { children.push({ operation: structuredClone(op), depth: item.depth + Math.max(1, dispatchDepth), parentId: operationId }) },
       replaceInput(value) { if (phase !== "before") throw new CardRuleError("POKER_CARD_INVALID_PHASE"); operation.input = structuredClone(value) },
       block() { if (phase !== "before") throw new CardRuleError("POKER_CARD_INVALID_PHASE"); blocked = true },
       emit(type, data, audience = "internal", dedupeKey, ownerAdmissionId) {
@@ -57,6 +58,7 @@ export function runResolution<S>(input: S, operations: readonly DomainOperation[
     for (const e of active) counts.set(e.ownerAdmissionId, (counts.get(e.ownerAdmissionId) ?? 0) + 1)
     if ([...counts.values()].some(n => n > POKER_CARD_LIMITS.effectsPerPlayer)) throw new CardRuleError("POKER_CARD_BUDGET_EXCEEDED")
     effects.splice(0, effects.length, ...active)
+    queue.unshift(...children)
   }
   return { state, frame }
 }

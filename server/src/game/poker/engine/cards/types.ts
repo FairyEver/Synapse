@@ -34,6 +34,8 @@ export interface CardDefinition {
   id: string; name: string; description: string; artId: string; copies?: number; costBB?: number
   tags: readonly string[]; selections: readonly CardSelectionDefinition[]; steps: readonly DomainOperation[]
   excludeRiver?: boolean; ignoreSurcharges?: boolean
+  consumeSelected?: boolean
+  requirements?: readonly ("deck" | "candidate_pool" | "target_holds_ability" | "stealable" | "recent_deposit")[]
 }
 export interface ResolutionResult<S> { state: S; frame: ResolutionFrame; reserveBatch?: GameReserveWriteBatch; pending?: PendingChoice }
 export type HandResolution = ResolutionResult<HandState>

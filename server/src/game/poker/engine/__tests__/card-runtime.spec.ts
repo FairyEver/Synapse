@@ -8,6 +8,12 @@ const context = (): ResolutionContext => ({ handId: "h", actionSeq: 1, rootActio
 type State = { value: number; trace: string[]; effects: EffectInstance[] }
 const effect = (id: string, installedSeq = 0): EffectInstance => ({ id, kind: id, cardId: "41", ownerAdmissionId: "a", ownerSeatNo: 0, polarity: "positive", installedSeq, remaining: 1, dispellable: true, data: {} })
 describe("卡牌生命周期执行器", () => {
+  it("派生链完成后才执行下一个根步骤", () => {
+    const registry = new OperationRegistry<State>()
+    registry.register({ id: "step", schema: z.object({ name: z.string(), child: z.string().optional() }), apply(s, p, api) { s.trace.push(p.name); if (p.child) api.enqueue({ type: "step", input: { name: p.child } }) } })
+    const result = runResolution({ value: 0, trace: [], effects: [] }, [{ type: "step", input: { name: "effect", child: "derived" } }, { type: "step", input: { name: "next" } }], context(), registry)
+    expect(result.state.trace).toEqual(["effect", "derived", "next"])
+  })
   it("按执行前、事实、执行后处理且不改变输入", () => {
     const registry = new OperationRegistry<State>({ effects: s => s.effects })
     registry.register({ id: "add", schema: z.object({ amount: z.number() }), apply(s, input) { s.trace.push("fact"); s.value += input.amount } })

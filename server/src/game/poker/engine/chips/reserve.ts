@@ -88,7 +88,7 @@ export function applyReserveOperation(original: ReserveState, operation: Reserve
     natural(operation.cap)
     const claims = ordered(state.claims.filter(c => c.admissionId !== operation.actorAdmissionId && c.remainingAmount > 0))
     const people = [...new Set(claims.map(c => c.admissionId))].map(id => ({ id, claims: claims.filter(c => c.admissionId === id), total: claims.filter(c => c.admissionId === id).reduce((n, c) => n + c.remainingAmount, 0) }))
-    const targets = operation.target === "richest" ? [...people].sort((a, b) => b.total - a.total).slice(0, 1) : people
+    const targets = operation.targetAdmissionId ? people.filter(p => p.id === operation.targetAdmissionId) : operation.target === "richest" ? [...people].sort((a, b) => b.total - a.total).slice(0, 1) : people
     const total = targets.reduce((n, p) => n + p.total, 0)
     if (!total || !operation.cap) throw new Error("POKER_RESERVE_EMPTY")
     const planned = proportional(Math.min(operation.cap, total), targets.map(p => p.total))

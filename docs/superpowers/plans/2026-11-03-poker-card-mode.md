@@ -178,11 +178,11 @@
 **Files:** Create `server/src/game/poker/engine/cards/catalog-v1.ts`、`server/src/game/poker/engine/cards/commands.ts`、`server/src/game/poker/engine/cards/catalog/holes.ts`、`server/src/game/poker/engine/cards/catalog/information.ts`、`server/src/game/poker/engine/cards/catalog/draw.ts`、`server/src/game/poker/engine/cards/catalog/reserve.ts`、`server/src/game/poker/engine/cards/catalog/defense.ts`、`server/src/game/poker/engine/cards/catalog/table.ts`、`server/src/game/poker/engine/__tests__/card-catalog.spec.ts`、`server/src/game/poker/engine/__tests__/card-catalog-scenarios.ts`。
 **Interfaces:** Consumes T2–T7操作/状态；Produces `CARD_CATALOG_V1`、`createCardRegistry`、`planCardPlay`、`planCardChoice`和可验证目录/配方摘要。每个定义包括ID、规则文本、份数、目标、费用、步骤、时机、标签、状态策略和封面assetId。
 
-- [ ] **1. 写失败测试。** 断言ID=`01..60`、名称唯一、份数总90、双份30、无copies默认1、38代价2BB、其余基础代价0。手工建立60个`CardScenario`，字段为`definitionId,input,initialState,entropy,expectedStateDelta,expectedPublic,expectedPrivate`，expected不能从实际定义反算；按设计第8节逐行写对应断言。 断言示例：`expect(scenarios.map(s=>s.definitionId)).toEqual(Array.from({length:60},(_,i)=>String(i+1).padStart(2,"0"))); expect(actual.state).toMatchObject(scenario.expectedStateDelta)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-catalog.spec.ts`。
-- [ ] **3. 实现六组定义。** 只组合注册操作，特殊计算放在其所属领域操作而不是页面或Roll分支。固定3BB/5BB/10BB额度、38支付、49税、51/52/53时间值；30生成排除生成标签，25候选未选归还。所有目标schema和公开/私密结果明确化。
-- [ ] **4. 同命令验证绿灯。** 60场景逐张执行并检查真实效果，不只检查“注册存在”；额外验证28新实例入池后随机抽取不保证拿到新牌、35退款边界、48不把两人全场牌当单目标、58/59无资金/牌型改动。摘要改变需新版本，不能覆盖旧定义。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 注册首批60种90张卡牌及完整效果定义'`。
+- [x] **1. 写失败测试。** 断言ID=`01..60`、名称唯一、份数总90、双份30、无copies默认1、38代价2BB、其余基础代价0。手工建立60个`CardScenario`，字段为`definitionId,input,initialState,entropy,expectedStateDelta,expectedPublic,expectedPrivate`，expected不能从实际定义反算；按设计第8节逐行写对应断言。 断言示例：`expect(scenarios.map(s=>s.definitionId)).toEqual(Array.from({length:60},(_,i)=>String(i+1).padStart(2,"0"))); expect(actual.state).toMatchObject(scenario.expectedStateDelta)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-catalog.spec.ts`。
+- [x] **3. 实现六组定义。** 只组合注册操作，特殊计算放在其所属领域操作而不是页面或Roll分支。固定3BB/5BB/10BB额度、38支付、49税、51/52/53时间值；30生成排除生成标签，25候选未选归还。所有目标schema和公开/私密结果明确化。
+- [x] **4. 同命令验证绿灯。** 60场景逐张执行并检查真实效果，不只检查“注册存在”；额外验证28新实例入池后随机抽取不保证拿到新牌、35退款边界、48不把两人全场牌当单目标、58/59无资金/牌型改动。摘要改变需新版本，不能覆盖旧定义。
+- [x] **5. 本地提交。** `git commit -m 'feat: 注册首批60种90张卡牌及完整效果定义'`。
 
 
 ## Task 9: 通用暂存与根帧持久化、旧冻结兼容

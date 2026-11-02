@@ -21,7 +21,7 @@ export type ReserveMovement = GameReserveMovement
 export interface ReserveState { revision: number; lots: ReserveLot[]; claims: ReserveClaim[]; movements: ReserveMovement[]; finalized: boolean }
 export type ReserveOperation =
   | { kind: "deposit"; payer: ReservePerson; recipients: readonly ReservePerson[]; amount: number; sourceId: string; sourceType: string }
-  | { kind: "steal"; actorAdmissionId: string; cap: number; target: "all" | "richest"; protectedAdmissions?: readonly string[] }
+  | { kind: "steal"; actorAdmissionId: string; cap: number; target: "all" | "richest"; targetAdmissionId?: string; protectedAdmissions?: readonly string[] }
   | { kind: "refund"; actorAdmissionId: string; lotId: string; cap?: number }
   | { kind: "finalize" }
 export interface ReserveResult { state: ReserveState; amount: number; credits: Record<string, number>; debits: Record<string, number>; protectedAdmissions: string[] }
