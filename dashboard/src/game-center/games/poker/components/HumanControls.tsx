@@ -13,6 +13,7 @@ import { PokerAIConnectDialog } from "./PokerAIConnectDialog"
 import { copyPokerInvitation } from "../lib/room-entry"
 import { useHumanControls, type PokerIntent } from "../hooks/useHumanControls"
 import { usePokerReady, type PokerReadyControls } from "../hooks/usePokerReady"
+import { isPokerCardMode } from "../lib/card-mode"
 import { actionState, betPresets } from "../lib/action-view"
 import { amount, remaining } from "../lib/view"
 
@@ -46,8 +47,9 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const rollPending = !!table.roll?.pending || (table.mySeatNo !== null && table.roll?.pendingSeatNo === table.mySeatNo)
   const awaitingReady = table.status !== "closed" && !!table.awaitingReady
   const takeover = () => awaitingReady ? nextHand.takeover() : control("takeover")
+  const cardMode = isPokerCardMode(table)
   const [aiOpen, setAIOpen] = useState(false)
-  const openAI = () => { setPanel(null); setAIOpen(true) }
+  const openAI = () => { if (cardMode) return; setPanel(null); setAIOpen(true) }
   const canInvite = table.status !== "running" && table.status !== "closed" && table.seats.filter(seat => !seat.isHistorical && seat.status !== "left").length < table.maxSeats
   useEffect(() => { setAIOpen(false) }, [identityKey, table.roomCode])
   const joinLabel = table.mode === "points" ? `带入 ${amount(table.buyIn)} 点入座` : "本人入座"
@@ -129,10 +131,10 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {legal.includes("allin") && <Button ref={allInTrigger} variant="danger-soft" isDisabled={disabled || confirmAllIn} onPress={() => openConfirmation("allin")} aria-expanded={confirmAllIn}>全下</Button>}
   </div>
   const sessionControls = <div className="flex flex-col items-stretch gap-3">
-      {!mine && table.status !== "closed" && <>{handoff ? <><Button fullWidth isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button fullWidth variant="tertiary" isDisabled={busy} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接入</Button></> : <><Button isDisabled={busy} fullWidth onPress={() => void manage(join)}><UserRound aria-hidden="true" />{joinLabel}</Button><Button fullWidth variant="secondary" isDisabled={busy || version == null} onPress={openAI}><Bot aria-hidden="true" />接入 AI</Button></>}</>}
+      {!mine && table.status !== "closed" && <>{!cardMode && handoff ? <><Button fullWidth isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button fullWidth variant="tertiary" isDisabled={busy} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接入</Button></> : <><Button isDisabled={busy} fullWidth onPress={() => void manage(join)}><UserRound aria-hidden="true" />{joinLabel}</Button>{!cardMode && <Button fullWidth variant="secondary" isDisabled={busy || version == null} onPress={openAI}><Bot aria-hidden="true" />接入 AI</Button>}</>}</>}
       {mine && table.status !== "closed" && <>
-        {controller !== "human" ? <Button fullWidth isDisabled={busy || uncertain || roll.blocked || version == null} onPress={() => void manage(takeover)}>本人接管</Button> : handoff ? <Button fullWidth variant="tertiary" isDisabled={disabled} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接管</Button> : <Button fullWidth variant="secondary" isDisabled={disabled || version == null} onPress={openAI}>交给 AI</Button>}
-        {handoff && <Button fullWidth variant="secondary" onPress={openAI}>查看接入 / 取消</Button>}
+        {controller !== "human" ? <Button fullWidth isDisabled={busy || uncertain || roll.blocked || version == null} onPress={() => void manage(takeover)}>本人接管</Button> : handoff ? <Button fullWidth variant="tertiary" isDisabled={disabled} onPress={() => void manage(() => control("cancel_ai"))}>取消 AI 接管</Button> : !cardMode && <Button fullWidth variant="secondary" isDisabled={disabled || version == null} onPress={openAI}>交给 AI</Button>}
+        {!cardMode && handoff && <Button fullWidth variant="secondary" onPress={openAI}>查看接入 / 取消</Button>}
         <Button fullWidth variant="secondary" isDisabled={disabled || version == null || controller !== "human"} onPress={() => void manage(sit)}>{mine.status === "sitting_out" ? "回到牌桌" : table.pauseReason === "user" ? "本手后暂离" : "暂离"}</Button>
         <Button fullWidth variant="danger-soft" isDisabled={disabled || version == null || controller !== "human"} onPress={() => void manage(leave)}>离桌</Button>
       </>}
@@ -142,11 +144,11 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {controller !== "human" && <Button isDisabled={busy || uncertain || nextHand.busy || roll.blocked || version == null} onPress={() => void takeover()}>本人接管</Button>}
     {controller === "human" && mine.status === "sitting_out" && <Button isDisabled={disabled || version == null} onPress={() => void sit()}>回到牌桌</Button>}
     {controller === "human" && perspective === "public" && onPerspective && <Button isDisabled={busy || uncertain || nextHand.busy} onPress={() => onPerspective("owner")}>切回玩家视角</Button>}
-    {handoff && <><Button variant="secondary" isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
+    {!cardMode && handoff && <><Button variant="secondary" isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
   </div> : null
   const rollEntry = perspective === "owner" && mine && table.roll?.enabled && table.status === "running" && (acting || rollPending || roll.uncertain) && <Button size="sm" variant="tertiary" isDisabled={busy || uncertain || nextHand.busy} aria-label={!rollPending&&!roll.uncertain&&table.roll.coins?`Roll 换牌，钻石 ${table.roll.coins.balance}`:undefined} aria-expanded={panel === "roll"} onPress={() => {track({component:"button",name:"poker-roll",action:"click"});setAllInAction(null);setPanel("roll")}}>{rollPending ? "完成换牌" : roll.uncertain ? "核对换牌" : table.roll.coins ? <PokerDiamondAmount value={table.roll.coins.balance}/> : "Roll 换牌"}</Button> || (roll.uncertain || roll.storageError ? <Button size="sm" variant="secondary" isDisabled={roll.busy} onPress={()=>void roll.retry()}>{roll.storageError ? "重试恢复记录" : "核对原换牌请求"}</Button> : null)
   return <div ref={controlsRef} className="poker-human-controls" data-acting={acting} data-compact-controls={compact} aria-label="本人牌桌操作" onKeyDown={event => { if (event.key === "Escape" && confirmAllIn) { event.stopPropagation(); cancelConfirmation() } }}>
-    <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status" className="min-w-0 wrap-anywhere">{awaitingReady ? <>{!nextHand.eligible && mine?.status === "sitting_out" && <>已暂离 · </>}{nextHand.summary}</> : state}</span>{acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={openAI}>查看 AI 接入</Button>}{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
+    <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status" className="min-w-0 wrap-anywhere">{awaitingReady ? <>{!nextHand.eligible && mine?.status === "sitting_out" && <>已暂离 · </>}{nextHand.summary}</> : state}</span>{!cardMode && acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={openAI}>查看 AI 接入</Button>}{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
     {awaitingReady && <div className="flex min-w-0 flex-wrap items-center gap-2 font-sans text-foreground scheme-light" aria-label="下一手操作">
       {nextHand.notice && <p role="status" className="text-sm">{nextHand.notice}</p>}
       {controller === "ai" && nextHand.eligible && !nextHand.prepared && <p className="text-sm text-muted">等待 AI 确认准备</p>}
@@ -182,6 +184,6 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {!menuTrigger && mine && table.status !== "closed" && <div className="poker-local-menu font-sans text-foreground scheme-light"><Button ref={localMenuTrigger} variant="tertiary" aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" />座位管理</Button></div>}
     <PokerControlPopover open={panel === "menu"} onOpenChange={open => { if (!open) setPanel(null) }} trigger={managementTrigger} container={popoverContainer ?? controlsRef.current} title="更多操作" id={menuId} side={menuTrigger ? "bottom" : "top"} restoreFocus={panel === null && !confirmAllIn}>{mine && sessionControls}{menuContent && <div className="mt-4 space-y-3 border-t border-separator pt-4">{menuContent}</div>}</PokerControlPopover>
     {confirmation}
-    {aiOpen && <PokerAIConnectDialog key={`${identityKey}:${table.roomCode}`} open onOpenChange={setAIOpen} roomCode={table.roomCode} table={table} onChanged={onRefresh} />}
+    {!cardMode && aiOpen && <PokerAIConnectDialog key={`${identityKey}:${table.roomCode}`} open onOpenChange={setAIOpen} roomCode={table.roomCode} table={table} onChanged={onRefresh} />}
   </div>
 }

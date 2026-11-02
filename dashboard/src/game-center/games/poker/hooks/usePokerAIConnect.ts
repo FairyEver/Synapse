@@ -5,6 +5,7 @@ import { useAccount } from "@/game-center/runtime/account"
 import { useGameMutation } from "../../../hooks/useGameQuery"
 import { gameApi } from "../../../lib/api"
 import { pokerConnectInstruction } from "../lib/connect-instruction"
+import { isPokerCardMode } from "../lib/card-mode"
 
 export function usePokerAIConnect(table: PokerTableView | null, onRefresh: () => void | Promise<void>) {
   const {state}=useAccount(), mutation=useGameMutation()
@@ -17,7 +18,7 @@ export function usePokerAIConnect(table: PokerTableView | null, onRefresh: () =>
   const [failure,setFailure]=useState<{key:string;message:string}|null>(null)
   const control=confirmed?.key===key && confirmed.control.controlVersion>(table?.controlVersion ?? -1) ? confirmed.control : table
   const copy=async()=>{
-    if (!table || !identity) return
+    if (!table || !identity || isPokerCardMode(table)) return
     const submitted=context.current
     const current=()=>mounted.current && context.current===submitted
     setFailure(null)
@@ -25,7 +26,7 @@ export function usePokerAIConnect(table: PokerTableView | null, onRefresh: () =>
     catch { if(current()) setFailure({key,message:"复制失败，接入授权保持不变，请重试复制"}) }
   }
   const change=async(action:"request_ai"|"cancel_ai"|"takeover")=>{
-    if(!table || !identity) return
+    if(!table || !identity || isPokerCardMode(table) && action === "request_ai") return
     const submitted=context.current
     const current=()=>mounted.current && context.current===submitted
     setFailure(null)
@@ -33,6 +34,7 @@ export function usePokerAIConnect(table: PokerTableView | null, onRefresh: () =>
       const fresh=await gameApi().poker.table.state({roomCode:table.roomCode,perspective:"public"})
       if(!current()) return null
       if(fresh.status==="closed") throw new Error("房间已解散")
+      if(isPokerCardMode(fresh) && action === "request_ai") throw new Error("卡牌房仅限真人")
       if(fresh.controlVersion==null) throw new Error("请更新客户端后接入 AI")
       if(action==="request_ai" && (fresh.handoffPending || fresh.controller==="ai") || action==="cancel_ai" && !fresh.handoffPending || action==="takeover" && fresh.controller!=="ai") return fresh
       return gameApi().poker.control.set({roomCode:table.roomCode,controlVersion:fresh.controlVersion,action})

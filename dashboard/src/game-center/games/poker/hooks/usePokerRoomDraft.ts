@@ -5,13 +5,13 @@ import type { PokerRoomDraft } from "../components/CreateRoomDialog"
 import { POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS } from "@synapse/shared/game-contracts"
 
 const defaults: PokerRoomPreferences = {
-  mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000, roll: false, rollCoins: POKER_DEFAULT_ROLL_COINS,
+  mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000, roll: false, cards: false, rollCoins: POKER_DEFAULT_ROLL_COINS,
 }
 // Serialize config read/merge/write, including choices made immediately before unmount.
 let pendingSave: Promise<void> = Promise.resolve()
 
-function roomPreferences({ mode, variant, blindPreset, maxSeats, buyIn, roll = false, rollCoins = POKER_DEFAULT_ROLL_COINS }: PokerRoomPreferences): PokerRoomPreferences {
-  return { mode, variant, blindPreset, maxSeats, buyIn, roll, rollCoins }
+function roomPreferences({ mode, variant, blindPreset, maxSeats, buyIn, roll = false, cards = false, rollCoins = POKER_DEFAULT_ROLL_COINS }: PokerRoomPreferences): PokerRoomPreferences {
+  return { mode, variant, blindPreset, maxSeats, buyIn, roll, cards, rollCoins }
 }
 
 export function usePokerRoomDraft(userId: string | null, nickname: string) {
@@ -52,7 +52,7 @@ export function usePokerRoomDraft(userId: string | null, nickname: string) {
   }
   const createParams = () => ({
     mode:draft.mode, variant:draft.variant, blindPreset:draft.blindPreset, maxSeats:draft.maxSeats, buyIn:draft.buyIn,
-    ruleOptions: {roll:draft.roll ?? false, ...(draft.roll ? {rollCoins:draft.rollCoins ?? POKER_DEFAULT_ROLL_COINS} : {})},
+    ruleOptions: {cards:draft.cards ?? false, roll:draft.roll ?? false, ...(draft.roll ? {rollCoins:draft.rollCoins ?? POKER_DEFAULT_ROLL_COINS} : {})},
     // The server adds the authoritative room code only for automatic names.
     name: !draft.name.trim() || draft.name === initialName.current ? undefined : draft.name,
   })

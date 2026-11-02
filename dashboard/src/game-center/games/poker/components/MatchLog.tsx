@@ -17,6 +17,7 @@ const actionIcons: Record<PokerHandLogEntry["action"], LucideIcon> = {
   raise: TrendingUp,
   allin: ChevronsUp,
   roll: Shuffle,
+  card: Sparkles,
 }
 function LogActionIcon({ entry }: { entry: PokerHandLogEntry }) {
   const Icon = entry.roll?.kind === "super" ? Sparkles : actionIcons[entry.action]

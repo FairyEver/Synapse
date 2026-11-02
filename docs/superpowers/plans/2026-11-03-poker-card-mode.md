@@ -238,11 +238,11 @@
 **Files:** Create `dashboard/src/game-center/games/poker/hooks/usePokerCardAvailability.ts`、`dashboard/src/game-center/games/poker/__tests__/card-room.test.tsx`；Modify `dashboard/src/game-center/games/poker/components/CreateRoomDialog.tsx`、`dashboard/src/game-center/games/poker/components/PokerJoinSummary.tsx`、`dashboard/src/game-center/games/poker/components/RoomList.tsx`、`dashboard/src/game-center/games/poker/components/LobbyView.tsx`、`dashboard/src/game-center/games/poker/components/PokerAIConnectDialog.tsx`、`dashboard/src/game-center/games/poker/hooks/usePokerRoomDraft.ts`、`dashboard/src/game-center/games/poker/hooks/usePokerAIConnect.ts`、`dashboard/src/game-center/runtime/preferences.ts`、`dashboard/src/game-center/runtime/web-client.ts`、`dashboard/src/game-center/lib/api.ts`。
 **Interfaces:** Consumes T1/T12 guide和房规；Produces带cards开关的`PokerRoomDraft`/偏好和两项`GameBridge.poker.card`方法。`usePokerCardAvailability(identityKey)`返回available/loading/error/reload，查询留在hook/API层。
 
-- [ ] **1. 写失败测试。** `independent_cards_roll_flags`覆盖四种开关组合；`old_preference_cards_false`旧偏好默认为false；同一creationId重试不能改变cards配置。`cards_room_no_ai_entry`不显示授权接入/复制指令操作，普通房仍可用；guide失败不擅自认为可开放。 断言示例：`expect(sent.ruleOptions).toEqual({roll:true,rollCoins:12,cards:true})`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/dashboard exec vitest run src/game-center/games/poker/__tests__/card-room.test.tsx src/game-center/runtime/preferences.test.ts src/game-center/__tests__/web-api.test.ts`。
-- [ ] **3. 实现配置与传输。** Switch与现有Roll同层级，房主不能改卡池/单卡参数；按账号记忆。WebClient携带T1的规则支持头，新私有调用走固定路由不落公共invoke。房间创建身份来源修正由HTTP固定human；room/list摘要明确卡牌模式，AI入口按服务端模式禁用。
-- [ ] **4. 同命令验证绿灯。** 增加跨账号迟到偏好加载隔离、门槛关闭时清晰禁用且不会静默改写已发送创建意图、创建后设置不可变、未知创建结果原ID核对。运行`pnpm --filter @synapse/dashboard check:ui`。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 支持独立开启卡牌房并限制AI接入入口'`。
+- [x] **1. 写失败测试。** `independent_cards_roll_flags`覆盖四种开关组合；`old_preference_cards_false`旧偏好默认为false；同一creationId重试不能改变cards配置。`cards_room_no_ai_entry`不显示授权接入/复制指令操作，普通房仍可用；guide失败不擅自认为可开放。 断言示例：`expect(sent.ruleOptions).toEqual({roll:true,rollCoins:12,cards:true})`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/dashboard exec vitest run src/game-center/games/poker/__tests__/card-room.test.tsx src/game-center/runtime/preferences.test.ts src/game-center/__tests__/web-api.test.ts`。
+- [x] **3. 实现配置与传输。** Switch与现有Roll同层级，房主不能改卡池/单卡参数；按账号记忆。WebClient携带T1的规则支持头，新私有调用走固定路由不落公共invoke。房间创建身份来源修正由HTTP固定human；room/list摘要明确卡牌模式，AI入口按服务端模式禁用。
+- [x] **4. 同命令验证绿灯。** 增加跨账号迟到偏好加载隔离、门槛关闭时清晰禁用且不会静默改写已发送创建意图、创建后设置不可变、未知创建结果原ID核对。运行`pnpm --filter @synapse/dashboard check:ui`。
+- [x] **5. 本地提交。** `git commit -m 'feat: 支持独立开启卡牌房并限制AI接入入口'`。
 
 
 ## Task 14: 卡牌面板、目标选择和未知写恢复

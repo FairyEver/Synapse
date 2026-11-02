@@ -1,6 +1,7 @@
 import { abortable } from "./abortable"
 import { GAME_RESPONSE_SCHEMAS, GAME_UI_OPERATIONS, GAME_UI_ROUTES, GAME_WEB_IDENTITY_HEADER } from "@synapse/shared/game-ui"
 import { ApiError, requestJson } from "@/lib/api-client"
+import { GAME_POKER_RULES_HEADER, SUPPORTED_POKER_RULES } from "@synapse/shared/game-contracts"
 
 export class GameWebError extends Error {
   constructor(readonly code: string, message: string, readonly details: Record<string, unknown> = {}) { super(message) }
@@ -37,7 +38,7 @@ export class GameWebClient {
       try {
         body = await abortable(controller.signal, () => requestJson<unknown>(`/api${route ? route.path(params) : "/game/invoke"}`, {
           method: route?.method ?? "POST", signal: controller.signal,
-          headers: { [GAME_WEB_IDENTITY_HEADER]: identity },
+          headers: { [GAME_WEB_IDENTITY_HEADER]: identity, [GAME_POKER_RULES_HEADER]: SUPPORTED_POKER_RULES.join(",") },
           ...(route?.method === "GET" ? {} : { body: JSON.stringify({ operation, params }) }),
         }))
       } catch (error) {

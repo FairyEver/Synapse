@@ -2,6 +2,7 @@ import { Button, Card as SystemCard, Chip, Table } from "@heroui/react"
 import type { PokerRoomView } from "@synapse/shared/game-contracts"
 import { Card } from "./Card"
 import { amount } from "../lib/view"
+import { isPokerCardMode } from "../lib/card-mode"
 
 import "../../../styles/responsive-lists.css"
 
@@ -17,11 +18,12 @@ export function RoomList({ rooms, myRoomCodes, userId, onRoom, onConnect, onClos
   const rows = rooms.map(room => {
     const pending = room.myControl?.handoffPending, ai = room.myControl?.controller === "ai"
     const mine = room.myControl?.seatNo != null || myRoomCodes.includes(room.roomCode)
-    const canConnect = pending || ai || room.players < room.maxSeats && !mine
+    const cardMode = isPokerCardMode(room)
+    const canConnect = !cardMode && (pending || ai || room.players < room.maxSeats && !mine)
     return {
       room,
       name: room.name || `房间 #${room.roomCode}`,
-      description: `#${room.roomCode} · ${room.rules?.variant === "short32" ? "短牌 32 张" : "标准 52 张"}${room.rules?.ruleOptions?.roll ? " · Roll" : ""}`,
+      description: `#${room.roomCode} · ${room.rules?.variant === "short32" ? "短牌 32 张" : "标准 52 张"}${room.rules?.ruleOptions?.roll ? " · Roll" : ""}${cardMode ? " · 卡牌" : ""}`,
       type: room.mode === "practice" ? "陪练房" : "点数房",
       funding: room.mode === "practice" ? "初始筹码" : "带入点数",
       availability: pending ? "等待你的 AI 接入" : ai ? "你的 AI 已接管" : mine ? "已在桌" : room.players >= room.maxSeats ? "满员 · 可观看" : "可加入",

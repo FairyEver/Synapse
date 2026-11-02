@@ -4,6 +4,15 @@ const identity = { id: 'alice' }
 const create = () => new GameWebClient({ getIdentity: () => identity.id, onSessionInvalid: vi.fn() })
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 describe('浏览器游戏请求', () => {
+  it.each(["play", "choose"])("卡牌%s只走私有窄路由并声明支持的规则", async operation => {
+    const result = { ok: true, handId: "h", actionSeq: 1, cursor: "1:1", status: "completed" }
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(result)), client = create()
+    const params = { roomCode: "1234", actionId: "original-uuid" }
+    expect(await client.call(`app.game.poker.card.${operation}`, params)).toEqual(result)
+    expect(fetch.mock.calls[0][0]).toBe(`/api/game/poker/rooms/1234/card/${operation}`)
+    expect(new Headers(fetch.mock.calls[0][1]?.headers).get("x-synapse-poker-rules")).toBe("cards-v1,chips-v2")
+    client.dispose()
+  })
   it.each(["start","choose"])("Roll %s走窄POST并完整保留UUID和原参数",async(operation)=>{
     const result={ok:true,handId:"h",rollId:"r",actionSeq:4,cursor:"1:4",status:operation==="start"?"choice_required":"completed"}
     const fetch=vi.spyOn(globalThis,"fetch").mockResolvedValue(Response.json(result))

@@ -17,7 +17,7 @@ vi.mock("@/game-center/runtime/account", () => ({
 vi.mock("../../../lib/api", () => ({
   gameApi: () => ({
     hall: { overview: async () => ({ sessions: [] }) },
-    poker: { lobby: { list: async () => ({ items: [], nextOffset: null }) }, room: { create: api.create }, table: {state:api.state}, control:{set:api.control} },
+    poker: { guide: async () => ({ cards: { available: false } }), lobby: { list: async () => ({ items: [], nextOffset: null }) }, room: { create: api.create }, table: {state:api.state}, control:{set:api.control} },
   }),
 }))
 vi.mock("../components/LobbyView", () => ({
@@ -66,7 +66,7 @@ describe("建房请求身份", () => {
     await act(async()=>[...document.querySelectorAll<HTMLButtonElement>("button")].find(b=>b.getAttribute("aria-label")==="增加每手钻石")!.click())
     expect(coins.value).toBe("13")
     await submit()
-    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ruleOptions:{roll:true,rollCoins:13}}))
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ruleOptions:{cards:false,roll:true,rollCoins:13}}))
     await act(async()=>document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click());await open(host)
     expect((document.getElementById("poker-roll-coins") as HTMLInputElement).value).toBe("13")
   })
@@ -94,7 +94,7 @@ describe("建房请求身份", () => {
     await clickSwitchPart(control)
     expect(toggle.checked).toBe(true)
     await submit()
-    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ mode, variant, ruleOptions: { roll: true, rollCoins: 12 } }))
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ mode, variant, ruleOptions: { cards: false, roll: true, rollCoins: 12 } }))
   })
   it("默认名称使用当前昵称，每次新建重置名称，默认名称交由服务端补实际房间号", async () => {
     api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
@@ -131,7 +131,7 @@ describe("建房请求身份", () => {
     }
     expect(document.querySelector("#poker-seats")?.textContent).toContain("5")
     const saved = settings.update.mock.calls.at(-1)![1]
-    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 5, buyIn: 50000, roll: true, rollCoins: 12 })
+    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 5, buyIn: 50000, roll: true, rollCoins: 12, cards: false })
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     identity.user = { id: "another", nickname: "另一人", handle: "other" }
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
@@ -298,7 +298,7 @@ describe("建房请求身份", () => {
     await act(async()=>document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
     await submit();const first=api.create.mock.calls[0][0]
     await open(host);await submit();const second=api.create.mock.calls[1][0]
-    expect(first.ruleOptions).toEqual({roll:true,rollCoins:12});expect(second.ruleOptions).toEqual({roll:true,rollCoins:12})
+    expect(first.ruleOptions).toEqual({cards:false,roll:true,rollCoins:12});expect(second.ruleOptions).toEqual({cards:false,roll:true,rollCoins:12})
     expect(second.creationId).not.toBe(first.creationId)
     expect(second).not.toHaveProperty("roll")
   })

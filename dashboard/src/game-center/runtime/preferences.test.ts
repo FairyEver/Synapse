@@ -8,9 +8,17 @@ it.each([7, 8, 9, 10])("旧的%s人配置恢复为6人并保留其他选项", as
     mode: "practice", variant: "short32", blindPreset: "5/10", maxSeats, buyIn: 2000, roll: true,
   }))
   expect(await roomPreferencesStore.get("user")).toEqual({
-    mode: "practice", variant: "short32", blindPreset: "5/10", maxSeats: 6, buyIn: 1000, roll: true, rollCoins: 12,
+    mode: "practice", variant: "short32", blindPreset: "5/10", maxSeats: 6, buyIn: 1000, roll: true, rollCoins: 12, cards: false,
   })
   expect(await roomPreferencesStore.get("other")).toBeNull()
+})
+
+it("卡牌选项按账号记忆且校验类型", async () => {
+  await roomPreferencesStore.update("cards", { mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000, cards: true })
+  expect(await roomPreferencesStore.get("cards")).toMatchObject({ cards: true })
+  expect(await roomPreferencesStore.get("other")).toBeNull()
+  localStorage.setItem("synapse.game.poker-room-preferences.v1:bad", JSON.stringify({ mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000, cards: "true" }))
+  await expect(roomPreferencesStore.get("bad")).rejects.toThrow()
 })
 
 it("remembers custom roll coins by account and rejects invalid saved allowances", async () => {

@@ -14,17 +14,19 @@ export interface PokerRoomDraft {
   blindPreset: PokerBlindPreset
   maxSeats: number
   roll?: boolean
+  cards?: boolean
   rollCoins?: number
   buyIn: number
 }
 
-export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate, busy }: {
+export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate, busy, cardAvailability }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   value: PokerRoomDraft
   onChange: (value: PokerRoomDraft) => void
   onCreate: () => void
   busy: boolean
+  cardAvailability?: { available: boolean; loading: boolean; error: string | null; reload: () => Promise<void> }
 }) {
   const previouslyOpen = useRef(false)
   const returnFocus = useRef<HTMLElement | null>(null)
@@ -40,6 +42,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
   const update = (patch: Partial<PokerRoomDraft>) => onChange({ ...value, ...patch })
   const coins = value.rollCoins ?? POKER_DEFAULT_ROLL_COINS
   const validCoins = !value.roll || Number.isInteger(coins) && coins >= 1 && coins <= POKER_MAX_ROLL_COINS
+  const validCards = !value.cards || !!cardAvailability?.available
   const changeSeats = (delta: number) => {
     const maxSeats = Math.max(2, Math.min(POKER_MAX_SEATS, value.maxSeats + delta))
     track({ component: "button", name: "poker-room-seats", action: "click", value: String(maxSeats) })
@@ -51,7 +54,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
           <Modal.CloseTrigger data-slot="dialog-close" aria-label="关闭" />
           <Form className='flex min-h-0 flex-1 flex-col' aria-busy={busy} onSubmit={event => {
             event.preventDefault()
-            if (!busy && validCoins) {
+            if (!busy && validCoins && validCards) {
               track({ component: "button", name: "poker-create-room", action: "click" })
               onCreate()
             }
@@ -92,6 +95,11 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                   </Switch.Content>
                   <Description><PokerDiamondText text="普通 1／超级 3 钻石；另付筹码"/></Description>
                 </Switch>
+                <Switch isSelected={value.cards ?? false} onChange={cards => update({ cards })} isDisabled={busy || !cardAvailability?.available && !value.cards}>
+                  <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control><Label>卡牌模式</Label></Switch.Content>
+                  <Description>{cardAvailability?.loading ? "正在读取开放状态…" : cardAvailability?.error ? "开放状态读取失败" : !cardAvailability?.available ? "暂未开放" : "仅限真人；机器人不持卡"}</Description>
+                </Switch>
+                {cardAvailability?.error && <div role="alert" className="text-sm text-danger"><p>{cardAvailability.error}</p><Button variant="tertiary" onPress={() => void cardAvailability.reload()}>重试读取开放状态</Button></div>}
                 {value.roll && <NumberField value={coins} onChange={rollCoins => update({rollCoins})} minValue={1} maxValue={POKER_MAX_ROLL_COINS} step={1} isRequired isInvalid={!validCoins} isDisabled={busy} variant="secondary">
                   <Label htmlFor="poker-roll-coins"><PokerDiamondText text="每手钻石"/></Label>
                   <NumberField.Group>
@@ -125,7 +133,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
             </Modal.Body>
             <Modal.Footer>
               <Button variant="tertiary" slot="close">取消</Button>
-              <Button type="submit" isDisabled={busy || !validCoins}>{busy ? "创建中…" : "创建房间"}</Button>
+              <Button type="submit" isDisabled={busy || !validCoins || !validCards}>{busy ? "创建中…" : "创建房间"}</Button>
             </Modal.Footer>
           </Form>
         </Modal.Dialog>

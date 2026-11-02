@@ -11,6 +11,7 @@ import { gameApi } from "../../../lib/api"
 import { useGameQuery, useGameMutation } from "../../../hooks/useGameQuery"
 import { usePokerRoomDraft } from "../hooks/usePokerRoomDraft"
 import { useHallOverview } from "../../../hooks/useHallOverview"
+import { usePokerCardAvailability } from "../hooks/usePokerCardAvailability"
 export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
   const [offset, setOffset] = useState(0),
     [createOpen, setCreateOpen] = useState(false),
@@ -22,6 +23,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     userId = account.status === "authenticated" ? account.profile.user.id : null
   const nickname = account.status === "authenticated" ? account.profile.user.nickname?.trim() || account.profile.user.handle : "用户"
   const { draft, changeDraft, loadDraft, createParams } = usePokerRoomDraft(userId, nickname)
+  const cardAvailability = usePokerCardAvailability(userId)
   useEffect(() => {
     creation.current = null
     dialogGeneration.current++
@@ -40,6 +42,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
     hall = useHallOverview(),
     mutation = useGameMutation()
   const create = async () => {
+    if (draft.cards && !cardAvailability.available) return
     const generation = dialogGeneration.current
     const params = createParams(),
       key = JSON.stringify(params)
@@ -110,6 +113,7 @@ export function Lobby({ onRoom }: { onRoom: (code: string) => void }) {
         onChange={changeDraft}
         onCreate={() => void create()}
         busy={mutation.busy}
+        cardAvailability={cardAvailability}
       />
       <Modal.Backdrop
         isOpen={!!closing}
