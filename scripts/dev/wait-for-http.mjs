@@ -15,13 +15,14 @@ function parsePositiveInteger(value, optionName) {
 function parseWaitForHttpArgs(args) {
   const [url, ...rest] = args
   if (!url) {
-    throw new Error("Usage: node scripts/dev/wait-for-http.mjs <url> [--timeout-ms <ms>] [--interval-ms <ms>]")
+    throw new Error("Usage: node scripts/dev/wait-for-http.mjs <url> [--timeout-ms <ms>] [--interval-ms <ms>] [--request-timeout-ms <ms>]")
   }
 
   const options = {
     url,
     timeoutMs: 60_000,
     intervalMs: 500,
+    requestTimeoutMs: 10_000,
   }
 
   for (let index = 0; index < rest.length; index += 1) {
@@ -36,6 +37,12 @@ function parseWaitForHttpArgs(args) {
 
     if (optionName === "--interval-ms") {
       options.intervalMs = parsePositiveInteger(optionValue, optionName)
+      index += 1
+      continue
+    }
+
+    if (optionName === "--request-timeout-ms") {
+      options.requestTimeoutMs = parsePositiveInteger(optionValue, optionName)
       index += 1
       continue
     }
@@ -67,7 +74,7 @@ async function waitForHttp(options) {
 
   while (Date.now() < deadline) {
     const remainingMs = Math.max(1, deadline - Date.now())
-    const requestTimeoutMs = Math.min(options.intervalMs, remainingMs)
+    const requestTimeoutMs = Math.min(options.requestTimeoutMs ?? 10_000, remainingMs)
 
     try {
       const response = await fetchOnce(options.url, requestTimeoutMs)

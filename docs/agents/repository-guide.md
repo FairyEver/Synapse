@@ -43,7 +43,7 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 - `pnpm dev`：通过 mprocs 分栏启动 desktop、server、document；Dashboard 由 Server 进程一并启动。按 `q` 退出并停止本次启动的进程。
 - `pnpm dev:prod`：同一面板启动，桌面端使用生产站点 URL。
 - `pnpm dev:desktop`：仅桌面端。
-- `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；控制台自动打开 `http://localhost:19700/console/`，使用双栈监听；API 为 `19701`，PDF 宿主机映射为 `19702`。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
+- `pnpm dev:server`：服务端 API、dashboard、Postgres 和 PDF 渲染器；先等待 API `/readyz` 确认数据库、PDF 渲染器及已配置对象存储就绪，再启动 dashboard，待其监听后通过系统默认浏览器打开 `http://localhost:19700/console/`。后端就绪等待上限为 180 秒，单次探测上限为 10 秒；失败或超时不启动 dashboard、不打开页面。网页使用双栈监听；API 为 `19701`，PDF 宿主机映射为 `19702`。`pnpm dev` 和 `pnpm dev:prod` 共用该入口。
 - `pnpm dev:document`：文档站。
 - Dashboard 使用 `http://localhost:19700/console/`，双栈监听、固定端口；生产镜像直接构建到 `/app/dashboard/dist`，构建本身不自动部署。
 - Dashboard 的组件与视觉使用 HeroUI v3，规则见 `dashboard/CLAUDE.md` 与 `DESIGN.md`；此基线仅限该子包。仓库的 `.agents/skills/heroui-react/` 提供官方 Skill，`.codex/config.toml` 和 `.mcp.json` 分别配置 Codex / Claude Code 的官方 MCP。离线文档与 demos 用 `pnpm --filter @synapse/dashboard docs:heroui:sync` 下载到该子包被 Git 忽略的 `.heroui-docs/`；不会克隆上游仓库。

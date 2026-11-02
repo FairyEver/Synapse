@@ -32,6 +32,8 @@ paths:
 
 根 `pnpm dev` 和 `pnpm dev:prod` 启动 Desktop、Server、Document；Server 入口同时启动 API、Dashboard、Postgres 和 PDF renderer。Dashboard 不再占用独立 mprocs 栏目，统一随 `pnpm dev:server` 启停。Auto 与模板是按需命令，不随根 `pnpm dev` 启动。
 
+Server 入口等待 API 的 `/readyz` 返回成功后才启动 Dashboard，由 Vite 在网页监听后使用系统默认浏览器打开控制台。就绪探测覆盖数据库、PDF renderer 和已配置的对象存储；总等待上限 180 秒，单次请求上限 10 秒，重试间隔与请求超时独立。失败或超时时不打开 Web 端。
+
 ## 地址与边界
 
 - 浏览器入口使用 `http://localhost:19700/console/`；Dashboard 使用 `::` 双栈监听和 `strictPort`，避免只在 IPv4 上响应。桌面登录、服务端公开链接与文档开发链接同步使用该应用根地址。

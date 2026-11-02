@@ -53,6 +53,8 @@ pnpm dev:server
 
 自动启动 Postgres 与 PDF 渲染器容器、运行迁移、启动 API 和网页端开发服务器。控制台为 `http://localhost:19700/console/`，API 为 `http://localhost:19701`，PDF renderer 的宿主机映射为 `127.0.0.1:19702`；Postgres 保持 `5433`。生产端口与容器内部端口保持原样。本地命令会叠加 `compose.dev.yml`，仅为宿主机 API 开放渲染器端口；生产部署仍只连接 internal network。
 
+根 `pnpm dev` 共用此服务端入口：先等待 API 的 `/readyz` 确认数据库、PDF 渲染器和已配置对象存储就绪，再启动网页端，由 Vite 在监听后通过系统默认浏览器打开控制台。就绪等待最多 180 秒，单次请求最多 10 秒；就绪检查失败或超时时不打开网页。
+
 ---
 
 ## 生产部署（Docker + 宝塔面板）
