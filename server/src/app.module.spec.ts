@@ -10,7 +10,6 @@ import { LiveModule } from "./live/live.module"
 import { MailModule } from "./mail/mail.module"
 import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { OpenApiModule } from "./open-api/open-api.module"
-import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { TeamModule } from "./team/team.module"
 import { UpdateIntentModule } from "./update-intent/update-intent.module"
 import { VoiceModule } from "./voice/voice.module"
@@ -25,7 +24,6 @@ describe("AppModule", () => {
     ]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([LiveModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([MobileLiveModule]))
-    expect(importsOf(AppModule)).toEqual(expect.arrayContaining([SkillRepositoryModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([UpdateIntentModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([ApiKeyModule]))
     expect(importsOf(AppModule)).toEqual(expect.arrayContaining([OpenApiModule]))
@@ -40,6 +38,7 @@ describe("AppModule", () => {
     expect(moduleNames).toContain("TeamModule")
     expect(moduleNames).not.toContain("TeamsModule")
     expect(moduleNames).not.toContain("InvitationsModule")
+    expect(moduleNames).not.toContain("SkillRepositoryModule")
   })
 
   it("compiles the application dependency graph", async () => {

@@ -64,7 +64,7 @@ describe("scan item detail dialog layout", () => {
     expect(menuSource.match(/<DropdownMenuGroup>/g)).toHaveLength(3)
     expect(menuSource.match(/<DropdownMenuSeparator \/>/g)).toHaveLength(2)
     expect(menuSource).toMatch(
-      /<DropdownMenuGroup>[\s\S]*\{primaryActionLabel\}[\s\S]*重新安装[\s\S]*发布到仓库[\s\S]*上传到 Skill Repository[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*移到废纸篓[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*复制到其它编辑器[\s\S]*<\/DropdownMenuGroup>/,
+      /<DropdownMenuGroup>[\s\S]*\{primaryActionLabel\}[\s\S]*重新安装[\s\S]*发布到仓库[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*移到废纸篓[\s\S]*<\/DropdownMenuGroup>[\s\S]*<DropdownMenuSeparator \/>[\s\S]*<DropdownMenuGroup>[\s\S]*复制到其它编辑器[\s\S]*<\/DropdownMenuGroup>/,
     )
   })
 
@@ -208,48 +208,5 @@ describe("scan item detail dialog layout", () => {
 
     expect(source).not.toContain("getSynapseBridge()?.shell.showItemInFolder")
     expect(source).not.toMatch(/bridge\?\.shell\.showItemInFolder\([^)]*\)\.catch/)
-  })
-
-  it("offers Skill Repository upload only through the Skill detail action", async () => {
-    const source = await readFile(
-      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
-      "utf8",
-    )
-
-    expect(source).toContain("上传到 Skill Repository")
-    expect(source).toContain('item.type === "skill"')
-    expect(source).toContain("getUploadSkillToSkillRepositoryDisabledReason")
-    expect(source).toContain("handleUploadSkillToSkillRepository")
-    expect(source).toContain("prepareSkillRepositoryUpload")
-    expect(source).toContain("isSkillRepositoryUploadConfirmOpen")
-    expect(source).toContain("expectedSourceFingerprint")
-  })
-
-  it("opens Synapse after uploading to Skill Repository", async () => {
-    const source = await readFile(
-      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
-      "utf8",
-    )
-
-    expect(source).toContain("bridge.editorScan.uploadSkillToSkillRepository")
-    expect(source).toContain("buildUploadSkillToSkillRepositoryRequest(item)")
-    expect(source).toContain("openSkillRepositoryManagement(result.managementUrl)")
-    expect(source).toContain("bridge.shell.openExternal(managementUrl)")
-    expect(source).toContain("setSkillRepositoryManagementUrl(managementUrl)")
-    expect(source).toContain("复制链接")
-  })
-
-  it("offers a local-only retry when Skill Repository identity writing fails", async () => {
-    const source = await readFile(
-      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
-      "utf8",
-    )
-
-    expect(source).toContain("bridge.editorScan.retrySkillRepositoryIdentity")
-    expect(source).toContain("buildRetrySkillRepositoryIdentityRequest")
-    expect(source).toContain("error: result.identityWriteError ?? null")
-    expect(source).not.toContain("identityWriteError: result.identityWriteError")
-    expect(source).toContain("重试关联")
-    expect(source).toContain("本地关联写入失败。")
   })
 })

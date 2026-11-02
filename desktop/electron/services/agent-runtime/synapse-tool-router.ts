@@ -30,7 +30,6 @@ const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
   drive: ["云盘", "文件", "分享", "站点", "评论", "同步", "drive", "share", "site", "comment", "sync"],
   model_price: ["模型价格", "费用", "价格", "model price", "pricing", "cost"],
   repository: ["仓库", "repository", "repo"],
-  skill_repository: ["技能仓库", "skill repository", "skill repo"],
   workflow: ["工作流", "节点", "workflow", "node"],
   wecom: ["企业微信", "企微", "WeCom", "wecom"],
 }
@@ -176,7 +175,7 @@ export const SYNAPSE_TOOL_ROUTER_TOOL_DEFINITIONS: readonly SynapseToolRouterToo
 // shape is what non-Claude models get wrong most often.
 export const SYNAPSE_TOOL_ROUTER_INSTRUCTIONS = [
   "Synapse is this MCP server's local desktop app. It manages Database, Drive,",
-  "Workflow, Automation, Content (Rules/Skills/Prompts), Skill Repository, model price rules,",
+  "Workflow, Automation, Content (Rules/Skills/Prompts), model price rules,",
   "local secrets and repositories, Enterprise WeChat, Terminal sessions, App capabilities.",
   "",
   "This server publishes exactly two tools. Every Synapse capability is reached in two steps:",

@@ -125,11 +125,6 @@ export const IPC_CHANNELS = {
     "readEditorInstallFormValues": "synapse:app:resource_repository:operation:read_editor_install_form_values",
     "getIconPromptTemplate": "synapse:app:resource_repository:operation:get_icon_prompt_template",
   },
-  "skill-repository-install": {
-    "resolve": "synapse:app:skill_repository_install:operation:resolve",
-    "prepare": "synapse:app:skill_repository_install:operation:prepare",
-    "recordComplete": "synapse:app:skill_repository_install:operation:record_complete",
-  },
   "installers": {
     "inspectGlobalSkillInstallations": "synapse:app:installers:operation:inspect_global_skill_installations",
     "inspectSkillEnvSource": "synapse:app:installers:operation:inspect_skill_env_source",
@@ -182,8 +177,6 @@ export const IPC_CHANNELS = {
     "prepareQuickPublishDraft": "synapse:app:editor_scan:operation:prepare_quick_publish_draft",
     "finalizeQuickPublish": "synapse:app:editor_scan:operation:finalize_quick_publish",
     "trashItem": "synapse:app:editor_scan:operation:trash_item",
-    "uploadSkillToSkillRepository": "synapse:app:editor_scan:operation:upload_skill_to_skill_repository",
-    "retrySkillRepositoryIdentity": "synapse:app:editor_scan:operation:retry_skill_repository_identity",
   },
   "editor-copy": {
     "resolveTarget": "synapse:app:editor_copy:operation:resolve_target",

@@ -5,13 +5,10 @@
  * Replaces electron/ipc/editor-scan-handlers.ts with IpcModule.
  */
 
-import path from "node:path"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
-  EditorScanSkillRepositoryIdentityRetryRequest,
-  EditorScanSkillRepositoryUploadRequest,
   EditorScanFinalizeQuickPublishRequest,
   EditorScanQuickPublishRequest,
   EditorScanTrashRequest,
@@ -20,13 +17,10 @@ import {
   scanAll,
   readItemContent,
   listSkillFiles,
-  assertTrustedEditorReadTarget,
   finalizeQuickPublish,
   prepareQuickPublishDraft,
   trashScanItem,
 } from "../../services/editor-scan-service"
-import { skillRepositoryUploadService } from "../../services/skill-repository-upload-service"
-import { resolveSkillMainFile } from "../../services/content-skill-source-service"
 
 // Schemas
 const editorScanRequestSchema = z.object({ requestId: z.string().uuid() }).strict()
@@ -176,51 +170,6 @@ const trashResultSchema = z.object({
   path: z.string(),
 })
 
-const uploadSkillToSkillRepositoryRequestSchema = z.object({
-  itemType: z.enum(["skill", "rule", "prompt"]),
-  itemPath: z.string().min(1),
-  itemName: z.string().min(1),
-  editorId: z.string().min(1),
-  scope: z.enum(["global", "project"]),
-  projectPath: z.string().nullable().optional(),
-  mainFileName: z.string().nullable().optional(),
-  expectedSourceFingerprint: z.string().min(1).optional(),
-}).strict()
-type UploadSkillToSkillRepositoryRequest = z.infer<typeof uploadSkillToSkillRepositoryRequestSchema>
-
-const uploadSkillToSkillRepositoryResultSchema = z.object({
-  repositoryId: z.string().min(1),
-  name: z.string().min(1),
-  owner: z.string().nullable(),
-  managementUrl: z.string().url(),
-  identityWritten: z.boolean(),
-  identityWriteError: z.string().optional(),
-  identityBeforeUploadId: z.string().nullable().optional(),
-  identityMigrated: z.boolean(),
-  identityMigrationWarning: z.string().optional(),
-  sourceImportSummary: sourceImportSummarySchema,
-})
-
-const retrySkillRepositoryIdentityRequestSchema = z.object({
-  itemType: z.literal("skill"),
-  itemPath: z.string().min(1),
-  itemName: z.string().min(1),
-  editorId: z.string().min(1),
-  scope: z.enum(["global", "project"]),
-  projectPath: z.string().nullable().optional(),
-  repositoryId: z.string().min(1),
-  name: z.string().min(1),
-  owner: z.string().nullable(),
-  expectedSourceFingerprint: z.string().min(1),
-  expectedIdentityId: z.string().nullable(),
-}).strict()
-
-const retrySkillRepositoryIdentityResultSchema = z.object({
-  identityWritten: z.literal(true),
-  identityMigrated: z.boolean(),
-  identityMigrationWarning: z.string().optional(),
-})
-
 const activeScanControllers = new Map<string, AbortController>()
 
 export const editorScanIpcModule: IpcModule = {
@@ -319,72 +268,6 @@ export const editorScanIpcModule: IpcModule = {
           auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
         })
-      },
-    },
-    uploadSkillToSkillRepository: {
-      kind: "invoke",
-      operationId: "app.editor_scan.operation.upload_skill_to_skill_repository",
-      request: uploadSkillToSkillRepositoryRequestSchema,
-      response: uploadSkillToSkillRepositoryResultSchema,
-      handler: async (ctx, request: UploadSkillToSkillRepositoryRequest) => {
-        if (request.itemType !== "skill") {
-          throw new Error("只有 Skill 可以上传到 Skill Repository。")
-        }
-        const security = {
-          actor: { kind: "user" } as const,
-          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
-        }
-        await assertTrustedEditorReadTarget(security, request.itemPath, {
-          contentType: request.itemType,
-          itemName: request.itemName,
-          operation: "upload-skill-to-skill-repository",
-        }, "skill")
-        const mainFile = await resolveSkillMainFile(request.itemPath)
-        if (!mainFile || path.basename(mainFile) !== "SKILL.md") {
-          throw new Error("上传到 Skill Repository 需要根目录 SKILL.md。")
-        }
-        return skillRepositoryUploadService.importLocal(
-          {
-            sourceDirectoryPath: (request as EditorScanSkillRepositoryUploadRequest).itemPath,
-            name: (request as EditorScanSkillRepositoryUploadRequest).itemName,
-            openInBrowser: false,
-            ...(request.expectedSourceFingerprint
-              ? { expectedSourceFingerprint: request.expectedSourceFingerprint }
-              : {}),
-          },
-          security,
-        )
-      },
-    },
-    retrySkillRepositoryIdentity: {
-      kind: "invoke",
-      operationId: "app.editor_scan.operation.retry_skill_repository_identity",
-      request: retrySkillRepositoryIdentityRequestSchema,
-      response: retrySkillRepositoryIdentityResultSchema,
-      handler: async (ctx, request: EditorScanSkillRepositoryIdentityRetryRequest) => {
-        const security = {
-          actor: { kind: "user" } as const,
-          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
-          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
-        }
-        await assertTrustedEditorReadTarget(security, request.itemPath, {
-          contentType: request.itemType,
-          itemName: request.itemName,
-          operation: "retry-skill-repository-identity",
-        }, "skill")
-        const mainFile = await resolveSkillMainFile(request.itemPath)
-        if (!mainFile || path.basename(mainFile) !== "SKILL.md") {
-          throw new Error("关联 Skill Repository 需要根目录 SKILL.md。")
-        }
-        return skillRepositoryUploadService.retryLocalIdentity({
-          sourceDirectoryPath: request.itemPath,
-          repositoryId: request.repositoryId,
-          name: request.name,
-          owner: request.owner,
-          expectedSourceFingerprint: request.expectedSourceFingerprint,
-          expectedIdentityId: request.expectedIdentityId,
-        }, security)
       },
     },
   },

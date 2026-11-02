@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 云端 Skills 下线：移除 `skill_repository` domain 的全部 9 项 capability/MCP 索引工具、桌面上传与安装 IPC、安装窗口和 `synapse://skill-install` 专用协议处理；旧链接按未知协议处理。Console/Admin 列表、探索、详情及公开路径同时删除，权威系统 Skill 不再分发该领域指南。全局 capability 373→364、MCP 索引 369→360，公开路由工具仍为 search/invoke 两个；System App 22、默认 Dock 9、Workflow/Automation 与其他 Deep Link 不变。资源仓库仅保留 `content` 领域。历史条目计数保留为当时基线，当前计数以下表为准。
+
 - 2026-11-02 macOS 开发协议回跳：开发启动改用独立 bundle ID、内置当前仓库入口并声明 `synapse://` 的开发应用，修复网页登录唤起 Electron 默认窗口。既有 `synapse://auth/desktop/callback`、PKCE、IPC、MCP schema 和系统 Skill 不变；没有新增 Deep Link、System App、Dock、capability、MCP、Workflow 或 Automation，现有表格数量和例外均不变。
 
 - 2026-11-02 对局信息：既有table.state/room.get增加可选公开handLog（本手、完整标记、有界顺序流水、实际盲注、Roll支付与完成状态），仅白名单字段；总览继续使用potContributions/rollLedger，AI隐私不变。共享schema、MCP描述、系统Skill/API/协议、Agent和游戏规则同步。无新增注册、工具、输入、路由、权限或迁移；game30、全局373 capability/369 MCP、游戏Web28、桌面游戏IPC0及既有例外数量不变。
@@ -245,7 +247,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Automation | 是 | 是 | `automation` |
 | Launcher | 自身即应用页 | 是且不可移除 | — |
 | Settings（含设备命名） | 是 | 是 | `repository` |
-| Resource Repository | 是 | 否 | `content`、`skill_repository` |
+| Resource Repository | 是 | 否 | `content` |
 | Git | 是 | 否 | — |
 | Database | 是 | 否 | `database` |
 | Editor Scan | 是 | 否 | — |
@@ -281,7 +283,6 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `database` | 30 | 30 |
 | `model_price` | 11 | 11 |
 | `repository` | 1 | 1 |
-| `skill_repository` | 9 | 9 |
 | `automation` | 14 | 14 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
@@ -291,13 +292,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
 | `game` | 30 | 30 |
-| 合计 | 373 | 369 |
+| 合计 | 364 | 360 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 369 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 360 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

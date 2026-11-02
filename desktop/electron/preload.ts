@@ -964,12 +964,6 @@ const synapseBridge: SynapseBridge = {
       resolveEditorInstallTarget: invoke(IPC_CHANNELS.content.resolveEditorInstallTarget),
     },
   },
-  skillRepositoryInstall: {
-    resolve: (sessionId) => invoke(IPC_CHANNELS["skill-repository-install"].resolve)({ sessionId }),
-    prepare: (sessionId) => invoke(IPC_CHANNELS["skill-repository-install"].prepare)({ sessionId }),
-    recordComplete: (sessionId) =>
-      invoke(IPC_CHANNELS["skill-repository-install"].recordComplete)({ sessionId }),
-  },
   installers: {
     inspectGlobalSkillInstallations: invoke(IPC_CHANNELS.installers.inspectGlobalSkillInstallations),
     inspectSkillEnvSource: invoke(IPC_CHANNELS.installers.inspectSkillEnvSource),
@@ -1029,10 +1023,6 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["editor-scan"].finalizeQuickPublish)(request),
     trashItem: (request) =>
       invoke(IPC_CHANNELS["editor-scan"].trashItem)(request),
-    uploadSkillToSkillRepository: (request) =>
-      invoke(IPC_CHANNELS["editor-scan"].uploadSkillToSkillRepository)(request),
-    retrySkillRepositoryIdentity: (request) =>
-      invoke(IPC_CHANNELS["editor-scan"].retrySkillRepositoryIdentity)(request),
   },
   editorCopy: {
     resolveTarget: invoke(IPC_CHANNELS["editor-copy"].resolveTarget),

@@ -184,7 +184,6 @@ import { createContentCapabilityDispatcher } from "../capabilities/content-dispa
 import { createDriveCapabilityDispatcher } from "../capabilities/drive-dispatcher"
 import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
 import { createRepositoryCapabilityDispatcher } from "../capabilities/repository-dispatcher"
-import { createSkillRepositoryCapabilityDispatcher } from "../capabilities/skill-repository-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { createClaudeCodeTerminalSession } from "../modules/agent/claude-code-terminal"
@@ -270,7 +269,6 @@ import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-consta
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
 import { ClipboardSyncService, CLIPBOARD_SYNC_SERVICE_ID } from "../services/clipboard-sync-service"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
-import { SkillRepositoryUploadService } from "../services/skill-repository-upload-service"
 import { createDriveSyncService, type DriveSyncService } from "../services/drive-sync-service"
 import {
   AutomationExecutionService,
@@ -1799,20 +1797,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       permissionGuard,
       auditSink,
     })
-    const skillRepositoryUploadService = new SkillRepositoryUploadService({
-      accountService,
-      publicAppUrl: SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl,
-      openExternal: (url) => shell.openExternal(url),
-    })
-    const skillRepositoryDispatcher = createSkillRepositoryCapabilityDispatcher({
-      accountService,
-      uploadService: skillRepositoryUploadService,
-      publicAppUrl: SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl,
-      openExternal: (url) => shell.openExternal(url),
-      auditSink,
-      permissionGuard,
-      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
-    })
     const automationDispatcher = createAutomationCapabilityDispatcher({
       service: automation,
       accountService,
@@ -1939,7 +1923,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
-      skillRepositoryDispatch: (action, params, context) => skillRepositoryDispatcher.dispatch(action, params, context),
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(
         action,
         params,

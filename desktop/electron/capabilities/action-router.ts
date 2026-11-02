@@ -27,7 +27,6 @@ export type SynapseActionRouterDeps = {
   readonly wecomDispatch?: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
-  readonly skillRepositoryDispatch?: DomainDispatch
   readonly workflowDispatch: DomainDispatch
 }
 
@@ -53,10 +52,6 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       }
       if (domainId === "model_price") return deps.modelPriceDispatch(action, params, context)
       if (domainId === "repository") return deps.repositoryDispatch(action, params, context)
-      if (domainId === "skill_repository") {
-        if (!deps.skillRepositoryDispatch) throw new Error("Skill repository dispatcher is not configured")
-        return deps.skillRepositoryDispatch(action, params, context)
-      }
       if (domainId === "workflow") return deps.workflowDispatch(action, params, context)
       throw new Error(`Unknown action: ${action}`)
     },

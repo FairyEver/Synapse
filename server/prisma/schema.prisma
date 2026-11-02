@@ -87,9 +87,6 @@ model User {
   publicAssets                   PublicAsset[]
   driveSites                     DriveSite[]
   userHandleRedirects            UserHandleRedirect[]
-  skillRepositories              SkillRepository[]
-  skillRepositoryInstallSessions SkillRepositoryInstallSession[]
-  skillRepositoryInstallEvents   SkillRepositoryInstallEvent[]
   agentPersonas                  AgentPersona[]
   agentPersonaPreferences        AgentPersonaPreference[]
   clientTelemetryEvents          ClientTelemetryEvent[]
@@ -1233,110 +1230,6 @@ model UserHandleRedirect {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
-}
-
-model SkillRepository {
-  id                     String                             @id @default(cuid())
-  ownerUserId            String
-  owner                  User                               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  name                   String                             @db.VarChar(64)
-  title                  String                             @db.VarChar(160)
-  description            String?
-  visibility             String                             @default("private") @db.VarChar(16)
-  status                 String                             @default("active") @db.VarChar(16)
-  forkedFromRepositoryId String?
-  forkedFromRepository   SkillRepository?                   @relation("SkillRepositoryForks", fields: [forkedFromRepositoryId], references: [id], onDelete: SetNull)
-  forks                  SkillRepository[]                  @relation("SkillRepositoryForks")
-  lastSyncedAt           DateTime?
-  createdAt              DateTime                           @default(now())
-  updatedAt              DateTime                           @updatedAt
-  files                  SkillRepositoryFile[]
-  nameRedirects          SkillRepositoryNameRedirect[]
-  objectCleanupTasks     SkillRepositoryObjectCleanupTask[]
-  installSessions        SkillRepositoryInstallSession[]
-  installEvents          SkillRepositoryInstallEvent[]
-
-  @@unique([ownerUserId, name])
-  @@index([visibility, status, updatedAt])
-  @@index([ownerUserId, updatedAt])
-  @@index([forkedFromRepositoryId])
-}
-
-model SkillRepositoryNameRedirect {
-  id           String          @id @default(cuid())
-  ownerUserId  String
-  oldName      String          @db.VarChar(64)
-  repositoryId String
-  repository   SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  createdAt    DateTime        @default(now())
-
-  @@unique([ownerUserId, oldName])
-  @@index([repositoryId])
-}
-
-model SkillRepositoryFile {
-  id           String          @id @default(cuid())
-  repositoryId String
-  repository   SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  path         String          @db.VarChar(1024)
-  pathKey      String          @db.VarChar(1024)
-  kind         String          @db.VarChar(16)
-  mimeType     String?         @db.VarChar(255)
-  size         BigInt
-  sha256       String          @db.VarChar(64)
-  storageKey   String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-
-  @@unique([repositoryId, pathKey])
-  @@index([repositoryId, path])
-  @@index([sha256])
-}
-
-model SkillRepositoryObjectCleanupTask {
-  id           String           @id @default(cuid())
-  repositoryId String?
-  repository   SkillRepository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
-  storageKey   String           @unique
-  reason       String           @db.VarChar(64)
-  attempts     Int              @default(0)
-  lastError    String?          @db.VarChar(1000)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-
-  @@index([repositoryId])
-}
-
-model SkillRepositoryInstallSession {
-  id                String          @id @default(cuid())
-  userId            String
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  repositoryId      String
-  repository        SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  packageStorageKey String
-  packageSha256     String          @db.VarChar(64)
-  packageSize       BigInt
-  expiresAt         DateTime
-  consumedAt        DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([userId, expiresAt])
-  @@index([repositoryId, createdAt])
-  @@index([expiresAt])
-}
-
-model SkillRepositoryInstallEvent {
-  id               String          @id @default(cuid())
-  userId           String
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  repositoryId     String
-  repository       SkillRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  clientInstanceId String          @db.VarChar(120)
-  createdAt        DateTime        @default(now())
-
-  @@unique([userId, repositoryId, clientInstanceId])
-  @@index([repositoryId])
 }
 
 // 会议记录。音频走平台媒体对象存储，不占用户云盘配额，也不出现在云盘列表、

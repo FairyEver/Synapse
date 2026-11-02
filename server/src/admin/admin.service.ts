@@ -15,10 +15,6 @@ export type AdminUserListFilters = {
   readonly handle?: string
   readonly nickname?: string
 }
-type SkillRepositoryAdminListFilters = {
-  readonly status?: "active" | "removed"
-  readonly query?: string
-}
 // `satisfies` 是必须的：select 写成变量时 TS 不做多余属性检查，把关系字段名写错
 // （例如 teams 而不是 User 上的 teamMemberships）要等到运行期才会炸。
 const adminUserSelect = {
@@ -49,18 +45,6 @@ function toAdminUserRow<
   const { teamMemberships, ...rest } = user
   return { ...rest, teams: teamMemberships.map((membership) => membership.team) }
 }
-
-const adminSkillRepositorySelect = {
-  id: true,
-  name: true,
-  title: true,
-  visibility: true,
-  status: true,
-  owner: { select: { id: true, handle: true } },
-  updatedAt: true,
-} as const
-
-type AdminSkillRepositoryRecord = Prisma.SkillRepositoryGetPayload<{ select: typeof adminSkillRepositorySelect }>
 
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
@@ -339,59 +323,6 @@ export class AdminService {
     return createPasswordResetLink(this.prisma, id, publicAppUrl)
   }
 
-  async listSkillRepositories(
-    pagination?: PaginationQuery,
-    filters: SkillRepositoryAdminListFilters = {},
-  ): Promise<PaginatedResponse<unknown>> {
-    const page = pagination ?? parsePagination({})
-    const query = filters.query?.trim()
-    const where: Prisma.SkillRepositoryWhereInput = {
-      visibility: "public",
-      status: filters.status ?? "active",
-      ...(query ? {
-        OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { title: { contains: query, mode: "insensitive" } },
-          { owner: { handle: { contains: query, mode: "insensitive" } } },
-        ],
-      } : {}),
-    }
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.skillRepository.findMany({
-        ...toPrismaArgs(page),
-        where,
-        select: adminSkillRepositorySelect,
-      }),
-      this.prisma.skillRepository.count({ where }),
-    ])
-    return {
-      data: (data as AdminSkillRepositoryRecord[]).map(toAdminSkillRepositoryRow),
-      total,
-      page: page.page,
-      pageSize: page.pageSize,
-    }
-  }
-
-  async setSkillRepositoryRemoved(id: string, removed: boolean, actorEmail = "system", ipAddress = "system") {
-    const repository = await this.prisma.skillRepository.update({
-      where: { id },
-      data: { status: removed ? "removed" : "active" },
-      select: adminSkillRepositorySelect,
-    }).catch((error: unknown) => {
-      if (isRecordNotFoundError(error)) throw new NotFoundException("Skill 仓库不存在。")
-      throw error
-    })
-    await this.recordServiceManagedAuditSafely({
-      adminEmail: actorEmail,
-      action: removed ? "admin.skill_repository.remove" : "admin.skill_repository.restore",
-      targetType: "skill_repository",
-      targetId: id,
-      detail: { status: repository.status },
-      ipAddress,
-    })
-    return toAdminSkillRepositoryRow(repository as AdminSkillRepositoryRecord)
-  }
-
   private async recordServiceManagedAuditSafely(input: AuditRecordInput): Promise<void> {
     try {
       await this.auditLog?.record(input)
@@ -467,16 +398,4 @@ function isUniqueConstraintError(error: unknown): boolean {
 function normalizeAdminNote(value: string | null): string | null {
   const adminNote = value?.trim() ?? ""
   return adminNote ? adminNote : null
-}
-
-function toAdminSkillRepositoryRow(repository: AdminSkillRepositoryRecord) {
-  return {
-    id: repository.id,
-    name: repository.name,
-    title: repository.title,
-    visibility: repository.visibility,
-    status: repository.status,
-    owner: repository.owner,
-    updatedAt: repository.updatedAt,
-  }
 }

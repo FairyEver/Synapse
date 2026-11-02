@@ -27,7 +27,8 @@ import { assertSkillRuntimeEnvByteLength } from "./skill-env/file-policy"
 
 const logger = createMainLogger("service.content-skill-source")
 const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
-const SYNAPSE_SKILL_REPOSITORY_ID_FILE = ".synapse.repository.json"
+// Retired cloud identities remain excluded from local Skill publication.
+const LEGACY_CLOUD_SKILL_ID_FILE = ".synapse.repository.json"
 const SKILL_MAIN_FILE_PRIORITY = [
   "SKILL.md",
   "skill.md",
@@ -114,10 +115,6 @@ async function resolveSkillMainFile(dirPath: string, maxEntries?: number): Promi
   return mdFiles.length > 0 ? await resolveTrustedSkillMainFile(dirPath, path.join(dirPath, mdFiles[0] ?? "")) : null
 }
 
-async function resolveRootSkillMainFile(dirPath: string): Promise<string | null> {
-  return resolveTrustedSkillMainFile(dirPath, path.join(dirPath, "SKILL.md"))
-}
-
 async function resolveTrustedSkillMainFile(dirPath: string, filePath: string): Promise<string | null> {
   let info: Awaited<ReturnType<typeof lstat>>
   try {
@@ -183,7 +180,7 @@ async function readSkillDraftFromDirectory(
     if (!content.trim()) {
       throwInvalid("content", "Skill 主说明为空。")
     }
-    const controlFiles = [SYNAPSE_SKILL_ID_FILE, SYNAPSE_SKILL_REPOSITORY_ID_FILE]
+    const controlFiles = [SYNAPSE_SKILL_ID_FILE, LEGACY_CLOUD_SKILL_ID_FILE]
     const skip = new Set<string>([path.basename(mainFilePath), ...controlFiles])
     const state: SkillFileCollectionState = {
       controlFilesExcluded: [],
@@ -449,7 +446,7 @@ function sameFileSnapshot(
 }
 
 function controlFileName(name: string): boolean {
-  return name === SYNAPSE_SKILL_ID_FILE || name === SYNAPSE_SKILL_REPOSITORY_ID_FILE
+  return name === SYNAPSE_SKILL_ID_FILE || name === LEGACY_CLOUD_SKILL_ID_FILE
 }
 
 function createSkillSourceFingerprint(
@@ -624,10 +621,8 @@ export {
   assertDirectoryExists,
   createStoredSkillPublishFingerprint,
   readSkillDraftFromDirectory,
-  resolveRootSkillMainFile,
   resolveSkillMainFile,
   SYNAPSE_SKILL_ID_FILE,
-  SYNAPSE_SKILL_REPOSITORY_ID_FILE,
   type ContentSkillSourceDraft,
   type ContentSkillSourceSecurityDeps,
   type SkillSourceReadOptions,

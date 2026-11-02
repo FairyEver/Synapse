@@ -5,7 +5,6 @@ const adminRoutePatterns = [
   /^\/teams\/?$/u,
   /^\/teams\/[^/]+\/?$/u,
   /^\/devices\/?$/u,
-  /^\/skill-repositories\/?$/u,
   /^\/webhook-deliveries\/?$/u,
   /^\/audit-logs\/?$/u,
   /^\/problem-feedback\/?$/u,

@@ -75,7 +75,7 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 服务端 COS 按业务域隔离，不得因为“都是文件”混用 bucket：
 
 - `DRIVE_COS_*`：用户云盘文件、版本、Drive 公开素材和 Drive Sites 资源；受 Drive 权限、生命周期和容量统计约束。
-- `SKILL_REPOSITORY_COS_*`：云端 Skill 仓库文件、安装包和分发产物；不提供本地 fallback。
+- `SKILL_REPOSITORY_COS_*`：仅供云端 Skills 下线时的一次性部署清理，不再是运行时业务域。`deploy.sh` 停止旧 API、生成并恢复验证最终备份后，显式运行 `server/scripts/retire-cloud-skills.cjs --execute-deployment`，清空独立桶中 `skill-repositories/` 前缀后再删表；清理失败阻止迁移，重试继续。普通开发、容器启动与通用迁移不得自动清理 COS。预演仅对 `synapse_preflight_*` 恢复库运行 `--rehearsal`，只清克隆元数据，不访问 COS。迁移包含对象引用保护。风险扫描仍遵循 `ALLOW_RISKY_MIGRATIONS=1` 的既有放行机制。
 - `PLATFORM_MEDIA_COS_*`：用户/智能体头像、系统图标、模板/分享封面、模型图标，以及浏览器文档正文、文末留言和回复编辑产生的平台托管图片。默认私有读写，客户端不直接接触 COS bucket/key；系统头像使用 `avatars/system/v1/512/`，自定义头像使用 `avatars/users/`，分别由 `/api/avatars/system/<id>` 和 `/api/avatars/users/<id>` 代理公开读取；文档图片使用 `document-images/` 前缀，由服务端 `/object/<objectId>` 代理公开读取。生产环境必须完整配置该组变量。
 - `BACKUP_COS_*`：服务端灾备归档，当前 key 前缀为 `backups/`，不得承载运行时业务文件。
 
@@ -87,7 +87,7 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明字段、索引和记录字节预算的 SQLite 集合。批次最多 128 项（含 CAS 前置条件）及 256 KiB，只允许同一连接同步提交；artifact IO、SDK 和权限等待不得放进事务。冲突必须显式返回，提交成功后才发布 ID 通知。范围读取使用声明索引的等值前缀与下一字段边界，最多 101 行，不允许业务 SQL 或深 OFFSET。原有 namespace 不自动切换通知或存储语义；Agent V2 切换仍须完成消费者、迁移及备份验收。
 
-当前轻量 Backup 包含数据库和 Drive COS 对象清单，不包含 Drive、Skill Repository 或 Platform Media 的对象字节。需要可恢复的新域必须同步设计 manifest、复制和恢复流程。
+当前轻量 Backup 包含数据库和 Drive COS 对象清单，不包含 Drive 或 Platform Media 的对象字节。历史云端 Skills 对象字节也不在备份内，退役删除后不能仅凭数据库备份恢复。需要可恢复的新域必须同步设计 manifest、复制和恢复流程。
 
 ## 服务端 Node 安全基线
 

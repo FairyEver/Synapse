@@ -470,7 +470,7 @@ docker compose --env-file .env exec -T postgres createdb -U "$postgres_user" "$p
 docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$preflight_db" < "$ONLINE_BACKUP_FILE"
 
 database_url="postgresql://${postgres_user}:${postgres_password}@postgres:5432/${preflight_db}"
-SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps --entrypoint sh -e DATABASE_URL="$database_url" server -c "cd /app/server && npx prisma migrate deploy" </dev/null
+SYNAPSE_SERVER_IMAGE_TAG="$NEW_IMAGE_TAG" docker compose --env-file .env run --rm -T --no-deps --entrypoint sh -e DATABASE_URL="$database_url" server -c "cd /app/server && node scripts/retire-cloud-skills.cjs --rehearsal && npx prisma migrate deploy" </dev/null
 
 if [ "$MAIL_LEGACY_CUTOVER" = 1 ]; then
   docker compose --env-file .env exec -T postgres psql -X -v ON_ERROR_STOP=1 -U "$postgres_user" -d "$preflight_db" < scripts/purge-legacy-mail.sql
@@ -482,7 +482,7 @@ REMOTE_SCRIPT
 }
 
 deploy_remote_migrations() {
-  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env run --rm -T --no-deps --entrypoint sh server -c 'cd /app/server && npx prisma migrate deploy' </dev/null" || return 1
+  ssh "$SERVER" "cd $REMOTE_DIR/server && SYNAPSE_SERVER_IMAGE_TAG='$NEW_IMAGE_TAG' docker compose --env-file .env run --rm -T --no-deps --entrypoint sh server -c 'cd /app/server && node scripts/retire-cloud-skills.cjs --execute-deployment && npx prisma migrate deploy' </dev/null" || return 1
   if [ "${MAIL_LEGACY_CUTOVER:-}" = 1 ]; then
     ssh "$SERVER" "cd $REMOTE_DIR/server && bash -s" <<'REMOTE_SCRIPT' || return 1
 set -euo pipefail

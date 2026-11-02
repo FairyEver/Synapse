@@ -58,7 +58,6 @@ const mailBroadcastSchema = z.object({
 const userSortFields = ["createdAt", "updatedAt", "email", "handle", "status"] as const
 const deviceSortFields = ["lastSeenAt", "firstSeenAt", "deviceName", "platform", "appVersion"] as const
 const webhookDeliverySortFields = ["receivedAt", "status", "method"] as const
-const skillRepositorySortFields = ["createdAt", "updatedAt", "title", "name"] as const
 const mailSortFields = ["sentAt", "subject", "kind"] as const
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
@@ -246,24 +245,6 @@ export class AdminController {
     return result
   }
 
-  @Get("/skill-repositories")
-  async listSkillRepositories(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
-    const pagination = parsePagination(query, { allowedSortFields: skillRepositorySortFields })
-    const status = query.status === "removed" ? "removed" : "active"
-    const search = typeof query.query === "string" ? query.query.trim() : ""
-    const result = await this.admin.listSkillRepositories(pagination, {
-      status,
-      query: search || undefined,
-    })
-    await this.recordAdminRead(request, {
-      action: "admin.skill_repositories.list",
-      targetType: "skill_repository",
-      targetId: "list",
-      detail: { page: pagination.page, pageSize: pagination.pageSize, status, query: search || undefined },
-    })
-    return result
-  }
-
   @Patch("/users/:id/status")
   async updateUserStatus(@Param("id") id: string, @Body() body: unknown, @Req() request?: AdminRequest) {
     const result = userStatusSchema.safeParse(body)
@@ -299,16 +280,6 @@ export class AdminController {
       configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
       request,
     }))
-  }
-
-  @Post("/skill-repositories/:id/removed")
-  setSkillRepositoryRemoved(@Param("id") id: string, @Req() request?: AdminRequest) {
-    return this.admin.setSkillRepositoryRemoved(id, true, request?.admin?.email, request?.ip)
-  }
-
-  @Delete("/skill-repositories/:id/removed")
-  restoreSkillRepository(@Param("id") id: string, @Req() request?: AdminRequest) {
-    return this.admin.setSkillRepositoryRemoved(id, false, request?.admin?.email, request?.ip)
   }
 
   @Get("/audit-logs/export")

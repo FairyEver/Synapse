@@ -20,17 +20,13 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedWebhookDeliveriesIndexRouteImport } from './routes/_authenticated/webhook-deliveries/index'
 import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenticated/tables/index'
-import { Route as AuthenticatedSkillRepositoriesIndexRouteImport } from './routes/_authenticated/skill-repositories/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
 import { Route as NotificationsNotificationIdOpenRouteImport } from './routes/notifications/$notificationId/open'
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
-import { Route as AuthenticatedSkillRepositoriesExploreRouteImport } from './routes/_authenticated/skill-repositories/explore'
-import { Route as AuthenticatedSkillRepositoriesRepositoryIdRouteImport } from './routes/_authenticated/skill-repositories/$repositoryId'
 import { Route as AuthenticatedSettingsApiKeysRouteImport } from './routes/_authenticated/settings/api-keys'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 import { Route as ShareShareIdItemsBrowserItemIdRouteImport } from './routes/share/$shareId_/items/$browserItemId'
-import { Route as AuthenticatedSkillsOwnerHandleRepositoryNameRouteImport } from './routes/_authenticated/skills/$ownerHandle/$repositoryName'
 import { Route as AuthenticatedDriveItemsBrowserItemIdRouteImport } from './routes/_authenticated/drive/items/$browserItemId'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -91,12 +87,6 @@ const AuthenticatedTablesIndexRoute =
     path: '/tables/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedSkillRepositoriesIndexRoute =
-  AuthenticatedSkillRepositoriesIndexRouteImport.update({
-    id: '/skill-repositories/',
-    path: '/skill-repositories/',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
     id: '/',
@@ -121,18 +111,6 @@ const AuthenticatedWebhooksWebhookIdRoute =
     path: '/webhooks/$webhookId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedSkillRepositoriesExploreRoute =
-  AuthenticatedSkillRepositoriesExploreRouteImport.update({
-    id: '/skill-repositories/explore',
-    path: '/skill-repositories/explore',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedSkillRepositoriesRepositoryIdRoute =
-  AuthenticatedSkillRepositoriesRepositoryIdRouteImport.update({
-    id: '/skill-repositories/$repositoryId',
-    path: '/skill-repositories/$repositoryId',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedSettingsApiKeysRoute =
   AuthenticatedSettingsApiKeysRouteImport.update({
     id: '/api-keys',
@@ -149,12 +127,6 @@ const ShareShareIdItemsBrowserItemIdRoute =
     id: '/share/$shareId_/items/$browserItemId',
     path: '/share/$shareId/items/$browserItemId',
     getParentRoute: () => rootRouteImport,
-  } as any)
-const AuthenticatedSkillsOwnerHandleRepositoryNameRoute =
-  AuthenticatedSkillsOwnerHandleRepositoryNameRouteImport.update({
-    id: '/skills/$ownerHandle/$repositoryName',
-    path: '/skills/$ownerHandle/$repositoryName',
-    getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedDriveItemsBrowserItemIdRoute =
   AuthenticatedDriveItemsBrowserItemIdRouteImport.update({
@@ -173,18 +145,14 @@ export interface FileRoutesByFullPath {
   '/share/$shareId': typeof ShareShareIdRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
-  '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
-  '/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
   '/tables/': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
-  '/skills/$ownerHandle/$repositoryName': typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
   '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
 }
 export interface FileRoutesByTo {
@@ -196,18 +164,14 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
-  '/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  '/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
-  '/skill-repositories': typeof AuthenticatedSkillRepositoriesIndexRoute
   '/tables': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
   '/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
-  '/skills/$ownerHandle/$repositoryName': typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
   '/share/$shareId/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
 }
 export interface FileRoutesById {
@@ -222,18 +186,14 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
-  '/_authenticated/skill-repositories/$repositoryId': typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  '/_authenticated/skill-repositories/explore': typeof AuthenticatedSkillRepositoriesExploreRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
-  '/_authenticated/skill-repositories/': typeof AuthenticatedSkillRepositoriesIndexRoute
   '/_authenticated/tables/': typeof AuthenticatedTablesIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
   '/_authenticated/drive/items/$browserItemId': typeof AuthenticatedDriveItemsBrowserItemIdRoute
-  '/_authenticated/skills/$ownerHandle/$repositoryName': typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
   '/share/$shareId_/items/$browserItemId': typeof ShareShareIdItemsBrowserItemIdRoute
 }
 export interface FileRouteTypes {
@@ -248,18 +208,14 @@ export interface FileRouteTypes {
     | '/share/$shareId'
     | '/auth/desktop'
     | '/settings/api-keys'
-    | '/skill-repositories/$repositoryId'
-    | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
     | '/my-devices/'
     | '/settings/'
-    | '/skill-repositories/'
     | '/tables/'
     | '/webhook-deliveries/'
     | '/webhooks/'
     | '/drive/items/$browserItemId'
-    | '/skills/$ownerHandle/$repositoryName'
     | '/share/$shareId/items/$browserItemId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -271,18 +227,14 @@ export interface FileRouteTypes {
     | '/'
     | '/auth/desktop'
     | '/settings/api-keys'
-    | '/skill-repositories/$repositoryId'
-    | '/skill-repositories/explore'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
     | '/my-devices'
     | '/settings'
-    | '/skill-repositories'
     | '/tables'
     | '/webhook-deliveries'
     | '/webhooks'
     | '/drive/items/$browserItemId'
-    | '/skills/$ownerHandle/$repositoryName'
     | '/share/$shareId/items/$browserItemId'
   id:
     | '__root__'
@@ -296,18 +248,14 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
     | '/_authenticated/settings/api-keys'
-    | '/_authenticated/skill-repositories/$repositoryId'
-    | '/_authenticated/skill-repositories/explore'
     | '/_authenticated/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
-    | '/_authenticated/skill-repositories/'
     | '/_authenticated/tables/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
     | '/_authenticated/drive/items/$browserItemId'
-    | '/_authenticated/skills/$ownerHandle/$repositoryName'
     | '/share/$shareId_/items/$browserItemId'
   fileRoutesById: FileRoutesById
 }
@@ -402,13 +350,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTablesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/skill-repositories/': {
-      id: '/_authenticated/skill-repositories/'
-      path: '/skill-repositories'
-      fullPath: '/skill-repositories/'
-      preLoaderRoute: typeof AuthenticatedSkillRepositoriesIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/'
@@ -437,20 +378,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWebhooksWebhookIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/skill-repositories/explore': {
-      id: '/_authenticated/skill-repositories/explore'
-      path: '/skill-repositories/explore'
-      fullPath: '/skill-repositories/explore'
-      preLoaderRoute: typeof AuthenticatedSkillRepositoriesExploreRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/skill-repositories/$repositoryId': {
-      id: '/_authenticated/skill-repositories/$repositoryId'
-      path: '/skill-repositories/$repositoryId'
-      fullPath: '/skill-repositories/$repositoryId'
-      preLoaderRoute: typeof AuthenticatedSkillRepositoriesRepositoryIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/settings/api-keys': {
       id: '/_authenticated/settings/api-keys'
       path: '/api-keys'
@@ -471,13 +398,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/share/$shareId/items/$browserItemId'
       preLoaderRoute: typeof ShareShareIdItemsBrowserItemIdRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/skills/$ownerHandle/$repositoryName': {
-      id: '/_authenticated/skills/$ownerHandle/$repositoryName'
-      path: '/skills/$ownerHandle/$repositoryName'
-      fullPath: '/skills/$ownerHandle/$repositoryName'
-      preLoaderRoute: typeof AuthenticatedSkillsOwnerHandleRepositoryNameRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/drive/items/$browserItemId': {
       id: '/_authenticated/drive/items/$browserItemId'
@@ -508,37 +428,25 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
-  AuthenticatedSkillRepositoriesRepositoryIdRoute: typeof AuthenticatedSkillRepositoriesRepositoryIdRoute
-  AuthenticatedSkillRepositoriesExploreRoute: typeof AuthenticatedSkillRepositoriesExploreRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
-  AuthenticatedSkillRepositoriesIndexRoute: typeof AuthenticatedSkillRepositoriesIndexRoute
   AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
   AuthenticatedDriveItemsBrowserItemIdRoute: typeof AuthenticatedDriveItemsBrowserItemIdRoute
-  AuthenticatedSkillsOwnerHandleRepositoryNameRoute: typeof AuthenticatedSkillsOwnerHandleRepositoryNameRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
-  AuthenticatedSkillRepositoriesRepositoryIdRoute:
-    AuthenticatedSkillRepositoriesRepositoryIdRoute,
-  AuthenticatedSkillRepositoriesExploreRoute:
-    AuthenticatedSkillRepositoriesExploreRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
-  AuthenticatedSkillRepositoriesIndexRoute:
-    AuthenticatedSkillRepositoriesIndexRoute,
   AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
   AuthenticatedWebhooksIndexRoute: AuthenticatedWebhooksIndexRoute,
   AuthenticatedDriveItemsBrowserItemIdRoute:
     AuthenticatedDriveItemsBrowserItemIdRoute,
-  AuthenticatedSkillsOwnerHandleRepositoryNameRoute:
-    AuthenticatedSkillsOwnerHandleRepositoryNameRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

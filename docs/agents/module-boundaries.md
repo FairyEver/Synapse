@@ -6,6 +6,12 @@
 
 RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选coinCost。table.state及wait本人报价共享引擎，待选wait额外含roll报价；建房请求增加可选ruleOptions.rollCoins，不增加工具/路由/迁移。公开视角不追加本人钻石报价或候选。机器人继续依可用报价行动。
 
+## 云端 Skills 已移除（2026-11-02）
+
+- “我的 Skills / 探索 Skills”及管理、公开浏览、上传、Fork、安装和九项 MCP 能力已删除；没有兼容路由。重新设计前不得恢复旧入口或引导调用旧工具。
+- 保留资源仓库、本地编辑器 Skills、系统 Synapse Skill 与账号用户名；旧云身份文件仅作本地读取排除，不再写入或恢复关联。
+- 历史六表和独立 COS `skill-repositories/` 前缀由下次正式部署退役；当前任务不操作线上。普通启动与预演不删除 COS，详见仓库指南。
+
 ## 云端数据表
 
 - 服务端逻辑表/JSONB域，区别于桌面Database/Data Store。Console与开放REST API共享业务规则，无桌面入口或MCP。按用户后续决定不提供独立Skill；AI直接使用可整页复制为Markdown的API文档与OpenAPI契约，不增加Skill下载或分发配置。
@@ -261,8 +267,7 @@ RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选
 ## Rule、Skill、Content 与 Secrets
 
 - 写入编辑器目录、覆盖、替换、备份失败等敏感路径必须确认、权限检查和审计；备份失败阻断替换。安装与复制文案不得混用。
-- 资源仓库非只读 Skill 采用协作编辑：有写权限且完成仓库身份配置的用户可更新、删除、恢复和永久删除，判断依据只有仓库可写，不判断 `createdBy`；更新保留原 `createdBy` 不变并记录修改者。该规则不改变云 Skill Repository owner 模型，也不扩展到 Rule/Prompt——Rule 与 Prompt 的更新和删除（含恢复、永久删除）仍仅限创建者。
-- 云 Skill Repository 的 owner 删除为永久删除，删除后立即释放同一 owner 下的名称；管理员对公开仓库的下架仍保留可恢复记录并继续占用原名称。两种删除语义不得混用。
+- 资源仓库非只读 Skill 采用协作编辑：有写权限且完成仓库身份配置的用户可更新、删除、恢复和永久删除，判断依据只有仓库可写，不判断 `createdBy`；更新保留原 `createdBy` 不变并记录修改者。该规则不扩展到 Rule/Prompt——Rule 与 Prompt 的更新和删除（含恢复、永久删除）仍仅限创建者。
 - Skill 卸载统一使用 `skill-uninstaller`：无路径只扫已注册 Agent 全局 Skill 根，有路径则受限递归；单个 `SKILL.md` 最大 1 MiB，超限标记不完整并继续下级；执行前重验名称、真实路径和符号链接，确认后只移入系统废纸篓。IDE 管理不得另写删除逻辑。
 - 可持续配置在根 `.env.example` 声明，安装器生成/合并本地 `.env`；每个 Skill 最多 100 个变量。不得把真实 `.env` 写入资源仓库，也不得把持续同步值替换进 `SKILL.md`。
 - 密钥名称与 `.env` key 构成关联，创建后不可改名；Secrets update 至少包含 `value` 或 `description`。值变化只扫描可信编辑器 Skill 目录，经用户确认进入内存串行队列，不保存安装实例、不静默改写。

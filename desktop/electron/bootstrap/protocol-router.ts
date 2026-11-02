@@ -1,5 +1,3 @@
-import { parseSkillRepositoryInstallProtocolUrl } from "../../src/lib/skill-repository-install-window"
-import type { SynapseSkillRepositoryInstallWindowRequest } from "../../src/types/skill-repository-install"
 import { DESKTOP_UPDATE_INTENT_TOKEN_MAX_LENGTH } from "../../config"
 import type { DispatchResult } from "../../synapse-capabilities/shared/types"
 import { isAppDeepLinkCandidate, parseDeclaredAppDeepLink } from "./app-deep-link"
@@ -12,7 +10,6 @@ type ProtocolUrlRouterDeps = {
   focusMainWindow: () => void
   handleAuthCallback: (url: string) => Promise<unknown>
   logger: ProtocolRouterLogger
-  openSkillRepositoryInstallWindow: (request: SynapseSkillRepositoryInstallWindowRequest) => Promise<void>
   publishUpdateOpenRequest: (automatic: boolean) => void
   verifyUpdateIntent: (token: string) => Promise<boolean>
   privateProtocolHandlers?: Readonly<Record<string, (params: Record<string, unknown>) => Promise<void>>>
@@ -46,19 +43,6 @@ function isAccountAuthCallbackUrl(rawUrl: string): boolean {
       rawUrl === "synapse://auth/desktop/callback"
       || rawUrl.startsWith("synapse://auth/desktop/callback?")
       || rawUrl.startsWith("synapse://auth/desktop/callback#")
-    )
-  }
-}
-
-function isSkillRepositoryInstallUrlCandidate(rawUrl: string): boolean {
-  try {
-    const parsed = new URL(rawUrl)
-    return parsed.protocol === "synapse:" && parsed.hostname === "skill-install"
-  } catch {
-    return (
-      rawUrl === "synapse://skill-install"
-      || rawUrl.startsWith("synapse://skill-install?")
-      || rawUrl.startsWith("synapse://skill-install/")
     )
   }
 }
@@ -157,22 +141,7 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
       return 1
     }
 
-    const skillInstallRequest = parseSkillRepositoryInstallProtocolUrl(url)
-    if (skillInstallRequest) {
-      try {
-        await deps.openSkillRepositoryInstallWindow(skillInstallRequest)
-      } catch (error) {
-        deps.logger.warn("Failed to open skill repository install window.", { error })
-        deps.focusMainWindow()
-      }
-      return 0
-    }
-
-    deps.logger.warn(
-      isSkillRepositoryInstallUrlCandidate(url)
-        ? "Ignored invalid skill repository install URL."
-        : "Ignored unknown synapse protocol URL.",
-    )
+    deps.logger.warn("Ignored unknown synapse protocol URL.")
     deps.focusMainWindow()
     return 0
   }
@@ -214,7 +183,7 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
   function shouldCreateMainWindowBeforeStart(): boolean {
     if (pendingUrls.length === 0) return true
     return pendingUrls.some((url) => (
-      !parseSkillRepositoryInstallProtocolUrl(url) && !isAppDeepLinkCandidate(url)
+      !isAppDeepLinkCandidate(url)
     ))
   }
 

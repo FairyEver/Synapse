@@ -53,6 +53,7 @@ COPY --from=build /app/dashboard/dist ./dashboard/dist
 COPY --from=build /app/document/.vitepress/dist ./document
 COPY --from=build /app/shared ./shared
 COPY server/prisma ./server/prisma
+COPY server/scripts ./server/scripts
 COPY server/docker-entrypoint.sh ./server/docker-entrypoint.sh
 COPY server/package.json ./server/package.json
 COPY server/nginx.conf /etc/nginx/http.d/default.conf

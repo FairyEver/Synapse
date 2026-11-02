@@ -13,7 +13,6 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
     mailInternalDispatch: vi.fn(),
     modelPriceDispatch: vi.fn(),
     repositoryDispatch: vi.fn(),
-    skillRepositoryDispatch: vi.fn(),
     workflowDispatch: vi.fn(),
     ...overrides,
   }
@@ -94,21 +93,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
-  })
-
-  it("routes Skill Repository actions unchanged to the Skill Repository dispatcher", async () => {
-    const skillRepositoryDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
-    const deps = createRouterDeps({
-      skillRepositoryDispatch,
-    })
-    const router = createSynapseActionRouter(deps)
-
-    await expect(router.dispatch("app.skill_repository.item.list", {}, { source: "api" })).resolves.toEqual({
-      ok: true,
-      data: [],
-    })
-    expect(skillRepositoryDispatch).toHaveBeenCalledWith("app.skill_repository.item.list", {}, { source: "api" })
-    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
   })
 
   it("routes Automation actions to the Automation dispatcher", async () => {
@@ -197,7 +181,6 @@ describe("createSynapseActionRouter", () => {
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.modelPriceDispatch).not.toHaveBeenCalled()
     expect(deps.repositoryDispatch).not.toHaveBeenCalled()
-    expect(deps.skillRepositoryDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -238,13 +221,5 @@ describe("createSynapseActionRouter", () => {
     const router = createSynapseActionRouter(createRouterDeps())
 
     await expect(router.dispatch("missingAction", {}, { source: "api" })).rejects.toThrow(/Unknown action/)
-  })
-
-  it("does not map legacy skill_repository action ids", async () => {
-    const router = createSynapseActionRouter(createRouterDeps())
-
-    await expect(router.dispatch("skill_repository.item.list", {}, { source: "api" })).rejects.toThrow(
-      /Unknown action/,
-    )
   })
 })

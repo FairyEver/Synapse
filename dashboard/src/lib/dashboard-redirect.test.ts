@@ -11,10 +11,10 @@ import {
 describe('buildDashboardRedirectPath', () => {
   it('keeps search and hash from the current location', () => {
     expect(buildDashboardRedirectPath({
-      pathname: '/console/skill-repositories/repo-1',
+      pathname: '/console/tables/table-1',
       search: '?tab=files',
       hash: '#retry',
-    })).toBe('/console/skill-repositories/repo-1?tab=files#retry')
+    })).toBe('/console/tables/table-1?tab=files#retry')
   })
 })
 

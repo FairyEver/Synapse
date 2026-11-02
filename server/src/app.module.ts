@@ -27,7 +27,6 @@ import { NotificationModule } from "./notifications/notification.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { ProfileAvatarModule } from "./profile-avatar/profile-avatar.module"
-import { SkillRepositoryModule } from "./skill-repository/skill-repository.module"
 import { TeamModule } from "./team/team.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
@@ -51,7 +50,7 @@ type RequestLogObject = {
 function hasSensitiveRequestUrl(url: string): boolean {
   const pathname = url.split("?")[0] ?? ""
   return pathname === "/api/game"
-    || /^\/api\/(?:open\/v1|console)\/tables(?:\/|$)/u.test(pathname)
+    || /^\/api\/(?:open\/v1|console)\/tables(?:\/|$)/iu.test(pathname)
     || pathname.startsWith("/api/game/")
     || pathname === "/api/todos"
     || pathname.startsWith("/api/todos/")
@@ -120,7 +119,6 @@ function hasSensitiveRequestUrl(url: string): boolean {
     AgentPersonasModule,
     ApiKeyModule,
     OpenApiModule,
-    SkillRepositoryModule,
     DriveModule,
     AdminModule,
     BackupModule,

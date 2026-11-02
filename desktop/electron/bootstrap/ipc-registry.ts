@@ -21,7 +21,6 @@ import { editorIpcModule } from "../modules/editor/ipc"
 import { configIpcModule } from "../modules/config/ipc"
 import { repositoryIpcModule } from "../modules/repository/ipc"
 import { contentIpcModule } from "../modules/content/ipc"
-import { skillRepositoryInstallIpcModule } from "../modules/skill-repository-install/ipc"
 import { installersIpcModule } from "../modules/installers/ipc"
 import { agentIpcModule } from "../modules/agent/ipc"
 import { opsIpcModule } from "../modules/ops/ipc"
@@ -76,7 +75,6 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(configIpcModule, ctx)
   registry.register(repositoryIpcModule, ctx)
   registry.register(contentIpcModule, ctx)
-  registry.register(skillRepositoryInstallIpcModule, ctx)
   registry.register(installersIpcModule, ctx)
   registry.register(agentIpcModule, ctx)
   registry.register(automationIpcModule, ctx)
@@ -129,7 +127,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   configIpcModule,
   repositoryIpcModule,
   contentIpcModule,
-  skillRepositoryInstallIpcModule,
   installersIpcModule,
   agentIpcModule,
   automationIpcModule,

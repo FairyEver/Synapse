@@ -61,7 +61,6 @@ import { SharedInstallerFlow } from "@/modules/installers/shared/shared-installe
 import type { SynapseEditorAdapterSummary } from "@/types/editor"
 import type {
   EditorScanQuickPublishDraft,
-  EditorScanSkillRepositoryIdentityRetryRequest,
   EditorScanSkillFileEntry,
   ScanItemForDetail,
 } from "@/types/editor-scan"
@@ -72,13 +71,6 @@ import {
   buildSkillQuickPublishPayload,
   formatQuickPublishSourceLabel,
 } from "../lib/quick-publish"
-import {
-  buildRetrySkillRepositoryIdentityRequest,
-  buildUploadSkillToSkillRepositoryErrorMessage,
-  buildUploadSkillToSkillRepositoryRequest,
-  buildUploadSkillToSkillRepositorySuccessMessage,
-  getUploadSkillToSkillRepositoryDisabledReason,
-} from "../lib/skill-repository-upload"
 import { EditorCopyDialog } from "./editor-copy-dialog"
 
 const logger = createRendererLogger("editor-scan")
@@ -90,12 +82,6 @@ function logSafeItemPath(filePath: string): string {
 }
 
 type AttachmentDiff = { added: number; changed: number; removed: number }
-
-type SkillRepositoryIdentityRetryState = {
-  request: EditorScanSkillRepositoryIdentityRetryRequest
-  managementUrl: string
-  error: string | null
-}
 
 async function buildAttachmentDiff(
   draft: Extract<EditorScanQuickPublishDraft, { itemType: "skill" }>,
@@ -172,12 +158,6 @@ function ScanItemDetailDialog({
   const [overwriteDiff, setOverwriteDiff] = useState<AttachmentDiff | null>(null)
   const [overwriteUnavailableReason, setOverwriteUnavailableReason] = useState<string | null>(null)
   const [isOverwriteBusy, setIsOverwriteBusy] = useState(false)
-  const [isSkillRepositoryUploadBusy, setIsSkillRepositoryUploadBusy] = useState(false)
-  const [isSkillRepositoryUploadConfirmOpen, setIsSkillRepositoryUploadConfirmOpen] = useState(false)
-  const [skillRepositoryPublishDraft, setSkillRepositoryPublishDraft] = useState<Extract<EditorScanQuickPublishDraft, { itemType: "skill" }> | null>(null)
-  const [skillRepositoryManagementUrl, setSkillRepositoryManagementUrl] = useState<string | null>(null)
-  const [skillRepositoryIdentityRetry, setSkillRepositoryIdentityRetry] = useState<SkillRepositoryIdentityRetryState | null>(null)
-  const [isSkillRepositoryIdentityRetryBusy, setIsSkillRepositoryIdentityRetryBusy] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -195,12 +175,6 @@ function ScanItemDetailDialog({
       setOverwriteDiff(null)
       setOverwriteUnavailableReason(null)
       setIsOverwriteBusy(false)
-      setIsSkillRepositoryUploadBusy(false)
-      setIsSkillRepositoryUploadConfirmOpen(false)
-      setSkillRepositoryPublishDraft(null)
-      setSkillRepositoryManagementUrl(null)
-      setSkillRepositoryIdentityRetry(null)
-      setIsSkillRepositoryIdentityRetryBusy(false)
       return
     }
     const timer = setTimeout(() => setContentReady(true), 200)
@@ -590,159 +564,10 @@ function ScanItemDetailDialog({
     await publishAsNew()
   }, [item, publishAsNew])
 
-  const prepareSkillRepositoryUpload = useCallback(async () => {
-    if (!item) return
-    const disabled = getUploadSkillToSkillRepositoryDisabledReason(item)
-    if (disabled) return
-    setIsSkillRepositoryUploadBusy(true)
-    setQuickPublishError(null)
-    try {
-      const bridge = getSynapseBridge()
-      if (!bridge) throw new Error("当前窗口无法读取本地内容。")
-      const draft = await bridge.editorScan.prepareQuickPublishDraft({
-        itemType: "skill",
-        itemPath: item.path,
-        itemName: item.name,
-        metadata: item.metadata,
-        purpose: "publish",
-        synapseContentId: item.synapseContentId ?? undefined,
-      })
-      if (draft.itemType !== "skill") throw new Error("读取 Skill 发布内容失败。")
-      setSkillRepositoryPublishDraft(draft)
-      setIsSkillRepositoryUploadConfirmOpen(true)
-    } catch (error) {
-      setQuickPublishError(buildUploadSkillToSkillRepositoryErrorMessage(error))
-    } finally {
-      setIsSkillRepositoryUploadBusy(false)
-    }
-  }, [item])
-
-  const openSkillRepositoryManagement = useCallback(async (managementUrl: string) => {
-    const bridge = getSynapseBridge()
-    if (!bridge) {
-      setSkillRepositoryManagementUrl(managementUrl)
-      notifyError("无法打开 Synapse。")
-      return
-    }
-    try {
-      await bridge.shell.openExternal(managementUrl)
-    } catch (openError) {
-      logger.warn("Skill Repository management URL open failed.", {
-        editorId: item?.editorId,
-        error: openError,
-        itemType: item?.type,
-        pathBasename: item?.path ? logSafeItemPath(item.path) : undefined,
-        scope: item?.scope,
-      })
-      setSkillRepositoryManagementUrl(managementUrl)
-      notifyError("无法打开 Synapse。")
-    }
-  }, [item, notifyError])
-
-  const handleUploadSkillToSkillRepository = useCallback(async () => {
-    if (!item || !skillRepositoryPublishDraft) return
-    const disabled = getUploadSkillToSkillRepositoryDisabledReason(item)
-    if (disabled) return
-    setIsSkillRepositoryUploadBusy(true)
-    setQuickPublishError(null)
-
-    try {
-      const bridge = getSynapseBridge()
-      if (!bridge) {
-        throw new Error("当前窗口无法读取本地内容。")
-      }
-
-      const result = await bridge.editorScan.uploadSkillToSkillRepository(
-        {
-          ...buildUploadSkillToSkillRepositoryRequest(item),
-          expectedSourceFingerprint: skillRepositoryPublishDraft?.sourceFingerprint,
-        },
-      )
-      setIsSkillRepositoryUploadConfirmOpen(false)
-      success(buildUploadSkillToSkillRepositorySuccessMessage())
-      if (!result.identityWritten) {
-        setSkillRepositoryIdentityRetry({
-          request: buildRetrySkillRepositoryIdentityRequest(
-            item,
-            result,
-            skillRepositoryPublishDraft.sourceFingerprint,
-          ),
-          managementUrl: result.managementUrl,
-          error: result.identityWriteError ?? null,
-        })
-      } else if (result.identityMigrationWarning) {
-        warning("云仓库已上传，旧身份文件清理失败，不影响本次上传。")
-      }
-      logger.info("Skill Repository upload completed from scan detail.", {
-        editorId: item.editorId,
-        identityWritten: result.identityWritten,
-        itemType: item.type,
-        pathBasename: logSafeItemPath(item.path),
-        scope: item.scope,
-      })
-
-      if (result.identityWritten) await openSkillRepositoryManagement(result.managementUrl)
-    } catch (error) {
-      logger.warn("Skill Repository upload from scan detail failed.", {
-        editorId: item.editorId,
-        error,
-        itemType: item.type,
-        pathBasename: logSafeItemPath(item.path),
-        scope: item.scope,
-      })
-      setQuickPublishError(buildUploadSkillToSkillRepositoryErrorMessage(error))
-    } finally {
-      setIsSkillRepositoryUploadBusy(false)
-    }
-  }, [item, openSkillRepositoryManagement, skillRepositoryPublishDraft, success, warning])
-
-  const handleRetrySkillRepositoryIdentity = useCallback(async () => {
-    if (!skillRepositoryIdentityRetry) return
-    setIsSkillRepositoryIdentityRetryBusy(true)
-    setSkillRepositoryIdentityRetry((current) => current ? { ...current, error: null } : null)
-    try {
-      const bridge = getSynapseBridge()
-      if (!bridge) throw new Error("当前窗口无法处理本机内容。")
-      const result = await bridge.editorScan.retrySkillRepositoryIdentity(skillRepositoryIdentityRetry.request)
-      const managementUrl = skillRepositoryIdentityRetry.managementUrl
-      logger.info("Skill Repository identity retry completed from scan detail.", {
-        editorId: skillRepositoryIdentityRetry.request.editorId,
-        itemType: skillRepositoryIdentityRetry.request.itemType,
-        pathBasename: logSafeItemPath(skillRepositoryIdentityRetry.request.itemPath),
-        scope: skillRepositoryIdentityRetry.request.scope,
-      })
-      setSkillRepositoryIdentityRetry(null)
-      success("本地关联已恢复。")
-      if (result.identityMigrationWarning) {
-        warning("本地关联已恢复，旧身份文件清理失败。")
-      }
-      try {
-        await onChanged?.()
-      } catch {
-        warning("本地关联已恢复，列表刷新失败。")
-      }
-      await openSkillRepositoryManagement(managementUrl)
-    } catch (error) {
-      logger.warn("Skill Repository identity retry failed from scan detail.", {
-        editorId: skillRepositoryIdentityRetry.request.editorId,
-        errorName: error instanceof Error ? error.name : typeof error,
-        itemType: skillRepositoryIdentityRetry.request.itemType,
-        pathBasename: logSafeItemPath(skillRepositoryIdentityRetry.request.itemPath),
-        scope: skillRepositoryIdentityRetry.request.scope,
-      })
-      setSkillRepositoryIdentityRetry((current) => current
-        ? { ...current, error: buildUploadSkillToSkillRepositoryErrorMessage(error) }
-        : null)
-    } finally {
-      setIsSkillRepositoryIdentityRetryBusy(false)
-    }
-  }, [onChanged, openSkillRepositoryManagement, skillRepositoryIdentityRetry, success, warning])
-
   if (!item) return null
 
   const canReinstall = item.source === "synapse" && Boolean(item.synapseContentId)
   const canPublishToRepo = item.source === "synapse" && Boolean(item.synapseContentId)
-  const uploadSkillToRepositoryDisabledReason = getUploadSkillToSkillRepositoryDisabledReason(item)
 
   const metaEntries = item.metadata
     ? Object.entries(item.metadata).filter(([, v]) => v)
@@ -866,107 +691,6 @@ function ScanItemDetailDialog({
             >
               {isOverwriteBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
               覆盖现有内容
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={isSkillRepositoryUploadConfirmOpen}
-        onOpenChange={(nextOpen) => {
-          if (!isSkillRepositoryUploadBusy) setIsSkillRepositoryUploadConfirmOpen(nextOpen)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>上传到 Skill Repository</AlertDialogTitle>
-            <AlertDialogDescription>
-              {skillRepositoryPublishDraft ? (
-                <span className="space-y-1">
-                  <span className="block">
-                    将上传 {skillRepositoryPublishDraft.sourceImportSummary.fileCount} 个文件，共 {formatSkillAttachmentSize(skillRepositoryPublishDraft.sourceImportSummary.totalBytes)}。
-                  </span>
-                  <span className="block">
-                    .env、两类身份文件、其他隐藏项和符号链接不会上传。
-                  </span>
-                </span>
-              ) : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSkillRepositoryUploadBusy}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSkillRepositoryUploadBusy}
-              onClick={(event) => {
-                event.preventDefault()
-                void handleUploadSkillToSkillRepository()
-              }}
-            >
-              {isSkillRepositoryUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-              确认上传
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={skillRepositoryIdentityRetry !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen && !isSkillRepositoryIdentityRetryBusy) setSkillRepositoryIdentityRetry(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>云仓库已上传</AlertDialogTitle>
-            <AlertDialogDescription>
-              {skillRepositoryIdentityRetry?.error ?? "本地关联写入失败。"}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSkillRepositoryIdentityRetryBusy}>关闭</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSkillRepositoryIdentityRetryBusy}
-              onClick={(event) => {
-                event.preventDefault()
-                void handleRetrySkillRepositoryIdentity()
-              }}
-            >
-              {isSkillRepositoryIdentityRetryBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-              重试关联
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={skillRepositoryManagementUrl !== null}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setSkillRepositoryManagementUrl(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Skill 仓库已保存</AlertDialogTitle>
-            <AlertDialogDescription>
-              <span className="block break-all">{skillRepositoryManagementUrl}</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>关闭</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault()
-                if (skillRepositoryManagementUrl) {
-                  void navigator.clipboard.writeText(skillRepositoryManagementUrl).then(() => {
-                    success("已复制到剪贴板。")
-                    setSkillRepositoryManagementUrl(null)
-                  }).catch(() => {
-                    notifyError("复制失败。")
-                  })
-                }
-              }}
-            >
-              复制链接
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1117,15 +841,6 @@ function ScanItemDetailDialog({
                       }}
                     >
                       发布到仓库
-                    </DropdownMenuItem>
-                  ) : null}
-                  {item.type === "skill" ? (
-                    <DropdownMenuItem
-                      disabled={isSkillRepositoryUploadBusy || uploadSkillToRepositoryDisabledReason !== null}
-                      onSelect={() => void prepareSkillRepositoryUpload()}
-                    >
-                      {isSkillRepositoryUploadBusy ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : null}
-                      上传到 Skill Repository
                     </DropdownMenuItem>
                   ) : null}
                 </DropdownMenuGroup>

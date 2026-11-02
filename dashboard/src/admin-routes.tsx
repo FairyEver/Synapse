@@ -15,7 +15,6 @@ const DevicesPage = lazyRouteComponent(() => import('@/features/devices'));
 const LogsPage = lazyRouteComponent(() => import('@/features/logs'));
 const MailPage = lazyRouteComponent(() => import('@/features/mail'));
 const ProblemFeedbackPage = lazyRouteComponent(() => import('@/features/problem-feedback'));
-const SkillRepositoryAdminPage = lazyRouteComponent(() => import('@/features/skill-repository'), 'SkillRepositoryAdminPage');
 const SystemPage = lazyRouteComponent(() => import('@/features/system'));
 const TeamsPage = lazyRouteComponent(() => import('@/features/teams'));
 const TeamDetailPage = lazyRouteComponent(() => import('@/features/teams/team-detail'));
@@ -67,18 +66,6 @@ const authenticatedRoute = createRoute({
 function adminPage<const TPath extends string>(path: TPath, component: RouteComponent) {
     return createRoute({ getParentRoute: () => authenticatedRoute, path, component });
 }
-const skillSearchSchema = z.object({
-    page: z.coerce.number().optional(), pageSize: z.coerce.number().optional(),
-    sortBy: z.enum(['createdAt', 'updatedAt', 'title', 'name']).optional(),
-    sortOrder: z.enum(['asc', 'desc']).optional(), status: z.enum(['active', 'removed']).optional(),
-    query: z.string().optional(),
-});
-const skillRepositoriesRoute = createRoute({
-    getParentRoute: () => authenticatedRoute,
-    path: 'skill-repositories',
-    validateSearch: skillSearchSchema,
-    component: () => <SkillRepositoryAdminPage search={skillRepositoriesRoute.useSearch()}/>,
-});
 const webhookSearchSchema = z.object({
     page: z.coerce.number().optional(), pageSize: z.coerce.number().optional(), sortBy: z.string().optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(), webhookId: z.string().optional(), status: z.string().optional(),
@@ -121,7 +108,7 @@ export const adminRouteTree = rootRoute.addChildren([
         adminPage('teams', TeamsPage), teamDetailRoute,
         adminPage('telemetry', TelemetryPage),
         mailRoute,
-        skillRepositoriesRoute, webhookDeliveriesRoute, adminPage('audit-logs', AuditLogsPage),
+        webhookDeliveriesRoute, adminPage('audit-logs', AuditLogsPage),
         adminPage('problem-feedback', ProblemFeedbackPage),
         adminPage('backup', BackupPage), adminPage('logs', LogsPage),
     ]),

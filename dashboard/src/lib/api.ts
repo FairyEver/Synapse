@@ -47,22 +47,6 @@ import type {
   DriveFolderUploadPrepareResult,
   DriveUploadPrepareResult,
   DriveUsageDto,
-  SkillRepositoryDeleteResultDto,
-  SkillRepositoryDetailDto,
-  SkillRepositoryFileContentDto,
-  SkillRepositoryFileDeleteInput,
-  SkillRepositoryFileRenameInput,
-  SkillRepositoryForkInput,
-  SkillRepositoryForkResultDto,
-  SkillRepositoryInstallSessionDto,
-  SkillRepositoryItemDto,
-  SkillRepositoryListResultDto,
-  SkillRepositoryPublicListInput,
-  SkillRepositoryPublicPathDto,
-  SkillRepositoryStatus,
-  SkillRepositoryTextSaveInput,
-  SkillRepositoryUpdateInput,
-  SkillRepositoryVisibility,
   WebhookDeliveryDto,
   WebhookDeliveryHistoryDto,
 } from '@synapse/shared'
@@ -431,24 +415,6 @@ export type DashboardApiKeyCreateResult = {
   secret: string
 }
 
-export type AdminSkillRepositoryRow = {
-  id: string
-  name: string
-  title: string
-  visibility: SkillRepositoryVisibility
-  status: SkillRepositoryStatus
-  owner: {
-    id: string
-    handle: string
-  }
-  updatedAt: string
-}
-
-export type AdminSkillRepositoryListQuery = PaginationOptions & {
-  status?: SkillRepositoryStatus
-  query?: string
-}
-
 // 排序字段白名单由服务端把关（team.controller.ts 的 teamSortFields，越界报「排序字段无效。」），
 // 这里不收窄类型：收窄会和服务端共用的 getServerTableSortQuery（返回 string）打架。
 export type AdminTeamListQuery = PaginationOptions
@@ -617,7 +583,6 @@ export type AdminDriveStorageStatus = {
 const consoleApiBasePath = '/api/console'
 const legacyDashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
-const skillRepositoryApiBasePath = '/api/skill-repositories'
 const driveApiBasePath = '/api/drive'
 const driveBrowserApiBasePath = '/api/drive/browser'
 const desktopAuthorizePath = '/api/auth/desktop/authorize'
@@ -674,7 +639,6 @@ export function shouldNotifyAuthExpired(path: string, status: number, errorCode?
     !path.startsWith(adminApiBasePath) &&
     !path.startsWith(consoleApiBasePath) &&
     !path.startsWith(legacyDashboardApiBasePath) &&
-    !path.startsWith(skillRepositoryApiBasePath) &&
     !path.startsWith('/api/notifications/') &&
     !path.startsWith('/api/game/') &&
     !isProtectedDriveApiPath(path)
@@ -794,17 +758,6 @@ function paginationSuffix(options: PaginationOptions) {
   if (options.sortOrder) query.set('sortOrder', options.sortOrder)
   const value = query.toString()
   return value ? `?${value}` : ''
-}
-
-function adminSkillRepositoryQuerySuffix(options: AdminSkillRepositoryListQuery = {}) {
-  return querySuffix({
-    page: options.page,
-    pageSize: options.pageSize,
-    sortBy: options.sortBy,
-    sortOrder: options.sortOrder,
-    status: options.status,
-    query: options.query,
-  })
 }
 
 const adminTeamBasePath = `${adminApiBasePath}/teams`
@@ -1092,89 +1045,6 @@ export const dashboardApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  listMySkillRepositories: () =>
-    request<SkillRepositoryItemDto[]>(`${skillRepositoryApiBasePath}/mine`),
-  listPublicSkillRepositories: (options: SkillRepositoryPublicListInput = {}) =>
-    request<SkillRepositoryListResultDto>(
-      `${skillRepositoryApiBasePath}${querySuffix({
-        page: options.page,
-        pageSize: options.pageSize,
-        query: options.query ?? undefined,
-      })}`
-    ),
-  getSkillRepository: (id: string) =>
-    request<SkillRepositoryDetailDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}`
-    ),
-  getSkillRepositoryByPath: (ownerHandle: string, repositoryName: string) =>
-    request<SkillRepositoryPublicPathDto>(
-      `${skillRepositoryApiBasePath}/by-path/${encodeURIComponent(ownerHandle)}/${encodeURIComponent(repositoryName)}`
-    ),
-  updateSkillRepository: (id: string, input: SkillRepositoryUpdateInput) =>
-    request<SkillRepositoryDetailDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(input),
-      }
-    ),
-  deleteSkillRepository: (id: string) =>
-    request<SkillRepositoryDeleteResultDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}`,
-      { method: 'DELETE' }
-    ),
-  getSkillRepositoryFileContent: (id: string, path: string) =>
-    request<SkillRepositoryFileContentDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/files/content?${new URLSearchParams({ path }).toString()}`
-    ),
-  getSkillRepositoryFileContentByPath: (ownerHandle: string, repositoryName: string, path: string) =>
-    request<SkillRepositoryFileContentDto>(
-      `${skillRepositoryApiBasePath}/by-path/${encodeURIComponent(ownerHandle)}/${encodeURIComponent(repositoryName)}/files/content?${new URLSearchParams({ path }).toString()}`
-    ),
-  getSkillRepositoryFileDownloadUrl: (id: string, path: string) =>
-    `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/files/download?${new URLSearchParams({ path }).toString()}`,
-  getSkillRepositoryFileDownloadUrlByPath: (ownerHandle: string, repositoryName: string, path: string) =>
-    `${skillRepositoryApiBasePath}/by-path/${encodeURIComponent(ownerHandle)}/${encodeURIComponent(repositoryName)}/files/download?${new URLSearchParams({ path }).toString()}`,
-  forkSkillRepository: (id: string, input: SkillRepositoryForkInput = {}) =>
-    request<SkillRepositoryForkResultDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/fork`,
-      {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }
-    ),
-  createSkillRepositoryInstallSession: (id: string) =>
-    request<SkillRepositoryInstallSessionDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/install-sessions`,
-      {
-        method: 'POST',
-        body: JSON.stringify({}),
-      }
-    ),
-  saveSkillRepositoryTextFile: (id: string, input: SkillRepositoryTextSaveInput) =>
-    request<SkillRepositoryDetailDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/files/text`,
-      {
-        method: 'PUT',
-        body: JSON.stringify(input),
-      }
-    ),
-  renameSkillRepositoryFile: (id: string, input: SkillRepositoryFileRenameInput) =>
-    request<SkillRepositoryDetailDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/files/rename`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(input),
-      }
-    ),
-  deleteSkillRepositoryFile: (id: string, input: SkillRepositoryFileDeleteInput) =>
-    request<SkillRepositoryDetailDto>(
-      `${skillRepositoryApiBasePath}/${encodeURIComponent(id)}/files`,
-      {
-        method: 'DELETE',
-        body: JSON.stringify(input),
-      }
-    ),
 }
 
 type DriveBrowserSurface = 'standalone' | 'console'
@@ -1916,20 +1786,6 @@ export const adminApi = {
     downloadFile(
       `${adminApiBasePath}/drive/public-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}/download`,
       filename
-    ),
-  listSkillRepositories: (options: AdminSkillRepositoryListQuery = {}) =>
-    request<PaginatedResponse<AdminSkillRepositoryRow>>(
-      `${adminApiBasePath}/skill-repositories${adminSkillRepositoryQuerySuffix(options)}`
-    ),
-  setSkillRepositoryRemoved: (id: string) =>
-    request<AdminSkillRepositoryRow>(
-      `${adminApiBasePath}/skill-repositories/${encodeURIComponent(id)}/removed`,
-      { method: 'POST' }
-    ),
-  restoreSkillRepository: (id: string) =>
-    request<AdminSkillRepositoryRow>(
-      `${adminApiBasePath}/skill-repositories/${encodeURIComponent(id)}/removed`,
-      { method: 'DELETE' }
     ),
 }
 

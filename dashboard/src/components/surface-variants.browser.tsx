@@ -6,7 +6,6 @@ import { Card } from '@heroui/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { dashboardApi, adminApi } from '@/lib/api'
 import { UserAuthForm } from '@/features/auth/sign-in/components/user-auth-form'
-import { SkillRepositorySettingsDialog } from '@/features/skill-repository/skill-repository-settings-dialog'
 import { ApiKeysSettings } from '@/features/settings/api-keys-settings'
 import { WebhookFormDialog } from '@/features/webhooks'
 import LogsPage from '@/features/logs'
@@ -46,18 +45,6 @@ describe('field contrast on HeroUI surfaces', () => {
       await page.getByRole('button', { name: '显示密码' }).click()
       expect(password.type).toBe('text')
       distinguish(group, card)
-    })
-
-    it(`distinguishes textareas and selectors inside settings dialogs at ${width}px`, async () => {
-      await page.viewport(width, 800)
-      await render(<SkillRepositorySettingsDialog open saving={false} deleting={false} error={null} onOpenChange={() => undefined} onSave={async () => undefined} onDelete={async () => undefined} repository={{
-        id: 'fixture-repository', name: 'fixture', title: '布局回归', description: null, visibility: 'private', status: 'active', owner: { id: 'fixture-user', handle: 'fixture' },
-        forkedFromRepositoryId: null, createdAt: '2026-11-01T00:00:00Z', updatedAt: '2026-11-01T00:00:00Z', lastSyncedAt: null, files: [],
-      }} />)
-      const dialog = page.getByRole('dialog').element()
-      distinguish(page.getByRole('textbox', { name: '描述' }).element(), dialog)
-      distinguish(document.querySelector('[data-slot="select-trigger"]')!, dialog)
-      distinguish(page.getByRole('textbox', { name: '仓库名' }).element(), dialog)
     })
 
     it(`distinguishes unchecked permission controls on overlays at ${width}px`, async () => {

@@ -324,8 +324,6 @@ describe("SynapseSkillService", () => {
       contentApiText,
       modelPriceIndex,
       modelPriceApiText,
-      skillRepositoryIndex,
-      skillRepositoryApiText,
     ] = await Promise.all([
       readPackageText("drive/index.md"),
       readPackageText("drive/api-reference.md"),
@@ -335,8 +333,6 @@ describe("SynapseSkillService", () => {
       readPackageText("content/api-reference.md"),
       readPackageText("model-price/index.md"),
       readPackageText("model-price/api-reference.md"),
-      readPackageText("skill-repository/index.md"),
-      readPackageText("skill-repository/api-reference.md"),
     ])
     const missingDriveTools = buildDriveTools()
       .map((tool) => tool.name)
@@ -373,9 +369,6 @@ describe("SynapseSkillService", () => {
     expect(contentApiText).toContain("exact lowercase root filename `.env.example`")
     expect(contentApiText).toContain("case variants such as `.ENV.EXAMPLE`, are never read")
     expect(`${contentIndex}\n${contentApiText}`).not.toContain("High-confidence secrets")
-    expect(skillRepositoryIndex).toContain(".synapse.repository.json")
-    expect(skillRepositoryApiText).toContain("identityMigrated")
-    expect(`${skillRepositoryIndex}\n${skillRepositoryApiText}`).not.toContain("high-confidence secrets")
     expect(modelPriceIndex).toContain("app_model_price_used_model_list")
     expect(modelPriceIndex).toContain("ruleId")
     expect(modelPriceIndex).toContain("RMB per 1M tokens")

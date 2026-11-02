@@ -176,10 +176,6 @@ import type {
   WorkspaceFileTreeScope,
 } from "./workspace-file-tree"
 import type {
-  SynapseSkillRepositoryInstallPrepareResult,
-  SynapseSkillRepositoryInstallResolveResult,
-} from "./skill-repository-install"
-import type {
   SynapseInstallSourceToEditorPayload,
   SynapseInstallSourceToEditorTargetsPayload,
   SynapseInstallSourceToEditorTargetsResult,
@@ -445,10 +441,6 @@ import type {
   EditorScanQuickPublishRequest,
   EditorScanFinalizeQuickPublishRequest,
   EditorScanFinalizeQuickPublishResult,
-  EditorScanSkillRepositoryIdentityRetryRequest,
-  EditorScanSkillRepositoryIdentityRetryResult,
-  EditorScanSkillRepositoryUploadRequest,
-  EditorScanSkillRepositoryUploadResult,
   EditorScanResult,
   EditorScanRequest,
   EditorScanSkillFileEntry,
@@ -1565,11 +1557,6 @@ export type SynapseBridge = {
       resolveEditorInstallTarget: (payload: SynapseResolveEditorTargetPayload) => Promise<SynapseEditorResolvedTarget>
     }
   }
-  skillRepositoryInstall: {
-    resolve: (sessionId: string) => Promise<SynapseSkillRepositoryInstallResolveResult>
-    prepare: (sessionId: string) => Promise<SynapseSkillRepositoryInstallPrepareResult>
-    recordComplete: (sessionId: string) => Promise<{ ok: true }>
-  }
   installers: {
     inspectGlobalSkillInstallations: (
       source: SynapseSkillInstallerSource,
@@ -1636,12 +1623,6 @@ export type SynapseBridge = {
       request: EditorScanFinalizeQuickPublishRequest,
     ) => Promise<EditorScanFinalizeQuickPublishResult>
     trashItem: (request: EditorScanTrashRequest) => Promise<EditorScanTrashResult>
-    uploadSkillToSkillRepository: (
-      request: EditorScanSkillRepositoryUploadRequest,
-    ) => Promise<EditorScanSkillRepositoryUploadResult>
-    retrySkillRepositoryIdentity: (
-      request: EditorScanSkillRepositoryIdentityRetryRequest,
-    ) => Promise<EditorScanSkillRepositoryIdentityRetryResult>
   }
   editorCopy: {
     copy: (payload: SynapseCopyToEditorPayload) => Promise<SynapseEditorCopyResult>

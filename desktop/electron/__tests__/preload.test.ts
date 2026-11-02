@@ -721,31 +721,6 @@ describe("preload bridge", () => {
     )
   })
 
-  it("maps editor scan Skill Repository upload to the narrow IPC channel", async () => {
-    const bridge = await loadPreloadBridge()
-
-    await bridge.editorScan.uploadSkillToSkillRepository({
-      itemType: "skill",
-      itemPath: "/tmp/skills/review",
-      itemName: "review",
-      editorId: "claude-code",
-      scope: "project",
-      projectPath: "/tmp/project",
-    })
-
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:editor_scan:operation:upload_skill_to_skill_repository",
-      {
-        itemType: "skill",
-        itemPath: "/tmp/skills/review",
-        itemName: "review",
-        editorId: "claude-code",
-        scope: "project",
-        projectPath: "/tmp/project",
-      },
-    )
-  })
-
   it("maps cancellable editor scans to their narrow IPC channels", async () => {
     const bridge = await loadPreloadBridge()
     const request = { requestId: "4ca12db4-dcf0-4bfd-905a-4bf65f63204f" }
@@ -761,30 +736,6 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenNthCalledWith(
       2,
       "synapse:app:editor_scan:operation:cancel_scan",
-      request,
-    )
-  })
-
-  it("maps Skill Repository identity retry to the local-only IPC channel", async () => {
-    const bridge = await loadPreloadBridge()
-    const request = {
-      itemType: "skill" as const,
-      itemPath: "/tmp/skills/review",
-      itemName: "review",
-      editorId: "claude-code" as const,
-      scope: "project" as const,
-      projectPath: "/tmp/project",
-      repositoryId: "repo-1",
-      name: "review",
-      owner: "alice",
-      expectedSourceFingerprint: "sha256:source",
-      expectedIdentityId: null,
-    }
-
-    await bridge.editorScan.retrySkillRepositoryIdentity(request)
-
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:editor_scan:operation:retry_skill_repository_identity",
       request,
     )
   })

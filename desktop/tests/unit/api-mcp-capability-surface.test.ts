@@ -69,7 +69,6 @@ function mcpCapabilityIds(): CapabilityId[] {
 
 function conventionalPrimaryCapabilityIds(): CapabilityId[] {
   return CAPABILITY_DOMAINS
-    .filter((domain) => domain.id !== "skill_repository")
     .flatMap((domain) => domain.capabilities.map((capability) => capability.id))
     .filter((capabilityId) => !NON_MCP_CAPABILITY_IDS.has(capabilityId))
     .sort()
@@ -121,10 +120,10 @@ describe("API and MCP capability surface", () => {
     expect(toolNames).toEqual(mappedToolNames)
     expect(toolNames).toEqual(expect.arrayContaining(expectedToolNames))
     expect(mappedActionIds).toEqual(actionIds)
-    expect(allCapabilityIds()).toHaveLength(372)
+    expect(allCapabilityIds()).toHaveLength(364)
     expect(APP_DOMAIN.capabilities).toHaveLength(98)
     expect(buildAppTools()).toHaveLength(94)
-    expect(toolNames).toHaveLength(368)
+    expect(toolNames).toHaveLength(360)
     expect(toolNames.filter((toolName) => !toolName.startsWith("app_"))).toEqual([])
     expect(toolNames.filter((toolName) => retiredToolNames.has(toolName))).toEqual([])
   })
@@ -136,8 +135,8 @@ describe("API and MCP capability surface", () => {
     expect(published.some((tool) => tool.name.startsWith("app_"))).toBe(false)
     // The catalog is still the backing index for search/invoke; only the eager
     // tools/list payload shrank. Re-adding it here turns this assertion red.
-    expect(buildAllMcpTools()).toHaveLength(368)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(368)
+    expect(buildAllMcpTools()).toHaveLength(360)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(360)
   })
 
   it("documents model price rule IDs as opaque rule IDs", () => {
@@ -191,7 +190,6 @@ describe("API and MCP capability surface", () => {
       wecom: vi.fn(async () => ({ ok: true as const })),
       model_price: vi.fn(async () => ({ ok: true as const })),
       repository: vi.fn(async () => ({ ok: true as const })),
-      skill_repository: vi.fn(async () => ({ ok: true as const })),
       workflow: vi.fn(async () => ({ ok: true as const })),
     }
     const router = createSynapseActionRouter({
@@ -207,7 +205,6 @@ describe("API and MCP capability surface", () => {
       wecomDispatch: dispatchers.wecom,
       modelPriceDispatch: dispatchers.model_price,
       repositoryDispatch: dispatchers.repository,
-      skillRepositoryDispatch: dispatchers.skill_repository,
       workflowDispatch: dispatchers.workflow,
     })
 
@@ -264,7 +261,7 @@ describe("API and MCP capability surface", () => {
       && !file.path.startsWith("skill-authoring/")
     ))
 
-    expect(routingDocs).toHaveLength(30)
+    expect(routingDocs).toHaveLength(28)
     for (const doc of routingDocs) {
       expect(doc.content, doc.path).toContain("Reaching Synapse tools")
       expect(doc.content, doc.path).toContain("publishes only two tools")
@@ -361,5 +358,14 @@ describe("API and MCP capability surface", () => {
       .map((file) => file.path)
 
     expect(offenders).toEqual([])
+  })
+})
+
+
+describe("retired cloud Skill repositories", () => {
+  it("removes the domain and every cloud repository capability/tool", () => {
+    expect(CAPABILITY_DOMAINS.some((domain) => domain.id === "skill_repository")).toBe(false)
+    expect(allCapabilityIds().some((id) => id.startsWith("app.skill_repository."))).toBe(false)
+    expect(buildAllMcpTools().some((tool) => tool.name.startsWith("app_skill_repository_"))).toBe(false)
   })
 })

@@ -9,7 +9,7 @@ function harness(error?: Error) {
   const handleCallback = vi.fn(async () => { if (error) throw error })
   const registry = { get: vi.fn(() => ({ handleCallback })) }
   const deps = { focusMainWindow: vi.fn(), handleAuthCallback: vi.fn(), logger: { warn: vi.fn() },
-    openSkillRepositoryInstallWindow: vi.fn(), publishUpdateOpenRequest: vi.fn(), verifyUpdateIntent: vi.fn(),
+    publishUpdateOpenRequest: vi.fn(), verifyUpdateIntent: vi.fn(async () => false),
     dispatchAppAction: vi.fn(), showAppDeepLinkError: vi.fn(), privateProtocolHandlers: createConnectorProtocolHandlers(registry as never) }
   return { deps, handleCallback }
 }

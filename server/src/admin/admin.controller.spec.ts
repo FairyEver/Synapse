@@ -315,42 +315,6 @@ describe("AdminController", () => {
     }))
   })
 
-  it("lists skill repositories for administrators and records audit metadata", async () => {
-    const listSkillRepositories = vi.fn().mockResolvedValue({ data: [], total: 0, page: 2, pageSize: 10 })
-    const record = vi.fn().mockResolvedValue(undefined)
-    const controller = createController({ listSkillRepositories } as never, { record })
-
-    await expect(controller.listSkillRepositories(
-      { page: "2", pageSize: "10", sortBy: "updatedAt", sortOrder: "desc", status: "removed", query: " demo " },
-      { admin: { email: "admin@example.com" }, ip: "203.0.113.77" } as never,
-    )).resolves.toEqual({ data: [], total: 0, page: 2, pageSize: 10 })
-
-    expect(listSkillRepositories).toHaveBeenCalledWith(
-      { page: 2, pageSize: 10, sortBy: "updatedAt", sortOrder: "desc" },
-      { status: "removed", query: "demo" },
-    )
-    expect(record).toHaveBeenCalledWith(expect.objectContaining({
-      adminEmail: "admin@example.com",
-      action: "admin.skill_repositories.list",
-      targetType: "skill_repository",
-      targetId: "list",
-      detail: { page: 2, pageSize: 10, status: "removed", query: "demo" },
-      ipAddress: "203.0.113.77",
-    }))
-  })
-
-  it("defaults admin skill repository lists to active status", async () => {
-    const listSkillRepositories = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
-    const controller = createController({ listSkillRepositories } as never)
-
-    await controller.listSkillRepositories({ status: "bad" }, {} as never)
-
-    expect(listSkillRepositories).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, pageSize: 20 }),
-      { status: "active", query: undefined },
-    )
-  })
-
   it("keeps exported audit log responses when audit writes fail after send", async () => {
     const listForExport = vi.fn().mockResolvedValue([
       { id: "audit-1", adminEmail: "admin@example.com", action: "admin.login" },
@@ -516,29 +480,6 @@ describe("AdminController", () => {
       .rejects
       .toThrow(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
     expect(response.send).not.toHaveBeenCalled()
-  })
-  it("marks skill repositories removed through the service", async () => {
-    const setSkillRepositoryRemoved = vi.fn().mockResolvedValue({ id: "repo-1", status: "removed" })
-    const controller = createController({ setSkillRepositoryRemoved } as never)
-
-    await expect(controller.setSkillRepositoryRemoved(
-      "repo-1",
-      { admin: { email: "admin@example.com" }, ip: "203.0.113.78" } as never,
-    )).resolves.toEqual({ id: "repo-1", status: "removed" })
-
-    expect(setSkillRepositoryRemoved).toHaveBeenCalledWith("repo-1", true, "admin@example.com", "203.0.113.78")
-  })
-
-  it("restores skill repositories through the service", async () => {
-    const setSkillRepositoryRemoved = vi.fn().mockResolvedValue({ id: "repo-1", status: "active" })
-    const controller = createController({ setSkillRepositoryRemoved } as never)
-
-    await expect(controller.restoreSkillRepository(
-      "repo-1",
-      { admin: { email: "admin@example.com" }, ip: "203.0.113.79" } as never,
-    )).resolves.toEqual({ id: "repo-1", status: "active" })
-
-    expect(setSkillRepositoryRemoved).toHaveBeenCalledWith("repo-1", false, "admin@example.com", "203.0.113.79")
   })
   it("rejects invalid user status", async () => {
     const controller = createController({ updateUserStatus: vi.fn() } as never)

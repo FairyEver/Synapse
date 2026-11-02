@@ -48,7 +48,6 @@ function createMcpPath(state: SynapseAccountState) {
     mailInternalDispatch: unused.dispatch,
     modelPriceDispatch: unused.dispatch,
     repositoryDispatch: unused.dispatch,
-    skillRepositoryDispatch: unused.dispatch,
     workflowDispatch: unused.dispatch,
   })
   return { router, startLogin }

@@ -28,7 +28,6 @@ import type { WindowManager } from "./runtime/window"
 import type { SynapseActionRouter } from "./capabilities/action-router"
 import { accountService } from "./services/account-service"
 import { createMainLogger } from "./services/log-store"
-import { skillRepositoryInstallWindowService } from "./services/skill-repository-install-window-service"
 import { updateService } from "./services/update-service"
 import {
   resolveScriptRuntimeSmokeBootstrap,
@@ -74,7 +73,6 @@ function startSynapse(): void {
     focusMainWindow: focusOrCreateMainWindow,
     handleAuthCallback: (url) => accountService.handleAuthCallback(url),
     logger,
-    openSkillRepositoryInstallWindow: (request) => skillRepositoryInstallWindowService.open(request),
     publishUpdateOpenRequest: (automatic) => updateService.publishUpdateOpenRequest(automatic),
     verifyUpdateIntent: (token) => updateService.verifyUpdateIntent(token),
     privateProtocolHandlers,

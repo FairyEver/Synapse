@@ -22,11 +22,6 @@ import {
   buildRepositoryTools,
 } from "./repository-domain"
 import {
-  SKILL_REPOSITORY_DOMAIN,
-  SKILL_REPOSITORY_MCP_TOOL_ACTIONS,
-  buildSkillRepositoryTools,
-} from "./skill-repository-domain"
-import {
   WORKFLOW_DOMAIN,
   WORKFLOW_MCP_TOOL_ACTIONS,
   buildWorkflowTools,
@@ -54,7 +49,6 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   DATABASE_DOMAIN,
   MODEL_PRICE_DOMAIN,
   REPOSITORY_DOMAIN,
-  SKILL_REPOSITORY_DOMAIN,
   AUTOMATION_DOMAIN,
   WORKFLOW_DOMAIN,
   CONTENT_DOMAIN,
@@ -77,7 +71,6 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...buildDatabaseMcpToolActions(),
   ...MODEL_PRICE_MCP_TOOL_ACTIONS,
   ...REPOSITORY_MCP_TOOL_ACTIONS,
-  ...SKILL_REPOSITORY_MCP_TOOL_ACTIONS,
   ...AUTOMATION_MCP_TOOL_ACTIONS,
   ...WORKFLOW_MCP_TOOL_ACTIONS,
   ...CONTENT_MCP_TOOL_ACTIONS,
@@ -95,7 +88,6 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildDatabaseTools(),
     ...buildModelPriceTools(),
     ...buildRepositoryTools(),
-    ...buildSkillRepositoryTools(),
     ...buildAutomationTools(),
     ...buildWorkflowTools(),
     ...buildContentTools(),

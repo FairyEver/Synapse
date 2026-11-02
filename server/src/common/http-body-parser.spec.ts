@@ -94,18 +94,6 @@ describe("HTTP body parser configuration", () => {
     expect(authLoginCalls).toBe(0)
   })
 
-  it("keeps large JSON enabled for Skill Repository imports", async () => {
-    const value = "x".repeat(2 * 1024 * 1024)
-
-    const response = await request(app.getHttpServer())
-      .post("/api/skill-repositories/import")
-      .set("content-type", "application/json")
-      .send({ value })
-      .expect(201)
-
-    expect(response.body).toEqual({ size: value.length })
-  })
-
   it.each([
     "/api/drive/browser/owner/items/item-1/content",
     "/api/drive/browser/shares/share-1/content",

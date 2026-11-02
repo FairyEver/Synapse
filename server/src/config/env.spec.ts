@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   isBackupCosConfigured,
-  isSkillRepositoryCosConfigured,
   isDriveCosConfigured,
   isPlatformMediaCosConfigured,
   isTencentAsrConfigured,
@@ -31,10 +30,6 @@ describe("loadEnv", () => {
       DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
       PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
       PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
@@ -52,7 +47,6 @@ describe("loadEnv", () => {
     expect(env.pdfRendererInternalSecret).toBe(productionPdfEnv.PDF_RENDERER_INTERNAL_SECRET)
     expect(env.driveLocalRoot).toBe("/app/data/drive")
     expect(env.driveCollaborationEnabled).toBe(false)
-    expect(isSkillRepositoryCosConfigured(env)).toBe(true)
     expect(env.trustProxy).toBe("loopback")
   })
 
@@ -127,10 +121,6 @@ describe("loadEnv", () => {
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         APP_PUBLIC_URL: "https://synapse.test",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-        SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       }),
     ).toThrow("DESKTOP_UPDATE_INTENT_SECRET")
   })
@@ -144,10 +134,6 @@ describe("loadEnv", () => {
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
       PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
       PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
@@ -173,10 +159,6 @@ describe("loadEnv", () => {
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
       PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
       PLATFORM_MEDIA_COS_BUCKET: "platform-media-bucket",
@@ -210,10 +192,6 @@ describe("loadEnv", () => {
         DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test/api/",
         SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-        SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       }),
     ).toThrow("APP_PUBLIC_URL")
   })
@@ -228,10 +206,6 @@ describe("loadEnv", () => {
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
         DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
         APP_PUBLIC_URL: "https://synapse.test",
-        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-        SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       }),
     ).toThrow("SYNAPSE_DRIVE_LOCAL_ROOT")
   })
@@ -251,51 +225,10 @@ describe("loadEnv", () => {
       DRIVE_COS_SECRET_KEY: "drive-secret-key",
       DRIVE_COS_BUCKET: "drive-bucket",
       DRIVE_COS_REGION: "ap-beijing",
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
     })
 
     expect(isDriveCosConfigured(env)).toBe(true)
     expect(env.driveLocalRoot).toBeUndefined()
-  })
-
-  it("rejects production Skill Repository storage without COS", () => {
-    expect(() =>
-      loadEnv({
-        NODE_ENV: "production",
-        TRUST_PROXY: "loopback",
-        ...productionPdfEnv,
-        DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
-        USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
-        DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
-        APP_PUBLIC_URL: "https://synapse.test",
-        SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      }),
-    ).toThrow("SKILL_REPOSITORY_COS_SECRET_ID")
-  })
-
-  it("allows production Skill Repository storage with complete COS settings", () => {
-    const env = loadEnv({
-      NODE_ENV: "production",
-      TRUST_PROXY: "loopback",
-      ...productionPdfEnv,
-      ...platformMediaCosEnv,
-      DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
-      ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
-      USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
-      DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
-      APP_PUBLIC_URL: "https://synapse.test",
-      SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
-    })
-
-    expect(isSkillRepositoryCosConfigured(env)).toBe(true)
   })
 
   it("rejects missing required settings", () => {
@@ -324,10 +257,6 @@ describe("loadEnv", () => {
       DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
       ...platformMediaCosEnv,
     }
 
@@ -386,25 +315,6 @@ describe("loadEnv", () => {
     expect(isBackupCosConfigured(env)).toBe(true)
   })
 
-  it("loads Skill Repository COS settings independently", () => {
-    const env = loadEnv({
-      ...baseEnv,
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
-      DRIVE_COS_SECRET_ID: "drive-secret-id",
-      DRIVE_COS_SECRET_KEY: "drive-secret-key",
-      DRIVE_COS_BUCKET: "drive-bucket",
-      DRIVE_COS_REGION: "ap-guangzhou",
-    })
-
-    expect(env.skillRepositoryCosBucket).toBe("skill-repository-bucket")
-    expect(env.driveCosBucket).toBe("drive-bucket")
-    expect(isSkillRepositoryCosConfigured(env)).toBe(true)
-    expect(isDriveCosConfigured(env)).toBe(true)
-  })
-
   it("loads Platform Media COS settings independently", () => {
     const env = loadEnv({
       ...baseEnv,
@@ -435,10 +345,6 @@ describe("loadEnv", () => {
       DESKTOP_UPDATE_INTENT_SECRET: productionUpdateIntentSecret,
       APP_PUBLIC_URL: "https://synapse.test",
       SYNAPSE_DRIVE_LOCAL_ROOT: "/app/data/drive",
-      SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-      SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-      SKILL_REPOSITORY_COS_BUCKET: "skill-repository-bucket",
-      SKILL_REPOSITORY_COS_REGION: "ap-beijing",
     })).toThrow("PLATFORM_MEDIA_COS_SECRET_ID")
   })
 
@@ -451,15 +357,6 @@ describe("loadEnv", () => {
         DRIVE_COS_BUCKET: "drive-bucket",
       },
       missing: "DRIVE_COS_REGION",
-    },
-    {
-      name: "Skill Repository",
-      values: {
-        SKILL_REPOSITORY_COS_SECRET_ID: "skill-repository-secret-id",
-        SKILL_REPOSITORY_COS_SECRET_KEY: "skill-repository-secret-key",
-        SKILL_REPOSITORY_COS_REGION: "ap-beijing",
-      },
-      missing: "SKILL_REPOSITORY_COS_BUCKET",
     },
     {
       name: "Backup",
@@ -543,7 +440,6 @@ describe("loadEnv", () => {
 
     expect(isDriveCosConfigured(env)).toBe(false)
     expect(isBackupCosConfigured(env)).toBe(false)
-    expect(isSkillRepositoryCosConfigured(env)).toBe(false)
     expect(isPlatformMediaCosConfigured(env)).toBe(false)
   })
 })

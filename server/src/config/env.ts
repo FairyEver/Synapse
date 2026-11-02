@@ -63,15 +63,6 @@ const cosConfigGroups = [
     fields: ["DRIVE_COS_SECRET_ID", "DRIVE_COS_SECRET_KEY", "DRIVE_COS_BUCKET", "DRIVE_COS_REGION"],
   },
   {
-    name: "SKILL_REPOSITORY_COS",
-    fields: [
-      "SKILL_REPOSITORY_COS_SECRET_ID",
-      "SKILL_REPOSITORY_COS_SECRET_KEY",
-      "SKILL_REPOSITORY_COS_BUCKET",
-      "SKILL_REPOSITORY_COS_REGION",
-    ],
-  },
-  {
     name: "PLATFORM_MEDIA_COS",
     fields: [
       "PLATFORM_MEDIA_COS_SECRET_ID",
@@ -125,10 +116,6 @@ const envSchema = z
     APNS_USE_SANDBOX: z.enum(["true", "false"]).default("false"),
     PDF_RENDERER_URL: optionalHttpUrl,
     PDF_RENDERER_INTERNAL_SECRET: optionalEnvString,
-    SKILL_REPOSITORY_COS_SECRET_ID: optionalEnvString,
-    SKILL_REPOSITORY_COS_SECRET_KEY: optionalEnvString,
-    SKILL_REPOSITORY_COS_BUCKET: optionalEnvString,
-    SKILL_REPOSITORY_COS_REGION: optionalEnvString,
     PLATFORM_MEDIA_COS_SECRET_ID: optionalEnvString,
     PLATFORM_MEDIA_COS_SECRET_KEY: optionalEnvString,
     PLATFORM_MEDIA_COS_BUCKET: optionalEnvString,
@@ -236,14 +223,6 @@ const envSchema = z
     path: ["TRUST_PROXY"],
     message: "TRUST_PROXY must be set explicitly in production (for example \"loopback\"); leaving it unset silently breaks rate limiting, and \"true\" lets clients forge their address",
   })
-  .refine((env) => {
-    if (env.NODE_ENV !== "production") return true
-    const hasSkillRepositoryCos = !!(env.SKILL_REPOSITORY_COS_SECRET_ID && env.SKILL_REPOSITORY_COS_SECRET_KEY && env.SKILL_REPOSITORY_COS_BUCKET && env.SKILL_REPOSITORY_COS_REGION)
-    return hasSkillRepositoryCos
-  }, {
-    path: ["SKILL_REPOSITORY_COS_SECRET_ID"],
-    message: "SKILL_REPOSITORY_COS_* is required in production",
-  })
   .refine((env) => env.NODE_ENV !== "production"
     || !!(env.PLATFORM_MEDIA_COS_SECRET_ID && env.PLATFORM_MEDIA_COS_SECRET_KEY && env.PLATFORM_MEDIA_COS_BUCKET && env.PLATFORM_MEDIA_COS_REGION), {
     path: ["PLATFORM_MEDIA_COS_SECRET_ID"],
@@ -283,10 +262,6 @@ export interface ServerEnv {
   readonly apnsUseSandbox: boolean
   readonly pdfRendererUrl?: string
   readonly pdfRendererInternalSecret?: string
-  readonly skillRepositoryCosSecretId?: string
-  readonly skillRepositoryCosSecretKey?: string
-  readonly skillRepositoryCosBucket?: string
-  readonly skillRepositoryCosRegion?: string
   readonly platformMediaCosSecretId?: string
   readonly platformMediaCosSecretKey?: string
   readonly platformMediaCosBucket?: string
@@ -345,10 +320,6 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     apnsUseSandbox: result.data.APNS_USE_SANDBOX === "true",
     pdfRendererUrl: result.data.PDF_RENDERER_URL,
     pdfRendererInternalSecret: result.data.PDF_RENDERER_INTERNAL_SECRET,
-    skillRepositoryCosSecretId: result.data.SKILL_REPOSITORY_COS_SECRET_ID,
-    skillRepositoryCosSecretKey: result.data.SKILL_REPOSITORY_COS_SECRET_KEY,
-    skillRepositoryCosBucket: result.data.SKILL_REPOSITORY_COS_BUCKET,
-    skillRepositoryCosRegion: result.data.SKILL_REPOSITORY_COS_REGION,
     platformMediaCosSecretId: result.data.PLATFORM_MEDIA_COS_SECRET_ID,
     platformMediaCosSecretKey: result.data.PLATFORM_MEDIA_COS_SECRET_KEY,
     platformMediaCosBucket: result.data.PLATFORM_MEDIA_COS_BUCKET,
@@ -385,10 +356,6 @@ export function isTencentAsrConfigured(env: ServerEnv): boolean {
 
 export function isDriveCosConfigured(env: ServerEnv): boolean {
   return !!(env.driveCosSecretId && env.driveCosSecretKey && env.driveCosBucket && env.driveCosRegion)
-}
-
-export function isSkillRepositoryCosConfigured(env: ServerEnv): boolean {
-  return !!(env.skillRepositoryCosSecretId && env.skillRepositoryCosSecretKey && env.skillRepositoryCosBucket && env.skillRepositoryCosRegion)
 }
 
 export function isPlatformMediaCosConfigured(env: ServerEnv): boolean {
