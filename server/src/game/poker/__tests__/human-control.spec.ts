@@ -47,7 +47,7 @@ const url = gameTestDatabaseUrl()
     await actions.act(a, code, { ...input, controlVersion: controlled.controlVersion, expectedActionSeq: after.actionSeq, note: "不能作为AI判断", personaSource: "game" }, new Date(), "human")
     const written = await db.gamePokerAction.findUniqueOrThrow({ where: { actionId: input.actionId } })
     expect(written).toMatchObject({ actionSource: "human", personaVersionId: null, note: null })
-    expect(await actions.act(a, code, input)).toMatchObject({ ok: true })
+    await expect(actions.act(a, code, input)).rejects.toThrow("actionId已用于不同请求")
   })
   it("交接请求不影响真人，接受后新AI必须带版本和行动序号", async () => {
     const { a, code } = await table()

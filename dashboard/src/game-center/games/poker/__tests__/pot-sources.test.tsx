@@ -54,7 +54,7 @@ describe("底池来源面板", () => {
   })
   it("与Roll来源/日志面板互斥，快照更新沿用原身份而不是当前座位姓名", async () => {
     const { host, root, render } = await mount()
-    await act(async () => button("查看 Roll 费用明细").click())
+    await act(async () => button("查看暂存明细").click())
     await act(async () => button("查看底池来源").click())
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("来源分布")

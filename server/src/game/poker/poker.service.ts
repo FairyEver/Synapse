@@ -429,7 +429,7 @@ export class PokerService {
             const resolution = resolveHandCommand(before, { kind: "hand.cancel", funding: "practice", scope: reserveScope(c, hand.id) }, context, createCardRegistry())
             await persistHandResolution(this, c, resolution, context, before)
             await this.hall.freezeTransfers(c.tx, await this.reserves.finalize(c.tx, hand.id), c.now)
-            await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: context.actionSeq, status: "cancelled", street: "settled", pot: 0, endedAt: c.now, engineState: json(resolution.state), result: json({ cardAudit: resolution.state.cardAudit }) } })
+            await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: context.actionSeq, status: "cancelled", street: "settled", pot: 0, endedAt: c.now, engineState: json(resolution.state), result: resolution.state.cardAudit ? json({ cardAudit: resolution.state.cardAudit }) : Prisma.DbNull } })
             if (actor) await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq: context.actionSeq, seatNo: actor.seatNo, street: hand.street, action: "hand_cancel", amount: 0, nominalAmount: 0, waivedAmount: 0, potAfter: 0, actionSource: "human", actionId, createdAt: c.now } })
           }
           await this.hall.voidTransfers(c.tx, hand.id, now)

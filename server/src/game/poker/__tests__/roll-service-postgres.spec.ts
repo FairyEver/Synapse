@@ -10,10 +10,10 @@ import { PokerActionService } from "../poker-action.service"
 import { PokerWaitService } from "../poker-wait.service"
 import { PokerBotService } from "../poker-bot.service"
 import { advanceNextHand } from "./advance-next-hand"
-import { gameTestDatabaseUrl } from "./test-database"
+import { gameTestDatabaseUrl, legacyGameTestClient } from "./test-database"
 const url=gameTestDatabaseUrl()
 ;(url?describe:describe.skip)("真实PostgreSQL Roll同房事务（仅显式专用_e2e库）",()=>{
-  const db=new PrismaClient({datasources:{db:{url:url??"postgresql://localhost/unused_e2e"}}}) as PrismaService
+  const db=legacyGameTestClient(url ?? "postgresql://localhost/unused_e2e")
   const hall=new HallService(db),poker=new PokerService(db,hall),rolls=new PokerRollService(poker),actions=new PokerActionService(poker),wait=new PokerWaitService(actions)
   afterAll(async()=>{wait.onModuleDestroy();await db.$disconnect()})
   async function setup(){
@@ -47,7 +47,8 @@ const url=gameTestDatabaseUrl()
   })
   it("奇数费用按庄家左侧分配，超时弃牌离座后仍归原入座，新入座不接收迟到补偿",async()=>{
     const users=[randomUUID(),randomUUID(),randomUUID()]
-    const code=(await poker.createRoom(users[0],{maxSeats:3,buyIn:5000,ruleOptions:{roll:true}})).roomCode
+    const code=randomUUID()
+    await db.gamePokerRoom.create({data:{code,ownerUserId:users[0],maxSeats:3,buyIn:2000,ruleOptions:{roll:true},rollPricingVersion:"roll-v1"}})
     await joinForStartedHand(poker, users[0],code,{})
     await joinForStartedHand(poker, users[1],code,{})
     await joinForStartedHand(poker, users[2],code,{})

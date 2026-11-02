@@ -3,6 +3,7 @@ import type { PokerActionService } from "../poker-action.service"
 import { PokerDeadlineTask } from "../poker-deadline.task"
 import { PokerBotTask } from "../poker-bot.task"
 import { currentHand } from "../poker-current-hand"
+import { vi } from "vitest"
 /** Scope external scheduler selection; transitions still use real room locks and persistence. */
 function scopedActions(actions: PokerActionService, codes: string[]): PokerActionService {
   const poker = actions.poker
@@ -17,7 +18,14 @@ function scopedActions(actions: PokerActionService, codes: string[]): PokerActio
   } as unknown as PokerActionService
 }
 export const scopedDeadlineTask = (actions: PokerActionService, codes: string[]) => new PokerDeadlineTask(scopedActions(actions, codes))
-export const scopedBotTask = (actions: PokerActionService, code: string) => new PokerBotTask(scopedActions(actions, [code]))
+export const scopedBotTask = (actions: PokerActionService, code: string) => {
+  const task = new PokerBotTask(scopedActions(actions, [code])), scan = task.scan.bind(task)
+  task.scan = async (now = new Date()) => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(now)
+    try { await scan(now) } finally { vi.useRealTimers() }
+  }
+  return task
+}
 /** Each eligible non-bot explicitly readies through its actual controller. */
 export async function advanceNextHand(actions: PokerActionService, code: string): Promise<Date> {
   const room = await actions.poker.prisma.gamePokerRoom.findUniqueOrThrow({ where: { code } })

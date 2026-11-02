@@ -62,7 +62,7 @@ const url = gameTestDatabaseUrl()
     await poker.close(owner, code)
     await actions.actBot(code, { handId: state.handId!, scheduledAt: running.botActionAt! }, new Date(running.botActionAt!))
     await actions.expire(code, new Date(running.actionDeadlineAt!))
-    expect(await db.gamePokerAction.count({ where: { handId: state.handId! } })).toBe(count)
+    expect(await db.gamePokerAction.count({ where: { handId: state.handId!, action: { not: "hand_cancel" } } })).toBe(count)
     expect((await actions.state(owner, code)).status).toBe("closed")
   })
 

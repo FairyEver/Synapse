@@ -1,11 +1,11 @@
-import { joinForStartedHand } from "./advance-next-hand"
+import { joinForStartedHand, prepareAndStartInitialHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { Prisma, PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import type { PrismaService } from "../../../prisma/prisma.service"
 import { HallService } from "../../hall/hall.service"
 import { PokerService } from "../poker.service"
-import { gameTestDatabaseUrl } from "./test-database"
+import { gameTestDatabaseUrl, legacyGameTestClient } from "./test-database"
 
 // Isolate shuffle entropy: the new big blind has aces, and the old one-chip
 // small blind loses. Room-code entropy and action identifiers remain real.
@@ -29,14 +29,12 @@ vi.mock("node:crypto", async (importOriginal) => {
 
 const url = gameTestDatabaseUrl()
 ;(url ? describe : describe.skip)("跨房间资金事务死锁", () => {
-  const db = new PrismaClient({
-    datasources: { db: { url: url ?? "postgresql://localhost/unused_e2e" } },
-  }) as PrismaService
+  const db = legacyGameTestClient(url ?? "postgresql://localhost/unused_e2e")
   const hall = new HallService(db),
     poker = new PokerService(db, hall)
   afterAll(() => db.$disconnect())
 
-  it("两房互换入座遇到自动结算退款的账号锁死锁后仍各成功一次且守恒", async () => {
+  it("两房互换入座并发显式开局退款仍各成功一次且守恒", async () => {
     const a = randomUUID(),
       b = randomUUID(),
       r1 = (await poker.createRoom(b, { maxSeats: 2, buyIn: 1000 })).roomCode,
@@ -69,7 +67,8 @@ const url = gameTestDatabaseUrl()
       { status: "fulfilled", value: { roomCode: r1, seatNo: 1 } },
       { status: "fulfilled", value: { roomCode: r2, seatNo: 1 } },
     ])
-    expect(arrivals).toBeGreaterThan(2)
+    expect(arrivals).toBe(2)
+    await Promise.all([prepareAndStartInitialHand(concurrent, r1), prepareAndStartInitialHand(concurrent, r2)])
     const seats = await db.gamePokerSeat.findMany({
       where: { userId: { in: [a, b] } },
       orderBy: { userId: "asc" },

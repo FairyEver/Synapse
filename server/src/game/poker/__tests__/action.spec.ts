@@ -60,7 +60,7 @@ suite("权威行动、隐私与重连", () => {
   })
   it("actionId三次相同返回同一响应，只插一条；当前版本与note同事务且私密", async () => {
     const { a, b, code, agent } = await table(),
-      req = await request(a, code)
+      req = { ...await request(a, code), note: "我选择跟注" }
     await poker.upsertAgent(a, { id: agent.id, persona: "新风格" })
     const turn = await waiter.wait(a, code, "", 0, undefined, new Date(1))
     expect(turn).toMatchObject({ status: "your_turn", persona: "新风格" })

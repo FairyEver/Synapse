@@ -80,7 +80,7 @@ export function applyReserveOperation(original: ReserveState, operation: Reserve
     state.lots.push(lot)
     recipients.forEach((p, i) => {
       const amount = Math.floor(operation.amount / recipients.length) + (i < operation.amount % recipients.length ? 1 : 0)
-      state.claims.push({ ...p, id: context.nextId(), lotId: lot.id, originalAmount: amount, remainingAmount: amount, status: "pending" })
+      state.claims.push({ admissionId: p.admissionId, userId: p.userId, seatNo: p.seatNo, id: context.nextId(), lotId: lot.id, originalAmount: amount, remainingAmount: amount, status: "pending" })
     })
     state.movements.push({ id: context.nextId(), rootActionId: context.rootActionId, eventIndex: state.movements.length, kind: "deposit", amount: operation.amount, lotId: lot.id, actorAdmissionId: operation.payer.admissionId })
     result.debits[operation.payer.admissionId] = operation.amount; result.amount = operation.amount

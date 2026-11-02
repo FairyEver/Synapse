@@ -71,6 +71,18 @@ END;
 $$;
 CREATE TRIGGER "GameReserveMovement_append_only" BEFORE UPDATE OR DELETE ON "GameReserveMovement" FOR EACH ROW EXECUTE FUNCTION "game_reserve_append_only"();
 CREATE TRIGGER "GamePokerResolution_append_only" BEFORE UPDATE OR DELETE ON "GamePokerResolution" FOR EACH ROW EXECUTE FUNCTION "game_reserve_append_only"();
+CREATE FUNCTION "game_reserve_preserve_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE mutable_keys TEXT[];
+BEGIN
+  mutable_keys := CASE WHEN TG_TABLE_NAME='GameReserveLot' THEN ARRAY['remainingAmount','revision','status'] ELSE ARRAY['remainingAmount','status'] END;
+  IF (to_jsonb(NEW)-mutable_keys) IS DISTINCT FROM (to_jsonb(OLD)-mutable_keys) THEN
+    RAISE EXCEPTION 'Reserve original funding identities are immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "GameReserveLot_preserve_identity" BEFORE UPDATE ON "GameReserveLot" FOR EACH ROW EXECUTE FUNCTION "game_reserve_preserve_identity"();
+CREATE TRIGGER "GameReserveClaim_preserve_identity" BEFORE UPDATE ON "GameReserveClaim" FOR EACH ROW EXECUTE FUNCTION "game_reserve_preserve_identity"();
 CREATE OR REPLACE FUNCTION "game_poker_preserve_room_rules"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF (NEW."variant",NEW."smallBlind",NEW."bigBlind",NEW."ruleOptions",NEW."rollPricingVersion",NEW."cardRulesVersion",NEW."chipRulesVersion") IS DISTINCT FROM

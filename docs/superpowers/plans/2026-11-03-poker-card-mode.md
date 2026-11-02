@@ -287,11 +287,11 @@
 **Files:** Create `server/test/run-poker-card-e2e.mjs`、`server/test/poker-card.e2e.spec.ts`、`server/test/poker-card-runner.spec.ts`、`server/src/game/poker/engine/__tests__/card-combinations.spec.ts`、`docs/superpowers/acceptance/2026-11-03-poker-card-mode.md`；Modify `server/package.json`。
 **Interfaces:** runner只接受显式`GAME_E2E_DATABASE_URL`且host为loopback、库名以`_e2e`结尾；校验成功才通过子进程env设置DATABASE_URL、迁移、执行唯一目标spec。不得打印URL/凭据，不采用当前业务库兜底。
 
-- [ ] **1. 写并运行无数据库测试。** `card-combinations.spec.ts`固定种子覆盖补给→换牌、赦免→Roll、暂存→盗取→退款、窥牌→防护→反窥、全下后改牌、任意两张同阶段生成/状态叠加，逐步检查资金、扑克牌及能力牌区域守恒。运行`pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-combinations.spec.ts`，必须先见有意义失败再完成修复。 断言示例：`expect(spawnSpy).not.toHaveBeenCalled()`（非法库URL时）；组合场景逐步`expect(walletTotal+pot+reserve).toBe(initialMoney)`。
-- [ ] **2. 写并运行隔离runner拒绝测试。** `server/test/poker-card-runner.spec.ts`断言未配置、远程host、非_e2e库均在迁移/连接前拒绝；运行`pnpm --filter @synapse/server exec vitest run test/poker-card-runner.spec.ts`。`pnpm --filter @synapse/server run test:poker-cards:e2e`无配置时明确非0，不能把describe.skip当通过。依照既有runner模式使用spawn参数和env，不拼接凭据进shell。
-- [ ] **3. 获明确数据库测试授权后执行。** 在已核实的专用本机_e2e库做迁移前备份/恢复预演，再运行同一runner。验证SQL约束、同UUID并发只一个帧/账本、存入盗取退款与最终释放全事务、旧冻结不变、原入座离开重入、不重复补助；并发读取overview与最终释放时，只能看到前/后任一完整资金快照，不能同时计入已到手筹码和旧pending。清理仅限本次runId创建的记录，不truncate共享测试库。
-- [ ] **4. 完整回归和报告。** 单独运行shared build/typecheck/test，server typecheck及扑克/大厅专项，Dashboard tsc/check:ui及扑克Node/jsdom专项；旧标准/短牌、点数/陪练、Roll开关矩阵全部通过。记录模拟seed、版本、空池/生成/时间/筹码集中度和失败样本，明确“功能验证”与“平衡性未完成/已观测”区别；调参需新版本并回归。
-- [ ] **5. 本地提交。** `git commit -m 'test: 验证卡牌组合与暂存资金的真实事务一致性'`；若授权或环境缺失，保持本任务未完成并在报告写清，不能标记整版已验收。
+- [x] **1. 写并运行无数据库测试。** `card-combinations.spec.ts`固定种子覆盖补给→换牌、赦免→Roll、暂存→盗取→退款、窥牌→防护→反窥、全下后改牌、任意两张同阶段生成/状态叠加，逐步检查资金、扑克牌及能力牌区域守恒。运行`pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-combinations.spec.ts`，必须先见有意义失败再完成修复。 断言示例：`expect(spawnSpy).not.toHaveBeenCalled()`（非法库URL时）；组合场景逐步`expect(walletTotal+pot+reserve).toBe(initialMoney)`。
+- [x] **2. 写并运行隔离runner拒绝测试。** `server/test/poker-card-runner.spec.ts`断言未配置、远程host、非_e2e库均在迁移/连接前拒绝；运行`pnpm --filter @synapse/server exec vitest run test/poker-card-runner.spec.ts`。`pnpm --filter @synapse/server run test:poker-cards:e2e`无配置时明确非0，不能把describe.skip当通过。依照既有runner模式使用spawn参数和env，不拼接凭据进shell。
+- [x] **3. 获明确数据库测试授权后执行。** 在已核实的专用本机_e2e库做迁移前备份/恢复预演，再运行同一runner。验证SQL约束、同UUID并发只一个帧/账本、存入盗取退款与最终释放全事务、旧冻结不变、原入座离开重入、不重复补助；并发读取overview与最终释放时，只能看到前/后任一完整资金快照，不能同时计入已到手筹码和旧pending。清理仅限本次runId创建的记录，不truncate共享测试库。
+- [x] **4. 完整回归和报告。** 单独运行shared build/typecheck/test，server typecheck及扑克/大厅专项，Dashboard tsc/check:ui及扑克Node/jsdom专项；旧标准/短牌、点数/陪练、Roll开关矩阵全部通过。记录模拟seed、版本、空池/生成/时间/筹码集中度和失败样本，明确“功能验证”与“平衡性未完成/已观测”区别；调参需新版本并回归。
+- [x] **5. 本地提交。** `git commit -m 'test: 验证卡牌组合与暂存资金的真实事务一致性'`；若授权或环境缺失，保持本任务未完成并在报告写清，不能标记整版已验收。
 
 
 ## Task 18: 真实展开验收、规则同步和完成审查

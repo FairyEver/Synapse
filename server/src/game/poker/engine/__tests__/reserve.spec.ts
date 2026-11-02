@@ -13,6 +13,11 @@ function deposit(state: ReserveState, amount: number, seq = 1) {
   return run(state, { kind: "deposit", payer: person(0), recipients: [person(1), person(2), person(3)], amount, sourceId: `deposit-${seq}`, sourceType: "roll" }, seq)
 }
 describe("可追溯暂存", () => {
+  it("份额只保留入座资金身份，不扩散真人或行动状态字段至持久层", () => {
+    const recipient = { ...person(1), kind: "human", folded: false, allIn: false }
+    const result = run(empty(), { kind: "deposit", payer: person(0), recipients: [recipient], amount: 4, sourceId: "card", sourceType: "card" })
+    expect(Object.keys(result.state.claims[0]).sort()).toEqual(["admissionId", "id", "lotId", "originalAmount", "remainingAmount", "seatNo", "status", "userId"])
+  })
   it("deposit_120_steal_60_refund_60：取回不追溯已经偷到手的60", () => {
     const original = empty(), paid = deposit(original, 120)
     expect(paid.debits).toEqual({ 0: 120 })

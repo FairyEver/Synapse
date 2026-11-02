@@ -38,12 +38,12 @@ describe("牌桌本人冻结补偿快照", () => {
   it("收到补偿后按最新座位快照单列金额，不并入可用筹码", async () => {
     const { host, root } = await mount()
     await act(async () => root.render(<SidePanel table={received} perspective="owner" events={[event]} />))
-    expect(funds(host)).toEqual({ "可用筹码": "100", "本手待结算补偿": "8" })
+    expect(funds(host)).toEqual({ "可用筹码": "100", "本手暂存待分": "8" })
     await act(async () => root.unmount())
   })
   it("刷新后没有事件也保留本手待结算金额", async () => {
     const { host, root } = await mount(received)
-    expect(funds(host)).toEqual({ "可用筹码": "100", "本手待结算补偿": "8" })
+    expect(funds(host)).toEqual({ "可用筹码": "100", "本手暂存待分": "8" })
     expect(host.querySelector('[aria-label="换牌日志"]')).toBeNull()
     await act(async () => root.unmount())
   })
@@ -51,7 +51,7 @@ describe("牌桌本人冻结补偿快照", () => {
     const { host, root } = await mount(received, [event])
     const settled = { ...received, status: "paused", street: "settled", seats: [{ ...received.seats[0], stack: 108, pendingCompensation: 0 }] }
     await act(async () => root.render(<SidePanel table={settled} perspective="owner" events={[event]} />))
-    expect(funds(host)).toEqual({ "可用筹码": "108", "本手待结算补偿": "0" })
+    expect(funds(host)).toEqual({ "可用筹码": "108", "本手暂存待分": "0" })
     await act(async () => root.unmount())
   })
   it.each(["new-admission", "historical", "departed", "other-user", "public"])("%s不显示旧入座资产为本人当前资金", async scenario => {

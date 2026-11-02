@@ -94,6 +94,8 @@ const url = gameTestDatabaseUrl()
         deck,
       )
     await poker.withRoom(t.code, async (c) => {
+      const previous = (await c.tx.gamePokerHand.findUniqueOrThrow({ where: { id: t.handId } })).engineState as unknown as typeof state
+      Object.assign(state, { participants: previous.participants, turnClock: previous.turnClock, chipRulesVersion: previous.chipRulesVersion })
       await c.tx.gamePokerHand.update({
         where: { id: t.handId },
         data: { engineState: json(state) },

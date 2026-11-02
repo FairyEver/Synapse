@@ -22,7 +22,7 @@ async function collect<T extends { id: string }>(page: (after?: string) => Promi
 export class GameReserveService {
   private async lock(tx: Prisma.TransactionClient, scope: GameReserveScope): Promise<void> {
     const key = JSON.stringify([scope.gameKind, scope.gameRoomId, scope.settlementId, scope.funding])
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))::text AS "lock"`
   }
   /** Caller holds its game and ordered account locks; this service only persists validated funds. */
   async apply(tx: Prisma.TransactionClient, input: GameReserveWriteBatch): Promise<void> {

@@ -121,6 +121,7 @@ const url = gameTestDatabaseUrl()
       prefix.push("4d", "2s", "3h", "7d", "5c", "9c", "6h", "Jd")
       const deck = [...prefix, ...orderedDeck().filter((card) => !prefix.includes(card))]
       const h = startHand(c.seats.map((s) => ({ seatNo: s.seatNo, stack: s.participantKind === loser ? 2 : 1000 })), 0, deck, engine(hand))
+      Object.assign(h, { participants: engine(hand).participants, turnClock: engine(hand).turnClock })
       for (const seat of h.seats) await c.tx.gamePokerHandSeat.updateMany({ where: { handId: hand.id, seatNo: seat.seatNo }, data: { startingStack: seat.startingStack, holeCards: seat.hole } })
       await saveHand(poker, c, hand, h)
     })
