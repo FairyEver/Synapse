@@ -7,18 +7,18 @@
 <style>
 :root{color-scheme:light;--background:oklch(.9702 0 0);--surface:oklch(1 0 0);--foreground:oklch(.2103 .0059 285.89);--muted:oklch(.49 .014 285.94);--border:oklch(.90 .004 286.32);--default:oklch(.94 .001 286.375);--accent:oklch(.6204 .195 253.83);--accent-soft:color-mix(in oklch,var(--accent) 10%,var(--surface));--danger:oklch(.56 .21 25.74);--chip-1:oklch(.84 .012 260);--chip-5:oklch(.57 .21 25);--chip-10:oklch(.56 .19 254);--chip-25:oklch(.53 .14 153);--chip-100:oklch(.29 .022 280);--chip-200:oklch(.48 .19 305);--chip-500:oklch(.55 .12 65);--shadow:color-mix(in oklch,var(--foreground) 20%,transparent)}
 *{box-sizing:border-box}body{margin:0;background:var(--background);color:var(--foreground);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;font-variant-numeric:tabular-nums}button,input,select{font:inherit}button,select{cursor:pointer}button{border:0;border-radius:9px;background:var(--default);color:var(--foreground);min-height:40px;padding:9px 16px;font-weight:500;transition:background .16s,transform .16s}button:hover:not(:disabled){background:color-mix(in oklch,var(--default) 88%,var(--foreground))}button:active:not(:disabled){transform:translateY(1px)}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button:disabled{cursor:default;opacity:.45}.primary{background:var(--accent);color:var(--surface)}.primary:hover:not(:disabled){background:color-mix(in oklch,var(--accent) 90%,var(--foreground))}.quiet{background:transparent;color:var(--muted)}
-.topbar{height:66px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;border-bottom:1px solid var(--border);background:var(--surface)}.room{display:flex;gap:14px;align-items:center}.room strong{font-size:16px}.room span{color:var(--muted)}.prototype{font-size:12px;color:var(--muted);padding:4px 9px;background:var(--default);border-radius:5px}.app{max-width:1440px;margin:auto}.stage{height:clamp(480px,64vh,720px);min-height:480px;position:relative;isolation:isolate;--chip-size:46px;--pile-gap:40px;--stack-step:4.6px}.table{position:absolute;inset:48px 7% 49px;border:1px solid var(--border);border-radius:50%;background:var(--surface)}.table::after{content:"";position:absolute;inset:13px;border:1px solid color-mix(in oklch,var(--border) 35%,transparent);border-radius:50%}.pot{position:absolute;left:50%;top:17%;transform:translateX(-50%);width:310px;text-align:center}.pot-label{color:var(--muted);font-size:13px}.pot-amount{font-size:48px;line-height:1.15;font-weight:650;letter-spacing:-.035em;display:block}.pot-amount[data-changed]{animation:amount-cue .24s ease-out}.pile{position:relative;width:100%;height:122px;margin-top:8px;filter:drop-shadow(0 5px 4px var(--shadow))}.pile:empty::after{content:"";position:absolute;bottom:20px;left:30%;width:40%;height:15px;border:1px dashed var(--border);border-radius:50%}
+.topbar{height:66px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;border-bottom:1px solid var(--border);background:var(--surface)}.room{display:flex;gap:14px;align-items:center}.room strong{font-size:16px}.room span{color:var(--muted)}.prototype{font-size:12px;color:var(--muted);padding:4px 9px;background:var(--default);border-radius:5px}.app{max-width:1440px;margin:auto}.stage{height:clamp(480px,64vh,720px);min-height:480px;position:relative;isolation:isolate;--chip-size:46px}.table{position:absolute;inset:48px 7% 49px;border:1px solid var(--border);border-radius:50%;background:var(--surface)}.table::after{content:"";position:absolute;inset:13px;border:1px solid color-mix(in oklch,var(--border) 35%,transparent);border-radius:50%}.pot{position:absolute;left:50%;top:17%;transform:translateX(-50%);width:310px;text-align:center}.pot-label{color:var(--muted);font-size:13px}.pot-amount{font-size:48px;line-height:1.15;font-weight:650;letter-spacing:-.035em;display:block}.pot-amount[data-changed]{animation:amount-cue .24s ease-out}.pile{--cluster-gap:46px;--cluster-rise:4.6px;--cluster-base:30px;position:relative;width:100%;height:122px;margin-top:8px;filter:drop-shadow(0 5px 4px var(--shadow))}.pile:empty::after{content:"";position:absolute;bottom:20px;left:30%;width:40%;height:15px;border:1px dashed var(--border);border-radius:50%}
 .chip{position:absolute;width:var(--chip-size);height:var(--chip-size);pointer-events:none;color:var(--surface);transform:rotateX(44deg) rotateZ(var(--turn,0deg));transform-style:preserve-3d;filter:drop-shadow(0 1px 0 color-mix(in oklch,var(--chip-color) 60%,var(--foreground))) drop-shadow(0 2px 0 var(--chip-color)) drop-shadow(0 3px 0 color-mix(in oklch,var(--chip-color) 70%,var(--foreground)))}.chip svg{display:block;width:100%;height:100%;overflow:visible}.chip[data-value="1"]{color:var(--foreground)}.chip text{font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-weight:750;font-size:23px}.chip[data-value="100"] text,.chip[data-value="200"] text,.chip[data-value="500"] text{font-size:19px}.flight{z-index:10;will-change:transform}.chip.landed{animation:land .18s ease-out}.legend .chip{position:relative;display:block;--chip-size:32px;flex:none;filter:drop-shadow(0 2px 0 color-mix(in oklch,var(--chip-color) 65%,var(--foreground)));transform:rotateX(25deg)}
 .board{display:flex;gap:7px;position:absolute;left:50%;top:60%;transform:translate(-50%,-50%)}.card{width:50px;height:70px;border:1px solid var(--border);background:var(--surface);border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 24px/1.05 Georgia,serif;box-shadow:0 2px 0 var(--border)}.card span{font-size:22px}.card.red{color:var(--danger)}.card.empty{background:var(--background);box-shadow:none}.caption{position:absolute;top:calc(60% + 49px);left:50%;transform:translateX(-50%);color:var(--muted);white-space:nowrap;font-size:12px}.caption b{color:var(--foreground);font-weight:500;margin-right:8px}.seat{position:absolute;width:158px;text-align:center;z-index:2;transform:translate(-50%,-50%)}.seat[data-seat="0"]{left:16%;top:47%}.seat[data-seat="1"]{left:84%;top:47%}.seat[data-seat="2"]{left:50%;top:85%}.hand{height:61px;display:flex;justify-content:center;align-items:flex-end;margin-bottom:8px}.hand .card{width:42px;height:59px;font-size:26px;transform:rotate(-7deg)}.hand .card+.card{transform:rotate(7deg);margin-left:3px}.hand .back{background:var(--default);color:var(--muted);position:relative;font-size:20px}.hand .back::after{content:"";position:absolute;inset:4px;border:1px solid var(--border)}.plate{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 13px;display:flex;align-items:center;gap:9px;text-align:left}.seat[data-seat="2"] .plate{background:var(--accent-soft);border-color:var(--accent)}.avatar{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;background:var(--default);font-size:12px;flex:none}.seat[data-seat="2"] .avatar{background:var(--surface);color:var(--accent)}.name{font-size:13px}.balance{display:block;font-size:23px;font-weight:600;line-height:1.2}.receipt{height:23px;padding-top:5px;font-size:12px;color:var(--muted)}.seat[data-active="true"] .plate{outline:2px solid var(--accent);outline-offset:3px}.seat[data-active="true"] .receipt{color:var(--accent)}
 .dock{background:var(--surface);border-top:1px solid var(--border);padding:20px 28px 24px}.dock-inner{max-width:940px;margin:auto}.demo-row{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:15px}.legend{display:flex;gap:14px;align-items:center}.legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}.demo-buttons{display:flex;gap:8px}.bet-form{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.field{display:flex;align-items:center;gap:9px;color:var(--muted)}input,select{height:40px;border:1px solid var(--border);border-radius:8px;color:var(--foreground);background:var(--surface);padding:0 10px}input{width:94px}select{width:105px}.presets{display:flex;gap:5px;flex:1}.presets button{padding-inline:13px;min-width:43px;background:transparent}.presets button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}.status-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:28px;margin-top:13px;color:var(--muted);font-size:12px}.breakdown{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.breakdown b{font-weight:500;color:var(--foreground)}#status[data-error="true"]{color:var(--danger)}.unit{padding-left:5px;font-size:12px;color:var(--muted)}
 @keyframes land{0%{translate:0 -4px}100%{translate:0 0}}@keyframes amount-cue{0%{translate:0 3px}100%{translate:0 0}}
 @media(min-width:1500px){.stage{height:690px}.table{inset-inline:6%}.pot{top:22%}}
-@media(max-width:700px){.topbar{height:56px;padding-inline:16px}.room{gap:8px}.room span{font-size:12px}.stage{height:640px;--chip-size:37px;--pile-gap:32px;--stack-step:3.8px}.table{inset:45px 10px 35px;border-radius:45%}.seat{width:119px}.seat[data-seat="0"]{left:20%;top:22%}.seat[data-seat="1"]{left:80%;top:22%}.seat[data-seat="2"]{top:84%}.plate{padding:8px;gap:6px}.balance{font-size:20px}.avatar{width:22px;height:22px}.pot{top:33%;width:260px}.pot-amount{font-size:37px}.pile{height:100px}.board{top:63%;gap:5px}.board .card{width:39px;height:54px;font-size:21px}.caption{top:calc(63% + 37px);font-size:11px}.dock{padding:16px}.demo-row{flex-wrap:wrap;gap:10px}.legend{width:100%;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}.legend-item{flex-direction:column;gap:2px}.demo-buttons{width:100%}.demo-buttons button{flex:1}.bet-form{gap:10px}.presets{order:2;flex-basis:100%;justify-content:space-between}.field{flex:1}.field select,.field input{flex:1;min-width:0;width:70px}.bet-form>.primary{flex-basis:100%;order:3}.status-row{align-items:flex-start;flex-direction:column;gap:6px}.hand{height:54px}.hand .card{width:35px;height:50px}.legend .chip{--chip-size:29px}}
+@media(max-width:700px){.topbar{height:56px;padding-inline:16px}.room{gap:8px}.room span{font-size:12px}.stage{height:640px;--chip-size:37px}.table{inset:45px 10px 35px;border-radius:45%}.seat{width:119px}.seat[data-seat="0"]{left:20%;top:22%}.seat[data-seat="1"]{left:80%;top:22%}.seat[data-seat="2"]{top:84%}.plate{padding:8px;gap:6px}.balance{font-size:20px}.avatar{width:22px;height:22px}.pot{top:33%;width:260px}.pot-amount{font-size:37px}.pile{height:100px;--cluster-gap:38px;--cluster-rise:3.8px}.board{top:63%;gap:5px}.board .card{width:39px;height:54px;font-size:21px}.caption{top:calc(63% + 37px);font-size:11px}.dock{padding:16px}.demo-row{flex-wrap:wrap;gap:10px}.legend{width:100%;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}.legend-item{flex-direction:column;gap:2px}.demo-buttons{width:100%}.demo-buttons button{flex:1}.bet-form{gap:10px}.presets{order:2;flex-basis:100%;justify-content:space-between}.field{flex:1}.field select,.field input{flex:1;min-width:0;width:70px}.bet-form>.primary{flex-basis:100%;order:3}.status-row{align-items:flex-start;flex-direction:column;gap:6px}.hand{height:54px}.hand .card{width:35px;height:50px}.legend .chip{--chip-size:29px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 .stage{height:clamp(600px,70vh,760px);min-height:600px}
-.bank{position:absolute;top:calc(100% + 8px);left:50%;translate:-50% 0;width:240px;height:82px;--chip-size:30px;--bank-gap:26px;--bank-step:3.3px;filter:drop-shadow(0 3px 3px var(--shadow));pointer-events:none}.bank .chip{--turn:0deg}.bank[data-empty="true"]::after{content:"0";position:absolute;inset:25px 0 auto;color:var(--muted);font-size:13px}.seat[data-seat="2"] .bank{top:auto;bottom:15px;left:calc(100% + 22px);translate:0 0}
-@media(max-width:1050px) and (min-width:701px){.bank{width:200px;--chip-size:26px;--bank-gap:22px;--bank-step:3px}.seat[data-seat="2"] .bank{left:calc(100% + 8px)}}
-@media(max-width:700px){.stage{height:790px}.seat[data-seat="0"]{left:24%;top:14%}.seat[data-seat="1"]{left:76%;top:14%}.seat[data-seat="2"]{top:75%}.pot{top:34%}.board{top:58%}.caption{top:calc(58% + 37px)}.bank{width:min(170px,calc(48vw - 8px));height:75px;--chip-size:25px;--bank-gap:clamp(15px,4.5vw,20px);--bank-step:3px}.seat[data-seat="2"] .bank{top:calc(100% + 8px);bottom:auto;left:50%;translate:-50% 0}}
+.bank{position:absolute;top:calc(100% + 8px);left:50%;translate:-50% 0;width:240px;height:82px;--chip-size:30px;--cluster-gap:29px;--cluster-rise:3.3px;--cluster-base:14px;filter:drop-shadow(0 3px 3px var(--shadow));pointer-events:none}.bank[data-empty="true"]::after{content:"0";position:absolute;inset:25px 0 auto;color:var(--muted);font-size:13px}.seat[data-seat="2"] .bank{top:auto;bottom:15px;left:calc(100% + 22px);translate:0 0}
+@media(max-width:1050px) and (min-width:701px){.bank{width:200px;--chip-size:26px;--cluster-gap:25px;--cluster-rise:3px}.seat[data-seat="2"] .bank{left:calc(100% + 8px)}}
+@media(max-width:700px){.stage{height:790px}.seat[data-seat="0"]{left:24%;top:14%}.seat[data-seat="1"]{left:76%;top:14%}.seat[data-seat="2"]{top:75%}.pot{top:34%}.board{top:58%}.caption{top:calc(58% + 37px)}.bank{width:min(170px,calc(48vw - 8px));height:75px;--chip-size:25px;--cluster-gap:26px;--cluster-rise:3px}.seat[data-seat="2"] .bank{top:calc(100% + 8px);bottom:auto;left:50%;translate:-50% 0}}
 </style>
 </head>
 <body>
@@ -50,7 +50,7 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let total = 0, counts = {}, balances = [4990, 4990, 4990], generation = 0, busy = false;
   const animations = new Set();
-  const stackLimit = 12;
+  let potStacks = [];
   function decompose(amount) {
     if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('筹码金额必须为非负安全整数');
     const chips = [];
@@ -67,17 +67,57 @@
     const remaining = balance - amount;
     return {remaining, kept: decompose(remaining), outgoing: decompose(amount)};
   }
-  // Every chip is represented. Fixed-height columns wrap instead of clipping chips.
+  // Seeded offsets remain identical between renders; layout never uses Math.random().
+  function noise(seed) {
+    let hash = Math.imul(seed + 1, 0x45d9f3b);
+    hash = Math.imul(hash ^ (hash >>> 16), 0x45d9f3b);
+    return ((hash ^ (hash >>> 16)) >>> 0) / 4294967296;
+  }
+  function newStack(stacks) {
+    const index = stacks.length;
+    const angle = index * 2.399963 + .24;
+    const radius = index === 0 ? 0 : .94 * Math.sqrt(index);
+    const stack = {chips:[], capacity:8 + index % 3, x:Math.cos(angle) * radius, y:Math.sin(angle) * radius * .35};
+    stacks.push(stack);
+    return stack;
+  }
+  // Small holdings share a short mixed stack. Larger holdings retain distinct tall stacks.
+  function addToCluster(stacks, value) {
+    const candidates = stacks.filter(stack => stack.chips.length < stack.capacity &&
+      (stack.chips.includes(value) || stack.chips.length < 5));
+    const score = stack => (stack.chips.includes(value) ? -4 : 0) + stack.chips.length * .45;
+    candidates.sort((a,b) => score(a) - score(b));
+    const stack = candidates[0] || newStack(stacks);
+    const level = stack.chips.length;
+    stack.chips.push(value);
+    return {stack, index:stacks.indexOf(stack), level};
+  }
+  // Build complete large stacks first, then tuck the 1–3 spare chips into mixed stacks.
   function bankLayout(chips) {
-    const columns = [];
+    const stacks = [], spare = [];
     for (const value of values) {
       let count = chips.filter(chipValue => chipValue === value).length;
-      while (count > 0) {
-        const height = Math.min(stackLimit, count);
-        columns.push({value, height}); count -= height;
+      while (count >= 4) {
+        const stack = newStack(stacks);
+        const height = Math.min(stack.capacity, count);
+        stack.chips = Array(height).fill(value); count -= height;
       }
+      for (let i = 0; i < count; i++) spare.push(value);
     }
-    return columns;
+    spare.forEach(value => addToCluster(stacks, value));
+    return stacks;
+  }
+  function positionChip(node, stack, index, level, seed = 0) {
+    const key = seed * 991 + index * 131 + level * 17;
+    const dx = (noise(key) - .5) * 3.2;
+    const dy = (noise(key + 3) - .5) * 1.4;
+    const turn = (noise(key + 7) - .5) * 24;
+    node.style.left = `calc(50% + ${stack.x} * var(--cluster-gap) + ${dx}px - var(--chip-size) / 2)`;
+    node.style.bottom = `calc(var(--cluster-base) + ${stack.y} * var(--cluster-gap) + ${level} * var(--cluster-rise) + ${dy}px)`;
+    // Back stacks paint before front stacks; levels remain in physical stacking order.
+    node.style.zIndex = String(Math.round((8 - stack.y) * 1000) + level);
+    node.style.setProperty('--turn', `${turn}deg`);
+    node.dataset.stack = String(index); node.dataset.level = String(level); node.dataset.turn = String(turn);
   }
   function renderBank(seat, chips = decompose(balances[seat])) {
     let bank = seats[seat].querySelector('.bank');
@@ -85,15 +125,13 @@
       bank = document.createElement('div'); bank.className = 'bank'; bank.setAttribute('role', 'img');
       seats[seat].append(bank);
     }
-    const columns = bankLayout(chips), fragment = document.createDocumentFragment();
-    columns.forEach(({value,height},column) => {
-      for (let level = 0; level < height; level++) {
+    const stacks = bankLayout(chips), fragment = document.createDocumentFragment();
+    stacks.forEach((stack,index) => {
+      stack.chips.forEach((value,level) => {
         const node = chip(value);
-        node.style.left = `calc(50% + ${column - (columns.length - 1) / 2} * var(--bank-gap) - var(--chip-size) / 2)`;
-        node.style.bottom = `calc(5px + ${level} * var(--bank-step))`;
-        node.style.zIndex = String(column * stackLimit + level);
+        positionChip(node, stack, index, level, seat + 1);
         fragment.append(node);
-      }
+      });
     });
     bank.replaceChildren(fragment); bank.dataset.empty = String(!chips.length);
     bank.setAttribute('aria-label', `${seats[seat].querySelector('.name').textContent}剩余 ${format(chips.reduce((sum,value) => sum + value,0))} 筹码，${chips.length} 枚`);
@@ -110,16 +148,10 @@
   }
   // Append each wager's actual chips; never exchange the accumulated pot for larger denominations.
   function reserveChip(value) {
-    const index = counts[value] || 0;
-    counts[value] = index + 1;
-    const group = [...values].reverse().indexOf(value);
-    const column = Math.floor(index / 10), level = index % 10;
-    const jitter = ((index * 7 + group * 3) % 5 - 2) * .65;
+    counts[value] = (counts[value] || 0) + 1;
+    const {stack,index,level} = addToCluster(potStacks, value);
     const node = chip(value);
-    node.style.left = `calc(50% + ${group - (values.length - 1) / 2} * var(--pile-gap) + ${column * 8 + jitter}px - var(--chip-size) / 2)`;
-    node.style.bottom = `calc(${18 + (group % 2) * 11 - column * 9}px + ${level} * var(--stack-step))`;
-    node.style.zIndex = String(1 + level + column * 12 + group * 100);
-    node.style.setProperty('--turn', `${((index * 13 + group * 7) % 21) - 10}deg`);
+    positionChip(node, stack, index, level);
     node.style.visibility = 'hidden';
     pile.append(node);
     return node;
@@ -170,7 +202,7 @@
       {transform: transform(x1, y1, 0, from.width / target.offsetWidth), opacity: 1, offset: 0},
       {transform: transform(x1 + (x2-x1)*.16, y1 + (y2-y1)*.16 - 16, 4, 1.06), opacity: 1, offset: .18},
       {transform: transform(x1 + (x2-x1)*.62, y1 + (y2-y1)*.62 - 38, 20, 1.08), opacity: 1, offset: .58},
-      {transform: transform(x2, y2, 0), opacity: 1, offset: 1}
+      {transform: transform(x2, y2, Number(target.dataset.turn)), opacity: 1, offset: 1}
     ], {duration: reduced.matches ? 1 : 590, delay: reduced.matches ? 0 : index * 48, easing: 'cubic-bezier(.22,.65,.3,1)', fill: 'both'});
     animations.add(animation);
     try {
@@ -204,7 +236,7 @@
     generation++;
     animations.forEach(animation => animation.cancel()); animations.clear();
     stage.querySelectorAll('.flight').forEach(node => node.remove());
-    pile.replaceChildren(); total = 0; counts = {}; balances = initial ? [4990,4990,4990] : [5000,5000,5000];
+    pile.replaceChildren(); total = 0; counts = {}; potStacks = []; balances = initial ? [4990,4990,4990] : [5000,5000,5000];
     seats.forEach((node,i) => { node.dataset.active = 'false'; node.querySelector('.balance').textContent = format(balances[i]); node.querySelector('.receipt').textContent = initial ? '已下注 10' : '等待下注'; });
     seats.forEach((_,seat) => renderBank(seat));
     if (initial) for (let i = 0; i < 3; i++) { const node = reserveChip(10); node.style.visibility = 'visible'; total += 10; }
@@ -225,7 +257,7 @@
   $('#demo').addEventListener('click', () => {
     reset();
     execute(async run => {
-      const sequence = [[0,100],[1,100],[2,100],[0,100],[1,100],[2,501]];
+      const sequence = [[0,10],[1,10],[2,5],[0,5],[1,5],[2,100],[0,100],[1,100],[2,100],[0,100],[2,501]];
       for (const [seat,amount] of sequence) {
         if (generation !== run) return;
         amountInput.value = String(amount); $('#player').value = String(seat); preview();
