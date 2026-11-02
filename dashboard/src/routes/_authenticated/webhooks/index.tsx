@@ -1,7 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { z } from 'zod';
-import WebhooksPage from '@/features/webhooks';
+import { WebhookWorkspace } from '@/features/webhooks/webhook-workspace';
+import { webhookWorkspaceSearchSchema } from '@/features/webhooks/webhook-workspace-search';
 export const Route = createFileRoute('/_authenticated/webhooks/')({
-    validateSearch: z.object({ action: z.literal('create').optional().catch(undefined) }),
-    component: () => <WebhooksPage createOnOpen={Route.useSearch().action === 'create'} />,
+    validateSearch: webhookWorkspaceSearchSchema,
+    component: WebhookWorkspaceRoute,
 });
+function WebhookWorkspaceRoute() {
+    const search = Route.useSearch();
+    const navigate = Route.useNavigate();
+    return <WebhookWorkspace search={search} onSearchChange={(update) => void navigate({ search: update })}/>;
+}

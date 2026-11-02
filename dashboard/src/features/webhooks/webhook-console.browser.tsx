@@ -12,6 +12,13 @@ import { WebhookDeliveryHistoryDetailSheet } from '../webhook-deliveries/webhook
 import { WebhookSelector } from '../webhook-deliveries/webhook-selector'
 import { ServerDataTable } from '@/components/data-table'
 import { buildWebhookColumns } from './webhook-columns'
+import { WebhookWorkspace } from './webhook-workspace'
+import type { WebhookWorkspaceSearch } from './webhook-workspace-search'
+
+vi.mock('@tanstack/react-router', async (original) => ({
+  ...await original<typeof import('@tanstack/react-router')>(),
+  useNavigate: () => vi.fn(),
+}))
 
 const webhook: DashboardWebhookDto = {
   id: 'hook-1', publicId: 'wh_fixture', name: 'GitHub 部署', enabled: true,
@@ -43,6 +50,10 @@ function HistoryFixture({ initialSearch = {} }: { initialSearch?: WebhookDeliver
 function provider(children: React.ReactNode) {
   return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>
 }
+function WorkspaceFixture({ initialSearch = {} }: { initialSearch?: WebhookWorkspaceSearch }) {
+  const [search, setSearch] = useState(initialSearch)
+  return <WebhookWorkspace search={search} onSearchChange={setSearch} />
+}
 function noOverflow() {
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth)
 }
@@ -52,6 +63,33 @@ async function settleMotion() {
 
 describe('Webhook task flows', () => {
   for (const width of [390, 1280]) {
+    it(`unifies configuration and global records with persistent filters at ${width}px`, async () => {
+      await page.viewport(width, 850)
+      vi.spyOn(dashboardApi, 'listWebhooks').mockResolvedValue({ data: [webhook], total: 1, page: 1, pageSize: 10 })
+      const history = vi.spyOn(dashboardApi, 'listWebhookDeliveryHistory').mockResolvedValue({ data: [delivery], total: 1, page: 1, pageSize: 10 })
+      await render(provider(<WorkspaceFixture />))
+      await expect.element(page.getByRole('heading', { name: 'Webhook', exact: true })).toBeVisible()
+      await expect.element(page.getByRole('tab', { name: '接入配置', exact: true })).toHaveAttribute('aria-selected', 'true')
+      await expect.element(page.getByRole('button', { name: '新建 Webhook', exact: true })).toBeVisible()
+      expect(history).not.toHaveBeenCalled()
+      page.getByRole('tab', { name: '接入配置', exact: true }).element().focus()
+      await userEvent.keyboard('{ArrowRight}')
+      await expect.element(page.getByRole('tab', { name: '触发记录', exact: true })).toHaveAttribute('aria-selected', 'true')
+      await page.getByRole('button', { name: '全部状态 投递状态', exact: true }).click()
+      await page.getByRole('option', { name: '桌面端已确认', exact: true }).click()
+      await expect.poll(() => history.mock.calls.at(-1)?.[0]?.status).toBe('delivered')
+      await page.getByRole('tab', { name: '接入配置', exact: true }).click()
+      await page.getByRole('button', { name: '新建 Webhook', exact: true }).click()
+      await expect.element(page.getByRole('dialog')).toBeVisible()
+      await page.getByRole('button', { name: '取消', exact: true }).click()
+      await page.getByRole('tab', { name: '触发记录', exact: true }).click()
+      await expect.element(page.getByRole('button', { name: '桌面端已确认 投递状态', exact: true })).toBeVisible()
+      expect(document.querySelectorAll('main')).toHaveLength(1)
+      noOverflow()
+      await settleMotion()
+      await page.screenshot({ path: `/tmp/synapse-webhook-workspace-${width}.png` })
+    })
+
     it(`reveals and copies the URL, and saves a name at ${width}px`, async () => {
       await page.viewport(width, 850)
       const onSaveName = vi.fn()

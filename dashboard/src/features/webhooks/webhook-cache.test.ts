@@ -29,10 +29,10 @@ describe('removeDeletedWebhookFromCache', () => {
 
   it('builds a filtered history href for a webhook', () => {
     expect(getWebhookDeliveriesHref('webhook-1')).toBe(
-      '/webhook-deliveries?webhookId=webhook-1'
+      '/webhooks?tab=deliveries&webhookId=webhook-1'
     )
     expect(getWebhookDeliveriesHref('webhook/with space')).toBe(
-      '/webhook-deliveries?webhookId=webhook%2Fwith+space'
+      '/webhooks?tab=deliveries&webhookId=webhook%2Fwith+space'
     )
   })
 

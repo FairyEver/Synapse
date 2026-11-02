@@ -27,8 +27,8 @@ Dashboard 保持上述普通用户/管理身份隔离，但两套导航与路由
 
 ### Webhook 配置与触发记录
 
-- `/console/webhooks` 使用分页列表；名称进入单个 Webhook，行内“触发记录”进入 `/console/webhooks/:webhookId?tab=deliveries`。详情以 HeroUI Tabs 分配置和触发记录，记录复用全局历史组件，不复制页面外壳。
-- `/console/webhook-deliveries` 和 `/admin/webhook-deliveries` 保留全局历史及旧 `webhookId` 筛选链接。普通用户以分页名称选项选择 Webhook，已删除或不在管理列表的筛选对象不能被丢弃；管理员保留用户与 Webhook ID 筛选，不调用普通用户管理列表代替全局选项。
+- 普通用户导航只保留“Webhook”，入口 `/console/webhooks` 通过 HeroUI Tabs 切换“接入配置”和“触发记录”；全局历史使用 `?tab=deliveries`，切换时保留历史筛选与分页。名称进入单个 Webhook，行内“触发记录”进入 `/console/webhooks/:webhookId?tab=deliveries`；详情保留配置和记录两级结构，复用历史组件，不重复页面外壳。
+- 旧 `/console/webhook-deliveries` 自动替换跳转到统一入口的触发记录 Tab，保留 `webhookId`、日期、状态、分页及排序。管理员 `/admin/webhook-deliveries` 继续提供独立全局历史，不新增配置管理能力。普通用户使用分页名称选项并保留已删除对象的筛选值；管理员使用用户与 Webhook ID 筛选，不调用普通用户管理列表代替全局选项。
 - 历史筛选、分页和排序由路由搜索参数驱动；日期范围反转时显示错误并停止该查询。详情抽屉按请求与桌面端回执分区，Query、Headers 按需展开，客户端数量明确标注含义。
 - 接入配置默认遮蔽访问令牌，支持显隐和复制；重置调用地址立即使旧地址失效，内部标识、自动化关联和历史保留，新地址后续仍可复制；日常删除不清除触发历史。
 - 历史只展示已有脱敏摘要。桌面端确认仅代表收到消息，不能表述为自动化执行成功；不新增重放、补发或原始正文查询能力。

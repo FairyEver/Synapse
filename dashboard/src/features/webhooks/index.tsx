@@ -1,16 +1,13 @@
 import { TextField } from '@heroui/react';
-import { Button, Input, Label, Link, Modal, toast } from '@heroui/react';
+import { Button, Input, Label, Modal, toast } from '@heroui/react';
 import { useMemo, useState, type FormEvent, } from 'react';
 import type { DashboardWebhookDto } from '@synapse/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { dashboardApi } from '@/lib/api';
-import { consoleHref } from '@/lib/console-href';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DEFAULT_DASHBOARD_PAGE_SIZE, ServerDataTable, } from '@/components/data-table';
-import { Header } from '@/components/layout/header';
-import { Main } from '@/components/layout/main';
 import { getWebhookErrorMessage } from './webhook-error';
 import { WebhookUrlDialog } from './webhook-url-dialog';
 import { getWebhookResetSecretDialogDescription, webhookResetSecretDialogTitle, } from './webhook-reset-secret';
@@ -24,7 +21,7 @@ type OneTimeUrlState = {
     title: string;
     url: string;
 };
-export default function WebhooksPage({ createOnOpen = false }: { createOnOpen?: boolean }) {
+export default function WebhookList({ createOnOpen = false }: { createOnOpen?: boolean }) {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(DEFAULT_DASHBOARD_PAGE_SIZE);
     const [form, setForm] = useState<WebhookFormState | null>(() => createOnOpen
@@ -131,16 +128,11 @@ export default function WebhooksPage({ createOnOpen = false }: { createOnOpen?: 
         isUpdating: updateMutation.isPending,
     }), [navigate, updateMutation]);
     return (<>
-      <Header fixed>
-        <h1 className='text-lg font-semibold'>Webhooks</h1>
-      </Header>
-      <Main className='flex flex-1 flex-col gap-4'>
         <ServerDataTable columns={columns} data={[...(webhooksPage?.data ?? [])]} page={page} pageSize={pageSize} total={total} error={webhooksQuery.isError ? webhooksQuery.error : null} onRetry={() => void webhooksQuery.refetch()} onPageChange={setPage} onPageSizeChange={setPageSize} isLoading={webhooksQuery.isLoading} loadingRowCount={Math.min(pageSize, DEFAULT_DASHBOARD_PAGE_SIZE)} emptyMessage='暂无 Webhook，点击“新建 Webhook”创建' toolbar={<div className='flex flex-wrap items-center gap-4'>
               <Button onPress={() => setForm({ mode: 'create', webhook: null, name: '' })}>
                 <Plus data-icon='inline-start'/>
                 新建 Webhook
               </Button>
-              <Link href={consoleHref('/webhook-deliveries')}>全部触发记录</Link>
             </div>}/>
 
         <WebhookFormDialog form={form} isSaving={isSaving} onFormChange={setForm} onSubmit={submitForm}/>
@@ -163,7 +155,6 @@ export default function WebhooksPage({ createOnOpen = false }: { createOnOpen?: 
             if (deleteTarget)
                 deleteMutation.mutate(deleteTarget.id);
         }}/>
-      </Main>
     </>);
 }
 export function WebhookFormDialog({ form, isSaving, onFormChange, onSubmit, }: {
@@ -208,8 +199,8 @@ export function removeDeletedWebhookFromCache(current: DashboardWebhookDto[] | u
     return (current ?? []).filter((item) => item.id !== deletedId);
 }
 export function getWebhookDeliveriesHref(webhookId: string) {
-    const query = new URLSearchParams({ webhookId });
-    return `/webhook-deliveries?${query.toString()}`;
+    const query = new URLSearchParams({ tab: 'deliveries', webhookId });
+    return `/webhooks?${query.toString()}`;
 }
 export function getWebhookDetailHref(webhookId: string) {
     return `/webhooks/${encodeURIComponent(webhookId)}`;

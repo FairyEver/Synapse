@@ -1,27 +1,10 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
-import WebhookDeliveriesPage from '@/features/webhook-deliveries'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { webhookHistorySearchSchema } from '@/features/webhooks/webhook-workspace-search'
 
-const searchSchema = z.object({
-  page: z.coerce.number().optional(),
-  pageSize: z.coerce.number().optional(),
-  sortBy: z.string().optional(),
-  sortOrder: z.enum(['asc', 'desc']).optional(),
-  webhookId: z.string().optional(),
-  status: z.string().optional(),
-  from: z.string().optional(),
-  to: z.string().optional(),
-  user: z.string().optional(),
-  userId: z.string().optional(),
-})
-
+/** Preserve bookmarked history filters while using the single Webhook workspace. */
 export const Route = createFileRoute('/_authenticated/webhook-deliveries/')({
-  component: WebhookHistoryRoute,
-  validateSearch: searchSchema,
+  validateSearch: webhookHistorySearchSchema,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: '/webhooks/', search: { ...search, tab: 'deliveries' }, replace: true })
+  },
 })
-
-function WebhookHistoryRoute() {
-  const search = Route.useSearch()
-  const navigate = Route.useNavigate()
-  return <WebhookDeliveriesPage mode='user' search={search} onSearchChange={(update) => void navigate({ search: update })} />
-}
