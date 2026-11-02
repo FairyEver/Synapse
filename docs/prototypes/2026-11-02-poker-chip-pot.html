@@ -21,6 +21,9 @@
 @media(max-width:700px){.stage{height:790px}.seat[data-seat="0"]{left:24%;top:14%}.seat[data-seat="1"]{left:76%;top:14%}.seat[data-seat="2"]{top:75%}.pot{top:34%}.board{top:58%}.caption{top:calc(58% + 37px)}.bank{width:min(170px,calc(48vw - 8px));height:75px;--chip-size:25px;--cluster-gap:26px;--cluster-rise:3px}.seat[data-seat="2"] .bank{top:calc(100% + 8px);bottom:auto;left:50%;translate:-50% 0}}
 
 .pot-amount{position:relative;letter-spacing:0}.pot-value-text{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.pot-odometer{display:inline-flex;align-items:baseline;height:1.15em;vertical-align:top}.pot-digit{display:inline-block;position:relative;overflow:hidden;width:1ch;height:1.15em;line-height:1.15}.pot-digit-track{display:block;height:1.15em;will-change:transform}.pot-digit-track::before{display:block;white-space:pre;line-height:1.15;content:"0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9\a 0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9\a 0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9"}.pot-separator{width:.4ch;height:1.15em}.pot-separator::before{content:","}
+
+.stage>.pot{left:calc(50% - 105px);width:180px}.stage>.roll-pot{left:calc(50% + 105px)}.stage>.pot .pile{--cluster-gap:36px;--chip-size:40px}.round-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}.seat[data-paid="true"] .plate{outline:2px solid var(--accent);outline-offset:3px}dialog{border:1px solid var(--border);border-radius:14px;padding:0;background:var(--surface);color:var(--foreground);width:min(500px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow:auto}dialog::backdrop{background:color-mix(in oklch,var(--foreground) 30%,transparent)}.settlement-header,.settlement-footer{display:flex;align-items:center;justify-content:space-between;padding:16px 20px}.settlement-header h2{margin:0;font-size:18px;font-weight:600}.settlement-footer{justify-content:flex-end;border-top:1px solid var(--border)}#settlement-results{padding:0 20px}.settlement-player{padding:16px 0;border-top:1px solid var(--border)}.settlement-person{display:flex;justify-content:space-between;gap:12px;font-size:16px}.settlement-player dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0 0}.settlement-player dt{color:var(--muted);font-size:12px}.settlement-player dd{margin:4px 0 0;font-weight:500}.positive{color:var(--accent)}
+@media(max-width:700px){.stage>.pot{width:144px;left:calc(50% - 79px)}.stage>.roll-pot{left:calc(50% + 79px)}.stage>.pot .pile{--cluster-gap:29px;--chip-size:33px;--cluster-rise:3.8px}.stage>.pot .pot-amount{font-size:32px}.round-actions button{flex:1;padding-inline:9px}.settlement-player dl{grid-template-columns:repeat(2,minmax(0,1fr))}.settlement-header,.settlement-footer{padding:16px}.settlement-header h2{font-size:17px}#settlement-results{padding-inline:16px}}
 </style>
 </head>
 <body>
@@ -29,6 +32,7 @@
   <section class="stage" aria-label="三人牌桌">
     <div class="table" aria-hidden="true"></div>
     <div class="pot"><span class="pot-label">底池</span><strong class="pot-amount" id="pot-amount">30</strong><div class="pile" id="pile" role="img" aria-label="底池筹码"></div></div>
+    <div class="pot roll-pot"><span class="pot-label">Roll 费用</span><strong class="pot-amount" id="roll-amount">0</strong><div class="pile" id="roll-pile" role="img" aria-label="Roll 费用筹码"></div></div>
     <div class="board" aria-label="公共牌：黑桃K、红桃9、梅花7"><div class="card">K<span>♠</span></div><div class="card red">9<span>♥</span></div><div class="card">7<span>♣</span></div><div class="card empty"></div><div class="card empty"></div></div>
     <div class="caption"><b>翻牌</b>短牌 32 张 · 盲注 5 / 10</div>
     <div class="seat" data-seat="0"><div class="hand" aria-label="两张暗牌"><div class="card back">♠</div><div class="card back">♠</div></div><div class="plate"><span class="avatar">1</span><div><span class="name">陪练 1</span><strong class="balance">4,990</strong></div></div><div class="receipt">已下注 10</div></div>
@@ -36,11 +40,13 @@
     <div class="seat" data-seat="2"><div class="hand" aria-label="你的手牌：方块8、方块A"><div class="card red">8<span>♦</span></div><div class="card red">A<span>♦</span></div></div><div class="plate"><span class="avatar">3</span><div><span class="name">你</span><strong class="balance">4,990</strong></div></div><div class="receipt">已下注 10</div></div>
   </section>
   <footer class="dock"><div class="dock-inner">
-    <div class="demo-row"><div class="legend" aria-label="筹码面额" id="legend"></div><div class="demo-buttons"><button type="button" id="demo">连续下注演示</button><button type="button" class="quiet" id="reset">重置底池</button></div></div>
-    <form class="bet-form" id="bet-form"><label class="field">玩家<select id="player"><option value="2">你</option><option value="0">陪练 1</option><option value="1">陪练 2</option></select></label><label class="field">下注<input id="amount" type="number" min="1" max="5000" step="1" value="38" required></label><div class="presets" aria-label="下注金额预设"><button type="button" data-amount="8" aria-pressed="false">8</button><button type="button" data-amount="38" aria-pressed="true">38</button><button type="button" data-amount="100" aria-pressed="false">100</button><button type="button" data-amount="200" aria-pressed="false">200</button><button type="button" data-amount="501" aria-pressed="false">501</button></div><button type="submit" class="primary" id="bet">下注 38</button></form>
+    <div class="demo-row"><div class="legend" aria-label="筹码面额" id="legend"></div><div class="demo-buttons"><button type="button" id="demo">完整流程演示</button><button type="button" class="quiet" id="reset">重置底池</button></div></div>
+    <form class="bet-form" id="bet-form"><label class="field">玩家<select id="player"><option value="2">你</option><option value="0">陪练 1</option><option value="1">陪练 2</option></select></label><label class="field">金额<input id="amount" type="number" min="1" max="5000" step="1" value="38" required></label><div class="presets" aria-label="下注金额预设"><button type="button" data-amount="8" aria-pressed="false">8</button><button type="button" data-amount="38" aria-pressed="true">38</button><button type="button" data-amount="100" aria-pressed="false">100</button><button type="button" data-amount="200" aria-pressed="false">200</button><button type="button" data-amount="501" aria-pressed="false">501</button></div><button type="submit" class="primary" id="bet">下注 38</button></form>
+    <div class="round-actions"><button type="button" id="roll">Roll 换牌 · 38</button><button type="button" id="settle">结束并结算</button></div>
     <div class="status-row"><div class="breakdown" id="breakdown"></div><span id="status" role="status" aria-live="polite">准备下注</span></div>
   </div></footer>
 </main>
+<dialog id="settlement" aria-labelledby="settlement-title"><header class="settlement-header"><h2 id="settlement-title">本手结算</h2><button type="button" class="quiet" id="close-settlement" autofocus>关闭</button></header><div id="settlement-results"></div><footer class="settlement-footer"><button type="button" class="primary" id="new-round">再演示一手</button></footer></dialog>
 <script>
 (() => {
   'use strict';
@@ -50,10 +56,11 @@
   const seats = [...document.querySelectorAll('.seat')];
   const format = (value) => value.toLocaleString('zh-CN');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  let total = 0, counts = {}, balances = [4990, 4990, 4990], generation = 0, busy = false;
+  let balances = [4990, 4990, 4990], generation = 0, busy = false, settled = false;
+  let rollPaid = [0,0,0], rollEntitlements = [0,0,0];
+  const potFund = {id:'pot',pile,label:$('#pot-amount'),total:0,counts:{},stacks:[],wheels:new Map()};
+  const rollFund = {id:'roll',pile:$('#roll-pile'),label:$('#roll-amount'),total:0,counts:{},stacks:[],wheels:new Map()};
   const animations = new Set();
-  const potWheels = new Map();
-  let potStacks = [];
   function decompose(amount) {
     if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('筹码金额必须为非负安全整数');
     const chips = [];
@@ -69,6 +76,13 @@
     if (!Number.isSafeInteger(amount) || amount < 1 || amount > balance) throw new Error('下注不能超过剩余筹码');
     const remaining = balance - amount;
     return {remaining, kept: decompose(remaining), outgoing: decompose(amount)};
+  }
+  function splitRollFee(payer, fee) {
+    // Three demo seats, dealer at seat 0: distribute odd chips starting to the left.
+    const recipients = [1,2,0].filter(seat => seat !== payer);
+    const shares = [0,0,0];
+    recipients.forEach((seat,index) => { shares[seat] = Math.floor(fee / recipients.length) + (index < fee % recipients.length ? 1 : 0); });
+    return shares;
   }
   // Seeded offsets remain identical between renders; layout never uses Math.random().
   function noise(seed) {
@@ -115,13 +129,13 @@
   function groupStackColors(stacks) {
     stacks.forEach(stack => stack.chips.sort((a,b) => b - a));
   }
-  function sortPotStacks() {
-    groupStackColors(potStacks);
-    potStacks.forEach((stack,index) => {
-      const nodes = [...pile.querySelectorAll(`[data-stack="${index}"]`)]
+  function sortPotStacks(fund = potFund) {
+    groupStackColors(fund.stacks);
+    fund.stacks.forEach((stack,index) => {
+      const nodes = [...fund.pile.querySelectorAll(`[data-stack="${index}"]`)]
         .sort((a,b) => Number(b.dataset.value) - Number(a.dataset.value));
       nodes.forEach((node,level) => positionChip(node, stack, index, level));
-      pile.append(...nodes);
+      fund.pile.append(...nodes);
     });
   }
   function positionChip(node, stack, index, level, seed = 0) {
@@ -164,19 +178,19 @@
     return node;
   }
   // Append each wager's actual chips; never exchange the accumulated pot for larger denominations.
-  function reserveChip(value) {
-    counts[value] = (counts[value] || 0) + 1;
-    const {stack,index,level} = addToCluster(potStacks, value);
+  function reserveChip(value, fund = potFund) {
+    fund.counts[value] = (fund.counts[value] || 0) + 1;
+    const {stack,index,level} = addToCluster(fund.stacks, value);
     const node = chip(value);
     positionChip(node, stack, index, level);
     node.style.visibility = 'hidden';
-    pile.append(node);
+    fund.pile.append(node);
     return node;
   }
   function wheelTransform(position) {
     return `translateY(calc(${-position} * 1.15em))`;
   }
-  function rollWheel(wheel, digit, animate) {
+  function rollWheel(wheel, digit, animate, direction = 1) {
     if (!animate || reduced.matches) {
       wheel.animation?.cancel(); wheel.animation = null; wheel.digit = digit;
       wheel.track.style.transform = wheelTransform(10 + digit);
@@ -189,7 +203,7 @@
       ? -new DOMMatrixReadOnly(getComputedStyle(wheel.track).transform).m42 / height
       : 10 + wheel.digit;
     const start = 10 + ((position % 10) + 10) % 10;
-    const end = start + ((digit - start % 10) + 10) % 10;
+    const end = start + direction * ((direction * (digit - start % 10) + 10) % 10);
     wheel.animation?.cancel();
     wheel.digit = digit; wheel.track.style.transform = wheelTransform(start);
     const animation = wheel.track.animate([
@@ -202,8 +216,9 @@
       wheel.animation = null; animation.cancel();
     };
   }
-  function setPotAmount(value, animate = true) {
-    const label = $('#pot-amount');
+  function setPotAmount(value, animate = true, fund = potFund) {
+    const label = fund.label;
+    const direction = value < Number(label.dataset.value || 0) ? -1 : 1;
     let accessible = label.querySelector('.pot-value-text');
     let odometer = label.querySelector('.pot-odometer');
     if (!odometer) {
@@ -219,12 +234,12 @@
         const separator = document.createElement('span'); separator.className = 'pot-separator';
         parts.push(separator); continue;
       }
-      let wheel = potWheels.get(place);
+      let wheel = fund.wheels.get(place);
       if (!wheel) {
         const viewport = document.createElement('span'); viewport.className = 'pot-digit';
         const track = document.createElement('span'); track.className = 'pot-digit-track';
         viewport.append(track); wheel = {viewport,track,digit:0,animation:null};
-        track.style.transform = wheelTransform(10); potWheels.set(place,wheel);
+        track.style.transform = wheelTransform(10); fund.wheels.set(place,wheel);
       }
       used.add(place); place--;
       parts.push(wheel.viewport);
@@ -232,26 +247,29 @@
     // Attach new digit columns before measuring them; preserve existing reel instances.
     odometer.replaceChildren(...parts);
     place = String(value).length - 1;
-    for (const character of String(value)) rollWheel(potWheels.get(place--),Number(character),animate);
-    for (const [key,wheel] of potWheels) {
+    for (const character of String(value)) rollWheel(fund.wheels.get(place--),Number(character),animate,direction);
+    for (const [key,wheel] of fund.wheels) {
       if (used.has(key)) continue;
-      wheel.animation?.cancel(); potWheels.delete(key);
+      wheel.animation?.cancel(); fund.wheels.delete(key);
     }
   }
-  function updateTotal(value) {
-    total += value;
-    setPotAmount(total);
-    pile.setAttribute('aria-label', `底池 ${total}，${Object.entries(counts).map(([v,n]) => `${n} 枚 ${v}`).join('，')}`);
+  function updateTotal(value, fund = potFund) {
+    fund.total += value;
+    setPotAmount(fund.total,true,fund);
+    fund.pile.setAttribute('aria-label', `${fund === potFund ? '底池' : 'Roll 费用'} ${fund.total}，${Object.entries(fund.counts).map(([v,n]) => `${n} 枚 ${v}`).join('，')}`);
   }
   function setBusy(value) {
     busy = value;
-    for (const node of document.querySelectorAll('#bet-form button,#bet-form input,#bet-form select,#demo')) node.disabled = value;
+    for (const node of document.querySelectorAll('#bet-form button,#bet-form input,#bet-form select,#roll,#settle')) node.disabled = value || settled;
+    $('#demo').disabled = value;
+    $('#settle').disabled = value || settled || potFund.total + rollFund.total === 0;
   }
   function status(text, error = false) { $('#status').textContent = text; $('#status').dataset.error = String(error); }
   function preview() {
     const value = Number(amountInput.value);
     const valid = Number.isSafeInteger(value) && value >= 1 && value <= 5000;
     $('#bet').textContent = valid ? `下注 ${format(value)}` : '下注';
+    $('#roll').textContent = valid ? `Roll 换牌 · ${format(value)}` : 'Roll 换牌';
     document.querySelectorAll('[data-amount]').forEach(node => node.setAttribute('aria-pressed', String(Number(node.dataset.amount) === value)));
     const breakdown = $('#breakdown');
     breakdown.replaceChildren();
@@ -267,34 +285,43 @@
     });
     const count = document.createElement('span'); count.textContent = `（${chips.length} 枚）`; breakdown.append(count);
   }
-  async function fly(value, source, index, run) {
-    const target = reserveChip(value);
+  async function fly(value, source, index, run, fund = potFund) {
+    const target = reserveChip(value,fund);
     const from = source;
     const to = target.getBoundingClientRect(), bounds = stage.getBoundingClientRect();
     const x1 = from.x + from.width / 2 - bounds.x, y1 = from.y + from.height / 2 - bounds.y;
     const x2 = to.x + to.width / 2 - bounds.x, y2 = to.y + to.height / 2 - bounds.y;
     const flight = chip(value);
     flight.classList.add('flight'); flight.style.left = '0'; flight.style.top = '0';
+    flight.dataset.fund = fund.id; flight.dataset.direction = 'in';
     stage.append(flight);
+    const flightSize = parseFloat(getComputedStyle(stage).getPropertyValue('--chip-size'));
     const transform = (x, y, turn = 0, scale = 1) => `translate(${x}px,${y}px) translate(-50%,-50%) rotateX(44deg) rotateZ(${turn}deg) scale(${scale})`;
     const animation = flight.animate([
-      {transform: transform(x1, y1, 0, from.width / target.offsetWidth), opacity: 1, offset: 0},
+      {transform: transform(x1, y1, 0, from.width / flightSize), opacity: 1, offset: 0},
       {transform: transform(x1 + (x2-x1)*.16, y1 + (y2-y1)*.16 - 16, 4, 1.06), opacity: 1, offset: .18},
       {transform: transform(x1 + (x2-x1)*.62, y1 + (y2-y1)*.62 - 38, 20, 1.08), opacity: 1, offset: .58},
-      {transform: transform(x2, y2, Number(target.dataset.turn)), opacity: 1, offset: 1}
+      {transform: transform(x2, y2, Number(target.dataset.turn), target.offsetWidth / flightSize), opacity: 1, offset: 1}
     ], {duration: reduced.matches ? 1 : 590, delay: reduced.matches ? 0 : index * 48, easing: 'cubic-bezier(.22,.65,.3,1)', fill: 'both'});
     animations.add(animation);
     try {
       await animation.finished;
       if (generation !== run) return;
-      target.style.visibility = 'visible'; target.classList.add('landed'); updateTotal(value);
+      target.style.visibility = 'visible'; target.classList.add('landed'); updateTotal(value,fund);
     } catch (error) {
       if (error.name !== 'AbortError') throw error;
     } finally { animations.delete(animation); animation.cancel(); flight.remove(); }
   }
-  async function wager(seat, amount, run) {
+  async function wager(seat, amount, run, fund = potFund) {
     if (generation !== run) return;
+    const isRoll = fund === rollFund;
+    if (isRoll && amount >= balances[seat]) throw new Error('Roll 支付后至少保留 1 筹码');
     const plan = planBet(balances[seat], amount);
+    if (isRoll) {
+      const compensation = splitRollFee(seat,amount);
+      rollPaid[seat] += amount;
+      compensation.forEach((value,index) => { rollEntitlements[index] += value; });
+    }
     // Exchange large denominations for exact change, then measure the actual outgoing chips.
     const bank = renderBank(seat, [...plan.kept, ...plan.outgoing]);
     const sources = new Map(values.map(value => [value, [...bank.querySelectorAll(`[data-value="${value}"]`)]]));
@@ -303,26 +330,116 @@
     renderBank(seat, plan.kept);
     seats[seat].querySelector('.balance').textContent = format(balances[seat]);
     seats[seat].dataset.active = 'true';
-    seats[seat].querySelector('.receipt').textContent = `下注 ${format(amount)}`;
+    seats[seat].querySelector('.receipt').textContent = `${isRoll ? 'Roll 支出' : '下注'} ${format(amount)}`;
     const name = seats[seat].querySelector('.name').textContent;
-    status(`${name}下注 ${format(amount)}`);
-    await Promise.all(transfers.map(({value,source}, index) => fly(value, source, index, run)));
+    status(`${name}${isRoll ? '支付 Roll 费用' : '下注'} ${format(amount)}`);
+    await Promise.all(transfers.map(({value,source}, index) => fly(value, source, index, run, fund)));
     if (generation !== run) return;
     // Sort only after every chip lands, so in-flight destinations remain accurate.
-    sortPotStacks();
+    sortPotStacks(fund);
     seats[seat].dataset.active = 'false';
-    status(`${name}的筹码已入池`);
+    status(`${name}的筹码已放入${isRoll ? ' Roll 费用堆' : '底池'}`);
+  }
+  async function flyToPlayer(node, seat, index, run, fund) {
+    // Stagger actual departures; reset invalidates waiting departures and active flights.
+    if (!reduced.matches) await new Promise(resolve => setTimeout(resolve,Math.min(index,24) * 36));
+    if (generation !== run) return;
+    const value = Number(node.dataset.value), from = node.getBoundingClientRect();
+    const bank = seats[seat].querySelector('.bank'), to = bank.getBoundingClientRect();
+    const bounds = stage.getBoundingClientRect();
+    const size = parseFloat(getComputedStyle(bank).getPropertyValue('--chip-size'));
+    const stageSize = parseFloat(getComputedStyle(stage).getPropertyValue('--chip-size'));
+    const x1 = from.x + from.width / 2 - bounds.x, y1 = from.y + from.height / 2 - bounds.y;
+    const x2 = to.x + to.width / 2 - bounds.x, y2 = to.bottom - size / 2 - 10 - bounds.y;
+    const flight = chip(value); flight.classList.add('flight'); flight.style.left = '0'; flight.style.top = '0';
+    flight.dataset.fund = fund.id; flight.dataset.direction = 'out'; flight.dataset.recipient = String(seat);
+    stage.append(flight); node.remove(); fund.counts[value]--; updateTotal(-value,fund);
+    const transform = (x,y,scale,turn = 0) => `translate(${x}px,${y}px) translate(-50%,-50%) rotateX(44deg) rotateZ(${turn}deg) scale(${scale})`;
+    const animation = flight.animate([
+      {transform:transform(x1,y1,from.width / stageSize,Number(node.dataset.turn))},
+      {transform:transform(x1 + (x2-x1)*.5,y1 + (y2-y1)*.5 - 30,1.04,12),offset:.5},
+      {transform:transform(x2,y2,size / stageSize)}
+    ],{duration:reduced.matches ? 1 : 620,easing:'cubic-bezier(.22,.65,.3,1)',fill:'both'});
+    animations.add(animation);
+    try {
+      await animation.finished;
+      if (generation !== run) return;
+      balances[seat] += value; renderBank(seat);
+      seats[seat].querySelector('.balance').textContent = format(balances[seat]);
+      seats[seat].dataset.paid = 'true';
+    } catch (error) {
+      if (error.name !== 'AbortError') throw error;
+    } finally { animations.delete(animation); animation.cancel(); flight.remove(); }
+  }
+  async function distributeFund(fund, shares, run) {
+    if (shares.reduce((sum,value) => sum + value,0) !== fund.total) throw new Error('分配金额与筹码堆不一致');
+    const recipients = shares.map((amount,seat) => ({seat,amount})).filter(row => row.amount > 0);
+    if (!recipients.length) return;
+    let transfers;
+    if (recipients.length === 1) {
+      transfers = [...fund.pile.querySelectorAll('.chip')].map(node => ({node,seat:recipients[0].seat}));
+    } else {
+      // Make exact change for each preassigned recipient; this never merges the two funds.
+      fund.pile.replaceChildren(); fund.stacks = []; fund.counts = {};
+      transfers = recipients.flatMap(({seat,amount}) => decompose(amount).map(value => {
+        const node = reserveChip(value,fund); node.style.visibility = 'visible'; return {node,seat};
+      }));
+      sortPotStacks(fund);
+    }
+    transfers.sort((a,b) => Number(b.node.dataset.level) - Number(a.node.dataset.level));
+    await Promise.all(transfers.map(({node,seat},index) => flyToPlayer(node,seat,index,run,fund)));
+    if (generation === run) { fund.stacks = []; fund.counts = {}; }
+  }
+  function renderSettlement(ordinary, compensation) {
+    const results = $('#settlement-results'); results.replaceChildren();
+    seats.forEach((seat,index) => {
+      const row = document.createElement('section'); row.className = 'settlement-player';
+      const person = document.createElement('div'); person.className = 'settlement-person';
+      const name = document.createElement('span'); name.textContent = seat.querySelector('.name').textContent;
+      const delta = document.createElement('strong'), net = balances[index] - 5000;
+      delta.textContent = `${net > 0 ? '+' : ''}${format(net)}`;
+      if (net > 0) delta.className = 'positive';
+      person.append(name,delta); row.append(person);
+      const list = document.createElement('dl');
+      for (const [label,value] of [['底池分配',ordinary[index]],['Roll 支出',rollPaid[index]],['Roll 补偿',compensation[index]],['剩余筹码',balances[index]]]) {
+        const group = document.createElement('div'), term = document.createElement('dt'), detail = document.createElement('dd');
+        term.textContent = label; detail.textContent = format(value); group.append(term,detail); list.append(group);
+      }
+      row.append(list); results.append(row);
+    });
+  }
+  async function settleRound(run) {
+    if (generation !== run || settled) return;
+    if (potFund.total + rollFund.total === 0) throw new Error('请先下注或支付 Roll 费用');
+    if (rollEntitlements.reduce((sum,value) => sum + value,0) !== rollFund.total) throw new Error('Roll 补偿记录与费用筹码不一致');
+    // The prototype fixes the ordinary-pot winner at seat 2; Roll ownership is independent.
+    const ordinary = [0,0,potFund.total], compensation = [...rollEntitlements];
+    stage.dataset.phase = 'payout'; status('正在派发底池');
+    await distributeFund(potFund,ordinary,run);
+    if (generation !== run) return;
+    status('正在派发 Roll 补偿');
+    await distributeFund(rollFund,compensation,run);
+    if (generation !== run) return;
+    const numberAnimations = [potFund,rollFund].flatMap(fund => fund.label.getAnimations({subtree:true}));
+    await Promise.allSettled(numberAnimations.map(animation => animation.finished));
+    if (generation !== run) return;
+    settled = true; stage.dataset.phase = 'settled';
+    renderSettlement(ordinary,compensation);
+    status('结算完成'); $('#settlement').showModal();
   }
   function reset(initial = false) {
     generation++;
     animations.forEach(animation => animation.cancel()); animations.clear();
     stage.querySelectorAll('.flight').forEach(node => node.remove());
-    pile.replaceChildren(); total = 0; counts = {}; potStacks = []; balances = initial ? [4990,4990,4990] : [5000,5000,5000];
-    seats.forEach((node,i) => { node.dataset.active = 'false'; node.querySelector('.balance').textContent = format(balances[i]); node.querySelector('.receipt').textContent = initial ? '已下注 10' : '等待下注'; });
+    $('#settlement').close(); settled = false; stage.dataset.phase = 'playing';
+    rollPaid = [0,0,0]; rollEntitlements = [0,0,0];
+    for (const fund of [potFund,rollFund]) { fund.pile.replaceChildren(); fund.total = 0; fund.counts = {}; fund.stacks = []; }
+    balances = initial ? [4990,4990,4990] : [5000,5000,5000];
+    seats.forEach((node,i) => { node.dataset.active = 'false'; node.dataset.paid = 'false'; node.querySelector('.balance').textContent = format(balances[i]); node.querySelector('.receipt').textContent = initial ? '已下注 10' : '等待下注'; });
     seats.forEach((_,seat) => renderBank(seat));
-    if (initial) for (let i = 0; i < 3; i++) { const node = reserveChip(10); node.style.visibility = 'visible'; total += 10; }
+    if (initial) for (let i = 0; i < 3; i++) { const node = reserveChip(10); node.style.visibility = 'visible'; potFund.total += 10; }
     sortPotStacks();
-    setPotAmount(total,false); pile.setAttribute('aria-label', `底池 ${total}`);
+    for (const fund of [potFund,rollFund]) { setPotAmount(fund.total,false,fund); fund.pile.setAttribute('aria-label', `${fund === potFund ? '底池' : 'Roll 费用'} ${fund.total}`); }
     setBusy(false); status(initial ? '准备下注' : '底池已清空');
   }
   async function execute(task) {
@@ -333,6 +450,10 @@
     finally { if (generation === run) setBusy(false); }
   }
   $('#bet-form').addEventListener('submit', event => { event.preventDefault(); execute(run => wager(Number($('#player').value), Number(amountInput.value), run)); });
+  $('#roll').addEventListener('click', () => { if ($('#bet-form').reportValidity()) execute(run => wager(Number($('#player').value),Number(amountInput.value),run,rollFund)); });
+  $('#settle').addEventListener('click', () => execute(run => settleRound(run)));
+  $('#close-settlement').addEventListener('click', () => $('#settlement').close());
+  $('#new-round').addEventListener('click', () => { reset(true); preview(); });
   amountInput.addEventListener('input', preview);
   document.querySelectorAll('[data-amount]').forEach(node => node.addEventListener('click', () => { amountInput.value = node.dataset.amount; preview(); }));
   $('#reset').addEventListener('click', () => reset());
@@ -346,7 +467,11 @@
         await wager(seat,amount,run);
         if (!reduced.matches) await new Promise(resolve => setTimeout(resolve,420));
       }
-      if (generation === run) status(`演示完成 · 底池 ${format(total)}`);
+      if (generation !== run) return;
+      await wager(2,101,run,rollFund);
+      if (generation !== run) return;
+      await wager(0,38,run,rollFund);
+      if (generation === run) await settleRound(run);
     });
   });
   for (const value of [...values].reverse()) {
