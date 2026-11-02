@@ -10,7 +10,7 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
   const db = createHallStore(10000), hall = new HallService(db.prisma)
   const now = new Date("2026-11-01T00:00:00Z")
   const room: any = { id: "room", code: "1234", ownerUserId: "u", name: "table", status: "waiting", mode, maxSeats: 10, buyIn: 500, variant: "standard52", smallBlind: 1, bigBlind: 2, ruleOptions: { roll: true }, rollPricingVersion: "roll-v1", handNo: 0, dealerSeat: 0, currentHandId: null, createdAt: now, ...rules }
-  const seats: any[] = [], hands: any[] = [], participants: any[] = [], actions: any[] = [], receipts: any[] = [], rolls: any[] = [], summaries: any[] = [], archives: any[] = []
+  const seats: any[] = [], hands: any[] = [], participants: any[] = [], actions: any[] = [], receipts: any[] = [], rolls: any[] = [], summaries: any[] = [], archives: any[] = [], resolutions: any[] = []
   const matches = (row: any, where: any = {}): boolean => Object.entries(where).every(([k, v]: any) => {
     if (k === "OR") return v.some((part: any) => matches(row, part))
     if (v && typeof v === "object" && !(v instanceof Date)) {
@@ -39,10 +39,10 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
     delete: async ({ where }: any) => rows.splice(rows.findIndex(r => matches(r, where)), 1)[0],
     groupBy: async () => [],
   })
-  const arrays = [seats, hands, participants, actions, receipts, rolls, summaries, archives]
+  const arrays = [seats, hands, participants, actions, receipts, rolls, summaries, archives, resolutions]
   const prisma: any = { $transaction: (work: any) => db.transaction(async (hallTx) => {
     const backup = structuredClone({ arrays, room })
-    const tx: any = { ...hallTx, gamePokerRoom: table([room]), gamePokerSeat: table(seats), gamePokerHand: table(hands), gamePokerHandSeat: table(participants), gamePokerAction: table(actions), gamePokerActionReceipt: table(receipts), gamePokerRoll: table(rolls), gamePokerHandSummary: table(summaries), gamePokerAgent: table([]), gamePokerAgentVersion: table([]), gamePokerHandArchive: table(archives), gamePokerControlHistory: table([]), user: table([]) }
+    const tx: any = { ...hallTx, gamePokerRoom: table([room]), gamePokerSeat: table(seats), gamePokerHand: table(hands), gamePokerHandSeat: table(participants), gamePokerAction: table(actions), gamePokerActionReceipt: table(receipts), gamePokerRoll: table(rolls), gamePokerHandSummary: table(summaries), gamePokerAgent: table([]), gamePokerAgentVersion: table([]), gamePokerHandArchive: table(archives), gamePokerResolution: table(resolutions), gamePokerControlHistory: table([]), user: table([]) }
     tx.gameSession = { ...hallTx.gameSession, updateMany: table(db.sessions).updateMany }
     tx.$queryRaw = (sql: TemplateStringsArray | Prisma.Sql, ...args: any[]) => {
       const query = "text" in sql ? sql.text : sql.join("")
@@ -85,5 +85,5 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
   for (const seat of seats) if (seat.userId !== room.ownerUserId) await poker.ready(seat.userId, room.code, null, seat.controlVersion, now)
   await poker.start(room.ownerUserId, room.code, null, 0, now)
   db.locks.length = 0
-  return { db, hall, poker, room, seats, hands, participants, actions, receipts, rolls, summaries, archives, now, transact: <T>(fn: (c: RoomContext) => Promise<T>, at = now) => poker.withRoom(room.code, fn, at) }
+  return { db, hall, poker, room, seats, hands, participants, actions, receipts, rolls, summaries, archives, resolutions, now, transact: <T>(fn: (c: RoomContext) => Promise<T>, at = now) => poker.withRoom(room.code, fn, at) }
 }

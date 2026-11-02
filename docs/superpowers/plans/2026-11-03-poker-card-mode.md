@@ -190,11 +190,11 @@
 **Files:** Create `server/prisma/migrations/20261103000000_game_card_mode_and_reserve/migration.sql`、`server/src/game/hall/game-reserve.service.ts`、`server/src/game/hall/__tests__/reserve-store.spec.ts`、`server/src/game/poker/__tests__/card-migration.spec.ts`；Modify `server/prisma/schema.prisma`、`server/src/game/hall/hall.service.ts`、`server/src/game/hall/hall.module.ts`、`server/src/game/hall/__tests__/hall-store.ts`、`server/src/game/poker/__tests__/roll-service-store.ts`。
 **Interfaces:** Consumes T5的已验证差量；Produces固定接口中的`GameReserveService`。新增模型固定为`GameReserveLot`、`GameReserveClaim`、`GameReserveMovement`、`GamePokerResolution`，不复用旧冻结意图作为可变分录。
 
-- [ ] **1. 写失败测试。** `store_deduplicates_batch`同root/index只写一次且意图不同拒绝；`finalize_no_double_pending`暂存最终固化时pending不重复；`legacy_transfer_unchanged`旧GamePendingTransfer仍不可变；`failed_movement_rolls_back_wallet`写入失败后钱包、份额、帧、回执均未变。迁移文本断言没有UPDATE旧资金、DROP旧表、非空无默认回填。 断言示例：`expect(afterRetry.movements).toHaveLength(1); expect(afterFailedWrite).toEqual(beforeWrite)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/hall/__tests__/reserve-store.spec.ts src/game/poker/__tests__/card-migration.spec.ts`，使用内存事务store；此时不连接数据库。
-- [ ] **3. 实现模型与适配。** 房间增加nullable cardRulesVersion/chipRulesVersion、actionStartedAt；各新表存资金域/游戏/房间/本局/原入座、版本和稳定来源。Lot/Claim记录originalAmount/remainingAmount及状态，Movement只追加，Resolution唯一(handId,seq)且actionId唯一。非负/剩余不大于原额、唯一键、pending用户索引和稳定分页索引齐备；迁移设锁5秒/执行30秒超时。ReserveService只依赖Prisma，finalize返回最终`PendingTransferInput[]`由协调器调用原freeze/release；HallService聚合旧冻结pending与未固化Claim，inPlay仅真实资金，补助覆盖两类。overview的inPlay和两类pending必须在同一SQL快照读取（单语句或显式只读REPEATABLE READ事务），不能拼接跨快照金额。默认不改存量房版本。
-- [ ] **4. 验证绿灯。** 运行同组store/迁移测试，确认固化前后pending只计一次，旧store补齐真实新表语义而非跳过断言；运行不连接数据库的`pnpm --filter @synapse/server exec prisma generate`核对生成类型。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 持久化通用暂存及版本化卡牌结算帧'`。保留迁移未执行状态，真实约束验收交T17。
+- [x] **1. 写失败测试。** `store_deduplicates_batch`同root/index只写一次且意图不同拒绝；`finalize_no_double_pending`暂存最终固化时pending不重复；`legacy_transfer_unchanged`旧GamePendingTransfer仍不可变；`failed_movement_rolls_back_wallet`写入失败后钱包、份额、帧、回执均未变。迁移文本断言没有UPDATE旧资金、DROP旧表、非空无默认回填。 断言示例：`expect(afterRetry.movements).toHaveLength(1); expect(afterFailedWrite).toEqual(beforeWrite)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/hall/__tests__/reserve-store.spec.ts src/game/poker/__tests__/card-migration.spec.ts`，使用内存事务store；此时不连接数据库。
+- [x] **3. 实现模型与适配。** 房间增加nullable cardRulesVersion/chipRulesVersion、actionStartedAt；各新表存资金域/游戏/房间/本局/原入座、版本和稳定来源。Lot/Claim记录originalAmount/remainingAmount及状态，Movement只追加，Resolution唯一(handId,seq)且actionId唯一。非负/剩余不大于原额、唯一键、pending用户索引和稳定分页索引齐备；迁移设锁5秒/执行30秒超时。ReserveService只依赖Prisma，finalize返回最终`PendingTransferInput[]`由协调器调用原freeze/release；HallService聚合旧冻结pending与未固化Claim，inPlay仅真实资金，补助覆盖两类。overview的inPlay和两类pending必须在同一SQL快照读取（单语句或显式只读REPEATABLE READ事务），不能拼接跨快照金额。默认不改存量房版本。
+- [x] **4. 验证绿灯。** 运行同组store/迁移测试，确认固化前后pending只计一次，旧store补齐真实新表语义而非跳过断言；运行不连接数据库的`pnpm --filter @synapse/server exec prisma generate`核对生成类型。
+- [x] **5. 本地提交。** `git commit -m 'feat: 持久化通用暂存及版本化卡牌结算帧'`。保留迁移未执行状态，真实约束验收交T17。
 
 
 ## Task 10: 本人/公开/MCP投影与完整归档

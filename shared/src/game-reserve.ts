@@ -16,7 +16,7 @@ export interface GameReserveMovement {
   amount: number; lotId: string; claimId?: string; toAdmissionId?: string; actorAdmissionId?: string
 }
 export interface GameReserveWriteBatch {
-  scope: GameReserveScope; expectedRevision: number
+  scope: GameReserveScope; expectedRevision: number; revision: number
   lots: readonly GameReserveLot[]; claims: readonly GameReserveClaim[]; movements: readonly GameReserveMovement[]
 }
 export interface PokerReserveView {

@@ -200,6 +200,9 @@ export class HallService {
         ), frozen AS (
           SELECT COALESCE(sum("amount"), 0)::float8 AS pending FROM "GamePendingTransfer"
           WHERE "userId" = ${userId} AND "funding" = 'points' AND "status" = 'pending'
+        ), provisional AS (
+          SELECT COALESCE(sum("remainingAmount"), 0)::float8 AS pending FROM "GameReserveClaim"
+          WHERE "userId" = ${userId} AND "funding" = 'points' AND "status" = 'pending'
         )
         SELECT COALESCE((SELECT jsonb_agg(jsonb_build_object(
           'gameKind', "gameKind", 'funding', "funding", 'roomCode', "roomCode", 'seatNo', "seatNo",
@@ -207,7 +210,7 @@ export class HallService {
         )) FROM active), '[]'::jsonb) AS sessions,
         COALESCE((SELECT sum("inPlay") FROM active WHERE "funding" = 'points'), 0)::float8 AS "inPlay",
         COALESCE((SELECT sum("inPlay" - "buyIn") FROM active WHERE "funding" = 'points'), 0)::float8 AS "activeProfit",
-        (SELECT pending FROM frozen) AS pending`
+        ((SELECT pending FROM frozen) + (SELECT pending FROM provisional)) AS pending`
       const sessions = summary.sessions
         .map((s) => ({
           game: s.gameKind,
@@ -247,8 +250,9 @@ export class HallService {
       const account = await this.lockAccount(tx, userId)
       const seated = await tx.gameSession.count({ where: { userId, funding: "points", status: { not: "closed" } } })
       const pending = await tx.gamePendingTransfer.count({ where: { userId, funding: "points", status: "pending" } })
+      const provisional = await tx.gameReserveClaim.count({ where: { userId, funding: "points", status: "pending", remainingAmount: { gt: 0 } } })
       if (
-        pending ||
+        pending || provisional ||
         account.points !== 0 ||
         seated ||
         (account.lastGrantAt && now.getTime() - account.lastGrantAt.getTime() < 86400000)

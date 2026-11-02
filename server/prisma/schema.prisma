@@ -1678,6 +1678,9 @@ model GameSession {
 }
 
 model GamePokerRoom {
+  cardRulesVersion String?
+  chipRulesVersion String?
+  actionStartedAt DateTime?
   ruleOptions Json @default("{}")
   rollPricingVersion String?
   id               String @id @default(uuid())
@@ -1903,4 +1906,78 @@ model GamePokerRoll {
   completedAt DateTime?
   @@index([handId, startSeq])
   @@index([roomId, userId])
+}
+
+model GameReserveLot {
+  id String @id
+  gameKind String
+  gameRoomId String
+  settlementId String
+  funding String
+  revision Int @default(0)
+  sourceId String
+  sourceType String
+  sourceSeq Int
+  payerAdmissionId String
+  payerUserId String
+  payerSeatNo Int
+  originalAmount Int
+  remainingAmount Int
+  status String @default("pending")
+  createdAt DateTime @default(now())
+  @@unique([settlementId, sourceId])
+  @@index([settlementId, id])
+}
+
+model GameReserveClaim {
+  id String @id
+  lotId String
+  gameKind String
+  gameRoomId String
+  settlementId String
+  funding String
+  admissionId String
+  userId String
+  seatNo Int
+  originalAmount Int
+  remainingAmount Int
+  status String @default("pending")
+  @@unique([lotId, admissionId])
+  @@index([userId, funding, status])
+  @@index([settlementId, id])
+}
+
+model GameReserveMovement {
+  id String @id
+  lotId String
+  claimId String?
+  gameKind String
+  gameRoomId String
+  settlementId String
+  funding String
+  rootActionId String
+  eventIndex Int
+  kind String
+  amount Int
+  toAdmissionId String?
+  actorAdmissionId String?
+  createdAt DateTime @default(now())
+  @@unique([settlementId, rootActionId, eventIndex])
+  @@index([settlementId, id])
+}
+
+model GamePokerResolution {
+  id String @id
+  roomId String
+  handId String
+  seq Int
+  actionId String @unique
+  actorAdmissionId String?
+  actorUserId String?
+  source String
+  version String
+  data Json
+  createdAt DateTime @default(now())
+  @@unique([handId, seq])
+  @@index([roomId, handId, seq])
 }
