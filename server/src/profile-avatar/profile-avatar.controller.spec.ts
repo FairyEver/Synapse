@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest"
 import { ProfileAvatarController, PublicAvatarController } from "./profile-avatar.controller"
 
+const throttleLimitMetadata = "THROTTLER:LIMITdefault"
+const throttleTtlMetadata = "THROTTLER:TTLdefault"
+
 describe("ProfileAvatarController", () => {
+  it("allows 60 random avatar changes per minute while retaining the stricter upload limit", () => {
+    expect(Reflect.getMetadata(throttleLimitMetadata, ProfileAvatarController.prototype.random)).toBe(60)
+    expect(Reflect.getMetadata(throttleTtlMetadata, ProfileAvatarController.prototype.random)).toBe(60_000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, ProfileAvatarController.prototype.upload)).toBe(10)
+    expect(Reflect.getMetadata(throttleTtlMetadata, ProfileAvatarController.prototype.upload)).toBe(60_000)
+  })
+
   it("randomizes the current user avatar and returns the updated profile", async () => {
     const avatars = { randomize: vi.fn().mockResolvedValue(undefined) }
     const auth = { getMe: vi.fn().mockResolvedValue({ user: { id: "user-1", avatarUrl: "/api/avatars/system/next" } }) }

@@ -19,7 +19,8 @@ import { UserAuthService } from "../auth/user-auth.service"
 import { RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { ProfileAvatarService, type ResolvedProfileAvatar } from "./profile-avatar.service"
 
-const AVATAR_MUTATION_RATE_LIMIT = 10
+const AVATAR_RANDOMIZE_RATE_LIMIT = 60
+const AVATAR_UPLOAD_RATE_LIMIT = 10
 
 @UseGuards(UserAuthGuard)
 @Controller("/api/console/me/avatar")
@@ -29,14 +30,14 @@ export class ProfileAvatarController {
     private readonly auth: UserAuthService,
   ) {}
 
-  @Throttle({ default: { ttl: RATE_LIMIT_TTL_MS, limit: AVATAR_MUTATION_RATE_LIMIT } })
+  @Throttle({ default: { ttl: RATE_LIMIT_TTL_MS, limit: AVATAR_RANDOMIZE_RATE_LIMIT } })
   @Post("/random")
   async random(@Req() request: AuthenticatedUserRequest) {
     await this.avatars.randomize(request.user!.id, request.ip)
     return this.auth.getMe(request.user!.id)
   }
 
-  @Throttle({ default: { ttl: RATE_LIMIT_TTL_MS, limit: AVATAR_MUTATION_RATE_LIMIT } })
+  @Throttle({ default: { ttl: RATE_LIMIT_TTL_MS, limit: AVATAR_UPLOAD_RATE_LIMIT } })
   @Put()
   async upload(
     @Req() request: AuthenticatedUserRequest,
