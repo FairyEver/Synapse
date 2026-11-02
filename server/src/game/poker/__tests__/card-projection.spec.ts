@@ -17,6 +17,12 @@ function fixture() {
   return h
 }
 describe("卡牌隐私白名单", () => {
+  it("本人探查能力牌附带可读定义，公开视角不含该卡池信息", () => {
+    const h = fixture(), ownIds = h.cards!.hands["admission-0"].map(c => c.definitionId), observed = h.cards!.pool.find(c => !ownIds.includes(c.definitionId))!.definitionId
+    h.cards!.privateResults.push({ id: "ability-peek", ownerAdmissionId: "admission-0", cardId: "20", label: "能力牌", values: [observed], valid: true })
+    expect(projectCardView(h, policy())!.definitions![observed]).toMatchObject({ id: observed, name: CARD_CATALOG_V1.find(c => c.id === observed)!.name })
+    expect(projectCardView(h, policy({ perspective: "public" }))).not.toHaveProperty("definitions")
+  })
   it("卡牌房决策视角不能借本人身份读取暗牌，原始结算审计不返回客户端", () => {
     expect(canSeeHole("u", "u", "human", false, false, true, { audience: "decision", perspective: "owner", everJoined: true, mode: "points", cardMode: true })).toBe(false)
     expect(publicHandResult({ payouts: { 0: 10 }, cardAudit: { hole: ["As"], ownerAdmissionId: "secret" }, reserveAudit: { admissionId: "secret" }, deltas: { 0: 1 } })).toEqual({ payouts: { 0: 10 }, deltas: { 0: 1 } })

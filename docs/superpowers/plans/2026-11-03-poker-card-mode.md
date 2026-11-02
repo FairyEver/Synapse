@@ -250,11 +250,11 @@
 **Files:** Create `dashboard/src/game-center/games/poker/hooks/usePokerCards.ts`、`dashboard/src/game-center/games/poker/lib/card-intent-store.ts`、`dashboard/src/game-center/games/poker/lib/card-view.ts`、`dashboard/src/game-center/games/poker/components/PokerCardsDialog.tsx`、`dashboard/src/game-center/games/poker/components/PokerCardSelection.tsx`、`dashboard/src/game-center/games/poker/styles/cards.css`、`dashboard/src/game-center/games/poker/__tests__/card-controls.test.tsx`、`dashboard/src/game-center/games/poker/__tests__/card-intent-store.test.ts`；Modify `dashboard/src/game-center/games/poker/components/HumanControls.tsx`、`dashboard/src/game-center/games/poker/components/Table.tsx`、`dashboard/src/game-center/games/poker/hooks/useHumanControls.ts`、`dashboard/src/game-center/games/poker/hooks/usePokerRoom.ts`。
 **Interfaces:** `usePokerCards(table:PokerTableView,perspective:"owner"|"public",onRefresh:()=>void|Promise<void>,identityKey:string)`返回`busy,error,uncertain,storageError,play(input),choose(index),retry()`；具体请求使用T1类型。store提供getSnapshot/save/clear/reload/subscribe，scope固定账号+房间。
 
-- [ ] **1. 写失败测试。** `open_is_not_play`打开/选中卡不提交，明确使用才提交；`choice_schema_selects_real_targets`选择本人底牌/玩家/能力牌/公开状态时只提交schema字段；`storage_failure_blocks_card_only`存储失败阻止新卡写但不误禁已合法普通行动。`refresh_same_uuid`硬刷新恢复原UUID/参数，跨账号/房间迟到结果不能刷新新上下文。 断言示例：`expect(playMock).not.toHaveBeenCalled(); expect(restoredIntent.input.actionId).toBe(firstActionId)`（打开未使用、恢复两个独立案例）。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/dashboard exec vitest run src/game-center/games/poker/__tests__/card-controls.test.tsx src/game-center/games/poker/__tests__/card-intent-store.test.ts`。
-- [ ] **3. 实现用牌流程。** 先持久化意图并读回，再调用集中API；费用预演版本/额外代价明确确认。未知写使卡牌/Roll/下注共同等待原回执核对；明确领域拒绝才清除意图。统一待选时禁全部新主动牌和下注，仅原Roll候选可原槽重抽。
-- [ ] **4. 实现标准面板并验证绿灯。** 持牌图、名称、规则、实际代价、公共牌和原剩余时间；正文滚动、Footer操作可见；不按缩放画布尺寸缩小系统控件。公共视角无持牌DOM，关闭不丢待选，换局/视角清未提交选择，Escape返回真实入口。运行同组测试和`check:ui`；真实几何验收留T18。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 增加卡牌选择施放面板与可恢复操作意图'`。
+- [x] **1. 写失败测试。** `open_is_not_play`打开/选中卡不提交，明确使用才提交；`choice_schema_selects_real_targets`选择本人底牌/玩家/能力牌/公开状态时只提交schema字段；`storage_failure_blocks_card_only`存储失败阻止新卡写但不误禁已合法普通行动。`refresh_same_uuid`硬刷新恢复原UUID/参数，跨账号/房间迟到结果不能刷新新上下文。 断言示例：`expect(playMock).not.toHaveBeenCalled(); expect(restoredIntent.input.actionId).toBe(firstActionId)`（打开未使用、恢复两个独立案例）。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/dashboard exec vitest run src/game-center/games/poker/__tests__/card-controls.test.tsx src/game-center/games/poker/__tests__/card-intent-store.test.ts`。
+- [x] **3. 实现用牌流程。** 先持久化意图并读回，再调用集中API；费用预演版本/额外代价明确确认。未知写使卡牌/Roll/下注共同等待原回执核对；明确领域拒绝才清除意图。统一待选时禁全部新主动牌和下注，仅原Roll候选可原槽重抽。
+- [x] **4. 实现标准面板并验证绿灯。** 持牌图、名称、规则、实际代价、公共牌和原剩余时间；正文滚动、Footer操作可见；不按缩放画布尺寸缩小系统控件。公共视角无持牌DOM，关闭不丢待选，换局/视角清未提交选择，Escape返回真实入口。运行同组测试和`check:ui`；真实几何验收留T18。
+- [x] **5. 本地提交。** `git commit -m 'feat: 增加卡牌选择施放面板与可恢复操作意图'`。
 
 
 ## Task 15: 暂存明细、真实筹码动画与状态表现

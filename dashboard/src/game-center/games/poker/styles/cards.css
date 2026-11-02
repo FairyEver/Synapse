@@ -1,0 +1,2 @@
+.poker-ability-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 1rem; }
+.poker-ability-art { width: 100%; max-width: 10rem; aspect-ratio: 4 / 5; object-fit: cover; border-radius: var(--radius); }

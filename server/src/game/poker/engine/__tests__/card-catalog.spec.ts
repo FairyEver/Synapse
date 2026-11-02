@@ -33,6 +33,13 @@ function play(f: ReturnType<typeof prepare>, nowMs = 100000) {
   return runResolution(f.h, planCardPlay(f.h, f.input, ctx, registry()), ctx, createCardOperationRegistry(registry()))
 }
 describe("首批60张声明", () => {
+  it("空能力池的主动抽卡留下仅本人可读的未抽到反馈", () => {
+    const f = prepare("21")
+    f.h.cards!.spent.push(...f.h.cards!.pool.splice(0))
+    const result = play(f)
+    expect(result.state.cards!.privateResults).toContainEqual(expect.objectContaining({ ownerAdmissionId: "admission-0", cardId: "21", label: "抽卡结果", values: ["卡牌池已空，未抽到卡牌"] }))
+    expect(result.frame.events.filter(e => e.audience === "public").some(e => e.type === "ability.drawn")).toBe(false)
+  })
   it("稳定ID、唯一名称、60种90份和唯一2BB基础代价", () => {
     expect(CARD_CATALOG_V1.map(c => c.id)).toEqual(Array.from({ length: 60 }, (_, i) => String(i + 1).padStart(2, "0")))
     expect(new Set(CARD_CATALOG_V1.map(c => c.name)).size).toBe(60)

@@ -120,6 +120,7 @@ export function createCardOperationRegistry(catalog: CardRegistry): OperationReg
   } })
   registry.register({ id: "ability.draw", schema: z.object({ admissionId: z.string(), count: z.number().int().nonnegative().max(1024), reason: z.enum(["card", "trigger", "stage"]) }).strict(), apply(h, input, api) {
     const result = applyCardPoolOperation(h.cards!, { kind: "draw", admissionId: input.admissionId, count: input.count }, api.context); h.cards = result.state
+    if (result.drawn.length < input.count && api.operation.cardId) h.cards.privateResults.push({ id: api.context.nextId(), ownerAdmissionId: input.admissionId, cardId: api.operation.cardId, label: "抽卡结果", values: [result.drawn.length ? `仅抽到 ${result.drawn.length} 张，卡牌池已空` : "卡牌池已空，未抽到卡牌"], valid: true })
     api.emit("ability.drawn", { count: result.drawn.length, reason: input.reason, empty: h.cards.pool.length === 0 }, "owner", undefined, input.admissionId)
   } })
   registry.register({ id: "ability.drawAll", schema: z.object({}).strict(), apply(h, _input, api) {

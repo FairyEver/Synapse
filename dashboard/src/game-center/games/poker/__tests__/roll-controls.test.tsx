@@ -19,6 +19,16 @@ function Harness({value=table,identity="roll-user",refresh=vi.fn(),perspective="
 afterEach(()=>{vi.resetAllMocks();localStorage.clear();sessionStorage.clear();document.body.replaceChildren()})
 async function mount(value=table,identity="roll-user",refresh=vi.fn()){const host=document.createElement("div"),root=createRoot(host);document.body.append(host);await act(async()=>root.render(<Harness value={value} identity={identity} refresh={refresh}/>));return root}
 describe("Roll决策与恢复",()=>{
+ it("卡牌房Roll保留付款版本；卡牌待选不允许新Roll",async()=>{
+  api.start.mockResolvedValue({ok:true,actionSeq:4})
+  const value={...table,roll:{...table.roll!,normal:{fee:3,available:true,payment:{nominalAmount:3,waivedAmount:3,paidAmount:0,version:"roll-card-quote"}}}}
+  const root=await mount(value,"card-roll-quote")
+  await act(async()=>current.start("normal",0,3))
+  expect(api.start.mock.calls[0][0].expectedPaymentVersion).toBe("roll-card-quote")
+  await act(async()=>root.render(<Harness identity="card-roll-quote" value={{...value,cards:{enabled:true,version:"cards-v1",used:[],statuses:[],pending:{choiceId:"card-choice",kind:"poker",origin:"card",paymentVersion:"paid",candidates:["2c"]}}}}/>))
+  await act(async()=>current.start("normal",0,3));expect(api.start).toHaveBeenCalledOnce()
+  await act(async()=>root.unmount())
+ })
  it("连续槽位只来自当前行动点确认的成功换牌，切换视角后不恢复旧选择",async()=>{
   api.start.mockResolvedValue({ok:true,actionSeq:4})
   const root=await mount(table,"continuation-boundary")

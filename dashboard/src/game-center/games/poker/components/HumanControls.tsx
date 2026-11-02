@@ -5,6 +5,8 @@ import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
 import { usePokerRoll } from "../hooks/usePokerRoll"
 import { PokerRollDialog } from "./PokerRollDialog"
+import { usePokerCards } from "../hooks/usePokerCards"
+import { PokerCardsDialog } from "./PokerCardsDialog"
 import { PokerDiamondAmount } from "./PokerDiamondText"
 import { PokerButton } from "./PokerButton"
 import { PokerControlPopover } from "./PokerControlPopover"
@@ -17,7 +19,7 @@ import { isPokerCardMode } from "../lib/card-mode"
 import { actionState, betPresets } from "../lib/action-view"
 import { amount, remaining } from "../lib/view"
 
-export type PokerControlPanel = "bet" | "menu" | "roll"
+export type PokerControlPanel = "bet" | "menu" | "roll" | "cards"
 type Props = {
   table: PokerTableView
   perspective: "owner" | "public"
@@ -44,6 +46,8 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const { busy, error, to, setTo, uncertain, mine, controller, version, handoff,
     act, retry, control, join, sit, leave } = useHumanControls(table, onRefresh, identityKey)
   const roll = usePokerRoll(table, perspective, onRefresh, identityKey)
+  const cards = usePokerCards(table, perspective, onRefresh, identityKey, busy || uncertain || roll.blocked)
+  const cardPending = !!table.cards?.pending
   const rollPending = !!table.roll?.pending || (table.mySeatNo !== null && table.roll?.pendingSeatNo === table.mySeatNo)
   const awaitingReady = table.status !== "closed" && !!table.awaitingReady
   const takeover = () => awaitingReady ? nextHand.takeover() : control("takeover")
@@ -84,16 +88,22 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     if (key !== autoOpened.current) { autoOpened.current = key; setPanel("roll") }
   }, [identityKey,table.roomCode,table.handId,table.roll?.pending?.rollId,roll.continuation?.actionId,controller,perspective,setPanel])
   useEffect(() => { if (perspective !== "owner") setPanel(null) },[perspective,setPanel])
+  useEffect(() => {
+    const pending = table.cards?.pending
+    if (perspective !== "owner" || !pending) return
+    const key = `${identityKey}:${table.roomCode}:${table.handId}:card:${pending.choiceId}`
+    if (key !== autoOpened.current) { autoOpened.current = key; setPanel("cards") }
+  }, [identityKey, table.roomCode, table.handId, table.cards?.pending?.choiceId, perspective, setPanel])
   const legal = table.legalActions ?? [], numeric = Number(to)
   const validAmount = to.trim() !== "" && Number.isSafeInteger(numeric) && numeric >= (table.minRaiseTo ?? Infinity) && numeric <= (table.maxRaiseTo ?? -1)
   const acting = perspective === "owner" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" && !!table.handId && version != null
-  const disabled = busy || uncertain || nextHand.busy || roll.blocked || rollPending
+  const disabled = busy || uncertain || nextHand.busy || roll.blocked || rollPending || cards.blocked || cardPending
   const canBet = legal.includes("bet") || legal.includes("raise")
   const raise = legal.includes("raise")
   const contribution = Math.max(0, Math.min(mine?.stack ?? 0, numeric - (mine?.streetBet ?? 0)))
   const pendingState = mine?.leavePending ? "本手后离桌" : table.pauseReason === "user" && mine?.status !== "sitting_out" ? "本手后暂离" : null
   const baseState = perspective === "public" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" ? "旁观视角 · 切回玩家视角出牌" : actionState(table, acting, handoff)
-  const controlState = roll.storageError ? "换牌恢复记录不可用" : roll.uncertain ? "换牌结果待核对" : rollPending ? "请先完成换牌" : handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState
+  const controlState = cards.uncertain ? "用牌结果待核对" : cardPending ? "请先完成卡牌选择" : roll.storageError ? "换牌恢复记录不可用" : roll.uncertain ? "换牌结果待核对" : rollPending ? "请先完成换牌" : handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState
   const state = busy ? "正在提交…" : pendingState && table.status === "running" ? `${controlState} · ${pendingState}` : controlState
   const presets = betPresets(table)
   const amountError = !to.trim() ? "请输入金额" : !Number.isSafeInteger(numeric) ? "请输入整数金额" : numeric < (table.minRaiseTo ?? Infinity) ? `至少${raise ? "加注" : "下注"}到 ${amount(table.minRaiseTo ?? 0)}` : numeric > (table.maxRaiseTo ?? -1) ? `最多${raise ? "加注" : "下注"}到 ${amount(table.maxRaiseTo ?? 0)}` : null
@@ -146,7 +156,8 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {controller === "human" && perspective === "public" && onPerspective && <Button isDisabled={busy || uncertain || nextHand.busy} onPress={() => onPerspective("owner")}>切回玩家视角</Button>}
     {!cardMode && handoff && <><Button variant="secondary" isDisabled={busy} onPress={openAI}>查看接入 / 取消</Button><Button variant="tertiary" isDisabled={disabled || version == null} onPress={() => void control("cancel_ai")}>取消 AI 接管</Button></>}
   </div> : null
-  const rollEntry = perspective === "owner" && mine && table.roll?.enabled && table.status === "running" && (acting || rollPending || roll.uncertain) && <Button size="sm" variant="tertiary" isDisabled={busy || uncertain || nextHand.busy} aria-label={!rollPending&&!roll.uncertain&&table.roll.coins?`Roll 换牌，钻石 ${table.roll.coins.balance}`:undefined} aria-expanded={panel === "roll"} onPress={() => {track({component:"button",name:"poker-roll",action:"click"});setAllInAction(null);setPanel("roll")}}>{rollPending ? "完成换牌" : roll.uncertain ? "核对换牌" : table.roll.coins ? <PokerDiamondAmount value={table.roll.coins.balance}/> : "Roll 换牌"}</Button> || (roll.uncertain || roll.storageError ? <Button size="sm" variant="secondary" isDisabled={roll.busy} onPress={()=>void roll.retry()}>{roll.storageError ? "重试恢复记录" : "核对原换牌请求"}</Button> : null)
+  const rollEntry = perspective === "owner" && mine && table.roll?.enabled && table.status === "running" && (acting || rollPending || roll.uncertain) && <Button size="sm" variant="tertiary" isDisabled={busy || uncertain || nextHand.busy || cards.blocked || cardPending} aria-label={!rollPending&&!roll.uncertain&&table.roll.coins?`Roll 换牌，钻石 ${table.roll.coins.balance}`:undefined} aria-expanded={panel === "roll"} onPress={() => {track({component:"button",name:"poker-roll",action:"click"});setAllInAction(null);setPanel("roll")}}>{rollPending ? "完成换牌" : roll.uncertain ? "核对换牌" : table.roll.coins ? <PokerDiamondAmount value={table.roll.coins.balance}/> : "Roll 换牌"}</Button> || (roll.uncertain || roll.storageError ? <Button size="sm" variant="secondary" isDisabled={roll.busy} onPress={()=>void roll.retry()}>{roll.storageError ? "重试恢复记录" : "核对原换牌请求"}</Button> : null)
+  const cardEntry = perspective === "owner" && table.cards?.enabled && mine && <Button variant="tertiary" isDisabled={busy || uncertain || nextHand.busy || roll.blocked || rollPending} aria-expanded={panel === "cards"} onPress={() => { track({component:"button",name:"poker-cards",action:"click"}); setAllInAction(null); setPanel("cards") }}>卡牌</Button>
   return <div ref={controlsRef} className="poker-human-controls" data-acting={acting} data-compact-controls={compact} aria-label="本人牌桌操作" onKeyDown={event => { if (event.key === "Escape" && confirmAllIn) { event.stopPropagation(); cancelConfirmation() } }}>
     <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status" className="min-w-0 wrap-anywhere">{awaitingReady ? <>{!nextHand.eligible && mine?.status === "sitting_out" && <>已暂离 · </>}{nextHand.summary}</> : state}</span>{!cardMode && acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={openAI}>查看 AI 接入</Button>}{acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
     {awaitingReady && <div className="flex min-w-0 flex-wrap items-center gap-2 font-sans text-foreground scheme-light" aria-label="下一手操作">
@@ -160,12 +171,13 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {!mine && table.status !== "closed" && <div className="space-y-2 font-sans text-foreground scheme-light"><PokerJoinSummary table={table} /><div className="poker-join-controls">{sessionControls}</div></div>}
     {canInvite && <div className="mt-2 flex flex-wrap items-center gap-2 font-sans text-foreground scheme-light"><Button variant="secondary" onPress={() => void copyPokerInvitation(table.roomCode)}>邀请玩家</Button></div>}
     {recovery}
-    {perspective === "owner" && <PokerRollDialog table={table} open={panel === "roll"} onOpenChange={open=>setPanel(open?"roll":null)} controls={roll} onTakeover={()=>void takeover()} disabled={busy||uncertain||nextHand.busy} epoch={rollEpoch}/>}
+    {perspective === "owner" && <PokerRollDialog table={table} open={panel === "roll"} onOpenChange={open=>setPanel(open?"roll":null)} controls={roll} onTakeover={()=>void takeover()} disabled={busy||uncertain||nextHand.busy||cards.blocked||cardPending} epoch={rollEpoch}/>}
 
-    {!acting && rollEntry && <div className="poker-bet-presets font-sans text-foreground scheme-light">{rollEntry}</div>}
+    {perspective === "owner" && table.cards?.enabled && <PokerCardsDialog table={table} open={panel === "cards"} onOpenChange={open => setPanel(open ? "cards" : null)} controls={cards} disabled={busy || uncertain || nextHand.busy || roll.blocked || rollPending} epoch={rollEpoch} />}
+    {!acting && (rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light">{rollEntry}{cardEntry}</div>}
     {acting && <div className="poker-action-dock">
-      {(canBet || rollEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light" role="group" aria-label="下注金额选择">
-        {rollEntry}
+      {(canBet || rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light" role="group" aria-label="下注金额选择">
+        {rollEntry}{cardEntry}
         {canBet && presets.map(preset => <Button key={preset.label} size="sm" variant={numeric === preset.to ? "secondary" : "tertiary"} aria-pressed={numeric === preset.to} isDisabled={disabled || confirmAllIn} onPress={() => setTo(String(preset.to))}>{preset.label}</Button>)}
         {canBet && <Button ref={betTrigger} size="sm" variant="tertiary" isDisabled={disabled || confirmAllIn} aria-expanded={panel === "bet"} aria-controls={`${betId}-panel`} onPress={() => setPanel(panel === "bet" ? null : "bet")}>自定义<ChevronUp aria-hidden="true" /></Button>}
       </div>}

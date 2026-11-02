@@ -47,6 +47,7 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
     return { instanceId: instance.id, cardId: definition.id, available: !reason, ...(reason ? { reason } : {}), payment: { nominalAmount: quote.nominalAmount, waivedAmount: quote.waivedAmount, paidAmount: quote.paidAmount, version: quote.version }, choices }
   })
   view.definitions = definitions
+  for (const result of cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId && r.label === "能力牌")) for (const id of result.values) definitions[id] ??= definitionView(id)
   const pending = cards.pending?.ownerAdmissionId === self.admissionId ? cards.pending : null
   view.pending = pending ? { choiceId: pending.id, kind: pending.kind, origin: pending.origin, paymentVersion: pending.paymentVersion, candidates: [...pending.candidates],
     ...(pending.sourceCardId ? { sourceCardId: pending.sourceCardId } : {}), ...(pending.cardIndex === undefined ? {} : { cardIndex: pending.cardIndex }),

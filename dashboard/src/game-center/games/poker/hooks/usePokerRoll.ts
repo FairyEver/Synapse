@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { PokerRollKind, PokerRollStartInput, PokerTableView } from "@synapse/shared/game-contracts"
 import { gameApi } from "../../../lib/api"
 import { rollIntentStore, type RollIntent } from "../lib/roll-intent-store"
+import { cardIntentStore } from "../lib/card-intent-store"
 
 export function usePokerRoll(table: PokerTableView, perspective: "owner" | "public", onRefresh: () => void | Promise<void>, identityKey?: string) {
   const scope = {identityKey:identityKey ?? "",roomCode:table.roomCode}
@@ -58,13 +59,16 @@ export function usePokerRoll(table: PokerTableView, perspective: "owner" | "publ
     }
   }
   const start = (kind: PokerRollKind, cardIndex: number, expectedFee: number) => {
+    if (table.cards?.pending || cardIntentStore.getSnapshot(scope).intent) return
     if (!canControl || !table.roll?.enabled || snapshot.error || command || sending.current || (table.roll?.pending && table.roll.pending.cardIndex !== cardIndex) || !table.handId || !["preflop","flop","turn"].includes(table.street ?? "") || !table.roll?.[kind]?.available || table.roll[kind]!.fee !== expectedFee || ![0,1].includes(cardIndex)) return
     const intent: RollIntent = {operation:"start",input:{roomCode:table.roomCode,handId:table.handId,street:table.street as PokerRollStartInput["street"],expectedActionSeq:table.actionSeq ?? 0,controlVersion:version!,actionId:crypto.randomUUID(),kind,cardIndex,expectedFee}}
+    if (table.roll[kind]?.payment) intent.input.expectedPaymentVersion = table.roll[kind]!.payment!.version
     try { rollIntentStore.save(scope,intent) }
     catch(cause) { setError(cause instanceof Error ? cause.message : "换牌恢复记录保存失败"); return }
     return execute(intent)
   }
   const choose = (candidateIndex: number) => {
+    if (table.cards?.pending || cardIntentStore.getSnapshot(scope).intent) return
     const pending = table.roll?.pending
     if (!canControl || snapshot.error || command || sending.current || !pending || !table.handId || !Number.isInteger(candidateIndex) || candidateIndex < 0 || candidateIndex >= pending.candidates.length) return
     const intent:RollIntent={operation:"choose",input:{roomCode:table.roomCode,handId:table.handId,rollId:pending.rollId,candidateIndex,expectedActionSeq:table.actionSeq ?? 0,controlVersion:version!,actionId:crypto.randomUUID()}}

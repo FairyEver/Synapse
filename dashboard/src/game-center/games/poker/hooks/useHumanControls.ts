@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { gameApi } from "../../../lib/api"
+import { cardIntentStore } from "../lib/card-intent-store"
+import { rollIntentStore } from "../lib/roll-intent-store"
 export type PokerIntent = Parameters<ReturnType<typeof gameApi>["poker"]["action"]["act"]>[0]
 // Keep an unresolved command stable across room navigation and perspective changes.
 // The caller scopes this key to the authenticated account, never a seat number.
@@ -62,6 +64,8 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
     return applied && mounted.current && context.current === submittedKey
   }
   const act = (action: PokerIntent["action"]) => {
+    const scope = { identityKey: identityKey ?? "", roomCode: table.roomCode }
+    if (table.cards?.pending || table.roll?.pending || cardIntentStore.getSnapshot(scope).intent || rollIntentStore.getSnapshot(scope).intent) return
     if (!table.handId || !table.street || !["preflop", "flop", "turn", "river"].includes(table.street) || version == null || intent.current || pending.current) return
     const submitted: PokerIntent = {
       roomCode: table.roomCode,
@@ -71,6 +75,7 @@ export function useHumanControls(table: PokerTableView, onRefresh: () => void | 
       expectedActionSeq: seq,
       controlVersion: version,
       action,
+      ...(table.paymentVersion ? { expectedPaymentVersion: table.paymentVersion } : {}),
       ...(["bet", "raise"].includes(action) ? { to: Number(to) } : {}),
     }
     intent.current = submitted
