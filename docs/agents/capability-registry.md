@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 建房金额档位：既有 `app.game.poker.room.create` 的 buyIn 枚举及 poker.guide 同步为1000/5000/10000/50000，两类房间一致；Web与系统Skill同步，旧房间金额不变。未新增能力、MCP、Web/IPC路由，表格数量与既有例外保持不变。
+
 - 2026-11-02 房主手动开局：首局与后续每手统一全员准备后显式开始；新增 `app.game.poker.room.start`（MCP `app_game_poker_room_start`）及受身份/同源保护的 Web POST `/game/poker/rooms/:code/start`。game 29→30（大厅3、扑克27），全局 capability 372→373、MCP索引368→369，游戏Web27→28，桌面游戏IPC仍0；System App22、默认Dock9、Workflow/Automation/Deep Link及既有UI私有例外不变。seat.ready输入/响应及wait的ready_required允许首局handId=null；table增加可选isRoomOwner/canStart，公开视角不授予开局操作。无数据库迁移，Skill与Agent指南同步；以下既有计数为历史基线。
 
 - 2026-11-02 每手钻石配置：既有room.create输入ruleOptions追加可选rollCoins（正整数，默认12），房规响应同步该字段；每手coinPolicy冻结额度，normal/super消耗仍固定1/3，拒绝费率注入。仅扩展既有schema、描述和系统Skill；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变，无数据库迁移。

@@ -1,9 +1,11 @@
 import { useLayoutEffect, useRef } from "react"
 import { Button, Description, FieldError, Form, Input, Label, Modal, NumberField, Radio, RadioGroup, Switch, TextField } from "@heroui/react"
 import { Minus, Plus } from "lucide-react"
-import { POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS, POKER_MAX_SEATS, type GameFunding, type PokerBlindPreset, type PokerVariant } from "@synapse/shared/game-contracts"
+import { POKER_BUY_IN_PRESETS, POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS, POKER_MAX_SEATS, type GameFunding, type PokerBlindPreset, type PokerVariant } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
 import { PokerDiamondText } from "./PokerDiamondText"
+
+const buyInLabels: Record<number, string> = { 1000: "1k", 5000: "5k", 10000: "1w", 50000: "5w" }
 
 export interface PokerRoomDraft {
   name: string
@@ -116,8 +118,8 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                 <RadioGroup variant="secondary" id="poker-buyin" orientation="horizontal" value={String(value.buyIn)} isDisabled={busy}
                   onChange={buyIn => update({ buyIn: Number(buyIn) })}>
                   <Label>{value.mode === "practice" ? "初始筹码" : "带入点数"}</Label>
-                  <div className="flex flex-wrap gap-4">{[500, 1000, 2000, 5000].map(amount =>
-                    <Radio key={amount} value={String(amount)}><Radio.Content><Radio.Control><Radio.Indicator /></Radio.Control>{amount.toLocaleString()}</Radio.Content></Radio>)}</div>
+                  <div className="flex flex-wrap gap-4">{POKER_BUY_IN_PRESETS.map(amount =>
+                    <Radio key={amount} value={String(amount)}><Radio.Content><Radio.Control><Radio.Indicator /></Radio.Control>{buyInLabels[amount]}</Radio.Content></Radio>)}</div>
                 </RadioGroup>
               </fieldset>
             </Modal.Body>

@@ -2,7 +2,7 @@ import { PokerRollService } from "./poker/poker-roll.service"
 import type { PokerRollStartInput, PokerRollChooseInput } from "@synapse/shared/game-contracts"
 import { BadRequestException, Injectable } from "@nestjs/common"
 import { z } from "zod"
-import { GAME_TOOLS } from "@synapse/shared/game-contracts"
+import { GAME_TOOLS, POKER_BUY_IN_PRESETS } from "@synapse/shared/game-contracts"
 import { HallService } from "./hall/hall.service"
 import { PokerService } from "./poker/poker.service"
 import { PokerActionService, type ActionInput } from "./poker/poker-action.service"
@@ -74,7 +74,7 @@ export class GameApiService {
             seats: "2–10",
             blinds: [[1, 2], [2, 4], [5, 10], [10, 20]],
             variants: { standard52: "标准52张", short32: "7至A共32张；同花大于葫芦，顺子大于三条，A789T为最小顺子。" },
-            buyIn: [500, 1000, 2000, 5000],
+            buyIn: POKER_BUY_IN_PRESETS,
             actionWindowSeconds: 600,
             roll: "建房ruleOptions.roll默认关闭；ruleOptions.rollCoins可设置每手钻石（默认12，正整数），normal/super消耗固定1/3、不可配置；开启后翻前/翻牌/转牌本人行动时可按table.state或wait的normal/super确切报价换牌。费用独立于底池，补偿其他未弃牌原入座者并冻结到手末；普通一张立即替换，超级三选一强制完成。Roll不续600秒时限；超时先选第一张再撤出。候选及旧牌位置只给本人，教学无额外权限。",
             heartbeatSeconds: 60,

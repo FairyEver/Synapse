@@ -15,6 +15,16 @@ describe("扑克房间最多6人", () => {
     expect(await poker.createRoom("owner", { mode, maxSeats: 6, buyIn: 1000, name: "房间" })).toHaveProperty("roomCode")
   })
 
+  it.each(["points", "practice"] as const)("%s房校验新的四档金额", async mode => {
+    const poker = new PokerService({ gamePokerRoom: { create: async ({ data }: any) => data } } as PrismaService, {} as HallService)
+    for (const buyIn of [1000, 5000, 10000, 50000]) {
+      expect(await poker.createRoom("owner", { mode, maxSeats: 6, buyIn, name: "房间" })).toHaveProperty("roomCode")
+    }
+    for (const buyIn of [500, 2000, 1001, 50001]) {
+      await expect(poker.createRoom("owner", { mode, maxSeats: 6, buyIn, name: "房间" })).rejects.toMatchObject({ response: { code: "POKER_ILLEGAL_ACTION" } })
+    }
+  })
+
   function legacyRoom(humans: number, count: number) {
     const room = { id: "room", code: "1234", maxSeats: 10, status: "waiting", mode: "practice", ownerUserId: "owner" }
     const seats = Array.from({ length: count }, (_, seatNo) => ({ seatNo, userId: `user-${seatNo}`, participantKind: seatNo < humans ? "account" : "bot" }))

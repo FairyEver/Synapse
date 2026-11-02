@@ -125,7 +125,7 @@ export const gameResponseFixtures: Record<string, unknown> = {
       game: "无限注德州扑克",
       seats: "2–10",
       blinds: [1, 2],
-      buyIn: [500, 1000, 2000, 5000],
+      buyIn: [1000, 5000, 10000, 50000],
       actionWindowSeconds: 600,
       heartbeatSeconds: 60,
       timeout: "超时离场",

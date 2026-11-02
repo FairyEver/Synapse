@@ -90,7 +90,7 @@ const url = gameTestDatabaseUrl()
     expect((await hall.overview(user)).points.total).toBe(1000000)
   })
   it("5/10盲注的不足额全下跟注不误计为翻前加注", async () => {
-    const user = randomUUID(), code = (await poker.createRoom(user, { maxSeats: 2, buyIn: 500, blindPreset: "5/10" })).roomCode
+    const user = randomUUID(), code = (await poker.createRoom(user, { maxSeats: 2, buyIn: 1000, blindPreset: "5/10" })).roomCode
     const room = await db.gamePokerRoom.findUniqueOrThrow({ where: { code } })
     const old = new Date(Date.now() - 91 * 86400000)
     const hand = await db.gamePokerHand.create({ data: { roomId: room.id, handNo: 1, dealerSeat: 0, status: "settled", street: "settled", board: [], engineState: {}, startedAt: old, endedAt: old, rules: { variant: "standard52", smallBlind: 5, bigBlind: 10 } } })

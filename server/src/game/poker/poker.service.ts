@@ -7,7 +7,7 @@ import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
 import { resolveRules, ROLL_PRICING_VERSION, type PokerVariant } from "./engine/rules"
-import { POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
+import { POKER_BUY_IN_PRESETS, POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
 import { nextHandEligible, preparedForNextHand } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
 
@@ -81,10 +81,10 @@ export class PokerService {
       !Number.isInteger(input.maxSeats) ||
       input.maxSeats < 2 ||
       input.maxSeats > POKER_MAX_SEATS ||
-      ![500, 1000, 2000, 5000].includes(input.buyIn) ||
+      !POKER_BUY_IN_PRESETS.includes(input.buyIn) ||
       (input.mode !== undefined && !["points", "practice"].includes(input.mode))
     )
-      reject("POKER_ILLEGAL_ACTION", "座位应为2–6，带入额仅支持500/1000/2000/5000。")
+      reject("POKER_ILLEGAL_ACTION", "座位应为2–6，带入额仅支持1000/5000/10000/50000。")
     let rules
     try {
       const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)

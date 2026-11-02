@@ -24,6 +24,7 @@ export interface HallOverview {
   next: { game: string; roomCode: string | null } | null
 }
 export type PokerVariant = "standard52" | "short32"
+export const POKER_BUY_IN_PRESETS: readonly number[] = [1000, 5000, 10000, 50000]
 export const POKER_MAX_SEATS = 6
 export const POKER_DEFAULT_ROLL_COINS = 12
 export const POKER_MAX_ROLL_COINS = 2147483647
@@ -328,7 +329,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
       blindPreset: { type: "string", enum: ["1/2", "2/4", "5/10", "10/20"] },
       creationId: { type: "string", format: "uuid", maxLength: 36 },
       maxSeats: integer(2, POKER_MAX_SEATS),
-      buyIn: { type: "integer", enum: [500, 1000, 2000, 5000] },
+      buyIn: { type: "integer", enum: POKER_BUY_IN_PRESETS },
       name: str(48),
       mode,
     },

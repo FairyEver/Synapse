@@ -116,7 +116,7 @@ describe("建房请求身份", () => {
     roots.add(root); document.body.append(host)
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
     await open(host)
-    for (const value of ["practice", "short32", "10/20", "5000"]) {
+    for (const value of ["practice", "short32", "10/20", "50000"]) {
       await act(async () => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!.click())
     }
     await act(async () => document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
@@ -126,12 +126,12 @@ describe("建房请求身份", () => {
     root = createRoot(host); roots.add(root)
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
     await open(host)
-    for (const value of ["practice", "short32", "10/20", "5000"]) {
+    for (const value of ["practice", "short32", "10/20", "50000"]) {
       expect(document.querySelector(`input[type="radio"][value="${value}"]`)!.checked).toBe(true)
     }
     expect(document.querySelector("#poker-seats")?.textContent).toContain("5")
     const saved = settings.update.mock.calls.at(-1)![1]
-    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 5, buyIn: 5000, roll: true, rollCoins: 12 })
+    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 5, buyIn: 50000, roll: true, rollCoins: 12 })
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     identity.user = { id: "another", nickname: "另一人", handle: "other" }
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
@@ -219,7 +219,10 @@ describe("建房请求身份", () => {
     document.body.append(host)
     await act(async () => root.render(<Lobby onRoom={onRoom} />))
     await open(host)
-    for (const value of ["practice", "short32", "5/10", "2000"]) {
+    const buyInGroup = document.getElementById("poker-buyin")!
+    expect([...buyInGroup.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map(input => input.value)).toEqual(["1000", "5000", "10000", "50000"])
+    for (const label of ["1k", "5k", "1w", "5w"]) expect(buyInGroup.textContent).toContain(label)
+    for (const value of ["practice", "short32", "5/10", "10000"]) {
       const option = document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)
       expect(option, `直接选择 ${value}`).not.toBeNull()
       await act(async () => option!.click())
@@ -231,7 +234,7 @@ describe("建房请求身份", () => {
     await act(async () => decrease.click())
     await submit()
     expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
-      mode: "practice", variant: "short32", blindPreset: "5/10", buyIn: 2000, maxSeats: 5,
+      mode: "practice", variant: "short32", blindPreset: "5/10", buyIn: 10000, maxSeats: 5,
     }))
     expect(onRoom).toHaveBeenCalledWith("5678")
   })

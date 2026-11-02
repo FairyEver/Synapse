@@ -17,7 +17,7 @@ const url=gameTestDatabaseUrl()
   const hall=new HallService(db),poker=new PokerService(db,hall),rolls=new PokerRollService(poker),actions=new PokerActionService(poker),wait=new PokerWaitService(actions)
   afterAll(async()=>{wait.onModuleDestroy();await db.$disconnect()})
   async function setup(){
-    const user=randomUUID(),other=randomUUID(),code=(await poker.createRoom(user,{maxSeats:2,buyIn:500,ruleOptions:{roll:true}})).roomCode
+    const user=randomUUID(),other=randomUUID(),code=(await poker.createRoom(user,{maxSeats:2,buyIn:1000,ruleOptions:{roll:true}})).roomCode
     await joinForStartedHand(poker, user,code,{});await joinForStartedHand(poker, other,code,{})
     const state=await actions.state(user,code),room=await db.gamePokerRoom.findUniqueOrThrow({where:{code}})
     const input={roomCode:code,handId:state.handId!,street:"preflop" as const,expectedActionSeq:0,controlVersion:0,actionId:randomUUID(),kind:"super" as const,cardIndex:0,expectedFee:state.roll.super!.fee}
@@ -47,7 +47,7 @@ const url=gameTestDatabaseUrl()
   })
   it("奇数费用按庄家左侧分配，超时弃牌离座后仍归原入座，新入座不接收迟到补偿",async()=>{
     const users=[randomUUID(),randomUUID(),randomUUID()]
-    const code=(await poker.createRoom(users[0],{maxSeats:3,buyIn:2000,ruleOptions:{roll:true}})).roomCode
+    const code=(await poker.createRoom(users[0],{maxSeats:3,buyIn:5000,ruleOptions:{roll:true}})).roomCode
     await joinForStartedHand(poker, users[0],code,{})
     await joinForStartedHand(poker, users[1],code,{})
     await joinForStartedHand(poker, users[2],code,{})

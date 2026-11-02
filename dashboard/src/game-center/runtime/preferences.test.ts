@@ -8,7 +8,7 @@ it.each([7, 8, 9, 10])("旧的%s人配置恢复为6人并保留其他选项", as
     mode: "practice", variant: "short32", blindPreset: "5/10", maxSeats, buyIn: 2000, roll: true,
   }))
   expect(await roomPreferencesStore.get("user")).toEqual({
-    mode: "practice", variant: "short32", blindPreset: "5/10", maxSeats: 6, buyIn: 2000, roll: true, rollCoins: 12,
+    mode: "practice", variant: "short32", blindPreset: "5/10", maxSeats: 6, buyIn: 1000, roll: true, rollCoins: 12,
   })
   expect(await roomPreferencesStore.get("other")).toBeNull()
 })
@@ -22,4 +22,9 @@ it("remembers custom roll coins by account and rejects invalid saved allowances"
     localStorage.setItem("synapse.game.poker-room-preferences.v1:bad",JSON.stringify({...options,rollCoins}))
     await expect(roomPreferencesStore.get("bad")).rejects.toThrow()
   }
+})
+
+it.each([500, 2000, 1000, 5000, 10000, 50000])("保存金额%s恢复为有效新档位", async buyIn => {
+  await roomPreferencesStore.update("user", { mode: "points", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn })
+  expect(await roomPreferencesStore.get("user")).toMatchObject({ buyIn: [500, 2000].includes(buyIn) ? 1000 : buyIn })
 })

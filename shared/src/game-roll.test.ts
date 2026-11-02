@@ -25,12 +25,12 @@ describe("Roll线协议", () => {
     expect(parse(choose).safeParse(select).success).toBe(true)
     expect(parse(choose).safeParse({ ...select, candidateIndex: 3 }).success).toBe(false)
     const create = parse(GAME_TOOLS.find(t => t.id === "app.game.poker.room.create")!)
-    expect(create.safeParse({ maxSeats: 2, buyIn: 500, ruleOptions: { roll: true } }).success).toBe(true)
-    expect(create.safeParse({ maxSeats: 2, buyIn: 500, ruleOptions: { roll: true, rollCoins: 21 } }).success).toBe(true)
+    expect(create.safeParse({ maxSeats: 2, buyIn: 1000, ruleOptions: { roll: true } }).success).toBe(true)
+    expect(create.safeParse({ maxSeats: 2, buyIn: 1000, ruleOptions: { roll: true, rollCoins: 21 } }).success).toBe(true)
     for (const options of [{roll:true,rollCoins:0},{roll:true,rollCoins:1.5},{roll:true,rollCoins:2147483648},{roll:true,normalCost:2},{roll:true,superCost:4}])
-      expect(create.safeParse({ maxSeats:2,buyIn:500,ruleOptions:options }).success).toBe(false)
-    expect(create.safeParse({ maxSeats: 2, buyIn: 500, ruleOptions: {} }).success).toBe(true)
-    expect(create.safeParse({ maxSeats: 2, buyIn: 500, ruleOptions: { roll: true, rate: 1 } }).success).toBe(false)
+      expect(create.safeParse({ maxSeats:2,buyIn:1000,ruleOptions:options }).success).toBe(false)
+    expect(create.safeParse({ maxSeats: 2, buyIn: 1000, ruleOptions: {} }).success).toBe(true)
+    expect(create.safeParse({ maxSeats: 2, buyIn: 1000, ruleOptions: { roll: true, rate: 1 } }).success).toBe(false)
   })
   it("公开事件禁止包含私有候选、旧牌及位置", () => {
     const schema = GAME_RESPONSE_SCHEMAS["app.game.poker.table.events"]
