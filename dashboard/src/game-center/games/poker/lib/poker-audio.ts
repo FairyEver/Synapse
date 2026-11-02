@@ -3,15 +3,9 @@ import deal from "../assets/audio/card-slide-4.ogg?url"
 import card from "../assets/audio/card-place-2.ogg?url"
 import fold from "../assets/audio/card-shove-4.ogg?url"
 import tap from "../assets/audio/chip-lay-1.ogg?url"
-import coin1 from "../assets/audio/chips-collide-1.ogg?url"
-import coin2 from "../assets/audio/chips-collide-2.ogg?url"
-import collect from "../assets/audio/chips-stack-1.ogg?url"
-import pocket from "../assets/audio/dropLeather.ogg?url"
-import winCoin1 from "../assets/audio/handleCoins.ogg?url"
-import winCoin2 from "../assets/audio/handleCoins2.ogg?url"
 import type { PokerSound, PokerSoundCue } from "./poker-sounds"
 
-const assets: Record<PokerSound, string> = { deal, card, fold, tap, coin1, coin2, collect, turn: tap, pocket, winCoin1, winCoin2 }
+const assets: Record<PokerSound, string> = { deal, card, fold, tap, turn: tap, chip: tap }
 const logger = createRendererLogger("game.poker.audio")
 
 /** Room-scoped, gesture-activated audio. Unready cues are dropped, never replayed. */
@@ -22,16 +16,17 @@ export function createPokerAudio() {
   let disposed = false
   const abort = new AbortController()
   const buffers = new Map<string, AudioBuffer>()
-  const sources = new Map<AudioBufferSourceNode, GainNode>()
+  const sources = new Map<AudioBufferSourceNode, { gain: GainNode; impact: boolean }>()
 
-  function stop() {
-    for (const [source, gain] of sources) {
+  function stop(onlyBatch = false) {
+    for (const [source, { gain, impact }] of sources) {
+      if (onlyBatch && impact) continue
       source.onended = null
       try { source.stop() } catch (error) { logger.warn("Unable to stop poker sound", { error }) }
       source.disconnect()
       gain.disconnect()
+      sources.delete(source)
     }
-    sources.clear()
   }
 
   async function activate() {
@@ -40,7 +35,7 @@ export function createPokerAudio() {
       if (!context) {
         context = new AudioContext()
         master = context.createGain()
-        // Quiet fixed gain: wager size changes contact count and pace, not volume.
+        // Quiet fixed gain; denominations and money amounts never raise the volume.
         master.gain.value = 0.35
         master.connect(context.destination)
       }
@@ -65,8 +60,8 @@ export function createPokerAudio() {
     }
   }
 
-  function play(cues: PokerSoundCue[]) {
-    stop()
+  function play(cues: PokerSoundCue[], impact = false) {
+    if (!impact) stop(true)
     if (disposed || !context || context.state !== "running" || !master) return
     try {
       for (const cue of cues.slice(0, 40)) {
@@ -74,10 +69,11 @@ export function createPokerAudio() {
         if (!buffer) continue
         const source = context.createBufferSource(), gain = context.createGain()
         source.buffer = buffer
+        source.playbackRate.value = cue.playbackRate ?? 1
         gain.gain.value = Math.min(0.5, Math.max(0, cue.volume))
         source.connect(gain)
         gain.connect(master)
-        sources.set(source, gain)
+        sources.set(source, { gain, impact })
         source.onended = () => {
           sources.delete(source)
           source.disconnect()
@@ -106,5 +102,5 @@ export function createPokerAudio() {
     master?.disconnect()
     try { await context?.close() } catch (error) { logger.warn("Unable to close poker audio", { error }) }
   }
-  return { activate, play, stop, dispose }
+  return { activate, play, land: (cue: PokerSoundCue) => play([cue], true), stop: () => stop(), dispose }
 }

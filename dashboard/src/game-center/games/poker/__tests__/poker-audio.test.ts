@@ -7,7 +7,7 @@ class FakeContext {
   state = "running"
   currentTime = 10
   destination = {}
-  sources: { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }[] = []
+  sources: { start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn>; playbackRate: { value: number } }[] = []
   gains: { gain: { value: number } }[] = []
   resume = vi.fn().mockResolvedValue(undefined)
   close = vi.fn().mockImplementation(async () => { this.state = "closed" })
@@ -18,7 +18,7 @@ class FakeContext {
     return gain
   }
   createBufferSource() {
-    const source = { buffer: null, onended: null, start: vi.fn(), stop: vi.fn(), connect: vi.fn(), disconnect: vi.fn() }
+    const source = { playbackRate: { value: 1 }, buffer: null, onended: null, start: vi.fn(), stop: vi.fn(), connect: vi.fn(), disconnect: vi.fn() }
     this.sources.push(source)
     return source
   }
@@ -35,7 +35,7 @@ async function ready() {
 describe("本地音频播放器", () => {
   it("交互后加载本地素材，以低音量调度；停止和卸载取消所有声音", async () => {
     const { audio, context } = await ready()
-    audio.play([{ sound: "coin1", delay: 75, volume: 0.35 }])
+    audio.play([{ sound: "chip", delay: 75, volume: 0.35 }])
     expect(context.sources[0].start).toHaveBeenCalledWith(10.075)
     audio.stop()
     expect(context.sources[0].stop).toHaveBeenCalled()
@@ -57,7 +57,7 @@ describe("本地音频播放器", () => {
     })))
     const audio = createPokerAudio()
     const loading = audio.activate()
-    audio.play([{ sound: "coin1", delay: 0, volume: 0.35 }])
+    audio.play([{ sound: "chip", delay: 0, volume: 0.35 }])
     expect(context.sources).toHaveLength(0)
     await audio.dispose()
     await loading
@@ -69,14 +69,14 @@ describe("本地音频播放器", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("missing asset")))
     const audio = createPokerAudio()
     await audio.activate()
-    audio.play([{ sound: "coin1", delay: 0, volume: 0.35 }])
+    audio.play([{ sound: "chip", delay: 0, volume: 0.35 }])
     expect(context.sources).toHaveLength(0)
     expect(warn).toHaveBeenCalled()
     await audio.dispose()
   })
   it("连续更新替换声音批次，避免多桌动作堆积", async () => {
     const { audio, context } = await ready()
-    const cue = { sound: "coin1" as const, delay: 0, volume: 0.35 }
+    const cue = { sound: "chip" as const, delay: 0, volume: 0.35 }
     audio.play([cue])
     audio.play([cue])
     expect(context.sources[0].stop).toHaveBeenCalled()
@@ -85,13 +85,13 @@ describe("本地音频播放器", () => {
   it("音频设备错误不向牌桌抛出异常", async () => {
     const { audio, context } = await ready()
     vi.spyOn(context, "createBufferSource").mockImplementation(() => { throw new Error("audio device unavailable") })
-    expect(() => audio.play([{ sound: "coin1", delay: 0, volume: 0.35 }])).not.toThrow()
+    expect(() => audio.play([{ sound: "chip", delay: 0, volume: 0.35 }])).not.toThrow()
     expect(warn).toHaveBeenCalled()
     await audio.dispose()
   })
   it("筹码保持当前音量，翻牌与下注结算同批出现时不截断声音", async () => {
     const { audio, context } = await ready()
-    const money = Array.from({ length: 16 }, (_, i) => ({ sound: "coin1" as const, delay: i * 55, volume: 0.5 }))
+    const money = Array.from({ length: 16 }, (_, i) => ({ sound: "chip" as const, delay: i * 55, volume: 0.5 }))
     const cards = Array.from({ length: 3 }, (_, i) => ({ sound: "card" as const, delay: i * 120, volume: 0.28 }))
     audio.play([...money, ...cards, ...money.map(c => ({ ...c, delay: c.delay + 520 }))])
     expect(context.sources).toHaveLength(35)
@@ -99,17 +99,21 @@ describe("本地音频播放器", () => {
     expect(context.gains[17].gain.value).toBe(0.28)
     await audio.dispose()
   })
-  it("本地加载落袋与两种金属金币素材，按顺序播放并可一起停止", async () => {
+  it("每枚落地声叠加播放，后续落地和快照反馈不截断先前尾音", async () => {
     const { audio, context } = await ready()
-    audio.play([
-      { sound: "pocket", delay: 520, volume: 0.3 },
-      { sound: "winCoin1", delay: 620, volume: 0.38 },
-      { sound: "winCoin2", delay: 810, volume: 0.38 },
-    ])
-    expect(context.sources).toHaveLength(3)
-    expect(context.sources.map(s => s.start.mock.calls[0][0])).toEqual([10.52, 10.62, 10.81])
+    const cue = { sound: "chip" as const, delay: 0, volume: 0.3, playbackRate: 0.98 }
+    audio.play([{ sound: "card", delay: 120, volume: 0.28 }])
+    audio.land(cue)
+    audio.land({ ...cue, playbackRate: 1.02 })
+    audio.play([{ sound: "fold", delay: 0, volume: 0.25 }])
+    expect(context.sources).toHaveLength(4)
+    expect(context.sources[0].stop).toHaveBeenCalledTimes(1)
+    expect(context.sources[1].stop).not.toHaveBeenCalled()
+    expect(context.sources[2].stop).not.toHaveBeenCalled()
+    expect(context.sources[1].start).toHaveBeenCalledWith(10)
+    expect(context.sources[1].playbackRate.value).toBe(0.98)
     audio.stop()
-    expect(context.sources.every(s => s.stop.mock.calls.length === 1)).toBe(true)
+    expect(context.sources.slice(1).every(s => s.stop.mock.calls.length === 1)).toBe(true)
     await audio.dispose()
   })
 })

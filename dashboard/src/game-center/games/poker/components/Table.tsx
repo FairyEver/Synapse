@@ -48,7 +48,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const membersTrigger = useRef<HTMLButtonElement>(null)
   const panelId = useId(), menuId = useId()
   const [soundEnabled, setSoundEnabled] = useState(true)
-  usePokerAudio(table, perspective, identityKey ?? "", soundEnabled)
+  const chipLanded = usePokerAudio(table, perspective, identityKey ?? "", soundEnabled)
   const controlVersion = table.controlVersion ?? table.seats.find(seat => seat.seatNo === table.mySeatNo)?.controlVersion
   useEffect(() => { setPanel(current => current === "bet" ? null : current) }, [table.handId, table.actionSeq, controlVersion, perspective, table.actionOnSeat, table.status])
   useEffect(() => { setPanel(null) }, [compact])
@@ -126,7 +126,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
                 {view.status === "paused" && view.pauseReason && <p className="poker-pause-reason">{({user:"牌局已暂停",all_humans_away:"真人均已暂离",no_human:"等待本人或 AI 入座",insufficient_players:"等待对手",insufficient_chips:"等待有筹码的玩家"} as Record<string,string>)[view.pauseReason] ?? "等待可参与的玩家"}</p>}
               </div>
               {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} displayStack={cash.banks[seatNo] ?? seat.stack} onInspect={trigger => { inspectedTrigger.current = trigger; setInspected({ seatNo, key: view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? seat.botId ?? seat.displayName }); setPanel("playerInfo") }} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} hasStarted={!!view.handId} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
-              <ChipMotion transfers={cash.active} layout={`${fit.scene.mode}:${fit.scale}`} scope={cash.scope} onStart={cash.start} onComplete={cash.complete} />
+              <ChipMotion transfers={cash.active} layout={`${fit.scene.mode}:${fit.scale}`} scope={cash.scope} onStart={cash.start} onComplete={cash.complete} onLand={chipLanded} />
             </div>
           </div>
         </div>

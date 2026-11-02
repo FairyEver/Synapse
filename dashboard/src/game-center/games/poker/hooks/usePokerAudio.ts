@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { createPokerAudio } from "../lib/poker-audio"
+import type { PresentedTransfer } from "../lib/chip-presentation"
 import { pokerSoundCues, soundActionSeq } from "../lib/poker-sounds"
 
 export function usePokerAudio(table: PokerTableView, perspective: "owner" | "public", identityKey: string, enabled: boolean) {
@@ -47,4 +48,10 @@ export function usePokerAudio(table: PokerTableView, perspective: "owner" | "pub
     const cues = pokerSoundCues(old.table, table, perspective)
     if (cues.length) audio.current?.play(cues)
   }, [table, context, enabled, perspective])
+
+  return useCallback((_transfer: PresentedTransfer, index: number) => {
+    if (!enabled || table.status === "closed" || document.visibilityState === "hidden" || !foreground.current || previous.current?.context !== context) return
+    // One short physical impact per landed chip, with subtle variation and natural tails.
+    audio.current?.land({ sound: "chip", delay: 0, volume: 0.3 + (index % 3) * 0.025, playbackRate: 0.97 + (index % 5) * 0.015 })
+  }, [context, enabled, table.status])
 }
