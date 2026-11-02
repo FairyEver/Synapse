@@ -69,11 +69,11 @@ it("本人切到旁观视角仍可接回自己的 AI 座位，但不能代准备
   await act(async () => screen.root.unmount())
 })
 
-it("首局准备发送null且全员准备不会代房主开始", async () => {
+it("首局房主不显示准备，其他玩家准备后由房主开始", async () => {
   const first = { ...table, handId: null, handNo: 0, street: null, settlement: null, isRoomOwner: true, canStart: false }
   const screen = await render(first)
-  await act(async () => button("准备")!.click())
-  expect(api.ready).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: null, controlVersion: 3 })
+  expect(button("准备")).toBeUndefined()
+  expect(api.ready).not.toHaveBeenCalled()
   expect(api.start).not.toHaveBeenCalled()
   expect(button("开始")!.disabled).toBe(true)
   const allReady = { ...first, canStart: true, seats: first.seats.map(s => ({ ...s, readyForNextHand: true })) }
@@ -92,6 +92,14 @@ it("每轮准备后房主仍需手动开始，旁观视角不可开始", async (
   await act(async () => button("开始")!.click())
   expect(api.start).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: "h1", controlVersion: 3 })
   await screen.update(ready, "owner", "public")
+  expect(button("开始")).toBeUndefined()
+  await act(async () => screen.root.unmount())
+})
+
+it("首局非房主仍须准备，提交null手牌且没有开始入口", async () => {
+  const screen = await render({ ...table, handId: null, handNo: 0, settlement: null, isRoomOwner: false })
+  await act(async () => button("准备")!.click())
+  expect(api.ready).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: null, controlVersion: 3 })
   expect(button("开始")).toBeUndefined()
   await act(async () => screen.root.unmount())
 })

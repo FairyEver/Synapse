@@ -338,7 +338,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   ["poker.roll.start", "按本人当前报价确认换牌，另付筹码；有coins快照的每手额度由建房rollCoins确定（默认12），normal固定扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
   ["poker.roll.choose", "从本人待选超级换牌候选中选一张，不再扣筹码或钻石，零钻石仍可选择；候选仅本人可见，未知结果复用原actionId。", { ...room, handId: str(), rollId: str(), candidateIndex: integer(0, 2), expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "handId", "rollId", "candidateIndex", "expectedActionSeq", "controlVersion", "actionId"], true],
-  ["poker.room.start", "仅房主在所有可参与座位准备后手动开始；首局handId传null，后续传当前结算handId。入座、准备、回座、调度均不自动开局；已入座房主须携当前controlVersion并持有控制权。", { ...room, handId: { type: ["string", "null"], maxLength: 200 }, controlVersion }, ["roomCode", "handId"], true],
+  ["poker.room.start", "仅房主手动开始：首局房主免准备，其他可参与座位须准备；后续房主也须准备且全员准备后才能开始。首局handId传null，后续传当前结算handId。入座、准备、回座、调度均不自动开局；已入座房主须携当前controlVersion并持有控制权。", { ...room, handId: { type: ["string", "null"], maxLength: 200 }, controlVersion }, ["roomCode", "handId"], true],
   ["poker.room.get", "只读旁观快照，不返回底牌、私密提示词或note。", room, ["roomCode"], false],
   ["poker.bot.add", "仅陪练房房主添加一个程序机器人，不调用模型、不影响大厅点数；同次重试复用creationId。", { ...room, creationId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "creationId"], true],
   ["poker.bot.remove", "仅陪练房房主移除本房机器人；本手参与者手后移除，不能控制其动作或真人座位。", { ...room, botId: str() }, ["roomCode", "botId"], true],
@@ -350,7 +350,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     true,
   ],
   ["poker.seat.leave", "点数房离桌退剩余筹码，陪练房不兑换点数；参与中的手结束后离场，接管后须提交当前controlVersion。", { ...room, controlVersion }, ["roomCode"], true],
-  ["poker.seat.ready", "首局及每手结算后本人显式准备，首局handId传null，后续携当前结算handId和controlVersion；全员准备后仍须房主room.start。陪练自动准备，AI必须调用本工具，真人由Web点击；查询、wait和回座不会准备，旧手请求不得用于新手。", { ...room, handId: { type: ["string", "null"], maxLength: 200 }, controlVersion }, ["roomCode", "handId", "controlVersion"], true],
+  ["poker.seat.ready", "首局房主免准备，其他可参与者及每手结算后房主均须显式准备；首局handId传null，后续携当前结算handId和controlVersion；全员准备后仍须房主room.start。陪练自动准备，AI必须调用本工具，真人由Web点击；查询、wait和回座不会准备，旧手请求不得用于新手。", { ...room, handId: { type: ["string", "null"], maxLength: 200 }, controlVersion }, ["roomCode", "handId", "controlVersion"], true],
   [
     "poker.seat.sit",
     "主动暂离或回座；当前手结束后生效。sittingOut确认请求，pending表示尚未生效，status是实际座位状态。",

@@ -191,14 +191,13 @@ it("旧部署留下的到期后台轮转也不能自动越过未准备座位", a
 })
 
 // Regressions: a second arrival and scheduler checks must never start a hand.
-it("首局全员准备后仍须房主开始，旧首局请求不能开始后续手牌", async () => {
+it("首局房主免准备但仍须手动开始，旧首局请求不能开始后续手牌", async () => {
   const f = fixture()
   f.hands.length = 0
   Object.assign(f.c.room, { status: "waiting", handNo: 0, currentHandId: null })
   f.c.seats.forEach(s => { s.status = "waiting" })
   await startNext(f.poker, f.c)
   expect(f.hands).toHaveLength(0)
-  await f.poker.ready("u0", "1234", null, 0, f.c.now, "human")
   await expect(f.poker.start("u0", "1234", null, 0, f.c.now, "human")).rejects.toMatchObject({ response: { code: "POKER_ILLEGAL_ACTION" } })
   await f.poker.ready("u1", "1234", null, 0, f.c.now, "human")
   await startNext(f.poker, f.c)
@@ -226,7 +225,8 @@ it("首局投影公开准备进度，仅房主玩家视角获得开始资格", a
   const f = fixture()
   f.hands.length = 0
   Object.assign(f.c.room, { status: "waiting", handNo: 0, currentHandId: null })
-  f.c.seats.forEach(s => { s.status = "ready" })
+  f.c.seats[0].status = "waiting"
+  f.c.seats[1].status = "ready"
   ;(f.c.tx.gameSession as any).findUnique = async () => null
   ;(f.c.tx as any).gamePokerControlHistory = { findUnique: async () => null }
   const actions = new PokerActionService(f.poker)
@@ -236,5 +236,17 @@ it("首局投影公开准备进度，仅房主玩家视角获得开始资格", a
   expect(await actions.view(f.c, "u1", "owner", false)).toMatchObject({ isRoomOwner: false, canStart: false })
   expect(await actions.view(f.c, "u0", "public", false)).toMatchObject({ isRoomOwner: false, canStart: false })
   f.c.room.ownerUserId = "spectator"
+  f.c.seats[0].status = "ready"
   expect(await actions.view(f.c, "spectator", "owner", false)).toMatchObject({ isRoomOwner: true, canStart: true })
+})
+
+it("后续手牌房主不能沿用首局免准备，准备后仍需另点开始", async () => {
+  const f = fixture()
+  await saveHand(f.poker, f.c, f.hands[0], f.settled)
+  await f.poker.ready("u1", "1234", "h1", 0, f.c.now, "human")
+  await expect(f.poker.start("u0", "1234", "h1", 0, f.c.now, "human")).rejects.toMatchObject({ response: { code: "POKER_ILLEGAL_ACTION" } })
+  await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")
+  expect(f.hands).toHaveLength(1)
+  await f.poker.start("u0", "1234", "h1", 0, f.c.now, "human")
+  expect(f.hands).toHaveLength(2)
 })

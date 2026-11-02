@@ -48,7 +48,7 @@ export async function prepareAndStartInitialHand(poker: PokerService, code: stri
   const seats = await poker.prisma.gamePokerSeat.findMany({ where: { roomId: room.id }, take: 10 })
   const eligible = seats.filter(s => s.stack > 0 && s.status !== "sitting_out" && !s.sitPending && !s.leavePending)
   if (eligible.length < 2 || !eligible.some(s => s.participantKind !== "bot")) return
-  for (const seat of eligible) if (seat.participantKind !== "bot")
+  for (const seat of eligible) if (seat.participantKind !== "bot" && seat.userId !== room.ownerUserId)
     await poker.ready(seat.userId, code, null, seat.controlVersion, time, seat.controller === "human" ? "human" : "mcp")
   const owner = seats.find(s => s.userId === room.ownerUserId)
   await poker.start(room.ownerUserId, code, null, owner?.controlVersion, time, owner?.controller === "human" ? "human" : "mcp")

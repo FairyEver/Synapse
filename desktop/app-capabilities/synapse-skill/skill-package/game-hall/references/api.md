@@ -295,7 +295,7 @@
 
 ## app_game_poker_room_start
 
-仅房主在所有可参与座位准备后手动开始；首局handId传null，后续传当前结算handId。入座、准备、回座、调度均不自动开局；已入座房主须携当前controlVersion并持有控制权。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+仅房主手动开始：首局房主免准备，其他可参与座位须准备；后续房主也须准备且全员准备后才能开始。首局handId传null，后续传当前结算handId。入座、准备、回座、调度均不自动开局；已入座房主须携当前controlVersion并持有控制权。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -457,7 +457,7 @@
 
 ## app_game_poker_seat_ready
 
-首局及每手结算后本人显式准备，首局handId传null，后续携当前结算handId和controlVersion；全员准备后仍须房主room.start。陪练自动准备，AI必须调用本工具，真人由Web点击；查询、wait和回座不会准备，旧手请求不得用于新手。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+首局房主免准备，其他可参与者及每手结算后房主均须显式准备；首局handId传null，后续携当前结算handId和controlVersion；全员准备后仍须房主room.start。陪练自动准备，AI必须调用本工具，真人由Web点击；查询、wait和回座不会准备，旧手请求不得用于新手。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

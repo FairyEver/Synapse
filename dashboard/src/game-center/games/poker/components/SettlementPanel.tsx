@@ -39,8 +39,7 @@ function ScopedSettlementPanel({ table, onOpen, compact, ready, blocked = false 
           <div role="status" className="poker-result-waiting text-xs text-muted"><p>{table.status === "closed" ? "房间已解散" : !table.awaitingReady ? "本手已结束" : ready.summary}</p>{table.awaitingReady && ready.controller === "ai" && progress.mine && !ready.prepared && <p>等待 AI 确认准备</p>}{ready.notice && <p>{ready.notice}</p>}</div>
           <Button variant="secondary" onPress={close}>返回牌桌</Button>
           {ready.canTakeover && <Button isPending={ready.busy} isDisabled={ready.busy} onPress={() => { void ready.takeover() }}>本人接管</Button>}
-          {ready.showStart && <Button isPending={ready.busy} isDisabled={ready.busy || !ready.canStart || blocked} onPress={() => { void ready.start() }}>开始</Button>}
-          {ready.canReady && <Button isPending={ready.busy} isDisabled={ready.prepared || ready.busy} onPress={() => { void ready.ready() }}>{ready.prepared ? "已准备" : "准备下一手"}</Button>}
+          {ready.canReady && <Button isPending={ready.busy} isDisabled={ready.prepared || ready.busy} onPress={async () => { if (await ready.ready() && table.isRoomOwner) close() }}>{ready.prepared ? "已准备" : "准备下一手"}</Button>}
         </Modal.Footer>
       </Modal.Dialog></Modal.Container>
     </Modal.Backdrop>

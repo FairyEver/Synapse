@@ -22,7 +22,8 @@ export function usePokerReady(table: PokerTableView, perspective: "owner" | "pub
   }, [seatScope, controller, version, table.awaitingReady, prepared])
   useEffect(() => { setBusy(false); setError(null) }, [scope])
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-  const canReady = table.status !== "closed" && !!table.awaitingReady && !!mine && controller === "human" && perspective === "owner" && version != null
+  const firstHandOwner = table.handNo === 0 && !!table.isRoomOwner
+  const canReady = !firstHandOwner && table.status !== "closed" && !!table.awaitingReady && !!mine && controller === "human" && perspective === "owner" && version != null
   const canTakeover = table.status !== "closed" && !!table.awaitingReady && table.mySeatNo != null && controller === "ai" && version != null
   const showStart = table.status !== "closed" && !!table.awaitingReady && !!table.isRoomOwner && perspective === "owner" && (table.mySeatNo == null || controller === "human")
   const canStart = showStart && !!table.canStart

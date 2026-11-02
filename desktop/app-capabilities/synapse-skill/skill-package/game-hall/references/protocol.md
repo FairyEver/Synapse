@@ -1,6 +1,6 @@
 # 协议与错误恢复
 
-2026-11-02 房主开局规则（取代历史自动开局描述）：首局和每手结算后都必须全员准备，再由房主手动开始。入座、最后一人准备、回座、离桌、机器人管理和后台调度均不自动发牌；程序陪练仍自动准备，真人点击准备、AI显式seat.ready。首局准备与开始的handId为null，后续绑定当前结算handId；控制版本和原控制权限不变。新增app.game.poker.room.start（Web POST /game/poker/rooms/:code/start），只允许房主显式调用，已入座房主须持当前控制权；旧请求过期必须重读，不得盲重发或凭继续意图自动开始。复用座位status=ready，不新增数据库字段或迁移。
+2026-11-02 房主开局规则（取代历史自动开局描述）：首局房主免准备，其他可参与者准备后由房主手动开始；后续每手结算后房主也须准备，准备成功后返回牌桌，待全员准备再由房主手动开始。结算面板不提供开始入口。入座、最后一人准备、回座、离桌、机器人管理和后台调度均不自动发牌；程序陪练仍自动准备，真人点击准备、AI显式seat.ready。首局准备与开始的handId为null，后续绑定当前结算handId；控制版本和原控制权限不变。新增app.game.poker.room.start（Web POST /game/poker/rooms/:code/start），只允许房主显式调用，已入座房主须持当前控制权；旧请求过期必须重读，不得盲重发或凭继续意图自动开始。复用座位status=ready，不新增数据库字段或迁移。
 
 2026-11-02 钻石额度更新：建房可通过ruleOptions.rollCoins设置每手钻石，默认12，必须为1至2147483647之间的整数；创建后额度固定。普通/超级消耗固定1/3钻石，不提供费率配置；额度1或2时超级因钻石不足禁用。启用Roll的新手牌保存coinPolicy={limit:房间额度,normal:1,super:3}，各参赛者按本手全部成功start历史计算余额，跨阶段不补充、下一手恢复房间额度。刷新、重启、接管、离桌/回座不补充；仍另付筹码及冻结补偿，无购买、转让、兑换或钻石盈亏。旧房间缺rollCoins按12，旧手缺coinPolicy的历史兼容规则不变。
 
@@ -69,7 +69,7 @@ checkpoint_get返回{checkpoint:null|检查点}，checkpoint_save返回{checkpoi
 
 ## 每手准备屏障
 
-首局和每手结算后均等待全员准备，nextHandAt为空；所有仍可参赛座位准备后，由房主显式room.start才发下一手。程序陪练自动准备；真人通过Web点击；AI必须显式app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait可返回ready_required，携首局null或当前结算手牌和控制版本；已准备返回waiting。先补hand_result和处理维护点，再按用户继续意图准备。暂离/离桌/无筹码/历史回显座位不计入，新加入及回座者不自动准备。旧handId返回POKER_STALE_ACTION，重读而不把信号迁移到新手；响应丢失先table_state核对，本手仍等待时才以相同参数重试。准备不修改资金，也不构成未来多手的准备授权。
+首局仅房主免准备，其他仍可参赛座位必须准备；后续每手结算后房主也须准备，nextHandAt为空，全员准备后由房主显式room.start才发下一手。程序陪练自动准备；真人通过Web点击；AI必须显式app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait可返回ready_required，携首局null或当前结算手牌和控制版本；已准备返回waiting。先补hand_result和处理维护点，再按用户继续意图准备。暂离/离桌/无筹码/历史回显座位不计入，新加入及回座者不自动准备。旧handId返回POKER_STALE_ACTION，重读而不把信号迁移到新手；响应丢失先table_state核对，本手仍等待时才以相同参数重试。准备不修改资金，也不构成未来多手的准备授权。
 
 ## Roll 严格写入与恢复
 

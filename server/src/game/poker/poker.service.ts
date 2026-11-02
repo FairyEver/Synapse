@@ -236,8 +236,8 @@ export class PokerService {
       if (c.room.handNo === 0 ? handId !== null : !hand || hand.id !== handId || hand.status !== "settled")
         reject("POKER_STALE_ACTION", "牌局已变化，请重新读取牌桌后开始。")
       const eligible = c.seats.filter(nextHandEligible)
-      if (eligible.length < 2 || !eligible.some(s => s.participantKind !== "bot") || !eligible.every(preparedForNextHand))
-        reject("POKER_ILLEGAL_ACTION", "至少两位玩家且所有参与者准备后，房主才能开始。")
+      if (eligible.length < 2 || !eligible.some(s => s.participantKind !== "bot") || !eligible.every(s => preparedForNextHand(s, c.room)))
+        reject("POKER_ILLEGAL_ACTION", "人数不足或仍有玩家未准备。")
       await startNext(this, c, true)
       return { handId: c.room.currentHandId!, started: true }
     }, now)

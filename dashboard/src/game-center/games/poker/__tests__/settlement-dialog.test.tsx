@@ -112,3 +112,27 @@ it.each(["points","practice"] as const)("%s结算的Roll净变化使用实际资
   expect(document.querySelector('.poker-result-net strong small')?.textContent).toBe(mode==="practice"?"筹码":"点数")
   await act(async()=>screen.root.unmount())
 })
+
+it("房主在结算中先准备，成功后返回牌桌，结算不提供开始入口", async () => {
+  api.ready.mockResolvedValue({ handId: "h1", started: false })
+  const owner = { ...table, isRoomOwner: true, canStart: false }
+  const screen = await render(owner)
+  expect(button("开始")).toBeUndefined()
+  await act(async () => button("准备下一手").click())
+  expect(api.ready).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: "h1", controlVersion: 3 })
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  await screen.update({ ...owner, canStart: true, seats: table.seats.map(s => ({ ...s, readyForNextHand: true })) })
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  await act(async () => button("本局结算").click())
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  expect(button("开始")).toBeUndefined()
+  await act(async () => screen.root.unmount())
+})
+it("房主准备失败仍留在结算，可核对和重试", async () => {
+  api.ready.mockRejectedValue(new Error("准备失败"))
+  const screen = await render({ ...table, isRoomOwner: true, canStart: false })
+  await act(async () => button("准备下一手").click())
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("准备失败")
+  await act(async () => screen.root.unmount())
+})

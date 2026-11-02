@@ -35,7 +35,7 @@ export async function startNext(
   }
   const eligible = c.seats.filter(nextHandEligible)
   if (eligible.length < 2 || !eligible.some((s) => s.participantKind !== "bot") ||
-      !eligible.every(preparedForNextHand) || !requestedByOwner) {
+      !eligible.every(s => preparedForNextHand(s, c.room)) || !requestedByOwner) {
     c.room = await c.tx.gamePokerRoom.update({
       where: { id: c.room.id },
       data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null, botActionAt: null, nextHandAt: null },

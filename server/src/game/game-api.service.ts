@@ -78,7 +78,7 @@ export class GameApiService {
             actionWindowSeconds: 600,
             roll: "建房ruleOptions.roll默认关闭；ruleOptions.rollCoins可设置每手钻石（默认12，正整数），normal/super消耗固定1/3、不可配置；开启后翻前/翻牌/转牌本人行动时可按table.state或wait的normal/super确切报价换牌。费用独立于底池，补偿其他未弃牌原入座者并冻结到手末；普通一张立即替换，超级三选一强制完成。Roll不续600秒时限；超时先选第一张再撤出。候选及旧牌位置只给本人，教学无额外权限。",
             heartbeatSeconds: 60,
-            nextHand: "首局及每手结束后所有有资格座位准备，真人手动点击、AI显式seat_ready、程序陪练自动准备。全员准备后仍须房主显式room_start，入座/准备/调度均不自动开局。首局handId为null，后续使用当前结算handId。",
+            nextHand: "首局房主免准备，其他可参与者须准备；后续每手结束后房主也须准备，真人手动点击、AI显式seat_ready、程序陪练自动准备。Web房主结算内准备成功返回牌桌，满足准备条件后仍须从牌桌显式room_start，入座/准备/调度均不自动开局。首局handId为null，后续使用当前结算handId。",
             timeout: "能check就记录check，否则fold；两者均立即撤出本手、离桌退款，不自动跟注。",
             headsUp: "按钮即小盲，翻前先行动、翻后后行动。",
             privacy: "MCP决策接口不提供教学明牌；Web 游戏中心从未入座可全牌旁观，曾参与点数房不能通过旁观读暗牌，陪练旁观只额外公开机器人牌。persona、版本、note及检查点仅本人可读。",

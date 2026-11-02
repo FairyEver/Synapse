@@ -72,7 +72,7 @@ seat_sit的sittingOut确认请求值；pending=true表示当前手未结束，st
 
 hand_result后推进cursor并继续接终局，离桌、输光、解散可能先补结算再table_closed；stack=0也不跳过最终确认。重放按handNo去重，空cursor只接当前牌况。需要日志时table_events按cursor分页，limit最多100，hasMore=true继续，按(handNo,seq,kind)去重；结算seq=2147483647。不要每轮拉全量history/detail或把整手报文留在上下文。
 
-首局与每手结束后都先全员准备，再由房主手动开始；加入、准备和后台调度不自动开局。首局seat_ready的handId传null，后续传当前结算handId。房主只有在用户明确要求开始时调用app_game_poker_room_start(roomCode,handId,controlVersion)，不得仅凭继续意图自动开始。程序陪练自动准备；真人需手动点击，AI必须在继续意图有效时明确调用seat_ready，不能代其他座位准备。查询、心跳、关闭结算、回座和普通重连都不代表准备。所有仍有筹码且未暂离/待离桌的座位（含下一手新加入者）都需准备；至少两人且至少一个非程序陪练。先完成本手结果确认与上下文维护判断，再发准备信号；准备绑定首局null或已结算handId和controlVersion，迟到信号不能授权后续手。
+首局房主免准备，不主动调用seat_ready，其他可参与者准备后由房主手动开始；后续每手结束后房主也须准备，Web房主在结算内准备成功返回牌桌，再等全员准备后从牌桌手动开始；加入、准备和后台调度不自动开局。首局seat_ready的handId传null，后续传当前结算handId。房主只有在用户明确要求开始时调用app_game_poker_room_start(roomCode,handId,controlVersion)，不得仅凭继续意图自动开始。程序陪练自动准备；真人需手动点击，AI必须在继续意图有效时明确调用seat_ready，不能代其他座位准备。查询、心跳、关闭结算、回座和普通重连都不代表准备。所有仍有筹码且未暂离/待离桌的座位（含下一手新加入者，首局房主除外）都需准备；至少两人且至少一个非程序陪练。先完成本手结果确认与上下文维护判断，再发准备信号；准备绑定首局null或已结算handId和controlVersion，迟到信号不能授权后续手。
 
 ## Roll 决策
 
