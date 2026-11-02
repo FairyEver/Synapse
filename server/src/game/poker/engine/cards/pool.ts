@@ -15,6 +15,7 @@ export interface CardModeState {
   pending: PendingChoice | null; dealtStages: string[]; deckRevision: number
   publicMarkers?: PublicCardMarker[]
   tideUsed?: Record<string, string[]>
+  catalogSnapshot?: { version: string; operationVersion: string; digest: string; recipe: { id: string; copies: number }[] }
 }
 export type CardPoolOperation =
   | { kind: "deal"; stage: "initial" | "flop" | "turn" | "river"; dealerSeat: number }

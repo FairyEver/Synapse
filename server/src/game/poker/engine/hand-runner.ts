@@ -3,11 +3,13 @@ import { resolveRules, type PokerRules } from "./rules"
 import { compareHands } from "./hand"
 import { after, seatOrder } from "./seat-order"
 import { splitPots, distribute } from "./pots"
-import { applyBet, betToMatch, type Decision, type EngineSeat, type BettingState } from "./betting"
+import { applyBet, type Decision, type EngineSeat, type BettingState } from "./betting"
 import { assertHandIntegrity, type RollState } from "./roll"
 import type { CardModeState } from "./cards/pool"
 import type { ReserveState } from "./chips/types"
 import type { TurnClock } from "./cards/deadlines"
+import { nextHandTransition } from "./hand-transitions"
+import { splitFundedPots } from "./chips/funded-pots"
 export { quoteRoll, startRoll, chooseRollCard, assertHandIntegrity, ROLL_PRICING_VERSION } from "./roll"
 export type { RollHistory, RollKind, RollState, RollQuote, RollOffer } from "./roll"
 export { legalActions } from "./betting"
@@ -16,6 +18,8 @@ export interface HandState extends BettingState, PokerRules {
   cards?: CardModeState
   reserve?: ReserveState
   turnClock?: TurnClock | null
+  cardAudit?: CardModeState
+  cancelledChips?: number
   street: "preflop" | "flop" | "turn" | "river" | "settled"
   dealerSeat: number
   burnedCards?: string[]
@@ -32,6 +36,7 @@ export function startHand(
   dealerSeat: number,
   deck: readonly string[],
   rules: Partial<PokerRules> = {},
+  options: { deferProgress?: boolean } = {},
 ): HandState {
   const snapshot = resolveRules(rules), validDeck = orderedDeck(snapshot.variant)
   if (
@@ -89,11 +94,12 @@ export function startHand(
     const amount = Math.min(s.stack, blind)
     s.stack -= amount
     s.total = amount
+    if (snapshot.chipRulesVersion === "chips-v2") s.nominalTotal = amount
     s.streetBet = amount
     s.allIn = s.stack === 0
   }
   h.actionOnSeat = order.preflop.find((no) => !h.seats.find((s) => s.seatNo === no)!.allIn) ?? null
-  progress(h, order.bigBlind)
+  if (!options.deferProgress) progress(h, order.bigBlind)
   assertHandIntegrity(h)
   return h
 }
@@ -118,28 +124,11 @@ export function removeFromHand(state: HandState, seatNo: number): HandState {
   return h
 }
 function progress(h: HandState, last: number): void {
-  const live = h.seats.filter((s) => !s.folded)
-  if (live.length === 1) {
-    settle(h, false)
-    return
-  }
-  const active = live.filter((s) => !s.allIn)
-  const pending = active.filter((s) => s.lastActedBet === null || s.streetBet < h.currentBet)
-  if (
-    (active.length > 1 && pending.length) ||
-    (active.length === 1 && active[0].streetBet < betToMatch(h, active[0].seatNo))
-  ) {
-    h.actionOnSeat =
-      after(
-        h.seats.map((s) => s.seatNo),
-        last,
-      ).find((no) => pending.some((s) => s.seatNo === no)) ?? null
-    return
-  }
-  if (h.street === "river") {
-    settle(h, true)
-    return
-  }
+  const transition = nextHandTransition(h, last)
+  if (transition.kind === "none") return
+  if (transition.kind === "settle") { settle(h, transition.showdown); return }
+  if (transition.kind === "turn") { h.actionOnSeat = transition.seatNo; return }
+  const active = h.seats.filter(s => !s.folded && !s.allIn)
   const burned = h.deck.shift()!
   h.burnedCards?.push(burned)
   const count = h.street === "preflop" ? 3 : 1
@@ -164,7 +153,7 @@ function progress(h: HandState, last: number): void {
 function settle(h: HandState, showdown: boolean): void {
   const live = h.seats.filter((s) => !s.folded)
   h.showdownSeats = showdown ? live.map((s) => s.seatNo) : []
-  h.pots = splitPots(h.seats)
+  h.pots = h.chipRulesVersion === "chips-v2" ? splitFundedPots(h.seats.map(s => ({ seatNo: s.seatNo, nominalTotal: s.nominalTotal ?? s.total, paidTotal: s.total, folded: s.folded })), after(h.seats.map(s => s.seatNo), h.dealerSeat)) : splitPots(h.seats)
   const order = after(
     h.seats.map((s) => s.seatNo),
     h.dealerSeat,
@@ -208,4 +197,8 @@ function settle(h: HandState, showdown: boolean): void {
     h.roll.released = true
     assertHandIntegrity(h)
   }
+}
+
+export function settleHand(state: HandState, showdown: boolean): HandState {
+  const h = structuredClone(state); settle(h, showdown); return h
 }

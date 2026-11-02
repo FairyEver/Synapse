@@ -1,12 +1,15 @@
 import { randomInt, randomUUID } from "node:crypto"
 import type { GamePokerHand } from "@prisma/client"
 import type { PokerService, RoomContext } from "./poker.service"
-import { json } from "./poker.service"
+import { json, sampleRoomTime } from "./poker.service"
 import { startHand, type HandState } from "./engine/hand-runner"
 import { orderedDeck, shuffle } from "./engine/deck"
 import { after } from "./engine/seat-order"
 import { resolveRules, type PokerRules } from "./engine/rules"
 import { nextHandEligible, preparedForNextHand } from "./poker-ready"
+import { resolveHandCommand } from "./engine/resolve-hand"
+import { createCardRegistry } from "./engine/cards/catalog-v1"
+import { persistHandResolution, reserveScope, roomResolutionContext } from "./poker-resolution"
 export const ACTION_WINDOW_MS = 600000
 export function engine(hand: GamePokerHand): HandState {
   const state = hand.engineState as unknown as HandState
@@ -54,9 +57,16 @@ export async function startNext(
     : eligible[0].seatNo
   const rules = resolveRules(c.room as unknown as Partial<PokerRules>)
   await poker.lockFunds(c)
-  const state = startHand(eligible, dealerSeat, shuffle(orderedDeck(rules.variant), randomInt), rules)
+  if (rules.chipRulesVersion === "chips-v2") sampleRoomTime(c)
+  const handId = randomUUID()
+  let state = startHand(eligible, dealerSeat, shuffle(orderedDeck(rules.variant), randomInt), rules, { deferProgress: rules.chipRulesVersion === "chips-v2" })
+  const context = roomResolutionContext(c, handId, 0, randomUUID(), null, "system")
+  state.participants = rules.chipRulesVersion === "chips-v2" ? eligible.map(p => ({ admissionId: p.id, userId: p.userId, seatNo: p.seatNo, kind: p.participantKind === "bot" ? "bot" : "human" })) : undefined
+  const resolution = rules.chipRulesVersion === "chips-v2" ? resolveHandCommand(state, { kind: "hand.start", scope: reserveScope(c, handId) }, context, createCardRegistry()) : null
+  if (resolution) state = resolution.state
   const hand = await c.tx.gamePokerHand.create({
     data: {
+      id: handId,
       roomId: c.room.id,
       handNo: c.room.handNo + 1,
       dealerSeat,
@@ -68,6 +78,7 @@ export async function startNext(
       startedAt: c.now,
     },
   })
+  if (resolution) await persistHandResolution(poker, c, resolution, context)
   c.room = await c.tx.gamePokerRoom.update({
     where: { id: c.room.id },
     data: {
@@ -106,6 +117,7 @@ export async function saveHand(
   const participants = await c.tx.gamePokerHandSeat.findMany({ where: { handId: hand.id }, take: 10 })
   const rules = resolveRules(state)
   const settled = state.street === "settled"
+  const reserveResult = reserveResults(state)
   const pot = settled ? 0 : state.seats.reduce((sum, s) => sum + s.total, 0)
   await c.tx.gamePokerHand.update({
     where: { id: hand.id },
@@ -118,15 +130,16 @@ export async function saveHand(
       status: settled ? "settled" : "running",
       showdownSeats: state.showdownSeats,
       ...(settled
-        ? { endedAt: c.now, result: json({ payouts: state.payouts, pots: state.pots, ...(state.roll ? { rollPaid: state.roll.paid, rollReceived: state.roll.credits } : {}), deltas: Object.fromEntries(state.seats.map((s) => [s.seatNo, s.stack - s.startingStack])) }) }
+        ? { endedAt: c.now, result: json({ payouts: state.payouts, pots: state.pots, ...reserveResult, ...(state.cardAudit ? { cardAudit: state.cardAudit } : {}), ...(state.roll ? { rollPaid: state.roll.paid, rollReceived: reserveResult.rollReceived ?? state.roll.credits } : {}), deltas: Object.fromEntries(state.seats.map((s) => [s.seatNo, s.stack - s.startingStack])) }) }
         : {}),
     },
   })
-  const deadlineAt = settled ? null : options.preserveDeadline ? c.room.actionDeadlineAt : new Date(c.now.getTime() + ACTION_WINDOW_MS)
+  const deadlineAt = settled ? null : state.chipRulesVersion === "chips-v2" ? state.turnClock ? new Date(state.turnClock.deadlineAt) : null : options.preserveDeadline ? c.room.actionDeadlineAt : new Date(c.now.getTime() + ACTION_WINDOW_MS)
   c.room = await c.tx.gamePokerRoom.update({
     where: { id: c.room.id },
     data: {
       actionDeadlineAt: deadlineAt,
+      ...(state.chipRulesVersion === "chips-v2" ? { actionStartedAt: state.turnClock ? new Date(state.turnClock.startedAt) : null } : {}),
       nextHandAt: null,
       botActionAt: !settled && c.room.mode === "practice" && c.seats.some((s) => s.seatNo === state.actionOnSeat && s.participantKind === "bot")
         ? new Date(c.now.getTime() + 1000) : null,
@@ -172,7 +185,8 @@ export async function saveHand(
     })
   }
   if (settled) {
-    if (state.roll) await poker.hall.releaseTransfers(c.tx, hand.id, active.map(s => ({ admissionId: s.id, userId: s.userId, gameKind: "poker", gameRoomId: c.room.id, funding: c.room.mode === "practice" ? "practice" : "points" })), c.now)
+    if (state.chipRulesVersion === "chips-v2") await poker.hall.freezeTransfers(c.tx, await poker.reserves.finalize(c.tx, hand.id), c.now)
+    if (state.roll || state.reserve) await poker.hall.releaseTransfers(c.tx, hand.id, active.map(s => ({ admissionId: s.id, userId: s.userId, gameKind: "poker", gameRoomId: c.room.id, funding: c.room.mode === "practice" ? "practice" : "points" })), c.now)
     for (const p of state.seats) {
       const participant = participants.find((s) => s.seatNo === p.seatNo)!
       await c.tx.gamePokerHandSeat.update({
@@ -204,4 +218,19 @@ export async function saveHand(
         data: { status: "closed", closedAt: c.now, actionDeadlineAt: null, botActionAt: null, nextHandAt: null },
       })
   }
+}
+
+function reserveResults(state: HandState) {
+  if (!state.reserve) return {}
+  const people = state.participants ?? [], seatOf = (id: string | undefined) => people.find(p => p.admissionId === id)?.seatNo
+  const reservePaid: Record<number, number> = {}, reserveReceived: Record<number, number> = {}, reserveStolen: Record<number, number> = {}, reserveRefunded: Record<number, number> = {}, rollReceived: Record<number, number> = {}
+  for (const lot of state.reserve.lots) reservePaid[lot.payerSeatNo] = (reservePaid[lot.payerSeatNo] ?? 0) + lot.originalAmount
+  for (const movement of state.reserve.movements) {
+    const no = seatOf(movement.toAdmissionId)
+    if (no === undefined) continue
+    const map = movement.kind === "finalize" ? reserveReceived : movement.kind === "steal" ? reserveStolen : movement.kind === "refund" ? reserveRefunded : null
+    if (map) map[no] = (map[no] ?? 0) + movement.amount
+    if (movement.kind === "finalize" && state.reserve.lots.find(l => l.id === movement.lotId)?.sourceType === "roll") rollReceived[no] = (rollReceived[no] ?? 0) + movement.amount
+  }
+  return { reservePaid, reserveReceived, reserveStolen, reserveRefunded, rollReceived }
 }

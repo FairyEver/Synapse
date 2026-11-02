@@ -3,6 +3,7 @@ import { Prisma, type GamePokerRoom, type GamePokerSeat } from "@prisma/client"
 import { createHash, randomInt, randomUUID } from "node:crypto"
 import { PrismaService } from "../../prisma/prisma.service"
 import { HallService } from "../hall/hall.service"
+import { GameReserveService } from "../hall/game-reserve.service"
 import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
@@ -10,13 +11,19 @@ import { resolveRules, ROLL_PRICING_VERSION, type PokerVariant } from "./engine/
 import { POKER_BUY_IN_PRESETS, POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
 import { nextHandEligible, preparedForNextHand } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
+import { engine } from "./poker-lifecycle"
+import { resolveHandCommand } from "./engine/resolve-hand"
+import { createCardRegistry } from "./engine/cards/catalog-v1"
+import { persistHandResolution, reserveScope, roomResolutionContext } from "./poker-resolution"
 
 export type RoomContext = {
   tx: Prisma.TransactionClient
   room: GamePokerRoom
   seats: GamePokerSeat[]
   now: Date
+  clock?: () => Date
 }
+export function sampleRoomTime(c: RoomContext): Date { c.now = c.clock?.() ?? c.now; return c.now }
 export const json = (value: unknown) => value as Prisma.InputJsonValue
 export function creationIdentity(userId: string, kind: "room" | "agent" | "bot", creationId: string): string {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(creationId))
@@ -30,6 +37,7 @@ export class PokerService {
   constructor(
     readonly prisma: PrismaService,
     readonly hall: HallService,
+    readonly reserves: GameReserveService = new GameReserveService(),
   ) {}
   private readonly listeners = new Set<(code: string) => void>()
   subscribe(listener: (code: string) => void): () => void {
@@ -39,7 +47,7 @@ export class PokerService {
   async withRoom<T>(
     code: string,
     work: (context: RoomContext) => Promise<T>,
-    now = new Date(),
+    now?: Date,
     changed = true,
   ): Promise<T> {
     let result: T
@@ -49,14 +57,15 @@ export class PokerService {
           async (tx) => {
             const [room] = await tx.$queryRaw<
               GamePokerRoom[]
-            >`SELECT "id", "code", "name", "ownerUserId", "mode", "variant", "ruleOptions", "rollPricingVersion", "nextHandAt", "botActionAt", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
+            >`SELECT "id", "code", "name", "ownerUserId", "mode", "variant", "ruleOptions", "rollPricingVersion", "cardRulesVersion", "chipRulesVersion", "actionStartedAt", "nextHandAt", "botActionAt", "maxSeats", "buyIn", "smallBlind", "bigBlind", "status", "handNo", "dealerSeat", "currentHandId", "actionDeadlineAt", "closeRequested", "lastMaintainedAt", "createdAt", "closedAt" FROM "GamePokerRoom" WHERE "code" = ${code} FOR UPDATE`
             if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
             const seats = await tx.gamePokerSeat.findMany({
               where: { roomId: room.id },
               take: 10,
               orderBy: { seatNo: "asc" },
             })
-            return work({ tx, room, seats, now })
+            const clock = () => now ?? new Date()
+            return work({ tx, room, seats, now: clock(), clock })
           },
           { timeout: 15000, maxWait: 15000 },
         )
@@ -226,7 +235,7 @@ export class PokerService {
       return { handId, started: false }
     }, now)
   }
-  async start(userId: string, code: string, handId: string | null, controlVersion?: number, now = new Date(), caller: PokerCaller = "mcp") {
+  async start(userId: string, code: string, handId: string | null, controlVersion?: number, now: Date | undefined = undefined, caller: PokerCaller = "mcp") {
     return this.withRoom(code, async (c) => {
       if (c.room.ownerUserId !== userId) reject("POKER_ILLEGAL_ACTION", "仅房主可以开始。")
       if (c.room.status === "closed" || c.room.closeRequested) reject("POKER_ROOM_CLOSED", "房间已解散或正在解散。")
@@ -269,7 +278,7 @@ export class PokerService {
   }
   /** Lock the complete points participant set before any session/asset mutation. */
   async lockFunds(c: RoomContext, additional: string[] = []) {
-    if (c.room.mode === "practice" || !(c.room.ruleOptions as { roll?: boolean } | null)?.roll) return
+    if (c.room.mode === "practice" || c.room.chipRulesVersion !== "chips-v2" && !(c.room.ruleOptions as { roll?: boolean } | null)?.roll) return
     const participants = c.room.currentHandId ? await c.tx.gamePokerHandSeat.findMany({ where: { handId: c.room.currentHandId }, take: 10 }) : []
     await this.hall.lockAccounts(c.tx, [...additional, ...participants.filter(p => p.participantKind !== "bot").map(p => p.userId), ...c.seats.filter(s => s.participantKind !== "bot").map(s => s.userId)])
   }
@@ -399,8 +408,17 @@ export class PokerService {
           return { pending: true }
         }
         if (hand && hand.status !== "settled") {
+          if (c.room.chipRulesVersion === "chips-v2") {
+            const before = engine(hand), actor = c.seats.find(s => s.userId === userId) ?? null, actionId = randomUUID()
+            const context = roomResolutionContext(c, hand.id, hand.actionSeq + 1, actionId, actor, "human")
+            const resolution = resolveHandCommand(before, { kind: "hand.cancel", funding: "practice", scope: reserveScope(c, hand.id) }, context, createCardRegistry())
+            await persistHandResolution(this, c, resolution, context, before)
+            await this.hall.freezeTransfers(c.tx, await this.reserves.finalize(c.tx, hand.id), c.now)
+            await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: context.actionSeq, status: "cancelled", street: "settled", pot: 0, endedAt: c.now, engineState: json(resolution.state), result: json({ cardAudit: resolution.state.cardAudit }) } })
+            if (actor) await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq: context.actionSeq, seatNo: actor.seatNo, street: hand.street, action: "hand_cancel", amount: 0, nominalAmount: 0, waivedAmount: 0, potAfter: 0, actionSource: "human", actionId, createdAt: c.now } })
+          }
           await this.hall.voidTransfers(c.tx, hand.id, now)
-          await c.tx.gamePokerHand.update({
+          if (c.room.chipRulesVersion !== "chips-v2") await c.tx.gamePokerHand.update({
             where: { id: hand.id },
             data: { status: "cancelled", endedAt: now,
               engineState: json({ ...(hand.engineState as Prisma.JsonObject), actionOnSeat: null }) },

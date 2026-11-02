@@ -126,7 +126,8 @@ export function registerCardStatusOperations(registry: OperationRegistry<HandSta
     used.push(admissionId)
     api.enqueue({ type: "ability.draw", input: { admissionId, count: 1, reason: "trigger" }, cardId: effect.cardId }); return true
   } })
-  registry.registerHook({ kind: "refill_field", event: "street.refill", phase: "before", priority: 30, apply(_h, _effect, event, api) {
+  registry.registerHook({ kind: "refill_field", event: "street.refill", phase: "before", priority: 30, apply(h, _effect, event, api) {
+    if (h.cards!.dealtStages.includes(String(event.data.stage))) return false
     api.replaceInput({ ...event.data, extra: Number(event.data.extra ?? 0) + 1 }); return true
   } })
 }

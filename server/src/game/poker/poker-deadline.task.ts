@@ -57,6 +57,7 @@ export class PokerDeadlineTask {
         select: {
           id: true,
           code: true,
+          chipRulesVersion: true,
           actionDeadlineAt: true,
           nextHandAt: true,
           createdAt: true,
@@ -88,7 +89,7 @@ export class PokerDeadlineTask {
       const rooms = await this.roomBatch("deadline", now)
       for (const room of rooms) {
         try {
-          await this.actions.expire(room.code, now)
+          await this.actions.expire(room.code, room.chipRulesVersion === "chips-v2" ? undefined : now)
         } catch (error) {
           this.logger.warn(
             { roomCode: room.code, errorName: error instanceof Error ? error.name : "Unknown" },

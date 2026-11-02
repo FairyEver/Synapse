@@ -5,7 +5,7 @@ import type { PokerCardChoiceSpec } from "@synapse/shared/game-contracts"
 export type Audience = "public" | "owner" | "internal"
 export interface ResolutionContext {
   handId: string; actionSeq: number; rootActionId: string; actorSeatNo: number | null; actorAdmissionId: string | null
-  source: "human" | "rules_bot" | "timeout" | "system"; nowMs: number
+  source: "human" | "mcp" | "rules_bot" | "timeout" | "system"; nowMs: number
   randomInt: (max: number) => number; nextId: () => string
 }
 export interface DomainOperation { type: string; input: Record<string, unknown>; audience?: Audience; ownerAdmissionId?: string; cardId?: string }

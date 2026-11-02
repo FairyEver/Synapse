@@ -108,6 +108,10 @@ export interface PokerSettlementView {
     hole?: string[]
     rollPaid?: number
     rollReceived?: number
+    reservePaid?: number
+    reserveReceived?: number
+    reserveStolen?: number
+    reserveRefunded?: number
     pokerDelta?: number
     delta: number
     payout: number

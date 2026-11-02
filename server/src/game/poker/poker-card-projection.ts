@@ -54,7 +54,7 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
   view.privateResults = cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId).map(r => ({ id: r.id, cardId: r.cardId, label: r.label, values: [...r.values], valid: r.valid }))
   return view
 }
-const PUBLIC_FACTS = new Set(["ability.played", "ability.statusInstalled", "ability.statusRemoved", "ability.blocked", "poker.revealed", "poker.guessed", "poker.sparked", "chips.paid", "chips.deposited", "chips.stolen", "chips.refunded", "bet.completed", "turn.started", "street.started", "hand.settled"])
+const PUBLIC_FACTS = new Set(["ability.played", "ability.statusInstalled", "ability.statusRemoved", "ability.blocked", "poker.revealed", "poker.guessed", "poker.sparked", "chips.paid", "chips.deposited", "chips.stolen", "chips.refunded", "chips.distributed", "chips.discarded", "bet.completed", "bet.blinds", "turn.started", "street.started", "hand.settled"])
 const amount = (n: unknown): n is number => Number.isSafeInteger(n) && Number(n) >= 0
 /** Private observations stay in the owner's panel, never in the shared animation feed. */
 export function projectResolutionFrame(frame: ResolutionFrame): PokerResolutionFrameView {
@@ -66,7 +66,7 @@ export function projectResolutionFrame(frame: ResolutionFrame): PokerResolutionF
     for (const key of ["amount", "nominalAmount", "waivedAmount", "count"] as const) if (amount(e.data[key])) view[key] = e.data[key]
     if (e.status) view.status = e.status
     if (["completed", "blocked", "choice_required"].includes(String(e.data.status))) view.status = String(e.data.status)
-    if (e.type === "poker.revealed" && Array.isArray(e.data.cards) && e.data.cards.every(c => typeof c === "string" && /^[2-9TJQKA][shdc]$/.test(c))) view.cards = [...e.data.cards] as string[]
+    if (["poker.revealed", "street.started"].includes(e.type) && Array.isArray(e.data.cards) && e.data.cards.every(c => typeof c === "string" && /^[2-9TJQKA][shdc]$/.test(c))) view.cards = [...e.data.cards] as string[]
     if (e.type === "poker.guessed") {
       if (e.data.color === "red" || e.data.color === "black") view.color = e.data.color
       if (typeof e.data.matched === "boolean") view.matched = e.data.matched

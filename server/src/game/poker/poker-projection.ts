@@ -77,6 +77,8 @@ export function projectSettlement(
         delta: amount(deltas[s.seatNo], endingStack - s.startingStack),
         payout: amount(payouts[s.seatNo]),
         ...(rules.ruleOptions?.roll ? { rollPaid: amount(object(result.rollPaid)[s.seatNo]), rollReceived: amount(object(result.rollReceived)[s.seatNo]), pokerDelta: amount(deltas[s.seatNo], endingStack - s.startingStack) + amount(object(result.rollPaid)[s.seatNo]) - amount(object(result.rollReceived)[s.seatNo]) } : {}),
+        ...(rules.chipRulesVersion === "chips-v2" ? { reservePaid: amount(object(result.reservePaid)[s.seatNo]), reserveReceived: amount(object(result.reserveReceived)[s.seatNo]), reserveStolen: amount(object(result.reserveStolen)[s.seatNo]), reserveRefunded: amount(object(result.reserveRefunded)[s.seatNo]),
+          pokerDelta: amount(deltas[s.seatNo], endingStack - s.startingStack) + amount(object(result.reservePaid)[s.seatNo]) - amount(object(result.reserveReceived)[s.seatNo]) - amount(object(result.reserveStolen)[s.seatNo]) - amount(object(result.reserveRefunded)[s.seatNo]) } : {}),
         endingStack,
         ...(visible ? { hole } : {}),
         ...(visible && !s.folded && board.length + hole.length >= 5 ? { handName: handRankName([...hole, ...board], rules.variant), bestFive: bestFive([...hole, ...board], rules.variant) } : {}),

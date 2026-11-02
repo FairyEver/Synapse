@@ -2,10 +2,16 @@ import { Injectable } from "@nestjs/common"
 import { createHash, randomInt } from "node:crypto"
 import type { PokerRollChooseInput, PokerRollStartInput, PokerRollResult } from "@synapse/shared/game-contracts"
 import { chooseRollCard, startRoll, quoteRoll } from "./engine/hand-runner"
-import { PokerService, json, type RoomContext } from "./poker.service"
+import { PokerService, sampleRoomTime, json, type RoomContext } from "./poker.service"
 import { engine, saveHand, ACTION_WINDOW_MS } from "./poker-lifecycle"
 import { assertController, type PokerCaller } from "./poker-control"
 import { reject } from "./poker-error"
+
+import { assertPokerModeAccess } from "./poker-mode-policy"
+import { resolveHandCommand } from "./engine/resolve-hand"
+import { createCardRegistry } from "./engine/cards/catalog-v1"
+import { persistHandResolution, reserveScope, roomResolutionContext } from "./poker-resolution"
+import { CardRuleError, type HandResolution } from "./engine/cards/types"
 
 type RollSource = PokerCaller | "rules_bot" | "timeout"
 type RollInput = PokerRollStartInput | PokerRollChooseInput
@@ -16,20 +22,21 @@ export function rollActionId(handId: string, seq: number, admissionId: string, o
 @Injectable()
 export class PokerRollService {
   constructor(readonly poker: PokerService) {}
-  start(userId: string, input: PokerRollStartInput, now = new Date(), caller: PokerCaller = "mcp") {
+  start(userId: string, input: PokerRollStartInput, now: Date | undefined = undefined, caller: PokerCaller = "mcp") {
     return this.poker.withRoom(input.roomCode, c => this.submit(c, userId, "start", input, caller), now)
   }
-  choose(userId: string, input: PokerRollChooseInput, now = new Date(), caller: PokerCaller = "mcp") {
+  choose(userId: string, input: PokerRollChooseInput, now: Date | undefined = undefined, caller: PokerCaller = "mcp") {
     return this.poker.withRoom(input.roomCode, c => this.submit(c, userId, "choose", input, caller), now)
   }
   /** Internal entry only: scheduler already holds the room transaction. Never expose source to clients. */
   async submit(c: RoomContext, userId: string, operation: "start" | "choose", input: RollInput, source: RollSource): Promise<PokerRollResult> {
+    assertPokerModeAccess(c.room, source, `roll.${operation}`)
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (!uuid.test(input.actionId)) reject("POKER_ILLEGAL_ACTION", "actionId须为UUID。")
     // Enumerate semantic parameters: field order/extra transport metadata never changes the fingerprint.
     const intent = operation === "start" ? (() => { const p = input as PokerRollStartInput; return [p.street,p.kind,p.cardIndex,p.expectedFee] })()
       : (() => { const p = input as PokerRollChooseInput; return [p.rollId,p.candidateIndex] })()
-    const requestHash = createHash("sha256").update(JSON.stringify([operation, userId, input.roomCode, input.handId, input.expectedActionSeq, input.controlVersion, ...intent])).digest("hex")
+    const requestHash = createHash("sha256").update(JSON.stringify([operation, userId, input.roomCode, input.handId, input.expectedActionSeq, input.controlVersion, ...intent, ...(c.room.chipRulesVersion === "chips-v2" && operation === "start" ? [(input as PokerRollStartInput).expectedPaymentVersion] : [])])).digest("hex")
     const previous = await c.tx.gamePokerActionReceipt.findUnique({ where: { actionId: input.actionId } })
     if (previous) {
       if (previous.userId !== userId || previous.roomId !== c.room.id || previous.requestHash !== requestHash)
@@ -51,10 +58,14 @@ export class PokerRollService {
     const participant = participants.find(p => p.admissionId === seat.id && p.userId === userId && p.seatNo === seat.seatNo)
     const state = engine(hand)
     if (!participant || seat.status !== "active" || state.actionOnSeat !== seat.seatNo) reject("POKER_NOT_YOUR_TURN", "当前不能换牌。")
-    await this.poker.lockFunds(c)
-    let next
+    await this.poker.lockFunds(c); sampleRoomTime(c)
+    if (source !== "timeout" && (!c.room.actionDeadlineAt || c.now >= c.room.actionDeadlineAt)) reject("POKER_STALE_ACTION", "行动已过期。")
+    const context = roomResolutionContext(c, hand.id, hand.actionSeq + 1, input.actionId, seat, source)
+    let next, resolution: HandResolution | undefined
     try {
-      if (operation === "start") {
+      if (state.chipRulesVersion === "chips-v2") {
+        resolution = resolveHandCommand(state, operation === "start" ? { kind: "roll.start", input: input as PokerRollStartInput, scope: reserveScope(c, hand.id) } : { kind: "roll.choose", input: input as PokerRollChooseInput, scope: reserveScope(c, hand.id) }, context, createCardRegistry()); next = resolution.state
+      } else if (operation === "start") {
         const p = input as PokerRollStartInput
         if (p.street !== hand.street) reject("POKER_STALE_ACTION", "阶段已改变。")
         const quote = quoteRoll(state, seat.seatNo)
@@ -67,11 +78,13 @@ export class PokerRollService {
         next = chooseRollCard(state, seat.seatNo, p.rollId, p.candidateIndex, randomInt)
       }
     } catch (error) {
+      if (error instanceof CardRuleError) reject(error.code, "换牌支付或选择已失效。")
       if (error instanceof Error && /^POKER_ROLL_/.test(error.message)) reject(error.message, "换牌请求无效，请重新读取牌桌。")
       throw error
     }
     const rollId = operation === "start" ? input.actionId : (input as PokerRollChooseInput).rollId
     const record = next.roll!.history.find(r => r.id === rollId)!, seq = hand.actionSeq + 1
+    if (!resolution) {
     if (operation === "start") {
       if (state.roll?.pending) await c.tx.gamePokerRoll.update({
         where: { id: state.roll.pending.id },
@@ -107,6 +120,8 @@ export class PokerRollService {
       where: { id: rollId },
       data: { data: json(record), chooseSeq: seq, completedAt: c.now },
     })
+    }
+    if (resolution) await persistHandResolution(this.poker, c, resolution, context, state)
     const result: PokerRollResult = {
       ok: true,
       handId: hand.id,
@@ -128,7 +143,7 @@ export class PokerRollService {
       amount: 0,
       rollId,
       potAfter: next.seats.reduce((n,s) => n+s.total,0),
-      elapsedMs: Math.max(0,c.now.getTime() - (c.room.actionDeadlineAt.getTime() - ACTION_WINDOW_MS)),
+      elapsedMs: Math.max(0,c.now.getTime() - (c.room.actionStartedAt?.getTime() ?? c.room.actionDeadlineAt.getTime() - ACTION_WINDOW_MS)),
       actionId: input.actionId,
       response: json(result),
       createdAt: c.now,

@@ -17,7 +17,8 @@ export function resolveRules(input: Omit<Partial<PokerRules>, "rollPricingVersio
   const smallBlind = input.smallBlind ?? 1, bigBlind = input.bigBlind ?? 2
   const options = input.ruleOptions
   if (options !== undefined && (!options || typeof options !== "object" || Array.isArray(options) ||
-      Object.keys(options).some(key => key !== "roll" && key !== "rollCoins") ||
+      Object.keys(options).some(key => key !== "roll" && key !== "rollCoins" && key !== "cards") ||
+      options.cards !== undefined && typeof options.cards !== "boolean" ||
       options.roll !== undefined && typeof options.roll !== "boolean" ||
       options.rollCoins !== undefined && (!Number.isInteger(options.rollCoins) || options.rollCoins < 1 || options.rollCoins > POKER_MAX_ROLL_COINS)))
     throw new Error("无效换牌规则")
@@ -26,8 +27,12 @@ export function resolveRules(input: Omit<Partial<PokerRules>, "rollPricingVersio
     throw new Error("无效扑克规则")
   if (input.ruleOptions?.roll && input.rollPricingVersion !== ROLL_PRICING_VERSION)
     throw new Error("POKER_ROLL_VERSION_UNSUPPORTED")
+  if (options?.cards && (input.cardRulesVersion !== "cards-v1" || input.chipRulesVersion !== "chips-v2") || input.cardRulesVersion !== undefined && input.cardRulesVersion !== null && input.cardRulesVersion !== "cards-v1"
+    || input.chipRulesVersion !== undefined && input.chipRulesVersion !== null && input.chipRulesVersion !== "chips-v2") throw new Error("POKER_CARD_VERSION_UNSUPPORTED")
   return { variant, smallBlind, bigBlind,
     ...(options ? { ruleOptions: { ...options, ...(options.roll ? { rollCoins: options.rollCoins ?? POKER_DEFAULT_ROLL_COINS } : {}) } } : {}),
     ...(input.rollPricingVersion != null ? { rollPricingVersion: input.rollPricingVersion } : {}),
+    ...(input.cardRulesVersion != null ? { cardRulesVersion: input.cardRulesVersion } : {}),
+    ...(input.chipRulesVersion != null ? { chipRulesVersion: input.chipRulesVersion } : {}),
   }
 }

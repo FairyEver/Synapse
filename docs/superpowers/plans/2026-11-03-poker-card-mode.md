@@ -214,11 +214,11 @@
 **Files:** Create `server/src/game/poker/engine/hand-transitions.ts`、`server/src/game/poker/engine/resolve-hand.ts`、`server/src/game/poker/poker-card.service.ts`、`server/src/game/poker/__tests__/card-service.spec.ts`、`server/src/game/poker/__tests__/card-lifecycle.spec.ts`；Modify `server/src/game/poker/poker.service.ts`、`server/src/game/poker/poker-action.service.ts`、`server/src/game/poker/poker-roll.service.ts`、`server/src/game/poker/poker-lifecycle.ts`、`server/src/game/poker/poker-deadline.task.ts`、`server/src/game/poker/engine/hand-runner.ts`、`server/src/game/poker/engine/roll.ts`、`server/src/game/poker/engine/rules.ts`、`docs/agents/module-boundaries.md`。
 **Interfaces:** Consumes T1–T10；Produces `nextHandTransition`、`resolveHandCommand`、`PokerCardService.play/choose`、统一存储的HandResolution与当前TurnClock。legacy走原版本，v2统一经协调器。
 
-- [ ] **1. 写失败测试。** `start_blinds_then_cards_then_turn`断言盲注先于初始能力牌；`stage_once_after_board`公共牌→已安装效果→真人补牌→下一行动；`waiver_roll_atomic`20筹码+1钻石遇额度100时筹码0/钻石1/次数+1/暂存0；`same_uuid_one_result`并发/未知结果重试不重复执行；`pending_blocks_all_cards`06或超级Roll待选时03/58/51均拒绝，原Roll同槽重抽仍可用。 断言示例：`expect(walletAfter).toBe(walletBefore); expect(diamondsAfter).toBe(diamondsBefore-1); expect(reserveAfter).toBe(0)`（豁免Roll案例）。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/__tests__/card-service.spec.ts src/game/poker/__tests__/card-lifecycle.spec.ts`。
-- [ ] **3. 实现统一推进和事务适配。** 从现有progress抽出`nextHandTransition`共用判定，legacy直接执行，v2通过注册操作发烧牌/公共牌/补牌/回合/结算。根链收敛后才推进，每根actionSeq只加1。Roll基础报价/钻石/次数独立，v2支付只通过公共操作扣一次，候选步骤不再裸扣；payment区分原价/实付。原withRoom锁内重新采样时间和重验期限/控制/序号，模式检查先于私有回执；同事务保存state、资金差量、帧、动作和回执。选择等待不持锁，elapsedMs从actionStartedAt计算。
-- [ ] **4. 验证绿灯。** 运行同组服务/生命周期测试，使用Vitest固定系统时间；确认锁等待跨过期限拒绝、旧超时调度遇新延时截止不提前撤出、超时第一候选后原过牌/弃牌撤出、结算先真实底池再暂存和离桌、保存中断不留下半帧。T10/T9提供的完整持久化行为不能被mock成恒成功。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 将卡牌生命周期接入牌局行动和事务结算'`；同期更新`docs/agents/module-boundaries.md`的资金/生命周期版本边界，保留旧局规则。
+- [x] **1. 写失败测试。** `start_blinds_then_cards_then_turn`断言盲注先于初始能力牌；`stage_once_after_board`公共牌→已安装效果→真人补牌→下一行动；`waiver_roll_atomic`20筹码+1钻石遇额度100时筹码0/钻石1/次数+1/暂存0；`same_uuid_one_result`并发/未知结果重试不重复执行；`pending_blocks_all_cards`06或超级Roll待选时03/58/51均拒绝，原Roll同槽重抽仍可用。 断言示例：`expect(walletAfter).toBe(walletBefore); expect(diamondsAfter).toBe(diamondsBefore-1); expect(reserveAfter).toBe(0)`（豁免Roll案例）。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/__tests__/card-service.spec.ts src/game/poker/__tests__/card-lifecycle.spec.ts`。
+- [x] **3. 实现统一推进和事务适配。** 从现有progress抽出`nextHandTransition`共用判定，legacy直接执行，v2通过注册操作发烧牌/公共牌/补牌/回合/结算。根链收敛后才推进，每根actionSeq只加1。Roll基础报价/钻石/次数独立，v2支付只通过公共操作扣一次，候选步骤不再裸扣；payment区分原价/实付。原withRoom锁内重新采样时间和重验期限/控制/序号，模式检查先于私有回执；同事务保存state、资金差量、帧、动作和回执。选择等待不持锁，elapsedMs从actionStartedAt计算。
+- [x] **4. 验证绿灯。** 运行同组服务/生命周期测试，使用Vitest固定系统时间；确认锁等待跨过期限拒绝、旧超时调度遇新延时截止不提前撤出、超时第一候选后原过牌/弃牌撤出、结算先真实底池再暂存和离桌、保存中断不留下半帧。T10/T9提供的完整持久化行为不能被mock成恒成功。
+- [x] **5. 本地提交。** `git commit -m 'feat: 将卡牌生命周期接入牌局行动和事务结算'`；同期更新`docs/agents/module-boundaries.md`的资金/生命周期版本边界，保留旧局规则。
 
 
 ## Task 12: HTTP路由、服务端AI禁入与版本门槛

@@ -120,7 +120,7 @@ export function createCardOperationRegistry(catalog: CardRegistry): OperationReg
   } })
   registry.register({ id: "ability.draw", schema: z.object({ admissionId: z.string(), count: z.number().int().nonnegative().max(1024), reason: z.enum(["card", "trigger", "stage"]) }).strict(), apply(h, input, api) {
     const result = applyCardPoolOperation(h.cards!, { kind: "draw", admissionId: input.admissionId, count: input.count }, api.context); h.cards = result.state
-    api.emit("ability.drawn", { count: result.drawn.length, empty: h.cards.pool.length === 0 }, "owner", undefined, input.admissionId)
+    api.emit("ability.drawn", { count: result.drawn.length, reason: input.reason, empty: h.cards.pool.length === 0 }, "owner", undefined, input.admissionId)
   } })
   registry.register({ id: "ability.drawAll", schema: z.object({}).strict(), apply(h, _input, api) {
     const order = after(h.seats.map(s => s.seatNo), h.dealerSeat)
@@ -161,10 +161,12 @@ export function createCardOperationRegistry(catalog: CardRegistry): OperationReg
   } })
   registry.register({ id: "street.refill", schema: z.object({ stage: z.enum(["flop", "turn", "river"]), extra: z.number().int().nonnegative().optional() }).strict(), apply(h, input, api) {
     if (h.cards!.dealtStages.includes(input.stage)) return
+    const counts = new Map(Object.entries(h.cards!.hands).map(([id, cards]) => [id, cards.length]))
     for (const p of h.cards!.participants) { const seat = h.seats.find(s => s.seatNo === p.seatNo)!; p.folded = seat.folded; p.allIn = seat.allIn }
     h.cards = applyCardPoolOperation(h.cards!, { kind: "deal", stage: input.stage, dealerSeat: h.dealerSeat }, api.context).state
     const order = after(h.seats.map(s => s.seatNo), h.dealerSeat)
     for (let n = 0; n < (input.extra ?? 0); n++) for (const person of h.cards!.participants.filter(p => p.kind === "human" && !p.folded && !p.allIn && p.active !== false).sort((a, b) => order.indexOf(a.seatNo) - order.indexOf(b.seatNo))) h.cards = applyCardPoolOperation(h.cards!, { kind: "draw", admissionId: person.admissionId, count: 1 }, api.context).state
+    for (const person of h.cards!.participants.filter(p => p.kind === "human" && !p.folded && !p.allIn && p.active !== false)) api.emit("ability.drawn", { count: (h.cards!.hands[person.admissionId]?.length ?? 0) - (counts.get(person.admissionId) ?? 0), reason: "stage" }, "owner", undefined, person.admissionId)
   } })
   return registry
 }

@@ -117,7 +117,7 @@ export class GameApiService {
           p as { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice" },
         )
       case "app.game.poker.room.start":
-        return this.poker.start(userId, p.roomCode, p.handId, p.controlVersion, new Date(), caller)
+        return this.poker.start(userId, p.roomCode, p.handId, p.controlVersion, undefined, caller)
       case "app.game.poker.room.get":
         return this.actions.state(userId, p.roomCode, "public")
       case "app.game.poker.bot.add":
@@ -139,11 +139,11 @@ export class GameApiService {
       case "app.game.poker.table.state":
         return this.actions.state(userId, p.roomCode, "owner", true)
       case "app.game.poker.action.act":
-        return this.actions.act(userId, p.roomCode, p as ActionInput, new Date(), caller)
+        return this.actions.act(userId, p.roomCode, p as ActionInput, undefined, caller)
       case "app.game.poker.roll.start":
-        return this.rolls.start(userId, p as PokerRollStartInput, new Date(), caller)
+        return this.rolls.start(userId, p as PokerRollStartInput, undefined, caller)
       case "app.game.poker.roll.choose":
-        return this.rolls.choose(userId, p as PokerRollChooseInput, new Date(), caller)
+        return this.rolls.choose(userId, p as PokerRollChooseInput, undefined, caller)
       case "app.game.poker.control.claim":
         return this.poker.claim(userId, p.roomCode, p.controlVersion)
       case "app.game.poker.checkpoint.get":

@@ -62,6 +62,7 @@ const settlement = z.object({
     seatNo: z.number(), displayName: z.string(), participantKind: z.enum(["human", "bot"]),
     isMe: z.boolean(), folded: z.boolean(), hole: z.array(z.string()).optional(),
     rollPaid: z.number().optional(), rollReceived: z.number().optional(), pokerDelta: z.number().optional(),
+    reservePaid: z.number().int().nonnegative().optional(), reserveReceived: z.number().int().nonnegative().optional(), reserveStolen: z.number().int().nonnegative().optional(), reserveRefunded: z.number().int().nonnegative().optional(),
     delta: z.number(), payout: z.number(), endingStack: z.number(), handName: z.string().optional(), bestFive: z.array(z.string()).length(5).optional(),
   }).passthrough()),
   pots: z.array(z.object({
