@@ -188,7 +188,7 @@ describe("统一底部操作与按需侧栏", () => {
     expect(controls.querySelectorAll('.poker-action-buttons button')).toHaveLength(3)
     expect([...controls.children].filter(node=>node===roll)).toHaveLength(0)
     const styles=(element:Element,property:string)=>[...style.sheet!.cssRules].reverse().flatMap(rule=>"selectorText" in rule && "style" in rule && element.matches((rule as CSSStyleRule).selectorText) && (rule as CSSStyleRule).style.getPropertyValue(property) ? [(rule as CSSStyleRule).style.getPropertyValue(property)] : [])[0] ?? "0"
-    expect(styles(host.querySelector('.poker-table-layout')!,"grid-template-rows")).toBe("3.5rem minmax(0, 1fr) 9rem")
+    expect(styles(host.querySelector('.poker-table-layout')!,"grid-template-rows")).toBe(`${width<=850 ? "5.5rem" : "3.5rem"} minmax(0, 1fr) 9rem`)
     const rem=(value:string)=>parseFloat(value)*(value.endsWith('rem')?16:1)
     // HeroUI small buttons reserve h-9 on narrow screens; evaluate the real local
     // CSS cascade against rendered DOM, without claiming jsdom measures geometry.

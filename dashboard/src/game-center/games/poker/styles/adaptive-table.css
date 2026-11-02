@@ -82,7 +82,5 @@
 .poker-canvas[data-table-shape] .poker-seat-meta { column-gap: 8px; }
 .poker-canvas[data-table-shape] .poker-seat-result, .poker-canvas[data-table-shape] .poker-seat[data-mine="true"] .poker-seat-result { position: static; transform: none; margin: 0; padding: 0; background: none; width: auto; }
 .poker-canvas[data-table-shape="landscape"] { --scene-label: 24px; --seat-label: 22px; }
-.poker-rules-caption { display: inline-flex; gap: 10px; }
-.poker-canvas[data-table-shape="portrait"] .poker-rules-caption { flex-direction: column; gap: 6px; }
 .poker-seat-info-trigger { position: absolute; inset: 0; width: 100%; border: 0; border-radius: var(--radius); background: transparent; cursor: pointer; }
 .poker-seat-info-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
