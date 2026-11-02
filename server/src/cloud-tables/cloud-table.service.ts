@@ -8,8 +8,8 @@ import { CloudTableMaintenance } from "./cloud-table-maintenance"
 import { CloudTableDatabase } from "./cloud-table-database"
 import { CloudTableScheduler } from "./cloud-table-scheduler"
 import { authorize, assertJsonBudget, fail, normalizeValues, validateFields } from "./cloud-table-validation"
-import { batchSchema, createTableSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
-import { queryPlan, stableJson } from "./cloud-table-query"
+import { batchSchema, createTableSchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
+import { filterPlan, queryPlan, stableJson } from "./cloud-table-query"
 import { OpenApiHttpError } from "../open-api/open-api.types"
 
 export type CloudActor = { userId?: string; apiKeyId?: string; console: boolean }
@@ -136,7 +136,7 @@ export class CloudTableService {
       if (!actor.userId) { if (!Object.values(table.anonymous as object).some(Boolean)) fail("FORBIDDEN", "表未开放匿名操作。", 403) }
       else if (!["manage", "read", "create", "update", "delete"].some(a => { try { permission(a as CloudAction | "manage"); return true } catch { return false } })) fail("FORBIDDEN", "没有访问此表的权限。", 403)
     }
-    const fieldActions: Partial<Record<string, CloudAction | "manage">> = { "table.update": "manage", "records.get": "read", "records.query": "read", "records.create": "create", "records.update": "update", "records.restore": "manage", "records.trash": "manage" }; const fieldAction = fieldActions[op]
+    const fieldActions: Partial<Record<string, CloudAction | "manage">> = { "table.update": "manage", "records.get": "read", "records.query": "read", "records.count": "read", "records.exists": "read", "records.create": "create", "records.update": "update", "records.restore": "manage", "records.trash": "manage" }; const fieldAction = fieldActions[op]
     if (fieldAction) permission(fieldAction)
     if (op === "records.batch") for (const action of parse(batchSchema, input).operations) permission(action.action)
     if (describing || fieldAction || op === "records.batch") {
@@ -234,13 +234,26 @@ export class CloudTableService {
       return row
     }
     if (op === "records.get") return this.recordDto(await rowAccess((input as { id: string }).id, "read"), fields)
-    if (op === "records.query") {
-      const range = permission("read"), query = parse(querySchema, input)
+    if (["records.query", "records.count", "records.exists"].includes(op)) {
+      const range = permission("read")
+      const visible = Prisma.sql`r."tableId" = ${tableId} AND r."deletedAt" IS NULL AND ${range === "own" ? Prisma.sql`r."creatorUserId" = ${actor.userId}` : Prisma.sql`TRUE`}`
+      if (op !== "records.query") {
+        const filter = filterPlan(fields, parse(filterSchema, input))
+        if (op === "records.exists") {
+          const [result] = await tx.$queryRaw<{ exists: boolean }[]>`SELECT EXISTS(SELECT 1 FROM "CloudTableRecord" r WHERE ${visible} AND ${filter}) AS "exists"`
+          return { exists: result!.exists }
+        }
+        const [result] = await tx.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS "count" FROM "CloudTableRecord" r WHERE ${visible} AND ${filter}`
+        if (result!.count > BigInt(Number.MAX_SAFE_INTEGER)) fail("COUNT_TOO_LARGE", "匹配数量超出安全整数范围，请缩小筛选范围。")
+        return { count: Number(result!.count) }
+      }
+      const query = parse(querySchema, input)
       const plan = queryPlan(tableId, fields, query, `${actor.userId ?? "anonymous"}:${actor.apiKeyId ?? "console"}`, table.schemaVersion, this.cursorSecret)
-      const rows = await tx.$queryRaw<(CloudTableRecord & { sortValues: unknown[] })[]>(Prisma.sql`SELECT r."id", r."tableId", r."values", r."creatorUserId", r."version", r."createdAt", r."updatedAt", r."deletedAt", ${plan.projection} FROM "CloudTableRecord" r WHERE r."tableId" = ${tableId} AND r."deletedAt" IS NULL AND ${range === "own" ? Prisma.sql`r."creatorUserId" = ${actor.userId}` : Prisma.sql`TRUE`} AND ${plan.filter} ORDER BY ${plan.order} LIMIT ${query.limit + 1}`)
+      const rows = await tx.$queryRaw<(CloudTableRecord & { sortValues: unknown[] })[]>(Prisma.sql`SELECT r."id", r."tableId", ${plan.values}, r."creatorUserId", r."version", r."createdAt", r."updatedAt", r."deletedAt", ${plan.projection} FROM "CloudTableRecord" r WHERE ${visible} AND ${plan.filter} ORDER BY ${plan.order} LIMIT ${query.limit + 1}`)
+      const returnedFields = query.fields === undefined ? fields : fields.filter(f => query.fields!.includes(f.key))
       const data: unknown[] = []; let bytes = 0
       for (const row of rows.slice(0, query.limit)) {
-        const dto = this.recordDto(row, fields), size = Buffer.byteLength(JSON.stringify(dto))
+        const dto = this.recordDto(row, returnedFields), size = Buffer.byteLength(JSON.stringify(dto))
         if (data.length && bytes + size > 1048576) break
         data.push(dto); bytes += size
       }

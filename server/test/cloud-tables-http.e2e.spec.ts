@@ -44,7 +44,7 @@ describe("cloud table complete real HTTP contract", () => {
       if (status >= 400) expect(result).toMatchObject({ requestId: response.headers.get("x-request-id"), error: { code: expect.any(String), message: expect.any(String) } })
       else {
         const prefix = path.startsWith("/api/open/") ? "/api/open/v1" : "/api/console"
-        const template = path.split("?")[0]!.slice(prefix.length).replace(/\/tables\/[^/]+/u, part => part === "/tables/trash" ? part : "/tables/{id}").replace(/\/records\/[^/]+/u, part => ["/records/query", "/records/batch", "/records/trash"].includes(part) ? part : "/records/{recordId}")
+        const template = path.split("?")[0]!.slice(prefix.length).replace(/\/tables\/[^/]+/u, part => part === "/tables/trash" ? part : "/tables/{id}").replace(/\/records\/[^/]+/u, part => ["/records/query", "/records/count", "/records/exists", "/records/batch", "/records/trash"].includes(part) ? part : "/records/{recordId}")
         const set = covered.get(prefix) ?? new Set<string>(); set.add(`${method.toLowerCase()} ${template}`); covered.set(prefix, set)
       }
     }
@@ -85,7 +85,7 @@ describe("cloud table complete real HTTP contract", () => {
     process.stdout.write(`Cloud table HTTP evidence: ${JSON.stringify({ httpRequests, successfulRoutes: Object.fromEntries([...covered].map(([p, routes]) => [p, [...routes].sort()])) })}\n`)
   })
 
-  it.each(["open", "console"])("executes all 19 %s routes with persisted round trips", async mode => {
+  it.each(["open", "console"])("executes all 21 %s routes with persisted round trips", async mode => {
     const root = mode === "open" ? "/api/open/v1/tables" : "/api/console/tables", auth = mode === "open" ? ownerKey : ownerCookie
     const created = await call("POST", root, auth, { name: `完整流程-${mode}`, fields }, 201, { "Idempotency-Key": randomUUID() })
     const path = `${root}/${created.id}`
@@ -114,6 +114,8 @@ describe("cloud table complete real HTTP contract", () => {
     expect(page.data).toHaveLength(1); expect(page.nextCursor).toBeTruthy()
     const next = await call("POST", `${path}/records/query`, auth, { limit: 1, sort: [{ field: "text", direction: "asc" }], cursor: page.nextCursor })
     expect(next.data).toHaveLength(1); expect(next.data[0].id).not.toBe(page.data[0].id); expect(next.nextCursor).toBeNull()
+    expect(await call("POST", `${path}/records/count`, auth, {})).toEqual({ count: 2 })
+    expect(await call("POST", `${path}/records/exists`, auth, { filters: [{ field: "text", op: "eq", value: "missing" }] })).toEqual({ exists: false })
     await call("DELETE", row, auth, { version: 3 })
     await denied("GET", row, auth, undefined, 404, "NOT_FOUND")
     expect((await call("GET", `${path}/records/trash`, auth)).data.map((r: { id: string }) => r.id)).toEqual(expect.arrayContaining([record.id, defaulted.id]))
@@ -133,8 +135,34 @@ describe("cloud table complete real HTTP contract", () => {
     expect(await call("GET", path, auth)).toMatchObject({ anonymous: {}, schemaVersion: 5 })
     expect((await call("GET", row, auth)).values.text).toBe("更新")
     const expected = Object.entries(cloudTableOpenApiPaths()).flatMap(([p, methods]) => Object.keys(methods).map(m => `${m} ${p}`)).sort()
-    expect(expected).toHaveLength(19)
+    expect(expected).toHaveLength(21)
     expect([...covered.get(mode === "open" ? "/api/open/v1" : "/api/console")!].sort()).toEqual(expected)
+  })
+
+  it("applies read scopes, table resources, own ACL and anonymous access to new reads", async () => {
+    const root = "/api/open/v1/tables", t = await call("POST", root, ownerKey, { name: "读取增强", fields: [{ key: "text", name: "文本", type: "text" }] }), path = `${root}/${t.id}`
+    await call("POST", `${path}/records`, ownerKey, { values: { text: "owner" } })
+    for (const suffix of ["count", "exists"]) await denied("POST", `${path}/records/${suffix}`, ownerCookie, {}, 403, "FORBIDDEN")
+    const write = await key(ownerCookie, { mode: "selected", tableIds: [t.id] }, ["tables.records.create"])
+    const writeAuth = { Authorization: `Bearer ${write.secret}` }
+    for (const suffix of ["query", "count", "exists"]) await denied("POST", `${path}/records/${suffix}`, writeAuth, {}, 403, "INSUFFICIENT_SCOPE")
+    const none = await key(ownerCookie, { mode: "selected", tableIds: [] }, ["tables.records.read"])
+    for (const suffix of ["count", "exists"]) await denied("POST", `${path}/records/${suffix}`, { Authorization: `Bearer ${none.secret}` }, {}, 403, "INSUFFICIENT_SCOPE")
+    await call("PATCH", `${path}/permissions`, ownerKey, { version: 1, anonymous: {}, members: [{ userId: member, permissions: { read: "own", create: "all" } }] })
+    const issued = await key(memberCookie, { mode: "selected", tableIds: [t.id] }), auth = { Authorization: `Bearer ${issued.secret}` }
+    await call("POST", `${path}/records`, auth, { values: { text: "member" } })
+    const filters = [{ field: "text", op: "eq", value: "owner" }, { field: "text", op: "eq", value: "member" }], body = { filters, filterMode: "any" }
+    expect((await call("POST", `${path}/records/query`, auth, { ...body, fields: [] })).data.map((r: { values: unknown }) => r.values)).toEqual([{}])
+    expect(await call("POST", `${path}/records/count`, auth, body)).toEqual({ count: 1 })
+    expect(await call("POST", `${path}/records/exists`, auth, { filters: filters.slice(0, 1) })).toEqual({ exists: false })
+    await call("PATCH", `${path}/permissions`, ownerKey, { version: 2, anonymous: {}, members: [] })
+    for (const suffix of ["count", "exists"]) await denied("POST", `${path}/records/${suffix}`, auth, {}, 403, "FORBIDDEN")
+    await call("PATCH", `${path}/permissions`, ownerKey, { version: 3, anonymous: { read: true }, members: [] })
+    expect(await call("POST", `${path}/records/count`, {}, body)).toEqual({ count: 2 })
+    expect(await call("POST", `${path}/records/exists`, {}, body)).toEqual({ exists: true })
+    await denied("POST", `${path}/records/count`, { Authorization: "Bearer invalid-key" }, {}, 401, "INVALID_API_KEY")
+    await call("DELETE", `/api/console/api-keys/${issued.apiKey.id}`, memberCookie)
+    for (const suffix of ["count", "exists"]) await denied("POST", `${path}/records/${suffix}`, auth, {}, 401, "INVALID_API_KEY")
   })
 
   it("enforces collaborator own-row permissions, owner-only management and immediate ACL/key changes", async () => {

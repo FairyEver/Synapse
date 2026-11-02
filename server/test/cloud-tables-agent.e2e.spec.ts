@@ -16,6 +16,7 @@ const scopes = ["tables.manage", "tables.records.read", "tables.records.create",
 
 describe("cloud tables document-only Agent simulation", () => {
   let app: INestApplication, prisma: PrismaClient, base: string, foreignId: string, foreignTrashId: string, foreignSnapshot: unknown
+  const originalDocumentUrl = process.env.DOCUMENT_PUBLIC_URL
   const alice = `ct-agent-a-${randomUUID()}`, bob = `ct-agent-b-${randomUUID()}`
   const aliceSecret = createApiKeySecret(), bobSecret = createApiKeySecret(), collaboratorSecret = createApiKeySecret()
   const audit: { path: string; cookie: boolean; authorization: boolean }[] = []
@@ -31,6 +32,7 @@ describe("cloud tables document-only Agent simulation", () => {
     for (const id of [alice, bob]) await prisma.user.create({ data: { id, email: `${id}@example.test`, handle: id, nickname: "Agent验收", passwordHash: "test-only-no-login" } })
     for (const [userId, secret] of [[alice, aliceSecret], [bob, bobSecret]]) await prisma.userApiKey.create({ data: { userId, name: "用户预先提供的管理密钥", keyHash: hashApiKeySecret(secret), keyPrefix: secret.slice(0, 15), scopes, tableAccessMode: "all_owned" } })
     app = await createTestApp(); await app.listen(0, "127.0.0.1"); base = await app.getUrl()
+    process.env.DOCUMENT_PUBLIC_URL = `${base}/document`
     // 预先模拟另一位用户已有的共享表；其表和授权不属于被测Agent的建表流程。
     const foreign = await bobCall("POST", "", { name: "Bob的表", fields: [{ key: "name", name: "姓名", type: "text" }] })
     foreignId = foreign.id
@@ -44,6 +46,8 @@ describe("cloud tables document-only Agent simulation", () => {
     app.getHttpServer().on("request", (req: { url: string; headers: Record<string, string | undefined> }) => { if (monitoring) audit.push({ path: req.url, cookie: Boolean(req.headers.cookie), authorization: Boolean(req.headers.authorization) }) })
   }, 30000)
   afterAll(async () => {
+    if (originalDocumentUrl === undefined) delete process.env.DOCUMENT_PUBLIC_URL
+    else process.env.DOCUMENT_PUBLIC_URL = originalDocumentUrl
     await app?.close()
     if (prisma) {
       await prisma.cloudTable.deleteMany({ where: { ownerId: { in: [alice, bob] } } })
@@ -58,19 +62,21 @@ describe("cloud tables document-only Agent simulation", () => {
     let result
     try {
       // 子进程不继承数据库、账号登录凭据或应用服务实例，只有用户交付的API输入。
-      result = await exec(process.execPath, [path.resolve("test/fixtures/cloud-tables-agent-client.mjs")], { env: { SY_API_BASE_URL: base, SY_API_KEY: aliceSecret, SY_COLLAB_API_KEY: collaboratorSecret, SY_OTHER_HANDLE: bob, SY_FOREIGN_TABLE_ID: foreignId, SY_FOREIGN_TRASH_ID: foreignTrashId }, timeout: 60000, maxBuffer: 1024 * 1024 })
+      result = await exec(process.execPath, [path.resolve("test/fixtures/cloud-tables-agent-client.mjs")], { env: { SY_API_BASE_URL: base, SY_API_DOCUMENT_PATH: path.resolve("../document/open-api/api/cloud-tables.md"), SY_API_KEY: aliceSecret, SY_COLLAB_API_KEY: collaboratorSecret, SY_OTHER_HANDLE: bob, SY_FOREIGN_TABLE_ID: foreignId, SY_FOREIGN_TRASH_ID: foreignTrashId }, timeout: 60000, maxBuffer: 1024 * 1024 })
     } catch (error) {
       await writeFile(evidencePath, error instanceof Error && "stderr" in error ? String(error.stderr) : String(error))
       throw new Error(`Document-only Agent failed; sanitized evidence: ${evidencePath}`)
     } finally { monitoring = false }
     const report = JSON.parse(result.stdout)
     expect(report.passed).toBe(true)
-    expect(report.successfulOperations).toHaveLength(19)
+    expect(report.successfulOperations).toHaveLength(21)
     expect(report.managementRejections).toBe(9)
-    expect(audit.length).toBe(report.trace.length)
-    expect(audit.every(r => r.path.startsWith("/api/open/v1/tables"))).toBe(true)
+    const tableRequests = audit.filter(r => r.path !== "/api/open/openapi.json")
+    expect(audit.length - tableRequests.length).toBe(1)
+    expect(tableRequests.length).toBe(report.trace.length)
+    expect(tableRequests.every(r => r.path.startsWith("/api/open/v1/tables"))).toBe(true)
     expect(audit.some(r => r.cookie)).toBe(false)
-    expect(audit.filter(r => !r.authorization)).toHaveLength(2)
+    expect(tableRequests.filter(r => !r.authorization)).toHaveLength(2)
     // Agent结束后再由表主独立观察，只读确认越权尝试没有改变表、ACL或业务数据。
     expect({ table: await bobCall("GET", `/${foreignId}`), records: await bobCall("POST", `/${foreignId}/records/query`, {}), trash: await bobCall("GET", `/${foreignId}/records/trash`) }).toEqual(foreignSnapshot)
     await writeFile(evidencePath, JSON.stringify({ ...report, consoleRequests: 0, cookieRequests: 0, foreignOwnerReadbackUnchanged: true }, null, 2))

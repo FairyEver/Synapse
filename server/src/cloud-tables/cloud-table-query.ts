@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import type { CloudField } from "@synapse/shared"
-import type { CloudQuery } from "./cloud-table-contract"
+import type { CloudFilter, CloudQuery } from "./cloud-table-contract"
 import { fail, validateValue } from "./cloud-table-validation"
 
 type Sort = { expression: Prisma.Sql; direction: "asc" | "desc"; timestamp: boolean }
@@ -10,21 +10,20 @@ export function stableJson(value: unknown): string {
   if (value && typeof value === "object") return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableJson((value as Record<string, unknown>)[k])}`).join(",")}}`
   return JSON.stringify(value)
 }
-export function queryPlan(tableId: string, fields: CloudField[], query: CloudQuery, identity: string, schemaVersion: number, secret: string) {
-  const active = fields.filter(f => !f.archivedAt)
-  function column(key: string): { expression: Prisma.Sql; field: CloudField; timestamp: boolean } {
-    if (["$id", "$createdAt", "$updatedAt", "$creatorUserId"].includes(key)) {
-      const name = key.slice(1)
-      return { expression: Prisma.sql`r.${Prisma.raw(`"${name}"`)}`, field: { key, name, type: "text" }, timestamp: name.endsWith("At") }
-    }
-    const field = active.find(f => f.key === key)
-    if (!field || field.type === "json" || field.type === "multiSelect") fail("INVALID_QUERY", "不支持该字段的筛选或排序。")
-    const raw = Prisma.sql`(r."values" ->> ${key})`
-    const expression = ["integer", "number"].includes(field.type) ? Prisma.sql`(${raw})::numeric` : field.type === "boolean" ? Prisma.sql`(${raw})::boolean` : Prisma.sql`${raw} COLLATE "C"`
-    return { expression, field, timestamp: false }
+function column(fields: CloudField[], key: string): { expression: Prisma.Sql; field: CloudField; timestamp: boolean } {
+  if (["$id", "$createdAt", "$updatedAt", "$creatorUserId"].includes(key)) {
+    const name = key.slice(1)
+    return { expression: Prisma.sql`r.${Prisma.raw(`"${name}"`)}`, field: { key, name, type: "text" }, timestamp: name.endsWith("At") }
   }
+  const field = fields.find(f => !f.archivedAt && f.key === key)
+  if (!field || field.type === "json" || field.type === "multiSelect") fail("INVALID_QUERY", "不支持该字段的筛选或排序。")
+  const raw = Prisma.sql`(r."values" ->> ${key})`
+  const expression = ["integer", "number"].includes(field.type) ? Prisma.sql`(${raw})::numeric` : field.type === "boolean" ? Prisma.sql`(${raw})::boolean` : Prisma.sql`${raw} COLLATE "C"`
+  return { expression, field, timestamp: false }
+}
+export function filterPlan(fields: CloudField[], query: CloudFilter): Prisma.Sql {
   const filters = query.filters.map(filter => {
-    const c = column(filter.field), x = c.expression
+    const c = column(fields, filter.field), x = c.expression
     const scalar = (value: unknown) => {
       if (c.timestamp) { if (typeof value !== "string" || Number.isNaN(Date.parse(value))) fail("INVALID_QUERY", "时间筛选无效。"); return Prisma.sql`${value}::timestamp` }
       validateValue({ ...c.field, required: false }, value)
@@ -50,11 +49,17 @@ export function queryPlan(tableId: string, fields: CloudField[], query: CloudQue
     const operator = { gt: ">", gte: ">=", lt: "<", lte: "<=" }[filter.op]
     return Prisma.sql`${x} ${Prisma.raw(operator)} ${value}`
   })
+  return filters.length ? Prisma.sql`(${Prisma.join(filters, query.filterMode === "any" ? " OR " : " AND ")})` : Prisma.sql`TRUE`
+}
+export function queryPlan(tableId: string, fields: CloudField[], query: CloudQuery, identity: string, schemaVersion: number, secret: string) {
+  const filter = filterPlan(fields, query)
+  if (query.fields?.some(key => !fields.some(f => !f.archivedAt && f.key === key))) fail("INVALID_QUERY", "返回字段必须是活动业务字段。")
+  const values = query.fields === undefined ? Prisma.sql`r."values"` : query.fields.length === 0 ? Prisma.sql`'{}'::jsonb` : Prisma.sql`(SELECT jsonb_object_agg(k, r."values" -> k) FROM unnest(ARRAY[${Prisma.join(query.fields)}]::text[]) AS selected(k))`
   const sortInput = query.sort.length ? query.sort : [{ field: "$createdAt", direction: "asc" as const }]
   if (new Set(sortInput.map(s => s.field)).size !== sortInput.length) fail("INVALID_QUERY", "排序字段不能重复。")
-  const sorts: Sort[] = sortInput.filter(s => s.field !== "$id").map(s => ({ ...column(s.field), direction: s.direction }))
-  sorts.push({ ...column("$id"), direction: sortInput.find(s => s.field === "$id")?.direction ?? "asc" })
-  const binding = createHash("sha256").update(stableJson({ tableId, identity, schemaVersion, filters: query.filters, sort: sortInput })).digest("hex")
+  const sorts: Sort[] = sortInput.filter(s => s.field !== "$id").map(s => ({ ...column(fields, s.field), direction: s.direction }))
+  sorts.push({ ...column(fields, "$id"), direction: sortInput.find(s => s.field === "$id")?.direction ?? "asc" })
+  const binding = createHash("sha256").update(stableJson({ tableId, identity, schemaVersion, filters: query.filters, sort: sortInput, ...(query.filterMode === "any" ? { filterMode: "any" } : {}), ...(query.fields === undefined ? {} : { fields: query.fields }) })).digest("hex")
   function encode(values: unknown[]): string {
     const data = Buffer.from(JSON.stringify({ binding, values })).toString("base64url")
     return `${data}.${createHmac("sha256", secret).update(data).digest("base64url")}`
@@ -80,7 +85,8 @@ export function queryPlan(tableId: string, fields: CloudField[], query: CloudQue
     } catch { fail("INVALID_CURSOR", "游标无效或查询条件已变化。") }
   }
   return {
-    filter: Prisma.sql`${Prisma.join([...filters, cursorCondition], " AND ")}`,
+    filter: Prisma.sql`${filter} AND ${cursorCondition}`,
+    values: Prisma.sql`${values} AS "values"`,
     order: Prisma.join(sorts.map(s => Prisma.sql`${s.expression} ${Prisma.raw(s.direction.toUpperCase())} NULLS LAST`)),
     projection: Prisma.sql`jsonb_build_array(${Prisma.join(sorts.map(s => s.expression))}) AS "sortValues"`, encode,
   }

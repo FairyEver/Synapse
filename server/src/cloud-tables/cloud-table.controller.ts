@@ -34,6 +34,8 @@ export class CloudTableController {
   @Post(":id/restore") restore(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string) { return this.call(r,s,id,"table.restore") }
   @Get(":id/logs") logs(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query("cursor") cursor?: string) { return this.call(r,s,id,"logs",{cursor}) }
   @Post(":id/records/query") query(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"records.query",b) }
+  @Post(":id/records/count") count(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"records.count",b) }
+  @Post(":id/records/exists") exists(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"records.exists",b) }
   @Post(":id/records/batch") batch(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"records.batch",b) }
   @Get(":id/records/trash") recordTrash(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query("cursor") cursor?: string) { return this.call(r,s,id,"records.trash",{cursor}) }
   @Post(":id/records") insert(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"records.create",b) }

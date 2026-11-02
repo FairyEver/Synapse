@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { batchSchema, createTableSchema, deleteRecordSchema, fieldSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, tableChangeSchema } from "./cloud-table-contract"
+import { batchSchema, createTableSchema, deleteRecordSchema, fieldSchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, tableChangeSchema } from "./cloud-table-contract"
 
 export const CLOUD_TABLE_JSON_SCHEMA = { anyOf: [
   { type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" },
@@ -32,6 +32,7 @@ export function cloudTableOpenApiPaths() {
     ["/{id}/collaborators/resolve", "post", "resolveCloudTableCollaborator", z.object({ handle: z.string().min(1).max(64) }).strict(), false],
     ["/{id}/logs", "get", "listCloudTableLogs", null, false, true],
     ["/{id}/records/query", "post", "queryCloudTableRecords", querySchema, true], ["/{id}/records/batch", "post", "mutateCloudTableRecords", batchSchema, true],
+    ["/{id}/records/count", "post", "countCloudTableRecords", filterSchema, true], ["/{id}/records/exists", "post", "existsCloudTableRecords", filterSchema, true],
     ["/{id}/records/trash", "get", "listDeletedCloudTableRecords", null, false, true],
     ["/{id}/records", "post", "createCloudTableRecord", recordCreateSchema, true],
     ["/{id}/records/{recordId}", "get", "getCloudTableRecord", null, true], ["/{id}/records/{recordId}", "patch", "updateCloudTableRecord", recordUpdateSchema, true], ["/{id}/records/{recordId}", "delete", "deleteCloudTableRecord", deleteRecordSchema, true],
@@ -49,7 +50,9 @@ export function cloudTableOpenApiPaths() {
     restoreCloudTable: ["恢复已删除的数据表", "仅表主，需tables.manage；30天内可恢复，恢复后关闭全部匿名操作。此操作不支持幂等键保证。"],
     resolveCloudTableCollaborator: ["通过SY用户名解析协作者", "仅表主，需tables.manage。传准确handle，不传邮箱、不猜userId；取得用户id后再写入members授权。"],
     listCloudTableLogs: ["读取数据表操作记录", "仅表主，需tables.manage。仅含固定诊断元数据，不含记录正文、密钥或Cookie；使用nextCursor继续分页。"],
-    queryCloudTableRecords: ["筛选、排序与分页查询记录", "需tables.records.read及表的读取授权，own只返回本人创建记录；或显式开放匿名查询。最多20筛选、3排序，每页默认50最多100条；nextCursor非空时继续查询，条件、身份或结构版本变化后重查首页。"],
+    queryCloudTableRecords: ["筛选、排序与分页查询记录", "需tables.records.read及表的读取授权，own只返回本人创建记录；或显式开放匿名查询。最多20筛选、3排序，每页默认50最多100条。filterMode默认all（AND），any为同级OR，空条件均表示无业务筛选；不支持嵌套分组。fields省略返回全部活动业务字段，空数组返回空values，最多100个不重复的活动业务字段key；系统元数据仍返回，筛选排序可使用未返回字段。nextCursor非空时继续查询，筛选、模式、投影、排序、身份或结构版本变化后重查首页；不是快照，不附带总数。"],
+    countCloudTableRecords: ["统计当前可读的匹配记录数", "需tables.records.read及表的读取授权，own仅统计本人创建且未删除记录；或显式开放匿名查询。只接受filters和filterMode，最多20条件，默认all（AND），any为同级OR，空条件表示无业务筛选。返回精确count，不读取记录正文，无分页和排序；超出安全整数返回400 COUNT_TOO_LARGE，SQL超时返回503。与另一次查询不保证同一快照，不支持写入幂等键。"],
+    existsCloudTableRecords: ["判断当前可读的匹配记录是否存在", "需tables.records.read及表的读取授权，own仅检查本人创建且未删除记录；或显式开放匿名查询。只接受filters和filterMode，最多20条件，默认all（AND），any为同级OR，空条件表示无业务筛选。返回exists布尔值，找到一条即可结束，不返回正文，无分页和排序；不提供并发去重保证，不支持写入幂等键。"],
     mutateCloudTableRecords: ["原子批量新增、修改与删除记录", "按每个操作要求tables.records.create/update/delete及表授权，匿名也须逐项开放。1至100项且全成全败；update/delete必须传各记录version，返回最小确认数组，不返回记录正文。"],
     listDeletedCloudTableRecords: ["读取记录回收站", "仅表主，需tables.manage。返回30天内删除记录；使用nextCursor继续分页。协作者的记录删除权限不包含回收站管理。"],
     createCloudTableRecord: ["新增记录", "需tables.records.create及表新增授权，或显式开放匿名新增。values按活动字段key传值，创建者由服务端设置，匿名创建者为null；只返回id与version，不代表拥有读取权限。"],
@@ -65,12 +68,17 @@ export function cloudTableOpenApiPaths() {
   const table = { type: "object", properties: { id: { type: "string" }, ownerId: { type: "string" }, viewerId: { type: "string" }, name: { type: "string" }, schemaVersion: { type: "integer" }, fields: { type: "array", items: outputField }, anonymous: (schema(permissionsSchema).properties as Record<string, unknown>).anonymous, permissions: { type: "object", additionalProperties: { type: "string", enum: ["none", "own", "all"] } }, members: outputMembers, deletedAt: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" } } }
   const confirmation = { type: "object", required: ["id", "version"], properties: { id: { type: "string" }, version: { type: "integer" } } }
   const page = (item: unknown) => ({ type: "object", required: ["data", "nextCursor"], properties: { data: { type: "array", items: item }, nextCursor: { type: ["string", "null"] } } })
+  const readResults: Record<string, unknown> = {
+    countCloudTableRecords: { type: "object", additionalProperties: false, required: ["count"], properties: { count: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER } } },
+    existsCloudTableRecords: { type: "object", additionalProperties: false, required: ["exists"], properties: { exists: { type: "boolean" } } },
+  }
   for (const [suffix, method, operationId, body, anonymous, paged] of routes) {
     const [summary, instruction] = usage[operationId]!
     const idempotent = ["createCloudTable", "createCloudTableRecord", "updateCloudTableRecord", "deleteCloudTableRecord", "mutateCloudTableRecords"].includes(operationId)
     const parameters = [...(suffix.includes("{id}") ? [id] : []), ...(suffix.includes("{recordId}") ? [recordId] : []), ...(paged ? [cursor] : []), ...(idempotent ? [idem] : [])]
     const mutation = ["createCloudTableRecord", "updateCloudTableRecord", "deleteCloudTableRecord", "restoreCloudTableRecord"].includes(operationId)
     let responseSchema: unknown = mutation ? confirmation : operationId === "mutateCloudTableRecords" ? { type: "object", properties: { data: { type: "array", items: confirmation } } } : operationId === "queryCloudTableRecords" || operationId === "listDeletedCloudTableRecords" ? page(row) : operationId === "getCloudTableRecord" ? row : operationId === "listCloudTables" || operationId === "listDeletedCloudTables" ? page(table) : operationId === "listCloudTableLogs" ? page({ type: "object" }) : operationId === "createCloudTable" || operationId === "setCloudTablePermissions" || operationId === "deleteCloudTable" || operationId === "restoreCloudTable" ? { type: "object", properties: { id: { type: "string" }, schemaVersion: { type: "integer" } } } : operationId === "resolveCloudTableCollaborator" ? { type: "object", properties: { id: { type: "string" }, handle: { type: "string" } } } : table
+    responseSchema = readResults[operationId] ?? responseSchema
     paths[`/tables${suffix}`] ??= {}
     paths[`/tables${suffix}`]![method] = { operationId, summary, tags: ["云端数据表"], description: `${instruction} 开放接口仅识别用户本人的API密钥或匿名身份，忽略Cookie，不接受普通登录Token；密钥同时受scope、表资源范围及当前表授权约束，协作者不能通过tables.manage成为表主。登录身份只用于官方Console的独立接口；Agent或Skill使用开放接口，不借用网页登录态。`, security: anonymous ? [{}, { ApiKeyBearer: [] }] : [{ ApiKeyBearer: [] }], parameters, ...(body ? { requestBody: { required: true, content: { "application/json": { schema: schema(body) } } } } : {}), responses: { [method === "post" ? "201" : "200"]: { description: "成功", content: { "application/json": { schema: responseSchema } } }, "400": error, "401": error, "403": error, "404": error, "409": error, "413": error, "503": error } }
   }

@@ -89,6 +89,66 @@ describe("cloud tables real PostgreSQL", () => {
     const empty = await request(actor, t.id, "records.query", { filters: [{ field: "n", op: "eq", value: null }] })
     expect(empty.data.map((r: any) => r.values.n)).toEqual([null])
   })
+  it("projects only selected values while sorting and paginating on unreturned fields", async () => {
+    const t = await request(actor, null, "table.create", { name: "projection", fields: [
+      { key: "title", name: "标题", type: "text" }, { key: "n", name: "数字", type: "integer" }, { key: "old", name: "归档", type: "text" },
+    ] })
+    for (const n of [3, 1, 2]) await request(actor, t.id, "records.create", { values: { title: `title-${n}`, n, old: "hidden" } })
+    const body = { fields: ["title"], sort: [{ field: "n", direction: "asc" }], limit: 1 }
+    const first = await request(actor, t.id, "records.query", body)
+    expect(first.data[0]).toMatchObject({ values: { title: "title-1" }, version: 1, creatorUserId: owner })
+    expect(Object.keys(first.data[0].values)).toEqual(["title"])
+    const next = await request(actor, t.id, "records.query", { ...body, cursor: first.nextCursor })
+    expect(next.data[0].values).toEqual({ title: "title-2" })
+    expect((await request(actor, t.id, "records.query", { fields: [], filters: [{ field: "n", op: "eq", value: 2 }] })).data[0].values).toEqual({})
+    expect((await request(actor, t.id, "records.query", {})).data[0].values).toHaveProperty("n")
+    await expect(request(actor, t.id, "records.query", { ...body, fields: ["n"], cursor: first.nextCursor })).rejects.toMatchObject({ code: "INVALID_CURSOR" })
+    await expect(request(actor, t.id, "records.query", { ...body, filterMode: "any", cursor: first.nextCursor })).rejects.toMatchObject({ code: "INVALID_CURSOR" })
+    await request(actor, t.id, "table.update", { version: 1, fields: [
+      { key: "title", name: "标题", type: "text" }, { key: "n", name: "数字", type: "integer" },
+    ] })
+    await expect(request(actor, t.id, "records.query", { fields: ["old"] })).rejects.toMatchObject({ code: "INVALID_QUERY" })
+    await expect(request(actor, t.id, "records.query", { ...body, cursor: first.nextCursor })).rejects.toMatchObject({ code: "INVALID_CURSOR" })
+  })
+  it("projects the full 100-field budget without losing JSON types or null fields", async () => {
+    const fields = Array.from({ length: 100 }, (_, i) => ({ key: `f${i}`, name: `字段${i}`, type: i === 0 ? "json" : i === 1 ? "boolean" : "integer" }))
+    const t = await request(actor, null, "table.create", { name: "full-projection", fields })
+    expect(await request(actor, t.id, "records.count")).toEqual({ count: 0 })
+    expect(await request(actor, t.id, "records.exists")).toEqual({ exists: false })
+    await request(actor, t.id, "records.create", { values: { f0: { nested: [1, "text", null] }, f1: false, f2: 0 } })
+    const [row] = (await request(actor, t.id, "records.query", { fields: fields.map(f => f.key) })).data
+    expect(Object.keys(row.values)).toHaveLength(100)
+    expect(row.values).toMatchObject({ f0: { nested: [1, "text", null] }, f1: false, f2: 0, f99: null })
+  })
+  it("keeps OR queries and statistics inside table, own and non-deleted boundaries", async () => {
+    const t = await request(actor, null, "table.create", { name: "or", fields: [{ key: "n", name: "数字", type: "integer" }] })
+    const foreign = await request(actor, null, "table.create", { name: "foreign", fields: [{ key: "n", name: "数字", type: "integer" }] })
+    await request(actor, foreign.id, "records.create", { values: { n: 1 } })
+    await request(actor, t.id, "permissions", { version: 1, anonymous: { create: true }, members: [{ userId: member, permissions: { read: "own", create: "all" } }] })
+    const who = { userId: member, console: true }
+    for (const n of [1, 2, 3]) await request(who, t.id, "records.create", { values: { n } })
+    const removed = await request(who, t.id, "records.create", { values: { n: 1 } })
+    await request(actor, t.id, "records.delete", { id: removed.id, version: 1 })
+    await request(actor, t.id, "records.create", { values: { n: 1 } })
+    await request({ console: false }, t.id, "records.create", { values: { n: 1 } })
+    const filters = [{ field: "n", op: "eq", value: 1 }, { field: "n", op: "eq", value: 2 }]
+    expect((await request(who, t.id, "records.query", { filters })).data).toEqual([])
+    const body = { filters, filterMode: "any" }
+    const page = await request(who, t.id, "records.query", { ...body, fields: [], sort: [{ field: "n", direction: "asc" }], limit: 1 })
+    const next = await request(who, t.id, "records.query", { ...body, fields: [], sort: [{ field: "n", direction: "asc" }], limit: 1, cursor: page.nextCursor })
+    expect(page.data).toHaveLength(1); expect(next.data).toHaveLength(1)
+    expect(next.data[0].id).not.toBe(page.data[0].id); expect(next.nextCursor).toBeNull()
+    expect(await request(who, t.id, "records.count", body)).toEqual({ count: 2 })
+    expect(await request(who, t.id, "records.exists", body)).toEqual({ exists: true })
+    expect(await request(who, t.id, "records.count", { filters })).toEqual({ count: 0 })
+    expect(await request(who, t.id, "records.exists", { filters })).toEqual({ exists: false })
+    for (const filterMode of ["all", "any"]) expect(await request(who, t.id, "records.count", { filterMode })).toEqual({ count: 3 })
+    for (const op of ["records.count", "records.exists"]) {
+      await expect(request({ console: false }, t.id, op)).rejects.toMatchObject({ code: "FORBIDDEN" })
+      await expect(request(who, t.id, op, { filters: [{ field: "missing", op: "eq", value: 1 }] })).rejects.toMatchObject({ code: "INVALID_QUERY" })
+      for (const extra of [{ limit: 1 }, { fields: [] }, { cursor: "bad" }, { sort: [] }]) await expect(request(who, t.id, op, extra)).rejects.toMatchObject({ code: "INVALID_REQUEST" })
+    }
+  })
   it("rejects incompatible field changes and restores archived field values", async () => {
     const t = await request(actor, null, "table.create", { name: "schema", fields: [{ key: "x", name: "文字", type: "text" }] })
     const r = await request(actor, t.id, "records.create", { values: { x: "preserved" } })

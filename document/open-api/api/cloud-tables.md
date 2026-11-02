@@ -96,6 +96,8 @@ Content-Type: application/json
 | `listDeletedCloudTables` | GET | `/tables/trash` | 本人的表回收站，不包含协作表 |
 | `restoreCloudTable` | POST | `/tables/{id}/restore` | 表主 + `tables.manage` |
 | `queryCloudTableRecords` | POST | `/tables/{id}/records/query` | `tables.records.read` + 表的查询授权 |
+| `countCloudTableRecords` | POST | `/tables/{id}/records/count` | 同上，仅统计可读且未删除记录 |
+| `existsCloudTableRecords` | POST | `/tables/{id}/records/exists` | 同上，仅检查可读且未删除记录 |
 | `getCloudTableRecord` | GET | `/tables/{id}/records/{recordId}` | 同上，且记录在可读范围内 |
 | `createCloudTableRecord` | POST | `/tables/{id}/records` | `tables.records.create` + 表的新增授权 |
 | `updateCloudTableRecord` | PATCH | `/tables/{id}/records/{recordId}` | `tables.records.update` + 表的修改授权 |
@@ -116,6 +118,8 @@ Content-Type: application/json
 | 建表 | `{ "id": "表ID", "schemaVersion": 1 }` |
 | 表详情／结构／修改结构 | 表对象；匿名发现结构时返回精简对象，见下文 |
 | 表列表／记录查询／回收站／日志 | `{ "data": [...], "nextCursor": "...或null" }` |
+| 条件计数 | `{ "count": 123 }` |
+| 存在判断 | `{ "exists": true }`，无匹配时为 `false` |
 | 新增／修改／删除／恢复记录 | `{ "id": "记录ID", "version": 1 }`，实际版本以响应为准 |
 | 批量写入 | `{ "data": [{ "id": "记录ID", "version": 1 }] }`，与输入顺序对应 |
 | 设置权限 | `{ "schemaVersion": 2 }` |
@@ -297,7 +301,9 @@ curl --fail-with-body --request POST "$SY_API_BASE_URL/api/open/v1/tables/$SY_TA
 
 | 请求字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `filters` | array | 否 | 默认 `[]`，最多 20 项，按 AND 组合，不支持 OR／SQL |
+| `filters` | array | 否 | 默认 `[]`，最多 20 项；组合方式由 `filterMode` 决定，不支持 SQL／嵌套分组 |
+| `filterMode` | string | 否 | 默认 `all`，全部条件满足（AND）；`any` 为任一条件满足（OR）。空条件在两种模式下均不增加业务筛选 |
+| `fields` | string[] | 否 | 省略返回全部活动业务字段；`[]` 返回空 `values`。最多 100 个不同的活动业务字段 key，不接受系统字段 key、未知或归档字段 |
 | `sort` | array | 否 | 默认 `$createdAt` 升序，最多 3 个不同字段 |
 | `limit` | integer | 否 | 默认 50，范围 1–100；响应还受字节预算限制 |
 | `cursor` | string | 否 | 上一页的 `nextCursor`，原样传入 |
@@ -314,7 +320,26 @@ curl --fail-with-body --request POST "$SY_API_BASE_URL/api/open/v1/tables/$SY_TA
 
 字段可引用活动 key 或系统字段 `$id/$createdAt/$updatedAt/$creatorUserId`，系统时间筛选使用 ISO 时间字符串。`json`、`multiSelect` 不支持筛选或排序，也不支持 JSON 深层路径。文本排序按数据库固定字符顺序，不是地区语言排序；空值最后，始终加入稳定 ID 排序。
 
-`nextCursor` 非 `null` 时，保持表、身份、筛选与排序不变继续：
+`fields` 只选择 `values` 内返回的业务字段，`id`、`version`、创建者和时间等系统元数据仍返回。筛选和排序可使用未返回的字段。投影在数据库内执行；它不是字段级权限，不能用来限制其他调用方可读取哪些字段。
+
+例如，查找状态为“新提交”或分数至少 80 的记录，只返回姓名和状态，并按分数排序：
+
+```json
+{
+  "filters": [
+    { "field": "status", "op": "eq", "value": "new" },
+    { "field": "score", "op": "gte", "value": 80 }
+  ],
+  "filterMode": "any",
+  "fields": ["name", "status"],
+  "sort": [{ "field": "score", "direction": "desc" }],
+  "limit": 50
+}
+```
+
+AND／OR 只组合业务条件；表范围、未删除和本人记录权限始终同时生效，不会因 `any` 扩大可读范围。不传新参数时，沿用原有 AND 查询及完整活动字段响应。
+
+`nextCursor` 非 `null` 时，保持表、身份、筛选、组合模式、字段投影与排序不变继续：
 
 ```json
 {
@@ -325,7 +350,45 @@ curl --fail-with-body --request POST "$SY_API_BASE_URL/api/open/v1/tables/$SY_TA
 }
 ```
 
-不要发送 `cursor: null`，结束时停止请求。页面不足 `limit` 条也可能还有下一页，以 `nextCursor` 为准。游标绑定表、身份、结构版本、筛选和排序，变化后从首分页重查，否则返回 `400 INVALID_CURSOR`。不要解析或拼接游标。分页不是快照，并发修改排序字段可能改变后续结果；不返回全表总数。
+不要发送 `cursor: null`，结束时停止请求。页面不足 `limit` 条也可能还有下一页，以 `nextCursor` 为准。游标绑定表、身份、结构版本、筛选、组合模式、字段投影和排序，变化后从首分页重查，否则返回 `400 INVALID_CURSOR`。字段投影列表的顺序也应保持不变；省略 `fields` 与显式传空数组不是同一查询。不要解析或拼接游标。分页不是快照，并发修改排序字段可能改变后续结果；列表不附带总数，需要时单独调用计数接口。
+
+### 条件计数与存在判断
+
+只需要数量或判断是否有匹配记录时，使用以下接口，避免分页下载明细。两者成功状态均为 `201`，使用 `tables.records.read` 及表读取授权；匿名调用必须已开放匿名 read。仅有新增、修改、删除或管理权限不能调用。
+
+| 接口 | operationId | 成功响应 |
+|---|---|---|
+| `POST /tables/{id}/records/count` | `countCloudTableRecords` | `{ "count": 123 }` |
+| `POST /tables/{id}/records/exists` | `existsCloudTableRecords` | `{ "exists": true }` 或 `{ "exists": false }` |
+
+两者的请求只接受以下字段，规则与记录查询一致：
+
+| 请求字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `filters` | array | 否 | 默认 `[]`，最多 20 个条件，支持上文 8 种操作符及相同字段类型范围 |
+| `filterMode` | string | 否 | 默认 `all`（AND），可选 `any`（同级 OR）；空条件表示不增加业务筛选 |
+
+不接受 `fields`、`sort`、`limit`、`cursor` 或其他参数，传入会返回 `400 INVALID_REQUEST`。例如统计状态为“新提交”或分数至少80的可读记录：
+
+```bash
+curl --fail-with-body --request POST "$SY_API_BASE_URL/api/open/v1/tables/$SY_TABLE_ID/records/count" \
+  --header "Authorization: Bearer $SY_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{"filters":[{"field":"status","op":"eq","value":"new"},{"field":"score","op":"gte","value":80}],"filterMode":"any"}'
+```
+
+检查是否存在已处理记录：
+
+```bash
+curl --fail-with-body --request POST "$SY_API_BASE_URL/api/open/v1/tables/$SY_TABLE_ID/records/exists" \
+  --header "Authorization: Bearer $SY_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{"filters":[{"field":"status","op":"eq","value":"done"}]}'
+```
+
+计数返回当前权限内、未删除记录的精确数量，`own` 只统计本人创建记录；无匹配时为 `0`。存在判断使用数据库 EXISTS，找到一条匹配记录即可结束，不读取正文。对空表分别返回 `0` 和 `false`。
+
+计数与另一次列表请求不保证同一快照；存在判断也不能作为并发去重或唯一性保证。两个接口均不写入业务数据、不声明写入幂等键，但仍会记录不含正文的操作元数据。它们共用现有公平队列和 SQL 超时；大范围精确计数可能返回 `503 SERVER_BUSY`，应退避或缩小条件，不返回近似数。计数超过 `9007199254740991` 时返回 `400 COUNT_TOO_LARGE`，不静默舍入。
 
 ### 读取单条记录
 
@@ -564,6 +627,8 @@ Authorization: Bearer syn_sk_...
 | 字段定义 | 单字段最多 64 KiB，含归档定义合计最多 1 MiB，活动默认值合计最多 64 KiB |
 | JSON 复杂度 | 请求最多 32 层、50000 节点 |
 | 查询 | 最多 20 筛选、3 排序；默认 50、最多 100 条，记录查询数据约 1 MiB 响应预算 |
+| 查询投影 | 最多 100 个不同的活动业务字段 key；`[]` 只返回系统元数据及空 `values` |
+| 计数／存在判断 | 最多 20 筛选，不分页、不排序；沿用读取权限、公平队列和 SQL 超时 |
 | 写入批次 | 1–100 个操作，并受请求字节限制 |
 
 不设置账号表数、记录数、总字节容量额度或低固定调用频率。使用专用连接池、按表所属账号分配公平并发和队列预算；多个密钥、协作者和匿名访问者共用表主预算，繁忙时返回 `503 SERVER_BUSY`。不要通过增加密钥或并发绕过保护。
@@ -583,7 +648,8 @@ Console 按读取权限导出 JSON／CSV，CSV 处理公式注入，单次导出
 |---|---|---|
 | 400 | `INVALID_REQUEST` | 检查 JSON、字段集合、必填参数和版本，不发未列出的字段 |
 | 400 | `INVALID_FIELDS`、`INVALID_VALUE`、`UNKNOWN_FIELD` | 重新读结构，按类型和字段 key 构造请求 |
-| 400 | `INVALID_QUERY`、`INVALID_CURSOR` | 检查筛选／排序；条件、身份或结构改变后从首分页重查 |
+| 400 | `INVALID_QUERY`、`INVALID_CURSOR` | 检查筛选／排序／活动投影字段；条件、组合模式、投影、身份或结构改变后从首分页重查 |
+| 400 | `COUNT_TOO_LARGE` | 精确数量超出安全整数范围，缩小筛选范围 |
 | 400 | `INVALID_MEMBERS` | 检查用户是否有效、重复或包含表主 |
 | 400 | `INVALID_IDEMPOTENCY_KEY` | 使用 8–120 位合法幂等键 |
 | 400 | `JSON_TOO_COMPLEX`、`SCHEMA_TOO_LARGE` | 降低 JSON 复杂度或定义体积 |
@@ -611,11 +677,13 @@ Console 按读取权限导出 JSON／CSV，CSV 处理公式注入，单次导出
 | 3 | `GET /tables/{id}/schema`，了解字段与当前权限 | 依据实际 key、类型、选项 key 调用；不能从显示名猜字段 |
 | 4 | 按任务 `PATCH /tables/{id}`，修改表名或字段 | 使用最新 `schemaVersion` 作为 `version`；字段须提交完整活动列表，去掉只读 `archivedAt`。省略已有字段会归档，不能误当局部字段更新 |
 | 5 | 需要协作时，先解析用户名，再 `PATCH /tables/{id}/permissions` | 仅表主；完整保留任务未要求移除的协作者和匿名配置。只有用户授权开放或调整权限时执行，不为解决403自动开放匿名 |
-| 6 | 新增、查询、修改、删除或分批导入记录 | 需相应记录 scope；`tables.manage` 不自带记录读写权限。修改与删除使用记录 `version` |
+| 6 | 新增、查询、修改、删除或分批导入记录 | 需相应记录 scope；`tables.manage` 不自带记录读写权限。修改与删除使用记录 `version`；查询可用 `fields` 减少返回字段、`filterMode: any` 表达同级 OR |
 | 7 | 按读取权限分页导出，或由表主读取操作记录 | 导出使用查询接口，按 `nextCursor` 继续；日志是诊断元数据，不是完整修改历史 |
 | 8 | 按用户要求删除、恢复表／记录或恢复字段 | 表主执行恢复；30天内恢复并检查当前结构，恢复整表后匿名权限关闭 |
 
 操作已有表时跳过建表步骤，先通过 `GET /tables` 发现已授权的表，再读取结构。Agent 不需要用户先在 Console 完成建表、字段配置或授权设置；用户只需先提供足够且明确授权的密钥。协作者管理自己的表与操作他人的协作表属于不同权限范围。
+
+只需要匹配数量时调用 `/records/count`，只判断是否存在时调用 `/records/exists`；不要下载全部记录后自行计数，也不要把存在判断当作防止重复新增的保证。需要明细时才分页查询，并仅选择任务需要的业务字段。
 
 调用示例任务：
 

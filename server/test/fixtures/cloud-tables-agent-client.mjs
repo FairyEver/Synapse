@@ -1,31 +1,36 @@
 // 独立HTTP客户端：仅使用公开文档/OpenAPI与用户交付的密钥，不导入应用代码。
 import assert from "node:assert/strict"
 import { createHash, randomUUID } from "node:crypto"
+import { readFile } from "node:fs/promises"
 
 const base = new URL(process.env.SY_API_BASE_URL)
 assert(["127.0.0.1", "localhost", "[::1]"].includes(base.hostname), "This destructive scenario requires the isolated loopback test API")
 assert.equal(process.env.DATABASE_URL, undefined)
-const documentUrl = "https://synapse.d2.pub/document/open-api/api/cloud-tables"
-const documentResponse = await fetch(documentUrl)
-assert.equal(documentResponse.status, 200)
-const html = await documentResponse.text()
-const modulePath = [...html.matchAll(/(?:src|href)="([^"]+cloud-tables[^"]+\.js)"/g)][0]?.[1]
-assert(modulePath, "Published document must expose its Markdown page data")
-const moduleSource = await fetch(new URL(modulePath, documentUrl)).then(r => { assert.equal(r.status, 200); return r.text() })
-const literal = /JSON\.parse\('((?:[^'\\]|\\.)*)'\)/u.exec(moduleSource)?.[1]
-assert(literal, "Cannot extract published copy-Markdown data")
-// 只解码打包器的字符串转义，不执行文档站JavaScript。
-const pageData = JSON.parse(literal.replace(/\\(['\\])/gu, "$1"))
-const markdown = pageData.copyMarkdown
+const documentUrl = process.env.SY_API_DOCUMENT_PATH ?? "https://synapse.d2.pub/document/open-api/api/cloud-tables"
+async function loadMarkdown() {
+  // 发布前验收读取本次文档，并以隔离API替换与文档构建相同的部署占位符。
+  if (process.env.SY_API_DOCUMENT_PATH) return (await readFile(documentUrl, "utf8")).replaceAll("{{APP_PUBLIC_URL}}", base.origin)
+  const documentResponse = await fetch(documentUrl)
+  assert.equal(documentResponse.status, 200)
+  const html = await documentResponse.text()
+  const modulePath = [...html.matchAll(/(?:src|href)="([^"]+cloud-tables[^"]+\.js)"/g)][0]?.[1]
+  assert(modulePath, "Published document must expose its Markdown page data")
+  const moduleSource = await fetch(new URL(modulePath, documentUrl)).then(r => { assert.equal(r.status, 200); return r.text() })
+  const literal = /JSON\.parse\('((?:[^'\\]|\\.)*)'\)/u.exec(moduleSource)?.[1]
+  assert(literal, "Cannot extract published copy-Markdown data")
+  // 只解码打包器的字符串转义，不执行文档站JavaScript。
+  return JSON.parse(literal.replace(/\\(['\\])/gu, "$1")).copyMarkdown
+}
+const markdown = await loadMarkdown()
 assert(markdown.includes("从零建表到管理数据"))
 assert(markdown.includes("管理操作的身份边界"))
-const contractUrl = markdown.match(/https:\/\/[^\s|)`]+\/api\/open\/openapi\.json/u)?.[0]
+const contractUrl = markdown.match(/https?:\/\/[^\s|)`]+\/api\/open\/openapi\.json/u)?.[0]
 assert(contractUrl)
 const contract = await fetch(contractUrl).then(r => { assert.equal(r.status, 200); return r.json() })
 const apiPrefix = contract.servers[0].url
 assert.equal(apiPrefix, "/api/open/v1")
 const operations = new Map(Object.entries(contract.paths).filter(([p]) => p === "/tables" || p.startsWith("/tables/")).flatMap(([path, methods]) => Object.entries(methods).map(([method, operation]) => [operation.operationId, { path, method: method.toUpperCase(), ...operation }])))
-assert.equal(operations.size, 19)
+assert.equal(operations.size, 21)
 const trace = [], successful = new Set()
 const keys = { owner: process.env.SY_API_KEY, collaborator: process.env.SY_COLLAB_API_KEY, anonymous: undefined }
 assert(keys.owner && keys.collaborator)
@@ -97,6 +102,11 @@ try {
   } while (cursor)
   assert.equal(all.length, 3); assert.equal(new Set(all.map(r => r.id)).size, 3)
   assert.equal(all.find(r => r.values.name === "李四").values.score, 0)
+  const match = { filters: [{ field: "score", op: "gte", value: 80 }, { field: "name", op: "eq", value: "李四" }], filterMode: "any" }
+  assert.deepEqual(await call("countCloudTableRecords", { params, body: match }), { count: 2 })
+  assert.deepEqual(await call("existsCloudTableRecords", { params, body: { filters: [{ field: "name", op: "eq", value: "不存在" }] } }), { exists: false })
+  const projected = await call("queryCloudTableRecords", { params, body: { ...match, fields: ["name"], sort: [{ field: "score", direction: "desc" }] } })
+  assert.deepEqual(projected.data.map(r => r.values), [{ name: "张三" }, { name: "李四" }])
 
   schema = await call("getCloudTableSchema", { params })
   const active = schema.fields.filter(f => !f.archivedAt).map(f => allowedInput("updateCloudTable", "fields", f))
