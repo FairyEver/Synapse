@@ -307,7 +307,7 @@ export class PokerActionService {
     perspective: "owner" | "public" = "owner",
     heartbeat = false,
     now?: Date,
-    audience: "desktop" | "decision" = "decision",
+    audience: "desktop" | "decision" | "bearer" = "decision",
   ) {
     return this.poker.withRoom(
       code,
@@ -322,8 +322,9 @@ export class PokerActionService {
     perspective: "owner" | "public",
     heartbeat: boolean,
     includeVersions = false,
-    audience: "desktop" | "decision" = "decision",
+    audience: "desktop" | "decision" | "bearer" = "decision",
   ) {
+    if (audience === "bearer") audience = isCardRoom(c.room) ? "decision" : "desktop"
     if (isCardRoom(c.room) && audience === "decision") perspective = "public"
     const me = c.seats.find((s) => s.userId === userId),
       own = perspective === "owner" && !!me

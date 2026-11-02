@@ -11,6 +11,7 @@ import { projectCardView, projectResolutionFrame } from "./poker-card-projection
 import { projectReserveView } from "./poker-reserve-projection"
 import { engine } from "./poker-lifecycle"
 import type { ResolutionFrame } from "./engine/cards/types"
+import { isCardRoom } from "./poker-mode-policy"
 @Injectable()
 export class PokerReadService {
   constructor(private readonly poker: PokerService) {}
@@ -122,7 +123,7 @@ export class PokerReadService {
   async detail(userId: string, code: string, handNo: number, audience: "desktop" | "decision" = "decision") {
     return this.poker.prisma.$transaction(
       async (tx) => {
-        const room = await tx.gamePokerRoom.findUnique({ where: { code }, select: { id: true, mode: true } })
+        const room = await tx.gamePokerRoom.findUnique({ where: { code }, select: { id: true, mode: true, ruleOptions: true, cardRulesVersion: true } })
         if (!room) reject("POKER_ROOM_NOT_FOUND", "房间不存在。")
         const hot = await tx.gamePokerHand.findUnique({
           where: { roomId_handNo: { roomId: room.id, handNo } },
@@ -181,7 +182,7 @@ export class PokerReadService {
         }
         if (!participants.some((s) => s.userId === userId))
           reject("POKER_SEAT_NOT_FOUND", "只能读取本人参与的手牌。")
-        const cardMode = !!(hand.rules as { ruleOptions?: { cards?: boolean } } | null)?.ruleOptions?.cards
+        const cardMode = isCardRoom(room) || !!(hand.rules as { ruleOptions?: { cards?: boolean } } | null)?.ruleOptions?.cards
         const privateAllowed = !cardMode || audience === "desktop"
         const versionIds = [
           ...new Set(

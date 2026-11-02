@@ -95,6 +95,7 @@ const envSchema = z
     TRUST_PROXY: z.string().optional(),
     DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
     PORT: z.coerce.number().int().positive().default(3000),
+    GAME_POKER_CARD_MODE_ENABLED: z.enum(["true", "false"]).default("false"),
     DRIVE_COS_SECRET_ID: optionalEnvString,
     DRIVE_COS_SECRET_KEY: optionalEnvString,
     DRIVE_COS_BUCKET: optionalEnvString,
@@ -255,6 +256,7 @@ export interface ServerEnv {
   readonly driveLocalRoot?: string
   readonly driveCollaborationEnabled: boolean
   readonly mobileLiveEnabled: boolean
+  readonly gamePokerCardModeEnabled: boolean
   readonly apnsKeyId?: string
   readonly apnsTeamId?: string
   readonly apnsKeyPath?: string
@@ -313,6 +315,7 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     driveLocalRoot: result.data.SYNAPSE_DRIVE_LOCAL_ROOT,
     driveCollaborationEnabled: result.data.DRIVE_COLLABORATION_ENABLED === "true",
     mobileLiveEnabled: result.data.MOBILE_LIVE_ENABLED === "true",
+    gamePokerCardModeEnabled: result.data.GAME_POKER_CARD_MODE_ENABLED === "true",
     apnsKeyId: result.data.APNS_KEY_ID,
     apnsTeamId: result.data.APNS_TEAM_ID,
     apnsKeyPath: result.data.APNS_KEY_PATH,

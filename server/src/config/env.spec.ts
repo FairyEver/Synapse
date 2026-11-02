@@ -20,6 +20,12 @@ const platformMediaCosEnv = {
 }
 
 describe("loadEnv", () => {
+  it("卡牌模式默认关闭且只接受显式true/false", () => {
+    const source = { DATABASE_URL: "postgresql://localhost/test", ADMIN_ACCESS_SECRET: productionUpdateIntentSecret, USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars" }
+    expect(loadEnv(source).gamePokerCardModeEnabled).toBe(false)
+    expect(loadEnv({ ...source, GAME_POKER_CARD_MODE_ENABLED: "true" }).gamePokerCardModeEnabled).toBe(true)
+    expect(() => loadEnv({ ...source, GAME_POKER_CARD_MODE_ENABLED: "yes" })).toThrow("GAME_POKER_CARD_MODE_ENABLED")
+  })
   it("parses required production settings", () => {
     const env = loadEnv({
       NODE_ENV: "production",

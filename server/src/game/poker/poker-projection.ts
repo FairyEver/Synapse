@@ -49,7 +49,7 @@ export function projectSettlement(
   const result = object(hand.result), payouts = object(result.payouts), deltas = object(result.deltas)
   const saved = object(hand.rules), state = "engineState" in hand ? object(hand.engineState) : {}
   const rules = resolveRules({ ...state, ...saved } as Partial<PokerRules>)
-  const effectivePolicy = { ...policy, cardMode: !!rules.ruleOptions?.cards }
+  const effectivePolicy = { ...policy, cardMode: !!policy.cardMode || !!rules.ruleOptions?.cards }
   const board = strings(hand.board), shown = numbers(hand.showdownSeats)
   const participating = participants.some((s) => s.userId === userId)
   const controlSources = new Map<string, Set<string>>()

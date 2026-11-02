@@ -40,7 +40,7 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
     groupBy: async () => [],
   })
   const arrays = [seats, hands, participants, actions, receipts, rolls, summaries, archives, resolutions]
-  const prisma: any = { $transaction: (work: any) => db.transaction(async (hallTx) => {
+  const prisma: any = { user: table([]), gamePokerRoom: table([room]), $transaction: (work: any) => db.transaction(async (hallTx) => {
     const backup = structuredClone({ arrays, room })
     const tx: any = { ...hallTx, gamePokerRoom: table([room]), gamePokerSeat: table(seats), gamePokerHand: table(hands), gamePokerHandSeat: table(participants), gamePokerAction: table(actions), gamePokerActionReceipt: table(receipts), gamePokerRoll: table(rolls), gamePokerHandSummary: table(summaries), gamePokerAgent: table([]), gamePokerAgentVersion: table([]), gamePokerHandArchive: table(archives), gamePokerResolution: table(resolutions), gamePokerControlHistory: table([]), user: table([]) }
     tx.gameSession = { ...hallTx.gameSession, updateMany: table(db.sessions).updateMany }
@@ -66,7 +66,7 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
           players: list.filter(player => tracked.includes(player.userId)),
         }])
       }
-      if (query.includes('FROM "GamePokerRoom"')) return Promise.resolve([structuredClone(room)])
+      if (query.includes('FROM "GamePokerRoom"')) return Promise.resolve(args[0] === room.code ? [structuredClone(room)] : [])
       if (query.includes('SELECT "id","handNo","seq","action"')) {
         const terminalOnly = query.includes(`action."action" IN ('check','fold')`) && query.includes("action->>'action' IN ('check','fold')")
         return Promise.resolve(actions.filter(a => a.userId === args[1] && a.isAuto && (!terminalOnly || ["check","fold"].includes(a.action))).sort((a,b) => b.createdAt.getTime()-a.createdAt.getTime() || b.id.localeCompare(a.id)).slice(0,1).map(a=>({...a,handNo:1})))
@@ -80,7 +80,7 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
     const userId = i === 0 ? "u" : `u${i}`, id = `admission-${i}`
     if (i > 0) db.accounts.set(userId, { userId, points: 10000, netProfit: 0, lastGrantAt: null })
     await db.transaction(tx => hall.join(tx, userId, { admissionId: id, gameKind: "poker", gameRoomId: room.id, roomCode: room.code, seatNo: i, buyIn: mode === "practice" ? 0 : 500, funding: mode as "points" | "practice", startCursor: "1" }, now))
-    seats.push({ id, userId, roomId: room.id, seatNo: i, participantKind: "human", displayName: userId, stack: 500, status: "waiting", joinedHandNo: 1, controller: (room.ruleOptions?.cards ? "human" : "ai"), controlVersion: 0, lastSeenAt: now, leavePending: false, sitPending: false })
+    seats.push({ id, userId, roomId: room.id, seatNo: i, participantKind: "human", displayName: userId, stack: 500, status: "waiting", joinedHandNo: 1, controller: (room.ruleOptions?.cards ? "human" : "ai"), controlVersion: 0, handoffPending: false, lastSeenAt: now, leavePending: false, sitPending: false })
   }
   for (let i = 0; i < (options.bots ?? 0); i++) seats.push({ id: `bot-${i}`, userId: `bot-user-${i}`, roomId: room.id, seatNo: count + i, participantKind: "bot", displayName: `机器人${i + 1}`, stack: 500, status: "waiting", joinedHandNo: 1, controller: "ai", controlVersion: 0, lastSeenAt: now, leavePending: false, sitPending: false })
   for (const seat of seats) if (seat.userId !== room.ownerUserId && seat.participantKind !== "bot") await poker.ready(seat.userId, room.code, null, seat.controlVersion, now, room.ruleOptions?.cards ? "human" : "mcp")

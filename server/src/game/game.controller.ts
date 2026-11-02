@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   HttpException,
+  Header,
   Body,
   Controller,
   Get,
@@ -19,11 +20,15 @@ import { GameApiService } from "./game-api.service"
 import { PokerActionService } from "./poker/poker-action.service"
 import { PokerService } from "./poker/poker.service"
 import { PokerEventsService } from "./poker/poker-events.service"
-import { GameWebGuard } from "./game-web.guard"
+import { GameWebGuard, gameWebAudience, gameWebCaller, type GameWebRequest } from "./game-web.guard"
+import { PokerCardWebGuard } from "./poker-card-web.guard"
+import { PokerCardService } from "./poker/poker-card.service"
+import { POKER_CARD_PLAY_SCHEMA, POKER_CARD_CHOOSE_SCHEMA } from "@synapse/shared/game-ui"
+import type { PokerCardPlayInput, PokerCardChooseInput } from "@synapse/shared/game-contracts"
 const callSchema = z
   .object({ operation: z.string().max(100), params: z.record(z.string(), z.unknown()).default({}) })
   .strict()
-@UseGuards(UserAuthGuard, GameWebGuard)
+@UseGuards(UserAuthGuard, GameWebGuard, PokerCardWebGuard)
 @Controller("/api/game")
 export class GameController {
   constructor(
@@ -31,7 +36,9 @@ export class GameController {
     private readonly actions: PokerActionService,
     private readonly poker: PokerService,
     private readonly events: PokerEventsService = new PokerEventsService(poker),
+    private readonly cards: PokerCardService = new PokerCardService(poker),
   ) {}
+  @Header("Cache-Control", "private, no-store")
   @Post("/invoke")
   invoke(
     @Req() req: AuthenticatedUserRequest,
@@ -73,11 +80,13 @@ export class GameController {
     return this.api.run(r.user!.id, "app.game.poker.lobby.list", this.page(q))
   }
   @Post("/poker/rooms") create(@Req() r: AuthenticatedUserRequest, @Body() b: unknown) {
-    return this.api.run(r.user!.id, "app.game.poker.room.create", b)
+    return this.api.run(r.user!.id, "app.game.poker.room.create", b, undefined, gameWebCaller(r), { rulesSupported: !!(r as GameWebRequest).gameRulesSupported })
   }
+  @Header("Cache-Control", "private, no-store")
   @Get("/poker/rooms/:code") room(@Req() r: AuthenticatedUserRequest, @Param("code") code: string) {
     return this.api.run(r.user!.id, "app.game.poker.room.get", { roomCode: code })
   }
+  @Header("Cache-Control", "private, no-store")
   @Get("/poker/rooms/:code/state") state(
     @Req() r: AuthenticatedUserRequest,
     @Param("code") code: string,
@@ -88,8 +97,8 @@ export class GameController {
       code,
       perspective === "public" ? "public" : "owner",
       true,
-      new Date(),
-      "desktop",
+      undefined,
+      gameWebAudience(r),
     )
   }
   @Post("/poker/rooms/:code/join") join(
@@ -120,9 +129,10 @@ export class GameController {
     if (!parsed.success) throw new BadRequestException("控制权请求无效。")
     return this.poker.control(r.user!.id, code, parsed.data.action, parsed.data.controlVersion)
   }
+  @Header("Cache-Control", "private, no-store")
   @Get("/poker/rooms/:code/events") tableEvents(@Req() r: AuthenticatedUserRequest, @Param("code") code: string, @Query("cursor") cursor?: string, @Query("limit") limit?: string, @Query("perspective") perspective?: string) {
     if (perspective !== undefined && perspective !== "owner" && perspective !== "public") throw new BadRequestException("观看视角无效。")
-    return this.events.events(r.user!.id, code, cursor ?? "", limit === undefined ? 100 : Number(limit), "desktop", perspective ?? "public")
+    return this.events.events(r.user!.id, code, cursor ?? "", limit === undefined ? 100 : Number(limit), gameWebAudience(r), perspective ?? "public")
   }
   @Post("/poker/rooms/:code/actions") action(
     @Req() r: AuthenticatedUserRequest,
@@ -136,6 +146,18 @@ export class GameController {
   }
   @Post("/poker/rooms/:code/roll/choose") rollChoose(@Req() r: AuthenticatedUserRequest, @Param("code") code: string, @Body() b: unknown) {
     return this.api.run(r.user!.id, "app.game.poker.roll.choose", this.uiParams(b, "app.game.poker.roll.choose", code), undefined, "human")
+  }
+  @Header("Cache-Control", "private, no-store")
+  @Post("/poker/rooms/:code/card/play") cardPlay(@Req() r: AuthenticatedUserRequest, @Param("code") code: string, @Body() b: unknown) {
+    const parsed = z.fromJSONSchema(POKER_CARD_PLAY_SCHEMA as Parameters<typeof z.fromJSONSchema>[0]).safeParse(this.uiParams(b, "app.game.poker.card.play", code))
+    if (!parsed.success) throw new BadRequestException("卡牌请求无效。")
+    return this.cards.play(r.user!.id, parsed.data as unknown as PokerCardPlayInput, "human")
+  }
+  @Header("Cache-Control", "private, no-store")
+  @Post("/poker/rooms/:code/card/choose") cardChoose(@Req() r: AuthenticatedUserRequest, @Param("code") code: string, @Body() b: unknown) {
+    const parsed = z.fromJSONSchema(POKER_CARD_CHOOSE_SCHEMA as Parameters<typeof z.fromJSONSchema>[0]).safeParse(this.uiParams(b, "app.game.poker.card.choose", code))
+    if (!parsed.success) throw new BadRequestException("卡牌选择无效。")
+    return this.cards.choose(r.user!.id, parsed.data as unknown as PokerCardChooseInput, "human")
   }
   @Post("/poker/rooms/:code/close") close(
     @Req() r: AuthenticatedUserRequest,
@@ -159,12 +181,14 @@ export class GameController {
   ) {
     return this.api.run(r.user!.id, "app.game.poker.agent.versions", { agentId: id })
   }
+  @Header("Cache-Control", "private, no-store")
   @Get("/poker/history") history(
     @Req() r: AuthenticatedUserRequest,
     @Query() q: Record<string, string>,
   ) {
-    return this.api.run(r.user!.id, "app.game.poker.hand.history", this.page(q))
+    return this.api.run(r.user!.id, "app.game.poker.hand.history", this.page(q), undefined, gameWebCaller(r))
   }
+  @Header("Cache-Control", "private, no-store")
   @Get("/poker/hands/:handNo") detail(
     @Req() r: AuthenticatedUserRequest,
     @Param("handNo") no: string,
@@ -173,7 +197,7 @@ export class GameController {
     return this.api.run(r.user!.id, "app.game.poker.hand.detail", {
       roomCode: code,
       handNo: Number(no),
-    })
+    }, undefined, gameWebCaller(r))
   }
   private page(q: Record<string, string>) {
     return {

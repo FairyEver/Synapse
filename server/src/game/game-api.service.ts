@@ -11,6 +11,8 @@ import { PokerReadService } from "./poker/poker-read.service"
 import { PokerNudgeService } from "./poker/poker-nudge.service"
 import { PokerBotService } from "./poker/poker-bot.service"
 import { PokerEventsService } from "./poker/poker-events.service"
+import { pokerCardModeEnabled } from "./poker/poker-mode-policy"
+import { SUPPORTED_POKER_RULES } from "@synapse/shared/game-contracts"
 import type { PokerCaller } from "./poker/poker-control"
 @Injectable()
 export class GameApiService {
@@ -31,6 +33,7 @@ export class GameApiService {
     input: unknown,
     signal?: AbortSignal,
     caller: PokerCaller = "mcp",
+    web?: { rulesSupported: boolean },
   ): Promise<unknown> {
     const definition = GAME_TOOLS.find((t) => t.id === operation)
     if (!definition) throw new BadRequestException("未知游戏操作。")
@@ -69,6 +72,7 @@ export class GameApiService {
       }
       case "app.game.poker.guide":
         return {
+          cards: { available: pokerCardModeEnabled(), supportedVersions: [...SUPPORTED_POKER_RULES], humanPlay: true, aiPlay: false, botReceivesCards: false, botUsesCards: false },
           rules: {
             game: "无限注德州扑克",
             seats: "2–10",
@@ -114,7 +118,7 @@ export class GameApiService {
       case "app.game.poker.room.create":
         return this.poker.createRoom(
           userId,
-          p as { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice" },
+          p as { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice" }, caller, !!web?.rulesSupported,
         )
       case "app.game.poker.room.start":
         return this.poker.start(userId, p.roomCode, p.handId, p.controlVersion, undefined, caller)
@@ -159,9 +163,9 @@ export class GameApiService {
       case "app.game.poker.agent.versions":
         return this.poker.agentVersions(userId, p.agentId)
       case "app.game.poker.hand.history":
-        return this.read.history(userId, p.offset ?? 0, p.limit ?? 50, p.mode)
+        return this.read.history(userId, p.offset ?? 0, p.limit ?? 50, p.mode, caller === "human" ? "desktop" : "decision")
       case "app.game.poker.hand.detail":
-        return this.read.detail(userId, p.roomCode, p.handNo)
+        return this.read.detail(userId, p.roomCode, p.handNo, caller === "human" ? "desktop" : "decision")
       case "app.game.poker.stats.get":
         return this.read.stats(userId, p.roomCode, p.mode)
     }

@@ -15,6 +15,7 @@ import { engine } from "./poker-lifecycle"
 import { resolveHandCommand } from "./engine/resolve-hand"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
 import { persistHandResolution, reserveScope, roomResolutionContext } from "./poker-resolution"
+import { assertPokerModeAccess, pokerCardModeEnabled } from "./poker-mode-policy"
 
 export type RoomContext = {
   tx: Prisma.TransactionClient
@@ -85,7 +86,14 @@ export class PokerService {
   async createRoom(
     userId: string,
     input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice"; variant?: PokerVariant; blindPreset?: string; ruleOptions?: PokerRuleOptions },
+    caller: PokerCaller = "mcp",
+    supportedRules = false,
   ) {
+    if (input.ruleOptions?.cards) {
+      if (caller !== "human") reject("POKER_CARD_AI_DISABLED", "卡牌房当前仅支持真人操作。")
+      if (!pokerCardModeEnabled()) reject("POKER_CARD_MODE_UNAVAILABLE", "卡牌模式尚未开放。")
+      if (!supportedRules) reject("POKER_CARD_VERSION_UNSUPPORTED", "客户端不支持当前卡牌规则。")
+    }
     if (
       !Number.isInteger(input.maxSeats) ||
       input.maxSeats < 2 ||
@@ -97,7 +105,7 @@ export class PokerService {
     let rules
     try {
       const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)
-      rules = resolveRules({ variant: input.variant, smallBlind, bigBlind, ...(input.ruleOptions ? { ruleOptions: input.ruleOptions } : {}), ...(input.ruleOptions?.roll ? { rollPricingVersion: ROLL_PRICING_VERSION } : {}) })
+      rules = resolveRules({ variant: input.variant, smallBlind, bigBlind, chipRulesVersion: "chips-v2", ...(input.ruleOptions?.cards ? { cardRulesVersion: "cards-v1" } : {}), ...(input.ruleOptions ? { ruleOptions: input.ruleOptions } : {}), ...(input.ruleOptions?.roll ? { rollPricingVersion: ROLL_PRICING_VERSION } : {}) })
     } catch {
       reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库、盲注和每手钻石额度。")
     }
@@ -153,6 +161,7 @@ export class PokerService {
       code,
       async (c) => {
         const { tx, room, seats } = c
+        assertPokerModeAccess(room, caller, "join")
         if (room.status === "closed") reject("POKER_ROOM_CLOSED", "房间已解散。")
         if (seats.some((s) => s.userId === userId))
           reject("POKER_ALREADY_SEATED", "已在该房间入座。")
@@ -220,6 +229,7 @@ export class PokerService {
   }
   async ready(userId: string, code: string, handId: string | null, controlVersion: number, now = new Date(), caller: PokerCaller = "mcp") {
     return this.withRoom(code, async (c) => {
+      assertPokerModeAccess(c.room, caller, "ready")
       const seat = c.seats.find(s => s.userId === userId && s.participantKind !== "bot")
       if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
       assertController(seat, caller, controlVersion)
@@ -237,6 +247,7 @@ export class PokerService {
   }
   async start(userId: string, code: string, handId: string | null, controlVersion?: number, now: Date | undefined = undefined, caller: PokerCaller = "mcp") {
     return this.withRoom(code, async (c) => {
+      assertPokerModeAccess(c.room, caller, "start")
       if (c.room.ownerUserId !== userId) reject("POKER_ILLEGAL_ACTION", "仅房主可以开始。")
       if (c.room.status === "closed" || c.room.closeRequested) reject("POKER_ROOM_CLOSED", "房间已解散或正在解散。")
       const owner = c.seats.find(s => s.userId === userId && s.participantKind !== "bot")
@@ -293,6 +304,7 @@ export class PokerService {
     return this.withRoom(
       code,
       async (c) => {
+        assertPokerModeAccess(c.room, caller, "sit")
         const seat = c.seats.find((s) => s.userId === userId)
         if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
         assertController(seat, caller, controlVersion)
@@ -339,6 +351,7 @@ export class PokerService {
   }
   async control(userId: string, code: string, action: "takeover" | "request_ai" | "cancel_ai", controlVersion: number, now = new Date()) {
     return this.withRoom(code, async (c) => {
+      assertPokerModeAccess(c.room, "human", `control.${action}`)
       const seat = c.seats.find((s) => s.userId === userId && s.participantKind !== "bot")
       if (!seat) {
         if (action === "takeover" || c.room.status === "closed") reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
@@ -357,6 +370,7 @@ export class PokerService {
   }
   async claim(userId: string, code: string, controlVersion: number, now = new Date()) {
     return this.withRoom(code, async (c) => {
+      assertPokerModeAccess(c.room, "mcp", "claim")
       const seat = c.seats.find((s) => s.userId === userId && s.participantKind !== "bot")
       if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
       const patch = claimControl(seat, controlVersion)
@@ -367,6 +381,7 @@ export class PokerService {
   }
   async checkpoint(userId: string, code: string, input?: { controlVersion: number; cursor: string; sessionStyle?: string; continueIntent: boolean }, now = new Date()) {
     return this.withRoom(code, async (c) => {
+      assertPokerModeAccess(c.room, "mcp", "checkpoint")
       const seat = c.seats.find((s) => s.userId === userId && s.participantKind !== "bot")
       if (!seat) return input ? reject("POKER_SEAT_NOT_FOUND", "座位已离场，不能保存恢复信息。") : { checkpoint: null }
       if (!input) return { checkpoint: (seat.checkpoint ?? null) as unknown as PokerResumeCheckpoint | null }

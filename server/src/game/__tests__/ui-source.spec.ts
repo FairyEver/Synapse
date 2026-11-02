@@ -20,7 +20,7 @@ describe("扑克UI入口与MCP来源", () => {
     const state = vi.fn(), events = vi.fn()
     const controller = new GameController({} as never, { state } as never, {} as never, { events } as never)
     await controller.state(req, "1234", "public")
-    expect(state).toHaveBeenCalledWith("owner", "1234", "public", true, expect.any(Date), "desktop")
+    expect(state).toHaveBeenCalledWith("owner", "1234", "public", true, undefined, "desktop")
     await controller.tableEvents(req, "1234", "1:1", "10")
     expect(events).toHaveBeenCalledWith("owner", "1234", "1:1", 10, "desktop", "public")
     await controller.tableEvents(req, "1234", "1:1", "10", "owner")

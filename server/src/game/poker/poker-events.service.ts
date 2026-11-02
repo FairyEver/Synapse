@@ -5,6 +5,7 @@ import type { PokerActionView, PokerTableEvent, PokerTableEventsView } from "@sy
 import { PokerService } from "./poker.service"
 import { archiveData, type ArchivedHand } from "./poker-archive.service"
 import { projectSettlement, type PokerViewPolicy } from "./poker-projection"
+import { isCardRoom } from "./poker-mode-policy"
 import { reject } from "./poker-error"
 import { projectResolutionFrame } from "./poker-card-projection"
 import type { ResolutionFrame } from "./engine/cards/types"
@@ -35,7 +36,7 @@ export class PokerEventsService {
     code: string,
     cursor = "",
     limit = 100,
-    audience: PokerViewPolicy["audience"] = "decision",
+    audience: PokerViewPolicy["audience"] | "bearer" = "decision",
     perspective: PokerViewPolicy["perspective"] = "public",
   ): Promise<PokerTableEventsView> {
     const match = /^(\d+):(\d+)$/.exec(cursor)
@@ -57,8 +58,9 @@ export class PokerEventsService {
         where: { userId_gameKind_gameRoomId: { userId, gameKind: "poker", gameRoomId: c.room.id } },
         select: { id: true },
       })
+      const readAudience = audience === "bearer" ? isCardRoom(c.room) ? "decision" : "desktop" : audience
       const policy: PokerViewPolicy = {
-        audience, perspective: c.room.cardRulesVersion && audience === "decision" ? "public" : perspective, mode: c.room.mode, cardMode: !!c.room.cardRulesVersion,
+        audience: readAudience, perspective: isCardRoom(c.room) && readAudience === "decision" ? "public" : perspective, mode: c.room.mode, cardMode: isCardRoom(c.room),
         everJoined: !!session || c.seats.some((s) => s.userId === userId),
       }
       const since = new Date(c.now.getTime() - REALTIME_WINDOW_MS)

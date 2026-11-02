@@ -2,6 +2,11 @@ import { CanActivate, ConflictException, ExecutionContext, ForbiddenException, I
 import { GAME_WEB_IDENTITY_HEADER, GAME_WEB_INVOKE_OPERATIONS } from "@synapse/shared/game-ui"
 import type { AuthenticatedUserRequest } from "../auth/user-auth.guard"
 import { resolvePublicAppUrl } from "../common/public-app-url"
+import { GAME_POKER_RULES_HEADER, supportsPokerCardRules } from "@synapse/shared/game-contracts"
+
+export interface GameWebRequest extends AuthenticatedUserRequest { gameTransport?: "cookie" | "bearer"; gameRulesSupported?: boolean }
+export const gameWebCaller = (request: AuthenticatedUserRequest): "human" | "mcp" => (request as GameWebRequest).gameTransport === "cookie" ? "human" : "mcp"
+export const gameWebAudience = (request: AuthenticatedUserRequest): "desktop" | "bearer" => (request as GameWebRequest).gameTransport === "bearer" ? "bearer" : "desktop"
 
 // Only the fixed local Web entrypoint may share development Cookie calls.
 const localWebOrigins = new Set(["http://localhost:19700"])
@@ -10,8 +15,10 @@ const localWebOrigins = new Set(["http://localhost:19700"])
 @Injectable()
 export class GameWebGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest<AuthenticatedUserRequest>()
-    if (/^bearer\s+\S+/i.test(request.headers.authorization ?? "")) return true
+    const request = context.switchToHttp().getRequest<GameWebRequest>()
+    const versions = request.headers[GAME_POKER_RULES_HEADER]
+    request.gameRulesSupported = supportsPokerCardRules(typeof versions === "string" ? versions : undefined)
+    if (/^bearer\s+\S+/i.test(request.headers.authorization ?? "")) { request.gameTransport = "bearer"; return true }
     if (!request.user || request.headers[GAME_WEB_IDENTITY_HEADER] !== request.user.id) {
       throw new ConflictException({ code: "GAME_IDENTITY_CHANGED", message: "登录账号已变更，请重新载入。" })
     }
@@ -28,6 +35,7 @@ export class GameWebGuard implements CanActivate {
     if (/\/invoke\/?$/i.test(request.path) && !GAME_WEB_INVOKE_OPERATIONS.includes(request.body?.operation)) {
       throw new ForbiddenException("此操作不能通过浏览器调用。")
     }
+    request.gameTransport = "cookie"
     return true
   }
 }

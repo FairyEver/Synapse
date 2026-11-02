@@ -1,5 +1,6 @@
 import { Injectable, ServiceUnavailableException, type OnModuleDestroy } from "@nestjs/common"
 import { PokerActionService } from "./poker-action.service"
+import { isCardRoom } from "./poker-mode-policy"
 import { reject } from "./poker-error"
 const MAX_CURSOR_VALUE = 2147483647
 @Injectable()
@@ -71,6 +72,7 @@ export class PokerWaitService implements OnModuleDestroy {
       code,
       async (c) => {
         const seat = c.seats.find((s) => s.userId === userId)
+        if (isCardRoom(c.room)) return { status: "control_released", cursor, controlVersion: seat?.controlVersion ?? 0, handoffPending: false }
         if (seat && (seat.controller ?? "ai") === "human")
           return { status: "control_released", cursor, controlVersion: seat.controlVersion ?? 0, handoffPending: seat.handoffPending ?? false }
         if (seat) {

@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-03 卡牌真人入口：Web新增私有 `app.game.poker.card.play` / `app.game.poker.card.choose`，对应 POST `/api/game/poker/rooms/:code/card/play`、`/card/choose`，游戏 Web 28→30。两项不进入公共 capability/MCP；game 30、全局 capability 364 / MCP 索引360、System App22、默认Dock9、游戏桌面IPC0及兼容深链不变。卡牌写入要求受信同源 Cookie 会话、账号头与 cards-v1/chips-v2 版本头；Bearer/MCP 不得参赛或接入AI，读取强制公开投影。功能开关 `GAME_POKER_CARD_MODE_ENABLED` 默认 false；无卡旧房兼容行为保留。私有响应禁止缓存，公开 search/invoke 仍仅2项。
+
 - 2026-11-02 云端 Skills 下线：移除 `skill_repository` domain 的全部 9 项 capability/MCP 索引工具、桌面上传与安装 IPC、安装窗口和 `synapse://skill-install` 专用协议处理；旧链接按未知协议处理。Console/Admin 列表、探索、详情及公开路径同时删除，权威系统 Skill 不再分发该领域指南。全局 capability 373→364、MCP 索引 369→360，公开路由工具仍为 search/invoke 两个；System App 22、默认 Dock 9、Workflow/Automation 与其他 Deep Link 不变。资源仓库仅保留 `content` 领域。历史条目计数保留为当时基线，当前计数以下表为准。
 
 - 2026-11-02 macOS 开发协议回跳：开发启动改用独立 bundle ID、内置当前仓库入口并声明 `synapse://` 的开发应用，修复网页登录唤起 Electron 默认窗口。既有 `synapse://auth/desktop/callback`、PKCE、IPC、MCP schema 和系统 Skill 不变；没有新增 Deep Link、System App、Dock、capability、MCP、Workflow 或 Automation，现有表格数量和例外均不变。

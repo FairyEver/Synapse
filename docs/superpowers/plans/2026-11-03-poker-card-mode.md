@@ -226,11 +226,11 @@
 **Files:** Create `server/src/game/poker/poker-mode-policy.ts`、`server/src/game/__tests__/card-web.spec.ts`、`server/src/game/poker/__tests__/card-access.spec.ts`；Modify `server/src/game/game.controller.ts`、`server/src/game/game-web.guard.ts`、`server/src/game/game-api.service.ts`、`server/src/game/game.module.ts`、`server/src/game/poker/poker.service.ts`、`server/src/game/poker/poker-action.service.ts`、`server/src/game/poker/poker-roll.service.ts`、`server/src/game/poker/poker-wait.service.ts`、`server/src/game/poker/poker-read.service.ts`、`server/src/config/env.ts`、`server/src/config/env.spec.ts`、`server/.env.example`、`server/compose.yml`、`docs/agents/capability-registry.md`。
 **Interfaces:** Produces `assertPokerModeAccess`、`cardReadPolicy`；公开guide返回cards.available与受支持规则版本，来源只能由受信HTTP/MCP入口设置。新私有路由为POST`/api/game/poker/rooms/:code/card/play`和`/card/choose`。
 
-- [ ] **1. 写失败测试。** 分别通过HTTP/公开invoke/直接服务调用尝试AI join、claim、request_ai、ready/start/act/Roll/card写入，卡牌房全拒绝；同账号真实human可用，rules_bot仅内部合法。`invoke_rejects_private_card_ids`不能经公共GAME_TOOLS调用新私有项；伪造caller/effectCode及跨房间instance拒绝。旧房AI行为不变。 断言示例：`expect(bearerResponse.status).toBe(403); expect(cookieResponse.body.ok).toBe(true); expect(privateIds.every(id=>!GAME_TOOLS.some(t=>t.id===id))).toBe(true)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/__tests__/card-web.spec.ts src/game/poker/__tests__/card-access.spec.ts`。
-- [ ] **3. 实现路由与模式策略。** 私有路由直接调用注入的PokerCardService并使用共享strict schema，不加入公共GameApiService工具switch。现有GameWebGuard对Bearer直接放行，因此卡牌房创建及用牌/选择/join/ready/start/act/Roll/AI交接入口额外强制受信Cookie Web会话、身份头和同源校验，Bearer即使伪造版本头也不能当human；普通房旧行为不变。所有参赛服务入口继续检查caller，避免直接服务绕过。读取/历史也按认证通道区分：Cookie为human/desktop，卡牌房Bearer或MCP强制decision/public，不能仅凭访问Web URL获得本人字段。
-- [ ] **4. 实现创建门槛并验证绿灯。** 增加`GAME_POKER_CARD_MODE_ENABLED=false`安全默认；仅门槛开启且human Web声明支持cards-v1/chips-v2时接受新建卡牌房。卡牌房旧客户端缺版本头不能写入；普通无卡新房可用AI/MCP，仍使用无卡干预的暂存；旧房版本不回填。覆盖Cookie通过、Bearer与缺版本头拒绝、来源伪造失败和旧房不受影响的HTTP测试。同步env校验/中文示例、compose与能力注册表：私有Web新增2、公共卡牌MCP新增0，其余按实际导出重算。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 增加真人卡牌入口并在服务端禁止AI参赛'`。
+- [x] **1. 写失败测试。** 分别通过HTTP/公开invoke/直接服务调用尝试AI join、claim、request_ai、ready/start/act/Roll/card写入，卡牌房全拒绝；同账号真实human可用，rules_bot仅内部合法。`invoke_rejects_private_card_ids`不能经公共GAME_TOOLS调用新私有项；伪造caller/effectCode及跨房间instance拒绝。旧房AI行为不变。 断言示例：`expect(bearerResponse.status).toBe(403); expect(cookieResponse.body.ok).toBe(true); expect(privateIds.every(id=>!GAME_TOOLS.some(t=>t.id===id))).toBe(true)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/__tests__/card-web.spec.ts src/game/poker/__tests__/card-access.spec.ts`。
+- [x] **3. 实现路由与模式策略。** 私有路由直接调用注入的PokerCardService并使用共享strict schema，不加入公共GameApiService工具switch。现有GameWebGuard对Bearer直接放行，因此卡牌房创建及用牌/选择/join/ready/start/act/Roll/AI交接入口额外强制受信Cookie Web会话、身份头和同源校验，Bearer即使伪造版本头也不能当human；普通房旧行为不变。所有参赛服务入口继续检查caller，避免直接服务绕过。读取/历史也按认证通道区分：Cookie为human/desktop，卡牌房Bearer或MCP强制decision/public，不能仅凭访问Web URL获得本人字段。
+- [x] **4. 实现创建门槛并验证绿灯。** 增加`GAME_POKER_CARD_MODE_ENABLED=false`安全默认；仅门槛开启且human Web声明支持cards-v1/chips-v2时接受新建卡牌房。卡牌房旧客户端缺版本头不能写入；普通无卡新房可用AI/MCP，仍使用无卡干预的暂存；旧房版本不回填。覆盖Cookie通过、Bearer与缺版本头拒绝、来源伪造失败和旧房不受影响的HTTP测试。同步env校验/中文示例、compose与能力注册表：私有Web新增2、公共卡牌MCP新增0，其余按实际导出重算。
+- [x] **5. 本地提交。** `git commit -m 'feat: 增加真人卡牌入口并在服务端禁止AI参赛'`。
 
 
 ## Task 13: 建房、摘要、偏好和AI入口
