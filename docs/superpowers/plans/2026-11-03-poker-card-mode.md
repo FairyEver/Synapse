@@ -166,11 +166,11 @@
 **Files:** Create `server/src/game/poker/engine/cards/statuses.ts`、`server/src/game/poker/engine/cards/deadlines.ts`、`server/src/game/poker/engine/__tests__/card-statuses.spec.ts`、`server/src/game/poker/engine/__tests__/card-deadlines.spec.ts`；Modify `server/src/game/poker/engine/cards/types.ts`、`server/src/game/poker/engine/hand-runner.ts`。
 **Interfaces:** Produces `registerCardStatusOperations`、`TurnClock/DeadlineOperation`、`applyDeadlineOperation`；支付豁免通过T4的通用modifier接入，不让筹码模块读取卡牌ID。
 
-- [ ] **1. 写失败测试。** `shield_first_effect_only`只耗第一个有效防护；`dispel_polarity`断言45移除别人正面触发48、移负面不触发；`cleanse_public_child_not_knowledge`断言46能移除60子标记且父仍在不重挂；`cleanse_ignores_surcharge`断言46不触发49，选中49才移除。`clock_keeps_start`在start=0/deadline=600000/now=100000翻倍后deadline=1100000，重复延时不越1200000；300秒缩时在期限内净化返还300秒，过期拒绝。 断言示例：`expect(afterDouble).toMatchObject({startedAt:0,deadlineAt:1100000}); expect(afterRepeatedExtension.deadlineAt).toBe(1200000)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-statuses.spec.ts src/game/poker/engine/__tests__/card-deadlines.spec.ts`。
-- [ ] **3. 实现状态语义。** 完整落实设计第7节驱散表、敌意、次数和全场替换；53同族不叠加；56本阶段每人触发标记不因同族替换清零；57派生抽牌不再增强自身。已完成资金/抽牌/51及52加时不可驱散。
-- [ ] **4. 同命令验证绿灯。** 覆盖47反窥被43拦截且不回环、弃牌后全场仍持续、全下获钱不复活行动、状态65个原子拒绝、驱散54不撤回已确定回合的加时、结算/取消清空运行状态。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 支持卡牌持续触发防护驱散与限时修正'`。
+- [x] **1. 写失败测试。** `shield_first_effect_only`只耗第一个有效防护；`dispel_polarity`断言45移除别人正面触发48、移负面不触发；`cleanse_public_child_not_knowledge`断言46能移除60子标记且父仍在不重挂；`cleanse_ignores_surcharge`断言46不触发49，选中49才移除。`clock_keeps_start`在start=0/deadline=600000/now=100000翻倍后deadline=1100000，重复延时不越1200000；300秒缩时在期限内净化返还300秒，过期拒绝。 断言示例：`expect(afterDouble).toMatchObject({startedAt:0,deadlineAt:1100000}); expect(afterRepeatedExtension.deadlineAt).toBe(1200000)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-statuses.spec.ts src/game/poker/engine/__tests__/card-deadlines.spec.ts`。
+- [x] **3. 实现状态语义。** 完整落实设计第7节驱散表、敌意、次数和全场替换；53同族不叠加；56本阶段每人触发标记不因同族替换清零；57派生抽牌不再增强自身。已完成资金/抽牌/51及52加时不可驱散。
+- [x] **4. 同命令验证绿灯。** 覆盖47反窥被43拦截且不回环、弃牌后全场仍持续、全下获钱不复活行动、状态65个原子拒绝、驱散54不撤回已确定回合的加时、结算/取消清空运行状态。
+- [x] **5. 本地提交。** `git commit -m 'feat: 支持卡牌持续触发防护驱散与限时修正'`。
 
 
 ## Task 8: 声明式接入完整60张与版本快照

@@ -7,12 +7,14 @@ import { applyBet, betToMatch, type Decision, type EngineSeat, type BettingState
 import { assertHandIntegrity, type RollState } from "./roll"
 import type { CardModeState } from "./cards/pool"
 import type { ReserveState } from "./chips/types"
+import type { TurnClock } from "./cards/deadlines"
 export { quoteRoll, startRoll, chooseRollCard, assertHandIntegrity, ROLL_PRICING_VERSION } from "./roll"
 export type { RollHistory, RollKind, RollState, RollQuote, RollOffer } from "./roll"
 export { legalActions } from "./betting"
 export interface HandState extends BettingState, PokerRules {
   cards?: CardModeState
   reserve?: ReserveState
+  turnClock?: TurnClock | null
   street: "preflop" | "flop" | "turn" | "river" | "settled"
   dealerSeat: number
   burnedCards?: string[]

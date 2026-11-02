@@ -14,6 +14,7 @@ export interface CardModeState {
   participants: CardParticipant[]; effects: EffectInstance[]; used: CardUseRecord[]; privateResults: CardPrivateResult[]
   pending: PendingChoice | null; dealtStages: string[]; deckRevision: number
   publicMarkers?: PublicCardMarker[]
+  tideUsed?: Record<string, string[]>
 }
 export type CardPoolOperation =
   | { kind: "deal"; stage: "initial" | "flop" | "turn" | "river"; dealerSeat: number }
