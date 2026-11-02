@@ -3,7 +3,7 @@ import { Button, Description, FieldError, Form, Input, Label, Modal, NumberField
 import { Minus, Plus } from "lucide-react"
 import { POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS, POKER_MAX_SEATS, type GameFunding, type PokerBlindPreset, type PokerVariant } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
-import { PokerCoinText } from "./PokerCoinText"
+import { PokerDiamondText } from "./PokerDiamondText"
 
 export interface PokerRoomDraft {
   name: string
@@ -88,14 +88,14 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                     <Switch.Control><Switch.Thumb /></Switch.Control>
                     <Label>Roll 换牌</Label>
                   </Switch.Content>
-                  <Description><PokerCoinText text="普通 1／超级 3 金币；另付筹码"/></Description>
+                  <Description><PokerDiamondText text="普通 1／超级 3 钻石；另付筹码"/></Description>
                 </Switch>
                 {value.roll && <NumberField value={coins} onChange={rollCoins => update({rollCoins})} minValue={1} maxValue={POKER_MAX_ROLL_COINS} step={1} isRequired isInvalid={!validCoins} isDisabled={busy} variant="secondary">
-                  <Label htmlFor="poker-roll-coins"><PokerCoinText text="每手金币"/></Label>
+                  <Label htmlFor="poker-roll-coins"><PokerDiamondText text="每手钻石"/></Label>
                   <NumberField.Group>
-                    <NumberField.DecrementButton aria-label="减少每手金币" />
+                    <NumberField.DecrementButton aria-label="减少每手钻石" />
                     <NumberField.Input id="poker-roll-coins" />
-                    <NumberField.IncrementButton aria-label="增加每手金币" />
+                    <NumberField.IncrementButton aria-label="增加每手钻石" />
                   </NumberField.Group>
                   <FieldError>请输入有效的正整数</FieldError>
                 </NumberField>}

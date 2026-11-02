@@ -90,7 +90,7 @@ export class PokerService {
       const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)
       rules = resolveRules({ variant: input.variant, smallBlind, bigBlind, ...(input.ruleOptions ? { ruleOptions: input.ruleOptions } : {}), ...(input.ruleOptions?.roll ? { rollPricingVersion: ROLL_PRICING_VERSION } : {}) })
     } catch {
-      reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库、盲注和每手金币额度。")
+      reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库、盲注和每手钻石额度。")
     }
     const id =
       input.creationId === undefined

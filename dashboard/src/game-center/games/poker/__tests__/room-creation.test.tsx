@@ -62,8 +62,8 @@ describe("建房请求身份", () => {
     await clickSwitchPart(document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!)
     const coins=document.getElementById("poker-roll-coins") as HTMLInputElement
     expect(coins?.value).toBe("12")
-    expect(document.body.textContent).toContain("普通 1／超级 3 金币")
-    await act(async()=>[...document.querySelectorAll<HTMLButtonElement>("button")].find(b=>b.getAttribute("aria-label")==="增加每手金币")!.click())
+    expect(document.body.textContent).toContain("普通 1／超级 3 钻石")
+    await act(async()=>[...document.querySelectorAll<HTMLButtonElement>("button")].find(b=>b.getAttribute("aria-label")==="增加每手钻石")!.click())
     expect(coins.value).toBe("13")
     await submit()
     expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ruleOptions:{roll:true,rollCoins:13}}))

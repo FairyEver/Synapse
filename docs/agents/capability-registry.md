@@ -1,8 +1,8 @@
 # 能力注册清单
 
-- 2026-11-02 每手金币配置：既有room.create输入ruleOptions追加可选rollCoins（正整数，默认12），房规响应同步该字段；每手coinPolicy冻结额度，normal/super消耗仍固定1/3，拒绝费率注入。仅扩展既有schema、描述和系统Skill；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变，无数据库迁移。
+- 2026-11-02 每手钻石配置：既有room.create输入ruleOptions追加可选rollCoins（正整数，默认12），房规响应同步该字段；每手coinPolicy冻结额度，normal/super消耗仍固定1/3，拒绝费率注入。仅扩展既有schema、描述和系统Skill；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变，无数据库迁移。
 
-- 2026-11-02 Roll 金币：既有本人 `table.state` / `table.wait` 报价追加可选 `coins={balance,limit}`，各档追加可选 `coinCost`；待选 wait 同时提供 `roll` 报价。启用Roll的新手每人12金币，normal/super扣1/3，choose不重复扣费，仍另付筹码；旧手无金币快照沿原规则完成。同步schema、工具描述、系统Skill与Agent指南，无新增输入、数据库字段或注册项；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变。
+- 2026-11-02 Roll 钻石：既有本人 `table.state` / `table.wait` 报价追加可选 `coins={balance,limit}`，各档追加可选 `coinCost`；待选 wait 同时提供 `roll` 报价。启用Roll的新手每人12钻石，normal/super扣1/3，choose不重复扣费，仍另付筹码；旧手无钻石快照沿原规则完成。同步schema、工具描述、系统Skill与Agent指南，无新增输入、数据库字段或注册项；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变。
 
 - 2026-11-02 连续 Roll：既有 `app.game.poker.roll.start` 允许超级待选时在原 cardIndex 按当前报价再次付费，成功放回旧候选且不退旧费用；输入/响应 schema 不变。MCP 描述、系统 Skill、生成 API 参考与 Agent 指南同步；无新增注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
 
