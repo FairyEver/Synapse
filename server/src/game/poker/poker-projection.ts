@@ -10,6 +10,7 @@ export type PokerViewPolicy = {
   perspective: "owner" | "public"
   everJoined: boolean
   mode: string
+  cardMode?: boolean
 }
 export function canSeeHole(
   userId: string,
@@ -24,7 +25,7 @@ export function canSeeHole(
     if (!policy.everJoined) return true
     if (policy.mode === "practice" && participantKind === "bot") return true
   }
-  return (policy.perspective === "owner" && userId === targetUserId) ||
+  return (policy.perspective === "owner" && userId === targetUserId && !(policy.cardMode && policy.audience === "decision")) ||
     (participating && shown && !folded)
 }
 const object = (value: unknown): Record<string, any> =>
@@ -32,6 +33,11 @@ const object = (value: unknown): Record<string, any> =>
 const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((c): c is string => typeof c === "string") : []
 const numbers = (value: unknown): number[] => Array.isArray(value) ? value.filter((c): c is number => Number.isSafeInteger(c)) : []
 const amount = (value: unknown, fallback = 0): number => Number.isSafeInteger(value) ? value as number : fallback
+export function publicHandResult(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const record = value as Record<string, unknown>
+  return Object.fromEntries(["payouts", "pots", "deltas", "rollPaid", "rollReceived", "reservePaid", "reserveReceived", "reserveStolen", "reserveRefunded"].filter(key => key in record).map(key => [key, record[key]]))
+}
 export function projectSettlement(
   hand: GamePokerHand | ArchivedHand["hand"],
   participants: GamePokerHandSeat[],
@@ -43,6 +49,7 @@ export function projectSettlement(
   const result = object(hand.result), payouts = object(result.payouts), deltas = object(result.deltas)
   const saved = object(hand.rules), state = "engineState" in hand ? object(hand.engineState) : {}
   const rules = resolveRules({ ...state, ...saved } as Partial<PokerRules>)
+  const effectivePolicy = { ...policy, cardMode: !!rules.ruleOptions?.cards }
   const board = strings(hand.board), shown = numbers(hand.showdownSeats)
   const participating = participants.some((s) => s.userId === userId)
   const controlSources = new Map<string, Set<string>>()
@@ -59,7 +66,7 @@ export function projectSettlement(
     rules,
     seats: participants.map((s) => {
       const hole = strings(s.holeCards)
-      const visible = canSeeHole(userId, s.userId, s.participantKind ?? "human", s.folded, shown.includes(s.seatNo), participating, policy)
+      const visible = canSeeHole(userId, s.userId, s.participantKind ?? "human", s.folded, shown.includes(s.seatNo), participating, effectivePolicy)
       const endingStack = amount(s.endingStack, s.startingStack + amount(deltas[s.seatNo]))
       return {
         seatNo: s.seatNo,

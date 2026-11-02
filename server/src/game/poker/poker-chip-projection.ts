@@ -27,6 +27,7 @@ export async function projectChipState(tx: Pick<Prisma.TransactionClient,"gamePo
   const paid = new Map(rolls.map(r=>[r.id,r]))
   const consume = (actions: ChipAction[]) => {
     for (const action of actions) {
+      if (action.action === "card_play" || action.action === "card_choose") continue
       if (action.action==="roll_choose") continue
       const fund = action.action==="roll_start" ? "roll" : "pot"
       const amount = fund==="roll" ? paid.get(action.rollId ?? "")?.fee : action.amount

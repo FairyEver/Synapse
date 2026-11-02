@@ -6,6 +6,8 @@ import { PokerService } from "./poker.service"
 import { archiveData, type ArchivedHand } from "./poker-archive.service"
 import { projectSettlement, type PokerViewPolicy } from "./poker-projection"
 import { reject } from "./poker-error"
+import { projectResolutionFrame } from "./poker-card-projection"
+import type { ResolutionFrame } from "./engine/cards/types"
 const MAX_SEQ = 2147483647
 const REALTIME_WINDOW_MS = 120000
 const timestamp = (value: Date | string | null): number => value ? new Date(value).getTime() : 0
@@ -18,6 +20,7 @@ function projectAction(action: GamePokerAction, seats: GamePokerHandSeat[], user
     street: action.street,
     action: action.action,
     amount: action.amount,
+    ...(action.nominalAmount == null ? {} : { nominalAmount: action.nominalAmount, waivedAmount: action.waivedAmount ?? 0 }),
     potAfter: action.potAfter,
     isAuto: action.isAuto,
     actionSource: source === "human" || source === "rules_bot" || source === "timeout" ? source : "mcp",
@@ -55,7 +58,7 @@ export class PokerEventsService {
         select: { id: true },
       })
       const policy: PokerViewPolicy = {
-        audience, perspective, mode: c.room.mode,
+        audience, perspective: c.room.cardRulesVersion && audience === "decision" ? "public" : perspective, mode: c.room.mode, cardMode: !!c.room.cardRulesVersion,
         everJoined: !!session || c.seats.some((s) => s.userId === userId),
       }
       const since = new Date(c.now.getTime() - REALTIME_WINDOW_MS)
@@ -75,6 +78,7 @@ export class PokerEventsService {
       }
       for (const hand of hot) records.set(hand.handNo, { hand })
       const events: PokerTableEvent[] = []
+      const frames = new Map<string, import("@synapse/shared/game-contracts").PokerResolutionFrameView>()
       for (const { hand, archive } of [...records.values()].sort((a, b) => a.hand.handNo - b.hand.handNo)) {
         if (hand.handNo < handNo.gte || hand.handNo > handNo.lte ||
             (hand.handNo === position[0] && position[1] === MAX_SEQ) ||
@@ -87,6 +91,11 @@ export class PokerEventsService {
           : await c.tx.gamePokerAction.findMany({ where: { handId: hand.id, seq: { gt: afterSeq }, createdAt: { gte: since } }, orderBy: { seq: "asc" }, take: remaining })
         const rollIds = actions.filter(a => a.rollId).map(a => a.rollId!)
         const rolls = archive?.rolls ?? (rollIds.length ? await c.tx.gamePokerRoll.findMany({ where: { handId: hand.id, id: { in: rollIds } }, take: 101 }) : [])
+        if (actions.length && c.room.chipRulesVersion === "chips-v2") {
+          const seqs = actions.map(a => a.seq)
+          const roots = archive ? archive.resolutions.filter(r => seqs.includes(r.seq)) : await c.tx.gamePokerResolution.findMany({ where: { handId: hand.id, seq: { in: seqs } }, orderBy: { seq: "asc" }, take: 101 })
+          for (const root of roots) frames.set(`${hand.handNo}:${root.seq}`, projectResolutionFrame(root.data as unknown as ResolutionFrame))
+        }
         for (const action of actions) {
           if (action.action.startsWith("roll_")) {
             const roll = rolls.find(r => r.id === action.rollId)
@@ -111,7 +120,7 @@ export class PokerEventsService {
         if (events.length > limit) break
       }
       const page = events.slice(0, limit), last = page.at(-1)
-      return { events: page, cursor: last ? `${last.handNo}:${last.seq}` : latest, hasMore: events.length > limit }
+      return { events: page, ...(frames.size ? { frames: page.flatMap(e => { const frame = frames.get(`${e.handNo}:${e.seq}`); return frame ? [frame] : [] }) } : {}), cursor: last ? `${last.handNo}:${last.seq}` : latest, hasMore: events.length > limit }
     }, new Date(), false)
   }
 }

@@ -15,7 +15,7 @@ export interface PokerCardChooseInput extends PokerCardWriteInput { choiceId: st
 export interface PokerCardResult { ok: true; handId: string; actionSeq: number; cursor: string; status: "completed" | "choice_required" | "blocked" }
 export interface PokerCardDefinitionView { id: string; name: string; description: string; artId: string; cost: number }
 export interface PokerCardChoiceSpec { key: string; label: string; kind: "hole" | "player" | "ability" | "status" | "color"; options: { value: string; label: string }[] }
-export interface PokerCardHandView { instanceId: string; card: PokerCardDefinitionView; available: boolean; reason?: string; payment: PokerPaymentView; choices: PokerCardChoiceSpec[] }
+export interface PokerCardHandView { instanceId: string; cardId: string; available: boolean; reason?: string; payment: PokerPaymentView; choices: PokerCardChoiceSpec[] }
 export interface PokerCardStatusView {
   id: string; cardId: string; title: string; polarity: "positive" | "negative" | "neutral"
   seatNo?: number; remaining?: number; expiresAt?: number; expiresStreet?: string; dispellable: boolean
@@ -26,6 +26,7 @@ export interface PokerCardPendingView {
 }
 export interface PokerCardView {
   enabled: boolean; version: string
+  definitions?: Record<string, PokerCardDefinitionView>
   ownHand?: PokerCardHandView[]; pending?: PokerCardPendingView | null
   used: { id: string; cardId: string; name: string; seatNo: number; seq: number; status: "completed" | "blocked" | "choice_required" }[]
   statuses: PokerCardStatusView[]
@@ -34,6 +35,7 @@ export interface PokerCardView {
 export interface PokerResolutionEventView {
   index: number; type: string; actorSeatNo?: number; targetSeatNo?: number; cardId?: string
   amount?: number; nominalAmount?: number; waivedAmount?: number; status?: string; cards?: string[]
+  color?: "red" | "black"; matched?: boolean; count?: number
 }
 export interface PokerResolutionFrameView { id: string; handId: string; seq: number; events: PokerResolutionEventView[] }
 export function supportsPokerCardRules(value: string | undefined): boolean {

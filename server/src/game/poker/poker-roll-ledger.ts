@@ -6,7 +6,7 @@ import type { HandState, RollHistory } from "./engine/hand-runner"
 interface RollLedgerInput {
   roomId: string
   userId: string
-  hand: { id: string; status: string }
+  hand: { id: string; status: string; rules?: unknown }
   participants: readonly Pick<GamePokerHandSeat, "seatNo" | "userId" | "admissionId" | "displayName" | "folded">[]
   state?: HandState | null
   archivedRolls?: readonly GamePokerRoll[]
@@ -16,6 +16,7 @@ interface RollLedgerInput {
 /** Public whitelist only. Missing source/identity means unavailable, never a partial zero ledger. */
 export function projectRollLedger(input: RollLedgerInput): PokerRollLedger | undefined {
   const { roomId, userId, hand, participants, state, archivedRolls, archivedActions } = input
+  if (state?.chipRulesVersion === "chips-v2" || hand.rules && typeof hand.rules === "object" && "chipRulesVersion" in hand.rules && hand.rules.chipRulesVersion === "chips-v2") return undefined
   let history: readonly RollHistory[]
   if (state?.roll && Array.isArray(state.roll.history)) history = state.roll.history
   else if (archivedRolls) {

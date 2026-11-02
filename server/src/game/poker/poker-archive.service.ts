@@ -3,13 +3,19 @@ import { Interval } from "@nestjs/schedule"
 import {
   type GamePokerAction,
   type GamePokerRoll,
+  type GamePokerResolution,
   type GamePokerHand,
   type GamePokerHandSeat,
   type GamePokerHandSummary,
   Prisma,
 } from "@prisma/client"
 import { PrismaService } from "../../prisma/prisma.service"
+import type { CardModeState } from "./engine/cards/pool"
+import type { ReserveState } from "./engine/chips/types"
 export interface ArchivedHand {
+  cards?: CardModeState
+  reserve?: ReserveState
+  resolutions: GamePokerResolution[]
   hand: Omit<GamePokerHand, "engineState">
   seats: GamePokerHandSeat[]
   actions: GamePokerAction[]
@@ -27,7 +33,7 @@ export function archiveData(data: Prisma.JsonValue): ArchivedHand {
     !Array.isArray(data.summaries)
   )
     throw new Error("归档手牌数据无效。")
-  return { ...data, rolls: Array.isArray(data.rolls) ? data.rolls : [] } as unknown as ArchivedHand
+  return { ...data, rolls: Array.isArray(data.rolls) ? data.rolls : [], resolutions: Array.isArray(data.resolutions) ? data.resolutions : [] } as unknown as ArchivedHand
 }
 @Injectable()
 export class PokerArchiveService {

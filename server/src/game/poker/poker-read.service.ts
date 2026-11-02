@@ -6,6 +6,11 @@ import { PokerService } from "./poker.service"
 import { reject } from "./poker-error"
 import { archiveData, type ArchivedHand } from "./poker-archive.service"
 import { resolveRules, type PokerRules } from "./engine/rules"
+import { publicHandResult } from "./poker-projection"
+import { projectCardView, projectResolutionFrame } from "./poker-card-projection"
+import { projectReserveView } from "./poker-reserve-projection"
+import { engine } from "./poker-lifecycle"
+import type { ResolutionFrame } from "./engine/cards/types"
 @Injectable()
 export class PokerReadService {
   constructor(private readonly poker: PokerService) {}
@@ -24,6 +29,8 @@ export class PokerReadService {
         variant: true,
         ruleOptions: true,
         rollPricingVersion: true,
+        cardRulesVersion: true,
+        chipRulesVersion: true,
         maxSeats: true,
         buyIn: true,
         status: true,
@@ -81,7 +88,7 @@ export class PokerReadService {
       cursorId = page.at(-1)!.id
     }
   }
-  async history(userId: string, offset = 0, limit = 50, mode: "points" | "practice" = "points") {
+  async history(userId: string, offset = 0, limit = 50, mode: "points" | "practice" = "points", audience: "desktop" | "decision" = "decision") {
     const rows = await this.poker.prisma.$queryRaw<GamePokerHandSummary[]>`
       SELECT "id","roomId","handId","handNo","userId","seatNo","delta","result","holeCards","board","createdAt" FROM (
         SELECT "id","roomId","handId","handNo","userId","seatNo","delta","result","holeCards","board","createdAt" FROM "GamePokerHandSummary" WHERE "userId"=${userId} AND "mode"=${mode}
@@ -92,7 +99,7 @@ export class PokerReadService {
       ) records ORDER BY "createdAt" DESC,"id" DESC LIMIT ${limit + 1} OFFSET ${offset}`
     const rooms = await this.poker.prisma.gamePokerRoom.findMany({
       where: { id: { in: rows.map((r) => r.roomId) } },
-      select: { id: true, code: true, variant: true, smallBlind: true, bigBlind: true, ruleOptions: true, rollPricingVersion: true },
+      select: { id: true, code: true, variant: true, smallBlind: true, bigBlind: true, ruleOptions: true, rollPricingVersion: true, cardRulesVersion: true, chipRulesVersion: true },
       take: limit + 1,
     })
     return {
@@ -105,14 +112,14 @@ export class PokerReadService {
         seatNo: r.seatNo,
         delta: r.delta,
         result: r.result,
-        hole: r.holeCards,
+        hole: audience === "decision" && (rooms.find(room => room.id === r.roomId)?.ruleOptions as { cards?: boolean } | null)?.cards ? [] : r.holeCards,
         board: r.board,
         createdAt: r.createdAt,
       })),
       nextOffset: rows.length > limit ? offset + limit : null,
     }
   }
-  async detail(userId: string, code: string, handNo: number) {
+  async detail(userId: string, code: string, handNo: number, audience: "desktop" | "decision" = "decision") {
     return this.poker.prisma.$transaction(
       async (tx) => {
         const room = await tx.gamePokerRoom.findUnique({ where: { code }, select: { id: true, mode: true } })
@@ -120,12 +127,18 @@ export class PokerReadService {
         const hot = await tx.gamePokerHand.findUnique({
           where: { roomId_handNo: { roomId: room.id, handNo } },
         })
+        let coldData: ArchivedHand | undefined
+        let resolutions: ArchivedHand["resolutions"] = []
         let hand: ArchivedHand["hand"],
           participants: ArchivedHand["seats"],
           actions: ArchivedHand["actions"],
           rolls: ArchivedHand["rolls"] = []
         if (hot) {
           hand = hot
+          if ((hot.rules as { chipRulesVersion?: string } | null)?.chipRulesVersion === "chips-v2") {
+            let afterSeq = -1
+            for (;;) { const page = await tx.gamePokerResolution.findMany({ where: { handId: hot.id, seq: { gt: afterSeq } }, orderBy: { seq: "asc" }, take: 1000 }); resolutions.push(...page); if (page.length < 1000) break; afterSeq = page.at(-1)!.seq }
+          }
           participants = await tx.gamePokerHandSeat.findMany({
             where: { handId: hot.id },
             take: 10,
@@ -160,6 +173,7 @@ export class PokerReadService {
           if (!cold.participantIds.includes(userId))
             reject("POKER_SEAT_NOT_FOUND", "只能读取本人参与的手牌。")
           const data = archiveData(cold.data)
+          coldData = data; resolutions = data.resolutions
           hand = data.hand
           participants = data.seats
           actions = data.actions
@@ -167,10 +181,12 @@ export class PokerReadService {
         }
         if (!participants.some((s) => s.userId === userId))
           reject("POKER_SEAT_NOT_FOUND", "只能读取本人参与的手牌。")
+        const cardMode = !!(hand.rules as { ruleOptions?: { cards?: boolean } } | null)?.ruleOptions?.cards
+        const privateAllowed = !cardMode || audience === "desktop"
         const versionIds = [
           ...new Set(
             actions
-              .filter((a) => a.userId === userId && a.personaVersionId)
+              .filter((a) => privateAllowed && a.userId === userId && a.personaVersionId)
               .map((a) => a.personaVersionId!),
           ),
         ]
@@ -185,7 +201,12 @@ export class PokerReadService {
           )
         }
         const shown = Array.isArray(hand.showdownSeats) ? hand.showdownSeats : []
+        const state = hot ? engine(hot) : null, ownParticipant = participants.find(p => p.userId === userId)
+        const cardState = state ?? (coldData?.cards ? { archived: true as const, cards: coldData.cards, street: hand.street, seats: participants.map(p => ({ seatNo: p.seatNo, hole: p.holeCards as string[] })) } : null)
+        const cards = cardState ? projectCardView(cardState, { audience, perspective: "owner", handId: hand.id, actionSeq: hand.actionSeq, nowMs: Date.now(), ...(ownParticipant?.admissionId ? { self: { userId, admissionId: ownParticipant.admissionId, seatNo: ownParticipant.seatNo, controlVersion: 0 } } : {}) }) : undefined
+        const reserve = projectReserveView({ roomId: room.id, handId: hand.id, status: hand.status, userId, participants, state: state?.reserve ?? coldData?.reserve })
         return {
+          ...(cards ? { cards } : {}), ...(reserve ? { reserve } : {}), ...(resolutions.length ? { frames: resolutions.map(r => projectResolutionFrame(r.data as unknown as ResolutionFrame)) } : {}),
           mode: room.mode,
           rules: resolveRules((hand.rules ?? {}) as Partial<PokerRules>),
           handId: hand.id,
@@ -193,7 +214,7 @@ export class PokerReadService {
           roomCode: code,
           board: hand.board,
           street: hand.street,
-          result: hand.result,
+          result: publicHandResult(hand.result),
           seats: participants.map((s) => ({
             seatNo: s.seatNo,
             displayName: s.displayName,
@@ -201,23 +222,24 @@ export class PokerReadService {
             startingStack: s.startingStack,
             endingStack: s.endingStack,
             folded: s.folded,
-            ...(s.userId === userId || (!s.folded && shown.includes(s.seatNo))
+            ...(privateAllowed && s.userId === userId || (!s.folded && shown.includes(s.seatNo))
               ? { hole: s.holeCards }
               : {}),
           })),
           rollHistory: actions.filter(a => a.rollId && a.action.startsWith("roll_")).flatMap(a => { const roll = rolls.find(r => r.id === a.rollId); return roll ? [publicRoll(roll, a, participants)] : [] }),
-          privateRolls: rolls.filter(r => r.userId === userId && participants.some(p => p.userId === userId && p.admissionId === r.admissionId && p.seatNo === r.seatNo)).map(privateRoll),
+          ...(privateAllowed ? { privateRolls: rolls.filter(r => r.userId === userId && participants.some(p => p.userId === userId && p.admissionId === r.admissionId && p.seatNo === r.seatNo)).map(privateRoll) } : {}),
           actions: actions.filter(a => !a.action.startsWith("roll_")).map((a) => ({
             seq: a.seq,
             seatNo: a.seatNo,
             street: a.street,
             action: a.action,
             amount: a.amount,
+            ...(a.nominalAmount == null ? {} : { nominalAmount: a.nominalAmount, waivedAmount: a.waivedAmount ?? 0 }),
             potAfter: a.potAfter,
             isAuto: a.isAuto,
             actionSource: a.actionSource ?? (a.isAuto ? "timeout" : "mcp"),
             elapsedMs: a.elapsedMs,
-            ...(a.userId === userId
+            ...(privateAllowed && a.userId === userId
               ? {
                   note: a.note,
                   personaVersion: versions.find((v) => v.id === a.personaVersionId)
@@ -299,16 +321,16 @@ export class PokerReadService {
           WHEN position=CASE WHEN seats=2 THEN 2 ELSE 3 END THEN "bigBlind" ELSE 0 END) AS blind
         FROM positions
       ), all_moves AS (
-        SELECT action."handId",action."seq",action."seatNo",action."userId",action."street",action."action",action."amount",action."isAuto"
+        SELECT action."handId",action."seq",action."seatNo",action."userId",action."street",action."action",action."amount",COALESCE(action."nominalAmount",action."amount") AS "nominalAmount",action."isAuto"
         FROM "GamePokerAction" action JOIN played ON played."handId"=action."handId"
         UNION ALL
-        SELECT action->>'handId',(action->>'seq')::int,(action->>'seatNo')::int,action->>'userId',action->>'street',action->>'action',(action->>'amount')::int,(action->>'isAuto')::boolean
+        SELECT action->>'handId',(action->>'seq')::int,(action->>'seatNo')::int,action->>'userId',action->>'street',action->>'action',(action->>'amount')::int,COALESCE((action->>'nominalAmount')::int,(action->>'amount')::int),(action->>'isAuto')::boolean
         FROM "GamePokerHandArchive" archive CROSS JOIN LATERAL jsonb_array_elements(archive."data"->'actions') AS entry(action)
         JOIN played ON played."handId"=archive."id" WHERE archive."participantIds" @> ARRAY[${userId}]::text[]
       ), contributions AS (
-        SELECT all_moves.*,COALESCE(blinds."bigBlind",2) AS "bigBlind",sum("amount") OVER(PARTITION BY "handId","street","seatNo" ORDER BY "seq")
+        SELECT all_moves.*,COALESCE(blinds."bigBlind",2) AS "bigBlind",sum("nominalAmount") OVER(PARTITION BY "handId","street","seatNo" ORDER BY "seq")
           + CASE WHEN "street"='preflop' THEN COALESCE(blinds.blind,0) ELSE 0 END AS "streetBetAfter"
-        FROM all_moves LEFT JOIN blinds USING("handId","seatNo") WHERE "action" NOT IN ('roll_start','roll_choose')
+        FROM all_moves LEFT JOIN blinds USING("handId","seatNo") WHERE "action" NOT IN ('roll_start','roll_choose','card_play','card_choose')
       ), prior_bets AS (
         SELECT *,GREATEST(CASE WHEN "street"='preflop' THEN "bigBlind" ELSE 0 END,
           max("streetBetAfter") OVER(PARTITION BY "handId","street" ORDER BY "seq" ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)) AS "priorBet"

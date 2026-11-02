@@ -100,7 +100,7 @@ export function planCardPlay(h: HandState, input: PokerCardPlayInput, context: R
     { type: "chips.pay", input: { seatNo: person.seatNo, nominalAmount: quote.nominalAmount, purpose: "card", revision: quote.revision, version: quote.version, components: quote.components, surchargeIds: quote.surchargeIds }, cardId: definition.id },
     { type: "ability.consume", input: { admissionId: person.admissionId, instanceIds: [input.instanceId, ...(definition.consumeSelected ? [String(input.selections.ability)] : [])] }, cardId: definition.id },
     { type: "ability.resolve", input: { steps, hostile: definition.tags.includes("hostile"), singleTarget: definition.tags.includes("single"), ...(target === undefined ? {} : { targetSeatNo: target }) }, cardId: definition.id },
-    { type: "ability.recordPlay", input: { instanceId: input.instanceId, cardId: definition.id, seatNo: person.seatNo }, cardId: definition.id },
+    { type: "ability.recordPlay", input: { instanceId: input.instanceId, cardId: definition.id, seatNo: person.seatNo, paidAmount: quote.paidAmount, nominalAmount: quote.nominalAmount, waivedAmount: quote.waivedAmount }, cardId: definition.id },
     { type: "ability.played", input: { admissionId: person.admissionId, seatNo: person.seatNo }, cardId: definition.id, audience: "public" },
   ]
 }
@@ -115,7 +115,7 @@ export function createCardOperationRegistry(catalog: CardRegistry): OperationReg
   registerPokerCardOperations(registry); registerCardStatusOperations(registry); registerChipCardOperations(registry)
   registry.register({ id: "ability.resolve", schema: z.object({ steps: z.array(z.object({ type: z.string(), input: z.record(z.string(), z.unknown()), cardId: z.string().optional() }).strict()), hostile: z.boolean(), singleTarget: z.boolean(), targetSeatNo: z.number().int().optional() }).strict(), apply(_h, input, api) { for (const step of input.steps) api.enqueue(step) } })
   registry.register({ id: "ability.consume", schema: z.object({ admissionId: z.string(), instanceIds: z.array(z.string()) }).strict(), apply(h, input, api) { h.cards = applyCardPoolOperation(h.cards!, { kind: "consume", ...input }, api.context).state } })
-  registry.register({ id: "ability.recordPlay", schema: z.object({ instanceId: z.string(), cardId: z.string(), seatNo: z.number().int() }).strict(), apply(h, input, api) {
+  registry.register({ id: "ability.recordPlay", schema: z.object({ instanceId: z.string(), cardId: z.string(), seatNo: z.number().int(), paidAmount: z.number().int().nonnegative(), nominalAmount: z.number().int().nonnegative(), waivedAmount: z.number().int().nonnegative() }).strict(), apply(h, input, api) {
     h.cards!.used.push({ id: api.context.nextId(), ...input, seq: api.context.actionSeq, status: h.cards!.pending ? "choice_required" : "completed" })
   } })
   registry.register({ id: "ability.draw", schema: z.object({ admissionId: z.string(), count: z.number().int().nonnegative().max(1024), reason: z.enum(["card", "trigger", "stage"]) }).strict(), apply(h, input, api) {

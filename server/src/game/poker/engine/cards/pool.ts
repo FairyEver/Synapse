@@ -5,7 +5,7 @@ import { CardRuleError } from "./types"
 
 export interface CardInstance { id: string; definitionId: string }
 export interface CardParticipant { admissionId: string; userId: string; seatNo: number; kind: "human" | "bot"; folded: boolean; allIn: boolean; active?: boolean }
-export interface CardUseRecord { id: string; instanceId: string; cardId: string; seatNo: number; seq: number; status: "completed" | "blocked" | "choice_required" }
+export interface CardUseRecord { id: string; instanceId: string; cardId: string; seatNo: number; seq: number; status: "completed" | "blocked" | "choice_required"; paidAmount?: number; nominalAmount?: number; waivedAmount?: number }
 export interface CardPrivateResult { id: string; ownerAdmissionId: string; cardId: string; label: string; values: string[]; valid: boolean; deckRevision?: number }
 export interface PublicCardMarker { id: string; card: string; cardId: string; ownerAdmissionId: string; sourceInstanceId?: string; expiresStreet?: string; parentEffectId?: string; dispellable: boolean }
 export interface CardModeState {

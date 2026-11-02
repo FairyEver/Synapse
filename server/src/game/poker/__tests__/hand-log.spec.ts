@@ -16,6 +16,14 @@ const actions = [
 const rolls = [{ id: "r1", seatNo: 0, kind: "super", fee: 40, count: 1, selectedIndex: 0, oldCard: "As", candidates: ["Ks"], cardIndex: 0 }]
 const input = { roomId: "room", hand, participants, actions, rolls, pendingRollId: null }
 describe("本手公开行动日志", () => {
+  it("新资金规则允许零实付Roll，出牌仅显示实际施放身份", () => {
+    const funded = { ...hand, rules: { ...hand.rules, chipRulesVersion: "chips-v2" } }
+    const paid = projectHandLog({ ...input, hand: funded, rolls: [{ ...rolls[0], fee: 0 }] })
+    expect(paid?.entries[2]).toMatchObject({ action: "roll", amount: 0 })
+    const cardAction = { ...actions[2], seq: 1, action: "card_play", amount: 0 }
+    const log = projectHandLog({ ...input, hand: { ...funded, actionSeq: 1 }, actions: [cardAction], cards: [{ cardId: "24", seq: 1, status: "completed" }] })
+    expect(log?.entries.at(-1)).toMatchObject({ action: "card", card: { id: "24", name: "弃旧图新" } })
+  })
   it("实际短筹码盲注先行，下注和Roll按seq合并且choose不重复收费", () => {
     const log = projectHandLog(input)!
     expect(log.complete).toBe(true)

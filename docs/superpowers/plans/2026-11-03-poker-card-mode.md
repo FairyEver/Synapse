@@ -202,11 +202,11 @@
 **Files:** Create `server/src/game/poker/poker-card-projection.ts`、`server/src/game/poker/poker-reserve-projection.ts`、`server/src/game/poker/__tests__/card-projection.spec.ts`、`server/src/game/poker/__tests__/card-archive.spec.ts`；Modify `server/src/game/poker/poker-projection.ts`、`server/src/game/poker/poker-read.service.ts`、`server/src/game/poker/poker-events.service.ts`、`server/src/game/poker/poker-archive.service.ts`、`server/src/game/poker/poker-hand-log.ts`、`server/src/game/poker/poker-roll-stats.ts`、`server/src/game/poker/poker-roll-ledger.ts`、`server/src/game/poker/poker-chip-projection.ts`、`server/src/game/poker/poker-pot-contributions.ts`。
 **Interfaces:** Produces T10两项投影函数、版本化根帧读取和归档字段；Consumes T1/T8/T9及现有`PokerViewPolicy`。完整源保存在快照/审计，近期事件只为表现。
 
-- [ ] **1. 写失败测试。** `owner_public_mcp_matrix`以两个账号同房+未入座教学视角断言，仅核实本人Web视角有ownHand/pending/privateResults；卡牌房MCP即使请求owner也没有暗牌或私有结果；`discard_is_not_public_play`额外消耗牌身份不公开。`whole_frame_pagination`页尾不能截断同一根帧。 断言示例：`expect(publicView).not.toHaveProperty("ownHand"); expect(mcpView).not.toHaveProperty("privateResults")`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/__tests__/card-projection.spec.ts src/game/poker/__tests__/card-archive.spec.ts`。
-- [ ] **3. 实现公开白名单。** 只公开已施放名称和实际公开结果；本人持牌使用实例引用+去重定义字典，其他人不常驻披露持牌数。暂存余额来自完整权威状态，明细最多1000项并带complete=false，缺源显示不可用而非零。旧rollLedger只按旧语义解释，新规则使用reserve来源/去向分列，不把退款改写为未支付。
-- [ ] **4. 同命令验证绿灯。** 覆盖热/冷归档往返、原入座离开重入、public本地防御性删除、根帧重读不再随机/触发、零实付Roll仍保留次数但支出0、公开标记交换/净化后历史知识保留。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 隔离卡牌私密结果并归档暂存与触发过程'`。
+- [x] **1. 写失败测试。** `owner_public_mcp_matrix`以两个账号同房+未入座教学视角断言，仅核实本人Web视角有ownHand/pending/privateResults；卡牌房MCP即使请求owner也没有暗牌或私有结果；`discard_is_not_public_play`额外消耗牌身份不公开。`whole_frame_pagination`页尾不能截断同一根帧。 断言示例：`expect(publicView).not.toHaveProperty("ownHand"); expect(mcpView).not.toHaveProperty("privateResults")`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/__tests__/card-projection.spec.ts src/game/poker/__tests__/card-archive.spec.ts`。
+- [x] **3. 实现公开白名单。** 只公开已施放名称和实际公开结果；本人持牌使用实例引用+去重定义字典，其他人不常驻披露持牌数。暂存余额来自完整权威状态，明细最多1000项并带complete=false，缺源显示不可用而非零。旧rollLedger只按旧语义解释，新规则使用reserve来源/去向分列，不把退款改写为未支付。
+- [x] **4. 同命令验证绿灯。** 覆盖热/冷归档往返、原入座离开重入、public本地防御性删除、根帧重读不再随机/触发、零实付Roll仍保留次数但支出0、公开标记交换/净化后历史知识保留。
+- [x] **5. 本地提交。** `git commit -m 'feat: 隔离卡牌私密结果并归档暂存与触发过程'`。
 
 
 ## Task 11: 接入开局、下注、Roll、用牌与超时协调

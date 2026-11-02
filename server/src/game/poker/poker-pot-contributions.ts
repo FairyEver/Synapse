@@ -18,6 +18,7 @@ const amountIsValid = (amount: number) => Number.isSafeInteger(amount) && amount
 /** Public immutable hand identities only; absent/corrupt sources never become a partial zero. */
 export function projectPotContributions(input: PotContributionsInput): PokerPotContributions | undefined {
   const { roomId, userId, hand, participants, state, archivedActions } = input
+  const funded = state?.chipRulesVersion === "chips-v2" || !!hand.rules && typeof hand.rules === "object" && "chipRulesVersion" in hand.rules && hand.rules.chipRulesVersion === "chips-v2"
   if (!hand.id || participants.length < 2 || participants.length > 10 || participants.some(player =>
     !player || player.handId !== hand.id || !player.userId || !Number.isInteger(player.seatNo) || player.seatNo < 0 || player.seatNo > 9 ||
     typeof player.displayName !== "string" || typeof player.folded !== "boolean" || !amountIsValid(player.startingStack) || player.startingStack === 0) ||
@@ -29,7 +30,7 @@ export function projectPotContributions(input: PotContributionsInput): PokerPotC
     if (!Array.isArray(state.seats) || state.seats.some(seat => !seat) || state.seats.length !== participants.length || new Set(state.seats.map(seat => seat.seatNo)).size !== participants.length) return undefined
     for (const player of participants) {
       const seat = state.seats.find(seat => seat.seatNo === player.seatNo)
-      if (!seat || seat.startingStack !== player.startingStack || !amountIsValid(seat.total) || seat.total > player.startingStack || typeof seat.folded !== "boolean") return undefined
+      if (!seat || seat.startingStack !== player.startingStack || !amountIsValid(seat.total) || !funded && seat.total > player.startingStack || typeof seat.folded !== "boolean") return undefined
       amounts.set(player.seatNo, seat.total)
     }
   } else {
@@ -51,14 +52,14 @@ export function projectPotContributions(input: PotContributionsInput): PokerPotC
     for (const [index, action] of ordered.entries()) {
       const player = participants.find(player => player.seatNo === action.seatNo)
       if (action.seq !== index + 1 || action.handId !== hand.id || action.roomId !== roomId || !player || action.userId !== player.userId || !amountIsValid(action.amount)) return undefined
-      if (action.action === "roll_start" || action.action === "roll_choose") {
+      if (["roll_start", "roll_choose", "card_play", "card_choose"].includes(action.action)) {
         if (action.amount !== 0) return undefined
         continue
       }
       if (!["fold", "check", "call", "bet", "raise", "allin"].includes(action.action) ||
           (["fold", "check"].includes(action.action) && action.amount !== 0)) return undefined
       const amount = amounts.get(player.seatNo)! + action.amount
-      if (!amountIsValid(amount) || amount > player.startingStack) return undefined
+      if (!amountIsValid(amount) || !funded && amount > player.startingStack) return undefined
       amounts.set(player.seatNo, amount)
     }
   }

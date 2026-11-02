@@ -166,6 +166,8 @@ export interface PokerSeatView {
   hole?: string[]
 }
 export interface PokerActionView {
+  nominalAmount?: number
+  waivedAmount?: number
   actionSource?: "mcp" | "human" | "timeout" | "rules_bot"
   seq: number
   seatNo: number
@@ -191,11 +193,12 @@ export interface PokerHandLogEntry {
   seatNo: number
   displayName: string
   street: "preflop" | "flop" | "turn" | "river"
-  action: "small_blind" | "big_blind" | "fold" | "check" | "call" | "bet" | "raise" | "allin" | "roll"
+  action: "small_blind" | "big_blind" | "fold" | "check" | "call" | "bet" | "raise" | "allin" | "roll" | "card"
   amount: number
   isAuto: boolean
   actionSource?: "mcp" | "human" | "timeout" | "rules_bot"
   roll?: { kind: PokerRollKind; count: number; status: "pending" | "completed" | "replaced" | "cancelled" }
+  card?: { id: string; name: string; status: "completed" | "blocked" | "choice_required" }
 }
 export interface PokerHandLog { handId: string; complete: boolean; entries: PokerHandLogEntry[] }
 export interface PokerTableView {
@@ -297,6 +300,9 @@ export interface PokerSummaryView {
   createdAt: string
 }
 export interface PokerDetailView {
+  cards?: PokerCardView
+  reserve?: PokerReserveView
+  frames?: PokerResolutionFrameView[]
   rollHistory?: PokerRollPublicView[]
   privateRolls?: PokerRollPrivateView[]
   rules?: PokerRules

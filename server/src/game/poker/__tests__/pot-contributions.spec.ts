@@ -8,6 +8,15 @@ import { PokerActionService } from "../poker-action.service"
 import { rollStore } from "./roll-service-store"
 
 describe("真实牌桌底池来源投影", () => {
+  it("暂存所得可继续投入，新规则允许真实累计超过本人最初带入", () => {
+    const h = startHand([{ seatNo: 0, stack: 500 }, { seatNo: 1, stack: 500 }], 0, orderedDeck())
+    h.seats[0].total = 600
+    const players = h.seats.map(s => ({ handId: "h", seatNo: s.seatNo, userId: `u${s.seatNo}`, admissionId: `a${s.seatNo}`, displayName: "玩家", folded: false, startingStack: 500 }))
+    const input = { roomId: "r", userId: "u0", hand: { id: "h", status: "running", dealerSeat: 0, rules: {}, actionSeq: 0 }, participants: players, state: h }
+    expect(projectPotContributions(input)).toBeUndefined()
+    h.chipRulesVersion = "chips-v2"
+    expect(projectPotContributions(input)?.players[0].amount).toBe(600)
+  })
   it("普通非Roll新手在下注前向所有视角/受众返回实际盲注及原参与身份", async () => {
     const f = await rollStore("points", 3, { ruleOptions: {}, rollPricingVersion: null })
     const actions = new PokerActionService(f.poker)

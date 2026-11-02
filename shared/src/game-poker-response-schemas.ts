@@ -73,6 +73,7 @@ const settlement = z.object({
 const version = z.object({ versionNo: z.number(), persona: z.string() }).passthrough()
 const action = z
   .object({
+    nominalAmount: z.number().int().nonnegative().optional(), waivedAmount: z.number().int().nonnegative().optional(),
     actionSource: z.enum(["mcp", "human", "timeout", "rules_bot"]).optional(),
     seq: z.number(),
     seatNo: z.number(),
@@ -134,13 +135,14 @@ const handLog = z.object({
   entries: z.array(z.object({
     seq: z.number().int().min(-1), seatNo: z.number().int().min(0).max(9), displayName: z.string(),
     street: z.enum(["preflop", "flop", "turn", "river"]),
-    action: z.enum(["small_blind", "big_blind", "fold", "check", "call", "bet", "raise", "allin", "roll"]),
+    action: z.enum(["small_blind", "big_blind", "fold", "check", "call", "bet", "raise", "allin", "roll", "card"]),
     amount: z.number().int().nonnegative(), isAuto: z.boolean(),
     actionSource: z.enum(["mcp", "human", "timeout", "rules_bot"]).optional(),
+    card: z.object({ id: z.string(), name: z.string(), status: z.enum(["completed", "blocked", "choice_required"]) }).strict().optional(),
     roll: z.object({ kind: z.enum(["normal", "super"]), count: z.number().int().positive(), status: z.enum(["pending", "completed", "replaced", "cancelled"]) }).strict().optional(),
   }).strict()).max(1002),
 }).strict().superRefine((log, ctx) => {
-  if (log.entries.some((entry, index) => (index > 0 && entry.seq <= log.entries[index - 1].seq) || (entry.action === "roll") !== !!entry.roll))
+  if (log.entries.some((entry, index) => (index > 0 && entry.seq <= log.entries[index - 1].seq) || (entry.action === "roll") !== !!entry.roll || (entry.action === "card") !== !!entry.card))
     ctx.addIssue({ code: "custom", message: "本手日志顺序或Roll记录无效。" })
 })
 const table = z
@@ -376,6 +378,7 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "app.game.poker.hand.history": page(summary),
   "app.game.poker.hand.detail": z
     .object({
+      cards: pokerCardViewSchema.optional(), reserve: pokerReserveViewSchema.optional(), frames: z.array(pokerResolutionFrameSchema).optional(),
       rollHistory: z.array(rollPublic).optional(), privateRolls: z.array(rollPrivate).optional(),
       rules: rules.optional(),
       handId: z.string(),

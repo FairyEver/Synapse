@@ -1778,6 +1778,8 @@ model GamePokerHandSeat {
   @@index([handId, userId])
 }
 model GamePokerAction {
+  nominalAmount Int?
+  waivedAmount Int?
   rollId String?
   id               String @id @default(uuid())
   handId           String
