@@ -17,4 +17,11 @@ test("reuse mode starts existing dependency images without rebuilding", () => {
   assert.ok(serverInfraArgs({ SYNAPSE_SERVER_REUSE_INFRA: "1" }).includes("--no-build"))
   assert.ok(!serverInfraArgs({ SYNAPSE_SERVER_REUSE_INFRA: "1" }).includes("--build"))
 })
-test("ordinary development still builds dependencies", () => assert.ok(serverInfraArgs({}).includes("--build")))
+test("ordinary development lets Compose reuse images and build missing dependencies", () => {
+  const args = serverInfraArgs({})
+  assert.ok(!args.includes("--build"))
+  assert.ok(!args.includes("--no-build"))
+})
+test("explicit rebuild mode rebuilds dependency images", () => {
+  assert.ok(serverInfraArgs({ SYNAPSE_SERVER_REUSE_INFRA: "0" }).includes("--build"))
+})

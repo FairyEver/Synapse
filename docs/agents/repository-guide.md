@@ -55,7 +55,9 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 本地服务停止统一使用根命令 `pnpm quit:server` / `pnpm quit`。Docker Compose 的本地默认变量经 Node 子进程 env 传递，不依赖 shell 变量赋值；Windows 的嵌套 pnpm 调用通过当前 pnpm 提供的 JavaScript 启动器或独立 pnpm.exe 执行，避免直接 spawn `.cmd` 或插入 shell 命令。独立执行内部脚本不属于受支持入口。
 
-游戏 Web 隔离验收仍使用根 `pnpm dev:server`：显式 `GAME_E2E_DATABASE_URL` 只允许本机、库名以 `_e2e` 结尾的 PostgreSQL，并覆盖本地业务数据库配置；可结合既有 `SYNAPSE_SERVER_API_PORT` 将测试 API 与运行中的业务 API 分开。省略该变量时普通开发行为不变。依赖容器已有可用镜像时，`SYNAPSE_SERVER_REUSE_INFRA=1` 使用 `--no-build` 启动依赖，避免重复拉取/构建；默认仍构建。
+本地 `pnpm dev`、`pnpm dev:prod` 和 `pnpm dev:server` 默认复用已有依赖镜像，缺少时才构建 PDF 渲染器或拉取 Postgres。本地 PDF 镜像不向镜像仓库查询更新；修改 PDF 渲染器源码、依赖或 Dockerfile 后，使用 `SYNAPSE_SERVER_REUSE_INFRA=0 pnpm dev` 显式重建。`SYNAPSE_SERVER_REUSE_INFRA=1` 仍使用 `--no-build` 禁止构建，要求依赖镜像已存在。首次构建和显式重建仍需要可用的镜像仓库网络。
+
+游戏 Web 隔离验收仍使用根 `pnpm dev:server`：显式 `GAME_E2E_DATABASE_URL` 只允许本机、库名以 `_e2e` 结尾的 PostgreSQL，并覆盖本地业务数据库配置；可结合既有 `SYNAPSE_SERVER_API_PORT` 将测试 API 与运行中的业务 API 分开。省略该变量时普通开发行为不变。
 
 游戏 Web 的 Cookie 写请求仅在 `NODE_ENV !== production` 且 `APP_PUBLIC_URL` 的 origin 为 `http://localhost:19700` 时允许本地开发来源；不扩展到其他端口、域名、协议或回环地址。生产环境仍要求 Origin 与 `APP_PUBLIC_URL` 精确匹配；开发例外不绕过跨站拦截、账号绑定或 invoke 操作白名单。
 

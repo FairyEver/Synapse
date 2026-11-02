@@ -1,5 +1,7 @@
 services:
   pdf-renderer:
+    # 本地镜像由源码构建，不向 Docker Hub 查询 latest；缺少时 Compose 仍会构建。
+    pull_policy: never
     ports:
       - "127.0.0.1:${PDF_RENDERER_HOST_PORT:-19702}:3010"
     networks:
