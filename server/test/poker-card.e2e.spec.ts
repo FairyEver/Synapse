@@ -65,7 +65,7 @@ describe("真实PostgreSQL卡牌与暂存事务", () => {
     const secret = h.cards!.privateResults[0].values[0]
     await f.act(f.users[0], "fold")
     const read = new PokerReadService(poker), owner = await read.detail(f.users[0], f.code, 1), other = await read.detail(f.users[1], f.code, 1)
-    expect(JSON.stringify(other)).not.toContain(secret)
+    expect(JSON.stringify(other)).not.toContain(JSON.stringify(secret))
     expect(await new PokerArchiveService(db).archiveHand(f.handId, new Date())).toBe(true)
     expect(await db.gamePokerHand.count({ where: { id: f.handId } })).toBe(0)
     expect(await db.gamePokerResolution.count({ where: { handId: f.handId } })).toBe(0)
