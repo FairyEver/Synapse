@@ -44,7 +44,7 @@ export function RollingAmount({value,scope,className="",onAnimating}: {value:num
     for(const [place,wheel] of wheels.current)if(!used.has(place)){wheel.animation?.cancel();wheels.current.delete(place);nodes.current.delete(place)}
     before.current={value,scope};moving()
   },[value,scope,reduced])
-  useEffect(()=>()=>{for(const wheel of wheels.current.values())wheel.animation?.cancel();wheels.current.clear()},[])
+  useEffect(()=>()=>{for(const wheel of wheels.current.values())wheel.animation?.cancel();wheels.current.clear();notify.current?.(false)},[])
   let place=String(value).length-1
   return <strong className={`poker-rolling-amount ${className}`} data-value={value}><span className="sr-only">{amount(value)}</span><span className="poker-number-reels" aria-hidden="true">{[...amount(value)].map((character,index)=>{
     if(character===",")return <span className="poker-number-comma" key={`comma-${index}`} />

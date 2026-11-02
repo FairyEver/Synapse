@@ -2,6 +2,7 @@ import { chipBreakdown, type PokerSeatView, type PokerSettlementView, type Poker
 import { Coins } from "lucide-react"
 import { Card } from "./Card"
 import { PokerChipPile } from "./PokerChipPile"
+import { RollingAmount } from "./RollingAmount"
 import { actionLabel, amount, seatPosition } from "../lib/view"
 export function Seat({
   seat,
@@ -15,8 +16,12 @@ export function Seat({
   deadlineMs, result, feedback, feedbackKey, turnPulse, celebrate, departed,
   onInspect,
   displayStack = seat.stack,
+  amountScope = "",
+  onStackAnimating,
 }: {
   displayStack?: number
+  amountScope?: string
+  onStackAnimating?: (active: boolean) => void
   onInspect?: (trigger: HTMLButtonElement) => void
   hasStarted?: boolean
   showWager?: boolean
@@ -83,7 +88,7 @@ export function Seat({
           <span className="poker-seat-name" title={seat.displayName}>
             {seat.isMe ? "你" : seat.displayName}
           </span>
-          <span className="poker-stack">{amount(displayStack)}</span>
+          <RollingAmount className="poker-stack" value={displayStack} scope={`${amountScope}:${seat.seatNo}:${seat.botId ?? seat.displayName}`} onAnimating={onStackAnimating} />
         </span>
         {dealer && (
           <span className="poker-dealer" role="img" aria-label="按钮位">

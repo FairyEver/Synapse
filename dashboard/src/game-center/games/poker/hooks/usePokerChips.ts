@@ -7,7 +7,7 @@ export function usePokerChips(table: PokerTableView, context: string) {
   const [generation,setGeneration]=useState(0)
   const scope=`${key}:${generation}`
   const [state,setState]=useState(()=>seedChipPresentation(table,context))
-  const [numbers,setNumbers]=useState<{key:string;pot:boolean;roll:boolean}>({key:scope,pot:false,roll:false})
+  const [numbers,setNumbers]=useState<{key:string;active:Partial<Record<ChipFund | `seat:${number}`,boolean>>}>({key:scope,active:{}})
   const latest=useRef({table,context}), previousAt=useRef(Date.now())
   latest.current={table,context}
   useLayoutEffect(()=>{
@@ -23,12 +23,12 @@ export function usePokerChips(table: PokerTableView, context: string) {
   },[])
   const start=useCallback((id:string)=>setState(old=>old.key===key?startChipTransfer(old,id):old),[key])
   const complete=useCallback((id:string)=>setState(old=>old.key===key?finishChipTransfer(old,id):old),[key])
-  const numberMotion=useCallback((fund:ChipFund,active:boolean)=>setNumbers(old=>{
-    const current=old.key===scope?old:{key:scope,pot:false,roll:false}
-    return current[fund]===active?current:{...current,[fund]:active}
+  const numberMotion=useCallback((fund:ChipFund | `seat:${number}`,active:boolean)=>setNumbers(old=>{
+    const current=old.key===scope?old:{key:scope,active:{}}
+    return !!current.active[fund]===active?current:{...current,active:{...current.active,[fund]:active}}
   }),[scope])
   const view=state.key===key?state:seedChipPresentation(table,context)
   const isSettlement=table.settlement?.handId===table.handId&&!!table.handId
-  const blocked=isSettlement&&(view.settlementHand!==table.handId||view.transfers.length>0||(numbers.key===scope&&(numbers.pot||numbers.roll)))
+  const blocked=isSettlement&&(view.settlementHand!==table.handId||view.transfers.length>0||(numbers.key===scope&&Object.values(numbers.active).some(Boolean)))
   return {...view,scope,active:activeChipTransfers(view),blocked,start,complete,numberMotion}
 }

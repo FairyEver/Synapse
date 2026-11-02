@@ -51,7 +51,10 @@ it("滚动金额保留进位、千位分隔和动态效果完成通知，换手�
   await render(30,"new")
   expect(notify).toHaveBeenLastCalledWith(false)
   expect(host.querySelector('.sr-only')?.textContent).toBe("30")
+  await render(31,"new")
+  expect(notify).toHaveBeenLastCalledWith(true)
   await act(async()=>root.unmount())
+  expect(notify).toHaveBeenLastCalledWith(false)
 })
 
 it.each([
