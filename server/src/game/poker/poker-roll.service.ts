@@ -60,7 +60,7 @@ export class PokerRollService {
         const quote = quoteRoll(state, seat.seatNo)
         if (!quote.enabled || !["normal", "super"].includes(p.kind)) reject("POKER_ROLL_ILLEGAL_ACTION", "当前不能换牌。")
         if (p.expectedFee !== quote[p.kind].fee) reject("POKER_ROLL_PRICE_CHANGED", "费用已改变，请重新读取报价。")
-        if (!quote[p.kind].available) reject(quote[p.kind].reason ?? "POKER_ROLL_ILLEGAL_ACTION", "当前不能换牌。")
+        if (!quote[p.kind].available) reject(quote[p.kind].reason ?? "POKER_ROLL_ILLEGAL_ACTION", quote[p.kind].reason === "POKER_ROLL_INSUFFICIENT_COINS" ? "本手金币不足，无法继续换牌。" : "当前不能换牌。")
         next = startRoll(state, seat.seatNo, { rollId: input.actionId, kind: p.kind, cardIndex: p.cardIndex, fee: p.expectedFee }, randomInt)
       } else {
         const p = input as PokerRollChooseInput

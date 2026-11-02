@@ -7,9 +7,10 @@ const controlFields = {
 }
 const control = z.object(controlFields).passthrough()
 const ruleOptions = z.object({ roll: z.boolean().optional() }).strict()
-const rollOffer = z.object({ fee: z.number().int().nonnegative(), available: z.boolean(), reason: z.string().optional() }).strict()
+const rollCoins = z.object({ balance: z.number().int().nonnegative(), limit: z.number().int().positive() }).strict().refine(coins => coins.balance <= coins.limit)
+const rollOffer = z.object({ coinCost: z.number().int().positive().optional(), fee: z.number().int().nonnegative(), available: z.boolean(), reason: z.string().optional() }).strict()
 const rollPending = z.object({ rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3) }).strict()
-const roll = z.object({ enabled: z.boolean(), pricingVersion: z.string().optional(), count: z.number().int().nonnegative().optional(), normal: rollOffer.optional(), super: rollOffer.optional(), pending: rollPending.nullable().optional(), pendingSeatNo: z.number().int().nonnegative().nullable().optional() }).strict()
+const roll = z.object({ coins: rollCoins.optional(), enabled: z.boolean(), pricingVersion: z.string().optional(), count: z.number().int().nonnegative().optional(), normal: rollOffer.optional(), super: rollOffer.optional(), pending: rollPending.nullable().optional(), pendingSeatNo: z.number().int().nonnegative().nullable().optional() }).strict()
 const rollPublic = z.object({ kind: z.enum(["normal", "super"]), phase: z.enum(["start", "choose"]), fee: z.number().int().positive(), count: z.number().int().positive(), seatNo: z.number(), displayName: z.string(), source: z.enum(["human", "mcp", "rules_bot", "timeout"]), compensations: z.record(z.string(), z.number().int().nonnegative()) }).strict()
 const rollAmounts = { count: z.number().int().nonnegative(), paid: z.number().int().nonnegative() }
 const rollTotals = z.object({ ...rollAmounts, players: z.number().int().nonnegative() }).strict()
@@ -185,7 +186,7 @@ const page = <T extends z.ZodType>(item: T) =>
     })
     .passthrough()
 const wait = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("roll_choice_required"), handId: z.string(), handNo: z.number(), rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3), controlVersion: controlFields.controlVersion, actionSeq: z.number().int().nonnegative(), deadlineMs: z.number().nullable(), cursor: z.string() }).passthrough(),
+  z.object({ status: z.literal("roll_choice_required"), roll: roll.optional(), handId: z.string(), handNo: z.number(), rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3), controlVersion: controlFields.controlVersion, actionSeq: z.number().int().nonnegative(), deadlineMs: z.number().nullable(), cursor: z.string() }).passthrough(),
   z.object({ status: z.literal("ready_required"), handId: z.string(), handNo: z.number(), controlVersion: controlFields.controlVersion, cursor: z.string() }).passthrough(),
   z.object({ status: z.literal("control_released"), cursor: z.string(), controlVersion: controlFields.controlVersion.optional(), handoffPending: controlFields.handoffPending.optional() }).passthrough(),
   z.object({ status: z.literal("waiting"), cursor: z.string() }).passthrough(),

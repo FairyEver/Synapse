@@ -1,5 +1,11 @@
 # 模块长期边界
 
+2026-11-02 金币额度更新：启用Roll的新手牌在引擎RollState保存coinPolicy={limit:12,normal:1,super:3}。各参赛者从本手全部成功start历史按档位计算余额；不增加可漂移的余额计数或数据库字段。normal/super扣1/3金币，筹码仍按roll-v1递增加价、费用独立补偿、支付后至少留1筹码。最多12次普通、4次超级或等额混合。跨街不恢复，下一手重新12；刷新、重启、接管、离桌/回座不补充。无购买、转让、兑换、金币盈亏或房间配置。
+
+旧手缺coinPolicy沿旧规则完成，不从当前配置推断或追扣；旧响应隐藏金币信息，现有房间下一手启用。原牌/候选隐私、原倒计时、控制权、行动资格不变。金币快照损坏或透支显式拒绝，不默默补足。
+
+RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选coinCost。table.state及wait本人报价共享引擎，待选wait额外含roll报价；请求参数不变，不增加工具/路由/迁移。公开视角不追加本人金币报价或候选。机器人继续依可用报价行动。
+
 ## 云端数据表
 
 - 服务端逻辑表/JSONB域，区别于桌面Database/Data Store。Console与开放REST API共享业务规则，无桌面入口或MCP。按用户后续决定不提供独立Skill；AI直接使用可整页复制为Markdown的API文档与OpenAPI契约，不增加Skill下载或分发配置。

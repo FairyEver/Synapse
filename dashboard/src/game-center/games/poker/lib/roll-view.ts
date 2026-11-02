@@ -1,5 +1,16 @@
-import type { PokerRollPublicView } from "@synapse/shared/game-contracts"
+import type { PokerRollOffer, PokerRollPublicView } from "@synapse/shared/game-contracts"
 import { amount } from "./view"
+export function rollOfferCost(offer: PokerRollOffer | undefined, unit: string) {
+  return `${offer?.coinCost != null ? `${offer.coinCost} 金币 + ` : ""}${amount(offer?.fee ?? 0)} ${unit}`
+}
+export function rollUnavailableReason(offer: PokerRollOffer | undefined, balance: number | undefined, unit: string) {
+  if (offer?.available) return null
+  if (offer?.reason === "POKER_ROLL_INSUFFICIENT_COINS") return balance === 0 ? "本手金币已用完" : `金币不足，需 ${offer.coinCost}`
+  if (offer?.reason === "POKER_ROLL_INSUFFICIENT_STACK") return `${unit}不足，支付后需至少保留 1 ${unit}`
+  if (offer?.reason === "POKER_ROLL_STREET_INVALID") return "当前阶段不能换牌"
+  if (offer?.reason === "POKER_ROLL_NOT_YOUR_TURN") return "当前不能换牌"
+  return "不可用"
+}
 export function rollEventLabel(event: PokerRollPublicView) {
   const kind = event.kind === "super" ? "超级换牌" : "普通换牌"
   return event.phase === "start" ? `${event.displayName} · ${kind} · 支出 ${amount(event.fee)}` : `${event.displayName} · 已完成${kind}`

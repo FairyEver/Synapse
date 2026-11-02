@@ -164,7 +164,7 @@
 
 ## app_game_poker_roll_start
 
-按本人当前报价确认换牌；超级待选可在原cardIndex付费重抽，放回原候选且不退费；共用次数、不续行动时限，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+按本人当前报价确认换牌，另付筹码；有coins快照的每手12金币，normal扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -236,7 +236,7 @@
 
 ## app_game_poker_roll_choose
 
-从本人待选超级换牌候选中选一张；候选仅本人可见，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+从本人待选超级换牌候选中选一张，不再扣筹码或金币，零金币仍可选择；候选仅本人可见，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -512,7 +512,7 @@
 
 ## app_game_poker_table_wait
 
-循环调用，单次最多阻塞25秒。行动窗口另为600秒。每轮重新读取persona；ready_required时按handId/controlVersion显式seat_ready，已准备只等待；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+循环调用，单次最多阻塞25秒。行动窗口另为600秒。每轮重新读取persona；roll_choice_required含本人候选及roll报价（可选coins余额/coinCost），金币耗尽仍可免费选牌；ready_required时按handId/controlVersion显式seat_ready，已准备只等待；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -541,7 +541,7 @@
 
 ## app_game_poker_table_state
 
-本人快照；刷新AI心跳，不得读取对手未摊牌底牌。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断12金币。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

@@ -19,6 +19,8 @@ export interface RollHistory {
   compensations: Record<number, number>
 }
 export interface RollState {
+  /** Missing only on hands started before the coin limit was introduced. */
+  coinPolicy?: { limit: number; normal: number; super: number }
   counts: Record<number, number>
   paid: Record<number, number>
   credits: Record<number, number>
@@ -27,8 +29,20 @@ export interface RollState {
   history: RollHistory[]
   pending: RollHistory | null
 }
-export interface RollOffer { fee: number; available: boolean; reason?: string }
-export interface RollQuote { enabled: boolean; pricingVersion?: string; count: number; normal: RollOffer; super: RollOffer }
+export interface RollOffer { fee: number; available: boolean; reason?: string; coinCost?: number }
+export interface RollQuote { enabled: boolean; pricingVersion?: string; count: number; coins?: { balance: number; limit: number }; normal: RollOffer; super: RollOffer }
+function rollCoins(roll: RollState | undefined, seatNo: number) {
+  const policy = roll?.coinPolicy
+  if (policy === undefined) return undefined
+  if (!policy || [policy.limit, policy.normal, policy.super].some(n => !Number.isSafeInteger(n) || n <= 0) || policy.normal > policy.limit || policy.super > policy.limit)
+    throw new Error("POKER_ROLL_STATE_INVALID")
+  const used = roll!.history.filter(r => r.seatNo === seatNo).reduce((sum, r) => {
+    if (r.kind !== "normal" && r.kind !== "super") throw new Error("POKER_ROLL_STATE_INVALID")
+    return sum + policy[r.kind]
+  }, 0)
+  if (!Number.isSafeInteger(used) || used > policy.limit) throw new Error("POKER_ROLL_STATE_INVALID")
+  return { balance: policy.limit - used, limit: policy.limit }
+}
 export function rollFinancials(state: HandState, seatNo: number): { effectivePot: number; effectiveFuture: number } {
   const p = state.seats.find(s => s.seatNo === seatNo)
   if (!p) throw new Error("POKER_ROLL_SEAT_INVALID")
@@ -47,21 +61,24 @@ export function quoteRoll(state: HandState, seatNo: number): RollQuote {
   if (!state.ruleOptions?.roll) return { enabled: false, count, normal: { fee: 0, available: false, reason: "POKER_ROLL_DISABLED" }, super: { fee: 0, available: false, reason: "POKER_ROLL_DISABLED" } }
   if (state.rollPricingVersion !== ROLL_PRICING_VERSION) throw new Error("POKER_ROLL_VERSION_UNSUPPORTED")
   const p = state.seats.find(s => s.seatNo === seatNo)
+  const coins = p ? rollCoins(state.roll, seatNo) : undefined
   const { effectivePot: P, effectiveFuture: E } = p ? rollFinancials(state, seatNo) : { effectivePot: 0, effectiveFuture: 0 }
   const [u, v] = state.street === "preflop" ? [1n, 3n] : state.street === "flop" ? [2n, 5n] : [4n, 8n]
   const T = 10n * BigInt(P) + BigInt(E), N = u * T > 2000n ? u * T : 2000n
   const S = v * T > N + 2000n ? v * T : N + 2000n
-  const offer = (base: bigint): RollOffer => {
+  const offer = (base: bigint, kind: RollKind): RollOffer => {
     const exact = ((1n + BigInt(count)) * base + 1999n) / 2000n
     if (exact > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("POKER_ROLL_MONEY_INVALID")
     const fee = Number(exact)
-    const reason = !state.roll ? "POKER_ROLL_STATE_INVALID" : state.roll.pending && state.roll.pending.seatNo !== seatNo ? "POKER_ROLL_CHOICE_REQUIRED" : !["preflop", "flop", "turn"].includes(state.street) ? "POKER_ROLL_STREET_INVALID" : !p || p.folded || p.allIn || state.actionOnSeat !== seatNo || !state.seats.some(s => s.seatNo !== seatNo && !s.folded) ? "POKER_ROLL_NOT_YOUR_TURN" : exact >= BigInt(p.stack) ? "POKER_ROLL_INSUFFICIENT_STACK" : undefined
-    return { fee, available: !reason, ...(reason ? { reason } : {}) }
+    const coinCost = state.roll?.coinPolicy?.[kind]
+    const reason = !state.roll ? "POKER_ROLL_STATE_INVALID" : state.roll.pending && state.roll.pending.seatNo !== seatNo ? "POKER_ROLL_CHOICE_REQUIRED" : !["preflop", "flop", "turn"].includes(state.street) ? "POKER_ROLL_STREET_INVALID" : !p || p.folded || p.allIn || state.actionOnSeat !== seatNo || !state.seats.some(s => s.seatNo !== seatNo && !s.folded) ? "POKER_ROLL_NOT_YOUR_TURN" : coins && coinCost !== undefined && coins.balance < coinCost ? "POKER_ROLL_INSUFFICIENT_COINS" : exact >= BigInt(p.stack) ? "POKER_ROLL_INSUFFICIENT_STACK" : undefined
+    return { fee, available: !reason, ...(coinCost !== undefined ? { coinCost } : {}), ...(reason ? { reason } : {}) }
   }
-  return { enabled: true, pricingVersion: ROLL_PRICING_VERSION, count, normal: offer(N), super: offer(S) }
+  return { enabled: true, pricingVersion: ROLL_PRICING_VERSION, count, ...(coins ? { coins } : {}), normal: offer(N, "normal"), super: offer(S, "super") }
 }
 export function startRoll(state: HandState, seatNo: number, input: { rollId: string; kind: RollKind; cardIndex: number; fee: number }, randomInt: (exclusiveMax: number) => number): HandState {
   const quote = quoteRoll(state, seatNo)
+  if (["normal", "super"].includes(input.kind) && quote[input.kind].reason === "POKER_ROLL_INSUFFICIENT_COINS") throw new Error("POKER_ROLL_INSUFFICIENT_COINS")
   if (!quote.enabled || !["normal", "super"].includes(input.kind) || !quote[input.kind].available || input.fee !== quote[input.kind].fee || ![0, 1].includes(input.cardIndex) || !input.rollId || state.roll!.history.some(r => r.id === input.rollId)) throw new Error("POKER_ROLL_ILLEGAL_ACTION")
   if (state.roll?.pending && state.roll.pending.cardIndex !== input.cardIndex) throw new Error("POKER_ROLL_ILLEGAL_ACTION")
   assertHandIntegrity(state)
@@ -115,6 +132,7 @@ export function assertHandIntegrity(h: HandState): void {
   const funds = h.seats.reduce((sum, s) => sum + BigInt(s.stack) + (h.street === "settled" ? 0n : BigInt(s.total)), frozen)
   if (funds !== original) throw new Error("筹码不守恒")
   if (h.ruleOptions?.roll && (!h.roll || !h.burnedCards || h.rollPricingVersion !== ROLL_PRICING_VERSION)) throw new Error("POKER_ROLL_STATE_INVALID")
+  if (h.roll?.coinPolicy !== undefined) for (const seat of h.seats) rollCoins(h.roll, seat.seatNo)
   const cards = [...h.deck, ...h.board, ...h.seats.flatMap(s => s.hole), ...(h.burnedCards ?? []), ...(h.roll?.pending?.candidates ?? [])]
   const deck = orderedDeck(h.variant)
   if (new Set(cards).size !== cards.length || cards.some(c => !deck.includes(c)) || ((h.burnedCards || h.ruleOptions?.roll) && cards.length !== deck.length)) throw new Error("POKER_HAND_CARDS_INVALID")

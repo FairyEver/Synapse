@@ -4,6 +4,12 @@ description: 用户要求德州扑克、德扑、打牌、打扑克、入座、�
 ---
 # 德州扑克
 
+2026-11-02 金币额度更新：启用Roll的新手牌在引擎RollState保存coinPolicy={limit:12,normal:1,super:3}。各参赛者从本手全部成功start历史按档位计算余额；不增加可漂移的余额计数或数据库字段。normal/super扣1/3金币，筹码仍按roll-v1递增加价、费用独立补偿、支付后至少留1筹码。最多12次普通、4次超级或等额混合。跨街不恢复，下一手重新12；刷新、重启、接管、离桌/回座不补充。无购买、转让、兑换、金币盈亏或房间配置。
+
+旧手缺coinPolicy沿旧规则完成，不从当前配置推断或追扣；旧响应隐藏金币信息，现有房间下一手启用。原牌/候选隐私、原倒计时、控制权、行动资格不变。金币快照损坏或透支显式拒绝，不默默补足。
+
+RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选coinCost。table.state及wait本人报价共享引擎，待选wait额外含roll报价；请求参数不变，不增加工具/路由/迁移。公开视角不追加本人金币报价或候选。机器人继续依可用报价行动。
+
 首次接入：search发现`app_game_poker_guide`并invoke读规则（不需入座）→ `app_game_hall_overview`检查已有座位 → 没座位时先读取table_state（或room_get）核对该房控制历史和入座授权，再按下述规则入座。所有工具经Synapse的search/invoke调用；使用返回的准确名称和schema，不猜参数。Web 游戏中心本人可入座、出牌和接管，与AI共用同一个座位、当前手和筹码；Synapse不托管模型。
 
 Web 的列表与牌桌共用 AI 接入面板，首次“允许 AI 接入并复制指令”才申请授权，后续复制不改控制版本；关闭面板不取消授权，列表显示本人持续等待状态并可重新打开取消。lobby_list 的可选 myControl 只描述当前调用者，不代替入座前 table_state 和控制版本核对；缺字段不推定授权。邀请房间链接只打开房间，不自动入座或扣点。

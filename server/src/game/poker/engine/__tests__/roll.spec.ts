@@ -87,7 +87,8 @@ describe("Roll transitions", () => {
     assertHandIntegrity(next)
   })
   it("preserves all cards through repeated pending short-deck rerolls and rejects an unaffordable reroll", () => {
-    let h = roll(hand(10, "short32"), "super", 1)
+    const legacy = hand(10, "short32"); delete legacy.roll!.coinPolicy
+    let h = roll(legacy, "super", 1)
     for (let i = 0; i < 8; i++) { h = roll(h, "super", 1); assertHandIntegrity(h) }
     const pending = h.roll!.pending!, seat = h.seats.find(s => s.seatNo === pending.seatNo)!
     const poor = structuredClone(h)
@@ -122,7 +123,7 @@ describe("Roll transitions", () => {
     assertHandIntegrity(h)
   })
   it("supports ten-player short deck repeatedly without losing burn/candidate cards", () => {
-    let h = hand(10, "short32")
+    let h = hand(10, "short32"); delete h.roll!.coinPolicy // Legacy hands still support long card-conservation stress runs.
     for (let i = 0; i < 8; i++) {
       h = roll(h, "super", i % 2)
       h = chooseRollCard(h, h.actionOnSeat!, h.roll!.pending!.id, i % 3, entropy)

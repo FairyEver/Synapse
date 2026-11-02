@@ -167,7 +167,7 @@ export class PokerWaitService implements OnModuleDestroy {
         const ownSeat = view.awaitingReady ? view.seats.find(s => s.isMe && !s.isHistorical) : undefined
         if (view.awaitingReady && ownSeat?.nextHandEligible && !ownSeat.readyForNextHand)
           return { status: "ready_required", handId: view.handId, handNo: view.handNo, controlVersion: view.controlVersion, cursor: `${view.handNo}:${MAX_CURSOR_VALUE}` }
-        if (view.roll?.pending) return { status: "roll_choice_required", handId: view.handId, handNo: view.handNo, ...view.roll.pending, controlVersion: view.controlVersion, actionSeq: view.actionSeq, deadlineMs: view.deadlineMs, cursor: view.cursor }
+        if (view.roll?.pending) return { status: "roll_choice_required", handId: view.handId, handNo: view.handNo, ...view.roll.pending, roll: view.roll, controlVersion: view.controlVersion, actionSeq: view.actionSeq, deadlineMs: view.deadlineMs, cursor: view.cursor }
         if (view.actionOnSeat === view.mySeatNo && view.mySeatNo !== null)
           return {
             status: "your_turn",

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react"
-import { Button, Form, Input, Label, Modal, Radio, RadioGroup, Switch, TextField } from "@heroui/react"
+import { Button, Description, Form, Input, Label, Modal, Radio, RadioGroup, Switch, TextField } from "@heroui/react"
 import { Minus, Plus } from "lucide-react"
 import { POKER_MAX_SEATS, type GameFunding, type PokerBlindPreset, type PokerVariant } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
@@ -84,6 +84,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                     <Switch.Control><Switch.Thumb /></Switch.Control>
                     <Label>Roll 换牌</Label>
                   </Switch.Content>
+                  <Description>每手 12 金币，普通 1／超级 3；另付筹码</Description>
                 </Switch>
                 <RadioGroup variant="secondary" id="poker-blinds" orientation="horizontal" value={value.blindPreset} isDisabled={busy}
                   onChange={blindPreset => update({ blindPreset: blindPreset as PokerBlindPreset })}>

@@ -32,10 +32,10 @@ import type { PokerChipState } from "./game-poker-chips.js"
 export type PokerBlindPreset = "1/2" | "2/4" | "5/10" | "10/20"
 export interface PokerRuleOptions { roll?: boolean }
 export type PokerRollKind = "normal" | "super"
-export interface PokerRollOffer { fee: number; available: boolean; reason?: string }
-export interface PokerRollQuote { enabled: boolean; pricingVersion?: string; count: number; normal: PokerRollOffer; super: PokerRollOffer }
+export interface PokerRollOffer { fee: number; available: boolean; reason?: string; coinCost?: number }
+export interface PokerRollQuote { enabled: boolean; pricingVersion?: string; count: number; coins?: { balance: number; limit: number }; normal: PokerRollOffer; super: PokerRollOffer }
 export interface PokerRollPending { rollId: string; cardIndex: number; candidates: string[] }
-export interface PokerRollView { enabled: boolean; pricingVersion?: string; count?: number; normal?: PokerRollOffer; super?: PokerRollOffer; pending?: PokerRollPending | null; pendingSeatNo?: number | null }
+export interface PokerRollView { enabled: boolean; pricingVersion?: string; count?: number; coins?: { balance: number; limit: number }; normal?: PokerRollOffer; super?: PokerRollOffer; pending?: PokerRollPending | null; pendingSeatNo?: number | null }
 export interface PokerRollPublicView { kind: PokerRollKind; phase: "start" | "choose"; fee: number; count: number; seatNo: number; displayName: string; source: "human" | "mcp" | "rules_bot" | "timeout"; compensations: Record<string, number> }
 export interface PokerRollAmounts { count: number; paid: number }
 export interface PokerRollTotals extends PokerRollAmounts { players: number }
@@ -45,7 +45,7 @@ export interface PokerRollStats {
   seats: { seatNo: number; key: string; hand: PokerRollAmounts; room: PokerRollAmounts }[]
 }
 export interface PokerRollPrivateView { rollId: string; kind: PokerRollKind; cardIndex: number; oldCard: string; candidates: string[]; selectedIndex: number | null; fee: number; street: "preflop" | "flop" | "turn"; count: number }
-export interface PokerRollChoiceRequiredView extends PokerRollPending { status: "roll_choice_required"; handId: string; handNo: number; controlVersion: number; actionSeq: number; deadlineMs: number | null; cursor: string }
+export interface PokerRollChoiceRequiredView extends PokerRollPending { roll?: PokerRollView; status: "roll_choice_required"; handId: string; handNo: number; controlVersion: number; actionSeq: number; deadlineMs: number | null; cursor: string }
 export interface PokerRollResult { ok: true; handId: string; rollId: string; actionSeq: number; cursor: string; status: "completed" | "choice_required" }
 export interface PokerRollStartInput { roomCode: string; handId: string; street: "preflop" | "flop" | "turn"; expectedActionSeq: number; controlVersion: number; actionId: string; kind: PokerRollKind; cardIndex: number; expectedFee: number }
 export interface PokerRollChooseInput { roomCode: string; handId: string; rollId: string; candidateIndex: number; expectedActionSeq: number; controlVersion: number; actionId: string }
@@ -331,8 +331,8 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     ["maxSeats", "buyIn"],
     true,
   ],
-  ["poker.roll.start", "按本人当前报价确认换牌；超级待选可在原cardIndex付费重抽，放回原候选且不退费；共用次数、不续行动时限，未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
-  ["poker.roll.choose", "从本人待选超级换牌候选中选一张；候选仅本人可见，未知结果复用原actionId。", { ...room, handId: str(), rollId: str(), candidateIndex: integer(0, 2), expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "handId", "rollId", "candidateIndex", "expectedActionSeq", "controlVersion", "actionId"], true],
+  ["poker.roll.start", "按本人当前报价确认换牌，另付筹码；有coins快照的每手12金币，normal扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
+  ["poker.roll.choose", "从本人待选超级换牌候选中选一张，不再扣筹码或金币，零金币仍可选择；候选仅本人可见，未知结果复用原actionId。", { ...room, handId: str(), rollId: str(), candidateIndex: integer(0, 2), expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "handId", "rollId", "candidateIndex", "expectedActionSeq", "controlVersion", "actionId"], true],
   ["poker.room.get", "只读旁观快照，不返回底牌、私密提示词或note。", room, ["roomCode"], false],
   ["poker.bot.add", "仅陪练房房主添加一个程序机器人，不调用模型、不影响大厅点数；同次重试复用creationId。", { ...room, creationId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "creationId"], true],
   ["poker.bot.remove", "仅陪练房房主移除本房机器人；本手参与者手后移除，不能控制其动作或真人座位。", { ...room, botId: str() }, ["roomCode", "botId"], true],
@@ -361,14 +361,14 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.table.wait",
-    "循环调用，单次最多阻塞25秒。行动窗口另为600秒。每轮重新读取persona；ready_required时按handId/controlVersion显式seat_ready，已准备只等待；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。",
+    "循环调用，单次最多阻塞25秒。行动窗口另为600秒。每轮重新读取persona；roll_choice_required含本人候选及roll报价（可选coins余额/coinCost），金币耗尽仍可免费选牌；ready_required时按handId/controlVersion显式seat_ready，已准备只等待；凭cursor先补本次入座结算（含离桌及归档），再返回table_closed；control_released时立即退出，不自动重新认领。",
     { ...room, cursor: str(64), timeoutMs: integer(0, 25000) },
     ["roomCode"],
     false,
   ],
   [
     "poker.table.state",
-    "本人快照；刷新AI心跳，不得读取对手未摊牌底牌。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。",
+    "本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断12金币。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。",
     room,
     ["roomCode"],
     false,

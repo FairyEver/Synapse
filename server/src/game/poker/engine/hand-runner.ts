@@ -66,6 +66,7 @@ export function startHand(
     for (const no of order.postflop)
       h.seats.find((s) => s.seatNo === no)!.hole.push(h.deck.shift()!)
   if (snapshot.ruleOptions?.roll) h.roll = {
+    coinPolicy: { limit: 12, normal: 1, super: 3 },
     counts: Object.fromEntries(h.seats.map(s => [s.seatNo, 0])),
     paid: Object.fromEntries(h.seats.map(s => [s.seatNo, 0])),
     credits: Object.fromEntries(h.seats.map(s => [s.seatNo, 0])),

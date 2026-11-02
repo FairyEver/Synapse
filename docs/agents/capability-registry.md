@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 Roll 金币：既有本人 `table.state` / `table.wait` 报价追加可选 `coins={balance,limit}`，各档追加可选 `coinCost`；待选 wait 同时提供 `roll` 报价。启用Roll的新手每人12金币，normal/super扣1/3，choose不重复扣费，仍另付筹码；旧手无金币快照沿原规则完成。同步schema、工具描述、系统Skill与Agent指南，无新增输入、数据库字段或注册项；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变。
+
 - 2026-11-02 连续 Roll：既有 `app.game.poker.roll.start` 允许超级待选时在原 cardIndex 按当前报价再次付费，成功放回旧候选且不退旧费用；输入/响应 schema 不变。MCP 描述、系统 Skill、生成 API 参考与 Agent 指南同步；无新增注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
 
 - 2026-11-02 筹码呈现：既有牌桌Web响应追加可选公开 `chipState`（普通/ Roll逐笔面额计数及最近32笔资金动作），仅desktop展示投影提供，decision/MCP不提供。共享响应schema、系统Skill及Agent指南同步，动作输入和工具描述的操作语义不变；无新注册项、权限或数据库字段，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
