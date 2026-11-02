@@ -105,11 +105,11 @@
 **Files:** Create `server/src/game/poker/engine/cards/types.ts`、`server/src/game/poker/engine/cards/registry.ts`、`server/src/game/poker/engine/cards/runner.ts`、`server/src/game/poker/engine/__tests__/card-runtime.spec.ts`。
 **Interfaces:** Consumes T1；Produces `OperationRegistry.register`、`CardRegistry`、`runResolution`和固定上下文/帧类型；允许测试注册受控小操作，不接数据库或UI。
 
-- [ ] **1. 写失败测试。** `before_then_fact_then_after`断言修改前/事实/后触发顺序；`priority_then_install_sequence`断言稳定顺序；`same_event_effect_once`断言重复事实不再触发；`chain_budget_is_atomic`对第129项和第33层断言抛错且原state/状态次数未变；查询预演不读取randomInt。 断言示例：`expect(trace).toEqual(["before","fact","after"]); expect(inputState).toEqual(beforeState)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-runtime.spec.ts`。
-- [ ] **3. 实现执行器。** 所有处理器只发领域操作，事实不可改；逐层带root/parent/index；首个有效拦截停止后续同类防护。注册校验schema/版本/次数和终止预算，异常回滚根动作的工作副本。
-- [ ] **4. 同命令验证绿灯。** 新增重排注册顺序后结果仍一致的断言；预算错误必须有稳定领域码，无成功半帧。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 建立支持前后钩子和有界触发的牌局执行器'`，只暂存本任务文件。
+- [x] **1. 写失败测试。** `before_then_fact_then_after`断言修改前/事实/后触发顺序；`priority_then_install_sequence`断言稳定顺序；`same_event_effect_once`断言重复事实不再触发；`chain_budget_is_atomic`对第129项和第33层断言抛错且原state/状态次数未变；查询预演不读取randomInt。 断言示例：`expect(trace).toEqual(["before","fact","after"]); expect(inputState).toEqual(beforeState)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-runtime.spec.ts`。
+- [x] **3. 实现执行器。** 所有处理器只发领域操作，事实不可改；逐层带root/parent/index；首个有效拦截停止后续同类防护。注册校验schema/版本/次数和终止预算，异常回滚根动作的工作副本。
+- [x] **4. 同命令验证绿灯。** 新增重排注册顺序后结果仍一致的断言；预算错误必须有稳定领域码，无成功半帧。
+- [x] **5. 本地提交。** `git commit -m 'feat: 建立支持前后钩子和有界触发的牌局执行器'`，只暂存本任务文件。
 
 
 ## Task 3: 有限共享池与实例去向
