@@ -452,7 +452,7 @@ export function DriveDocumentEditorCommentsFrame({
     <div
       ref={setEditorContainerRef}
       {...{ [dataAttributes.scroll]: 'true' }}
-      className='h-full min-h-0 overflow-auto overscroll-contain'
+      className='h-full min-h-0 overflow-auto overscroll-contain bg-surface'
       onWheelCapture={() => comments.cancelPendingLocation?.()}
       onScroll={() => {
         comments.handleEditorScroll()

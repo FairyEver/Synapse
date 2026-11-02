@@ -9,7 +9,10 @@ import type {
   DriveBrowserPreviewDto,
 } from '@synapse/shared'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { page } from 'vitest/browser'
 import { render } from 'vitest-browser-react'
+import { FilePreviewLayout } from '@/features/file-browser/preview/file-preview-layout'
+import { driveAnnotationApi, driveMessageApi } from '@/lib/api'
 import { DriveMDXeditorRenderer } from './mdxeditor-renderer'
 import { DriveRendererToolbarProvider } from './drive-renderer-toolbar-context'
 
@@ -21,9 +24,50 @@ afterEach(() => {
   lateVendorStyle?.remove()
   host = null
   lateVendorStyle = null
+  vi.restoreAllMocks()
 })
 
 describe('drive editor typography in Chromium', () => {
+  for (const width of [1280, 360]) {
+    it(`keeps the editor body and document messages on the reading surface at ${width}px`, async () => {
+      await page.viewport(width, 800)
+      vi.spyOn(driveAnnotationApi, 'listOwner').mockResolvedValue([])
+      vi.spyOn(driveMessageApi, 'list').mockResolvedValue({ itemId: 'file', canPost: true, messages: [] })
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const screen = await render(
+        <QueryClientProvider client={client}>
+          <div data-surface-reference className='bg-surface' />
+          <FilePreviewLayout className='h-[600px] bg-background'>
+            <DriveRendererToolbarProvider>
+              <DriveMDXeditorRenderer current={current()} preview={preview()} edit={editable()} editContext={editContext()}
+                annotationContext={{ context: 'owner', itemId: 'file' }} />
+            </DriveRendererToolbarProvider>
+          </FilePreviewLayout>
+        </QueryClientProvider>
+      )
+      try {
+        await expect.poll(() => document.querySelector('.drive-mdxeditor-content h1')).not.toBeNull()
+        await expect.poll(() => document.querySelector('textarea[aria-label="新建留言"]')).not.toBeNull()
+        const scroller = document.querySelector<HTMLElement>('[data-drive-mdxeditor-scroll="true"]')!
+        const reference = document.querySelector<HTMLElement>('[data-surface-reference]')!
+        const color = (element: HTMLElement) => {
+          const context = document.createElement('canvas').getContext('2d')!
+          context.fillStyle = getComputedStyle(element).backgroundColor
+          context.fillRect(0, 0, 1, 1)
+          return [...context.getImageData(0, 0, 1, 1).data]
+        }
+        expect(color(scroller)).toEqual(color(reference))
+        expect(color(scroller)[3]).toBe(255)
+        expect(document.querySelector('textarea[aria-label="新建留言"]')?.classList.contains('textarea--secondary')).toBe(true)
+        await page.screenshot({ path: `/tmp/synapse-editor-surface-${width}.png` })
+      } finally {
+        await screen.unmount()
+        client.clear()
+        await page.viewport(1280, 800)
+      }
+    })
+  }
+
   it('applies the Drive document typography to the rich-text editor', async () => {
     const consoleError = vi.spyOn(console, 'error')
     const screen = await render(

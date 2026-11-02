@@ -664,6 +664,7 @@ export function DriveMDXeditorRenderer({
           ) : null}
         </div>
         <TextArea
+          variant='secondary'
           value={value}
           readOnly={!canEdit}
           className='min-h-96 flex-1 font-mono text-sm'
@@ -736,6 +737,7 @@ export function DriveMDXeditorRenderer({
               key={current.id}
               messages={messages}
               sectionRef={messagesSectionRef}
+              fieldVariant='secondary'
             />
           ) : null
         }
