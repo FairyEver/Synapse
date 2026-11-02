@@ -1,6 +1,8 @@
 import { POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS, type PokerRuleOptions } from "@synapse/shared/game-contracts"
 export type PokerVariant = "standard52" | "short32"
 export interface PokerRules {
+  cardRulesVersion?: "cards-v1"
+  chipRulesVersion?: "chips-v2"
   variant: PokerVariant
   smallBlind: number
   bigBlind: number

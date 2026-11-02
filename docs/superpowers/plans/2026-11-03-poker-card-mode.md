@@ -117,12 +117,12 @@
 **Files:** Create `server/src/game/poker/engine/cards/pool.ts`、`server/src/game/poker/engine/__tests__/card-pool.spec.ts`、`server/src/game/poker/__tests__/card-test-fixtures.ts`；Modify `server/src/game/poker/engine/cards/types.ts`、`server/src/game/poker/engine/hand-runner.ts`、`server/src/game/poker/engine/rules.ts`。
 **Interfaces:** Consumes T2的`CardDefinition`/`ResolutionContext`；Produces `CardModeState`、`CardPoolOperation`、`createCardPool`、`applyCardPoolOperation`。fixture导出`makeCardHand(options?:{humans?:number;bots?:number;actorSeatNo?:number;variant?:PokerVariant;bigBlind?:number;roll?:boolean}):HandState`及`sequenceRandomInt(values:readonly number[]):(max:number)=>number`，默认两真人、0号行动、standard52、1/2盲、Roll关闭；先用现有startHand建立合法手，再附测试能力牌状态。生产目录待T8提供。
 
-- [ ] **1. 写失败测试。** 用三个测试定义验证缺省copies=1、显式copies=2；六真人初始各3、阶段三次各1，总发36；两真人三机器人只给真人；重复阶段事件不再发；剩2请求3只得2；生成/候选未选归还/消耗后始终满足`initial+generated===allZones`，第1025实例拒绝且无副作用。 断言示例：`expect(receivedPerHuman).toEqual([6,6,6,6,6,6]); expect(initialCount+generatedCount).toBe(allZoneCount)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-pool.spec.ts`。
-- [ ] **3. 实现区域操作。** 按原入座持有、庄家左侧轮流补牌、零池不回收；额外消耗先验证确实持有；候选保留区独立；弃牌持牌留存直到结算/取消。生成只能来自已注册目录，创建新ID。
-- [ ] **3a. 接入类型而不提前开放房规。** HandState增加可选cards、Engine PokerRules声明可选版本字段；fixture在合法原生手牌上附能力牌状态。T5再加入chips/T7加入turnClock，避免早期任务导入尚未创建的后续类型或提前绕过房规校验。
-- [ ] **4. 同命令验证绿灯。** 另断言同座换人不继承牌，全下和弃牌不补，清理本局不会删除审计事实。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 实现共享卡池发放抽取与生成实例守恒'`。
+- [x] **1. 写失败测试。** 用三个测试定义验证缺省copies=1、显式copies=2；六真人初始各3、阶段三次各1，总发36；两真人三机器人只给真人；重复阶段事件不再发；剩2请求3只得2；生成/候选未选归还/消耗后始终满足`initial+generated===allZones`，第1025实例拒绝且无副作用。 断言示例：`expect(receivedPerHuman).toEqual([6,6,6,6,6,6]); expect(initialCount+generatedCount).toBe(allZoneCount)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/card-pool.spec.ts`。
+- [x] **3. 实现区域操作。** 按原入座持有、庄家左侧轮流补牌、零池不回收；额外消耗先验证确实持有；候选保留区独立；弃牌持牌留存直到结算/取消。生成只能来自已注册目录，创建新ID。
+- [x] **3a. 接入类型而不提前开放房规。** HandState增加可选cards、Engine PokerRules声明可选版本字段；fixture在合法原生手牌上附能力牌状态。T5再加入chips/T7加入turnClock，避免早期任务导入尚未创建的后续类型或提前绕过房规校验。
+- [x] **4. 同命令验证绿灯。** 另断言同座换人不继承牌，全下和弃牌不补，清理本局不会删除审计事实。
+- [x] **5. 本地提交。** `git commit -m 'feat: 实现共享卡池发放抽取与生成实例守恒'`。
 
 
 ## Task 4: 有限豁免、名义下注与真实边池

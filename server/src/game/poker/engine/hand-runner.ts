@@ -5,10 +5,12 @@ import { after, seatOrder } from "./seat-order"
 import { splitPots, distribute } from "./pots"
 import { applyBet, betToMatch, type Decision, type EngineSeat, type BettingState } from "./betting"
 import { assertHandIntegrity, type RollState } from "./roll"
+import type { CardModeState } from "./cards/pool"
 export { quoteRoll, startRoll, chooseRollCard, assertHandIntegrity, ROLL_PRICING_VERSION } from "./roll"
 export type { RollHistory, RollKind, RollState, RollQuote, RollOffer } from "./roll"
 export { legalActions } from "./betting"
 export interface HandState extends BettingState, PokerRules {
+  cards?: CardModeState
   street: "preflop" | "flop" | "turn" | "river" | "settled"
   dealerSeat: number
   burnedCards?: string[]
