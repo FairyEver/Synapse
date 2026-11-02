@@ -10,6 +10,16 @@ const command = (f:Awaited<ReturnType<typeof rollStore>>,kind:"normal"|"super"="
  return {roomCode:f.room.code,handId:hand.id,street:state.street,expectedActionSeq:hand.actionSeq,controlVersion:0,actionId:randomUUID(),kind,cardIndex:0,expectedFee:quoteRoll(state,state.actionOnSeat)[kind].fee}
 }
 describe("Roll coin transactions and projections",()=>{
+ it("snapshots the configured room allowance for hands and owner quotes",async()=>{
+  const f=await rollStore("practice",3,{ruleOptions:{roll:true,rollCoins:21},rollPricingVersion:"roll-v1"})
+  const seat=f.hands[0].engineState.actionOnSeat,user=f.seats.find(s=>s.seatNo===seat)!.userId
+  expect(f.hands[0].rules.ruleOptions).toEqual({roll:true,rollCoins:21})
+  expect(f.hands[0].engineState.roll.coinPolicy).toEqual({limit:21,normal:1,super:3})
+  const actions=new PokerActionService(f.poker)
+  expect((await actions.state(user,f.room.code,"owner",false,f.now)).roll).toMatchObject({coins:{balance:21,limit:21}})
+  await new PokerRollService(f.poker).start(user,command(f),f.now)
+  expect(quoteRoll(f.hands[0].engineState,seat)).toMatchObject({coins:{balance:18,limit:21},super:{coinCost:3},normal:{coinCost:1}})
+ })
  it("wait includes owner coin balance and reroll offers while candidates are pending",async()=>{
   const f=await rollStore(),svc=new PokerRollService(f.poker),input=command(f),user=f.seats.find(s=>s.seatNo===f.hands[0].engineState.actionOnSeat)!.userId
   await svc.start(user,input,f.now)

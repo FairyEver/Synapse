@@ -34,7 +34,7 @@ export interface RollQuote { enabled: boolean; pricingVersion?: string; count: n
 function rollCoins(roll: RollState | undefined, seatNo: number) {
   const policy = roll?.coinPolicy
   if (policy === undefined) return undefined
-  if (!policy || [policy.limit, policy.normal, policy.super].some(n => !Number.isSafeInteger(n) || n <= 0) || policy.normal > policy.limit || policy.super > policy.limit)
+  if (!policy || [policy.limit, policy.normal, policy.super].some(n => !Number.isSafeInteger(n) || n <= 0) || policy.normal !== 1 || policy.super !== 3)
     throw new Error("POKER_ROLL_STATE_INVALID")
   const used = roll!.history.filter(r => r.seatNo === seatNo).reduce((sum, r) => {
     if (r.kind !== "normal" && r.kind !== "super") throw new Error("POKER_ROLL_STATE_INVALID")

@@ -5,6 +5,15 @@ const create = (variant: "standard52" | "short32" = "standard52") => startHand([
 const draw = (h: HandState, kind: "normal" | "super" = "normal") => startRoll(h,h.actionOnSeat!,{rollId:`coin-${h.roll!.history.length}`,kind,cardIndex:0,fee:quoteRoll(h,h.actionOnSeat!)[kind].fee},()=>0)
 const advance = (h: HandState) => {const street=h.street;while(h.street===street)h=act(h,h.actionOnSeat!,{action:legalActions(h,h.actionOnSeat!).toCall?"call":"check"});return h}
 describe("Roll per-hand coins",()=>{
+ it.each([1,2,21])("uses a configured %i coin limit with fixed one/three costs",limit=>{
+  const h=startHand([{seatNo:0,stack:1000},{seatNo:1,stack:1000}],0,orderedDeck(),{ruleOptions:{roll:true,rollCoins:limit},rollPricingVersion:"roll-v1"})
+  const seat=h.actionOnSeat!
+  expect(quoteRoll(h,seat)).toMatchObject({coins:{balance:limit,limit},normal:{coinCost:1,available:true},super:{coinCost:3,available:limit>=3}})
+  const next=draw(h)
+  expect(quoteRoll(next,seat)).toMatchObject({coins:{balance:limit-1,limit}})
+  expect(next.roll!.coinPolicy).toEqual({limit,normal:1,super:3})
+  assertHandIntegrity(next)
+ })
  it.each(["standard52","short32"] as const)("%s allows twelve normal rolls then rejects without changing cards or funds",variant=>{
   let h=create(variant);const seat=h.actionOnSeat!
   expect(quoteRoll(h,seat)).toMatchObject({coins:{balance:12,limit:12},normal:{coinCost:1},super:{coinCost:3}})

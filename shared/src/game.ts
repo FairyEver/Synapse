@@ -25,12 +25,14 @@ export interface HallOverview {
 }
 export type PokerVariant = "standard52" | "short32"
 export const POKER_MAX_SEATS = 6
+export const POKER_DEFAULT_ROLL_COINS = 12
+export const POKER_MAX_ROLL_COINS = 2147483647
 export type PokerController = "human" | "ai" | null
 export type PokerPauseReason = "user" | "context_maintenance" | null
 export * from "./game-poker-chips.js"
 import type { PokerChipState } from "./game-poker-chips.js"
 export type PokerBlindPreset = "1/2" | "2/4" | "5/10" | "10/20"
-export interface PokerRuleOptions { roll?: boolean }
+export interface PokerRuleOptions { roll?: boolean; rollCoins?: number }
 export type PokerRollKind = "normal" | "super"
 export interface PokerRollOffer { fee: number; available: boolean; reason?: string; coinCost?: number }
 export interface PokerRollQuote { enabled: boolean; pricingVersion?: string; count: number; coins?: { balance: number; limit: number }; normal: PokerRollOffer; super: PokerRollOffer }
@@ -317,9 +319,9 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.room.create",
-    "创建2–6人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。",
+    "创建2–6人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。ruleOptions.rollCoins可设置每手金币（正整数，默认12），normal/super消耗固定1/3，不可配置。",
     {
-      ruleOptions: { type: "object", properties: { roll: { type: "boolean" } }, additionalProperties: false },
+      ruleOptions: { type: "object", properties: { roll: { type: "boolean" }, rollCoins: integer(1, POKER_MAX_ROLL_COINS) }, additionalProperties: false },
       variant: { type: "string", enum: ["standard52", "short32"] },
       blindPreset: { type: "string", enum: ["1/2", "2/4", "5/10", "10/20"] },
       creationId: { type: "string", format: "uuid", maxLength: 36 },
@@ -331,7 +333,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
     ["maxSeats", "buyIn"],
     true,
   ],
-  ["poker.roll.start", "按本人当前报价确认换牌，另付筹码；有coins快照的每手12金币，normal扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
+  ["poker.roll.start", "按本人当前报价确认换牌，另付筹码；有coins快照的每手额度由建房rollCoins确定（默认12），normal固定扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。", { ...room, handId: str(), street: { type: "string", enum: ["preflop", "flop", "turn"] }, expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 }, kind: { type: "string", enum: ["normal", "super"] }, cardIndex: integer(0, 1), expectedFee: integer(1, 2147483647) }, ["roomCode", "handId", "street", "expectedActionSeq", "controlVersion", "actionId", "kind", "cardIndex", "expectedFee"], true],
   ["poker.roll.choose", "从本人待选超级换牌候选中选一张，不再扣筹码或金币，零金币仍可选择；候选仅本人可见，未知结果复用原actionId。", { ...room, handId: str(), rollId: str(), candidateIndex: integer(0, 2), expectedActionSeq: controlVersion, controlVersion, actionId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "handId", "rollId", "candidateIndex", "expectedActionSeq", "controlVersion", "actionId"], true],
   ["poker.room.get", "只读旁观快照，不返回底牌、私密提示词或note。", room, ["roomCode"], false],
   ["poker.bot.add", "仅陪练房房主添加一个程序机器人，不调用模型、不影响大厅点数；同次重试复用creationId。", { ...room, creationId: { type: "string", format: "uuid", maxLength: 36 } }, ["roomCode", "creationId"], true],
@@ -368,7 +370,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.table.state",
-    "本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断12金币。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。",
+    "本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断金币额度。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。",
     room,
     ["roomCode"],
     false,

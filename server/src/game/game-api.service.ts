@@ -76,7 +76,7 @@ export class GameApiService {
             variants: { standard52: "标准52张", short32: "7至A共32张；同花大于葫芦，顺子大于三条，A789T为最小顺子。" },
             buyIn: [500, 1000, 2000, 5000],
             actionWindowSeconds: 600,
-            roll: "建房ruleOptions.roll默认关闭；开启后翻前/翻牌/转牌本人行动时可按table.state或wait的normal/super确切报价换牌。费用独立于底池，补偿其他未弃牌原入座者并冻结到手末；普通一张立即替换，超级三选一强制完成。Roll不续600秒时限；超时先选第一张再撤出。候选及旧牌位置只给本人，教学无额外权限。",
+            roll: "建房ruleOptions.roll默认关闭；ruleOptions.rollCoins可设置每手金币（默认12，正整数），normal/super消耗固定1/3、不可配置；开启后翻前/翻牌/转牌本人行动时可按table.state或wait的normal/super确切报价换牌。费用独立于底池，补偿其他未弃牌原入座者并冻结到手末；普通一张立即替换，超级三选一强制完成。Roll不续600秒时限；超时先选第一张再撤出。候选及旧牌位置只给本人，教学无额外权限。",
             heartbeatSeconds: 60,
             nextHand: "首局沿用入座开局；每手结束后所有有资格座位重新准备，真人手动点击、AI显式seat_ready、程序陪练自动准备。未全员准备不开下一手。",
             timeout: "能check就记录check，否则fold；两者均立即撤出本手、离桌退款，不自动跟注。",

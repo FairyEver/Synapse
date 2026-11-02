@@ -7,7 +7,7 @@ import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
 import { resolveRules, ROLL_PRICING_VERSION, type PokerVariant } from "./engine/rules"
-import { POKER_MAX_SEATS, type PokerResumeCheckpoint } from "@synapse/shared/game-contracts"
+import { POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
 import { nextHandEligible } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
 
@@ -75,7 +75,7 @@ export class PokerService {
   }
   async createRoom(
     userId: string,
-    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice"; variant?: PokerVariant; blindPreset?: string; ruleOptions?: { roll?: boolean } },
+    input: { maxSeats: number; buyIn: number; name?: string; creationId?: string; mode?: "points" | "practice"; variant?: PokerVariant; blindPreset?: string; ruleOptions?: PokerRuleOptions },
   ) {
     if (
       !Number.isInteger(input.maxSeats) ||
@@ -88,10 +88,9 @@ export class PokerService {
     let rules
     try {
       const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)
-      if (input.ruleOptions && (Object.keys(input.ruleOptions).some(key => key !== "roll") || (input.ruleOptions.roll !== undefined && typeof input.ruleOptions.roll !== "boolean"))) throw new Error("Invalid rule options")
       rules = resolveRules({ variant: input.variant, smallBlind, bigBlind, ...(input.ruleOptions ? { ruleOptions: input.ruleOptions } : {}), ...(input.ruleOptions?.roll ? { rollPricingVersion: ROLL_PRICING_VERSION } : {}) })
     } catch {
-      reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库和盲注档位。")
+      reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库、盲注和每手金币额度。")
     }
     const id =
       input.creationId === undefined
@@ -112,6 +111,7 @@ export class PokerService {
             ownerUserId: userId,
             mode: input.mode ?? "points",
             ...rules,
+            ruleOptions: rules.ruleOptions ? json(rules.ruleOptions) : undefined,
             code,
             maxSeats: input.maxSeats,
             buyIn: input.buyIn,

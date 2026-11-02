@@ -17,6 +17,16 @@ describe("房间规则价格版本快照",()=>{
     expect(f.rooms[3]).toMatchObject({ruleOptions:{roll:true},rollPricingVersion:"roll-v1"})
     await expect(f.poker.createRoom("u",{name:"test",maxSeats:3,buyIn:500,ruleOptions:{extra:true} as never})).rejects.toThrow()
   })
+  it("accepts a custom coin allowance but rejects invalid budgets and configurable costs",async()=>{
+    const f=setup()
+    await f.poker.createRoom("u",{name:"custom",maxSeats:3,buyIn:500,ruleOptions:{roll:true,rollCoins:21}})
+    expect(f.rooms[0].ruleOptions).toEqual({roll:true,rollCoins:21})
+    await f.poker.createRoom("u",{name:"default",maxSeats:3,buyIn:500,ruleOptions:{roll:true}})
+    expect(f.rooms[1].ruleOptions).toEqual({roll:true,rollCoins:12})
+    for(const options of [{roll:true,rollCoins:0},{roll:true,rollCoins:-1},{roll:true,rollCoins:1.5},{roll:true,rollCoins:2147483648},{roll:true,normalCost:2},{roll:true,superCost:4}])
+      await expect(f.poker.createRoom("u",{name:"bad",maxSeats:3,buyIn:500,ruleOptions:options as never})).rejects.toThrow()
+    expect(f.rooms).toHaveLength(2)
+  })
   it("大厅列表与个人历史读取完整不可变规则",async()=>{
     const f=setup();await f.poker.createRoom("u",{name:"test",maxSeats:3,buyIn:500,ruleOptions:{roll:true}})
     expect((await f.read.lobby()).items[0].rules).toMatchObject({ruleOptions:{roll:true},rollPricingVersion:"roll-v1"})

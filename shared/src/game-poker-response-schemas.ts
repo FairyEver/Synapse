@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { POKER_MAX_ROLL_COINS } from "./game.js"
 
 const controlFields = {
   controller: z.enum(["human", "ai"]).nullable(),
@@ -6,7 +7,7 @@ const controlFields = {
   handoffPending: z.boolean(),
 }
 const control = z.object(controlFields).passthrough()
-const ruleOptions = z.object({ roll: z.boolean().optional() }).strict()
+const ruleOptions = z.object({ roll: z.boolean().optional(), rollCoins: z.number().int().min(1).max(POKER_MAX_ROLL_COINS).optional() }).strict()
 const rollCoins = z.object({ balance: z.number().int().nonnegative(), limit: z.number().int().positive() }).strict().refine(coins => coins.balance <= coins.limit)
 const rollOffer = z.object({ coinCost: z.number().int().positive().optional(), fee: z.number().int().nonnegative(), available: z.boolean(), reason: z.string().optional() }).strict()
 const rollPending = z.object({ rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3) }).strict()

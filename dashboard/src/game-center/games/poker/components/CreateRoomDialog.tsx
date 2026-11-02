@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react"
-import { Button, Description, Form, Input, Label, Modal, Radio, RadioGroup, Switch, TextField } from "@heroui/react"
+import { Button, Description, FieldError, Form, Input, Label, Modal, NumberField, Radio, RadioGroup, Switch, TextField } from "@heroui/react"
 import { Minus, Plus } from "lucide-react"
-import { POKER_MAX_SEATS, type GameFunding, type PokerBlindPreset, type PokerVariant } from "@synapse/shared/game-contracts"
+import { POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS, POKER_MAX_SEATS, type GameFunding, type PokerBlindPreset, type PokerVariant } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
 
 export interface PokerRoomDraft {
@@ -11,6 +11,7 @@ export interface PokerRoomDraft {
   blindPreset: PokerBlindPreset
   maxSeats: number
   roll?: boolean
+  rollCoins?: number
   buyIn: number
 }
 
@@ -34,6 +35,8 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
     previouslyOpen.current = open
   }, [open])
   const update = (patch: Partial<PokerRoomDraft>) => onChange({ ...value, ...patch })
+  const coins = value.rollCoins ?? POKER_DEFAULT_ROLL_COINS
+  const validCoins = !value.roll || Number.isInteger(coins) && coins >= 1 && coins <= POKER_MAX_ROLL_COINS
   const changeSeats = (delta: number) => {
     const maxSeats = Math.max(2, Math.min(POKER_MAX_SEATS, value.maxSeats + delta))
     track({ component: "button", name: "poker-room-seats", action: "click", value: String(maxSeats) })
@@ -45,7 +48,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
           <Modal.CloseTrigger data-slot="dialog-close" aria-label="关闭" />
           <Form className='flex min-h-0 flex-1 flex-col' aria-busy={busy} onSubmit={event => {
             event.preventDefault()
-            if (!busy) {
+            if (!busy && validCoins) {
               track({ component: "button", name: "poker-create-room", action: "click" })
               onCreate()
             }
@@ -84,8 +87,17 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                     <Switch.Control><Switch.Thumb /></Switch.Control>
                     <Label>Roll 换牌</Label>
                   </Switch.Content>
-                  <Description>每手 12 金币，普通 1／超级 3；另付筹码</Description>
+                  <Description>普通 1／超级 3 金币；另付筹码</Description>
                 </Switch>
+                {value.roll && <NumberField value={coins} onChange={rollCoins => update({rollCoins})} minValue={1} maxValue={POKER_MAX_ROLL_COINS} step={1} isRequired isInvalid={!validCoins} isDisabled={busy} variant="secondary">
+                  <Label htmlFor="poker-roll-coins">每手金币</Label>
+                  <NumberField.Group>
+                    <NumberField.DecrementButton aria-label="减少每手金币" />
+                    <NumberField.Input id="poker-roll-coins" />
+                    <NumberField.IncrementButton aria-label="增加每手金币" />
+                  </NumberField.Group>
+                  <FieldError>请输入有效的正整数</FieldError>
+                </NumberField>}
                 <RadioGroup variant="secondary" id="poker-blinds" orientation="horizontal" value={value.blindPreset} isDisabled={busy}
                   onChange={blindPreset => update({ blindPreset: blindPreset as PokerBlindPreset })}>
                   <Label>盲注</Label>
@@ -110,7 +122,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
             </Modal.Body>
             <Modal.Footer>
               <Button variant="tertiary" slot="close">取消</Button>
-              <Button type="submit" isDisabled={busy}>{busy ? "创建中…" : "创建房间"}</Button>
+              <Button type="submit" isDisabled={busy || !validCoins}>{busy ? "创建中…" : "创建房间"}</Button>
             </Modal.Footer>
           </Form>
         </Modal.Dialog>
