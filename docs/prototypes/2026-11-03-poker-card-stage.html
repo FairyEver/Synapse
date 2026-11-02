@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>德州扑克 · 卡牌舞台交互原型</title>
+  <!--
+    2026-11-03 · 仅供交互评审，不接入服务端、账号、存储或真实牌局。
+    依据 cards-v1 定义及 PokerCardChoiceSpec：主动确认、真实费用、两类候选、
+    关面板保留待选、倒计时不中断。使用仓库正式卡面，不改变玩法或系统 UI。
+    打开本文件即可体验；图片相对引用仓库资源，无 CDN、框架或新增依赖。
+    试玩：精准调包 → 选底牌与玩家；三思而行 → 能力牌候选；
+    左右逢源 → 底牌候选；慷慨解囊 → 20 筹码支付；更多手牌 → 分页。
+  -->
+  <style>
+    :root {
+      color-scheme: light;
+      --background: oklch(.9702 0 0); --surface: oklch(1 0 0);
+      --foreground: oklch(.2103 .0059 285.89); --muted: oklch(.49 .0138 285.94);
+      --line: oklch(.90 .004 286.32); --accent: oklch(.6204 .195 253.83);
+      --danger: oklch(.57 .19 25.74); --default: oklch(.94 .001 286.375);
+      --stage: oklch(.18 .018 174); --stage-deep: oklch(.12 .012 174);
+      --stage-ink: oklch(.95 .018 91); --stage-muted: oklch(.77 .023 161);
+      --stage-line: oklch(.43 .035 158); --stage-raised: oklch(.25 .026 169);
+      --brass: oklch(.79 .085 81); --brass-light: oklch(.9 .066 90);
+      --brass-dark: oklch(.43 .069 77); --card-paper: oklch(.95 .025 80);
+      --card-ink: oklch(.25 .023 166); --card-muted: oklch(.42 .026 164);
+      --sage: oklch(.81 .067 161); --shadow: oklch(.075 .009 165 / .55);
+      --veil: oklch(.12 .02 169 / .92); --veil-edge: oklch(.12 .02 169 / .72);
+      --z-table: 0; --z-overlay: 10; --z-flight: 20; --z-notice: 30; --z-demo: 40;
+      --ease: cubic-bezier(.22, 1, .36, 1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-synthesis: none; -webkit-font-smoothing: antialiased;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--background); color: var(--foreground); }
+    button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    button, a { touch-action: manipulation; }
+    button:disabled { cursor: not-allowed; }
+    button:focus-visible { outline: 2px solid var(--brass-light); outline-offset: 5px; }
+    .table-shell button:focus-visible, .demo-bar button:focus-visible { outline-color: var(--accent); }
+    button svg { width: 18px; height: 18px; flex: none; }
+    button[hidden], [hidden] { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .demo-bar { position: relative; z-index: var(--z-demo); min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 18px; background: var(--surface); color: var(--muted); border-bottom: 1px solid var(--line); font-size: 11px; }
+    .demo-label { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+    .demo-label strong { font-weight: 600; color: var(--foreground); }
+    .demo-actions { display: flex; gap: 4px; align-items: center; }
+    .demo-actions button { padding: 5px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .demo-actions button:hover, .demo-actions button[aria-pressed="true"] { background: var(--default); color: var(--foreground); }
+    .demo-actions .demo-reset { margin-left: 7px; border-left: 1px solid var(--line); border-radius: 0; }
+    .table-shell { position: relative; min-height: calc(100dvh - 40px); overflow: hidden; background: var(--background); }
+    .table-top { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 18px 28px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .room-info { display: flex; gap: 13px; align-items: center; font-size: 13px; }
+    .room-info span, .table-top > span { color: var(--muted); font-size: 12px; }
+    .scene { position: relative; width: min(1180px, 100%); height: calc(100dvh - 220px); min-height: 450px; max-height: 730px; margin: 0 auto; }
+    .felt { position: absolute; inset: 12% 10% 15%; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); }
+    .felt::after { content: ""; position: absolute; inset: 20px; border: 1px solid var(--line); border-radius: 50%; }
+    .seat { position: absolute; width: 144px; text-align: center; transform: translate(-50%, -50%); }
+    .seat.north { left: 50%; top: 15%; } .seat.west { left: 15%; top: 51%; } .seat.east { left: 85%; top: 51%; } .seat.south { left: 50%; top: 84%; }
+    .seat-backs { display: flex; justify-content: center; gap: 3px; height: 44px; margin-bottom: 7px; }
+    .card-back { display: grid; place-items: center; width: 30px; height: 42px; background: var(--default); border: 1px solid var(--line); border-radius: 3px; font: 22px Georgia, serif; color: var(--muted); }
+    .seat-plate { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 9px 12px; display: flex; gap: 9px; align-items: center; text-align: left; }
+    .avatar { width: 31px; height: 31px; border-radius: 50%; background: var(--default); display: grid; place-items: center; flex: none; font-size: 12px; }
+    .seat-name { font-size: 11px; color: var(--muted); } .seat-stack { display: block; font-size: 20px; font-weight: 550; }
+    .seat.south .seat-plate { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .seat.south .seat-backs { height: 65px; }
+    .playing { display: block; width: 47px; height: auto; aspect-ratio: 5 / 7; border-radius: 4px; }
+    .table-board { position: absolute; left: 50%; top: 53%; transform: translate(-50%, -50%); display: flex; gap: 6px; }
+    .table-board .playing { width: 51px; }
+    .empty-card { width: 51px; aspect-ratio: 5 / 7; border: 1px dashed var(--line); border-radius: 4px; }
+    .table-pots { position: absolute; top: 31%; left: 50%; translate: -50% 0; display: flex; gap: 54px; text-align: center; }
+    .table-pots small { display: block; color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+    .table-pots strong { font-size: 28px; font-weight: 550; }
+    .table-street { position: absolute; top: 64%; left: 50%; translate: -50% 0; color: var(--muted); font-size: 12px; }
+    .table-actions { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 19px 20px 27px; }
+    .table-actions button { border: 1px solid var(--line); padding: 12px 22px; border-radius: 8px; background: var(--surface); color: var(--foreground); }
+    .table-actions .cards-entry { background: var(--foreground); color: var(--surface); display: flex; gap: 10px; align-items: center; border-color: var(--foreground); }
+    .hand-count { display: grid; place-items: center; min-width: 22px; height: 22px; padding-inline: 5px; border-radius: 4px; font-size: 12px; background: color-mix(in oklch, var(--surface) 18%, transparent); }
+    .table-actions .table-passive { opacity: .55; }
+    .table-turn { color: var(--muted); font-size: 12px; margin-right: 10px; }
+    .status-on-table { color: var(--muted); font-size: 11px; text-align: center; min-height: 18px; }
+
+    /* The game overlay has no dialog box. The original table remains mounted behind it. */
+    .card-overlay { position: fixed; inset: 40px 0 0; z-index: var(--z-overlay); color: var(--stage-ink); overflow: hidden auto; overscroll-behavior: contain; background: radial-gradient(ellipse at 50% 44%, var(--veil) 22%, var(--veil-edge) 100%); animation: veil-in 240ms ease-out both; }
+    .overlay-layout { min-height: 100%; display: flex; flex-direction: column; }
+    .stage-hud { width: min(1180px, calc(100% - 64px)); min-height: 106px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 30px; border-bottom: 1px solid color-mix(in oklch, var(--stage-line) 55%, transparent); }
+    .round-context { font-size: 13px; display: flex; align-items: center; gap: 12px; }
+    .round-context > span { color: var(--stage-muted); }
+    .round-context strong { font-weight: 500; }
+    .hud-board { display: flex; align-items: center; gap: 6px; }
+    .hud-board .playing { width: 34px; border-radius: 3px; }
+    .hud-board .empty-card { width: 34px; border-color: var(--stage-line); }
+    .hud-board-label { font-size: 11px; margin-right: 8px; color: var(--stage-muted); }
+    .hud-right { display: flex; justify-content: flex-end; align-items: center; gap: 22px; }
+    .time { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: .035em; display: flex; gap: 9px; align-items: center; }
+    .time svg { color: var(--brass); width: 21px; height: 21px; }
+    .time[data-urgent="true"] { color: var(--brass-light); }
+    .close-overlay { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: transparent; color: var(--stage-muted); border: 1px solid var(--stage-line); transition: color 150ms, border-color 150ms; }
+    .close-overlay:hover { color: var(--stage-ink); border-color: var(--brass); }
+    .stage-heading { text-align: center; padding: 31px 20px 4px; }
+    .stage-heading h1 { margin: 0; font-family: "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif; font-size: 32px; font-weight: 600; letter-spacing: .12em; text-wrap: balance; }
+    .stage-heading p { font-size: 12px; color: var(--stage-muted); margin: 12px 0 0; letter-spacing: .035em; }
+    .stage-heading .heading-rule { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 17px auto 0; color: var(--brass); }
+    .heading-rule::before, .heading-rule::after { content: ""; height: 1px; width: 44px; background: color-mix(in oklch, var(--brass) 40%, transparent); }
+    .heading-rule svg { width: 10px; height: 10px; }
+    .view { flex: 1; display: flex; flex-direction: column; }
+    .hand-stage { --card-w: min(214px, 17.2vw); position: relative; min-height: 365px; flex: 1; display: flex; align-items: center; justify-content: center; padding: 37px 44px 46px; }
+    .hand-stage::after { content: ""; position: absolute; bottom: 20px; left: 15%; right: 15%; height: 1px; background: linear-gradient(90deg, transparent, var(--stage-line), transparent); pointer-events: none; }
+    .hand-row { display: flex; justify-content: center; align-items: center; width: 100%; perspective: 1300px; }
+    .card-slot { position: relative; width: var(--card-w); flex: none; margin-left: -7px; padding: 0; transform: translateY(var(--rest-y, 0px)) rotate(var(--rest-r, 0deg)); transition: transform 300ms var(--ease), filter 200ms; z-index: 1; filter: drop-shadow(0 12px 13px var(--shadow)); }
+    .card-slot:first-child { margin-left: 0; }
+    .card-slot:hover, .card-slot:focus-within { transform: translateY(-22px) rotate(0deg) scale(1.065); z-index: 3; }
+    .card-slot:has(.ability-card:active) { transform: translateY(-17px) rotate(0deg) scale(1.035); }
+    .card-slot.is-entering { animation: deal-in 540ms var(--ease) both; animation-delay: calc(var(--deal-i) * 55ms); }
+    .ability-card { display: block; position: relative; width: 100%; aspect-ratio: .64; padding: 0; border: 0; border-radius: 12px; text-align: left; color: var(--card-ink); background: var(--card-paper); transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform 160ms ease-out; isolation: isolate; }
+    .ability-card::before { content: ""; position: absolute; inset: 0; z-index: 2; border: 2px solid color-mix(in oklch, var(--brass-dark) 70%, var(--card-paper)); border-radius: inherit; pointer-events: none; }
+    .ability-card::after { content: ""; position: absolute; inset: 5px; z-index: 2; border: 1px solid color-mix(in oklch, var(--brass) 55%, transparent); border-radius: 8px; pointer-events: none; }
+    .card-slot:hover .ability-card::before, .card-slot:focus-within .ability-card::before, .card-slot.is-chosen .ability-card::before { border-color: var(--brass-light); }
+    .ability-art { display: block; width: 100%; height: 56%; object-fit: cover; object-position: 50% 48%; border-radius: 12px 12px 0 0; user-select: none; -webkit-user-drag: none; }
+    .card-type { position: absolute; top: 13px; left: 13px; z-index: 1; display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--card-muted); }
+    .card-type svg { width: 13px; height: 13px; }
+    .card-body { position: absolute; inset: 54% 0 0; padding: 12px 19px 16px; background: var(--card-paper); border-radius: 0 0 12px 12px; display: flex; flex-direction: column; }
+    .card-name { display: block; text-align: center; font: 600 21px/1.3 "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif; letter-spacing: .065em; }
+    .card-divider { display: flex; align-items: center; gap: 8px; color: var(--brass-dark); margin: 8px 8px 7px; }
+    .card-divider::before, .card-divider::after { content: ""; height: 1px; flex: 1; background: color-mix(in oklch, var(--brass-dark) 32%, transparent); }
+    .card-divider svg { width: 5px; height: 5px; }
+    .card-description { display: block; font-size: 11.5px; line-height: 1.7; text-align: center; text-wrap: pretty; }
+    .card-cost { display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 10px; color: var(--card-muted); margin-top: auto; padding-top: 6px; }
+    .card-cost svg { width: 11px; height: 11px; }
+    .card-locked { position: absolute; inset: 0; border-radius: inherit; background: color-mix(in oklch, var(--stage) 30%, transparent); z-index: 3; display: flex; justify-content: center; align-items: flex-end; padding: 14px 7px; }
+    .card-locked span { color: var(--stage-ink); background: var(--stage); border-radius: 4px; padding: 5px 9px; font-size: 11px; }
+    .card-slot.is-unavailable .ability-art { filter: saturate(.5); }
+    .card-slot.is-unavailable:hover { transform: translateY(-12px) rotate(0deg) scale(1.025); }
+    .page-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 4; width: 40px; height: 48px; padding: 0; border: 1px solid var(--stage-line); border-radius: 7px; display: grid; place-items: center; color: var(--stage-ink); background: color-mix(in oklch, var(--stage) 60%, transparent); }
+    .page-arrow:hover { border-color: var(--brass); }
+    .page-arrow:disabled { opacity: .22; }
+    .page-arrow.previous { left: 20px; } .page-arrow.next { right: 20px; }
+    .hand-status { min-height: 34px; font-size: 12px; color: var(--stage-muted); text-align: center; padding: 0 20px; }
+    .hand-status strong { color: var(--brass-light); font-weight: 500; }
+    .stage-footer { width: min(1120px, calc(100% - 64px)); display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 0 auto; min-height: 77px; padding: 14px 0 20px; }
+    .held-count { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--stage-muted); }
+    .held-count svg { width: 17px; height: 17px; color: var(--brass); }
+    .held-count b { color: var(--stage-ink); font-weight: 500; }
+    .key-hints { display: flex; align-items: center; gap: 15px; font-size: 11px; color: var(--stage-muted); }
+    kbd { font: inherit; padding: 2px 4px; border: 1px solid var(--stage-line); border-radius: 3px; color: var(--stage-ink); margin-right: 4px; }
+    .text-action { border: 0; padding: 9px 0; color: var(--stage-muted); background: transparent; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .text-action:hover { color: var(--stage-ink); }
+    .footer-actions { display: flex; align-items: center; gap: 20px; }
+    .inspect-view { padding: 24px 32px 30px; }
+    .inspect-top { width: min(850px, 100%); margin: 0 auto 15px; }
+    .inspect-layout { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 74px; width: min(850px, 100%); margin: auto; align-items: center; }
+    .inspect-card { filter: drop-shadow(0 14px 16px var(--shadow)); align-self: center; }
+    .inspect-card .ability-card { pointer-events: none; }
+    .inspect-card .card-name { font-size: 23px; }
+    .inspect-card .card-description { font-size: 12px; }
+    .inspect-details { animation: details-in 260ms var(--ease) both; }
+    .inspect-category { display: inline-flex; gap: 7px; align-items: center; font-size: 12px; color: var(--brass); }
+    .inspect-category svg { width: 16px; height: 16px; }
+    .inspect-details h2 { margin: 11px 0 14px; font: 600 29px/1.3 "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif; letter-spacing: .075em; }
+    .full-description { max-width: 38ch; margin: 0; font-size: 13px; line-height: 1.85; color: var(--stage-muted); text-wrap: pretty; }
+    .selection-fields { display: flex; flex-direction: column; gap: 22px; margin-top: 24px; }
+    .choice-field { border: 0; padding: 0; margin: 0; min-width: 0; }
+    .choice-field legend { font-size: 12px; padding: 0; margin-bottom: 10px; color: var(--stage-ink); }
+    .hole-options { display: flex; gap: 13px; }
+    .hole-choice { position: relative; padding: 0; border: 0; border-radius: 5px; background: transparent; transition: transform 180ms var(--ease); }
+    .hole-choice .playing { width: 49px; }
+    .hole-choice:hover { transform: translateY(-4px); }
+    .hole-choice[aria-pressed="true"] { outline: 2px solid var(--brass-light); outline-offset: 4px; transform: translateY(-4px); }
+    .selection-tick { position: absolute; right: -7px; bottom: -5px; width: 19px; height: 19px; background: var(--brass-light); border-radius: 50%; color: var(--stage-deep); display: grid; place-items: center; }
+    .selection-tick svg { width: 12px; height: 12px; }
+    .target-options { display: flex; gap: 8px; flex-wrap: wrap; }
+    .target-choice { min-height: 48px; padding: 9px 12px; display: flex; gap: 9px; align-items: center; background: transparent; border: 1px solid var(--stage-line); border-radius: 7px; color: var(--stage-muted); font-size: 12px; }
+    .target-choice .avatar { width: 25px; height: 25px; font-size: 10px; background: var(--stage-raised); color: var(--stage-ink); }
+    .target-choice:hover { border-color: var(--brass); color: var(--stage-ink); }
+    .target-choice[aria-pressed="true"] { border-color: var(--brass-light); color: var(--brass-light); background: var(--stage-raised); }
+    .target-choice > svg { width: 13px; height: 13px; }
+    .cast-area { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--stage-line); }
+    .intent-preview { font-size: 12px; line-height: 1.7; color: var(--stage-muted); margin: 0 0 13px; min-height: 21px; }
+    .payment { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; color: var(--stage-muted); font-size: 12px; margin-bottom: 16px; }
+    .payment strong { color: var(--brass-light); font-weight: 500; }
+    .payment span + span { padding-left: 9px; border-left: 1px solid var(--stage-line); }
+    .game-button { min-height: 46px; min-width: 190px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 24px; border: 0; border-radius: 6px; background: var(--brass); color: var(--stage-deep); box-shadow: inset 0 -3px 0 color-mix(in oklch, var(--brass-dark) 70%, transparent), inset 0 1px 0 var(--brass-light); font-size: 13px; font-weight: 600; letter-spacing: .04em; transition: background 150ms, transform 150ms; }
+    .game-button:hover { background: var(--brass-light); transform: translateY(-1px); }
+    .game-button:active { transform: translateY(1px); }
+    .game-button:disabled { background: var(--stage-raised); color: var(--stage-muted); box-shadow: inset 0 0 0 1px var(--stage-line); transform: none; }
+    .game-button svg { width: 16px; height: 16px; }
+    .cast-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .inspect-warning { font-size: 12px; line-height: 1.7; color: var(--brass-light); }
+    .candidate-stage { --card-w: min(236px, 23vw); min-height: 340px; flex: 1; display: flex; align-items: center; justify-content: center; padding: 36px 28px 30px; }
+    .candidate-stage .hand-row { gap: 26px; }
+    .candidate-stage .card-slot { margin: 0; }
+    .candidate-stage .card-slot.is-chosen { transform: translateY(-15px) scale(1.035); }
+    .candidate-stage .card-slot.is-chosen .ability-card { outline: 2px solid var(--brass-light); outline-offset: 5px; }
+    .candidate-stage .card-slot.is-chosen::after { content: "已选择"; position: absolute; left: 50%; bottom: -29px; translate: -50% 0; color: var(--brass-light); font-size: 11px; white-space: nowrap; }
+    .candidate-footer { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; padding: 13px 20px 29px; }
+    .candidate-footer p { margin: 0; color: var(--stage-muted); font-size: 11px; text-align: center; line-height: 1.7; }
+    .poker-candidate { aspect-ratio: 5 / 7; border-radius: 9px; background: transparent; border: 0; padding: 0; display: block; width: 100%; }
+    .poker-candidate .playing { width: 100%; border-radius: 9px; }
+    .candidate-stage.poker-candidates { --card-w: min(172px, 21vw); min-height: 320px; }
+    .poker-candidates .card-slot.is-chosen .poker-candidate { outline: 2px solid var(--brass-light); outline-offset: 6px; }
+    .private-view { align-items: center; justify-content: center; padding: 36px 24px; gap: 24px; }
+    .private-label { color: var(--brass); display: flex; align-items: center; gap: 7px; font-size: 12px; }
+    .private-label svg { width: 15px; height: 15px; }
+    .private-view h2 { font-size: 22px; font-weight: 500; margin: 0; }
+    .private-card { width: 112px; filter: drop-shadow(0 9px 12px var(--shadow)); animation: private-reveal 430ms var(--ease) both; }
+    .private-card .playing { width: 100%; }
+    .private-view p { margin: 0; max-width: 35ch; font-size: 12px; line-height: 1.8; text-align: center; color: var(--stage-muted); }
+    .empty-hand { min-height: 310px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; color: var(--stage-muted); font-size: 13px; }
+    .empty-hand svg { color: var(--brass); width: 36px; height: 36px; }
+    .notice { position: fixed; z-index: var(--z-notice); bottom: 110px; left: 50%; translate: -50% 0; max-width: calc(100% - 32px); padding: 13px 20px; border-radius: 6px; background: var(--stage); color: var(--stage-ink); font-size: 13px; display: flex; gap: 10px; align-items: center; text-align: center; animation: details-in 220ms var(--ease) both; pointer-events: none; }
+    .notice svg { width: 16px; height: 16px; flex: none; color: var(--brass); }
+    .card-flight { position: fixed; z-index: var(--z-flight); pointer-events: none; transform-origin: center; }
+    .impact { position: fixed; z-index: var(--z-flight); width: 80px; height: 80px; border: 2px solid var(--brass); border-radius: 50%; pointer-events: none; animation: impact 500ms var(--ease) both; }
+    .overlay-out { animation: veil-out 200ms ease-out both; pointer-events: none; }
+    @keyframes veil-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes veil-out { to { opacity: 0; } }
+    @keyframes deal-in { from { opacity: 0; transform: translate(0, 160px) rotate(calc(var(--rest-r) + 9deg)) scale(.79); } to { opacity: 1; transform: translateY(var(--rest-y)) rotate(var(--rest-r)); } }
+    @keyframes details-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes private-reveal { from { opacity: 0; transform: rotateY(70deg) translateY(10px); } to { opacity: 1; transform: rotateY(0) translateY(0); } }
+    @keyframes impact { from { opacity: .9; transform: scale(.4); } to { opacity: 0; transform: scale(1.6); } }
+
+    @media (min-width: 1500px) and (min-height: 850px) {
+      .hand-stage { --card-w: 242px; padding-block: 55px; } .hand-stage .card-description { font-size: 13px; }
+      .hand-stage .card-name { font-size: 24px; } .hand-stage .card-cost { font-size: 11px; }
+      .stage-heading { padding-top: 42px; } .stage-heading h1 { font-size: 36px; }
+      .inspect-layout { grid-template-columns: 278px minmax(0, 1fr); gap: 90px; }
+    }
+    @media (max-height: 760px) and (min-width: 851px) {
+      .stage-hud { min-height: 82px; } .stage-heading { padding-top: 21px; }
+      .stage-heading h1 { font-size: 28px; } .stage-heading .heading-rule { margin-top: 12px; }
+      .hand-stage { --card-w: min(194px, 16.4vw); min-height: 315px; padding-top: 25px; padding-bottom: 30px; }
+      .stage-footer { min-height: 60px; padding-top: 10px; } .card-body { padding-inline: 16px; }
+      .card-name { font-size: 19px; } .card-description { font-size: 11px; line-height: 1.65; }
+      .candidate-stage { --card-w: 202px; min-height: 315px; padding-block: 25px; }
+      .inspect-layout { grid-template-columns: 215px minmax(0, 1fr); gap: 60px; }
+      .selection-fields { gap: 15px; margin-top: 18px; } .cast-area { margin-top: 18px; padding-top: 15px; }
+      .inspect-view { padding-top: 10px; } .inspect-top { margin-bottom: 6px; }
+    }
+    @media (max-width: 1100px) and (min-width: 851px) {
+      .hand-stage { --card-w: 17.3vw; padding-inline: 26px; } .card-body { inset-block-start: 52%; padding: 10px 13px 12px; }
+      .ability-card { aspect-ratio: .60; } .ability-art { height: 54%; }
+      .card-name { font-size: 18px; } .card-description { font-size: 10.5px; line-height: 1.6; }
+      .card-divider { margin-block: 6px; } .key-hints { gap: 7px; }
+    }
+    @media (max-width: 850px) {
+      .demo-bar { padding: 7px 12px; flex-wrap: wrap; gap: 6px; min-height: 68px; }
+      .demo-label { font-size: 10px; } .demo-actions { width: 100%; justify-content: space-between; gap: 0; }
+      .demo-actions button { padding: 5px 6px; font-size: 10px; } .demo-actions .demo-reset { margin-left: 0; }
+      .card-overlay { inset-block-start: 68px; } .table-shell { min-height: calc(100dvh - 68px); }
+      .table-top { padding: 16px; } .room-info { gap: 8px; font-size: 12px; } .table-top > span { display: none; }
+      .stage-hud { width: calc(100% - 36px); min-height: 90px; grid-template-columns: 1fr auto; gap: 5px 12px; padding: 13px 0 10px; }
+      .round-context { font-size: 11px; gap: 8px; } .hud-right { gap: 13px; grid-area: 1 / 2 / 3 / 3; }
+      .time { font-size: 16px; gap: 6px; } .time svg { width: 18px; height: 18px; }
+      .hud-board { grid-column: 1; gap: 4px; } .hud-board .playing, .hud-board .empty-card { width: 23px; }
+      .hud-board-label { font-size: 10px; margin-right: 3px; }
+      .close-overlay { width: 33px; height: 33px; }
+      .stage-heading { padding-top: 23px; } .stage-heading h1 { font-size: 26px; }
+      .stage-heading p { font-size: 11px; margin-top: 10px; } .stage-heading .heading-rule { margin-top: 13px; }
+      .hand-stage { --card-w: 216px; padding: 28px 0 25px; min-height: 366px; width: 100%; display: block; overflow: hidden; }
+      .hand-stage::after { bottom: 12px; }
+      .hand-row { overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-inline: calc((100vw - 216px) / 2); justify-content: flex-start; gap: 18px; padding: 20px max(24px, calc((100% - 216px) / 2)) 28px; scrollbar-width: none; perspective: none; }
+      .hand-row::-webkit-scrollbar { display: none; }
+      .card-slot { margin: 0; transform: none; scroll-snap-align: center; }
+      .card-slot:hover, .card-slot:focus-within, .card-slot:has(.ability-card:active) { transform: translateY(-7px); }
+      .card-slot.is-entering { --rest-r: 0deg !important; --rest-y: 0px !important; }
+      .card-name { font-size: 21px; } .card-description { font-size: 11.5px; }
+      .hand-status { min-height: 35px; font-size: 11px; } .stage-footer { width: calc(100% - 36px); min-height: 65px; gap: 10px; padding-top: 8px; }
+      .key-hints { display: none; } .held-count { font-size: 11px; }
+      .page-arrow { display: none !important; }
+      .inspect-view { padding: 14px 24px 28px; }
+      .inspect-top { margin-bottom: 15px; }
+      .inspect-layout { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 21px; align-items: start; }
+      .inspect-card { align-self: start; grid-column: 1; grid-row: 1; }
+      .inspect-card .card-name { font-size: 13px; } .inspect-card .card-body { padding: 8px 10px 9px; }
+      .inspect-card .card-description { font-size: 8px; line-height: 1.5; }
+      .inspect-card .card-divider { margin: 5px 6px; } .inspect-card .card-cost { font-size: 7px; padding-top: 3px; }
+      .inspect-card .card-type { top: 10px; left: 10px; font-size: 7px; gap: 3px; } .inspect-card .card-type svg { width: 10px; height: 10px; }
+      .inspect-details { display: contents; }
+      .inspect-intro { grid-column: 2; align-self: center; }
+      .inspect-details h2 { font-size: 23px; margin: 10px 0 12px; } .inspect-category { font-size: 10px; }
+      .full-description { font-size: 12px; line-height: 1.8; }
+      .selection-fields { grid-column: 1 / -1; margin-top: 5px; gap: 21px; }
+      .cast-area { grid-column: 1 / -1; margin-top: 0; padding-top: 17px; }
+      .target-choice { flex: 1; justify-content: center; padding-inline: 9px; font-size: 11px; }
+      .game-button { min-height: 46px; } .cast-row .game-button { flex: 1; }
+      .candidate-stage { --card-w: 216px; min-height: 360px; padding: 20px 0 15px; display: block; overflow: hidden; }
+      .candidate-stage .hand-row { gap: 20px; padding-block: 24px 40px; }
+      .candidate-stage .card-slot.is-chosen { transform: translateY(-5px); }
+      .candidate-footer { padding: 10px 24px 25px; }
+      .candidate-stage.poker-candidates { --card-w: min(104px, 24vw); min-height: 235px; display: flex; padding: 35px 18px 45px; }
+      .poker-candidates .hand-row { justify-content: center; gap: 14px; padding: 12px 6px 35px; overflow: visible; }
+      .private-view { min-height: 430px; }
+      .scene { min-height: 480px; height: calc(100dvh - 270px); }
+      .felt { inset: 9% 5% 9%; border-radius: 43%; } .felt::after { inset: 11px; }
+      .seat { width: 112px; } .seat.north { top: 15%; } .seat.west { left: 18%; top: 48%; } .seat.east { left: 82%; top: 48%; } .seat.south { top: 84%; }
+      .seat-plate { padding: 7px 9px; } .seat-stack { font-size: 17px; } .avatar { width: 24px; height: 24px; }
+      .table-pots { top: 30%; gap: 42px; } .table-pots strong { font-size: 23px; }
+      .table-board { top: 59%; gap: 5px; } .table-board .playing, .table-board .empty-card { width: 36px; }
+      .table-street { top: 71%; } .table-actions { gap: 8px; padding: 17px 14px; }
+      .table-actions button { padding: 12px 17px; font-size: 12px; } .table-turn { display: none; }
+      .notice { bottom: 95px; font-size: 12px; padding: 12px 14px; }
+    }
+    @media (max-width: 360px) {
+      .demo-label span { display: none; } .demo-actions button { padding-inline: 4px; }
+      .hud-right { gap: 8px; } .round-context { gap: 5px; }
+      .inspect-view { padding-inline: 18px; } .inspect-layout { grid-template-columns: 112px minmax(0, 1fr); gap: 18px; }
+      .inspect-details h2 { font-size: 21px; } .full-description { font-size: 11px; }
+      .target-choice { gap: 5px; padding-inline: 6px; } .target-choice .avatar { width: 21px; height: 21px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+      .card-slot:hover, .card-slot:focus-within { transform: none; }
+      .ability-card { transform: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="demo-bar" aria-label="原型场景">
+    <div class="demo-label"><strong>卡牌舞台 / 交互原型</strong><span>本地演示，不连接牌局</span></div>
+    <nav class="demo-actions" aria-label="切换演示场景">
+      <button type="button" data-demo="hand" aria-pressed="true">手牌</button>
+      <button type="button" data-demo="ability" aria-pressed="false">能力三选一</button>
+      <button type="button" data-demo="poker" aria-pressed="false">底牌三选一</button>
+      <button type="button" data-demo="many" aria-pressed="false">更多手牌</button>
+      <button type="button" class="demo-reset" id="reset">重播入场</button>
+    </nav>
+  </header>
+
+  <main class="table-shell" id="table-shell">
+    <header class="table-top"><div class="room-info"><strong>#441769</strong><span>第 12 手</span><span>标准 52 张 · 盲注 5 / 10</span></div><span>对局信息　　牌型大小　　···</span></header>
+    <section class="scene" aria-label="演示牌桌">
+      <div class="felt" aria-hidden="true"></div>
+      <div class="seat north" data-seat="north"><div class="seat-backs" aria-label="两张暗牌"><span class="card-back">♠</span><span class="card-back">♠</span></div><div class="seat-plate"><span class="avatar">岚</span><div><span class="seat-name">阿岚</span><strong class="seat-stack">2,480</strong></div></div></div>
+      <div class="seat west" data-seat="west"><div class="seat-backs" aria-label="两张暗牌"><span class="card-back">♠</span><span class="card-back">♠</span></div><div class="seat-plate"><span class="avatar">舟</span><div><span class="seat-name">小舟</span><strong class="seat-stack">1,820</strong></div></div></div>
+      <div class="seat east" data-seat="east"><div class="seat-backs" aria-label="两张暗牌"><span class="card-back">♠</span><span class="card-back">♠</span></div><div class="seat-plate"><span class="avatar">林</span><div><span class="seat-name">林间</span><strong class="seat-stack">3,160</strong></div></div></div>
+      <div class="table-pots"><div><small>底池</small><strong>240</strong></div><div><small>暂存</small><strong id="reserve-total">60</strong></div></div>
+      <div class="table-board" id="table-board" aria-label="公共牌"></div><div class="table-street">转牌</div>
+      <div class="seat south" data-seat="self"><div class="seat-backs" id="own-holes" aria-label="你的底牌"></div><div class="seat-plate"><span class="avatar">你</span><div><span class="seat-name">你的回合</span><strong class="seat-stack" id="stack">2,140</strong></div></div></div>
+    </section>
+    <div class="status-on-table" id="table-status"></div>
+    <footer class="table-actions"><span class="table-turn">剩余 <span data-clock>08:40</span></span><button type="button" class="cards-entry" id="open-cards" aria-haspopup="dialog" aria-controls="card-overlay" aria-expanded="false"></button><button type="button" id="fold-demo" class="table-passive">弃牌</button><button type="button" id="check-demo" class="table-passive">过牌</button></footer>
+  </main>
+
+  <section class="card-overlay" id="card-overlay" role="dialog" aria-modal="true" aria-labelledby="stage-title" hidden>
+    <div class="overlay-layout">
+      <header class="stage-hud">
+        <div class="round-context"><span>第 12 手</span><strong>转牌 · 你的回合</strong></div>
+        <div class="hud-board" id="hud-board" aria-label="公共牌"></div>
+        <div class="hud-right"><div class="time" aria-label="当前回合剩余时间"><span id="clock-icon" aria-hidden="true"></span><span data-clock>08:40</span></div><button type="button" class="close-overlay" id="close-cards" aria-label="收起卡牌"></button></div>
+      </header>
+      <div class="stage-heading" id="stage-heading"><h1 id="stage-title">你的手牌</h1><p id="stage-subtitle">选择一张卡牌</p><div class="heading-rule" id="heading-rule" aria-hidden="true"></div></div>
+      <div id="stage-content" class="view"></div>
+      <footer class="stage-footer" id="stage-footer"></footer>
+    </div>
+  </section>
+  <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
+  <div class="sr-only" id="announcer" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+      const ASSETS = '../../dashboard/src/game-center/games/poker/assets/';
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+      const icons = {
+        cards: '<path d="M9 3h10a2 2 0 0 1 2 2v13M5 6h10a2 2 0 0 1 2 2v12H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/><path d="m10 10 3 3-3 3-3-3Z"/>',
+        swap: '<path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/>',
+        eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+        choice: '<path d="M5 4H2v15h5M19 4h3v15h-5M8 3h8v18H8Z"/>',
+        shield: '<path d="m12 3 8 3v5c0 5-8 10-8 10S4 16 4 11V6Z"/><path d="m8 12 3 3 5-6"/>',
+        coin: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/>',
+        diamond: '<path d="m12 3 7 9-7 9-7-9Z"/>',
+        clock: '<circle cx="12" cy="13" r="8"/><path d="M9 2h6m-3 3v8l4 2"/>',
+        x: '<path d="m6 6 12 12M6 18 18 6"/>',
+        back: '<path d="m10 6-6 6 6 6M4 12h16"/>',
+        arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+        left: '<path d="m15 5-7 7 7 7"/>',
+        right: '<path d="m9 5 7 7-7 7"/>',
+        tick: '<path d="m5 12 4 4L19 6"/>',
+        lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'
+      };
+      const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.cards}</svg>`;
+      const defs = {
+        '04': { name: '精准调包', type: '诡术', icon: 'swap', short: '交换自己一张底牌与指定对手的随机底牌。', description: '选择自己一张底牌，与选定其他未弃牌玩家的一张随机底牌交换。', choices: ['hole', 'player'] },
+        '06': { name: '左右逢源', type: '抉择', icon: 'choice', short: '抽取至多三张候选，选一张替换底牌。', description: '为自己选定底牌随机取至多三个候选，选一张；其余与旧牌洗回牌堆。', choices: ['hole'] },
+        '11': { name: '先知之眼', type: '情报', icon: 'eye', short: '私下预览下一张公共牌，牌序变化后失效。', description: '私下预览当前牌序下一张将发出的公共牌；牌序变化会使预览失效，河牌不可用。', choices: [] },
+        '22': { name: '灵感迸发', type: '补给', icon: 'cards', short: '从共享能力牌池抽两张。', description: '从共享能力牌池抽两张。', choices: [] },
+        '25': { name: '三思而行', type: '抉择', icon: 'choice', short: '至多三张能力牌选一张，其余归还牌池。', description: '从共享池暂取至多三张能力牌，选一张获得，其余原实例归还并洗匀。', choices: [] },
+        '35': { name: '物归原主', type: '暂存', icon: 'coin', short: '取回你最近一笔暂存剩余的全部筹码。', description: '取回本次用牌之前本人最近一笔正额暂存尚未被取走的全部筹码；已空不跳过。', choices: [] },
+        '38': { name: '慷慨解囊', type: '补给', icon: 'cards', short: '支付2BB至暂存，抽两张能力牌。', description: '支付2BB筹码至暂存，从共享池抽两张能力牌。', choices: [], cost: 20 },
+        '41': { name: '护身符', type: '防护', icon: 'shield', short: '抵挡一次他人对你底牌的改动。', description: '阻止下一次他人能力牌对本人底牌的替换、交换或重洗。', choices: [] },
+        '48': { name: '反制咒', type: '防护', icon: 'shield', short: '抵挡一次仅以你为目标的敌意卡牌。', description: '阻止下一次他人以本人为唯一外部目标的敌意能力牌效果，代价不退。', choices: [] }
+      };
+      const players = [{ id: 'north', name: '阿岚', glyph: '岚' }, { id: 'west', name: '小舟', glyph: '舟' }, { id: 'east', name: '林间', glyph: '林' }];
+      const rankNames = { K: 'K', J: 'J', A: 'A', Q: 'Q', T: '10' }, suits = { s: '♠', h: '♥', c: '♣', d: '♦' };
+      const cardText = code => `${rankNames[code[0]] || code[0]}${suits[code[1]]}`;
+      const playing = code => `<img class="playing" src="${ASSETS}cards/${code}.svg" alt="${cardText(code)}" draggable="false">`;
+      const overlay = $('#card-overlay'), content = $('#stage-content'), footer = $('#stage-footer'), table = $('#table-shell');
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+      let serial = 0, hand = [], ownHoles = ['Kc', '8c'], stack = 2140, reserve = 60, refundable = 0;
+      let pending = null, selected = null, selections = {}, candidate = null, page = 0, isOpen = false, busy = false;
+      let privateResult = false, statuses = [], scenario = 'hand', generation = 0, noticeTimer, closeVersion = 0;
+      let deadline = Date.now() + 520000, restoreFocus = null;
+      const makeInstance = id => ({ id: `${id}-${++serial}`, cardId: id });
+      const pageSize = 5;
+      const current = () => hand.find(item => item.id === selected);
+      const unavailableFor = item => item.cardId === '35' && refundable === 0 ? '没有可取回的暂存' : null;
+      const pokerCandidates = () => ['As', 'Qh', 'Td', '6s', 'Ac', 'Jh'].filter(code => !ownHoles.includes(code)).slice(0, 3);
+      const announce = message => { $('#announcer').textContent = message; };
+      function setHeading(title, subtitle, show = true) {
+        $('#stage-heading').hidden = !show;
+        $('#stage-title').textContent = title;
+        $('#stage-subtitle').textContent = subtitle;
+      }
+      function updateTable() {
+        $('#own-holes').innerHTML = ownHoles.map(playing).join('');
+        $('#stack').textContent = stack.toLocaleString('zh-CN');
+        $('#reserve-total').textContent = reserve.toLocaleString('zh-CN');
+        $('#open-cards').innerHTML = `${icon('cards')}<span>${pending ? '继续选牌' : '卡牌'}</span><b class="hand-count">${pending ? '待选' : hand.length}</b>`;
+        $('#table-status').textContent = statuses.join(' · ');
+      }
+      function dismissNotice() { clearTimeout(noticeTimer); $('#notice').hidden = true; }
+      function notify(message) {
+        clearTimeout(noticeTimer);
+        $('#notice').innerHTML = `${icon('tick')}<span>${message}</span>`;
+        $('#notice').hidden = false;
+        noticeTimer = setTimeout(() => { $('#notice').hidden = true; }, 3300);
+        announce(message);
+      }
+      function pageCards() { return innerWidth <= 850 ? hand : hand.slice(page * pageSize, (page + 1) * pageSize); }
+      function cardMarkup(item, index, total, candidateIndex) {
+        const d = defs[item.cardId], candidateMode = candidateIndex !== undefined;
+        const center = index - (total - 1) / 2, reason = candidateMode ? null : unavailableFor(item), locked = !!reason;
+        return `<div class="card-slot ${locked ? 'is-unavailable' : ''} is-entering" style="--rest-r:${center * 2.4}deg;--rest-y:${Math.abs(center) * 7}px;--deal-i:${Math.min(index, 4)}" data-instance="${item.id}" ${candidateMode ? `data-candidate="${candidateIndex}"` : ''}>
+          <button class="ability-card" type="button" ${candidateMode ? `aria-pressed="${candidate === candidateIndex}"` : ''} aria-label="${d.name}，${d.short}${locked ? `，${reason}` : ''}">
+            <img class="ability-art" src="${ASSETS}ability-cards/v1/${item.cardId}.png" alt="" width="1122" height="1402" draggable="false">
+            <span class="card-type">${icon(d.icon)}${d.type}</span>
+            <span class="card-body"><strong class="card-name">${d.name}</strong><span class="card-divider">${icon('diamond')}</span><span class="card-description">${d.short}</span><span class="card-cost">${d.cost ? `${icon('coin')}${d.cost} 筹码 · 2BB` : '无需筹码'}</span></span>
+            ${locked ? `<span class="card-locked"><span>${reason}</span></span>` : ''}
+          </button></div>`;
+      }
+      function attachCardMotion(root) {
+        $$('.is-entering', root).forEach(slot => slot.addEventListener('animationend', () => slot.classList.remove('is-entering'), { once: true }));
+        $$('.ability-card', root).forEach(button => {
+          button.addEventListener('pointermove', event => {
+            if (reduced.matches || event.pointerType !== 'mouse' || innerWidth <= 850) return;
+            const rect = button.getBoundingClientRect();
+            button.style.setProperty('--tilt-x', `${-(event.clientY - rect.top - rect.height / 2) / rect.height * 3}deg`);
+            button.style.setProperty('--tilt-y', `${(event.clientX - rect.left - rect.width / 2) / rect.width * 3}deg`);
+          });
+          button.addEventListener('pointerleave', () => { button.style.removeProperty('--tilt-x'); button.style.removeProperty('--tilt-y'); });
+        });
+      }
+      function renderFooter(kind = 'hand') {
+        const pendingText = pending ? '待选结果仅你可见' : '手牌仅你可见';
+        footer.innerHTML = `<div class="held-count">${icon('cards')}<span>${kind === 'hand' ? `<b>${hand.length}</b> 张手牌${hand.length > pageSize && innerWidth > 850 ? ` · ${page * pageSize + 1}–${Math.min((page + 1) * pageSize, hand.length)}` : ''}` : pendingText}</span></div><div class="key-hints"><span><kbd>← →</kbd>切换</span><span><kbd>Enter</kbd>${pending ? '选牌' : '查看'}</span><span><kbd>Esc</kbd>${selected ? '返回' : '收起'}</span></div><div class="footer-actions">${privateResult && kind === 'hand' ? '<button type="button" class="text-action" id="revisit-private">本人情报</button>' : ''}<button type="button" class="text-action" id="return-table">收起卡牌 ${icon('back')}</button></div>`;
+        $('#return-table').addEventListener('click', closeCards);
+        $('#revisit-private')?.addEventListener('click', renderPrivate);
+        footer.hidden = false;
+      }
+      function renderHand() {
+        selected = null;
+        content.className = 'view';
+        setHeading('你的手牌', innerWidth <= 850 ? '左右滑动 · 轻点选牌' : '悬停查看 · 点击选牌');
+        page = Math.min(page, Math.max(0, Math.ceil(hand.length / pageSize) - 1));
+        const cards = pageCards();
+        content.innerHTML = hand.length ? `<div class="hand-stage"><button class="page-arrow previous" type="button" aria-label="上一组手牌" ${page === 0 ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('left')}</button><div class="hand-row" aria-label="能力手牌">${cards.map((item, i) => cardMarkup(item, i, cards.length)).join('')}</div><button class="page-arrow next" type="button" aria-label="下一组手牌" ${(page + 1) * pageSize >= hand.length ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('right')}</button></div><div class="hand-status">${statuses.length ? `<strong>${statuses.join(' · ')}</strong>` : '可连续使用卡牌，再完成本轮下注'}</div>` : `<div class="empty-hand">${icon('cards')}<span>本轮手牌已用完</span><button class="text-action" type="button" id="empty-return">返回牌桌 ${icon('back')}</button></div>`;
+        $$('.card-slot', content).forEach(slot => $('.ability-card', slot).addEventListener('click', () => inspect(slot.dataset.instance, slot)));
+        $('.previous', content)?.addEventListener('click', () => { page--; renderHand(); $('.ability-card', content)?.focus({ preventScroll: true }); });
+        $('.next', content)?.addEventListener('click', () => { page++; renderHand(); $('.ability-card', content)?.focus({ preventScroll: true }); });
+        $('#empty-return')?.addEventListener('click', closeCards);
+        attachCardMotion(content);
+        renderFooter();
+      }
+      function inspect(instanceId, origin) {
+        if (busy || pending) return;
+        const item = hand.find(entry => entry.id === instanceId);
+        if (!item) return;
+        const originRect = origin?.getBoundingClientRect();
+        selected = item.id;
+        selections = {};
+        const d = defs[item.cardId];
+        content.className = 'view inspect-view';
+        setHeading(d.name, '', false);
+        content.innerHTML = `<div class="inspect-top"><button class="text-action" id="back-hand" type="button">${icon('back')} 返回手牌</button></div><div class="inspect-layout"><div class="inspect-card">${cardMarkup(item, 0, 1)}</div><div class="inspect-details"><div class="inspect-intro"><span class="inspect-category">${icon(d.icon)}${d.type}</span><h2>${d.name}</h2><p class="full-description">${d.description}</p></div><div class="selection-fields" id="selection-fields"></div><div class="cast-area"><p class="intent-preview" id="intent-preview"></p><div class="payment">${d.cost ? `<span>代价 ${d.cost} 筹码</span><span>豁免 0</span><span>实付 <strong>${d.cost} 筹码</strong></span>` : '<span>无需筹码</span>'}</div><div class="cast-row"><button class="game-button" type="button" id="cast-card"></button><button class="text-action" type="button" id="cancel-card">换一张</button></div><p class="inspect-warning" id="inspect-warning" hidden></p></div></div></div>`;
+        $('.inspect-card .card-slot').classList.remove('is-entering');
+        $('.inspect-card .ability-card').setAttribute('tabindex', '-1');
+        $('.inspect-card .ability-card').setAttribute('aria-hidden', 'true');
+        $('#back-hand').addEventListener('click', backToHand);
+        $('#cancel-card').addEventListener('click', backToHand);
+        $('#cast-card').addEventListener('click', castCard);
+        renderChoices();
+        updateIntent();
+        renderFooter('inspect');
+        if (originRect && !reduced.matches && typeof Element.prototype.animate === 'function') {
+          const artwork = $('.inspect-card'), to = artwork.getBoundingClientRect();
+          artwork.animate([{ transform: `translate(${originRect.left - to.left}px,${originRect.top - to.top}px) scale(${originRect.width / (to.width || 1)})` }, { transform: 'none' }], { duration: 350, easing: 'cubic-bezier(.22,1,.36,1)' });
+        }
+        requestAnimationFrame(() => {
+          if (selected === instanceId && isOpen) ($('.hole-choice', content) || $('.target-choice', content) || $('#cast-card'))?.focus({ preventScroll: true });
+        });
+        announce(`已选择${d.name}${d.choices.length ? '，请选择目标' : '，确认后使用'}`);
+      }
+      function renderChoices() {
+        const item = current();
+        if (!item) return;
+        const d = defs[item.cardId];
+        $('#selection-fields').innerHTML = d.choices.map(choice => choice === 'hole' ? `<fieldset class="choice-field"><legend>选择你的底牌</legend><div class="hole-options">${ownHoles.map((code, i) => `<button type="button" class="hole-choice" data-hole="${i}" aria-pressed="${selections.hole === i}" aria-label="选择底牌${cardText(code)}">${playing(code)}${selections.hole === i ? `<span class="selection-tick">${icon('tick')}</span>` : ''}</button>`).join('')}</div></fieldset>` : `<fieldset class="choice-field"><legend>选择目标玩家</legend><div class="target-options">${players.map(player => `<button type="button" class="target-choice" data-target="${player.id}" aria-pressed="${selections.player === player.id}"><span class="avatar">${player.glyph}</span><span>${player.name}</span>${selections.player === player.id ? icon('tick') : ''}</button>`).join('')}</div></fieldset>`).join('');
+        $$('.hole-choice', content).forEach(button => button.addEventListener('click', () => {
+          selections.hole = Number(button.dataset.hole); renderChoices(); updateIntent(); $(`[data-hole="${selections.hole}"]`, content)?.focus({ preventScroll: true });
+        }));
+        $$('.target-choice', content).forEach(button => button.addEventListener('click', () => {
+          selections.player = button.dataset.target; renderChoices(); updateIntent(); $(`[data-target="${selections.player}"]`, content)?.focus({ preventScroll: true });
+        }));
+      }
+      function updateIntent() {
+        const item = current();
+        if (!item) return;
+        const d = defs[item.cardId], ready = d.choices.every(key => selections[key] !== undefined);
+        const reason = unavailableFor(item) || (d.cost > stack - 1 ? '筹码不足，需保留至少 1 筹码' : null);
+        const button = $('#cast-card');
+        button.disabled = !ready || !!reason || busy;
+        button.innerHTML = `${d.cost ? `支付 ${d.cost} 筹码并使用` : '使用卡牌'} ${icon('arrow')}`;
+        let intent = '确认后消耗这张卡牌';
+        if (d.choices.includes('hole') && selections.hole === undefined) intent = '先选择一张自己的底牌';
+        else if (d.choices.includes('player') && !selections.player) intent = '再选择一位目标玩家';
+        else if (item.cardId === '04') intent = `用 ${cardText(ownHoles[selections.hole])} 交换${players.find(player => player.id === selections.player).name}的一张随机底牌`;
+        else if (item.cardId === '06') intent = `为 ${cardText(ownHoles[selections.hole])} 获取候选牌`;
+        else if (item.cardId === '25') intent = '使用后，从三张候选能力牌中选一张';
+        else if (item.cardId === '11') intent = '查看下一张公共牌，仅你可见';
+        $('#intent-preview').textContent = reason || intent;
+        $('#inspect-warning').hidden = !reason;
+        $('#inspect-warning').textContent = reason ? '本牌无法在当前状态使用，手牌会保留。' : '';
+      }
+      function backToHand() {
+        if (busy) return;
+        const id = selected;
+        renderHand();
+        requestAnimationFrame(() => $(`[data-instance="${id}"] .ability-card`, content)?.focus({ preventScroll: true }));
+      }
+      function removeCurrent() {
+        const item = current();
+        hand = hand.filter(entry => entry.id !== selected);
+        selected = null;
+        return item;
+      }
+      async function flyCard(element, destination) {
+        if (!element || !destination || reduced.matches || typeof Element.prototype.animate !== 'function') return;
+        const rect = element.getBoundingClientRect(), target = destination.getBoundingClientRect();
+        if (!rect.width || !rect.height || !target.width) return;
+        const flight = document.createElement('div');
+        flight.className = 'card-flight';
+        Object.assign(flight.style, { top: `${rect.top}px`, left: `${rect.left}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+        const clone = element.cloneNode(true);
+        clone.classList.remove('is-entering');
+        $$('[id]', clone).forEach(node => node.removeAttribute('id'));
+        $$('.is-entering', clone).forEach(node => node.classList.remove('is-entering'));
+        flight.append(clone); document.body.append(flight);
+        const animation = flight.animate([{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${target.left + target.width / 2 - rect.left - rect.width / 2}px,${target.top + target.height / 2 - rect.top - rect.height / 2}px) scale(.13) rotate(8deg)`, opacity: .15 }], { duration: 450, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+        await animation.finished;
+        flight.remove();
+      }
+      function impact(destination) {
+        if (!destination || reduced.matches) return;
+        const rect = destination.getBoundingClientRect(), ring = document.createElement('div');
+        ring.className = 'impact'; ring.style.left = `${rect.left + rect.width / 2 - 40}px`; ring.style.top = `${rect.top + rect.height / 2 - 40}px`;
+        document.body.append(ring); ring.addEventListener('animationend', () => ring.remove(), { once: true });
+      }
+      async function castCard() {
+        const item = current();
+        if (!item || busy || pending || $('#cast-card').disabled) return;
+        const d = defs[item.cardId], token = generation;
+        busy = true; $('#cast-card').disabled = true; $('#cast-card').textContent = '出牌中…';
+        const hole = selections.hole, targetId = selections.player;
+        const destination = $(`[data-seat="${targetId || 'self'}"] .seat-plate`);
+        const source = $('.inspect-card');
+        if (item.cardId !== '25' && item.cardId !== '06' && item.cardId !== '11') {
+          // Only this throwaway fixture resolves locally. Production must animate committed server frames.
+          const flight = flyCard(source, destination);
+          await closeCards(false);
+          await flight;
+          if (token !== generation) return;
+        }
+        removeCurrent();
+        if (d.cost) { stack -= d.cost; reserve += d.cost; refundable = d.cost; }
+        busy = false;
+        if (item.cardId === '25' || item.cardId === '06') {
+          pending = { kind: item.cardId === '25' ? 'ability' : 'poker', source: d.name, hole, candidates: item.cardId === '25' ? ['06', '22', '48'] : pokerCandidates() };
+          candidate = null; updateTable(); renderPending();
+          announce('已获取三张候选，请选择一张。收起卡牌会保留待选。');
+          requestAnimationFrame(() => $('.candidate-stage button', content)?.focus({ preventScroll: true }));
+          return;
+        }
+        if (item.cardId === '11') { privateResult = true; renderPrivate(); updateTable(); return; }
+        let message = `${d.name}已使用`;
+        if (item.cardId === '04') {
+          // Deterministic demo result; no hidden opponent card appears in the target picker.
+          ownHoles[hole] = ['Qs', 'Th', '6d', 'Ac', 'Jh'].find(code => !ownHoles.includes(code)); message = `精准调包完成 · ${cardText(ownHoles[hole])} 已换入你的底牌`;
+        }
+        if (item.cardId === '41') { statuses.push('护身符 · 剩余 1 次'); message = '护身符已生效 · 可抵挡 1 次改牌'; }
+        if (item.cardId === '48') { statuses.push('反制咒 · 剩余 1 次'); message = '反制咒已生效 · 剩余 1 次'; }
+        if (item.cardId === '35') { stack += refundable; reserve -= refundable; message = `已取回最近一笔暂存的 ${refundable} 筹码`; refundable = 0; }
+        if (item.cardId === '38' || item.cardId === '22') {
+          hand.push(makeInstance('06'), makeInstance('35'));
+          message = item.cardId === '38' ? '已支付 20 筹码至暂存 · 获得 2 张能力牌' : '获得 2 张能力牌';
+        }
+        updateTable(); impact(destination); notify(message);
+        renderHand();
+      }
+      function renderPending() {
+        if (!pending) return;
+        selected = null; content.className = 'view';
+        const isAbility = pending.kind === 'ability';
+        setHeading('选择一张', isAbility ? `${pending.source} · 将一张能力牌加入手牌` : `${pending.source} · 替换你的 ${cardText(ownHoles[pending.hole])}`);
+        const slots = pending.candidates.map((value, index) => isAbility ? cardMarkup({ id: `candidate-${index}`, cardId: value }, index, pending.candidates.length, index) : `<div class="card-slot is-entering" data-candidate="${index}" style="--rest-r:${(index - 1) * 3}deg;--rest-y:${Math.abs(index - 1) * 5}px;--deal-i:${index}"><button type="button" class="poker-candidate" aria-label="选择${cardText(value)}" aria-pressed="${candidate === index}">${playing(value)}</button></div>`).join('');
+        content.innerHTML = `<div class="candidate-stage ${isAbility ? '' : 'poker-candidates'}"><div class="hand-row" aria-label="候选牌">${slots}</div></div><div class="candidate-footer"><button class="game-button" id="choose-candidate" type="button" ${candidate === null ? 'disabled' : ''}>${isAbility ? '加入手牌' : '替换底牌'} ${icon('arrow')}</button><p>其余候选归还牌池 · 收起后仍可继续选择<br>超时默认选择第一张，倒计时继续</p></div>`;
+        $$('.card-slot', content).forEach(slot => {
+          const index = Number(slot.dataset.candidate);
+          if (candidate === index) slot.classList.add('is-chosen');
+          $('button', slot).addEventListener('click', () => {
+            if (busy) return;
+            candidate = index;
+            $$('.card-slot', content).forEach(other => { const chosen = other === slot; other.classList.toggle('is-chosen', chosen); $('button', other).setAttribute('aria-pressed', String(chosen)); });
+            $('#choose-candidate').disabled = false;
+            announce(`已选择${isAbility ? defs[pending.candidates[index]].name : cardText(pending.candidates[index])}，请确认`);
+          });
+        });
+        $('#choose-candidate').addEventListener('click', chooseCandidate);
+        attachCardMotion(content); renderFooter('candidate');
+      }
+      async function chooseCandidate() {
+        if (candidate === null || !pending || busy) return;
+        const token = generation, resolved = { ...pending }, index = candidate;
+        busy = true; $('#choose-candidate').disabled = true; $('#choose-candidate').textContent = '正在收起…';
+        const flight = flyCard($(`[data-candidate="${index}"]`, content), $('#open-cards'));
+        await closeCards(false); await flight;
+        if (token !== generation) return;
+        const value = resolved.candidates[index];
+        if (resolved.kind === 'ability') hand.push(makeInstance(value));
+        else { ownHoles[resolved.hole] = value; privateResult = false; }
+        pending = null; candidate = null; busy = false;
+        updateTable(); notify(resolved.kind === 'ability' ? `${defs[value].name}已加入手牌` : `${cardText(value)} 已换入底牌`);
+        impact(resolved.kind === 'ability' ? $('#open-cards') : $('#own-holes'));
+      }
+      function renderPrivate() {
+        content.className = 'view private-view';
+        setHeading('本人情报', '', false);
+        content.innerHTML = `<span class="private-label">${icon('lock')}仅你可见</span><h2>下一张公共牌</h2><div class="private-card">${playing('Jd')}</div><p>当前牌序下，河牌将发出 ${cardText('Jd')}。<br>牌序变化后，这条情报会失效。</p><button type="button" class="game-button" id="private-continue">继续选牌 ${icon('cards')}</button>`;
+        $('#private-continue').addEventListener('click', renderHand);
+        renderFooter('private');
+        requestAnimationFrame(() => $('#private-continue')?.focus({ preventScroll: true }));
+        announce('私密情报：下一张公共牌为方块J，仅你可见');
+      }
+      function openCards() {
+        if (busy || Date.now() >= deadline) return;
+        closeVersion++; overlay.classList.remove('overlay-out');
+        if (!isOpen) restoreFocus = document.activeElement;
+        isOpen = true; overlay.hidden = false; table.inert = true;
+        $('#open-cards').setAttribute('aria-expanded', 'true');
+        dismissNotice();
+        if (pending) renderPending(); else renderHand();
+        requestAnimationFrame(() => ($('.hand-row button', content) || $('#close-cards')).focus({ preventScroll: true }));
+      }
+      async function closeCards(allowBusy = true) {
+        if (allowBusy && busy) return;
+        const version = ++closeVersion;
+        isOpen = false; table.inert = false;
+        $('#open-cards').setAttribute('aria-expanded', 'false');
+        overlay.classList.add('overlay-out');
+        if (!reduced.matches) await new Promise(resolve => setTimeout(resolve, 200));
+        if (isOpen || version !== closeVersion) return;
+        overlay.hidden = true; overlay.classList.remove('overlay-out');
+        (restoreFocus?.isConnected && !restoreFocus.closest('#card-overlay') ? restoreFocus : $('#open-cards')).focus({ preventScroll: true });
+      }
+      function reset(kind = 'hand') {
+        generation++; busy = false; selected = null; selections = {}; candidate = null; pending = null; page = 0; privateResult = false; statuses = [];
+        scenario = kind; stack = 2140; reserve = 60; refundable = 0; ownHoles = ['Kc', '8c']; deadline = Date.now() + 520000;
+        hand = ['04', '11', '25', '41', '38'].map(makeInstance);
+        if (kind === 'many') hand.push(...['35', '06', '22', '48', '41', '25', '04'].map(makeInstance));
+        if (kind === 'ability' || kind === 'poker') {
+          hand = hand.filter(item => item.cardId !== '25');
+          pending = { kind, source: kind === 'ability' ? '三思而行' : '左右逢源', hole: 1, candidates: kind === 'ability' ? ['06', '22', '48'] : pokerCandidates() };
+        }
+        $$('.card-flight, .impact').forEach(node => node.remove());
+        $$('.demo-actions [data-demo]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.demo === kind)));
+        updateTable(); tick(); openCards();
+      }
+      function tick() {
+        const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        const display = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+        $$('[data-clock]').forEach(node => { node.textContent = display; });
+        $('.time').dataset.urgent = String(seconds < 60);
+        if (!seconds && !busy) {
+          // Static fixture mirrors the first-candidate fallback; it does not simulate a server turn engine.
+          if (pending) {
+            const value = pending.candidates[0];
+            if (pending.kind === 'ability') hand.push(makeInstance(value)); else ownHoles[pending.hole] = value;
+            pending = null; candidate = null;
+          }
+          selected = null; busy = false; updateTable();
+          if (isOpen) void closeCards();
+          $('#open-cards').disabled = true;
+          $('#table-status').textContent = '本回合已超时 · 待选已按第一张处理 · 切换演示场景可重置';
+        }
+      }
+      $('#clock-icon').innerHTML = icon('clock'); $('#close-cards').innerHTML = icon('x'); $('#heading-rule').innerHTML = icon('diamond');
+      const board = ['Ks', '9h', '7c', '2d'].map(playing).join('') + '<span class="empty-card" aria-label="河牌未发"></span>';
+      $('#table-board').innerHTML = board; $('#hud-board').innerHTML = '<span class="hud-board-label">公共牌</span>' + board;
+      $('#open-cards').addEventListener('click', openCards); $('#close-cards').addEventListener('click', () => void closeCards());
+      $('#reset').addEventListener('click', () => { $('#open-cards').disabled = false; reset(scenario); });
+      $$('[data-demo]').forEach(button => button.addEventListener('click', () => { $('#open-cards').disabled = false; reset(button.dataset.demo); }));
+      ['#fold-demo', '#check-demo'].forEach(selector => $(selector).addEventListener('click', () => notify(pending ? '请先完成待选卡牌' : '此原型仅演示卡牌操作')));
+      overlay.addEventListener('click', event => { if (event.target === overlay || event.target.classList.contains('overlay-layout')) void closeCards(); });
+      document.addEventListener('keydown', event => {
+        if (!isOpen || busy || event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.key === 'Escape') { event.preventDefault(); selected ? backToHand() : void closeCards(); return; }
+        if (event.key === 'Tab') {
+          const elements = $$('button:not(:disabled):not([tabindex="-1"])', overlay).filter(node => node.getClientRects().length && !node.closest('[hidden]'));
+          const first = elements[0], last = elements[elements.length - 1];
+          if (!elements.length) return;
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+        if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && !selected) {
+          const options = $$('.hand-row button', content);
+          if (!options.length) return;
+          event.preventDefault();
+          const index = options.indexOf(document.activeElement), next = (index + (event.key === 'ArrowRight' ? 1 : -1) + options.length) % options.length;
+          options[next].focus({ preventScroll: true });
+          if (innerWidth <= 850) options[next].scrollIntoView({ behavior: reduced.matches ? 'instant' : 'smooth', block: 'nearest', inline: 'center' });
+        }
+      });
+      let wasNarrow = innerWidth <= 850;
+      window.addEventListener('resize', () => {
+        const narrow = innerWidth <= 850;
+        if (narrow === wasNarrow) return;
+        wasNarrow = narrow;
+        if (isOpen && !selected && !pending) renderHand();
+      });
+      setInterval(tick, 1000);
+      reset();
+    })();
+  </script>
+</body>
+</html>
