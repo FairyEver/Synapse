@@ -73,6 +73,10 @@ export class PokerRollService {
     const rollId = operation === "start" ? input.actionId : (input as PokerRollChooseInput).rollId
     const record = next.roll!.history.find(r => r.id === rollId)!, seq = hand.actionSeq + 1
     if (operation === "start") {
+      if (state.roll?.pending) await c.tx.gamePokerRoll.update({
+        where: { id: state.roll.pending.id },
+        data: { completedAt: c.now },
+      })
       await c.tx.gamePokerRoll.create({ data: {
         id: rollId,
         roomId: c.room.id,

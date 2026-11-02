@@ -101,9 +101,9 @@ Dashboard 牌桌底部和结算 Footer 共用准备/接管执行器与进度，�
 
 ## Roll 已实施协议（2026-11-01）
 
-建房可显式ruleOptions.roll=true，缺省关闭；服务端roll-v1写入房间和每手快照，不接受客户端价格版本。normal指定一张旧底牌后随机一张，super先付费生成三候选再必须选择；只本人可读候选/旧牌位置。两档共享本手次数和原deadline，河牌关闭，费用不计普通下注。机器人使用可见信息的有限策略，不称最优、不读暗牌。
+建房可显式ruleOptions.roll=true，缺省关闭；服务端roll-v1写入房间和每手快照，不接受客户端价格版本。normal指定一张旧底牌后随机一张，super先付费生成三候选，可选择或在原槽按新报价付费重抽；只本人可读候选/旧牌位置。两档共享本手次数和原deadline，河牌关闭，费用不计普通下注。机器人使用可见信息的有限策略，不称最优、不读暗牌。
 
-外部AI：读table_state或your_turn的roll报价→按用户会话风格/预算决定→roll_start携当前手/street/actionSeq/controlVersion、新UUID、kind/cardIndex和确切expectedFee→choice_required时先从原候选roll_choose→重读当前报价和合法动作→正常act。wait的roll_choice_required仍在control_released/未读终局之后，优先于your_turn。收到control_released立即停，不为选牌重新claim；响应丢失先读状态并用原UUID、operation和全部参数确认原回执，不能换UUID重抽或静默改价。有限试玩价格不保证盈利。
+外部AI：读table_state或your_turn的roll报价→按用户会话风格/预算决定→roll_start携当前手/street/actionSeq/controlVersion、新UUID、kind/cardIndex和确切expectedFee→choice_required时从当前候选roll_choose，或读table_state新报价后在原cardIndex付费再次roll_start→重读当前报价和合法动作→正常act。重抽成功回收旧候选，不退旧费用及补偿，次数累加且不续deadline；失败保留原候选。wait的roll_choice_required仍在control_released/未读终局之后，优先于your_turn。收到control_released立即停，不为选牌重新claim；响应丢失先读状态并用原UUID、operation和全部参数确认原回执，不能把未知结果当新一轮换UUID重抽或静默改价。有限试玩价格不保证盈利。
 
 冻结补偿按扣费当时其他未弃牌原参与者（含全下者）确权，本手不能花。普通派彩后释放：仍在原入座的stack/session投影只入账一次，已离场points归原账号余额和盈亏，不归后来同seatNo或新session；practice离场/取消清零。Hall独立汇总通用pending，不读取扑克表；total=available+inPlay+pending，netProfit含pending，旧响应缺字段按0，pending未释放不能领取补助。结算delta保留总净变化，pokerDelta=delta+rollPaid-rollReceived，payout仍仅普通派彩；公开事件choose保留fee作审计但不再次收费。
 

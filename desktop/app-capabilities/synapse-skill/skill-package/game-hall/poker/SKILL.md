@@ -32,14 +32,16 @@ cursor = 当前游标或已验证检查点游标
 while 当前用户授权、AI控制版本有效且未到上下文维护点:
     result = table_wait(roomCode, cursor, timeoutMs=25000)
     if result.status == "roll_choice_required":
-        核对当前AI控制权；从原三个私有候选中选一张
-        roll_choose携原rollId、候选下标、当前controlVersion/actionSeq及新actionId(UUID)
+        核对当前AI控制权；按用户风格/预算选择当前候选或付费重抽
+        选择时roll_choose携原rollId、候选下标、当前controlVersion/actionSeq及新actionId(UUID)
+        重抽时先读table_state新报价，以原cardIndex、确切expectedFee和当前版本/序号、新UUID发起roll_start
+        旧候选成功后放回，已付费用不退，次数累加且不续时；失败保留原候选
         未知结果复用该UUID与全部参数核对；重读table_state，再恢复循环
     else if result.status == "your_turn":
         按sessionStyle或现读persona判断；只读决策投影，不读取教学明牌
         先读roll报价、可用状态、共享次数和累计成本，决定本次是否换牌
         若选择Roll：确认当前确切fee；roll_start携kind/cardIndex/expectedFee及手牌/阶段/版本/UUID
-        start后重读；choice_required必须先完成原选择；完成后重新报价或正常act，不能沿用旧actionSeq
+        start后重读；choice_required先选择当前候选或按上述规则付费重抽；完成待选后重新报价或正常act，不能沿用旧actionSeq
         不换牌时继续下面正常下注流程
         以legalActions/toCall/minRaiseTo/maxRaiseTo为硬边界
         生成actionId(UUID)，携带handId/street/controlVersion/expectedActionSeq及action/to?

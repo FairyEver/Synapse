@@ -67,7 +67,7 @@ checkpoint_get返回{checkpoint:null|检查点}，checkpoint_save返回{checkpoi
 
 公开工具新增app_game_poker_roll_start/choose，均经search/invoke，Web对应POST /game/poker/rooms/:code/roll/start或roll/choose，无桌面IPC。start必传roomCode/handId/street(preflop、flop、turn)/expectedActionSeq/controlVersion/actionId(UUID)/kind(normal或super)/cardIndex(0或1)/expectedFee(正整数)；choose必传roomCode/handId/rollId/candidateIndex(0..2)/expectedActionSeq/controlVersion/actionId(UUID)。不得传来源、定价版本或目标账号/座位。
 
-成功均为{ok:true,handId,rollId,actionSeq,cursor,status:completed|choice_required}，start的actionId就是rollId。super开始后table_state.roll.pending={rollId,cardIndex,candidates}仅本人可见；wait先保留control_released与未读结果优先级，再返回roll_choice_required，包含handId/handNo/controlVersion/actionSeq/deadlineMs/cursor及原pending字段。本人必须choose后重读当前报价和正常合法动作，不把start的旧序号继续用于下注。
+成功均为{ok:true,handId,rollId,actionSeq,cursor,status:completed|choice_required}，start的actionId就是rollId。super开始后table_state.roll.pending={rollId,cardIndex,candidates}仅本人可见；wait先保留control_released与未读结果优先级，再返回roll_choice_required，包含handId/handNo/controlVersion/actionSeq/deadlineMs/cursor及原pending字段。本人可choose，或读取table_state的当前报价后在原cardIndex以新UUID再次start（normal/super均可）；重抽成功才回收旧候选，旧费用与补偿不退，个人次数累加，旧候选不可再选。失败保留原待选，普通下注仍需先完成待选。未知结果先核对原UUID，不把start的旧序号用于新动作。历史privateRolls中selectedIndex=null也可能是未选候选便继续重抽的记录；当前待选只认roll.pending。
 
 网络超时、断线或GAME_INVALID_RESPONSE不能证明写入失败。保留operation、UUID与所有语义参数，先读state，再原请求确认永久回执；服务器先查已成功回执，再核对新写入控制权。不得因手牌/控制版本变化、关闭面板或刷新而换UUID重抽；不同意图复用同UUID被拒绝。收到POKER_ROLL_PRICE_CHANGED时本次事务无副作用，重读报价后重新决定并明确确认新费用，不自动接受新价。POKER_ROLL_*不可用或非法原因按当前状态处理；控制释放立即停止新写入，确认旧回执不授权新动作。
 

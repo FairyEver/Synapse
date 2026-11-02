@@ -74,10 +74,12 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   }, [confirmAllIn])
   useEffect(() => { setAllInAction(null); setLocalPanel(null) }, [table.handId, table.actionSeq, version, perspective, compact, table.actionOnSeat, table.status])
   useEffect(() => {
-    if (perspective !== "owner" || !table.roll?.pending) return
-    const key = `${identityKey}:${table.roomCode}:${table.handId}:${table.roll.pending.rollId}:${controller}`
+    const rollId = table.roll?.pending?.rollId ?? roll.continuation?.actionId
+    if (perspective !== "owner" || !rollId) return
+    if (!table.roll?.pending && panel !== "roll") return
+    const key = `${identityKey}:${table.roomCode}:${table.handId}:${rollId}:${controller}`
     if (key !== autoOpened.current) { autoOpened.current = key; setPanel("roll") }
-  }, [identityKey,table.roomCode,table.handId,table.roll?.pending?.rollId,controller,perspective,setPanel])
+  }, [identityKey,table.roomCode,table.handId,table.roll?.pending?.rollId,roll.continuation?.actionId,controller,perspective,setPanel])
   useEffect(() => { if (perspective !== "owner") setPanel(null) },[perspective,setPanel])
   const legal = table.legalActions ?? [], numeric = Number(to)
   const validAmount = to.trim() !== "" && Number.isSafeInteger(numeric) && numeric >= (table.minRaiseTo ?? Infinity) && numeric <= (table.maxRaiseTo ?? -1)

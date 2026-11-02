@@ -55,7 +55,7 @@ export function quoteRoll(state: HandState, seatNo: number): RollQuote {
     const exact = ((1n + BigInt(count)) * base + 1999n) / 2000n
     if (exact > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("POKER_ROLL_MONEY_INVALID")
     const fee = Number(exact)
-    const reason = !state.roll ? "POKER_ROLL_STATE_INVALID" : state.roll.pending ? "POKER_ROLL_CHOICE_REQUIRED" : !["preflop", "flop", "turn"].includes(state.street) ? "POKER_ROLL_STREET_INVALID" : !p || p.folded || p.allIn || state.actionOnSeat !== seatNo || !state.seats.some(s => s.seatNo !== seatNo && !s.folded) ? "POKER_ROLL_NOT_YOUR_TURN" : exact >= BigInt(p.stack) ? "POKER_ROLL_INSUFFICIENT_STACK" : undefined
+    const reason = !state.roll ? "POKER_ROLL_STATE_INVALID" : state.roll.pending && state.roll.pending.seatNo !== seatNo ? "POKER_ROLL_CHOICE_REQUIRED" : !["preflop", "flop", "turn"].includes(state.street) ? "POKER_ROLL_STREET_INVALID" : !p || p.folded || p.allIn || state.actionOnSeat !== seatNo || !state.seats.some(s => s.seatNo !== seatNo && !s.folded) ? "POKER_ROLL_NOT_YOUR_TURN" : exact >= BigInt(p.stack) ? "POKER_ROLL_INSUFFICIENT_STACK" : undefined
     return { fee, available: !reason, ...(reason ? { reason } : {}) }
   }
   return { enabled: true, pricingVersion: ROLL_PRICING_VERSION, count, normal: offer(N), super: offer(S) }
@@ -63,8 +63,14 @@ export function quoteRoll(state: HandState, seatNo: number): RollQuote {
 export function startRoll(state: HandState, seatNo: number, input: { rollId: string; kind: RollKind; cardIndex: number; fee: number }, randomInt: (exclusiveMax: number) => number): HandState {
   const quote = quoteRoll(state, seatNo)
   if (!quote.enabled || !["normal", "super"].includes(input.kind) || !quote[input.kind].available || input.fee !== quote[input.kind].fee || ![0, 1].includes(input.cardIndex) || !input.rollId || state.roll!.history.some(r => r.id === input.rollId)) throw new Error("POKER_ROLL_ILLEGAL_ACTION")
+  if (state.roll?.pending && state.roll.pending.cardIndex !== input.cardIndex) throw new Error("POKER_ROLL_ILLEGAL_ACTION")
   assertHandIntegrity(state)
   const h = structuredClone(state), roll = h.roll!, p = h.seats.find(s => s.seatNo === seatNo)!
+  if (roll.pending) {
+    // Paid candidates are forfeited only with a successful new start; the slot stays committed.
+    h.deck = shuffle([...h.deck, ...roll.pending.candidates], randomInt)
+    roll.pending = null
+  }
   const amount = input.kind === "super" ? 3 : 1
   if (h.deck.length < amount) throw new Error("POKER_ROLL_DECK_EXHAUSTED")
   const candidates: string[] = []

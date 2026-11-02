@@ -15,10 +15,24 @@ vi.mock("../../../lib/api",()=>({gameApi:()=>({poker:{roll:{start:api.start,choo
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true})
 const table:PokerTableView={roomCode:"1234",name:null,status:"running",buyIn:1000,maxSeats:2,handId:"h",handNo:1,street:"flop",board:[],pot:20,dealerSeat:0,actionOnSeat:0,deadlineMs:10000,cursor:"1:3",mySeatNo:0,seats:[{seatNo:0,isMe:true,displayName:"我",stack:100,status:"active",streetBet:2,aiState:"online"}],recentActions:[],deckRemaining:40,actionSeq:3,controlVersion:4,controller:"human",hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true},pending:null}}
 let current:ReturnType<typeof usePokerRoll>
-function Harness({value=table,identity="roll-user",refresh=vi.fn()}:{value?:PokerTableView;identity?:string;refresh?:()=>Promise<void>|void}){current=usePokerRoll(value,"owner",refresh,identity);return null}
+function Harness({value=table,identity="roll-user",refresh=vi.fn(),perspective="owner"}:{value?:PokerTableView;identity?:string;refresh?:()=>Promise<void>|void;perspective?:"owner"|"public"}){current=usePokerRoll(value,perspective,refresh,identity);return null}
 afterEach(()=>{vi.resetAllMocks();localStorage.clear();sessionStorage.clear();document.body.replaceChildren()})
 async function mount(value=table,identity="roll-user",refresh=vi.fn()){const host=document.createElement("div"),root=createRoot(host);document.body.append(host);await act(async()=>root.render(<Harness value={value} identity={identity} refresh={refresh}/>));return root}
 describe("Roll决策与恢复",()=>{
+ it("连续槽位只来自当前行动点确认的成功换牌，切换视角后不恢复旧选择",async()=>{
+  api.start.mockResolvedValue({ok:true,actionSeq:4})
+  const root=await mount(table,"continuation-boundary")
+  await act(async()=>current.start("normal",1,3))
+  expect(current.continuation).toBeNull()
+  const value={...table,actionSeq:4,roll:{...table.roll!,count:1}}
+  await act(async()=>root.render(<Harness value={value} identity="continuation-boundary"/>))
+  expect(current.continuation).toMatchObject({kind:"normal",cardIndex:1})
+  await act(async()=>root.render(<Harness value={value} identity="continuation-boundary" perspective="public"/>))
+  await act(async()=>root.render(<Harness value={value} identity="continuation-boundary"/>))
+  expect(current.continuation).toBeNull()
+  expect(api.start).toHaveBeenCalledOnce()
+  await act(async()=>root.unmount())
+ })
  it("换牌序号推进不模拟普通下注、旧动作或筹码声音",()=>{
   const next={...table,actionSeq:4,hole:["2c","Kd"],seats:table.seats.map(seat=>({...seat,stack:92,rollPaid:8}))}
   expect(tableMotion(table,next)).toMatchObject({actions:[],transfers:[],turn:null})
@@ -53,7 +67,7 @@ describe("Roll决策与恢复",()=>{
   expect(api.start).toHaveBeenCalledOnce();expect(refresh).toHaveBeenCalledOnce();expect(current.blocked).toBe(false)
   await act(async()=>root.unmount())
  })
- it("待选、AI控制和旁观均不能新抽；选择携带原Roll身份并需真人控制",async()=>{
+ it("AI控制时不能重抽或选择；接管后选择携带原Roll身份",async()=>{
   const pending={rollId:"old-roll",cardIndex:1,candidates:["2c","3c","4c"]}
   const value={...table,roll:{...table.roll!,pending}}
   api.choose.mockResolvedValue({ok:true})

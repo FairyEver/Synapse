@@ -16,14 +16,14 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
   controls:ReturnType<typeof usePokerRoll>;disabled:boolean;epoch:string;onTakeover:()=>void
 }) {
   const [kind,setKind]=useState<PokerRollKind>("normal"),[card,setCard]=useState(""),[candidate,setCandidate]=useState("")
-  const pending=table.roll?.pending,offer=table.roll?.[kind]
+  const pending=table.roll?.pending,offer=table.roll?.[kind],repeatOffer=table.roll?.super
   const hole=table.hole??[]
   const unit=table.mode==="practice"?"筹码":"点数"
   const paid=table.seats.find(seat=>seat.isMe&&seat.seatNo===table.mySeatNo)?.rollPaid
   const prior=useRef(false),origin=useRef<HTMLElement|null>(null)
   if(open&&!prior.current) origin.current=document.activeElement instanceof HTMLElement?document.activeElement:null
   useLayoutEffect(()=>{if(!open&&prior.current&&origin.current?.isConnected) origin.current.focus();prior.current=open},[open])
-  useEffect(()=>{setKind(table.roll?.normal?.available?"normal":"super");setCard("");setCandidate("")},[epoch,table.roll?.normal?.available,table.roll?.super?.available,table.roll?.normal?.fee,table.roll?.super?.fee,pending?.rollId])
+  useEffect(()=>{setKind(controls.continuation?.kind ?? (table.roll?.normal?.available?"normal":"super"));setCard(controls.continuation ? String(controls.continuation.cardIndex) : "");setCandidate("")},[epoch,table.roll?.normal?.available,table.roll?.super?.available,table.roll?.normal?.fee,table.roll?.super?.fee,pending?.rollId,controls.continuation])
   const blocked=disabled||controls.blocked||controls.storageError||!controls.canControl
   return <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange} className="font-sans text-foreground scheme-light">
     <Modal.Container size="md"><Modal.Dialog>
@@ -65,7 +65,7 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
               </Radio>)}
             </div>
           </RadioGroup>
-          <p className="text-xs text-muted">选择后继续本手。关闭不会撤销换牌。</p>
+          <p className="text-xs text-muted">重新抽牌会放回当前候选，已付费用不退。关闭不会撤销换牌。</p>
         </> : <>
           <RadioGroup aria-label="选择换掉的牌" variant="secondary" value={card} onChange={setCard} isDisabled={blocked}>
             <Label>选择换掉的牌</Label>
@@ -106,8 +106,9 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
         {controls.uncertain&&<p role="status" className="text-sm">结果待核对，保留原请求。</p>}
       </div></Modal.Body>
       <Modal.Footer className="flex-wrap">
-        <Button variant="tertiary" onPress={()=>onOpenChange(false)}>{pending?"稍后选择":"取消"}</Button>
-        {controls.storageError?<Button isPending={controls.busy} isDisabled={controls.busy} onPress={()=>void controls.retry()}>重试恢复记录</Button>:controls.uncertain?<Button isPending={controls.busy} isDisabled={controls.busy} onPress={()=>void controls.retry()}>核对原换牌请求</Button>:pending&&!controls.canControl?<Button isPending={controls.busy} isDisabled={disabled||controls.blocked} onPress={onTakeover}>本人接管</Button>:pending?<Button isPending={controls.busy} isDisabled={blocked||candidate===""} onPress={()=>void controls.choose(Number(candidate))}>选择这张牌</Button>:<Button isPending={controls.busy} isDisabled={blocked||card===""||!offer?.available} onPress={()=>{if(offer) void controls.start(kind,Number(card),offer.fee)}}>支付 {amount(offer?.fee??0)} {unit}换牌</Button>}
+        <Button variant="tertiary" onPress={()=>onOpenChange(false)}>{pending?"稍后选择":controls.continuation?"继续本手":"取消"}</Button>
+        {pending&&controls.canControl&&!controls.storageError&&!controls.uncertain&&<Button variant="secondary" isPending={controls.busy} isDisabled={blocked||!repeatOffer?.available} onPress={()=>{if(repeatOffer) void controls.start("super",pending.cardIndex,repeatOffer.fee)}}>再抽 3 张 · {amount(repeatOffer?.fee??0)} {unit}</Button>}
+        {controls.storageError?<Button isPending={controls.busy} isDisabled={controls.busy} onPress={()=>void controls.retry()}>重试恢复记录</Button>:controls.uncertain?<Button isPending={controls.busy} isDisabled={controls.busy} onPress={()=>void controls.retry()}>核对原换牌请求</Button>:pending&&!controls.canControl?<Button isPending={controls.busy} isDisabled={disabled||controls.blocked} onPress={onTakeover}>本人接管</Button>:pending?<Button isPending={controls.busy} isDisabled={blocked||candidate===""} onPress={()=>void controls.choose(Number(candidate))}>选择这张牌</Button>:<Button isPending={controls.busy} isDisabled={blocked||card===""||!offer?.available} onPress={()=>{if(offer) void controls.start(kind,Number(card),offer.fee)}}>{controls.continuation?`再抽 ${kind==="normal"?1:3} 张 · ${amount(offer?.fee??0)} ${unit}`:`支付 ${amount(offer?.fee??0)} ${unit}换牌`}</Button>}
       </Modal.Footer>
     </Modal.Dialog></Modal.Container>
   </Modal.Backdrop>

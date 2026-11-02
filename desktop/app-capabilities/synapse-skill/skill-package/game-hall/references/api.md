@@ -164,7 +164,7 @@
 
 ## app_game_poker_roll_start
 
-按本人当前报价确认换牌；不续行动时限，超级换牌后必须完成选牌；未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+按本人当前报价确认换牌；超级待选可在原cardIndex付费重抽，放回原候选且不退费；共用次数、不续行动时限，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

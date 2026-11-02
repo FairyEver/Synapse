@@ -11,6 +11,25 @@ const startInput = (f: Awaited<ReturnType<typeof rollStore>>, kind: "normal" | "
   return { roomCode: f.room.code, handId: hand.id, street: state.street, expectedActionSeq: hand.actionSeq, controlVersion: 0, actionId: randomUUID(), kind, cardIndex: 0, expectedFee: quoteRoll(state, state.actionOnSeat)[kind].fee }
 }
 describe("Roll事务：控制、资金、原入座与恢复", () => {
+  it.each(["normal", "super"] as const)("待选直接付费重抽%s，关闭旧待选审计且重试不重复扣费", async kind => {
+    const f = await rollStore(), svc = new PokerRollService(f.poker), first = startInput(f), deadline = f.room.actionDeadlineAt
+    const user = f.seats.find(s => s.seatNo === f.hands[0].engineState.actionOnSeat)!.userId
+    await svc.start(user, first, f.now)
+    const second = startInput(f, kind), before = structuredClone(f.hands[0].engineState)
+    await expect(svc.start(user, { ...second, expectedFee: second.expectedFee + 1 }, f.now)).rejects.toThrow()
+    expect(f.hands[0].engineState).toEqual(before)
+    const result = await svc.start(user, second, f.now)
+    expect(f.rolls).toHaveLength(2)
+    expect(f.rolls[0]).toMatchObject({ completedAt: f.now, data: { selectedIndex: null } })
+    expect(f.actions.map(a => [a.seq, a.action])).toEqual([[1, "roll_start"], [2, "roll_start"]])
+    expect(f.db.transfers.reduce((n,t) => n + t.amount, 0)).toBe(first.expectedFee + second.expectedFee)
+    expect(f.room.actionDeadlineAt).toEqual(deadline)
+    const persisted = structuredClone(f.hands[0].engineState)
+    expect(await svc.start(user, second, f.now)).toEqual(result)
+    expect(f.hands[0].engineState).toEqual(persisted)
+    await expect(svc.choose(user, { roomCode: f.room.code, handId: first.handId, rollId: first.actionId, candidateIndex: 0, expectedActionSeq: 2, controlVersion: 0, actionId: randomUUID() }, f.now)).rejects.toThrow()
+    expect(f.hands[0].engineState).toEqual(persisted)
+  })
   it("持久扣费和原入座冻结，同UUID重试不重抽且不续截止", async () => {
     const f = await rollStore(), svc = new PokerRollService(f.poker), input = startInput(f), deadline = f.room.actionDeadlineAt
     const user = f.seats.find(s => s.seatNo === f.hands[0].engineState.actionOnSeat)!.userId

@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 连续 Roll：既有 `app.game.poker.roll.start` 允许超级待选时在原 cardIndex 按当前报价再次付费，成功放回旧候选且不退旧费用；输入/响应 schema 不变。MCP 描述、系统 Skill、生成 API 参考与 Agent 指南同步；无新增注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
+
 - 2026-11-02 筹码呈现：既有牌桌Web响应追加可选公开 `chipState`（普通/ Roll逐笔面额计数及最近32笔资金动作），仅desktop展示投影提供，decision/MCP不提供。共享响应schema、系统Skill及Agent指南同步，动作输入和工具描述的操作语义不变；无新注册项、权限或数据库字段，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
 
 - 2026-11-02 扑克房间上限：既有 `app.game.poker.room.create` 的 `maxSeats` 改为2–6，Web、服务端入座和陪练容量同步；MCP描述、schema、Skill规则及API参考同步。未新增或删除注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。

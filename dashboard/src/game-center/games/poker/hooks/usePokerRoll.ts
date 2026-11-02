@@ -17,8 +17,10 @@ export function usePokerRoll(table: PokerTableView, perspective: "owner" | "publ
   if (context.current.key !== key || context.current.point !== point) context.current = { key, point }
   const mounted = useRef(true), sending = useRef(false)
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null)
+  const [lastStart, setLastStart] = useState<{ key: string; input: PokerRollStartInput; actionSeq: number; count: number } | null>(null)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => { setBusy(false); setError(null); sending.current = false }, [key, point])
+  useEffect(() => { setLastStart(null) }, [key, table.handId, table.street, version, perspective, controller, table.status, table.actionOnSeat])
   const canControl = !!identityKey && perspective === "owner" && !!mine && controller === "human" && version != null && table.status === "running" && table.actionOnSeat === table.mySeatNo
   const command = snapshot.intent
   const execute = async (intent: RollIntent, recovering = false) => {
@@ -32,7 +34,10 @@ export function usePokerRoll(table: PokerTableView, perspective: "owner" | "publ
         await gameApi().poker.table.state({roomCode:intent.input.roomCode})
         if (!current()) return
       }
-      if (intent.operation === "start") await gameApi().poker.roll.start(intent.input)
+      if (intent.operation === "start") {
+        const result = await gameApi().poker.roll.start(intent.input)
+        if (current() && !recovering) setLastStart({key,input:intent.input,actionSeq:result.actionSeq,count:(table.roll?.count ?? 0)+1})
+      }
       else await gameApi().poker.roll.choose(intent.input)
       applied = true
       rollIntentStore.clear(scope,intent)
@@ -53,7 +58,7 @@ export function usePokerRoll(table: PokerTableView, perspective: "owner" | "publ
     }
   }
   const start = (kind: PokerRollKind, cardIndex: number, expectedFee: number) => {
-    if (!canControl || !table.roll?.enabled || snapshot.error || command || sending.current || table.roll?.pending || !table.handId || !["preflop","flop","turn"].includes(table.street ?? "") || !table.roll?.[kind]?.available || table.roll[kind]!.fee !== expectedFee || ![0,1].includes(cardIndex)) return
+    if (!canControl || !table.roll?.enabled || snapshot.error || command || sending.current || (table.roll?.pending && table.roll.pending.cardIndex !== cardIndex) || !table.handId || !["preflop","flop","turn"].includes(table.street ?? "") || !table.roll?.[kind]?.available || table.roll[kind]!.fee !== expectedFee || ![0,1].includes(cardIndex)) return
     const intent: RollIntent = {operation:"start",input:{roomCode:table.roomCode,handId:table.handId,street:table.street as PokerRollStartInput["street"],expectedActionSeq:table.actionSeq ?? 0,controlVersion:version!,actionId:crypto.randomUUID(),kind,cardIndex,expectedFee}}
     try { rollIntentStore.save(scope,intent) }
     catch(cause) { setError(cause instanceof Error ? cause.message : "换牌恢复记录保存失败"); return }
@@ -67,7 +72,8 @@ export function usePokerRoll(table: PokerTableView, perspective: "owner" | "publ
     catch(cause) { setError(cause instanceof Error ? cause.message : "换牌恢复记录保存失败"); return }
     return execute(intent)
   }
-  return { busy, error:snapshot.error ?? error, storageError:!!snapshot.error, blocked:busy || !!command, uncertain:!!command && !busy, canControl, start, choose, retry:() => {
+  const continuation = canControl && lastStart?.key === key && lastStart.input.handId === table.handId && lastStart.input.street === table.street && lastStart.input.controlVersion === version && lastStart.actionSeq === table.actionSeq && lastStart.count === table.roll?.count ? lastStart.input : null
+  return { busy, error:snapshot.error ?? error, storageError:!!snapshot.error, blocked:busy || !!command, uncertain:!!command && !busy, canControl, continuation, start, choose, retry:() => {
     const restored=rollIntentStore.reload(scope)
     if(restored.error) {setError(restored.error);return}
     setError(null)

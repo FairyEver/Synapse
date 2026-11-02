@@ -54,7 +54,6 @@ describe("Roll transitions", () => {
     expect(pending.candidates).toHaveLength(3)
     expect(() => act(h, h.actionOnSeat!, { action: "call" })).toThrow()
     expect(() => removeFromHand(h, 1)).toThrow()
-    expect(() => roll(h)).toThrow()
     expect(() => chooseRollCard(h, 1, pending.id, 1, entropy)).toThrow()
     expect(() => chooseRollCard(h, pending.seatNo, "wrong", 1, entropy)).toThrow()
     expect(() => chooseRollCard(h, pending.seatNo, pending.id, 3, entropy)).toThrow()
@@ -66,6 +65,38 @@ describe("Roll transitions", () => {
     expect(chosen.roll!.counts).toEqual(h.roll!.counts)
     expect(chosen.roll!.pending).toBeNull()
     assertHandIntegrity(chosen)
+  })
+  it.each(["normal", "super"] as const)("rerolls pending candidates as %s at the committed slot without choosing or refunding", kind => {
+    const h = roll(hand(), "super", 1), original = structuredClone(h), pending = h.roll!.pending!, seat = pending.seatNo
+    const quote = quoteRoll(h, seat)
+    expect(quote[kind].available).toBe(true)
+    const input = { rollId: "reroll", kind, cardIndex: 1, fee: quote[kind].fee }
+    expect(() => startRoll(h, seat, { ...input, cardIndex: 0 }, entropy)).toThrow()
+    expect(() => startRoll(h, seat, input, max => max)).toThrow()
+    expect(h).toEqual(original)
+    const next = startRoll(h, seat, input, () => 0)
+    expect(h).toEqual(original)
+    expect(next.roll!.history[0].selectedIndex).toBeNull()
+    expect(next.roll!.counts[seat]).toBe(2)
+    expect(next.roll!.paid[seat]).toBe(pending.fee + input.fee)
+    expect(next.seats.find(s => s.seatNo === seat)!.stack).toBe(h.seats.find(s => s.seatNo === seat)!.stack - input.fee)
+    expect(next.roll!.history[1].oldCard).toBe(pending.oldCard)
+    expect(() => chooseRollCard(next, seat, pending.id, 0, entropy)).toThrow()
+    if (kind === "super") expect(next.seats.find(s => s.seatNo === seat)!.hole).toEqual(h.seats.find(s => s.seatNo === seat)!.hole)
+    expect(quoteRoll(h, (seat + 1) % h.seats.length).normal.available).toBe(false)
+    assertHandIntegrity(next)
+  })
+  it("preserves all cards through repeated pending short-deck rerolls and rejects an unaffordable reroll", () => {
+    let h = roll(hand(10, "short32"), "super", 1)
+    for (let i = 0; i < 8; i++) { h = roll(h, "super", 1); assertHandIntegrity(h) }
+    const pending = h.roll!.pending!, seat = h.seats.find(s => s.seatNo === pending.seatNo)!
+    const poor = structuredClone(h)
+    poor.seats.find(s => s.seatNo === seat.seatNo)!.stack = 1
+    expect(quoteRoll(poor, seat.seatNo).super.available).toBe(false)
+    expect(() => roll(poor, "super", 1)).toThrow()
+    expect(poor.roll!.pending).toEqual(pending)
+    h = chooseRollCard(h, seat.seatNo, pending.id, 2, entropy)
+    assertHandIntegrity(h)
   })
   it("counts persist across streets, river disables, settlement releases compensation exactly once", () => {
     let h = roll(hand(2)); h = nextStreet(h)

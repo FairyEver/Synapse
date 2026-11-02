@@ -19,6 +19,91 @@ async function render(value = table, identityKey?: string) { const host = docume
 function button(host: HTMLElement, label: string) { return [...host.querySelectorAll("button")].find(b => b.textContent === label || b.getAttribute("aria-label") === label || b.getAttribute("aria-label")?.startsWith(label + " "))! }
 async function openManagement(host: HTMLElement) { await act(async () => button(host, "更多牌桌操作").click()) }
 describe("真人牌桌操作", () => {
+ it("普通换牌成功后留在面板并沿用槽位，下一次只需点击付费",async()=>{
+  api.rollStart.mockResolvedValueOnce({ok:true,actionSeq:4}).mockResolvedValueOnce({ok:true,actionSeq:5})
+  const first={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true},pending:null}}
+  function Continuous(){
+   const [value,setValue]=useState<PokerTableView>(first)
+   return <HumanControls identityKey="continuous-normal" table={value} perspective="owner" onRefresh={()=>setValue(current=>({...current,actionSeq:current.actionSeq!+1,hole:["As","2c"],roll:{...current.roll!,count:current.roll!.count!+1,normal:{fee:6,available:true}}}))}/>
+  }
+  const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+  await act(async()=>root.render(<Continuous/>))
+  await act(async()=>button(host,"Roll 换牌").click())
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="1"]')!.click())
+  await act(async()=>button(document.body,"支付 3 点数换牌").click())
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  const again=button(document.body,"再抽 1 张 · 6 点数")
+  expect(again?.disabled).toBe(false)
+  await act(async()=>again.click())
+  expect(api.rollStart.mock.calls[1][0]).toMatchObject({kind:"normal",cardIndex:1,expectedFee:6,expectedActionSeq:4})
+  expect(api.rollChoose).not.toHaveBeenCalled()
+  expect(api.rollStart.mock.calls[1][0].actionId).not.toBe(api.rollStart.mock.calls[0][0].actionId)
+  await act(async()=>root.unmount())
+ })
+ it("三选一不选候选即可付费重抽，显示新费用且未知结果只核对原请求",async()=>{
+  const pending={rollId:"pending-reroll",cardIndex:1,candidates:["2c","3c","4c"]}
+  const value={...table,hole:["As","Kd"],roll:{enabled:true,count:1,normal:{fee:6,available:true},super:{fee:16,available:true},pending,pendingSeatNo:0}}
+  api.rollStart.mockRejectedValueOnce(new Error("响应丢失")).mockResolvedValueOnce({ok:true,actionSeq:4})
+  api.state.mockResolvedValue(value)
+  const {root}=await render(value,"continuous-super")
+  expect(button(document.body,"选择这张牌").disabled).toBe(true)
+  const again=button(document.body,"再抽 3 张 · 16 点数")
+  expect(again?.disabled).toBe(false)
+  await act(async()=>{again.click();again.click()})
+  expect(api.rollStart).toHaveBeenCalledOnce()
+  const request=api.rollStart.mock.calls[0][0]
+  expect(request).toMatchObject({kind:"super",cardIndex:1,expectedFee:16,expectedActionSeq:3})
+  expect(api.rollChoose).not.toHaveBeenCalled()
+  expect(button(document.body,"再抽 3 张 · 16 点数")).toBeUndefined()
+  await act(async()=>button(document.body,"核对原换牌请求").click())
+  expect(api.rollStart.mock.calls[1][0]).toEqual(request)
+  await act(async()=>root.unmount())
+ })
+ it("三选一余额不足时保留候选供选择，禁止再次付费",async()=>{
+  const value={...table,hole:["As","Kd"],roll:{enabled:true,count:1,super:{fee:160,available:false},pending:{rollId:"poor-reroll",cardIndex:1,candidates:["2c","3c","4c"]},pendingSeatNo:0}}
+  const {root}=await render(value,"poor-reroll")
+  expect(button(document.body,"再抽 3 张 · 160 点数")?.disabled).toBe(true)
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="1"]')!.click())
+  expect(button(document.body,"选择这张牌").disabled).toBe(false)
+  expect(api.rollStart).not.toHaveBeenCalled()
+  await act(async()=>root.unmount())
+ })
+ it("三选一直接重抽后清理旧选择，继续展示新候选和下一次费用",async()=>{
+  api.rollStart.mockResolvedValue({ok:true,actionSeq:4})
+  const first={...table,hole:["As","Kd"],roll:{enabled:true,count:1,super:{fee:16,available:true},pending:{rollId:"old-candidates",cardIndex:1,candidates:["2c","3c","4c"]},pendingSeatNo:0}}
+  function Continuous(){
+   const [value,setValue]=useState<PokerTableView>(first)
+   return <HumanControls identityKey="new-candidates" table={value} perspective="owner" onRefresh={()=>setValue({...first,actionSeq:4,roll:{...first.roll,count:2,super:{fee:24,available:true},pending:{...first.roll.pending,rollId:api.rollStart.mock.calls[0][0].actionId,candidates:["5c","6c","7c"]}}})}/>
+  }
+  const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+  await act(async()=>root.render(<Continuous/>))
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="1"]')!.click())
+  await act(async()=>button(document.body,"再抽 3 张 · 16 点数").click())
+  expect(document.querySelector('[aria-label="选择候选 1，5♣"]')).not.toBeNull()
+  expect(document.querySelector('[aria-label="选择候选 1，2♣"]')).toBeNull()
+  expect(button(document.body,"选择这张牌").disabled).toBe(true)
+  expect(button(document.body,"再抽 3 张 · 24 点数").disabled).toBe(false)
+  expect(api.rollChoose).not.toHaveBeenCalled()
+  await act(async()=>root.unmount())
+ })
+ it("普通换牌请求中主动关闭，成功后不重新打开面板",async()=>{
+  let resolve!:(value:unknown)=>void
+  api.rollStart.mockImplementation(()=>new Promise(done=>{resolve=done}))
+  const first={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},pending:null}}
+  function Continuous(){
+   const [value,setValue]=useState<PokerTableView>(first)
+   return <HumanControls identityKey="closed-continuation" table={value} perspective="owner" onRefresh={()=>setValue({...first,actionSeq:4,roll:{...first.roll,count:1}})}/>
+  }
+  const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
+  await act(async()=>root.render(<Continuous/>))
+  await act(async()=>button(host,"Roll 换牌").click())
+  await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="1"]')!.click())
+  await act(async()=>button(document.body,"支付 3 点数换牌").click())
+  await act(async()=>button(document.body,"取消").click())
+  await act(async()=>resolve({ok:true,actionSeq:4}))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  await act(async()=>root.unmount())
+ })
  it("关闭Roll的房间在会话存储不可读时仍可正常弃牌",async()=>{
   api.act.mockResolvedValue({ok:true})
   const failure=vi.spyOn(Storage.prototype,"getItem").mockImplementation(()=>{throw new Error("denied")})
