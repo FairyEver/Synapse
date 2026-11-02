@@ -5,7 +5,7 @@ import type { usePokerRoll } from "../hooks/usePokerRoll"
 import { Card } from "./Card"
 import { amount, remaining, streetLabel } from "../lib/view"
 import { rollOfferCost, rollUnavailableReason } from "../lib/roll-view"
-import { PokerDiamondText } from "./PokerDiamondText"
+import { PokerDiamondAmount, PokerDiamondText, PokerRollCost } from "./PokerDiamondText"
 
 const suits: Record<string, string> = { s: "♠", h: "♥", d: "♦", c: "♣" }
 const cardLabel = (card?: string) => {
@@ -26,7 +26,6 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
     kind:value, label:value==="normal"?"普通":"超级", offer:table.roll?.[value],
     cost:rollOfferCost(table.roll?.[value],unit), reason:rollUnavailableReason(table.roll?.[value],coins?.balance,unit),
   }))
-  const afterCoins=coins&&offer?.coinCost!=null&&offer.available?coins.balance-offer.coinCost:null
   const paid=table.seats.find(seat=>seat.isMe&&seat.seatNo===table.mySeatNo)?.rollPaid
   const prior=useRef(false),origin=useRef<HTMLElement|null>(null)
   if(open&&!prior.current) origin.current=document.activeElement instanceof HTMLElement?document.activeElement:null
@@ -38,7 +37,7 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
       <Modal.CloseTrigger aria-label="关闭换牌" />
       <Modal.Header>
         <Modal.Heading className="pr-8 wrap-anywhere">{pending?"选择新牌":"Roll 换牌"}</Modal.Heading>
-        {coins&&<p className="pr-8 text-sm font-medium tabular-nums"><PokerDiamondText text={`本手钻石 ${coins.balance}/${coins.limit}`}/></p>}
+        {coins&&<p className="pr-8 text-sm font-medium tabular-nums"><PokerDiamondAmount value={coins.balance}/></p>}
         <p className="pr-8 text-sm leading-5 text-muted tabular-nums">{pending?`换掉第 ${pending.cardIndex+1} 张 · 已支付`:`本手第 ${(table.roll?.count??0)+1} 次`}{paid!=null&&` · 已支出 ${amount(paid)} ${unit}`}</p>
       </Modal.Header>
       <Modal.Body><div className="space-y-3">
@@ -76,7 +75,7 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
           </RadioGroup>
           {coins&&controls.canControl&&!controls.storageError&&!controls.uncertain&&<div className="space-y-2" aria-label="重新抽牌">
             {choices.map(choice=><div key={choice.kind} className="space-y-1">
-              <Button fullWidth variant="secondary" isDisabled={blocked||!choice.offer?.available} onPress={()=>{if(choice.offer) void controls.start(choice.kind,pending.cardIndex,choice.offer.fee)}}><PokerDiamondText text={`${choice.label}重抽 · ${choice.cost}`}/></Button>
+              <Button fullWidth variant="secondary" aria-label={`${choice.label}重抽 · ${choice.cost}`} isDisabled={blocked||!choice.offer?.available} onPress={()=>{if(choice.offer) void controls.start(choice.kind,pending.cardIndex,choice.offer.fee)}}>{choice.label}重抽 · <PokerRollCost offer={choice.offer} unit={unit}/></Button>
               {choice.reason&&<p className="text-xs text-muted"><PokerDiamondText text={choice.reason}/></p>}
             </div>)}
           </div>}
@@ -106,7 +105,7 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
                     </span>
                     <Radio.Control><Radio.Indicator/></Radio.Control>
                   </span>
-                  <span className="text-sm font-semibold text-foreground tabular-nums wrap-anywhere"><PokerDiamondText text={choice.cost}/></span>
+                  <span className="mt-auto flex w-full justify-center text-sm font-semibold text-foreground"><PokerRollCost offer={choice.offer} unit={unit}/></span>
                   {choice.reason&&<span className="text-xs text-muted"><PokerDiamondText text={choice.reason}/></span>}
                 </Radio.Content>
               </Radio>)}
@@ -118,7 +117,6 @@ export function PokerRollDialog({table,open,onOpenChange,controls,disabled,epoch
         {controls.uncertain&&<p role="status" className="text-sm">结果待核对，保留原请求。</p>}
       </div></Modal.Body>
       <Modal.Footer className="flex-wrap">
-        {!pending&&coins&&offer?.available&&<p className="w-full text-sm tabular-nums wrap-anywhere"><PokerDiamondText text={`支付 ${rollOfferCost(offer,unit)}${afterCoins!=null?` · 扣后钻石 ${afterCoins}/${coins.limit}`:""}`}/></p>}
         <Button variant="tertiary" onPress={()=>onOpenChange(false)}>{pending?"稍后选择":controls.continuation?"继续本手":"取消"}</Button>
         {pending&&!coins&&controls.canControl&&!controls.storageError&&!controls.uncertain&&<Button variant="secondary" isPending={controls.busy} isDisabled={blocked||!repeatOffer?.available} onPress={()=>{if(repeatOffer) void controls.start("super",pending.cardIndex,repeatOffer.fee)}}>再抽 3 张 · {amount(repeatOffer?.fee??0)} {unit}</Button>}
         {controls.storageError?<Button isPending={controls.busy} isDisabled={controls.busy} onPress={()=>void controls.retry()}>重试恢复记录</Button>:controls.uncertain?<Button isPending={controls.busy} isDisabled={controls.busy} onPress={()=>void controls.retry()}>核对原换牌请求</Button>:pending&&!controls.canControl?<Button isPending={controls.busy} isDisabled={disabled||controls.blocked} onPress={onTakeover}>本人接管</Button>:pending?<Button isPending={controls.busy} isDisabled={blocked||candidate===""} onPress={()=>void controls.choose(Number(candidate))}>选择这张牌</Button>:<Button isPending={controls.busy} isDisabled={blocked||card===""||!offer?.available} onPress={()=>{if(offer) void controls.start(kind,Number(card),offer.fee)}}>{coins?"确认换牌":controls.continuation?`再抽 ${kind==="normal"?1:3} 张 · ${amount(offer?.fee??0)} ${unit}`:`支付 ${amount(offer?.fee??0)} ${unit}换牌`}</Button>}
