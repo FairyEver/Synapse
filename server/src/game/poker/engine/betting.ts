@@ -9,6 +9,8 @@ export interface EngineSeat {
   startingStack: number
   streetBet: number
   total: number
+  /** chips-v2: cumulative nominal stake; total always remains real money. */
+  nominalTotal?: number
   folded: boolean
   allIn: boolean
   lastActedBet: number | null

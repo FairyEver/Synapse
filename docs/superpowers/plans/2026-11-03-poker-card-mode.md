@@ -130,11 +130,11 @@
 **Files:** Create `server/src/game/poker/engine/chips/types.ts`、`server/src/game/poker/engine/chips/payment.ts`、`server/src/game/poker/engine/chips/funded-betting.ts`、`server/src/game/poker/engine/chips/funded-pots.ts`、`server/src/game/poker/engine/__tests__/funded-betting.spec.ts`、`server/src/game/poker/engine/__tests__/funded-pots.spec.ts`；Modify `server/src/game/poker/engine/betting.ts`、`server/src/game/poker/engine/pots.ts`。
 **Interfaces:** Produces `ChipPaymentInput/Modifier/Quote`、`FundedSeat/Pot`、`quoteChipPayment`、`applyFundedBet`、`splitFundedPots`；筹码模块不导入具体卡牌ID。
 
-- [ ] **1. 写失败测试。** `cap_100_on_60_and_300`断言实付0/200；`combined_spell_cost`在BB10时20基础+20追加遇30豁免，实付10；`allin_500_plus_100`断言名义600、实付500和allIn=true；`call_80_waived`实付0且allIn=false。边池手算例`[(100,0),(100,100),(50,50)]`得到真实金额`[100,50]`和资格`[[A,B,C],[A,B]]`。 断言示例：`expect(splitFundedPots(seats,order).map(p=>p.amount)).toEqual([100,50])`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/funded-betting.spec.ts src/game/poker/engine/__tests__/funded-pots.spec.ts`。
-- [ ] **3. 实现支付和分层。** 同次基础/追加卡费合并一次支付；最大余数使用BigInt中间量，层级同余优先低层。名义匹配/最小加注和真实投入独立，返还只返实体资金。非下注支付默认留1颗，钻石不享筹码豁免；未用满的一次性额度不结转。
-- [ ] **4. 同命令验证绿灯。** 枚举三人名义1至9的729个无减免组合，对照既有`splitPots`；增加不整除、零金额层、已弃牌高投入、唯一未弃牌者、未匹配最高层和短全下不重开加注权。断言每层合计等于实付总额。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 支持有额度豁免的名义下注与真实边池结算'`。
+- [x] **1. 写失败测试。** `cap_100_on_60_and_300`断言实付0/200；`combined_spell_cost`在BB10时20基础+20追加遇30豁免，实付10；`allin_500_plus_100`断言名义600、实付500和allIn=true；`call_80_waived`实付0且allIn=false。边池手算例`[(100,0),(100,100),(50,50)]`得到真实金额`[100,50]`和资格`[[A,B,C],[A,B]]`。 断言示例：`expect(splitFundedPots(seats,order).map(p=>p.amount)).toEqual([100,50])`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/funded-betting.spec.ts src/game/poker/engine/__tests__/funded-pots.spec.ts`。
+- [x] **3. 实现支付和分层。** 同次基础/追加卡费合并一次支付；最大余数使用BigInt中间量，层级同余优先低层。名义匹配/最小加注和真实投入独立，返还只返实体资金。非下注支付默认留1颗，钻石不享筹码豁免；未用满的一次性额度不结转。
+- [x] **4. 同命令验证绿灯。** 枚举三人名义1至9的729个无减免组合，对照既有`splitPots`；增加不整除、零金额层、已弃牌高投入、唯一未弃牌者、未匹配最高层和短全下不重开加注权。断言每层合计等于实付总额。
+- [x] **5. 本地提交。** `git commit -m 'feat: 支持有额度豁免的名义下注与真实边池结算'`。
 
 
 ## Task 5: 可追溯暂存、盗取与退款
