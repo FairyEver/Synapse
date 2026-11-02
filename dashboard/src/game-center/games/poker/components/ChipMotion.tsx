@@ -24,20 +24,30 @@ export function ChipMotion({transfers,layout,scope,onStart,onComplete}: {transfe
     for(const [id,job] of running.current)if(!ids.has(id)){cancel(job);running.current.delete(id)}
     const root=layer.current?.parentElement
     if(!root)return
-    const bounds=root.getBoundingClientRect(),scale=bounds.width/root.offsetWidth||1
-    const point=(selector:string):Point|null=>{
-      const rect=root.querySelector(selector)?.getBoundingClientRect()
-      return rect?{x:(rect.x+rect.width/2-bounds.x)/scale,y:(rect.y+rect.height/2-bounds.y)/scale}:null
-    }
-    transfers.forEach((transfer,batch)=>{
+    const pending=transfers.flatMap((transfer,batch)=>{
       const existing=running.current.get(transfer.id)
       if(existing){
         if(reduced&&!existing.complete){existing.animations.forEach(a=>a.cancel());if(existing.timer)clearTimeout(existing.timer);queueMicrotask(()=>complete(transfer.id,existing))}
-        return
+        return []
       }
       const elements=[...layer.current!.querySelectorAll<HTMLElement>(`[data-transfer-id="${CSS.escape(transfer.id)}"] .poker-flying-chip`)]
       const job:Running={cancelled:false,complete:false,animations:[],remaining:elements.length};running.current.set(transfer.id,job)
-      const center=point(`[data-chip-anchor="${transfer.fund}"]`),seat=point(`[data-seat="${transfer.seatNo}"] .poker-seat-bank`)
+      return [{transfer,batch,elements,job}]
+    })
+    if(!pending.length)return
+    const bounds=!reduced&&pending.some(p=>p.elements.length)?root.getBoundingClientRect():null
+    const width=bounds?root.offsetWidth:0,scale=bounds&&width?bounds.width/width:1,points=new Map<string,Point|null>()
+    const point=(selector:string):Point|null=>{
+      if(!bounds)return null
+      if(points.has(selector))return points.get(selector)!
+      const rect=root.querySelector(selector)?.getBoundingClientRect()
+      const value=rect?{x:(rect.x+rect.width/2-bounds.x)/scale,y:(rect.y+rect.height/2-bounds.y)/scale}:null
+      points.set(selector,value)
+      return value
+    }
+    // Snapshot every unique anchor before starting any animation or changing styles.
+    const measured=pending.map(p=>({...p,center:point(`[data-chip-anchor="${p.transfer.fund}"]`),seat:point(`[data-seat="${p.transfer.seatNo}"] .poker-seat-bank`)}))
+    measured.forEach(({transfer,batch,elements,job,center,seat})=>{
       callbacks.current.onStart(transfer.id)
       if(reduced||!center||!seat||!elements.length){queueMicrotask(()=>complete(transfer.id,job));return}
       const from=transfer.direction==="in"?seat:center,to=transfer.direction==="in"?center:seat

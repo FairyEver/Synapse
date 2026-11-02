@@ -1,6 +1,6 @@
 /* Playing objects only. These physical denomination colors never theme a system panel. */
 .poker-table { --poker-chip-size: 44px; --poker-chip-shadow: color-mix(in oklch,var(--foreground) 20%,transparent); }
-.poker-chip { display:block; width:var(--poker-chip-size); height:var(--poker-chip-size); color:var(--surface); transform:rotateX(44deg) rotateZ(var(--chip-turn,0deg)); filter:drop-shadow(0 1px 0 color-mix(in oklch,var(--chip-color) 60%,var(--foreground))) drop-shadow(0 2px 0 var(--chip-color)) drop-shadow(0 3px 0 color-mix(in oklch,var(--chip-color) 70%,var(--foreground))); }
+.poker-chip { display:block; width:var(--poker-chip-size); height:var(--poker-chip-size); color:var(--surface); border-radius:50%; transform:scaleY(.71934) rotate(var(--chip-turn,0deg)); box-shadow:0 2px 0 color-mix(in oklch,var(--chip-color) 60%,var(--foreground)),0 4px 0 var(--chip-color),0 6px 0 color-mix(in oklch,var(--chip-color) 70%,var(--foreground)); }
 .poker-chip[data-chip-value="1"] { --chip-color:oklch(.84 .012 260); color:var(--foreground); }
 .poker-chip[data-chip-value="5"] { --chip-color:oklch(.57 .21 25); }
 .poker-chip[data-chip-value="10"] { --chip-color:oklch(.56 .19 254); }
@@ -34,7 +34,7 @@
 .poker-rolling-amount { position:relative; letter-spacing:0; font-variant-numeric:tabular-nums; }
 .poker-number-reels { display:inline-flex; align-items:baseline; height:1.15em; vertical-align:top; }
 .poker-number-digit { display:inline-block; position:relative; overflow:hidden; width:1ch; height:1.15em; line-height:1.15; }
-.poker-number-track { display:block; height:1.15em; will-change:transform; }
+.poker-number-track { display:block; height:1.15em; }
 .poker-number-track::before { display:block; white-space:pre; line-height:1.15; content:"0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9\a 0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9\a 0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9"; }
 .poker-number-comma { width:.4ch; height:1.15em; }.poker-number-comma::before { content:","; }
 @media(prefers-reduced-motion:reduce) { .poker-flying-chip[data-fallback="true"]{animation-duration:1ms;animation-delay:0ms!important;} }

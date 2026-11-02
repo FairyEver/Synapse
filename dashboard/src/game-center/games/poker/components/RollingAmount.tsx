@@ -16,6 +16,14 @@ export function RollingAmount({value,scope,className="",onAnimating}: {value:num
     const previous=before.current,animate=!!previous&&previous.scope===scope&&!reduced
     const direction=previous&&value<previous.value?-1:1,used=new Set<number>()
     const digits=String(value)
+    // Only interrupted reels need a visual position. Read all of them before any writes.
+    const positions=new Map<number,number>()
+    if(animate&&typeof DOMMatrixReadOnly!=="undefined")for(let index=0;index<digits.length;index++){
+      const place=digits.length-index-1,wheel=wheels.current.get(place)
+      if(!wheel?.animation||wheel.node!==nodes.current.get(place)||wheel.digit===Number(digits[index]))continue
+      const height=wheel.node.offsetHeight
+      if(height>0)positions.set(place,-new DOMMatrixReadOnly(getComputedStyle(wheel.track).transform).m42/height)
+    }
     for(let index=0;index<digits.length;index++) {
       const place=digits.length-index-1,digit=Number(digits[index]),node=nodes.current.get(place)!
       used.add(place)
@@ -25,8 +33,7 @@ export function RollingAmount({value,scope,className="",onAnimating}: {value:num
         wheel.animation?.cancel();wheel.animation=null;wheel.digit=digit;wheel.track.style.transform=transform(10+digit);continue
       }
       if(wheel.digit===digit)continue
-      const height=node.getBoundingClientRect().height
-      const position=wheel.animation&&height>0&&typeof DOMMatrixReadOnly!=="undefined"?-new DOMMatrixReadOnly(getComputedStyle(wheel.track).transform).m42/height:10+wheel.digit
+      const position=positions.get(place)??10+wheel.digit
       const {start,end}=reelDestination(position,digit,direction)
       wheel.animation?.cancel();wheel.digit=digit;wheel.track.style.transform=transform(start)
       const animation=wheel.track.animate([{transform:transform(start)},{transform:transform(end)}],{duration:440,easing:"cubic-bezier(.2,.65,.25,1)",fill:"both"})
