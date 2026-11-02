@@ -534,13 +534,14 @@ describe("mobile workspace Git uses real bounded readonly repositories", { timeo
     for (const name of names) await writeFile(path.join(f.root, name), `changed ${name}\n`)
     const indexBefore = await readFile(path.join(f.root, ".git", "index")), objectsBefore = (await readdir(objectsRoot, { recursive: true })).sort()
     const scope = await f.open("repository"), runner = createControlledProcessRunner({ permissionGuard: f.guard, auditSink: f.audit })
-    let nativeActive = 0, maxNativeActive = 0, baselineLatencyMs = 0
+    let nativeActive = 0, maxNativeActive = 0, baselineLatencyMs = 0, delayedBaseline = false
     configureGitCommandSecurity({ processRunner: { run: async request => {
       nativeActive++; maxNativeActive = Math.max(maxNativeActive, nativeActive)
       try {
-        if (request.args?.includes("cat-file")) {
+        if (request.args?.includes("cat-file") && !delayedBaseline) {
+          delayedBaseline = true
           const started = performance.now()
-          await new Promise(resolve => setTimeout(resolve, 100))
+          await new Promise(resolve => setTimeout(resolve, L.searchRequestMs + 100))
           baselineLatencyMs += performance.now() - started
         }
         return await runner.run(request)
