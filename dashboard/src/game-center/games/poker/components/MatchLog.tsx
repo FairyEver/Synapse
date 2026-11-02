@@ -1,11 +1,27 @@
 import { Accordion } from "@heroui/react"
-import type { PokerTableView } from "@synapse/shared/game-contracts"
+import type { PokerHandLogEntry, PokerTableView } from "@synapse/shared/game-contracts"
+import { Check, ChevronsUp, CircleDollarSign, Coins, CornerDownRight, Plus, Shuffle, Sparkles, TrendingUp, X, type LucideIcon } from "lucide-react"
 import { bettingStreets, matchLog, reachedStreets } from "../lib/match-information"
 import { actionLabel, amount, streetLabel } from "../lib/view"
 import { Card } from "./Card"
 
 const rollStatus = { pending: "待选牌，费用已支付", completed: "已完成", replaced: "已重新抽取，费用不退", cancelled: "本手已取消" }
 const blindLabels: Record<string, string> = { small_blind: "小盲", big_blind: "大盲" }
+const actionIcons: Record<PokerHandLogEntry["action"], LucideIcon> = {
+  small_blind: CircleDollarSign,
+  big_blind: Coins,
+  fold: X,
+  check: Check,
+  call: CornerDownRight,
+  bet: Plus,
+  raise: TrendingUp,
+  allin: ChevronsUp,
+  roll: Shuffle,
+}
+function LogActionIcon({ entry }: { entry: PokerHandLogEntry }) {
+  const Icon = entry.roll?.kind === "super" ? Sparkles : actionIcons[entry.action]
+  return <span className="flex size-5 shrink-0 items-center justify-center text-muted" aria-hidden="true"><Icon className="size-4" /></span>
+}
 export function MatchLog({ table }: { table: PokerTableView }) {
   const log = matchLog(table)
   const current = bettingStreets.indexOf(table.street as typeof bettingStreets[number])
@@ -27,7 +43,7 @@ export function MatchLog({ table }: { table: PokerTableView }) {
             {!log.entries.some(e => e.street === street) && <p className="py-3 text-sm text-muted">{log.complete ? "本轮暂无行动" : "暂无已取得的行动记录"}</p>}
             <ol className="divide-y divide-separator text-sm" aria-label={`${streetLabel[street]}行动记录`}>
               {log.entries.filter(e => e.street === street).map(entry => <li key={entry.seq} data-log-seq={entry.seq} className="flex min-w-0 items-start gap-3 py-3">
-                <span className="w-5 shrink-0 text-xs text-muted tabular-nums">{entry.seq > 0 ? String(entry.seq).padStart(2, "0") : "盲注"}</span>
+                <LogActionIcon entry={entry} />
                 <span className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="wrap-anywhere">{entry.displayName} · {entry.roll ? entry.roll.kind === "super" ? "超级 Roll" : "普通 Roll" : blindLabels[entry.action] ?? actionLabel[entry.action] ?? entry.action}</span>
                   {entry.roll ? <small className="text-muted">本手第 {entry.roll.count} 次 · {rollStatus[entry.roll.status]}</small> :
