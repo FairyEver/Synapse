@@ -541,7 +541,7 @@
 
 ## app_game_poker_table_state
 
-本人快照；刷新AI心跳，不得读取对手未摊牌底牌。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+本人快照；刷新AI心跳，不得读取对手未摊牌底牌。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

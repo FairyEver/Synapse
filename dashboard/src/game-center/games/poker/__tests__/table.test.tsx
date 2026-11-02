@@ -71,7 +71,7 @@ describe("牌桌", () => {
       expect(trigger).not.toBeNull()
       const canvas = host.querySelector(".poker-canvas")
       await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="日志"]')!.click())
-      trigger!.focus()
+      await act(async () => trigger!.focus())
       await act(async () => trigger!.click())
       const dialog = document.querySelector('[role="dialog"]')!
       expect(dialog).not.toBeNull()
@@ -83,7 +83,7 @@ describe("牌桌", () => {
       expect(dialog.textContent).toContain(variant === "short32" ? "短牌 32 张" : "标准 52 张")
       expect(dialog.textContent).toContain(variant === "short32" ? "A、7、8、9、10" : "A、2、3、4、5")
       await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭牌型大小"]')!.click())
-      await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)) })
+      await act(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))) })
       expect(document.querySelector('[role="dialog"]')).toBeNull()
       expect(document.activeElement).toBe(trigger)
       expect(host.querySelector(".poker-canvas")).toBe(canvas)

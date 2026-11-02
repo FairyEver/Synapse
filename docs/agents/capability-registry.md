@@ -2,6 +2,8 @@
 
 - 2026-11-02 扑克房间上限：既有 `app.game.poker.room.create` 的 `maxSeats` 改为2–6，Web、服务端入座和陪练容量同步；MCP描述、schema、Skill规则及API参考同步。未新增或删除注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
 
+- 2026-11-02 Roll 统计：既有 `table.state`/`room.get` 追加可选公开 rollStats（本手/房间总量，以及最多10个当前/历史回显座位对应账号的本手/房间汇总）。不增加输入参数、capability、MCP、Web 操作、System App、Dock、Workflow、Automation 或 Deep Link，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0均不变。统计在点击玩家区域后的系统信息弹窗内展示，不常驻牌桌；按身份和 Roll ID 去重，候选/旧槽不公开，schema、描述、系统 Skill 与生成参考同步。
+
 - 2026-11-01 Roll 完整接入：新增 `app.game.poker.roll.start` / `app.game.poker.roll.choose`（MCP `app_game_poker_roll_start` / `app_game_poker_roll_choose`），game 27→29（大厅3、扑克26），全局 capability 370→372、MCP索引366→368；当前实际注册为372/368。Web增加两个身份/同源保护的POST `/game/poker/rooms/:code/roll/start`、`/roll/choose`，游戏UI可调用27项，桌面游戏IPC为0。无新System App、Dock、Workflow、Automation或Deep Link；System App22、默认Dock9及两条兼容游戏路径保留。room.close/control.set仍UI私有，table.wait/control.claim/checkpoint仅Agent可用。建房ruleOptions.roll缺省false，服务端roll-v1固定；候选仅原手本人可见，超级待选与控制释放优先于普通行动，幂等永久回执匹配全部参数，Skill和生成API参考同步。下面日期相同的27/370/366及更早计数均为当次历史基线。
 
 - 2026-11-01 云端数据表：新增服务端REST及Console，API文档可整页复制为Markdown供AI调用；按用户后续决定不提供独立Skill。不注册桌面System App、Dock、capability、MCP、Workflow、Automation或Deep Link，各注册数量不因云表变化。

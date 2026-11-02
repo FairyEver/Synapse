@@ -12,7 +12,9 @@ export function Seat({
   dealer,
   dealt,
   deadlineMs, result, feedback, feedbackKey, turnPulse, celebrate, departed,
+  onInspect,
 }: {
+  onInspect?: (trigger: HTMLButtonElement) => void
   hasStarted?: boolean
   showWager?: boolean
   departed?: boolean
@@ -92,6 +94,7 @@ export function Seat({
           </span>}
         <span className="poker-wager" data-seat={seat.seatNo} data-visible={showWager && seat.streetBet > 0} aria-label={`${seat.isMe ? "你" : seat.displayName} 本轮下注 ${amount(seat.streetBet)}`}><Coins aria-hidden="true" /><span title={amount(seat.streetBet)}>{amount(seat.streetBet)}</span></span>
       </div>
+      {onInspect && <button type="button" className="poker-seat-info-trigger" aria-label={`查看${seat.isMe ? "你" : seat.displayName}的玩家信息`} onClick={event => onInspect(event.currentTarget)} />}
     </div>
   )
 }

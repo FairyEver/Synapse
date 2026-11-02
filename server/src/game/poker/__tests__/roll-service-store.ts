@@ -1,4 +1,5 @@
 import type { GamePokerRoom } from "@prisma/client"
+import type { Prisma } from "@prisma/client"
 import { randomUUID } from "node:crypto"
 import { createHallStore } from "../../hall/__tests__/hall-store"
 import { HallService } from "../../hall/hall.service"
@@ -44,8 +45,28 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
     const backup = structuredClone({ arrays, room })
     const tx: any = { ...hallTx, gamePokerRoom: table([room]), gamePokerSeat: table(seats), gamePokerHand: table(hands), gamePokerHandSeat: table(participants), gamePokerAction: table(actions), gamePokerActionReceipt: table(receipts), gamePokerRoll: table(rolls), gamePokerHandSummary: table(summaries), gamePokerAgent: table([]), gamePokerAgentVersion: table([]), gamePokerHandArchive: table(archives), gamePokerControlHistory: table([]), user: table([]) }
     tx.gameSession = { ...hallTx.gameSession, updateMany: table(db.sessions).updateMany }
-    tx.$queryRaw = (sql: TemplateStringsArray, ...args: any[]) => {
-      const query = sql.join("")
+    tx.$queryRaw = (sql: TemplateStringsArray | Prisma.Sql, ...args: any[]) => {
+      const query = "text" in sql ? sql.text : sql.join("")
+      if ("values" in sql && "text" in sql) args = sql.values
+      if (query.includes("WITH records AS")) {
+        const handId = args[2], tracked = args.slice(4)
+        const unique = new Map<string, any>()
+        for (const archive of archives.filter(a => a.roomId === room.id)) for (const row of archive.data.rolls ?? []) unique.set(row.id, { ...row, displayName: archive.data.seats.find((s: any) => s.admissionId === row.admissionId && s.userId === row.userId)?.displayName ?? "选手" })
+        for (const row of rolls.filter(r => r.roomId === room.id)) unique.set(row.id, { ...row, displayName: participants.find(s => s.handId === row.handId && s.admissionId === row.admissionId && s.userId === row.userId)?.displayName ?? "选手" })
+        const players = new Map<string, any>()
+        for (const row of unique.values()) {
+          const p = players.get(row.userId) ?? { userId: row.userId, displayName: row.displayName, count: 0, paid: 0, handCount: 0, handPaid: 0 }
+          p.count++; p.paid += row.data.fee
+          if (row.handId === handId) { p.handCount++; p.handPaid += row.data.fee }
+          players.set(row.userId, p)
+        }
+        const list = [...players.values()].sort((a,b) => a.userId.localeCompare(b.userId))
+        return Promise.resolve([{
+          hand: { players: list.filter(p => p.handCount > 0).length, count: list.reduce((n,p) => n+p.handCount,0), paid: list.reduce((n,p) => n+p.handPaid,0) },
+          room: { players: list.length, count: list.reduce((n,p) => n+p.count,0), paid: list.reduce((n,p) => n+p.paid,0) },
+          players: list.filter(player => tracked.includes(player.userId)),
+        }])
+      }
       if (query.includes('FROM "GamePokerRoom"')) return Promise.resolve([structuredClone(room)])
       if (query.includes('SELECT "id","handNo","seq","action"')) {
         const terminalOnly = query.includes(`action."action" IN ('check','fold')`) && query.includes("action->>'action' IN ('check','fold')")

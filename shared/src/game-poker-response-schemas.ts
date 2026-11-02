@@ -11,6 +11,12 @@ const rollOffer = z.object({ fee: z.number().int().nonnegative(), available: z.b
 const rollPending = z.object({ rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3) }).strict()
 const roll = z.object({ enabled: z.boolean(), pricingVersion: z.string().optional(), count: z.number().int().nonnegative().optional(), normal: rollOffer.optional(), super: rollOffer.optional(), pending: rollPending.nullable().optional(), pendingSeatNo: z.number().int().nonnegative().nullable().optional() }).strict()
 const rollPublic = z.object({ kind: z.enum(["normal", "super"]), phase: z.enum(["start", "choose"]), fee: z.number().int().positive(), count: z.number().int().positive(), seatNo: z.number(), displayName: z.string(), source: z.enum(["human", "mcp", "rules_bot", "timeout"]), compensations: z.record(z.string(), z.number().int().nonnegative()) }).strict()
+const rollAmounts = { count: z.number().int().nonnegative(), paid: z.number().int().nonnegative() }
+const rollTotals = z.object({ ...rollAmounts, players: z.number().int().nonnegative() }).strict()
+const rollStats = z.object({
+  hand: rollTotals, room: rollTotals,
+  seats: z.array(z.object({ seatNo: z.number().int().min(0).max(9), key: z.string(), hand: z.object(rollAmounts).strict(), room: z.object(rollAmounts).strict() }).strict()).max(10),
+}).strict()
 const rollPrivate = z.object({ rollId: z.string(), kind: z.enum(["normal", "super"]), cardIndex: z.number().int().min(0).max(1), oldCard: z.string(), candidates: z.array(z.string()).min(1).max(3), selectedIndex: z.number().int().min(0).max(2).nullable(), fee: z.number().int().positive(), street: z.enum(["preflop", "flop", "turn"]), count: z.number().int().positive() }).strict()
 const rollResult = z.object({ ok: z.literal(true), handId: z.string(), rollId: z.string(), actionSeq: z.number().int().nonnegative(), cursor: z.string(), status: z.enum(["completed", "choice_required"]) }).passthrough()
 const rules = z.object({ ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
@@ -76,6 +82,7 @@ const seat = z
   .passthrough()
 const table = z
   .object({
+    rollStats: rollStats.optional(),
     rules: rules.optional(), ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), roll: roll.optional(),
     requiresJoinApproval: z.boolean().optional(),
     variant: z.enum(["standard52", "short32"]).optional(),

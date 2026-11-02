@@ -35,6 +35,13 @@ export interface PokerRollQuote { enabled: boolean; pricingVersion?: string; cou
 export interface PokerRollPending { rollId: string; cardIndex: number; candidates: string[] }
 export interface PokerRollView { enabled: boolean; pricingVersion?: string; count?: number; normal?: PokerRollOffer; super?: PokerRollOffer; pending?: PokerRollPending | null; pendingSeatNo?: number | null }
 export interface PokerRollPublicView { kind: PokerRollKind; phase: "start" | "choose"; fee: number; count: number; seatNo: number; displayName: string; source: "human" | "mcp" | "rules_bot" | "timeout"; compensations: Record<string, number> }
+export interface PokerRollAmounts { count: number; paid: number }
+export interface PokerRollTotals extends PokerRollAmounts { players: number }
+export interface PokerRollStats {
+  hand: PokerRollTotals
+  room: PokerRollTotals
+  seats: { seatNo: number; key: string; hand: PokerRollAmounts; room: PokerRollAmounts }[]
+}
 export interface PokerRollPrivateView { rollId: string; kind: PokerRollKind; cardIndex: number; oldCard: string; candidates: string[]; selectedIndex: number | null; fee: number; street: "preflop" | "flop" | "turn"; count: number }
 export interface PokerRollChoiceRequiredView extends PokerRollPending { status: "roll_choice_required"; handId: string; handNo: number; controlVersion: number; actionSeq: number; deadlineMs: number | null; cursor: string }
 export interface PokerRollResult { ok: true; handId: string; rollId: string; actionSeq: number; cursor: string; status: "completed" | "choice_required" }
@@ -146,6 +153,7 @@ export interface PokerActionView {
   personaVersion?: { versionNo: number; persona: string } | null
 }
 export interface PokerTableView {
+  rollStats?: PokerRollStats
   rules?: PokerRules
   ruleOptions?: PokerRuleOptions
   rollPricingVersion?: string
@@ -356,7 +364,7 @@ const definitions: [string, string, Record<string, Field>, string[], boolean][] 
   ],
   [
     "poker.table.state",
-    "本人快照；刷新AI心跳，不得读取对手未摊牌底牌。",
+    "本人快照；刷新AI心跳，不得读取对手未摊牌底牌。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。",
     room,
     ["roomCode"],
     false,

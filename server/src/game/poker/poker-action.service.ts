@@ -3,6 +3,7 @@ import { randomInt, randomUUID } from "node:crypto"
 import { PokerRollService, rollActionId } from "./poker-roll.service"
 import { botRollObservation, chooseBotRoll, chooseBotRollCandidate } from "./bot-roll-policy"
 import { projectRollView } from "./poker-roll-projection"
+import { projectRollStats } from "./poker-roll-stats"
 import { chooseBotAction } from "./bot-policy"
 import type { ActionKind } from "./engine/betting"
 import { act, legalActions, removeFromHand } from "./engine/hand-runner"
@@ -354,7 +355,11 @@ export class PokerActionService {
     const deadlineMs = c.room.actionDeadlineAt
       ? Math.max(0, c.room.actionDeadlineAt.getTime() - c.now.getTime())
       : null
+    const rollEnabled = !!(c.room.ruleOptions as { roll?: boolean } | null)?.roll
+    const statSeats = [...c.seats, ...participants.filter(p => !c.seats.some(s => s.seatNo === p.seatNo))]
+    const rollStats = rollEnabled ? await projectRollStats(c, hand?.id ?? null, statSeats) : undefined
     return {
+      ...(rollStats ? { rollStats } : {}),
       roomCode: c.room.code,
       mode: c.room.mode,
       ...resolveRules(c.room as unknown as Parameters<typeof resolveRules>[0]),

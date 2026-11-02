@@ -1,5 +1,7 @@
 # 协议与错误恢复
 
+Roll公开统计：table_state/room_get的rollStats.hand/room各含players/count/paid，room从创建以来累计且包含hand。seats最多10项，含seatNo、不透明key、hand/room的count/paid；按账号累计并映射到当前/历史回显座位，离桌重进/换座不重置，同座位换人不继承。只计算成功start，choose不重复。公开统计无私牌、旧槽或额外账号ID，不授予操作权限；旧响应无字段按不可用处理。Web点击玩家区域查看统计，保持桌面简洁，不新增分页或工具输入参数。
+
 陪练mode=practice与点数房固定隔离，overview的funding标注会话类型。bot_add仅房主，必传UUID creationId；bot_remove按botId管理机器人，pending手后移除；POKER_BOT_NOT_ALLOWED表示房间、权限或目标不允许，不得改用act控制。创建重试保留UUID，不跨房复用，移除后旧标识不复活，查询座位确认。练习离桌丢弃本桌筹码，不扣兑点数；机器人actionSource=rules_bot不是真人超时提示。
 
 座位只按当前账号+roomCode定位，不存在seatToken。同账号可同时玩多个游戏、多个房间，同一房间只能一个座位。

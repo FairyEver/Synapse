@@ -161,7 +161,7 @@ describe("统一底部操作与按需侧栏", () => {
     await act(async()=>root.render(<Table table={value} perspective="owner" identityKey="uncertain-roll-band" onPerspective={()=>{}} onBack={()=>{}}/>))
     await click(host,"Roll 换牌")
     await act(async()=>document.querySelector<HTMLInputElement>('input[type="radio"][value="0"]')!.click())
-    await click(document.body,"支付 3 换牌")
+    await click(document.body,"支付 3 点数换牌")
     await click(document.body,"取消")
     const controls=host.querySelector('.poker-human-controls')!
     expect([...controls.children].map(node=>node.className)).toEqual(["poker-control-state","poker-action-dock"])

@@ -325,6 +325,7 @@
 - 2026-11-02 人数上限：所有资金模式和牌组统一2–6座，默认6座；真人/AI/陪练机器人共计最多6位，陪练仍保留真人位置。旧7–10座配置自动收敛；旧大房间仅限制新增入座，不踢人或重写历史容量。此规则取代历史2–10座约定。
 
 - 当前 Roll 产品边界（2026-11-01）：建房 `ruleOptions.roll?:boolean` 缺省false，服务端价格 `roll-v1` 随房间/手牌固定；两种资金模式和牌组共用规则。normal/super共用个人本手次数，preflop/flop/turn当前行动者可用、河牌关闭，支付后至少留一筹码。费用独立下注，不消耗行动、不续deadline；超级原候选必须先选，断线/接管不重抽，超时选首张后原超时撤出。
+- 2026-11-02 Roll 可见信息：牌桌不常驻统计或追加座位数字，点击玩家区域在互斥 HeroUI 信息面板查看个人本手/房间次数与支出、待选状态及全桌合计。rollStats由服务端合并GamePokerRoll/归档，按唯一ID去重、账号身份汇总；每次成功start计一次，choose不增加次数/花费。房间创建以来累计包含本手，不因刷新/换座/重进重置。只投影桌上当前/历史座位对应账号的公开汇总（最多10位），不用座位或名字作为累计身份，不含私牌或额外账号ID。复用table.state/room.get，不新增输入参数、注册表面、迁移或Hall扑克分支。
 - 通用 `GamePendingTransfer` 记录冻结补偿；每次join使用新admissionId，Poker按原handSeat身份生成/释放，Hall不读扑克表。补偿派彩后按原入座到账，离场points归原账号及盈亏，practice离场清零；引擎stack已包含释放的只标table、不能再次加款。overview.points.pending计入total和netProfit，不计available，pending未释放禁止领取补助。永久Roll审计/回执与归档保留完整牌序和请求指纹，候选/旧槽/原牌仅原手本人可读，教学不扩权。
 - 当前注册：game 29项capability/MCP（大厅3、扑克26）、全局372 capability/368 MCP；游戏桌面IPC0，Web27项UI操作，两条兼容深链仅受控打开浏览器。新增roll.start/choose与已有join/act/ready共用版本和房锁；room.close/control.set仍UI私有，wait/claim/checkpoint仍Agent专用。下列26/27及旧IPC数量为历史基线。
 - Web Roll入口属于直接玩法按钮；档位、原手牌位置、确切费用确认及三选一采用HeroUI标准系统Modal/RadioGroup，与金额/全下/日志/管理面板互斥。可关闭/重开但不撤销待选；pending或Roll未知写入禁止正常下注，AI控制需先本人接管。未知写结果保留账号/房间隔离的原UUID与完整参数，先读状态再确认原回执；新手/控制变更清理未提交选择，迟到回调不作用于新上下文。公开本地视角剥离本人Roll报价/候选。
