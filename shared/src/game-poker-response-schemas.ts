@@ -113,8 +113,24 @@ const seat = z
   .passthrough()
 const chipCount = z.object({value:z.union([z.literal(1),z.literal(5),z.literal(10),z.literal(25),z.literal(100),z.literal(200),z.literal(500)]),count:z.number().int().positive()}).strict()
 const chipState = z.object({pot:z.array(chipCount).max(7),roll:z.array(chipCount).max(7),recent:z.array(z.object({id:z.string(),seq:z.number().int().nonnegative(),seatNo:z.number().int().nonnegative(),amount:z.number().int().nonnegative(),fund:z.enum(["pot","roll"])}).strict()).max(32)}).strict()
+const potAmount = z.number().int().nonnegative()
+const potContributions = z.object({
+  handId: z.string().min(1), status: z.enum(["pending", "settled", "cancelled"]), total: potAmount,
+  players: z.array(z.object({
+    key: z.string().min(1), seatNo: z.number().int().min(0).max(9), displayName: z.string(), isMe: z.boolean(), folded: z.boolean(), amount: potAmount,
+  }).strict()).max(10),
+}).strict().superRefine((pot, ctx) => {
+  if (new Set(pot.players.map(player => player.key)).size !== pot.players.length ||
+      new Set(pot.players.map(player => player.seatNo)).size !== pot.players.length || pot.players.filter(player => player.isMe).length > 1)
+    ctx.addIssue({ code: "custom", message: "底池来源玩家身份重复。" })
+  // Refinements can run after number validation failed; never convert invalid numbers to BigInt.
+  if (!Number.isSafeInteger(pot.total) || pot.players.some(player => !Number.isSafeInteger(player.amount))) return
+  if (pot.players.reduce((sum, player) => sum + BigInt(player.amount), 0n) !== BigInt(pot.total))
+    ctx.addIssue({ code: "custom", message: "底池来源金额不守恒。" })
+})
 const table = z
   .object({
+    potContributions: potContributions.optional(),
     chipState: chipState.optional(),
     rollStats: rollStats.optional(),
     rollLedger: rollLedger.optional(),
@@ -160,7 +176,10 @@ const table = z
     minRaiseTo: z.number().optional(),
     maxRaiseTo: z.number().optional(),
   })
-  .passthrough()
+  .passthrough().superRefine((table, ctx) => {
+    if (table.potContributions && table.potContributions.handId !== table.handId)
+      ctx.addIssue({ code: "custom", message: "底池来源不属于当前手牌。" })
+  })
 const agent = z
   .object({
     id: z.string(),

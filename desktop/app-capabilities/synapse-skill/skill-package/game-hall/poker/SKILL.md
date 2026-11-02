@@ -24,6 +24,8 @@ Web 的列表与牌桌共用 AI 接入面板，首次“允许 AI 接入并复�
 
 ## 控制与行动
 
+底池公开来源：table_state/room_get可选potContributions={handId,status,total,players}，所有视角/受众统一白名单。status=pending|settled|cancelled，分别为本手进行中、已结算、已取消；total始终是本手普通累计投入，结算后hand.pot可为0，不声称来源金额仍在池中、可下注或取消已到账。players最多10项，仅含房间作用域不透明key、seatNo、displayName、isMe、folded、amount，金额为安全非负整数，各玩家合计严格等于total。含实际短筹码盲注、跟注/下注/加注/全下、弃牌已投入及后来未跟注退款/边池的累计投入；Roll start/choose费用和补偿均独立排除。热手取引擎累计total；冷归档从本手不可变participants初始筹码、庄家和规则恢复实际盲注，再加完整归档普通actions，不从最近30条动作、当前席位余额或动画反推。姓名和归属只取本手快照，同座新账号不继承；不公开userId/admissionId、牌面、候选、persona或note。来源缺失、序号不全、身份或金额损坏时省略字段，旧响应按不可用；已知amount=0才是该玩家没有投入。Web点击原底池区域查看，只读不暂停、不行动、不改变权限、资金和动画。不新增查询、工具、输入参数、路由、数据库字段或迁移。
+
 Web的筹码堆与滚动金额只是展示：普通底池和Roll费用分开，派发完成后展示结算。可选chipState仅Web展示投影返回，MCP不依赖它；筹码颜色、动画进度不授予控制权、不延长行动窗口，也不代替结算shares、rollReceived或逐手准备。
 
 座位删除不清除该房的永久控制历史。无座位时先看table_state/room_get的requiresJoinApproval：明确为false表示没有控制历史，可按用户原入座授权join，兼容首次入座；true表示有历史，必须handoffPending=true且携匹配controlVersion才可seat_join。controller=null不代表首次入座，不按版本0猜测；标记缺失或未知时先核实，不能推定首次。未授权时安全退出并提示用户在Web 游戏中心请求AI入座，不自动join或重扣点。control.set(request_ai)授予该入座授权，cancel_ai撤销；取消或版本变化就停止。control_claim只用于已有座位交接，不能替代无座位入座授权。

@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 底池来源：既有 `table.state`/`room.get` 追加可选公开只读 `potContributions`（本手handId、pending/settled/cancelled、累计total和原参赛身份players/amount），包含实际盲注及完整普通下注，排除Roll；弃牌、退款和边池仍保留累计投入，同座新账号不继承。缺源/损坏省略，不公开账号/入座标识、牌面或note；共享schema、MCP描述、系统Skill/API/协议及Agent指南同步。没有新增查询、路由、输入参数、迁移、工具或权限；game30、全局373 capability/369 MCP、游戏Web28、桌面游戏IPC0及所有既有例外不变。
+
 - 2026-11-02 Roll费用明细：既有 `table.state`/`room.get` 追加可选公开只读 `rollLedger`，包含本手handId、pending/released/cancelled状态、参赛身份快照players和按成功start排序去重的全部entries及原补偿分配。保留弃牌/离桌者归属，不按当前占座者重写；不暴露账号/入座标识、旧牌或候选，缺失不当作零。共享schema、MCP描述及系统Skill/API/协议同步；不新增查询、数据库字段、输入参数、工具或权限，注册表数量及所有既有例外不变。
 
 - 2026-11-02 建房金额档位：既有 `app.game.poker.room.create` 的 buyIn 枚举及 poker.guide 同步为1000/5000/10000/50000，两类房间一致；Web与系统Skill同步，旧房间金额不变。未新增能力、MCP、Web/IPC路由，表格数量与既有例外保持不变。

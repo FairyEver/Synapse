@@ -23,8 +23,8 @@
 .poker-canvas[data-table-shape] .poker-pot-row::after { content:none; }
 .poker-canvas[data-table-shape] .poker-pot-value { gap:4px; width:190px; }
 .poker-canvas[data-table-shape] .poker-roll-pot { font-size:56px; line-height:1.15; color:var(--foreground); }
-.poker-roll-fee-trigger { padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
-.poker-roll-fee-trigger:focus-visible { outline:2px solid var(--accent); outline-offset:6px; border-radius:var(--radius); }
+.poker-roll-fee-trigger,.poker-pot-sources-trigger { padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.poker-roll-fee-trigger:focus-visible,.poker-pot-sources-trigger:focus-visible { outline:2px solid var(--accent); outline-offset:6px; border-radius:var(--radius); }
 .poker-canvas[data-table-shape] .poker-seat-bank { width:100px; height:78px; --poker-chip-size:36px; }
 .poker-canvas[data-table-shape="portrait"] .poker-seat-bank { --poker-chip-size:44px; }
 .poker-canvas[data-table-shape="portrait"] .poker-pot-value { width:180px; }

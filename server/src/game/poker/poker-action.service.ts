@@ -5,6 +5,7 @@ import { botRollObservation, chooseBotRoll, chooseBotRollCandidate } from "./bot
 import { projectRollView } from "./poker-roll-projection"
 import { projectRollStats } from "./poker-roll-stats"
 import { projectRollLedger } from "./poker-roll-ledger"
+import { projectPotContributions } from "./poker-pot-contributions"
 import { projectChipState } from "./poker-chip-projection"
 import { chooseBotAction } from "./bot-policy"
 import type { ActionKind } from "./engine/betting"
@@ -366,10 +367,14 @@ export class PokerActionService {
       roomId: c.room.id, userId, hand, participants, state: h,
       archivedRolls: archived?.rolls, archivedActions: archived?.actions,
     }) : undefined
+    const potContributions = hand ? projectPotContributions({
+      roomId: c.room.id, userId, hand, participants, state: h, archivedActions: archived?.actions,
+    }) : undefined
     const chipState = audience === "desktop" && hand ? await projectChipState(c.tx,hand,participants,
       archived ? archived.rolls.map(r=>({id:r.id,seatNo:r.seatNo,fee:(r.data as unknown as {fee:number}).fee})) : h?.roll?.history ?? [],
       archived?.actions) : undefined
     return {
+      ...(potContributions ? { potContributions } : {}),
       ...(chipState ? {chipState} : {}),
       ...(rollStats ? { rollStats } : {}),
       ...(rollLedger ? { rollLedger } : {}),
