@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-02 macOS 开发协议回跳：开发启动改用独立 bundle ID、内置当前仓库入口并声明 `synapse://` 的开发应用，修复网页登录唤起 Electron 默认窗口。既有 `synapse://auth/desktop/callback`、PKCE、IPC、MCP schema 和系统 Skill 不变；没有新增 Deep Link、System App、Dock、capability、MCP、Workflow 或 Automation，现有表格数量和例外均不变。
+
 - 2026-11-02 对局信息：既有table.state/room.get增加可选公开handLog（本手、完整标记、有界顺序流水、实际盲注、Roll支付与完成状态），仅白名单字段；总览继续使用potContributions/rollLedger，AI隐私不变。共享schema、MCP描述、系统Skill/API/协议、Agent和游戏规则同步。无新增注册、工具、输入、路由、权限或迁移；game30、全局373 capability/369 MCP、游戏Web28、桌面游戏IPC0及既有例外数量不变。
 
 - 2026-11-02 底池来源：既有 `table.state`/`room.get` 追加可选公开只读 `potContributions`（本手handId、pending/settled/cancelled、累计total和原参赛身份players/amount），包含实际盲注及完整普通下注，排除Roll；弃牌、退款和边池仍保留累计投入，同座新账号不继承。缺源/损坏省略，不公开账号/入座标识、牌面或note；共享schema、MCP描述、系统Skill/API/协议及Agent指南同步。没有新增查询、路由、输入参数、迁移、工具或权限；game30、全局373 capability/369 MCP、游戏Web28、桌面游戏IPC0及所有既有例外不变。

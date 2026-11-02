@@ -7,6 +7,7 @@ import { spawn } from "node:child_process"
 import { rm } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { prepareDevElectron, registerDevElectron } from "./prepare-dev-electron.mjs"
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const desktopRoot = path.resolve(scriptDir, "../..")
@@ -92,7 +93,11 @@ if (isStopping) {
   process.exit(0)
 }
 
-const nodemon = spawn(pnpmCommand, ["exec", "nodemon"], {
+const launch = await prepareDevElectron({ desktopRoot, devServerUrl })
+if (isStopping) process.exit(0)
+if (launch.appRoot) registerDevElectron(launch.appRoot)
+
+const nodemon = spawn(pnpmCommand, ["exec", "nodemon", "--exec", launch.command], {
   cwd: desktopRoot,
   stdio: "inherit",
   env: {

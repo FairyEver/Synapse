@@ -13,6 +13,14 @@ import {
 const workspaceRoot = "/Users/liyang/Documents/code/github/Synapse"
 const desktopRoot = `${workspaceRoot}/desktop`
 
+test("macOS cached development app belongs only to this workspace's desktop process", () => {
+  const commandLine = `${desktopRoot}/node_modules/.cache/synapse-dev/c07e96f15733/Synapse Dev.app/Contents/MacOS/Electron`
+  const row = { pid: 601, pgid: 601, commandLine, cwd: desktopRoot }
+  assert.equal(matchesSynapseDevProcess(row, { workspaceRoot, targetScripts: ["dev:desktop"] }), true)
+  assert.equal(matchesSynapseDevProcess(row, { workspaceRoot, targetScripts: ["dev:server"] }), false)
+  assert.equal(matchesSynapseDevProcess({ ...row, commandLine: commandLine.replace(workspaceRoot, "/tmp/other-project"), cwd: "/tmp/other-project/desktop" }, { workspaceRoot }), false)
+})
+
 test("Dashboard cleanup is owned by the server dev process", () => {
   const rows = [
     { pid: 501, commandLine: "pnpm --filter @synapse/dashboard run dev", cwd: workspaceRoot },

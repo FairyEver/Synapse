@@ -15,6 +15,7 @@ const DEV_PORTS_BY_SCRIPT = {
   "dev:server": [],
 }
 const DEV_PORTS = Object.values(DEV_PORTS_BY_SCRIPT).flat()
+const MAC_DEV_APP_COMMAND = /desktop[/\\]node_modules[/\\]\.cache[/\\]synapse-dev[/\\][a-f0-9]+[/\\]Synapse Dev\.app[/\\]Contents[/\\]MacOS[/\\]Electron(?:\s|$)/u
 
 const RELATIVE_DEV_COMMAND_MATCHERS = [
   /scripts[/\\]dev[/\\]dev\.mjs/u,
@@ -36,6 +37,7 @@ const RELATIVE_DEV_COMMAND_MATCHERS = [
 
 const WORKSPACE_DEV_COMMAND_MATCHERS = [
   ...RELATIVE_DEV_COMMAND_MATCHERS,
+  MAC_DEV_APP_COMMAND,
   /server[/\\]dist[/\\]main(?:\s|$)/u,
   /electron[/\\]dist[/\\]Electron\.app.* \./u,
 ]
@@ -47,6 +49,7 @@ const DEV_COMMAND_MATCHERS_BY_SCRIPT = {
     /pnpm(?:\.cjs)?.*\bdev:document\b/u,
   ],
   "dev:desktop": [
+    MAC_DEV_APP_COMMAND,
     /scripts[/\\]dev[/\\]dev\.mjs/u,
     /dev-renderer/u,
     /dev-electron-app/u,
