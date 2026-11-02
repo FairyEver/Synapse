@@ -18,12 +18,13 @@ export function WebhookUrlDialog({ open, title, url, onOpenChange, }: WebhookUrl
         }
     }
     return (<Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}><Modal.Container><Modal.Dialog>
-        <Modal.Header>
-          <Modal.Heading>{title}</Modal.Heading>
+        <Modal.CloseTrigger />
+        <Modal.Header className='pe-10'>
+          <Modal.Heading className='wrap-anywhere'>{title}</Modal.Heading>
         </Modal.Header>
         <Modal.Body>
           <TextField className='grid gap-2'>
-            <Label htmlFor='webhook-url'>URL</Label>
+            <Label htmlFor='webhook-url'>接入地址</Label>
             <Input variant="secondary" id='webhook-url' readOnly value={url}></Input>
           </TextField>
         </Modal.Body>

@@ -45,7 +45,9 @@ describe('drawer title and close control geometry', () => {
           await open(title)
           const heading = page.getByRole('heading', { name: title, exact: true })
           await expect.element(heading).toBeVisible()
-          await expect.poll(() => document.getAnimations().some(animation => animation.playState === 'running')).toBe(false)
+          // Tabs scroll shadows use scroll-driven animations that stay running while idle.
+          // Wait for time-based entrance animations before measuring geometry.
+          await expect.poll(() => document.getAnimations().some(animation => animation.playState === 'running' && animation.timeline instanceof DocumentTimeline)).toBe(false)
           const dialog = document.querySelector<HTMLElement>('[data-slot="drawer-dialog"]')!
           const close = document.querySelector<HTMLElement>('[data-slot="drawer-close-trigger"]')!.getBoundingClientRect()
           const titleRange = document.createRange()

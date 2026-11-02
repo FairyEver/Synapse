@@ -1,235 +1,92 @@
-import { consoleHref } from '@/lib/console-href';
-import { Link as HeroLink } from '@heroui/react';
-import { Button, Card, Chip, Skeleton, toast } from '@heroui/react';
-import { useState, type ReactNode } from 'react';
-import type { DashboardWebhookDto } from '@synapse/shared';
-import { useMutation, useQuery, useQueryClient, type QueryClient, } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
-import { dashboardApi } from '@/lib/api';
-import { ConfirmDialog } from '@/components/confirm-dialog';
-import { Header } from '@/components/layout/header';
-import { Main } from '@/components/layout/main';
-import { RelativeTime } from '@/components/relative-time';
-import { getWebhookDeliveryStatusLabel, getWebhookUrlDisplayState, } from './webhook-display';
-import { getWebhookErrorMessage } from './webhook-error';
-import { WebhookFormDialog, type WebhookFormState, } from './index';
-import { WebhookUrlDialog } from './webhook-url-dialog';
-import { getWebhookResetSecretDialogDescription, webhookResetSecretDialogTitle, } from './webhook-reset-secret';
-type OneTimeUrlState = {
-    title: string;
-    url: string;
-};
+import { Button, Card, Chip, Link, Skeleton, Tabs, toast } from '@heroui/react'
+import { useState } from 'react'
+import type { DashboardWebhookDto } from '@synapse/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
+import { dashboardApi } from '@/lib/api'
+import { consoleHref } from '@/lib/console-href'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Header } from '@/components/layout/header'
+import { Main } from '@/components/layout/main'
+import { WebhookDeliveryHistory } from '../webhook-deliveries'
+import { WebhookConfiguration } from './webhook-configuration'
+import { getWebhookErrorMessage } from './webhook-error'
+import { WebhookUrlDialog } from './webhook-url-dialog'
+import { getWebhookResetSecretDialogDescription, webhookResetSecretDialogTitle } from './webhook-reset-secret'
+
 export default function WebhookDetailPage() {
-    const { webhookId } = useParams({
-        from: '/_authenticated/webhooks/$webhookId',
-    });
-    const [form, setForm] = useState<WebhookFormState | null>(null);
-    const [oneTimeUrl, setOneTimeUrl] = useState<OneTimeUrlState | null>(null);
-    const [deleteTarget, setDeleteTarget] = useState<DashboardWebhookDto | null>(null);
-    const [resetSecretTarget, setResetSecretTarget] = useState<DashboardWebhookDto | null>(null);
-    const queryClient = useQueryClient();
-    const navigate = useNavigate();
-    const webhooksQuery = useQuery({
-        queryKey: ['dashboard-webhook', webhookId],
-        queryFn: () => dashboardApi.getWebhook(webhookId),
-    });
-    const webhook = webhooksQuery.data ?? null;
-    const updateMutation = useMutation({
-        mutationFn: ({ id, input, }: {
-            id: string;
-            input: {
-                name?: string;
-                enabled?: boolean;
-            };
-        }) => dashboardApi.updateWebhook(id, input),
-        onSuccess: (updatedWebhook) => {
-            setForm(null);
-            replaceWebhookInCache(queryClient, updatedWebhook);
-            toast.success('已保存');
-        },
-        onError: (error) => toast.danger(getWebhookErrorMessage(error, '保存失败')),
-    });
-    const resetSecretMutation = useMutation({
-        mutationFn: (id: string) => dashboardApi.resetWebhookSecret(id),
-        onSuccess: (result) => {
-            setResetSecretTarget(null);
-            setOneTimeUrl({ title: '新的 Webhook URL', url: result.url });
-            replaceWebhookInCache(queryClient, result.webhook);
-            toast.success('已重置');
-        },
-        onError: (error) => toast.danger(getWebhookErrorMessage(error, '重置失败')),
-    });
-    const deleteMutation = useMutation({
-        mutationFn: (id: string) => dashboardApi.deleteWebhook(id),
-        onSuccess: (_result, deletedId) => {
-            setDeleteTarget(null);
-            queryClient.removeQueries({ queryKey: ['dashboard-webhook', deletedId] });
-            void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] });
-            toast.success('已删除');
-            void navigate({ to: '/webhooks/' });
-        },
-        onError: (error) => toast.danger(getWebhookErrorMessage(error, '删除失败')),
-    });
-    return (<>
-      <Header fixed>
-        <h1 className='text-lg font-semibold'>Webhook 详情</h1>
-      </Header>
-      <Main className='flex max-w-4xl flex-col gap-4'>
-        <div>
-          <HeroLink href={consoleHref('/webhooks/')}>返回</HeroLink>
-        </div>
+  const { webhookId } = useParams({ from: '/_authenticated/webhooks/$webhookId' })
+  const search = useSearch({ from: '/_authenticated/webhooks/$webhookId' })
+  const navigate = useNavigate({ from: '/webhooks/$webhookId' })
+  const [oneTimeUrl, setOneTimeUrl] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DashboardWebhookDto | null>(null)
+  const [resetSecretTarget, setResetSecretTarget] = useState<DashboardWebhookDto | null>(null)
+  const queryClient = useQueryClient()
+  const webhookQuery = useQuery({ queryKey: ['dashboard-webhook', webhookId], queryFn: () => dashboardApi.getWebhook(webhookId) })
+  const webhook = webhookQuery.data
 
-        {webhooksQuery.isLoading ? (<WebhookDetailSkeleton />) : webhooksQuery.isError ? (<Card>
-            <Card.Content className='flex flex-col items-start gap-3'>
-              <div className='font-medium'>加载失败</div>
-              <div className='text-sm text-muted'>
-                {getWebhookErrorMessage(webhooksQuery.error, '详情加载失败')}
-              </div>
-              <Button variant="outline" onPress={() => void webhooksQuery.refetch()}>
-                重试
-              </Button>
-            </Card.Content>
-          </Card>) : webhook ? (<WebhookDetailCard webhook={webhook} isUpdating={updateMutation.isPending} isResetting={resetSecretMutation.isPending} onEdit={(target) => setForm({
-                mode: 'edit',
-                webhook: target,
-                name: target.name,
-            })} onToggle={(target) => updateMutation.mutate({
-                id: target.id,
-                input: { enabled: !target.enabled },
-            })} onResetSecret={setResetSecretTarget} onDelete={setDeleteTarget}/>) : (<Card>
-            <Card.Content className='flex flex-col items-start gap-3'>
-              <div className='font-medium'>未找到 Webhook</div>
-              <HeroLink href={consoleHref('/webhooks/')}>返回列表</HeroLink>
-            </Card.Content>
-          </Card>)}
+  function replaceWebhook(updated: DashboardWebhookDto) {
+    queryClient.setQueryData(['dashboard-webhook', updated.id], updated)
+    void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
+  }
+  const update = useMutation({
+    mutationFn: (input: { name?: string; enabled?: boolean }) => dashboardApi.updateWebhook(webhookId, input),
+    onSuccess: (updated) => { replaceWebhook(updated); toast.success('已保存') },
+    onError: (error) => toast.danger(getWebhookErrorMessage(error, '保存失败')),
+  })
+  const resetSecret = useMutation({
+    mutationFn: (id: string) => dashboardApi.resetWebhookSecret(id),
+    onSuccess: (result) => { setResetSecretTarget(null); setOneTimeUrl(result.url); replaceWebhook(result.webhook); toast.success('调用地址已重置') },
+    onError: (error) => toast.danger(getWebhookErrorMessage(error, '重置失败')),
+  })
+  const remove = useMutation({
+    mutationFn: (id: string) => dashboardApi.deleteWebhook(id),
+    onSuccess: (_result, deletedId) => {
+      setDeleteTarget(null)
+      queryClient.removeQueries({ queryKey: ['dashboard-webhook', deletedId] })
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] })
+      toast.success('已删除')
+      void navigate({ to: '/webhooks/' })
+    },
+    onError: (error) => toast.danger(getWebhookErrorMessage(error, '删除失败')),
+  })
 
-        <WebhookFormDialog form={form} isSaving={updateMutation.isPending} onFormChange={setForm} onSubmit={(event) => {
-            event.preventDefault();
-            if (!form?.webhook)
-                return;
-            const name = form.name.trim();
-            if (!name) {
-                toast.danger('名称不能为空');
-                return;
-            }
-            updateMutation.mutate({
-                id: form.webhook.id,
-                input: { name },
-            });
-        }}/>
-        <WebhookUrlDialog open={Boolean(oneTimeUrl)} title={oneTimeUrl?.title ?? 'Webhook URL'} url={oneTimeUrl?.url ?? ''} onOpenChange={(open) => {
-            if (!open)
-                setOneTimeUrl(null);
-        }}/>
-        <ConfirmDialog open={Boolean(resetSecretTarget)} onOpenChange={(open) => {
-            if (!open)
-                setResetSecretTarget(null);
-        }} title={webhookResetSecretDialogTitle} desc={getWebhookResetSecretDialogDescription(resetSecretTarget)} cancelBtnText='取消' confirmText='重置' destructive isLoading={resetSecretMutation.isPending} handleConfirm={() => {
-            if (resetSecretTarget)
-                resetSecretMutation.mutate(resetSecretTarget.id);
-        }}/>
-        <ConfirmDialog open={Boolean(deleteTarget)} onOpenChange={(open) => {
-            if (!open)
-                setDeleteTarget(null);
-        }} title='删除 Webhook' desc={deleteTarget?.name ?? ''} cancelBtnText='取消' confirmText='删除' destructive isLoading={deleteMutation.isPending} handleConfirm={() => {
-            if (deleteTarget)
-                deleteMutation.mutate(deleteTarget.id);
-        }}/>
-      </Main>
-    </>);
-}
-function WebhookDetailCard({ webhook, isUpdating, isResetting, onEdit, onToggle, onResetSecret, onDelete, }: {
-    webhook: DashboardWebhookDto;
-    isUpdating: boolean;
-    isResetting: boolean;
-    onEdit: (webhook: DashboardWebhookDto) => void;
-    onToggle: (webhook: DashboardWebhookDto) => void;
-    onResetSecret: (webhook: DashboardWebhookDto) => void;
-    onDelete: (webhook: DashboardWebhookDto) => void;
-}) {
-    const urlState = getWebhookUrlDisplayState(webhook);
-    return (<Card>
-      <Card.Header>
-        <Card.Title className='flex min-w-0 items-center gap-2 text-base'>
-          <span className='truncate'>{webhook.name}</span>
-          <Chip variant={webhook.enabled ? "soft" : "secondary"}>
-            {webhook.enabled ? '启用' : '停用'}
-          </Chip>
-        </Card.Title>
-      </Card.Header>
-      <Card.Content className='grid gap-4 md:grid-cols-2'>
-        <WebhookDetailField label='Public ID'>
-          <span className='break-all font-mono'>{webhook.publicId}</span>
-        </WebhookDetailField>
-        <WebhookDetailField label='URL'>
-          <span className='break-all font-mono text-muted'>
-            {urlState.label}
-          </span>
-        </WebhookDetailField>
-        <WebhookDetailField label='创建时间'>
-          <RelativeTime value={webhook.createdAt}/>
-        </WebhookDetailField>
-        <WebhookDetailField label='更新时间'>
-          <RelativeTime value={webhook.updatedAt}/>
-        </WebhookDetailField>
-        <WebhookDetailField label='最近触发'>
-          <RelativeTime value={webhook.lastDeliveryAt}/>
-        </WebhookDetailField>
-        <WebhookDetailField label='触发状态'>
-          {webhook.lastDeliveryStatus ? (<Chip variant="tertiary">
-              {getWebhookDeliveryStatusLabel(webhook.lastDeliveryStatus)}
-            </Chip>) : ('-')}
-        </WebhookDetailField>
-      </Card.Content>
-      <Card.Footer className='flex-wrap justify-end gap-2'>
-        <Button variant={webhook.enabled ? "outline" : "primary"} isDisabled={isUpdating} onPress={() => onToggle(webhook)}>
-          {webhook.enabled ? '停用' : '启用'}
-        </Button>
-        <HeroLink href={consoleHref('/webhook-deliveries', { search: { webhookId: webhook.id } })}>
-            查看记录
-          </HeroLink>
-        <Button variant="outline" onPress={() => onEdit(webhook)}>
-          重命名
-        </Button>
-        <Button variant="outline" isDisabled={isResetting} onPress={() => onResetSecret(webhook)}>
-          重置 secret
-        </Button>
-        <Button variant="danger" onPress={() => onDelete(webhook)}>
-          删除
-        </Button>
-      </Card.Footer>
-    </Card>);
-}
-function WebhookDetailField({ label, children, }: {
-    label: string;
-    children: ReactNode;
-}) {
-    return (<div className='flex min-w-0 flex-col gap-1 text-sm'>
-      <span className='text-xs font-medium text-muted'>
-        {label}
-      </span>
-      <div className='min-w-0'>{children}</div>
-    </div>);
-}
-function WebhookDetailSkeleton() {
-    return (<Card>
-      <Card.Header>
-        <Card.Title className='flex items-center gap-2'>
-          <Skeleton className='h-5 w-40'></Skeleton>
-          <Skeleton className='h-5 w-12'></Skeleton>
-        </Card.Title>
-      </Card.Header>
-      <Card.Content className='grid gap-4 md:grid-cols-2'>
-        {Array.from({ length: 6 }).map((_, index) => (<Skeleton key={index} className='h-9 w-full'></Skeleton>))}
-      </Card.Content>
-      <Card.Footer className='flex-wrap justify-end gap-2'>
-        <Skeleton className='h-8 w-16'></Skeleton>
-        <Skeleton className='h-8 w-20'></Skeleton>
-        <Skeleton className='h-8 w-16'></Skeleton>
-      </Card.Footer>
-    </Card>);
-}
-function replaceWebhookInCache(queryClient: QueryClient, webhook: DashboardWebhookDto) {
-    queryClient.setQueryData(['dashboard-webhook', webhook.id], webhook);
-    void queryClient.invalidateQueries({ queryKey: ['dashboard-webhooks'] });
+  return <>
+    <Header fixed><h1 className='text-lg font-semibold'>Webhook</h1></Header>
+    <Main>
+      <div><Link href={consoleHref('/webhooks/')}>返回 Webhook 列表</Link></div>
+      {webhookQuery.isLoading ? <Card><Card.Content className='grid gap-4'><Skeleton className='h-6 w-48' /><Skeleton className='h-40 w-full' /></Card.Content></Card>
+        : webhookQuery.isError ? <Card><Card.Content className='grid justify-items-start gap-3'>
+          <h2 className='font-medium'>加载失败</h2><p className='text-sm text-muted'>{getWebhookErrorMessage(webhookQuery.error, '详情加载失败')}</p>
+          <Button variant='secondary' onPress={() => void webhookQuery.refetch()}>重试</Button>
+        </Card.Content></Card>
+        : webhook ? <>
+          <div className='flex flex-wrap items-center gap-3'>
+            <h2 className='min-w-0 wrap-anywhere text-2xl font-semibold'>{webhook.name}</h2>
+            <Chip variant='soft' color={webhook.enabled ? 'success' : 'default'}>{webhook.enabled ? '已启用' : '已停用'}</Chip>
+          </div>
+          <Tabs variant='secondary' selectedKey={search.tab ?? 'configuration'} onSelectionChange={(key) => void navigate({ search: (current) => ({ ...current, tab: key === 'deliveries' ? 'deliveries' : 'configuration' }) })}>
+            <Tabs.ListContainer><Tabs.List aria-label='Webhook 页面'>
+              <Tabs.Tab id='configuration'>配置<Tabs.Indicator /></Tabs.Tab>
+              <Tabs.Tab id='deliveries'>触发记录<Tabs.Indicator /></Tabs.Tab>
+            </Tabs.List></Tabs.ListContainer>
+            <Tabs.Panel id='configuration' className='max-w-3xl pt-6'>
+              <WebhookConfiguration key={webhook.id} webhook={webhook} isUpdating={update.isPending} isResetting={resetSecret.isPending}
+                onSaveName={(name) => update.mutate({ name })} onToggle={() => update.mutate({ enabled: !webhook.enabled })}
+                onResetSecret={() => setResetSecretTarget(webhook)} onDelete={() => setDeleteTarget(webhook)} />
+            </Tabs.Panel>
+            <Tabs.Panel id='deliveries' className='pt-6'>
+              <WebhookDeliveryHistory mode='user' scopeWebhookId={webhook.id} search={search} onSearchChange={(change) => void navigate({ search: change })} />
+            </Tabs.Panel>
+          </Tabs>
+        </> : <p className='text-muted'>未找到 Webhook</p>}
+      <WebhookUrlDialog open={Boolean(oneTimeUrl)} title='新的接入地址' url={oneTimeUrl ?? ''} onOpenChange={(open) => { if (!open) setOneTimeUrl(null) }} />
+      <ConfirmDialog open={Boolean(resetSecretTarget)} onOpenChange={(open) => { if (!open) setResetSecretTarget(null) }}
+        title={webhookResetSecretDialogTitle} desc={getWebhookResetSecretDialogDescription(resetSecretTarget)} cancelBtnText='取消' confirmText='重置调用地址'
+        destructive isLoading={resetSecret.isPending} handleConfirm={() => { if (resetSecretTarget) resetSecret.mutate(resetSecretTarget.id) }} />
+      <ConfirmDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }} title='删除 Webhook'
+        desc={`删除「${deleteTarget?.name ?? ''}」后，接入地址立即失效，已有触发记录仍会保留。`} cancelBtnText='取消' confirmText='删除 Webhook'
+        destructive isLoading={remove.isPending} handleConfirm={() => { if (deleteTarget) remove.mutate(deleteTarget.id) }} />
+    </Main>
+  </>
 }

@@ -1,11 +1,12 @@
 import { TextField } from '@heroui/react';
-import { Button, Input, Label, Modal, toast } from '@heroui/react';
+import { Button, Input, Label, Link, Modal, toast } from '@heroui/react';
 import { useMemo, useState, type FormEvent, } from 'react';
 import type { DashboardWebhookDto } from '@synapse/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { dashboardApi } from '@/lib/api';
+import { consoleHref } from '@/lib/console-href';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DEFAULT_DASHBOARD_PAGE_SIZE, ServerDataTable, } from '@/components/data-table';
 import { Header } from '@/components/layout/header';
@@ -121,22 +122,25 @@ export default function WebhooksPage({ createOnOpen = false }: { createOnOpen?: 
         onResetSecret: setResetSecretTarget,
         onOpenDeliveries: (webhook) => {
             void navigate({
-                to: '/webhook-deliveries',
-                search: { webhookId: webhook.id },
+                to: '/webhooks/$webhookId',
+                params: { webhookId: webhook.id },
+                search: { tab: 'deliveries' },
             });
         },
         onDelete: setDeleteTarget,
+        isUpdating: updateMutation.isPending,
     }), [navigate, updateMutation]);
     return (<>
       <Header fixed>
         <h1 className='text-lg font-semibold'>Webhooks</h1>
       </Header>
       <Main className='flex flex-1 flex-col gap-4'>
-        <ServerDataTable columns={columns} data={[...(webhooksPage?.data ?? [])]} page={page} pageSize={pageSize} total={total} error={webhooksQuery.isError ? webhooksQuery.error : null} onRetry={() => void webhooksQuery.refetch()} onPageChange={setPage} onPageSizeChange={setPageSize} isLoading={webhooksQuery.isLoading} loadingRowCount={Math.min(pageSize, DEFAULT_DASHBOARD_PAGE_SIZE)} emptyMessage='暂无 Webhook' toolbar={<div className='flex items-center justify-end'>
+        <ServerDataTable columns={columns} data={[...(webhooksPage?.data ?? [])]} page={page} pageSize={pageSize} total={total} error={webhooksQuery.isError ? webhooksQuery.error : null} onRetry={() => void webhooksQuery.refetch()} onPageChange={setPage} onPageSizeChange={setPageSize} isLoading={webhooksQuery.isLoading} loadingRowCount={Math.min(pageSize, DEFAULT_DASHBOARD_PAGE_SIZE)} emptyMessage='暂无 Webhook，点击“新建 Webhook”创建' toolbar={<div className='flex flex-wrap items-center gap-4'>
               <Button onPress={() => setForm({ mode: 'create', webhook: null, name: '' })}>
                 <Plus data-icon='inline-start'/>
-                新建
+                新建 Webhook
               </Button>
+              <Link href={consoleHref('/webhook-deliveries')}>全部触发记录</Link>
             </div>}/>
 
         <WebhookFormDialog form={form} isSaving={isSaving} onFormChange={setForm} onSubmit={submitForm}/>
@@ -155,7 +159,7 @@ export default function WebhooksPage({ createOnOpen = false }: { createOnOpen?: 
         <ConfirmDialog open={Boolean(deleteTarget)} onOpenChange={(open) => {
             if (!open)
                 setDeleteTarget(null);
-        }} title='删除 Webhook' desc={deleteTarget?.name ?? ''} cancelBtnText='取消' confirmText='删除' destructive isLoading={deleteMutation.isPending} handleConfirm={() => {
+        }} title='删除 Webhook' desc={`删除「${deleteTarget?.name ?? ''}」后，接入地址立即失效，已有触发记录仍会保留。`} cancelBtnText='取消' confirmText='删除 Webhook' destructive isLoading={deleteMutation.isPending} handleConfirm={() => {
             if (deleteTarget)
                 deleteMutation.mutate(deleteTarget.id);
         }}/>
@@ -172,8 +176,9 @@ export function WebhookFormDialog({ form, isSaving, onFormChange, onSubmit, }: {
             if (!open)
                 onFormChange(null);
         }}><Modal.Container><Modal.Dialog>
-        <Modal.Header>
-          <Modal.Heading>
+        <Modal.CloseTrigger />
+        <Modal.Header className='pe-10'>
+          <Modal.Heading className='wrap-anywhere'>
             {form?.mode === 'edit' ? '重命名 Webhook' : '新建 Webhook'}
           </Modal.Heading>
         </Modal.Header>
@@ -193,8 +198,8 @@ export function WebhookFormDialog({ form, isSaving, onFormChange, onSubmit, }: {
           <Button variant="outline" isDisabled={isSaving} onPress={() => onFormChange(null)}>
             取消
           </Button>
-          <Button type='submit' form='webhook-form' isDisabled={isSaving}>
-            保存
+          <Button type='submit' form='webhook-form' isPending={isSaving} isDisabled={!form?.name.trim()}>
+            {form?.mode === 'edit' ? '保存名称' : '创建 Webhook'}
           </Button>
         </Modal.Footer>
       </Modal.Dialog></Modal.Container></Modal.Backdrop>);

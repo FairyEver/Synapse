@@ -6,6 +6,7 @@ import {
   formatWebhookDeliveryHistoryBody,
   getWebhookDeliveryHistoryStatusColor,
   getWebhookHistoryDisplayName,
+  getWebhookHistoryDateRangeError,
 } from './webhook-delivery-history-display'
 
 function row(input: Partial<WebhookDeliveryHistoryDto> = {}): WebhookDeliveryHistoryDto {
@@ -47,8 +48,15 @@ describe('webhook delivery history display helpers', () => {
   })
 
   it('formats compact client and body summaries', () => {
-    expect(formatWebhookDeliveryClientSummary(row())).toBe('1/2/2')
+    expect(formatWebhookDeliveryClientSummary(row())).toBe('已确认 1 · 已发送 2 · 在线 2')
     expect(formatWebhookDeliveryHistoryBody(row())).toBe('json · 12 B')
+  })
+
+  it('rejects reversed date ranges without rejecting open-ended ranges', () => {
+    expect(getWebhookHistoryDateRangeError('2026-11-03', '2026-11-02')).toBe('结束日期不能早于开始日期')
+    expect(getWebhookHistoryDateRangeError('2026-11-02', '2026-11-02')).toBeNull()
+    expect(getWebhookHistoryDateRangeError('2026-11-02', '')).toBeNull()
+    expect(getWebhookHistoryDateRangeError('', '2026-11-02')).toBeNull()
   })
 
   it('maps delivery outcomes to semantic status colors', () => {

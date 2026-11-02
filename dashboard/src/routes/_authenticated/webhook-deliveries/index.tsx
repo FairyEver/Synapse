@@ -16,6 +16,12 @@ const searchSchema = z.object({
 })
 
 export const Route = createFileRoute('/_authenticated/webhook-deliveries/')({
-  component: () => <WebhookDeliveriesPage mode='user' search={Route.useSearch()} />,
+  component: WebhookHistoryRoute,
   validateSearch: searchSchema,
 })
+
+function WebhookHistoryRoute() {
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  return <WebhookDeliveriesPage mode='user' search={search} onSearchChange={(update) => void navigate({ search: update })} />
+}

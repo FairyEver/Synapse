@@ -53,7 +53,7 @@ describe('overlay spacing and icon sizing', () => {
       await render(<WebhookFixture onSubmit={submit} />)
       await page.getByRole('textbox', { name: '名称' }).fill('布局回归')
       const input = page.getByRole('textbox', { name: '名称' }).element().getBoundingClientRect()
-      const save = page.getByRole('button', { name: '保存', exact: true })
+      const save = page.getByRole('button', { name: '创建 Webhook', exact: true })
       expect(save.element().getBoundingClientRect().top - input.bottom).toBeGreaterThanOrEqual(16)
       await save.click()
       expect(submit).toHaveBeenCalledOnce()

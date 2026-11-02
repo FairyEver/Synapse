@@ -22,7 +22,7 @@ export function getWebhookHistoryDisplayName(delivery: Pick<WebhookDeliveryHisto
 export function formatWebhookDeliveryClientSummary(
   delivery: Pick<WebhookDeliveryHistoryDto, 'acknowledgedClientCount' | 'sentClientCount' | 'onlineClientCount'>
 ) {
-  return `${delivery.acknowledgedClientCount}/${delivery.sentClientCount}/${delivery.onlineClientCount}`
+  return `已确认 ${delivery.acknowledgedClientCount} · 已发送 ${delivery.sentClientCount} · 在线 ${delivery.onlineClientCount}`
 }
 
 export function formatWebhookDeliveryHistoryBody(
@@ -42,6 +42,10 @@ export function getWebhookDeliveryHistoryStatusColor(
 
 export function formatWebhookDeliveryHistoryDateTime(value: string) {
   return new Date(value).toLocaleString('zh-CN')
+}
+
+export function getWebhookHistoryDateRangeError(from = '', to = '') {
+  return from && to && from > to ? '结束日期不能早于开始日期' : null
 }
 
 export function buildWebhookDeliveryHistoryQuery(

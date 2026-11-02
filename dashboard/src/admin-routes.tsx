@@ -101,8 +101,13 @@ const webhookDeliveriesRoute = createRoute({
     getParentRoute: () => authenticatedRoute,
     path: 'webhook-deliveries',
     validateSearch: webhookSearchSchema,
-    component: () => <WebhookDeliveriesPage mode='admin' search={webhookDeliveriesRoute.useSearch()}/>,
+    component: AdminWebhookHistoryRoute,
 });
+function AdminWebhookHistoryRoute() {
+    const search = webhookDeliveriesRoute.useSearch();
+    const navigate = webhookDeliveriesRoute.useNavigate();
+    return <WebhookDeliveriesPage mode='admin' search={search} onSearchChange={(update) => void navigate({ search: update })}/>;
+}
 const teamDetailRoute = createRoute({
     getParentRoute: () => authenticatedRoute,
     path: 'teams/$teamId',

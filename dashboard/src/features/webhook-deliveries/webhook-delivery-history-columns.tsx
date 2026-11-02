@@ -4,138 +4,55 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { DataTableColumnHeader } from '@/components/data-table'
 import { LongText } from '@/components/long-text'
 import { getWebhookDeliveryStatusLabel } from '@/features/webhooks/webhook-display'
-import {
-  formatWebhookDeliveryClientSummary,
-  formatWebhookDeliveryHistoryBody,
-  formatWebhookDeliveryHistoryDateTime,
-  getWebhookDeliveryHistoryStatusColor,
-  getWebhookHistoryDisplayName,
-} from './webhook-delivery-history-display'
+import { formatWebhookDeliveryClientSummary, formatWebhookDeliveryHistoryBody, formatWebhookDeliveryHistoryDateTime, getWebhookDeliveryHistoryStatusColor, getWebhookHistoryDisplayName } from './webhook-delivery-history-display'
 
 type BuildColumnsInput = {
   mode: 'user' | 'admin'
   onOpenDetail: (delivery: WebhookDeliveryHistoryDto) => void
+  showWebhook?: boolean
 }
 
-export function buildWebhookDeliveryHistoryColumns({
-  mode,
-  onOpenDetail,
-}: BuildColumnsInput): ColumnDef<WebhookDeliveryHistoryDto>[] {
+export function buildWebhookDeliveryHistoryColumns({ mode, onOpenDetail, showWebhook = true }: BuildColumnsInput): ColumnDef<WebhookDeliveryHistoryDto>[] {
   const columns: ColumnDef<WebhookDeliveryHistoryDto>[] = [
     {
       accessorKey: 'receivedAt',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='时间' />
-      ),
-      cell: ({ row }) =>
-        <span className='tabular-nums'>
-          {formatWebhookDeliveryHistoryDateTime(row.original.receivedAt)}
-        </span>,
-      meta: { label: '时间', className: 'w-40' },
+      header: ({ column }) => <DataTableColumnHeader column={column} title='接收时间' />,
+      cell: ({ row }) => <span className='tabular-nums'>{formatWebhookDeliveryHistoryDateTime(row.original.receivedAt)}</span>,
+      meta: { label: '接收时间', className: 'w-44' },
     },
-    {
-      id: 'webhook',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='Webhook' />
-      ),
-      cell: ({ row }) => (
-        <div className='flex min-w-0 flex-col gap-1'>
-          <div className='flex min-w-0 items-center gap-2'>
-            <span className='truncate font-medium'>
-              {getWebhookHistoryDisplayName(row.original)}
-            </span>
-            {row.original.webhook.deletedAt ? (
-              <Chip color="default">已删除</Chip>
-            ) : null}
-          </div>
-          <span className='truncate font-mono text-xs text-muted'>
-            {row.original.webhook.publicId}
-          </span>
-        </div>
-      ),
-      enableSorting: false,
+    ...(showWebhook ? [{
+      id: 'webhook', header: 'Webhook', enableSorting: false,
+      cell: ({ row }) => <div className='grid min-w-0 gap-1'>
+        <div className='flex min-w-0 items-center gap-2'><span className='max-w-56 truncate font-medium' title={getWebhookHistoryDisplayName(row.original)}>{getWebhookHistoryDisplayName(row.original)}</span>{row.original.webhook.deletedAt && <Chip size='sm' variant='secondary'>已删除</Chip>}</div>
+        <span className='truncate font-mono text-xs text-muted'>{row.original.webhook.publicId}</span>
+      </div>,
       meta: { label: 'Webhook', className: 'w-64 max-w-64' },
+    } satisfies ColumnDef<WebhookDeliveryHistoryDto>] : []),
+    {
+      accessorKey: 'status', header: ({ column }) => <DataTableColumnHeader column={column} title='投递状态' />,
+      cell: ({ row }) => <Chip variant='soft' color={getWebhookDeliveryHistoryStatusColor(row.original.status)}>{getWebhookDeliveryStatusLabel(row.original.status)}</Chip>,
+      meta: { label: '投递状态' },
     },
     {
-      accessorKey: 'method',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='方法' />
-      ),
-      cell: ({ row }) => <Chip color="default">{row.original.method}</Chip>,
-      meta: { label: '方法', className: 'w-20' },
+      id: 'clients', header: '桌面端回执', enableSorting: false,
+      cell: ({ row }) => <span className='text-sm tabular-nums'>{formatWebhookDeliveryClientSummary(row.original)}</span>,
+      meta: { label: '桌面端回执', tdClassName: 'text-right', thClassName: 'text-right' },
     },
     {
-      accessorKey: 'status',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='状态' />
-      ),
-      cell: ({ row }) => (
-        <Chip
-          color={getWebhookDeliveryHistoryStatusColor(
-            row.original.status
-          )}
-        >
-          {getWebhookDeliveryStatusLabel(row.original.status)}
-        </Chip>
-      ),
-      meta: { label: '状态', className: 'w-32' },
+      accessorKey: 'method', header: ({ column }) => <DataTableColumnHeader column={column} title='请求' />,
+      cell: ({ row }) => <div className='grid gap-1'><span className='font-mono text-sm'>{row.original.method}</span><span className='text-xs text-muted'>{formatWebhookDeliveryHistoryBody(row.original)}</span></div>,
+      meta: { label: '请求' },
     },
     {
-      id: 'clients',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='客户端' />
-      ),
-      cell: ({ row }) => formatWebhookDeliveryClientSummary(row.original),
-      enableSorting: false,
-      meta: { label: '客户端',
-        className: 'w-20',
-        thClassName: 'text-right',
-        tdClassName: 'text-right tabular-nums',
-      },
-    },
-    {
-      id: 'body',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='Body' />
-      ),
-      cell: ({ row }) => formatWebhookDeliveryHistoryBody(row.original),
-      enableSorting: false,
-      meta: { label: 'Body', className: 'w-24' },
-    },
-    {
-      id: 'actions',
-      cell: ({ row }) => (
-        <Button
-          variant='ghost'
-          size='sm'
-          onPress={() => onOpenDetail(row.original)}
-        >
-          详情
-        </Button>
-      ),
-      enableSorting: false,
-      enableHiding: false,
-      meta: {
-        className: 'w-16',
-        thClassName: 'text-right',
-        tdClassName: 'text-right',
-      },
+      id: 'actions', header: '操作', enableSorting: false, enableHiding: false,
+      cell: ({ row }) => <Button variant='ghost' size='sm' onPress={() => onOpenDetail(row.original)}>查看详情</Button>,
+      meta: { thClassName: 'text-right', tdClassName: 'text-right' },
     },
   ]
-
-  if (mode === 'admin') {
-    columns.splice(1, 0, {
-      id: 'user',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='用户' />
-      ),
-      cell: ({ row }) => (
-        <LongText>{row.original.user?.email ?? '-'}</LongText>
-      ),
-      enableSorting: false,
-      meta: { label: '用户', className: 'w-56 max-w-56' },
-    })
-  }
-
+  if (mode === 'admin') columns.splice(1, 0, {
+    id: 'user', header: '用户', enableSorting: false,
+    cell: ({ row }) => <LongText>{row.original.user?.email ?? '-'}</LongText>,
+    meta: { label: '用户', className: 'w-56 max-w-56' },
+  })
   return columns
 }
