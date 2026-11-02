@@ -16,6 +16,7 @@ import { HandRankDialog } from "./HandRankDialog"
 import { PokerPlayerInfoDialog } from "./PokerPlayerInfoDialog"
 import { PokerReserveDialog } from "./PokerReserveDialog"
 import { PokerPotSourcesDialog } from "./PokerPotSourcesDialog"
+import { PokerCardFeedback } from "./PokerCardFeedback"
 import { projectTable, streetLabel } from "../lib/view"
 import { TABLE_CONTROLS_BREAKPOINT } from "../lib/table-layout"
 import { fitTableScene, tableSceneVariables } from "../lib/table-scene"
@@ -56,14 +57,6 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const [soundEnabled, setSoundEnabled] = useState(true)
   const chipLanded = usePokerAudio(table, perspective, identityKey ?? "", soundEnabled)
   const controlVersion = table.controlVersion ?? table.seats.find(seat => seat.seatNo === table.mySeatNo)?.controlVersion
-  const [cardFeedback, setCardFeedback] = useState<string | null>(null)
-  useEffect(() => {
-    const blocked = animateFrames.filter(frame => frame.handId === table.handId).flatMap(frame => frame.events).some(event => event.type === "ability.blocked" || event.type === "ability.protected" || event.status === "blocked")
-    if (!blocked) { setCardFeedback(null); return }
-    setCardFeedback("防护已触发")
-    const timer = setTimeout(() => setCardFeedback(null), 1800)
-    return () => clearTimeout(timer)
-  }, [animateFrames, table.handId, identityKey, perspective, controlVersion])
   useEffect(() => { setPanel(current => current === "bet" ? null : current) }, [table.handId, table.actionSeq, controlVersion, perspective, table.actionOnSeat, table.status])
   useEffect(() => { setPanel(null) }, [compact])
   useEffect(() => { setPanel(current => current === "playerInfo" ? null : current) }, [table.roomCode, identityKey, perspective])
@@ -148,7 +141,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
                   {showRoll && <button ref={rollFeesTrigger} type="button" className="poker-pot-value poker-roll-fee-trigger" aria-label="查看暂存明细" aria-haspopup="dialog" aria-expanded={panel === "rollFees"} onClick={() => setPanel("rollFees")}><span className="poker-pot-label">暂存</span><RollingAmount className="poker-roll-pot" value={chipValue(cash.funds.roll)} scope={cash.scope} onAnimating={active=>cash.numberMotion("roll",active)} /><PokerChipPile chips={cash.funds.roll} label="暂存" fund="roll" /></button>}
                 </div>
                 <div className="poker-board" data-card-size="md">{Array.from({length:5},(_,i) => <span key={i} className="poker-deal-slot" data-dealt={dealt >= view.seats.length+i+1 || !view.board[i]}><Card card={view.board[i]} faceUp={!view.board[i] || dealt >= view.seats.length+i+1} /></span>)}</div>
-                <div className="poker-board-caption"><span className="poker-street">{stage}</span>{cardFeedback && <span role="status">{cardFeedback}</span>}</div>
+                <div className="poker-board-caption"><span className="poker-street">{stage}</span><PokerCardFeedback frames={animateFrames} handId={table.handId} scope={`${table.roomCode}:${identityKey}:${perspective}:${controlVersion}`} /></div>
                 {view.status === "paused" && view.pauseReason && <p className="poker-pause-reason">{({user:"牌局已暂停",all_humans_away:"真人均已暂离",no_human:"等待本人或 AI 入座",insufficient_players:"等待对手",insufficient_chips:"等待有筹码的玩家"} as Record<string,string>)[view.pauseReason] ?? "等待可参与的玩家"}</p>}
               </div>
               {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} amountScope={`${cash.scope}:${view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? ""}`} onStackAnimating={active => cash.numberMotion(`seat:${seatNo}`, active)} displayStack={cash.banks[seatNo] ?? seat.stack} onInspect={trigger => { inspectedTrigger.current = trigger; setInspected({ seatNo, key: view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? seat.botId ?? seat.displayName }); setPanel("playerInfo") }} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} hasStarted={!!view.handId} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}

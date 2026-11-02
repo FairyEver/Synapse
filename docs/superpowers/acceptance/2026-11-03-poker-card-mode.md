@@ -30,7 +30,7 @@
 | 固定种子组合 + 暂存 + runner 单元 | 30/30，通过 |
 | 未配置 `test:poker-cards:e2e` | exit 1，在任何迁移/连接前拒绝，符合预期 |
 | 显式隔离 PG 卡牌专项 | 8/8，通过；没有 skip |
-| server `vitest run src/game --maxWorkers=2`，显式 PG | 最终 GAME_ROLL_STATS_SQL_TEST=1：645/645，无 skip |
+| server `vitest run src/game --maxWorkers=2`，显式 PG | 最终 GAME_ROLL_STATS_SQL_TEST=1：646/646，无 skip |
 | Dashboard `vitest run src/game-center/games/poker` | 372/372，通过 |
 | shared typecheck | exit 0 |
 | shared 完整 build/test | build exit 0；343 passed，1 failed（下述已有基线问题） |
@@ -48,11 +48,11 @@
 
 ## 浏览器、系统契约与最终检查
 
-- 最终服务端 `GAME_ROLL_STATS_SQL_TEST=1 vitest run src/game --maxWorkers=2`：645/645，exit0，无 skip。Dashboard 扑克 Node/jsdom 372/372；新入口相关 UI 25/25；54 项服务端 HTTP/来源/指南回归通过；卡牌机器人正额跟注另有服务层 RED→GREEN 和真实PG回归。
-- `test:browser .../card-mode.browser.tsx`：37/37，exit0。覆盖1280×800、390×667、390×844、320×568、568×320、667×320的实际展开持牌、目标、能力候选、扑克牌候选、暂存筛选、结算；正文单一滚动、标题留白、标准按钮/关闭按钮、键盘 Escape 和焦点返回。850px 两侧复用同一画布，受控减少动态效果分支可操作。
-- 根 `pnpm dev:server` 使用专用 `poker_card_browser_20261103_e2e` 库和19785/19786端口，独立Compose project。默认19700/19701已有服务，未执行会匹配全部服务的停止入口；测试结束仅停止本次PTY进程组与专用Compose资源，默认端口继续监听。临时 PostgreSQL 集群用于最终复核，完成后正常停止，数据和审计保留。
+- 最终服务端 `GAME_ROLL_STATS_SQL_TEST=1 vitest run src/game --maxWorkers=2`：646/646，exit0，无 skip。Dashboard 扑克 Node/jsdom 372/372；新入口相关 UI 25/25；54 项服务端 HTTP/来源/指南回归通过；卡牌机器人正额跟注另有服务层 RED→GREEN 和真实PG回归。
+- `test:browser .../card-mode.browser.tsx`：45/45，exit0。覆盖1280×800、390×667、390×844、320×568、568×320、667×320的实际展开持牌、玩家目标、同名状态目标、能力候选、扑克牌候选、暂存筛选、结算；正文单一滚动、标题留白、标准按钮/关闭按钮、键盘 Escape 和焦点返回。850px 两侧复用同一画布，受控减少动态效果分支可操作。
+- 根 `pnpm dev:server` 使用专用 `poker_card_browser_20261103_e2e` 库和19785/19786端口，独立Compose project。默认19700/19701已有服务，未执行会匹配全部服务的停止入口；测试结束仅停止本次PTY进程组与专用Compose资源，默认端口继续监听。临时 PostgreSQL 集群在最终复核后已用 pg_ctl 正常停止，19785/19786/19854/5432均无本次监听；数据和审计保留。
 - 用 browser-skill/bsk 的Agent Window登录本次专用账号，实际创建 cards+Roll 点数房867846，真人对手由本次隔离夹具入座并准备。首局双方各3张；本人实际使用移花接木后持卡3→2、底牌交换；超级Roll实付2点数、钻石12→9、三选一完成；暂存显示2、原对手待分2。弃牌结算997+1003，直接查库核对能力牌持有/状态/待选清空、暂存最终释放和2000筹码守恒。双方显式准备、房主从牌桌再次开始，第二局又各3张且使用历史0；随后正常关闭并结算，双方总点数2000000守恒。浏览器会话已停止。
-- 实页发现网页invoke建房来源遗漏，新增HTTP回归先RED后GREEN：仅既有创建操作传递经过认证的Cookie真人来源及版本，两条创建入口均拒绝Bearer及无版本请求，其他invoke调用不扩大权限。编译/构建与最终645项游戏回归覆盖修复。
+- 实页发现网页invoke建房来源遗漏，新增HTTP回归先RED后GREEN：仅既有创建操作传递经过认证的Cookie真人来源及版本，两条创建入口均拒绝Bearer及无版本请求，其他invoke调用不扩大权限。编译/构建与最终646项游戏回归覆盖修复。
 - 卡牌陪练的机器人正额跟注缺报价版本问题已由服务层失败测试确认，并改为锁内携带服务器报价；真实PG验证机器人仍零持牌、正额跟注成功、取消不产生大厅收益。
 - 系统 Skill/参考更新；`generate-game-reference.mjs`生成恰30个MCP工具，新增卡牌MCP为0，游戏Web为30（私有用牌/选牌2项）。桌面 `roll-skill-contract`/`human-control`12/12、`check:hard-constraints`、服务端/Dashboard类型、UI边界及最终Dashboard生产构建均exit0。桌面旧测试示例500已更正为当前1000，并明确拒绝500；未更改实际档位契约。
 
@@ -66,7 +66,18 @@
 - 几何与展开筛选截图：`/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-03-poker-card-mode/browser/` 内按尺寸和面板命名的PNG，包含顶部与滚动后。
 - bsk导出：`/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-03-poker-card-mode/browser/live-browser-trace.json`。该捕获存在8MiB留存上限、写入积压和被丢弃请求/console，不能作为完整网络/性能追踪；以界面截图、实际DOM、服务器回归和直接数据库不变量断言为主要证据。初轮选择器/HMR/扩展覆盖层失败已记录，未计作成功；没有修改浏览器扩展设置。
 
-独立最终审查在本轮实现提交后执行；发现的重要问题必须补回归、修复并重新验证后方可交付。
+## 独立最终审查与修复
+
+18项任务完成后，由一位全新上下文的 gpt-6-astra 只读审查整个 dc7c17648..6c79e918a 范围，提供设计、计划、逐字 Review Focus 及全部实施判断。未发现确定的 Critical；两项 Important 均经实施者确认后在同一次修复中完成，无二次审查。
+
+1. 驱散目标原来只显示卡名。同名跨玩家状态、全场状态和多个实体标记的真实投影回归先失败；现显示所属座位/本人/全场、剩余次数、当前实体槽位及必要的同名序号，选项不包含暗牌面。投影8/8及六种屏幕的实际选择/原UUID提交通过。
+2. 59号“星光一闪”原来只有服务端事件。真实 Table 浏览器回归先失败，现消费实时公开根帧，展示一次短星形反馈；重复帧不重播、重连基线不补播、切换身份/手牌清理，减少动态效果保留静态结果。宽屏和320px截图已目视复核；最终浏览器45/45、Dashboard372/372、服务端646/646、PG8/8，类型、UI边界、硬约束和生产构建均通过。
+
+保留一个 Minor：卡牌入口暂未显示本人持牌数量，打开面板后可查看；未在本次重要问题修复中额外扩展。长期PVP平衡、生产演练、原有从未入座旁观者政策和无生产入口的内部离座命令，均由实施者逐项判断，见下方全部判断记录。
+
+最终证据为本地文件，尚无在线链接：`.superpowers/sdd/2026-11-03-poker-card-mode/` 内 `final-game-retry.log`、`final-dashboard.log`、`final-browser-green.log`、`final-pg.log`、`final-*-type.log`、`final-ui-check.log`、`final-hard-constraints.log`、`final-dashboard-build.log`；根目录绝对路径同本文开头。新增截图为 `browser/*-status-top.png`、`browser/spark-1280.png` 和 `browser/spark-reduced-320.png`。
+
+最终复跑曾因测试集群重启漏带临时端口而连接失败，已停止该专用集群并用显式127.0.0.1:19854/专用socket重启，成功重跑646项且零skip。原失败保存在 `final-game.log`，不是最终通过结果；最终旧迁移样本仍为7|pending。新增浏览器状态测试初轮误点HeroUI隐藏input而超时，改为真实可见卡面/目标标签点击后45项全部通过；未通过修改产品控件绕过点击验证。
 
 ## 回滚前提
 
@@ -74,7 +85,7 @@
 
 ## 实施判断与代价记录
 
-以下保存执行时的全部判断；上文事实和结果为最新验收状态，早期范围判断不替代最终验证。
+以下按发生顺序保留执行时的全部判断；上文事实和结果为最新验收状态，早期范围判断不替代最终验证。
 
 1. Ruling: Work on current main without worktree — explicit repository and approved-plan scope overrides skill isolation default — cost if wrong: less isolation; only task files are staged.
 
@@ -137,3 +148,17 @@
 30. Ruling: isolate Vite Browser cache and nondefault Dashboard port cache after simultaneous dev/test optimizers invalidated the live document; confirmed stable actual interaction after separation — cost if wrong: extra ignored dev caches, default entry remains unchanged.
 
 31. Ruling: existing desktop human-control fixture still declared removed500 buy-in valid. Correct valid example to1000 and explicitly assert500rejected without changing schema — cost if wrong: historical room creation no longer represented by new-create tests; legacy persisted rooms retain separate coverage.
+
+32. Final: Ruling: retain this task’s ignored evidence workspace rather than delete it — the acceptance record points to actual local screenshots, GPT source provenance, database backup and test logs; deleting it would invalidate reviewable evidence and conflict with the user’s no-destructive-cleanup boundary — cost if wrong: local disk usage until the owner explicitly cleans it.
+
+33. Final: Ruling: finish on current main with task-only local commits, no branch-integration menu — user explicitly requires current checkout and no questions; there is no feature branch to merge and no push/deployment authorization — cost if wrong: publication remains a later explicit operation; the unrelated shared notification baseline test remains reported rather than silently repaired.
+
+34. Final: Ruling: long-term PVP balance remains unjudged — functional seeded simulations establish invariants, not fair win rates or economic concentration; acceptance explicitly limits the claim — cost if wrong: live balance may need a new catalog version after playtesting.
+
+35. Final: Ruling: production migration/deployment/recovery is outside this delivery — only task-owned loopback DB restore was executed and creation stays off by default — cost if wrong: rollout still needs real environment backup/recovery and version-gate validation.
+
+36. Final: Ruling: retain pre-existing never-seated spectator poker-hole visibility — approved design preserves existing poker visibility while card owner data is separately fail-closed; decision/MCP card mode remains public — cost if wrong: broader spectator policy needs a separate product decision and regression.
+
+37. Final: Ruling: do not invent a new production participant.leave caller — actual in-hand departures use leavePending and existing settlement; no current caller reaches the hypothetical nonactor pending-choice branch — cost if wrong: a future direct caller must add lifecycle coverage before exposure.
+
+38. Final: Ruling: retain the shared notification baseline failure as a reported limitation — exact base already contains game-poker but the fixed expected list omits it; unrelated module repair is outside this change — cost if wrong: full shared suite remains one failure despite all changed game contracts passing.

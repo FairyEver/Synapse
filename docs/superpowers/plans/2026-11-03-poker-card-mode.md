@@ -10,10 +10,12 @@
 
 **Spec:** [已确认设计](../specs/2026-11-03-poker-card-mode-design.md)，用户2026-11-03明确“确认设计，进入实施计划”。实现者必须同时阅读设计和计划。
 
+**实施状态：**18项实施与自测已完成；最终独立审查的两项重要问题已补回归并修复，结果及一项延后小项见[验收记录](../acceptance/2026-11-03-poker-card-mode.md)。未推送、部署或开启生产卡牌创建。
+
 ## Global Constraints
 
 - 仓库 `/Users/liyang/Documents/code/github/Synapse`，当前 `main`；未经另行允许不新建/切换分支、不使用其他worktree或副本。
-- 本文所有路径以该仓库为根；Create均为计划新增，Modify均已只读核实存在。当前仅编写计划，所有实现复选框保持未勾选。
+- 本文所有路径以该仓库为根；Create均为计划新增，Modify均在编写计划时只读核实。复选框现记录已实际完成的步骤，最终验证以验收记录为准。
 - 初始60种90张，30种单份、30种双份；`copies`未声明默认1。仅系统代码配置，房主只开关卡牌模式。
 - 每局真人初始3张，翻牌/转牌/河牌仍可行动的真人各补1张；机器人零发放/零用牌；结算清空。共享池有限、抽取不放回，显式生成新实例。
 - 本人回合内可连续用牌；初始600秒，回合开始后1200秒绝对上限；待选不续时，超时第一候选。128派生操作、32层因果、1024牌实例、每人64持续状态。
@@ -85,7 +87,7 @@
 
 ### 通用执行与测试约定
 
-所有任务先添加列出的行为测试并运行确认失败，再实现最小功能并运行同一组确认通过，随后提交。下面“预期通过”是未来验收标准，本轮没有运行这些产品测试。首次测试前单独运行`pnpm --filter @synapse/shared build`；共享源码变化后重新构建，避免引用旧dist。
+所有任务先添加列出的行为测试并运行确认失败，再实现最小功能并运行同一组确认通过，随后提交。下面“预期通过”是计划的验收标准；实际执行和结果见验收记录。首次测试前单独运行`pnpm --filter @synapse/shared build`；共享源码变化后重新构建，避免引用旧dist。
 
 测试目录固定为`server/src/game/poker/engine/__tests__/`（纯引擎）、`server/src/game/poker/__tests__/`（服务）、`server/src/game/hall/__tests__/`（通用资金）、`shared/src/`、Dashboard模块`__tests__/`。纯函数fixture在新增`server/src/game/poker/__tests__/card-test-fixtures.ts`导出`makeCardHand(options)`和`sequenceRandomInt(values)`，使用真实`startHand`/`orderedDeck`建立有效状态；移牌到手中必须从共享池移走，不造重复实例。
 

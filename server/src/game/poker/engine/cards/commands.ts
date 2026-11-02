@@ -37,10 +37,22 @@ export function cardChoices(h: HandState, definition: CardDefinition, admissionI
       .map(p => ({ value: String(p.seatNo), label: `座位${p.seatNo + 1}` }))
     else if (selection.kind === "ability") options = (h.cards!.hands[admissionId] ?? []).filter(c => c.id !== instanceId).map(c => ({ value: c.id, label: registry.get(c.definitionId).name }))
     else if (selection.kind === "status") {
+      const seatLabel = (seatNo: number) => `座位${seatNo + 1}${seatNo === self.seatNo ? "（本人）" : ""}`
       options = h.cards!.effects.filter(e => e.dispellable && (selection.target !== "own_negative" || e.ownerAdmissionId === admissionId && e.polarity === "negative" && e.targetSeatNo !== undefined))
-        .map(e => ({ value: e.id, label: registry.get(e.cardId).name }))
+        .map(e => ({ value: e.id, label: `${e.targetSeatNo === undefined ? "全场" : seatLabel(e.targetSeatNo)} · ${registry.get(e.cardId).name}${e.remaining === null ? "" : ` · 剩余${e.remaining}次`}` }))
       options.push(...(h.cards!.publicMarkers ?? []).filter(m => m.dispellable && h.seats.some(s => s.hole.includes(m.card) && (selection.target !== "own_negative" || s.seatNo === self.seatNo)))
-        .map(m => ({ value: m.id, label: registry.get(m.cardId).name })))
+        .map(m => {
+          const holder = h.seats.find(s => s.hole.includes(m.card))!
+          return { value: m.id, label: `${seatLabel(holder.seatNo)} · 底牌${holder.hole.indexOf(m.card) + 1} · ${registry.get(m.cardId).name}` }
+        }))
+      const counts = new Map<string, number>(), positions = new Map<string, number>()
+      for (const option of options) counts.set(option.label, (counts.get(option.label) ?? 0) + 1)
+      options = options.map(option => {
+        if (counts.get(option.label) === 1) return option
+        const position = (positions.get(option.label) ?? 0) + 1
+        positions.set(option.label, position)
+        return { ...option, label: `${option.label} · 第${position}个` }
+      })
     }
     return { key: selection.key, label: selection.label, kind: selection.kind, options }
   })

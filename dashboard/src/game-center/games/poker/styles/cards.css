@@ -1,2 +1,12 @@
 .poker-ability-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 1rem; }
 .poker-ability-art { width: 100%; max-width: 10rem; aspect-ratio: 4 / 5; object-fit: cover; border-radius: var(--radius); }
+.poker-card-feedback { display: inline-flex; align-items: center; gap: 0.375rem; pointer-events: none; }
+.poker-card-feedback svg { width: 1.25em; height: 1.25em; color: var(--brass); }
+.poker-card-feedback[data-kind="spark"] svg { animation: poker-card-spark 700ms ease-out both; }
+@keyframes poker-card-spark {
+  0% { transform: scale(0.6) rotate(-12deg); opacity: 0.2; }
+  45% { transform: scale(1.25) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.poker-card-feedback[data-reduced-motion="true"] svg { animation: none; }
+@media (prefers-reduced-motion: reduce) { .poker-card-feedback[data-kind="spark"] svg { animation: none; } }

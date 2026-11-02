@@ -17,6 +17,31 @@ function fixture() {
   return h
 }
 describe("卡牌隐私白名单", () => {
+  it("驱散目标区分玩家、全场、剩余次数和当前实体槽位，不暴露暗牌", () => {
+    const h = makeCardHand({ definitions: CARD_CATALOG_V1 }), cards = h.cards!
+    const index = cards.pool.findIndex(c => c.definitionId === "45"), dispel = cards.pool.splice(index, 1)[0]
+    cards.hands["admission-0"] = [dispel]
+    cards.effects = [
+      { id: "own-shield", kind: "info_guard", cardId: "43", ownerAdmissionId: "admission-0", ownerSeatNo: 0, targetSeatNo: 0, polarity: "positive", remaining: 1, installedSeq: 0, dispellable: true, data: {} },
+      ...[1, 2, 1].map((remaining, i) => ({ id: `other-shield-${i}`, kind: "info_guard", cardId: "43", ownerAdmissionId: "admission-1", ownerSeatNo: 1, targetSeatNo: 1, polarity: "positive" as const, remaining, installedSeq: i, dispellable: true, data: {} })),
+      { id: "field", kind: "reveal_field", cardId: "60", ownerAdmissionId: "admission-1", ownerSeatNo: 1, polarity: "neutral", remaining: null, installedSeq: 0, dispellable: true, data: {} },
+    ]
+    const marked = h.seats[1].hole[0]
+    cards.publicMarkers = [{ id: "marker-a", cardId: "60", card: marked, ownerAdmissionId: "admission-1", dispellable: true }, { id: "marker-b", cardId: "60", card: h.seats[1].hole[1], ownerAdmissionId: "admission-1", dispellable: true }]
+    const options = () => projectCardView(h, policy())!.ownHand![0].choices![0].options
+    expect(options()).toEqual([
+      { value: "own-shield", label: "座位1（本人） · 缄默护罩 · 剩余1次" },
+      { value: "other-shield-0", label: "座位2 · 缄默护罩 · 剩余1次 · 第1个" },
+      { value: "other-shield-1", label: "座位2 · 缄默护罩 · 剩余2次" },
+      { value: "other-shield-2", label: "座位2 · 缄默护罩 · 剩余1次 · 第2个" },
+      { value: "field", label: "全场 · 众目睽睽" },
+      { value: "marker-a", label: "座位2 · 底牌1 · 众目睽睽" },
+      { value: "marker-b", label: "座位2 · 底牌2 · 众目睽睽" },
+    ])
+    ;[h.seats[0].hole[1], h.seats[1].hole[0]] = [h.seats[1].hole[0], h.seats[0].hole[1]]
+    expect(options()).toContainEqual({ value: "marker-a", label: "座位1（本人） · 底牌2 · 众目睽睽" })
+    expect(options().some(o => o.label.includes(marked))).toBe(false)
+  })
   it("本人探查能力牌附带可读定义，公开视角不含该卡池信息", () => {
     const h = fixture(), ownIds = h.cards!.hands["admission-0"].map(c => c.definitionId), observed = h.cards!.pool.find(c => !ownIds.includes(c.definitionId))!.definitionId
     h.cards!.privateResults.push({ id: "ability-peek", ownerAdmissionId: "admission-0", cardId: "20", label: "能力牌", values: [observed], valid: true })

@@ -23,7 +23,7 @@ const cards: PokerTableView["cards"] = { enabled: true, version: "cards-v1", use
   ownHand: names.map(c => ({ instanceId: `held-${c.cardId}`, cardId: c.cardId, available: true, choices: [], payment: { nominalAmount: 0, waivedAmount: 0, paidAmount: 0, version: "q" } })), privateResults: [],
 }
 const table: PokerTableView = { ...rollTable, seats: rollTable.seats.slice(0, 6), maxSeats: 6, deadlineMs: 300000, ruleOptions: { cards: true, roll: true }, cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2", cards }
-type Panel = "cards" | "target" | "ability" | "poker" | "reserve" | "settlement"
+type Panel = "cards" | "target" | "status" | "ability" | "poker" | "reserve" | "settlement"
 const evidence = "/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-03-poker-card-mode/browser"
 function Fixture({ panel }: { panel: Panel }) {
   const [open, setOpen] = useState(false)
@@ -32,6 +32,16 @@ function Fixture({ panel }: { panel: Panel }) {
     { key: "hole", label: "本人底牌", kind: "hole", options: [{ value: "0", label: "底牌1" }, { value: "1", label: "底牌2" }] },
     { key: "player", label: "目标玩家", kind: "player", options: Array.from({ length: 5 }, (_, i) => ({ value: String(i + 1), label: `玩家${i + 1}` + "LongUnbrokenPlayerName".repeat(5) })) },
   ] }]
+  if (panel === "status") {
+    snapshot.cards!.definitions!["45"] = { id: "45", name: "驱散术", description: "选择并移除一个公开、可驱散的持续效果。", artId: "v1/45", cost: 0 }
+    snapshot.cards!.ownHand = [{ ...cards.ownHand![0], instanceId: "dispel", cardId: "45", choices: [{ key: "status", label: "持续效果", kind: "status", options: [
+      { value: "shield-own", label: "座位1（本人） · 缄默护罩 · 剩余1次" },
+      { value: "shield-other", label: "座位2 · 缄默护罩 · 剩余2次" },
+      { value: "field", label: "全场 · 众目睽睽" },
+      { value: "marker-a", label: "座位2 · 底牌1 · 众目睽睽" },
+      { value: "marker-b", label: "座位2 · 底牌2 · 众目睽睽" },
+    ] }] }]
+  }
   if (panel === "ability" || panel === "poker") snapshot.cards!.pending = { choiceId: "choice", kind: panel, origin: "card", paymentVersion: "q", candidates: panel === "ability" ? ["01", "02", "03"] : ["As", "Kh", "Qc"], ...(panel === "ability" ? { candidateCards: Object.values(cards.definitions!).slice(0, 3) } : {}) }
   snapshot.reserve = { handId: snapshot.handId!, status: "pending", total: 60, complete: true,
     players: [0, 1].map(i => ({ key: `p${i}`, seatNo: i, displayName: "LongUnbrokenPlayerName".repeat(5), pending: i ? 60 : 0, isMe: !i })),
@@ -50,13 +60,14 @@ function fits(element: Element, label: string) {
   expect(r.right, label).toBeLessThanOrEqual(innerWidth + 1); expect(r.bottom, label).toBeLessThanOrEqual(innerHeight + 1)
 }
 for (const [width, height] of [[1280, 800], [390, 667], [390, 844], [320, 568], [568, 320], [667, 320]]) {
-  for (const panel of ["cards", "target", "ability", "poker", "reserve", "settlement"] as const) it(`${width}×${height} ${panel} 展开、单正文滚动、标准按钮和键盘关闭`, async () => {
+  for (const panel of ["cards", "target", "status", "ability", "poker", "reserve", "settlement"] as const) it(`${width}×${height} ${panel} 展开、单正文滚动、标准按钮和键盘关闭`, async () => {
     await page.viewport(width, height)
     const screen = await render(<Fixture panel={panel} />)
     try {
       if (panel !== "settlement") await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
       await expect.element(page.getByRole("dialog")).toBeVisible()
       if (panel === "target") await page.getByText("精准调包", { exact: true }).click()
+      if (panel === "status") await page.getByText("驱散术", { exact: true }).click()
       await new Promise(resolve => setTimeout(resolve, 250))
       const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!, body = dialog.querySelector<HTMLElement>(".modal__body")!, footer = dialog.querySelector<HTMLElement>(".modal__footer")!, header = dialog.querySelector<HTMLElement>(".modal__header")!
       fits(dialog, "dialog"); fits(header, "header"); fits(footer, "footer")
@@ -69,6 +80,11 @@ for (const [width, height] of [[1280, 800], [390, 667], [390, 844], [320, 568], 
       const scrolls = [...dialog.querySelectorAll<HTMLElement>("*")].filter(el => /^(auto|scroll)$/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1)
       expect(scrolls.every(el => el === body)).toBe(true)
       await page.screenshot({ path: `${evidence}/${width}-${height}-${panel}-top.png` })
+      if (panel === "status") {
+        await page.getByText("座位2 · 缄默护罩 · 剩余2次", { exact: true }).click()
+        await page.getByRole("button", { name: "使用卡牌", exact: true }).click()
+        expect(controls.play).toHaveBeenLastCalledWith(expect.objectContaining({ instanceId: "dispel", selections: { status: "shield-other" } }))
+      }
       if (panel === "ability" || panel === "poker") {
         await page.getByText("候选 1", { exact: true }).click()
         await expect.element(page.getByRole("button", { name: "选择这张牌", exact: true })).toBeEnabled()
@@ -109,5 +125,30 @@ it("850px两侧切换和卡牌面板开关复用原画布，减少动态效果�
     for (const width of [850, 849, 851]) { await page.viewport(width, 700); expect(document.querySelector(".poker-canvas")).toBe(canvas); fits(document.querySelector(".poker-controls-anchor")!, "controls") }
     await page.getByRole("button", { name: "卡牌", exact: true }).click()
     await expect.element(page.getByRole("dialog")).toBeVisible()
+  } finally { await screen.unmount(); spy.mockRestore() }
+})
+for (const reduced of [false, true]) it(`星光实时帧实际反馈，去重、重连基线和身份隔离（减少动态${reduced}）`, async () => {
+  const original = window.matchMedia.bind(window)
+  const spy = vi.spyOn(window, "matchMedia").mockImplementation(query => query.includes("prefers-reduced-motion") ? { ...original(query), matches: reduced, addEventListener: noop, removeEventListener: noop } : original(query))
+  await page.viewport(reduced ? 320 : 1280, reduced ? 568 : 800)
+  const frame = { id: "spark-1", handId: table.handId!, seq: 4, events: [{ index: 0, type: "poker.sparked", cardId: "59", actorSeatNo: 0 }] }
+  const props = { table, perspective: "owner" as const, onPerspective: noop, onBack: noop, identityKey: "spark-owner" }
+  const screen = await render(<div className="h-dvh"><Table {...props} /></div>)
+  try {
+    await expect.element(page.getByText("星光一闪", { exact: true })).not.toBeInTheDocument()
+    await screen.rerender(<div className="h-dvh"><Table {...props} animateFrames={[frame]} /></div>)
+    await expect.element(page.getByText("星光一闪", { exact: true })).toBeVisible()
+    const feedback = page.getByText("星光一闪", { exact: true }).element()
+    fits(feedback, "spark feedback")
+    expect(getComputedStyle(feedback.querySelector("svg")!).animationName).toBe(reduced ? "none" : "poker-card-spark")
+    await page.screenshot({ path: `${evidence}/spark-${reduced ? "reduced-320" : "1280"}.png` })
+    await new Promise(resolve => setTimeout(resolve, 1900))
+    await expect.element(page.getByText("星光一闪", { exact: true })).not.toBeInTheDocument()
+    await screen.rerender(<div className="h-dvh"><Table {...props} animateFrames={[{ ...frame }]} /></div>)
+    await expect.element(page.getByText("星光一闪", { exact: true })).not.toBeInTheDocument()
+    await screen.rerender(<div className="h-dvh"><Table {...props} animateFrames={[{ ...frame, id: "spark-2", seq: 5 }]} /></div>)
+    await expect.element(page.getByText("星光一闪", { exact: true })).toBeVisible()
+    await screen.rerender(<div className="h-dvh"><Table {...props} identityKey="another-owner" animateFrames={[{ ...frame, id: "spark-2", seq: 5 }]} /></div>)
+    await expect.element(page.getByText("星光一闪", { exact: true })).not.toBeInTheDocument()
   } finally { await screen.unmount(); spy.mockRestore() }
 })
