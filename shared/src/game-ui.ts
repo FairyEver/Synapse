@@ -32,6 +32,7 @@ export interface GameBridge {
       list: (input?: { offset?: number; limit?: number; mode?: GameFunding | "all" }) => Promise<GamePage<PokerRoomView>>
     }
     room: {
+      start: (input: Room & { handId: string | null; controlVersion?: number }) => Promise<{ handId: string; started: boolean }>
       close: (input: Room) => Promise<{ pending?: boolean; closed?: boolean }>
       create: (input: {
         maxSeats: number
@@ -50,7 +51,7 @@ export interface GameBridge {
       remove: (input: Room & { botId: string }) => Promise<{ pending: boolean }>
     }
     seat: {
-      ready: (input: Room & { handId: string; controlVersion: number }) => Promise<{ handId: string; started: boolean }>
+      ready: (input: Room & { handId: string | null; controlVersion: number }) => Promise<{ handId: string | null; started: boolean }>
       join: (input: Room & { agentId?: string; modelName?: string; controlVersion?: number }) => Promise<{ roomCode: string; seatNo: number }>
       leave: (input: Room & { controlVersion?: number }) => Promise<{ pending: boolean }>
       sit: (input: Room & { sittingOut: boolean; controlVersion?: number; reason?: "user" | "context_maintenance" }) => Promise<{ sittingOut: boolean; pending: boolean; status: string }>
@@ -163,6 +164,7 @@ export interface GameUiRoute {
 
 const roomPath = (params: Record<string, unknown>) => `/game/poker/rooms/${encodeURIComponent(String(params.roomCode))}`
 export const pokerUiRoutes = {
+  "app.game.poker.room.start": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/start` },
   "app.game.poker.roll.start": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/roll/start` },
   "app.game.poker.roll.choose": { method: "POST", bareResponse: true, path: params => `${roomPath(params)}/roll/choose` },
   "app.game.poker.seat.ready": {

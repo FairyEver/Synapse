@@ -1,3 +1,4 @@
+import { joinForStartedHand, prepareAndStartInitialHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -16,7 +17,8 @@ const url = gameTestDatabaseUrl()
   async function room() {
     const u = randomUUID(), code = (await poker.createRoom(u, { maxSeats: 2, buyIn: 1000, mode: "practice" })).roomCode
     await bots.add(u, code, randomUUID())
-    await poker.join(u, code, {})
+    await prepareAndStartInitialHand(poker, code)
+    await joinForStartedHand(poker, u, code, {})
     return { u, code }
   }
   it("两实例竞争只产生一个动作，旧调度不操作新行动点", async () => {

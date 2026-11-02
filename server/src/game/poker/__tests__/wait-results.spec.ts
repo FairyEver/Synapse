@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { BadRequestException } from "@nestjs/common"
 import { PrismaClient } from "@prisma/client"
@@ -30,8 +31,8 @@ const url = gameTestDatabaseUrl()
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {}, now)
-    await poker.join(b, code, {}, now)
+    await joinForStartedHand(poker, a, code, {}, now)
+    await joinForStartedHand(poker, b, code, {}, now)
     const handId = (await actions.state(a, code)).handId!
     let clock = now
     async function advance() { clock = await advanceNextHand(actions, code) }
@@ -124,7 +125,7 @@ const url = gameTestDatabaseUrl()
     await t.move(t.a, "fold")
     if (archived) expect(await archive.archiveHand(t.handId, new Date())).toBe(true)
     const now = new Date(t.now.getTime() + 5002)
-    await poker.join(t.a, t.code, {}, now)
+    await joinForStartedHand(poker, t.a, t.code, {}, now)
     const pending = await wait.wait(t.a, t.code, "1:0", 0, undefined, now)
     expect(pending).toMatchObject({ status: "ready_required", handId: t.handId, cursor: "1:2147483647" })
     await advanceNextHand(actions, t.code)

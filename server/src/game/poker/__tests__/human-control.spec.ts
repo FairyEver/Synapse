@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -18,8 +19,8 @@ const url = gameTestDatabaseUrl()
   async function table(mode: "points" | "practice" = "points") {
     const a = randomUUID(), b = randomUUID(), outsider = randomUUID()
     const code = (await poker.createRoom(a, { maxSeats: 3, buyIn: 1000, mode, variant: "short32", blindPreset: "5/10" })).roomCode
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
     return { a, b, outsider, code }
   }
   it("房规在建房和引擎一致且不能修改", async () => {
@@ -69,7 +70,7 @@ const url = gameTestDatabaseUrl()
   })
   it("从未参与者看牌后入座只能下一手，离桌后仍不能全牌旁观", async () => {
     const { outsider, code } = await table()
-    await poker.join(outsider, code, {}, new Date(), "human")
+    await joinForStartedHand(poker, outsider, code, {}, new Date(), "human")
     const joined = await actions.state(outsider, code, "public", false, new Date(), "desktop")
     expect(joined.mySeatNo).not.toBeNull()
     expect(joined.seats.every((s) => !s.hole)).toBe(true)
@@ -78,7 +79,7 @@ const url = gameTestDatabaseUrl()
   })
   it("维护检查点本人私有，真人接管使自动恢复失效且不更改点数", async () => {
     const user = randomUUID(), code = (await poker.createRoom(user, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(user, code, {})
+    await joinForStartedHand(poker, user, code, {})
     await poker.sit(user, code, true, new Date(), "mcp", 0, "context_maintenance")
     const saved = await poker.checkpoint(user, code, { controlVersion: 0, cursor: "0:0", sessionStyle: "临时打法", continueIntent: true })
     expect(saved.checkpoint).toMatchObject({ roomCode: code, sessionStyle: "临时打法", continueIntent: true })
@@ -103,7 +104,7 @@ const url = gameTestDatabaseUrl()
   })
   it("迟到维护请求不能覆盖用户暂停或离桌意图", async () => {
     const user = randomUUID(), code = (await poker.createRoom(user, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(user, code, {})
+    await joinForStartedHand(poker, user, code, {})
     await poker.sit(user, code, true, new Date(), "mcp", 0, "user")
     await expect(poker.sit(user, code, true, new Date(), "mcp", 0, "context_maintenance")).rejects.toThrow()
     await expect(poker.checkpoint(user, code, { controlVersion: 0, cursor: "0:0", continueIntent: true })).rejects.toThrow()
@@ -111,20 +112,20 @@ const url = gameTestDatabaseUrl()
   })
   it("接管后离桌仍保留控制历史，旧AI不能重扣点，显式新授权可入座", async () => {
     const user = randomUUID(), code = (await poker.createRoom(user, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(user, code, {})
+    await joinForStartedHand(poker, user, code, {})
     const human = await poker.control(user, code, "takeover", 0)
     await poker.leave(user, code, new Date(), "human", human.controlVersion)
     await expect(poker.join(user, code, {})).rejects.toThrow()
     expect((await hall.overview(user)).points.available).toBe(1000000)
     const intent = await poker.control(user, code, "request_ai", human.controlVersion)
     await expect(poker.join(user, code, { controlVersion: human.controlVersion })).rejects.toThrow()
-    await poker.join(user, code, { controlVersion: intent.controlVersion })
+    await joinForStartedHand(poker, user, code, { controlVersion: intent.controlVersion })
     expect((await actions.state(user, code)).controller).toBe("ai")
     expect((await hall.overview(user)).points.available).toBe(999000)
   })
   it("接管后的旧MCP查询不替真人续在线心跳", async () => {
     const user = randomUUID(), code = (await poker.createRoom(user, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(user, code, {})
+    await joinForStartedHand(poker, user, code, {})
     await poker.control(user, code, "takeover", 0)
     const before = await db.gamePokerSeat.findFirstOrThrow({ where: { userId: user } })
     await actions.state(user, code, "owner", true, new Date(before.lastSeenAt.getTime() + 120000))

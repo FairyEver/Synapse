@@ -16,6 +16,7 @@ export function engine(hand: GamePokerHand): HandState {
 export async function startNext(
   poker: PokerService,
   c: RoomContext,
+  requestedByOwner = false,
 ): Promise<void> {
   if (c.room.status === "closed") return
   const previous = c.room.currentHandId
@@ -34,7 +35,7 @@ export async function startNext(
   }
   const eligible = c.seats.filter(nextHandEligible)
   if (eligible.length < 2 || !eligible.some((s) => s.participantKind !== "bot") ||
-      (c.room.handNo > 0 && !eligible.every(preparedForNextHand))) {
+      !eligible.every(preparedForNextHand) || !requestedByOwner) {
     c.room = await c.tx.gamePokerRoom.update({
       where: { id: c.room.id },
       data: { status: c.room.handNo ? "paused" : "waiting", actionDeadlineAt: null, botActionAt: null, nextHandAt: null },

@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto"
 import { createHallStore } from "../../hall/__tests__/hall-store"
 import { HallService } from "../../hall/hall.service"
 import { PokerService } from "../poker.service"
-import { startNext } from "../poker-lifecycle"
 import type { RoomContext } from "../poker.service"
 // Only persistence is doubled. Room transactions, engine and Hall accounting are real.
 export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePokerRoom, "ruleOptions" | "rollPricingVersion">) {
@@ -83,7 +82,8 @@ export async function rollStore(mode = "points", count = 3, rules?: Pick<GamePok
     await db.transaction(tx => hall.join(tx, userId, { admissionId: id, gameKind: "poker", gameRoomId: room.id, roomCode: room.code, seatNo: i, buyIn: mode === "practice" ? 0 : 500, funding: mode as "points" | "practice", startCursor: "1" }, now))
     seats.push({ id, userId, roomId: room.id, seatNo: i, participantKind: "human", displayName: userId, stack: 500, status: "waiting", joinedHandNo: 1, controller: "ai", controlVersion: 0, lastSeenAt: now, leavePending: false, sitPending: false })
   }
-  await poker.withRoom(room.code, c => startNext(poker, c), now)
+  for (const seat of seats) await poker.ready(seat.userId, room.code, null, seat.controlVersion, now)
+  await poker.start(room.ownerUserId, room.code, null, 0, now)
   db.locks.length = 0
   return { db, hall, poker, room, seats, hands, participants, actions, receipts, rolls, summaries, archives, now, transact: <T>(fn: (c: RoomContext) => Promise<T>, at = now) => poker.withRoom(room.code, fn, at) }
 }

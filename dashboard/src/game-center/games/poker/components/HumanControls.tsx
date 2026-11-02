@@ -150,7 +150,8 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {awaitingReady && <div className="flex min-w-0 flex-wrap items-center gap-2 font-sans text-foreground scheme-light" aria-label="下一手操作">
       {nextHand.notice && <p role="status" className="text-sm">{nextHand.notice}</p>}
       {controller === "ai" && nextHand.eligible && !nextHand.prepared && <p className="text-sm text-muted">等待 AI 确认准备</p>}
-      {nextHand.canReady && <Button isPending={nextHand.busy} isDisabled={disabled || nextHand.prepared} onPress={() => void nextHand.ready()}>{nextHand.prepared ? "已准备" : "准备下一手"}</Button>}
+      {nextHand.canReady && <Button isPending={nextHand.busy} isDisabled={disabled || nextHand.prepared} onPress={() => void nextHand.ready()}>{nextHand.prepared ? "已准备" : table.handNo === 0 ? "准备" : "准备下一手"}</Button>}
+      {nextHand.showStart && <Button isPending={nextHand.busy} isDisabled={disabled || !nextHand.canStart} onPress={() => void nextHand.start()}>开始</Button>}
       {nextHand.error && <div className="w-full space-y-2"><p role="alert" className="text-sm text-danger">{nextHand.error}</p><Button variant="secondary" onPress={() => void nextHand.refresh()}>刷新牌桌</Button></div>}
     </div>}
     {(error || uncertain) && <div className="space-y-3 rounded-xl bg-surface p-4 font-sans text-foreground scheme-light"><p role="alert" className="text-sm text-danger">{error}{uncertain && "，请重试确认结果"}</p>{uncertain && <Button isDisabled={busy} onPress={retry}>重试出牌</Button>}</div>}

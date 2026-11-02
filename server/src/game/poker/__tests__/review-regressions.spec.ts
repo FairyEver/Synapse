@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -27,19 +28,19 @@ const url = gameTestDatabaseUrl()
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
     return { a, b, code }
   }
   it("盲注直接结算保留结果，全员准备后继续开局或暂停", async () => {
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
+    await joinForStartedHand(poker, a, code, {})
     await db.gamePokerSeat.updateMany({ where: { userId: a }, data: { stack: 1 } })
     await db.gameSession.updateMany({ where: { userId: a }, data: { inPlay: 1 } })
     await db.gameAccount.update({ where: { userId: a }, data: { points: { increment: 999 } } })
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, b, code, {})
     let state = await actions.state(b, code)
     if (state.status === "running" && state.street === "settled") {
       expect(state.actionOnSeat).toBeNull()

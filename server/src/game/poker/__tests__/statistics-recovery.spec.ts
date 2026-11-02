@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -29,7 +30,7 @@ const url = gameTestDatabaseUrl()
       b = randomUUID(),
       old = new Date(Date.now() - 91 * 86400000),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {}, old)
+    await joinForStartedHand(poker, a, code, {}, old)
     if (firstStack !== 1000) {
       await db.gamePokerSeat.updateMany({ where: { userId: a }, data: { stack: firstStack } })
       await db.gameSession.updateMany({ where: { userId: a }, data: { inPlay: firstStack } })
@@ -38,7 +39,7 @@ const url = gameTestDatabaseUrl()
         data: { points: { increment: 1000 - firstStack } },
       })
     }
-    await poker.join(b, code, {}, old)
+    await joinForStartedHand(poker, b, code, {}, old)
     await poker.close(a, code)
     const handId = (await actions.state(a, code)).handId!
     async function move(user: string, action: "call" | "check" | "raise" | "allin", to?: number) {
@@ -97,7 +98,7 @@ const url = gameTestDatabaseUrl()
       [a, b, c, d, e] = users,
       old = new Date(Date.now() - 91 * 86400000),
       code = (await poker.createRoom(a, { maxSeats: 5, buyIn: 1000 })).roomCode
-    for (const user of users) await poker.join(user, code, {}, old)
+    for (const user of users) await joinForStartedHand(poker, user, code, {}, old)
     if (shortBlind) {
       await db.gamePokerSeat.updateMany({ where: { userId: e }, data: { stack: 1 } })
       await db.gameSession.updateMany({ where: { userId: e }, data: { inPlay: 1 } })

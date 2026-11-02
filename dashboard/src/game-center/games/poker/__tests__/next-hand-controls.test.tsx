@@ -5,8 +5,8 @@ import { afterEach, expect, it, vi } from "vitest"
 import { HumanControls } from "../components/HumanControls"
 import { table } from "./settlement-fixture"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
-const api = vi.hoisted(() => ({ ready: vi.fn(), control: vi.fn() }))
-vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { seat: { ready: api.ready }, control: { set: api.control } } }) }))
+const api = vi.hoisted(() => ({ start: vi.fn(), ready: vi.fn(), control: vi.fn() }))
+vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { room: { start: api.start }, seat: { ready: api.ready }, control: { set: api.control } } }) }))
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 afterEach(() => { vi.resetAllMocks(); document.body.replaceChildren() })
@@ -66,5 +66,32 @@ it("本人切到旁观视角仍可接回自己的 AI 座位，但不能代准备
   expect(api.control).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", controlVersion: 3, action: "takeover" })
   expect(api.ready).not.toHaveBeenCalled()
   expect(button("准备下一手")).toBeUndefined()
+  await act(async () => screen.root.unmount())
+})
+
+it("首局准备发送null且全员准备不会代房主开始", async () => {
+  const first = { ...table, handId: null, handNo: 0, street: null, settlement: null, isRoomOwner: true, canStart: false }
+  const screen = await render(first)
+  await act(async () => button("准备")!.click())
+  expect(api.ready).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: null, controlVersion: 3 })
+  expect(api.start).not.toHaveBeenCalled()
+  expect(button("开始")!.disabled).toBe(true)
+  const allReady = { ...first, canStart: true, seats: first.seats.map(s => ({ ...s, readyForNextHand: true })) }
+  await screen.update(allReady)
+  expect(document.body.textContent).toContain("等待房主开始")
+  expect(api.start).not.toHaveBeenCalled()
+  await act(async () => { button("开始")!.click(); button("开始")!.click() })
+  expect(api.start).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: null, controlVersion: 3 })
+  await screen.update({ ...allReady, isRoomOwner: false })
+  expect(button("开始")).toBeUndefined()
+  await act(async () => screen.root.unmount())
+})
+it("每轮准备后房主仍需手动开始，旁观视角不可开始", async () => {
+  const ready = { ...table, isRoomOwner: true, canStart: true, seats: table.seats.map(s => ({ ...s, readyForNextHand: true })) }
+  const screen = await render(ready)
+  await act(async () => button("开始")!.click())
+  expect(api.start).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: "h1", controlVersion: 3 })
+  await screen.update(ready, "owner", "public")
+  expect(button("开始")).toBeUndefined()
   await act(async () => screen.root.unmount())
 })

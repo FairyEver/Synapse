@@ -1,5 +1,7 @@
 # 游戏大厅接入与验证
 
+2026-11-02 房主开局规则（取代历史自动开局描述）：首局和每手结算后都必须全员准备，再由房主手动开始。入座、最后一人准备、回座、离桌、机器人管理和后台调度均不自动发牌；程序陪练仍自动准备，真人点击准备、AI显式seat.ready。首局准备与开始的handId为null，后续绑定当前结算handId；控制版本和原控制权限不变。新增app.game.poker.room.start（Web POST /game/poker/rooms/:code/start），只允许房主显式调用，已入座房主须持当前控制权；旧请求过期必须重读，不得盲重发或凭继续意图自动开始。复用座位status=ready，不新增数据库字段或迁移。
+
 2026-11-02 钻石额度更新：建房可通过ruleOptions.rollCoins设置每手钻石，默认12，必须为1至2147483647之间的整数；创建后额度固定。普通/超级消耗固定1/3钻石，不提供费率配置；额度1或2时超级因钻石不足禁用。启用Roll的新手牌保存coinPolicy={limit:房间额度,normal:1,super:3}，各参赛者按本手全部成功start历史计算余额，跨阶段不补充、下一手恢复房间额度。刷新、重启、接管、离桌/回座不补充；仍另付筹码及冻结补偿，无购买、转让、兑换或钻石盈亏。旧房间缺rollCoins按12，旧手缺coinPolicy的历史兼容规则不变。
 
 旧手缺coinPolicy沿旧规则完成，不从当前配置推断或追扣；旧响应隐藏钻石信息，现有房间下一手启用。原牌/候选隐私、原倒计时、控制权、行动资格不变。钻石快照损坏或透支显式拒绝，不默默补足。
@@ -101,7 +103,7 @@ table.events可传perspective=owner|public，MCP默认owner且固定decision投�
 
 ## 每手结算与准备（2026-11-01）
 
-每手结束弹出HeroUI完整结算，允许关闭/重开，关闭不代准备。服务端结算投影新增仅根据已获准公开牌面计算的bestFive和分池reason，暗牌不泄露。取代旧五秒自动续局：所有当前可参赛者显式准备，陪练自动、真人按钮、AI调用app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait的ready_required可用于空游标重连，已准备仍waiting；先处理未读hand_result与上下文维护。旧手、旧控制版本及他人座位不能授权下一手。复用座位status=ready，无新增数据库迁移；先更新API与MCP契约再上线Web。本次开发不部署。
+每手结束弹出HeroUI完整结算，允许关闭/重开，关闭不代准备。服务端结算投影新增仅根据已获准公开牌面计算的bestFive和分池reason，暗牌不泄露。取代旧五秒自动续局：所有当前可参赛者显式准备，陪练自动、真人按钮、AI调用app_game_poker_seat_ready(roomCode,handId,controlVersion)。wait的ready_required可用于空游标重连，首局handId为null，已准备仍waiting，须由房主显式app_game_poker_room_start才发牌；先处理未读hand_result与上下文维护。旧手、旧控制版本及他人座位不能授权下一手。复用座位status=ready，无新增数据库迁移；先更新API与MCP契约再上线Web。本次开发不部署。
 
 Dashboard 牌桌底部和结算 Footer 共用准备/接管执行器与进度，关闭结算后仍可直接准备，显示人数和等待对象；长名单摘要只列前两人及待准备总人数，完整名单见结算。AI 控制时可在结算内本人接管，保持弹窗打开，再明确点击准备。接回清除原准备时提示“已接管，请重新准备”；换手、换房、换账号或确认准备后清除提示。接管和准备请求未结束时两个表面同步禁用，暂离/历史座位不计入屏障，旁观不代准备。不改变 MCP schema、控制版本及资金规则。
 

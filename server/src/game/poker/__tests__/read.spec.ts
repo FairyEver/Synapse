@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -22,8 +23,8 @@ const url = gameTestDatabaseUrl()
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
     const s = await act.state(a, code)
     await poker.sit(a, code, true)
     await act.act(a, code, {
@@ -47,8 +48,8 @@ const url = gameTestDatabaseUrl()
       b = randomUUID(),
       agent = await poker.upsertAgent(a, { persona: "私密策略" }),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, { agentId: agent.id })
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, { agentId: agent.id })
+    await joinForStartedHand(poker, b, code, {})
     const s = await act.state(a, code),
       id = randomUUID()
     await act.act(a, code, {
@@ -79,8 +80,8 @@ const url = gameTestDatabaseUrl()
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
     const state = await act.state(a, code),
       room = await db.gamePokerRoom.findUniqueOrThrow({ where: { code } })
     await db.gamePokerAction.createMany({
@@ -133,8 +134,8 @@ const url = gameTestDatabaseUrl()
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
     const comparison = await read.stats(a, code)
     expect(comparison.comparison).toHaveLength(2)
     expect(comparison.comparison?.filter((p) => p.isMe)).toHaveLength(1)
@@ -149,7 +150,7 @@ const url = gameTestDatabaseUrl()
   it("无进行中手牌时，30分钟无人在线解散并退还筹码", async () => {
     const a = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {}, new Date(0))
+    await joinForStartedHand(poker, a, code, {}, new Date(0))
     await poker.sit(a, code, true, new Date(0))
     await poker.maintain(code, new Date(1800000))
     expect((await hall.overview(a)).points.available).toBe(1000000)

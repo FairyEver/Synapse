@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -20,7 +21,7 @@ const url = gameTestDatabaseUrl()
     const userId = randomUUID(),
       base = new Date(),
       code = (await poker.createRoom(userId, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(userId, code, {}, base)
+    await joinForStartedHand(poker, userId, code, {}, base)
     const at = (minutes: number) => new Date(base.getTime() + minutes * 60000)
     return { userId, code, at }
   }
@@ -57,7 +58,7 @@ const url = gameTestDatabaseUrl()
   it("本手中的暂离申请不提前计时，从结算实际进入暂离开始计算", async () => {
     const t = await table(),
       other = randomUUID()
-    await poker.join(other, t.code, {}, t.at(0))
+    await joinForStartedHand(poker, other, t.code, {}, t.at(0))
     expect(await poker.sit(t.userId, t.code, true, t.at(0))).toMatchObject({
       pending: true,
       status: "active",

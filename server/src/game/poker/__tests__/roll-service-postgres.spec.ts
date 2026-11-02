@@ -1,3 +1,4 @@
+import { joinForStartedHand, prepareAndStartInitialHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -17,7 +18,7 @@ const url=gameTestDatabaseUrl()
   afterAll(async()=>{wait.onModuleDestroy();await db.$disconnect()})
   async function setup(){
     const user=randomUUID(),other=randomUUID(),code=(await poker.createRoom(user,{maxSeats:2,buyIn:500,ruleOptions:{roll:true}})).roomCode
-    await poker.join(user,code,{});await poker.join(other,code,{})
+    await joinForStartedHand(poker, user,code,{});await joinForStartedHand(poker, other,code,{})
     const state=await actions.state(user,code),room=await db.gamePokerRoom.findUniqueOrThrow({where:{code}})
     const input={roomCode:code,handId:state.handId!,street:"preflop" as const,expectedActionSeq:0,controlVersion:0,actionId:randomUUID(),kind:"super" as const,cardIndex:0,expectedFee:state.roll.super!.fee}
     return {user,other,code,input,room}
@@ -47,9 +48,9 @@ const url=gameTestDatabaseUrl()
   it("奇数费用按庄家左侧分配，超时弃牌离座后仍归原入座，新入座不接收迟到补偿",async()=>{
     const users=[randomUUID(),randomUUID(),randomUUID()]
     const code=(await poker.createRoom(users[0],{maxSeats:3,buyIn:2000,ruleOptions:{roll:true}})).roomCode
-    await poker.join(users[0],code,{})
-    await poker.join(users[1],code,{})
-    await poker.join(users[2],code,{})
+    await joinForStartedHand(poker, users[0],code,{})
+    await joinForStartedHand(poker, users[1],code,{})
+    await joinForStartedHand(poker, users[2],code,{})
     async function move(user:string,action:"fold"|"call",now=new Date()){
       const s=await actions.state(user,code)
       await actions.act(user,code,{handId:s.handId!,street:s.street!,expectedActionSeq:s.actionSeq,controlVersion:s.controlVersion,actionId:randomUUID(),action},now)
@@ -71,7 +72,7 @@ const url=gameTestDatabaseUrl()
     await actions.expire(code,deadline)
     const afterTimeout=new Date(deadline.getTime()+1)
     expect((await hall.overview(users[2])).points.pending).toBe(2)
-    await poker.join(users[2],code,{},afterTimeout)
+    await joinForStartedHand(poker, users[2],code,{},afterTimeout)
     const fresh=await db.gamePokerSeat.findFirstOrThrow({where:{userId:users[2],roomId:oldSeat.roomId}})
     expect(fresh.id).not.toBe(oldSeat.id)
     const before=await db.gameAccount.findUniqueOrThrow({where:{userId:users[2]}})
@@ -88,8 +89,9 @@ const url=gameTestDatabaseUrl()
   it("超级待选陪练立即解散只作废练习资产，保留候选审计和原请求回执",async()=>{
     const user=randomUUID(),bots=new PokerBotService(poker)
     const code=(await poker.createRoom(user,{maxSeats:2,buyIn:1000,mode:"practice",ruleOptions:{roll:true}})).roomCode
-    await poker.join(user,code,{})
+    await joinForStartedHand(poker, user,code,{})
     const bot=await bots.add(user,code,randomUUID())
+    await prepareAndStartInitialHand(poker, code)
     const s=await actions.state(user,code)
     const input={roomCode:code,handId:s.handId!,street:"preflop" as const,expectedActionSeq:s.actionSeq!,controlVersion:s.controlVersion!,actionId:randomUUID(),kind:"super" as const,cardIndex:0,expectedFee:s.roll.super!.fee}
     const result=await rolls.start(user,input)

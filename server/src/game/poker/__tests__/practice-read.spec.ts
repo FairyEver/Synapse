@@ -1,3 +1,4 @@
+import { joinForStartedHand, prepareAndStartInitialHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -13,8 +14,8 @@ import { PokerNudgeService } from "../poker-nudge.service"
 import { gameTestDatabaseUrl } from "./test-database"
 const url = gameTestDatabaseUrl()
 describe("陪练MCP注册", () => {
-  it("提供29项可检索能力，机器人管理不含行动或身份覆盖参数", () => {
-    expect(GAME_TOOLS).toHaveLength(29)
+  it("提供30项可检索能力，机器人管理不含行动或身份覆盖参数", () => {
+    expect(GAME_TOOLS).toHaveLength(30)
     expect(GAME_TOOLS.find((t) => t.id === "app.game.poker.bot.add")?.inputSchema.required).toEqual(["roomCode", "creationId"])
     expect(GAME_TOOLS.find((t) => t.id === "app.game.poker.bot.remove")?.inputSchema.required).toEqual(["roomCode", "botId"])
   })
@@ -27,8 +28,8 @@ describe("陪练MCP注册", () => {
     const u = randomUUID(), b = randomUUID(), now = new Date(Date.now() - 100 * 86400000)
     const agent = await poker.upsertAgent(u, { persona: "练习风格" })
     const code = (await poker.createRoom(u, { maxSeats: 2, buyIn: 1000, mode: "practice" })).roomCode
-    await poker.join(u, code, { agentId: agent.id }, now)
-    await poker.join(b, code, {}, now)
+    await joinForStartedHand(poker, u, code, { agentId: agent.id }, now)
+    await joinForStartedHand(poker, b, code, {}, now)
     await poker.close(u, code, now)
     const state = await actions.state(u, code)
     await actions.act(u, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "fold" }, now)
@@ -46,7 +47,8 @@ describe("陪练MCP注册", () => {
   it("陪练默认不进入房间列表，对机器人提醒被服务端拒绝且不发通知", async () => {
     const u = randomUUID(), code = (await poker.createRoom(u, { maxSeats: 2, buyIn: 1000, mode: "practice" })).roomCode
     const bot = await bots.add(u, code, randomUUID())
-    await poker.join(u, code, {})
+    await prepareAndStartInitialHand(poker, code)
+    await joinForStartedHand(poker, u, code, {})
     expect((await read.lobby()).items.some((r) => r.roomCode === code)).toBe(false)
     expect((await read.lobby(0, 100, "practice")).items.some((r) => r.roomCode === code)).toBe(true)
     const notification = { createInTransaction: vi.fn(), deliverCommitted: vi.fn() }

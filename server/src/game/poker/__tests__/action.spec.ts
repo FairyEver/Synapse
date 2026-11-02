@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -24,8 +25,8 @@ suite("权威行动、隐私与重连", () => {
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 6, buyIn: 1000 })).roomCode
     const agent = await poker.upsertAgent(a, { persona: "旧风格" })
-    await poker.join(a, code, { agentId: agent.id }, new Date(0))
-    await poker.join(b, code, {}, new Date(0))
+    await joinForStartedHand(poker, a, code, { agentId: agent.id }, new Date(0))
+    await joinForStartedHand(poker, b, code, {}, new Date(0))
     return { a, b, code, agent }
   }
   async function request(a: string, code: string) {
@@ -166,9 +167,9 @@ suite("权威行动、隐私与重连", () => {
       c = randomUUID(),
       d = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 3, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {}, new Date(0))
-    await poker.join(b, code, {}, new Date(0))
-    await poker.join(c, code, {}, new Date(0))
+    await joinForStartedHand(poker, a, code, {}, new Date(0))
+    await joinForStartedHand(poker, b, code, {}, new Date(0))
+    await joinForStartedHand(poker, c, code, {}, new Date(0))
     // The third seat joins mid-hand; finish the heads-up hand to bring all three in.
     let view = await actions.state(a, code, "owner", false, new Date(1))
     await actions.act(
@@ -181,7 +182,7 @@ suite("权威行动、隐私与重连", () => {
     const next = await actions.state(b, code, "owner", false, nextAt)
     const actor = [a, b, c][next.actionOnSeat!]
     await actions.expire(code, new Date(nextAt.getTime() + 600000))
-    await poker.join(d, code, {}, new Date(nextAt.getTime() + 600001))
+    await joinForStartedHand(poker, d, code, {}, new Date(nextAt.getTime() + 600001))
     view = await actions.state(d, code, "owner", false, new Date(600003))
     expect(view.hole).toEqual([])
     expect(view.seats.find((s) => s.isMe)?.hole).toBeUndefined()

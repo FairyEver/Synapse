@@ -356,6 +356,8 @@ export class PokerActionService {
     const deadlineMs = c.room.actionDeadlineAt
       ? Math.max(0, c.room.actionDeadlineAt.getTime() - c.now.getTime())
       : null
+    const isRoomOwner = perspective === "owner" && c.room.ownerUserId === userId
+    const eligible = c.seats.filter(nextHandEligible)
     const rollEnabled = !!(c.room.ruleOptions as { roll?: boolean } | null)?.roll
     const statSeats = [...c.seats, ...participants.filter(p => !c.seats.some(s => s.seatNo === p.seatNo))]
     const rollStats = rollEnabled ? await projectRollStats(c, hand?.id ?? null, statSeats) : undefined
@@ -377,7 +379,9 @@ export class PokerActionService {
       requiresJoinApproval: !!controlHistory,
       pauseReason: own ? me?.pauseReason ?? null : null,
       nextHandAt: c.room.nextHandAt?.toISOString() ?? null,
-      awaitingReady: hand?.status === "settled" && c.room.status !== "closed",
+      awaitingReady: (c.room.handNo === 0 || hand?.status === "settled") && c.room.status !== "closed",
+      isRoomOwner,
+      canStart: isRoomOwner && !c.room.closeRequested && c.room.status !== "closed" && (c.room.handNo === 0 || hand?.status === "settled") && eligible.length >= 2 && eligible.some(s => s.participantKind !== "bot") && eligible.every(preparedForNextHand),
       settlement: hand ? projectSettlement(hand, participants, sources as unknown as Parameters<typeof projectSettlement>[2], userId, policy) : null,
       ownerUserId: c.room.ownerUserId,
       name: c.room.name,
@@ -408,7 +412,7 @@ export class PokerActionService {
           seatNo: s.seatNo,
           isHistorical: "ghost" in s,
           nextHandEligible: !("ghost" in s) && nextHandEligible(s),
-          readyForNextHand: !("ghost" in s) && hand?.status === "settled" && preparedForNextHand(s),
+          readyForNextHand: !("ghost" in s) && (c.room.handNo === 0 || hand?.status === "settled") && preparedForNextHand(s),
           inCurrentHand: !!p,
           participantKind: s.participantKind,
           ...(s.participantKind === "bot" && !("ghost" in s) ? { botId: s.id, leavePending: s.leavePending } : {}),

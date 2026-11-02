@@ -1,3 +1,4 @@
+import type { PokerService } from "../poker.service"
 import type { PokerActionService } from "../poker-action.service"
 import { PokerDeadlineTask } from "../poker-deadline.task"
 import { PokerBotTask } from "../poker-bot.task"
@@ -29,5 +30,26 @@ export async function advanceNextHand(actions: PokerActionService, code: string)
     : (await actions.poker.prisma.gamePokerHandArchive.findUniqueOrThrow({ where: { id: hand.id }, select: { endedAt: true } })).endedAt
   const seats = await actions.poker.prisma.gamePokerSeat.findMany({ where: { roomId: room.id, participantKind: { not: "bot" }, stack: { gt: 0 }, status: { not: "sitting_out" }, sitPending: false, leavePending: false }, take: 10 })
   for (const seat of seats) await actions.poker.ready(seat.userId, code, hand.id, seat.controlVersion, now, seat.controller === "human" ? "human" : "mcp")
+  const owner = await actions.poker.prisma.gamePokerSeat.findFirst({ where: { roomId: room.id, userId: room.ownerUserId } })
+  await actions.poker.start(room.ownerUserId, code, hand.id, owner?.controlVersion, now, owner?.controller === "human" ? "human" : "mcp")
   return now
+}
+
+/** Legacy running-hand fixtures now explicitly prepare and ask the host to start. */
+export async function joinForStartedHand(poker: PokerService, ...args: Parameters<PokerService["join"]>) {
+  const result = await poker.join(...args)
+  const [, code, , time = new Date()] = args
+  await prepareAndStartInitialHand(poker, code, time)
+  return result
+}
+export async function prepareAndStartInitialHand(poker: PokerService, code: string, time = new Date()) {
+  const room = await poker.prisma.gamePokerRoom.findUniqueOrThrow({ where: { code } })
+  if (room.handNo !== 0) return
+  const seats = await poker.prisma.gamePokerSeat.findMany({ where: { roomId: room.id }, take: 10 })
+  const eligible = seats.filter(s => s.stack > 0 && s.status !== "sitting_out" && !s.sitPending && !s.leavePending)
+  if (eligible.length < 2 || !eligible.some(s => s.participantKind !== "bot")) return
+  for (const seat of eligible) if (seat.participantKind !== "bot")
+    await poker.ready(seat.userId, code, null, seat.controlVersion, time, seat.controller === "human" ? "human" : "mcp")
+  const owner = seats.find(s => s.userId === room.ownerUserId)
+  await poker.start(room.ownerUserId, code, null, owner?.controlVersion, time, owner?.controller === "human" ? "human" : "mcp")
 }

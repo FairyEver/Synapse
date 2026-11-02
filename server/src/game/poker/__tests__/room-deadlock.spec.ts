@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { Prisma, PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -40,8 +41,8 @@ const url = gameTestDatabaseUrl()
       b = randomUUID(),
       r1 = (await poker.createRoom(b, { maxSeats: 2, buyIn: 1000 })).roomCode,
       r2 = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(b, r1, {})
-    await poker.join(a, r2, {})
+    await joinForStartedHand(poker, b, r1, {})
+    await joinForStartedHand(poker, a, r2, {})
     // These ongoing sessions have previously lost 999 chips elsewhere at their
     // tables. Remaining available balances and session buy-ins are unchanged.
     await db.gamePokerSeat.updateMany({ where: { userId: { in: [a, b] } }, data: { stack: 1 } })
@@ -92,8 +93,8 @@ const url = gameTestDatabaseUrl()
     const userId = randomUUID(),
       r1 = (await poker.createRoom(userId, { maxSeats: 2, buyIn: 1000 })).roomCode,
       r2 = (await poker.createRoom(userId, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(userId, r1, {})
-    await poker.join(userId, r2, {})
+    await joinForStartedHand(poker, userId, r1, {})
+    await joinForStartedHand(poker, userId, r2, {})
     await Promise.all([poker.leave(userId, r1), poker.leave(userId, r2)])
     expect((await hall.overview(userId)).points).toEqual({
       total: 1000000,
@@ -108,7 +109,7 @@ const url = gameTestDatabaseUrl()
     const userId = randomUUID(),
       r1 = (await poker.createRoom(userId, { maxSeats: 2, buyIn: 1000 })).roomCode,
       r2 = (await poker.createRoom(userId, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(userId, r1, {})
+    await joinForStartedHand(poker, userId, r1, {})
     await Promise.all([poker.join(userId, r2, {}), poker.leave(userId, r1)])
     expect((await hall.overview(userId)).points).toEqual({
       total: 1000000,

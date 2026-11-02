@@ -1,3 +1,4 @@
+import { joinForStartedHand, prepareAndStartInitialHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -22,8 +23,10 @@ const url = gameTestDatabaseUrl()
     const owner = randomUUID()
     const code = (await poker.createRoom(owner, { maxSeats: 4, buyIn: 1000, mode: "practice" })).roomCode
     await bots.add(owner, code, randomUUID())
+    await prepareAndStartInitialHand(poker, code)
     await bots.add(owner, code, randomUUID())
-    if (ownerSeated) await poker.join(owner, code, {}, new Date(), caller)
+    await prepareAndStartInitialHand(poker, code)
+    if (ownerSeated) await joinForStartedHand(poker, owner, code, {}, new Date(), caller)
     return { owner, code }
   }
 
@@ -66,8 +69,9 @@ const url = gameTestDatabaseUrl()
   it("结算展示期间立即解散仍保留已完成结果供AI补发", async () => {
     const owner = randomUUID()
     const code = (await poker.createRoom(owner, { maxSeats: 2, buyIn: 1000, mode: "practice" })).roomCode
-    await poker.join(owner, code, {})
+    await joinForStartedHand(poker, owner, code, {})
     await bots.add(owner, code, randomUUID())
+    await prepareAndStartInitialHand(poker, code)
     const state = await actions.state(owner, code)
     await actions.act(owner, code, { handId: state.handId!, street: state.street!, actionId: randomUUID(), action: "fold" })
     const settled = await db.gamePokerHand.findUniqueOrThrow({ where: { id: state.handId! } })
@@ -81,24 +85,24 @@ const url = gameTestDatabaseUrl()
 
   it.each(["active", "sitting_out", "waiting"] as const)("其他账号处于%s时仍等待本手完成，不能当作机器人", async (status) => {
     const { owner, code } = await room("mcp", false), other = randomUUID()
-    if (status !== "waiting") await poker.join(other, code, {})
+    if (status !== "waiting") await joinForStartedHand(poker, other, code, {})
     if (status === "sitting_out") await db.gamePokerSeat.updateMany({ where: { userId: other }, data: { status, sitPending: true } })
-    await poker.join(owner, code, {})
-    if (status === "waiting") await poker.join(other, code, {})
+    await joinForStartedHand(poker, owner, code, {})
+    if (status === "waiting") await joinForStartedHand(poker, other, code, {})
     expect(await poker.close(owner, code)).toEqual({ pending: true })
     expect((await actions.state(owner, code)).status).toBe("running")
   })
 
   it("房主未入座而其他账号正在陪练时也必须等待", async () => {
     const { owner, code } = await room("mcp", false)
-    await poker.join(randomUUID(), code, {})
+    await joinForStartedHand(poker, randomUUID(), code, {})
     expect(await poker.close(owner, code)).toEqual({ pending: true })
   })
 
   it("当前手有已超时离桌的其他真人时仍保留其合法结算", async () => {
     const { owner, code } = await room("mcp", false), other = randomUUID()
-    await poker.join(other, code, {})
-    await poker.join(owner, code, {})
+    await joinForStartedHand(poker, other, code, {})
+    await joinForStartedHand(poker, owner, code, {})
     // Departure removes the live seat but preserves participation in this hand.
     await poker.withRoom(code, async (c) => {
       await poker.refund(c, c.seats.find((s) => s.userId === other)!)

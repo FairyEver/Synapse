@@ -74,3 +74,13 @@ describe("扑克人工操作和接管协议", () => {
     expect(GAME_RESPONSE_SCHEMAS["app.game.poker.table.wait"]?.safeParse({ status: "control_released", cursor: "1:2", controlVersion: "old" }).success).toBe(false)
   })
 })
+
+it("首局准备和房主开始使用同一严格共享契约", () => {
+  const ready = request("seat.ready")
+  expect(ready.safeParse({ roomCode: "1234", handId: null, controlVersion: 0 }).success).toBe(true)
+  const start = request("room.start")
+  expect(start.safeParse({ roomCode: "1234", handId: null, controlVersion: 0 }).success).toBe(true)
+  expect(start.safeParse({ roomCode: "1234" }).success).toBe(false)
+  expect(pokerUiRoutes["app.game.poker.room.start"].path({ roomCode: "1234" })).toBe("/game/poker/rooms/1234/start")
+  expect(GAME_RESPONSE_SCHEMAS["app.game.poker.seat.ready"]?.safeParse({ handId: null, started: false }).success).toBe(true)
+})

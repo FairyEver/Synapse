@@ -99,6 +99,8 @@ const table = z
     handoffPending: controlFields.handoffPending.optional(),
     pauseReason: z.enum(["user", "context_maintenance"]).nullable().optional(),
     nextHandAt: z.string().nullable().optional(),
+    isRoomOwner: z.boolean().optional(),
+    canStart: z.boolean().optional(),
     awaitingReady: z.boolean().optional(),
     settlement: settlement.nullable().optional(),
     mode: z.enum(["points", "practice"]).optional(),
@@ -188,7 +190,7 @@ const page = <T extends z.ZodType>(item: T) =>
     .passthrough()
 const wait = z.discriminatedUnion("status", [
   z.object({ status: z.literal("roll_choice_required"), roll: roll.optional(), handId: z.string(), handNo: z.number(), rollId: z.string(), cardIndex: z.number().int().min(0).max(1), candidates: z.array(z.string()).length(3), controlVersion: controlFields.controlVersion, actionSeq: z.number().int().nonnegative(), deadlineMs: z.number().nullable(), cursor: z.string() }).passthrough(),
-  z.object({ status: z.literal("ready_required"), handId: z.string(), handNo: z.number(), controlVersion: controlFields.controlVersion, cursor: z.string() }).passthrough(),
+  z.object({ status: z.literal("ready_required"), handId: z.string().nullable(), handNo: z.number(), controlVersion: controlFields.controlVersion, cursor: z.string() }).passthrough(),
   z.object({ status: z.literal("control_released"), cursor: z.string(), controlVersion: controlFields.controlVersion.optional(), handoffPending: controlFields.handoffPending.optional() }).passthrough(),
   z.object({ status: z.literal("waiting"), cursor: z.string() }).passthrough(),
   z
@@ -276,7 +278,8 @@ export const POKER_RESPONSE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   "app.game.poker.room.get": table,
   "app.game.poker.seat.join": z.object({ roomCode: z.string(), seatNo: z.number() }).passthrough(),
   "app.game.poker.seat.leave": z.object({ pending: z.boolean() }).passthrough(),
-  "app.game.poker.seat.ready": z.object({ handId: z.string(), started: z.boolean() }).passthrough(),
+  "app.game.poker.room.start": z.object({ handId: z.string(), started: z.boolean() }).passthrough(),
+  "app.game.poker.seat.ready": z.object({ handId: z.string().nullable(), started: z.boolean() }).passthrough(),
   "app.game.poker.seat.sit": z
     .object({ sittingOut: z.boolean(), pending: z.boolean(), status: z.string() })
     .passthrough(),

@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { beforeAll, afterAll, describe, expect, it } from "vitest"
 import { randomUUID } from "node:crypto"
 import { PrismaClient } from "@prisma/client"
@@ -63,8 +64,8 @@ suite("真实Postgres房间事务", () => {
       b = randomUUID(),
       now = new Date("2026-10-30T01:00:00.000Z"),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {}, now)
-    await poker.join(b, code, {}, now)
+    await joinForStartedHand(poker, a, code, {}, now)
+    await joinForStartedHand(poker, b, code, {}, now)
     const previousZone = process.env.TZ
     try {
       process.env.TZ = "Asia/Shanghai"

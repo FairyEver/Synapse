@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -29,8 +30,8 @@ const url = gameTestDatabaseUrl()
       base = Date.now() - 91 * 86400000,
       code = (await poker.createRoom(a, { maxSeats: 3, buyIn: 1000 })).roomCode,
       at = (seconds: number) => new Date(base + seconds * 1000)
-    await poker.join(a, code, {}, at(0))
-    await poker.join(b, code, {}, at(0))
+    await joinForStartedHand(poker, a, code, {}, at(0))
+    await joinForStartedHand(poker, b, code, {}, at(0))
     const handId = (await actions.state(a, code)).handId!
     return { a, b, code, at, handId }
   }
@@ -57,7 +58,7 @@ const url = gameTestDatabaseUrl()
       if (archived) expect(await archive.archiveHand(t.handId, new Date())).toBe(true)
       // Model an already captured request clock whose connection/room-lock wait
       // lets another instance expire the old seat first. No service is mocked.
-      await poker.join(t.a, t.code, {}, queuedJoinClock)
+      await joinForStartedHand(poker, t.a, t.code, {}, queuedJoinClock)
       await advanceNextHand(actions, t.code)
       const current = await actions.state(t.a, t.code)
       expect(current.handNo).toBe(2)
@@ -73,7 +74,7 @@ const url = gameTestDatabaseUrl()
     async (archived) => {
       const t = await table(),
         c = randomUUID()
-      await poker.join(c, t.code, {}, t.at(110))
+      await joinForStartedHand(poker, c, t.code, {}, t.at(110))
       // The join captured at 110s commits before the queued 99s action.
       // The due transition at 104s still opens hand 2 before the join's clock.
       await move(t.a, t.code, "fold", t.at(99))
@@ -96,7 +97,7 @@ const url = gameTestDatabaseUrl()
   it.each([false, true])("请求时钟乱序的合法新手仍可消费本人结算，已归档=%s", async (archived) => {
     const t = await table(),
       c = randomUUID()
-    await poker.join(c, t.code, {}, t.at(110))
+    await joinForStartedHand(poker, c, t.code, {}, t.at(110))
     await move(t.a, t.code, "fold", t.at(99))
     await advanceNextHand(actions, t.code)
     const current = await actions.state(c, t.code)

@@ -7,7 +7,7 @@ import { PokerActionService } from "../poker-action.service"
 
 function fixture() {
   const now = new Date("2026-10-30T00:00:00Z")
-  const room: any = { id: "r", code: "1234", mode: "points", variant: "short32", smallBlind: 5, bigBlind: 10, status: "running", handNo: 1, dealerSeat: 0, currentHandId: "h1", nextHandAt: null }
+  const room: any = { id: "r", code: "1234", ownerUserId: "u0", mode: "points", variant: "short32", smallBlind: 5, bigBlind: 10, status: "running", handNo: 1, dealerSeat: 0, currentHandId: "h1", nextHandAt: null }
   const seats = [0, 1].map((seatNo) => ({ id: `s${seatNo}`, userId: `u${seatNo}`, seatNo, stack: 100, status: "active", participantKind: "human", controller: "human", controlVersion: 0, joinedHandNo: 1, lastSeenAt: now }))
   const hands: any[] = [{ id: "h1", handNo: 1, status: "running" }]
   const handSeats = seats.map((s) => ({ ...s, handId: "h1" }))
@@ -46,7 +46,7 @@ describe("结算展示与全员准备屏障", () => {
     expect(f.c.room.actionDeadlineAt).toBeNull()
     expect(f.c.room.botActionAt).toBeNull()
   })
-  it("时间经过再久也不续局，最后一位准备后才按房规发一手", async () => {
+  it("时间经过再久也不续局，全员准备后仍等待房主手动开始", async () => {
     const f = fixture()
     await saveHand(f.poker, f.c, f.hands[0], f.settled)
     f.c.now = new Date(f.c.now.getTime() + 600000)
@@ -57,6 +57,8 @@ describe("结算展示与全员准备屏障", () => {
     await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")
     expect(f.hands).toHaveLength(1)
     await f.poker.ready("u1", "1234", "h1", 0, f.c.now, "human")
+    expect(f.hands).toHaveLength(1)
+    await f.poker.start("u0", "1234", "h1", 0, f.c.now, "human")
     expect(f.hands).toHaveLength(2)
     expect(f.c.room.nextHandAt).toBeNull()
     expect(engine(f.hands[1])).toMatchObject({ variant: "short32", smallBlind: 5, bigBlind: 10 })
@@ -79,6 +81,8 @@ describe("结算展示与全员准备屏障", () => {
     expect(f.hands).toHaveLength(1)
     f.c.seats[1].status = "ready"
     await startNext(f.poker, f.c)
+    expect(f.hands).toHaveLength(1)
+    await f.poker.start("u0", "1234", "h1", 0, f.c.now, "human")
     expect(f.hands).toHaveLength(2)
   })
   it("陪练自动准备，AI必须通过MCP明确准备且不能代真人准备", async () => {
@@ -90,6 +94,8 @@ describe("结算展示与全员准备屏障", () => {
     expect(f.hands).toHaveLength(1)
     await expect(f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")).rejects.toMatchObject({ response: { code: "POKER_CONTROL_RELEASED" } })
     await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "mcp")
+    expect(f.hands).toHaveLength(1)
+    await f.poker.start("u0", "1234", "h1", 0, f.c.now, "mcp")
     expect(f.hands).toHaveLength(2)
     await expect(f.poker.ready("u0", "1234", "h1", 0, f.c.now, "mcp")).rejects.toMatchObject({ response: { code: "POKER_STALE_ACTION" } })
     expect(f.hands).toHaveLength(2)
@@ -117,6 +123,8 @@ describe("结算展示与全员准备屏障", () => {
     await f.poker.ready("u0", "1234", "h1", 0, f.c.now, "human")
     expect(f.hands).toHaveLength(1)
     await f.poker.ready("u1", "1234", "h1", 0, f.c.now, "human")
+    expect(f.hands).toHaveLength(1)
+    await f.poker.start("u0", "1234", "h1", 0, f.c.now, "human")
     expect(f.hands).toHaveLength(2)
   })
   it("关桌不等待五秒", async () => {
@@ -180,4 +188,53 @@ it("旧部署留下的到期后台轮转也不能自动越过未准备座位", a
     await new PokerDeadlineTask(actions).scan(new Date(rooms[0].c.now.getTime() + 2000))
     expect(rooms[100].hands).toHaveLength(1)
   } finally { warn.mockRestore() }
+})
+
+// Regressions: a second arrival and scheduler checks must never start a hand.
+it("首局全员准备后仍须房主开始，旧首局请求不能开始后续手牌", async () => {
+  const f = fixture()
+  f.hands.length = 0
+  Object.assign(f.c.room, { status: "waiting", handNo: 0, currentHandId: null })
+  f.c.seats.forEach(s => { s.status = "waiting" })
+  await startNext(f.poker, f.c)
+  expect(f.hands).toHaveLength(0)
+  await f.poker.ready("u0", "1234", null, 0, f.c.now, "human")
+  await expect(f.poker.start("u0", "1234", null, 0, f.c.now, "human")).rejects.toMatchObject({ response: { code: "POKER_ILLEGAL_ACTION" } })
+  await f.poker.ready("u1", "1234", null, 0, f.c.now, "human")
+  await startNext(f.poker, f.c)
+  expect(f.hands).toHaveLength(0)
+  await expect(f.poker.start("u1", "1234", null, 0, f.c.now, "human")).rejects.toBeDefined()
+  await f.poker.start("u0", "1234", null, 0, f.c.now, "human")
+  expect(f.hands).toHaveLength(1)
+  await expect(f.poker.start("u0", "1234", null, 0, f.c.now, "human")).rejects.toMatchObject({ response: { code: "POKER_STALE_ACTION" } })
+  await expect(f.poker.ready("u0", "1234", null, 0, f.c.now, "human")).rejects.toBeDefined()
+})
+it("新加入未准备者阻止房主开局，控制权和暂离资格不能绕过", async () => {
+  const f = fixture()
+  await saveHand(f.poker, f.c, f.hands[0], f.settled)
+  f.c.seats.forEach(s => { s.status = "ready" })
+  f.c.seats.push({ id: "s2", userId: "u2", seatNo: 2, stack: 100, status: "waiting", participantKind: "human" } as any)
+  await expect(f.poker.start("u0", "1234", "h1", 0, f.c.now, "human")).rejects.toBeDefined()
+  f.c.seats[2].status = "sitting_out"
+  await expect(f.poker.start("u0", "1234", "h1", 9, f.c.now, "human")).rejects.toBeDefined()
+  await expect(f.poker.start("u0", "1234", "h1", 0, f.c.now, "mcp")).rejects.toBeDefined()
+  await f.poker.start("u0", "1234", "h1", 0, f.c.now, "human")
+  expect(f.hands).toHaveLength(2)
+})
+
+it("首局投影公开准备进度，仅房主玩家视角获得开始资格", async () => {
+  const f = fixture()
+  f.hands.length = 0
+  Object.assign(f.c.room, { status: "waiting", handNo: 0, currentHandId: null })
+  f.c.seats.forEach(s => { s.status = "ready" })
+  ;(f.c.tx.gameSession as any).findUnique = async () => null
+  ;(f.c.tx as any).gamePokerControlHistory = { findUnique: async () => null }
+  const actions = new PokerActionService(f.poker)
+  const own = await actions.view(f.c, "u0", "owner", false)
+  expect(own).toMatchObject({ handId: null, awaitingReady: true, isRoomOwner: true, canStart: true })
+  expect(own.seats.every(s => s.readyForNextHand)).toBe(true)
+  expect(await actions.view(f.c, "u1", "owner", false)).toMatchObject({ isRoomOwner: false, canStart: false })
+  expect(await actions.view(f.c, "u0", "public", false)).toMatchObject({ isRoomOwner: false, canStart: false })
+  f.c.room.ownerUserId = "spectator"
+  expect(await actions.view(f.c, "spectator", "owner", false)).toMatchObject({ isRoomOwner: true, canStart: true })
 })

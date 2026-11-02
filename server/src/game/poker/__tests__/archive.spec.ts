@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -25,8 +26,8 @@ const url = gameTestDatabaseUrl()
       agent = await poker.upsertAgent(a, { persona: "归档私密风格" }),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
     const old = new Date(Date.now() - 91 * 86400000)
-    await poker.join(a, code, { agentId: agent.id }, old)
-    await poker.join(b, code, {}, old)
+    await joinForStartedHand(poker, a, code, { agentId: agent.id }, old)
+    await joinForStartedHand(poker, b, code, {}, old)
     const state = await actions.state(a, code),
       request = {
         handId: state.handId!,
@@ -63,8 +64,8 @@ const url = gameTestDatabaseUrl()
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
     const state = await actions.state(a, code)
     await actions.act(a, code, {
       handId: state.handId!,

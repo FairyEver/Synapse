@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { afterAll, describe, expect, it } from "vitest"
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "node:crypto"
@@ -32,7 +33,7 @@ const url = gameTestDatabaseUrl()
   it("未开手时暂离立即反映到overview，回座恢复waiting且不重复扣款", async () => {
     const a = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
+    await joinForStartedHand(poker, a, code, {})
     expect(await status(a, code)).toMatchObject({ status: "waiting", needsAction: false })
     await poker.sit(a, code, true)
     expect(await status(a, code)).toMatchObject({
@@ -48,8 +49,8 @@ const url = gameTestDatabaseUrl()
     const a = randomUUID(),
       b = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 2, buyIn: 1000 })).roomCode
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
     expect(await status(a, code)).toMatchObject({ status: "active", needsAction: true })
     const pending = await poker.sit(a, code, true)
     expect(pending).toMatchObject({ sittingOut: true, pending: true, status: "active" })
@@ -73,7 +74,7 @@ const url = gameTestDatabaseUrl()
       b = randomUUID(),
       c = randomUUID(),
       code = (await poker.createRoom(a, { maxSeats: 3, buyIn: 1000 })).roomCode
-    for (const user of [a, b, c]) await poker.join(user, code, {})
+    for (const user of [a, b, c]) await joinForStartedHand(poker, user, code, {})
     await poker.sit(a, code, true)
     await fold(a, code)
     expect(await status(a, code)).toMatchObject({ status: "sitting_out" })

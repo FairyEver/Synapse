@@ -8,7 +8,7 @@ import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
 import { resolveRules, ROLL_PRICING_VERSION, type PokerVariant } from "./engine/rules"
 import { POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
-import { nextHandEligible } from "./poker-ready"
+import { nextHandEligible, preparedForNextHand } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
 
 export type RoomContext = {
@@ -209,21 +209,37 @@ export class PokerService {
       now,
     )
   }
-  async ready(userId: string, code: string, handId: string, controlVersion: number, now = new Date(), caller: PokerCaller = "mcp") {
+  async ready(userId: string, code: string, handId: string | null, controlVersion: number, now = new Date(), caller: PokerCaller = "mcp") {
     return this.withRoom(code, async (c) => {
       const seat = c.seats.find(s => s.userId === userId && s.participantKind !== "bot")
       if (!seat) reject("POKER_SEAT_NOT_FOUND", "你未在该房间入座。")
       assertController(seat, caller, controlVersion)
       if (c.room.status === "closed") reject("POKER_ROOM_CLOSED", "房间已解散。")
       const { hand } = await currentHand(c)
-      if (!hand || hand.id !== handId || hand.status !== "settled")
+      if (c.room.handNo === 0 ? handId !== null : !hand || hand.id !== handId || hand.status !== "settled")
         reject("POKER_STALE_ACTION", "结算已变化，请重新读取牌桌后准备。")
       if (!nextHandEligible(seat)) reject("POKER_SEAT_SITTING_OUT", "当前座位不能参加下一手，请先回座。")
       seat.status = "ready"
       seat.lastSeenAt = now
       await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { status: "ready", lastSeenAt: now } })
       await startNext(this, c)
-      return { handId, started: c.room.handNo > hand.handNo }
+      return { handId, started: false }
+    }, now)
+  }
+  async start(userId: string, code: string, handId: string | null, controlVersion?: number, now = new Date(), caller: PokerCaller = "mcp") {
+    return this.withRoom(code, async (c) => {
+      if (c.room.ownerUserId !== userId) reject("POKER_ILLEGAL_ACTION", "仅房主可以开始。")
+      if (c.room.status === "closed" || c.room.closeRequested) reject("POKER_ROOM_CLOSED", "房间已解散或正在解散。")
+      const owner = c.seats.find(s => s.userId === userId && s.participantKind !== "bot")
+      if (owner) assertController(owner, caller, controlVersion)
+      const { hand } = await currentHand(c)
+      if (c.room.handNo === 0 ? handId !== null : !hand || hand.id !== handId || hand.status !== "settled")
+        reject("POKER_STALE_ACTION", "牌局已变化，请重新读取牌桌后开始。")
+      const eligible = c.seats.filter(nextHandEligible)
+      if (eligible.length < 2 || !eligible.some(s => s.participantKind !== "bot") || !eligible.every(preparedForNextHand))
+        reject("POKER_ILLEGAL_ACTION", "至少两位玩家且所有参与者准备后，房主才能开始。")
+      await startNext(this, c, true)
+      return { handId: c.room.currentHandId!, started: true }
     }, now)
   }
   async leave(userId: string, code: string, now = new Date(), caller: PokerCaller = "mcp", controlVersion?: number) {

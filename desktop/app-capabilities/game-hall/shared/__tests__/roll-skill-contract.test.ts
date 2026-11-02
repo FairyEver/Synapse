@@ -4,7 +4,7 @@ import { z } from "zod"
 import { GAME_TOOLS } from "@synapse/shared/game-contracts"
 const read = (path: string) => readFileSync(new URL(`../../../synapse-skill/skill-package/game-hall/${path}`, import.meta.url), "utf8")
 describe("Roll Skill 与真实工具契约", () => {
-  it("生成参考的每个参数schema等于运行时注册的29项工具", () => {
+  it("生成参考的每个参数schema等于运行时注册的30项工具", () => {
     const sections = read("references/api.md").split(/^## /m).slice(1)
     const schemas = new Map(sections.map(section => [section.split("\n")[0], JSON.parse(section.match(/```json\n([\s\S]*?)\n```/)![1])]))
     expect(schemas.size).toBe(GAME_TOOLS.length)

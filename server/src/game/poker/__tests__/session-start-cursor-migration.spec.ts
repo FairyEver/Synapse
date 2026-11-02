@@ -1,3 +1,4 @@
+import { joinForStartedHand } from "./advance-next-hand"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { afterAll, describe, expect, it } from "vitest"
@@ -22,9 +23,9 @@ const url = gameTestDatabaseUrl()
   it("实际迁移SQL取本座位下一手边界，保留未知边界与其他游戏数据且不改变点数", async () => {
     const [owner, a, b] = Array.from({ length: 3 }, () => randomUUID())
     const { roomCode: code } = await poker.createRoom(owner, { maxSeats: 3, buyIn: 1000 })
-    await poker.join(a, code, {})
-    await poker.join(b, code, {})
-    await poker.join(owner, code, {})
+    await joinForStartedHand(poker, a, code, {})
+    await joinForStartedHand(poker, b, code, {})
+    await joinForStartedHand(poker, owner, code, {})
     const room = await db.gamePokerRoom.findUniqueOrThrow({ where: { code } })
     await db.gameSession.updateMany({ where: { gameRoomId: room.id }, data: { startCursor: null } })
     await db.gamePokerSeat.updateMany({
