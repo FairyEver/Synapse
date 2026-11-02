@@ -24,7 +24,7 @@ export function MySessions({ sessions, onOpen }: { sessions: GameSessionView[]; 
       {sessions.map(session => <li key={`${session.game}:${session.roomCode}`}>
         <Card>
           <Card.Header className="flex-row flex-wrap items-center justify-between gap-2">
-            <Card.Title className="text-base">{session.gameName}{session.funding === "practice" && " · 陪练"}</Card.Title>
+            <Card.Title className="text-sm">{session.gameName}{session.funding === "practice" && " · 陪练"}</Card.Title>
             <Chip color={session.needsAction ? "accent" : "default"}>{session.needsAction ? "轮到你" : "进行中"}</Chip>
           </Card.Header>
           <Card.Content className="flex flex-row flex-wrap justify-between gap-2 text-sm">

@@ -48,7 +48,7 @@ describe("Roll实际展开布局", () => {
         expect(rect(seat).bottom).toBeLessThanOrEqual(rect(viewport).bottom+1)
         expect(overlap(seat,document.querySelector(".poker-board")!)).toBe(false)
         const label=seat.querySelector(".poker-seat-meta")!
-        expect(parseFloat(getComputedStyle(label).fontSize)*scale).toBeGreaterThanOrEqual(12)
+        if(canvas.dataset.tableShape!=="landscape") expect(parseFloat(getComputedStyle(label).fontSize)*scale).toBeGreaterThanOrEqual(12)
         for (const other of document.querySelectorAll(".poker-seat")) if (other!==seat) expect(overlap(seat,other),`座位${seat.getAttribute("data-position")}/${other.getAttribute("data-position")}：${JSON.stringify([rect(seat).toJSON(),rect(other).toJSON()])}`).toBe(false)
       }
       await page.getByRole("button",{name:"查看你的玩家信息",exact:true}).click()

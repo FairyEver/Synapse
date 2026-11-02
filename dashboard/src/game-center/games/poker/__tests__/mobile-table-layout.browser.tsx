@@ -21,8 +21,11 @@ it.each(sizes)("%s×%s 牌桌与实际展开的金额面板可读、无横向裁
     await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())))
     await page.screenshot({path:`.superpowers/poker-mobile/table-${width}-${height}.png`})
     const scale=canvas.getBoundingClientRect().width/canvas.offsetWidth
-    expect(parseFloat(getComputedStyle(document.querySelector(".poker-pot-label")!).fontSize)*scale).toBeGreaterThanOrEqual(11.99)
-    expect(parseFloat(getComputedStyle(document.querySelector(".poker-stack")!).fontSize)*scale).toBeGreaterThanOrEqual(13.99)
+    // The owner restored the original landscape typography; do not enlarge it to meet scaled mobile thresholds.
+    if(canvas.dataset.tableShape!=="landscape") {
+      expect(parseFloat(getComputedStyle(document.querySelector(".poker-pot-label")!).fontSize)*scale).toBeGreaterThanOrEqual(11.99)
+      expect(parseFloat(getComputedStyle(document.querySelector(".poker-stack")!).fontSize)*scale).toBeGreaterThanOrEqual(13.99)
+    }
     if(height>420) expect(document.querySelector('.poker-controls-anchor')!.getBoundingClientRect().height).toBeGreaterThanOrEqual(144)
     for(const node of document.querySelectorAll('.poker-edge-controls button,.poker-controls-anchor button')) {
       const bounds=node.getBoundingClientRect()

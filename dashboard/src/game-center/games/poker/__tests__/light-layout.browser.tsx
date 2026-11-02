@@ -42,11 +42,13 @@ describe.each(sizes)("亮色牌桌 %s×%s", (width,height) => {
       const canvas = document.querySelector<HTMLElement>(".poker-canvas")!, viewport = document.querySelector(".poker-canvas-viewport")!, footer = document.querySelector(".poker-controls-anchor")!
       await expect.poll(() => rect(canvas).width <= rect(viewport).width + 1 && rect(canvas).height <= rect(viewport).height + 1).toBe(true)
       const scale = rect(canvas).width / canvas.offsetWidth
-      for (const selector of [".poker-pot-label", ".poker-board-caption", ".poker-seat-meta"]) {
-        const element = document.querySelector(selector)!
-        expect(parseFloat(getComputedStyle(element).fontSize) * scale, selector).toBeGreaterThanOrEqual(11.99)
+      if(canvas.dataset.tableShape!=="landscape") {
+        for (const selector of [".poker-pot-label", ".poker-board-caption", ".poker-seat-meta"]) {
+          const element = document.querySelector(selector)!
+          expect(parseFloat(getComputedStyle(element).fontSize) * scale, selector).toBeGreaterThanOrEqual(11.99)
+        }
+        expect(parseFloat(getComputedStyle(document.querySelector(".poker-stack")!).fontSize) * scale).toBeGreaterThanOrEqual(13.99)
       }
-      expect(parseFloat(getComputedStyle(document.querySelector(".poker-stack")!).fontSize) * scale).toBeGreaterThanOrEqual(13.99)
       for (const selector of [".poker-pot-label", ".poker-seat-meta", ".poker-ai-state[data-acting=true]", ".poker-control-state", '.poker-seat[data-mine=true] .poker-seat-avatar']) expect(contrast(document.querySelector(selector)!), selector).toBeGreaterThanOrEqual(4.5)
       const header=document.querySelector(".poker-edge-controls")!
       expect(rect(header).bottom).toBeLessThanOrEqual(rect(document.querySelector(".poker-table-main")!).top)

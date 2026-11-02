@@ -52,14 +52,14 @@ export function RoomList({ rooms, myRoomCodes, userId, onRoom, onConnect, onClos
         <SystemCard>
           <SystemCard.Header>
             <Button fullWidth variant="ghost" className="h-auto justify-start whitespace-normal wrap-anywhere text-left" onPress={() => onRoom(room.roomCode)}>{name}</Button>
-            <SystemCard.Description>{description}</SystemCard.Description>
+            <SystemCard.Description className="text-xs">{description}</SystemCard.Description>
           </SystemCard.Header>
           <SystemCard.Content className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2"><Chip size="sm">{type}</Chip><Chip size="sm" color={room.status === "running" ? "success" : "default"}>{statusLabels[room.status] ?? room.status}</Chip><span className="text-sm text-muted">{availability}</span></div>
+            <div className="flex flex-wrap items-center gap-2"><Chip size="sm">{type}</Chip><Chip size="sm" color={room.status === "running" ? "success" : "default"}>{statusLabels[room.status] ?? room.status}</Chip><span className="text-xs text-muted">{availability}</span></div>
             <dl className="grid grid-cols-2 gap-3 text-sm">
-              <div><dt className="text-muted">人数</dt><dd className="tabular-nums">{room.players} / {room.maxSeats} 人</dd></div>
-              <div><dt className="text-muted">{funding}</dt><dd className="tabular-nums">{amount(room.buyIn)}</dd></div>
-              <div><dt className="text-muted">盲注</dt><dd className="tabular-nums">{room.smallBlind} / {room.bigBlind}</dd></div>
+              <div><dt className="text-xs text-muted">人数</dt><dd className="tabular-nums">{room.players} / {room.maxSeats} 人</dd></div>
+              <div><dt className="text-xs text-muted">{funding}</dt><dd className="tabular-nums">{amount(room.buyIn)}</dd></div>
+              <div><dt className="text-xs text-muted">盲注</dt><dd className="text-xs tabular-nums">{room.smallBlind} / {room.bigBlind}</dd></div>
             </dl>
           </SystemCard.Content>
           {hasActions && <SystemCard.Footer className="flex-wrap gap-2">{actions}</SystemCard.Footer>}

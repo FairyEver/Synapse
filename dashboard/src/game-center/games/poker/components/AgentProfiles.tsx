@@ -229,7 +229,7 @@ export function AgentProfiles() {
                               ["翻前加注", `${Math.round(player.pfr * 100)}%`],
                               ["进攻", player.aggression.toFixed(2)],
                               ["胜率", `${Math.round(player.winRate * 100)}%`],
-                            ].map(([label, value]) => <div key={label}><dt className="text-muted">{label}</dt><dd className="tabular-nums">{value}</dd></div>)}
+                            ].map(([label, value]) => <div key={label}><dt className="text-xs text-muted">{label}</dt><dd className="tabular-nums">{value}</dd></div>)}
                           </dl>
                         </Card.Content>
                       </Card>
