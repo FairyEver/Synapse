@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react"
 import { Button, Form, Input, Label, Modal, Radio, RadioGroup, Switch, TextField } from "@heroui/react"
 import { Minus, Plus } from "lucide-react"
-import type { GameFunding, PokerBlindPreset, PokerVariant } from "@synapse/shared/game-contracts"
+import { POKER_MAX_SEATS, type GameFunding, type PokerBlindPreset, type PokerVariant } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
 
 export interface PokerRoomDraft {
@@ -35,7 +35,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
   }, [open])
   const update = (patch: Partial<PokerRoomDraft>) => onChange({ ...value, ...patch })
   const changeSeats = (delta: number) => {
-    const maxSeats = Math.max(2, Math.min(10, value.maxSeats + delta))
+    const maxSeats = Math.max(2, Math.min(POKER_MAX_SEATS, value.maxSeats + delta))
     track({ component: "button", name: "poker-room-seats", action: "click", value: String(maxSeats) })
     update({ maxSeats })
   }
@@ -96,7 +96,7 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                   <div className="flex items-center gap-4">
                     <Button isIconOnly variant="secondary" aria-label="减少座位" isDisabled={busy || value.maxSeats <= 2} onPress={() => changeSeats(-1)}><Minus /></Button>
                     <output id="poker-seats" aria-live="polite" className="tabular-nums">{value.maxSeats} 人</output>
-                    <Button isIconOnly variant="secondary" aria-label="增加座位" isDisabled={busy || value.maxSeats >= 10} onPress={() => changeSeats(1)}><Plus /></Button>
+                    <Button isIconOnly variant="secondary" aria-label="增加座位" isDisabled={busy || value.maxSeats >= POKER_MAX_SEATS} onPress={() => changeSeats(1)}><Plus /></Button>
                   </div>
                 </div>
                 <RadioGroup variant="secondary" id="poker-buyin" orientation="horizontal" value={String(value.buyIn)} isDisabled={busy}

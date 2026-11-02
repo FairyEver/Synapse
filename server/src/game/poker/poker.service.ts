@@ -7,7 +7,7 @@ import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
 import { resolveRules, ROLL_PRICING_VERSION, type PokerVariant } from "./engine/rules"
-import type { PokerResumeCheckpoint } from "@synapse/shared/game-contracts"
+import { POKER_MAX_SEATS, type PokerResumeCheckpoint } from "@synapse/shared/game-contracts"
 import { nextHandEligible } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
 
@@ -80,11 +80,11 @@ export class PokerService {
     if (
       !Number.isInteger(input.maxSeats) ||
       input.maxSeats < 2 ||
-      input.maxSeats > 10 ||
+      input.maxSeats > POKER_MAX_SEATS ||
       ![500, 1000, 2000, 5000].includes(input.buyIn) ||
       (input.mode !== undefined && !["points", "practice"].includes(input.mode))
     )
-      reject("POKER_ILLEGAL_ACTION", "座位应为2–10，带入额仅支持500/1000/2000/5000。")
+      reject("POKER_ILLEGAL_ACTION", "座位应为2–6，带入额仅支持500/1000/2000/5000。")
     let rules
     try {
       const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)
@@ -147,7 +147,8 @@ export class PokerService {
         if (room.status === "closed") reject("POKER_ROOM_CLOSED", "房间已解散。")
         if (seats.some((s) => s.userId === userId))
           reject("POKER_ALREADY_SEATED", "已在该房间入座。")
-        if (seats.length >= room.maxSeats) reject("POKER_ROOM_FULL", "房间已满。")
+        const maxSeats = Math.min(room.maxSeats, POKER_MAX_SEATS)
+        if (seats.length >= maxSeats) reject("POKER_ROOM_FULL", "房间已满。")
         const history = await tx.gamePokerControlHistory.findUnique({ where: { roomId_userId: { roomId: room.id, userId } } })
         if (caller === "mcp" && history && (!history.joinPending || input.controlVersion !== history.controlVersion))
           reject("POKER_CONTROL_RELEASED", "请在桌面明确授权AI重新入座，旧循环不能重新扣点。")
@@ -165,7 +166,7 @@ export class PokerService {
         const modelName = (caller === "human" ? "" : input.modelName ?? agent?.model ?? "")
           .replace(/[\x00-\x1f\x7f]/g, "")
           .slice(0, 24)
-        const seatNo = Array.from({ length: room.maxSeats }, (_, i) => i).find(
+        const seatNo = Array.from({ length: maxSeats }, (_, i) => i).find(
           (n) => !seats.some((s) => s.seatNo === n),
         )!
         const admissionId = randomUUID()

@@ -92,7 +92,7 @@
 
 ## app_game_poker_room_create
 
-创建2–10人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+创建2–6人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -131,7 +131,7 @@
     "maxSeats": {
       "type": "integer",
       "minimum": 2,
-      "maximum": 10
+      "maximum": 6
     },
     "buyIn": {
       "type": "integer",

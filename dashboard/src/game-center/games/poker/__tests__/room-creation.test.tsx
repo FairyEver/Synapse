@@ -104,7 +104,7 @@ describe("建房请求身份", () => {
       await act(async () => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!.click())
     }
     await act(async () => document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
-    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="增加座位"]')!.click())
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="减少座位"]')!.click())
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     await act(async () => root.unmount()); roots.delete(root)
     root = createRoot(host); roots.add(root)
@@ -113,9 +113,9 @@ describe("建房请求身份", () => {
     for (const value of ["practice", "short32", "10/20", "5000"]) {
       expect(document.querySelector(`input[type="radio"][value="${value}"]`)!.checked).toBe(true)
     }
-    expect(document.querySelector("#poker-seats")?.textContent).toContain("7")
+    expect(document.querySelector("#poker-seats")?.textContent).toContain("5")
     const saved = settings.update.mock.calls.at(-1)![1]
-    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 7, buyIn: 5000, roll: true })
+    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 5, buyIn: 5000, roll: true })
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     identity.user = { id: "another", nickname: "另一人", handle: "other" }
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
@@ -211,15 +211,15 @@ describe("建房请求身份", () => {
     }
     expect(document.body.textContent).toContain("不影响大厅点数")
     expect(document.body.textContent).toContain("同花大于葫芦")
-    const increase = document.querySelector<HTMLButtonElement>('[aria-label="增加座位"]')!
-    await act(async () => increase.click())
+    const decrease = document.querySelector<HTMLButtonElement>('[aria-label="减少座位"]')!
+    await act(async () => decrease.click())
     await submit()
     expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
-      mode: "practice", variant: "short32", blindPreset: "5/10", buyIn: 2000, maxSeats: 7,
+      mode: "practice", variant: "short32", blindPreset: "5/10", buyIn: 2000, maxSeats: 5,
     }))
     expect(onRoom).toHaveBeenCalledWith("5678")
   })
-  it("座位调节限定在 2 至 10 人，关闭后恢复入口焦点", async () => {
+  it("座位调节限定在 2 至 6 人，关闭后恢复入口焦点", async () => {
     const host = document.createElement("div"), root = createRoot(host)
     roots.add(root)
     document.body.append(host)
@@ -234,7 +234,7 @@ describe("建房请求身份", () => {
     expect(document.querySelector("#poker-seats")?.textContent).toContain("2")
     for (let i = 0; i < 9; i++) await act(async () => increase.click())
     expect(increase.disabled).toBe(true)
-    expect(document.querySelector("#poker-seats")?.textContent).toContain("10")
+    expect(document.querySelector("#poker-seats")?.textContent).toContain("6")
     await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })))
     // React Aria restores focus when its overlay FocusScope unmounts.
     await act(async () => { await new Promise((resolve) => requestAnimationFrame(resolve)) })

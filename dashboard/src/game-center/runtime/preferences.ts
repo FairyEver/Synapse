@@ -1,4 +1,4 @@
-import type { GameFunding, PokerVariant, PokerBlindPreset } from "@synapse/shared/game-contracts"
+import { POKER_MAX_SEATS, type GameFunding, type PokerVariant, type PokerBlindPreset } from "@synapse/shared/game-contracts"
 export type PokerRoomPreferences = { mode: GameFunding; variant: PokerVariant; blindPreset: PokerBlindPreset; maxSeats: number; buyIn: number; roll?: boolean }
 const key = (userId: string) => `synapse.game.poker-room-preferences.v1:${userId}`
 export const roomPreferencesStore = {
@@ -11,7 +11,8 @@ export const roomPreferencesStore = {
       || value.maxSeats < 2 || value.maxSeats > 10 || ![500, 1000, 2000, 5000].includes(value.buyIn)) {
       throw new Error("房间配置无效，请重置浏览器保存的房间选项。")
     }
-    return { mode:value.mode, variant:value.variant, blindPreset:value.blindPreset, maxSeats:value.maxSeats, buyIn:value.buyIn, roll:value.roll ?? false }
+    // Accept old 7–10 seat preferences without blocking the creation form.
+    return { mode:value.mode, variant:value.variant, blindPreset:value.blindPreset, maxSeats:Math.min(value.maxSeats, POKER_MAX_SEATS), buyIn:value.buyIn, roll:value.roll ?? false }
   },
   async update(userId: string, value: PokerRoomPreferences): Promise<void> {
     localStorage.setItem(key(userId), JSON.stringify({ mode:value.mode, variant:value.variant, blindPreset:value.blindPreset, maxSeats:value.maxSeats, buyIn:value.buyIn, roll:value.roll ?? false }))

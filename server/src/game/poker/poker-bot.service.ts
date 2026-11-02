@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common"
+import { POKER_MAX_SEATS } from "@synapse/shared/game-contracts"
 import { PokerService, creationIdentity } from "./poker.service"
 import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
@@ -19,9 +20,10 @@ export class PokerBotService {
       if (c.room.status === "closed" || c.room.closeRequested)
         reject("POKER_ROOM_CLOSED", "房间已解散或正在解散。")
       const humans = c.seats.filter((s) => s.participantKind !== "bot").length
-      if (c.seats.length >= c.room.maxSeats - (humans ? 0 : 1))
+      const maxSeats = Math.min(c.room.maxSeats, POKER_MAX_SEATS)
+      if (c.seats.length >= maxSeats - (humans ? 0 : 1))
         reject("POKER_ROOM_FULL", "房间已满或须为真人保留座位。")
-      const seatNo = Array.from({ length: c.room.maxSeats }, (_, i) => i).find((n) => !c.seats.some((s) => s.seatNo === n))!
+      const seatNo = Array.from({ length: maxSeats }, (_, i) => i).find((n) => !c.seats.some((s) => s.seatNo === n))!
       await c.tx.gamePokerBot.create({ data: { id, roomId: c.room.id, seatNo, createdAt: now } })
       const seat = await c.tx.gamePokerSeat.create({ data: {
         id, userId: `bot:${id}`, participantKind: "bot", roomId: c.room.id, seatNo,
