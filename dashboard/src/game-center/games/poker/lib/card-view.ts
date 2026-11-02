@@ -9,5 +9,3 @@ export function cardPlayInput(table: PokerTableView, card: PokerCardHandView, se
 }
 const reasons: Record<string, string> = { POKER_NOT_YOUR_TURN: "等待你的回合", POKER_ACTION_EXPIRED: "本回合已超时", POKER_CARD_CHOICE_REQUIRED: "请先完成待选", POKER_CARD_INSUFFICIENT_STACK: "筹码不足，须保留至少 1 筹码", POKER_CARD_INVALID_SELECTION: "暂无合法目标", POKER_CARD_REQUIREMENT_UNMET: "当前条件不满足" }
 export const cardUnavailableReason = (reason?: string) => reason ? reasons[reason] ?? "当前条件不满足" : null
-const covers = import.meta.glob<string>("../assets/abilities/v1/*.png", { eager: true, query: "?url", import: "default" })
-export const abilityArt = (artId: string) => /^v1\/(0[1-9]|[1-5][0-9]|60)$/.test(artId) ? covers[`../assets/abilities/${artId}.png`] : undefined

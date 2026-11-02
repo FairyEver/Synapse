@@ -274,12 +274,12 @@
 **Files:** Create `dashboard/src/game-center/games/poker/assets/ability-cards/v1/{01..60}.png`、`dashboard/src/game-center/games/poker/assets/ability-cards/v1/manifest.json`、`dashboard/src/game-center/games/poker/assets/ability-cards/v1/README.md`、`dashboard/src/game-center/games/poker/lib/card-artwork.ts`、`dashboard/scripts/check-poker-card-assets.mjs`；Modify `dashboard/package.json`、`dashboard/src/game-center/games/poker/components/PokerCardsDialog.tsx`。
 **Interfaces:** `manifest`每项含cardId、assetVersion、相对文件、实际尺寸、实际模型信息/未提供、完整提示词；`cardArtwork(cardId:string):string`仅映射已核对本地资源，不能返回生成占位图或私人远程URL。
 
-- [ ] **1. 写资源核对器。** 检查01..60恰60个唯一PNG、PNG签名/尺寸合法、文件非空、ID与T8目录完全匹配、prompt/model信息有值或明确未提供；缺1张时exit非0。运行`node dashboard/scripts/check-poker-card-assets.mjs`确认目前缺素材而失败，不为此运行无关产品测试。 断言示例：`assert.equal(assetIds.length,60); assert.equal(new Set(assetIds).size,60)`。
-- [ ] **2. 阅读并使用imagegen技能。** 实施者先读`/Users/liyang/.codex/skills/.system/imagegen/SKILL.md`，用当前GPT生图工具。先01/11/33校准，再用同一基准和设计第8节各主体生成其余57张；每张独立插画，同名副本复用。此处是真实生成工作，不以创建manifest宣称完成。
-- [ ] **3. 保存正式资产与溯源。** 浅底/少元素/左上光、无生成文字和卡框、统一4:5展示安全区与1024级素材；记录实际输出，不编造模型/seed/尺寸。若精确原图比例不受工具支持，保留原图，在统一4:5安全区展示并记录；需要修图用GPT编辑，不擅用Python重绘。
-- [ ] **3a. 接入资源检查入口。** dashboard/package.json增加`check:poker-card-assets`，值为`node scripts/check-poker-card-assets.mjs`；渲染仅按manifest的本地资源映射，不对网络失败做外部图兜底。
-- [ ] **4. 验收60张。** 运行核对器exit0，逐张看缩略图和完整图检查含义/风格/错误文字；实际面板只惰性加载需要的资源，避免一次预载60张。运行`pnpm --filter @synapse/dashboard build`，检查产物含全部已映射资源。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 配齐60种卡牌的统一GPT生成封面'`；不将卡牌美术写进发布说明。
+- [x] **1. 写资源核对器。** 检查01..60恰60个唯一PNG、PNG签名/尺寸合法、文件非空、ID与T8目录完全匹配、prompt/model信息有值或明确未提供；缺1张时exit非0。运行`node dashboard/scripts/check-poker-card-assets.mjs`确认目前缺素材而失败，不为此运行无关产品测试。 断言示例：`assert.equal(assetIds.length,60); assert.equal(new Set(assetIds).size,60)`。
+- [x] **2. 阅读并使用imagegen技能。** 实施者先读`/Users/liyang/.codex/skills/.system/imagegen/SKILL.md`，用当前GPT生图工具。先01/11/33校准，再用同一基准和设计第8节各主体生成其余57张；每张独立插画，同名副本复用。此处是真实生成工作，不以创建manifest宣称完成。
+- [x] **3. 保存正式资产与溯源。** 浅底/少元素/左上光、无生成文字和卡框、统一4:5展示安全区与1024级素材；记录实际输出，不编造模型/seed/尺寸。若精确原图比例不受工具支持，保留原图，在统一4:5安全区展示并记录；需要修图用GPT编辑，不擅用Python重绘。
+- [x] **3a. 接入资源检查入口。** dashboard/package.json增加`check:poker-card-assets`，值为`node scripts/check-poker-card-assets.mjs`；渲染仅按manifest的本地资源映射，不对网络失败做外部图兜底。
+- [x] **4. 验收60张。** 运行核对器exit0，逐张看缩略图和完整图检查含义/风格/错误文字；实际面板只惰性加载需要的资源，避免一次预载60张。运行`pnpm --filter @synapse/dashboard build`，检查产物含全部已映射资源。
+- [x] **5. 本地提交。** `git commit -m 'feat: 配齐60种卡牌的统一GPT生成封面'`；不将卡牌美术写进发布说明。
 
 
 ## Task 17: 隔离PostgreSQL、组合模拟与兼容回归

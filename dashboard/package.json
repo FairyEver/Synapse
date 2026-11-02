@@ -11,7 +11,8 @@
     "docs:heroui:sync": "node scripts/sync-heroui-docs.mjs",
     "test": "vitest run",
     "test:browser": "vitest run --config vitest.browser.config.ts",
-    "check:ui": "node scripts/check-ui-boundaries.mjs"
+    "check:ui": "node scripts/check-ui-boundaries.mjs",
+    "check:poker-card-assets": "node scripts/check-poker-card-assets.mjs"
   },
   "dependencies": {
     "@heroui/react": "3.2.7",
