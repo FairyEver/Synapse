@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react"
-import type { PokerChipValue } from "@synapse/shared/game-contracts"
+import { compactPokerChipCounts, type PokerDisplayChipValue } from "@synapse/shared/game-contracts"
 import type { PresentedTransfer } from "../lib/chip-presentation"
 import { useReducedMotion } from "../hooks/useReducedMotion"
 import { PokerChip } from "./PokerChip"
 type Point={x:number;y:number}
 type Running={cancelled:boolean;complete:boolean;animations:Animation[];timer?:ReturnType<typeof setTimeout>;remaining:number;silent:boolean;landed:Set<number>}
-function visibleChips(transfer:PresentedTransfer):PokerChipValue[] {
-  const result:PokerChipValue[]=[]
-  for(const entry of transfer.chips)for(let i=0;i<entry.count&&result.length<24;i++)result.push(entry.value)
+function visibleChips(transfer:PresentedTransfer):PokerDisplayChipValue[] {
+  const result:PokerDisplayChipValue[]=[]
+  for(const entry of compactPokerChipCounts(transfer.chips))for(let i=0;i<entry.count;i++)result.push(entry.value)
   return result
 }
 /** Measure actual contained-scene anchors; completion comes from the animations, not a guessed gate. */

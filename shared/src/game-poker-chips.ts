@@ -4,7 +4,9 @@ export type PokerChipValue = typeof POKER_CHIP_VALUES[number]
 export type PokerChipCount = { value: PokerChipValue; count: number }
 export type PokerChipContribution = { id: string; seq: number; seatNo: number; amount: number; fund: "pot" | "roll" }
 export type PokerChipState = { pot: PokerChipCount[]; roll: PokerChipCount[]; recent: PokerChipContribution[] }
-export type PositionedPokerChip = { id: string; value: PokerChipValue; stack: number; level: number; x: number; y: number; rotation: number; depth: number }
+export type PokerDisplayChipValue = PokerChipValue | 1000
+export type PokerDisplayChipCount = { value: PokerDisplayChipValue; count: number }
+export type PositionedPokerChip = { id: string; value: PokerDisplayChipValue; stack: number; level: number; x: number; y: number; rotation: number; depth: number }
 export function chipBreakdown(amount: number): PokerChipCount[] {
   if (!Number.isSafeInteger(amount) || amount < 0) throw new Error("Invalid poker chip amount")
   const result: PokerChipCount[] = []
@@ -31,17 +33,28 @@ function noise(seed: number): number {
   hash = Math.imul(hash^(hash>>>16),0x45d9f3b)
   return ((hash^(hash>>>16))>>>0)/4294967296
 }
-/** Keep all denominations/counts in the model; bound expensive SVGs with an exact overflow legend. */
-export function layoutChipPile(counts: readonly PokerChipCount[], seed = 0): { chips: PositionedPokerChip[]; overflow: PokerChipCount[] } {
-  const stacks: PokerChipValue[][] = [], spare: PokerChipValue[] = [], overflow: PokerChipCount[] = []
-  let budget = 120
-  for (const value of POKER_CHIP_VALUES) {
-    const count = counts.find(c=>c.value===value)?.count ?? 0
-    let visible = Math.min(count,budget); budget -= visible
-    if (count>visible) overflow.push({value,count:count-visible})
+/** Presentation only: retain inventory below the target; consolidate before introducing the fewest 1k chips. */
+export function compactPokerChipCounts(counts: readonly PokerChipCount[]): PokerDisplayChipCount[] {
+  const target = 200
+  if (counts.reduce((sum,c)=>sum+c.count,0)<=target) return counts.map(c=>({...c}))
+  const compact = chipBreakdown(chipValue(counts))
+  const count = compact.reduce((sum,c)=>sum+c.count,0)
+  const fiveHundreds = compact.find(c=>c.value===500)
+  if (count<=target || !fiveHundreds) return compact
+  // Each pair of 500s replaced by one 1k saves exactly one node. A target is never a truncation.
+  const thousands = Math.min(count-target,Math.floor(fiveHundreds.count/2))
+  fiveHundreds.count -= thousands*2
+  return [...(thousands?[{value:1000 as const,count:thousands}]:[]),...compact.filter(c=>c.count>0)]
+}
+/** Every presented chip is drawn, with the full inventory value and no overflow text. */
+export function layoutChipPile(counts: readonly PokerChipCount[], seed = 0): { chips: PositionedPokerChip[] } {
+  const stacks: PokerDisplayChipValue[][] = [], spare: PokerDisplayChipValue[] = []
+  const presented = compactPokerChipCounts(counts)
+  for (const value of [1000,...POKER_CHIP_VALUES] as const) {
+    let visible = presented.find(c=>c.value===value)?.count ?? 0
     while (visible>=4) {
       const height = Math.min(8+stacks.length%3,visible)
-      stacks.push(Array<PokerChipValue>(height).fill(value)); visible-=height
+      stacks.push(Array<PokerDisplayChipValue>(height).fill(value)); visible-=height
     }
     for (let i=0;i<visible;i++) spare.push(value)
   }
@@ -60,5 +73,5 @@ export function layoutChipPile(counts: readonly PokerChipCount[], seed = 0): { c
       return {id:`${stack}:${level}:${value}`,value,stack,level,x:x+(noise(key)-.5)*.07,y:y+level*.105+(noise(key+3)-.5)*.03,rotation:(noise(key+7)-.5)*24,depth:Math.round((8-y)*1000)+level}
     })
   })
-  return {chips,overflow}
+  return {chips}
 }

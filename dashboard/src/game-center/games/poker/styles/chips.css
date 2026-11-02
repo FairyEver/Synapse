@@ -7,6 +7,7 @@
 .poker-chip[data-chip-value="25"] { --chip-color:oklch(.53 .14 153); }
 .poker-chip[data-chip-value="100"] { --chip-color:oklch(.29 .022 280); }
 .poker-chip[data-chip-value="200"] { --chip-color:oklch(.48 .19 305); }
+.poker-chip[data-chip-value="1000"] { --chip-color:var(--danger); color:var(--danger-foreground); }
 .poker-chip[data-chip-value="500"] { --chip-color:oklch(.55 .12 65); }
 .poker-chip svg { display:block; width:100%; height:100%; overflow:visible; }
 .poker-chip-disc { fill:var(--chip-color); stroke:color-mix(in oklch,var(--chip-color) 65%,var(--foreground)); stroke-width:1.5; }
@@ -14,11 +15,10 @@
 .poker-chip-ring,.poker-chip-dots { fill:none; stroke:currentColor; stroke-width:1; }
 .poker-chip-ring { opacity:.68; }.poker-chip-dots { opacity:.3; stroke-dasharray:1.2 2.5; }
 .poker-chip text { fill:currentColor; font:750 23px -apple-system,BlinkMacSystemFont,sans-serif; }
-.poker-chip[data-chip-value="100"] text,.poker-chip[data-chip-value="200"] text,.poker-chip[data-chip-value="500"] text { font-size:19px; }
+.poker-chip[data-chip-value="100"] text,.poker-chip[data-chip-value="200"] text,.poker-chip[data-chip-value="500"] text,.poker-chip[data-chip-value="1000"] text { font-size:19px; }
 .poker-chip-pile { position:relative; width:180px; height:104px; flex:none; pointer-events:none; filter:drop-shadow(0 4px 3px var(--poker-chip-shadow)); }
 .poker-placed-chip { position:absolute; left:calc(50% + var(--chip-x) * var(--poker-chip-size) - var(--poker-chip-size) / 2); bottom:calc(22px + var(--chip-y) * var(--poker-chip-size)); }
 .poker-chip-anchor { position:absolute; left:50%; bottom:44px; width:1px; height:1px; }
-.poker-chip-overflow { position:absolute; top:100%; left:50%; transform:translateX(-50%); max-width:230px; font-size:var(--scene-label); line-height:1.2; white-space:normal; color:var(--foreground); }
 .poker-canvas[data-table-shape] .poker-pot-row { display:flex; justify-content:center; gap:26px; width:auto; }
 .poker-canvas[data-table-shape] .poker-pot-row::after { content:none; }
 .poker-canvas[data-table-shape] .poker-pot-value { gap:4px; width:190px; }

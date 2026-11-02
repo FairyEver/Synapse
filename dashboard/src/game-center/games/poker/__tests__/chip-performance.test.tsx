@@ -69,3 +69,21 @@ it("缩放牌桌快速更新金额时，按数字自身高度衔接当前滚动�
   await render(67)
   expect(starts).toEqual(["translateY(calc(-12.5 * 1.15em))","translateY(calc(-12.5 * 1.15em))"])
 })
+
+it("大额筹码全部用实体表达，1k标签正确且不生成覆盖文字",async()=>{
+  const host=mount()
+  await act(async()=>root!.render(<PokerChipPile chips={[{value:500,count:201}]} label="底池" />))
+  const values=[...host.querySelectorAll<HTMLElement>('.poker-chip')].map(node=>Number(node.dataset.chipValue))
+  expect(values).toHaveLength(200)
+  expect(values.reduce((sum,value)=>sum+value,0)).toBe(100500)
+  expect(host.querySelector('[data-chip-value="1000"] text')?.textContent).toBe("1k")
+  expect(host.textContent).not.toContain("×")
+  expect(host.querySelector('[role="img"]')?.getAttribute("aria-label")).toBe("底池 100,500")
+})
+it("大笔飞行不截取前24枚，合并后完整表达金额",async()=>{
+  const host=mount(),transfer:PresentedTransfer={id:"large",seatNo:0,fund:"pot",direction:"in",amount:100500,chips:[{value:500,count:201}],kind:"bet",started:false}
+  await act(async()=>root!.render(<ChipMotion transfers={[transfer]} layout="landscape" scope="h" onStart={()=>{}} onComplete={()=>{}} />))
+  const values=[...host.querySelectorAll<HTMLElement>('.poker-flying-chip .poker-chip')].map(node=>Number(node.dataset.chipValue))
+  expect(values).toHaveLength(200)
+  expect(values.reduce((sum,value)=>sum+value,0)).toBe(100500)
+})
