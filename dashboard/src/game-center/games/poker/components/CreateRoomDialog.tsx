@@ -80,7 +80,10 @@ export function CreateRoomDialog({ open, onOpenChange, value, onChange, onCreate
                   <p id="poker-variant-hint-short32" aria-hidden={value.variant !== "short32"} className={value.variant !== "short32" ? "hidden" : "text-sm text-muted"}>同花大于葫芦，A789T 是最小顺子</p>
                 </RadioGroup>
                 <Switch isSelected={value.roll ?? false} onChange={roll => update({roll})} isDisabled={busy}>
-                  <Switch.Control><Switch.Thumb /></Switch.Control><Switch.Content><Label>Roll 换牌</Label></Switch.Content>
+                  <Switch.Content>
+                    <Switch.Control><Switch.Thumb /></Switch.Control>
+                    <Label>Roll 换牌</Label>
+                  </Switch.Content>
                 </Switch>
                 <RadioGroup variant="secondary" id="poker-blinds" orientation="horizontal" value={value.blindPreset} isDisabled={busy}
                   onChange={blindPreset => update({ blindPreset: blindPreset as PokerBlindPreset })}>

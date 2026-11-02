@@ -45,7 +45,41 @@ async function open(host: HTMLElement) {
 async function submit() {
   await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })))
 }
+async function clickSwitchPart(target: HTMLElement) {
+  await act(async () => {
+    for (const type of ["pointerdown", "pointerup"]) {
+      target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, pointerType: "mouse", button: 0, width: 1, height: 1 }))
+    }
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1, button: 0 }))
+  })
+}
 describe("建房请求身份", () => {
+  it.each([
+    ["points", "standard52"], ["points", "short32"],
+    ["practice", "standard52"], ["practice", "short32"],
+  ])("%s / %s 可点击 Roll 滑块和文字切换，并提交选中的房规", async (mode, variant) => {
+    api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
+    const host = document.createElement("div"), root = createRoot(host)
+    roots.add(root); document.body.append(host)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
+    await open(host)
+    for (const value of [mode, variant]) {
+      await act(async () => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`)!.click())
+    }
+    const toggle = document.querySelector<HTMLInputElement>('input[role="switch"]')!
+    const thumb = document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!
+    const control = document.querySelector<HTMLElement>('[data-slot="switch-control"]')!
+    const label = [...document.querySelectorAll<HTMLElement>('[data-slot="label"]')].find(node => node.textContent === "Roll 换牌")!
+    expect(toggle.checked).toBe(false)
+    await clickSwitchPart(thumb)
+    expect(toggle.checked).toBe(true)
+    await clickSwitchPart(label)
+    expect(toggle.checked).toBe(false)
+    await clickSwitchPart(control)
+    expect(toggle.checked).toBe(true)
+    await submit()
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ mode, variant, ruleOptions: { roll: true } }))
+  })
   it("默认名称使用当前昵称，每次新建重置名称，默认名称交由服务端补实际房间号", async () => {
     api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
     const host = document.createElement("div"), root = createRoot(host)
@@ -149,11 +183,18 @@ describe("建房请求身份", () => {
     expect(document.querySelector<HTMLFieldSetElement>("fieldset")?.disabled).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
     expect(document.querySelector('button[type="submit"]')?.textContent).toContain("创建中")
+    const roll = document.querySelector<HTMLInputElement>('input[role="switch"]')!
+    expect(roll.disabled).toBe(true)
+    await clickSwitchPart(document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!)
+    expect(roll.checked).toBe(false)
     await submit()
     expect(api.create).toHaveBeenCalledOnce()
     await act(async () => reject(new Error("创建失败")))
     expect(document.querySelector<HTMLFieldSetElement>("fieldset")?.disabled).toBe(false)
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false)
+    expect(roll.disabled).toBe(false)
+    await clickSwitchPart(document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!)
+    expect(roll.checked).toBe(true)
   })
   it("直接点选配置并调节座位后，提交对应房间参数", async () => {
     api.create.mockReset().mockResolvedValue({ roomCode: "5678" })

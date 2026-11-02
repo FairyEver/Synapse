@@ -311,8 +311,8 @@ describe("synapse tool router search", () => {
     }
 
     expect(misses.join("\n")).toBe("")
-    // 243 次真实检索实测约 15 秒，远超 vitest 默认的 5 秒超时。
-  }, 60_000)
+    // 368 次真实检索在本机约 35 秒，完整测试并行运行时更慢。
+  }, 120_000)
 
   it("routes by domain when the caller already narrowed it", async () => {
     const result = await searchSynapseTools({ query: "列表", domain: "automation", limit: 5 })

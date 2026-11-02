@@ -33,6 +33,16 @@ describe("desktop package scripts", () => {
     expect(packageJson.build?.files).toContain("node_modules/@synapse/shared/**/*")
   })
 
+  it("uses an electron-builder release that keeps pnpm deduped runtime dependencies", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+      readonly devDependencies?: Record<string, string>
+    }
+
+    const version = packageJson.devDependencies?.["electron-builder"] ?? ""
+    const [major, minor] = version.split(".").map(Number)
+    expect(major > 26 || (major === 26 && minor >= 18)).toBe(true)
+  })
+
   it("does not expose a committed E2E test script", () => {
     const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
       readonly scripts?: Record<string, string>
