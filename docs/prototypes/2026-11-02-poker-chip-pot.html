@@ -105,7 +105,21 @@
       for (let i = 0; i < count; i++) spare.push(value);
     }
     spare.forEach(value => addToCluster(stacks, value));
+    groupStackColors(stacks);
     return stacks;
+  }
+  // Keep each denomination in one continuous band, without exchanging or deleting chips.
+  function groupStackColors(stacks) {
+    stacks.forEach(stack => stack.chips.sort((a,b) => b - a));
+  }
+  function sortPotStacks() {
+    groupStackColors(potStacks);
+    potStacks.forEach((stack,index) => {
+      const nodes = [...pile.querySelectorAll(`[data-stack="${index}"]`)]
+        .sort((a,b) => Number(b.dataset.value) - Number(a.dataset.value));
+      nodes.forEach((node,level) => positionChip(node, stack, index, level));
+      pile.append(...nodes);
+    });
   }
   function positionChip(node, stack, index, level, seed = 0) {
     const key = seed * 991 + index * 131 + level * 17;
@@ -229,6 +243,8 @@
     status(`${name}下注 ${format(amount)}`);
     await Promise.all(transfers.map(({value,source}, index) => fly(value, source, index, run)));
     if (generation !== run) return;
+    // Sort only after every chip lands, so in-flight destinations remain accurate.
+    sortPotStacks();
     seats[seat].dataset.active = 'false';
     status(`${name}的筹码已入池`);
   }
@@ -240,6 +256,7 @@
     seats.forEach((node,i) => { node.dataset.active = 'false'; node.querySelector('.balance').textContent = format(balances[i]); node.querySelector('.receipt').textContent = initial ? '已下注 10' : '等待下注'; });
     seats.forEach((_,seat) => renderBank(seat));
     if (initial) for (let i = 0; i < 3; i++) { const node = reserveChip(10); node.style.visibility = 'visible'; total += 10; }
+    sortPotStacks();
     $('#pot-amount').textContent = format(total); pile.setAttribute('aria-label', `底池 ${total}`);
     setBusy(false); status(initial ? '准备下注' : '底池已清空');
   }
