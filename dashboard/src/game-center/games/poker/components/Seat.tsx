@@ -55,10 +55,13 @@ export function Seat({
       data-mine={seat.isMe}
       aria-label={`座位 ${seat.seatNo + 1} · ${seat.displayName}`}
     >
-      {!waiting && <div className="poker-seat-cards" data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!seat.hole}>
-        <Card card={seat.hole?.[0]} faceUp={!!seat.hole && dealt} />
-        <Card card={seat.hole?.[1]} faceUp={!!seat.hole && dealt} />
-      </div>}
+      <div className="poker-seat-objects">
+        {!waiting && <div className="poker-seat-cards" data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!seat.hole}>
+          <Card card={seat.hole?.[0]} faceUp={!!seat.hole && dealt} />
+          <Card card={seat.hole?.[1]} faceUp={!!seat.hole && dealt} />
+        </div>}
+        <PokerChipPile chips={chipBreakdown(displayStack)} label={`${seat.isMe ? "你" : seat.displayName}剩余筹码`} seed={seat.seatNo+1} className="poker-seat-bank" />
+      </div>
       <div className="poker-seat-plate" data-turn-pulse={turnPulse}>
         <span className="poker-seat-avatar" aria-hidden={!acting}>
           {seat.seatNo + 1}
@@ -97,7 +100,6 @@ export function Seat({
           </span>}
         <span className="poker-wager" data-seat={seat.seatNo} data-visible={showWager && seat.streetBet > 0} aria-label={`${seat.isMe ? "你" : seat.displayName} 本轮下注 ${amount(seat.streetBet)}`}><Coins aria-hidden="true" /><span title={amount(seat.streetBet)}>{amount(seat.streetBet)}</span></span>
       </div>
-      <PokerChipPile chips={chipBreakdown(displayStack)} label={`${seat.isMe ? "你" : seat.displayName}剩余筹码`} seed={seat.seatNo+1} className="poker-seat-bank" />
       {onInspect && <button type="button" className="poker-seat-info-trigger" aria-label={`查看${seat.isMe ? "你" : seat.displayName}的玩家信息`} onClick={event => onInspect(event.currentTarget)} />}
     </div>
   )

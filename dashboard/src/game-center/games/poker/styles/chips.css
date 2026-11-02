@@ -23,10 +23,8 @@
 .poker-canvas[data-table-shape] .poker-pot-row::after { content:none; }
 .poker-canvas[data-table-shape] .poker-pot-value { gap:4px; width:190px; }
 .poker-canvas[data-table-shape] .poker-roll-pot { font-size:56px; line-height:1.15; color:var(--foreground); }
-.poker-canvas[data-table-shape] .poker-seat-bank { position:absolute; left:calc(100% + 6px); bottom:0; width:150px; height:78px; --poker-chip-size:36px; }
-.poker-canvas[data-table-shape] .poker-seat[data-position="6"] .poker-seat-bank,.poker-canvas[data-table-shape] .poker-seat[data-position="7"] .poker-seat-bank,.poker-canvas[data-table-shape] .poker-seat[data-position="8"] .poker-seat-bank,.poker-canvas[data-table-shape] .poker-seat[data-position="9"] .poker-seat-bank { left:auto; right:calc(100% + 6px); }
+.poker-canvas[data-table-shape] .poker-seat-bank { width:100px; height:78px; --poker-chip-size:36px; }
 .poker-canvas[data-table-shape="portrait"] .poker-seat-bank { --poker-chip-size:44px; }
-.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="2"] .poker-seat-bank,.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="3"] .poker-seat-bank,.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="7"] .poker-seat-bank,.poker-canvas[data-table-shape="portrait"] .poker-seat[data-position="8"] .poker-seat-bank { left:50%; right:auto; bottom:auto; top:calc(100% + 4px); transform:translateX(-50%); }
 .poker-canvas[data-table-shape="portrait"] .poker-pot-value { width:180px; }
 .poker-canvas[data-table-shape="portrait"] .poker-pot-row { gap:22px; }
 .poker-chip-motion .poker-chip-transfer { display:contents; position:static; padding:0; background:none; box-shadow:none; animation:none; }

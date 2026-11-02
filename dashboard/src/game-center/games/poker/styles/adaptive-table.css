@@ -17,7 +17,8 @@
 .poker-canvas[data-table-shape] .poker-pause-reason { max-width: 420px; white-space: normal; text-align: center; margin: 0; font-size: var(--scene-label); }
 .poker-canvas[data-table-shape] .poker-seat { width: 190px; }
 .poker-canvas[data-table-shape] .poker-seat[data-mine="true"] { width: 200px; }
-.poker-canvas[data-table-shape] .poker-seat-cards { margin-bottom: 6px; }
+.poker-canvas[data-table-shape] .poker-seat-objects { display: flex; align-items: flex-end; justify-content: center; gap: 12px; margin-bottom: 6px; }
+.poker-canvas[data-table-shape] .poker-seat-cards { flex: none; margin-bottom: 0; }
 .poker-canvas[data-table-shape] .poker-seat-cards[data-card-size="sm"] { --cw: 56px; }
 .poker-canvas[data-table-shape] .poker-seat[data-mine="true"] .poker-seat-cards[data-card-size="sm"] { --cw: 80px; }
 .poker-canvas[data-table-shape] .poker-seat-plate { padding: 6px 10px; gap: 8px; border: 2px solid var(--border); box-shadow: none; background: var(--surface); }
