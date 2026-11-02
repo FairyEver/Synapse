@@ -1,4 +1,5 @@
 import type { Pot } from "../pots"
+import type { GameReserveLot, GameReserveClaim, GameReserveMovement } from "@synapse/shared/game-contracts"
 
 export interface ChipPaymentInput {
   payerId: string; resource: "chips" | "diamonds"; purpose: "bet" | "blind" | "roll" | "card"
@@ -12,3 +13,15 @@ export interface ChipPaymentQuote {
 }
 export interface FundedSeat { seatNo: number; nominalTotal: number; paidTotal: number; folded: boolean }
 export type FundedPot = Pot
+
+export interface ReservePerson { admissionId: string; userId: string; seatNo: number }
+export type ReserveLot = GameReserveLot
+export type ReserveClaim = GameReserveClaim
+export type ReserveMovement = GameReserveMovement
+export interface ReserveState { revision: number; lots: ReserveLot[]; claims: ReserveClaim[]; movements: ReserveMovement[]; finalized: boolean }
+export type ReserveOperation =
+  | { kind: "deposit"; payer: ReservePerson; recipients: readonly ReservePerson[]; amount: number; sourceId: string; sourceType: string }
+  | { kind: "steal"; actorAdmissionId: string; cap: number; target: "all" | "richest"; protectedAdmissions?: readonly string[] }
+  | { kind: "refund"; actorAdmissionId: string; lotId: string; cap?: number }
+  | { kind: "finalize" }
+export interface ReserveResult { state: ReserveState; amount: number; credits: Record<string, number>; debits: Record<string, number>; protectedAdmissions: string[] }

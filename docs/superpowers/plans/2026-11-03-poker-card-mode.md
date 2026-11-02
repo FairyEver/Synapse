@@ -142,11 +142,11 @@
 **Files:** Create `server/src/game/poker/engine/chips/reserve.ts`、`server/src/game/poker/engine/__tests__/reserve.spec.ts`；Modify `server/src/game/poker/engine/chips/types.ts`、`server/src/game/poker/engine/hand-runner.ts`。
 **Interfaces:** Produces `ReserveState/Operation/Result`、`ReserveLot/Claim/Movement`、`applyReserveOperation`；T9只持久化这里的已验证差量，不重算玩法。
 
-- [ ] **1. 写失败测试。** `deposit_120_steal_60_refund_60`断言A存120后B/C/D各40，B盗60后待分`[40,10,10]`，A取回仅60，B已到手60不追回；`split_deposits_same_beneficiary_loss`验证拆分批次不改变受益人总损失；39目标被44保护后实得0且不换次富者。 断言示例：`expect(afterSteal.claims.map(c=>c.remainingAmount)).toEqual([40,10,10]); expect(refundedAmount).toBe(60)`。
-- [ ] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/reserve.spec.ts`。
-- [ ] **3. 实现来源与两级同比转移。** 先按受益人再按来源拆分损失，同余按庄家左侧/原序号；保留盗者自己份额，资格按存入快照。最近批次在本次出牌前锁定，零额不成批次，已空不跳更早；每笔原始额等于剩余与各已转出去向之和。
-- [ ] **4. 同命令验证绿灯。** 覆盖部分退款、自己当前卡费不成退款目标、离桌/换座、群体盗取遇保护后重新分摊、定向不改选、最终分配重试不重复；每步核对钱包+真实底池+暂存守恒。
-- [ ] **5. 本地提交。** `git commit -m 'feat: 实现暂存来源账本及按份额盗取退款'`。
+- [x] **1. 写失败测试。** `deposit_120_steal_60_refund_60`断言A存120后B/C/D各40，B盗60后待分`[40,10,10]`，A取回仅60，B已到手60不追回；`split_deposits_same_beneficiary_loss`验证拆分批次不改变受益人总损失；39目标被44保护后实得0且不换次富者。 断言示例：`expect(afterSteal.claims.map(c=>c.remainingAmount)).toEqual([40,10,10]); expect(refundedAmount).toBe(60)`。
+- [x] **2. 运行红灯。** `pnpm --filter @synapse/server exec vitest run src/game/poker/engine/__tests__/reserve.spec.ts`。
+- [x] **3. 实现来源与两级同比转移。** 先按受益人再按来源拆分损失，同余按庄家左侧/原序号；保留盗者自己份额，资格按存入快照。最近批次在本次出牌前锁定，零额不成批次，已空不跳更早；每笔原始额等于剩余与各已转出去向之和。
+- [x] **4. 同命令验证绿灯。** 覆盖部分退款、自己当前卡费不成退款目标、离桌/换座、群体盗取遇保护后重新分摊、定向不改选、最终分配重试不重复；每步核对钱包+真实底池+暂存守恒。
+- [x] **5. 本地提交。** `git commit -m 'feat: 实现暂存来源账本及按份额盗取退款'`。
 
 
 ## Task 6: 扑克牌操作、候选与实体公开标记
