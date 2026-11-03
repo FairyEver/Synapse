@@ -331,14 +331,22 @@
   <script id="poker-model">
 const Poker = (() => {
   const cards = {
-    single: { name: '换牌术', art: '01', description: '指定一张底牌，从牌堆随机抽一张替换。', target: 'hole', draws: 1, price: 'normal', weight: 2 },
-    three: { name: '左右逢源', art: '06', description: '指定一张底牌，从三张随机候选中选一张替换。', target: 'hole', draws: 3, price: 'super', weight: 2 },
-    five: { name: '五选其一', art: '07', description: '随机锁定一张底牌，从五张随机候选中选一张替换。', draws: 5, price: 'super', weight: 3 },
-    double: { name: '重整旗鼓', art: '02', description: '随机抽两张新牌，替换你的两张底牌。', draws: 2, price: 'normal', weight: 4 },
-    preview: { name: '先知之眼', art: '11', description: '私下查看下一张公共牌。牌序改变后情报失效。' },
-    inspect: { name: '明察秋毫', art: '14', description: '私下查看一名未弃牌对手的两张底牌。', target: 'seat' },
-    draw: { name: '灵感迸发', art: '22', description: '从共享牌池抽两张能力牌。' },
-    counter: { name: '反制咒', art: '48', description: '阻止下一张以你为唯一目标的敌对能力牌。' },
+    single: { name: '换牌术', art: '01', description: '指定一张底牌，从牌堆随机抽一张替换。',
+      swapCount: 1, price: 'normal', weight: 2, play: { target: 'hole', cancelUntil: 'target-confirm', result: 'holes' } },
+    three: { name: '左右逢源', art: '06', description: '指定一张底牌，从三张随机候选中选一张替换。',
+      price: 'super', weight: 2, play: { target: 'hole', cancelUntil: 'target-confirm', candidates: 3, result: 'holes' } },
+    five: { name: '五选其一', art: '07', description: '随机锁定一张底牌，从五张随机候选中选一张替换。',
+      price: 'super', weight: 3, play: { cancelUntil: 'never', candidates: 5, result: 'holes' } },
+    double: { name: '重整旗鼓', art: '02', description: '随机抽两张新牌，替换你的两张底牌。',
+      swapCount: 2, price: 'normal', weight: 4, play: { cancelUntil: 'never', result: 'table' } },
+    preview: { name: '先知之眼', art: '11', description: '私下查看下一张公共牌。牌序改变后情报失效。',
+      play: { cancelUntil: 'never', result: 'intel' } },
+    inspect: { name: '明察秋毫', art: '14', description: '私下查看一名未弃牌对手的两张底牌。',
+      play: { target: 'seat', cancelUntil: 'target-confirm', result: 'intel' } },
+    draw: { name: '灵感迸发', art: '22', description: '从共享牌池抽两张能力牌。',
+      play: { cancelUntil: 'never', result: 'table' } },
+    counter: { name: '反制咒', art: '48', description: '阻止下一张以你为唯一目标的敌对能力牌。',
+      play: { cancelUntil: 'never', result: 'table' } },
   };
   const streets = { flop: '翻牌', turn: '转牌', river: '河牌' };
   const ranks = '23456789TJQKA';
@@ -428,12 +436,17 @@ const Poker = (() => {
     if (state.pending) return '请先选择换牌候选';
     if (state.phase !== 'active') return '轮到你行动时可使用';
     const def = cards[key];
-    if (def.draws && state.deck.length < def.draws) return '牌堆剩余牌不足';
+    const draws = def.play.candidates ?? def.swapCount ?? 0;
+    if (state.deck.length < draws) return '牌堆剩余牌不足';
     if (key === 'preview' && state.street === 'river') return '没有下一张公共牌';
     if (key === 'draw' && !state.abilityPool.length) return '能力牌池已空';
     if (key === 'counter' && state.shield) return '反制咒已生效';
     if (quote(state, key) >= state.seats[0].stack) return '筹码不足，使用后须至少保留 1 枚';
     return '';
+  }
+
+  function canCancelPlay(key, phase) {
+    return phase === 'target' && cards[key]?.play.cancelUntil === 'target-confirm';
   }
 
   function use(state, id, target, expected) {
@@ -443,8 +456,8 @@ const Poker = (() => {
     const reason = unavailable(state, key);
     if (reason) return reason;
     const def = cards[key];
-    if (def.target === 'hole' && target !== 0 && target !== 1) return '请选择一张底牌';
-    if (def.target === 'seat' && (target < 1 || !state.seats[target] || state.seats[target].folded)) return '请选择一名未弃牌的对手';
+    if (def.play.target === 'hole' && target !== 0 && target !== 1) return '请选择一张底牌';
+    if (def.play.target === 'seat' && (!Number.isInteger(target) || target < 1 || !state.seats[target] || state.seats[target].folded)) return '请选择一名未弃牌的对手';
     const amount = quote(state, key);
     if (expected !== amount) return '费用已变化，请按当前金额确认';
 
@@ -455,23 +468,24 @@ const Poker = (() => {
     state.hand = state.hand.filter(card => card.id !== id);
     const event = addLog(state, 'card', 0, { card: key, amount, result: '效果已结算' });
 
-    if (def.draws) {
+    const draws = def.play.candidates ?? def.swapCount;
+    if (draws) {
       state.exchanges++;
       state.intel = state.intel.filter(entry => entry.key !== 'preview');
-      const slot = key === 'five' ? randomIndex(state, 2) : target;
-      const drawn = takeRandom(state, def.draws);
-      if (key === 'single') {
-        const [old] = hero.holes.splice(slot, 1, drawn[0]);
+      const slot = def.play.candidates && !def.play.target ? randomIndex(state, 2) : target;
+      const drawn = takeRandom(state, draws);
+      if (def.play.candidates) {
+        state.pending = { key, candidates: drawn, slot, eventId: event.id, amount };
+        event.result = '等待选牌';
+      } else if (def.swapCount === 1) {
+        const [old] = hero.holes.splice(target, 1, drawn[0]);
         returnCards(state, [old]);
         event.result = '已替换一张底牌';
-      } else if (key === 'double') {
+      } else {
         const old = hero.holes;
         hero.holes = drawn;
         returnCards(state, old);
         event.result = '已替换两张底牌';
-      } else {
-        state.pending = { key, candidates: drawn, slot, eventId: event.id, amount };
-        event.result = '等待选牌';
       }
     } else if (key === 'preview') {
       state.intel = [{ key, label: '下一张公共牌', cards: [state.deck[1]] }, ...state.intel.filter(entry => entry.key !== key)];
@@ -496,13 +510,6 @@ const Poker = (() => {
     state.log.find(entry => entry.id === pending.eventId).result = '已替换一张底牌';
     state.pending = null;
     return null;
-  }
-
-  function preparePlay(state, id, target, expected) {
-    // Pending selections stay off the public table until the whole effect completes.
-    const draft = structuredClone(state);
-    const error = use(draft, id, target, expected);
-    return error ? { error } : { draft };
   }
 
   function pots(state) {
@@ -693,7 +700,7 @@ const Poker = (() => {
     return null;
   }
 
-  return { cards, streets, reset, quote, unavailable, use, preparePlay, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent };
+  return { cards, streets, reset, quote, unavailable, canCancelPlay, use, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent };
 })();
   </script>
   <script>
@@ -1041,7 +1048,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
 })();
 
 (() => {
-  const { cards, reset, quote, unavailable, preparePlay, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent } = Poker;
+  const { cards, reset, quote, unavailable, canCancelPlay, use, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent } = Poker;
   const streets = { ...Poker.streets, preflop: '翻前' };
   const assets = '../../dashboard/src/game-center/games/poker/assets/';
   const $ = selector => document.querySelector(selector);
@@ -1236,7 +1243,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       const def = cards[key];
       return '<button type="button" class="ability' + (unavailable(state, key) ? ' unavailable' : '') +
         '" data-card="' + instance.id + '" data-focus="card-' + instance.id +
-        '" aria-keyshortcuts="Enter Space"' + (def.target || key === 'five' || key === 'preview' ? ' aria-haspopup="dialog"' : '') +
+        '" aria-keyshortcuts="Enter Space"' + (def.play.target || def.play.candidates || def.play.result !== 'table' ? ' aria-haspopup="dialog"' : '') +
         ' aria-label="' + def.name + '，' + amount + ' 筹码">' +
         '<span class="price" aria-hidden="true">' + num(amount) + '</span>' + artwork(key) +
         '<span class="ability-name">' + def.name + '</span></button>';
@@ -1301,11 +1308,12 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     const def = cards[key];
     const amount = quote(state, key);
     const reason = unavailable(state, key);
+    const hint = reason || (def.play.candidates ? '拖到牌桌使用 · 亮出候选后不可取消' : '拖到牌桌使用');
     const preview = $('#card-preview');
     preview.innerHTML = '<div class="preview-face">' + artwork(key) + '<strong>' + def.name + '</strong></div>' +
       '<div class="preview-copy"><p>' + def.description + '</p><p class="fee">' +
       (amount ? num(amount) + ' 筹码' : '无需筹码') + '</p>' +
-      (reason ? '<p class="hint">' + reason + '</p>' : '<p class="hint">拖到牌桌使用</p>') + '</div>';
+      '<p class="hint">' + hint + '</p></div>';
     preview.hidden = false;
     const card = trigger.getBoundingClientRect();
     const dock = $('.poker-controls-anchor').getBoundingClientRect();
@@ -1334,20 +1342,21 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   function renderStage(focus) {
     const panel = $('#card-stage');
     const def = cards[stage.key];
-    const pending = stage.draft?.pending;
+    const pending = state.pending;
     const selecting = stage.mode === 'target' || stage.mode === 'candidate';
+    const cancellable = canCancelPlay(stage.key, stage.mode);
     let title;
     let content;
     let confirm = '';
     if (stage.mode === 'target') {
-      title = def.target === 'hole' ? '选择要替换的底牌' : '选择玩家';
-      const targets = def.target === 'hole' ? stageCards(state.seats[0].holes, 'target', stage.target) :
+      title = def.play.target === 'hole' ? '选择要替换的底牌' : '选择玩家';
+      const targets = def.play.target === 'hole' ? stageCards(state.seats[0].holes, 'target', stage.target) :
         '<div class="stage-options" role="group" aria-label="可选玩家">' + state.seats.map((seat, i) => i && !seat.folded ?
           '<button type="button" class="target-choice" data-target="' + i + '" data-focus="target-' + i +
           '" aria-pressed="' + (stage.target === i) + '">' + seat.name + '</button>' : '').join('') + '</div>';
       content = '<p class="stage-context">' + def.name + ' · ' + def.description + '</p>' + targets;
       confirm = '<button type="button" class="game-button" data-apply-target data-focus="stage-confirm"' +
-        (stage.target == null ? ' disabled' : '') + '>确认目标</button>';
+        (stage.target == null ? ' disabled' : '') + '>' + (def.play.candidates ? '确认并看候选' : '确认目标') + '</button>';
     } else if (stage.mode === 'candidate') {
       title = '选择一张';
       content = '<p class="stage-context">' + def.name + ' · 替换第 ' + (pending.slot + 1) + ' 张底牌</p>' +
@@ -1361,17 +1370,19 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       title = stage.resultTitle;
       content = stageResults(stage.result);
     }
-    const payment = selecting ? (stage.amount ? '完成后支付 ' + num(stage.amount) + ' 筹码' : '无需筹码') :
+    const payment = stage.mode === 'target' ? (stage.amount ? '确认后支付 ' + num(stage.amount) + ' 筹码' : '无需筹码') +
+      (def.play.candidates ? ' · 亮出后不可取消' : '') :
       (stage.amount ? '已支付 ' + num(stage.amount) + ' 筹码' : '');
     const done = '<button type="button" class="game-button" data-stage-close data-focus="stage-confirm">完成</button>';
-    const cancel = '<button type="button" class="text-action" data-stage-close>放弃使用</button>';
+    const cancel = cancellable ? '<button type="button" class="text-action" data-stage-close>放弃使用</button>' : '';
+    const close = !selecting || cancellable ?
+      '<button type="button" class="close-overlay" data-stage-close data-focus="stage-close" aria-label="关闭卡牌">' + icon('close') + '</button>' : '';
     const board = Array.from({ length: 5 }, (_, i) => tableCard(state.board[i])).join('');
     panel.innerHTML = '<div class="overlay-layout"><header class="stage-top"><div class="stage-hud">' +
       '<div class="round-context"><span>第 1 手</span><strong>' + streets[state.street] + '</strong></div>' +
       '<div class="hud-board" data-card-size="xs" aria-label="公共牌"><span class="hud-board-label">公共牌</span>' + board +
       '</div><div class="hud-right"><span class="time">' + icon('clock') + '5:00</span>' +
-      '<button type="button" class="close-overlay" data-stage-close data-focus="stage-close" aria-label="关闭卡牌">' + icon('close') +
-      '</button></div></div></header><div class="stage-content"><div class="stage-task">' +
+      close + '</div></div></header><div class="stage-content"><div class="stage-task">' +
       '<div class="stage-heading"><h2 id="stage-title" data-focus="stage-heading" tabindex="-1">' + title + '</h2></div>' + content +
       (stage.error ? '<p class="stage-error" role="alert">' + stage.error + '</p>' : '') +
       '<div class="stage-controls">' + (payment ? '<p class="payment">' + payment + '</p>' : '') +
@@ -1382,11 +1393,14 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
 
   function closeStage() {
     const previous = stage;
+    if (state.pending || (previous?.mode === 'target' && !canCancelPlay(previous.key, previous.mode))) {
+      return announce('候选已经亮出，请选一张完成换牌');
+    }
     const panel = $('#card-stage');
     stage = null;
     if (panel.open) panel.close();
     panel.innerHTML = '';
-    if (previous?.mode === 'target' || previous?.mode === 'candidate') {
+    if (previous?.mode === 'target') {
       announce('已放弃使用，卡牌已放回手里');
       focusAt('card-' + previous.id);
       hidePreview();
@@ -1397,12 +1411,12 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     }
   }
 
-  function commitStage(draft) {
+  function finishCardStage() {
     const { key, amount } = stage;
-    const showResult = $('#card-stage').open || key === 'preview';
-    state = draft;
+    const result = cards[key].play.result;
+    const showResult = result !== 'table';
     if (showResult) {
-      const isIntel = key === 'preview' || key === 'inspect';
+      const isIntel = result === 'intel';
       stage = {
         mode: 'done', key, amount,
         resultTitle: isIntel ? '私密情报' : '换牌完成',
@@ -1410,6 +1424,9 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       };
     } else {
       stage = null;
+      const panel = $('#card-stage');
+      if (panel.open) panel.close();
+      panel.innerHTML = '';
     }
     announce(cards[key].name + '已使用');
     render(showResult ? null : 'bet-call');
@@ -1417,7 +1434,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   }
 
   function resolveStage() {
-    const { draft, error } = preparePlay(state, stage.id, stage.target, stage.amount);
+    const error = use(state, stage.id, stage.target, stage.amount);
     if (error) {
       announce(error);
       if ($('#card-stage').open) {
@@ -1427,13 +1444,13 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       } else stage = null;
       return;
     }
-    if (draft.pending) {
+    if (state.pending) {
       stage.mode = 'candidate';
-      stage.draft = draft;
       stage.error = '';
+      render();
       renderStage('choice-0');
     } else {
-      commitStage(draft);
+      finishCardStage();
     }
   }
 
@@ -1447,7 +1464,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     hidePreview();
     closeLog();
     stage = { id, key, amount: quote(state, key), target: null };
-    if (cards[key].target) {
+    if (cards[key].play.target) {
       stage.mode = 'target';
       renderStage('stage-heading');
     } else {
@@ -1549,6 +1566,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   }
 
   function start() {
+    if (state?.pending) return;
     endDrag();
     if ($('#card-stage').open) $('#card-stage').close();
     $('#card-stage').innerHTML = '';
@@ -1796,9 +1814,9 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       stage.candidate = Number(target.dataset.choice);
       renderStage('choice-' + stage.candidate);
     } else if (target.hasAttribute('data-confirm-choice')) {
-      const problem = choose(stage.draft, stage.candidate);
+      const problem = choose(state, stage.candidate);
       if (problem) return announce(problem);
-      commitStage(stage.draft);
+      finishCardStage();
     } else if (target.hasAttribute('data-bet')) {
       const contribution = (chosenBet ?? betOptions()[0].to) - state.seats[0].streetBet;
       const problem = bet(state, target.dataset.bet, contribution);
