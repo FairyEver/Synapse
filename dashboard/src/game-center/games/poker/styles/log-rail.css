@@ -1,5 +1,5 @@
 .poker-immersive[data-control-layout] .poker-table-layout:has(> .poker-log-rail) {
-  grid-template-columns: minmax(0, 1fr) 3rem;
+  grid-template-columns: minmax(0, 1fr) 3.25rem;
 }
 .poker-immersive[data-control-layout] .poker-table-layout:has(> .poker-log-rail) .poker-edge-controls {
   grid-column: 1 / -1;
@@ -10,29 +10,58 @@
   border-top: 0;
 }
 .poker-log-rail {
+  --poker-log-command-size: 2.5rem;
+  --poker-log-entry-size: 1.75rem;
+  --poker-log-row-size: calc(var(--poker-log-entry-size) + 0.5rem);
+  --poker-log-gap: 0.25rem;
   grid-area: 2 / 2;
   display: flex;
   flex-direction: column;
+  align-items: center;
   min-height: 0;
-  gap: 0.25rem;
+  gap: var(--poker-log-gap);
   padding: 0.25rem 0.125rem;
+  container-type: size;
+}
+.poker-log-command {
+  flex: none;
+  inline-size: var(--poker-log-command-size);
+  block-size: var(--poker-log-command-size);
+  padding-inline: 0.25rem;
 }
 .poker-log-entries {
   display: flex;
   flex-direction: column;
   align-items: center;
+  inline-size: 100%;
   min-height: 0;
-  gap: 0.25rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  padding-block: 0.1875rem;
+  scroll-snap-type: y mandatory;
+}
+@supports (block-size: round(down, 2px, 1px)) {
+  .poker-log-entries {
+    /* Leave space for three commands and keep both scroll edges between event rows. */
+    --poker-log-space: calc(100cqh - 3 * (var(--poker-log-command-size) + var(--poker-log-gap)));
+    max-block-size: max(0px, round(down, var(--poker-log-space), var(--poker-log-row-size)));
+  }
+}
+.poker-log-entries > li {
+  display: grid;
+  flex: none;
+  place-items: center;
+  block-size: var(--poker-log-row-size);
+  scroll-snap-align: start;
+}
+@media (any-pointer: coarse) {
+  .poker-log-rail { --poker-log-entry-size: 2.5rem; }
 }
 .poker-log-entry {
   --button-bg-hover: transparent;
   --button-bg-pressed: transparent;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
+  inline-size: var(--poker-log-entry-size);
+  block-size: var(--poker-log-entry-size);
   border-radius: var(--radius-sm);
 }
 .poker-log-entry-visual {
@@ -98,27 +127,6 @@
   inline-size: 1rem;
   block-size: 1rem;
   color: var(--muted);
-}
-
-.poker-log-open, .poker-log-end {
-  width: 100%;
-  flex: none;
-  gap: 0.125rem;
-  padding-inline: 0;
-  font-size: 0.6875rem;
-  white-space: nowrap;
-}
-.poker-log-open {
-  flex-direction: column;
-  min-height: 2.75rem;
-  padding-block: 0.25rem;
-}
-.poker-log-end { color: var(--muted); }
-.poker-log-end svg { width: 0.75rem; height: 0.75rem; }
-.poker-log-rail:has(.poker-log-end) .poker-log-entries { border-block: 1px solid var(--separator); }
-@media (any-pointer: coarse) {
-  .poker-log-entry { inline-size: 2.5rem; block-size: 2.5rem; }
-  .poker-log-end { min-height: 2.5rem; }
 }
 
 .poker-history-dialog {

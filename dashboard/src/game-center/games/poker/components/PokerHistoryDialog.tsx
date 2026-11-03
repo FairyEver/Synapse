@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState } from "react"
 import { Button, Modal } from "@heroui/react"
-import { ArrowDownToLine, ArrowUpToLine, History, PinOff } from "lucide-react"
+import { ArrowDownToLine, ArrowUpToLine, PinOff } from "lucide-react"
 import { logEntryLabel } from "../lib/log-appearance"
 import { pokerLogItemLabel, type PokerLogGroup } from "../lib/log-items"
 import { PokerLogDetails, PokerLogGlyph } from "./PokerLogDetails"
@@ -17,8 +17,8 @@ type Props = {
 
 export function PokerHistoryDialog({ open, onOpenChange, groups, complete, initialItemId, handNo, practice }: Props) {
   return <Modal isOpen={open} onOpenChange={onOpenChange}>
-    <Button type="button" variant="secondary" size="sm" className="poker-log-open" isDisabled={!groups.length}>
-      <History aria-hidden="true" />查看全部
+    <Button type="button" variant="secondary" size="sm" className="poker-log-command" aria-label="查看全部" isDisabled={!groups.length}>
+      全部
     </Button>
     <Modal.Backdrop className="font-sans text-foreground scheme-light">
       <Modal.Container size="lg" placement="center" scroll="inside">

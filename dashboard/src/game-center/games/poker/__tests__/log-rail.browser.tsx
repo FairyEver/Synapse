@@ -95,13 +95,42 @@ it.each([[1280, 800], [390, 667]])("%s×%s 展开本手历史，按轮次预览�
   try {
     const rail = page.getByRole("complementary", { name: "本手公开日志" })
     const railList = rail.getByRole("list").element()
-    await rail.getByRole("button", { name: "跳到开局记录" }).click()
+    const trigger = rail.getByRole("button", { name: "查看全部" })
+    const newest = rail.getByRole("button", { name: "跳到最新记录" })
+    const oldest = rail.getByRole("button", { name: "跳到开局记录" })
+    const railBox = rail.element().getBoundingClientRect()
+    for (const control of [trigger, newest, oldest]) {
+      const button = control.element()
+      const range = document.createRange()
+      range.selectNodeContents(button)
+      const content = range.getBoundingClientRect()
+      const box = button.getBoundingClientRect()
+      expect(box.height).toBeGreaterThanOrEqual(40)
+      expect(box.left - railBox.left).toBeGreaterThanOrEqual(6)
+      expect(railBox.right - box.right).toBeGreaterThanOrEqual(6)
+      expect(content.left - box.left).toBeGreaterThanOrEqual(5)
+      expect(box.right - content.right).toBeGreaterThanOrEqual(5)
+      expect(content.top - box.top).toBeGreaterThanOrEqual(5)
+      expect(box.bottom - content.bottom).toBeGreaterThanOrEqual(5)
+    }
+    const hasClippedRow = () => {
+      const viewport = railList.getBoundingClientRect()
+      return Array.from(railList.children).some(row => {
+        const box = row.getBoundingClientRect()
+        return box.bottom > viewport.top + 1 && box.top < viewport.bottom - 1 &&
+          (box.top < viewport.top - 1 || box.bottom > viewport.bottom + 1)
+      })
+    }
+    await oldest.click()
     expect(railList.scrollHeight).toBeGreaterThan(railList.clientHeight)
     expect(railList.scrollTop).toBe(railList.scrollHeight - railList.clientHeight)
-    await rail.getByRole("button", { name: "跳到最新记录" }).click()
+    expect(hasClippedRow()).toBe(false)
+    await newest.click()
     expect(railList.scrollTop).toBe(0)
+    expect(hasClippedRow()).toBe(false)
+    railList.scrollTop = 73
+    await expect.poll(hasClippedRow).toBe(false)
 
-    const trigger = rail.getByRole("button", { name: "查看全部" })
     await trigger.click()
     const dialog = page.getByRole("dialog", { name: "对局历史" })
     const detail = dialog.getByRole("region", { name: "事件详情" })

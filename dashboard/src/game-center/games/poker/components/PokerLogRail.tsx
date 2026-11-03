@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Button, Popover, popoverVariants } from "@heroui/react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
-import { ArrowDownToLine, ArrowUpToLine } from "lucide-react"
 import { pokerLogGroups, pokerLogItemLabel } from "../lib/log-items"
 import { PokerHistoryDialog } from "./PokerHistoryDialog"
 import { PokerLogDetails, PokerLogGlyph } from "./PokerLogDetails"
@@ -80,9 +79,9 @@ function HandLogRail({ table, historyOpen, onHistoryOpenChange }: Props) {
     <aside ref={rail} className="poker-log-rail text-foreground" aria-label="本手公开日志">
       <PokerHistoryDialog open={historyOpen} onOpenChange={changeHistory} groups={groups} complete={complete}
         initialItemId={initialItemId} handNo={table.handNo} practice={table.mode === "practice"} />
-      {items.length > 0 && <Button type="button" variant="ghost" size="sm" className="poker-log-end"
+      {items.length > 0 && <Button type="button" variant="ghost" size="sm" className="poker-log-command text-muted"
         aria-label="跳到最新记录" onPress={() => jump(false)}>
-        <ArrowUpToLine aria-hidden="true" />最新
+        最新
       </Button>}
       <ol ref={entriesRef} className="poker-log-entries" aria-label="从最新到最早">
         {items.map(item => {
@@ -117,9 +116,9 @@ function HandLogRail({ table, historyOpen, onHistoryOpenChange }: Props) {
           </li>
         })}
       </ol>
-      {items.length > 0 && <Button type="button" variant="ghost" size="sm" className="poker-log-end"
+      {items.length > 0 && <Button type="button" variant="ghost" size="sm" className="poker-log-command text-muted"
         aria-label={complete ? "跳到开局记录" : "跳到最早记录"} onPress={() => jump(true)}>
-        <ArrowDownToLine aria-hidden="true" />{complete ? "开局" : "最早"}
+        {complete ? "开局" : "最早"}
       </Button>}
     </aside>
     {/* Use the board for collision bounds and the viewport for popover coordinates. */}
