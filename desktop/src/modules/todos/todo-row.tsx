@@ -1,12 +1,17 @@
 import { Calendar, Bell, MoreHorizontal } from "lucide-react"
 import type { MouseEvent } from "react"
-import type { TodoItemDto } from "@synapse/shared/todo-contracts"
+import { TODO_PRIORITIES, type TodoItemDto, type TodoPriority } from "@synapse/shared/todo-contracts"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { priorityLabels, TodoPriorityBadge } from "./todo-priority"
 import { formatTodoInstant } from "./todo-time"
 
-export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, onCopy }: { item: TodoItemDto; disabled: boolean; onOpen: () => void; onEdit: () => void; onComplete: () => void; onDelete: () => void; onCopy: () => void }) {
+export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, onCopy, onPriority }: {
+  item: TodoItemDto; disabled: boolean; onOpen: () => void; onEdit: () => void; onComplete: () => void
+  onDelete: () => void; onCopy: () => void; onPriority: (priority: TodoPriority | null) => void
+}) {
+  const priority = item.priority ?? "none"
   const overdue = !item.completedAt && !!item.dueAt && new Date(item.dueAt).getTime() < Date.now()
   const handleOpen = (event: MouseEvent<HTMLButtonElement>) => {
     const selection = event.currentTarget.ownerDocument.getSelection()
@@ -14,7 +19,7 @@ export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, 
       && selection.getRangeAt(0).intersectsNode(event.currentTarget)) return
     onOpen()
   }
-  return <li className="flex items-center gap-4 px-5 py-4">
+  return <li className="flex items-center gap-2 px-3 py-3 sm:gap-4 sm:px-5">
     <Checkbox checked={!!item.completedAt} disabled={disabled} data-track="todos.complete" aria-label={`${item.completedAt ? "恢复" : "完成"} ${item.title}`} onCheckedChange={onComplete} />
     <button type="button" data-track="todos.open" data-allow-select="true" className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-ring" onClick={handleOpen}>
       <span className={`block break-words text-sm font-medium ${item.completedAt ? "text-muted-foreground line-through" : ""}`}>{item.title}</span>
@@ -24,6 +29,24 @@ export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, 
         {item.remindAt && <span className="flex items-center gap-1"><Bell className="size-3.5" />{item.reminderStatus === "sent" ? "已提醒" : item.reminderStatus === "cancelled" ? "提醒已取消" : item.reminderStatus === "expired" ? "提醒已过期" : `提醒 ${formatTodoInstant(item.remindAt)}`}</span>}
       </span>}
     </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" className="min-w-14 shrink-0 text-xs text-muted-foreground" data-track="todos.row-priority"
+          aria-label={`${item.title}的优先级：${priorityLabels[priority]}`} disabled={disabled}>
+          {item.priority ? <TodoPriorityBadge priority={item.priority} /> : priorityLabels.none}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" aria-label="设置优先级">
+        <DropdownMenuRadioGroup value={priority}>
+          {(["none", ...TODO_PRIORITIES] as const).map((value) =>
+            <DropdownMenuRadioItem key={value} value={value} data-track="todos.set-priority"
+              onSelect={() => onPriority(value === "none" ? null : value)}>
+              {priorityLabels[value]}
+            </DropdownMenuRadioItem>,
+          )}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
     <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" data-track="todos.menu" aria-label={`${item.title}的操作`} disabled={disabled}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
       <DropdownMenuGroup>
         <DropdownMenuItem data-track="todos.edit" onSelect={onEdit}>编辑</DropdownMenuItem>

@@ -1,12 +1,20 @@
 export const TODO_REMINDER_KINDS = ["none", "at_due", "before_due", "custom"] as const
 export const TODO_REMINDER_STATUSES = ["none", "pending", "sent", "cancelled", "expired"] as const
 export const TODO_REMINDER_OFFSETS = [10, 60, 1440] as const
+export const TODO_PRIORITIES = ["high", "medium", "low"] as const
+export const TODO_PRIORITY_FILTERS = [...TODO_PRIORITIES, "none"] as const
+export const TODO_SORTS = ["due", "priority"] as const
+export const TODO_PRIORITY_HEADER = "x-synapse-todo-priority"
 export type TodoFilter = "pending" | "all"
+export type TodoPriority = typeof TODO_PRIORITIES[number]
+export type TodoPriorityFilter = typeof TODO_PRIORITY_FILTERS[number]
+export type TodoSort = typeof TODO_SORTS[number]
 export type TodoReminderKind = typeof TODO_REMINDER_KINDS[number]
 export type TodoReminderStatus = typeof TODO_REMINDER_STATUSES[number]
 export interface TodoFieldsInput {
   title: string
   note?: string | null
+  priority?: TodoPriority | null
   dueAt?: string | null
   reminder?: TodoReminderKind
   offsetMinutes?: 10 | 60 | 1440 | null
@@ -16,11 +24,19 @@ export type TodoCreateInput = TodoFieldsInput & { clientRequestId: string }
 export type TodoUpdateInput = Partial<TodoFieldsInput> & { expectedVersion: number; clientRequestId: string }
 export interface TodoCompletionInput { completed: boolean; expectedVersion: number; clientRequestId: string }
 export interface TodoDeleteInput { expectedVersion: number; clientRequestId: string }
-export interface TodoListInput { filter?: TodoFilter; query?: string; offset?: number; limit?: number }
+export interface TodoListInput {
+  filter?: TodoFilter
+  priority?: TodoPriorityFilter
+  sort?: TodoSort
+  query?: string
+  offset?: number
+  limit?: number
+}
 export interface TodoItemDto {
   id: string
   title: string
   note: string | null
+  priority?: TodoPriority | null
   dueAt: string | null
   reminder: TodoReminderKind
   offsetMinutes: 10 | 60 | 1440 | null

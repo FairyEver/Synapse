@@ -1,12 +1,13 @@
 import { BadRequestException } from "@nestjs/common"
 import { z } from "zod"
-import { countTodoCodePoints, isValidTodoText, parseTodoInstant, TODO_REMINDER_KINDS, type TodoFieldsInput, type TodoReminderKind } from "@synapse/shared/todo-contracts"
+import { countTodoCodePoints, isValidTodoText, parseTodoInstant, TODO_PRIORITIES, TODO_PRIORITY_FILTERS, TODO_REMINDER_KINDS, TODO_SORTS, type TodoFieldsInput, type TodoPriority, type TodoReminderKind } from "@synapse/shared/todo-contracts"
 
 const text = (limit: number) => z.string().refine(isValidTodoText, "包含无效字符").refine((value) => countTodoCodePoints(value) <= limit, `最多 ${limit} 个字符`)
 const instant = z.string().refine((value) => parseTodoInstant(value) !== null, "使用带时区的分钟精度时间").transform((value) => parseTodoInstant(value)!.toISOString())
 const fields = {
   title: z.string().trim().pipe(text(200)).refine((value) => value.length > 0, "标题必填"),
   note: text(10000).transform((value) => value.trim() ? value : null).nullable().optional(),
+  priority: z.enum(TODO_PRIORITIES).nullable().optional(),
   dueAt: instant.nullable().optional(),
   reminder: z.enum(TODO_REMINDER_KINDS).optional(),
   offsetMinutes: z.union([z.literal(10), z.literal(60), z.literal(1440)]).nullable().optional(),
@@ -19,6 +20,8 @@ export const todoCompletionSchema = z.object({ completed: z.boolean(), ...precon
 export const todoDeleteSchema = z.object(preconditions).strict()
 export const todoListSchema = z.object({
   filter: z.enum(["pending", "all"]).default("pending"),
+  priority: z.enum(TODO_PRIORITY_FILTERS).optional(),
+  sort: z.enum(TODO_SORTS).optional(),
   query: text(200).optional(),
   offset: z.coerce.number().int().min(0).max(2147483647).default(0),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -26,6 +29,7 @@ export const todoListSchema = z.object({
 export interface NormalizedTodoFields {
   title: string
   note: string | null
+  priority: TodoPriority | null
   dueAt: Date | null
   reminder: TodoReminderKind
   offsetMinutes: number | null
@@ -34,6 +38,7 @@ export interface NormalizedTodoFields {
 export function normalizeTodoFields(input: Partial<TodoFieldsInput>, current: NormalizedTodoFields | null, now: Date, options: { validateFuture?: boolean } = {}): NormalizedTodoFields {
   const title = input.title ?? current?.title ?? ""
   const note = input.note === undefined ? current?.note ?? null : input.note
+  const priority = input.priority === undefined ? current?.priority ?? null : input.priority
   const dueAt = input.dueAt === undefined ? current?.dueAt ?? null : input.dueAt === null ? null : new Date(input.dueAt)
   const reminder = input.reminder ?? current?.reminder ?? "none"
   let offsetMinutes = input.offsetMinutes === undefined ? current?.offsetMinutes ?? null : input.offsetMinutes
@@ -51,5 +56,5 @@ export function normalizeTodoFields(input: Partial<TodoFieldsInput>, current: No
   }
   const changed = !current || current.reminder !== reminder || current.offsetMinutes !== offsetMinutes || current.remindAt?.getTime() !== remindAt?.getTime()
   if (options.validateFuture !== false && changed && remindAt && remindAt <= now) throw new BadRequestException({ code: "TODO_REMINDER_IN_PAST", message: "提醒时间必须晚于当前时间" })
-  return { title, note, dueAt, reminder, offsetMinutes, remindAt }
+  return { title, note, priority, dueAt, reminder, offsetMinutes, remindAt }
 }

@@ -8,12 +8,14 @@ Use this domain for “记录到待办事项”, querying, editing, completing, 
 
 ## Operation flow
 
-- Create: `app_todos_item_create`, with a title and fresh UUID `clientRequestId`. Note, due time and reminder are optional; reminder defaults to `none`.
-- List: `app_todos_item_list`, default `pending`; `all` includes completed. Literal case-insensitive title/note search. Defaults `offset=0`, `limit=50`, maximum 100. Follow `nextOffset` until null; do not infer uniqueness from the first page. Restart at zero when filters change; concurrent changes may cause repeats/omissions.
+- Create with `app_todos_item_create`, a title, and a fresh UUID `clientRequestId`. Priority, note, deadline, and reminder are optional. Priority defaults to unassigned and reminder defaults to `none`.
+- List with `app_todos_item_list`. Completion defaults to `pending` and `all` includes completed. Search title and note with a literal case-insensitive match. Filter by `priority` or sort pending items with `sort: "priority"`. Defaults are `offset=0` and `limit=50`, with a maximum of 100. Follow `nextOffset` until null to check uniqueness. Restart at zero when filters or sort change. Concurrent changes can cause repeats or omissions.
 - Read: `app_todos_item_get`, with exactly one `id` or complete copied `reference`, unchanged. Reading neither opens UI nor marks notifications read nor changes completion.
 - Edit/complete/restore/delete: locate a unique item, freshly get it, and pass `id` and its `version` as `expectedVersion`. Edit with `app_todos_item_update`; complete/restore with `app_todos_item_set_completed` and `completed=true/false`; delete with `app_todos_item_delete`. Deletion has no restore.
 
 Clear target and user authorization: execute CRUD directly, without extra formal confirmation. “删除续费域名” matching two items: ask which before deleting; do not choose by position. A reference identifies an item but does not alone authorize a write.
+
+Set priority to `high`, `medium`, or `low` when requested. Use `priority: null` in an update to clear it. Omit `priority` when editing another field. For list filters only, `priority: "none"` selects unassigned items.
 
 ## Time and reminder rules
 

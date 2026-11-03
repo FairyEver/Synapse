@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Plus } from "lucide-react"
 import { toast } from "sonner"
-import type { TodoItemDto } from "@synapse/shared/todo-contracts"
+import type { TodoItemDto, TodoPriority } from "@synapse/shared/todo-contracts"
 import { useAccount } from "@/app-shell/account"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
-import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { TodoOpenRequest } from "../apps/types"
 import { useTodos } from "./use-todos"
 import { useTodoEditor } from "./use-todo-editor"
 import { useTodoTarget } from "./use-todo-target"
 import { TodoList } from "./todo-list"
+import { TodoListControls } from "./todo-list-controls"
+import { TodoQuickCreate } from "./todo-quick-create"
 import { TodoEditor } from "./todo-editor"
 import { TodoDetail } from "./todo-detail"
-import { todoErrorMessage } from "./todo-state"
+import { todoErrorMessage, type TodoListView } from "./todo-state"
 
 const tabs = [{ id: "pending" as const, label: "未完成" }, { id: "all" as const, label: "全部" }]
 export function TodosModule({ openRequest, onOpenRequestConsumed }: { openRequest?: TodoOpenRequest | null; onOpenRequestConsumed?: (requestId: string) => void } = {}) {
@@ -32,19 +32,36 @@ export function TodosModule({ openRequest, onOpenRequestConsumed }: { openReques
   const selectAll = useCallback(() => todos.setFilter("all"), [todos.setFilter])
   const target = useTodoTarget({ request: openRequest, ready: todos.authenticated, generation: todos.generation, blocked: !!editor.draft || editor.saving, open: showDetail, selectAll, consumed: onOpenRequestConsumed })
   useEffect(() => { setDetail(null); deleteLock.current = false; setDeleting(null); setDeleteBusy(false) }, [todos.generation])
-  const create = () => { target.cancel(); setDetail(null); editor.open() }
   const open = (item: TodoItemDto) => { target.cancel(); showDetail(item) }
   const edit = (item: TodoItemDto) => { target.cancel(); setDetail(null); editor.open(item) }
   const complete = async (item: TodoItemDto) => { target.cancel(); try { await todos.setCompleted(item, !item.completedAt) } catch (cause) { toast.error(todoErrorMessage(cause)) } }
   const remove = async () => { if (!deleting || deleteLock.current) return; const identity = todos.generation; deleteLock.current = true; setDeleteBusy(true); try { await todos.remove(deleting); if (currentGeneration.current === identity) setDeleting(null) } catch (cause) { if (currentGeneration.current === identity) toast.error(todoErrorMessage(cause)) } finally { if (currentGeneration.current === identity) { deleteLock.current = false; setDeleteBusy(false) } } }
   const copy = async (item: TodoItemDto) => { try { await navigator.clipboard.writeText(`synapse://todos/${item.id}`); toast("ID 已复制") } catch { toast.error("复制失败") } }
   const undo = async () => { try { await todos.undoCompletion() } catch (cause) { toast.error(todoErrorMessage(cause)) } }
-  return <SystemAppWindowShell tabs={tabs} value={todos.filter} onValueChange={(filter) => { target.cancel(); todos.setFilter(filter) }} actions={<SystemAppTopBarActionButton type="button" data-track="todos.new" onClick={create} disabled={!todos.authenticated || !todos.online}><Plus data-icon="inline-start" />新建待办</SystemAppTopBarActionButton>}>
-    <ScrollArea className="h-full"><div className="mx-auto max-w-4xl space-y-4 p-6">
+  const changePriorityFilter = (value: TodoListView["priority"]) => { target.cancel(); todos.setViewOption("priority", value) }
+  const changePriority = async (item: TodoItemDto, priority: TodoPriority | null) => {
+    target.cancel()
+    const generation = todos.generation
+    try { await todos.setPriority(item, priority) }
+    catch (cause) { if (currentGeneration.current === generation) toast.error(todoErrorMessage(cause)) }
+  }
+  const filteredByPriority = todos.priority !== "all"
+  const emptyTitle = filteredByPriority ? "没有符合筛选条件的待办" : todos.filter === "all" ? "没有待办事项" : "没有未完成事项"
+  return <SystemAppWindowShell tabs={tabs} value={todos.filter} onValueChange={(filter) => { target.cancel(); todos.setFilter(filter) }}>
+    <ScrollArea className="h-full"><div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-6">
       {!todos.authenticated ? <div className="flex items-center gap-3 text-sm"><span>登录后查看待办事项</span><Button type="button" onClick={() => void startLogin()}>登录</Button></div> : <>
         {(todos.error || target.error || !todos.online) && <div role="alert" className="flex items-center justify-between gap-3 text-sm text-destructive"><span>{target.error ?? todos.error ?? "连接失败，请重试"}</span><Button type="button" variant="outline" onClick={() => void (target.error ? target.retry() : todos.refresh())} disabled={todos.loading}>重试</Button></div>}
         {todos.undo && <div role="status" className="flex items-center justify-between gap-3 text-sm"><span>已完成</span><Button type="button" variant="ghost" onClick={() => void undo()} disabled={!todos.online}>撤销</Button></div>}
-        <TodoList emptyTitle={todos.filter === "all" ? "没有待办事项" : "没有未完成事项"} items={todos.items} loading={todos.loading} error={todos.error} more={todos.nextOffset !== null} disabled={!todos.online} writingIds={todos.writingIds} onNew={create} onOpen={open} onEdit={edit} onComplete={(item) => void complete(item)} onDelete={(item) => { target.cancel(); deletingGeneration.current = todos.generation; setDeleting(item) }} onCopy={(item) => void copy(item)} onMore={() => void todos.loadMore()} />
+        <TodoQuickCreate key={todos.generation} generation={todos.generation} online={todos.online} priorityFilter={todos.priority} onSaved={todos.refresh} />
+        <TodoListControls priority={todos.priority} sort={todos.sort} onPriorityChange={changePriorityFilter}
+          onSortChange={(sort) => todos.setViewOption("sort", sort)} />
+        <TodoList emptyTitle={emptyTitle} items={todos.items} loading={todos.loading} error={todos.error}
+          more={todos.nextOffset !== null} disabled={!todos.online} writingIds={todos.writingIds}
+          onClearPriority={filteredByPriority ? () => changePriorityFilter("all") : undefined}
+          onPriority={(item, priority) => void changePriority(item, priority)}
+          onOpen={open} onEdit={edit} onComplete={(item) => void complete(item)}
+          onDelete={(item) => { target.cancel(); deletingGeneration.current = todos.generation; setDeleting(item) }}
+          onCopy={(item) => void copy(item)} onMore={() => void todos.loadMore()} />
       </>}
     </div></ScrollArea>
     <TodoDetail item={detailItem} disabled={!todos.online || !!detailItem && todos.writingIds.has(detailItem.id)} onClose={() => setDetail(null)} onEdit={edit} />

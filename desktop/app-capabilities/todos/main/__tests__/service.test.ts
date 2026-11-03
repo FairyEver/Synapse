@@ -42,7 +42,16 @@ describe("TodoCloudService", () => {
     const [url, init] = account.fetchAuthenticated.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe("/todos")
     expect(JSON.parse(String(init.body))).toEqual(input)
-    expect(init.headers).toEqual({ "Content-Type": "application/json" })
+    expect(init.headers).toEqual({ "Content-Type": "application/json", "x-synapse-todo-priority": "1" })
+  })
+  it("forwards priority pagination and accepts a negotiated response", async () => {
+    const { account, service } = harness()
+    const page = { items: [{ ...todoFixture, priority: "high" }], nextOffset: 3 }
+    account.fetchAuthenticated.mockResolvedValueOnce(Response.json(page))
+    expect(await service.list({ priority: "high", sort: "priority", offset: 2, limit: 1 })).toEqual(page)
+    const [url, init] = account.fetchAuthenticated.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toContain("priority=high&sort=priority&offset=2&limit=1")
+    expect(init.headers).toEqual({ "x-synapse-todo-priority": "1" })
   })
   it("rejects malformed locators without any network call", async () => {
     const { account, service } = harness()

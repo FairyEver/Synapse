@@ -10,12 +10,12 @@ const page: TodoPageDto = JSON.parse(readFileSync(resolve("../shared/fixtures/to
 describe("shared Todo wire fixture", () => {
   it("serializes actual database dates and excludes private persistence fields", () => {
     const items = page.items.map((item) => {
-      const row: TodoItem = { ...item, userId: "private-owner", createRequestId: "private-request", createRequestHash: "private-hash", deletedAt: null,
+      const row: TodoItem = { ...item, priority: item.priority ?? null, userId: "private-owner", createRequestId: "private-request", createRequestHash: "private-hash", deletedAt: null,
         dueAt: item.dueAt ? new Date(item.dueAt) : null, remindAt: item.remindAt ? new Date(item.remindAt) : null,
         completedAt: item.completedAt ? new Date(item.completedAt) : null, createdAt: new Date(item.createdAt), updatedAt: new Date(item.updatedAt) }
       return todoDto(row)
     })
-    expect({ items, nextOffset: null }).toEqual(page)
+    expect({ items, nextOffset: null }).toEqual({ ...page, items: page.items.map((item) => ({ ...item, priority: null })) })
     expect(JSON.stringify(items)).not.toContain("private-")
   })
 })

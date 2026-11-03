@@ -1526,6 +1526,12 @@ enum TodoReminderStatus {
   expired
 }
 
+enum TodoPriority {
+  high
+  medium
+  low
+}
+
 model TodoItem {
   id                 String @id @default(cuid())
   userId             String
@@ -1533,6 +1539,7 @@ model TodoItem {
   user               User @relation(fields: [userId], references: [id], onDelete: Cascade)
   title              String
   note               String?
+  priority           TodoPriority?
   dueAt              DateTime?
   reminder           TodoReminderKind @default(none)
   offsetMinutes      Int?

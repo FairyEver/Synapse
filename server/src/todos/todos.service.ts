@@ -1,14 +1,14 @@
 import { ConflictException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type TodoItem } from "@prisma/client"
 import type { TodoChangedPayload, TodoCompletionInput, TodoCreateInput, TodoDeleteInput, TodoDeleteResult, TodoItemDto, TodoListInput, TodoPageDto, TodoUpdateInput } from "@synapse/shared/todo-contracts"
-import { TodoRepository } from "./todo.repository"
+import { TodoRepository, type TodoVisibleRow } from "./todo.repository"
 import { todoCompletionSchema, todoCreateSchema, todoDeleteSchema, todoListSchema, todoUpdateSchema, normalizeTodoFields } from "./todo.schemas"
 import { nextTodoReminderState } from "./todo-state"
 import { todoRequestHash } from "./todo-idempotency"
 import { TodoEvents } from "./todo-events"
 
-export function todoDto(item: TodoItem): TodoItemDto {
-  return { id: item.id, title: item.title, note: item.note, dueAt: item.dueAt?.toISOString() ?? null, reminder: item.reminder,
+export function todoDto(item: TodoVisibleRow): TodoItemDto {
+  return { id: item.id, title: item.title, note: item.note, priority: item.priority, dueAt: item.dueAt?.toISOString() ?? null, reminder: item.reminder,
     offsetMinutes: item.offsetMinutes as TodoItemDto["offsetMinutes"], remindAt: item.remindAt?.toISOString() ?? null,
     reminderGeneration: item.reminderGeneration, reminderStatus: item.reminderStatus, completedAt: item.completedAt?.toISOString() ?? null,
     version: item.version, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }
@@ -29,8 +29,13 @@ export class TodosService {
   async create(userId: string, raw: TodoCreateInput): Promise<TodoItemDto> {
     const parsed = todoCreateSchema.parse(raw)
     // Canonicalize defaults before hashing; a replay is allowed after its reminder time passes.
-    const canonical = normalizeTodoFields(parsed, null, new Date(), { validateFuture: false })
-    const input = { ...parsed, ...canonical, dueAt: canonical.dueAt?.toISOString() ?? null, remindAt: canonical.remindAt?.toISOString() ?? null } as TodoCreateInput
+    const { priority, ...canonical } = normalizeTodoFields(parsed, null, new Date(), { validateFuture: false })
+    // Omitting an unassigned priority preserves create hashes from older releases.
+    const input: TodoCreateInput = {
+      ...canonical, clientRequestId: parsed.clientRequestId, ...(priority === null ? {} : { priority }),
+      offsetMinutes: canonical.offsetMinutes as TodoCreateInput["offsetMinutes"],
+      dueAt: canonical.dueAt?.toISOString() ?? null, remindAt: canonical.remindAt?.toISOString() ?? null,
+    }
     return this.mutate(userId, "create", null, input, async (tx, hash, changed) => {
       const existing = await tx.todoItem.findUnique({ where: { userId_createRequestId: { userId, createRequestId: input.clientRequestId } } })
       if (existing) { if (existing.createRequestHash !== hash) throw this.requestConflict(); if (existing.deletedAt) throw this.unavailable(); return todoDto(existing) }
@@ -48,7 +53,7 @@ export class TodosService {
       const now = new Date()
       const fields = normalizeTodoFields(input, row, now)
       const state = nextTodoReminderState(fields, row, row.completedAt, now)
-      const unchanged = fields.title === row.title && fields.note === row.note && fields.dueAt?.getTime() === row.dueAt?.getTime()
+      const unchanged = fields.title === row.title && fields.note === row.note && fields.priority === row.priority && fields.dueAt?.getTime() === row.dueAt?.getTime()
         && fields.reminder === row.reminder && fields.offsetMinutes === row.offsetMinutes && fields.remindAt?.getTime() === row.remindAt?.getTime()
       if (unchanged) return todoDto(row)
       const updated = await tx.todoItem.update({ where: { id }, data: { ...fields, ...state, version: { increment: 1 } } })

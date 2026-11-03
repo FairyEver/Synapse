@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { TodoRepository } from "../src/todos/todo.repository"
 import { TodosService } from "../src/todos/todos.service"
+import { todoRequestHash } from "../src/todos/todo-idempotency"
 
 describe("todo PostgreSQL commit and ownership", () => {
   let prisma: PrismaClient
@@ -67,5 +68,41 @@ describe("todo PostgreSQL commit and ownership", () => {
     expect((await service.list(owner, { query })).items.map((x) => x.id)).toEqual([earlier.id, later.id, noDate.id])
     await service.setCompleted(owner, earlier.id, { completed: true, expectedVersion: 1, clientRequestId: randomUUID() })
     expect((await service.list(owner, { filter: "all", query })).items.map((x) => x.id)).toEqual([later.id, noDate.id, earlier.id])
+  })
+  it("filters and sorts optional priority before paging, preserving date ties and completed ordering", async () => {
+    const query = randomUUID()
+    const make = (priority: "high" | "medium" | "low" | null, day: number) => service.create(owner, {
+      title: query, priority, dueAt: `2026-10-${day}T01:00:00Z`, clientRequestId: randomUUID(),
+    })
+    const unassigned = await make(null, 11)
+    const low = await make("low", 12)
+    const medium = await make("medium", 13)
+    const highLater = await make("high", 16)
+    const highEarlier = await make("high", 15)
+    const completedHigh = await make("high", 14)
+    await service.setCompleted(owner, completedHigh.id, { completed: true, expectedVersion: 1, clientRequestId: randomUUID() })
+    expect((await service.list(owner, { query, limit: 2 })).items.map((item) => item.id)).toEqual([unassigned.id, low.id])
+    const sorted = { query, filter: "all", sort: "priority", limit: 2 } as const
+    const first = await service.list(owner, sorted)
+    expect(first.items.map((item) => item.id)).toEqual([highEarlier.id, highLater.id])
+    expect(first.nextOffset).toBe(2)
+    expect((await service.list(owner, { ...sorted, offset: 2 })).items.map((item) => item.id)).toEqual([medium.id, low.id])
+    expect((await service.list(owner, { ...sorted, offset: 4 })).items.map((item) => item.id)).toEqual([unassigned.id, completedHigh.id])
+    expect((await service.list(owner, { query, priority: "medium", limit: 1 })).items.map((item) => item.id)).toEqual([medium.id])
+    const renamed = await service.update(owner, medium.id, { title: query + "修改", expectedVersion: 1, clientRequestId: randomUUID() })
+    expect(renamed.priority).toBe("medium")
+    const clear = { priority: null, expectedVersion: renamed.version, clientRequestId: randomUUID() }
+    const cleared = await service.update(owner, medium.id, clear)
+    expect(cleared).toMatchObject({ priority: null, version: renamed.version + 1, reminderGeneration: medium.reminderGeneration })
+    expect(await service.update(owner, medium.id, clear)).toEqual(cleared)
+    expect((await service.list(owner, { query, priority: "none" })).items.map((item) => item.id)).toEqual([unassigned.id, medium.id])
+  })
+  it("retries a legacy create hash after the optional priority column is added", async () => {
+    const clientRequestId = randomUUID()
+    const input = { title: "旧客户端重试", clientRequestId, note: null, dueAt: null, reminder: "none" as const, offsetMinutes: null, remindAt: null }
+    const old = await prisma.todoItem.create({ data: { userId: owner, title: input.title, createRequestId: clientRequestId, createRequestHash: todoRequestHash("create", null, input) } })
+    const replay = await service.create(owner, { ...input, priority: null })
+    expect(replay).toMatchObject({ id: old.id, priority: null })
+    await expect(service.create(owner, { ...input, priority: "high" })).rejects.toMatchObject({ status: 409 })
   })
 })

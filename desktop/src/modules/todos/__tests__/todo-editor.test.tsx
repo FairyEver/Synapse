@@ -41,7 +41,7 @@ describe("Todo editor", () => {
     mount(<Harness />); act(() => current.open())
     act(() => current.change("title", "新事项"))
     const response = deferred<typeof item>(); mocks.create.mockReturnValue(response.promise)
-    let writing!: Promise<void>
+    let writing!: ReturnType<typeof current.save>
     act(() => { writing = current.save(); void current.save() })
     expect(mocks.create).toHaveBeenCalledTimes(1)
     mount(<Harness generation={1} />)

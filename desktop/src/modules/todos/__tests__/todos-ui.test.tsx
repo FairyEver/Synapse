@@ -16,6 +16,45 @@ function selectText(start: Node, end: Node = start) {
 }
 
 describe("Todo visible actions", () => {
+  it("adds from the top form without a dialog and keeps the draft when filtering", async () => {
+    mocks.create.mockResolvedValue({ ...item, id: "created", title: "测试快建" })
+    mount(<TodosModule />); await flush()
+    const form = document.querySelector<HTMLFormElement>('form[aria-label="快速新建待办"]')!
+    expect(form).not.toBeNull()
+    const title = form.querySelector<HTMLInputElement>('input[aria-label="待办标题"]')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "测试快建")
+      title.dispatchEvent(new Event("input", { bubbles: true }))
+      document.querySelector<HTMLButtonElement>('[aria-label="筛选高优先级"]')!.click()
+    })
+    await flush()
+    expect(title.value).toBe("测试快建")
+    expect(mocks.list).toHaveBeenLastCalledWith(expect.objectContaining({ priority: "high", offset: 0 }))
+    act(() => form.requestSubmit()); await flush()
+    expect(mocks.create).toHaveBeenCalledOnce()
+    expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({ title: "测试快建" })
+    expect(mocks.create.mock.calls[0]?.[0]).not.toHaveProperty("priority")
+    expect(title.value).toBe("")
+    expect(document.activeElement).toBe(title)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it("sets and clears a row priority through the versioned update", async () => {
+    mocks.list.mockResolvedValue({ items: [{ ...item, priority: "medium" }], nextOffset: null })
+    const cleared = { ...item, priority: null, version: 2 }
+    mocks.update.mockResolvedValue(cleared)
+    mount(<TodosModule />); await flush()
+    const trigger = document.querySelector<HTMLButtonElement>('[aria-label="报销的优先级：中"]')!
+    expect(trigger.textContent).toBe("中")
+    expect(trigger.querySelector("svg")).toBeNull()
+    act(() => trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))); await flush()
+    const choice = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find((entry) => entry.textContent === "未设置")!
+    mocks.list.mockResolvedValue({ items: [cleared], nextOffset: null })
+    act(() => choice.click()); await flush()
+    expect(mocks.update).toHaveBeenCalledWith("a", expect.objectContaining({ priority: null, expectedVersion: 1 }))
+    expect(document.querySelector('[aria-label="报销的优先级：未设置"]')?.textContent).toBe("未设置")
+  })
+
   it.each(["window", "dock", "launcher"] as const)("opens read-only details in %s with the complete note and edits only on request", async (host) => {
     const note = "背景：升级评估已完成\n验收：核对所有业务入口"
     mocks.list.mockResolvedValue({ items: [{ ...item, note, dueAt: "2026-11-01T08:00:00.000Z", remindAt: "2026-11-01T07:00:00.000Z", reminder: "before_due", offsetMinutes: 60, reminderStatus: "pending" }], nextOffset: null })

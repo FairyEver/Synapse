@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { parseTodoReference, type TodoCompletionInput, type TodoCreateInput, type TodoDeleteInput, type TodoDeleteResult, type TodoItemDto, type TodoListInput, type TodoLocator, type TodoPageDto, type TodoUpdateInput } from "@synapse/shared/todo-contracts"
+import { parseTodoReference, TODO_PRIORITY_HEADER, type TodoCompletionInput, type TodoCreateInput, type TodoDeleteInput, type TodoDeleteResult, type TodoItemDto, type TodoListInput, type TodoLocator, type TodoPageDto, type TodoUpdateInput } from "@synapse/shared/todo-contracts"
 import type { AccountService } from "../../../electron/services/account-service"
 import type { EventBus } from "../../../electron/runtime/event-bus/types"
 import { TodoCloudError } from "../shared/ipc-result"
@@ -46,7 +46,10 @@ export class TodoCloudService {
       if (generation !== this.generation || now.status !== "authenticated" || now.profile.user.id !== identity) throw new TodoCloudError(0, "TODO_IDENTITY_CHANGED", "账号已变更")
     }
     try {
-      const response = await this.deps.account.fetchAuthenticated(path, { method, signal: controller.signal, ...(input === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }) }, "待办请求失败")
+      const headers: Record<string, string> = { [TODO_PRIORITY_HEADER]: "1" }
+      if (input !== undefined) headers["Content-Type"] = "application/json"
+      const response = await this.deps.account.fetchAuthenticated(path, { method, signal: controller.signal, headers,
+        ...(input === undefined ? {} : { body: JSON.stringify(input) }) }, "待办请求失败")
       current()
       const result = schema.safeParse(await response.json())
       current()

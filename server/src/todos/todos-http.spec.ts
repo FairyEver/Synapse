@@ -51,4 +51,40 @@ describe("authenticated todo HTTP boundary", () => {
       expect(calls).toEqual([{ user: "owner", input: { filter: "pending", offset: 0, limit: 50 } }])
     } finally { await app.close() }
   })
+
+  it("negotiates the optional priority field for old strict clients and validates list options", async () => {
+    const item = { id: "todo", version: 1, priority: "medium" }
+    const list = async (_user: string, input: unknown) => ({ items: [item], nextOffset: null, input })
+    const module = await Test.createTestingModule({ controllers: [TodosController], providers: [{
+      provide: TodosService, useValue: { list, get: async () => item, create: async () => item, update: async () => item, setCompleted: async () => item },
+    }] }).overrideGuard(UserAuthGuard).useValue({ canActivate(context: ExecutionContext) {
+      context.switchToHttp().getRequest().user = { id: "owner" }; return true
+    } }).compile()
+    const app = module.createNestApplication()
+    await app.init()
+    try {
+      const api = request(app.getHttpServer())
+      const version = { clientRequestId: "00000000-0000-4000-8000-000000000001", expectedVersion: 1 }
+      for (const [method, path, body] of [
+        ["get", "/api/todos/todo", undefined],
+        ["post", "/api/todos", { title: "事项", clientRequestId: version.clientRequestId }],
+        ["patch", "/api/todos/todo", { ...version, title: "修改" }],
+        ["patch", "/api/todos/todo/completion", { ...version, completed: true }],
+      ] as const) {
+        const legacy = api[method](path)
+        if (body) legacy.send(body)
+        expect((await legacy).body).toEqual({ id: "todo", version: 1 })
+        const current = api[method](path).set("x-synapse-todo-priority", "1")
+        if (body) current.send(body)
+        expect((await current).body).toEqual(item)
+      }
+      const legacyPage = await api.get("/api/todos").expect(200)
+      expect(legacyPage.body.items).toEqual([{ id: "todo", version: 1 }])
+      const filtered = await api.get("/api/todos?priority=medium&sort=priority&offset=2").set("x-synapse-todo-priority", "1").expect(200)
+      expect(filtered.body.items).toEqual([item])
+      expect(filtered.body.input).toMatchObject({ priority: "medium", sort: "priority", offset: 2 })
+      await api.get("/api/todos?priority=unknown").expect(400)
+      await api.get("/api/todos?sort=unknown").expect(400)
+    } finally { await app.close() }
+  })
 })

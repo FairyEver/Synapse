@@ -62,6 +62,27 @@ describe("cloud Todo list", () => {
     await act(async () => { pending.resolve({ items: [item], nextOffset: null }); await pending.promise })
     expect(current.items).toEqual([])
   })
+  it("restarts a changed priority view and carries the same filter and sort to its next page", async () => {
+    const high = { ...item, priority: "high" as const }
+    const next = { ...high, id: "next" }
+    const late = deferred<{ items: typeof item[]; nextOffset: number | null }>()
+    mocks.list.mockResolvedValueOnce({ items: [item], nextOffset: 50 }).mockReturnValueOnce(late.promise)
+    mount(<Harness />); await flush()
+    act(() => { void current.loadMore() })
+    mocks.list.mockResolvedValue({ items: [high], nextOffset: 50 })
+    act(() => {
+      current.setViewOption("priority", "high")
+      current.setViewOption("sort", "priority")
+    })
+    await flush()
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending", priority: "high", sort: "priority", offset: 0, limit: 50 })
+    await act(async () => { late.resolve({ items: [{ ...high, id: "stale" }], nextOffset: null }); await late.promise })
+    expect(current.items).toEqual([high])
+    mocks.list.mockResolvedValueOnce({ items: [next], nextOffset: null })
+    await act(async () => { await current.loadMore() })
+    expect(mocks.list).toHaveBeenLastCalledWith({ filter: "pending", priority: "high", sort: "priority", offset: 50, limit: 50 })
+    expect(current.items).toEqual([high, next])
+  })
   it("undo keeps receipt version on another-client conflict and rereads without overwriting", async () => {
     mount(<Harness />); await flush()
     const done = { ...item, version: 2, completedAt: item.createdAt }
