@@ -133,8 +133,15 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const contribution = preview.paidAmount
   const pendingState = mine?.leavePending ? "本手后离桌" : table.pauseReason === "user" && mine?.status !== "sitting_out" ? "本手后暂离" : null
   const baseState = perspective === "public" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" ? "旁观视角 · 切回玩家视角出牌" : actionState(table, acting, handoff)
-  const controlState = cards.uncertain ? "用牌结果待核对" : cardPending ? "请先完成卡牌选择" : roll.storageError ? "换牌恢复记录不可用" : roll.uncertain ? "换牌结果待核对" : rollPending ? "请先完成换牌" : handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState
+  const blockedState = cards.uncertain ? "用牌结果待核对" : cardPending ? "请先完成卡牌选择" : roll.storageError ? "换牌恢复记录不可用" : roll.uncertain ? "换牌结果待核对" : rollPending ? "请先完成换牌" : null
+  const controlState = blockedState ?? (handoff && mine ? acting ? "轮到你 · 等待 AI 接入" : mine.status === "sitting_out" ? "已暂离 · 等待 AI 接入" : "等待 AI 接入 · 本人仍可操作" : baseState)
   const state = busy ? "正在提交…" : pendingState && table.status === "running" ? `${controlState} · ${pendingState}` : controlState
+  const canAct = !actionDisabled && (canFold || canCheck || canCall || canAllIn || canBet && validAmount)
+  const activeOpponent = table.status === "running" && table.actionOnSeat !== table.mySeatNo
+    ? table.seats.find(seat => seat.seatNo === table.actionOnSeat) : undefined
+  const waitingState = activeOpponent ? `等待 ${activeOpponent.displayName} 行动` : acting ? "等待牌桌更新" : baseState
+  const dockStatus = canAct ? "" : busy || cards.busy || roll.busy ? "正在提交…"
+    : uncertain ? "出牌结果待核对" : confirmAllIn ? "等待确认全下" : blockedState ?? waitingState
   const presets = betPresets(table)
   const amountError = !to.trim() ? "请输入金额" : !Number.isSafeInteger(numeric) ? "请输入整数金额" : numeric < (table.minRaiseTo ?? Infinity) ? `至少${raise ? "加注" : "下注"}到 ${amount(table.minRaiseTo ?? 0)}` : numeric > (table.maxRaiseTo ?? -1) ? `最多${raise ? "加注" : "下注"}到 ${amount(table.maxRaiseTo ?? 0)}` : null
   const manage = async (work: () => Promise<boolean>) => {
@@ -197,7 +204,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {showCardDock && <PokerCardDockFlow key={`${cardEpoch}:${table.mySeatNo}:${controller}:${table.status}`} table={table} controls={cards}
       disabled={busy || uncertain || nextHand.busy || roll.blocked || rollPending} frames={cardFrames} dropArea={cardDropArea}
       onActivate={() => { setAllInAction(null); setPanel(null) }} onRefresh={onRefresh} intelOpen={intelEpoch === cardEpoch} onIntelClose={closeIntel} />}
-    <div className={showCardDock && !awaitingReady ? "sr-only" : "poker-control-state"}><span className="poker-action-indicator" aria-hidden="true" /><span role="status" className="min-w-0 wrap-anywhere">{awaitingReady ? <>{!nextHand.eligible && mine?.status === "sitting_out" && <>已暂离 · </>}{nextHand.summary}</> : state}</span>{!cardMode && acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={openAI}>查看 AI 接入</Button>}{!showCardDock && acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>
+    {(!showCardDock || awaitingReady) && <div className="poker-control-state"><span className="poker-action-indicator" aria-hidden="true" /><span role="status" className="min-w-0 wrap-anywhere">{awaitingReady ? <>{!nextHand.eligible && mine?.status === "sitting_out" && <>已暂离 · </>}{nextHand.summary}</> : state}</span>{!cardMode && acting && handoff && <Button size="sm" variant="tertiary" isDisabled={busy} onPress={openAI}>查看 AI 接入</Button>}{!showCardDock && acting && table.deadlineMs != null && <span className="poker-action-clock" role="timer" aria-live="off" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}</div>}
     {awaitingReady && <div className="flex min-w-0 flex-wrap items-center gap-2 font-sans text-foreground scheme-light" aria-label="下一手操作">
       {nextHand.notice && <p role="status" className="text-sm">{nextHand.notice}</p>}
       {controller === "ai" && nextHand.eligible && !nextHand.prepared && <p className="text-sm text-muted">等待 AI 确认准备</p>}
@@ -214,6 +221,9 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {canOpenCards && <PokerCardsDialog table={table} open={panel === "cards"} onOpenChange={open => setPanel(open ? "cards" : null)} controls={cards} disabled={busy || uncertain || nextHand.busy || roll.blocked || rollPending} epoch={cardEpoch} frames={cardFrames} />}
     {!acting && (rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light">{rollEntry}{cardEntry}</div>}
     {(acting || showCardDock) && <div className="poker-action-dock">
+      {showCardDock && !awaitingReady && <p className="poker-action-dock-status" role="status" title={dockStatus || undefined}>
+        {canAct ? <span className="sr-only">{state}</span> : dockStatus}
+      </p>}
       {(showBetChoices || rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light" role="group" aria-label="下注金额选择">
         {rollEntry}{cardEntry}
         {showBetChoices && presets.map(preset => {

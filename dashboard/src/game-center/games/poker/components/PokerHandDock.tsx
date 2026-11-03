@@ -7,6 +7,7 @@ import { amount } from "../lib/view"
 import "../styles/hand-dock.css"
 
 type Preview = { id: string; anchor: HTMLButtonElement; input: "mouse" | "keyboard" | "touch" }
+type PreviewPosition = { left: number; bottom: number; maxHeight: number }
 type Drag = { id: string; pointer: number; x: number; y: number; started: boolean }
 type Props = { table: PokerTableView; canPlay: boolean; dropArea?: RefObject<HTMLDivElement | null>; onPlay: (card: PokerCardHandView) => void }
 
@@ -14,8 +15,9 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
   const hand = table.cards?.ownHand ?? []
   const definitions = table.cards?.definitions
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [position, setPosition] = useState({ left: 0, top: 0 })
+  const [position, setPosition] = useState<PreviewPosition | null>(null)
   const previewBox = useRef<HTMLDivElement>(null)
+  const closePreview = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [ghost, setGhost] = useState<{ id: string; x: number; y: number; onTable: boolean } | null>(null)
   const drag = useRef<Drag | null>(null)
   const suppressClick = useRef(false)
@@ -45,22 +47,35 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
       if (!previewBox.current) return
       const rect = preview.anchor.getBoundingClientRect()
       const dockTop = preview.anchor.closest(".poker-hand-dock")?.getBoundingClientRect().top ?? rect.top
-      const { offsetWidth: width, offsetHeight: height } = previewBox.current
-      setPosition({ left: Math.max(8, Math.min(rect.left + (rect.width - width) / 2, window.innerWidth - width - 8)), top: Math.max(8, Math.min(dockTop, rect.top) - height - 10) })
+      const { offsetWidth: width } = previewBox.current
+      // Keep the tooltip above the lifted card and its fee badge, even when its content needs to scroll.
+      const bottomEdge = Math.max(0, Math.min(dockTop, rect.top, window.innerHeight) - 16)
+      setPosition({
+        left: Math.max(8, Math.min(rect.left + (rect.width - width) / 2, window.innerWidth - width - 8)),
+        bottom: window.innerHeight - bottomEdge,
+        maxHeight: Math.max(0, bottomEdge - 8),
+      })
     }
     const outside = (event: Event) => {
-      if (preview.input === "touch" && event.target instanceof Node && !preview.anchor.contains(event.target)) setPreview(null)
+      if (preview.input === "touch" && event.target instanceof Node && !preview.anchor.contains(event.target) && !previewBox.current?.contains(event.target)) setPreview(null)
     }
     place()
     window.addEventListener("pointerdown", outside, true)
     window.addEventListener("resize", place)
     window.addEventListener("scroll", place, true)
     return () => {
+      clearTimeout(closePreview.current)
       window.removeEventListener("pointerdown", outside, true)
       window.removeEventListener("resize", place)
       window.removeEventListener("scroll", place, true)
     }
   }, [preview, definition, previewed?.reason])
+
+  const keepPreview = () => clearTimeout(closePreview.current)
+  const leavePreview = () => {
+    keepPreview()
+    closePreview.current = setTimeout(() => setPreview(current => current?.input === "mouse" ? null : current), 160)
+  }
 
   const begin = (event: PointerEvent<HTMLButtonElement>, card: PokerCardHandView) => {
     suppressClick.current = false
@@ -101,8 +116,8 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
         return <button key={card.instanceId} type="button" className="poker-hand-dock-card" aria-label={`${info?.name ?? "能力牌"}，${amount(card.payment.paidAmount)} 筹码`} aria-describedby={previewed === card && definition && !ghost ? previewId : undefined}
           aria-keyshortcuts="Enter Space" aria-haspopup={info?.play && (card.choices.length > 0 || info.play.result !== "table") ? "dialog" : undefined}
           aria-disabled={!canPlay || !card.available} data-dragging={ghost?.id === card.instanceId}
-          onPointerEnter={event => { if (event.pointerType === "mouse" && !drag.current) setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "mouse" }) }}
-          onPointerLeave={event => { if (event.pointerType === "mouse" && !event.currentTarget.matches(":focus-visible")) setPreview(current => current?.id === card.instanceId ? null : current) }}
+          onPointerEnter={event => { if (event.pointerType === "mouse" && !drag.current) { keepPreview(); setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "mouse" }) } }}
+          onPointerLeave={event => { if (event.pointerType === "mouse" && !event.currentTarget.matches(":focus-visible")) leavePreview() }}
           onFocus={event => { if (event.currentTarget.matches(":focus-visible")) setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "keyboard" }) }}
           onBlur={() => setPreview(current => current?.id === card.instanceId ? null : current)}
           onPointerDown={event => begin(event, card)} onPointerMove={move} onPointerUp={event => end(event, card, true)} onPointerCancel={event => end(event, card, false)} onLostPointerCapture={event => end(event, card, false)}
@@ -125,7 +140,9 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
         </button>
       })}
     </div>
-    {previewed && definition && !ghost && createPortal(<div ref={previewBox} id={previewId} className="poker-hand-dock-preview" role="tooltip" style={position}>
+    {previewed && definition && !ghost && createPortal(<div ref={previewBox} id={previewId} className="poker-hand-dock-preview" role="tooltip"
+      data-compact={!!position && position.maxHeight < 220} style={position ?? { visibility: "hidden" }}
+      onPointerEnter={keepPreview} onPointerLeave={leavePreview}>
       <PokerAbilityDetails name={definition.name} artId={definition.artId} description={definition.description}>
         <b className="text-accent-soft-foreground">{previewed.payment.paidAmount ? `实付 ${amount(previewed.payment.paidAmount)} 筹码` : "无需筹码"}</b>
         <small className="text-muted">{cardUnavailableReason(previewed.reason) ?? (!canPlay ? "等待你的回合" : definition.play?.candidates ? `${useHint} · 亮出候选后不可取消` : useHint)}</small>

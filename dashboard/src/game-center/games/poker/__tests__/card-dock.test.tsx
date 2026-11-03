@@ -78,6 +78,26 @@ it("等待时预览价格；选择目标前可以放弃，重新报价保留目�
   expect(controls.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ selections: { hole: "1" }, expectedPaymentVersion: "new-quote", expectedActionSeq: 4 }))
 })
 
+it("手牌上方空间不足时缩小预览牌面，浮层底部避开手牌", async () => {
+  await mount(snapshot())
+  const card = document.querySelector<HTMLButtonElement>(".poker-hand-dock-card")!
+  const dock = card.closest<HTMLElement>(".poker-hand-dock")!
+  let top = 140
+  card.getBoundingClientRect = () => new DOMRect(100, top, 54, 72)
+  dock.getBoundingClientRect = () => new DOMRect(0, top, 360, 72)
+  await act(async () => card.dispatchEvent(Object.assign(new MouseEvent("pointerover", { bubbles: true }), { pointerType: "mouse" })))
+  const preview = document.querySelector<HTMLElement>('[role="tooltip"]')!
+  expect(preview.textContent).toContain("实付 2 筹码")
+  expect(preview.dataset.compact).toBe("true")
+  expect(window.innerHeight - parseFloat(preview.style.bottom)).toBeLessThan(top)
+  expect(parseFloat(preview.style.maxHeight)).toBeLessThan(top)
+
+  top = 400
+  await act(async () => window.dispatchEvent(new Event("resize")))
+  expect(preview.dataset.compact).toBe("false")
+  expect(window.innerHeight - parseFloat(preview.style.bottom)).toBeLessThan(top)
+})
+
 it("免费选择玩家只显示确定，单一目标仍需主动选择", async () => {
   const table = snapshot(), card = table.cards!.ownHand![0]
   card.payment = { nominalAmount: 2, waivedAmount: 2, paidAmount: 0, version: "waived" }

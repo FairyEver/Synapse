@@ -273,11 +273,12 @@ it("少量详情与左卡在中间区域居中，能力候选完整规则只在�
     expect(Math.abs(middle(card) - middle(details))).toBeLessThan(3)
   } finally { await screen.unmount() }
 })
-it.each([[1280, 800], [320, 568]])("%s×%s 底部沿用牌桌背景，能力牌增减不移动行动按钮", async (width, height) => {
+it.each([[1280, 800], [320, 568], [568, 320]])("%s×%s 等待状态和手牌增减不移动行动按钮，矮屏预览避开手牌", async (width, height) => {
   await page.viewport(width, height)
   const hand = cardTable.cards!.ownHand!
-  const fixture = (ownHand: typeof hand) => <div className="h-dvh">
-    <Table table={{ ...cardTable, cards: { ...cardTable.cards!, version: "cards-v2", ownHand } }} perspective="owner" onPerspective={noop} onBack={noop} />
+  const fixture = (ownHand: typeof hand, actionOnSeat = cardTable.actionOnSeat) => <div className="h-dvh">
+    <Table table={{ ...cardTable, actionOnSeat, legalActions: actionOnSeat === cardTable.mySeatNo ? cardTable.legalActions : [],
+      cards: { ...cardTable.cards!, version: "cards-v2", ownHand } }} perspective="owner" onPerspective={noop} onBack={noop} />
   </div>
   const screen = await render(fixture(hand))
   try {
@@ -293,7 +294,23 @@ it.each([[1280, 800], [320, 568]])("%s×%s 底部沿用牌桌背景，能力牌�
     expect(card.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top)
     expect(bounds.width).toBeLessThan(anchor.getBoundingClientRect().width)
     const board = viewport.getBoundingClientRect().toJSON()
-    await screen.rerender(fixture([]))
+    if (height === 320) {
+      await page.getByRole("button", { name: /偷梁换柱/ }).hover()
+      const preview = page.getByRole("tooltip")
+      await expect.element(preview).toHaveTextContent("实付 2 筹码")
+      const panel = preview.element().getBoundingClientRect()
+      const art = preview.element().querySelector("img")!.getBoundingClientRect()
+      const fee = preview.element().querySelector("b")!.getBoundingClientRect()
+      expect(panel.top).toBeGreaterThanOrEqual(8)
+      expect(panel.bottom).toBeLessThan(card.getBoundingClientRect().top)
+      expect(art.width).toBeLessThanOrEqual(68)
+      expect(fee.bottom).toBeLessThanOrEqual(panel.bottom)
+    }
+    await screen.rerender(fixture(hand, 1))
+    const status = anchor.querySelector(".poker-action-dock-status")!
+    expect(status.textContent).toBe("等待 对手 行动")
+    expect(actions.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON())
+    await screen.rerender(fixture([], 1))
     expect(anchor.querySelector(".poker-hand-dock-card")).toBeNull()
     expect(actions.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON())
     expect(viewport.getBoundingClientRect().toJSON()).toEqual(board)

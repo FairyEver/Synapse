@@ -182,15 +182,20 @@ describe("统一底部操作与按需侧栏", () => {
   })
 
   it("卡牌桌失去行动权后保留底栏，关闭金额面板并禁用出牌，轮到本人后恢复", async () => {
-    const value: PokerTableView = { ...table, hole: cardTable.hole, cards: { ...cardTable.cards!, version: "cards-v2" } }
+    const value: PokerTableView = { ...table, seats: [...table.seats, { ...table.seats[0], seatNo: 1, isMe: false, displayName: "陪练 2" }],
+      hole: cardTable.hole, cards: { ...cardTable.cards!, version: "cards-v2" } }
     const { host, root, render } = await controls(value)
     const custom = button(host, "自定义")
     const presets = ["最小", "半池", "一池", "自定义"]
+    const status = host.querySelector('[role="status"]')
     try {
+      expect(status?.querySelector(".sr-only")?.textContent).toBe("轮到你")
       await click(host, "自定义")
       expect(host.querySelector('input[type="number"]')).not.toBeNull()
 
       await render({ ...value, actionOnSeat: 1, actionSeq: 4, legalActions: [], toCall: 0, minRaiseTo: 0, maxRaiseTo: 0 })
+      expect(host.querySelector('[role="status"]')).toBe(status)
+      expect(status?.textContent).toBe("等待 陪练 2 行动")
       expect(host.querySelector('[role="group"][aria-label="能力牌"]')).not.toBeNull()
       expect(host.querySelector('input[type="number"]')).toBeNull()
       expect(button(host, "自定义")).toBe(custom)
@@ -223,6 +228,15 @@ describe("统一底部操作与按需侧栏", () => {
       await render({ ...value, actionSeq: 6 })
       expect(button(host, "自定义").disabled).toBe(false)
       expect(host.querySelector('input[type="number"]')).toBeNull()
+      expect(status?.querySelector(".sr-only")?.textContent).toBe("轮到你")
+
+      let finish!: (result: { ok: true }) => void
+      api.act.mockReturnValueOnce(new Promise<{ ok: true }>(resolve => { finish = resolve }))
+      await click(host, "弃牌")
+      expect(status?.textContent).toBe("正在提交…")
+      expect(actions.every(action => action.disabled)).toBe(true)
+      await act(async () => finish({ ok: true }))
+      expect(status?.querySelector(".sr-only")?.textContent).toBe("轮到你")
     } finally {
       await act(async () => root.unmount())
     }
