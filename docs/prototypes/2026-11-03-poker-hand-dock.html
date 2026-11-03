@@ -114,9 +114,14 @@
     .own-cards .playing { width: 42px; box-shadow: 0 2px 0 var(--border), 0 5px 9px var(--shadow); }
     .seat-shield { display: inline-flex; color: var(--accent); }
     .seat-shield svg { width: 1em; height: 1em; }
-    .hand { min-width: 0; }
-    .fan { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
-    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; height: var(--hand-height); padding: 9px 7px 9px; }
+    .hand { --fan-bleed: 16px; position: relative; min-width: 0; height: var(--hand-height); }
+    /* Give the scrollport room to paint the shadows without enlarging the hand row. */
+    .fan {
+      position: absolute; inset: calc(-1 * var(--fan-bleed)) 0;
+      padding-block: var(--fan-bleed); overflow: auto hidden; overscroll-behavior-inline: contain; scrollbar-width: none;
+    }
+    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; height: var(--hand-height); padding-inline: 11px 14px; }
+    .poker-human-controls { position: relative; }
     .ability {
       position: relative; flex: 0 0 auto; display: grid; gap: 3px; justify-items: center; width: clamp(58px, 6.3vw, 78px);
       padding: 4px 4px 5px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-paper);
