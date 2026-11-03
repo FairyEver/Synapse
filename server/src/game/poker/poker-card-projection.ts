@@ -6,9 +6,22 @@ import type { ResolutionFrame } from "./engine/cards/types"
 import type { CardModeState } from "./engine/cards/pool"
 
 export interface CardViewPolicy {
-  audience: "desktop" | "decision"; perspective: "owner" | "public"; handId: string; actionSeq: number; nowMs: number
+  audience: "desktop" | "decision"; perspective: "owner" | "public"; mode: string; handId: string; actionSeq: number; nowMs: number
   self?: { userId: string; admissionId: string; seatNo: number; controlVersion: number }
 }
+
+// Presentation copy stays outside the versioned catalog used to resume existing hands.
+const chipCardDescriptions: Partial<Record<string, (chips: (blinds: number) => string, unit: string) => string>> = {
+  "31": (chips, unit) => `下次支付${unit}时最多减免 ${chips(10)}。只减免一次，剩余额度作废。`,
+  "32": (chips, unit) => `下次支付${unit}时最多减免 ${chips(3)}。只减免一次。`,
+  "33": chips => `最多偷取 ${chips(10)}。按其他人待分到的暂存金额比例扣取，立即归你。`,
+  "34": chips => `最多偷取 ${chips(3)}。按其他人待分到的暂存金额比例扣取，立即归你。`,
+  "36": chips => `最多取回 ${chips(3)}，只取自出牌前你最近一笔暂存付款。该笔已空就不再往前找。`,
+  "38": chips => `基础费用 ${chips(2)}，付入暂存。从共享池抽两张能力牌。`,
+  "39": chips => `最多偷取 ${chips(5)}，目标是暂存待分金额最多的其他人。同额时按庄家左侧顺序，目标受保护时不换人。`,
+  "49": chips => `让一名其他真人多付 ${chips(2)}。对方下次使用能力牌时将这笔费用付入暂存，成功出牌后效果结束。`,
+}
+
 export function projectCardView(state: HandState | { archived: true; cards: CardModeState; seats: { seatNo: number; hole: string[] }[]; street: string }, policy: CardViewPolicy): PokerCardView | undefined {
   const cards = state.cards
   if (!cards) return undefined
@@ -31,9 +44,11 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
     return view
   }
   const seat = state.seats.find(s => s.seatNo === self.seatNo), definitions: Record<string, PokerCardDefinitionView> = {}
+  const unit = policy.mode === "practice" ? "筹码" : "点数"
+  const chips = (blinds: number) => `${blinds * state.bigBlind} ${unit}`
   const definitionView = (id: string): PokerCardDefinitionView => {
     const definition = registry.get(id)
-    return { id, name: definition.name, description: definition.description, artId: definition.artId, cost: (definition.costBB ?? 0) * state.bigBlind,
+    return { id, name: definition.name, description: chipCardDescriptions[id]?.(chips, unit) ?? definition.description, artId: definition.artId, cost: (definition.costBB ?? 0) * state.bigBlind,
       ...(definition.selections.some(selection => selection.kind === "ability") ? { consumeSelected: !!definition.consumeSelected } : {}) }
   }
   view.ownHand = (cards.hands[self.admissionId] ?? []).map(instance => {

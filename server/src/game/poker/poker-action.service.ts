@@ -438,7 +438,7 @@ export class PokerActionService {
       chipState = projectFundedChipState(chipState, h?.reserve ?? archived?.reserve, participants, roots.map(root => root.data as unknown as import("./engine/cards/types").ResolutionFrame))
     }
     const cardState = h ?? (archived?.cards ? { archived: true as const, cards: archived.cards, street: hand!.street, seats: participants.map(p => ({ seatNo: p.seatNo, hole: p.holeCards as string[] })) } : null)
-    const cards = cardState ? projectCardView(cardState, { audience, perspective, handId: hand!.id, actionSeq: hand!.actionSeq, nowMs: c.now.getTime(), ...(own && me && participants.some(p => p.admissionId === me.id && p.userId === userId) ? { self: { userId, admissionId: me.id, seatNo: me.seatNo, controlVersion: me.controlVersion } } : {}) }) : undefined
+    const cards = cardState ? projectCardView(cardState, { audience, perspective, mode: c.room.mode, handId: hand!.id, actionSeq: hand!.actionSeq, nowMs: c.now.getTime(), ...(own && me && participants.some(p => p.admissionId === me.id && p.userId === userId) ? { self: { userId, admissionId: me.id, seatNo: me.seatNo, controlVersion: me.controlVersion } } : {}) }) : undefined
     const reserve = hand ? projectReserveView({ roomId: c.room.id, handId: hand.id, status: hand.status, userId, participants, state: h?.reserve ?? archived?.reserve }) : undefined
     return {
       ...(cards ? { cards } : {}), ...(reserve ? { reserve } : {}),

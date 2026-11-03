@@ -54,7 +54,7 @@ describe("卡牌模式服务策略", () => {
     const f = await rollStore(); expect(f.room.chipRulesVersion).toBeUndefined(); expect(f.hands[0].engineState.chipRulesVersion).toBeUndefined()
   })
   it("读取策略将卡牌房MCP降为公开，不影响普通房的本人策略", () => {
-    const requested = { audience: "desktop" as const, perspective: "owner" as const, handId: "h", actionSeq: 0, nowMs: 0, self: { userId: "u", admissionId: "a", seatNo: 0, controlVersion: 0 } }
+    const requested = { audience: "desktop" as const, perspective: "owner" as const, mode: "points", handId: "h", actionSeq: 0, nowMs: 0, self: { userId: "u", admissionId: "a", seatNo: 0, controlVersion: 0 } }
     expect(cardReadPolicy({ cardRulesVersion: "cards-v1" }, "mcp", requested)).toMatchObject({ audience: "decision", perspective: "public", self: undefined })
     expect(cardReadPolicy({}, "mcp", requested)).toEqual(requested)
   })
