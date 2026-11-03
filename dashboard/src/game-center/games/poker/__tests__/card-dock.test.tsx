@@ -45,6 +45,7 @@ async function mount(table: PokerTableView) {
   const render = (state = table, canControl = true, intelOpen = false) => act(async () => root.render(<>
     <div ref={dropArea} />
     <PokerCardDockFlow table={state} controls={{ ...controls, canControl }} disabled={false} dropArea={dropArea} onActivate={vi.fn()} onRefresh={vi.fn()} intelOpen={intelOpen} />
+    <button type="button">一池</button>
   </>))
   await render()
   return { render, controls, dropArea }
@@ -96,6 +97,32 @@ it("手牌上方空间不足时缩小预览牌面，浮层底部避开手牌", a
   await act(async () => window.dispatchEvent(new Event("resize")))
   expect(preview.dataset.compact).toBe("false")
   expect(window.innerHeight - parseFloat(preview.style.bottom)).toBeLessThan(top)
+})
+
+it.each(["牌桌快照刷新", "卡牌已有键盘焦点"])("%s时，鼠标快速移到下注档位后关闭手牌预览", async scenario => {
+  const table = snapshot()
+  const { render } = await mount(table)
+  const card = document.querySelector<HTMLButtonElement>(".poker-hand-dock-card")!
+  const preset = button("一池")
+  const tooltip = () => document.querySelector('[role="tooltip"]')
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+  try {
+    if (scenario === "卡牌已有键盘焦点") {
+      await act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }))
+        card.focus()
+      })
+      expect(card.matches(":focus-visible")).toBe(true)
+    }
+    await act(async () => card.dispatchEvent(Object.assign(new MouseEvent("pointerover", { bubbles: true }), { pointerType: "mouse" })))
+    expect(tooltip()?.textContent).toContain("拖到牌桌使用")
+    await act(async () => card.dispatchEvent(Object.assign(new MouseEvent("pointerout", { bubbles: true, relatedTarget: preset }), { pointerType: "mouse" })))
+    if (scenario === "牌桌快照刷新") await render(structuredClone(table))
+    await act(async () => vi.advanceTimersByTime(200))
+    expect(tooltip()).toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 it("免费选择玩家只显示确定，单一目标仍需主动选择", async () => {

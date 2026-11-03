@@ -80,6 +80,34 @@ it("总览将卡费和下注分列，日志不完整时不推算费用", () => {
   expect(matchOverview({ ...table, handLog: { ...table.handLog!, complete: false } }).cardFees).toBeUndefined()
 })
 
+it("在日志项上按下鼠标再移出时，残留的按钮焦点不会固定悬停详情", async () => {
+  const host = document.body.appendChild(document.createElement("div"))
+  const root = createRoot(host)
+  const tooltip = () => document.body.querySelector('[role="tooltip"]')
+  try {
+    await act(async () => root.render(<PokerLogRail table={table} historyOpen={false} onHistoryOpenChange={() => {}} />))
+    const card = host.querySelector<HTMLButtonElement>(".poker-log-entry")!
+    await act(async () => {
+      pointer(card, "pointerover", "mouse")
+      pointer(card, "pointerdown", "mouse")
+      card.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+      card.focus()
+    })
+    expect(tooltip()).not.toBeNull()
+    await act(async () => pointer(card, "pointerout", "mouse"))
+    await act(async () => new Promise(resolve => setTimeout(resolve, 200)))
+    expect(document.activeElement).toBe(card)
+    expect(tooltip()).toBeNull()
+  } finally {
+    await act(async () => {
+      pointer(document.body, "pointerup", "mouse")
+      document.body.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }))
+      root.unmount()
+    })
+    host.remove()
+  }
+})
+
 it("悬停分别显示各轮新翻的牌，以及能力牌详情和实际公开的底牌", async () => {
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)

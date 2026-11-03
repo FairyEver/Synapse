@@ -76,6 +76,7 @@ export function MarkdownImageCommentsOverlay({
       updateHoveredImage(null)
     }, HOVER_INTENT_DELAY)
   }, [cancelHoverTimer, updateHoveredImage])
+  useLayoutEffect(() => cancelHoverTimer, [cancelHoverTimer])
   useEffect(() => {
     const root = rootRef.current
     const container = containerRef.current
@@ -214,7 +215,6 @@ export function MarkdownImageCommentsOverlay({
       root.removeEventListener('pointerout', onPointerOut)
       root.removeEventListener('focusin', onFocusIn)
       root.removeEventListener('focusout', onFocusOut)
-      cancelHoverTimer()
     }
   }, [
     cancelHoverTimer,

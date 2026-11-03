@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Button, Popover, popoverVariants } from "@heroui/react"
+import { useFocusVisible } from "react-aria"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { pokerLogGroups, pokerLogItemLabel } from "../lib/log-items"
 import { PokerHistoryDialog } from "./PokerHistoryDialog"
@@ -26,7 +27,8 @@ function HandLogRail({ table, historyOpen, onHistoryOpenChange }: Props) {
   const [pinned, setPinned] = useState<Anchor | null>(null)
   const clearHover = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const tipId = useId()
-  const active = pinned ?? hovered ?? focused
+  const { isFocusVisible } = useFocusVisible()
+  const active = pinned ?? hovered ?? (isFocusVisible ? focused : null)
   const button = active?.button ?? null
   const anchorRef = useMemo(() => ({ current: button }), [button])
   const current = historyOpen ? undefined : items.find(item => item.id === active?.id)

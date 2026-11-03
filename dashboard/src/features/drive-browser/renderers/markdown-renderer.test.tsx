@@ -405,6 +405,26 @@ describe('DriveMarkdownRenderer', () => {
     ).toBe('/image.png')
   })
 
+  it('closes the image hover action after leaving even if the preview refreshes', async () => {
+    mockImageCommentRects()
+    const html =
+      '<p><img data-drive-markdown-image-id="mdimg_1" src="/files/asset_1" alt="示意图"></p>'
+    const { rerender } = renderMarkdown({
+      previewData: preview({ html, markdownProjection: imageProjection() }),
+    })
+    await setPreviewWidth(1200)
+    triggerAllResizeObservers()
+    await flushAnimationFrames()
+    const image = document.querySelector('[data-drive-markdown-image-id="mdimg_1"]')!
+    const toolbar = () => document.querySelector('[data-drive-markdown-image-comment-action="true"]')
+    await act(async () => image.dispatchEvent(new Event('pointerover', { bubbles: true })))
+    expect(toolbar()).not.toBeNull()
+    await act(async () => image.dispatchEvent(new Event('pointerout', { bubbles: true })))
+    rerender({ previewData: preview({ html, markdownProjection: imageProjection() }) })
+    await act(async () => new Promise(resolve => setTimeout(resolve, 160)))
+    expect(toolbar()).toBeNull()
+  })
+
   it('opens an image comment draft from the hover action without opening the lightbox', async () => {
     mockImageCommentRects()
     renderMarkdown({

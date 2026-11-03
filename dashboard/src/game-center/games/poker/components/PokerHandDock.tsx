@@ -78,6 +78,8 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
     return () => element.removeAttribute("data-card-drop")
   }, [dropArea, isOverTable])
 
+  // Repositioning after a new table snapshot must not cancel a pending pointer leave.
+  useLayoutEffect(() => () => clearTimeout(closePreview.current), [])
   useLayoutEffect(() => {
     if (!preview) return
     const place = () => {
@@ -101,7 +103,6 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
     window.addEventListener("resize", place)
     window.addEventListener("scroll", place, true)
     return () => {
-      clearTimeout(closePreview.current)
       window.removeEventListener("pointerdown", outside, true)
       window.removeEventListener("resize", place)
       window.removeEventListener("scroll", place, true)
@@ -170,7 +171,7 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
           aria-keyshortcuts="Enter Space" aria-haspopup={info?.play && (card.choices.length > 0 || info.play.result !== "table") ? "dialog" : undefined}
           aria-disabled={!canPlay || !card.available} data-dragging={ghost?.id === card.instanceId} data-card-motion-anchor={`ability:${card.instanceId}`}
           onPointerEnter={event => { if (event.pointerType === "mouse" && !drag.current) { keepPreview(); setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "mouse" }) } }}
-          onPointerLeave={event => { if (event.pointerType === "mouse" && !event.currentTarget.matches(":focus-visible")) leavePreview() }}
+          onPointerLeave={event => { if (event.pointerType === "mouse") leavePreview() }}
           onFocus={event => { if (event.currentTarget.matches(":focus-visible")) setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "keyboard" }) }}
           onBlur={() => setPreview(current => current?.id === card.instanceId ? null : current)}
           onPointerDown={event => begin(event, card)} onPointerMove={move} onPointerUp={event => end(event, card, true)} onPointerCancel={event => end(event, card, false)} onLostPointerCapture={event => end(event, card, false)}
