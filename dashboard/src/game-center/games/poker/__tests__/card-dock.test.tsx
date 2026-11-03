@@ -50,10 +50,8 @@ async function mount(table: PokerTableView) {
   return { render, controls, dropArea }
 }
 
-it("底牌保持静态，等待时预览价格；选择目标前可以放弃，重新报价保留目标", async () => {
+it("等待时预览价格；选择目标前可以放弃，重新报价保留目标", async () => {
   const before = snapshot(), { controls, render } = await mount(before)
-  expect(document.querySelectorAll(".poker-hand-dock-holes [data-card]")).toHaveLength(2)
-  expect(document.querySelector(".poker-hand-dock-holes button, .poker-hand-dock-holes [tabindex]")).toBeNull()
   const card = document.querySelector<HTMLButtonElement>(".poker-hand-dock-card")!
   await render(before, false)
   expect(card.getAttribute("aria-disabled")).toBe("true")

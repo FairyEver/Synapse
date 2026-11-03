@@ -28,36 +28,16 @@
   --hand-gap: .625rem;
   --hand-card-radius: var(--radius-sm);
   display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100%;
   min-width: 0;
-  padding-inline: var(--hand-gap);
 }
-.poker-hand-dock-holes {
-  --cw: var(--hand-card-width);
-  display: flex;
-  flex: none;
-  gap: var(--hand-gap);
-  pointer-events: none;
-  user-select: none;
-}
-.poker-hand-dock-holes:empty { display: none; }
-.poker-hand-dock-holes :is(.poker-card-front, .poker-card-back, .poker-card-placeholder) {
-  border: 1px solid var(--separator);
-  border-radius: var(--hand-card-radius);
-  box-shadow: none;
-}
-.poker-hand-dock-fan { min-width: 0; height: 100%; position: relative; width: max-content; margin-inline-end: calc(-1 * var(--hand-gap)); }
-.poker-hand-dock-holes:empty + .poker-hand-dock-fan { margin-inline-end: 0; }
 .poker-hand-dock-cards {
   display: flex;
   align-items: center;
   gap: var(--hand-gap);
-  width: max-content;
-  max-width: 100%;
+  flex: 1;
+  min-width: 0;
   height: calc(100% + 2 * var(--hand-bleed));
-  /* The leading padding also supplies the gap from the last hole card. */
   padding: var(--hand-bleed) var(--hand-gap);
   margin-block: calc(-1 * var(--hand-bleed));
   overflow-x: auto;
@@ -87,14 +67,11 @@
   position: relative;
   border-radius: var(--hand-card-radius);
   pointer-events: none;
-  transform: translateY(var(--fan-drop, 0px)) rotate(var(--fan-angle, 0deg));
   transition: transform 150ms ease-out;
 }
-/* For long hands, keep the middle readable and fan out the edges. */
-.poker-hand-dock-card:first-child:not(:only-child) { --fan-angle: -8deg; --fan-drop: .2rem; }
-.poker-hand-dock-card:last-child:not(:only-child) { --fan-angle: 8deg; --fan-drop: .2rem; }
-.poker-hand-dock-card:nth-child(2):nth-last-child(n + 3) { --fan-angle: -3deg; --fan-drop: .05rem; }
-.poker-hand-dock-card:nth-last-child(2):nth-child(n + 3) { --fan-angle: 3deg; --fan-drop: .05rem; }
+/* Auto margins center a fitting hand and collapse when it needs to scroll. */
+.poker-hand-dock-card:first-child { margin-inline-start: auto; }
+.poker-hand-dock-card:last-child { margin-inline-end: auto; }
 .poker-hand-dock-card:focus-visible { z-index: 1; outline: none; }
 .poker-hand-dock-card:focus-visible .poker-ability-face { outline: 2px solid var(--accent); outline-offset: 2px; transform: translateY(-.35rem); }
 @media (hover: hover) {
@@ -124,8 +101,7 @@
   border-radius: var(--radius-lg);
   box-shadow: 0 .55rem 1.5rem color-mix(in oklch, var(--foreground) 18%, transparent);
 }
-.poker-hand-dock-ghost { width: 6.25rem; transform: translate(-50%, -60%) rotate(-5deg); }
-.poker-canvas .poker-seat-objects[data-dock-holes="true"] { min-height: 78px; }
+.poker-hand-dock-ghost { width: 6.25rem; transform: translate(-50%, -60%); }
 .poker-table-main[data-card-drop] { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
 .poker-card-dock-error { margin: 0; font-size: .875rem; color: var(--danger); text-align: center; }
 

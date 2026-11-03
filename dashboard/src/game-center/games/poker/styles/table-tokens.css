@@ -431,6 +431,11 @@
   margin-left: -0.1rem;
   transform: rotate(5deg) translateY(1px);
 }
+.poker-seat-cards[data-flat="true"] { gap: .25rem; }
+.poker-seat-cards[data-flat="true"] .poker-card {
+  margin-left: 0;
+  transform: none;
+}
 .poker-seat-plate {
   position: relative;
   display: flex;

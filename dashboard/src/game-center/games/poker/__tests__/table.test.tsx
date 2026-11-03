@@ -6,6 +6,7 @@ import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { Card } from "../components/Card"
 import { Table } from "../components/Table"
 import { projectTable } from "../lib/view"
+import { cardTable } from "./card-stage-fixture"
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const state: PokerTableView = {
   roomCode: "1234",
@@ -61,6 +62,32 @@ const state: PokerTableView = {
   deckRemaining: 48,
 }
 describe("牌桌", () => {
+  it("新版卡牌桌在本人筹码左侧显示两张底牌，底栏只显示能力牌", async () => {
+    const host = document.createElement("div"), root = createRoot(host)
+    document.body.append(host)
+    const cards = { ...cardTable.cards!, version: "cards-v2" as const }
+    const render = (ownHand = cards.ownHand) => act(async () => root.render(
+      <Table table={{ ...state, hole: state.seats[0].hole, cards: { ...cards, ownHand } }} perspective="owner" onPerspective={() => {}} onBack={() => {}} />,
+    ))
+    try {
+      await render()
+      const mine = host.querySelector('.poker-seat[data-mine="true"]')!
+      const holeCards = mine.querySelector(".poker-seat-cards")!
+      expect(holeCards).not.toBeNull()
+      expect([...holeCards.querySelectorAll("[data-card]")].map(card => card.getAttribute("data-card"))).toEqual(["As", "Kh"])
+      expect(holeCards.nextElementSibling).toBe(mine.querySelector(".poker-seat-bank"))
+      const dock = host.querySelector(".poker-hand-dock")!
+      expect(dock.querySelector("[data-card]")).toBeNull()
+      expect(dock.querySelectorAll("button")).toHaveLength(1)
+
+      await render([])
+      expect(host.querySelector(".poker-hand-dock")).toBeNull()
+      expect(mine.querySelectorAll(".poker-seat-cards [data-card]")).toHaveLength(2)
+    } finally {
+      await act(async () => root.unmount())
+      host.remove()
+    }
+  })
   it.each([undefined, "standard52", "short32"] as const)("顶栏按当前%s规则展示牌型排序，关闭返回入口且不重挂画布", async (variant) => {
     const host = document.createElement("div"), root = createRoot(host)
     document.body.append(host)

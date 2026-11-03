@@ -191,7 +191,7 @@ describe("统一底部操作与按需侧栏", () => {
       expect(host.querySelector('input[type="number"]')).not.toBeNull()
 
       await render({ ...value, actionOnSeat: 1, actionSeq: 4, legalActions: [], toCall: 0, minRaiseTo: 0, maxRaiseTo: 0 })
-      expect(host.querySelectorAll(".poker-hand-dock-holes [data-card]")).toHaveLength(2)
+      expect(host.querySelector('[role="group"][aria-label="能力牌"]')).not.toBeNull()
       expect(host.querySelector('input[type="number"]')).toBeNull()
       expect(button(host, "自定义")).toBe(custom)
       for (const label of presets) {

@@ -4,7 +4,6 @@ import type { PokerCardHandView, PokerTableView } from "@synapse/shared/game-con
 import { PokerAbilityDetails, PokerAbilityFace } from "./PokerAbilityDetails"
 import { cardUnavailableReason } from "../lib/card-view"
 import { amount } from "../lib/view"
-import { Card } from "./Card"
 import "../styles/hand-dock.css"
 
 type Preview = { id: string; anchor: HTMLButtonElement; input: "mouse" | "keyboard" | "touch" }
@@ -92,9 +91,10 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
     if (isOnTable(event.clientX, event.clientY)) onPlay(card)
   }
 
-  return <div className="poker-hand-dock" aria-label="手牌区">
-    <div className="poker-hand-dock-holes" aria-label="你的底牌">{table.hole?.map((value, index) => <Card key={index} card={value} />)}</div>
-    {hand.length > 0 && <div className="poker-hand-dock-fan"><div className="poker-hand-dock-cards" role="group" aria-label="能力牌"
+  if (!hand.length) return null
+
+  return <div className="poker-hand-dock">
+    <div className="poker-hand-dock-cards" role="group" aria-label="能力牌"
       onScroll={() => { if (preview?.input === "touch") setPreview(null) }}>
       {hand.map(card => {
         const info = definitions?.[card.cardId]
@@ -113,7 +113,7 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
               return
             }
             if (suppressClick.current) return
-            // A touch tap can preview without preventing the fan's horizontal scroll.
+            // A touch tap can preview without preventing horizontal scrolling.
             if (pointerType.current === "touch" || pointerType.current === "pen") {
               if (preview?.id === card.instanceId && preview.input === "touch" && canPlay && card.available) { setPreview(null); onPlay(card) }
               else setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "touch" })
@@ -124,7 +124,7 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
           </PokerAbilityFace>
         </button>
       })}
-    </div></div>}
+    </div>
     {previewed && definition && !ghost && createPortal(<div ref={previewBox} id={previewId} className="poker-hand-dock-preview" role="tooltip" style={position}>
       <PokerAbilityDetails name={definition.name} artId={definition.artId} description={definition.description}>
         <b className="text-accent-soft-foreground">{previewed.payment.paidAmount ? `实付 ${amount(previewed.payment.paidAmount)} 筹码` : "无需筹码"}</b>
