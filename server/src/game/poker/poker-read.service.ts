@@ -204,7 +204,7 @@ export class PokerReadService {
         const shown = Array.isArray(hand.showdownSeats) ? hand.showdownSeats : []
         const state = hot ? engine(hot) : null, ownParticipant = participants.find(p => p.userId === userId)
         const cardState = state ?? (coldData?.cards ? { archived: true as const, cards: coldData.cards, street: hand.street, seats: participants.map(p => ({ seatNo: p.seatNo, hole: p.holeCards as string[] })) } : null)
-        const cards = cardState ? projectCardView(cardState, { audience, perspective: "owner", mode: room.mode, handId: hand.id, actionSeq: hand.actionSeq, nowMs: Date.now(), ...(ownParticipant?.admissionId ? { self: { userId, admissionId: ownParticipant.admissionId, seatNo: ownParticipant.seatNo, controlVersion: 0 } } : {}) }) : undefined
+        const cards = cardState ? projectCardView(cardState, { audience, perspective: "owner", handId: hand.id, actionSeq: hand.actionSeq, nowMs: Date.now(), ...(ownParticipant?.admissionId ? { self: { userId, admissionId: ownParticipant.admissionId, seatNo: ownParticipant.seatNo, controlVersion: 0 } } : {}) }) : undefined
         const reserve = projectReserveView({ roomId: room.id, handId: hand.id, status: hand.status, userId, participants, state: state?.reserve ?? coldData?.reserve })
         return {
           ...(cards ? { cards } : {}), ...(reserve ? { reserve } : {}), ...(resolutions.length ? { frames: resolutions.map(r => projectResolutionFrame(r.data as unknown as ResolutionFrame)) } : {}),

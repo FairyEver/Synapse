@@ -8,7 +8,7 @@ import type { ResolutionFrame } from "../engine/cards/types"
 import type { ReserveState } from "../engine/chips/types"
 import { canSeeHole, publicHandResult } from "../poker-projection"
 
-const policy = (extra: Partial<CardViewPolicy> = {}): CardViewPolicy => ({ audience: "desktop", perspective: "owner", mode: "practice", handId: "test-hand", actionSeq: 1, nowMs: 0, self: { userId: "user-0", admissionId: "admission-0", seatNo: 0, controlVersion: 1 }, ...extra })
+const policy = (extra: Partial<CardViewPolicy> = {}): CardViewPolicy => ({ audience: "desktop", perspective: "owner", handId: "test-hand", actionSeq: 1, nowMs: 0, self: { userId: "user-0", admissionId: "admission-0", seatNo: 0, controlVersion: 1 }, ...extra })
 function fixture() {
   const h = makeCardHand({ definitions: CARD_CATALOG_V1 })
   h.cards = applyCardPoolOperation(h.cards!, { kind: "deal", stage: "initial", dealerSeat: 0 }, cardContext()).state
@@ -18,16 +18,16 @@ function fixture() {
 }
 describe("能力牌金额文案", () => {
   it.each([
-    { mode: "practice", bigBlind: 10, cost: 20, steal: "100 筹码", richest: "50 筹码", fee: "20 筹码" },
-    { mode: "points", bigBlind: 20, cost: 40, steal: "200 点数", richest: "100 点数", fee: "40 点数" },
-  ])("$mode 的手牌和候选使用本手盲注换算金额", ({ mode, bigBlind, cost, steal, richest, fee }) => {
+    { bigBlind: 10, cost: 20, steal: "100 筹码", richest: "50 筹码", fee: "20 筹码" },
+    { bigBlind: 20, cost: 40, steal: "200 筹码", richest: "100 筹码", fee: "40 筹码" },
+  ])("大盲注 $bigBlind 时，手牌和候选直接显示筹码数", ({ bigBlind, cost, steal, richest, fee }) => {
     const h = makeCardHand({ definitions: CARD_CATALOG_V1, bigBlind }), cards = h.cards!
     const takeCard = (id: string) => cards.pool.splice(cards.pool.findIndex(c => c.definitionId === id), 1)[0]
     cards.hands["admission-0"] = [takeCard("33"), takeCard("38")]
     cards.pool.unshift(takeCard("39"))
     h.cards = applyCardPoolOperation(cards, { kind: "reserve", admissionId: "admission-0", count: 1, choiceId: "choice", street: "preflop", paymentVersion: "q" }, cardContext()).state
 
-    const view = projectCardView(h, policy({ mode }))!
+    const view = projectCardView(h, policy())!
     expect(view.definitions!["33"].description).toContain(steal)
     expect(view.definitions!["38"]).toMatchObject({ cost, description: expect.stringContaining(fee) })
     expect(view.ownHand?.find(c => c.cardId === "38")?.payment.nominalAmount).toBe(cost)
