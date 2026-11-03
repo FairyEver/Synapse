@@ -57,11 +57,14 @@ describe("Roll玩家信息", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     await act(async()=>root.unmount())
   })
-  it("点击其他玩家只展示该玩家数据，日志面板互斥，关闭不提交动作", async()=>{
-    const {host,root}=await mount()
+  it("点击其他玩家只展示该玩家数据，与总览互斥，关闭不提交动作", async()=>{
+    const {root}=await mount()
     await act(async()=>button("对局信息").click())
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    await act(async()=>button("关闭对局信息").click())
+    await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve))})
     await act(async()=>button("查看玩家1的玩家信息").click())
-    expect(host.querySelector(".poker-information-drawer")?.hasAttribute("hidden")).toBe(true)
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).toBeNull()
     const info=document.querySelector('[aria-label="玩家换牌统计"]')!
     expect(info.textContent).toContain("支出 8 筹码")
     expect(info.textContent).toContain("支出 36 筹码")

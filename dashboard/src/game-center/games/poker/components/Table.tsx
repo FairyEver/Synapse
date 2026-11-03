@@ -1,12 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import { ArrowLeft, Bell, Eye, ListOrdered, MoreHorizontal, UserRound, UsersRound, Volume2, VolumeX, X } from "lucide-react"
+import { ArrowLeft, Bell, Eye, MoreHorizontal, UserRound, UsersRound, Volume2, VolumeX } from "lucide-react"
 import { chipValue, type PokerTableView, type PokerTableEvent, type PokerResolutionFrameView } from "@synapse/shared/game-contracts"
 import { Button } from "@heroui/react"
 import { Card } from "./Card"
 import { Seat, EmptySeat } from "./Seat"
 import { PokerLogRail } from "./PokerLogRail"
 import { hasPokerHandDock, usesPokerHandDock } from "../lib/card-mode"
-import { SidePanel } from "./SidePanel"
+import { PokerMatchOverviewDialog } from "./PokerMatchOverviewDialog"
 import { HumanControls, type PokerControlPanel } from "./HumanControls"
 import { PokerMembersPanel } from "./PokerMembersPanel"
 import { ChipMotion } from "./ChipMotion"
@@ -47,23 +47,23 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   identityKey?: string
   members?: ReactNode
 }) {
-  const [panel, setPanel] = useState<PokerControlPanel | "log" | "members" | "ranks" | "playerInfo" | "rollFees" | "potSources" | null>(null), [fit, setFit] = useState(fitTableScene(1440,900))
+  const [panel, setPanel] = useState<PokerControlPanel | "overview" | "members" | "ranks" | "playerInfo" | "rollFees" | "potSources" | null>(null), [fit, setFit] = useState(fitTableScene(1440,900))
   const [inspected, setInspected] = useState<{ seatNo: number; key: string } | null>(null)
   const inspectedTrigger = useRef<HTMLButtonElement | null>(null)
   const [compact, setCompact] = useState(false)
-  const panelOpen = panel === "log"
-  const surface = useRef<HTMLElement>(null), viewport = useRef<HTMLDivElement>(null), cardDropArea = useRef<HTMLDivElement>(null), menuTrigger = useRef<HTMLButtonElement>(null), logTrigger = useRef<HTMLButtonElement>(null)
+  const surface = useRef<HTMLElement>(null), viewport = useRef<HTMLDivElement>(null), cardDropArea = useRef<HTMLDivElement>(null), menuTrigger = useRef<HTMLButtonElement>(null)
   const membersTrigger = useRef<HTMLButtonElement>(null)
   const rollFeesTrigger = useRef<HTMLButtonElement>(null)
   const potSourcesTrigger = useRef<HTMLButtonElement>(null)
-  const panelId = useId(), menuId = useId()
+  const menuId = useId()
   const [soundEnabled, setSoundEnabled] = useState(true)
   const chipLanded = usePokerAudio(table, perspective, identityKey ?? "", soundEnabled)
   const controlVersion = table.controlVersion ?? table.seats.find(seat => seat.seatNo === table.mySeatNo)?.controlVersion
   useEffect(() => { setPanel(current => current === "bet" ? null : current) }, [table.handId, table.actionSeq, controlVersion, perspective, table.actionOnSeat, table.status])
-  useEffect(() => { setPanel(null) }, [compact])
+  useEffect(() => { setPanel(current => current === "overview" ? current : null) }, [compact])
   useEffect(() => { setPanel(current => current === "playerInfo" ? null : current) }, [table.roomCode, identityKey, perspective])
   useEffect(() => { setPanel(current => current === "rollFees" || current === "potSources" ? null : current) }, [table.handId, table.roomCode, identityKey, perspective])
+  useEffect(() => { setPanel(current => current === "overview" ? null : current) }, [table.handId, table.roomCode, identityKey, perspective, table.mySeatNo])
   useEffect(() => { if (table.status === "closed") setPanel(null) }, [table.status])
   const view = useMemo(()=>projectTable(table, perspective),[table,perspective])
   const nextHand = usePokerReady(view, perspective, identityKey, onRefresh)
@@ -118,7 +118,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const closePlayerInfo = () => { const trigger = inspectedTrigger.current; setPanel(null); setInspected(null); requestAnimationFrame(() => { if (trigger?.isConnected) trigger.focus() }) }
   const closeRollFees = () => { setPanel(null); requestAnimationFrame(() => rollFeesTrigger.current?.focus()) }
   const closePotSources = () => { setPanel(null); requestAnimationFrame(() => potSourcesTrigger.current?.focus()) }
-  return <section ref={surface} onKeyDown={e => { if (e.key === "Escape" && panel === "log") { setPanel(null); logTrigger.current?.focus() } }} className="poker-table poker-immersive" data-control-layout="bottom" data-hand-dock={showHandDock} data-entry-controls={view.mySeatNo === null || view.status !== "running"} data-compact-controls={compact} data-panel-open={panelOpen} aria-label={`牌桌 ${table.roomCode}`}>
+  return <section ref={surface} className="poker-table poker-immersive" data-control-layout="bottom" data-hand-dock={showHandDock} data-entry-controls={view.mySeatNo === null || view.status !== "running"} data-compact-controls={compact} aria-label={`牌桌 ${table.roomCode}`}>
     <div className="poker-table-layout">
         <div className="poker-edge-controls bg-surface font-sans text-foreground scheme-light">
           <Button type="button" variant="tertiary" isIconOnly={compact} aria-label="返回房间" onPress={onBack}><ArrowLeft aria-hidden="true" />{!compact && "返回房间"}</Button>
@@ -129,7 +129,8 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           <div className="poker-perspective flex items-center gap-2">
             {members && view.status !== "closed" && <Button ref={membersTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label="成员管理" aria-expanded={panel === "members"} onPress={() => setPanel(panel === "members" ? null : "members")}><UsersRound aria-hidden="true" />{!compact && "成员"}</Button>}
             <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} ready={presentedReady} blocked={cash.blocked} />
-            <Button ref={logTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label={panelOpen ? "收起对局信息" : "对局信息"} aria-expanded={panelOpen} aria-controls={panelId} onPress={() => setPanel(panelOpen ? null : "log")}><ListOrdered aria-hidden="true" />{!compact && (panelOpen ? "收起对局信息" : "对局信息")}</Button>
+            <PokerMatchOverviewDialog table={view} events={events} perspective={perspective} compact={compact}
+              open={panel === "overview"} onOpenChange={open => setPanel(current => open ? "overview" : current === "overview" ? null : current)} />
             <HandRankDialog variant={view.variant} open={panel === "ranks"} onOpenChange={open => setPanel(open ? "ranks" : null)} compact={compact} />
             {view.status !== "closed" && <Button ref={menuTrigger} type="button" variant="tertiary" isIconOnly aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" /></Button>}
           </div>
@@ -157,17 +158,11 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
       </div>
       {cardDock && <PokerLogRail table={view} />}
       <div className="poker-interaction-rail">
-        <div className="poker-information-slot">
-          <div className="poker-information-drawer bg-surface font-sans text-foreground scheme-light" hidden={!panelOpen} inert={!panelOpen}>
-            <Button type="button" isIconOnly size="sm" variant="tertiary" className="poker-close-log" aria-label="关闭对局信息" onPress={() => { setPanel(null); logTrigger.current?.focus() }}><X aria-hidden="true" /></Button>
-            <SidePanel identityKey={identityKey} id={panelId} table={view} perspective={perspective} events={events} />
-          </div>
-        </div>
         <PokerMembersPanel open={panel === "members"} onOpenChange={open => setPanel(open ? "members" : null)} compact={compact} trigger={membersTrigger} container={surface.current}>{members}</PokerMembersPanel>
         {panel === "playerInfo" && inspectedSeat && inspected?.key === inspectedKey && <PokerPlayerInfoDialog table={view} seat={inspectedSeat} onClose={closePlayerInfo} />}
         {panel === "rollFees" && <PokerReserveDialog table={view} onClose={closeRollFees} />}
         {panel === "potSources" && <PokerPotSourcesDialog table={view} onClose={closePotSources} />}
-        <div className="poker-controls-anchor"><HumanControls cardDropArea={cardDropArea} cardFrames={cardFrames} nextHand={presentedReady} identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" || panel === "members" || panel === "ranks" || panel === "playerInfo" || panel === "rollFees" || panel === "potSources" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
+        <div className="poker-controls-anchor"><HumanControls cardDropArea={cardDropArea} cardFrames={cardFrames} nextHand={presentedReady} identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "overview" || panel === "members" || panel === "ranks" || panel === "playerInfo" || panel === "rollFees" || panel === "potSources" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
             <Button fullWidth type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
             {canNudge && <Button fullWidth variant="tertiary" isDisabled={(view.deadlineMs ?? 600000) > 540000} onPress={() => { onNudge(active.seatNo); setPanel(null) }}><Bell aria-hidden="true" />提醒玩家</Button>}
             {table.seats.some(s => s.isMe) && <Button fullWidth variant="tertiary" isDisabled={nextHand.busy} aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onPress={() => { onPerspective(perspective === "owner" ? "public" : "owner"); setPanel(null) }}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "旁观视角" : "玩家视角"}</Button>}

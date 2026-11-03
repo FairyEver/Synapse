@@ -63,10 +63,12 @@ it.each(sizes)("%s×%s 牌桌与实际展开的金额面板可读、无横向裁
     }
     const transform=canvas.style.transform
     await page.getByRole("button",{name:"对局信息",exact:true}).click()
-    for(const name of ["总览","AI","日志"]) await page.getByRole("tab",{name,exact:true}).click()
-    const drawer=document.querySelector('.poker-information-drawer')!.getBoundingClientRect()
-    expect(drawer.top).toBeGreaterThanOrEqual(0)
-    expect(drawer.bottom).toBeLessThanOrEqual(document.querySelector('.poker-controls-anchor')!.getBoundingClientRect().top+1)
+    const overview = page.getByRole("dialog", {name:"总览",exact:true})
+    await expect.element(overview).toBeVisible()
+    const bounds = overview.element().getBoundingClientRect()
+    expect(bounds.top).toBeGreaterThanOrEqual(0)
+    expect(bounds.bottom).toBeLessThanOrEqual(innerHeight + 1)
+    expect(Math.abs((bounds.left + bounds.right) / 2 - innerWidth / 2)).toBeLessThan(2)
     await page.getByRole("button",{name:"关闭对局信息"}).click()
     expect(document.querySelector('.poker-canvas')).toBe(canvas)
     expect(canvas.style.transform).toBe(transform)

@@ -3,7 +3,7 @@ import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { describe, expect, it } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
-import { SidePanel } from "../components/SidePanel"
+import { PokerLogRail } from "../components/PokerLogRail"
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 describe("牌桌日志行动人", () => {
@@ -51,11 +51,10 @@ describe("牌桌日志行动人", () => {
     }
     const host = document.createElement("div"),
       root = createRoot(host)
-    await act(async () => root.render(<SidePanel table={table} perspective="public" />))
-    expect(host.querySelector('[aria-label="对局信息"] ol')?.textContent).toContain(
-      displayName ?? "座位 2",
-    )
-    expect(host.textContent).not.toContain("新玩家")
+    await act(async () => root.render(<PokerLogRail table={table} />))
+    const action = host.querySelector('button[data-log-seq="1"]')
+    expect(action?.getAttribute("aria-label")).toContain(displayName ?? "座位 2")
+    expect(action?.getAttribute("aria-label")).not.toContain("新玩家")
     await act(async () => root.unmount())
   })
 })

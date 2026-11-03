@@ -12,7 +12,7 @@
 
 以下旧建房选项、Roll 和暂存行为只适用于存量房间及对应规则版本。
 
-2026-11-02 对局信息：牌桌顶部入口由“日志”改为“对局信息”，固定“日志 / 总览 / AI”三个Tab。日志仅按阶段合并实际盲注、普通行动及成功Roll start，不含累计指标、玩家汇总、资产或完整结算；choose只更新原Roll状态，不新增收费。总览复用本手potContributions/rollLedger，按原参赛身份展示累计下注、普通/超级次数、支出和补偿，可展开各轮投入；缺字段显示不可用，不从recentActions或近期事件推算。完整结算仅在总览；AI判断/提示词仅本人视角且已入座可见，其他视角显示不可用。身份、房间、手牌、视角变化重置Tab，保留面板互斥、焦点返回、画布和850px行为。
+2026-11-03 对局信息：牌桌顶部入口直接打开居中的 HeroUI「总览」模态框，正文按需滚动，关闭或按 Esc 返回入口。总览沿用本手累计、原参赛者的各轮投入与完整结算，缺字段时显示暂不可用。旧侧栏的日志与 AI 判断/提示词页签已移除，卡牌桌右侧窄轨继续提供本手公开历史。切换手牌、房间、身份、座位或视角时关闭总览，宽窄切换不挤占牌桌画布。
 
 table_state/room_get可选公开handLog={handId,complete,entries}，绑定当前手牌。entries按seq排列，仅含seq/seatNo/displayName/street/action/amount/isAuto/actionSource及可选roll={kind,count,status}；street为preflop/flop/turn/river，action为small_blind/big_blind/fold/check/call/bet/raise/allin/roll，金额为实际追加或Roll费用。seq=-1/0为按本手初始筹码与规则恢复的实际小/大盲，正数沿用动作序号；choose不生成第二条，序号可有间隔。roll.status=pending/completed/replaced/cancelled，分别为待选/完成/被重抽替代/手牌取消，取消不表示费用到账。查询只取本手最近最多1000条原始动作，完整时额外含两笔盲注（最多1002项）；complete=false表示截断或缺口，不附加盲注，也不能算整手或各轮完整下注；缺字段表示不可用。姓名只取本手参赛快照，不公开userId/admissionId、底牌、候选、旧牌、槽位、note或persona。保留原recentActions最近30条普通行动及本人AI隐私；既有table.state/room.get只读扩展，无新工具、输入、路由、权限、迁移或写入。
 
@@ -105,7 +105,7 @@ RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选
 | HumanControls 的金额输入/滑块/预设、全下确认及错误/重试提示 | 系统 | 当前原生 input、PokerButton 和游戏表单皮肤；后续改为标准系统表单/确认/反馈，保留显式提交与原动作意图 |
 | HumanControls 的入座、AI 接入/接管、暂离/回座/离桌 | 系统 | 当前与出牌共用 PokerButton，宽屏常驻、窄屏进入“更多”；应分出系统管理呈现，保留窄屏入口和控制权语义 |
 | [PokerControlPopover](../../dashboard/src/game-center/games/poker/components/PokerControlPopover.tsx) | 系统表单/菜单容器 | 已用 HeroUI Popover，但挂到牌桌并应用游戏皮肤、PokerButton 关闭按钮；需隔离系统主题，保留锚点、边界、互斥、Escape 和焦点返回 |
-| [SidePanel](../../dashboard/src/game-center/games/poker/components/SidePanel.tsx) 的日志/AI 判断/提示词、[PracticeBots](../../dashboard/src/game-center/games/poker/components/PracticeBots.tsx) | 系统 | HeroUI Tabs 仍被游戏变量重染，机器人管理使用 PokerButton；需统一系统侧栏与管理控件，保留仅本人可读与房主权限 |
+| 旧对局信息侧栏（已移除）、[PracticeBots](../../dashboard/src/game-center/games/poker/components/PracticeBots.tsx) | 系统 | HeroUI Tabs 仍被游戏变量重染，机器人管理使用 PokerButton；需统一系统侧栏与管理控件，保留仅本人可读与房主权限 |
 | [Settlement](../../dashboard/src/game-center/games/poker/components/Settlement.tsx) | 分两种用途 | `compact=false` 桌上短摘要保留游戏反馈；`compact` 日志内完整结果改用系统布局并复用牌面，不按组件名一刀切 |
 
 实施顺序采用先改造交叉最多的 `HumanControls`、`PokerControlPopover`、`SidePanel` 和 `PracticeBots`，再统一 Table 边缘系统入口；大厅/房间/记录/档案沿用既有系统方向，纯牌桌场景保留。相关样式证据为 [responsive-controls.css](../../dashboard/src/game-center/games/poker/styles/responsive-controls.css) 中的 Tabs token 重映射和 `.poker-control-popover` 覆盖，以及 [table-tokens.css](../../dashboard/src/game-center/games/poker/styles/table-tokens.css) 中的游戏按钮/表单样式。

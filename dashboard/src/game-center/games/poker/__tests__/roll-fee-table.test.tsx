@@ -19,15 +19,19 @@ async function mount() {
   return { host, root, render }
 }
 describe("牌桌暂存入口与旧账本适配", () => {
-  it("费用标签金额筹码均在入口内；与日志互斥、关闭恢复焦点，不提交资金操作", async () => {
+  it("费用标签金额筹码均在入口内；与总览互斥、关闭恢复焦点，不提交资金操作", async () => {
     const { host, root } = await mount()
     const trigger = button("查看暂存明细")
     expect(trigger).toBeDefined()
     expect(trigger.querySelector('.poker-chip-pile[data-fund="roll"]')).not.toBeNull()
     await act(async () => button("对局信息").click())
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).not.toBeNull()
+    await act(async () => button("关闭对局信息").click())
+    await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)) })
     await act(async () => trigger.click())
     expect([...document.querySelectorAll('[role="dialog"] dt')].find(node => node.textContent === "存入合计")?.nextElementSibling?.textContent).toBe("403")
-    expect(host.querySelector('.poker-information-drawer')?.hasAttribute('hidden')).toBe(true)
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).toBeNull()
     await act(async () => {
       button("关闭暂存明细").click()
       await new Promise(resolve => requestAnimationFrame(resolve))
@@ -35,10 +39,8 @@ describe("牌桌暂存入口与旧账本适配", () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(document.activeElement).toBe(trigger)
     await act(async () => trigger.click())
-    await act(async () => {
-      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
-      await new Promise(resolve => requestAnimationFrame(resolve))
-    })
+    await act(async () => button("关闭暂存明细").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })))
+    await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)) })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(document.activeElement).toBe(trigger)
     await act(async () => root.unmount())

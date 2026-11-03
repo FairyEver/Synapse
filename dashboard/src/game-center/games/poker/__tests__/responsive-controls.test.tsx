@@ -278,15 +278,18 @@ describe("统一底部操作与按需侧栏", () => {
     await act(async()=>root.unmount())
   })
 
-  it("Roll与日志/金额/全下/管理互斥，关闭回入口且画布节点保持",async()=>{
+  it("Roll与总览/金额/全下/管理互斥，关闭回入口且画布节点保持",async()=>{
     const host=document.createElement("div"),root=createRoot(host);document.body.append(host)
     const value={...table,hole:["As","Kd"],roll:{enabled:true,count:0,normal:{fee:3,available:true},super:{fee:8,available:true}}}
     await act(async()=>root.render(<Table table={value} perspective="owner" identityKey="panel-roll-user" onPerspective={()=>{}} onBack={()=>{}}/>))
     const canvas=host.querySelector('.poker-canvas'),style=canvas!.getAttribute('style')
     await click(host,"对局信息")
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1)
+    await click(document.body,"关闭对局信息")
+    await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve))})
     button(host,"Roll 换牌").focus()
     await click(host,"Roll 换牌")
-    expect(host.querySelector('.poker-information-drawer')!.hasAttribute('hidden')).toBe(true)
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).toBeNull()
     expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Roll 换牌")
     await click(document.body,"取消")
     await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve))})
@@ -307,7 +310,7 @@ describe("统一底部操作与按需侧栏", () => {
     await act(async()=>root.unmount())
   })
 
-  it("按内容宽度切换，日志、金额和更多互斥且不改变画布尺寸", async () => {
+  it("按内容宽度切换，总览、金额和更多互斥且不改变画布尺寸", async () => {
     const host=document.createElement("div"),root=createRoot(host)
     document.body.append(host)
     await act(async()=>root.render(<Table table={table} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} members={<span>陪练设置</span>} />))
@@ -322,10 +325,15 @@ describe("统一底部操作与按需侧栏", () => {
     await resize(720)
     expect(host.querySelector("input")).toBeNull()
     await click(host,"对局信息")
-    expect(button(host,"收起对局信息").getAttribute("aria-expanded")).toBe("true")
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).not.toBeNull()
     const transform=(host.querySelector(".poker-canvas") as HTMLElement).style.transform
+    await resize(1000)
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).not.toBeNull()
+    await resize(720)
+    await click(document.body,"关闭对局信息")
+    await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve))})
     await click(host,"更多牌桌操作")
-    expect(button(host,"对局信息").getAttribute("aria-expanded")).toBe("false")
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).toBeNull()
     expect(button(host,"交给 AI")).toBeDefined()
     await act(async()=>root.render(<Table table={{...table,actionSeq:4}} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} members={<span>陪练设置</span>} />))
     expect(button(host,"交给 AI")).toBeDefined()
@@ -341,6 +349,9 @@ describe("统一底部操作与按需侧栏", () => {
     await click(host,"自定义")
     expect(host.querySelector('input[type="number"]')).not.toBeNull()
     await click(host,"对局信息")
+    expect(host.querySelector('input[type="number"]')).toBeNull()
+    await click(document.body,"关闭对局信息")
+    await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve))})
     await click(host,"成员管理")
     expect(host.textContent).toContain("陪练设置")
     await act(async()=>root.unmount())

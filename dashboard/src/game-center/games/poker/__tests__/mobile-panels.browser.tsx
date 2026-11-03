@@ -16,7 +16,7 @@ import { PokerRollFeeDialog } from "../components/PokerRollFeeDialog"
 import { PokerPotSourcesDialog } from "../components/PokerPotSourcesDialog"
 import { HandRankDialog } from "../components/HandRankDialog"
 import { SettlementPanel } from "../components/SettlementPanel"
-import { SidePanel } from "../components/SidePanel"
+import { PokerMatchOverviewDialog } from "../components/PokerMatchOverviewDialog"
 import { PracticePreparation } from "../components/PracticePreparation"
 import { PersonaBadge } from "../components/PersonaBadge"
 import { rollTable } from "./roll-visibility-fixtures"
@@ -118,18 +118,42 @@ for (const [width, height] of [[320,568],[390,667],[568,320],[667,320],[1280,800
       if (name !== "settlement") await expect.element(page.getByRole("button", {name:"打开测试面板",exact:true})).toHaveFocus()
     } finally { await screen.unmount() }
   })
-  it(`${width}×${height} information tabs contain large numbers and long content`,async()=>{
-    await page.viewport(width,height)
-    const screen=await render(<div className="h-dvh w-full bg-surface"><SidePanel table={{...stress,persona:longName,recentActions:[{seq:1,seatNo:1,displayName:longName,street:"flop",action:"raise",amount:large,potAfter:large,isAuto:false,note:longName}]}} perspective="owner"/></div>)
+  it(`${width}×${height} 总览模态框的长内容在正文内滚动`, async () => {
+    await page.viewport(width, height)
+    function Overview() {
+      const [open, setOpen] = useState(false)
+      return <PokerMatchOverviewDialog table={stress} perspective="owner" compact={width < 850} open={open} onOpenChange={setOpen} />
+    }
+    const screen = await render(<Overview />)
     try {
-      for(const tab of ["日志","总览","AI"]) {
-        await page.getByRole('tab',{name:tab,exact:true}).click()
-        const panel=document.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!
-        fits(panel,tab)
-        await page.screenshot({path:`.superpowers/sdd/2026-11-02-mobile-panels/${width}-${height}-${tab}.png`})
-        expect(panel.scrollWidth,`${tab} overflow`).toBeLessThanOrEqual(panel.clientWidth+1)
+      const trigger = page.getByRole("button", { name: "对局信息", exact: true })
+      const dialog = page.getByRole("dialog", { name: "总览", exact: true })
+      await trigger.click()
+      await expect.element(dialog).toBeVisible()
+      await expect.poll(() => dialog.element().closest('[data-slot="modal-container"]')?.hasAttribute("data-entering")).toBe(false)
+      const panel = dialog.element()
+      const body = panel.querySelector<HTMLElement>(".modal__body")!
+      const heading = panel.querySelector(".modal__heading")!
+      const close = panel.querySelector(".modal__close-trigger")!
+      fits(panel, "总览")
+      expect(rect(heading).left - rect(panel).left).toBeGreaterThanOrEqual(16)
+      expect(rect(heading).top - rect(panel).top).toBeGreaterThanOrEqual(16)
+      const headingText = document.createRange()
+      headingText.selectNodeContents(heading)
+      expect(headingText.getBoundingClientRect().right).toBeLessThanOrEqual(rect(close).left)
+      expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1)
+      if (body.scrollHeight > body.clientHeight) {
+        const top = rect(heading).top
+        body.scrollTop = body.scrollHeight
+        await expect.poll(() => body.scrollTop).toBeGreaterThan(0)
+        expect(rect(heading).top).toBe(top)
+        fits(close, "关闭对局信息")
       }
-    }finally{await screen.unmount()}
+      await page.screenshot({ path: `.superpowers/sdd/2026-11-02-mobile-panels/${width}-${height}-overview.png` })
+      await userEvent.keyboard("{Escape}")
+      await expect.element(dialog).not.toBeInTheDocument()
+      await expect.element(trigger).toHaveFocus()
+    } finally { await screen.unmount() }
   })
   it(`${width}×${height} practice preparation and expanded persona remain reachable`,async()=>{
     await page.viewport(width,height)

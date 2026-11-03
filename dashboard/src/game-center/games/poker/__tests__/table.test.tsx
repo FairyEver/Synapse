@@ -98,11 +98,13 @@ describe("牌桌", () => {
       expect(trigger).not.toBeNull()
       const canvas = host.querySelector(".poker-canvas")
       await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="对局信息"]')!.click())
+      await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="关闭对局信息"]')!.click())
+      await act(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))) })
       await act(async () => trigger!.focus())
       await act(async () => trigger!.click())
       const dialog = document.querySelector('[role="dialog"]')!
       expect(dialog).not.toBeNull()
-      expect(host.querySelector(".poker-information-drawer")?.hasAttribute("hidden")).toBe(true)
+      expect(document.querySelector('[role="dialog"][aria-label="总览"]')).toBeNull()
       const ranks = [...dialog.querySelectorAll("ol li")].map(item => item.lastElementChild?.textContent)
       expect(ranks).toEqual(variant === "short32"
         ? ["皇家同花顺", "同花顺", "四条", "同花", "葫芦", "顺子", "三条", "两对", "一对", "高牌"]
@@ -150,14 +152,27 @@ describe("牌桌", () => {
   it("结算后重新进入仍可在总览查看完整分池结果，轮询事件不重复结算", async () => {
     const settlement = {handId:"h",handNo:1,board:[],rules:{variant:"standard52" as const,smallBlind:1,bigBlind:2},mixedControl:false,seats:[{seatNo:0,displayName:"我",participantKind:"human" as const,isMe:true,folded:false,delta:3,payout:6,endingStack:1003,handName:"一对"}],pots:[{amount:6,eligible:[0],winners:[0],shares:{0:6},refund:false}]}
     const host=document.createElement("div"),root=createRoot(host)
+    document.body.append(host)
     const render=async(events: Parameters<typeof Table>[0]["events"])=>act(async()=>root.render(<Table table={{...state,settlement}} events={events} perspective="owner" onPerspective={()=>{}} onBack={()=>{}} />))
     await render([])
-    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="对局信息"]')!.click())
-    await act(async () => ([...host.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent === "总览")!).click())
-    expect(host.querySelector(".poker-result-log")?.textContent).toContain("主池 6")
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="关闭结算，返回牌桌"]')!.click())
+    await act(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))) })
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-label="对局信息"]')!
+    await act(async () => { trigger.focus(); trigger.click() })
+    const overview = document.querySelector('[role="dialog"][aria-label="总览"]')
+    expect(overview?.querySelector("h2")?.textContent).toBe("总览")
+    expect(overview?.querySelector('[role="tablist"]')).toBeNull()
+    expect(overview?.querySelector(".poker-result-log")?.textContent).toContain("主池 6")
     await render([{kind:"settlement",handId:"h",handNo:1,seq:2147483647,settlement}])
-    expect(host.querySelectorAll(".poker-result-log")).toHaveLength(1)
+    expect(overview?.querySelectorAll(".poker-result-log")).toHaveLength(1)
+    await act(async () => {
+      overview?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    })
+    await act(async () => { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))) })
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
     await act(async()=>root.unmount())
+    host.remove()
   })
   it("申请手后暂离时仍按进行中呈现，直到服务端确认已暂停", async () => {
     const host=document.createElement("div"),root=createRoot(host)
@@ -244,9 +259,10 @@ describe("牌桌", () => {
     expect(host.textContent).not.toContain("2")
     await act(async () => root.unmount())
   })
-  it("窄窗日志入口可展开和收起，仍只提供观看操作", async () => {
+  it("总览模态框可通过关闭按钮关闭，牌桌画布保持原位", async () => {
     const host = document.createElement("div"),
       root = createRoot(host)
+    document.body.append(host)
     await act(async () =>
       root.render(
         <Table
@@ -258,17 +274,20 @@ describe("牌桌", () => {
         />,
       ),
     )
-    const toggle = [...host.querySelectorAll("button")].find((b) =>
-      b.getAttribute("aria-controls"),
-    )!
-    expect(toggle).toBeDefined()
+    const canvas = host.querySelector(".poker-canvas")
+    const toggle = host.querySelector<HTMLButtonElement>('[aria-label="对局信息"]')!
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
     await act(async () => toggle.click())
     expect(toggle.getAttribute("aria-expanded")).toBe("true")
-    expect(host.querySelector("aside")?.id).toBe(toggle.getAttribute("aria-controls"))
-    await act(async () => toggle.click())
+    const dialog = document.querySelector('[role="dialog"][aria-label="总览"]')!
+    expect(dialog).not.toBeNull()
+    expect(host.contains(dialog)).toBe(false)
+    await act(async () => dialog.querySelector<HTMLButtonElement>('[aria-label="关闭对局信息"]')!.click())
+    expect(document.querySelector('[role="dialog"][aria-label="总览"]')).toBeNull()
     expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(host.querySelector(".poker-canvas")).toBe(canvas)
     await act(async () => root.unmount())
+    host.remove()
   })
   it("旁观不显示出牌控件和私密判断，仍标记行动座位", async () => {
     const host = document.createElement("div"),

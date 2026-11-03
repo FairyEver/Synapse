@@ -68,11 +68,12 @@ describe.each(sizes)("亮色牌桌 %s×%s", (width,height) => {
       }
       const transform = canvas.style.transform
       await page.getByRole("button",{name:"对局信息",exact:true}).click()
-      const drawer = document.querySelector(".poker-information-drawer")!
-      expect(rect(drawer).bottom).toBeLessThanOrEqual(rect(footer).top + 1)
+      const overview = page.getByRole("dialog", { name: "总览", exact: true })
+      await expect.element(overview).toBeVisible()
+      expect(rect(overview.element()).bottom).toBeLessThanOrEqual(innerHeight + 1)
       expect(canvas.style.transform).toBe(transform)
       await userEvent.keyboard("{Escape}")
-      expect(document.querySelector(".poker-information-drawer")?.hasAttribute("hidden")).toBe(true)
+      await expect.element(overview).not.toBeInTheDocument()
       if (count === 10) await page.screenshot({path:`.superpowers/sdd/2026-11-01-poker-light-ui/${width}-${height}-10-seats.png`})
     } finally { await screen.unmount() }
   })
