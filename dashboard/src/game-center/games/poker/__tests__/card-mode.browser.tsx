@@ -273,6 +273,32 @@ it("少量详情与左卡在中间区域居中，能力候选完整规则只在�
     expect(Math.abs(middle(card) - middle(details))).toBeLessThan(3)
   } finally { await screen.unmount() }
 })
+it.each([[1280, 800], [320, 568]])("%s×%s 只有主行动按钮在白底内，能力牌增减不移动底栏", async (width, height) => {
+  await page.viewport(width, height)
+  const hand = cardTable.cards!.ownHand!
+  const fixture = (ownHand: typeof hand) => <div className="h-dvh">
+    <Table table={{ ...cardTable, cards: { ...cardTable.cards!, version: "cards-v2", ownHand } }} perspective="owner" onPerspective={noop} onBack={noop} />
+  </div>
+  const screen = await render(fixture(hand))
+  try {
+    const anchor = document.querySelector(".poker-controls-anchor")!
+    const actions = anchor.querySelector(".poker-action-buttons")!
+    const presets = anchor.querySelector(".poker-bet-presets")!
+    const card = anchor.querySelector(".poker-hand-dock-card")!
+    const viewport = document.querySelector(".poker-canvas-viewport")!
+    const bounds = actions.getBoundingClientRect()
+    expect(getComputedStyle(actions).backgroundColor).toBe(getComputedStyle(document.querySelector(".poker-edge-controls")!).backgroundColor)
+    expect(getComputedStyle(anchor).backgroundColor).not.toBe(getComputedStyle(actions).backgroundColor)
+    expect(presets.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top)
+    expect(card.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top)
+    expect(bounds.width).toBeLessThan(anchor.getBoundingClientRect().width)
+    const board = viewport.getBoundingClientRect().toJSON()
+    await screen.rerender(fixture([]))
+    expect(anchor.querySelector(".poker-hand-dock-card")).toBeNull()
+    expect(actions.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON())
+    expect(viewport.getBoundingClientRect().toJSON()).toEqual(board)
+  } finally { await screen.unmount() }
+})
 it("850px两侧切换和卡牌面板开关复用原画布，减少动态效果仍可操作", async () => {
   const original = window.matchMedia.bind(window)
   const spy = vi.spyOn(window, "matchMedia").mockImplementation(query => query.includes("prefers-reduced-motion") ? { ...original(query), matches: true, addEventListener: noop, removeEventListener: noop } : original(query))

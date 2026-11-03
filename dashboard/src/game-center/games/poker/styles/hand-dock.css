@@ -1,22 +1,20 @@
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-controls-anchor {
   --hand-height: clamp(4.5rem, 7vw, 6rem);
   --hand-bleed: 1.25rem;
-  --dock-top: .25rem;
   position: relative;
   background: var(--game-bg, var(--background));
   border-top: 0;
-  padding-block-start: var(--dock-top);
-}
-.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-controls-anchor::before {
-  content: "";
-  position: absolute;
-  inset: calc(var(--dock-top) + var(--hand-height) / 2) 0 0;
-  background: var(--surface);
-  border-top: 1px solid var(--separator);
-  pointer-events: none;
+  padding-block: .25rem 0;
 }
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-human-controls { width: min(100%, 52rem); position: relative; }
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock { width: min(100%, 40rem); margin-inline: auto; }
+.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock > .poker-bet-presets { margin-block-end: .25rem; }
+.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-buttons {
+  margin-inline: -.5rem;
+  padding: .25rem .5rem .5rem;
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
 /* Reserve the row even when the hand has no cards to render. */
 .poker-hand-dock-slot {
   flex: none;
