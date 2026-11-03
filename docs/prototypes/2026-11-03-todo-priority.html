@@ -24,18 +24,14 @@
       --color-white: oklch(1 0 0);
       --color-red-700: oklch(50.5% 0.213 27.518);
       --color-red-300: oklch(80.8% 0.114 19.571);
-      --color-amber-600: oklch(66.6% 0.179 58.318);
-      --color-amber-300: oklch(87.9% 0.169 91.605);
-      --color-yellow-700: oklch(55.4% 0.135 66.442);
+      --color-purple-700: oklch(49.6% 0.265 301.924);
+      --color-purple-300: oklch(82.7% 0.119 306.383);
       --color-blue-700: oklch(48.8% 0.243 264.376);
       --color-blue-300: oklch(80.9% 0.105 251.813);
       --radius: 0.625rem;
     }
     [data-priority="high"] { --priority-fill: var(--color-red-700); --priority-ink: light-dark(var(--priority-fill), var(--color-red-300)); }
-    [data-priority="medium"] {
-      --priority-fill: color-mix(in oklch, var(--color-yellow-700), var(--color-amber-600) 18%);
-      --priority-ink: light-dark(var(--priority-fill), var(--color-amber-300));
-    }
+    [data-priority="medium"] { --priority-fill: var(--color-purple-700); --priority-ink: light-dark(var(--priority-fill), var(--color-purple-300)); }
     [data-priority="low"] { --priority-fill: var(--color-blue-700); --priority-ink: light-dark(var(--priority-fill), var(--color-blue-300)); }
     [data-priority="none"] { --priority-ink: var(--muted-foreground); }
     *, *::before, *::after { box-sizing: border-box; }
@@ -57,8 +53,8 @@
     .button.primary:hover { opacity: .88; }
     .button.icon-only { width: 32px; padding: 0; }
     .segments { display: flex; padding: 3px; gap: 2px; border-radius: var(--radius); background: var(--muted); }
-    .segment { min-height: 28px; padding: 0 12px; border-radius: calc(var(--radius) - 3px); color: var(--muted-foreground); }
-    .segment[aria-pressed="true"], .filter-option input:checked + .segment { background: var(--card); color: var(--foreground); border-color: var(--border); }
+    .segment { min-height: 28px; padding: 0 12px; border-radius: calc(var(--radius) - 3px); color: var(--priority-ink, var(--muted-foreground)); }
+    .segment[aria-pressed="true"], .filter-option input:checked + .segment { background: var(--card); color: var(--priority-ink, var(--foreground)); border-color: var(--border); }
     main { width: min(100%, 952px); margin-inline: auto; padding: 24px 24px 80px; }
     .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
     .priority-filters { flex-wrap: wrap; }
@@ -66,7 +62,6 @@
     .filter-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
     .filter-option:hover .segment { background: var(--selected); }
     .filter-option input:focus-visible + .segment { outline: 2px solid var(--ring); outline-offset: 2px; }
-    .filter-option .icon { width: 14px; height: 14px; }
     .control { min-width: 0; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: 5px 10px; }
     .toolbar select { cursor: pointer; }
     .select-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -74,7 +69,7 @@
     .select-wrap > .icon:first-child { left: 10px; }
     .select-wrap > .icon:last-child { right: 9px; width: 13px; }
     .select-wrap > select { appearance: none; padding-inline: 32px 29px; }
-    .priority-symbol, .select-wrap > .priority-symbol { color: var(--priority-ink, var(--muted-foreground)); }
+    .select-wrap > select:first-child { padding-left: 10px; }
     .quick-create { display: grid; gap: 8px; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
     .quick-title-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
     .quick-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -106,13 +101,11 @@
     .metadata .icon { width: 14px; height: 14px; }
     .overdue, .danger { color: var(--destructive); }
     .picker { position: relative; justify-self: center; }
-    .badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 50px; min-height: 23px; border: 1px solid transparent; border-radius: 999px; padding: 0 7px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
-    .badge .icon { width: 13px; height: 13px; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 23px; border-radius: 999px; padding: 0 8px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
     .badge[data-priority] { color: var(--color-white); background: var(--priority-fill); }
     .priority-trigger { padding: 0 5px; min-width: 60px; }
     .priority-trigger[aria-expanded="true"], .more-trigger[aria-expanded="true"] { background: var(--selected); }
-    .priority-trigger.unset { color: var(--muted-foreground); }
-    .priority-trigger.unset .icon { width: 15px; height: 15px; }
+    .priority-trigger.unset { color: var(--muted-foreground); font-size: 12px; }
     .menu { position: absolute; z-index: 1; top: calc(100% + 4px); right: 0; min-width: 152px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
     .menu.above { top: auto; bottom: calc(100% + 4px); }
     .menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; white-space: nowrap; }
@@ -157,8 +150,6 @@
     @media (max-width: 580px) {
       .topbar { padding: 8px 12px; gap: 6px; }
       .segment { padding-inline: 6px; }
-      .filter-option .segment { gap: 3px; padding-inline: 5px; }
-      .filter-option .icon { width: 13px; height: 13px; }
       main { padding: 16px 12px 80px; }
       .task { grid-template-columns: 28px minmax(0, 1fr) 54px 28px; column-gap: 5px; padding-inline: 7px; }
       .task .icon-only, .check { width: 28px; }
@@ -174,11 +165,7 @@
 <body>
   <svg class="sprites" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 22V3m0 1c5-5 11 5 16 0v12c-5 5-11-5-16 0"/></symbol>
-    <symbol id="i-high" viewBox="0 0 24 24"><path d="m7 11 5-5 5 5m-10 6 5-5 5 5"/></symbol>
-    <symbol id="i-medium" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
-    <symbol id="i-low" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
-    <symbol id="i-none" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-sort" viewBox="0 0 24 24"><path d="M8 4v16m-4-4 4 4 4-4m4 4V4m-4 4 4-4 4 4"/></symbol>
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/></symbol>
@@ -203,15 +190,14 @@
         <button class="button primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>添加待办</button>
       </div>
       <div class="quick-options" role="group" aria-label="待办选项">
-        <span class="select-wrap" data-priority="none">
-          <svg class="icon priority-symbol" aria-hidden="true"><use href="#i-flag"/></svg>
+        <span class="select-wrap">
           <select class="control" name="priority" id="quick-priority" aria-label="新待办优先级">
             <option value="none">优先级未设置</option>
             <option value="high">高优先级</option>
             <option value="medium">中优先级</option>
             <option value="low">低优先级</option>
           </select>
-          <svg class="icon" aria-hidden="true"><use href="#i-low"/></svg>
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
         </span>
         <button class="button" type="button" id="quick-due-toggle" aria-expanded="false" aria-controls="quick-due-field">
           <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg><span>截止时间</span>
@@ -224,7 +210,7 @@
             <option value="before_due">提前提醒</option>
             <option value="custom">自定提醒</option>
           </select>
-          <svg class="icon" aria-hidden="true"><use href="#i-low"/></svg>
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
         </span>
         <button class="button" type="button" id="quick-note-toggle" aria-expanded="false" aria-controls="quick-note-field">
           <svg class="icon" aria-hidden="true"><use href="#i-note"/></svg><span>备注</span>
@@ -242,10 +228,10 @@
     <div class="toolbar" aria-label="待办筛选与排序">
       <fieldset class="segments priority-filters" id="priority-filter" aria-label="筛选优先级">
         <label class="filter-option"><input type="radio" name="priority-filter" value="all" checked><span class="segment">全部优先级</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="high" aria-label="高优先级"><span class="segment" data-priority="high"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-high"/></svg>高</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="medium" aria-label="中优先级"><span class="segment" data-priority="medium"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-medium"/></svg>中</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="low" aria-label="低优先级"><span class="segment" data-priority="low"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-low"/></svg>低</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="none"><span class="segment" data-priority="none"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-none"/></svg>未设置</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="high" aria-label="高优先级"><span class="segment" data-priority="high">高</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="medium" aria-label="中优先级"><span class="segment" data-priority="medium">中</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="low" aria-label="低优先级"><span class="segment" data-priority="low">低</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="none"><span class="segment">未设置</span></label>
       </fieldset>
       <span class="select-wrap">
         <svg class="icon" aria-hidden="true"><use href="#i-sort"/></svg>
@@ -253,7 +239,7 @@
           <option value="due">按截止时间</option>
           <option value="priority">按优先级</option>
         </select>
-        <svg class="icon" aria-hidden="true"><use href="#i-low"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
       </span>
     </div>
     <section class="list-card" aria-label="待办列表">
@@ -372,7 +358,7 @@
         });
     }
 
-    const badge = priority => `<span class="badge" data-priority="${priority}">${icon(priority)}${priorities[priority]}</span>`;
+    const badge = priority => `<span class="badge" data-priority="${priority}">${priorities[priority]}</span>`;
 
     function row(item) {
       const title = escaped(item.title);
@@ -392,9 +378,9 @@
           </span>` : ""}
         </button>
         <div class="picker">
-          <button class="button priority-trigger ${item.priority === "none" ? "unset" : ""}" type="button" data-action="priority" aria-haspopup="menu" aria-expanded="false" aria-label="${title}，优先级${priorities[item.priority]}" title="${item.priority === "none" ? "设置优先级" : "修改优先级"}">${item.priority === "none" ? icon("flag") : badge(item.priority)}</button>
+          <button class="button priority-trigger ${item.priority === "none" ? "unset" : ""}" type="button" data-action="priority" aria-haspopup="menu" aria-expanded="false" aria-label="${title}，优先级${priorities[item.priority]}" title="${item.priority === "none" ? "设置优先级" : "修改优先级"}">${item.priority === "none" ? priorities.none : badge(item.priority)}</button>
           <div class="menu" role="menu" aria-label="设置优先级" hidden>
-            ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}" data-priority="${priority}">${icon(priority, "priority-symbol")}${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
+            ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}" data-priority="${priority}">${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
           </div>
         </div>
         <div class="picker">
@@ -520,11 +506,7 @@
       $("quick-due-toggle").querySelector("span").textContent = due ? `截止 ${dateLabel(due)}` : "截止时间";
       $("quick-due-toggle").dataset.configured = String(!!due);
       $("quick-note-toggle").dataset.configured = String(!!$("quick-note").value.trim());
-      const priority = $("quick-priority").value;
-      const priorityControl = $("quick-priority").parentElement;
-      $("quick-priority").dataset.configured = String(priority !== "none");
-      priorityControl.dataset.priority = priority;
-      priorityControl.querySelector(".priority-symbol use").setAttribute("href", `#i-${priority === "none" ? "flag" : priority}`);
+      $("quick-priority").dataset.configured = String($("quick-priority").value !== "none");
       $("quick-reminder").dataset.configured = String($("quick-reminder").value !== "none");
     }
 
@@ -560,7 +542,7 @@
     }
 
     $("priority-choices").innerHTML = ["none", "high", "medium", "low"].map(priority =>
-      `<label><input type="radio" name="priority" value="${priority}" ${priority === "none" ? "checked" : ""}><span data-priority="${priority}">${icon(priority, "priority-symbol")}${priorities[priority]}</span></label>`).join("");
+      `<label><input type="radio" name="priority" value="${priority}" ${priority === "none" ? "checked" : ""}><span>${priorities[priority]}</span></label>`).join("");
     ["due", "note"].forEach(name => {
       $(`quick-${name}-toggle`).addEventListener("click", () => {
         const expand = $(`quick-${name}-field`).hidden;
