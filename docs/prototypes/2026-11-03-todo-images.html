@@ -90,6 +90,9 @@
     .task:hover, .task:focus-within { background: color-mix(in oklab, var(--muted) 58%, var(--card)); }
     .task-main { flex: 1 1 10rem; min-width: 0; }
     .task-actions { display: flex; flex: none; align-items: center; gap: 8px; margin-inline-start: auto; }
+    .completion-mark { display: grid; place-items: center; width: 16px; height: 16px; flex: none; border: 1px solid var(--ring); border-radius: 50%; color: var(--muted-foreground); }
+    .completion-mark .icon { width: 12px; height: 12px; stroke-width: 2; }
+    .is-done .completion-mark { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
     .task-content { display: block; width: 100%; padding: 0; border: 0; border-radius: 4px; background: transparent; text-align: left; }
     .task-title { display: block; overflow-wrap: anywhere; font-weight: 550; }
     .is-done .task-title { color: var(--muted-foreground); text-decoration: line-through; }
@@ -512,7 +515,7 @@
       const overdue = !item.doneAt && item.due && new Date(item.due).getTime() < Date.now();
       const remindLabel = item.doneAt && remind && new Date(remind).getTime() > item.doneAt ? "提醒已取消" : remind ? `提醒 ${dateLabel(remind)}` : "";
       const completion = item.doneAt ? "恢复" : "完成";
-      const completionLabel = item.doneAt ? "恢复待办" : "标为完成";
+      const completionLabel = item.doneAt ? "恢复待办" : "完成";
       const completionAction = item.doneAt ? "恢复为未完成" : "标为完成";
       return `<li class="task ${item.doneAt ? "is-done" : ""}" data-id="${item.id}">
         <div class="task-main">
@@ -533,7 +536,10 @@
               ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}" data-priority="${priority}">${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
             </div>
           </div>
-          <button class="button outline" type="button" data-action="complete" aria-label="${completionAction}：${title}">${completionLabel}</button>
+          <button class="button outline" type="button" data-action="complete" aria-label="${completionAction}：${title}">
+            <span class="completion-mark" aria-hidden="true">${icon("check")}</span>
+            <span>${completionLabel}</span>
+          </button>
           <div class="picker">
             <button class="button icon-only more-trigger" type="button" data-action="more" aria-haspopup="menu" aria-expanded="false" aria-label="${title}的更多操作">${icon("more")}</button>
             <div class="menu" role="menu" aria-label="更多操作" hidden>
