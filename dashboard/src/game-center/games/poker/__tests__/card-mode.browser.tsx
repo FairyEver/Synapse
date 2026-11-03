@@ -273,20 +273,23 @@ it("少量详情与左卡在中间区域居中，能力候选完整规则只在�
     expect(Math.abs(middle(card) - middle(details))).toBeLessThan(3)
   } finally { await screen.unmount() }
 })
-it.each([[1280, 800], [320, 568], [568, 320]])("%s×%s 等待状态和手牌增减不移动行动按钮，矮屏预览避开手牌", async (width, height) => {
+it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手牌变化保持桌沿与按钮位置，矮屏预览避开手牌", async (width, height) => {
   await page.viewport(width, height)
   const hand = cardTable.cards!.ownHand!
-  const fixture = (ownHand: typeof hand, actionOnSeat = cardTable.actionOnSeat) => <div className="h-dvh">
-    <Table table={{ ...cardTable, actionOnSeat, legalActions: actionOnSeat === cardTable.mySeatNo ? cardTable.legalActions : [],
+  const fixture = (ownHand: typeof hand, changes: Partial<PokerTableView> = {}) => <div className="h-dvh">
+    <Table table={{ ...cardTable, legalActions: ["fold", "check", "bet", "allin"], toCall: 0, minRaiseTo: 10, maxRaiseTo: 120000, ...changes,
       cards: { ...cardTable.cards!, version: "cards-v2", ownHand } }} perspective="owner" onPerspective={noop} onBack={noop} />
   </div>
   const screen = await render(fixture(hand))
   try {
+    const nextLayout = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    await nextLayout()
     const anchor = document.querySelector(".poker-controls-anchor")!
     const actions = anchor.querySelector(".poker-action-buttons")!
     const presets = anchor.querySelector(".poker-bet-presets")!
     const card = anchor.querySelector(".poker-hand-dock-card")!
     const viewport = document.querySelector(".poker-canvas-viewport")!
+    const rail = viewport.querySelector(".poker-rail")!
     const bounds = actions.getBoundingClientRect()
     expect(getComputedStyle(actions).backgroundColor).toBe("rgba(0, 0, 0, 0)")
     expect(getComputedStyle(anchor).backgroundColor).toBe(getComputedStyle(anchor.closest(".poker-table")!).backgroundColor)
@@ -299,6 +302,13 @@ it.each([[1280, 800], [320, 568], [568, 320]])("%s×%s 等待状态和手牌增�
     expect(Math.abs(gapBelowCards - gapBelowPresets)).toBeLessThan(1)
     expect(bounds.width).toBeLessThan(anchor.getBoundingClientRect().width)
     const board = viewport.getBoundingClientRect().toJSON()
+    const railBounds = rail.getBoundingClientRect().toJSON()
+    const expectStableLayout = async () => {
+      await nextLayout()
+      expect(actions.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON())
+      expect(viewport.getBoundingClientRect().toJSON()).toEqual(board)
+      expect(rail.getBoundingClientRect().toJSON()).toEqual(railBounds)
+    }
     if (height === 320) {
       await page.getByRole("button", { name: /偷梁换柱/ }).hover()
       const preview = page.getByRole("tooltip")
@@ -311,14 +321,19 @@ it.each([[1280, 800], [320, 568], [568, 320]])("%s×%s 等待状态和手牌增�
       expect(art.width).toBeLessThanOrEqual(68)
       expect(fee.bottom).toBeLessThanOrEqual(panel.bottom)
     }
-    await screen.rerender(fixture(hand, 1))
+    const opponentTurn = { actionOnSeat: 1, legalActions: [] }
+    await screen.rerender(fixture(hand, opponentTurn))
     const status = anchor.querySelector(".poker-action-dock-status")!
     expect(status.textContent).toBe("等待 对手 行动")
-    expect(actions.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON())
-    await screen.rerender(fixture([], 1))
+    await expectStableLayout()
+    await screen.rerender(fixture([], opponentTurn))
     expect(anchor.querySelector(".poker-hand-dock-card")).toBeNull()
-    expect(actions.getBoundingClientRect().toJSON()).toEqual(bounds.toJSON())
-    expect(viewport.getBoundingClientRect().toJSON()).toEqual(board)
+    await expectStableLayout()
+    for (const legalActions of [["fold", "call", "raise", "allin"], ["fold", "call", "allin"]]) {
+      await screen.rerender(fixture(hand, { legalActions, toCall: 49990, betWaiverCap: 2, minRaiseTo: 99980 }))
+      expect(actions.textContent).toContain("实付 49,988")
+      await expectStableLayout()
+    }
   } finally { await screen.unmount() }
 })
 it("850px两侧切换和卡牌面板开关复用原画布，减少动态效果仍可操作", async () => {

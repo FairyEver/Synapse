@@ -16,6 +16,12 @@
   width: min(100%, 40rem);
   margin-inline: auto;
 }
+.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-buttons .poker-button {
+  flex-wrap: wrap;
+  align-content: center;
+  row-gap: 0;
+  padding-block: .25rem;
+}
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock:has(> .poker-action-dock-status) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -41,6 +47,10 @@
   white-space: nowrap;
 }
 @container (max-width: 480px) {
+  /* Reserve room for a wrapped amount and its optional actual payment line. */
+  .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-buttons .poker-button {
+    min-height: 4rem;
+  }
   .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock:has(> .poker-action-dock-status) {
     grid-template-columns: minmax(0, 1fr);
   }

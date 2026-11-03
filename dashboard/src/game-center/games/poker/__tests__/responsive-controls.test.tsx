@@ -196,6 +196,7 @@ describe("统一底部操作与按需侧栏", () => {
       await render({ ...value, actionOnSeat: 1, actionSeq: 4, legalActions: [], toCall: 0, minRaiseTo: 0, maxRaiseTo: 0 })
       expect(host.querySelector('[role="status"]')).toBe(status)
       expect(status?.textContent).toBe("等待 陪练 2 行动")
+      expect(host.querySelector('[aria-label="恢复牌桌操作"]')).toBeNull()
       expect(host.querySelector('[role="group"][aria-label="能力牌"]')).not.toBeNull()
       expect(host.querySelector('input[type="number"]')).toBeNull()
       expect(button(host, "自定义")).toBe(custom)
@@ -218,6 +219,10 @@ describe("统一底部操作与按需侧栏", () => {
       expect(document.querySelector('[role="tooltip"]')?.textContent).toContain("偷梁换柱")
       await act(async () => card.click())
       expect(document.querySelector("dialog[open]")).toBeNull()
+
+      await render({ ...value, actionOnSeat: 1, actionSeq: 4, legalActions: [],
+        seats: value.seats.map(seat => seat.isMe ? { ...seat, status: "sitting_out" } : seat) })
+      expect(host.querySelector('[aria-label="恢复牌桌操作"] button')?.textContent).toBe("回到牌桌")
 
       await render({ ...value, actionSeq: 5, legalActions: ["fold", "call"] })
       expect(button(host, "弃牌").disabled).toBe(false)
