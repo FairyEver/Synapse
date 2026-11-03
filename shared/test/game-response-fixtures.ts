@@ -141,6 +141,7 @@ export const gameResponseFixtures: Record<string, unknown> = {
   "app.game.poker.bot.add": { botId: "bot", seatNo: 1 },
   "app.game.poker.bot.remove": { pending: false },
   "app.game.poker.room.create": { roomCode: "4821" },
+  "app.game.poker.room.start": { handId: "hand", started: true },
   "app.game.poker.room.get": {
     ...publicTable,
     mySeatNo: null,

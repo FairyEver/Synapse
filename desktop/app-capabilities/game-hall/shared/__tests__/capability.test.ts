@@ -15,9 +15,9 @@ describe("游戏工具目录", () => {
     expect(result.tools.some((t) => t.name.startsWith("app_game_poker_"))).toBe(true)
   })
   it("实际全局数量和私有UI例外与能力表一致", () => {
-    expect(CAPABILITY_DOMAINS.flatMap(d => d.capabilities)).toHaveLength(373)
-    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(369)
-    expect(buildAllMcpTools()).toHaveLength(369)
+    expect(CAPABILITY_DOMAINS.flatMap(d => d.capabilities)).toHaveLength(364)
+    expect(Object.keys(MCP_TOOL_ACTIONS)).toHaveLength(360)
+    expect(buildAllMcpTools()).toHaveLength(360)
     expect(getActionDomainId("app.game.poker.control.set")).toBeNull()
     expect(getActionDomainId("app.game.poker.room.close")).toBeNull()
   })
