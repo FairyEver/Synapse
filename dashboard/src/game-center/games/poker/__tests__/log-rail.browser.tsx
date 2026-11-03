@@ -30,11 +30,13 @@ it.each([[1280, 800], [390, 667]])("%s×%s 牌桌的窄轨只显示图标，详�
       dock: document.querySelector(".poker-controls-anchor")!.getBoundingClientRect(),
       rail: region.element().getBoundingClientRect(),
     })
-    expect(region.getByRole("button").elements().map(button => button.textContent)).toEqual(["", ""])
-    expect(region.getByRole("button").elements().map(button => button.getAttribute("data-log-seq"))).toEqual(["2", "1"])
+    const entries = region.getByRole("button").elements()
+    expect(entries.every(button => button.textContent === "")).toBe(true)
+    expect(entries.map(button => button.getAttribute("aria-label"))).toEqual(["选手，五选其一", "河牌", "转牌", "阿岚，加注", "翻牌"])
     await card.hover()
     await expect.element(tooltip).toHaveTextContent("实付 24 筹码入主池")
     await expect.element(tooltip).toHaveTextContent("从五张候选中选一张")
+    expect(tooltip.element().querySelector('[data-ability-size="lg"]')).not.toBeNull()
     const { tip, dock, rail } = boxes()
     const cardBounds = card.element().getBoundingClientRect()
     expect(tip.left).toBeGreaterThanOrEqual(0)

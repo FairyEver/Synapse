@@ -70,3 +70,33 @@ it("总览将卡费和下注分列，日志不完整时不推算费用", () => {
   expect({ bet, cardFees, rounds: players[0].rounds }).toMatchObject({ bet: 2, cardFees: 8, rounds: [{ bet: 2, cardFees: 8 }] })
   expect(matchOverview({ ...table, handLog: { ...table.handLog!, complete: false } }).cardFees).toBeUndefined()
 })
+
+it("悬停分别显示各轮新翻的牌，以及能力牌详情和实际公开的底牌", async () => {
+  const host = document.body.appendChild(document.createElement("div"))
+  const root = createRoot(host)
+  const view: PokerTableView = {
+    ...table, board: ["2c", "3h", "4d", "5s", "6c"], hole: ["As", "Ks"],
+    handLog: { ...table.handLog!, entries: [table.handLog!.entries[0], {
+      ...table.handLog!.entries[1],
+      effects: [{ kind: "revealed", target: { seatNo: 1, displayName: "原对手" }, cards: ["Qh"] }],
+    }] },
+  }
+  const tooltip = () => document.body.querySelector('[role="tooltip"]')!
+  const faces = () => Array.from(tooltip().querySelectorAll("[data-card]"), node => node.getAttribute("data-card"))
+  const hover = (name: string) => act(async () => pointer(host.querySelector(`button[aria-label="${name}"]`)!, "pointerover", "mouse"))
+  try {
+    await act(async () => root.render(<PokerLogRail table={view} />))
+    await hover("翻牌")
+    expect(faces()).toEqual(["2c", "3h", "4d"])
+    await hover("河牌")
+    expect(faces()).toEqual(["6c"])
+    await hover("选手，五选其一")
+    expect(tooltip().textContent).toContain("原对手公开底牌")
+    expect(faces()).toEqual(["Qh"])
+    expect(tooltip().querySelector('[data-ability-size="lg"] img')?.getAttribute("src")).toContain("/v2/07.png")
+    expect(tooltip().textContent).toContain("从五张候选中选一张。")
+  } finally {
+    await act(async () => root.unmount())
+    host.remove()
+  }
+})

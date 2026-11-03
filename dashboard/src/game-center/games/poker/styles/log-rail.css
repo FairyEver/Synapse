@@ -48,22 +48,35 @@
   pointer-events: none;
 }
 .poker-log-tip {
-  inline-size: min(19rem, calc(100dvw - 3.75rem));
+  inline-size: min(22rem, calc(100dvw - 3.75rem));
+  max-block-size: var(--available-height);
   overflow-y: auto;
+  overscroll-behavior: contain;
   pointer-events: auto;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 .poker-log-tip-content {
+  display: grid;
+  gap: .375rem;
+}
+.poker-log-summary {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   gap: 0.75rem;
   padding: 0.75rem;
   font-size: 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-lg);
 }
-.poker-log-tip-content > .poker-log-card-art {
-  inline-size: 3.5rem;
-  block-size: auto;
-  border-radius: var(--radius-sm);
+.poker-log-effects {
+  display: grid;
+  gap: .375rem;
+  padding-block-start: .375rem;
+  border-block-start: 1px solid var(--separator);
 }
 .poker-log-action-icon {
   inline-size: 1rem;

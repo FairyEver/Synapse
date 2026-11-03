@@ -5,6 +5,7 @@ import { PokerActionService } from "../poker-action.service"
 import { PokerRollService } from "../poker-roll.service"
 import { quoteRoll } from "../engine/hand-runner"
 import { randomUUID } from "node:crypto"
+import type { ResolutionFrame } from "../engine/cards/types"
 
 const participants = [0, 1, 2].map(seatNo => ({ handId: "h", seatNo, userId: `u${seatNo}`, displayName: `原玩家${seatNo}`, startingStack: seatNo === 1 ? 1 : 500 }))
 const hand = { id: "h", status: "running", dealerSeat: 0, rules: { variant: "standard52", smallBlind: 5, bigBlind: 10 }, actionSeq: 3 }
@@ -45,6 +46,30 @@ describe("本手公开行动日志", () => {
     expect(log.entries.map(e => [e.seq, e.action, e.amount])).toEqual([[-1, "small_blind", 1], [0, "big_blind", 10], [1, "roll", 40], [3, "call", 10]])
     expect(log.entries[2].roll).toEqual({ kind: "super", count: 1, status: "completed" })
     for (const key of ["userId", "roomId", "note", "oldCard", "candidates", "cardIndex", "selectedIndex"]) expect(JSON.stringify(log)).not.toContain(`"${key}"`)
+  })
+  it("按行动归属公开效果并使用原参赛姓名，私密结果和其他手牌的事件不进入日志", () => {
+    const frame: ResolutionFrame = {
+      id: "h:1", handId: "h", seq: 1, rootActionId: "root",
+      events: [
+        { id: "reveal", index: 0, phase: "after", audience: "public", type: "poker.revealed", actorSeatNo: 0, cardId: "17",
+          data: { targetSeatNo: 1, cards: ["Qh"], ownerAdmissionId: "secret", candidates: ["Ks"] } },
+        { id: "private", index: 1, phase: "after", audience: "owner", type: "poker.revealed", actorSeatNo: 0, cardId: "17",
+          data: { targetSeatNo: 1, cards: ["As"] } },
+        { id: "internal", index: 2, phase: "after", audience: "internal", type: "poker.peek", actorSeatNo: 0, status: "blocked",
+          data: { targetSeatNo: 2, cards: ["Js"] } },
+      ],
+    }
+    const log = projectHandLog({
+      ...input,
+      hand: { ...hand, actionSeq: 1, rules: { ...hand.rules, cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2" } },
+      actions: [{ ...actions[0], action: "card_play" }],
+      cards: [{ cardId: "17", seq: 1, status: "completed" }],
+      frames: [structuredClone(frame), { ...structuredClone(frame), handId: "other", seq: 2 }],
+    })
+    expect(log?.entries.at(-1)?.effects).toEqual([
+      { kind: "revealed", target: { seatNo: 1, displayName: "原玩家1" }, cards: ["Qh"] },
+    ])
+    expect(JSON.stringify(log)).not.toMatch(/secret|candidates|Ks|As|Js/)
   })
   it("尾部不完整不补盲注；身份错配或缺Roll源显式不可用", () => {
     expect(projectHandLog({ ...input, actions: actions.slice(1) })).toMatchObject({ complete: false, entries: [{ seq: 3, action: "call" }] })

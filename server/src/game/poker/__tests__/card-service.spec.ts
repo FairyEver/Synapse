@@ -60,6 +60,35 @@ describe("卡牌房间原子服务", () => {
     view = await service.state("outsider", f.room.code, "public", false, f.now, "decision")
     expect(view.seats.every(s => !s.publicHole?.length)).toBe(true)
   })
+  it("公开日志从实际结算记录读取亮牌和换牌，归档后同样可读", async () => {
+    const f = await fixture(), service = new PokerCardService(f.poker)
+    const shown = f.hands[0].engineState.seats[0].hole[1]
+    await service.play("u", request(f, "17", { hole: 1 }), "human", f.now)
+    const play = request(f, "06", { hole: 0 })
+    await service.play("u", play, "human", f.now)
+    const pending = f.hands[0].engineState.cards.pending
+    await service.choose("u", { roomCode: play.roomCode, handId: play.handId, street: play.street, controlVersion: play.controlVersion,
+      expectedActionSeq: 2, actionId: randomUUID(), choiceId: pending.id, expectedPaymentVersion: pending.paymentVersion, candidateIndex: 0 }, "human", f.now)
+
+    const actionService = new PokerActionService(f.poker)
+    const read = () => actionService.state("outsider", f.room.code, "public", false, f.now, "desktop")
+    const hot = (await read()).handLog!
+    const cardEntries = hot.entries.filter(entry => entry.action === "card")
+    const target = { seatNo: 0, displayName: "u" }
+    expect(cardEntries.map(entry => [entry.seq, entry.effects])).toEqual([
+      [1, [{ kind: "revealed", target, cards: [shown] }]],
+      [2, [{ kind: "replaced", target, count: 1 }]],
+    ])
+    expect(cardEntries[1].card?.status).toBe("completed")
+    for (const hidden of pending.candidates) expect(JSON.stringify(hot)).not.toContain(JSON.stringify(hidden))
+
+    const { engineState, ...hand } = f.hands[0]
+    f.archives.push(JSON.parse(JSON.stringify({ roomId: f.room.id, handNo: hand.handNo, data: {
+      hand, cards: engineState.cards, seats: f.participants, actions: f.actions, summaries: f.summaries, resolutions: f.resolutions,
+    } })))
+    f.hands.splice(0)
+    expect((await read()).handLog).toEqual(hot)
+  })
   it("超级Roll待选拦截所有主动卡牌，并允许原槽重抽；MCP读取保持公开", async () => {
     const f = await fixture(), rolls = new PokerRollService(f.poker)
     const start = (slot: number) => {

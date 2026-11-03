@@ -24,7 +24,7 @@ import { resolveHandCommand } from "./engine/resolve-hand"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
 import { persistHandResolution, reserveScope, roomResolutionContext } from "./poker-resolution"
 import { fundedBetCapacity, legalFundedActions, betPaymentVersion } from "./engine/chips/funded-betting"
-import { CardRuleError, type HandResolution } from "./engine/cards/types"
+import { CardRuleError, type HandResolution, type ResolutionFrame } from "./engine/cards/types"
 import { projectCardView } from "./poker-card-projection"
 import { projectReserveView } from "./poker-reserve-projection"
 export interface ActionInput {
@@ -421,11 +421,19 @@ export class PokerActionService {
       roomId: c.room.id, userId, hand, participants, state: h,
       archivedRolls: archived?.rolls, archivedActions: archived?.actions,
     }) : undefined
+    const logSeqs = new Set(logRecords.map(record => record.seq))
+    const logRoots = hand && isCardRoom(c.room) && logSeqs.size
+      ? archived ? archived.resolutions.filter(root => logSeqs.has(root.seq))
+        : await c.tx.gamePokerResolution.findMany({
+            where: { handId: hand.id, seq: { in: [...logSeqs] } }, orderBy: { seq: "asc" }, take: 1000,
+          })
+      : undefined
     const handLog = hand ? projectHandLog({
       roomId: c.room.id, hand, participants, actions: logRecords,
       rolls: h?.roll?.history ?? archived?.rolls.map(record => record.data as unknown as import("./engine/hand-runner").RollHistory) ?? [],
       pendingRollId: h?.roll?.pending?.id ?? null,
       cards: h?.cards?.used ?? archived?.cards?.used,
+      frames: logRoots?.map(root => root.data as unknown as ResolutionFrame),
     }) : undefined
     const potContributions = hand ? projectPotContributions({
       roomId: c.room.id, userId, hand, participants, state: h, archivedActions: archived?.actions,

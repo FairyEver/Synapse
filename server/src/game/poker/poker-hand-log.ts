@@ -3,6 +3,8 @@ import { resolveRules } from "./engine/rules"
 import { seatOrder } from "./engine/seat-order"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
 import { cardArtworkV2, createCardRegistryV2 } from "./engine/cards/catalog-v2"
+import type { ResolutionFrame } from "./engine/cards/types"
+import { projectHandLogEffect, projectLegacyOwnReplacement } from "./poker-hand-log-effects"
 
 interface Input {
   roomId: string
@@ -12,6 +14,7 @@ interface Input {
   rolls: readonly { id: string; seatNo: number; kind: string; fee: number; count: number; selectedIndex: number | null }[]
   pendingRollId: string | null
   cards?: readonly { cardId: string; seq: number; status: "completed" | "blocked" | "choice_required"; paidAmount?: number; nominalAmount?: number; waivedAmount?: number }[]
+  frames?: readonly ResolutionFrame[]
 }
 const streets = ["preflop", "flop", "turn", "river"]
 const actions = ["fold", "check", "call", "bet", "raise", "allin"]
@@ -73,6 +76,33 @@ export function projectHandLog(input: Input): PokerHandLog | undefined {
     } else {
       if (!actions.includes(a.action)) return undefined
       entries.push({ ...base, action: a.action as PokerHandLogEntry["action"], amount: a.amount })
+    }
+  }
+  if (input.frames?.length) {
+    const bySeq = new Map(entries.map(entry => [entry.seq, entry]))
+    const byAction = new Map(ordered.map(action => [action.seq, action]))
+    const players = new Map(participants.map(({ seatNo, displayName }) => [seatNo, { seatNo, displayName }]))
+    cardRegistry ??= cardsV2 ? createCardRegistryV2() : createCardRegistry()
+    const names = new Map(cardRegistry.all().map(({ id, name }) => [id, name]))
+    for (const frame of [...input.frames].sort((a, b) => a.seq - b.seq)) {
+      if (frame.handId !== hand.id || !Array.isArray(frame.events)) continue
+      const action = byAction.get(frame.seq)
+      if (!action) continue
+      const entry = bySeq.get(frame.seq)
+      const sourceSeq = frame.events.find(event => event.type === "choice.complete" && event.phase === "after" && event.status === "completed")?.data.seq
+      const sourceAction = typeof sourceSeq === "number" && sourceSeq < action.seq ? byAction.get(sourceSeq) : undefined
+      const sourceEntry = sourceAction?.action === "card_play" && sourceAction.userId === action.userId && sourceAction.seatNo === action.seatNo
+        ? bySeq.get(sourceAction.seq) : undefined
+      const hasReplacementFact = frame.events.some(event => event.audience === "public" && event.type === "poker.changed")
+      for (const event of frame.events) {
+        const choiceEffect = action.action === "card_choose" || ["poker.changed", "poker.publicMoved", "poker.choose"].includes(event.type)
+        const destination = choiceEffect && sourceEntry ? sourceEntry : entry
+        if (!destination) continue
+        const cardId = destination.card?.id
+        const effect = projectHandLogEffect(event, players, names, cardId)
+          ?? (cardsV2 && !hasReplacementFact ? projectLegacyOwnReplacement(event, players.get(action.seatNo), cardId) : undefined)
+        if (effect) (destination.effects ??= []).push(effect)
+      }
     }
   }
   return { handId: hand.id, complete, entries }

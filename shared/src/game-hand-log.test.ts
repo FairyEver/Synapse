@@ -16,4 +16,15 @@ for (const operation of ["app.game.poker.table.state", "app.game.poker.room.get"
     for (const key of ["note", "userId", "hole", "candidates", "oldCard"]) expect(parse({ handId: "hand", complete: true, entries: [{ ...entry, [key]: "secret" }] }).success).toBe(false)
     for (const amount of [-1, 0.5, Infinity]) expect(parse({ handId: "hand", complete: true, entries: [{ ...entry, amount }] }).success).toBe(false)
   })
+  it("仅允许公开亮牌效果携带合法扑克牌面", () => {
+    const target = { seatNo: 1, displayName: "原对手" }
+    const card = { ...entry, action: "card", roll: undefined, card: { id: "17", name: "开诚布公", status: "completed" } }
+    const withEffect = (effect: unknown) => parse({ handId: "hand", complete: true, entries: [{ ...card, effects: [effect] }] })
+    const reveal = { kind: "revealed", target, cards: ["Qh"] }
+    expect(withEffect(reveal).success).toBe(true)
+    expect(withEffect({ ...reveal, cards: ["joker"] }).success).toBe(false)
+    expect(withEffect({ ...reveal, candidates: ["As"] }).success).toBe(false)
+    expect(withEffect({ ...reveal, target: { ...target, userId: "secret" } }).success).toBe(false)
+    expect(withEffect({ ...reveal, kind: "replaced", count: 1 }).success).toBe(false)
+  })
 })

@@ -13,6 +13,21 @@ const chooseProperties = { ...common, choiceId: text, candidateIndex: { type: "i
 export const POKER_CARD_PLAY_SCHEMA = { type: "object", properties: playProperties, required: Object.keys(playProperties), additionalProperties: false }
 export const POKER_CARD_CHOOSE_SCHEMA = { type: "object", properties: chooseProperties, required: Object.keys(chooseProperties), additionalProperties: false }
 const amount = z.number().int().nonnegative()
+const logEffectSource = { sourceCardName: z.string().optional() }
+const logEffectTarget = z.object({ seatNo: z.number().int().min(0).max(9), displayName: z.string() }).strict()
+const logEffect = { ...logEffectSource, target: logEffectTarget.optional() }
+export const pokerHandLogEffectSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ ...logEffectSource, kind: z.literal("revealed"), target: logEffectTarget,
+    cards: z.array(z.string().regex(/^[2-9TJQKA][shdc]$/)).min(1).max(2) }),
+  z.strictObject({ ...logEffectSource, kind: z.literal("guessed"), target: logEffectTarget, color: z.enum(["red", "black"]), matched: z.boolean() }),
+  z.strictObject({ ...logEffect, kind: z.enum(["protected", "blocked", "installed", "sparked"]) }),
+  z.strictObject({ ...logEffect, kind: z.literal("removed"), removedCardName: z.string().optional() }),
+  z.strictObject({ ...logEffect, kind: z.enum(["stolen", "refunded", "distributed", "discarded"]), amount }),
+  z.strictObject({ ...logEffectSource, kind: z.enum(["replaced", "exchanged", "reordered"]), target: logEffectTarget, count: z.number().int().min(1).max(2) }),
+  z.strictObject({ ...logEffectSource, kind: z.literal("shuffled"), targets: z.array(logEffectTarget).min(2).max(10) }),
+  z.strictObject({ ...logEffect, kind: z.literal("clock"), milliseconds: amount }),
+])
+export type PokerHandLogEffect = z.infer<typeof pokerHandLogEffectSchema>
 export const pokerPaymentSchema = z.object({ nominalAmount: amount, waivedAmount: amount, paidAmount: amount, version: z.string().min(1) }).strict().refine(v => v.nominalAmount === v.waivedAmount + v.paidAmount)
 const playPolicy = z.object({ cancelUntil: z.enum(["target-confirm", "never"]), result: z.enum(["table", "holes", "intel"]), candidates: z.number().int().min(1).max(5).optional() }).strict()
 const definition = z.object({ id: z.string(), name: z.string(), description: z.string(), artId: z.string(), cost: amount, consumeSelected: z.boolean().optional(), play: playPolicy.optional() }).strict()

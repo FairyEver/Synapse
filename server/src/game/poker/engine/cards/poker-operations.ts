@@ -26,6 +26,10 @@ export function publicHoleCards(h: HandState, no: number): string[] {
   const markers = h.cards?.publicMarkers ?? []
   return h.seats.find(s => s.seatNo === no)?.hole.filter(c => markers.some(m => m.card === c && (!m.expiresStreet || m.expiresStreet === h.street))) ?? []
 }
+function emitMovedPublicCards(h: HandState, api: OperationApi, seatNo: number, previous: readonly string[]) {
+  const cards = publicHoleCards(h, seatNo).filter(card => !previous.includes(card))
+  if (cards.length) api.emit("poker.publicMoved", { targetSeatNo: seatNo, cards }, "public")
+}
 function observe(h: HandState, api: OperationApi, observer: number, label: string, values: string[], future = false) {
   const owner = h.cards!.participants.find(p => p.seatNo === observer)
   if (!owner) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
@@ -65,11 +69,14 @@ export function registerPokerCardOperations(registry: OperationRegistry<HandStat
         const best = input.mode === "highest" ? [...candidates].sort((a, b) => "23456789TJQKA".indexOf(b[0]) - "23456789TJQKA".indexOf(a[0]) || "shdc".indexOf(a[1]) - "shdc".indexOf(b[1]))[0] : candidates[0]
         p.hole[cardIndex] = best
         h.deck = shuffle([...h.deck, old, ...candidates.filter(c => c !== best)], api.context.randomInt)
+        api.emit("poker.changed", { change: "replaced", targetSeatNo: p.seatNo, count: 1 }, "public")
+        emitMovedPublicCards(h, api, p.seatNo, [old, p.hole[1 - cardIndex]])
       }
       invalidatePokerObservations(h); assertHandIntegrity(h)
     } })
   registry.register({ id: "poker.reset", schema: z.object({ seatNo, excludeOld: z.boolean().optional(), ...metadata }).strict(), apply(h, input, api) {
     noPending(h); const p = activeSeat(h, input.seatNo)
+    const previous = p.hole
     if (input.excludeOld) {
       if (h.deck.length < 2) throw new CardRuleError("POKER_CARD_DECK_EMPTY")
       const replacements = [pick(h.deck, api), pick(h.deck, api)]
@@ -80,6 +87,8 @@ export function registerPokerCardOperations(registry: OperationRegistry<HandStat
       p.hole = [pick(h.deck, api), pick(h.deck, api)]
     }
     invalidatePokerObservations(h); assertHandIntegrity(h)
+    api.emit("poker.changed", { change: "replaced", targetSeatNo: p.seatNo, count: 2 }, "public")
+    emitMovedPublicCards(h, api, p.seatNo, previous)
   } })
   registry.register({ id: "poker.randomExchange", schema: z.object({ seatNo, cardIndex: slot }).strict(), apply(h, input, api) {
     noPending(h); activeSeat(h, input.seatNo)
@@ -90,6 +99,7 @@ export function registerPokerCardOperations(registry: OperationRegistry<HandStat
   registry.register({ id: "poker.exchange", schema: z.object({ seatNo, targetSeatNo: seatNo, cardIndex: slot.optional(), whole: z.boolean().optional(), ...metadata }).strict(), apply(h, input, api) {
     noPending(h); const p = activeSeat(h, input.seatNo), target = activeSeat(h, input.targetSeatNo)
     if (p === target) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
+    const previous = [...p.hole], previousTarget = [...target.hole]
     if (input.whole) [p.hole, target.hole] = [target.hole, p.hole]
     else {
       if (input.cardIndex === undefined) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
@@ -97,13 +107,19 @@ export function registerPokerCardOperations(registry: OperationRegistry<HandStat
       ;[p.hole[input.cardIndex], target.hole[index]] = [target.hole[index], p.hole[input.cardIndex]]
     }
     assertHandIntegrity(h)
+    api.emit("poker.changed", { change: "exchanged", targetSeatNo: target.seatNo, count: input.whole ? 2 : 1 }, "public")
+    emitMovedPublicCards(h, api, p.seatNo, previous)
+    emitMovedPublicCards(h, api, target.seatNo, previousTarget)
   } })
   registry.register({ id: "poker.shuffleHoles", schema: z.object({ excludedSeatNos: z.array(seatNo).optional() }).strict(), apply(h, input, api) {
     noPending(h); const players = h.seats.filter(s => !s.folded && !input.excludedSeatNos?.includes(s.seatNo))
     if (players.length < 2) { api.emit("ability.blocked", { reason: "insufficient_targets" }, "public"); return }
+    const previous = new Map(players.map(player => [player.seatNo, player.hole]))
     const cards = shuffle(players.flatMap(p => p.hole), api.context.randomInt)
     for (const p of players) p.hole = cards.splice(0, 2)
     assertHandIntegrity(h)
+    api.emit("poker.shuffled", { targetSeatNos: players.map(player => player.seatNo) }, "public")
+    for (const player of players) emitMovedPublicCards(h, api, player.seatNo, previous.get(player.seatNo)!)
   } })
   registry.register({ id: "poker.peek", schema: z.object({ seatNo, observerSeatNo: seatNo.optional(), mode: z.enum(["next", "stage", "top", "one", "two", "suit", "rank"]), reflected: z.boolean().optional(), ...metadata }).strict(), apply(h, input, api) {
     const p = activeSeat(h, input.seatNo), observer = input.observerSeatNo ?? api.context.actorSeatNo!
@@ -141,9 +157,12 @@ export function registerPokerCardOperations(registry: OperationRegistry<HandStat
     h.deck = shuffle([...h.deck, old, ...pending.candidates.filter((_, i) => i !== input.index)], api.context.randomInt)
     h.cards!.pending = null
     invalidatePokerObservations(h); assertHandIntegrity(h)
+    api.emit("poker.changed", { change: "replaced", targetSeatNo: p.seatNo, count: 1 }, "public")
+    emitMovedPublicCards(h, api, p.seatNo, [old, p.hole[1 - pending.cardIndex!]])
   } })
-  registry.register({ id: "poker.swapPositions", schema: z.object({ seatNo }).strict(), apply(h, input) {
+  registry.register({ id: "poker.swapPositions", schema: z.object({ seatNo }).strict(), apply(h, input, api) {
     noPending(h); const p = activeSeat(h, input.seatNo); p.hole.reverse(); assertHandIntegrity(h)
+    api.emit("poker.changed", { change: "reordered", targetSeatNo: p.seatNo, count: 2 }, "public")
   } })
   registry.register({ id: "poker.spark", schema: z.object({}).strict(), apply(_h, _input, api) { api.emit("poker.sparked", {}, "public") } })
 }

@@ -57,7 +57,7 @@ export function registerCardStatusOperations(registry: OperationRegistry<HandSta
     if (target.effect?.kind === "shrink" && h.turnClock?.reductions[target.effect.id]) h.turnClock = applyDeadlineOperation(h.turnClock, { kind: "restore", effectId: target.effect.id }, api.context.nowMs)
     h.cards!.effects = h.cards!.effects.filter(e => e.id !== input.effectId)
     h.cards!.publicMarkers = (h.cards!.publicMarkers ?? []).filter(m => m.id !== input.effectId && m.parentEffectId !== input.effectId)
-    api.emit("ability.statusRemoved", { id: input.effectId }, "public")
+    api.emit("ability.statusRemoved", { id: input.effectId, targetSeatNo: target.seatNo, removedCardId: target.effect?.cardId ?? target.marker?.cardId }, "public")
   } })
   registry.register({ id: "ability.consumeEffects", schema: z.object({ ids: z.array(z.string()) }).strict(), apply(h, input) { consumeEffects(h, input.ids) } })
   registry.register({ id: "ability.clearStatuses", schema: z.object({}).strict(), apply(h) { h.cards!.effects = []; h.cards!.publicMarkers = []; h.turnClock = null } })
@@ -81,6 +81,7 @@ export function registerCardStatusOperations(registry: OperationRegistry<HandSta
     const before = h.turnClock
     if (!before || before.seatNo !== api.context.actorSeatNo) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
     h.turnClock = applyDeadlineOperation(before, input, api.context.nowMs)
+    if (h.turnClock) api.emit("clock.extended", { targetSeatNo: before.seatNo, milliseconds: h.turnClock.deadlineAt - before.deadlineAt }, "public")
     if (h.turnClock?.deadlineAt === before.deadlineAt && api.operation.cardId && api.context.actorAdmissionId) {
       h.cards!.privateResults.push({ id: api.context.nextId(), ownerAdmissionId: api.context.actorAdmissionId, cardId: api.operation.cardId, label: "行动时间", values: ["已达本回合时间上限，时间未延长"], valid: true })
     }

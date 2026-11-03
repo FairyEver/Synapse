@@ -1,4 +1,4 @@
-import { pokerCardResultSchema, pokerCardViewSchema, pokerReserveViewSchema, pokerResolutionFrameSchema, pokerPaymentSchema } from "./game-poker-card-schemas.js"
+import { pokerCardResultSchema, pokerCardViewSchema, pokerHandLogEffectSchema, pokerReserveViewSchema, pokerResolutionFrameSchema, pokerPaymentSchema } from "./game-poker-card-schemas.js"
 import { z } from "zod"
 import { POKER_MAX_ROLL_COINS } from "./game.js"
 import { POKER_CARD_RULES_VERSIONS } from "./game-poker-cards.js"
@@ -142,6 +142,7 @@ const handLog = z.object({
     amount: z.number().int().nonnegative(), nominalAmount: z.number().int().nonnegative().optional(), waivedAmount: z.number().int().nonnegative().optional(), isAuto: z.boolean(),
     actionSource: z.enum(["mcp", "human", "timeout", "rules_bot"]).optional(),
     card: z.object({ id: z.string(), name: z.string(), artId: z.string().optional(), description: z.string().optional(), status: z.enum(["completed", "blocked", "choice_required"]) }).strict().optional(),
+    effects: z.array(pokerHandLogEffectSchema).min(1).max(2048).optional(),
     roll: z.object({ kind: z.enum(["normal", "super"]), count: z.number().int().positive(), status: z.enum(["pending", "completed", "replaced", "cancelled"]) }).strict().optional(),
   }).strict()).max(1002),
 }).strict().superRefine((log, ctx) => {
