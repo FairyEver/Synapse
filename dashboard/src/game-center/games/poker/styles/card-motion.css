@@ -18,24 +18,22 @@
   margin: 0;
 }
 .poker-motion-piece > .poker-ability-face { overflow: hidden; font-size: .75rem; }
-.poker-motion-piece .poker-card-turn,
-.poker-card-dock-stage .intel-values .poker-card-turn { transition: none; }
+.poker-motion-piece .poker-card-turn { transition: none; }
+.poker-card-dock-stage .poker-motion-overlay {
+  --playing-back: var(--stage-raised);
+  --playing-back-ink: var(--brass);
+}
 
-.poker-board { position: relative; }
-.poker-motion-deck, .poker-motion-pool {
+.poker-board, .poker-result-hole-cards { position: relative; }
+.poker-motion-deck {
   position: absolute;
   top: 50%;
   translate: 0 -50%;
   pointer-events: none;
-  --cw: calc(var(--poker-board-card-width) * .54);
+  --cw: calc(var(--poker-board-card-width, 3.5rem) * .54);
 }
 .poker-motion-deck { inset-inline-start: calc(100% + 14px); }
-.poker-motion-pool { inset-inline-end: calc(100% + 14px); }
-.poker-motion-pool {
-  --playing-back: var(--accent-soft);
-  --playing-back-ink: var(--accent);
-}
-.poker-motion-deck .poker-card, .poker-motion-pool .poker-card {
+.poker-motion-deck .poker-card {
   box-shadow: 2px 3px var(--border), 4px 6px var(--border);
   border-radius: var(--radius-sm);
 }

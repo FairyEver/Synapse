@@ -26,7 +26,7 @@ import { fitTableScene, tableSceneVariables } from "../lib/table-scene"
 import { useTableMotion } from "../hooks/useTableMotion"
 import { useDealAnimation } from "../hooks/useDealAnimation"
 import { usePokerCardMotion } from "../hooks/usePokerCardMotion"
-import { PokerCardMotion, PokerMotionDecks } from "./PokerCardMotion"
+import { PokerCardMotion, PokerMotionDeck } from "./PokerCardMotion"
 import { usePokerAudio } from "../hooks/usePokerAudio"
 import { usePokerReady } from "../hooks/usePokerReady"
 import { usePokerChips } from "../hooks/usePokerChips"
@@ -160,7 +160,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
                     const visible = !view.board[i] || dealt >= view.seats.length + i + 1
                     return <span key={i} className="poker-deal-slot" data-dealt={visible}><Card card={view.board[i]} faceUp={visible} /></span>
                   })}
-                  {cardDock && view.handId && <PokerMotionDecks />}
+                  {cardDock && view.handId && <PokerMotionDeck />}
                 </div>
                 {cardDock && <span className="poker-motion-cast-zone" data-card-motion-anchor="cast-zone" aria-hidden="true" />}
                 <div className="poker-board-caption"><span className="poker-street">{stage}</span><PokerCardFeedback frames={animateFrames} handId={table.handId} scope={`${table.roomCode}:${identityKey}:${perspective}:${controlVersion}`} /></div>

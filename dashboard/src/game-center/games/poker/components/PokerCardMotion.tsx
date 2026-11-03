@@ -11,6 +11,7 @@ type Props = {
   batch: PokerCardMotionBatch | null
   mySeat: number | null
   paymentPending: boolean
+  insideSurface?: boolean
   onComplete: (batch: PokerCardMotionBatch) => void
 }
 
@@ -18,19 +19,20 @@ function center(rect: DOMRect) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
 }
 
-export function PokerCardMotion({ surface, batch, mySeat, paymentPending, onComplete }: Props) {
+export function PokerCardMotion({ surface, batch, mySeat, paymentPending, insideSurface = false, onComplete }: Props) {
   const layer = useRef<HTMLDivElement>(null)
   const templates = useRef<HTMLDivElement>(null)
   const active = useRef<gsap.core.Timeline | null>(null)
   const waitingForChips = useRef(false)
   const pendingChips = useRef(paymentPending)
   pendingChips.current = paymentPending
+  const oldCards = new Set(batch?.changes.flatMap(change => Object.values(change.oldCards ?? {}).flatMap(cards => Object.values(cards))))
 
   useLayoutEffect(() => {
     const root = surface.current, host = layer.current, sources = templates.current
     if (!batch || !root || !host || !sources) return
     const anchor = (name: string) => root.querySelector<HTMLElement>(`[data-card-motion-anchor="${CSS.escape(name)}"]`)
-    const hole = (seat: number, index: number) => root.querySelector<HTMLElement>(`[data-seat="${seat}"] .poker-seat-cards > :nth-child(${index + 1})`)
+    const hole = (seat: number, index: number) => root.querySelector<HTMLElement>(`[data-seat="${seat}"] :is(.poker-seat-cards, .poker-result-hole-cards) > :nth-child(${index + 1})`)
     const usable = (element?: HTMLElement | null) => {
       const rect = element?.getBoundingClientRect()
       return rect?.width && rect.height ? rect : null
@@ -38,7 +40,10 @@ export function PokerCardMotion({ surface, batch, mySeat, paymentPending, onComp
     const sprite = (visual: HTMLElement, start: DOMRect, end: DOMRect) => {
       const piece = document.createElement("span")
       piece.className = "poker-motion-piece"
-      piece.append(visual.cloneNode(true))
+      const face = visual.cloneNode(true) as HTMLElement
+      // The live slot is concealed during transit. Its copy must stay visible.
+      face.style.removeProperty("opacity")
+      piece.append(face)
       host.append(piece)
       const from = center(start)
       gsap.set(piece, { x: from.x, y: from.y, xPercent: -50, yPercent: -50, width: end.width, height: end.height, "--cw": `${end.width}px`, opacity: 0 })
@@ -48,23 +53,28 @@ export function PokerCardMotion({ surface, batch, mySeat, paymentPending, onComp
     const context = gsap.context(() => {
       const tl = gsap.timeline({ paused: true, defaults: { ease: "power2.out" } })
       active.current = tl
-      const deck = anchor("poker-deck"), pool = anchor("ability-pool"), castZone = anchor("cast-zone")
-      const deckRect = usable(deck), poolRect = usable(pool), castRect = usable(castZone)
+      const deck = anchor("poker-deck"), castZone = anchor("cast-zone")
+      const deckRect = usable(deck), castRect = usable(castZone)
       const back = sources.querySelector<HTMLElement>(".poker-card")!
       const hidden = new Set<HTMLElement>()
       const conceal = (element: HTMLElement) => {
         if (!hidden.has(element)) gsap.set(element, { opacity: 0 })
         hidden.add(element)
       }
-      const fly = (visual: HTMLElement, from: DOMRect, to: DOMRect, at: number, duration: number, flip = false) => {
+      const fly = (visual: HTMLElement, from: DOMRect, to: DOMRect, at: number, duration: number,
+        options: { flip?: "up" | "down"; phase?: "return" | "draw"; hold?: boolean } = {}) => {
         const piece = sprite(visual, from, to)
         const target = center(to)
-        const face = flip ? piece.querySelector(".poker-card-turn") : null
+        const startScale = from.width / to.width
+        if (options.phase) piece.dataset.motionPhase = options.phase
+        if (options.hold) gsap.set(piece, { opacity: 1, scale: startScale })
+        const face = options.flip ? piece.querySelector(".poker-card-turn") : null
         if (face) {
-          gsap.set(face, { rotationY: 180 })
-          tl.to(face, { rotationY: 0, duration: .16, ease: "power1.inOut" }, at + duration - .16)
+          const revealing = options.flip === "up"
+          gsap.set(face, { rotationY: revealing ? 180 : 0 })
+          tl.to(face, { rotationY: revealing ? 0 : 180, duration: .16, ease: "power1.inOut" }, revealing ? at + duration - .16 : at)
         }
-        tl.set(piece, { opacity: 1, rotation: -8, scale: .82 }, at)
+        tl.set(piece, { opacity: 1, rotation: options.hold ? 0 : -8, scale: startScale }, at)
         tl.to(piece, { ...target, rotation: 0, scale: 1, duration }, at)
         tl.set(piece, { opacity: 0 }, at + duration)
       }
@@ -90,7 +100,9 @@ export function PokerCardMotion({ surface, batch, mySeat, paymentPending, onComp
         })
       })
 
+      const resultInDialog = !insideSurface && document.querySelector(".poker-card-dock-stage[open] .poker-result-hole-cards")
       for (const change of batch.changes) {
+        if (resultInDialog && change.kind === "replaced" && change.seats[0] === mySeat) continue
         const at = tl.duration()
         if (change.kind === "effect") {
           for (const seat of change.seats) {
@@ -105,52 +117,52 @@ export function PokerCardMotion({ surface, batch, mySeat, paymentPending, onComp
             const rect = usable(root.querySelector<HTMLElement>(`[data-seat="${seat}"] .poker-seat-cards`))
             if (!rect) return []
             const width = Math.min(rect.width, rect.height / 1.4)
-            return [{ card: null, rect: new DOMRect(rect.left + (rect.width - width) / 2, rect.top, width, rect.height) }]
+            return [{ card: null, index: -1, rect: new DOMRect(rect.left + (rect.width - width) / 2, rect.top, width, rect.height) }]
           }
           return slots.flatMap(index => {
             const card = hole(seat, index), rect = usable(card)
-            return card && rect ? [{ card, rect }] : []
+            return card && rect ? [{ card, index, rect }] : []
           })
         })
+        const exchange = change.kind === "reordered" || change.kind === "exchanged"
+        const returnDuration = .28, step = .055, shuffleDuration = .2, drawDuration = .32
+        const shuffleAt = at + returnDuration + Math.max(0, ...groups.map(group => group.length - 1)) * step
+        if (!exchange && deck && deckRect) tl.to(deck, {
+          keyframes: [{ rotation: -9, y: -3 }, { rotation: 8, y: -2 }, { rotation: 0, y: 0 }],
+          duration: shuffleDuration, ease: "power1.inOut",
+        }, shuffleAt)
+
         for (const [groupIndex, group] of groups.entries()) {
-          group.slice(0, change.count).forEach(({ card, rect }, index) => {
-            const start = at + index * .04
-            const other = change.kind === "reordered" ? group[1 - index]?.rect
-              : change.kind === "exchanged" ? groups[1 - groupIndex]?.[index]?.rect : null
-            if (card) {
-              conceal(card)
-              tl.set(card, { opacity: 0 }, start)
-            }
-            if (other) {
-              fly(back, other, rect, start, .32)
-              if (card) tl.set(card, { opacity: 1 }, start + .32)
+          group.forEach(({ card, index: slot, rect }, index) => {
+            const start = at + index * step
+            if (exchange) {
+              const other = change.kind === "reordered" ? group[1 - index]?.rect : groups[1 - groupIndex]?.[index]?.rect
+              if (!other) return
+              if (card) { conceal(card); tl.set(card, { opacity: 0 }, start) }
+              fly(back, other, rect, start, drawDuration)
+              if (card) tl.set(card, { opacity: 1 }, start + drawDuration)
             } else if (deckRect) {
-              if (change.kind === "replaced") {
-                // Draw first, then send the old card back. The new face appears at its seat.
-                fly(card ?? back, deckRect, rect, start, .28, card?.dataset.face === "up")
-                fly(back, rect, deckRect, start + .13, .23)
-                if (card) tl.set(card, { opacity: 1 }, start + .28)
-              } else {
-                fly(back, rect, deckRect, start, .23)
-                fly(card ?? back, deckRect, rect, start + .4, .28, card?.dataset.face === "up")
-                if (card) tl.set(card, { opacity: 1 }, start + .68)
-              }
-            } else if (card) tl.set(card, { opacity: 1 }, start)
+              const old = change.oldCards?.[change.seats[groupIndex]]?.[slot]
+              const previousFace = old ? sources.querySelector<HTMLElement>(`[data-motion-old="${CSS.escape(old)}"] .poker-card`) : null
+              if (card) { conceal(card); tl.set(card, { opacity: 0 }, start) }
+              fly(previousFace ?? back, rect, deckRect, start, returnDuration, { phase: "return", flip: previousFace ? "down" : undefined, hold: !!previousFace })
+              const redraw = shuffleAt + shuffleDuration + index * step
+              fly(card ?? back, deckRect, rect, redraw, drawDuration, { phase: "draw", flip: card?.dataset.face === "up" ? "up" : undefined })
+              if (card) tl.set(card, { opacity: 1 }, redraw + drawDuration)
+            }
           })
         }
-        if (deck && deckRect && (change.kind === "shuffled" || change.kind === "replaced"))
-          tl.fromTo(deck, { rotation: -9 }, { rotation: 9, duration: .08, repeat: 1, yoyo: true, immediateRender: false }, at + (change.kind === "replaced" ? .36 : .24))
       }
 
       const drawStart = tl.duration()
-      if (poolRect) batch.draws.forEach((id, index) => {
+      if (deckRect) batch.draws.forEach((id, index) => {
         const slot = anchor(`ability:${id}`), face = slot?.querySelector<HTMLElement>(".poker-ability-face"), target = usable(slot)
         if (!slot || !face || !target) return
         const row = slot.parentElement?.getBoundingClientRect()
         if (row && (target.right <= row.left || target.left >= row.right)) return
         const at = drawStart + index * .065
         conceal(face)
-        fly(face, poolRect, target, at, .32)
+        fly(face, deckRect, target, at, .32)
         tl.set(face, { opacity: 1 }, at + .32)
       })
       const done = () => queueMicrotask(() => {
@@ -184,7 +196,7 @@ export function PokerCardMotion({ surface, batch, mySeat, paymentPending, onComp
       waitingForChips.current = false
       host.replaceChildren()
     }
-  }, [batch, mySeat, onComplete, surface])
+  }, [batch, insideSurface, mySeat, onComplete, surface])
 
   useLayoutEffect(() => {
     if (paymentPending || !waitingForChips.current) return
@@ -192,19 +204,18 @@ export function PokerCardMotion({ surface, batch, mySeat, paymentPending, onComp
     active.current?.resume()
   }, [paymentPending])
 
-  if (!batch) return null
+  const portal = insideSurface ? surface.current : document.body
+  if (!batch || !portal) return null
   return createPortal(<div className="poker-motion-overlay" aria-hidden="true">
     <div ref={templates} hidden>
       <Card faceUp={false} />
+      {[...oldCards].map(card => <span key={card} data-motion-old={card}><Card card={card} /></span>)}
       {batch.casts.map((cast, index) => <span data-motion-cast={index} key={cast.id}><PokerAbilityFace name={cast.name} artId={cast.artId} size="sm" /></span>)}
     </div>
     <div ref={layer} />
-  </div>, document.body)
+  </div>, portal)
 }
 
-export function PokerMotionDecks() {
-  return <>
-    <span className="poker-motion-deck" data-card-motion-anchor="poker-deck" aria-hidden="true"><Card faceUp={false} /></span>
-    <span className="poker-motion-pool" data-card-motion-anchor="ability-pool" aria-hidden="true"><Card faceUp={false} /></span>
-  </>
+export function PokerMotionDeck() {
+  return <span className="poker-motion-deck" data-card-motion-anchor="poker-deck" aria-hidden="true"><Card faceUp={false} /></span>
 }

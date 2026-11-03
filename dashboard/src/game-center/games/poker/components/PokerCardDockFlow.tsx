@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react"
 import { createPortal } from "react-dom"
 import gsap from "gsap"
 import { useReducedMotion } from "../hooks/useReducedMotion"
@@ -12,6 +12,8 @@ import { Card } from "./Card"
 import { PokerCardIntel } from "./PokerCardIntel"
 import { PokerCardCandidates, PokerCardSelection } from "./PokerCardSelection"
 import { PokerHandDock } from "./PokerHandDock"
+import { PokerCardMotion, PokerMotionDeck } from "./PokerCardMotion"
+import type { PokerCardMotionBatch } from "../lib/table-card-motion"
 import "../styles/cards.css"
 
 type CardResult = NonNullable<PokerCardDefinitionView["play"]>["result"]
@@ -70,6 +72,9 @@ export function PokerCardDockFlow({ table, controls, disabled, showHand = true, 
   const revealMotion = usedResult && resultKind === "holes" && used.status !== "blocked" ? `result:${used.id}` : null
   const motionKey = choiceMotion ?? revealMotion
   const previousMotion = useRef(motionKey)
+  const [replacementMotion, setReplacementMotion] = useState<{ key: string; batch: PokerCardMotionBatch } | null>(null)
+  const clearReplacementMotion = useCallback(() => setReplacementMotion(null), [])
+  const replacementBatch = !reduced && replacementMotion?.key === revealMotion ? replacementMotion?.batch ?? null : null
   const stage = pending ? pending.choiceId : usedResult ? "result" : targetStage ? card.instanceId : recovery ? "recovery" : review ? "intel" : "waiting"
 
   useLayoutEffect(() => {
@@ -79,20 +84,33 @@ export function PokerCardDockFlow({ table, controls, disabled, showHand = true, 
     const previous = previousMotion.current
     previousMotion.current = motionKey
     if (!motionKey || previous === motionKey || reduced || !dialog.current) return
-    const items = dialog.current.querySelectorAll(choiceMotion ? ".candidate-view .card-slot" : ".intel-values .poker-card-turn")
-    if (!items.length) return
-    const motion = gsap.context(() => {
-      if (choiceMotion) gsap.from(items, { opacity: 0, y: 30, scale: .88, duration: .28, stagger: .05, ease: "power2.out", clearProps: "opacity,transform" })
-      else gsap.from(items, { rotationY: 180, duration: .24, stagger: .05, ease: "power1.inOut", clearProps: "transform" })
-    })
-    return () => motion.revert()
+    if (choiceMotion) {
+      const items = dialog.current.querySelectorAll(".candidate-view .card-slot")
+      if (!items.length) return
+      const motion = gsap.context(() => {
+        gsap.from(items, { opacity: 0, y: 30, scale: .88, duration: .28, stagger: .05, ease: "power2.out", clearProps: "opacity,transform" })
+      })
+      return () => motion.revert()
+    }
+
+    const seat = table.mySeatNo, previousHole = submitted?.baseline.hole, nextHole = table.hole
+    if (seat === null || submitted?.baseline.handId !== table.handId || previousHole?.length !== 2 || nextHole?.length !== 2) return
+    const slots = [0, 1].filter(index => previousHole[index] !== nextHole[index])
+    if (!slots.length) return
+    setReplacementMotion({ key: motionKey, batch: {
+      casts: [], draws: [], payments: [],
+      changes: [{
+        kind: "replaced", seats: [seat], count: slots.length, slots: { [seat]: slots },
+        oldCards: { [seat]: Object.fromEntries(slots.map(index => [index, previousHole[index]])) },
+      }],
+    } })
   }, [motionKey, choiceMotion, reduced])
   useEffect(() => { if (open) headingRef.current?.focus() }, [open, stage])
 
   const reset = () => {
     dialog.current?.close()
     if (intelOpen) onIntelClose?.()
-    setSelected(null); setValues({}); setSubmitted(null); setRefreshError(false)
+    setSelected(null); setValues({}); setSubmitted(null); setRefreshError(false); clearReplacementMotion()
   }
   const send = (next: PokerCardHandView, selectedValues: CardSelectionValues) => {
     if (!validCardSelections(next, selectedValues)) return
@@ -147,7 +165,14 @@ export function PokerCardDockFlow({ table, controls, disabled, showHand = true, 
                 {pending.cardIndex !== undefined && <p className="poker-card-dock-stage-description">替换第 {pending.cardIndex + 1} 张底牌{originalCard && ` · ${playingCardLabel(originalCard)}`}</p>}
                 <PokerCardCandidates pending={pending} table={table} value={candidateIndex} onChange={index => setCandidate({ choiceId: pending.choiceId, index })} disabled={locked} />
               </> : usedResult ? <>
-                {resultKind === "holes" && used.status !== "blocked" && <section className="intel-result" aria-label="你的底牌"><div className="intel-values">{table.hole?.map((value, index) => <Card key={index} card={value} />)}</div></section>}
+                {resultKind === "holes" && used.status !== "blocked" && <section className="intel-result" data-seat={table.mySeatNo} aria-label="你的底牌">
+                  <div className="intel-values poker-result-hole-cards">
+                    {table.hole?.map((value, index) => <Card key={index} card={value} />)}
+                    {replacementBatch && <PokerMotionDeck />}
+                  </div>
+                  <PokerCardMotion surface={dialog} batch={replacementBatch} mySeat={table.mySeatNo} insideSurface
+                    paymentPending={false} onComplete={clearReplacementMotion} />
+                </section>}
                 {resultKind === "intel" && feedback?.results.length ? <PokerCardIntel cards={cards} results={feedback.results} target={feedback.target} /> : null}
               </> : targetStage ? <>
                 <p className="poker-card-dock-stage-description">{definition.description}</p>

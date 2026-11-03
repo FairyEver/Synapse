@@ -5,6 +5,7 @@ export type PokerCardChange = {
   seats: number[]
   count: number
   slots?: Record<number, number[]>
+  oldCards?: Record<number, Record<number, string>>
 }
 export type PokerCardMotionBatch = {
   casts: { id: string; name: string; artId: string; seatNo: number; blocked: boolean }[]
@@ -47,14 +48,22 @@ export function planPokerCardMotion(previous: PokerTableView, current: PokerTabl
         const targets = [...new Set(effect.kind === "exchanged" ? [entry.seatNo, effect.target.seatNo] : [effect.target.seatNo])]
         if (!targets.every(seat => seatNumbers.has(seat)) || effect.kind === "exchanged" && targets.length !== 2) continue
         const slots: Record<number, number[]> = {}
+        const visibleHole = (view: PokerTableView, seatNo: number) =>
+          (view.mySeatNo === seatNo ? view.hole : undefined) ?? view.seats.find(seat => seat.seatNo === seatNo)?.hole
         if (sameHand && effect.count === 1) for (const seatNo of targets) {
-          const oldHole = previous.seats.find(seat => seat.seatNo === seatNo)?.hole
-          const newHole = current.seats.find(seat => seat.seatNo === seatNo)?.hole
+          const oldHole = visibleHole(previous, seatNo), newHole = visibleHole(current, seatNo)
           if (oldHole?.length !== 2 || newHole?.length !== 2) continue
           const changed = [0, 1].filter(index => oldHole[index] !== newHole[index])
           if (changed.length === effect.count) slots[seatNo] = changed
         }
-        batch.changes.push({ kind: effect.kind, seats: targets, count: effect.count, ...(Object.keys(slots).length ? { slots } : {}) })
+        const seat = current.mySeatNo
+        const oldHole = seat === null ? undefined : visibleHole(previous, seat)
+        const ownSlots = seat !== null && targets.includes(seat) ? effect.count === 2 ? [0, 1] : slots[seat] : undefined
+        const oldCards = effect.kind === "replaced" && seat !== null && ownSlots && oldHole?.length === 2 &&
+          sameHand && current.actionSeq === lastSeq + 1 && previous.cards?.ownHand && current.cards.ownHand
+          ? { [seat]: Object.fromEntries(ownSlots.map(index => [index, oldHole[index]])) } : undefined
+        batch.changes.push({ kind: effect.kind, seats: targets, count: effect.count,
+          ...(Object.keys(slots).length ? { slots } : {}), ...(oldCards ? { oldCards } : {}) })
       } else if (effect.kind === "shuffled") {
         const targets = effect.targets.map(target => target.seatNo).filter(seat => seatNumbers.has(seat))
         if (targets.length > 1) batch.changes.push({ kind: effect.kind, seats: targets, count: 2 })
