@@ -1536,6 +1536,7 @@ model TodoItem {
   id                 String @id @default(cuid())
   userId             String
   deliveries         TodoReminderDelivery[]
+  images             TodoImage[]
   user               User @relation(fields: [userId], references: [id], onDelete: Cascade)
   title              String
   note               String?
@@ -1558,6 +1559,23 @@ model TodoItem {
   @@index([userId, deletedAt, completedAt, dueAt, createdAt, id])
   @@index([reminderStatus, remindAt])
   @@index([deletedAt])
+}
+
+model TodoImage {
+  id            String @id @db.Uuid
+  userId        String
+  todoId        String?
+  todo          TodoItem? @relation(fields: [todoId], references: [id], onDelete: SetNull)
+  position      Int @default(0)
+  mimeType      String
+  byteSize      Int
+  thumbnailSize Int
+  sha256        String
+  ready         Boolean @default(false)
+  expiresAt     DateTime?
+
+  @@index([userId, todoId])
+  @@index([todoId, expiresAt])
 }
 
 enum TodoDeliveryStatus {

@@ -1411,6 +1411,10 @@ export type SynapseBridge = {
   }
   mail: import("../../app-capabilities/mail/shared/bridge").MailBridge
   todos: {
+    image: {
+      stage: (input: import("@synapse/shared/todo-contracts").TodoImageStageInput) => Promise<{ imageId: string }>
+      read: (input: import("@synapse/shared/todo-contracts").TodoImageReadInput) => Promise<import("@synapse/shared/todo-contracts").TodoImageContent>
+    }
     item: {
       list: (input?: import("@synapse/shared/todo-contracts").TodoListInput) => Promise<import("@synapse/shared/todo-contracts").TodoPageDto>
       get: (locator: import("@synapse/shared/todo-contracts").TodoLocator) => Promise<import("@synapse/shared/todo-contracts").TodoItemDto>

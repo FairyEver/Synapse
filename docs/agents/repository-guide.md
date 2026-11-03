@@ -79,6 +79,8 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 - `PLATFORM_MEDIA_COS_*`：用户/智能体头像、系统图标、模板/分享封面、模型图标，以及浏览器文档正文、文末留言和回复编辑产生的平台托管图片。默认私有读写，客户端不直接接触 COS bucket/key；系统头像使用 `avatars/system/v1/512/`，自定义头像使用 `avatars/users/`，分别由 `/api/avatars/system/<id>` 和 `/api/avatars/users/<id>` 代理公开读取；文档图片使用 `document-images/` 前缀，由服务端 `/object/<objectId>` 代理公开读取。生产环境必须完整配置该组变量。
 - `BACKUP_COS_*`：服务端灾备归档，当前 key 前缀为 `backups/`，不得承载运行时业务文件。
 
+待办原图与缩略图也使用 `PLATFORM_MEDIA_COS_*`，对象前缀为 `todo-images/`。读取经过待办账号鉴权，平台媒体备份清单覆盖此对象前缀与 `document-images/`。
+
 新增存储用途前先判断语义、权限、生命周期、计费归属和备份策略是否属于现有域。若不同，应新增明确的 storage domain，并同步 `server/src/config/env.ts`、测试、`server/compose.yml`、示例配置、部署脚本、README 和规则文档。COS 域配置必须完整校验 `SECRET_ID`、`SECRET_KEY`、`BUCKET`、`REGION`。
 
 数据库只保存对象元数据和引用，例如 `storageKey`、`assetId`、`mimeType`、`size`、`sha256`、归属、状态和版本；不得把图片或大文件字节写入 PostgreSQL、SQLite 或 DataRepository。删除、替换、回滚和孤儿清理必须显式设计，底层删除失败不得静默丢失元数据。

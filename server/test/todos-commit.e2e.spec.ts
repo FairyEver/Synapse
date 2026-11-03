@@ -1,10 +1,12 @@
 import "reflect-metadata"
 import { randomUUID } from "node:crypto"
+import { Readable } from "node:stream"
 import { PrismaClient } from "@prisma/client"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { TodoRepository } from "../src/todos/todo.repository"
 import { TodosService } from "../src/todos/todos.service"
 import { todoRequestHash } from "../src/todos/todo-idempotency"
+import { TodoImageService } from "../src/todos/todo-image.service"
 
 describe("todo PostgreSQL commit and ownership", () => {
   let prisma: PrismaClient
@@ -104,5 +106,44 @@ describe("todo PostgreSQL commit and ownership", () => {
     const replay = await service.create(owner, { ...input, priority: null })
     expect(replay).toMatchObject({ id: old.id, priority: null })
     await expect(service.create(owner, { ...input, priority: "high" })).rejects.toMatchObject({ status: 409 })
+  })
+
+  it("stages image pairs, binds them atomically, and hides them after removal or across owners", async () => {
+    const png = Buffer.from("89504e470d0a1a0a", "hex")
+    const thumbnail = Buffer.from("RIFF0000WEBP")
+    const objects = new Map<string, Buffer>()
+    let failThumbnail = true
+    const images = new TodoImageService(prisma as never, {
+      async putObject(key: string, bytes: Buffer) {
+        if (failThumbnail && key.endsWith("/thumbnail")) { failThumbnail = false; throw new Error("upload interrupted") }
+        objects.set(key, bytes)
+      },
+      async getObjectStream(key: string) { return { stream: Readable.from([objects.get(key)!]) } },
+      async deleteObject(key: string) { objects.delete(key) },
+    } as never)
+    const imageId = randomUUID()
+    await expect(images.stage(owner, imageId, png, thumbnail)).rejects.toMatchObject({ status: 503 })
+    const input = { title: "图片待办", imageIds: [imageId], clientRequestId: randomUUID() }
+    await expect(service.create(owner, input)).rejects.toMatchObject({ status: 400 })
+    expect(await prisma.todoItem.count({ where: { userId: owner, createRequestId: input.clientRequestId } })).toBe(0)
+    await images.stage(owner, imageId, png, thumbnail)
+    await expect(images.stage(other, imageId, png, thumbnail)).rejects.toMatchObject({ status: 404 })
+    await expect(service.create(other, input)).rejects.toMatchObject({ status: 400 })
+    const created = await service.create(owner, input)
+    expect(created.imageIds).toEqual([imageId])
+    expect(await service.create(owner, input)).toEqual(created)
+    expect((await service.list(owner, { query: "图片待办" })).items[0]?.imageIds).toEqual([imageId])
+    await expect(images.open(other, created.id, imageId, "original")).rejects.toMatchObject({ status: 404 })
+    await expect(images.open(owner, "wrong-todo", imageId, "thumbnail")).rejects.toMatchObject({ status: 404 })
+    expect(await images.open(owner, created.id, imageId, "thumbnail")).toMatchObject({ mimeType: "image/webp", byteSize: thumbnail.length })
+    expect(await images.open(owner, created.id, imageId, "original")).toMatchObject({ mimeType: "image/png", byteSize: png.length })
+    const renamed = await service.update(owner, created.id, { title: "修改标题", expectedVersion: created.version, clientRequestId: randomUUID() })
+    expect(renamed.imageIds).toEqual([imageId])
+    const cleared = await service.update(owner, created.id, { imageIds: [], expectedVersion: renamed.version, clientRequestId: randomUUID() })
+    expect(cleared.version).toBe(renamed.version + 1)
+    await expect(images.open(owner, created.id, imageId, "thumbnail")).rejects.toMatchObject({ status: 404 })
+    await images.prune()
+    expect(objects.size).toBe(0)
+    expect(await prisma.todoImage.findUnique({ where: { id: imageId } })).toBeNull()
   })
 })

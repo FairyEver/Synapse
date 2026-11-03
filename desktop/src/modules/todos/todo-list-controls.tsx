@@ -4,6 +4,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { priorityLabels } from "./todo-priority"
 import type { TodoListView } from "./todo-state"
 
+const prioritySelectedClass = "data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+
 export function TodoListControls({ priority, sort, onPriorityChange, onSortChange }: {
   priority: TodoListView["priority"]; sort: TodoSort
   onPriorityChange: (priority: TodoListView["priority"]) => void; onSortChange: (sort: TodoSort) => void
@@ -11,8 +13,8 @@ export function TodoListControls({ priority, sort, onPriorityChange, onSortChang
   return <div className="flex flex-wrap items-center gap-2">
     <ToggleGroup type="single" variant="outline" role="radiogroup" aria-label="筛选优先级" data-track="todos.priority-filter"
       value={priority} onValueChange={(value) => { if (value) onPriorityChange(value as TodoListView["priority"]) }}>
-      <ToggleGroupItem value="all" aria-label="全部优先级">全部优先级</ToggleGroupItem>
-      {TODO_PRIORITY_FILTERS.map((value) => <ToggleGroupItem key={value} value={value}
+      <ToggleGroupItem value="all" aria-label="全部优先级" className={prioritySelectedClass}>全部优先级</ToggleGroupItem>
+      {TODO_PRIORITY_FILTERS.map((value) => <ToggleGroupItem key={value} value={value} className={prioritySelectedClass}
         aria-label={value === "none" ? "筛选未设置优先级" : `筛选${priorityLabels[value]}优先级`}>
         {priorityLabels[value]}
       </ToggleGroupItem>)}

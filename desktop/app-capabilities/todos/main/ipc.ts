@@ -4,6 +4,7 @@ import type { AuditSink, PermissionGuard } from "../../../electron/runtime/secur
 import { TODOS_SERVICE_ID } from "../shared/capability"
 import { todoFailure } from "../shared/ipc-result"
 import { todoCompletionActionSchema, todoCreateInputSchema, todoDeleteActionSchema, todoDeleteResultSchema, todoIpcResultSchema, todoItemSchema, todoListInputSchema, todoLocatorSchema, todoPageSchema, todoUpdateActionSchema } from "../shared/schema"
+import { todoImageContentSchema, todoImageReadSchema, todoImageStageResultSchema, todoImageStageSchema } from "../shared/schema"
 import type { TodoCloudService } from "./service"
 import { createTodoCapabilityDispatcher } from "./dispatcher"
 
@@ -29,6 +30,8 @@ export const todosIpcModule: IpcModule = {
     update: { ...method("app.todos.item.update", todoUpdateActionSchema, todoItemSchema), operationId: "app.todos.item.update" },
     setCompleted: { ...method("app.todos.item.set_completed", todoCompletionActionSchema, todoItemSchema), operationId: "app.todos.item.set_completed" },
     delete: { ...method("app.todos.item.delete", todoDeleteActionSchema, todoDeleteResultSchema), operationId: "app.todos.item.delete" },
+    stageImage: { ...method("app.todos.image.stage", todoImageStageSchema, todoImageStageResultSchema), operationId: "app.todos.image.stage" },
+    readImage: { ...method("app.todos.image.read", todoImageReadSchema, todoImageContentSchema), operationId: "app.todos.image.read" },
   },
   events: {},
 }

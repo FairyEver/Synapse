@@ -5,6 +5,7 @@ import type { TodoItemDto } from "@synapse/shared/todo-contracts"
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), setCompleted: vi.fn(), delete: vi.fn(),
+  stageImage: vi.fn(), readImage: vi.fn(),
   authenticated: true, online: true, id: "user", reset: () => {}, changed: () => {},
 }))
 export { mocks }
@@ -20,5 +21,5 @@ export function deferred<T>() { let resolve!: (value: T) => void; const promise 
 let root: Root | null = null
 export function mount(node: React.ReactNode) { if (!root) { const container = document.createElement("div"); document.body.append(container); root = createRoot(container) }; act(() => root!.render(node)) }
 export async function flush() { await act(async () => { await Promise.resolve(); await Promise.resolve() }) }
-beforeEach(() => { mocks.authenticated = true; mocks.online = true; mocks.id = "user"; for (const fn of [mocks.list, mocks.get, mocks.create, mocks.update, mocks.setCompleted, mocks.delete]) fn.mockReset(); mocks.list.mockResolvedValue({ items: [item], nextOffset: null }); mocks.get.mockResolvedValue(item) })
+beforeEach(() => { mocks.authenticated = true; mocks.online = true; mocks.id = "user"; for (const fn of [mocks.list, mocks.get, mocks.create, mocks.update, mocks.setCompleted, mocks.delete, mocks.stageImage, mocks.readImage]) fn.mockReset(); mocks.list.mockResolvedValue({ items: [item], nextOffset: null }); mocks.get.mockResolvedValue(item) })
 afterEach(() => { if (root) act(() => root?.unmount()); root = null; document.body.innerHTML = "" })

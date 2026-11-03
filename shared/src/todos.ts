@@ -5,6 +5,17 @@ export const TODO_PRIORITIES = ["high", "medium", "low"] as const
 export const TODO_PRIORITY_FILTERS = [...TODO_PRIORITIES, "none"] as const
 export const TODO_SORTS = ["due", "priority"] as const
 export const TODO_PRIORITY_HEADER = "x-synapse-todo-priority"
+export const TODO_IMAGES_HEADER = "x-synapse-todo-images"
+export const TODO_THUMBNAIL_SIZE_HEADER = "x-synapse-todo-thumbnail-size"
+export const TODO_MAX_IMAGES = 10
+export const TODO_MAX_IMAGE_BYTES = 20 * 1024 * 1024
+export const TODO_MAX_THUMBNAIL_BYTES = 256 * 1024
+export const TODO_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/x-icon"] as const
+export const TODO_IMAGE_VARIANTS = ["thumbnail", "original"] as const
+export type TodoImageVariant = typeof TODO_IMAGE_VARIANTS[number]
+export interface TodoImageReadInput { todoId: string; imageId: string; variant: TodoImageVariant }
+export interface TodoImageStageInput { imageId: string; original: Uint8Array; thumbnail: Uint8Array }
+export interface TodoImageContent { bytes: Uint8Array; mimeType: typeof TODO_IMAGE_MIME_TYPES[number] }
 export type TodoFilter = "pending" | "all"
 export type TodoPriority = typeof TODO_PRIORITIES[number]
 export type TodoPriorityFilter = typeof TODO_PRIORITY_FILTERS[number]
@@ -15,6 +26,7 @@ export interface TodoFieldsInput {
   title: string
   note?: string | null
   priority?: TodoPriority | null
+  imageIds?: string[]
   dueAt?: string | null
   reminder?: TodoReminderKind
   offsetMinutes?: 10 | 60 | 1440 | null
@@ -37,6 +49,7 @@ export interface TodoItemDto {
   title: string
   note: string | null
   priority?: TodoPriority | null
+  imageIds?: string[]
   dueAt: string | null
   reminder: TodoReminderKind
   offsetMinutes: 10 | 60 | 1440 | null

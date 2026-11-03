@@ -2,7 +2,7 @@ import type { DispatchContext, DispatchResult } from "../../../synapse-capabilit
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import { checkCapabilityPermission } from "../../../electron/capabilities/permission-audit"
 import { TodoCloudError, todoFailure } from "../shared/ipc-result"
-import { todoCompletionActionSchema, todoCreateInputSchema, todoDeleteActionSchema, todoListInputSchema, todoLocatorSchema, todoUpdateActionSchema } from "../shared/schema"
+import { todoCompletionActionSchema, todoCreateInputSchema, todoDeleteActionSchema, todoImageReadSchema, todoImageStageSchema, todoListInputSchema, todoLocatorSchema, todoUpdateActionSchema } from "../shared/schema"
 import type { TodoCloudService } from "./service"
 
 function operation(service: TodoCloudService, action: string, params: Record<string, unknown>): { run: () => Promise<unknown>; id?: string; expectedVersion?: number } {
@@ -13,6 +13,8 @@ function operation(service: TodoCloudService, action: string, params: Record<str
     case "app.todos.item.update": { const { id, ...input } = todoUpdateActionSchema.parse(params); return { id, expectedVersion: input.expectedVersion, run: () => service.update(id, input) } }
     case "app.todos.item.set_completed": { const { id, ...input } = todoCompletionActionSchema.parse(params); return { id, expectedVersion: input.expectedVersion, run: () => service.setCompleted(id, input) } }
     case "app.todos.item.delete": { const { id, ...input } = todoDeleteActionSchema.parse(params); return { id, expectedVersion: input.expectedVersion, run: () => service.delete(id, input) } }
+    case "app.todos.image.stage": { const input = todoImageStageSchema.parse(params); return { run: () => service.stageImage(input) } }
+    case "app.todos.image.read": { const input = todoImageReadSchema.parse(params); return { id: input.todoId, run: () => service.readImage(input) } }
     default: throw new Error("Unknown Todo operation")
   }
 }

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common"
 import type { z } from "zod"
 import type { Request } from "express"
-import { TODO_PRIORITY_HEADER, type TodoItemDto } from "@synapse/shared/todo-contracts"
+import { TODO_IMAGES_HEADER, TODO_PRIORITY_HEADER, type TodoItemDto } from "@synapse/shared/todo-contracts"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { TodosService } from "./todos.service"
@@ -13,10 +13,12 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data
 }
 function todoResponse(req: AuthedRequest, item: TodoItemDto): TodoItemDto {
-  if (req.headers[TODO_PRIORITY_HEADER] === "1") return { ...item, priority: item.priority ?? null }
   // Older desktop versions reject unknown fields in the response.
-  const { priority: _priority, ...legacy } = item
-  return legacy
+  const { priority, imageIds, ...legacy } = item
+  return { ...legacy,
+    ...(req.headers[TODO_PRIORITY_HEADER] === "1" ? { priority: priority ?? null } : {}),
+    ...(req.headers[TODO_IMAGES_HEADER] === "1" ? { imageIds: imageIds ?? [] } : {}),
+  }
 }
 @Controller("/api/todos")
 @UseGuards(UserAuthGuard)

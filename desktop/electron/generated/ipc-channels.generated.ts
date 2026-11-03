@@ -480,6 +480,8 @@ export const IPC_CHANNELS = {
     "update": "synapse:app:todos:item:update",
     "setCompleted": "synapse:app:todos:item:set_completed",
     "delete": "synapse:app:todos:item:delete",
+    "stageImage": "synapse:app:todos:image:stage",
+    "readImage": "synapse:app:todos:image:read",
   },
   "agentPersonas": {
     "list": "synapse:app:agent_personas:operation:list",

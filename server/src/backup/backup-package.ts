@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { createReadStream } from "node:fs"
 import { mkdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { TODO_IMAGE_STORAGE_PREFIX } from "../drive/platform-media-storage"
 
 export interface BackupContentManifestItem {
   readonly path: string
@@ -47,6 +48,7 @@ export interface BackupPackageManifest {
       readonly bucket: string
       readonly region: string
       readonly prefix: "document-images/"
+      readonly prefixes: readonly ["document-images/", typeof TODO_IMAGE_STORAGE_PREFIX]
     }
   }
   readonly contents: BackupContentManifestItem[]
@@ -99,6 +101,7 @@ export function createBackupManifest(input: BackupPackageManifestInput): BackupP
               bucket: input.platformMediaBucket,
               region: input.platformMediaRegion,
               prefix: "document-images/" as const,
+              prefixes: ["document-images/", TODO_IMAGE_STORAGE_PREFIX] as const,
             },
           }
         : {}),
@@ -150,7 +153,7 @@ export function createRestoreMarkdown(input: RestoreMarkdownInput): string {
     "- `database.sql.gz`：业务数据库 dump，不包含问题反馈记录。",
     "- `postgres-globals.sql`：PostgreSQL 角色和全局权限。",
     "- `drive-cos-manifest.json`：Drive COS 对象清单，不包含文件内容。",
-    "- `platform-media-cos-manifest.json`：平台媒体文档图片对象清单，不包含文件内容。",
+    "- `platform-media-cos-manifest.json` 包含平台媒体的文档图片和待办图片对象清单，图片字节存放于对象存储。",
     "- `backup-manifest.json`：备份元信息和校验和。",
     "",
     "## 恢复步骤",

@@ -1,6 +1,6 @@
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 import type { CapabilityId } from "./naming"
-import { TODO_PRIORITIES, TODO_PRIORITY_FILTERS, TODO_SORTS } from "@synapse/shared/todo-contracts"
+import { TODO_MAX_IMAGES, TODO_PRIORITIES, TODO_PRIORITY_FILTERS, TODO_SORTS } from "@synapse/shared/todo-contracts"
 const definitions = [
   ["list", "查询待办", "List the signed-in user's todos by completion state, optional priority and literal case-insensitive title/note query. Sort pending items by due date or priority. Pagination: offset-based. Continue with nextOffset until null; restart at 0 after changing filters or sort. Changes can cause repeats or omissions."],
   ["get", "读取待办", "Read one owned Todo using exactly one id or complete synapse://todos/<id> reference. Does not open UI, mark notifications read or change completion."],
@@ -17,6 +17,8 @@ const fields = {
   title: { type: "string", minLength: 1, maxLength: 200, description: "Required nonblank title after trimming; maximum 200 Unicode code points." },
   note: { type: ["string", "null"], maxLength: 10000, description: "Optional plain text, maximum 10000 Unicode code points." },
   priority: { type: ["string", "null"], enum: [...TODO_PRIORITIES, null], description: "Optional priority. Null clears it; omission on update keeps it." },
+  imageIds: { type: "array", items: { type: "string", format: "uuid" }, maxItems: TODO_MAX_IMAGES, uniqueItems: true,
+    description: "Ordered IDs of images already attached to this todo or staged by this account in the desktop editor. Omit to retain; [] removes all." },
   dueAt: date,
   reminder: { type: "string", enum: ["none", "at_due", "before_due", "custom"], description: "Relative reminders require dueAt. Newly set or changed reminder time must be in the future." },
   offsetMinutes: { type: ["integer", "null"], enum: [10, 60, 1440, null], description: "Only before_due uses an offset." },

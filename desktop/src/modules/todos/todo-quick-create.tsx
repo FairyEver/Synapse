@@ -11,6 +11,8 @@ import { TodoPrioritySelect } from "./todo-priority"
 import { TodoReminderFields, TodoReminderSelect } from "./todo-reminder-fields"
 import type { TodoListView } from "./todo-state"
 import { useTodoEditor } from "./use-todo-editor"
+import { handleTodoImagePaste, TodoImagePicker } from "./todo-image-picker"
+import { TodoImageStrip } from "./todo-image-strip"
 
 export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }: {
   generation: number; online: boolean; priorityFilter: TodoListView["priority"]; onSaved: () => Promise<void>
@@ -54,7 +56,8 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
     <form aria-label="快速新建待办" data-track="todos.quick-create" onSubmit={(event) => void submit(event)}>
       <div className="flex items-center gap-2">
         <Input ref={title} aria-label="待办标题" data-track="todos.quick-title" placeholder="输入待办标题"
-          value={draft.title} disabled={saving} onChange={(event) => change("title", event.target.value)} />
+          value={draft.title} disabled={saving} onChange={(event) => change("title", event.target.value)}
+          onPaste={event => handleTodoImagePaste(event, editor.addImages)} />
         <Button type="submit" data-track="todos.quick-submit" disabled={!online || saving || !draft.title.trim()}>
           <Plus data-icon="inline-start" />{saving ? "添加中" : "添加待办"}
         </Button>
@@ -70,6 +73,7 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
           aria-expanded={showNote} aria-controls={showNote ? noteId : undefined} disabled={saving} onClick={() => setShowNote((open) => !open)}>
           <StickyNote data-icon="inline-start" />备注
         </Button>
+        <TodoImagePicker disabled={saving} onSelect={editor.addImages} />
       </div>
       {(showDue || hasReminderTime) && <div className="grid gap-3 sm:grid-cols-2">
         {showDue && <div className="min-w-0 space-y-2">
@@ -82,8 +86,9 @@ export function TodoQuickCreate({ generation, online, priorityFilter, onSaved }:
       {showNote && <div className="space-y-2">
         <Label htmlFor={noteId}>备注</Label>
         <Textarea id={noteId} rows={2} data-track="todos.note" disabled={saving} value={draft.note}
-          onChange={(event) => change("note", event.target.value)} />
+          onChange={(event) => change("note", event.target.value)} onPaste={event => handleTodoImagePaste(event, editor.addImages)} />
       </div>}
+      <TodoImageStrip images={draft.images} disabled={saving} onRemove={editor.removeImage} />
       {editor.error && <p role="alert" className="text-sm text-destructive">{editor.error}</p>}
     </form>
   </Card>

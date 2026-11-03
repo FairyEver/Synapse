@@ -13,6 +13,7 @@ import type COS from "cos-nodejs-sdk-v5"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
 import { isBackupCosConfigured, isDriveCosConfigured, isPlatformMediaCosConfigured, loadEnv, type ServerEnv } from "../config/env"
+import { TODO_IMAGE_STORAGE_PREFIX } from "../drive/platform-media-storage"
 import {
   contentManifestItem,
   createBackupManifest,
@@ -419,6 +420,7 @@ export class BackupService {
       bucket: this.env.platformMediaCosBucket!,
       region: this.env.platformMediaCosRegion!,
       prefix: "document-images/",
+      additionalPrefixes: [TODO_IMAGE_STORAGE_PREFIX],
     })
   }
 
@@ -428,9 +430,9 @@ export class BackupService {
     readonly bucket: string
     readonly region: string
     readonly prefix: string
+    readonly additionalPrefixes?: readonly string[]
   }): Promise<void> {
     const stream = fs.createWriteStream(input.filePath, { encoding: "utf8" })
-    let marker: string | undefined
     let completed = false
     let firstObject = true
     try {
@@ -438,23 +440,27 @@ export class BackupService {
       await writeStreamChunk(stream, `  "bucket": ${JSON.stringify(input.bucket)},\n`)
       await writeStreamChunk(stream, `  "region": ${JSON.stringify(input.region)},\n`)
       await writeStreamChunk(stream, `  "prefix": ${JSON.stringify(input.prefix)},\n`)
+      const prefixes = [input.prefix, ...(input.additionalPrefixes ?? [])]
+      await writeStreamChunk(stream, `  "prefixes": ${JSON.stringify(prefixes)},\n`)
       await writeStreamChunk(stream, '  "objects": [\n')
-      do {
-        const page = await new Promise<{ readonly Contents?: Array<{ readonly Key?: string; readonly Size?: string | number; readonly ETag?: string; readonly LastModified?: string }>; readonly IsTruncated?: string | boolean; readonly NextMarker?: string }>((resolve, reject) => {
-          input.cos.getBucket({ Bucket: input.bucket, Region: input.region, Prefix: input.prefix, ...(marker ? { Marker: marker } : {}) }, (error, data) => {
-            if (error) reject(error)
-            else resolve(data)
+      for (const prefix of prefixes) {
+        let marker: string | undefined
+        do {
+          const page = await new Promise<{ readonly Contents?: Array<{ readonly Key?: string; readonly Size?: string | number; readonly ETag?: string; readonly LastModified?: string }>; readonly IsTruncated?: string | boolean; readonly NextMarker?: string }>((resolve, reject) => {
+            input.cos.getBucket({ Bucket: input.bucket, Region: input.region, Prefix: prefix, ...(marker ? { Marker: marker } : {}) }, (error, data) => {
+              if (error) reject(error)
+              else resolve(data)
+            })
           })
-        })
-        for (const item of page.Contents ?? []) {
-          if (!item.Key) continue
-          const object = { key: item.Key, size: Number(item.Size ?? 0), ...(item.ETag ? { etag: item.ETag } : {}), ...(item.LastModified ? { lastModified: item.LastModified } : {}) }
-          await writeStreamChunk(stream, `${firstObject ? "" : ",\n"}    ${JSON.stringify(object)}`)
-          firstObject = false
-        }
-        marker = page.NextMarker
-        if (page.IsTruncated !== true && page.IsTruncated !== "true") marker = undefined
-      } while (marker)
+          for (const item of page.Contents ?? []) {
+            if (!item.Key) continue
+            const object = { key: item.Key, size: Number(item.Size ?? 0), ...(item.ETag ? { etag: item.ETag } : {}), ...(item.LastModified ? { lastModified: item.LastModified } : {}) }
+            await writeStreamChunk(stream, `${firstObject ? "" : ",\n"}    ${JSON.stringify(object)}`)
+            firstObject = false
+          }
+          marker = page.IsTruncated === true || page.IsTruncated === "true" ? page.NextMarker : undefined
+        } while (marker)
+      }
       await writeStreamChunk(stream, "\n  ]\n}\n")
       stream.end()
       await finished(stream)

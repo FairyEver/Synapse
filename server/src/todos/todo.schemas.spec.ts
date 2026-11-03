@@ -6,6 +6,13 @@ const now = new Date("2026-10-11T00:00:00Z")
 const create = (extra: Record<string, unknown> = {}) => ({ title: " 测试事项 ", clientRequestId: key, ...extra })
 
 describe("todo strict input and candidate validation", () => {
+  it("accepts a bounded, ordered set of image IDs and rejects duplicates or URLs", () => {
+    const first = "00000000-0000-4000-8000-000000000011"
+    const second = "00000000-0000-4000-8000-000000000012"
+    expect(todoCreateSchema.parse(create({ imageIds: [second, first] }))).toMatchObject({ imageIds: [second, first] })
+    expect(todoCreateSchema.safeParse(create({ imageIds: [first, first] })).success).toBe(false)
+    expect(todoCreateSchema.safeParse(create({ imageIds: ["https://example.com/image.png"] })).success).toBe(false)
+  })
   it("accepts 200 code points and rejects 201, rather than counting UTF-16", () => {
     expect(todoCreateSchema.safeParse(create({ title: "😀".repeat(200) })).success).toBe(true)
     expect(todoCreateSchema.safeParse(create({ title: "😀".repeat(201) })).success).toBe(false)

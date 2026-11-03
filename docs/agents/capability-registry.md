@@ -344,6 +344,8 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-11-03 待办优先级扩展既有 list、create、update 的参数及条目响应。桌面新建入口移入内容区的两行快建，继续使用既有窗口壳层。Todos 仍为 6 个 capability / MCP 索引，System App、Dock、Workflow、Automation 和 Deep Link 注册数量一致。
 
+2026-11-03 待办图片增加两个仅桌面 IPC 使用的操作 `app.todos.image.stage`、`app.todos.image.read`，复用 `network.connect` 审计。既有 create、update 可携带有序图片 ID，读取返回已绑定 ID。图片字节不通过 MCP 暴露，Todos 仍为 6 个 capability / MCP 索引。
+
 2026-10-12 审核修复：桌面更多菜单的完成／恢复复用既有 completion 操作；iOS 待办通知统一按通知 ID 重取、标记已读并解析本次服务器记录。旧回执隔离与服务端投递租约、过期、APNs 超时修复均为内部行为修正；仍为 21 个 System App、6 个 todos capability / MCP 索引，桌面与 iOS 各一条 Todo 路由，Workflow、Automation 和默认 Dock 无增量，MCP schema 与系统 Skill 指南无需新增动作。
 
 2026-10-11 集成核对：从实际 `CAPABILITY_DOMAINS` 累加 289 项、`MCP_TOOL_ACTIONS` 与 `buildAllMcpTools()` 各 285 项；`todos` 均为 6。System App 注册测试列出 21 个应用。相对实施前增量为 1 个 System App、6 个 capability / MCP 索引、1 条桌面 Todo 路由及 1 条 iOS Todo 路由；Workflow / Automation 增量均为 0，默认 Dock 无增量，公开 MCP 工具仍为 2。iOS 入口为主页现有导航栈，不注册桌面 System App 或额外底栏。

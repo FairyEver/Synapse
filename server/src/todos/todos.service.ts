@@ -6,12 +6,14 @@ import { todoCompletionSchema, todoCreateSchema, todoDeleteSchema, todoListSchem
 import { nextTodoReminderState } from "./todo-state"
 import { todoRequestHash } from "./todo-idempotency"
 import { TodoEvents } from "./todo-events"
+import { replaceTodoImages, todoImageIds } from "./todo-image-links"
 
-export function todoDto(item: TodoVisibleRow): TodoItemDto {
+export function todoDto(item: TodoVisibleRow, imageIds: string[] = []): TodoItemDto {
   return { id: item.id, title: item.title, note: item.note, priority: item.priority, dueAt: item.dueAt?.toISOString() ?? null, reminder: item.reminder,
     offsetMinutes: item.offsetMinutes as TodoItemDto["offsetMinutes"], remindAt: item.remindAt?.toISOString() ?? null,
     reminderGeneration: item.reminderGeneration, reminderStatus: item.reminderStatus, completedAt: item.completedAt?.toISOString() ?? null,
-    version: item.version, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }
+    version: item.version, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString(),
+    ...(imageIds.length ? { imageIds } : {}) }
 }
 @Injectable()
 export class TodosService {
@@ -19,12 +21,12 @@ export class TodosService {
   async list(userId: string, input: TodoListInput): Promise<TodoPageDto> {
     const parsed = todoListSchema.parse(input)
     const rows = await this.repository.list(userId, parsed)
-    return { items: rows.slice(0, parsed.limit).map(todoDto), nextOffset: rows.length > parsed.limit ? parsed.offset + parsed.limit : null }
+    return { items: rows.slice(0, parsed.limit).map(row => todoDto(row, row.imageIds)), nextOffset: rows.length > parsed.limit ? parsed.offset + parsed.limit : null }
   }
   async get(userId: string, id: string): Promise<TodoItemDto> {
     const row = await this.repository.get(userId, id)
     if (!row) throw this.unavailable()
-    return todoDto(row)
+    return todoDto(row, row.imageIds)
   }
   async create(userId: string, raw: TodoCreateInput): Promise<TodoItemDto> {
     const parsed = todoCreateSchema.parse(raw)
@@ -33,17 +35,23 @@ export class TodosService {
     // Omitting an unassigned priority preserves create hashes from older releases.
     const input: TodoCreateInput = {
       ...canonical, clientRequestId: parsed.clientRequestId, ...(priority === null ? {} : { priority }),
+      ...(parsed.imageIds?.length ? { imageIds: parsed.imageIds } : {}),
       offsetMinutes: canonical.offsetMinutes as TodoCreateInput["offsetMinutes"],
       dueAt: canonical.dueAt?.toISOString() ?? null, remindAt: canonical.remindAt?.toISOString() ?? null,
     }
     return this.mutate(userId, "create", null, input, async (tx, hash, changed) => {
       const existing = await tx.todoItem.findUnique({ where: { userId_createRequestId: { userId, createRequestId: input.clientRequestId } } })
-      if (existing) { if (existing.createRequestHash !== hash) throw this.requestConflict(); if (existing.deletedAt) throw this.unavailable(); return todoDto(existing) }
+      if (existing) {
+        if (existing.createRequestHash !== hash) throw this.requestConflict()
+        if (existing.deletedAt) throw this.unavailable()
+        return todoDto(existing, await todoImageIds(tx, userId, existing.id))
+      }
       const now = new Date()
       const fields = normalizeTodoFields(input, null, now)
       const row = await tx.todoItem.create({ data: { userId, ...fields, ...nextTodoReminderState(fields, null, null, now), createRequestId: input.clientRequestId, createRequestHash: hash } })
+      if (input.imageIds?.length) await replaceTodoImages(tx, userId, row.id, input.imageIds, now)
       changed({ id: row.id, version: row.version })
-      return todoDto(row)
+      return todoDto(row, input.imageIds)
     })
   }
   async update(userId: string, id: string, raw: TodoUpdateInput): Promise<TodoItemDto> {
@@ -53,31 +61,38 @@ export class TodosService {
       const now = new Date()
       const fields = normalizeTodoFields(input, row, now)
       const state = nextTodoReminderState(fields, row, row.completedAt, now)
+      const previousImages = await todoImageIds(tx, userId, id)
+      const nextImages = input.imageIds ?? previousImages
+      const imagesChanged = previousImages.length !== nextImages.length || previousImages.some((imageId, index) => imageId !== nextImages[index])
       const unchanged = fields.title === row.title && fields.note === row.note && fields.priority === row.priority && fields.dueAt?.getTime() === row.dueAt?.getTime()
         && fields.reminder === row.reminder && fields.offsetMinutes === row.offsetMinutes && fields.remindAt?.getTime() === row.remindAt?.getTime()
-      if (unchanged) return todoDto(row)
+      if (unchanged && !imagesChanged) return todoDto(row, previousImages)
+      if (imagesChanged) await replaceTodoImages(tx, userId, id, nextImages, now)
       const updated = await tx.todoItem.update({ where: { id }, data: { ...fields, ...state, version: { increment: 1 } } })
       changed({ id: updated.id, version: updated.version })
-      return todoDto(updated)
+      return todoDto(updated, nextImages)
     })
   }
   async setCompleted(userId: string, id: string, raw: TodoCompletionInput): Promise<TodoItemDto> {
     const input = todoCompletionSchema.parse(raw)
     return this.mutate(userId, "completion", id, input, async (tx, _hash, changed) => {
       const row = await this.requireVersion(tx, userId, id, input.expectedVersion)
-      if (Boolean(row.completedAt) === input.completed) return todoDto(row)
+      const images = await todoImageIds(tx, userId, id)
+      if (Boolean(row.completedAt) === input.completed) return todoDto(row, images)
       const now = new Date()
       const completedAt = input.completed ? now : null
       const updated = await tx.todoItem.update({ where: { id }, data: { completedAt, ...nextTodoReminderState(row, row, completedAt, now), version: { increment: 1 } } })
       changed({ id: updated.id, version: updated.version })
-      return todoDto(updated)
+      return todoDto(updated, images)
     })
   }
   async delete(userId: string, id: string, raw: TodoDeleteInput): Promise<TodoDeleteResult> {
     const input = todoDeleteSchema.parse(raw)
     return this.mutate(userId, "delete", id, input, async (tx, _hash, changed) => {
       const row = await this.requireVersion(tx, userId, id, input.expectedVersion)
-      const deleted = await tx.todoItem.update({ where: { id }, data: { deletedAt: new Date(), reminderStatus: row.reminderStatus === "pending" ? "cancelled" : row.reminderStatus, version: { increment: 1 } } })
+      const now = new Date()
+      await replaceTodoImages(tx, userId, id, [], now)
+      const deleted = await tx.todoItem.update({ where: { id }, data: { deletedAt: now, reminderStatus: row.reminderStatus === "pending" ? "cancelled" : row.reminderStatus, version: { increment: 1 } } })
       changed({ id: deleted.id, version: deleted.version })
       return { id: deleted.id, version: deleted.version, deleted: true }
     })

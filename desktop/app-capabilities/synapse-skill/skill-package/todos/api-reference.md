@@ -19,6 +19,8 @@ Fields: title (trimmed nonblank max 200 Unicode code points); note (string/null 
 
 Priority accepts `high`, `medium`, `low`, or null on create and update. Null clears priority. Omission on update retains the existing level. `"none"` is only a list filter and matches unassigned items.
 
+An item can return ordered `imageIds` for up to 10 attachments. Create and update accept IDs already attached to the same item or staged by the same account in the desktop editor. Omit the field to retain attachments on update. Pass an empty array to remove them all. The desktop stages and displays image bytes through private, account-scoped operations.
+
 TodoItem contains id, title, note, priority (nullable), dueAt, reminder, offsetMinutes, remindAt, reminderGeneration, reminderStatus (none/pending/sent/cancelled/expired), completedAt (null pending), version, createdAt, updatedAt. A missing priority from an older server also means unassigned. Creation, update, and completion output timestamps can include seconds.
 
 By default, pending items sort by dueAt ascending with nulls last, then createdAt and id ascending. Priority sort orders pending items high, medium, low, then unassigned, using the default order within each level. Completed items follow pending ones in completedAt and id descending order. Filtering and sorting precede pagination. Continue nextOffset until null and restart at zero when filters or sort change. Concurrent edits can cause offset pages to repeat or omit items.

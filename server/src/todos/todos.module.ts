@@ -11,11 +11,14 @@ import { MobileLiveModule } from "../mobile-live/mobile-live.module"
 import { TodoEvents } from "./todo-events"
 import { TodoReminderWorker } from "./todo-reminder.worker"
 import { TodoReminderOutbox } from "./todo-reminder-outbox"
-@Module({ imports: [UserAuthModule, PrismaModule, NotificationModule, LiveModule, MobileLiveModule], controllers: [TodosController],
-  providers: [TodosService, TodoRepository, TodoEvents, TodoReminderWorker, TodoReminderOutbox], exports: [TodosService] })
+import { PlatformMediaModule } from "../platform-media/platform-media.module"
+import { TodoImageService } from "./todo-image.service"
+import { TodoImagesController } from "./todo-images.controller"
+@Module({ imports: [UserAuthModule, PrismaModule, NotificationModule, LiveModule, MobileLiveModule, PlatformMediaModule], controllers: [TodosController, TodoImagesController],
+  providers: [TodosService, TodoRepository, TodoEvents, TodoReminderWorker, TodoReminderOutbox, TodoImageService], exports: [TodosService] })
 export class TodosModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(setTodoNoStore).forRoutes(TodosController)
+    consumer.apply(setTodoNoStore).forRoutes(TodosController, TodoImagesController)
   }
 }
 

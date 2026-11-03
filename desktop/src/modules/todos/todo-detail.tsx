@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { TodoPriorityBadge } from "./todo-priority"
+import { TodoImageStrip } from "./todo-image-strip"
 
 const dateTime = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
 const formatTime = (value: string) => dateTime.format(new Date(value))
@@ -27,6 +28,10 @@ export function TodoDetail({ item, disabled, onClose, onEdit }: { item: TodoItem
           {item.note && <section className="space-y-2" aria-label="备注">
             <h3 className="text-sm font-medium text-muted-foreground">备注</h3>
             <p className="whitespace-pre-wrap wrap-anywhere text-sm leading-7">{item.note}</p>
+          </section>}
+          {!!item.imageIds?.length && <section className="space-y-2" aria-label="图片">
+            <h3 className="text-sm font-medium">图片</h3>
+            <TodoImageStrip images={item.imageIds.map(id => ({ id }))} todoId={item.id} />
           </section>}
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-4 border-t pt-6 text-sm">
             <dt className="text-muted-foreground">优先级</dt><dd>{item.priority ? <TodoPriorityBadge priority={item.priority} /> : "未设置"}</dd>

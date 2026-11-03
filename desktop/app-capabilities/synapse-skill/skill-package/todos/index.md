@@ -17,6 +17,8 @@ Clear target and user authorization: execute CRUD directly, without extra formal
 
 Set priority to `high`, `medium`, or `low` when requested. Use `priority: null` in an update to clear it. Omit `priority` when editing another field. For list filters only, `priority: "none"` selects unassigned items.
 
+Omit `imageIds` when editing another field. Change attachment IDs only when the user asks to modify attachments. Use the desktop editor to stage new images and preview existing ones.
+
 ## Time and reminder rules
 
 Title is trimmed, nonblank, max 200 Unicode code points. Note max 10000, blank -> null. NUL and unpaired surrogates are invalid. Resolve date, clock time and time zone. Send RFC3339 with explicit offset or Z, minute precision (seconds/milliseconds zero); server returns UTC. Deadline may be past; new/changed reminder must be future.

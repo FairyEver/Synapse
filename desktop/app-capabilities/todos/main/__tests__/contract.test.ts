@@ -16,7 +16,11 @@ describe("Todo cross-layer contract", () => {
   })
   it("maps the same six capabilities to the UI bridge and the MCP index", () => {
     expect(capabilityActions).toHaveLength(6)
-    expect(Object.values(todosIpcModule.methods).map((method) => method.operationId)).toEqual(capabilityActions)
+    const ipcActions = Object.values(todosIpcModule.methods).map((method) => method.operationId)
+    expect(ipcActions.filter(action => action.startsWith("app.todos.item."))).toEqual(capabilityActions)
+    expect(ipcActions.filter(action => action.startsWith("app.todos.image."))).toEqual(["app.todos.image.stage", "app.todos.image.read"])
+    expect(Object.values(MCP_TOOL_ACTIONS)).not.toContain("app.todos.image.stage")
+    expect(Object.values(MCP_TOOL_ACTIONS)).not.toContain("app.todos.image.read")
     expect(buildTodoTools().map((tool) => MCP_TOOL_ACTIONS[tool.name])).toEqual(capabilityActions)
   })
   it("does not widen the public System Notifier request to allow Todo-owned metadata", () => {

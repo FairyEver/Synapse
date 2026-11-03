@@ -5,6 +5,10 @@ import { mocks, mount, flush, item, deferred } from "./harness"
 import { TodosModule } from "../index"
 import { EmbeddedSystemAppShell } from "../../apps/components/embedded-system-app-shell"
 vi.mock("@/components/ui/scroll-area", () => ({ ScrollArea: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
+vi.mock("../todo-image-files", async (original) => ({
+  ...await original<typeof import("../todo-image-files")>(),
+  prepareTodoImage: async (imageId: string) => ({ imageId, original: new Uint8Array([1]), thumbnail: new Uint8Array([2]) }),
+}))
 afterEach(() => window.getSelection()?.removeAllRanges())
 
 function selectText(start: Node, end: Node = start) {
@@ -16,6 +20,53 @@ function selectText(start: Node, end: Node = start) {
 }
 
 describe("Todo visible actions", () => {
+  it("shows a solid priority selection and saves chosen and pasted images with the quick-add draft", async () => {
+    const createObjectURL = vi.fn(() => "blob:todo-test")
+    vi.stubGlobal("URL", class extends URL {
+      static createObjectURL = createObjectURL
+      static revokeObjectURL = vi.fn()
+    })
+    try {
+      mocks.stageImage.mockImplementation(async input => ({ imageId: input.imageId }))
+      mocks.create.mockImplementation(async input => {
+        const created = { ...item, id: "with-images", title: input.title, imageIds: input.imageIds }
+        mocks.list.mockResolvedValue({ items: [created], nextOffset: null })
+        return created
+      })
+      mocks.readImage.mockResolvedValue({ bytes: new Uint8Array([1]), mimeType: "image/webp" })
+      mount(<TodosModule />); await flush()
+      const filter = document.querySelector('[role="radio"][aria-checked="true"]')!
+      expect(filter.textContent).toBe("全部优先级")
+      expect(filter.classList.contains("data-[state=on]:bg-primary")).toBe(true)
+      const form = document.querySelector<HTMLFormElement>('[aria-label="快速新建待办"]')!
+      const input = form.querySelector<HTMLInputElement>('input[aria-label="待办标题"]')!
+      const picker = form.querySelector<HTMLInputElement>('input[type="file"]')!
+      const file = new File(["image"], "fixture.png", { type: "image/png" })
+      const paste = new Event("paste", { bubbles: true, cancelable: true })
+      Object.defineProperty(paste, "clipboardData", { value: { files: [file], items: [] } })
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "带图片的待办")
+        input.dispatchEvent(new Event("input", { bubbles: true }))
+        Object.defineProperty(picker, "files", { value: [file] })
+        picker.dispatchEvent(new Event("change", { bubbles: true }))
+      })
+      act(() => input.dispatchEvent(paste)); await flush()
+      expect(paste.defaultPrevented).toBe(true)
+      expect(form.querySelectorAll('button[aria-label^="预览图片"]')).toHaveLength(2)
+      expect(mocks.stageImage).not.toHaveBeenCalled()
+      act(() => form.requestSubmit()); await flush()
+      expect(mocks.stageImage).toHaveBeenCalledTimes(2)
+      expect(mocks.create.mock.calls[0]?.[0].imageIds).toEqual(mocks.stageImage.mock.calls.map(([arg]) => arg.imageId))
+      const preview = document.querySelector<HTMLButtonElement>('li [aria-label="预览图片 1"]')!
+      act(() => preview.click()); await flush()
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain("图片预览")
+      expect(mocks.readImage).toHaveBeenCalledWith(expect.objectContaining({ todoId: "with-images", variant: "original" }))
+      expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
+    } finally {
+      mount(null)
+      vi.unstubAllGlobals()
+    }
+  })
   it("adds from the top form without a dialog and keeps the draft when filtering", async () => {
     mocks.create.mockResolvedValue({ ...item, id: "created", title: "测试快建" })
     mount(<TodosModule />); await flush()

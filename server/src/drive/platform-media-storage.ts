@@ -11,6 +11,8 @@ import { isPlatformMediaCosConfigured, loadEnv } from "../config/env"
 import { driveUploadUrlTtlSeconds } from "./drive.constants"
 import type { DriveStorageObjectInfo, DriveUploadInstruction } from "./drive-storage"
 
+export const TODO_IMAGE_STORAGE_PREFIX = "todo-images/"
+
 export interface PlatformMediaStoragePort {
   createUploadInstruction(input: { readonly key: string; readonly contentType: string; readonly expectedSize: bigint }): Promise<DriveUploadInstruction>
   headObject(key: string): Promise<DriveStorageObjectInfo | null>

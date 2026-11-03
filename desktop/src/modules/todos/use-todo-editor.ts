@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { countTodoCodePoints, isValidTodoText, type TodoFieldsInput, type TodoItemDto, type TodoPriority, type TodoReminderKind } from "@synapse/shared/todo-contracts"
+import { TODO_MAX_IMAGES, TODO_MAX_IMAGE_BYTES } from "@synapse/shared/todo-contracts"
 import { todosApi } from "@/lib/todos-api"
 import { todoLocalToUtc, todoUtcToLocal } from "./todo-time"
 import { todoErrorMessage } from "./todo-state"
+import { isTodoImageFile, prepareTodoImage, type TodoDraftImage } from "./todo-image-files"
 
-export type TodoEditorDraft = { id: string | null; expectedVersion: number | null; clientRequestId: string; title: string; note: string; priority: TodoPriority | null; originalPriority: TodoPriority | null; due: string; reminder: TodoReminderKind; offsetMinutes: 10 | 60 | 1440; custom: string; originalTimes: { dueLocal: string; customLocal: string; dueAt: string | null; remindAt: string | null } }
+export type TodoEditorDraft = { id: string | null; expectedVersion: number | null; clientRequestId: string; title: string; note: string; priority: TodoPriority | null; originalPriority: TodoPriority | null; due: string; reminder: TodoReminderKind; offsetMinutes: 10 | 60 | 1440; custom: string; images: TodoDraftImage[]; originalImageIds: string[]; originalTimes: { dueLocal: string; customLocal: string; dueAt: string | null; remindAt: string | null } }
 
 function newDraft(item?: TodoItemDto): TodoEditorDraft {
   const dueAt = item?.dueAt ?? null, remindAt = item?.reminder === "custom" ? item.remindAt : null
@@ -14,6 +16,7 @@ function newDraft(item?: TodoItemDto): TodoEditorDraft {
     id: item?.id ?? null, expectedVersion: item?.version ?? null, clientRequestId: crypto.randomUUID(),
     title: item?.title ?? "", note: item?.note ?? "", priority, originalPriority: priority, due: dueLocal,
     reminder: item?.reminder ?? "none", offsetMinutes: item?.offsetMinutes ?? 10, custom: customLocal,
+    images: (item?.imageIds ?? []).map(id => ({ id })), originalImageIds: item?.imageIds ?? [],
     originalTimes: { dueAt, remindAt, dueLocal, customLocal },
   }
 }
@@ -35,6 +38,20 @@ export function useTodoEditor({ generation, online, onSaved, quickCreate = false
     revision.current++
     setDraft((current) => current && current[key] !== value ? { ...current, [key]: value, clientRequestId: crypto.randomUUID() } : current)
   }, [])
+  const addImages = (files: File[]) => {
+    if (!draft || busy.current) return
+    const valid = files.filter(file => isTodoImageFile(file) && file.size > 0 && file.size <= TODO_MAX_IMAGE_BYTES)
+    const available = TODO_MAX_IMAGES - draft.images.length
+    const added = valid.slice(0, available).map(file => ({ id: crypto.randomUUID(), file }))
+    if (added.length) change("images", [...draft.images, ...added])
+    setError(valid.length > available ? `每条待办最多添加 ${TODO_MAX_IMAGES} 张图片`
+      : valid.length !== files.length ? "请选择支持的图片格式，单张最大 20 MB" : null)
+  }
+  const removeImage = (id: string) => {
+    if (!draft || busy.current) return
+    change("images", draft.images.filter(image => image.id !== id))
+    setError(null)
+  }
   useEffect(() => {
     epoch.current = generation; revision.current++; busy.current = false
     setDraft(quickCreate ? newDraft() : null); setSaving(false); setError(null); setConflict(false)
@@ -56,6 +73,17 @@ export function useTodoEditor({ generation, online, onSaved, quickCreate = false
         offsetMinutes: draft.reminder === "before_due" ? draft.offsetMinutes : null, remindAt: draft.reminder === "custom" ? remindAt : null }
       if (draft.reminder === "custom" && !fields.remindAt) throw new Error("请选择提醒时间")
       if ((draft.reminder === "at_due" || draft.reminder === "before_due") && !fields.dueAt) throw new Error("请选择截止时间")
+      const imageIds = draft.images.map(image => image.id)
+      if (imageIds.length !== draft.originalImageIds.length || imageIds.some((id, index) => id !== draft.originalImageIds[index])) {
+        for (const { id, file } of draft.images) {
+          if (!file) continue
+          const upload = await prepareTodoImage(id, file)
+          if (!current()) return
+          await todosApi.stageImage(upload)
+          if (!current()) return
+        }
+        fields.imageIds = imageIds
+      }
       const result = draft.id && draft.expectedVersion
         ? await todosApi.update(draft.id, { ...fields, expectedVersion: draft.expectedVersion, clientRequestId: draft.clientRequestId })
         : await todosApi.create({ ...fields, clientRequestId: draft.clientRequestId })
@@ -74,5 +102,5 @@ export function useTodoEditor({ generation, online, onSaved, quickCreate = false
     catch (cause) { if (current()) setError(todoErrorMessage(cause)) }
   }, [draft?.id, open])
   const sameIdentity = epoch.current === generation
-  return { draft: sameIdentity ? draft : null, saving: sameIdentity && saving, error: sameIdentity ? error : null, conflict: sameIdentity && conflict, open, close, change, save, reload }
+  return { draft: sameIdentity ? draft : null, saving: sameIdentity && saving, error: sameIdentity ? error : null, conflict: sameIdentity && conflict, open, close, change, addImages, removeImage, save, reload }
 }

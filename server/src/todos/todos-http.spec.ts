@@ -1,12 +1,15 @@
 import "reflect-metadata"
+import { Readable } from "node:stream"
 import { Test } from "@nestjs/testing"
 import { type ExecutionContext, Module, NotFoundException, UnauthorizedException } from "@nestjs/common"
 import request from "supertest"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "../auth/user-auth.guard"
 import { TodosController } from "./todos.controller"
 import { TodosService } from "./todos.service"
 import { TodosModule } from "./todos.module"
+import { TodoImagesController } from "./todo-images.controller"
+import { TodoImageService } from "./todo-image.service"
 
 // Run the production route middleware with isolated service/guard fixtures.
 @Module({ imports: [], controllers: [TodosController], providers: [{ provide: TodosService, useValue: {
@@ -15,6 +18,34 @@ import { TodosModule } from "./todos.module"
 class TodoHttpTestModule extends TodosModule {}
 
 describe("authenticated todo HTTP boundary", () => {
+  it("accepts image bytes after authentication and returns private content for the requested item", async () => {
+    const imageId = "00000000-0000-4000-8000-000000000011"
+    const stage = vi.fn(async () => ({ imageId }))
+    const open = vi.fn(async () => ({ stream: Readable.from([Buffer.from([3])]), mimeType: "image/webp", byteSize: 1 }))
+    let authenticated = false
+    @Module({ imports: [], exports: [], controllers: [TodoImagesController], providers: [{ provide: TodoImageService, useValue: { stage, open } }] })
+    class ImagesHttpTestModule extends TodosModule {}
+    const module = await Test.createTestingModule({ imports: [ImagesHttpTestModule] })
+      .overrideGuard(UserAuthGuard).useValue({ canActivate(context: ExecutionContext) {
+        if (!authenticated) throw new UnauthorizedException()
+        context.switchToHttp().getRequest().user = { id: "owner" }; return true
+      } }).compile()
+    const app = module.createNestApplication()
+    await app.init()
+    try {
+      const api = request(app.getHttpServer())
+      const upload = () => api.put(`/api/todos/images/${imageId}`).set("Content-Type", "application/octet-stream")
+        .set("x-synapse-todo-thumbnail-size", "1").send(Buffer.from([1, 2, 3]))
+      await upload().expect(401).expect("Cache-Control", "private, no-store")
+      expect(stage).not.toHaveBeenCalled()
+      authenticated = true
+      await upload().expect(200, { imageId })
+      expect(stage).toHaveBeenCalledWith("owner", imageId, Buffer.from([1, 2]), Buffer.from([3]))
+      await api.get(`/api/todos/todo-1/images/${imageId}/thumbnail`).expect(200)
+        .expect("Content-Type", "image/webp").expect("Content-Length", "1").expect("Cache-Control", "private, no-store")
+      expect(open).toHaveBeenCalledWith("owner", "todo-1", imageId, "thumbnail")
+    } finally { await app.close() }
+  })
   it("prevents caching of every Todo success, validation, ownership and authentication response", async () => {
     let authenticated = true
     const fixture = await Test.createTestingModule({ imports: [TodoHttpTestModule] }).overrideGuard(UserAuthGuard).useValue({ canActivate(context: ExecutionContext) {
@@ -53,7 +84,8 @@ describe("authenticated todo HTTP boundary", () => {
   })
 
   it("negotiates the optional priority field for old strict clients and validates list options", async () => {
-    const item = { id: "todo", version: 1, priority: "medium" }
+    const imageIds = ["00000000-0000-4000-8000-000000000011"]
+    const item = { id: "todo", version: 1, priority: "medium", imageIds }
     const list = async (_user: string, input: unknown) => ({ items: [item], nextOffset: null, input })
     const module = await Test.createTestingModule({ controllers: [TodosController], providers: [{
       provide: TodosService, useValue: { list, get: async () => item, create: async () => item, update: async () => item, setCompleted: async () => item },
@@ -74,14 +106,14 @@ describe("authenticated todo HTTP boundary", () => {
         const legacy = api[method](path)
         if (body) legacy.send(body)
         expect((await legacy).body).toEqual({ id: "todo", version: 1 })
-        const current = api[method](path).set("x-synapse-todo-priority", "1")
+        const current = api[method](path).set("x-synapse-todo-priority", "1").set("x-synapse-todo-images", "1")
         if (body) current.send(body)
         expect((await current).body).toEqual(item)
       }
       const legacyPage = await api.get("/api/todos").expect(200)
       expect(legacyPage.body.items).toEqual([{ id: "todo", version: 1 }])
       const filtered = await api.get("/api/todos?priority=medium&sort=priority&offset=2").set("x-synapse-todo-priority", "1").expect(200)
-      expect(filtered.body.items).toEqual([item])
+      expect(filtered.body.items).toEqual([{ id: "todo", version: 1, priority: "medium" }])
       expect(filtered.body.input).toMatchObject({ priority: "medium", sort: "priority", offset: 2 })
       await api.get("/api/todos?priority=unknown").expect(400)
       await api.get("/api/todos?sort=unknown").expect(400)

@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { priorityLabels, TodoPriorityBadge } from "./todo-priority"
 import { formatTodoInstant } from "./todo-time"
+import { TodoImageStrip } from "./todo-image-strip"
 
 export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, onCopy, onPriority }: {
   item: TodoItemDto; disabled: boolean; onOpen: () => void; onEdit: () => void; onComplete: () => void
@@ -21,7 +22,8 @@ export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, 
   }
   return <li className="flex items-center gap-2 px-3 py-3 sm:gap-4 sm:px-5">
     <Checkbox checked={!!item.completedAt} disabled={disabled} data-track="todos.complete" aria-label={`${item.completedAt ? "恢复" : "完成"} ${item.title}`} onCheckedChange={onComplete} />
-    <button type="button" data-track="todos.open" data-allow-select="true" className="min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-ring" onClick={handleOpen}>
+    <div className="min-w-0 flex-1 space-y-2">
+    <button type="button" data-track="todos.open" data-allow-select="true" className="block w-full min-w-0 text-left focus-visible:outline-2 focus-visible:outline-ring" onClick={handleOpen}>
       <span className={`block break-words text-sm font-medium ${item.completedAt ? "text-muted-foreground line-through" : ""}`}>{item.title}</span>
       {item.note && <span className="mt-1 block truncate text-sm text-muted-foreground">{item.note}</span>}
       {(item.dueAt || item.remindAt) && <span className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -29,6 +31,8 @@ export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, 
         {item.remindAt && <span className="flex items-center gap-1"><Bell className="size-3.5" />{item.reminderStatus === "sent" ? "已提醒" : item.reminderStatus === "cancelled" ? "提醒已取消" : item.reminderStatus === "expired" ? "提醒已过期" : `提醒 ${formatTodoInstant(item.remindAt)}`}</span>}
       </span>}
     </button>
+    <TodoImageStrip images={(item.imageIds ?? []).map(id => ({ id }))} todoId={item.id} limit={3} />
+    </div>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" className="min-w-14 shrink-0 text-xs text-muted-foreground" data-track="todos.row-priority"

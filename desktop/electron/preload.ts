@@ -256,7 +256,7 @@ function writeRendererIpcFailureLog(channel: string, args: unknown, error: unkno
       operationId: operationIdForChannel(channel),
       durationMs,
       error: describeIpcError(error),
-      request: (channel.startsWith("synapse:app:game:") || channel.startsWith("synapse:app:todos:item:") || channel.startsWith("synapse:app:mail:"))
+      request: (channel.startsWith("synapse:app:game:") || channel.startsWith("synapse:app:todos:") || channel.startsWith("synapse:app:mail:"))
         ? { inputType: typeof args }
         : sanitizeIpcPayload("request", args),
     },
@@ -781,6 +781,10 @@ const synapseBridge: SynapseBridge = {
   },
   mail: createMailBridge((channel, input) => invoke(channel)(input), createDomainEventPayloadSubscription(subscribe, "account", "mail.changed")),
   todos: {
+    image: {
+      stage: async (input) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.stageImage)(input) as TodoIpcResult<{ imageId: string }>),
+      read: async (input) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.readImage)(input) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoImageContent>),
+    },
     item: {
       list: async (input = {}) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.list)(input) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoPageDto>),
       get: async (locator) => unwrapTodoResult(await invoke(IPC_CHANNELS.todos.get)(locator) as TodoIpcResult<import("@synapse/shared/todo-contracts").TodoItemDto>),

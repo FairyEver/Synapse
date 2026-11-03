@@ -4,9 +4,10 @@ import { unwrapTodoResult } from "../../shared/ipc-result"
 import { todoFixture } from "./fixtures"
 
 describe("Todo typed IPC", () => {
-  it("wires only six canonical operations", () => {
+  it("wires six canonical operations and two desktop-only image operations", () => {
     expect(Object.values(todosIpcModule.methods).map((method) => method.operationId)).toEqual([
       "app.todos.item.list", "app.todos.item.get", "app.todos.item.create", "app.todos.item.update", "app.todos.item.set_completed", "app.todos.item.delete",
+      "app.todos.image.stage", "app.todos.image.read",
     ])
     expect(todosIpcModule.methods.create!.request.safeParse({ title: "t", userId: "forged" }).success).toBe(false)
   })
