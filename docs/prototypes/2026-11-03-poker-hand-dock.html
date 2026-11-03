@@ -5,298 +5,282 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>德州扑克 · 手牌与对局日志原型</title>
+  <!-- The room toolbar, canvas, seat/chip markup and betting dock follow the Dashboard Table.
+       The prototype adds a hand row and public event rail to that layout. -->
+  <link rel="stylesheet" href="../../dashboard/src/game-center/styles/web.css">
+  <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/table-tokens.css">
+  <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/responsive-controls.css">
+  <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/adaptive-table.css">
+  <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/chips.css">
   <style>
     :root {
-      /* Light table and system tokens, adapted from the existing poker prototype. */
-      --background: oklch(.965 .001 286);
-      --surface: oklch(1 0 0);
-      --foreground: oklch(.2103 .0059 285.89);
-      --muted: oklch(.49 .0138 285.94);
-      --border: oklch(.90 .004 286.32);
-      --default: oklch(.94 .001 286.375);
-      --accent: oklch(.52 .19 254);
-      --accent-soft: color-mix(in oklab, var(--accent) 10%, var(--surface));
+      /* HeroUI light tokens as computed on the current Web game. */
+      --background: lab(96.5432% 0 0);
+      --surface: lab(100% 0 0);
+      --surface-secondary: lab(94.4672% .129223 -.473213);
+      --foreground: lab(8.34178% .607349 -2.12998);
+      --muted: lab(47.8738% 1.41454 -4.98644);
+      --border: lab(88.3653% .399351 -1.45447);
+      --separator: lab(90.6853% .399232 -1.45452);
+      --default: lab(93.0314% .0993609 -.364041);
+      --accent: lab(54.5335% 3.31545 -66.5298);
+      --accent-foreground: lab(98.9676% 0 0);
+      --accent-soft: color-mix(in oklab, var(--accent) 15%, transparent);
+      --accent-soft-foreground: color-mix(in oklab, var(--accent) 70%, var(--foreground));
+      --success: lab(71.4376% -59.4106 38.0321);
       --danger: oklch(.52 .19 25.74);
-      --shadow: color-mix(in oklch, var(--foreground) 13%, transparent);
+      --destructive: var(--danger);
+      --radius: .5rem;
       --card-paper: oklch(.965 .015 83);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --shadow: color-mix(in oklab, var(--foreground) 13%, transparent);
+      --system-font: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      font-family: var(--system-font);
       font-variant-numeric: tabular-nums;
+      color-scheme: light;
     }
     * { box-sizing: border-box; }
     body { margin: 0; color: var(--foreground); background: var(--background); }
-    button, select { font: inherit; color: inherit; }
+    button, select, input { font: inherit; color: inherit; }
     button { cursor: pointer; touch-action: manipulation; }
     button:disabled { cursor: not-allowed; opacity: .45; }
-    button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     [hidden] { display: none !important; }
     img { display: block; user-select: none; }
     p, h1, h2 { margin: 0; }
     svg { width: 18px; height: 18px; flex: none; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .app { min-height: 100dvh; display: flex; flex-direction: column; }
-    .topbar {
-      display: flex; align-items: center; justify-content: space-between; gap: 14px;
-      padding: 12px clamp(14px, 3.2vw, 48px); background: var(--surface); border-bottom: 1px solid var(--border);
-    }
-    .identity, .demo-tools { display: flex; align-items: center; gap: 11px; }
-    .mark { display: grid; place-items: center; width: 39px; height: 39px; border-radius: 10px; background: var(--foreground); color: var(--surface); font-size: 23px; }
-    .identity h1 { font-size: 16px; font-weight: 650; letter-spacing: .025em; white-space: nowrap; }
-    .identity p { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; }
-    .demo-tools label { color: var(--muted); font-size: 12px; white-space: nowrap; }
-    .button, select {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 11px;
-      border: 1px solid var(--border); border-radius: 8px; background: var(--surface); white-space: nowrap; font-size: 13px;
-    }
-    .button:hover:not(:disabled) { background: var(--default); }
-    .button.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); font-weight: 650; }
-    .button.primary:hover:not(:disabled) { background: color-mix(in oklch, var(--accent) 89%, var(--foreground)); }
-    .button.quiet { background: transparent; }
-    .button.icon { width: 36px; min-width: 36px; padding: 0; }
-    .room {
-      flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 60px;
-      width: min(1440px, 100%); margin-inline: auto;
-    }
-    .game { display: flex; flex-direction: column; min-width: 0; }
-    .arena { position: relative; flex: 1 0 auto; min-height: 426px; isolation: isolate; }
-    .hud {
-      position: absolute; z-index: 1; top: 17px; left: clamp(12px, 3vw, 36px);
-      display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px;
-    }
-    .hud strong { color: var(--foreground); font-weight: 650; }
-    .felt {
-      position: absolute; inset: 14% 9% 14%;
-      border: 1px solid var(--border); border-radius: 49% / 48%; background: var(--surface);
-    }
-    .felt::after { content: ""; position: absolute; inset: 14px; border: 1px solid var(--default); border-radius: inherit; }
-    .seat { position: absolute; z-index: 1; display: grid; justify-items: center; gap: 7px; transform: translate(-50%, -50%); }
-    .seat.north { left: 50%; top: 16%; }
-    .seat.west { left: 15%; top: 54%; }
-    .seat.east { left: 85%; top: 54%; }
-    .seat.folded { opacity: .56; }
-    .backs { display: flex; gap: 3px; }
-    .back, .backs .playing { width: clamp(20px, 2.5vw, 29px); aspect-ratio: 5 / 7; border-radius: 4px; }
-    .back { display: grid; place-items: center; border: 1px solid var(--border); color: var(--muted); background: var(--default); font: 15px Georgia, serif; }
-    .seat-plate { display: flex; align-items: center; gap: 8px; min-width: 96px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
-    .avatar { display: grid; place-items: center; flex: none; width: 29px; height: 29px; background: var(--default); color: var(--muted); border-radius: 50%; font-size: 12px; }
-    .seat-name { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; }
-    .seat-plate strong { font-size: 15px; font-weight: 650; }
-    .seat-state { font-size: 11px; color: var(--muted); white-space: nowrap; }
-    .center {
-      position: absolute; z-index: 0; inset: 34% 0 auto; display: grid; justify-items: center;
-      gap: clamp(9px, 1.7vh, 17px); text-align: center;
-    }
-    .pool { display: flex; align-items: center; gap: 8px; }
-    .pool svg { width: 23px; height: 23px; color: var(--accent); }
-    .pool small { display: block; text-align: left; color: var(--muted); font-size: 11px; }
-    .pool strong { font-size: clamp(24px, 3vw, 34px); line-height: 1; letter-spacing: -.04em; font-weight: 700; }
-    .pool span { margin-left: 5px; font-size: 11px; color: var(--muted); }
-    .board { display: flex; gap: clamp(4px, .55vw, 8px); }
-    .playing { aspect-ratio: 5 / 7; width: 48px; height: auto; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); object-fit: contain; }
-    .board .playing, .blank { width: clamp(34px, 5.5vw, 60px); }
-    .blank { aspect-ratio: 5 / 7; border-radius: 5px; border: 1px dashed var(--border); }
-    .turn { min-height: 24px; padding: 4px 10px; border-radius: 99px; color: var(--muted); font-size: 12px; }
-    .turn.active { color: var(--accent); background: var(--accent-soft); font-weight: 650; }
-    .result { max-width: min(430px, 93%); display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
-    .result strong { color: var(--foreground); }
+    .font-sans { font-family: var(--system-font); }
+    .bg-surface { background: var(--surface); }
+    .text-foreground { color: var(--foreground); }
+    .text-muted { color: var(--muted); }
+    .text-sm { font-size: .875rem; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .gap-2 { gap: .5rem; }
 
-    .dock {
-      display: grid; grid-template-columns: 125px minmax(0, 1fr) 224px; align-items: end; gap: 16px;
-      min-height: 175px; padding: 10px clamp(10px, 2.6vw, 36px) 16px;
-      background: var(--surface); border-top: 1px solid var(--border);
+    .button, select {
+      display: inline-flex; align-items: center; justify-content: center; gap: .375rem; min-height: 2.25rem; padding: 0 .875rem;
+      border: 0; border-radius: 99px; background: var(--default); color: var(--foreground); white-space: nowrap; text-decoration: none; font-size: .875rem; font-weight: 500;
     }
-    .dock-label { display: flex; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: 11px; white-space: nowrap; }
-    .dock-label strong { color: var(--foreground); font-size: 13px; font-weight: 650; }
-    .own { display: grid; gap: 8px; justify-items: start; padding-bottom: 3px; }
-    .own-cards { display: flex; gap: 5px; }
-    .own-cards .playing { width: 48px; }
+    .button:hover:not(:disabled) { background: color-mix(in oklab, var(--default) 94%, var(--foreground)); }
+    .button svg { width: 1rem; height: 1rem; }
+    .button.primary { background: var(--accent); color: var(--accent-foreground); font-weight: 650; }
+    .button.primary:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 89%, var(--accent-foreground)); }
+    .button.quiet { background: transparent; }
+    .button.icon { width: 2.25rem; min-width: 2.25rem; padding: 0; }
+    .button.small { min-height: 2rem; padding: 0 .75rem; font-size: .8125rem; }
+    .button[aria-pressed="true"] { color: var(--accent-soft-foreground); background: var(--accent-soft); }
+    .poker-edge-controls { border-bottom: 1px solid var(--separator); }
+    .poker-edge-controls svg { flex: none; }
+
+    /* The regular canvas, room toolbar and action buttons retain the production layout. */
+    .poker-table[data-control-layout] { height: 100dvh; }
+    .poker-table[data-control-layout] .poker-table-layout {
+      grid-template-columns: minmax(0, 1fr) 3.75rem;
+      grid-template-rows: 3.5rem minmax(0, 1fr) auto;
+    }
+    .poker-table[data-control-layout] .poker-edge-controls,
+    .poker-table[data-control-layout] .poker-controls-anchor { grid-column: 1 / -1; }
+    .poker-table[data-control-layout] .poker-table-main { grid-area: 2 / 1; }
+    .poker-table[data-control-layout] .poker-controls-anchor { padding-bottom: .875rem; }
+    .poker-table[data-control-layout][data-compact-controls="true"] .poker-table-layout {
+      grid-template-rows: 5.5rem minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) 2.75rem;
+    }
+    .poker-canvas-viewport { flex: 1; }
+    .poker-bet-presets > .button { margin: 0; }
+    .poker-action-dock > .button { width: 100%; }
+    .poker-pot-row .poker-pot-extra { font-size: var(--scene-label); line-height: 1.2; }
+    .poker-pot-row .poker-pot-extra .poker-pot { font-size: 42px; }
+    .poker-seat-objects[data-dock-holes="true"] { min-height: 78px; }
+    .poker-turn-ring { width: 100%; height: 100%; }
+    #results .poker-settlement { display: flex; flex-wrap: wrap; text-align: center; }
+    #results .poker-settlement strong { max-width: none; }
+
+    .hand-dock {
+      display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: .75rem;
+      width: min(100%, 49rem); margin: 0 auto .35rem;
+    }
+    .dock-label { display: flex; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: .6875rem; white-space: nowrap; }
+    .dock-label strong { color: var(--foreground); font-size: .8125rem; font-weight: 650; }
+    .own { display: grid; gap: 4px; padding-bottom: 3px; }
+    .own-cards { display: flex; gap: 4px; }
+    .own-cards .playing { width: 42px; }
     .shield { display: inline-flex; color: var(--accent); }
     .shield svg { width: 15px; height: 15px; }
     .hand { min-width: 0; }
     .hand-title { justify-content: center; }
+    .hand-title .button { min-height: 24px; width: 24px; min-width: 24px; }
     .fan { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
-    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; justify-content: center; min-height: 124px; padding: 12px 7px 8px; }
+    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; justify-content: center; min-height: 98px; padding: 9px 7px 6px; }
     .ability {
-      position: relative; flex: 0 0 auto; display: grid; gap: 3px; justify-items: center; width: clamp(61px, 7.1vw, 93px);
-      padding: 4px 4px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-paper);
+      position: relative; flex: 0 0 auto; display: grid; gap: 3px; justify-items: center; width: clamp(58px, 6.3vw, 78px);
+      padding: 4px 4px 5px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-paper);
       color: var(--foreground); box-shadow: 0 2px 5px var(--shadow); transition: transform 150ms ease-out;
     }
-    .ability + .ability { margin-left: -7px; }
+    .ability + .ability { margin-left: -6px; }
     .ability img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 5px; }
-    .ability-name { white-space: nowrap; font-size: clamp(9px, 1vw, 11px); font-weight: 650; }
+    .ability-name { white-space: nowrap; font-size: .625rem; font-weight: 650; }
     .ability .price {
-      position: absolute; top: -5px; left: -5px; display: grid; place-items: center;
-      min-width: 25px; padding: 0 4px; height: 23px; border: 2px solid var(--surface); border-radius: 99px;
-      background: var(--accent); color: var(--surface); font-size: 10px; font-weight: 750;
+      position: absolute; top: -5px; left: -5px; display: grid; place-items: center; min-width: 22px; padding: 0 4px; height: 21px;
+      border: 2px solid var(--surface); border-radius: 99px; background: var(--accent); color: var(--accent-foreground); font-size: .625rem; font-weight: 750;
     }
     .ability[aria-pressed="true"] { z-index: 2; border-color: var(--accent); }
-    .ability[aria-pressed="true"], .ability:focus-visible { transform: translateY(-6px); z-index: 3; }
+    .ability[aria-pressed="true"], .ability:focus-visible { transform: translateY(-4px); z-index: 3; }
     .ability.unavailable .price { background: var(--muted); }
     .fan-inner > :first-child:nth-last-child(n+4), .fan-inner > :nth-child(2):nth-last-child(n+3) { rotate: -4deg; }
     .fan-inner > :last-child:nth-child(n+4), .fan-inner > :nth-last-child(2):nth-child(n+3) { rotate: 4deg; }
-    @media (hover: hover) {
-      .ability:hover { transform: translateY(-7px); z-index: 3; }
-    }
-    .empty-hand { color: var(--muted); font-size: 12px; }
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .actions .primary, .actions .wide, .actions .dock-label { grid-column: 1 / -1; }
-    .actions .button { width: 100%; }
+    @media (hover: hover) { .ability:hover { transform: translateY(-4px); z-index: 3; } }
+    .empty-hand { color: var(--muted); font-size: .75rem; }
 
-    .rail { position: sticky; top: 0; min-width: 0; align-self: start; display: grid; justify-items: center; gap: 8px; padding: 15px 5px 8px; }
-    .rail::before { content: ""; position: absolute; inset: 0 auto 0 0; border-left: 1px solid var(--border); }
+    .rail { grid-area: 2 / 2; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); justify-items: center; align-content: start; gap: 8px; padding: 13px 4px 5px; border-left: 1px solid var(--separator); }
     #rail-icon { color: var(--muted); }
-    .log-list { width: 100%; max-height: min(64dvh, 550px); overflow-y: auto; scrollbar-width: thin; display: grid; justify-items: center; gap: 6px; padding: 5px 4px; }
+    .log-list { width: 100%; overflow-y: auto; scrollbar-width: thin; display: grid; align-content: start; justify-items: center; gap: 5px; padding: 4px 3px; }
     .log-entry {
-      width: 37px; height: 37px; display: grid; place-items: center; padding: 0; overflow: hidden;
-      border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: var(--surface);
+      width: 36px; height: 36px; display: grid; place-items: center; padding: 0; overflow: hidden;
+      border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); background: var(--surface);
     }
     .log-entry img { width: 100%; height: 100%; object-fit: cover; }
     .log-entry[data-active="true"] { border-color: var(--accent); color: var(--accent); }
+    .prototype-overlay { grid-area: 2 / 1; position: relative; z-index: 5; min-height: 0; pointer-events: none; }
+    .log-tip, .detail, .web-popover {
+      position: absolute; background: var(--surface); border: 1px solid var(--separator);
+      border-radius: calc(var(--radius) * 1.5); box-shadow: 0 6px 18px var(--shadow);
+    }
     .log-tip {
-      position: absolute; z-index: 5; inset: 34px 5px auto auto; width: min(275px, calc(100% - 14px));
+      z-index: 2; inset: .5rem .375rem auto auto; width: min(275px, calc(100% - 14px));
       display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px;
-      max-height: 125px; overflow: auto; padding: 10px; background: var(--surface);
-      border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 6px 18px var(--shadow);
-      font-size: 12px; line-height: 1.45; pointer-events: none;
+      max-height: min(125px, 37%); overflow: auto; padding: 10px; font-size: .75rem; line-height: 1.45;
     }
     .log-tip img { width: 47px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 6px; }
     .log-tip > svg { color: var(--accent); }
-    .log-tip strong { display: block; font-size: 14px; }
+    .log-tip strong { display: block; font-size: .875rem; }
     .log-tip p { margin-top: 3px; color: var(--muted); }
     .log-tip .log-result { color: var(--foreground); }
-
     .detail {
-      position: absolute; z-index: 4; inset: auto 0 10px; margin-inline: auto;
-      width: min(580px, calc(100% - 24px)); max-height: 245px; overflow-y: auto;
-      padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
-      box-shadow: 0 7px 22px var(--shadow);
+      z-index: 1; inset: auto 0 .5rem; margin-inline: auto; width: min(580px, calc(100% - 24px));
+      max-height: min(230px, calc(63% - 16px)); overflow-y: auto; padding: 12px 14px; pointer-events: auto;
     }
     .detail-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 11px; align-items: start; }
-    .detail-heading img { width: 49px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 6px; }
-    .detail h2 { font-size: 16px; font-weight: 700; }
-    .detail p { margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .detail-heading img { width: 44px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 6px; }
+    .detail h2, .web-popover h2 { font-size: 1rem; font-weight: 650; }
+    .detail p { margin-top: 4px; font-size: .75rem; color: var(--muted); line-height: 1.45; }
     .detail p.error { color: var(--danger); }
-    .targets, .candidates { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
-    .targets .button[aria-pressed="true"], .candidate[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+    .targets, .candidates { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+    .candidate[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+    .playing { aspect-ratio: 5 / 7; width: 42px; height: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); object-fit: contain; }
     .targets .playing { width: 20px; }
-    .detail-footer { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 9px; }
-    .detail-footer > span { color: var(--muted); font-size: 12px; }
+    .detail-footer { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 8px; }
+    .detail-footer > span { color: var(--muted); font-size: .75rem; }
     .detail-footer strong { color: var(--foreground); }
-    .candidates { display: grid; grid-template-columns: repeat(5, minmax(0, 48px)); }
+    .candidates { display: grid; grid-template-columns: repeat(5, minmax(0, 43px)); }
     .candidate { min-width: 0; padding: 2px; border: 1px solid transparent; border-radius: 7px; background: var(--background); }
     .candidate .playing { width: 100%; }
     .intel-cards { display: flex; gap: 4px; margin-top: 7px; }
     .intel-cards .playing { width: 36px; }
 
-    @media (max-width: 850px) {
-      .room { grid-template-columns: minmax(0, 1fr) 50px; }
-      .dock { grid-template-columns: 102px minmax(0, 1fr) 150px; gap: 9px; }
-      .actions { gap: 5px; }
-      .actions .button { padding-inline: 5px; }
-      .fan-inner { justify-content: start; }
-      .seat.west { left: 12%; }
-      .seat.east { left: 88%; }
+    .web-popover {
+      position: fixed; inset: auto; z-index: 9; max-width: calc(100vw - 1rem); max-height: min(55dvh, 30rem);
+      width: min(23rem, calc(100vw - 1rem)); margin: 0; padding: 1rem; color: var(--foreground); overflow: auto; font: .875rem var(--system-font);
     }
+    .web-popover header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: .5rem; }
+    .web-popover ul, .web-popover ol { padding-left: 1.25rem; }
+    .web-popover li + li { margin-top: .375rem; }
+    .web-popover form { display: flex; align-items: center; flex-wrap: wrap; gap: .625rem; }
+    .web-popover input[type="number"] { width: 6rem; border: 1px solid var(--border); border-radius: var(--radius); padding: .45rem; }
+    .web-popover input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+    .web-popover .menu-group { display: flex; gap: .5rem; align-items: center; }
+    .web-popover .panel-tabs { display: flex; gap: .375rem; margin-bottom: .5rem; }
+    .web-popover .panel-tabs button { flex: 1; }
+
+    [data-compact-controls="true"] .poker-edge-controls .button { width: 2.25rem; min-width: 2.25rem; padding: 0; }
+    [data-compact-controls="true"] .toolbar-label { display: none; }
     @media (max-width: 620px) {
-      .topbar { padding: 8px 10px; gap: 6px; }
-      .identity, .demo-tools { gap: 6px; }
-      .mark { width: 31px; height: 31px; font-size: 18px; }
-      .identity h1 { font-size: 14px; }
-      .demo-tools label { display: none; }
-      .demo-tools select { max-width: 116px; }
-      .room { grid-template-columns: minmax(0, 1fr) 43px; }
-      .arena { min-height: 360px; }
-      .hud { top: 9px; font-size: 11px; }
-      .felt { inset: 19% 7% 12%; border-radius: 48% / 44%; }
-      .felt::after { inset: 8px; }
-      .seat.north { top: 17%; }
-      .seat.west { left: 16%; top: 72%; }
-      .seat.east { left: 84%; top: 72%; }
-      .seat-plate { min-width: 0; padding: 5px 7px; gap: 4px; }
-      .avatar { width: 20px; height: 20px; font-size: 10px; }
-      .seat-plate strong { font-size: 13px; }
-      .seat { gap: 4px; }
-      .center { inset: 32% 0 auto; gap: 9px; }
-      .result { max-width: 52%; }
-      .dock { grid-template-columns: 79px minmax(0, 1fr); align-items: end; padding: 4px 8px 8px; gap: 5px 7px; min-height: 0; }
-      .own { gap: 5px; align-self: center; }
+      .poker-table[data-control-layout] .poker-controls-anchor { padding-inline: .55rem; padding-bottom: .55rem; }
+      .poker-table[data-control-layout] .poker-bet-presets { gap: .25rem; }
+      .poker-table[data-control-layout] .poker-action-buttons .poker-button { min-width: 0; padding-inline: .25rem; }
+      .check-detail { display: none; }
+      .hand-dock { gap: .5rem; }
       .own-cards { gap: 3px; }
-      .own-cards .playing { width: 34px; }
+      .own-cards .playing { width: 32px; }
       .hand-title { justify-content: start; padding-left: 4px; }
-      .fan-inner { min-height: 99px; padding: 9px 7px 5px; }
+      .fan-inner { justify-content: start; min-height: 84px; gap: 4px; }
       .ability + .ability { margin-left: 0; }
-      .fan-inner { gap: 5px; }
-      .actions { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .actions .dock-label { display: none; }
-      .actions .primary { grid-column: auto; }
-      .actions .wide { grid-column: 1 / -1; }
-      .rail { padding: 11px 2px 6px; gap: 4px; }
-      .log-list { padding: 5px 3px; gap: 5px; max-height: min(58dvh, 490px); }
+      .rail { padding: 9px 2px 4px; gap: 4px; }
       .log-entry { width: 32px; height: 32px; }
-      .log-tip { top: 20px; max-height: 120px; }
-      .detail { inset-block-end: 7px; width: calc(100% - 12px); padding: 9px 10px; max-height: 208px; }
+      .detail { width: calc(100% - 12px); padding: 8px 9px; max-height: min(193px, calc(100% - 88px)); }
       .detail-heading { gap: 7px; }
-      .detail-heading img { width: 40px; }
-      .detail-heading .button { width: 32px; min-width: 32px; min-height: 32px; }
+      .detail-heading img { width: 36px; }
+      .detail-heading .button { width: 30px; min-width: 30px; min-height: 30px; }
       .detail-footer { margin-top: 6px; }
-      .detail .targets { gap: 5px; }
     }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
   </style>
 </head>
 <body>
-  <main class="app">
-    <header class="topbar">
-      <div class="identity">
-        <span class="mark" aria-hidden="true">♠</span>
-        <div><h1>德州扑克</h1><p>交互原型 · 标准 52 张</p></div>
-      </div>
-      <div class="demo-tools">
-        <label for="scenario">演示场景</label>
-        <select id="scenario" aria-label="演示场景">
-          <option value="flop">常规行动</option>
-          <option value="waiting">等待对手</option>
-          <option value="river">河牌换牌</option>
-          <option value="low">筹码不足</option>
-          <option value="split">平分与边池</option>
-        </select>
-        <button type="button" class="button icon" id="reset" aria-label="重置场景" title="重置场景"></button>
-      </div>
-    </header>
+  <main class="poker-table poker-immersive" data-control-layout="bottom" data-compact-controls="false" aria-label="牌桌 4821">
+    <div class="poker-table-layout">
+      <header class="poker-edge-controls bg-surface font-sans text-foreground">
+        <a class="button" href="https://synapse.d2.pub/game/poker" aria-label="返回房间">
+          <span data-symbol="back" aria-hidden="true"></span><span class="toolbar-label">返回房间</span>
+        </a>
+        <div class="poker-room-details">
+          <span class="poker-room-summary text-sm"><strong>#4821</strong><span class="text-muted">第 1 手 · 陪练</span></span>
+          <div class="poker-room-rules text-sm"><span>标准 52 张</span><span>盲注 5 / 10</span></div>
+        </div>
+        <div class="poker-perspective flex items-center gap-2">
+          <button type="button" class="button" aria-label="成员管理" data-system="members"><span data-symbol="members"></span><span class="toolbar-label">成员</span></button>
+          <button type="button" class="button" aria-label="对局信息" data-system="match"><span data-symbol="log"></span><span class="toolbar-label">对局信息</span></button>
+          <button type="button" class="button" aria-label="牌型大小" data-system="ranks"><span data-symbol="ranks"></span><span class="toolbar-label">牌型大小</span></button>
+          <button type="button" class="button icon" aria-label="更多牌桌操作" data-system="menu"><span data-symbol="more"></span></button>
+        </div>
+      </header>
 
-    <div class="room">
-      <div class="game">
-        <section class="arena" aria-label="牌桌">
-          <div class="hud"><strong>第 12 手</strong><span>盲注 5 / 10</span></div>
-          <div class="felt" aria-hidden="true"></div>
-          <div id="opponents"></div>
-          <div class="center">
-            <div id="pools" class="pool"></div>
-            <div id="board" class="board" aria-label="公共牌"></div>
-            <div id="turn" class="turn"></div>
-            <div id="results" class="result" hidden></div>
+      <div class="poker-table-main">
+        <div id="results" class="poker-results-anchor" hidden></div>
+        <div class="poker-canvas-viewport">
+          <div class="poker-canvas" data-table-shape="landscape">
+            <div class="poker-rail" aria-hidden="true"><div class="poker-felt"></div></div>
+            <div class="poker-table-content">
+              <div class="poker-center">
+                <div id="pools" class="poker-pot-row"></div>
+                <div id="board" class="poker-board" data-card-size="md" aria-label="公共牌"></div>
+                <div class="poker-board-caption"><span id="street" class="poker-street"></span></div>
+              </div>
+              <div id="seats"></div>
+            </div>
           </div>
-          <section id="detail" class="detail" aria-labelledby="detail-title" hidden></section>
-          <div id="log-tip" class="log-tip" hidden></div>
-        </section>
+        </div>
+      </div>
 
-        <footer class="dock" aria-label="你的手牌和操作">
+      <div class="prototype-overlay font-sans">
+        <section id="detail" class="detail" aria-labelledby="detail-title" hidden></section>
+        <div id="log-tip" class="log-tip" hidden></div>
+      </div>
+      <aside class="rail font-sans" aria-label="对局日志">
+        <span id="rail-icon" data-symbol="log" aria-hidden="true"></span>
+        <div id="log" class="log-list"></div>
+      </aside>
+
+      <footer class="poker-controls-anchor" aria-label="你的手牌和操作">
+        <div class="hand-dock font-sans">
           <section class="own" aria-label="你的底牌">
-            <div class="dock-label"><strong>你</strong><span id="stack"></span><span id="shield" class="shield" hidden></span></div>
+            <div class="dock-label"><strong>你的底牌</strong><span id="shield" class="shield" hidden></span></div>
             <div class="own-cards" id="holes"></div>
           </section>
           <section class="hand" aria-label="你的能力牌">
             <div class="dock-label hand-title"><strong>能力牌</strong><span id="hand-count"></span><button class="button icon quiet" type="button" id="intel" aria-label="私密情报" title="私密情报" hidden></button></div>
             <div class="fan" id="fan"><div class="fan-inner" id="hand"></div></div>
           </section>
-          <section id="actions" class="actions" aria-label="下注操作"></section>
-        </footer>
-      </div>
-      <aside class="rail" aria-label="对局日志">
-        <span id="rail-icon" aria-hidden="true"></span>
-        <div id="log" class="log-list"></div>
-      </aside>
+        </div>
+        <div id="controls" class="poker-human-controls" aria-label="本人牌桌操作">
+          <div class="poker-control-state"><span class="poker-action-indicator" aria-hidden="true"></span><span id="turn" role="status"></span><span id="clock" class="poker-action-clock" aria-label="行动剩余时间"></span></div>
+          <section id="actions" class="poker-action-dock" aria-label="下注操作"></section>
+        </div>
+      </footer>
     </div>
   </main>
+  <dialog id="system-panel" class="web-popover" aria-labelledby="system-title"></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
 
   <script id="poker-model">
@@ -340,7 +324,7 @@ const Poker = (() => {
       { name: '小舟', avatar: '舟', stack: 410, total: split ? 150 : 60, holes: split ? ['Qc', 'Jh'] : ['9h', '9d'] },
     ];
     if (!split) seats.push({ name: '林间', avatar: '林', stack: 520, total: 60, holes: ['Ac', '7c'] });
-    for (const seat of seats) Object.assign(seat, { streetBet: 0, folded: false, action: '' });
+    for (const seat of seats) Object.assign(seat, { streetBet: 0, cardPaid: 0, folded: false, action: '' });
     const burned = river ? ['3s', '5c', '6h'] : ['3s'];
     const scheduled = river ? [] : ['5c', '2d', '6h', '8h'];
     const reserved = new Set([...board, ...burned, ...scheduled, ...seats.flatMap(seat => seat.holes)]);
@@ -350,7 +334,7 @@ const Poker = (() => {
       phase: key === 'waiting' ? 'opponents' : 'active', opponentMode: 'opening',
       log: [], seq: 0, hand: [], serial: 0, pending: null, intel: [],
       abilityPool: [...Object.keys(cards), 'inspect', 'counter', 'three', 'single', 'double', 'preview', 'five', 'draw'],
-      cardFees: split ? 25 : 0, exchanges: 0, shield: false, results: null,
+      cardFees: split ? 25 : 0, exchanges: 0, minRaise: 10, shield: false, results: null,
     };
     dealAbility(state, Object.keys(cards).length);
     addLog(state, 'raise', 1, { amount: 30, street: 'preflop' });
@@ -358,6 +342,7 @@ const Poker = (() => {
     addLog(state, 'street', null, { street: state.street });
     if (key === 'waiting') commitBet(state, 2, 'bet', 20);
     if (split) {
+      seats[2].cardPaid = 25;
       addLog(state, 'allin', 1, { amount: 100 });
       addLog(state, 'card', 2, { card: 'three', amount: 25, result: '已替换一张底牌' });
     }
@@ -420,6 +405,7 @@ const Poker = (() => {
 
     const hero = state.seats[0];
     hero.stack -= amount;
+    hero.cardPaid += amount;
     state.cardFees += amount;
     state.hand = state.hand.filter(card => card.id !== id);
     const event = addLog(state, 'card', 0, { card: key, amount, result: '效果已结算' });
@@ -526,6 +512,7 @@ const Poker = (() => {
     const next = streetOrder[streetOrder.indexOf(state.street) + 1];
     if (!next) return;
     state.street = next;
+    state.minRaise = 10;
     state.burned.push(state.deck.shift());
     state.board.push(state.deck.shift());
     state.intel = state.intel.filter(entry => entry.key !== 'preview');
@@ -571,7 +558,7 @@ const Poker = (() => {
   }
 
   function raiseAmount(state) {
-    return toCall(state) + 40;
+    return toCall(state) + state.minRaise;
   }
 
   function canRaise(state) {
@@ -588,7 +575,7 @@ const Poker = (() => {
     addLog(state, action, i, { amount });
   }
 
-  function bet(state, intent) {
+  function bet(state, intent, requested = raiseAmount(state)) {
     if (state.phase !== 'active' || state.pending) return '当前不可下注';
     const hero = state.seats[0];
     const owed = toCall(state);
@@ -599,9 +586,10 @@ const Poker = (() => {
       return null;
     }
     const raising = intent === 'raise';
-    if (raising && !canRaise(state)) return '当前不可加注';
-    const amount = Math.min(hero.stack, raising ? raiseAmount(state) : owed);
+    if (raising && (!canRaise(state) || !Number.isSafeInteger(requested) || requested < raiseAmount(state) || requested > hero.stack)) return '当前不可加注';
+    const amount = Math.min(hero.stack, raising ? requested : owed);
     const action = amount === hero.stack ? 'allin' : raising ? (owed ? 'raise' : 'bet') : amount ? 'call' : 'check';
+    if (raising) state.minRaise = amount - owed;
     commitBet(state, 0, action, amount);
     state.phase = 'opponents';
     state.opponentMode = 'respond';
@@ -622,6 +610,7 @@ const Poker = (() => {
       if (opener) {
         const action = state.seats[opener].stack === high + 40 ? 'allin' : high ? 'raise' : 'bet';
         commitBet(state, opener, action, high + 40);
+        state.minRaise = 40;
       } else if (!high) {
         for (const i of active) commitBet(state, i, 'check');
       }
@@ -656,6 +645,349 @@ const Poker = (() => {
 })();
   </script>
   <script>
+// Browser-ready snapshot of dashboard/src/game-center/games/poker/lib/table-scene.ts
+const tableScene = (() => {
+function points(values) {
+    return values.map(([x, y])=>({
+            x,
+            y
+        }));
+}
+const scenes = {
+    landscape: {
+        mode: "landscape",
+        width: 1440,
+        height: 900,
+        rail: {
+            left: 80,
+            top: 68,
+            width: 1280,
+            height: 740
+        },
+        center: {
+            x: 720,
+            y: 435
+        },
+        boardCardWidth: 80,
+        seats: points([
+            [
+                720,
+                750
+            ],
+            [
+                430,
+                760
+            ],
+            [
+                170,
+                600
+            ],
+            [
+                170,
+                350
+            ],
+            [
+                430,
+                120
+            ],
+            [
+                720,
+                120
+            ],
+            [
+                1010,
+                120
+            ],
+            [
+                1270,
+                350
+            ],
+            [
+                1270,
+                600
+            ],
+            [
+                1010,
+                760
+            ]
+        ])
+    },
+    square: {
+        mode: "square",
+        width: 1080,
+        height: 1080,
+        rail: {
+            left: 50,
+            top: 60,
+            width: 980,
+            height: 930
+        },
+        center: {
+            x: 540,
+            y: 535
+        },
+        boardCardWidth: 72,
+        seats: points([
+            [
+                540,
+                930
+            ],
+            [
+                280,
+                900
+            ],
+            [
+                125,
+                650
+            ],
+            [
+                125,
+                390
+            ],
+            [
+                280,
+                140
+            ],
+            [
+                540,
+                140
+            ],
+            [
+                800,
+                140
+            ],
+            [
+                955,
+                390
+            ],
+            [
+                955,
+                650
+            ],
+            [
+                800,
+                900
+            ]
+        ])
+    },
+    portrait: {
+        mode: "portrait",
+        width: 840,
+        height: 1320,
+        rail: {
+            left: 48,
+            top: 50,
+            width: 744,
+            height: 1220
+        },
+        center: {
+            x: 420,
+            y: 650
+        },
+        boardCardWidth: 64,
+        seats: points([
+            [
+                420,
+                1170
+            ],
+            [
+                120,
+                1080
+            ],
+            [
+                120,
+                820
+            ],
+            [
+                120,
+                550
+            ],
+            [
+                120,
+                290
+            ],
+            [
+                420,
+                145
+            ],
+            [
+                720,
+                290
+            ],
+            [
+                720,
+                550
+            ],
+            [
+                720,
+                820
+            ],
+            [
+                720,
+                1080
+            ]
+        ])
+    }
+};
+function fitTableScene(width, height) {
+    const valid = Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+    const ratio = valid ? width / height : 1.6;
+    const landscapeBoundary = Math.sqrt(scenes.landscape.width / scenes.landscape.height);
+    const portraitBoundary = Math.sqrt(scenes.portrait.width / scenes.portrait.height);
+    const scene = scenes[ratio >= landscapeBoundary ? "landscape" : ratio >= portraitBoundary ? "square" : "portrait"];
+    const scale = valid ? Math.min(width / scene.width, height / scene.height) : 0;
+    return {
+        scene,
+        scale,
+        width: scene.width * scale,
+        height: scene.height * scale
+    };
+}
+function tableSceneVariables(scene) {
+    const variables = {
+        "--poker-rail-left": `${scene.rail.left}px`,
+        "--poker-rail-top": `${scene.rail.top}px`,
+        "--poker-rail-width": `${scene.rail.width}px`,
+        "--poker-rail-height": `${scene.rail.height}px`,
+        "--poker-center-x": `${scene.center.x}px`,
+        "--poker-center-y": `${scene.center.y}px`,
+        "--poker-board-card-width": `${scene.boardCardWidth}px`
+    };
+    scene.seats.forEach((point, index)=>{
+        variables[`--poker-seat-${index}-x`] = `${point.x}px`;
+        variables[`--poker-seat-${index}-y`] = `${point.y}px`;
+    });
+    return variables;
+}
+return { fitTableScene, tableSceneVariables };
+})();
+
+// Browser-ready snapshot of shared/src/game-poker-chips.ts
+const chipDisplay = (() => {
+const POKER_CHIP_VALUES = [
+    500,
+    200,
+    100,
+    25,
+    10,
+    5,
+    1
+];
+function chipBreakdown(amount) {
+    if (!Number.isSafeInteger(amount) || amount < 0) throw new Error("Invalid poker chip amount");
+    const result = [];
+    for (const value of POKER_CHIP_VALUES){
+        const count = Math.floor(amount / value);
+        if (count) result.push({
+            value,
+            count
+        });
+        amount %= value;
+    }
+    return result;
+}
+function addChipPayment(counts, amount) {
+    const next = new Map(counts.map((c)=>[
+            c.value,
+            c.count
+        ]));
+    for (const chip of chipBreakdown(amount))next.set(chip.value, (next.get(chip.value) ?? 0) + chip.count);
+    return POKER_CHIP_VALUES.filter((v)=>next.get(v)).map((value)=>({
+            value,
+            count: next.get(value)
+        }));
+}
+function chipValue(counts) {
+    return counts.reduce((sum, c)=>sum + c.value * c.count, 0);
+}
+function subtractChipCounts(counts, removed) {
+    const next = new Map(counts.map((c)=>[
+            c.value,
+            c.count
+        ]));
+    for (const chip of removed)next.set(chip.value, Math.max(0, (next.get(chip.value) ?? 0) - chip.count));
+    return POKER_CHIP_VALUES.filter((v)=>next.get(v)).map((value)=>({
+            value,
+            count: next.get(value)
+        }));
+}
+function noise(seed) {
+    let hash = Math.imul(seed + 1, 0x45d9f3b);
+    hash = Math.imul(hash ^ hash >>> 16, 0x45d9f3b);
+    return ((hash ^ hash >>> 16) >>> 0) / 4294967296;
+}
+function compactPokerChipCounts(counts) {
+    const target = 200;
+    if (counts.reduce((sum, c)=>sum + c.count, 0) <= target) return counts.map((c)=>({
+            ...c
+        }));
+    const compact = chipBreakdown(chipValue(counts));
+    const count = compact.reduce((sum, c)=>sum + c.count, 0);
+    const fiveHundreds = compact.find((c)=>c.value === 500);
+    if (count <= target || !fiveHundreds) return compact;
+    const thousands = Math.min(count - target, Math.floor(fiveHundreds.count / 2));
+    fiveHundreds.count -= thousands * 2;
+    return [
+        ...thousands ? [
+            {
+                value: 1000,
+                count: thousands
+            }
+        ] : [],
+        ...compact.filter((c)=>c.count > 0)
+    ];
+}
+function layoutChipPile(counts, seed = 0) {
+    const stacks = [], spare = [];
+    const presented = compactPokerChipCounts(counts);
+    for (const value of [
+        1000,
+        ...POKER_CHIP_VALUES
+    ]){
+        let visible = presented.find((c)=>c.value === value)?.count ?? 0;
+        while(visible >= 4){
+            const height = Math.min(8 + stacks.length % 3, visible);
+            stacks.push(Array(height).fill(value));
+            visible -= height;
+        }
+        for(let i = 0; i < visible; i++)spare.push(value);
+    }
+    for (const value of spare){
+        const candidates = stacks.map((chips, index)=>({
+                chips,
+                index
+            })).filter((s)=>s.chips.length < 8 + s.index % 3 && (s.chips.includes(value) || s.chips.length < 5));
+        candidates.sort((a, b)=>(a.chips.includes(value) ? -4 : 0) + a.chips.length * .45 - ((b.chips.includes(value) ? -4 : 0) + b.chips.length * .45));
+        if (candidates[0]) candidates[0].chips.push(value);
+        else stacks.push([
+            value
+        ]);
+    }
+    const spread = Math.min(1, 1.8 / Math.sqrt(Math.max(1, stacks.length)));
+    const chips = stacks.flatMap((values, stack)=>{
+        const angle = stack * 2.399963 + .24, radius = stack ? .94 * Math.sqrt(stack) * spread : 0;
+        const x = Math.cos(angle) * radius, y = Math.sin(angle) * radius * .35;
+        return values.sort((a, b)=>b - a).map((value, level)=>{
+            const key = seed * 991 + stack * 131 + level * 17;
+            return {
+                id: `${stack}:${level}:${value}`,
+                value,
+                stack,
+                level,
+                x: x + (noise(key) - .5) * .07,
+                y: y + level * .105 + (noise(key + 3) - .5) * .03,
+                rotation: (noise(key + 7) - .5) * 24,
+                depth: Math.round((8 - y) * 1000) + level
+            };
+        });
+    });
+    return {
+        chips
+    };
+}
+return { chipBreakdown, layoutChipPile, addChipPayment };
+})();
+
 (() => {
   const { cards, reset, quote, unavailable, use, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent } = Poker;
   const streets = { ...Poker.streets, preflop: '翻前' };
@@ -670,6 +1002,12 @@ const Poker = (() => {
     reset: '<path d="M3 12a9 9 0 1 1 2.5 6.2M3 6v6h6"/>',
     close: '<path d="m6 6 12 12M6 18 18 6"/>',
     chips: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v5c0 4 16 4 16 0V6M4 11v5c0 4 16 4 16 0v-5"/>',
+    back: '<path d="M19 12H5m7 7-7-7 7-7"/>',
+    members: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-4M16 3a4 4 0 0 1 0 8"/><circle cx="9" cy="7" r="4"/>',
+    ranks: '<path d="M12 21c-2-2-5-3-10-3V3c5 0 8 1 10 3 2-2 5-3 10-3v15c-5 0-8 1-10 3Zm0-15v15"/>',
+    more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+    up: '<path d="m6 15 6-6 6 6"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     eye: '<path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>',
     shield: '<path d="m12 3 8 3v5c0 5-8 10-8 10s-8-5-8-10V6zM8 12l3 3 5-6"/>',
     fold: '<path d="m6 6 12 12M6 18 18 6"/>',
@@ -685,9 +1023,11 @@ const Poker = (() => {
   const faceName = card => (card[0] === 'T' ? '10' : card[0]) + suits[card[1]];
   const face = (card, privateFace = false) => '<img class="playing" src="' + assets + 'cards/' + card + '.svg" alt="' + faceName(card) + '" draggable="false"' + (privateFace ? ' data-private' : '') + '>';
   const artwork = (key, alt = '') => '<img src="' + assets + 'ability-cards/v1/' + cards[key].art + '.png" alt="' + alt + '" draggable="false">';
-  const backs = '<span class="back" aria-hidden="true">♠</span>'.repeat(2);
-  const location = ['', 'north', 'west', 'east'];
-
+  const scenarioNames = { flop: '常规行动', waiting: '等待对手', river: '河牌换牌', low: '筹码不足', split: '平分与边池' };
+  const seatNumbers = [1, 2, 4, 5];
+  let scenario = 'flop';
+  let chosenBet = null;
+  let matchTab = '日志';
   let state;
   let selection;
   let showIntel;
@@ -721,42 +1061,121 @@ const Poker = (() => {
     return index === 1 ? '边池' : '边池 ' + index;
   }
 
+  function tableCard(card, faceUp = true) {
+    if (faceUp && !card) return '<span class="poker-card-placeholder" aria-label="未发牌"></span>';
+    const visible = faceUp ? card : null;
+    return '<span class="poker-card" data-face="' + (visible ? 'up' : 'down') + '" role="img" aria-label="' +
+      (visible ? faceName(visible) : '牌背') + '"><span class="poker-card-turn"><span class="poker-card-front" aria-hidden="true">' +
+      (visible ? '<img src="' + assets + 'cards/' + visible + '.svg" alt="" width="240" height="336" draggable="false">' : '') +
+      '</span><span class="poker-card-back" aria-hidden="true"><span>♠</span></span></span></span>';
+  }
+
+  // Mirrors the PokerChip and PokerChipPile markup, using the shared denomination layout.
+  const edgePath = Array.from({ length: 8 }, (_, i) => {
+    const angle = i * Math.PI / 4;
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    return [[28, 3], [36, 3], [35, 12], [29, 12]].map(([x, y], index) =>
+      (index ? 'L' : 'M') + (32 + (x - 32) * c - (y - 32) * s).toFixed(3) + ' ' +
+      (32 + (x - 32) * s + (y - 32) * c).toFixed(3)).join('') + 'Z';
+  }).join('');
+
+  function chipPile(chips, label, seed = 0, bank = false) {
+    const layout = chipDisplay.layoutChipPile(chips, seed);
+    return '<span class="poker-chip-pile' + (bank ? ' poker-seat-bank' : '') + '" role="img" aria-label="' + label + '">' +
+      layout.chips.map(chip => '<span class="poker-placed-chip" style="--chip-x:' + chip.x + ';--chip-y:' + chip.y +
+        ';--chip-turn:' + chip.rotation + 'deg;z-index:' + chip.depth + '"><span class="poker-chip" data-chip-value="' +
+        chip.value + '" aria-hidden="true"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="31" class="poker-chip-disc"/>' +
+        '<path d="' + edgePath + '" class="poker-chip-edge"/><circle cx="32" cy="32" r="23" class="poker-chip-ring"/>' +
+        '<circle cx="32" cy="32" r="20" class="poker-chip-dots"/><text x="32" y="33" text-anchor="middle" dominant-baseline="middle">' +
+        (chip.value === 1000 ? '1k' : chip.value) + '</text></svg></span></span>').join('') + '</span>';
+  }
+
+  function activeSeat() {
+    if (state.phase === 'active') return 0;
+    if (state.phase === 'opponents') return state.seats.findIndex((seat, i) => i > 0 && !seat.folded && seat.stack);
+    return -1;
+  }
+
   function renderTable() {
     const settled = state.phase === 'settled';
     const showdown = settled && state.seats.filter(seat => !seat.folded).length > 1;
-    $('#opponents').innerHTML = state.seats.slice(1).map((seat, index) => {
+    const actor = activeSeat();
+    const maxSeats = 6;
+    $('#seats').innerHTML = Array.from({ length: maxSeats }, (_, seatNo) => {
+      // Six available seats, using seatPosition from the Dashboard view contract.
+      const position = Math.round(seatNo * 10 / maxSeats) % 10;
+      const number = seatNo + 1;
+      const i = seatNumbers.indexOf(number);
+      const seat = state.seats[i];
+      if (!seat) return '<div class="poker-seat poker-seat-empty" data-position="' + position +
+        '" role="group" aria-label="座位 ' + number + ' · 空位"><span class="poker-empty-marker" aria-hidden="true">' +
+        number + '</span><span>空位</span></div>';
+      const mine = i === 0;
+      const acting = i === actor;
       const revealed = showdown && !seat.folded;
-      const status = seat.folded ? '弃牌' : !seat.stack && !settled ? '全下' : labels[seat.action] || '';
-      return '<div class="seat ' + location[index + 1] + (seat.folded ? ' folded' : '') + '">' +
-        '<div class="backs"' + (revealed ? '' : ' role="img" aria-label="两张暗牌"') + '>' +
-        (revealed ? seat.holes.map(card => face(card)).join('') : backs) +
-        '</div><div class="seat-plate"><span class="avatar" aria-hidden="true">' + seat.avatar + '</span><div><span class="seat-name">' +
-        seat.name + '</span><strong>' + num(seat.stack) + '</strong></div></div>' +
-        '<span class="seat-state">' + status + '</span></div>';
+      const status = seat.folded ? '已弃牌' : acting ? (mine ? '轮到你' : '行动中') :
+        !seat.stack && !settled ? '已全下' : labels[seat.action] || (mine ? '本人操作' : '机器人');
+      const win = settled && state.results.some(pool => !pool.refund && pool.winners.includes(i));
+      const clock = '<svg class="poker-turn-ring" viewBox="0 0 40 40" aria-hidden="true">' +
+        '<circle class="poker-turn-track" cx="20" cy="20" r="18"/><circle cx="20" cy="20" r="18" pathLength="100" stroke-dasharray="100" stroke-dashoffset="50"/></svg>';
+      return '<div class="poker-seat" role="group" data-position="' + position + '" data-acting="' + acting +
+        '" data-folded="' + seat.folded + '" data-mine="' + mine + '" data-winner="' + win + '" aria-label="座位 ' + number + ' · ' + seat.name +
+        '"><div class="poker-seat-objects" data-dock-holes="' + mine + '">' + (mine ? '' :
+        '<div class="poker-seat-cards" data-card-size="' + (seat.folded ? 'xs' : 'sm') + '" data-dealt="true">' +
+        seat.holes.map(card => tableCard(card, revealed)).join('') + '</div>') +
+        chipPile(chipDisplay.chipBreakdown(seat.stack), seat.name + '剩余筹码 ' + num(seat.stack), number, true) +
+        '</div><div class="poker-seat-plate"><span class="poker-seat-avatar">' + number + (acting ? clock : '') +
+        '</span><span class="poker-seat-identity"><span class="poker-seat-name">' + seat.name +
+        '</span><span class="poker-stack">' + num(seat.stack) + '</span></span>' +
+        (mine ? '<span class="poker-dealer" role="img" aria-label="按钮位">D</span>' : '') +
+        '</div><div class="poker-seat-meta"><span class="poker-ai-state" data-acting="' + acting + '">' + status + '</span>' +
+        '<span class="poker-wager" data-visible="' + Boolean(!settled && seat.streetBet) +
+        '" aria-label="' + seat.name + '本轮下注 ' + num(seat.streetBet) + '">' + icon('chips') +
+        '<span>' + num(seat.streetBet) + '</span></span></div>' +
+        '<button type="button" class="poker-seat-info-trigger" data-system="seat" data-seat-info="' + i + '" aria-label="查看' +
+        seat.name + '的玩家信息"></button></div>';
     }).join('');
+
     const pools = state.results ?? pots(state);
     const main = pools.find(pool => !pool.refund)?.amount ?? 0;
     const other = pools.filter(pool => !pool.refund).slice(1).reduce((sum, pool) => sum + pool.amount, 0);
-    const unmatched = settled ? 0 : pools.filter(pool => pool.refund).reduce((sum, pool) => sum + pool.amount, 0);
     const hasAllIn = state.seats.some(seat => !seat.folded && !seat.stack);
-    const side = settled || hasAllIn ? other : 0;
-    const inPlay = unmatched + other - side;
-    $('#pools').innerHTML = icon('chips') + '<div><small>主池</small><strong id="main-pool">' + num(main) + '</strong>' +
-      (side ? '<span>边池 ' + num(side) + '</span>' : '') + (inPlay ? '<span>待跟注 ' + num(inPlay) + '</span>' : '') + '</div>';
-    $('#board').innerHTML = state.board.map(card => face(card)).join('') +
-      '<span class="blank" aria-hidden="true"></span>'.repeat(5 - state.board.length);
-    const status = settled ? '已结算' : state.pending ? '请选择候选牌' : state.phase === 'active' ? '轮到你行动' : '等待对手';
-    $('#turn').textContent = streets[state.street] + ' · ' + status;
-    $('#turn').classList.toggle('active', state.phase === 'active');
+    // The canvas's one visible pile includes live wagers; side pools are broken out at settlement.
+    const displayed = settled ? main : state.seats.reduce((sum, seat) => sum + seat.total, state.cardFees);
+    const chips = chipDisplay.addChipPayment(chipDisplay.chipBreakdown(displayed - state.cardFees), state.cardFees);
+    $('#pools').innerHTML = '<button type="button" class="poker-pot-value poker-pot-sources-trigger" data-system="pot" aria-label="查看底池来源">' +
+      '<span class="poker-pot-label">底池</span><span class="poker-pot" id="main-pool">' + num(displayed) + '</span>' +
+      chipPile(chips, '底池 ' + num(displayed)) + '</button>' + (other && (hasAllIn || settled) ?
+      '<span class="poker-pot-extra">' + (settled ? '边池 ' : '含边池 ') + num(other) + '</span>' : '');
+    $('#board').innerHTML = Array.from({ length: 5 }, (_, i) =>
+      '<span class="poker-deal-slot" data-dealt="true">' + tableCard(state.board[i]) + '</span>').join('');
+    $('#street').textContent = settled ? '已结算' : streets[state.street];
     $('#results').hidden = !settled;
-    if (settled) $('#results').innerHTML = pools.map((pool, i) => {
+    if (settled) $('#results').innerHTML = '<div class="poker-settlement">' + pools.map((pool, i) => {
       const shares = pool.winners.map(winner => state.seats[winner].name + ' +' + num(pool.shares[winner])).join('、');
-      return '<div><strong>' + poolName(pool, i) + ' ' + num(pool.amount) + '</strong> · ' + shares + '</div>';
-    }).join('');
+      return '<span><strong>' + poolName(pool, i) + ' ' + num(pool.amount) + '</strong> · ' + shares + '</span>';
+    }).join('') + '</div>';
+  }
+
+  function fitCanvas() {
+    const viewport = $('.poker-canvas-viewport');
+    const canvas = $('.poker-canvas');
+    const { width, height } = viewport.getBoundingClientRect();
+    const { scene, scale } = tableScene.fitTableScene(width, height);
+    canvas.dataset.tableShape = scene.mode;
+    canvas.dataset.compact = String(scale < .65);
+    Object.assign(canvas.style, {
+      width: scene.width + 'px', height: scene.height + 'px',
+      transform: 'translate(-50%, -50%) scale(' + scale + ')',
+    });
+    canvas.style.setProperty('--poker-scale', scale || 1);
+    for (const [name, value] of Object.entries(tableScene.tableSceneVariables(scene))) canvas.style.setProperty(name, value);
+    const scroller = viewport.parentElement;
+    scroller.scrollTop = Math.max(0, (scroller.scrollHeight - scroller.clientHeight) / 2);
   }
 
   function renderDock() {
-    $('#stack').textContent = num(state.seats[0].stack) + ' 筹码';
     $('#holes').innerHTML = state.seats[0].holes.map(card => face(card, true)).join('');
     $('#shield').hidden = !state.shield;
     $('#hand-count').textContent = state.hand.length + ' 张';
@@ -773,23 +1192,56 @@ const Poker = (() => {
         '<span class="ability-name">' + def.name + '</span></button>';
     }).join('') || '<span class="empty-hand">没有能力牌</span>';
 
-    const action = (intent, text, disabled, variant = '') => button(text,
-      'data-bet="' + intent + '" data-focus="bet-' + intent + '"' + (disabled ? ' disabled' : ''), variant);
+    const action = (intent, text, disabled, variant = '', primary = false) =>
+      '<button type="button" class="poker-button ' + variant + '" data-bet="' + intent + '" data-focus="bet-' + intent + '"' +
+      (primary ? ' data-tone="primary"' : '') + (disabled ? ' disabled' : '') + '>' + text + '</button>';
     const owed = toCall(state);
-    const stack = state.seats[0].stack;
-    const inactive = state.phase !== 'active' || !!state.pending;
-    let controls = '<div class="dock-label"><strong>行动</strong></div>';
+    const hero = state.seats[0];
+    const actor = activeSeat();
+    const active = state.phase === 'active';
+    const status = state.phase === 'settled' ? '本手结束' : state.pending ? '请选择候选牌' :
+      active ? '轮到你' : hero.folded ? '已弃牌 · 等待下一手' : actor > 0 ? '等待 ' + state.seats[actor].name + ' 行动' : '等待结算';
+    $('#controls').dataset.acting = String(active);
+    $('#turn').textContent = status;
+    $('#clock').hidden = !active;
+    $('#clock').innerHTML = icon('clock') + '5:00';
+    let controls;
     if (state.phase === 'settled') {
-      controls += button('重玩本手', 'data-restart data-focus="next"', 'primary wide');
+      controls = button('重玩本手', 'data-restart data-focus="next"', 'primary');
     } else if (state.phase === 'opponents') {
-      controls += button('推进对手行动', 'data-opponent data-focus="next"', 'primary wide');
+      controls = button('推进对手行动', 'data-opponent data-focus="next"');
     } else {
-      const call = !owed ? '过牌' : stack <= owed ? '全下 ' + num(stack) : '跟注 ' + num(owed);
-      controls += action('fold', '弃牌', inactive) +
-        action('raise', (owed ? '加注 ' : '下注 ') + num(raiseAmount(state)), inactive || !canRaise(state)) +
-        action('call', call, inactive, 'primary');
+      const inactive = !!state.pending;
+      const call = !owed ? '过牌 <span class="check-detail">无需跟注</span>' : hero.stack <= owed ?
+        '全下 ' + num(hero.stack) : '跟注 ' + num(owed);
+      const options = betOptions();
+      if (chosenBet != null && canRaise(state)) {
+        chosenBet = Math.min(hero.streetBet + hero.stack, Math.max(options[0].to, chosenBet));
+      }
+      const betTo = chosenBet ?? options[0].to;
+      const presets = canRaise(state) ? '<div class="poker-bet-presets font-sans" role="group" aria-label="下注金额选择">' +
+        options.map((option, index) => button(option.label, 'data-preset="' + option.to + '" data-focus="preset-' + index +
+          '" aria-pressed="' + (betTo === option.to && options.findIndex(preset => preset.to === betTo) === index) + '"' +
+          (inactive ? ' disabled' : ''), 'small')).join('') +
+        button('自定义' + icon('up'), 'data-system="bet" data-focus="bet-custom"' + (inactive ? ' disabled' : ''), 'small') + '</div>' : '';
+      controls = presets + '<div class="poker-action-buttons">' + action('fold', '弃牌', inactive, 'poker-fold-action') +
+        action('call', call, inactive, '', true) + action('raise', (owed ? '加注到 ' : '下注到 ') + num(betTo),
+          inactive || !canRaise(state), 'poker-raise-action') + '</div>';
     }
     $('#actions').innerHTML = controls;
+  }
+
+  // These presets use the same call-to and clamping formulas as action-view.ts.
+  function betOptions() {
+    const hero = state.seats[0];
+    const owed = toCall(state);
+    const min = hero.streetBet + raiseAmount(state);
+    const max = hero.streetBet + hero.stack;
+    const callTo = hero.streetBet + owed;
+    const pot = state.seats.reduce((sum, seat) => sum + seat.total, state.cardFees);
+    const clamp = target => Math.min(max, Math.max(min, Math.round(target)));
+    return [{ label: '最小', to: min }, { label: '半池', to: clamp(callTo + (pot + owed) / 2) },
+      { label: '一池', to: clamp(callTo + pot + owed) }];
   }
 
   function renderDetails() {
@@ -888,7 +1340,9 @@ const Poker = (() => {
   }
 
   function start() {
-    state = reset($('#scenario').value);
+    state = reset(scenario);
+    chosenBet = null;
+    matchTab = '日志';
     selection = null;
     showIntel = false;
     error = '';
@@ -897,6 +1351,78 @@ const Poker = (() => {
     $('#fan').scrollLeft = 0;
     $('#log').scrollTop = 0;
     render();
+  }
+
+  function describeLog(entry) {
+    const amount = entry.amount ? ' · ' + num(entry.amount) + ' 筹码' : '';
+    return [entry.actor, logHeading(entry)].filter(Boolean).join(' · ') + amount + (entry.result ? ' · ' + entry.result : '');
+  }
+
+  function matchContent() {
+    const tabs = '<div class="panel-tabs" aria-label="对局信息">' + ['日志', '总览', 'AI'].map(tab =>
+      button(tab, 'data-match-tab="' + tab + '" aria-pressed="' + (tab === matchTab) + '"', 'small')).join('') + '</div>';
+    const content = matchTab === '日志' ? '<ol>' + state.log.map(entry => '<li>' + describeLog(entry) + '</li>').join('') + '</ol>' :
+      matchTab === '总览' ? '<ul>' + state.seats.map(seat => '<li>' + seat.name + ' · 累计下注 ' + num(seat.total) +
+        ' · 卡牌支出 ' + num(seat.cardPaid) + '</li>').join('') + '</ul>' : '<p>暂无 AI 判断</p>';
+    return tabs + content;
+  }
+
+  function panelContent(kind, seatNumber) {
+    if (kind === 'menu') {
+      const options = Object.entries(scenarioNames).map(([key, name]) => '<option value="' + key + '"' +
+        (key === scenario ? ' selected' : '') + '>' + name + '</option>').join('');
+      return ['更多操作', '<div class="menu-group"><label for="scenario">演示场景</label><select id="scenario">' +
+        options + '</select>' + button(icon('reset'), 'data-restart aria-label="重置场景"', 'icon') + '</div>'];
+    }
+    if (kind === 'match') return ['对局信息', matchContent()];
+    if (kind === 'members') return ['成员管理', '<ul>' + state.seats.map((seat, i) =>
+      '<li>' + seatNumbers[i] + ' 号位 · ' + seat.name + ' · ' + (i ? '机器人' : '本人') + '</li>').join('') + '</ul>'];
+    if (kind === 'ranks') return ['牌型大小', '<ol><li>皇家同花顺</li><li>同花顺</li><li>四条</li><li>葫芦</li><li>同花</li><li>顺子</li><li>三条</li><li>两对</li><li>一对</li><li>高牌</li></ol>'];
+    if (kind === 'pot') return ['底池来源', '<ul>' + state.seats.map(seat =>
+      '<li>' + seat.name + ' · 下注 ' + num(seat.total) + (seat.cardPaid ? ' · 卡牌费 ' + num(seat.cardPaid) : '') + '</li>').join('') + '</ul>'];
+    if (kind === 'seat') {
+      const seat = state.seats[seatNumber];
+      return ['玩家信息', '<p>' + seat.name + ' · 剩余 ' + num(seat.stack) + ' 筹码</p>'];
+    }
+    const hero = state.seats[0];
+    const min = betOptions()[0].to;
+    const max = hero.streetBet + hero.stack;
+    const to = chosenBet ?? min;
+    const bounds = ' min="' + min + '" max="' + max + '" value="' + to + '" step="1"';
+    return [toCall(state) ? '加注' : '下注', '<form id="bet-form"><label for="bet-number">金额</label>' +
+      '<input id="bet-number" type="number" required' + bounds + '><input id="bet-slider" type="range" aria-label="下注金额"' + bounds + '>' +
+      '<span>追加 <strong id="bet-extra">' + num(to - hero.streetBet) + '</strong></span><button class="button primary" type="submit">确定金额</button></form>'];
+  }
+
+  function placePanel(trigger, kind) {
+    const panel = $('#system-panel');
+    const anchor = trigger.getBoundingClientRect();
+    const frame = panel.getBoundingClientRect();
+    panel.style.left = Math.max(8, Math.min(innerWidth - frame.width - 8, anchor.right - frame.width)) + 'px';
+    const below = anchor.bottom + 8;
+    const above = anchor.top - frame.height - 8;
+    panel.style.top = Math.max(8, kind === 'bet' || below + frame.height > innerHeight ? above : below) + 'px';
+  }
+
+  function openPanel(trigger) {
+    const kind = trigger.dataset.system;
+    const panel = $('#system-panel');
+    if (panel.open && panel.dataset.kind === kind && kind !== 'seat') return panel.close();
+    const [title, content] = panelContent(kind, Number(trigger.dataset.seatInfo));
+    panel.dataset.kind = kind;
+    panel.innerHTML = '<header><h2 id="system-title">' + title + '</h2>' + button(icon('close'), 'data-system-close aria-label="关闭"', 'icon quiet') +
+      '</header><div id="system-body">' + content + '</div>';
+    if (!panel.open) panel.show();
+    placePanel(trigger, kind);
+    if (kind === 'bet') $('#bet-number').focus();
+  }
+
+  function updateBetField(event) {
+    const field = event.target;
+    if (field.id !== 'bet-number' && field.id !== 'bet-slider') return;
+    const other = field.id === 'bet-number' ? $('#bet-slider') : $('#bet-number');
+    other.value = field.value;
+    $('#bet-extra').textContent = field.validity.valid ? num(Number(field.value) - state.seats[0].streetBet) : '—';
   }
 
   function toggleLog(id) {
@@ -916,17 +1442,31 @@ const Poker = (() => {
     const old = instance ? quote(state, instance.key) : null;
     const problem = advanceOpponent(state);
     if (problem) return announce(problem);
+    chosenBet = null;
     error = instance && quote(state, instance.key) !== old ? '费用已变化，请按当前金额确认' : '';
     if (error) announce(error);
     render(state.phase === 'active' ? (selection ? 'card-' + selection.id : 'bet-call') : 'next');
   }
 
-  $('#reset').innerHTML = icon('reset');
-  $('#rail-icon').innerHTML = icon('log');
+  document.querySelectorAll('[data-symbol]').forEach(element => { element.innerHTML = icon(element.dataset.symbol); });
   $('#intel').innerHTML = icon('eye');
   $('#shield').innerHTML = icon('shield') + '<span class="sr-only">反制咒已生效</span>';
-  $('#scenario').addEventListener('change', start);
-  $('#reset').addEventListener('click', start);
+  const systemPanel = $('#system-panel');
+  systemPanel.addEventListener('change', event => {
+    if (event.target.id !== 'scenario') return;
+    scenario = event.target.value;
+    systemPanel.close();
+    start();
+    $('[data-system="menu"]').focus();
+  });
+  systemPanel.addEventListener('input', updateBetField);
+  systemPanel.addEventListener('submit', event => {
+    if (event.target.id !== 'bet-form') return;
+    event.preventDefault();
+    chosenBet = $('#bet-number').valueAsNumber;
+    systemPanel.close();
+    render('bet-custom');
+  });
   $('#intel').addEventListener('click', () => {
     if (state.pending) return announce('请先选择换牌候选');
     selection = null;
@@ -961,6 +1501,15 @@ const Poker = (() => {
 
   document.addEventListener('click', event => {
     const target = event.target.closest('button');
+    if (target?.hasAttribute('data-system')) return openPanel(target);
+    if (target?.hasAttribute('data-system-close')) return systemPanel.close();
+    if (target?.hasAttribute('data-match-tab')) {
+      matchTab = target.dataset.matchTab;
+      $('#system-body').innerHTML = matchContent();
+      $('#system-body [aria-pressed="true"]').focus();
+      return;
+    }
+    if (systemPanel.open && !event.target.closest('#system-panel')) systemPanel.close();
     if (target?.hasAttribute('data-log')) {
       toggleLog(Number(target.dataset.log));
       return;
@@ -1011,15 +1560,21 @@ const Poker = (() => {
       announce('换牌完成');
       render('bet-call');
     } else if (target.hasAttribute('data-bet')) {
-      const problem = bet(state, target.dataset.bet);
+      const contribution = (chosenBet ?? betOptions()[0].to) - state.seats[0].streetBet;
+      const problem = bet(state, target.dataset.bet, contribution);
       if (problem) return announce(problem);
+      chosenBet = null;
       selection = null;
       showIntel = false;
       error = '';
       render('next');
+    } else if (target.hasAttribute('data-preset')) {
+      chosenBet = Number(target.dataset.preset);
+      render();
     } else if (target.hasAttribute('data-opponent')) {
       onAdvance();
     } else if (target.hasAttribute('data-restart')) {
+      if (systemPanel.open) systemPanel.close();
       start();
       focusAt('bet-call');
     }
@@ -1027,7 +1582,9 @@ const Poker = (() => {
 
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
-    if (!$('#log-tip').hidden) {
+    if (systemPanel.open) {
+      systemPanel.close();
+    } else if (!$('#log-tip').hidden) {
       closeLog();
     } else if (!state.pending && (selection || showIntel)) {
       const focus = selection ? 'card-' + selection.id : null;
@@ -1038,6 +1595,14 @@ const Poker = (() => {
     }
   });
 
+  const table = $('.poker-table');
+  const viewport = $('.poker-canvas-viewport');
+  const resize = new ResizeObserver(() => {
+    table.dataset.compactControls = String(table.clientWidth <= 850);
+    fitCanvas();
+  });
+  resize.observe(table);
+  resize.observe(viewport);
   start();
 })();
   </script>
