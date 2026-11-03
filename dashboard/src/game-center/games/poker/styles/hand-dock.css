@@ -18,21 +18,22 @@
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-human-controls { width: min(100%, 52rem); position: relative; }
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock { width: min(100%, 40rem); margin-inline: auto; }
 .poker-hand-dock {
-  --ability-width: calc(var(--hand-height) * .77);
+  --hand-card-width: calc(var(--hand-height) / 1.4);
+  --hand-gap: .625rem;
   --hand-card-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: .25rem;
   height: var(--hand-height);
   min-width: 0;
+  padding-inline: var(--hand-gap);
   margin-block-end: .375rem;
 }
 .poker-hand-dock-holes {
-  --cw: calc(var(--hand-height) / 1.4);
+  --cw: var(--hand-card-width);
   display: flex;
   flex: none;
-  gap: .25rem;
+  gap: var(--hand-gap);
   pointer-events: none;
   user-select: none;
 }
@@ -42,15 +43,17 @@
   border-radius: var(--hand-card-radius);
   box-shadow: none;
 }
-.poker-hand-dock-fan { min-width: 0; height: 100%; position: relative; width: max-content; }
+.poker-hand-dock-fan { min-width: 0; height: 100%; position: relative; width: max-content; margin-inline-end: calc(-1 * var(--hand-gap)); }
+.poker-hand-dock-holes:empty + .poker-hand-dock-fan { margin-inline-end: 0; }
 .poker-hand-dock-cards {
   display: flex;
   align-items: center;
-  gap: .25rem;
+  gap: var(--hand-gap);
   width: max-content;
   max-width: 100%;
   height: calc(100% + 2 * var(--hand-bleed));
-  padding: var(--hand-bleed) .375rem;
+  /* The leading padding also supplies the gap from the last hole card. */
+  padding: var(--hand-bleed) var(--hand-gap);
   margin-block: calc(-1 * var(--hand-bleed));
   overflow-x: auto;
   overflow-y: hidden;
@@ -58,7 +61,7 @@
   overscroll-behavior-inline: contain;
 }
 .poker-hand-dock-cards::-webkit-scrollbar { display: none; }
-.poker-hand-dock-card, .poker-hand-dock-face {
+.poker-hand-dock-thumbnail, .poker-hand-dock-face {
   color: var(--foreground);
   background: color-mix(in oklch, var(--surface) 92%, var(--warning, var(--default)));
   border: 1px solid var(--separator);
@@ -68,11 +71,12 @@
 }
 .poker-hand-dock-card {
   position: relative;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  flex: 0 0 var(--ability-width);
+  flex: 0 0 var(--hand-card-width);
+  min-width: 0;
   height: var(--hand-height);
-  border-radius: var(--hand-card-radius);
+  border: 0;
+  padding: 0;
+  background: none;
   font: inherit;
   font-size: clamp(.625rem, 1vw, .75rem);
   line-height: 1.1;
@@ -81,16 +85,35 @@
   cursor: grab;
   touch-action: pan-x;
   user-select: none;
-  transition: transform 120ms ease-out;
+}
+.poker-hand-dock-thumbnail {
+  position: relative;
+  display: grid;
+  grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
+  height: 100%;
+  border-radius: var(--hand-card-radius);
+  pointer-events: none;
+  transform: translateY(var(--fan-drop, 0px)) rotate(var(--fan-angle, 0deg));
+  transition: transform 150ms ease-out;
+}
+/* For long hands, keep the middle readable and fan out the edges. */
+.poker-hand-dock-card:first-child:not(:only-child) { --fan-angle: -8deg; --fan-drop: .2rem; }
+.poker-hand-dock-card:last-child:not(:only-child) { --fan-angle: 8deg; --fan-drop: .2rem; }
+.poker-hand-dock-card:nth-child(2):nth-last-child(n + 3) { --fan-angle: -3deg; --fan-drop: .05rem; }
+.poker-hand-dock-card:nth-last-child(2):nth-child(n + 3) { --fan-angle: 3deg; --fan-drop: .05rem; }
+.poker-hand-dock-card:focus-visible { z-index: 1; outline: none; }
+.poker-hand-dock-card:focus-visible .poker-hand-dock-thumbnail { outline: 2px solid var(--accent); outline-offset: 2px; }
+.poker-hand-dock-card:focus-visible .poker-hand-dock-thumbnail { transform: translateY(-.35rem); }
+@media (hover: hover) {
+  .poker-hand-dock-card:hover { z-index: 1; }
+  .poker-hand-dock-card:hover .poker-hand-dock-thumbnail { transform: translateY(-.35rem); }
 }
 .poker-hand-dock-face { box-shadow: 0 .15rem 0 var(--separator), 0 .35rem .55rem color-mix(in oklch, var(--foreground) 14%, transparent); }
 .poker-hand-dock-card[aria-disabled="true"] { cursor: default; }
 .poker-hand-dock-card[aria-disabled="true"] .poker-hand-dock-cost { background: var(--muted); }
-.poker-hand-dock-card:is(:hover, :focus-visible) { z-index: 1; transform: translateY(-.2rem); }
-.poker-hand-dock-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .poker-hand-dock-card[data-dragging="true"] { opacity: .45; }
-.poker-hand-dock-card img, .poker-hand-dock-face img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .3rem; }
-.poker-hand-dock-card > span { display: block; margin-top: .2rem; overflow: hidden; text-overflow: ellipsis; }
+.poker-hand-dock-thumbnail img, .poker-hand-dock-face img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .3rem; }
+.poker-hand-dock-thumbnail > span { display: block; margin-top: .2rem; overflow: hidden; text-overflow: ellipsis; }
 .poker-hand-dock-cost {
   position: absolute;
   display: grid;
@@ -98,7 +121,7 @@
   min-width: 1.25rem;
   height: 1.25rem;
   padding-inline: .15rem;
-  inset: -.28rem auto auto -.32rem;
+  inset: -.28rem auto auto -.2rem;
   border: 2px solid var(--surface);
   border-radius: 1rem;
   background: var(--accent);
@@ -119,7 +142,7 @@
   color: var(--foreground);
   box-shadow: 0 .55rem 1.5rem color-mix(in oklch, var(--foreground) 18%, transparent);
 }
-.poker-hand-dock-card img { height: 100%; min-height: 0; aspect-ratio: auto; }
+.poker-hand-dock-thumbnail img { height: 100%; min-height: 0; aspect-ratio: auto; }
 .poker-hand-dock-face img { aspect-ratio: 4 / 5; object-fit: contain; }
 .poker-hand-dock-face strong { display: block; margin: .25rem .125rem; }
 .poker-hand-dock-description { display: grid; gap: .25rem; font-size: .875rem; }
@@ -203,5 +226,5 @@
   .poker-card-dock-task, .poker-card-dock-task-content { gap: .5rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .poker-hand-dock-card { transition: none; }
+  .poker-hand-dock-thumbnail { transition: none; }
 }

@@ -119,9 +119,11 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
               else setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "touch" })
             }
           }}>
-          <img src={cardArtwork(card.cardId)} alt="" draggable={false} />
-          <span>{info?.name ?? "能力牌"}</span>
-          <b className="poker-hand-dock-cost">{amount(card.payment.paidAmount)}</b>
+          <span className="poker-hand-dock-thumbnail">
+            <img src={cardArtwork(card.cardId)} alt="" draggable={false} />
+            <span>{info?.name ?? "能力牌"}</span>
+            <b className="poker-hand-dock-cost">{amount(card.payment.paidAmount)}</b>
+          </span>
         </button>
       })}
     </div></div>}
