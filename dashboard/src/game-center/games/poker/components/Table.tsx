@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { ArrowLeft, Bell, Eye, MoreHorizontal, UserRound, UsersRound, Volume2, VolumeX } from "lucide-react"
 import { chipValue, type PokerTableView, type PokerTableEvent, type PokerResolutionFrameView } from "@synapse/shared/game-contracts"
 import { Button } from "@heroui/react"
@@ -24,9 +24,9 @@ import { projectTable, streetLabel } from "../lib/view"
 import { TABLE_CONTROLS_BREAKPOINT } from "../lib/table-layout"
 import { fitTableScene, tableSceneVariables } from "../lib/table-scene"
 import { useTableMotion } from "../hooks/useTableMotion"
+import { useDealAnimation } from "../hooks/useDealAnimation"
 import { usePokerCardMotion } from "../hooks/usePokerCardMotion"
 import { PokerCardMotion, PokerMotionDecks } from "./PokerCardMotion"
-import type { PokerCardMotionBatch } from "../lib/table-card-motion"
 import { usePokerAudio } from "../hooks/usePokerAudio"
 import { usePokerReady } from "../hooks/usePokerReady"
 import { usePokerChips } from "../hooks/usePokerChips"
@@ -75,22 +75,12 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const cardDock = usesPokerHandDock(view)
   const showPlayControls = hasPokerPlayControls(view, perspective)
   const showRoll = !cardDock && (!!view.reserve || !!view.roll?.enabled || !!view.ruleOptions?.roll || chipValue(cash.funds.roll) > 0)
-  const { batch: cardMotion, queued: queuedMotion, complete: completeCardMotion } = usePokerCardMotion(
-    view, JSON.stringify([identityKey, view.roomCode, perspective, view.mySeatNo, controlVersion, fit.scene.mode, fit.scale]),
+  const dealt = useDealAnimation(view.handId, view.seats.length + view.board.length, 0, view)
+  const { batch: cardMotion, complete: completeCardMotion } = usePokerCardMotion(
+    view, JSON.stringify([identityKey, view.roomCode, perspective, view.mySeatNo, controlVersion]),
   )
-  const [releasedMotion, setReleasedMotion] = useState<PokerCardMotionBatch | null>(null)
-  const paymentReleased = cardMotion === releasedMotion
-  const heldPayments = new Set([...(paymentReleased ? [] : (cardMotion?.payments ?? [])), ...(queuedMotion?.payments ?? [])])
-  const showingShowdown = [cardMotion, queuedMotion].some(batch => batch && (batch.reveals.length || batch.winningCards.length))
-  const movingChips = cash.active.filter(transfer => !heldPayments.has(transfer.id) &&
-    !(showingShowdown && transfer.fund === "pot" && transfer.direction === "out"))
-  const settlementBlocked = cash.blocked || showingShowdown
-  const presentedReady = settlementBlocked ? { ...nextHand, busy: true } : nextHand
+  const presentedReady = cash.blocked ? { ...nextHand, busy: true } : nextHand
   const paymentPending = !!cardMotion?.payments.some(id => cash.transfers.some(transfer => transfer.id === id))
-  const finishCardMotion = useCallback((batch: PokerCardMotionBatch) => {
-    completeCardMotion(batch)
-    setReleasedMotion(released => released === batch ? null : released)
-  }, [completeCardMotion])
   useLayoutEffect(() => {
     const element = viewport.current, container = surface.current, scroller = cardDropArea.current
     if (!element || !container || !scroller || typeof ResizeObserver === "undefined") return
@@ -147,7 +137,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           </div>
           <div className="poker-perspective flex items-center gap-2">
             {members && view.status !== "closed" && <Button ref={membersTrigger} type="button" variant="tertiary" isIconOnly={compact} aria-label="成员管理" aria-expanded={panel === "members"} onPress={() => setPanel(panel === "members" ? null : "members")}><UsersRound aria-hidden="true" />{!compact && "成员"}</Button>}
-            <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} ready={presentedReady} blocked={settlementBlocked} />
+            <SettlementPanel table={view} perspective={perspective} identityKey={identityKey} onRefresh={onRefresh} onOpen={() => setPanel(null)} compact={compact} ready={presentedReady} blocked={cash.blocked} />
             <PokerMatchOverviewDialog table={view} events={events} perspective={perspective} compact={compact}
               open={panel === "overview"} onOpenChange={open => setPanel(current => open ? "overview" : current === "overview" ? null : current)} />
             <HandRankDialog variant={view.variant} open={panel === "ranks"} onOpenChange={open => setPanel(open ? "ranks" : null)} compact={compact} />
@@ -155,7 +145,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           </div>
         </div>
       <div className="poker-table-main" ref={cardDropArea}>
-        {view.settlement && !settlementBlocked && <div className="poker-results-anchor"><Settlement settlement={view.settlement} /></div>}
+        {view.settlement && !cash.blocked && <div className="poker-results-anchor"><Settlement settlement={view.settlement} /></div>}
         <div className="poker-canvas-viewport" ref={viewport}>
           <div className="poker-canvas" data-table-shape={fit.scene.mode} data-compact={fit.scale<0.65} style={{ ...tableSceneVariables(fit.scene), "--poker-scale":fit.scale || 1, width:fit.scene.width, height:fit.scene.height, transform:`translate(-50%, -50%) scale(${fit.scale})` } as CSSProperties}>
             <div className="poker-rail" aria-hidden="true"><div className="poker-felt" /></div>
@@ -166,21 +156,24 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
                   {showRoll && <button ref={rollFeesTrigger} type="button" className="poker-pot-value poker-roll-fee-trigger" aria-label="查看暂存明细" aria-haspopup="dialog" aria-expanded={panel === "rollFees"} onClick={() => setPanel("rollFees")}><span className="poker-pot-label">暂存</span><RollingAmount className="poker-roll-pot" value={chipValue(cash.funds.roll)} scope={cash.scope} onAnimating={active=>cash.numberMotion("roll",active)} /><PokerChipPile chips={cash.funds.roll} label="暂存" fund="roll" /></button>}
                 </div>
                 <div className="poker-board" data-card-size="md">
-                  {Array.from({length:5},(_,i) => <span key={i} className="poker-deal-slot" data-card-motion-anchor={`board:${i}`}><Card card={view.board[i]} /></span>)}
-                  {view.handId && <PokerMotionDecks abilities={cardDock} />}
+                  {Array.from({length:5},(_,i) => {
+                    const visible = !view.board[i] || dealt >= view.seats.length + i + 1
+                    return <span key={i} className="poker-deal-slot" data-dealt={visible}><Card card={view.board[i]} faceUp={visible} /></span>
+                  })}
+                  {cardDock && view.handId && <PokerMotionDecks />}
                 </div>
-                <span className="poker-motion-cast-zone" data-card-motion-anchor="cast-zone" aria-hidden="true" />
+                {cardDock && <span className="poker-motion-cast-zone" data-card-motion-anchor="cast-zone" aria-hidden="true" />}
                 <div className="poker-board-caption"><span className="poker-street">{stage}</span><PokerCardFeedback frames={animateFrames} handId={table.handId} scope={`${table.roomCode}:${identityKey}:${perspective}:${controlVersion}`} /></div>
                 {view.status === "paused" && view.pauseReason && <p className="poker-pause-reason">{({user:"牌局已暂停",all_humans_away:"真人均已暂离",no_human:"等待本人或 AI 入座",insufficient_players:"等待对手",insufficient_chips:"等待有筹码的玩家"} as Record<string,string>)[view.pauseReason] ?? "等待可参与的玩家"}</p>}
               </div>
-              {slots.map(({seatNo,seat}) => seat ? <Seat key={seatNo} seat={seat} flatHoleCards={cardDock && seat.isMe} amountScope={`${cash.scope}:${view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? ""}`} onStackAnimating={active => cash.numberMotion(`seat:${seatNo}`, active)} displayStack={cash.banks[seatNo] ?? seat.stack} onInspect={trigger => { inspectedTrigger.current = trigger; setInspected({ seatNo, key: view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? seat.botId ?? seat.displayName }); setPanel("playerInfo") }} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt hasStarted={!!view.handId} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
-              <ChipMotion transfers={movingChips} layout={`${fit.scene.mode}:${fit.scale}`} scope={cash.scope} onStart={cash.start} onComplete={cash.complete} onLand={chipLanded} />
+              {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} flatHoleCards={cardDock && seat.isMe} amountScope={`${cash.scope}:${view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? ""}`} onStackAnimating={active => cash.numberMotion(`seat:${seatNo}`, active)} displayStack={cash.banks[seatNo] ?? seat.stack} onInspect={trigger => { inspectedTrigger.current = trigger; setInspected({ seatNo, key: view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? seat.botId ?? seat.displayName }); setPanel("playerInfo") }} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} hasStarted={!!view.handId} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
+              <ChipMotion transfers={cash.active} layout={`${fit.scene.mode}:${fit.scale}`} scope={cash.scope} onStart={cash.start} onComplete={cash.complete} onLand={chipLanded} />
             </div>
           </div>
         </div>
       </div>
       <PokerCardMotion surface={surface} batch={cardMotion} mySeat={perspective === "owner" ? view.mySeatNo : null}
-        paymentReleased={paymentReleased} paymentPending={paymentPending} onPaymentReady={setReleasedMotion} onComplete={finishCardMotion} />
+        paymentPending={paymentPending} onComplete={completeCardMotion} />
       {cardDock && <PokerLogRail key={JSON.stringify([table.roomCode, identityKey, perspective, table.mySeatNo])}
         table={view} historyOpen={panel === "history"}
         onHistoryOpenChange={open => setPanel(current => open ? "history" : current === "history" ? null : current)} />}

@@ -10,11 +10,9 @@ function table(): PokerTableView {
 }
 
 describe("牌桌动画读取已确认的变化", () => {
-  it("普通房按座位发两圈牌，翻牌时只发新增公共牌", () => {
-    const current = { ...table(), cards: undefined, board: [], street: "preflop" as const, handNo: 2, dealerSeat: 1 }
-    const previous = { ...current, handId: null, handNo: 1 }
-    expect(planPokerCardMotion(previous, current)?.deals).toEqual(["hole:0:0", "hole:1:0", "hole:0:1", "hole:1:1"])
-    expect(planPokerCardMotion(current, { ...current, actionSeq: 4, board: ["Ac", "3s", "5d"] })?.deals).toEqual(["board:0", "board:1", "board:2"])
+  it("普通房的发牌和亮牌交给牌桌原有的动画", () => {
+    const previous = { ...table(), cards: undefined, board: [] }
+    expect(planPokerCardMotion(previous, { ...previous, board: ["Ac", "3s", "5d"], actionSeq: 4 })).toBeNull()
   })
 
   it("对手的公开换牌只有座位和张数，重复快照不重播", () => {

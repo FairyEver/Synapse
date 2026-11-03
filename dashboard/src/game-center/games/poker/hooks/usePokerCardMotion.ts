@@ -20,7 +20,7 @@ export function usePokerCardMotion(table: PokerTableView, scope: string) {
     if (batch) setState(active => ({
       scope, handId: table.handId,
       batches: active?.scope === scope && active.handId === table.handId && active.batches.length
-        ? [active.batches[0], batch] : [batch],
+        ? [...active.batches, batch].slice(0, 4) : [batch],
     }))
     else if (before.table.handId !== table.handId) setState(null)
   }, [table, scope, reduced])
@@ -33,5 +33,5 @@ export function usePokerCardMotion(table: PokerTableView, scope: string) {
     setState(active => active?.batches[0] === batch ? { ...active, batches: active.batches.slice(1) } : active)
   }, [])
   const batches = !reduced && state?.scope === scope && state.handId === table.handId ? state.batches : []
-  return { batch: batches[0] ?? null, queued: batches[1], complete }
+  return { batch: batches[0] ?? null, complete }
 }

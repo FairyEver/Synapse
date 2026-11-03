@@ -22,7 +22,7 @@
 .poker-card-dock-stage .intel-values .poker-card-turn { transition: none; }
 
 .poker-board { position: relative; }
-.poker-motion-deck, .poker-motion-pool, .poker-motion-discard {
+.poker-motion-deck, .poker-motion-pool {
   position: absolute;
   top: 50%;
   translate: 0 -50%;
@@ -31,12 +31,6 @@
 }
 .poker-motion-deck { inset-inline-start: calc(100% + 14px); }
 .poker-motion-pool { inset-inline-end: calc(100% + 14px); }
-.poker-motion-discard {
-  inset-inline-start: calc(100% + 14px);
-  width: var(--cw);
-  height: calc(var(--cw) * 1.4);
-  top: 95%;
-}
 .poker-motion-pool {
   --playing-back: var(--accent-soft);
   --playing-back-ink: var(--accent);
