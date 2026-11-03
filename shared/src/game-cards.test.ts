@@ -3,9 +3,17 @@ import { z } from "zod"
 import { GAME_TOOLS } from "./game.js"
 import * as ui from "./game-ui.js"
 import { GAME_RESPONSE_SCHEMAS } from "./game-response-schemas.js"
+import { pokerCardViewSchema } from "./game-poker-card-schemas.js"
 
 const play = { roomCode: "1234", handId: "h", street: "flop", expectedActionSeq: 3, controlVersion: 1, actionId: "c31f8452-0886-414f-b266-03ea3318a30e", expectedPaymentVersion: "q1", instanceId: "card-1", selections: { hole: 0, player: 1 } }
 describe("卡牌模式线协议", () => {
+  it("材料用途兼容旧定义，消耗和保留按布尔元数据解析", () => {
+    const definition = { id: "24", name: "弃旧图新", description: "消耗另一张牌", artId: "v1/24", cost: 0 }
+    const view = { enabled: true, version: "cards-v1", definitions: { "24": definition }, used: [], statuses: [] }
+    expect(pokerCardViewSchema.safeParse(view).success).toBe(true)
+    for (const consumeSelected of [true, false]) expect(pokerCardViewSchema.parse({ ...view, definitions: { "24": { ...definition, consumeSelected } } }).definitions!["24"].consumeSelected).toBe(consumeSelected)
+    expect(pokerCardViewSchema.safeParse({ ...view, definitions: { "24": { ...definition, consumeSelected: "false" } } }).success).toBe(false)
+  })
   it("建房允许两个独立模式且拒绝玩家配置卡池", () => {
     const tool = GAME_TOOLS.find(t => t.id === "app.game.poker.room.create")!
     const schema = z.fromJSONSchema(tool.inputSchema as Parameters<typeof z.fromJSONSchema>[0])

@@ -1,46 +1,114 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Button, Label, Modal, Radio, RadioGroup } from "@heroui/react"
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Layers3, Shield, Eye, X } from "lucide-react"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import type { usePokerCards } from "../hooks/usePokerCards"
 import { cardPlayInput, cardUnavailableReason, validCardSelections } from "../lib/card-view"
+import { reconcileCardSelections, type CardSelectionValues } from "../lib/card-selection"
 import { amount, remaining, streetLabel } from "../lib/view"
-import { cardArtwork } from "../lib/card-artwork"
 import { Card } from "./Card"
-import { PokerCardStatuses } from "./PokerCardStatuses"
-import { PokerCardSelection } from "./PokerCardSelection"
+import { PokerAbilityCard, cardFanStyle } from "./PokerAbilityCard"
+import { PokerCardStageStatuses } from "./PokerCardStageStatuses"
+import { PokerCardIntel } from "./PokerCardIntel"
+import { PokerCardCandidates, PokerCardSelection } from "./PokerCardSelection"
 import "../styles/cards.css"
 
-export function PokerCardsDialog({ table, open, onOpenChange, controls, disabled, epoch }: { table: PokerTableView; open: boolean; onOpenChange: (open: boolean) => void; controls: ReturnType<typeof usePokerCards>; disabled: boolean; epoch: string }) {
-  const [selected, setSelected] = useState(""), [selections, setSelections] = useState<Record<string, string | number>>({}), [candidate, setCandidate] = useState("")
-  const cards = table.cards, pending = cards?.pending, hand = cards?.ownHand ?? [], card = hand.find(item => item.instanceId === selected), definition = card && cards?.definitions?.[card.cardId]
-  const unit = table.mode === "practice" ? "筹码" : "点数", blocked = disabled || controls.blocked || controls.storageError || !controls.canControl
-  const prior = useRef(false), origin = useRef<HTMLElement | null>(null)
-  if (open && !prior.current) origin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-  useLayoutEffect(() => { if (!open && prior.current && origin.current?.isConnected) origin.current.focus(); prior.current = open }, [open])
-  useEffect(() => { setSelected(""); setSelections({}); setCandidate("") }, [epoch, pending?.choiceId])
-  const select = (value: string) => { setSelected(value); setSelections({}) }
+type Props = { table: PokerTableView; open: boolean; onOpenChange: (open: boolean) => void; controls: ReturnType<typeof usePokerCards>; disabled: boolean; epoch: string }
+type View = "hand" | "inspect" | "intel" | "statuses"
+
+/** A game surface, mounted beside the existing table layout rather than inside the scaled canvas. */
+export function PokerCardsDialog(props: Props) {
+  const anchor = useRef<HTMLSpanElement>(null), [container, setContainer] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => { setContainer(anchor.current?.closest<HTMLElement>(".poker-table") ?? document.body) }, [])
+  const key = `${props.epoch}:${props.table.controller}:${props.table.mySeatNo}:${props.table.status}:${props.table.cards?.pending?.choiceId ?? ""}`
+  return <><span hidden ref={anchor} />{container && createPortal(<CardStageSession key={key} {...props} container={container} />, container)}</>
+}
+function CardStageSession({ table, open, onOpenChange, controls, disabled, container }: Props & { container: HTMLElement }) {
+  const [selected, setSelected] = useState(""), [rawValues, setValues] = useState<CardSelectionValues>({}), [candidate, setCandidate] = useState("")
+  const [view, setView] = useState<View>("hand"), [page, setPage] = useState(0)
+  const stage = useRef<HTMLDivElement>(null), heading = useId()
+  const cards = table.cards, pending = cards?.pending, hand = cards?.ownHand ?? [], card = hand.find(item => item.instanceId === selected)
+  const definition = card && cards?.definitions?.[card.cardId], selections = reconcileCardSelections(card?.choices ?? [], rawValues)
+  const blocked = disabled || controls.blocked || controls.storageError || !controls.canControl
+  const unit = table.mode === "practice" ? "筹码" : "点数"
+  const inspect = !pending && view === "inspect" && !!card && !!definition
+  const effectiveView = inspect ? "inspect" : view === "inspect" ? "hand" : view
+  const pageCount = Math.max(1, Math.ceil(hand.length / 5)), currentPage = Math.min(page, pageCount - 1), displayed = hand.slice(currentPage * 5, currentPage * 5 + 5)
+  const validCandidate = pending && candidate !== "" && Number.isInteger(Number(candidate)) && Number(candidate) >= 0 && Number(candidate) < pending.candidates.length
+  const candidateInfo = pending?.kind === "ability" && validCandidate ? pending.candidateCards?.[Number(candidate)] : undefined
+  const information = effectiveView === "intel" || effectiveView === "statuses"
+  const recovery = controls.storageError || controls.uncertain
+  const hasPrimary = recovery || !information && (!!pending || inspect)
+  const returnLabel = information && pending ? "返回选牌" : information || inspect ? "返回手牌" : "收起卡牌"
+  const title = information ? effectiveView === "intel" ? "本人情报" : "牌局状态" : pending ? "选择一张" : inspect ? definition.name : "你的手牌"
+  const select = (value: string) => { setSelected(value); setValues({}); setView("inspect") }
   const confirm = () => { if (card && !blocked && card.available && validCardSelections(card, selections)) void controls.play(cardPlayInput(table, card, selections)) }
-  return <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange} className="font-sans text-foreground scheme-light"><Modal.Container size="lg"><Modal.Dialog>
-    <Modal.CloseTrigger aria-label="关闭卡牌" />
-    <Modal.Header><Modal.Heading className="pr-8">{pending ? "选择卡牌" : "卡牌"}</Modal.Heading></Modal.Header>
-    <Modal.Body className="space-y-4">
-      <section aria-label="卡牌面板公共牌" className="space-y-2"><div className="flex flex-wrap justify-between gap-2 text-sm"><span>{streetLabel[table.street ?? ""]}</span>{table.deadlineMs != null && <span className="tabular-nums">剩余 {remaining(table.deadlineMs)}</span>}</div><div data-card-size="sm" className="flex justify-center gap-2">{Array.from({ length: 5 }, (_, index) => <Card key={index} card={table.board[index]} />)}</div></section>
-      {pending ? <RadioGroup name="card-candidate" variant="secondary" value={candidate} onChange={setCandidate} isDisabled={blocked}>
-        <Label>选择一张</Label><div className={pending.kind === "ability" ? "poker-ability-list" : "grid grid-cols-3 gap-3"}>{pending.candidates.map((value, index) => {
-          const info = pending.candidateCards?.[index], art = info && cardArtwork(info.id)
-          return <Radio key={`${pending.choiceId}:${index}`} value={String(index)} aria-label={`候选 ${index + 1}${info ? `，${info.name}` : ""}`}><Radio.Content className="flex min-w-0 flex-col gap-2"><span className="flex gap-2"><Radio.Control><Radio.Indicator /></Radio.Control>候选 {index + 1}</span>{pending.kind === "poker" ? <div data-card-size="md"><Card card={value} /></div> : <>{art && <img className="poker-ability-art" src={art} alt="" loading="lazy" width={1122} height={1402} />}<strong className="wrap-anywhere">{info?.name}</strong><p className="text-sm wrap-anywhere">{info?.description}</p></>}</Radio.Content></Radio>
-        })}</div>
-      </RadioGroup> : <>
-        {!hand.length ? <p className="text-sm text-muted">暂无卡牌</p> : <RadioGroup name="held-card" aria-label="持有卡牌" variant="secondary" value={selected} onChange={select} isDisabled={controls.blocked}>
-          <div className="poker-ability-list">{hand.map(item => { const info = cards?.definitions?.[item.cardId], art = info && cardArtwork(info.id); return <Radio key={item.instanceId} value={item.instanceId} aria-label={info?.name}><Radio.Content className="flex min-w-0 flex-col gap-2"><span className="flex gap-2"><Radio.Control><Radio.Indicator /></Radio.Control><strong className="wrap-anywhere">{info?.name ?? "卡牌"}</strong></span>{art && <img className="poker-ability-art" src={art} alt="" loading="lazy" width={1122} height={1402} />}<p className="text-sm wrap-anywhere">{info?.description}</p>{!item.available && <p className="text-xs text-muted">{cardUnavailableReason(item.reason)}</p>}</Radio.Content></Radio> })}</div>
-        </RadioGroup>}
-        {card && definition && <section className="space-y-4" aria-label="施放卡牌"><h3 className="font-semibold wrap-anywhere">{definition.name}</h3><p className="text-sm tabular-nums">{card.payment.nominalAmount ? `代价 ${amount(card.payment.nominalAmount)} ${unit} · 豁免 ${amount(card.payment.waivedAmount)} · 实付 ${amount(card.payment.paidAmount)} ${unit}` : "无需筹码"}</p><PokerCardSelection choices={card.choices} values={selections} onChange={setSelections} disabled={blocked || !card.available} /></section>}
-      </>}
-      {cards && <PokerCardStatuses cards={cards} seats={table.seats} />}
-      {!!cards?.privateResults?.length && <section aria-label="本人情报" className="space-y-2"><h3 className="text-sm font-medium">本人情报</h3>{cards.privateResults.map(result => <p key={result.id} className="text-sm wrap-anywhere">{result.label}：{result.values.map(value => result.label === "能力牌" ? cards.definitions?.[value]?.name ?? value : value).join("、")}{!result.valid && "（已失效）"}</p>)}</section>}
-      {controls.error && <p role="alert" className="text-sm text-danger">{controls.error}</p>}
-      {controls.uncertain && <p role="status" className="text-sm">结果待核对，保留原请求。</p>}
-    </Modal.Body>
-    <Modal.Footer className="flex-wrap"><Button variant="tertiary" onPress={() => onOpenChange(false)}>关闭卡牌</Button>{controls.storageError || controls.uncertain ? <Button isPending={controls.busy} isDisabled={controls.busy} onPress={() => void controls.retry()}>{controls.storageError ? "重试恢复记录" : "核对原用牌请求"}</Button> : pending ? <Button isPending={controls.busy} isDisabled={blocked || candidate === ""} onPress={() => void controls.choose(Number(candidate))}>选择这张牌</Button> : <Button isPending={controls.busy} isDisabled={blocked || !card?.available || !validCardSelections(card, selections)} onPress={confirm}>使用卡牌</Button>}</Modal.Footer>
-  </Modal.Dialog></Modal.Container></Modal.Backdrop>
+  const close = () => onOpenChange(false)
+  useEffect(() => {
+    if (JSON.stringify(rawValues) !== JSON.stringify(selections)) setValues(selections)
+  }, [card?.choices, rawValues])
+  useEffect(() => { if (candidate && !validCandidate) setCandidate("") }, [candidate, validCandidate])
+  // Block the table behind the stage without moving or restoring pointer focus.
+  useLayoutEffect(() => {
+    if (!open || !stage.current) return
+    const siblings = [...container.children].filter((element): element is HTMLElement => element instanceof HTMLElement && element !== stage.current)
+    const prior = siblings.map(element => [element, element.inert] as const)
+    for (const element of siblings) element.inert = true
+    return () => { for (const [element, inert] of prior) element.inert = inert }
+  }, [open, container])
+  if (!open || !cards) return null
+  return <div className="poker-card-stage card-overlay" data-standalone={container === document.body} ref={stage} role="dialog" aria-modal="true" aria-labelledby={heading}>
+    <div className="overlay-layout">
+      <header className="stage-top">
+        <div className="stage-hud">
+          <div className="round-context"><span>第 {table.handNo} 手</span><strong>{streetLabel[table.street ?? ""]}</strong></div>
+          <div className="hud-board" aria-label="卡牌面板公共牌"><span className="hud-board-label">公共牌</span>{Array.from({ length: 5 }, (_, index) => <Card key={index} card={table.board[index]} />)}</div>
+          <div className="hud-right">{table.deadlineMs != null && <span className="time" role="timer" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}<button type="button" className="close-overlay" aria-label="关闭卡牌" onClick={close}><X aria-hidden="true" /></button></div>
+        </div>
+        <div className="stage-heading" data-inspect={inspect}><h2 id={heading}>{title}</h2></div>
+      </header>
+      {information ? <main className="view inspect-view"><div className="inspect-layout">
+        <div className="inspect-emblem" aria-hidden="true">{effectiveView === "intel" ? <Eye /> : <Shield />}</div>
+        <div className="inspect-details"><div className="inspect-body">{effectiveView === "intel" ? <PokerCardIntel cards={cards} /> : <PokerCardStageStatuses cards={cards} seats={table.seats} />}</div></div>
+      </div></main> : pending ? candidateInfo ? <main className="view inspect-view"><div className="inspect-layout">
+        <div className="inspect-card"><PokerAbilityCard definition={candidateInfo} interactive={false} /></div>
+        <div className="inspect-details"><div className="inspect-body"><p className="full-description">{candidateInfo.description}</p><PokerCardCandidates pending={pending} table={table} value={candidate} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} compact /></div></div>
+      </div></main> : <div className="view"><PokerCardCandidates pending={pending} table={table} value={validCandidate ? candidate : ""} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} /></div>
+        : inspect ? <main className="view inspect-view"><div className="inspect-layout">
+          <div className="inspect-card"><PokerAbilityCard definition={definition} cost={card.payment.paidAmount ? `${amount(card.payment.paidAmount)} ${unit}` : `无需${unit}`} interactive={false} /></div>
+          <div className="inspect-details"><div className="inspect-body">
+            <p className="full-description">{definition.description}</p>
+            {!card.available && <p className="card-unavailable" role="status">{cardUnavailableReason(card.reason)}</p>}
+            <PokerCardSelection table={table} definition={definition} choices={card.choices} values={selections} onChange={setValues} disabled={!!blocked || !card.available} />
+          </div></div>
+        </div></main>
+          : <main className="view"><div className="hand-stage">
+              {!hand.length ? <p className="choice-empty">暂无卡牌</p> : <div className="hand-row" key={currentPage} aria-label="持有卡牌">{displayed.map((item, index) => {
+                const info = cards.definitions?.[item.cardId]
+                return <div className="card-slot is-entering" data-unavailable={!item.available} key={item.instanceId} style={cardFanStyle(index, displayed.length)}>
+                  <PokerAbilityCard definition={info} data-held-card={item.instanceId} aria-label={info?.name ?? "卡牌"} onClick={() => select(item.instanceId)} disabled={controls.busy} cost={item.payment.paidAmount ? `${amount(item.payment.paidAmount)} ${unit}` : `无需${unit}`} />
+                  {!item.available && <span className="held-unavailable">{cardUnavailableReason(item.reason)}</span>}
+                </div>
+              })}</div>}
+              {pageCount > 1 && <><button type="button" className="page-arrow previous" aria-label="上一组卡牌" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft /></button><button type="button" className="page-arrow next" aria-label="下一组卡牌" disabled={currentPage === pageCount - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight /></button></>}
+            </div></main>}
+      <footer className="stage-footer" data-mode={inspect ? "inspect" : information ? "information" : pending ? "candidate" : "hand"} data-has-primary={hasPrimary}>
+        <div className="footer-meta">
+          {controls.error && <p role="alert" className="stage-error" title={controls.error}>{controls.error}</p>}
+          {controls.uncertain && <p role="status" className="stage-error">结果待核对，保留原请求。</p>}
+          {pending && pending.origin !== "card" && <p className="stage-error">请在换牌中完成选择</p>}
+          {inspect ? <p className="payment">{card.payment.nominalAmount ? <><span>代价 {amount(card.payment.nominalAmount)} {unit}</span>{card.payment.waivedAmount > 0 && <span>豁免 {amount(card.payment.waivedAmount)}</span>}<strong>实付 {amount(card.payment.paidAmount)} {unit}</strong></> : `无需${unit}`}</p>
+            : !information && <div className="footer-summary"><span className="held-count"><Layers3 aria-hidden="true" /><span>{pending ? validCandidate ? `已选第 ${Number(candidate) + 1} 张` : "请选择一张" : `${hand.length} 张${pageCount > 1 ? ` · ${currentPage + 1}/${pageCount}` : ""}`}</span></span>
+              <nav className="stage-links" aria-label="卡牌信息"><button type="button" className="text-action" aria-label="本人情报" onClick={() => setView("intel")}><Eye aria-hidden="true" />情报{cards.privateResults?.filter(result => result.valid).length ? <b>{cards.privateResults.filter(result => result.valid).length}</b> : null}</button><button type="button" className="text-action" aria-label="牌局状态" onClick={() => setView("statuses")}><Shield aria-hidden="true" />状态</button></nav>
+            </div>}
+        </div>
+        <div className="footer-actions">
+          <button type="button" className="text-action" aria-label={returnLabel} onClick={information || inspect ? () => setView("hand") : close}>{information || inspect ? <><ArrowLeft aria-hidden="true" />返回</> : "收起"}</button>
+          {recovery ? <button type="button" className="game-button" disabled={controls.busy} onClick={() => void controls.retry()}>{controls.busy ? "正在核对…" : controls.storageError ? "重试恢复记录" : "核对原用牌请求"}</button>
+            : pending && !information ? <button type="button" className="game-button" disabled={!!blocked || !validCandidate || pending.origin !== "card"} onClick={() => void controls.choose(Number(candidate))}>{controls.busy ? "正在确认…" : "选择这张牌"}</button>
+              : inspect && <button type="button" className="game-button" disabled={!!blocked || !card.available || !validCardSelections(card, selections)} onClick={confirm}>{controls.busy ? "正在施放…" : "使用卡牌"}</button>}
+        </div>
+      </footer>
+    </div>
+  </div>
 }

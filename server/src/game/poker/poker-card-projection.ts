@@ -33,7 +33,8 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
   const seat = state.seats.find(s => s.seatNo === self.seatNo), definitions: Record<string, PokerCardDefinitionView> = {}
   const definitionView = (id: string): PokerCardDefinitionView => {
     const definition = registry.get(id)
-    return { id, name: definition.name, description: definition.description, artId: definition.artId, cost: (definition.costBB ?? 0) * state.bigBlind }
+    return { id, name: definition.name, description: definition.description, artId: definition.artId, cost: (definition.costBB ?? 0) * state.bigBlind,
+      ...(definition.selections.some(selection => selection.kind === "ability") ? { consumeSelected: !!definition.consumeSelected } : {}) }
   }
   view.ownHand = (cards.hands[self.admissionId] ?? []).map(instance => {
     const definition = registry.get(instance.definitionId)

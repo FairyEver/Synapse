@@ -3,7 +3,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
-import { tableResponse } from "../../../../../../shared/test/game-response-fixtures"
+import { cardTable } from "./card-stage-fixture"
 import { HumanControls } from "../components/HumanControls"
 import { usePokerCards } from "../hooks/usePokerCards"
 import { cardIntentStore } from "../lib/card-intent-store"
@@ -14,18 +14,17 @@ vi.mock("@/game-center/runtime/account", () => ({ useAccount: () => ({ state: { 
 vi.mock("@heroui/react", async original => ({ ...await original<typeof import("@heroui/react")>(), toast: Object.assign(vi.fn(), { danger: vi.fn(), success: vi.fn(), update: vi.fn() }) }))
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
-export const cardTable: PokerTableView = { ...tableResponse, mode: "practice", status: "running", roomCode: "1234", handId: "card-ui-hand", street: "flop", actionSeq: 3, actionOnSeat: 0, mySeatNo: 0, controller: "human", controlVersion: 2, hole: ["As", "Kd"], legalActions: ["check", "fold"], deadlineMs: 300000, paymentVersion: "bet-quote", ruleOptions: { cards: true }, seats: [{ seatNo: 0, isMe: true, displayName: "我", stack: 100, status: "active", streetBet: 0, aiState: "online" }, { seatNo: 1, displayName: "对手", stack: 100, status: "active", streetBet: 0, aiState: "online" }], cards: { enabled: true, version: "cards-v1", used: [], statuses: [], definitions: { "01": { id: "01", name: "偷梁换柱", description: "指定一张底牌，与随机对手的随机底牌交换。", artId: "v1/01", cost: 0 } }, ownHand: [{ instanceId: "card-instance", cardId: "01", available: true, payment: { nominalAmount: 4, waivedAmount: 2, paidAmount: 2, version: "card-quote" }, choices: [{ key: "hole", label: "本人底牌", kind: "hole", options: [{ value: "0", label: "第1张" }, { value: "1", label: "第2张" }] }, { key: "player", label: "目标玩家", kind: "player", options: [{ value: "1", label: "对手" }] }] }], pending: null, privateResults: [] } }
 const roots = new Set<Root>()
 beforeEach(() => { vi.clearAllMocks(); api.play.mockResolvedValue({ ok: true, actionSeq: 4 }); api.choose.mockResolvedValue({ ok: true, actionSeq: 4 }); api.action.mockResolvedValue({ ok: true }); api.state.mockResolvedValue(cardTable) })
 afterEach(async () => { for (const root of roots) await act(async () => root.unmount()); roots.clear(); sessionStorage.clear(); vi.restoreAllMocks(); document.body.replaceChildren() })
 async function mount(content: React.ReactNode) { const host = document.createElement("div"), root = createRoot(host); roots.add(root); document.body.append(host); await act(async () => root.render(content)); return root }
-const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.trim() === label)!
+const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.trim() === label || b.getAttribute("aria-label") === label)!
 async function click(label: string) { await act(async () => button(label).click()) }
-async function openCard() { await click("卡牌"); await act(async () => document.querySelector<HTMLInputElement>('input[type="radio"][value="card-instance"]')!.click()) }
+async function openCard() { await click("卡牌"); await act(async () => document.querySelector<HTMLButtonElement>('button[data-held-card="card-instance"]')!.click()) }
 it("打开及选中不施放，选择合法目标后明确确认才付款，携带报价版本", async () => {
   await mount(<HumanControls table={cardTable} perspective="owner" identityKey="open-card" onRefresh={vi.fn()} />)
   await openCard(); expect(api.play).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("实付 2 筹码")
-  for (const [name, value] of [["hole", "1"], ["player", "1"]]) await act(async () => document.querySelector<HTMLInputElement>(`input[name="card-${name}"][value="${value}"]`)!.click())
+  for (const [name, value] of [["hole", "1"], ["player", "1"]]) await act(async () => document.querySelector<HTMLButtonElement>(`button[data-choice="${name}"][value="${value}"]`)!.click())
   await click("使用卡牌")
   expect(api.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instanceId: "card-instance", selections: { hole: "1", player: "1" }, expectedPaymentVersion: "card-quote", expectedActionSeq: 3, controlVersion: 2 }))
   expect(api.play.mock.calls[0][0]).not.toHaveProperty("caller")
@@ -80,7 +79,7 @@ it("持久候选关闭面板仍保留，只选择真实索引且不再收费", a
 it.each(["ability", "status", "color"] as const)("%s选择只提交服务端列出的真实选项", async kind => {
   const table = { ...cardTable, cards: { ...cardTable.cards!, ownHand: [{ ...cardTable.cards!.ownHand![0], choices: [{ key: kind, label: kind, kind, options: [{ value: "server-option", label: "合法目标" }] }] }] } }
   await mount(<HumanControls table={table} perspective="owner" identityKey={`target-${kind}`} onRefresh={vi.fn()} />)
-  await openCard(); await act(async () => document.querySelector<HTMLInputElement>(`input[name="card-${kind}"][value="server-option"]`)!.click())
+  await openCard(); await act(async () => document.querySelector<HTMLButtonElement>(`button[data-choice="${kind}"][value="server-option"]`)!.click())
   await click("使用卡牌"); expect(api.play.mock.calls[0][0].selections).toEqual({ [kind]: "server-option" })
 })
 it.each(["transport", "domain"])("%s失败只有确定领域拒绝才清理原请求", async kind => {
@@ -91,12 +90,12 @@ it.each(["transport", "domain"])("%s失败只有确定领域拒绝才清理原�
 it("待选可关闭重开，普通行动保持禁用；行动点变化清掉未提交选择", async () => {
   const refresh = vi.fn(), identity = "choice-reopen", table = { ...cardTable, cards: { ...cardTable.cards!, pending: { choiceId: "reopen-choice", kind: "poker" as const, origin: "card" as const, paymentVersion: "original-paid", candidates: ["2c", "3c", "4c"] } } }
   const root = await mount(<HumanControls table={table} perspective="owner" identityKey={identity} onRefresh={refresh} />)
-  expect(document.querySelector('input[name="card-candidate"]')).not.toBeNull()
+  expect(document.querySelector('button[data-choice="candidate"]')).not.toBeNull()
   await click("关闭卡牌"); expect(document.querySelector('[role="dialog"]')).toBeNull(); await click("卡牌")
-  expect(document.querySelectorAll('input[name="card-candidate"]')).toHaveLength(3); expect(api.choose).not.toHaveBeenCalled()
+  expect(document.querySelectorAll('button[data-choice="candidate"]')).toHaveLength(3); expect(api.choose).not.toHaveBeenCalled()
   await click("关闭卡牌")
   await act(async () => root.render(<HumanControls table={cardTable} perspective="owner" identityKey={identity} onRefresh={refresh} />))
-  await openCard(); await act(async () => document.querySelector<HTMLInputElement>('input[name="card-hole"][value="0"]')!.click())
+  await openCard(); await act(async () => document.querySelector<HTMLInputElement>('button[data-choice="hole"][value="0"]')!.click())
   await act(async () => root.render(<HumanControls table={{ ...cardTable, actionSeq: 4 }} perspective="owner" identityKey={identity} onRefresh={refresh} />))
-  await click("卡牌"); expect(document.querySelector<HTMLInputElement>('input[value="card-instance"]')!.checked).toBe(false); expect(api.play).not.toHaveBeenCalled()
+  await click("卡牌"); expect(document.querySelector<HTMLButtonElement>('button[data-held-card="card-instance"]')!.getAttribute("aria-pressed")).not.toBe("true"); expect(api.play).not.toHaveBeenCalled()
 })

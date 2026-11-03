@@ -13,7 +13,7 @@ export const POKER_CARD_PLAY_SCHEMA = { type: "object", properties: playProperti
 export const POKER_CARD_CHOOSE_SCHEMA = { type: "object", properties: chooseProperties, required: Object.keys(chooseProperties), additionalProperties: false }
 const amount = z.number().int().nonnegative()
 export const pokerPaymentSchema = z.object({ nominalAmount: amount, waivedAmount: amount, paidAmount: amount, version: z.string().min(1) }).strict().refine(v => v.nominalAmount === v.waivedAmount + v.paidAmount)
-const definition = z.object({ id: z.string(), name: z.string(), description: z.string(), artId: z.string(), cost: amount }).strict()
+const definition = z.object({ id: z.string(), name: z.string(), description: z.string(), artId: z.string(), cost: amount, consumeSelected: z.boolean().optional() }).strict()
 export const pokerCardStatusSchema = z.object({ id: z.string(), cardId: z.string(), title: z.string(), polarity: z.enum(["positive", "negative", "neutral"]), seatNo: amount.optional(), remaining: amount.optional(), expiresAt: amount.optional(), expiresStreet: z.string().optional(), dispellable: z.boolean() }).strict()
 export const pokerCardViewSchema = z.object({
   enabled: z.boolean(), version: z.literal("cards-v1"),

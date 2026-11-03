@@ -13,7 +13,7 @@ export interface PokerCardWriteInput {
 export interface PokerCardPlayInput extends PokerCardWriteInput { instanceId: string; selections: Record<string, string | number> }
 export interface PokerCardChooseInput extends PokerCardWriteInput { choiceId: string; candidateIndex: number }
 export interface PokerCardResult { ok: true; handId: string; actionSeq: number; cursor: string; status: "completed" | "choice_required" | "blocked" }
-export interface PokerCardDefinitionView { id: string; name: string; description: string; artId: string; cost: number }
+export interface PokerCardDefinitionView { id: string; name: string; description: string; artId: string; cost: number; consumeSelected?: boolean }
 export interface PokerCardChoiceSpec { key: string; label: string; kind: "hole" | "player" | "ability" | "status" | "color"; options: { value: string; label: string }[] }
 export interface PokerCardHandView { instanceId: string; cardId: string; available: boolean; reason?: string; payment: PokerPaymentView; choices: PokerCardChoiceSpec[] }
 export interface PokerCardStatusView {

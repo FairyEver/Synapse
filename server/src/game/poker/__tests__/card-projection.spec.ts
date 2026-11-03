@@ -17,6 +17,15 @@ function fixture() {
   return h
 }
 describe("卡牌隐私白名单", () => {
+  it("材料用途来自实际配方且只随本人定义投影，旧定义仍兼容", () => {
+    const h = fixture(), cards = h.cards!
+    cards.hands["admission-0"] = ["24", "29", "01"].map((definitionId, i) => ({ id: `material-${i}`, definitionId }))
+    const view = projectCardView(h, policy())!
+    expect(view.definitions!["24"]).toHaveProperty("consumeSelected", true)
+    expect(view.definitions!["29"]).toHaveProperty("consumeSelected", false)
+    expect(view.definitions!["01"]).not.toHaveProperty("consumeSelected")
+    expect(projectCardView(h, policy({ audience: "decision" }))).not.toHaveProperty("definitions")
+  })
   it("驱散目标区分玩家、全场、剩余次数和当前实体槽位，不暴露暗牌", () => {
     const h = makeCardHand({ definitions: CARD_CATALOG_V1 }), cards = h.cards!
     const index = cards.pool.findIndex(c => c.definitionId === "45"), dispel = cards.pool.splice(index, 1)[0]

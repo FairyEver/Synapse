@@ -23,15 +23,23 @@ const cards: PokerTableView["cards"] = { enabled: true, version: "cards-v1", use
   ownHand: names.map(c => ({ instanceId: `held-${c.cardId}`, cardId: c.cardId, available: true, choices: [], payment: { nominalAmount: 0, waivedAmount: 0, paidAmount: 0, version: "q" } })), privateResults: [],
 }
 const table: PokerTableView = { ...rollTable, seats: rollTable.seats.slice(0, 6), maxSeats: 6, deadlineMs: 300000, ruleOptions: { cards: true, roll: true }, cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2", cards }
-type Panel = "cards" | "target" | "status" | "ability" | "poker" | "reserve" | "settlement"
-const evidence = "/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-03-poker-card-mode/browser"
-function Fixture({ panel }: { panel: Panel }) {
+type Panel = "cards" | "target" | "guess" | "material" | "status" | "ability" | "poker" | "reserve" | "settlement"
+const evidence = "/Users/liyang/Documents/code/github/Synapse/.superpowers/sdd/2026-11-03-poker-card-stage-implementation/browser"
+function Fixture({ panel, recovery }: { panel: Panel; recovery?: "uncertain" | "storage" }) {
   const [open, setOpen] = useState(false)
   const snapshot = structuredClone(table)
   if (panel === "target") snapshot.cards!.ownHand = [{ ...cards.ownHand![3], choices: [
     { key: "hole", label: "本人底牌", kind: "hole", options: [{ value: "0", label: "底牌1" }, { value: "1", label: "底牌2" }] },
     { key: "player", label: "目标玩家", kind: "player", options: Array.from({ length: 5 }, (_, i) => ({ value: String(i + 1), label: `玩家${i + 1}` + "LongUnbrokenPlayerName".repeat(5) })) },
   ] }]
+  if (panel === "guess") snapshot.cards!.ownHand = [{ ...cards.ownHand![0], choices: [
+    { key: "targetHole", label: "目标底牌", kind: "hole", options: [{ value: "1:0", label: "座位2 · 底牌1" }, { value: "1:1", label: "座位2 · 底牌2" }] },
+    { key: "color", label: "猜颜色", kind: "color", options: [{ value: "red", label: "红色" }, { value: "black", label: "黑色" }] },
+  ] }]
+  if (panel === "material") {
+    snapshot.cards!.definitions!["24"] = { id: "24", name: "弃旧图新", description: "额外消耗自己另一张能力牌，从共享池抽两张。", artId: "v1/24", cost: 0, consumeSelected: true }
+    snapshot.cards!.ownHand = [{ ...cards.ownHand![0], instanceId: "material-source", cardId: "24", choices: [{ key: "ability", label: "另一张能力牌", kind: "ability", options: cards.ownHand!.slice(1).map(item => ({ value: item.instanceId, label: cards.definitions![item.cardId].name })) }] }, ...cards.ownHand!.slice(1)]
+  }
   if (panel === "status") {
     snapshot.cards!.definitions!["45"] = { id: "45", name: "驱散术", description: "选择并移除一个公开、可驱散的持续效果。", artId: "v1/45", cost: 0 }
     snapshot.cards!.ownHand = [{ ...cards.ownHand![0], instanceId: "dispel", cardId: "45", choices: [{ key: "status", label: "持续效果", kind: "status", options: [
@@ -42,7 +50,12 @@ function Fixture({ panel }: { panel: Panel }) {
       { value: "marker-b", label: "座位2 · 底牌2 · 众目睽睽" },
     ] }] }]
   }
-  if (panel === "ability" || panel === "poker") snapshot.cards!.pending = { choiceId: "choice", kind: panel, origin: "card", paymentVersion: "q", candidates: panel === "ability" ? ["01", "02", "03"] : ["As", "Kh", "Qc"], ...(panel === "ability" ? { candidateCards: Object.values(cards.definitions!).slice(0, 3) } : {}) }
+  if (panel === "ability" || panel === "poker") snapshot.cards!.pending = { choiceId: "choice", kind: panel, origin: "card", paymentVersion: "q", candidates: panel === "ability" ? ["01", "02", "03"] : ["As", "Kh", "Qc"], ...(panel === "ability" ? { candidateCards: ["01", "02", "03"].map(id => cards.definitions![id]) } : {}) }
+  if (snapshot.cards!.pending) snapshot.cards!.privateResults = [
+    { id: "observed-hole", cardId: "13", label: "one", values: ["2s"], valid: true },
+    { id: "observed-suit", cardId: "19", label: "suit", values: ["h"], valid: true },
+    { id: "observed-rank", cardId: "20", label: "rank", values: ["K"], valid: true },
+  ]
   snapshot.reserve = { handId: snapshot.handId!, status: "pending", total: 60, complete: true,
     players: [0, 1].map(i => ({ key: `p${i}`, seatNo: i, displayName: "LongUnbrokenPlayerName".repeat(5), pending: i ? 60 : 0, isMe: !i })),
     lots: [{ id: "lot", payerKey: "p0", sourceType: "card", originalAmount: 120, remainingAmount: 60, shares: [{ key: "p1", originalAmount: 120, remainingAmount: 60 }] }],
@@ -51,7 +64,7 @@ function Fixture({ panel }: { panel: Panel }) {
   return <><Button onPress={() => setOpen(true)}>打开测试面板</Button>
     {open && panel === "reserve" && <PokerReserveDialog table={snapshot} onClose={() => setOpen(false)} />}
     {panel === "settlement" && <SettlementPanel table={settled} perspective="owner" onRefresh={noop} ready={{ canReady: true, canTakeover: false, prepared: false, busy: false, error: null, ready: noop, takeover: noop, refresh: noop }} />}
-    {!["reserve", "settlement"].includes(panel) && <PokerCardsDialog table={snapshot} open={open} onOpenChange={setOpen} controls={controls} disabled={false} epoch="browser" />}
+    {!["reserve", "settlement"].includes(panel) && <PokerCardsDialog table={snapshot} open={open} onOpenChange={setOpen} controls={recovery ? { ...controls, blocked: recovery === "uncertain", uncertain: recovery === "uncertain", storageError: recovery === "storage", error: "恢复失败：" + "长错误说明".repeat(16) } : controls} disabled={false} epoch="browser" />}
   </>
 }
 function fits(element: Element, label: string) {
@@ -60,38 +73,64 @@ function fits(element: Element, label: string) {
   expect(r.right, label).toBeLessThanOrEqual(innerWidth + 1); expect(r.bottom, label).toBeLessThanOrEqual(innerHeight + 1)
 }
 for (const [width, height] of [[1280, 800], [390, 667], [390, 844], [320, 568], [568, 320], [667, 320]]) {
-  for (const panel of ["cards", "target", "status", "ability", "poker", "reserve", "settlement"] as const) it(`${width}×${height} ${panel} 展开、单正文滚动、标准按钮和键盘关闭`, async () => {
+  for (const panel of ["cards", "target", "guess", "material", "status", "ability", "poker", "reserve", "settlement"] as const) it(`${width}×${height} ${panel} 展开、固定顶底及滚动边界`, async () => {
     await page.viewport(width, height)
     const screen = await render(<Fixture panel={panel} />)
     try {
       if (panel !== "settlement") await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
       await expect.element(page.getByRole("dialog")).toBeVisible()
-      if (panel === "target") await page.getByText("精准调包", { exact: true }).click()
-      if (panel === "status") await page.getByText("驱散术", { exact: true }).click()
-      await new Promise(resolve => setTimeout(resolve, 250))
-      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!, body = dialog.querySelector<HTMLElement>(".modal__body")!, footer = dialog.querySelector<HTMLElement>(".modal__footer")!, header = dialog.querySelector<HTMLElement>(".modal__header")!
+      if (["target", "guess", "material", "status"].includes(panel)) {
+        const source = panel === "target" ? "精准调包" : panel === "status" ? "驱散术" : panel === "material" ? "弃旧图新" : "换牌术"
+        await page.getByRole("button", { name: source, exact: true }).click()
+      }
+      await new Promise(resolve => setTimeout(resolve, 800))
+      const gameStage = !["reserve", "settlement"].includes(panel)
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+      const body = dialog.querySelector<HTMLElement>(gameStage ? ".inspect-details, .view" : ".modal__body")!
+      const footer = dialog.querySelector<HTMLElement>(gameStage ? ".stage-footer" : ".modal__footer")!
+      const header = dialog.querySelector<HTMLElement>(gameStage ? ".stage-top" : ".modal__header")!
       fits(dialog, "dialog"); fits(header, "header"); fits(footer, "footer")
-      expect(header.getBoundingClientRect().left - dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(20)
-      expect(header.getBoundingClientRect().top - dialog.getBoundingClientRect().top).toBeGreaterThanOrEqual(20)
       expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1)
       expect(body.clientHeight).toBeGreaterThan(24)
       for (const button of footer.querySelectorAll("button")) { fits(button, "footer button"); expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(36) }
-      for (const image of body.querySelectorAll<HTMLImageElement>(".poker-ability-art")) { expect(image.loading).toBe("lazy"); expect(image.getBoundingClientRect().height).toBeLessThanOrEqual(201) }
       const scrolls = [...dialog.querySelectorAll<HTMLElement>("*")].filter(el => /^(auto|scroll)$/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1)
-      expect(scrolls.every(el => el === body)).toBe(true)
+      expect(scrolls.every(el => gameStage ? el.classList.contains("inspect-details") : el === body)).toBe(true)
+      if (gameStage) {
+        expect(dialog.querySelector(".modal__dialog")).toBeNull()
+        expect(dialog.contains(document.activeElement)).toBe(false)
+        const card = dialog.querySelector<HTMLElement>(".inspect-card")
+        const details = dialog.querySelector<HTMLElement>(".inspect-details")
+        if (card && details) {
+          fits(card, "fixed inspected card")
+          expect(card.getBoundingClientRect().right).toBeLessThanOrEqual(details.getBoundingClientRect().left)
+          const y = card.getBoundingClientRect().top, top = header.getBoundingClientRect().top, bottom = footer.getBoundingClientRect().bottom
+          details.scrollTop = details.scrollHeight
+          expect(card.getBoundingClientRect().top).toBe(y)
+          expect(header.getBoundingClientRect().top).toBe(top); expect(footer.getBoundingClientRect().bottom).toBe(bottom)
+          details.scrollTop = 0
+          expect(parseFloat(getComputedStyle(dialog.querySelector(".full-description") ?? details).fontSize)).toBeGreaterThanOrEqual(width > 850 ? 18 : 16)
+        }
+      }
       await page.screenshot({ path: `${evidence}/${width}-${height}-${panel}-top.png` })
       if (panel === "status") {
-        await page.getByText("座位2 · 缄默护罩 · 剩余2次", { exact: true }).click()
+        await page.getByRole("button", { name: "座位2 · 缄默护罩 · 剩余2次", exact: true }).click()
         await page.getByRole("button", { name: "使用卡牌", exact: true }).click()
         expect(controls.play).toHaveBeenLastCalledWith(expect.objectContaining({ instanceId: "dispel", selections: { status: "shield-other" } }))
       }
+      if (panel === "guess") {
+        await page.getByRole("button", { name: "座位2 · 底牌1", exact: true }).click()
+        await page.getByRole("button", { name: "红色", exact: true }).click()
+        await page.getByRole("button", { name: "使用卡牌", exact: true }).click()
+        expect(controls.play).toHaveBeenLastCalledWith(expect.objectContaining({ selections: { targetHole: "1:0", color: "red" } }))
+      }
       if (panel === "ability" || panel === "poker") {
-        await page.getByText("候选 1", { exact: true }).click()
+        const previous = controls.choose.mock.calls.length
+        await page.getByRole("button", { name: panel === "ability" ? "候选 1，换牌术" : "候选 1", exact: true }).click()
         await expect.element(page.getByRole("button", { name: "选择这张牌", exact: true })).toBeEnabled()
         await page.getByRole("button", { name: "选择这张牌", exact: true }).click()
+        expect(controls.choose).toHaveBeenCalledTimes(previous + 1)
         expect(controls.choose).toHaveBeenLastCalledWith(0)
       }
-      if (body.scrollHeight > body.clientHeight + 1) { body.scrollTop = body.scrollHeight; expect(body.scrollTop).toBeGreaterThan(0); fits(footer, "scrolled footer") }
       if (panel === "reserve") {
         body.scrollTop = 0
         await page.getByRole("button", { name: "全部 来源", exact: true }).click()
@@ -105,13 +144,75 @@ for (const [width, height] of [[1280, 800], [390, 667], [390, 844], [320, 568], 
         await page.getByRole("option", { name: "卡牌", exact: true }).click()
         await expect.element(page.getByRole("listbox")).not.toBeInTheDocument()
       }
-      await page.screenshot({ path: `${evidence}/${width}-${height}-${panel}.png` })
-      await userEvent.keyboard("{Escape}")
+      if (gameStage) await page.getByRole("button", { name: "关闭卡牌", exact: true }).click()
+      else await userEvent.keyboard("{Escape}")
       await expect.element(page.getByRole("dialog")).not.toBeInTheDocument()
-      if (panel !== "settlement") await expect.element(page.getByRole("button", { name: "打开测试面板", exact: true })).toHaveFocus()
     } finally { await screen.unmount() }
   })
 }
+for (const width of [1280, 320]) it(`${width}px 待选回看情报并返回同一张预选，只有确认才提交`, async () => {
+  await page.viewport(width, width === 320 ? 568 : 800)
+  const screen = await render(<Fixture panel="poker" />)
+  try {
+    const previous = controls.choose.mock.calls.length
+    await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
+    await page.getByRole("button", { name: "候选 2", exact: true }).click()
+    await page.getByRole("button", { name: "本人情报", exact: true }).click()
+    await expect.element(page.getByRole("heading", { name: "本人情报", exact: true })).toBeVisible()
+    fits(document.querySelector('.intel-values [data-card="2s"]')!, "authorized observation")
+    fits(document.querySelector(".stage-footer")!, "intel footer")
+    expect(controls.choose).toHaveBeenCalledTimes(previous)
+    await page.screenshot({ path: `${evidence}/${width}-pending-intel.png` })
+    await page.getByRole("button", { name: "返回选牌", exact: true }).click()
+    await expect.element(page.getByRole("button", { name: "候选 2", exact: true })).toHaveAttribute("aria-pressed", "true")
+    await page.getByRole("button", { name: "选择这张牌", exact: true }).click()
+    expect(controls.choose).toHaveBeenCalledTimes(previous + 1)
+    expect(controls.choose).toHaveBeenLastCalledWith(1)
+  } finally { await screen.unmount() }
+})
+for (const [width, height] of [[320, 568], [568, 320]]) for (const recovery of ["uncertain", "storage"] as const) it(`${width}×${height} ${recovery} 恢复按钮和信息入口始终在底栏内`, async () => {
+  await page.viewport(width, height)
+  const screen = await render(<Fixture panel="cards" recovery={recovery} />)
+  try {
+    await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
+    await expect.element(page.getByRole("dialog")).toBeVisible()
+    const footer = document.querySelector<HTMLElement>(".stage-footer")!
+    fits(footer, "recovery footer")
+    for (const button of footer.querySelectorAll("button")) fits(button, "recovery action")
+    const retry = page.getByRole("button", { name: recovery === "storage" ? "重试恢复记录" : "核对原用牌请求", exact: true }), prior = controls.retry.mock.calls.length
+    await retry.click(); expect(controls.retry).toHaveBeenCalledTimes(prior + 1)
+    await page.screenshot({ path: `${evidence}/${width}-${height}-${recovery}.png` })
+  } finally { await screen.unmount() }
+})
+it("候选选中保持静态描边，另一张 hover 抬起，Escape 不触发卡牌关闭", async () => {
+  await page.viewport(1280, 800)
+  const screen = await render(<Fixture panel="poker" />)
+  try {
+    await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
+    await page.getByRole("button", { name: "候选 1", exact: true }).click()
+    const selected = page.getByRole("button", { name: "候选 1", exact: true }).element().parentElement!
+    const hovered = page.getByRole("button", { name: "候选 2", exact: true })
+    await hovered.hover()
+    await new Promise(resolve => setTimeout(resolve, 350))
+    expect(new DOMMatrix(getComputedStyle(selected).transform).m42).toBe(0)
+    expect(new DOMMatrix(getComputedStyle(hovered.element().parentElement!).transform).m42).toBeLessThan(0)
+    await userEvent.keyboard("{Escape}")
+    await expect.element(page.getByRole("dialog")).toBeVisible()
+    await page.getByRole("button", { name: "关闭卡牌", exact: true }).click()
+  } finally { await screen.unmount() }
+})
+it("少量详情与左卡在中间区域居中，能力候选完整规则只在右侧滚动", async () => {
+  await page.viewport(1280, 800)
+  const screen = await render(<Fixture panel="cards" />)
+  try {
+    await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
+    await page.getByRole("button", { name: "换牌术", exact: true }).click()
+    const body = document.querySelector<HTMLElement>(".inspect-body")!, details = document.querySelector<HTMLElement>(".inspect-details")!, card = document.querySelector<HTMLElement>(".inspect-card")!
+    const middle = (element: HTMLElement) => { const box = element.getBoundingClientRect(); return box.top + box.height / 2 }
+    expect(Math.abs(middle(body) - middle(details))).toBeLessThan(3)
+    expect(Math.abs(middle(card) - middle(details))).toBeLessThan(3)
+  } finally { await screen.unmount() }
+})
 it("850px两侧切换和卡牌面板开关复用原画布，减少动态效果仍可操作", async () => {
   const original = window.matchMedia.bind(window)
   const spy = vi.spyOn(window, "matchMedia").mockImplementation(query => query.includes("prefers-reduced-motion") ? { ...original(query), matches: true, addEventListener: noop, removeEventListener: noop } : original(query))
@@ -121,7 +222,7 @@ it("850px两侧切换和卡牌面板开关复用原画布，减少动态效果�
     const canvas = document.querySelector(".poker-canvas")!
     await page.getByRole("button", { name: "卡牌", exact: true }).click()
     await expect.element(page.getByRole("dialog")).toBeVisible()
-    await userEvent.keyboard("{Escape}")
+    await page.getByRole("button", { name: "关闭卡牌", exact: true }).click()
     for (const width of [850, 849, 851]) { await page.viewport(width, 700); expect(document.querySelector(".poker-canvas")).toBe(canvas); fits(document.querySelector(".poker-controls-anchor")!, "controls") }
     await page.getByRole("button", { name: "卡牌", exact: true }).click()
     await expect.element(page.getByRole("dialog")).toBeVisible()
