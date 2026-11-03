@@ -10,8 +10,9 @@
     依据 cards-v1 定义及 PokerCardChoiceSpec：主动确认、真实费用、两类候选、
     关面板保留待选、倒计时不中断。使用仓库正式卡面，不改变玩法或系统 UI。
     打开本文件即可体验；图片相对引用仓库资源，无 CDN、框架或新增依赖。
-    试玩：精准调包 → 选底牌与玩家；三思而行 → 能力牌候选；
-    左右逢源 → 底牌候选；慷慨解囊 → 20 筹码支付；更多手牌 → 分页。
+    八种选择器通过统一注册表调用，卡牌仅声明 choices 和 followUp。
+    顶部可直接体验底牌、玩家、暗牌、颜色、材料、状态和两类候选。
+    完整的原型契约与卡牌映射见 2026-11-03-poker-card-selection-design.md。
   -->
   <style>
     :root {
@@ -27,6 +28,7 @@
       --brass-dark: oklch(.43 .069 77); --card-paper: oklch(.95 .025 80);
       --card-ink: oklch(.25 .023 166); --card-muted: oklch(.42 .026 164);
       --sage: oklch(.81 .067 161); --shadow: oklch(.075 .009 165 / .55);
+      --guess-red: oklch(.79 .12 25);
       --veil: oklch(.12 .02 169 / .92); --veil-edge: oklch(.12 .02 169 / .72);
       --z-table: 0; --z-overlay: 10; --z-flight: 20; --z-notice: 30; --z-demo: 40;
       --ease: cubic-bezier(.22, 1, .36, 1);
@@ -50,6 +52,8 @@
     .demo-actions button { padding: 5px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 11px; white-space: nowrap; }
     .demo-actions button:hover, .demo-actions button[aria-pressed="true"] { background: var(--default); color: var(--foreground); }
     .demo-actions .demo-reset { margin-left: 7px; border-left: 1px solid var(--line); border-radius: 0; }
+    .demo-actions select { max-width: 160px; height: 27px; border: 1px solid var(--line); border-radius: 5px; color: var(--foreground); background: var(--background); font: inherit; padding: 0 6px; }
+    .demo-actions select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .table-shell { position: relative; min-height: calc(100dvh - 40px); overflow: hidden; background: var(--background); }
     .table-top { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 18px 28px; border-bottom: 1px solid var(--line); background: var(--surface); }
     .room-info { display: flex; gap: 13px; align-items: center; font-size: 13px; }
@@ -188,7 +192,63 @@
     .game-button svg { width: 16px; height: 16px; }
     .cast-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
     .inspect-warning { font-size: 12px; line-height: 1.7; color: var(--brass-light); }
+    .step-summary { color: var(--stage-muted); font-size: 11px; margin: 0 0 20px; line-height: 1.8; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .step-summary .step-current { color: var(--brass-light); }
+    .step-summary .step-complete { color: var(--sage); }
+    .step-summary svg { width: 12px; height: 12px; }
+    .choice-hint, .choice-empty { font-size: 11px; line-height: 1.7; color: var(--stage-muted); margin: 9px 0 0; }
+    .choice-empty { padding: 14px 0; color: var(--brass-light); }
+    .choice-field[data-blocked="true"] { opacity: .55; }
+    .choice-field button:disabled { opacity: .5; }
+    .opponent-hands { display: flex; gap: 13px; overflow-x: auto; padding: 4px 4px 9px; }
+    .opponent-group { flex: none; min-width: 92px; }
+    .opponent-name { display: flex; align-items: center; gap: 6px; color: var(--stage-muted); font-size: 11px; margin-bottom: 11px; }
+    .opponent-name .avatar { width: 21px; height: 21px; background: var(--stage-raised); color: var(--stage-ink); font-size: 9px; }
+    .opponent-slots { display: flex; gap: 9px; }
+    .hidden-hole { width: 41px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--stage-ink); position: relative; }
+    .hidden-hole .card-back { width: 41px; height: 57px; border-color: var(--stage-line); background: var(--stage-raised); color: var(--brass); }
+    .hidden-hole .playing { width: 41px; }
+    .hidden-hole small { display: block; margin-top: 6px; font-size: 9px; color: var(--stage-muted); }
+    .hidden-hole[aria-pressed="true"] .card-back { outline: 2px solid var(--brass-light); outline-offset: 3px; }
+    .hidden-hole[aria-pressed="true"] small { color: var(--brass-light); }
+    .color-options { display: flex; gap: 12px; }
+    .color-choice { display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 115px; min-height: 49px; padding: 10px 18px; border: 1px solid var(--stage-line); border-radius: 6px; background: transparent; color: var(--stage-ink); font-size: 12px; }
+    .color-choice b { font: 23px Georgia, serif; }
+    .color-choice[data-value="red"] b { color: var(--guess-red); }
+    .color-choice[aria-pressed="true"] { border-color: var(--brass-light); background: var(--stage-raised); }
+    .ability-options { display: flex; gap: 13px; overflow: auto; padding: 8px 5px 12px; scroll-snap-type: x proximity; }
+    .ability-options .card-slot { width: 117px; margin: 0; transform: none; filter: none; flex: none; scroll-snap-align: start; }
+    .ability-options .card-slot:hover, .ability-options .card-slot:focus-within { transform: translateY(-3px); }
+    .ability-options .ability-card { aspect-ratio: .64; }
+    .ability-options .ability-art { height: 54%; }
+    .ability-options .card-body { inset: 51% 0 0; padding: 7px 9px 11px; }
+    .ability-options .card-name { font-size: 13px; }
+    .ability-options .card-divider { margin: 5px 7px; }
+    .ability-options .card-description { font-size: 8px; line-height: 1.6; }
+    .ability-options .card-cost { display: none; }
+    .ability-options .card-type { top: 9px; left: 9px; font-size: 7px; gap: 3px; }
+    .ability-options .card-type svg { width: 10px; height: 10px; }
+    .ability-options .card-slot.is-picked .ability-card { outline: 2px solid var(--brass-light); outline-offset: 3px; }
+    .material-outcome { display: block; color: var(--stage-muted); text-align: center; font-size: 10px; margin-top: 9px; min-height: 15px; }
+    .card-slot.is-picked .material-outcome { color: var(--brass-light); }
+    .effect-options { display: flex; flex-direction: column; gap: 8px; max-height: 235px; overflow: auto; padding: 4px; }
+    .effect-group-label { color: var(--stage-muted); margin: 5px 0 0; font-size: 10px; }
+    .effect-choice { display: flex; gap: 10px; align-items: center; text-align: left; padding: 12px; min-height: 57px; border: 1px solid var(--stage-line); border-radius: 6px; background: transparent; color: var(--stage-ink); }
+    .effect-choice > svg { color: var(--brass); width: 22px; height: 22px; }
+    .effect-choice strong { font-size: 12px; font-weight: 500; }
+    .effect-choice small { display: block; font-size: 10px; color: var(--stage-muted); margin-top: 5px; line-height: 1.5; }
+    .effect-choice .effect-tick { margin-left: auto; flex: none; width: 15px; height: 15px; }
+    .effect-choice[aria-pressed="true"] { border-color: var(--brass-light); background: var(--stage-raised); }
+    .selection-receipt { color: var(--stage-ink); margin: 0 0 14px; font-size: 12px; line-height: 1.8; }
+    .selection-receipt strong { color: var(--brass-light); font-weight: 500; }
+    .private-cards { display: flex; gap: 14px; max-width: 100%; justify-content: center; }
+    .private-cards .private-card { width: 102px; }
+    .private-symbol { min-width: 110px; padding: 25px; border: 1px solid var(--stage-line); border-radius: 8px; text-align: center; font: 42px Georgia, serif; }
+    .private-ability { width: 190px; filter: drop-shadow(0 9px 12px var(--shadow)); }
+    .private-ability .card-slot { width: 100%; transform: none; }
+    .private-ability .ability-card { pointer-events: none; }
     .candidate-stage { --card-w: min(236px, 23vw); min-height: 340px; flex: 1; display: flex; align-items: center; justify-content: center; padding: 36px 28px 30px; }
+    .view > [data-selector$="-candidate"] { flex: 1; display: flex; flex-direction: column; }
     .candidate-stage .hand-row { gap: 26px; }
     .candidate-stage .card-slot { margin: 0; }
     .candidate-stage .card-slot.is-chosen { transform: translateY(-15px) scale(1.035); }
@@ -248,6 +308,7 @@
       .demo-bar { padding: 7px 12px; flex-wrap: wrap; gap: 6px; min-height: 68px; }
       .demo-label { font-size: 10px; } .demo-actions { width: 100%; justify-content: space-between; gap: 0; }
       .demo-actions button { padding: 5px 6px; font-size: 10px; } .demo-actions .demo-reset { margin-left: 0; }
+      .demo-actions select { width: 132px; max-width: 40vw; font-size: 10px; }
       .card-overlay { inset-block-start: 68px; } .table-shell { min-height: calc(100dvh - 68px); }
       .table-top { padding: 16px; } .room-info { gap: 8px; font-size: 12px; } .table-top > span { display: none; }
       .stage-hud { width: calc(100% - 36px); min-height: 90px; grid-template-columns: 1fr auto; gap: 5px 12px; padding: 13px 0 10px; }
@@ -278,6 +339,8 @@
       .inspect-card .card-divider { margin: 5px 6px; } .inspect-card .card-cost { font-size: 7px; padding-top: 3px; }
       .inspect-card .card-type { top: 10px; left: 10px; font-size: 7px; gap: 3px; } .inspect-card .card-type svg { width: 10px; height: 10px; }
       .inspect-details { display: contents; }
+      .step-summary { grid-column: 1 / -1; margin: 0; }
+      .inspect-intro { grid-row: 1; }
       .inspect-intro { grid-column: 2; align-self: center; }
       .inspect-details h2 { font-size: 23px; margin: 10px 0 12px; } .inspect-category { font-size: 10px; }
       .full-description { font-size: 12px; line-height: 1.8; }
@@ -321,8 +384,15 @@
     <div class="demo-label"><strong>卡牌舞台 / 交互原型</strong><span>本地演示，不连接牌局</span></div>
     <nav class="demo-actions" aria-label="切换演示场景">
       <button type="button" data-demo="hand" aria-pressed="true">手牌</button>
-      <button type="button" data-demo="ability" aria-pressed="false">能力三选一</button>
-      <button type="button" data-demo="poker" aria-pressed="false">底牌三选一</button>
+      <select id="interaction-demo" aria-label="体验八类选择交互">
+        <option value="">选择交互演示</option>
+        <option value="own-hole">自己的底牌</option><option value="player">其他玩家</option>
+        <option value="opponent-hole">对手的一张暗牌</option><option value="color">猜红色或黑色</option>
+        <option value="ability-material">另一张能力牌 · 消耗</option><option value="ability-copy">另一张能力牌 · 复制</option>
+        <option value="status">持续效果 · 驱散</option><option value="cleanse">持续效果 · 净化</option>
+        <option value="poker">扑克牌候选</option><option value="ability">能力牌候选</option>
+        <option value="single">仅一张候选</option><option value="empty">没有合法目标</option>
+      </select>
       <button type="button" data-demo="many" aria-pressed="false">更多手牌</button>
       <button type="button" class="demo-reset" id="reset">重播入场</button>
     </nav>
@@ -359,389 +429,535 @@
   <div class="sr-only" id="announcer" role="status" aria-live="polite"></div>
 
   <script>
-    (() => {
-      'use strict';
-      const ASSETS = '../../dashboard/src/game-center/games/poker/assets/';
-      const $ = (selector, root = document) => root.querySelector(selector);
-      const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
-      const icons = {
-        cards: '<path d="M9 3h10a2 2 0 0 1 2 2v13M5 6h10a2 2 0 0 1 2 2v12H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/><path d="m10 10 3 3-3 3-3-3Z"/>',
-        swap: '<path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/>',
-        eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
-        choice: '<path d="M5 4H2v15h5M19 4h3v15h-5M8 3h8v18H8Z"/>',
-        shield: '<path d="m12 3 8 3v5c0 5-8 10-8 10S4 16 4 11V6Z"/><path d="m8 12 3 3 5-6"/>',
-        coin: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/>',
-        diamond: '<path d="m12 3 7 9-7 9-7-9Z"/>',
-        clock: '<circle cx="12" cy="13" r="8"/><path d="M9 2h6m-3 3v8l4 2"/>',
-        x: '<path d="m6 6 12 12M6 18 18 6"/>',
-        back: '<path d="m10 6-6 6 6 6M4 12h16"/>',
-        arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
-        left: '<path d="m15 5-7 7 7 7"/>',
-        right: '<path d="m9 5 7 7-7 7"/>',
-        tick: '<path d="m5 12 4 4L19 6"/>',
-        lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'
-      };
-      const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.cards}</svg>`;
-      const defs = {
-        '04': { name: '精准调包', type: '诡术', icon: 'swap', short: '交换自己一张底牌与指定对手的随机底牌。', description: '选择自己一张底牌，与选定其他未弃牌玩家的一张随机底牌交换。', choices: ['hole', 'player'] },
-        '06': { name: '左右逢源', type: '抉择', icon: 'choice', short: '抽取至多三张候选，选一张替换底牌。', description: '为自己选定底牌随机取至多三个候选，选一张；其余与旧牌洗回牌堆。', choices: ['hole'] },
-        '11': { name: '先知之眼', type: '情报', icon: 'eye', short: '私下预览下一张公共牌，牌序变化后失效。', description: '私下预览当前牌序下一张将发出的公共牌；牌序变化会使预览失效，河牌不可用。', choices: [] },
-        '22': { name: '灵感迸发', type: '补给', icon: 'cards', short: '从共享能力牌池抽两张。', description: '从共享能力牌池抽两张。', choices: [] },
-        '25': { name: '三思而行', type: '抉择', icon: 'choice', short: '至多三张能力牌选一张，其余归还牌池。', description: '从共享池暂取至多三张能力牌，选一张获得，其余原实例归还并洗匀。', choices: [] },
-        '35': { name: '物归原主', type: '暂存', icon: 'coin', short: '取回你最近一笔暂存剩余的全部筹码。', description: '取回本次用牌之前本人最近一笔正额暂存尚未被取走的全部筹码；已空不跳过。', choices: [] },
-        '38': { name: '慷慨解囊', type: '补给', icon: 'cards', short: '支付2BB至暂存，抽两张能力牌。', description: '支付2BB筹码至暂存，从共享池抽两张能力牌。', choices: [], cost: 20 },
-        '41': { name: '护身符', type: '防护', icon: 'shield', short: '抵挡一次他人对你底牌的改动。', description: '阻止下一次他人能力牌对本人底牌的替换、交换或重洗。', choices: [] },
-        '48': { name: '反制咒', type: '防护', icon: 'shield', short: '抵挡一次仅以你为目标的敌意卡牌。', description: '阻止下一次他人以本人为唯一外部目标的敌意能力牌效果，代价不退。', choices: [] }
-      };
-      const players = [{ id: 'north', name: '阿岚', glyph: '岚' }, { id: 'west', name: '小舟', glyph: '舟' }, { id: 'east', name: '林间', glyph: '林' }];
-      const rankNames = { K: 'K', J: 'J', A: 'A', Q: 'Q', T: '10' }, suits = { s: '♠', h: '♥', c: '♣', d: '♦' };
-      const cardText = code => `${rankNames[code[0]] || code[0]}${suits[code[1]]}`;
-      const playing = code => `<img class="playing" src="${ASSETS}cards/${code}.svg" alt="${cardText(code)}" draggable="false">`;
-      const overlay = $('#card-overlay'), content = $('#stage-content'), footer = $('#stage-footer'), table = $('#table-shell');
-      const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-      let serial = 0, hand = [], ownHoles = ['Kc', '8c'], stack = 2140, reserve = 60, refundable = 0;
-      let pending = null, selected = null, selections = {}, candidate = null, page = 0, isOpen = false, busy = false;
-      let privateResult = false, statuses = [], scenario = 'hand', generation = 0, noticeTimer, closeVersion = 0;
-      let deadline = Date.now() + 520000, restoreFocus = null;
-      const makeInstance = id => ({ id: `${id}-${++serial}`, cardId: id });
-      const pageSize = 5;
-      const current = () => hand.find(item => item.id === selected);
-      const unavailableFor = item => item.cardId === '35' && refundable === 0 ? '没有可取回的暂存' : null;
-      const pokerCandidates = () => ['As', 'Qh', 'Td', '6s', 'Ac', 'Jh'].filter(code => !ownHoles.includes(code)).slice(0, 3);
-      const announce = message => { $('#announcer').textContent = message; };
-      function setHeading(title, subtitle, show = true) {
-        $('#stage-heading').hidden = !show;
-        $('#stage-title').textContent = title;
-        $('#stage-subtitle').textContent = subtitle;
+(() => {
+  'use strict';
+  const ASSETS = '../../dashboard/src/game-center/games/poker/assets/';
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const icons = {
+    cards: '<path d="M9 3h10a2 2 0 0 1 2 2v13M5 6h10a2 2 0 0 1 2 2v12H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/><path d="m10 10 3 3-3 3-3-3Z"/>',
+    swap: '<path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    choice: '<path d="M5 4H2v15h5M19 4h3v15h-5M8 3h8v18H8Z"/>',
+    shield: '<path d="m12 3 8 3v5c0 5-8 10-8 10S4 16 4 11V6Z"/><path d="m8 12 3 3 5-6"/>',
+    coin: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/>',
+    diamond: '<path d="m12 3 7 9-7 9-7-9Z"/>', clock: '<circle cx="12" cy="13" r="8"/><path d="M9 2h6m-3 3v8l4 2"/>',
+    x: '<path d="m6 6 12 12M6 18 18 6"/>', back: '<path d="m10 6-6 6 6 6M4 12h16"/>', arrow: '<path d="M4 12h16m-6-6 6 6-6 6"/>',
+    left: '<path d="m15 5-7 7 7 7"/>', right: '<path d="m9 5 7 7-7 7"/>', tick: '<path d="m5 12 4 4L19 6"/>',
+    lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'
+  };
+  const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.cards}</svg>`;
+  const defs = {
+    "01": {"id":"01","name":"换牌术","copies":2,"type":"诡术","icon":"swap","short":"选择自己一张底牌，随机换一张；先取新牌，再…","description":"选择自己一张底牌，随机换一张；先取新牌，再洗回旧牌。","choices":["HOLE"]},
+    "02": {"id":"02","name":"重整旗鼓","copies":2,"type":"诡术","icon":"swap","short":"将自己两张底牌洗回牌堆，再随机抽两张，可能…","description":"将自己两张底牌洗回牌堆，再随机抽两张，可能抽回原牌。","choices":[]},
+    "03": {"id":"03","name":"移花接木","copies":2,"type":"诡术","icon":"swap","short":"选择自己一张底牌，与随机其他未弃牌玩家的一…","description":"选择自己一张底牌，与随机其他未弃牌玩家的一张随机底牌交换。","choices":["HOLE"]},
+    "04": {"id":"04","name":"精准调包","copies":1,"type":"诡术","icon":"swap","short":"选择自己一张底牌，与选定其他未弃牌玩家的一…","description":"选择自己一张底牌，与选定其他未弃牌玩家的一张随机底牌交换。","choices":["HOLE","PLAYER"]},
+    "05": {"id":"05","name":"对调双生","copies":1,"type":"诡术","icon":"swap","short":"与选定其他未弃牌玩家交换整副两张底牌。","description":"与选定其他未弃牌玩家交换整副两张底牌。","choices":["PLAYER"]},
+    "06": {"id":"06","name":"左右逢源","copies":2,"type":"诡术","icon":"swap","short":"为自己选定底牌随机取至多三个候选，选一张；…","description":"为自己选定底牌随机取至多三个候选，选一张；其余与旧牌洗回牌堆。","choices":["HOLE"],"followUp":"poker-candidate"},
+    "07": {"id":"07","name":"择高而留","copies":1,"type":"诡术","icon":"swap","short":"随机取至多两张候选，以点数较高者替换选定底…","description":"随机取至多两张候选，以点数较高者替换选定底牌；同点按固定花色顺序。","choices":["HOLE"]},
+    "08": {"id":"08","name":"红色邀约","copies":2,"type":"诡术","icon":"swap","short":"随机取剩余牌堆中的一张红色牌替换选定底牌；…","description":"随机取剩余牌堆中的一张红色牌替换选定底牌；没有则不换。","choices":["HOLE"]},
+    "09": {"id":"09","name":"黑色邀约","copies":2,"type":"诡术","icon":"swap","short":"随机取剩余牌堆中的一张黑色牌替换选定底牌；…","description":"随机取剩余牌堆中的一张黑色牌替换选定底牌；没有则不换。","choices":["HOLE"]},
+    "10": {"id":"10","name":"天地重洗","copies":1,"type":"诡术","icon":"swap","short":"将所有未弃牌且未受改牌保护的玩家底牌混洗，…","description":"将所有未弃牌且未受改牌保护的玩家底牌混洗，再各发两张；不足两人则被阻止。","choices":[]},
+    "11": {"id":"11","name":"先知之眼","copies":2,"type":"情报","icon":"eye","short":"私下预览当前牌序下一张将发出的公共牌；牌序…","description":"私下预览当前牌序下一张将发出的公共牌；牌序变化会使预览失效，河牌不可用。","choices":[]},
+    "12": {"id":"12","name":"洞悉先机","copies":1,"type":"情报","icon":"eye","short":"私下预览当前牌序下一阶段全部公共牌；牌序变…","description":"私下预览当前牌序下一阶段全部公共牌；牌序变化会使预览失效，河牌不可用。","choices":[]},
+    "13": {"id":"13","name":"察言观色","copies":2,"type":"情报","icon":"eye","short":"私下查看选定其他未弃牌玩家的一张随机底牌。","description":"私下查看选定其他未弃牌玩家的一张随机底牌。","choices":["PLAYER"]},
+    "14": {"id":"14","name":"明察秋毫","copies":1,"type":"情报","icon":"eye","short":"私下查看选定其他未弃牌玩家的两张底牌。","description":"私下查看选定其他未弃牌玩家的两张底牌。","choices":["PLAYER"]},
+    "15": {"id":"15","name":"探囊知底","copies":2,"type":"情报","icon":"eye","short":"私下查看选定其他真人手中一张随机能力牌；没…","description":"私下查看选定其他真人手中一张随机能力牌；没有牌的玩家不可选。","choices":["HUMAN"],"needsHeldAbility":true},
+    "16": {"id":"16","name":"观星术","copies":1,"type":"情报","icon":"eye","short":"私下查看剩余牌堆顶部至多三张，包含可能被烧…","description":"私下查看剩余牌堆顶部至多三张，包含可能被烧掉的牌。","choices":[]},
+    "17": {"id":"17","name":"开诚布公","copies":2,"type":"情报","icon":"eye","short":"公开自己选定底牌；本局该实体牌处于任何玩家…","description":"公开自己选定底牌；本局该实体牌处于任何玩家底牌中时都公开。","choices":["HOLE"]},
+    "18": {"id":"18","name":"猜牌游戏","copies":2,"type":"情报","icon":"eye","short":"选择其他玩家一张未公开底牌，猜红或黑；公布…","description":"选择其他玩家一张未公开底牌，猜红或黑；公布颜色，猜中抽一张能力牌。","choices":["HIDDEN","COLOR"]},
+    "19": {"id":"19","name":"花色侦测","copies":1,"type":"情报","icon":"eye","short":"私下得知选定其他玩家一张随机底牌的花色，不…","description":"私下得知选定其他玩家一张随机底牌的花色，不显示点数。","choices":["PLAYER"]},
+    "20": {"id":"20","name":"点数侦测","copies":1,"type":"情报","icon":"eye","short":"私下得知选定其他玩家一张随机底牌的点数，不…","description":"私下得知选定其他玩家一张随机底牌的点数，不显示花色。","choices":["PLAYER"]},
+    "21": {"id":"21","name":"小小补给","copies":2,"type":"补给","icon":"cards","short":"从共享能力牌池抽一张。","description":"从共享能力牌池抽一张。","choices":[]},
+    "22": {"id":"22","name":"灵感迸发","copies":2,"type":"补给","icon":"cards","short":"从共享能力牌池抽两张。","description":"从共享能力牌池抽两张。","choices":[]},
+    "23": {"id":"23","name":"满载而归","copies":1,"type":"补给","icon":"cards","short":"从共享能力牌池抽三张。","description":"从共享能力牌池抽三张。","choices":[]},
+    "24": {"id":"24","name":"弃旧图新","copies":2,"type":"补给","icon":"cards","short":"额外消耗自己另一张能力牌，从共享池抽两张。","description":"额外消耗自己另一张能力牌，从共享池抽两张。","choices":["EXTRA"],"consumeSelected":true},
+    "25": {"id":"25","name":"三思而行","copies":1,"type":"补给","icon":"cards","short":"从共享池暂取至多三张能力牌，选一张获得，其…","description":"从共享池暂取至多三张能力牌，选一张获得，其余原实例归还并洗匀。","choices":[],"followUp":"ability-candidate"},
+    "26": {"id":"26","name":"以一换一","copies":2,"type":"补给","icon":"cards","short":"额外消耗自己另一张能力牌，从共享池抽一张。","description":"额外消耗自己另一张能力牌，从共享池抽一张。","choices":["EXTRA"],"consumeSelected":true},
+    "27": {"id":"27","name":"雨露均沾","copies":2,"type":"补给","icon":"cards","short":"所有仍可行动的真人各从共享池抽一张能力牌。","description":"所有仍可行动的真人各从共享池抽一张能力牌。","choices":[]},
+    "28": {"id":"28","name":"灵感种子","copies":2,"type":"补给","icon":"cards","short":"生成一张新的“小小补给”放入共享池并洗匀，…","description":"生成一张新的“小小补给”放入共享池并洗匀，再从池中抽一张，不保证抽到新牌。","choices":[]},
+    "29": {"id":"29","name":"埋下伏笔","copies":1,"type":"补给","icon":"cards","short":"选择自己另一张能力牌，生成一个新副本放入共…","description":"选择自己另一张能力牌，生成一个新副本放入共享池并洗匀，原牌保留；牌名仅本人知晓。","choices":["EXTRA"]},
+    "30": {"id":"30","name":"推陈出新","copies":1,"type":"补给","icon":"cards","short":"额外消耗自己另一张能力牌，向池中生成两张随…","description":"额外消耗自己另一张能力牌，向池中生成两张随机新牌（排除生成类）并洗匀，再抽两张。","choices":["EXTRA"],"consumeSelected":true},
+    "31": {"id":"31","name":"赦免","copies":1,"type":"暂存","icon":"coin","short":"下一次正额筹码支付减免至多10BB，触发一…","description":"下一次正额筹码支付减免至多10BB，触发一次后结束，未用满不保留。","choices":[]},
+    "32": {"id":"32","name":"小赦免","copies":2,"type":"暂存","icon":"coin","short":"下一次正额筹码支付减免至多3BB，触发一次…","description":"下一次正额筹码支付减免至多3BB，触发一次后结束。","choices":[]},
+    "33": {"id":"33","name":"妙手空空","copies":1,"type":"暂存","icon":"coin","short":"从其他人的暂存待分份额按比例偷取至多10B…","description":"从其他人的暂存待分份额按比例偷取至多10BB，立即获得，不取自己份额。","choices":[]},
+    "34": {"id":"34","name":"顺手牵羊","copies":2,"type":"暂存","icon":"coin","short":"从其他人的暂存待分份额按比例偷取至多3BB…","description":"从其他人的暂存待分份额按比例偷取至多3BB，立即获得，不取自己份额。","choices":[]},
+    "35": {"id":"35","name":"物归原主","copies":1,"type":"暂存","icon":"coin","short":"取回本次用牌之前本人最近一笔正额暂存尚未被…","description":"取回本次用牌之前本人最近一笔正额暂存尚未被取走的全部筹码；已空不跳过。","choices":[]},
+    "36": {"id":"36","name":"小本回收","copies":2,"type":"暂存","icon":"coin","short":"从本次用牌之前本人最近一笔正额暂存剩余中取…","description":"从本次用牌之前本人最近一笔正额暂存剩余中取回至多3BB；已空不跳过。","choices":[]},
+    "37": {"id":"37","name":"暂存封条","copies":1,"type":"暂存","icon":"coin","short":"本阶段结束前全桌暂存不能被盗取，退款与最终…","description":"本阶段结束前全桌暂存不能被盗取，退款与最终分配不受影响。","choices":[]},
+    "38": {"id":"38","name":"慷慨解囊","copies":2,"type":"暂存","icon":"coin","short":"支付2BB筹码至暂存，从共享池抽两张能力牌。","description":"支付2BB筹码至暂存，从共享池抽两张能力牌。","choices":[],"costBB":2},
+    "39": {"id":"39","name":"劫富济贫","copies":1,"type":"暂存","icon":"coin","short":"从暂存待分份额最多的其他身份处偷取至多5B…","description":"从暂存待分份额最多的其他身份处偷取至多5BB；同额按庄家左侧，受保护不改选。","choices":[]},
+    "40": {"id":"40","name":"暂存回响","copies":1,"type":"暂存","icon":"coin","short":"本人下一次实际向暂存支付正额筹码后，抽一张…","description":"本人下一次实际向暂存支付正额筹码后，抽一张能力牌，触发一次。","choices":[]},
+    "41": {"id":"41","name":"护身符","copies":2,"type":"防护","icon":"shield","short":"阻止下一次他人能力牌对本人底牌的替换、交换…","description":"阻止下一次他人能力牌对本人底牌的替换、交换或重洗。","choices":[]},
+    "42": {"id":"42","name":"铁壁","copies":1,"type":"防护","icon":"shield","short":"阻止两次他人能力牌对本人底牌的替换、交换或…","description":"阻止两次他人能力牌对本人底牌的替换、交换或重洗，按实际拦截扣减。","choices":[]},
+    "43": {"id":"43","name":"缄默护罩","copies":2,"type":"防护","icon":"shield","short":"阻止下一次他人能力牌对本人底牌的查看或公开。","description":"阻止下一次他人能力牌对本人底牌的查看或公开。","choices":[]},
+    "44": {"id":"44","name":"守财印","copies":2,"type":"防护","icon":"shield","short":"保护本人暂存待分份额免遭下一次盗取，不阻止…","description":"保护本人暂存待分份额免遭下一次盗取，不阻止原付款人取回。","choices":[]},
+    "45": {"id":"45","name":"驱散术","copies":2,"type":"防护","icon":"shield","short":"选择并移除一个公开、可驱散的持续效果，可以…","description":"选择并移除一个公开、可驱散的持续效果，可以属于玩家或全场。","choices":["STATUS"]},
+    "46": {"id":"46","name":"净化术","copies":2,"type":"防护","icon":"shield","short":"选择并移除本人一个可驱散的负面持续效果；本…","description":"选择并移除本人一个可驱散的负面持续效果；本牌不受追加卡费影响。","choices":["CLEANSE"],"ignoreSurcharges":true},
+    "47": {"id":"47","name":"反窥之眼","copies":1,"type":"防护","icon":"shield","short":"阻止下一次他人私下窥看本人底牌，并私下反窥…","description":"阻止下一次他人私下窥看本人底牌，并私下反窥施放者一张随机底牌；不再次反窥。","choices":[]},
+    "48": {"id":"48","name":"反制咒","copies":1,"type":"防护","icon":"shield","short":"阻止下一次他人以本人为唯一外部目标的敌意能…","description":"阻止下一次他人以本人为唯一外部目标的敌意能力牌效果，代价不退。","choices":[]},
+    "49": {"id":"49","name":"沉重咒印","copies":1,"type":"防护","icon":"shield","short":"选定其他真人下一次用能力牌时额外支付2BB…","description":"选定其他真人下一次用能力牌时额外支付2BB至暂存，成功出牌后结束。","choices":["HUMAN"]},
+    "50": {"id":"50","name":"以静制动","copies":1,"type":"防护","icon":"shield","short":"在本人下一回合开始前，首次有他人使用能力牌…","description":"在本人下一回合开始前，首次有他人使用能力牌时，本人抽一张，随后结束。","choices":[]},
+    "51": {"id":"51","name":"争分夺秒","copies":2,"type":"时序","icon":"clock","short":"当前剩余操作时间翻倍，最多延至本回合开始后…","description":"当前剩余操作时间翻倍，最多延至本回合开始后1200秒。","choices":[]},
+    "52": {"id":"52","name":"从容不迫","copies":2,"type":"时序","icon":"clock","short":"当前操作时间增加60秒，最多延至本回合开始…","description":"当前操作时间增加60秒，最多延至本回合开始后1200秒。","choices":[]},
+    "53": {"id":"53","name":"急促咒语","copies":1,"type":"时序","icon":"clock","short":"选定其他真人下一次正常行动回合基础时限减少…","description":"选定其他真人下一次正常行动回合基础时限减少300秒，同族不叠加；期限内净化返还。","choices":["HUMAN"]},
+    "54": {"id":"54","name":"时间缓流","copies":1,"type":"时序","icon":"clock","short":"本阶段后续新行动回合基础时限增加60秒，已…","description":"本阶段后续新行动回合基础时限增加60秒，已开始回合不变，同族替换。","choices":[]},
+    "55": {"id":"55","name":"幸运帷幕","copies":1,"type":"时序","icon":"clock","short":"下一次阶段自动补牌时，每名合资格真人额外抽…","description":"下一次阶段自动补牌时，每名合资格真人额外抽一张，触发一次；河牌不可用。","choices":[]},
+    "56": {"id":"56","name":"法力潮汐","copies":1,"type":"时序","icon":"clock","short":"本阶段每名真人首次再使用一张能力牌后额外抽…","description":"本阶段每名真人首次再使用一张能力牌后额外抽一张，本牌自身不触发；同族替换。","choices":[]},
+    "57": {"id":"57","name":"一箭双雕","copies":1,"type":"时序","icon":"clock","short":"本人下一次因卡牌效果直接从共享池抽能力牌时…","description":"本人下一次因卡牌效果直接从共享池抽能力牌时额外抽一张，不计阶段补牌或候选选择。","choices":[]},
+    "58": {"id":"58","name":"调换位置","copies":2,"type":"时序","icon":"clock","short":"对调自己两张底牌的左右位置，不改变实体牌和…","description":"对调自己两张底牌的左右位置，不改变实体牌和牌型。","choices":[]},
+    "59": {"id":"59","name":"星光一闪","copies":2,"type":"时序","icon":"clock","short":"在牌桌播放一次短促星光，不改变其他规则。","description":"在牌桌播放一次短促星光，不改变其他规则。","choices":[]},
+    "60": {"id":"60","name":"众目睽睽","copies":1,"type":"时序","icon":"clock","short":"本阶段所有未弃牌玩家各有一张随机底牌公开，…","description":"本阶段所有未弃牌玩家各有一张随机底牌公开，受信息保护者排除；标记随实体牌移动。","choices":[]}
+  };
+  const profiles = {
+    HOLE: { key: 'hole', ui: 'own-hole', label: '选择你的底牌' },
+    PLAYER: { key: 'player', ui: 'player', label: '选择目标玩家', target: 'other_alive' },
+    HUMAN: { key: 'player', ui: 'player', label: '选择目标玩家', target: 'other_human' },
+    HIDDEN: { key: 'targetHole', ui: 'opponent-hole', label: '选择对手的一张暗牌' },
+    COLOR: { key: 'color', ui: 'color', label: '猜测这张牌的颜色', dependsOn: ['targetHole'] },
+    EXTRA: { key: 'ability', ui: 'ability', label: '选择另一张能力牌' },
+    STATUS: { key: 'status', ui: 'status', label: '选择要驱散的效果', target: 'public_effect' },
+    CLEANSE: { key: 'status', ui: 'status', label: '选择要净化的效果', target: 'own_negative' }
+  };
+  // Selection UI consumes authorized options. Only this fixture adapter manufactures them locally.
+  const rankNames = { K: 'K', J: 'J', A: 'A', Q: 'Q', T: '10' }, suits = { s: '♠', h: '♥', c: '♣', d: '♦' };
+  const cardText = code => `${rankNames[code[0]] || code[0]}${suits[code[1]]}`;
+  const playing = code => `<img class="playing" src="${ASSETS}cards/${code}.svg" alt="${cardText(code)}" draggable="false">`;
+  const overlay = $('#card-overlay'), content = $('#stage-content'), footer = $('#stage-footer'), table = $('#table-shell');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  let serial = 0, hand = [], abilityPool = [], ownHoles = [], publicOwn = [], players = [], effects = [], privateResults = [];
+  let stack = 2140, reserve = 60, refundable = 0, selected = null, selections = {}, pending = null, page = 0;
+  let isOpen = false, busy = false, scenario = 'hand', generation = 0, closeVersion = 0, noticeTimer;
+  let deadline = Date.now() + 520000, restoreFocus = null;
+  const pageSize = 5;
+  const makeInstance = cardId => ({ id: `${cardId}-${++serial}`, cardId });
+  const current = () => hand.find(item => item.id === selected);
+  const playerAt = seatNo => players.find(player => player.seatNo === Number(seatNo));
+  const ownerName = seatNo => seatNo === undefined ? '全场' : seatNo === 3 ? '你' : playerAt(seatNo)?.name || '原参赛者';
+  const effectDetail = effect => [effect.slot !== undefined ? `底牌 ${effect.slot + 1}` : '', effect.remaining == null ? '' : `剩余 ${effect.remaining} 次`, effect.expiresStreet ? '本阶段结束消失' : '本局有效'].filter(Boolean).join(' · ');
+  const announce = message => { $('#announcer').textContent = message; };
+  const option = (value, label, meta = {}) => ({ value: String(value), label, meta });
+  const picked = (request, value) => request.options.find(item => item.value === String(value));
+  const dependencyReady = (request, values) => (request.dependsOn || []).every(key => values[key] !== undefined);
+  const validChoice = (request, values) => dependencyReady(request, values) && !!picked(request, values[request.key]);
+
+  // Eight renderers share one request/value contract. No renderer branches on card IDs.
+  const selectors = {
+    'own-hole': (request, values) => `<div class="hole-options">${request.options.map(item => `<button type="button" class="hole-choice" ${choiceAttrs(request, item, values)} aria-label="选择底牌${cardText(item.meta.card)}">${playing(item.meta.card)}${choiceTick(request, item, values)}</button>`).join('')}</div>`,
+    player: (request, values) => `<div class="target-options">${request.options.map(item => `<button type="button" class="target-choice" ${choiceAttrs(request, item, values)}><span class="avatar">${esc(item.meta.glyph)}</span><span>${esc(item.label)}${item.meta.bot ? ' · 陪练' : ''}</span>${isPicked(request, item, values) ? icon('tick') : ''}</button>`).join('')}</div>`,
+    'opponent-hole': (request, values) => {
+      const groups = [...new Set(request.options.map(item => item.meta.seatNo))];
+      return `<div class="opponent-hands">${groups.map(seatNo => {
+        const player = request.options.find(item => item.meta.seatNo === seatNo).meta;
+        return `<div class="opponent-group"><div class="opponent-name"><span class="avatar">${esc(player.glyph)}</span>${esc(player.name)}</div><div class="opponent-slots">${[0, 1].map(slot => {
+          const item = request.options.find(entry => entry.meta.seatNo === seatNo && entry.meta.slot === slot);
+          if (!item) return '<button type="button" class="hidden-hole" disabled aria-label="该槽位不可选"><span class="card-back">♠</span><small>不可选</small></button>';
+          return `<button type="button" class="hidden-hole" ${choiceAttrs(request, item, values)} aria-label="${esc(item.label)}"><span class="card-back">♠</span><small>底牌 ${slot + 1}</small></button>`;
+        }).join('')}</div></div>`;
+      }).join('')}</div>`;
+    },
+    color: (request, values) => `<div class="color-options">${request.options.map(item => `<button type="button" class="color-choice" ${choiceAttrs(request, item, values)} ${!dependencyReady(request, values) ? 'disabled' : ''}><b>${item.value === 'red' ? '♥ ♦' : '♠ ♣'}</b>${esc(item.label)}${isPicked(request, item, values) ? icon('tick') : ''}</button>`).join('')}</div>`,
+    ability: (request, values) => `<div class="ability-options">${request.options.map(item => {
+      const active = isPicked(request, item, values), badge = active ? request.purpose === 'copy' ? '原牌保留 · 复制入池' : '将额外消耗' : item.label;
+      return cardMarkup(item.meta.instance, 0, 1, { request, item, values, active, material: true, badge });
+    }).join('')}</div>`,
+    status: (request, values) => {
+      let previous;
+      return `<div class="effect-options">${request.options.map(item => {
+        const group = item.meta.owner, heading = group !== previous ? `<p class="effect-group-label">${esc(group)}</p>` : '';
+        previous = group;
+        return `${heading}<button type="button" class="effect-choice" ${choiceAttrs(request, item, values)}>${icon(defs[item.meta.effect.cardId].icon)}<span><strong>${esc(item.label)}</strong><small>${esc(effectDetail(item.meta.effect))}</small></span>${isPicked(request, item, values) ? `<span class="effect-tick">${icon('tick')}</span>` : ''}</button>`;
+      }).join('')}</div>`;
+    },
+    'poker-candidate': (request, values) => `<div class="candidate-stage poker-candidates"><div class="hand-row">${request.options.map((item, index) => `<div class="card-slot is-entering ${isPicked(request, item, values) ? 'is-chosen' : ''}" data-candidate="${index}" style="--rest-r:${(index - 1) * 3}deg;--rest-y:${Math.abs(index - 1) * 5}px;--deal-i:${index}"><button type="button" class="poker-candidate" ${choiceAttrs(request, item, values)} aria-label="选择${esc(item.label)}">${playing(item.meta.card)}</button></div>`).join('')}</div></div>`,
+    'ability-candidate': (request, values) => `<div class="candidate-stage"><div class="hand-row">${request.options.map((item, index) => cardMarkup(item.meta.instance, index, request.options.length, { request, item, values, active: isPicked(request, item, values), candidateIndex: index })).join('')}</div></div>`
+  };
+  function isPicked(request, item, values) { return values[request.key] === item.value; }
+  function choiceAttrs(request, item, values) { return `data-choice-key="${esc(request.key)}" data-value="${esc(item.value)}" aria-pressed="${isPicked(request, item, values)}"`; }
+  function choiceTick(request, item, values) { return isPicked(request, item, values) ? `<span class="selection-tick">${icon('tick')}</span>` : ''; }
+  function renderSelection(request, values = selections) {
+    if (!selectors[request.ui]) throw new Error(`未知选择器：${request.ui}`);
+    return selectors[request.ui](request, values);
+  }
+  function reconcileChoices(requests, values) {
+    const next = { ...values };
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const request of requests) if (next[request.key] !== undefined && !validChoice(request, next)) {
+        delete next[request.key]; changed = true;
       }
-      function updateTable() {
-        $('#own-holes').innerHTML = ownHoles.map(playing).join('');
-        $('#stack').textContent = stack.toLocaleString('zh-CN');
-        $('#reserve-total').textContent = reserve.toLocaleString('zh-CN');
-        $('#open-cards').innerHTML = `${icon('cards')}<span>${pending ? '继续选牌' : '卡牌'}</span><b class="hand-count">${pending ? '待选' : hand.length}</b>`;
-        $('#table-status').textContent = statuses.join(' · ');
+    }
+    return next;
+  }
+  function setChoice(requests, key, value) {
+    selections = reconcileChoices(requests, selections);
+    const request = requests.find(item => item.key === key);
+    if (!request || !dependencyReady(request, selections) || !picked(request, value)) return false;
+    if (selections[key] === value) return true;
+    const next = { ...selections, [key]: value };
+    // Dependency invalidation is shared, including multi-step chains.
+    const invalidated = new Set([key]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const dependent of requests) if (!invalidated.has(dependent.key) && dependent.dependsOn?.some(parent => invalidated.has(parent))) {
+        delete next[dependent.key]; invalidated.add(dependent.key); changed = true;
       }
-      function dismissNotice() { clearTimeout(noticeTimer); $('#notice').hidden = true; }
-      function notify(message) {
-        clearTimeout(noticeTimer);
-        $('#notice').innerHTML = `${icon('tick')}<span>${message}</span>`;
-        $('#notice').hidden = false;
-        noticeTimer = setTimeout(() => { $('#notice').hidden = true; }, 3300);
-        announce(message);
-      }
-      function pageCards() { return innerWidth <= 850 ? hand : hand.slice(page * pageSize, (page + 1) * pageSize); }
-      function cardMarkup(item, index, total, candidateIndex) {
-        const d = defs[item.cardId], candidateMode = candidateIndex !== undefined;
-        const center = index - (total - 1) / 2, reason = candidateMode ? null : unavailableFor(item), locked = !!reason;
-        return `<div class="card-slot ${locked ? 'is-unavailable' : ''} is-entering" style="--rest-r:${center * 2.4}deg;--rest-y:${Math.abs(center) * 7}px;--deal-i:${Math.min(index, 4)}" data-instance="${item.id}" ${candidateMode ? `data-candidate="${candidateIndex}"` : ''}>
-          <button class="ability-card" type="button" ${candidateMode ? `aria-pressed="${candidate === candidateIndex}"` : ''} aria-label="${d.name}，${d.short}${locked ? `，${reason}` : ''}">
-            <img class="ability-art" src="${ASSETS}ability-cards/v1/${item.cardId}.png" alt="" width="1122" height="1402" draggable="false">
-            <span class="card-type">${icon(d.icon)}${d.type}</span>
-            <span class="card-body"><strong class="card-name">${d.name}</strong><span class="card-divider">${icon('diamond')}</span><span class="card-description">${d.short}</span><span class="card-cost">${d.cost ? `${icon('coin')}${d.cost} 筹码 · 2BB` : '无需筹码'}</span></span>
-            ${locked ? `<span class="card-locked"><span>${reason}</span></span>` : ''}
-          </button></div>`;
-      }
-      function attachCardMotion(root) {
-        $$('.is-entering', root).forEach(slot => slot.addEventListener('animationend', () => slot.classList.remove('is-entering'), { once: true }));
-        $$('.ability-card', root).forEach(button => {
-          button.addEventListener('pointermove', event => {
-            if (reduced.matches || event.pointerType !== 'mouse' || innerWidth <= 850) return;
-            const rect = button.getBoundingClientRect();
-            button.style.setProperty('--tilt-x', `${-(event.clientY - rect.top - rect.height / 2) / rect.height * 3}deg`);
-            button.style.setProperty('--tilt-y', `${(event.clientX - rect.left - rect.width / 2) / rect.width * 3}deg`);
-          });
-          button.addEventListener('pointerleave', () => { button.style.removeProperty('--tilt-x'); button.style.removeProperty('--tilt-y'); });
+    }
+    selections = next;
+    return true;
+  }
+  function fixtureChoices(item) {
+    const d = defs[item.cardId];
+    return d.choices.map(profile => {
+      const request = { ...profiles[profile], purpose: d.consumeSelected ? 'consume' : 'copy', options: [] };
+      if (request.ui === 'own-hole') request.options = ownHoles.map((card, index) => option(index, cardText(card), { card }));
+      if (request.ui === 'player') request.options = players.filter(player => !player.folded && (request.target !== 'other_human' || !player.bot) && (!d.needsHeldAbility || player.abilityCount > 0)).map(player => option(player.seatNo, player.name, player));
+      if (request.ui === 'opponent-hole') request.options = players.filter(player => !player.folded).flatMap(player => [0, 1].filter(slot => !player.publicSlots.includes(slot)).map(slot => option(`${player.seatNo}:${slot}`, `${player.name} · 底牌 ${slot + 1}`, { seatNo: player.seatNo, slot, name: player.name, glyph: player.glyph })));
+      if (request.ui === 'color') request.options = [option('red', '红色'), option('black', '黑色')];
+      if (request.ui === 'ability') {
+        const others = hand.filter(entry => entry.id !== item.id), totals = new Map(), positions = new Map();
+        others.forEach(entry => totals.set(entry.cardId, (totals.get(entry.cardId) || 0) + 1));
+        request.options = others.map(entry => {
+          const number = (positions.get(entry.cardId) || 0) + 1; positions.set(entry.cardId, number);
+          return option(entry.id, `${defs[entry.cardId].name}${totals.get(entry.cardId) > 1 ? ` · 第 ${number} 张` : ''}`, { instance: entry });
         });
       }
-      function renderFooter(kind = 'hand') {
-        const pendingText = pending ? '待选结果仅你可见' : '手牌仅你可见';
-        footer.innerHTML = `<div class="held-count">${icon('cards')}<span>${kind === 'hand' ? `<b>${hand.length}</b> 张手牌${hand.length > pageSize && innerWidth > 850 ? ` · ${page * pageSize + 1}–${Math.min((page + 1) * pageSize, hand.length)}` : ''}` : pendingText}</span></div><div class="key-hints"><span><kbd>← →</kbd>切换</span><span><kbd>Enter</kbd>${pending ? '选牌' : '查看'}</span><span><kbd>Esc</kbd>${selected ? '返回' : '收起'}</span></div><div class="footer-actions">${privateResult && kind === 'hand' ? '<button type="button" class="text-action" id="revisit-private">本人情报</button>' : ''}<button type="button" class="text-action" id="return-table">收起卡牌 ${icon('back')}</button></div>`;
-        $('#return-table').addEventListener('click', closeCards);
-        $('#revisit-private')?.addEventListener('click', renderPrivate);
-        footer.hidden = false;
-      }
-      function renderHand() {
-        selected = null;
-        content.className = 'view';
-        setHeading('你的手牌', innerWidth <= 850 ? '左右滑动 · 轻点选牌' : '悬停查看 · 点击选牌');
-        page = Math.min(page, Math.max(0, Math.ceil(hand.length / pageSize) - 1));
-        const cards = pageCards();
-        content.innerHTML = hand.length ? `<div class="hand-stage"><button class="page-arrow previous" type="button" aria-label="上一组手牌" ${page === 0 ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('left')}</button><div class="hand-row" aria-label="能力手牌">${cards.map((item, i) => cardMarkup(item, i, cards.length)).join('')}</div><button class="page-arrow next" type="button" aria-label="下一组手牌" ${(page + 1) * pageSize >= hand.length ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('right')}</button></div><div class="hand-status">${statuses.length ? `<strong>${statuses.join(' · ')}</strong>` : '可连续使用卡牌，再完成本轮下注'}</div>` : `<div class="empty-hand">${icon('cards')}<span>本轮手牌已用完</span><button class="text-action" type="button" id="empty-return">返回牌桌 ${icon('back')}</button></div>`;
-        $$('.card-slot', content).forEach(slot => $('.ability-card', slot).addEventListener('click', () => inspect(slot.dataset.instance, slot)));
-        $('.previous', content)?.addEventListener('click', () => { page--; renderHand(); $('.ability-card', content)?.focus({ preventScroll: true }); });
-        $('.next', content)?.addEventListener('click', () => { page++; renderHand(); $('.ability-card', content)?.focus({ preventScroll: true }); });
-        $('#empty-return')?.addEventListener('click', closeCards);
-        attachCardMotion(content);
-        renderFooter();
-      }
-      function inspect(instanceId, origin) {
-        if (busy || pending) return;
-        const item = hand.find(entry => entry.id === instanceId);
-        if (!item) return;
-        const originRect = origin?.getBoundingClientRect();
-        selected = item.id;
-        selections = {};
-        const d = defs[item.cardId];
-        content.className = 'view inspect-view';
-        setHeading(d.name, '', false);
-        content.innerHTML = `<div class="inspect-top"><button class="text-action" id="back-hand" type="button">${icon('back')} 返回手牌</button></div><div class="inspect-layout"><div class="inspect-card">${cardMarkup(item, 0, 1)}</div><div class="inspect-details"><div class="inspect-intro"><span class="inspect-category">${icon(d.icon)}${d.type}</span><h2>${d.name}</h2><p class="full-description">${d.description}</p></div><div class="selection-fields" id="selection-fields"></div><div class="cast-area"><p class="intent-preview" id="intent-preview"></p><div class="payment">${d.cost ? `<span>代价 ${d.cost} 筹码</span><span>豁免 0</span><span>实付 <strong>${d.cost} 筹码</strong></span>` : '<span>无需筹码</span>'}</div><div class="cast-row"><button class="game-button" type="button" id="cast-card"></button><button class="text-action" type="button" id="cancel-card">换一张</button></div><p class="inspect-warning" id="inspect-warning" hidden></p></div></div></div>`;
-        $('.inspect-card .card-slot').classList.remove('is-entering');
-        $('.inspect-card .ability-card').setAttribute('tabindex', '-1');
-        $('.inspect-card .ability-card').setAttribute('aria-hidden', 'true');
-        $('#back-hand').addEventListener('click', backToHand);
-        $('#cancel-card').addEventListener('click', backToHand);
-        $('#cast-card').addEventListener('click', castCard);
-        renderChoices();
-        updateIntent();
-        renderFooter('inspect');
-        if (originRect && !reduced.matches && typeof Element.prototype.animate === 'function') {
-          const artwork = $('.inspect-card'), to = artwork.getBoundingClientRect();
-          artwork.animate([{ transform: `translate(${originRect.left - to.left}px,${originRect.top - to.top}px) scale(${originRect.width / (to.width || 1)})` }, { transform: 'none' }], { duration: 350, easing: 'cubic-bezier(.22,1,.36,1)' });
-        }
-        requestAnimationFrame(() => {
-          if (selected === instanceId && isOpen) ($('.hole-choice', content) || $('.target-choice', content) || $('#cast-card'))?.focus({ preventScroll: true });
+      if (request.ui === 'status') {
+        const eligible = effects.filter(effect => effect.dispellable && (request.target !== 'own_negative' || effect.seatNo === 3 && effect.polarity === 'negative'));
+        const counts = new Map(), positions = new Map();
+        const name = effect => `${effect.seatNo}:${effect.cardId}:${effect.remaining}:${effect.slot}`;
+        eligible.forEach(effect => counts.set(name(effect), (counts.get(name(effect)) || 0) + 1));
+        request.options = eligible.map(effect => {
+          const key = name(effect), number = (positions.get(key) || 0) + 1; positions.set(key, number);
+          return option(effect.id, `${defs[effect.cardId].name}${counts.get(key) > 1 ? ` · 第 ${number} 个` : ''}`, { effect, owner: ownerName(effect.seatNo) });
         });
-        announce(`已选择${d.name}${d.choices.length ? '，请选择目标' : '，确认后使用'}`);
       }
-      function renderChoices() {
-        const item = current();
-        if (!item) return;
-        const d = defs[item.cardId];
-        $('#selection-fields').innerHTML = d.choices.map(choice => choice === 'hole' ? `<fieldset class="choice-field"><legend>选择你的底牌</legend><div class="hole-options">${ownHoles.map((code, i) => `<button type="button" class="hole-choice" data-hole="${i}" aria-pressed="${selections.hole === i}" aria-label="选择底牌${cardText(code)}">${playing(code)}${selections.hole === i ? `<span class="selection-tick">${icon('tick')}</span>` : ''}</button>`).join('')}</div></fieldset>` : `<fieldset class="choice-field"><legend>选择目标玩家</legend><div class="target-options">${players.map(player => `<button type="button" class="target-choice" data-target="${player.id}" aria-pressed="${selections.player === player.id}"><span class="avatar">${player.glyph}</span><span>${player.name}</span>${selections.player === player.id ? icon('tick') : ''}</button>`).join('')}</div></fieldset>`).join('');
-        $$('.hole-choice', content).forEach(button => button.addEventListener('click', () => {
-          selections.hole = Number(button.dataset.hole); renderChoices(); updateIntent(); $(`[data-hole="${selections.hole}"]`, content)?.focus({ preventScroll: true });
-        }));
-        $$('.target-choice', content).forEach(button => button.addEventListener('click', () => {
-          selections.player = button.dataset.target; renderChoices(); updateIntent(); $(`[data-target="${selections.player}"]`, content)?.focus({ preventScroll: true });
-        }));
-      }
-      function updateIntent() {
-        const item = current();
-        if (!item) return;
-        const d = defs[item.cardId], ready = d.choices.every(key => selections[key] !== undefined);
-        const reason = unavailableFor(item) || (d.cost > stack - 1 ? '筹码不足，需保留至少 1 筹码' : null);
-        const button = $('#cast-card');
-        button.disabled = !ready || !!reason || busy;
-        button.innerHTML = `${d.cost ? `支付 ${d.cost} 筹码并使用` : '使用卡牌'} ${icon('arrow')}`;
-        let intent = '确认后消耗这张卡牌';
-        if (d.choices.includes('hole') && selections.hole === undefined) intent = '先选择一张自己的底牌';
-        else if (d.choices.includes('player') && !selections.player) intent = '再选择一位目标玩家';
-        else if (item.cardId === '04') intent = `用 ${cardText(ownHoles[selections.hole])} 交换${players.find(player => player.id === selections.player).name}的一张随机底牌`;
-        else if (item.cardId === '06') intent = `为 ${cardText(ownHoles[selections.hole])} 获取候选牌`;
-        else if (item.cardId === '25') intent = '使用后，从三张候选能力牌中选一张';
-        else if (item.cardId === '11') intent = '查看下一张公共牌，仅你可见';
-        $('#intent-preview').textContent = reason || intent;
-        $('#inspect-warning').hidden = !reason;
-        $('#inspect-warning').textContent = reason ? '本牌无法在当前状态使用，手牌会保留。' : '';
-      }
-      function backToHand() {
-        if (busy) return;
-        const id = selected;
-        renderHand();
-        requestAnimationFrame(() => $(`[data-instance="${id}"] .ability-card`, content)?.focus({ preventScroll: true }));
-      }
-      function removeCurrent() {
-        const item = current();
-        hand = hand.filter(entry => entry.id !== selected);
-        selected = null;
-        return item;
-      }
-      async function flyCard(element, destination) {
-        if (!element || !destination || reduced.matches || typeof Element.prototype.animate !== 'function') return;
-        const rect = element.getBoundingClientRect(), target = destination.getBoundingClientRect();
-        if (!rect.width || !rect.height || !target.width) return;
-        const flight = document.createElement('div');
-        flight.className = 'card-flight';
-        Object.assign(flight.style, { top: `${rect.top}px`, left: `${rect.left}px`, width: `${rect.width}px`, height: `${rect.height}px` });
-        const clone = element.cloneNode(true);
-        clone.classList.remove('is-entering');
-        $$('[id]', clone).forEach(node => node.removeAttribute('id'));
-        $$('.is-entering', clone).forEach(node => node.classList.remove('is-entering'));
-        flight.append(clone); document.body.append(flight);
-        const animation = flight.animate([{ transform: 'translate(0,0) scale(1)', opacity: 1 }, { transform: `translate(${target.left + target.width / 2 - rect.left - rect.width / 2}px,${target.top + target.height / 2 - rect.top - rect.height / 2}px) scale(.13) rotate(8deg)`, opacity: .15 }], { duration: 450, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
-        await animation.finished;
-        flight.remove();
-      }
-      function impact(destination) {
-        if (!destination || reduced.matches) return;
-        const rect = destination.getBoundingClientRect(), ring = document.createElement('div');
-        ring.className = 'impact'; ring.style.left = `${rect.left + rect.width / 2 - 40}px`; ring.style.top = `${rect.top + rect.height / 2 - 40}px`;
-        document.body.append(ring); ring.addEventListener('animationend', () => ring.remove(), { once: true });
-      }
-      async function castCard() {
-        const item = current();
-        if (!item || busy || pending || $('#cast-card').disabled) return;
-        const d = defs[item.cardId], token = generation;
-        busy = true; $('#cast-card').disabled = true; $('#cast-card').textContent = '出牌中…';
-        const hole = selections.hole, targetId = selections.player;
-        const destination = $(`[data-seat="${targetId || 'self'}"] .seat-plate`);
-        const source = $('.inspect-card');
-        if (item.cardId !== '25' && item.cardId !== '06' && item.cardId !== '11') {
-          // Only this throwaway fixture resolves locally. Production must animate committed server frames.
-          const flight = flyCard(source, destination);
-          await closeCards(false);
-          await flight;
-          if (token !== generation) return;
-        }
-        removeCurrent();
-        if (d.cost) { stack -= d.cost; reserve += d.cost; refundable = d.cost; }
-        busy = false;
-        if (item.cardId === '25' || item.cardId === '06') {
-          pending = { kind: item.cardId === '25' ? 'ability' : 'poker', source: d.name, hole, candidates: item.cardId === '25' ? ['06', '22', '48'] : pokerCandidates() };
-          candidate = null; updateTable(); renderPending();
-          announce('已获取三张候选，请选择一张。收起卡牌会保留待选。');
-          requestAnimationFrame(() => $('.candidate-stage button', content)?.focus({ preventScroll: true }));
-          return;
-        }
-        if (item.cardId === '11') { privateResult = true; renderPrivate(); updateTable(); return; }
-        let message = `${d.name}已使用`;
-        if (item.cardId === '04') {
-          // Deterministic demo result; no hidden opponent card appears in the target picker.
-          ownHoles[hole] = ['Qs', 'Th', '6d', 'Ac', 'Jh'].find(code => !ownHoles.includes(code)); message = `精准调包完成 · ${cardText(ownHoles[hole])} 已换入你的底牌`;
-        }
-        if (item.cardId === '41') { statuses.push('护身符 · 剩余 1 次'); message = '护身符已生效 · 可抵挡 1 次改牌'; }
-        if (item.cardId === '48') { statuses.push('反制咒 · 剩余 1 次'); message = '反制咒已生效 · 剩余 1 次'; }
-        if (item.cardId === '35') { stack += refundable; reserve -= refundable; message = `已取回最近一笔暂存的 ${refundable} 筹码`; refundable = 0; }
-        if (item.cardId === '38' || item.cardId === '22') {
-          hand.push(makeInstance('06'), makeInstance('35'));
-          message = item.cardId === '38' ? '已支付 20 筹码至暂存 · 获得 2 张能力牌' : '获得 2 张能力牌';
-        }
-        updateTable(); impact(destination); notify(message);
-        renderHand();
-      }
-      function renderPending() {
-        if (!pending) return;
-        selected = null; content.className = 'view';
-        const isAbility = pending.kind === 'ability';
-        setHeading('选择一张', isAbility ? `${pending.source} · 将一张能力牌加入手牌` : `${pending.source} · 替换你的 ${cardText(ownHoles[pending.hole])}`);
-        const slots = pending.candidates.map((value, index) => isAbility ? cardMarkup({ id: `candidate-${index}`, cardId: value }, index, pending.candidates.length, index) : `<div class="card-slot is-entering" data-candidate="${index}" style="--rest-r:${(index - 1) * 3}deg;--rest-y:${Math.abs(index - 1) * 5}px;--deal-i:${index}"><button type="button" class="poker-candidate" aria-label="选择${cardText(value)}" aria-pressed="${candidate === index}">${playing(value)}</button></div>`).join('');
-        content.innerHTML = `<div class="candidate-stage ${isAbility ? '' : 'poker-candidates'}"><div class="hand-row" aria-label="候选牌">${slots}</div></div><div class="candidate-footer"><button class="game-button" id="choose-candidate" type="button" ${candidate === null ? 'disabled' : ''}>${isAbility ? '加入手牌' : '替换底牌'} ${icon('arrow')}</button><p>其余候选归还牌池 · 收起后仍可继续选择<br>超时默认选择第一张，倒计时继续</p></div>`;
-        $$('.card-slot', content).forEach(slot => {
-          const index = Number(slot.dataset.candidate);
-          if (candidate === index) slot.classList.add('is-chosen');
-          $('button', slot).addEventListener('click', () => {
-            if (busy) return;
-            candidate = index;
-            $$('.card-slot', content).forEach(other => { const chosen = other === slot; other.classList.toggle('is-chosen', chosen); $('button', other).setAttribute('aria-pressed', String(chosen)); });
-            $('#choose-candidate').disabled = false;
-            announce(`已选择${isAbility ? defs[pending.candidates[index]].name : cardText(pending.candidates[index])}，请确认`);
-          });
-        });
-        $('#choose-candidate').addEventListener('click', chooseCandidate);
-        attachCardMotion(content); renderFooter('candidate');
-      }
-      async function chooseCandidate() {
-        if (candidate === null || !pending || busy) return;
-        const token = generation, resolved = { ...pending }, index = candidate;
-        busy = true; $('#choose-candidate').disabled = true; $('#choose-candidate').textContent = '正在收起…';
-        const flight = flyCard($(`[data-candidate="${index}"]`, content), $('#open-cards'));
-        await closeCards(false); await flight;
-        if (token !== generation) return;
-        const value = resolved.candidates[index];
-        if (resolved.kind === 'ability') hand.push(makeInstance(value));
-        else { ownHoles[resolved.hole] = value; privateResult = false; }
-        pending = null; candidate = null; busy = false;
-        updateTable(); notify(resolved.kind === 'ability' ? `${defs[value].name}已加入手牌` : `${cardText(value)} 已换入底牌`);
-        impact(resolved.kind === 'ability' ? $('#open-cards') : $('#own-holes'));
-      }
-      function renderPrivate() {
-        content.className = 'view private-view';
-        setHeading('本人情报', '', false);
-        content.innerHTML = `<span class="private-label">${icon('lock')}仅你可见</span><h2>下一张公共牌</h2><div class="private-card">${playing('Jd')}</div><p>当前牌序下，河牌将发出 ${cardText('Jd')}。<br>牌序变化后，这条情报会失效。</p><button type="button" class="game-button" id="private-continue">继续选牌 ${icon('cards')}</button>`;
-        $('#private-continue').addEventListener('click', renderHand);
-        renderFooter('private');
-        requestAnimationFrame(() => $('#private-continue')?.focus({ preventScroll: true }));
-        announce('私密情报：下一张公共牌为方块J，仅你可见');
-      }
-      function openCards() {
-        if (busy || Date.now() >= deadline) return;
-        closeVersion++; overlay.classList.remove('overlay-out');
-        if (!isOpen) restoreFocus = document.activeElement;
-        isOpen = true; overlay.hidden = false; table.inert = true;
-        $('#open-cards').setAttribute('aria-expanded', 'true');
-        dismissNotice();
-        if (pending) renderPending(); else renderHand();
-        requestAnimationFrame(() => ($('.hand-row button', content) || $('#close-cards')).focus({ preventScroll: true }));
-      }
-      async function closeCards(allowBusy = true) {
-        if (allowBusy && busy) return;
-        const version = ++closeVersion;
-        isOpen = false; table.inert = false;
-        $('#open-cards').setAttribute('aria-expanded', 'false');
-        overlay.classList.add('overlay-out');
-        if (!reduced.matches) await new Promise(resolve => setTimeout(resolve, 200));
-        if (isOpen || version !== closeVersion) return;
-        overlay.hidden = true; overlay.classList.remove('overlay-out');
-        (restoreFocus?.isConnected && !restoreFocus.closest('#card-overlay') ? restoreFocus : $('#open-cards')).focus({ preventScroll: true });
-      }
-      function reset(kind = 'hand') {
-        generation++; busy = false; selected = null; selections = {}; candidate = null; pending = null; page = 0; privateResult = false; statuses = [];
-        scenario = kind; stack = 2140; reserve = 60; refundable = 0; ownHoles = ['Kc', '8c']; deadline = Date.now() + 520000;
-        hand = ['04', '11', '25', '41', '38'].map(makeInstance);
-        if (kind === 'many') hand.push(...['35', '06', '22', '48', '41', '25', '04'].map(makeInstance));
-        if (kind === 'ability' || kind === 'poker') {
-          hand = hand.filter(item => item.cardId !== '25');
-          pending = { kind, source: kind === 'ability' ? '三思而行' : '左右逢源', hole: 1, candidates: kind === 'ability' ? ['06', '22', '48'] : pokerCandidates() };
-        }
-        $$('.card-flight, .impact').forEach(node => node.remove());
-        $$('.demo-actions [data-demo]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.demo === kind)));
-        updateTable(); tick(); openCards();
-      }
-      function tick() {
-        const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-        const display = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-        $$('[data-clock]').forEach(node => { node.textContent = display; });
-        $('.time').dataset.urgent = String(seconds < 60);
-        if (!seconds && !busy) {
-          // Static fixture mirrors the first-candidate fallback; it does not simulate a server turn engine.
-          if (pending) {
-            const value = pending.candidates[0];
-            if (pending.kind === 'ability') hand.push(makeInstance(value)); else ownHoles[pending.hole] = value;
-            pending = null; candidate = null;
-          }
-          selected = null; busy = false; updateTable();
-          if (isOpen) void closeCards();
-          $('#open-cards').disabled = true;
-          $('#table-status').textContent = '本回合已超时 · 待选已按第一张处理 · 切换演示场景可重置';
-        }
-      }
-      $('#clock-icon').innerHTML = icon('clock'); $('#close-cards').innerHTML = icon('x'); $('#heading-rule').innerHTML = icon('diamond');
-      const board = ['Ks', '9h', '7c', '2d'].map(playing).join('') + '<span class="empty-card" aria-label="河牌未发"></span>';
-      $('#table-board').innerHTML = board; $('#hud-board').innerHTML = '<span class="hud-board-label">公共牌</span>' + board;
-      $('#open-cards').addEventListener('click', openCards); $('#close-cards').addEventListener('click', () => void closeCards());
-      $('#reset').addEventListener('click', () => { $('#open-cards').disabled = false; reset(scenario); });
-      $$('[data-demo]').forEach(button => button.addEventListener('click', () => { $('#open-cards').disabled = false; reset(button.dataset.demo); }));
-      ['#fold-demo', '#check-demo'].forEach(selector => $(selector).addEventListener('click', () => notify(pending ? '请先完成待选卡牌' : '此原型仅演示卡牌操作')));
-      overlay.addEventListener('click', event => { if (event.target === overlay || event.target.classList.contains('overlay-layout')) void closeCards(); });
-      document.addEventListener('keydown', event => {
-        if (!isOpen || busy || event.ctrlKey || event.metaKey || event.altKey) return;
-        if (event.key === 'Escape') { event.preventDefault(); selected ? backToHand() : void closeCards(); return; }
-        if (event.key === 'Tab') {
-          const elements = $$('button:not(:disabled):not([tabindex="-1"])', overlay).filter(node => node.getClientRects().length && !node.closest('[hidden]'));
-          const first = elements[0], last = elements[elements.length - 1];
-          if (!elements.length) return;
-          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-        }
-        if ((event.key === 'ArrowRight' || event.key === 'ArrowLeft') && !selected) {
-          const options = $$('.hand-row button', content);
-          if (!options.length) return;
-          event.preventDefault();
-          const index = options.indexOf(document.activeElement), next = (index + (event.key === 'ArrowRight' ? 1 : -1) + options.length) % options.length;
-          options[next].focus({ preventScroll: true });
-          if (innerWidth <= 850) options[next].scrollIntoView({ behavior: reduced.matches ? 'instant' : 'smooth', block: 'nearest', inline: 'center' });
-        }
+      return request;
+    });
+  }
+  function pendingRequest() {
+    return { key: 'candidate', ui: pending.ui, label: '选择一张', options: pending.candidates.map((value, index) => option(index, pending.ui === 'poker-candidate' ? cardText(value) : defs[value.cardId].name, pending.ui === 'poker-candidate' ? { card: value } : { instance: value })) };
+  }
+  function quoteFor(d) {
+    const surcharge = d.ignoreSurcharges ? 0 : effects.filter(effect => effect.cardId === '49' && effect.seatNo === 3).reduce((sum, effect) => sum + (effect.amount || 20), 0);
+    const nominal = (d.costBB || 0) * 10 + surcharge;
+    const waiver = effects.filter(effect => ['31', '32'].includes(effect.cardId) && effect.seatNo === 3).reduce((sum, effect) => sum + (effect.cap || 0), 0);
+    return { nominal, waived: Math.min(waiver, nominal), paid: Math.max(0, nominal - waiver), surcharge };
+  }
+  function unavailableFor(item) {
+    if (['35', '36'].includes(item.cardId) && refundable === 0) return '没有可取回的暂存';
+    if (item.cardId === '25' && !abilityPool.length) return '共享能力牌池已空';
+    if (fixtureChoices(item).some(request => !request.options.length)) return '暂无合法目标';
+    if (quoteFor(defs[item.cardId]).paid > stack - 1) return '筹码不足，需保留至少 1 筹码';
+    return null;
+  }
+  function setHeading(title, subtitle, show = true) {
+    $('#stage-heading').hidden = !show; $('#stage-title').textContent = title; $('#stage-subtitle').textContent = subtitle;
+  }
+  function updateTable() {
+    $('#own-holes').innerHTML = ownHoles.map(playing).join('');
+    $('#stack').textContent = stack.toLocaleString('zh-CN'); $('#reserve-total').textContent = reserve.toLocaleString('zh-CN');
+    $('#open-cards').innerHTML = `${icon('cards')}<span>${pending ? '继续选牌' : '卡牌'}</span><b class="hand-count">${pending ? '待选' : hand.length}</b>`;
+    $('#table-status').textContent = effects.slice(0, 3).map(effect => `${ownerName(effect.seatNo)} · ${defs[effect.cardId].name}${effect.remaining == null ? '' : ` ${effect.remaining}次`}`).join('　');
+  }
+  function dismissNotice() { clearTimeout(noticeTimer); $('#notice').hidden = true; }
+  function notify(message) {
+    dismissNotice(); $('#notice').innerHTML = `${icon('tick')}<span>${esc(message)}</span>`; $('#notice').hidden = false;
+    noticeTimer = setTimeout(() => { $('#notice').hidden = true; }, 3300); announce(message);
+  }
+  function cardMarkup(item, index, total, options = {}) {
+    const d = defs[item.cardId], center = index - (total - 1) / 2;
+    const reason = options.request || options.display ? null : unavailableFor(item);
+    return `<div class="card-slot ${reason ? 'is-unavailable' : ''} ${options.active ? options.material ? 'is-picked' : 'is-chosen' : ''} ${options.material || options.display ? '' : 'is-entering'}" style="--rest-r:${center * 2.4}deg;--rest-y:${Math.abs(center) * 7}px;--deal-i:${Math.min(index, 4)}" data-instance="${esc(item.id)}" ${options.candidateIndex === undefined ? '' : `data-candidate="${options.candidateIndex}"`}>
+      <button class="ability-card" type="button" ${options.request ? choiceAttrs(options.request, options.item, options.values) : ''} ${options.display ? 'tabindex="-1" aria-hidden="true"' : ''} aria-label="${esc(options.item?.label || d.name)}，${esc(d.short)}${reason ? `，${esc(reason)}` : ''}">
+        <img class="ability-art" src="${ASSETS}ability-cards/v1/${item.cardId}.png" alt="" width="1122" height="1402" draggable="false"><span class="card-type">${icon(d.icon)}${esc(d.type)}</span>
+        <span class="card-body"><strong class="card-name">${esc(d.name)}</strong><span class="card-divider">${icon('diamond')}</span><span class="card-description">${esc(d.short)}</span><span class="card-cost">${d.costBB ? `${icon('coin')}${d.costBB}BB 筹码` : '无需筹码'}</span></span>
+        ${reason ? `<span class="card-locked"><span>${esc(reason)}</span></span>` : ''}</button>${options.material ? `<span class="material-outcome">${esc(options.badge)}</span>` : ''}</div>`;
+  }
+  function attachCardMotion(root) {
+    $$('.is-entering', root).forEach(slot => slot.addEventListener('animationend', () => slot.classList.remove('is-entering'), { once: true }));
+    $$('.ability-card', root).forEach(button => {
+      button.addEventListener('pointermove', event => {
+        if (reduced.matches || event.pointerType !== 'mouse' || innerWidth <= 850) return;
+        const rect = button.getBoundingClientRect();
+        button.style.setProperty('--tilt-x', `${-(event.clientY - rect.top - rect.height / 2) / rect.height * 3}deg`);
+        button.style.setProperty('--tilt-y', `${(event.clientX - rect.left - rect.width / 2) / rect.width * 3}deg`);
       });
-      let wasNarrow = innerWidth <= 850;
-      window.addEventListener('resize', () => {
-        const narrow = innerWidth <= 850;
-        if (narrow === wasNarrow) return;
-        wasNarrow = narrow;
-        if (isOpen && !selected && !pending) renderHand();
-      });
-      setInterval(tick, 1000);
-      reset();
-    })();
+      button.addEventListener('pointerleave', () => { button.style.removeProperty('--tilt-x'); button.style.removeProperty('--tilt-y'); });
+    });
+  }
+  function renderFooter(kind = 'hand') {
+    footer.innerHTML = `<div class="held-count">${icon('cards')}<span>${kind === 'hand' ? `<b>${hand.length}</b> 张手牌${hand.length > pageSize && innerWidth > 850 ? ` · ${page * pageSize + 1}–${Math.min((page + 1) * pageSize, hand.length)}` : ''}` : pending ? '待选结果仅你可见' : '手牌仅你可见'}</span></div><div class="key-hints"><span><kbd>← →</kbd>切换</span><span><kbd>Enter</kbd>选择</span><span><kbd>Esc</kbd>${selected ? '返回' : '收起'}</span></div><div class="footer-actions">${privateResults.length && kind === 'hand' ? '<button type="button" class="text-action" id="revisit-private">本人情报</button>' : ''}<button type="button" class="text-action" id="return-table">收起卡牌 ${icon('back')}</button></div>`;
+    $('#return-table').addEventListener('click', () => void closeCards()); $('#revisit-private')?.addEventListener('click', renderPrivate); footer.hidden = false;
+  }
+  function renderHand() {
+    selected = null; selections = {}; content.className = 'view';
+    setHeading('你的手牌', innerWidth <= 850 ? '左右滑动 · 轻点选牌' : '悬停查看 · 点击选牌');
+    page = Math.min(page, Math.max(0, Math.ceil(hand.length / pageSize) - 1));
+    const cards = innerWidth <= 850 ? hand : hand.slice(page * pageSize, (page + 1) * pageSize);
+    content.innerHTML = hand.length ? `<div class="hand-stage"><button class="page-arrow previous" type="button" aria-label="上一组手牌" ${page === 0 ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('left')}</button><div class="hand-row" aria-label="能力手牌">${cards.map((item, index) => cardMarkup(item, index, cards.length)).join('')}</div><button class="page-arrow next" type="button" aria-label="下一组手牌" ${(page + 1) * pageSize >= hand.length ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('right')}</button></div><div class="hand-status">可连续使用卡牌，再完成本轮下注</div>` : `<div class="empty-hand">${icon('cards')}<span>本轮手牌已用完</span><button class="text-action" type="button" id="empty-return">返回牌桌 ${icon('back')}</button></div>`;
+    $$('.hand-stage .card-slot', content).forEach(slot => $('.ability-card', slot).addEventListener('click', () => inspect(slot.dataset.instance, slot)));
+    $('.previous', content)?.addEventListener('click', () => { page--; renderHand(); focusFirstChoice(); });
+    $('.next', content)?.addEventListener('click', () => { page++; renderHand(); focusFirstChoice(); });
+    $('#empty-return')?.addEventListener('click', () => void closeCards()); attachCardMotion(content); renderFooter();
+  }
+  function focusFirstChoice() {
+    requestAnimationFrame(() => { if (isOpen) ($('[data-choice-key]:not(:disabled)', content) || $('.hand-row button', content) || $('#cast-card:not(:disabled)') || $('#close-cards'))?.focus({ preventScroll: true }); });
+  }
+  function inspect(instanceId, origin) {
+    if (busy || pending) return;
+    const item = hand.find(entry => entry.id === instanceId); if (!item) return;
+    const originRect = origin?.getBoundingClientRect(); selected = instanceId; selections = {};
+    const d = defs[item.cardId]; content.className = 'view inspect-view'; setHeading(d.name, '', false);
+    content.innerHTML = `<div class="inspect-top"><button class="text-action" id="back-hand" type="button">${icon('back')} 返回手牌</button></div><div class="inspect-layout"><div class="inspect-card">${cardMarkup(item, 0, 1, { display: true })}</div><div class="inspect-details"><div class="inspect-intro"><span class="inspect-category">${icon(d.icon)}${esc(d.type)}</span><h2>${esc(d.name)}</h2><p class="full-description">${esc(d.description)}</p></div><div class="selection-fields" id="selection-fields"></div><div class="cast-area"><div class="step-summary" id="step-summary"></div><p class="intent-preview" id="intent-preview"></p><p class="selection-receipt" id="selection-receipt"></p><div class="payment" id="payment"></div><div class="cast-row"><button class="game-button" type="button" id="cast-card"></button><button class="text-action" type="button" id="cancel-card">换一张</button></div><p class="inspect-warning" id="inspect-warning" hidden></p></div></div></div>`;
+    $('#back-hand').addEventListener('click', backToHand); $('#cancel-card').addEventListener('click', backToHand); $('#cast-card').addEventListener('click', () => void castCard());
+    renderChoices(); renderFooter('inspect');
+    if (originRect && !reduced.matches && typeof Element.prototype.animate === 'function') {
+      const artwork = $('.inspect-card'), to = artwork.getBoundingClientRect();
+      artwork.animate([{ transform: `translate(${originRect.left - to.left}px,${originRect.top - to.top}px) scale(${originRect.width / (to.width || 1)})` }, { transform: 'none' }], { duration: 350, easing: 'cubic-bezier(.22,1,.36,1)' });
+    }
+    focusFirstChoice(); announce(`已选择${d.name}${d.choices.length ? '，请选择目标' : '，确认后使用'}`);
+  }
+  function renderChoices() {
+    const item = current(); if (!item) return;
+    const requests = fixtureChoices(item);
+    // Revalidate every refresh; a stale or dependent selection cannot enable submission.
+    selections = reconcileChoices(requests, selections);
+    $('#selection-fields').innerHTML = requests.map(request => `<fieldset class="choice-field" data-selector="${request.ui}" data-blocked="${!dependencyReady(request, selections)}"><legend>${esc(request.label)}</legend>${request.options.length ? renderSelection(request) : '<p class="choice-empty">当前没有可选择的目标</p>'}${request.ui === 'ability' ? `<p class="choice-hint">${request.purpose === 'copy' ? '原牌保留，副本放入共享牌池' : '与正在使用的卡牌一起消耗'}</p>` : ''}${!dependencyReady(request, selections) ? '<p class="choice-hint">先选择上一步的目标</p>' : ''}</fieldset>`).join('');
+    updateIntent(); attachCardMotion($('#selection-fields'));
+  }
+  function updateIntent() {
+    const item = current(); if (!item) return;
+    const d = defs[item.cardId], requests = fixtureChoices(item), quote = quoteFor(d), reason = unavailableFor(item);
+    const next = requests.find(request => !validChoice(request, selections));
+    $('#cast-card').disabled = busy || !!next || !!reason;
+    $('#cast-card').innerHTML = `${quote.paid ? `支付 ${quote.paid} 筹码并使用` : '使用卡牌'} ${icon('arrow')}`;
+    $('#payment').innerHTML = quote.nominal ? `<span>代价 ${quote.nominal} 筹码${quote.surcharge ? `（含追加 ${quote.surcharge}）` : ''}</span><span>豁免 ${quote.waived}</span><span>实付 <strong>${quote.paid} 筹码</strong></span>` : '<span>无需筹码</span>';
+    $('#intent-preview').textContent = reason || (next ? next.label : d.followUp ? '确认使用后获取候选，再选择一张' : '目标已就绪，确认后施放');
+    $('#step-summary').innerHTML = requests.map((request, index) => `<span class="${validChoice(request, selections) ? 'step-complete' : request === next ? 'step-current' : ''}">${validChoice(request, selections) ? '✓ ' : ''}${esc(request.label)}</span>${index < requests.length - 1 ? icon('right') : ''}`).join('');
+    const summary = requests.filter(request => validChoice(request, selections)).map(request => {
+      const value = picked(request, selections[request.key]);
+      const label = request.ui === 'status' ? `${value.meta.owner} · ${value.label} · ${effectDetail(value.meta.effect)}` : value.label;
+      return `${request.ui === 'ability' ? request.purpose === 'copy' ? '保留并复制' : '额外消耗' : request.ui === 'status' ? '移除' : request.ui === 'color' ? '猜' : '选择'} <strong>${esc(label)}</strong>`;
+    });
+    $('#selection-receipt').innerHTML = summary.join(' · '); $('#selection-receipt').hidden = !summary.length;
+    $('#inspect-warning').hidden = !reason; $('#inspect-warning').textContent = reason ? '尚未施放，卡牌与筹码会保留。' : '';
+  }
+  function backToHand() {
+    if (busy) return; const id = selected; renderHand();
+    requestAnimationFrame(() => { if (isOpen) $(`[data-instance="${id}"] .ability-card`, content)?.focus({ preventScroll: true }); });
+  }
+  function addEffect(cardId, seatNo, extra = {}) {
+    effects.push({ id: `effect-${++serial}`, cardId, seatNo, polarity: 'positive', remaining: 1, dispellable: true, ...extra });
+  }
+  function drawAbilities(count) { const drawn = abilityPool.splice(0, count); hand.push(...drawn); return drawn.length; }
+  function addPrivate(type, label, values, future = false) { privateResults.push({ type, label, values, future, valid: true }); }
+  function invalidatePrivate() { privateResults.forEach(result => { if (result.future) result.valid = false; }); }
+  function pokerCandidates() { return ['As', 'Qh', 'Td', '6s', 'Ac', 'Jh'].filter(card => !ownHoles.includes(card)).slice(0, 3); }
+  function applyDemoOutcome(d, values, material) {
+    const id = d.id, hole = Number(values.hole), target = values.player === undefined ? undefined : Number(values.player);
+    const [targetSeat] = String(values.targetHole || '').split(':').map(Number);
+    const message = text => ({ message: text });
+    if (d.followUp) {
+      pending = { ui: d.followUp, source: d.name, sourceCardId: id, hole, candidates: d.followUp === 'poker-candidate' ? pokerCandidates() : abilityPool.splice(0, 3) };
+      if (d.followUp === 'poker-candidate') invalidatePrivate();
+      return { pending: true };
+    }
+    if (['01', '03', '04', '07', '08', '09'].includes(id)) {
+      const guard = ['03', '04'].includes(id) && effects.find(effect => ['41', '42', '48'].includes(effect.cardId) && effect.seatNo === (target ?? 0));
+      if (guard) { if (--guard.remaining <= 0) effects = effects.filter(effect => effect !== guard); return message('对方防护已抵挡 · 本次卡牌已消耗'); }
+      ownHoles[hole] = (id === '08' ? ['Th', '6d'] : id === '07' ? ['As', 'Kh'] : ['Qs', 'Th', '6d', 'Ac', 'Jh']).find(card => !ownHoles.includes(card));
+      if (!['03', '04'].includes(id)) invalidatePrivate();
+      return message(`${d.name}完成 · ${cardText(ownHoles[hole])} 已换入底牌`);
+    }
+    if (['02', '05', '10'].includes(id)) { ownHoles = ['Th', '6d']; if (id === '02') invalidatePrivate(); return message(`${d.name}完成 · 已更新你的两张底牌`); }
+    if (['11', '12', '16'].includes(id)) { addPrivate('poker', id === '16' ? '牌堆顶部 · 按顺序' : id === '12' ? '下一阶段公共牌' : '下一张公共牌', id === '16' ? ['Jd', '6h', 'Tc'] : ['Jd'], true); return { private: true }; }
+    if (['13', '14'].includes(id)) { addPrivate('poker', `${ownerName(target)} · 本次查看`, id === '14' ? ['Th', '6d'] : ['Th']); return { private: true }; }
+    if (id === '15') { addPrivate('ability', `${ownerName(target)} · 本次看到的能力牌`, ['21']); return { private: true }; }
+    if (['19', '20'].includes(id)) { addPrivate('symbol', `${ownerName(target)} · ${id === '19' ? '花色' : '点数'}`, [id === '19' ? '♥' : 'Q']); return { private: true }; }
+    if (id === '17') { publicOwn.push(ownHoles[hole]); addEffect(id, 3, { polarity: 'negative', remaining: null, slot: hole }); return message(`${cardText(ownHoles[hole])} 已公开 · 标记随实体牌移动`); }
+    if (id === '18') { const matched = values.color === 'red'; if (matched) drawAbilities(1); return message(`${ownerName(targetSeat)}的目标底牌为红色 · ${matched ? '猜中，获得一张能力牌' : '未猜中'}`); }
+    if (['21', '22', '23', '24', '26', '27', '28', '30', '38'].includes(id)) {
+      if (id === '28') abilityPool.push(makeInstance('21'));
+      if (id === '30') abilityPool.push(makeInstance('41'), makeInstance('22'));
+      const count = ['23'].includes(id) ? 3 : ['22', '24', '30', '38'].includes(id) ? 2 : 1;
+      const drawn = drawAbilities(count);
+      return message(`${d.name}已完成 · ${drawn ? `获得 ${drawn} 张能力牌` : '共享能力牌池已空'}${drawn && drawn < count ? '，牌池已空' : ''}`);
+    }
+    if (id === '29') { abilityPool.push(makeInstance(material.cardId)); return message(`${defs[material.cardId].name}的副本已放入共享池 · 原牌保留`); }
+    if (['33', '34', '39'].includes(id)) {
+      if (effects.some(effect => effect.cardId === '37')) return message('暂存封条已阻止盗取 · 卡牌已消耗');
+      const amount = Math.min(reserve, id === '33' ? 100 : id === '34' ? 30 : 50); reserve -= amount; stack += amount; return message(`从暂存获得 ${amount} 筹码`);
+    }
+    if (['35', '36'].includes(id)) { const amount = Math.min(refundable, id === '35' ? refundable : 30); refundable -= amount; reserve -= amount; stack += amount; return message(`已取回最近一笔暂存的 ${amount} 筹码`); }
+    if (['45', '46'].includes(id)) {
+      const effect = effects.find(entry => entry.id === values.status);
+      effects = effects.filter(entry => entry.id !== values.status);
+      if (effect?.restoreMs) deadline = Math.min(deadline + effect.restoreMs, turnStartedAt + 1200000);
+      if (effect?.slot !== undefined && effect.seatNo === 3) publicOwn = publicOwn.filter(card => card !== ownHoles[effect.slot]);
+      return message(`${defs[effect.cardId].name}已移除${effect.restoreMs ? ' · 已返还被扣除的时间' : ''}`);
+    }
+    if (['51', '52'].includes(id)) { deadline = Math.min(Date.now() + (deadline - Date.now()) * (id === '51' ? 2 : 1) + (id === '52' ? 60000 : 0), turnStartedAt + 1200000); tick(); return message('操作时间已更新'); }
+    if (id === '58') { ownHoles.reverse(); return message('左右底牌已对调，牌型不变'); }
+    if (id === '59') return message('星光一闪');
+    const group = ['37', '54', '55', '56', '60'].includes(id);
+    const remaining = ['37', '54', '56', '60', '53'].includes(id) ? null : id === '42' ? 2 : 1;
+    if (group || id === '53') effects = effects.filter(effect => effect.cardId !== id || !group && effect.seatNo !== target);
+    addEffect(id, group ? undefined : target ?? 3, { remaining, polarity: ['49', '53'].includes(id) ? 'negative' : group ? 'neutral' : 'positive', expiresStreet: ['37', '54', '56', '60'].includes(id), ...(id === '31' || id === '32' ? { cap: id === '31' ? 100 : 30 } : {}) });
+    return message(`${d.name}已生效${remaining == null ? '' : ` · 剩余 ${remaining} 次`}`);
+  }
+  async function flyCard(element, destination) {
+    if (!element || !destination || reduced.matches || typeof Element.prototype.animate !== 'function') return;
+    const rect = element.getBoundingClientRect(), target = destination.getBoundingClientRect(); if (!rect.width || !target.width) return;
+    const flight = document.createElement('div'); flight.className = 'card-flight';
+    Object.assign(flight.style, { top: `${rect.top}px`, left: `${rect.left}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+    const clone = element.cloneNode(true); clone.classList.remove('is-entering'); $$('[id]', clone).forEach(node => node.removeAttribute('id')); $$('.is-entering', clone).forEach(node => node.classList.remove('is-entering')); flight.append(clone); document.body.append(flight);
+    try { await flight.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${target.left + target.width / 2 - rect.left - rect.width / 2}px,${target.top + target.height / 2 - rect.top - rect.height / 2}px) scale(.13) rotate(8deg)`, opacity: .15 }], { duration: 450, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }).finished; }
+    finally { flight.remove(); }
+  }
+  function impact(destination) {
+    if (!destination || reduced.matches) return;
+    const rect = destination.getBoundingClientRect(), ring = document.createElement('div'); ring.className = 'impact'; ring.style.left = `${rect.left + rect.width / 2 - 40}px`; ring.style.top = `${rect.top + rect.height / 2 - 40}px`; document.body.append(ring); ring.addEventListener('animationend', () => ring.remove(), { once: true });
+  }
+  async function castCard() {
+    if (Date.now() >= deadline) { tick(); return; }
+    const item = current(); if (!item || busy || pending || unavailableFor(item)) return;
+    const requests = fixtureChoices(item); if (requests.some(request => !validChoice(request, selections))) return;
+    const d = defs[item.cardId], values = { ...selections }, material = hand.find(entry => entry.id === values.ability), quote = quoteFor(d), token = generation;
+    busy = true; $('#cast-card').disabled = true; $('#cast-card').textContent = '出牌中…';
+    // The fixture resolves locally; a production adapter must use committed server results.
+    hand = hand.filter(entry => entry.id !== item.id && !(d.consumeSelected && entry.id === material?.id)); selected = null;
+    stack -= quote.paid; reserve += quote.paid; if (quote.paid) refundable = quote.paid;
+    if (quote.nominal) effects = effects.filter(effect => !(effect.seatNo === 3 && ((!d.ignoreSurcharges && effect.cardId === '49') || quote.waived && ['31', '32'].includes(effect.cardId))));
+    const outcome = applyDemoOutcome(d, values, material);
+    if (outcome.pending || outcome.private) { busy = false; updateTable(); outcome.pending ? renderPending() : renderPrivate(); focusFirstChoice(); return; }
+    const target = values.player === undefined ? values.targetHole?.split(':')[0] : values.player;
+    const destination = $(`[data-seat="${target === undefined ? 'self' : playerAt(target)?.id || 'self'}"] .seat-plate`);
+    const flight = flyCard($('.inspect-card'), destination); await closeCards(false); await flight; if (token !== generation) return;
+    busy = false; updateTable(); renderHand(); impact(destination); notify(outcome.message);
+  }
+  function renderPending(animate = true) {
+    if (!pending) return; selected = null; content.className = 'view';
+    const request = pendingRequest(), poker = request.ui === 'poker-candidate';
+    setHeading('选择一张', `${pending.source} · ${poker ? `替换你的 ${cardText(ownHoles[pending.hole])}` : '将一张能力牌加入手牌'}`);
+    content.innerHTML = `<div data-selector="${request.ui}">${renderSelection(request)}</div><div class="candidate-footer"><button class="game-button" id="choose-candidate" type="button" ${validChoice(request, selections) ? '' : 'disabled'}>${poker ? '替换底牌' : '加入手牌'} ${icon('arrow')}</button><p>其余候选归还牌池 · 收起后仍可继续选择<br>超时默认选择第一张，倒计时继续</p></div>`;
+    if (!animate) $$('.is-entering', content).forEach(node => node.classList.remove('is-entering'));
+    $('#choose-candidate').addEventListener('click', () => void chooseCandidate()); attachCardMotion(content); renderFooter('candidate');
+  }
+  function completePending(index) {
+    const resolved = pending, value = resolved.candidates[index];
+    if (resolved.ui === 'ability-candidate') { hand.push(value); abilityPool.push(...resolved.candidates.filter((_, i) => i !== index)); }
+    else { ownHoles[resolved.hole] = value; invalidatePrivate(); }
+    pending = null; selections = {};
+    return resolved.ui === 'ability-candidate' ? `${defs[value.cardId].name}已加入手牌` : `${cardText(value)} 已换入底牌`;
+  }
+  async function chooseCandidate() {
+    if (Date.now() >= deadline) { tick(); return; }
+    if (!pending || busy || !validChoice(pendingRequest(), selections)) return;
+    const index = Number(selections.candidate), token = generation;
+    busy = true; $('#choose-candidate').disabled = true; $('#choose-candidate').textContent = '正在收起…';
+    const flight = flyCard($(`[data-candidate="${index}"]`, content), $('#open-cards')); await closeCards(false); await flight; if (token !== generation) return;
+    const message = completePending(index); busy = false; updateTable(); renderHand(); impact($('#open-cards')); notify(message);
+  }
+  function renderPrivate() {
+    const result = privateResults.at(-1); if (!result) return;
+    selected = null; content.className = 'view private-view'; setHeading('本人情报', '', false);
+    const visual = result.type === 'poker' ? `<div class="private-cards">${result.values.map(card => `<div class="private-card">${playing(card)}</div>`).join('')}</div>` : result.type === 'ability' ? `<div class="private-ability">${cardMarkup({ id: 'observed', cardId: result.values[0] }, 0, 1, { display: true })}</div>` : `<div class="private-symbol">${esc(result.values[0])}</div>`;
+    content.innerHTML = `<span class="private-label">${icon('lock')}仅你可见${!result.valid ? ' · 已失效' : ''}</span><h2>${esc(result.label)}</h2>${visual}<p>${!result.valid ? '牌序已经变化，这条预览已失效。' : result.future ? '仅对应当前牌序，牌序变化后失效。' : '这是本次查看时的结果。'}${result.label.startsWith('牌堆顶部') ? '<br>包含可能被烧掉的牌。' : ''}</p><button type="button" class="game-button" id="private-continue">继续选牌 ${icon('cards')}</button>`;
+    $('#private-continue').addEventListener('click', renderHand); renderFooter('private'); requestAnimationFrame(() => $('#private-continue')?.focus({ preventScroll: true }));
+  }
+  function openCards() {
+    if (busy || Date.now() >= deadline) return;
+    closeVersion++; overlay.classList.remove('overlay-out'); if (!isOpen) restoreFocus = document.activeElement;
+    isOpen = true; overlay.hidden = false; table.inert = true; $('#open-cards').setAttribute('aria-expanded', 'true'); dismissNotice();
+    pending ? renderPending() : renderHand(); focusFirstChoice();
+  }
+  async function closeCards(allowBusy = true) {
+    if (allowBusy && busy) return; const version = ++closeVersion;
+    isOpen = false; table.inert = false; $('#open-cards').setAttribute('aria-expanded', 'false'); overlay.classList.add('overlay-out');
+    if (!reduced.matches) await new Promise(resolve => setTimeout(resolve, 200)); if (isOpen || version !== closeVersion) return;
+    overlay.hidden = true; overlay.classList.remove('overlay-out'); (restoreFocus?.isConnected && !restoreFocus.closest('#card-overlay') ? restoreFocus : $('#open-cards')).focus({ preventScroll: true });
+  }
+  let turnStartedAt = Date.now();
+  const demoCards = { 'own-hole': '06', player: '13', 'opponent-hole': '18', color: '18', 'ability-material': '24', 'ability-copy': '29', status: '45', cleanse: '46', empty: '15' };
+  function reset(kind = 'hand') {
+    generation++; busy = false; selected = null; selections = {}; pending = null; page = 0; privateResults = [];
+    scenario = kind; stack = 2140; reserve = 60; refundable = 0; ownHoles = ['Kc', '8c']; publicOwn = ['Kc']; turnStartedAt = Date.now(); deadline = turnStartedAt + 520000;
+    players = [{ id: 'north', seatNo: 0, name: '阿岚', glyph: '岚', abilityCount: 2, publicSlots: [], bot: false }, { id: 'west', seatNo: 1, name: '小舟', glyph: '舟', abilityCount: 0, publicSlots: [], bot: false }, { id: 'east', seatNo: 2, name: '林间', glyph: '林', abilityCount: 0, publicSlots: [1], bot: true }];
+    effects = []; addEffect('41', 0); addEffect('41', 0); addEffect('53', 3, { remaining: null, polarity: 'negative', restoreMs: 300000 }); addEffect('17', 3, { remaining: null, polarity: 'negative', slot: 0 }); addEffect('37', undefined, { remaining: null, polarity: 'neutral', expiresStreet: true });
+    const preferred = ['06', '22', '48', '21', '41', '35', '24', '29', '45', '46'];
+    abilityPool = Object.values(defs).flatMap(d => Array.from({ length: d.copies }, () => makeInstance(d.id)));
+    abilityPool.sort((a, b) => (preferred.indexOf(a.cardId) < 0 ? 100 : preferred.indexOf(a.cardId)) - (preferred.indexOf(b.cardId) < 0 ? 100 : preferred.indexOf(b.cardId)));
+    const take = id => { const index = abilityPool.findIndex(item => item.cardId === id); if (index < 0) throw new Error(`演示牌池缺少 ${id}`); return abilityPool.splice(index, 1)[0]; };
+    let ids = ['04', '18', '24', '45', '25'];
+    if (kind === 'many') ids = ['04', '18', '24', '45', '25', '06', '29', '46', '13', '11', '38', '35', '24', '41', '21'];
+    if (demoCards[kind]) ids = [...new Set([demoCards[kind], '24', '29', '35', '41'])];
+    if (['ability-material', 'ability-copy'].includes(kind)) ids = [demoCards[kind], '35', '41', '41', '06'];
+    hand = ids.map(take);
+    if (['ability', 'poker', 'single'].includes(kind)) {
+      hand = hand.filter(item => item.cardId !== '25');
+      pending = { ui: kind === 'poker' ? 'poker-candidate' : 'ability-candidate', source: kind === 'poker' ? '左右逢源' : '三思而行', sourceCardId: kind === 'poker' ? '06' : '25', hole: 1, candidates: kind === 'poker' ? pokerCandidates() : abilityPool.splice(0, kind === 'single' ? 1 : 3) };
+    }
+    if (kind === 'empty') players.forEach(player => { player.abilityCount = 0; });
+    $$('.card-flight, .impact').forEach(node => node.remove()); $$('.demo-actions [data-demo]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.demo === kind)));
+    $('#interaction-demo').value = (demoCards[kind] || ['ability', 'poker', 'single'].includes(kind)) ? kind : '';
+    $('#open-cards').disabled = false; updateTable(); tick(); openCards();
+    if (demoCards[kind]) { inspect(hand.find(item => item.cardId === demoCards[kind]).id); if (kind === 'color') { setChoice(fixtureChoices(current()), 'targetHole', '0:0'); renderChoices(); } }
+  }
+  function tick() {
+    const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    const display = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+    $$('[data-clock]').forEach(node => { node.textContent = display; }); $('.time').dataset.urgent = String(seconds < 60);
+    if (!seconds && !busy) {
+      const hadPending = !!pending; if (pending) completePending(0);
+      selected = null; updateTable(); if (isOpen) void closeCards(); $('#open-cards').disabled = true;
+      $('#table-status').textContent = `本回合已超时${hadPending ? ' · 待选已按第一张处理' : ''} · 切换演示场景可重置`;
+    }
+  }
+  $('#clock-icon').innerHTML = icon('clock'); $('#close-cards').innerHTML = icon('x'); $('#heading-rule').innerHTML = icon('diamond');
+  const board = ['Ks', '9h', '7c', '2d'].map(playing).join('') + '<span class="empty-card" aria-label="河牌未发"></span>';
+  $('#table-board').innerHTML = board; $('#hud-board').innerHTML = '<span class="hud-board-label">公共牌</span>' + board;
+  $('#open-cards').addEventListener('click', openCards); $('#close-cards').addEventListener('click', () => void closeCards());
+  $('#reset').addEventListener('click', () => reset(scenario)); $$('[data-demo]').forEach(button => button.addEventListener('click', () => reset(button.dataset.demo)));
+  $('#interaction-demo').addEventListener('change', event => { if (event.target.value) reset(event.target.value); });
+  content.addEventListener('click', event => {
+    const button = event.target.closest('[data-choice-key]'); if (!button || button.disabled || busy) return;
+    const requests = pending ? [pendingRequest()] : current() ? fixtureChoices(current()) : [];
+    if (!setChoice(requests, button.dataset.choiceKey, button.dataset.value)) return;
+    const key = button.dataset.choiceKey, value = button.dataset.value;
+    const rails = $$('.ability-options, .effect-options, .opponent-hands', content).map(node => [node.className, node.scrollLeft, node.scrollTop]);
+    pending ? renderPending(false) : renderChoices();
+    rails.forEach(([className, left, top]) => { const rail = $(`.${className}`, content); if (rail) { rail.scrollLeft = left; rail.scrollTop = top; } });
+    $$('[data-choice-key]', content).find(node => node.dataset.choiceKey === key && node.dataset.value === value)?.focus({ preventScroll: true });
+    announce(`已选择${picked(requests.find(request => request.key === key), value).label}`);
+  });
+  ['#fold-demo', '#check-demo'].forEach(selector => $(selector).addEventListener('click', () => notify(pending ? '请先完成待选卡牌' : '此原型仅演示卡牌操作')));
+  overlay.addEventListener('click', event => { if (event.target === overlay || event.target.classList.contains('overlay-layout')) void closeCards(); });
+  document.addEventListener('keydown', event => {
+    if (!isOpen || busy || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === 'Escape') { event.preventDefault(); selected ? backToHand() : void closeCards(); return; }
+    if (event.key === 'Tab') {
+      const elements = $$('button:not(:disabled):not([tabindex="-1"])', overlay).filter(node => node.getClientRects().length && !node.closest('[hidden]'));
+      const first = elements[0], last = elements.at(-1); if (!first) return;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      const active = document.activeElement, field = active?.closest('.choice-field'), row = active?.closest('.hand-row');
+      const root = field || row; if (!root) return;
+      const options = $$('button:not(:disabled):not([tabindex="-1"])', root); if (!options.length) return;
+      event.preventDefault(); const index = options.indexOf(active), next = (index + (event.key === 'ArrowRight' ? 1 : -1) + options.length) % options.length;
+      options[next].focus({ preventScroll: true }); options[next].scrollIntoView({ behavior: reduced.matches ? 'instant' : 'smooth', block: 'nearest', inline: 'center' });
+    }
+  });
+  let wasNarrow = innerWidth <= 850;
+  window.addEventListener('resize', () => { const narrow = innerWidth <= 850; if (narrow === wasNarrow) return; wasNarrow = narrow; if (isOpen && !selected && !pending) renderHand(); });
+  setInterval(tick, 1000); reset();
+})();
+
   </script>
 </body>
 </html>
