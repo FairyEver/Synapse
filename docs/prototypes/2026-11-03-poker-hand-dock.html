@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/responsive-controls.css">
   <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/adaptive-table.css">
   <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/chips.css">
+  <link rel="stylesheet" href="../../dashboard/src/game-center/games/poker/styles/cards.css">
   <style>
     :root {
       /* HeroUI light tokens as computed on the current Web game. */
@@ -98,25 +99,26 @@
     #results .poker-settlement strong { max-width: none; }
 
     .hand-dock {
-      display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: .75rem;
-      width: min(100%, 49rem); margin: 0 auto .35rem;
+      display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: .375rem;
+      width: min(100%, 45rem); margin: 0 auto .35rem;
     }
     .dock-label { display: flex; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: .6875rem; white-space: nowrap; }
     .dock-label strong { color: var(--foreground); font-size: .8125rem; font-weight: 650; }
-    .own { display: grid; gap: 4px; padding-bottom: 3px; }
+    .own { display: grid; gap: 4px; padding-bottom: 6px; pointer-events: none; user-select: none; }
     .own-cards { display: flex; gap: 4px; }
     .own-cards .playing { width: 42px; }
     .shield { display: inline-flex; color: var(--accent); }
     .shield svg { width: 15px; height: 15px; }
     .hand { min-width: 0; }
-    .hand-title { justify-content: center; }
+    .hand-title { padding-left: 7px; }
     .hand-title .button { min-height: 24px; width: 24px; min-width: 24px; }
     .fan { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
-    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; justify-content: center; min-height: 98px; padding: 9px 7px 6px; }
+    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; min-height: 98px; padding: 9px 7px 6px; }
     .ability {
       position: relative; flex: 0 0 auto; display: grid; gap: 3px; justify-items: center; width: clamp(58px, 6.3vw, 78px);
       padding: 4px 4px 5px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-paper);
       color: var(--foreground); box-shadow: 0 2px 5px var(--shadow); transition: transform 150ms ease-out;
+      touch-action: pan-x; cursor: grab; user-select: none;
     }
     .ability + .ability { margin-left: -6px; }
     .ability img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 5px; }
@@ -125,9 +127,10 @@
       position: absolute; top: -5px; left: -5px; display: grid; place-items: center; min-width: 22px; padding: 0 4px; height: 21px;
       border: 2px solid var(--surface); border-radius: 99px; background: var(--accent); color: var(--accent-foreground); font-size: .625rem; font-weight: 750;
     }
-    .ability[aria-pressed="true"] { z-index: 2; border-color: var(--accent); }
-    .ability[aria-pressed="true"], .ability:focus-visible { transform: translateY(-4px); z-index: 3; }
+    .ability:focus-visible { transform: translateY(-4px); z-index: 3; }
     .ability.unavailable .price { background: var(--muted); }
+    .ability.unavailable { cursor: default; }
+    .ability[data-dragging] { opacity: .35; }
     .fan-inner > :first-child:nth-last-child(n+4), .fan-inner > :nth-child(2):nth-last-child(n+3) { rotate: -4deg; }
     .fan-inner > :last-child:nth-child(n+4), .fan-inner > :nth-last-child(2):nth-child(n+3) { rotate: 4deg; }
     @media (hover: hover) { .ability:hover { transform: translateY(-4px); z-index: 3; } }
@@ -143,7 +146,7 @@
     .log-entry img { width: 100%; height: 100%; object-fit: cover; }
     .log-entry[data-active="true"] { border-color: var(--accent); color: var(--accent); }
     .prototype-overlay { grid-area: 2 / 1; position: relative; z-index: 5; min-height: 0; pointer-events: none; }
-    .log-tip, .detail, .web-popover {
+    .log-tip, .card-preview, .web-popover {
       position: absolute; background: var(--surface); border: 1px solid var(--separator);
       border-radius: calc(var(--radius) * 1.5); box-shadow: 0 6px 18px var(--shadow);
     }
@@ -157,27 +160,48 @@
     .log-tip strong { display: block; font-size: .875rem; }
     .log-tip p { margin-top: 3px; color: var(--muted); }
     .log-tip .log-result { color: var(--foreground); }
-    .detail {
-      z-index: 1; inset: auto 0 .5rem; margin-inline: auto; width: min(580px, calc(100% - 24px));
-      max-height: min(230px, calc(63% - 16px)); overflow-y: auto; padding: 12px 14px; pointer-events: auto;
-    }
-    .detail-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 11px; align-items: start; }
-    .detail-heading img { width: 44px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 6px; }
-    .detail h2, .web-popover h2 { font-size: 1rem; font-weight: 650; }
-    .detail p { margin-top: 4px; font-size: .75rem; color: var(--muted); line-height: 1.45; }
-    .detail p.error { color: var(--danger); }
-    .targets, .candidates { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
-    .candidate[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
     .playing { aspect-ratio: 5 / 7; width: 42px; height: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); object-fit: contain; }
-    .targets .playing { width: 20px; }
-    .detail-footer { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 8px; }
-    .detail-footer > span { color: var(--muted); font-size: .75rem; }
-    .detail-footer strong { color: var(--foreground); }
-    .candidates { display: grid; grid-template-columns: repeat(5, minmax(0, 43px)); }
-    .candidate { min-width: 0; padding: 2px; border: 1px solid transparent; border-radius: 7px; background: var(--background); }
-    .candidate .playing { width: 100%; }
-    .intel-cards { display: flex; gap: 4px; margin-top: 7px; }
-    .intel-cards .playing { width: 36px; }
+    .card-preview {
+      position: fixed; inset: auto; z-index: 10; width: min(355px, calc(100vw - 20px));
+      display: grid; grid-template-columns: minmax(90px, 39%) minmax(0, 1fr); align-items: center; gap: 13px;
+      padding: 10px; pointer-events: none; font: .875rem/1.5 var(--system-font);
+    }
+    .preview-face { padding: 5px; text-align: center; background: var(--card-paper); border: 1px solid var(--border); border-radius: var(--radius); }
+    .preview-face img { width: 100%; aspect-ratio: 4 / 5; object-fit: contain; border-radius: 5px; }
+    .preview-face strong { display: block; padding-block: 4px 1px; }
+    .preview-copy h2, .web-popover h2 { font-size: 1rem; font-weight: 650; }
+    .preview-copy p + p, .preview-copy h2 + p { margin-top: .375rem; }
+    .preview-copy .fee { color: var(--accent-soft-foreground); font-size: .8125rem; font-weight: 600; }
+    .preview-copy .hint { color: var(--muted); font-size: .75rem; }
+    .drag-card {
+      position: fixed; top: 0; left: 0; z-index: 12; width: 85px; pointer-events: none;
+      box-shadow: 0 5px 16px var(--shadow); transform-origin: top left;
+    }
+    body[data-card-drag] { cursor: grabbing; user-select: none; }
+    .poker-table-main[data-drop] { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+
+    .prototype-stage {
+      width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0;
+      font-family: var(--system-font); background-color: var(--stage-deep);
+    }
+    .prototype-stage::backdrop { background: transparent; }
+    .prototype-stage .stage-content {
+      min-width: 0; min-height: 0; display: grid; align-content: center; justify-items: center; gap: 20px;
+      padding: 12px 14px; overflow: auto; text-align: center;
+    }
+    .prototype-stage .stage-options {
+      --cw: min(140px, 16vw, 31dvh); display: flex; justify-content: center; flex-wrap: wrap; gap: clamp(8px, 2vw, 22px);
+      width: min(920px, 100%); padding: 6px;
+    }
+    .prototype-stage .stage-options .poker-candidate { width: var(--cw); flex: none; }
+    .prototype-stage .stage-options .target-choice { flex: 0 1 auto; min-width: min(120px, 100%); }
+    .prototype-stage .poker-candidate[aria-pressed="true"],
+    .prototype-stage button:focus-visible { outline: 2px solid var(--brass-light); outline-offset: 4px; }
+    .prototype-stage .stage-context { color: var(--stage-muted); font-size: .875rem; }
+    .prototype-stage .intel-list { width: min(520px, 100%); text-align: left; }
+    .prototype-stage .intel-values { --cw: min(108px, 19vw, 25dvh); }
+    .prototype-stage .stage-footer[data-has-primary="false"] .footer-actions { margin-left: auto; }
+    .prototype-stage .stage-error { color: var(--brass-light); }
 
     .web-popover {
       position: fixed; inset: auto; z-index: 9; max-width: calc(100vw - 1rem); max-height: min(55dvh, 30rem);
@@ -208,11 +232,6 @@
       .ability + .ability { margin-left: 0; }
       .rail { padding: 9px 2px 4px; gap: 4px; }
       .log-entry { width: 32px; height: 32px; }
-      .detail { width: calc(100% - 12px); padding: 8px 9px; max-height: min(193px, calc(100% - 88px)); }
-      .detail-heading { gap: 7px; }
-      .detail-heading img { width: 36px; }
-      .detail-heading .button { width: 30px; min-width: 30px; min-height: 30px; }
-      .detail-footer { margin-top: 6px; }
     }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
   </style>
@@ -254,7 +273,6 @@
       </div>
 
       <div class="prototype-overlay font-sans">
-        <section id="detail" class="detail" aria-labelledby="detail-title" hidden></section>
         <div id="log-tip" class="log-tip" hidden></div>
       </div>
       <aside class="rail font-sans" aria-label="对局日志">
@@ -280,6 +298,9 @@
       </footer>
     </div>
   </main>
+  <div id="card-preview" class="card-preview" role="tooltip" hidden></div>
+  <div id="drag-card" class="drag-card preview-face" aria-hidden="true" hidden></div>
+  <dialog id="card-stage" class="poker-card-stage prototype-stage" data-standalone="true" aria-labelledby="stage-title" aria-modal="true"></dialog>
   <dialog id="system-panel" class="web-popover" aria-labelledby="system-title"></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
 
@@ -451,6 +472,13 @@ const Poker = (() => {
     state.log.find(entry => entry.id === pending.eventId).result = '已替换一张底牌';
     state.pending = null;
     return null;
+  }
+
+  function preparePlay(state, id, target, expected) {
+    // Pending selections stay off the public table until the whole effect completes.
+    const draft = structuredClone(state);
+    const error = use(draft, id, target, expected);
+    return error ? { error } : { draft };
   }
 
   function pots(state) {
@@ -641,7 +669,7 @@ const Poker = (() => {
     return null;
   }
 
-  return { cards, streets, reset, quote, unavailable, use, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent };
+  return { cards, streets, reset, quote, unavailable, use, preparePlay, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent };
 })();
   </script>
   <script>
@@ -989,7 +1017,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
 })();
 
 (() => {
-  const { cards, reset, quote, unavailable, use, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent } = Poker;
+  const { cards, reset, quote, unavailable, preparePlay, choose, pots, toCall, raiseAmount, canRaise, bet, advanceOpponent } = Poker;
   const streets = { ...Poker.streets, preflop: '翻前' };
   const assets = '../../dashboard/src/game-center/games/poker/assets/';
   const $ = selector => document.querySelector(selector);
@@ -1029,9 +1057,9 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   let chosenBet = null;
   let matchTab = '日志';
   let state;
-  let selection;
-  let showIntel;
-  let error;
+  let stage;
+  let previewTrigger;
+  let drag;
   let pinnedLog;
   let hoveredLog;
   let focusedLog;
@@ -1180,14 +1208,15 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     $('#shield').hidden = !state.shield;
     $('#hand-count').textContent = state.hand.length + ' 张';
     $('#intel').hidden = !state.intel.length;
-    $('#intel').setAttribute('aria-expanded', String(showIntel));
+    $('#intel').setAttribute('aria-expanded', String(stage?.mode === 'intel'));
     $('#hand').innerHTML = state.hand.map(instance => {
       const key = instance.key;
       const amount = quote(state, key);
       const def = cards[key];
       return '<button type="button" class="ability' + (unavailable(state, key) ? ' unavailable' : '') +
-        '" data-card="' + instance.id + '" data-focus="card-' + instance.id + '" aria-controls="detail" aria-pressed="' +
-        (selection?.id === instance.id) + '" aria-label="' + def.name + '，' + amount + ' 筹码">' +
+        '" data-card="' + instance.id + '" data-focus="card-' + instance.id +
+        '" aria-keyshortcuts="Enter Space"' + (def.target || key === 'five' || key === 'preview' ? ' aria-haspopup="dialog"' : '') +
+        ' aria-label="' + def.name + '，' + amount + ' 筹码">' +
         '<span class="price" aria-hidden="true">' + num(amount) + '</span>' + artwork(key) +
         '<span class="ability-name">' + def.name + '</span></button>';
     }).join('') || '<span class="empty-hand">没有能力牌</span>';
@@ -1244,53 +1273,189 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       { label: '一池', to: clamp(callTo + pot + owed) }];
   }
 
-  function renderDetails() {
-    const panel = $('#detail');
-    const instance = state.hand.find(card => card.id === selection?.id);
-    const pending = state.pending;
-    panel.hidden = !(pending || instance || (showIntel && state.intel.length));
-    if (panel.hidden) {
-      panel.innerHTML = '';
-      return;
-    }
-    if (pending) {
-      panel.innerHTML = '<div class="detail-heading">' + artwork(pending.key) +
-        '<div><h2 id="detail-title">' + cards[pending.key].name + ' · 选择一张</h2><p>替换第 ' + (pending.slot + 1) +
-        ' 张底牌 · 仅你可见</p></div></div>' +
-        '<div class="candidates" aria-label="私有换牌候选">' + pending.candidates.map((card, index) =>
-          '<button type="button" class="candidate" data-choice="' + index + '" data-focus="choice-' + index +
-          '" aria-pressed="' + (selection?.candidate === index) + '" aria-label="候选 ' + (index + 1) + '，' + faceName(card) +
-          '">' + face(card, true) + '</button>').join('') +
-        '</div><div class="detail-footer"><span>已付 <strong>' + num(pending.amount) + '</strong> 筹码</span>' +
-        button('确认换牌', 'data-confirm-choice data-focus="choose"' + (selection?.candidate == null ? ' disabled' : ''), 'primary') + '</div>';
-      return;
-    }
-    const close = button(icon('close'), 'data-close aria-label="关闭详情"', 'icon quiet');
-    if (showIntel) {
-      panel.innerHTML = '<div class="detail-heading">' + icon('eye') + '<div><h2 id="detail-title">私密情报</h2><p>仅你可见</p></div>' +
-        close + '</div>' + state.intel.map(entry => '<div><p>' + entry.label + '</p><div class="intel-cards">' +
-        entry.cards.map(card => face(card, true)).join('') + '</div></div>').join('');
-      return;
-    }
+  function hidePreview() {
+    if (previewTrigger) previewTrigger.removeAttribute('aria-describedby');
+    previewTrigger = null;
+    $('#card-preview').hidden = true;
+  }
 
-    const def = cards[instance.key];
-    const amount = quote(state, instance.key);
-    const reason = unavailable(state, instance.key);
-    const targetButton = (text, value, label) => button(text, 'data-target="' + value + '" data-focus="target-' + value +
-      '" aria-pressed="' + (selection.target === value) + '" aria-label="' + label + '"');
-    let targets = '';
-    if (def.target === 'hole') targets = state.seats[0].holes.map((card, i) =>
-      targetButton(face(card, true) + '底牌 ' + (i + 1), i, '底牌 ' + (i + 1) + '，' + faceName(card))).join('');
-    if (def.target === 'seat') targets = state.seats.map((seat, i) =>
-      i && !seat.folded ? targetButton(seat.name, i, seat.name) : '').join('');
-    const status = error || reason;
-    const disabled = Boolean(reason || (def.target && selection.target == null));
-    panel.innerHTML = '<div class="detail-heading">' + artwork(instance.key) +
-      '<div><h2 id="detail-title">' + def.name + '</h2><p>' + def.description + '</p></div>' + close + '</div>' +
-      (targets ? '<div class="targets">' + targets + '</div>' : '') +
-      (status ? '<p class="' + (error || reason.startsWith('筹码不足') ? 'error' : '') + '">' + status + '</p>' : '') +
-      '<div class="detail-footer"><span>实付 <strong id="card-quote">' + num(amount) + '</strong> 筹码</span>' +
-      button('使用 · ' + num(amount), 'data-use="' + amount + '" data-focus="use"' + (disabled ? ' disabled' : ''), 'primary') + '</div>';
+  function showPreview(trigger) {
+    if (drag?.active || $('#card-stage').open) return;
+    const instance = state.hand.find(card => card.id === Number(trigger.dataset.card));
+    if (!instance) return;
+    hidePreview();
+    const { key } = instance;
+    const def = cards[key];
+    const amount = quote(state, key);
+    const reason = unavailable(state, key);
+    const preview = $('#card-preview');
+    preview.innerHTML = '<div class="preview-face">' + artwork(key) + '<strong>' + def.name + '</strong></div>' +
+      '<div class="preview-copy"><p>' + def.description + '</p><p class="fee">' +
+      (amount ? num(amount) + ' 筹码' : '无需筹码') + '</p>' +
+      (reason ? '<p class="hint">' + reason + '</p>' : '<p class="hint">拖到牌桌使用</p>') + '</div>';
+    preview.hidden = false;
+    const card = trigger.getBoundingClientRect();
+    const dock = $('.poker-controls-anchor').getBoundingClientRect();
+    const center = (card.left + card.right) / 2;
+    preview.style.left = Math.max(10, Math.min(center - preview.offsetWidth / 2, innerWidth - preview.offsetWidth - 10)) + 'px';
+    preview.style.top = Math.max(8, dock.top - preview.offsetHeight - 8) + 'px';
+    previewTrigger = trigger;
+    trigger.setAttribute('aria-describedby', 'card-preview');
+  }
+
+  function stageCards(values, intent, selected) {
+    return '<div class="stage-options" role="group" aria-label="' + (intent === 'target' ? '可选底牌' : '私有换牌候选') + '">' +
+      values.map((card, i) => {
+        const label = (intent === 'target' ? '底牌 ' : '候选 ') + (i + 1) + '，' + faceName(card);
+        return '<button type="button" class="poker-candidate" data-' + intent + '="' + i + '" data-focus="' + intent + '-' + i +
+          '" aria-pressed="' + (selected === i) + '" aria-label="' + label + '">' + tableCard(card) + '</button>';
+      }).join('') + '</div>';
+  }
+
+  function stageResults(entries) {
+    return '<div class="intel-list">' + entries.map(entry => '<section class="intel-result"><h3>' + entry.label +
+      '</h3><div class="intel-values">' + entry.cards.map(card => tableCard(card)).join('') +
+      '</div></section>').join('') + '</div>';
+  }
+
+  function renderStage(focus) {
+    const panel = $('#card-stage');
+    const def = cards[stage.key];
+    const pending = stage.draft?.pending;
+    const selecting = stage.mode === 'target' || stage.mode === 'candidate';
+    let title;
+    let content;
+    let confirm = '';
+    if (stage.mode === 'target') {
+      title = def.target === 'hole' ? '选择要替换的底牌' : '选择玩家';
+      const targets = def.target === 'hole' ? stageCards(state.seats[0].holes, 'target', stage.target) :
+        '<div class="stage-options" role="group" aria-label="可选玩家">' + state.seats.map((seat, i) => i && !seat.folded ?
+          '<button type="button" class="target-choice" data-target="' + i + '" data-focus="target-' + i +
+          '" aria-pressed="' + (stage.target === i) + '">' + seat.name + '</button>' : '').join('') + '</div>';
+      content = '<p class="stage-context">' + def.name + ' · ' + def.description + '</p>' + targets;
+      confirm = '<button type="button" class="game-button" data-apply-target data-focus="stage-confirm"' +
+        (stage.target == null ? ' disabled' : '') + '>确认目标</button>';
+    } else if (stage.mode === 'candidate') {
+      title = '选择一张';
+      content = '<p class="stage-context">' + def.name + ' · 替换第 ' + (pending.slot + 1) + ' 张底牌</p>' +
+        stageCards(pending.candidates, 'choice', stage.candidate);
+      confirm = '<button type="button" class="game-button" data-confirm-choice data-focus="stage-confirm"' +
+        (stage.candidate == null ? ' disabled' : '') + '>确认换牌</button>';
+    } else if (stage.mode === 'intel') {
+      title = '私密情报';
+      content = stageResults(state.intel);
+    } else {
+      title = stage.resultTitle;
+      content = stageResults(stage.result);
+    }
+    const payment = selecting ? (stage.amount ? '完成后支付 ' + num(stage.amount) + ' 筹码' : '无需筹码') :
+      (stage.amount ? '已支付 ' + num(stage.amount) + ' 筹码' : '');
+    const board = Array.from({ length: 5 }, (_, i) => tableCard(state.board[i])).join('');
+    panel.innerHTML = '<div class="overlay-layout"><header class="stage-top"><div class="stage-hud">' +
+      '<div class="round-context"><span>第 1 手</span><strong>' + streets[state.street] + '</strong></div>' +
+      '<div class="hud-board" data-card-size="xs" aria-label="公共牌"><span class="hud-board-label">公共牌</span>' + board +
+      '</div><div class="hud-right"><span class="time">' + icon('clock') + '5:00</span>' +
+      '<button type="button" class="close-overlay" data-stage-close data-focus="stage-close" aria-label="关闭卡牌">' + icon('close') +
+      '</button></div></div><div class="stage-heading"><h2 id="stage-title">' + title + '</h2></div></header>' +
+      '<div class="stage-content">' + content + '</div><footer class="stage-footer" data-has-primary="' + Boolean(confirm) +
+      '"><div class="footer-meta"><p class="payment">' + payment + '</p>' +
+      (stage.error ? '<p class="stage-error" role="alert">' + stage.error + '</p>' : '') +
+      '</div><div class="footer-actions"><button type="button" class="text-action" data-stage-close>' +
+      (selecting ? '放弃使用' : '完成') + '</button>' + confirm + '</div></footer></div>';
+    if (!panel.open) panel.showModal();
+    if (focus) focusAt(focus);
+  }
+
+  function closeStage() {
+    const previous = stage;
+    const panel = $('#card-stage');
+    stage = null;
+    if (panel.open) panel.close();
+    panel.innerHTML = '';
+    $('#intel').setAttribute('aria-expanded', 'false');
+    if (previous?.mode === 'target' || previous?.mode === 'candidate') {
+      announce('已放弃使用，卡牌已放回手里');
+      focusAt('card-' + previous.id);
+      hidePreview();
+    } else if (previous?.mode === 'intel') {
+      $('#intel').focus({ preventScroll: true });
+    } else {
+      focusAt('bet-call');
+    }
+  }
+
+  function commitStage(draft) {
+    const { key, amount } = stage;
+    const showResult = $('#card-stage').open || key === 'preview';
+    state = draft;
+    if (showResult) {
+      const isIntel = key === 'preview' || key === 'inspect';
+      stage = {
+        mode: 'done', key, amount,
+        resultTitle: isIntel ? '私密情报' : '换牌完成',
+        result: isIntel ? [state.intel[0]] : [{ label: '你的底牌', cards: state.seats[0].holes }],
+      };
+    } else {
+      stage = null;
+    }
+    announce(cards[key].name + '已使用');
+    render(showResult ? null : 'bet-call');
+    if (showResult) renderStage('stage-close');
+  }
+
+  function resolveStage() {
+    const { draft, error } = preparePlay(state, stage.id, stage.target, stage.amount);
+    if (error) {
+      announce(error);
+      if ($('#card-stage').open) {
+        stage.error = error;
+        stage.amount = quote(state, stage.key);
+        renderStage('stage-confirm');
+      } else stage = null;
+      return;
+    }
+    if (draft.pending) {
+      stage.mode = 'candidate';
+      stage.draft = draft;
+      stage.error = '';
+      renderStage('choice-0');
+    } else {
+      commitStage(draft);
+    }
+  }
+
+  function requestPlay(id) {
+    if (stage) return;
+    const instance = state.hand.find(card => card.id === id);
+    if (!instance) return;
+    const { key } = instance;
+    const reason = unavailable(state, key);
+    if (reason) return announce(reason);
+    hidePreview();
+    closeLog();
+    stage = { id, key, amount: quote(state, key), target: null };
+    if (cards[key].target) {
+      stage.mode = 'target';
+      renderStage('stage-close');
+    } else {
+      resolveStage();
+    }
+  }
+
+  function isTableDrop(event) {
+    const table = $('.poker-table-main').getBoundingClientRect();
+    return event.clientX >= table.left && event.clientX <= table.right &&
+      event.clientY >= table.top && event.clientY < table.bottom;
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    if (drag.trigger.hasPointerCapture(drag.pointer)) drag.trigger.releasePointerCapture(drag.pointer);
+    drag.trigger.removeAttribute('data-dragging');
+    delete document.body.dataset.cardDrag;
+    $('.poker-table-main').removeAttribute('data-drop');
+    $('#drag-card').hidden = true;
+    drag = null;
   }
 
   function renderTip() {
@@ -1330,9 +1495,9 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     const priorFocus = document.activeElement?.dataset.focus;
     const scroll = $('#fan').scrollLeft;
     const logScroll = $('#log').scrollTop;
+    hidePreview();
     renderTable();
     renderDock();
-    renderDetails();
     renderLog();
     $('#fan').scrollLeft = scroll;
     $('#log').scrollTop = logScroll;
@@ -1340,12 +1505,13 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   }
 
   function start() {
+    endDrag();
+    if ($('#card-stage').open) $('#card-stage').close();
+    $('#card-stage').innerHTML = '';
+    stage = null;
     state = reset(scenario);
     chosenBet = null;
     matchTab = '日志';
-    selection = null;
-    showIntel = false;
-    error = '';
     pinnedLog = hoveredLog = focusedLog = null;
     announce('');
     $('#fan').scrollLeft = 0;
@@ -1438,14 +1604,10 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   }
 
   function onAdvance() {
-    const instance = state.hand.find(card => card.id === selection?.id);
-    const old = instance ? quote(state, instance.key) : null;
     const problem = advanceOpponent(state);
     if (problem) return announce(problem);
     chosenBet = null;
-    error = instance && quote(state, instance.key) !== old ? '费用已变化，请按当前金额确认' : '';
-    if (error) announce(error);
-    render(state.phase === 'active' ? (selection ? 'card-' + selection.id : 'bet-call') : 'next');
+    render(state.phase === 'active' ? 'bet-call' : 'next');
   }
 
   document.querySelectorAll('[data-symbol]').forEach(element => { element.innerHTML = icon(element.dataset.symbol); });
@@ -1468,11 +1630,71 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     render('bet-custom');
   });
   $('#intel').addEventListener('click', () => {
-    if (state.pending) return announce('请先选择换牌候选');
-    selection = null;
-    showIntel = !showIntel;
-    render();
+    if (stage || !state.intel.length) return;
+    hidePreview();
+    stage = { mode: 'intel' };
+    $('#intel').setAttribute('aria-expanded', 'true');
+    renderStage('stage-close');
   });
+
+  $('#card-stage').addEventListener('cancel', event => {
+    event.preventDefault();
+    closeStage();
+  });
+
+  const hand = $('#hand');
+  hand.addEventListener('pointerover', event => {
+    const card = event.target.closest('[data-card]');
+    if (event.pointerType === 'mouse' && card && !card.contains(event.relatedTarget)) showPreview(card);
+  });
+  hand.addEventListener('pointerout', event => {
+    const card = event.target.closest('[data-card]');
+    if (card && card === previewTrigger && !card.contains(event.relatedTarget)) hidePreview();
+  });
+  hand.addEventListener('focusin', event => {
+    if (event.target.matches('[data-card]:focus-visible')) showPreview(event.target);
+  });
+  hand.addEventListener('focusout', event => {
+    if (event.target === previewTrigger) hidePreview();
+  });
+  $('#fan').addEventListener('scroll', hidePreview, { passive: true });
+
+  hand.addEventListener('pointerdown', event => {
+    const trigger = event.target.closest('[data-card]');
+    if (!trigger || event.button !== 0 || !event.isPrimary || stage || drag) return;
+    const id = Number(trigger.dataset.card);
+    const instance = state.hand.find(card => card.id === id);
+    if (!instance || unavailable(state, instance.key)) return;
+    drag = { id, trigger, key: instance.key, pointer: event.pointerId, x: event.clientX, y: event.clientY, active: false };
+  });
+  document.addEventListener('pointermove', event => {
+    if (!drag || event.pointerId !== drag.pointer) return;
+    if (!drag.active) {
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (Math.hypot(dx, dy) < 7 || (event.pointerType === 'touch' && -dy <= Math.abs(dx))) return;
+      hidePreview();
+      drag.active = true;
+      drag.trigger.setPointerCapture(event.pointerId);
+      drag.trigger.setAttribute('data-dragging', '');
+      document.body.dataset.cardDrag = '';
+      $('#drag-card').innerHTML = artwork(drag.key) + '<strong>' + cards[drag.key].name + '</strong>';
+      $('#drag-card').hidden = false;
+    }
+    event.preventDefault();
+    $('#drag-card').style.transform = 'translate(' + (event.clientX - 42) + 'px,' + (event.clientY - 56) + 'px)';
+    $('.poker-table-main').toggleAttribute('data-drop', isTableDrop(event));
+  }, { passive: false });
+  document.addEventListener('pointerup', event => {
+    if (!drag || event.pointerId !== drag.pointer) return;
+    const { id, active } = drag;
+    endDrag();
+    if (active && isTableDrop(event)) requestPlay(id);
+  });
+  document.addEventListener('pointercancel', event => {
+    if (event.pointerId === drag?.pointer) endDrag();
+  });
+  window.addEventListener('blur', endDrag);
 
   $('#log').addEventListener('pointerover', event => {
     if (event.pointerType !== 'mouse') return;
@@ -1515,58 +1737,31 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       return;
     }
     if (pinnedLog != null && !event.target.closest('#log-tip')) closeLog();
+    if (previewTrigger && !target?.hasAttribute('data-card')) hidePreview();
     if (!target) return;
     if (target.hasAttribute('data-card')) {
-      if (state.pending) return announce('请先选择换牌候选');
-      const id = Number(target.dataset.card);
-      selection = selection?.id === id ? null : { id, target: null };
-      showIntel = false;
-      error = '';
-      render('card-' + id);
-      if (!event.detail && selection) {
-        const first = $('#detail [data-target], #detail [data-use]:enabled') || $('#detail [data-close]');
-        first?.focus({ preventScroll: true });
-      }
+      if (!event.detail) requestPlay(Number(target.dataset.card));
+      else if (event.pointerType === 'touch') showPreview(target);
     } else if (target.hasAttribute('data-target')) {
-      selection.target = Number(target.dataset.target);
-      error = '';
-      render();
-    } else if (target.hasAttribute('data-close')) {
-      const focus = selection ? 'card-' + selection.id : null;
-      selection = null;
-      showIntel = false;
-      render(focus);
-      if (!focus) $('#intel').focus();
-    } else if (target.hasAttribute('data-use')) {
-      error = use(state, selection.id, selection.target, Number(target.dataset.use)) || '';
-      if (error) {
-        announce(error);
-        render();
-        return;
-      }
-      const privateEffect = ['preview', 'inspect'].includes(state.log[0].card);
-      const card = cards[state.log[0].card].name;
-      selection = null;
-      showIntel = privateEffect;
-      announce(card + (state.pending ? '已使用，请选择候选' : '已使用'));
-      render(state.pending ? 'choice-0' : 'bet-call');
+      stage.target = Number(target.dataset.target);
+      stage.error = '';
+      renderStage('target-' + stage.target);
+    } else if (target.hasAttribute('data-stage-close')) {
+      closeStage();
+    } else if (target.hasAttribute('data-apply-target')) {
+      resolveStage();
     } else if (target.hasAttribute('data-choice')) {
-      selection = { candidate: Number(target.dataset.choice) };
-      render();
+      stage.candidate = Number(target.dataset.choice);
+      renderStage('choice-' + stage.candidate);
     } else if (target.hasAttribute('data-confirm-choice')) {
-      const problem = choose(state, selection?.candidate);
+      const problem = choose(stage.draft, stage.candidate);
       if (problem) return announce(problem);
-      selection = null;
-      announce('换牌完成');
-      render('bet-call');
+      commitStage(stage.draft);
     } else if (target.hasAttribute('data-bet')) {
       const contribution = (chosenBet ?? betOptions()[0].to) - state.seats[0].streetBet;
       const problem = bet(state, target.dataset.bet, contribution);
       if (problem) return announce(problem);
       chosenBet = null;
-      selection = null;
-      showIntel = false;
-      error = '';
       render('next');
     } else if (target.hasAttribute('data-preset')) {
       chosenBet = Number(target.dataset.preset);
@@ -1582,16 +1777,17 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
 
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
-    if (systemPanel.open) {
+    if (drag) {
+      endDrag();
+    } else if ($('#card-stage').open) {
+      event.preventDefault();
+      closeStage();
+    } else if (systemPanel.open) {
       systemPanel.close();
     } else if (!$('#log-tip').hidden) {
       closeLog();
-    } else if (!state.pending && (selection || showIntel)) {
-      const focus = selection ? 'card-' + selection.id : null;
-      selection = null;
-      showIntel = false;
-      render(focus);
-      if (!focus) $('#intel').focus();
+    } else {
+      hidePreview();
     }
   });
 
@@ -1600,6 +1796,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   const resize = new ResizeObserver(() => {
     table.dataset.compactControls = String(table.clientWidth <= 850);
     fitCanvas();
+    if (previewTrigger) showPreview(previewTrigger);
   });
   resize.observe(table);
   resize.observe(viewport);
