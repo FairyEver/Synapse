@@ -49,3 +49,9 @@ export function seatPosition(seatNo: number, maxSeats: number, origin = 0): numb
   const relative = (seatNo - origin + maxSeats) % maxSeats
   return Math.round((relative * 10) / maxSeats) % 10
 }
+
+const playingCardSuits: Record<string, string> = { s: "♠", h: "♥", d: "♦", c: "♣" }
+export function playingCardLabel(card?: string): string {
+  if (!card) return ""
+  return `${card[0] === "T" ? "10" : card[0]}${playingCardSuits[card[1]] ?? ""}`
+}

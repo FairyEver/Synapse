@@ -48,6 +48,7 @@ function Room({ code, onBack }: { code: string; onBack: () => void }) {
             events={events.events}
             animate={events.animate}
             animateFrames={events.animateFrames}
+            cardFrames={events.frames}
             members={<PracticeBots controls={bots} table={room.table} />}
             onBack={onBack}
           />

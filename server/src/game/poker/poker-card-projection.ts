@@ -1,7 +1,7 @@
-import type { PokerCardDefinitionView, PokerCardView, PokerResolutionFrameView, PokerResolutionEventView } from "@synapse/shared/game-contracts"
+import type { PokerCardChoiceSpec, PokerCardDefinitionView, PokerCardView, PokerResolutionFrameView, PokerResolutionEventView } from "@synapse/shared/game-contracts"
 import type { HandState } from "./engine/hand-runner"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
-import { cardChoices, cardRequirementError, quoteCardPlay } from "./engine/cards/commands"
+import { cardChoices, cardRequirementReason, quoteCardPlay } from "./engine/cards/commands"
 import type { ResolutionFrame } from "./engine/cards/types"
 import type { CardModeState } from "./engine/cards/pool"
 
@@ -20,6 +20,16 @@ const chipCardDescriptions: Partial<Record<string, (chips: (blinds: number) => s
   "38": chips => `基础费用 ${chips(2)}，付入暂存。从共享池抽两张能力牌。`,
   "39": chips => `最多偷取 ${chips(5)}，目标是暂存待分金额最多的其他人。同额时按庄家左侧顺序，目标受保护时不换人。`,
   "49": chips => `让一名其他真人多付 ${chips(2)}。对方下次使用能力牌时将这笔费用付入暂存，成功出牌后效果结束。`,
+}
+
+function missingChoiceReason(choices: PokerCardChoiceSpec[], requiresAbilityHolder: boolean): string | undefined {
+  const missing = choices.find(choice => !choice.options.length)
+  if (!missing) return undefined
+  if (missing.key === "targetHole") return "POKER_CARD_NO_HIDDEN_HOLE"
+  if (missing.kind === "ability") return "POKER_CARD_NO_MATERIAL"
+  if (missing.kind === "status") return "POKER_CARD_NO_STATUS"
+  if (missing.kind === "player" && requiresAbilityHolder) return "POKER_CARD_NO_ABILITY_TARGET"
+  return "POKER_CARD_INVALID_SELECTION"
 }
 
 export function projectCardView(state: HandState | { archived: true; cards: CardModeState; seats: { seatNo: number; hole: string[] }[]; street: string }, policy: CardViewPolicy): PokerCardView | undefined {
@@ -58,7 +68,7 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
     const reason = !seat || seat.folded || seat.allIn || state.actionOnSeat !== self.seatNo || state.street === "settled" ? "POKER_NOT_YOUR_TURN"
       : !state.turnClock || policy.nowMs >= state.turnClock.deadlineAt ? "POKER_ACTION_EXPIRED"
       : cards.pending || state.roll?.pending ? "POKER_CARD_CHOICE_REQUIRED" : !quote.satisfied ? "POKER_CARD_INSUFFICIENT_STACK"
-      : choices.some(c => !c.options.length) ? "POKER_CARD_INVALID_SELECTION" : cardRequirementError(state, definition, self.admissionId, policy.actionSeq + 1)
+      : cardRequirementReason(state, definition, self.admissionId, policy.actionSeq + 1) ?? missingChoiceReason(choices, !!definition.requirements?.includes("target_holds_ability"))
     return { instanceId: instance.id, cardId: definition.id, available: !reason, ...(reason ? { reason } : {}), payment: { nominalAmount: quote.nominalAmount, waivedAmount: quote.waivedAmount, paidAmount: quote.paidAmount, version: quote.version }, choices }
   })
   view.definitions = definitions

@@ -72,11 +72,13 @@ function richest(h: HandState, admissionId: string) {
   return h.cards!.participants.map(p => ({ ...p, amount: h.reserve?.claims.filter(c => c.admissionId === p.admissionId).reduce((n, c) => n + c.remainingAmount, 0) ?? 0 }))
     .filter(p => p.admissionId !== admissionId && p.amount > 0).sort((a, b) => b.amount - a.amount || order.indexOf(a.seatNo) - order.indexOf(b.seatNo))[0]
 }
-export function cardRequirementError(h: HandState, definition: CardDefinition, admissionId: string, seq: number): string | undefined {
-  if (definition.excludeRiver && h.street === "river") return "POKER_CARD_INVALID_SELECTION"
+export function cardRequirementReason(h: HandState, definition: CardDefinition, admissionId: string, seq: number): string | undefined {
+  if (definition.excludeRiver && h.street === "river") return "POKER_CARD_RIVER_UNAVAILABLE"
   for (const requirement of definition.requirements ?? []) {
-    if (requirement === "deck" && !h.deck.length || requirement === "candidate_pool" && !h.cards!.pool.length || requirement === "stealable" && !richest(h, admissionId)?.amount
-      || requirement === "recent_deposit" && !lastReserveDeposit(h.reserve ?? { revision: 0, lots: [], claims: [], movements: [], finalized: false }, admissionId, seq)?.remainingAmount) return "POKER_CARD_INVALID_SELECTION"
+    if (requirement === "deck" && !h.deck.length) return "POKER_CARD_DECK_EMPTY"
+    if (requirement === "candidate_pool" && !h.cards!.pool.length) return "POKER_CARD_POOL_EMPTY"
+    if (requirement === "stealable" && !richest(h, admissionId)?.amount) return "POKER_CARD_NO_RESERVE_SHARES"
+    if (requirement === "recent_deposit" && !lastReserveDeposit(h.reserve ?? { revision: 0, lots: [], claims: [], movements: [], finalized: false }, admissionId, seq)?.remainingAmount) return "POKER_CARD_NO_RECENT_DEPOSIT"
   }
   return undefined
 }
@@ -84,8 +86,7 @@ export function planCardPlay(h: HandState, input: PokerCardPlayInput, context: R
   const person = validateActor(h, input, context)
   if (h.cards!.pending || h.roll?.pending) throw new CardRuleError("POKER_CARD_CHOICE_REQUIRED")
   const { definition } = own(h, input, person.admissionId, registry)
-  const error = cardRequirementError(h, definition, person.admissionId, context.actionSeq)
-  if (error) throw new CardRuleError(error)
+  if (cardRequirementReason(h, definition, person.admissionId, context.actionSeq)) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
   const choices = cardChoices(h, definition, person.admissionId, input.instanceId, registry)
   if (Object.keys(input.selections).length !== choices.length || choices.some(c => !c.options.some(o => o.value === String(input.selections[c.key])))) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
   const quote = quoteCardPlay(h, input, registry)

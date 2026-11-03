@@ -2,6 +2,7 @@ import type { ComponentType } from "react"
 import { Check, Shield, UserRound } from "lucide-react"
 import type { PokerCardChoiceSpec, PokerCardDefinitionView, PokerCardPendingView, PokerTableView } from "@synapse/shared/game-contracts"
 import { cardCandidateRequest, cardChoiceRequests, changeCardSelection, type CardSelectionRequest, type CardSelectionUI, type CardSelectionValues } from "../lib/card-selection"
+import { playingCardLabel } from "../lib/view"
 import { Card } from "./Card"
 import { PokerAbilityCard } from "./PokerAbilityCard"
 
@@ -59,7 +60,7 @@ function Statuses(props: RendererProps) {
 }
 function PokerCandidates(props: RendererProps) {
   return <div className="candidate-stage poker-candidates"><div className="hand-row">{props.request.options.map((option, index) => <div className="card-slot" data-chosen={String(props.value) === option.value} key={option.value}>
-    <button {...choiceProps(props, option)} className="poker-candidate" aria-label={option.label}><Card card={props.request.pending?.candidates[index]} /></button>
+    <button {...choiceProps(props, option)} className="poker-candidate" aria-label={`${option.label}，${playingCardLabel(props.request.pending?.candidates[index])}`}><Card card={props.request.pending?.candidates[index]} /></button>
   </div>)}</div></div>
 }
 function AbilityCandidates(props: RendererProps) {

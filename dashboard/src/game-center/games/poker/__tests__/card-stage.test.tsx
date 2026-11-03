@@ -113,3 +113,49 @@ it("对局总览的公共状态仍能折叠，不受卡牌游戏样式隔离影�
   await act(async () => toggle!.click()); expect(toggle!.getAttribute("aria-expanded")).toBe("false")
   expect(document.querySelector(".stage-statuses")).toBeNull()
 })
+
+it("出牌提交后直接显示本次私密结果，旧情报仍可回看", async () => {
+  const before = structuredClone(cardTable)
+  before.cards!.ownHand![0].choices = []
+  before.cards!.privateResults = [{ id: "older", cardId: "01", label: "one", values: ["Js"], valid: true }]
+  const { render, actions } = await mount(before)
+  await click('button[data-held-card="card-instance"]')
+  await act(async () => primary().click())
+  expect(actions.play).toHaveBeenCalledOnce()
+
+  const after = structuredClone(before)
+  after.actionSeq = 4
+  after.cards!.ownHand = []
+  after.cards!.used.push({ id: "played", cardId: "01", name: "偷梁换柱", seatNo: 0, seq: 4, status: "completed" })
+  after.cards!.privateResults!.push({ id: "new", cardId: "01", label: "one", values: ["Qs"], valid: true })
+  await render(after)
+  expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe("用牌结果")
+  expect(document.querySelector('.intel-values [data-card="Qs"]')).not.toBeNull()
+  expect(document.querySelector('.intel-values [data-card="Js"]')).toBeNull()
+  await click('button[aria-label="返回手牌"]')
+  await click('button[aria-label="本人情报"]')
+  expect(document.querySelector('.intel-values [data-card="Js"]')).not.toBeNull()
+})
+
+it("确认扑克牌候选后展示替换后的底牌，收起重开仍保留原选择", async () => {
+  const pending = structuredClone(cardTable)
+  pending.cards!.ownHand = []
+  pending.cards!.used = [{ id: "used-06", cardId: "06", name: "左右逢源", seatNo: 0, seq: 3, status: "choice_required" }]
+  pending.cards!.pending = { choiceId: "choice-06", kind: "poker", origin: "card", paymentVersion: "paid", sourceCardId: "06", cardIndex: 0, candidates: ["Qs"] }
+  const { render, actions } = await mount(pending)
+  expect(document.body.textContent).toContain("替换底牌 1")
+  await click('button[data-choice="candidate"][value="0"]')
+  await render(pending, false)
+  await render(pending, true)
+  await click(".footer-actions .game-button")
+  expect(actions.choose).toHaveBeenCalledExactlyOnceWith(0)
+
+  const after = structuredClone(pending)
+  after.actionSeq = 4
+  after.hole = ["Qs", "Kd"]
+  after.cards!.pending = null
+  after.cards!.used[0].status = "completed"
+  await render(after)
+  expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe("用牌结果")
+  expect(document.querySelector('.intel-values [data-card="Qs"]')).not.toBeNull()
+})

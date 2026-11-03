@@ -31,7 +31,7 @@ import "../styles/adaptive-table.css"
 import "../styles/chips.css"
 const NO_EVENTS: PokerTableEvent[] = []
 const NO_FRAMES: PokerResolutionFrameView[] = []
-export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, animateFrames = NO_FRAMES, members, identityKey }: {
+export function Table({ table, perspective, onPerspective, onNudge, onBack, onRefresh = () => {}, events = NO_EVENTS, animateFrames = NO_FRAMES, cardFrames = NO_FRAMES, members, identityKey }: {
   table: PokerTableView
   perspective: "owner" | "public"
   onPerspective: (v: "owner" | "public") => void
@@ -41,6 +41,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   events?: PokerTableEvent[]
   animate?: PokerTableEvent[]
   animateFrames?: PokerResolutionFrameView[]
+  cardFrames?: PokerResolutionFrameView[]
   identityKey?: string
   members?: ReactNode
 }) {
@@ -161,7 +162,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
         {panel === "playerInfo" && inspectedSeat && inspected?.key === inspectedKey && <PokerPlayerInfoDialog table={view} seat={inspectedSeat} onClose={closePlayerInfo} />}
         {panel === "rollFees" && <PokerReserveDialog table={view} onClose={closeRollFees} />}
         {panel === "potSources" && <PokerPotSourcesDialog table={view} onClose={closePotSources} />}
-        <div className="poker-controls-anchor"><HumanControls nextHand={presentedReady} identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" || panel === "members" || panel === "ranks" || panel === "playerInfo" || panel === "rollFees" || panel === "potSources" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
+        <div className="poker-controls-anchor"><HumanControls cardFrames={cardFrames} nextHand={presentedReady} identityKey={identityKey} table={view} perspective={perspective} onPerspective={onPerspective} onRefresh={onRefresh} compact={compact} activePanel={panel === "log" || panel === "members" || panel === "ranks" || panel === "playerInfo" || panel === "rollFees" || panel === "potSources" ? null : panel} onPanelChange={setPanel} menuTrigger={menuTrigger} menuId={menuId} popoverContainer={surface.current} menuContent={<>
             <Button fullWidth type="button" variant="tertiary" aria-label={soundEnabled ? "关闭音效" : "开启音效"} aria-pressed={soundEnabled} onPress={() => setSoundEnabled(v => !v)}>{soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}音效</Button>
             {canNudge && <Button fullWidth variant="tertiary" isDisabled={(view.deadlineMs ?? 600000) > 540000} onPress={() => { onNudge(active.seatNo); setPanel(null) }}><Bell aria-hidden="true" />提醒玩家</Button>}
             {table.seats.some(s => s.isMe) && <Button fullWidth variant="tertiary" isDisabled={nextHand.busy} aria-label={perspective === "owner" ? "切换旁观视角" : "切换玩家视角"} onPress={() => { onPerspective(perspective === "owner" ? "public" : "owner"); setPanel(null) }}>{perspective === "owner" ? <UserRound aria-hidden="true" /> : <Eye aria-hidden="true" />}{perspective === "owner" ? "旁观视角" : "玩家视角"}</Button>}

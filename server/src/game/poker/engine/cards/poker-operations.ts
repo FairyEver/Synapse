@@ -47,7 +47,10 @@ export function registerPokerCardOperations(registry: OperationRegistry<HandStat
         } else candidates.push(pick(h.deck, api))
       }
       if (!candidates.length) {
-        if (input.mode === "red" || input.mode === "black") return
+        if (input.mode === "red" || input.mode === "black") {
+          observe(h, api, input.seatNo, "换牌结果", [`牌堆里没有${input.mode === "red" ? "红色" : "黑色"}牌，底牌未换`])
+          return
+        }
         throw new CardRuleError("POKER_CARD_DECK_EMPTY")
       }
       if (input.mode === "candidates") {

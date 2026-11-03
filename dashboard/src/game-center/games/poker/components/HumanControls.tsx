@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react"
 import { AlertDialog, Button, Description, FieldError, Input, Label, Slider, TextField } from "@heroui/react"
 import { Bot, ChevronUp, Clock3, MoreHorizontal, UserRound } from "lucide-react"
-import type { PokerTableView } from "@synapse/shared/game-contracts"
+import type { PokerResolutionFrameView, PokerTableView } from "@synapse/shared/game-contracts"
 import { track } from "@/game-center/runtime/tracking"
 import { usePokerRoll } from "../hooks/usePokerRoll"
 import { PokerRollDialog } from "./PokerRollDialog"
@@ -34,6 +34,7 @@ type Props = {
   menuContent?: ReactNode
   popoverContainer?: HTMLElement | null
   nextHand?: PokerReadyControls
+  cardFrames?: readonly PokerResolutionFrameView[]
 }
 export function HumanControls(props: Props) {
   return props.nextHand ? <ScopedHumanControls {...props} nextHand={props.nextHand} /> : <LocalHumanControls {...props} />
@@ -42,7 +43,7 @@ function LocalHumanControls(props: Props) {
   const nextHand = usePokerReady(props.table, props.perspective, props.identityKey, props.onRefresh)
   return <ScopedHumanControls {...props} nextHand={nextHand} />
 }
-function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, identityKey, compact = false, activePanel, onPanelChange, menuTrigger, menuId, popoverContainer, menuContent, nextHand }: Props & { nextHand: PokerReadyControls }) {
+function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, identityKey, compact = false, activePanel, onPanelChange, menuTrigger, menuId, popoverContainer, menuContent, nextHand, cardFrames }: Props & { nextHand: PokerReadyControls }) {
   const { busy, error, to, setTo, uncertain, mine, controller, version, handoff,
     act, retry, control, join, sit, leave } = useHumanControls(table, onRefresh, identityKey)
   const roll = usePokerRoll(table, perspective, onRefresh, identityKey)
@@ -69,6 +70,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const managementTrigger = menuTrigger ?? localMenuTrigger
   const confirmAllIn = allInAction !== null && panel === "bet"
   const rollEpoch = `${identityKey}:${table.roomCode}:${table.handId}:${table.street}:${table.actionSeq}:${version}:${perspective}`
+  const cardEpoch = `${identityKey}:${table.roomCode}:${table.handId}:${table.street}:${version}:${perspective}`
   const autoOpened = useRef("")
   const betId = useId()
   const allInTrigger = useRef<HTMLButtonElement>(null)
@@ -183,7 +185,7 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
     {recovery}
     {perspective === "owner" && <PokerRollDialog table={table} open={panel === "roll"} onOpenChange={open=>setPanel(open?"roll":null)} controls={roll} onTakeover={()=>void takeover()} disabled={busy||uncertain||nextHand.busy||cards.blocked||cardPending} epoch={rollEpoch}/>}
 
-    {canOpenCards && <PokerCardsDialog table={table} open={panel === "cards"} onOpenChange={open => setPanel(open ? "cards" : null)} controls={cards} disabled={busy || uncertain || nextHand.busy || roll.blocked || rollPending} epoch={rollEpoch} />}
+    {canOpenCards && <PokerCardsDialog table={table} open={panel === "cards"} onOpenChange={open => setPanel(open ? "cards" : null)} controls={cards} disabled={busy || uncertain || nextHand.busy || roll.blocked || rollPending} epoch={cardEpoch} frames={cardFrames} />}
     {!acting && (rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light">{rollEntry}{cardEntry}</div>}
     {acting && <div className="poker-action-dock">
       {(canBet || rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light" role="group" aria-label="下注金额选择">

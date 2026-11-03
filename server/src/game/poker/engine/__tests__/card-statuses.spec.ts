@@ -99,4 +99,20 @@ describe("持续状态", () => {
     h = run(h, [op("ability.dispel", { effectId: slowId }), op("ability.dispel", { effectId: fieldId })], 3, 100000).state
     expect(h.turnClock).toMatchObject({ startedAt: 0, deadlineAt: 660000 })
   })
+  it.each([
+    { cardId: "51", input: { kind: "double" } },
+    { cardId: "52", input: { kind: "extend", milliseconds: 60000 } },
+  ])("$cardId 已到回合上限时只向施放者说明未延时", ({ cardId, input }) => {
+    const h = makeCardHand()
+    h.turnClock = { seatNo: 0, turnId: "t", startedAt: 0, deadlineAt: 1199999, reductions: {} }
+    const operations = [{ type: "clock.change", cardId, input }]
+    const extended = run(h, operations, 1, 1000).state
+    expect(extended.turnClock!.deadlineAt).toBe(1200000)
+    expect(extended.cards!.privateResults).toEqual([])
+    const capped = run(extended, operations, 2, 2000).state
+    expect(capped.turnClock).toEqual(extended.turnClock)
+    expect(capped.cards!.privateResults).toEqual([expect.objectContaining({
+      ownerAdmissionId: "admission-0", cardId, label: "行动时间", values: ["已达本回合时间上限，时间未延长"], valid: true,
+    })])
+  })
 })

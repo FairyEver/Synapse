@@ -35,6 +35,18 @@ describe("能力牌金额文案", () => {
   })
 })
 describe("卡牌隐私白名单", () => {
+  it("本人可区分无暂存、无可选对手和无材料；公开投影仍不包含这些原因", () => {
+    const h = fixture(), cards = h.cards!
+    cards.hands["admission-0"] = [{ id: "peek", definitionId: "15" }]
+    cards.hands["admission-1"] = []
+    const getReason = () => projectCardView(h, policy())!.ownHand![0].reason
+    expect(getReason()).toBe("POKER_CARD_NO_ABILITY_TARGET")
+    cards.hands["admission-0"] = [{ id: "refund", definitionId: "35" }]
+    expect(getReason()).toBe("POKER_CARD_NO_RECENT_DEPOSIT")
+    cards.hands["admission-0"] = [{ id: "material", definitionId: "24" }]
+    expect(getReason()).toBe("POKER_CARD_NO_MATERIAL")
+    expect(projectCardView(h, policy({ perspective: "public" }))).not.toHaveProperty("ownHand")
+  })
   it("材料用途来自实际配方且只随本人定义投影，旧定义仍兼容", () => {
     const h = fixture(), cards = h.cards!
     cards.hands["admission-0"] = ["24", "29", "01"].map((definitionId, i) => ({ id: `material-${i}`, definitionId }))

@@ -78,8 +78,12 @@ export function registerCardStatusOperations(registry: OperationRegistry<HandSta
     if (h.turnClock?.turnId === input.turnId) h.turnClock = null
   } })
   registry.register({ id: "clock.change", schema: z.discriminatedUnion("kind", [z.object({ kind: z.literal("double") }).strict(), z.object({ kind: z.literal("extend"), milliseconds: z.number().int().nonnegative() }).strict()]), apply(h, input, api) {
-    if (h.turnClock?.seatNo !== api.context.actorSeatNo) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
-    h.turnClock = applyDeadlineOperation(h.turnClock, input, api.context.nowMs)
+    const before = h.turnClock
+    if (!before || before.seatNo !== api.context.actorSeatNo) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
+    h.turnClock = applyDeadlineOperation(before, input, api.context.nowMs)
+    if (h.turnClock?.deadlineAt === before.deadlineAt && api.operation.cardId && api.context.actorAdmissionId) {
+      h.cards!.privateResults.push({ id: api.context.nextId(), ownerAdmissionId: api.context.actorAdmissionId, cardId: api.operation.cardId, label: "行动时间", values: ["已达本回合时间上限，时间未延长"], valid: true })
+    }
   } })
   registry.register({ id: "ability.played", schema: z.object({ admissionId: z.string(), seatNo: z.number().int() }).strict(), apply(_h, _input) {} })
   registry.registerHook({ kind: "counter", event: "*", phase: "before", priority: 0, apply(h, effect, event, api) {

@@ -1,11 +1,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Layers3, Shield, Eye, X } from "lucide-react"
-import type { PokerTableView } from "@synapse/shared/game-contracts"
+import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Layers3, Shield, Eye, Sparkles, X } from "lucide-react"
+import type { PokerResolutionFrameView, PokerTableView } from "@synapse/shared/game-contracts"
 import type { usePokerCards } from "../hooks/usePokerCards"
-import { cardPlayInput, cardUnavailableReason, validCardSelections } from "../lib/card-view"
+import { cardChoiceBaseline, cardPlayBaseline, cardPlayFeedback, cardPlayInput, cardUnavailableReason, validCardSelections } from "../lib/card-view"
 import { reconcileCardSelections, type CardSelectionValues } from "../lib/card-selection"
-import { amount, remaining, streetLabel } from "../lib/view"
+import { amount, playingCardLabel, remaining, streetLabel } from "../lib/view"
 import { Card } from "./Card"
 import { PokerAbilityCard, cardFanStyle } from "./PokerAbilityCard"
 import { PokerCardStageStatuses } from "./PokerCardStageStatuses"
@@ -13,43 +13,63 @@ import { PokerCardIntel } from "./PokerCardIntel"
 import { PokerCardCandidates, PokerCardSelection } from "./PokerCardSelection"
 import "../styles/cards.css"
 
-type Props = { table: PokerTableView; open: boolean; onOpenChange: (open: boolean) => void; controls: ReturnType<typeof usePokerCards>; disabled: boolean; epoch: string }
+type Props = { table: PokerTableView; open: boolean; onOpenChange: (open: boolean) => void; controls: ReturnType<typeof usePokerCards>; disabled: boolean; epoch: string; frames?: readonly PokerResolutionFrameView[] }
 type View = "hand" | "inspect" | "intel" | "statuses"
 
 /** A game surface, mounted beside the existing table layout rather than inside the scaled canvas. */
 export function PokerCardsDialog(props: Props) {
   const anchor = useRef<HTMLSpanElement>(null), [container, setContainer] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => { setContainer(anchor.current?.closest<HTMLElement>(".poker-table") ?? document.body) }, [])
-  const key = `${props.epoch}:${props.table.controller}:${props.table.mySeatNo}:${props.table.status}:${props.table.cards?.pending?.choiceId ?? ""}`
+  const key = `${props.epoch}:${props.table.controller}:${props.table.mySeatNo}:${props.table.status}`
   return <><span hidden ref={anchor} />{container && createPortal(<CardStageSession key={key} {...props} container={container} />, container)}</>
 }
-function CardStageSession({ table, open, onOpenChange, controls, disabled, container }: Props & { container: HTMLElement }) {
-  const [selected, setSelected] = useState(""), [rawValues, setValues] = useState<CardSelectionValues>({}), [candidate, setCandidate] = useState("")
+function CardStageSession({ table, open, onOpenChange, controls, disabled, container, frames = [] }: Props & { container: HTMLElement }) {
+  const [selected, setSelected] = useState(""), [rawValues, setValues] = useState<CardSelectionValues>({}), [picked, setPicked] = useState<{ choiceId: string; seq?: number; value: string } | null>(null)
   const [view, setView] = useState<View>("hand"), [page, setPage] = useState(0)
+  const [selectedAt, setSelectedAt] = useState(table.actionSeq)
+  const [submitted, setSubmitted] = useState<ReturnType<typeof cardPlayBaseline> | null>(null)
   const stage = useRef<HTMLDivElement>(null), heading = useId()
   const playButton = useRef<HTMLButtonElement>(null)
   const cards = table.cards, pending = cards?.pending, hand = cards?.ownHand ?? [], card = hand.find(item => item.instanceId === selected)
+  const candidate = picked?.choiceId === pending?.choiceId && picked?.seq === table.actionSeq ? picked?.value ?? "" : ""
+  const setCandidate = (value: string) => { if (pending) setPicked({ choiceId: pending.choiceId, seq: table.actionSeq, value }) }
   const visible = open && !!cards
   const definition = card && cards?.definitions?.[card.cardId], selections = reconcileCardSelections(card?.choices ?? [], rawValues)
   const blocked = disabled || controls.blocked || controls.storageError || !controls.canControl
-  const inspect = !pending && view === "inspect" && !!card && !!definition
+  const inspect = !pending && view === "inspect" && selectedAt === table.actionSeq && !!card && !!definition
   const effectiveView = inspect ? "inspect" : view === "inspect" ? "hand" : view
+  const feedback = cardPlayFeedback(table, submitted, frames)
+  const showResult = !pending && view === "inspect" && !!(feedback?.results.length || feedback?.changedHole || feedback?.revealed.length)
   const pageCount = Math.max(1, Math.ceil(hand.length / 5)), currentPage = Math.min(page, pageCount - 1), displayed = hand.slice(currentPage * 5, currentPage * 5 + 5)
   const validCandidate = pending && candidate !== "" && Number.isInteger(Number(candidate)) && Number(candidate) >= 0 && Number(candidate) < pending.candidates.length
   const candidateInfo = pending?.kind === "ability" && validCandidate ? pending.candidateCards?.[Number(candidate)] : undefined
-  const information = effectiveView === "intel" || effectiveView === "statuses"
+  const information = showResult || effectiveView === "intel" || effectiveView === "statuses"
   const recovery = controls.storageError || controls.uncertain
   const hasFooterPrimary = !inspect && (recovery || !information && !!pending)
   const returnLabel = information && pending ? "返回选牌" : information ? "返回手牌" : "收起卡牌"
-  const title = information ? effectiveView === "intel" ? "本人情报" : "牌局状态" : pending ? "选择一张" : inspect ? definition.name : "你的手牌"
-  const select = (value: string) => { setSelected(value); setValues({}); setView("inspect") }
-  const confirm = () => { if (card && !blocked && card.available && validCardSelections(card, selections)) void controls.play(cardPlayInput(table, card, selections)) }
-  const close = () => onOpenChange(false)
+  const title = showResult ? "用牌结果" : information ? effectiveView === "intel" ? "本人情报" : "牌局状态" : pending ? "选择一张" : inspect ? definition.name : "你的手牌"
+  const select = (value: string) => { setSubmitted(null); setSelectedAt(table.actionSeq); setSelected(value); setValues({}); setView("inspect") }
+  const confirm = () => {
+    if (!card || blocked || !card.available || !validCardSelections(card, selections)) return
+    const target = table.seats.find(seat => seat.seatNo === Number(selections.player))?.displayName
+    setSubmitted(cardPlayBaseline(table, card, target))
+    void controls.play(cardPlayInput(table, card, selections))
+  }
+  const choose = () => {
+    if (!pending || !validCandidate || blocked) return
+    if (!submitted) setSubmitted(cardChoiceBaseline(table, pending))
+    setView("inspect")
+    void controls.choose(Number(candidate))
+  }
+  const close = () => {
+    if (submitted && !pending) { setSubmitted(null); setView("hand") }
+    onOpenChange(false)
+  }
   const recoveryButton = recovery ? <button type="button" className="game-button" disabled={controls.busy} onClick={() => void controls.retry()}>{controls.busy ? "正在核对…" : controls.storageError ? "重试恢复记录" : "核对原用牌请求"}</button> : null
   useEffect(() => {
     if (JSON.stringify(rawValues) !== JSON.stringify(selections)) setValues(selections)
   }, [card?.choices, rawValues])
-  useEffect(() => { if (candidate && !validCandidate) setCandidate("") }, [candidate, validCandidate])
+  useEffect(() => { if (picked && (picked.choiceId !== pending?.choiceId || !validCandidate)) setPicked(null) }, [picked, pending?.choiceId, validCandidate])
   useEffect(() => {
     if (!visible) return
     // Focus can stay outside the stage when it opens.
@@ -58,8 +78,8 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
       if (event.key === "Escape") {
         event.preventDefault()
         if (event.repeat) return
-        if (inspect) setView("hand")
-        else onOpenChange(false)
+        if (inspect || showResult) setView("hand")
+        else close()
         return
       }
       const button = playButton.current
@@ -71,7 +91,7 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [visible, inspect, onOpenChange])
+  }, [visible, inspect, showResult, submitted, onOpenChange])
   // Block the table behind the stage without moving or restoring pointer focus.
   useLayoutEffect(() => {
     if (!open || !stage.current) return
@@ -94,8 +114,14 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
         <div className="stage-heading" data-inspect={inspect}><h2 id={heading} data-card-stage-content="">{title}</h2></div>
       </header>
       {information ? <main className="view inspect-view"><div className="inspect-layout">
-        <div className="inspect-emblem" aria-hidden="true" data-card-stage-content="">{effectiveView === "intel" ? <Eye /> : <Shield />}</div>
-        <div className="inspect-details" data-card-stage-content=""><div className="inspect-body">{effectiveView === "intel" ? <PokerCardIntel cards={cards} /> : <PokerCardStageStatuses cards={cards} seats={table.seats} />}</div></div>
+        <div className="inspect-emblem" aria-hidden="true" data-card-stage-content="">{showResult || effectiveView === "intel" ? <Eye /> : <Shield />}</div>
+        <div className="inspect-details" data-card-stage-content=""><div className="inspect-body">
+          {showResult && feedback ? <>
+            {feedback.changedHole && <section className="intel-result"><h3>你的底牌</h3><div className="intel-values">{feedback.changedHole.map((value, index) => <Card key={index} card={value} />)}</div></section>}
+            {feedback.revealed.map((reveal, index) => <section className="intel-result" key={index}><h3>{table.seats.find(seat => seat.seatNo === reveal.seatNo)?.displayName ?? "公开底牌"}</h3><div className="intel-values">{reveal.cards.map((value, slot) => <Card key={slot} card={value} />)}</div></section>)}
+            {feedback.results.length > 0 && <PokerCardIntel cards={cards} results={feedback.results} target={feedback.target} />}
+          </> : effectiveView === "intel" ? <PokerCardIntel cards={cards} /> : <PokerCardStageStatuses cards={cards} seats={table.seats} />}
+        </div></div>
       </div></main> : pending ? candidateInfo ? <main className="view inspect-view"><div className="inspect-layout">
         <div className="inspect-card" data-card-stage-content=""><PokerAbilityCard definition={candidateInfo} interactive={false} /></div>
         <div className="inspect-details" data-card-stage-content=""><div className="inspect-body"><p className="full-description">{candidateInfo.description}</p><PokerCardCandidates pending={pending} table={table} value={candidate} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} compact /></div></div>
@@ -105,7 +131,7 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
           <div className="inspect-details" data-card-stage-content=""><div className="inspect-body">
             <p className="full-description">{definition.description}</p>
             {!card.available && <p className="card-unavailable" role="status">{cardUnavailableReason(card.reason)}</p>}
-            <PokerCardSelection table={table} definition={definition} choices={card.choices} values={selections} onChange={setValues} disabled={!!blocked || !card.available} />
+            <PokerCardSelection table={table} definition={definition} choices={card.choices.filter(choice => choice.options.length > 0)} values={selections} onChange={setValues} disabled={!!blocked || !card.available} />
             <div className="inspect-actions">
               <button type="button" className="text-action" aria-label="返回手牌" aria-keyshortcuts="Escape" onClick={() => setView("hand")}><ArrowLeft aria-hidden="true" />返回</button>
               {recoveryButton ?? <button ref={playButton} type="button" className="game-button" aria-keyshortcuts="Enter" disabled={!!blocked || !card.available || !validCardSelections(card, selections)} onClick={confirm}>{controls.busy ? "正在施放…" : "使用卡牌"}</button>}
@@ -124,17 +150,20 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
             </div></main>}
       <footer className="stage-footer" data-card-stage-content="" data-mode={inspect ? "inspect" : information ? "information" : pending ? "candidate" : "hand"} data-has-primary={hasFooterPrimary}>
         <div className="footer-meta">
+          {!inspect && !pending && feedback && <p className={feedback.spark ? "poker-card-feedback" : "stage-error"} data-kind={feedback.spark ? "spark" : undefined} role="status">{feedback.spark && <Sparkles aria-hidden="true" />}{feedback.title}</p>}
           {controls.error && <p role="alert" className="stage-error" title={controls.error}>{controls.error}</p>}
           {controls.uncertain && <p role="status" className="stage-error">结果待核对，保留原请求。</p>}
           {pending && pending.origin !== "card" && <p className="stage-error">请在换牌中完成选择</p>}
           {inspect ? <p className="payment">{card.payment.nominalAmount ? <><span>代价 {amount(card.payment.nominalAmount)} 筹码</span>{card.payment.waivedAmount > 0 && <span>豁免 {amount(card.payment.waivedAmount)}</span>}<strong>实付 {amount(card.payment.paidAmount)} 筹码</strong></> : "无需筹码"}</p>
-            : !information && <div className="footer-summary"><span className="held-count"><Layers3 aria-hidden="true" /><span>{pending ? validCandidate ? `已选第 ${Number(candidate) + 1} 张` : "请选择一张" : `${hand.length} 张${pageCount > 1 ? ` · ${currentPage + 1}/${pageCount}` : ""}`}</span></span>
+            : !information && <div className="footer-summary"><span className="held-count"><Layers3 aria-hidden="true" /><span>{pending ? pending.kind === "poker" && pending.cardIndex !== undefined
+                ? `替换底牌 ${pending.cardIndex + 1} · ${playingCardLabel(table.hole?.[pending.cardIndex])}`
+                : validCandidate ? `已选第 ${Number(candidate) + 1} 张` : "请选择一张" : `${hand.length} 张${pageCount > 1 ? ` · ${currentPage + 1}/${pageCount}` : ""}`}</span></span>
               <nav className="stage-links" aria-label="卡牌信息"><button type="button" className="text-action" aria-label="本人情报" onClick={() => setView("intel")}><Eye aria-hidden="true" />情报{cards.privateResults?.filter(result => result.valid).length ? <b>{cards.privateResults.filter(result => result.valid).length}</b> : null}</button><button type="button" className="text-action" aria-label="牌局状态" onClick={() => setView("statuses")}><Shield aria-hidden="true" />状态</button></nav>
             </div>}
         </div>
         {!inspect && <div className="footer-actions">
           <button type="button" className="text-action" aria-label={returnLabel} onClick={information ? () => setView("hand") : close}>{information ? <><ArrowLeft aria-hidden="true" />返回</> : "收起"}</button>
-          {recoveryButton ?? (pending && !information && <button type="button" className="game-button" disabled={!!blocked || !validCandidate || pending.origin !== "card"} onClick={() => void controls.choose(Number(candidate))}>{controls.busy ? "正在确认…" : "选择这张牌"}</button>)}
+          {recoveryButton ?? (pending && !information && <button type="button" className="game-button" disabled={!!blocked || !validCandidate || pending.origin !== "card"} onClick={choose}>{controls.busy ? "正在确认…" : "选择这张牌"}</button>)}
         </div>}
       </footer>
     </div>

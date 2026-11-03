@@ -72,7 +72,10 @@ describe.each(["standard52", "short32"] as const)("扑克牌领域 %s", variant 
     // Put every red card outside the draw pile while retaining a complete physical deck.
     h.burnedCards!.push(...h.deck.filter(c => "hd".includes(c[1])))
     h.deck = h.deck.filter(c => !"hd".includes(c[1]))
-    expect(run(h, "poker.replace", { seatNo: 0, cardIndex: 0, mode: "red" }).state.seats[0].hole[0]).toBe(old)
+    const unchanged = run(h, "poker.replace", { seatNo: 0, cardIndex: 0, mode: "red" })
+    expect(unchanged.state.seats[0].hole[0]).toBe(old)
+    expect(unchanged.state.cards!.privateResults).toMatchObject([{ ownerAdmissionId: "admission-0", label: "换牌结果", values: ["牌堆里没有红色牌，底牌未换"] }])
+    expect(unchanged.frame.events.some(e => e.audience === "public")).toBe(false)
     before.seats[1].folded = true
     expect(() => run(before, "poker.exchange", { seatNo: 0, targetSeatNo: 1, cardIndex: 0 })).toThrow()
     const active = makeCardHand({ variant, roll: true }), quote = quoteRoll(active, 0)
