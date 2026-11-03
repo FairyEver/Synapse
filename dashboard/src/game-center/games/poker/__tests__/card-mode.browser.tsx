@@ -204,7 +204,20 @@ for (const [width, height] of [[1280, 800], [320, 568], [568, 320]]) it(`${width
     await page.screenshot({ path: `${evidence}/${width}-${height}-dock-player.png` })
 
     const pending = structuredClone(table)
-    pending.cards!.pending = { choiceId: "five", kind: "poker", origin: "card", paymentVersion: "paid", cardIndex: 1, candidates: ["2c", "Qc", "8d", "Td", "7s"] }
+    pending.cards!.pending = { choiceId: "three", kind: "poker", origin: "card", paymentVersion: "paid", cardIndex: 1, candidates: ["9d", "Kd", "Kc"] }
+    await screen.rerender(flow(pending))
+    const card = dialog.getByRole("button", { name: /^候选 1，/ }).element() as HTMLButtonElement
+    const face = card.querySelector(".poker-card-front")!
+    expect(parseFloat(getComputedStyle(face).borderTopLeftRadius)).toBeGreaterThan(0)
+    expect(getComputedStyle(face).borderTopLeftRadius).toBe(getComputedStyle(card).borderTopLeftRadius)
+    const size = card.getBoundingClientRect().width
+    card.click()
+    await expect.element(dialog.getByRole("button", { name: /^候选 1，/ })).toHaveAttribute("aria-pressed", "true")
+    expect(card.querySelector(".selection-tick")).not.toBeNull()
+    expect(card.getBoundingClientRect().width).toBe(size)
+    await page.screenshot({ path: `${evidence}/${width}-${height}-dock-three-candidates.png` })
+
+    pending.cards!.pending = { ...pending.cards!.pending, choiceId: "five", candidates: ["2c", "Qc", "8d", "Td", "7s"] }
     await screen.rerender(flow(pending))
     const candidates = dialog.getByRole("button", { name: /^候选 \d，/ }).elements()
     expect(candidates).toHaveLength(5)
@@ -235,9 +248,11 @@ it("候选选中保持静态描边，另一张 hover 抬起，Escape 关闭卡�
   const screen = await render(<Fixture panel="poker" />)
   try {
     await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
-    await page.getByRole("button", { name: "候选 1", exact: true }).click()
-    const selected = page.getByRole("button", { name: "候选 1", exact: true }).element().parentElement!
-    const hovered = page.getByRole("button", { name: "候选 2", exact: true })
+    const first = page.getByRole("button", { name: /^候选 1，/ })
+    await first.click()
+    const selected = first.element().parentElement!
+    const hovered = page.getByRole("button", { name: /^候选 2，/ })
+    expect(first.element().querySelector(".selection-tick")).not.toBeNull()
     await hovered.hover()
     await new Promise(resolve => setTimeout(resolve, 350))
     expect(new DOMMatrix(getComputedStyle(selected).transform).m42).toBe(0)

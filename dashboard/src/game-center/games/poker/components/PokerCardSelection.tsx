@@ -47,9 +47,11 @@ function Materials(props: RendererProps) {
   return <div className="ability-options">{props.request.options.map(option => {
     const held = cards?.ownHand?.find(card => card.instanceId === option.value), info = held && cards?.definitions?.[held.cardId]
     const duplicates = props.request.options.filter(item => item.label === option.label), ordinal = duplicates.length > 1 ? `第 ${duplicates.findIndex(item => item.value === option.value) + 1} 张` : "能力牌"
-    return <div className="card-slot" data-picked={String(props.value) === option.value} key={option.value}>
+    const picked = String(props.value) === option.value
+    return <div className="card-slot" data-picked={picked} key={option.value}>
       <PokerAbilityCard {...choiceProps(props, option)} definition={info} caption={info ? ordinal : option.label} aria-label={`${option.label}${duplicates.length > 1 ? ` · ${ordinal}` : ""}`} />
-      <span className="material-outcome">{String(props.value) === option.value ? purpose : ordinal}</span>
+      {picked && <Tick />}
+      <span className="material-outcome">{picked ? purpose : ordinal}</span>
     </div>
   })}</div>
 }
@@ -59,15 +61,18 @@ function Statuses(props: RendererProps) {
   </button>)}</div>
 }
 function PokerCandidates(props: RendererProps) {
-  return <div className="candidate-stage poker-candidates"><div className="hand-row">{props.request.options.map((option, index) => <div className="card-slot" data-chosen={String(props.value) === option.value} key={option.value}>
-    <button {...choiceProps(props, option)} className="poker-candidate" aria-label={`${option.label}，${playingCardLabel(props.request.pending?.candidates[index])}`}><Card card={props.request.pending?.candidates[index]} /></button>
+  return <div className="candidate-stage poker-candidates"><div className="hand-row">{props.request.options.map((option, index) => <div className="card-slot" key={option.value}>
+    <button {...choiceProps(props, option)} className="poker-candidate" aria-label={`${option.label}，${playingCardLabel(props.request.pending?.candidates[index])}`}>
+      <Card card={props.request.pending?.candidates[index]} />{String(props.value) === option.value && <Tick />}
+    </button>
   </div>)}</div></div>
 }
 function AbilityCandidates(props: RendererProps) {
   return <div className="candidate-stage"><div className="hand-row">{props.request.options.map((option, index) => {
     const info = props.request.pending?.candidateCards?.[index]
-    return <div className="card-slot" data-chosen={String(props.value) === option.value} key={option.value}>
+    return <div className="card-slot" key={option.value}>
       <PokerAbilityCard {...choiceProps(props, option)} definition={info} caption={option.label} aria-label={`${option.label}${info ? `，${info.name}` : ""}`} />
+      {String(props.value) === option.value && <Tick />}
     </div>
   })}</div></div>
 }

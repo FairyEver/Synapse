@@ -5,7 +5,7 @@ import type { PokerCardDefinitionView, PokerCardHandView, PokerResolutionFrameVi
 import type { usePokerCards } from "../hooks/usePokerCards"
 import { cardChoiceBaseline, cardConfirmLabel, cardPlayBaseline, cardPlayFeedback, cardPlayInput, cardUnavailableReason, validCardSelections } from "../lib/card-view"
 import { reconcileCardSelections, type CardSelectionValues } from "../lib/card-selection"
-import { amount, remaining, streetLabel } from "../lib/view"
+import { amount, playingCardLabel, remaining, streetLabel } from "../lib/view"
 import { Card } from "./Card"
 import { PokerCardIntel } from "./PokerCardIntel"
 import { PokerCardCandidates, PokerCardSelection } from "./PokerCardSelection"
@@ -52,6 +52,7 @@ export function PokerCardDockFlow({ table, controls, disabled, frames = [], drop
   const review = intelOpen && !!intel?.length && !pending && !targetStage && !usedResult && !waitingStage && !recovery
   const open = !!pending || targetStage || usedResult || waitingStage || recovery || review
   const candidateIndex = candidate?.choiceId === pending?.choiceId ? candidate?.index ?? "" : ""
+  const originalCard = pending?.cardIndex === undefined ? undefined : table.hole?.[pending.cardIndex]
   const cancelTarget = targetStage && !controls.blocked && !recovery && definition.play?.cancelUntil === "target-confirm"
   const showClose = !pending && !recovery && (cancelTarget || waitingStage && !!controls.error && !controls.blocked)
   const dismissible = showClose || !pending && !recovery && (usedResult || review)
@@ -121,7 +122,7 @@ export function PokerCardDockFlow({ table, controls, disabled, frames = [], drop
             <header className="stage-heading"><h2 ref={headingRef} tabIndex={-1} id={heading}>{title}</h2></header>
             <div className="poker-card-dock-task-content">
               {pending ? <>
-                {pending.cardIndex !== undefined && <p className="poker-card-dock-stage-description">替换第 {pending.cardIndex + 1} 张底牌</p>}
+                {pending.cardIndex !== undefined && <p className="poker-card-dock-stage-description">替换第 {pending.cardIndex + 1} 张底牌{originalCard && ` · ${playingCardLabel(originalCard)}`}</p>}
                 <PokerCardCandidates pending={pending} table={table} value={candidateIndex} onChange={index => setCandidate({ choiceId: pending.choiceId, index })} disabled={locked} />
               </> : usedResult ? <>
                 {resultKind === "holes" && used.status !== "blocked" && <section className="intel-result" aria-label="你的底牌"><div className="intel-values">{table.hole?.map((value, index) => <Card key={index} card={value} />)}</div></section>}

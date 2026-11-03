@@ -5,6 +5,7 @@
   --stage-line: oklch(.43 .035 158); --stage-raised: oklch(.25 .026 169);
   --brass: oklch(.79 .085 81); --brass-light: oklch(.9 .066 90); --brass-dark: oklch(.43 .069 77);
   --card-paper: oklch(.95 .025 80); --card-ink: oklch(.25 .023 166); --card-muted: oklch(.42 .026 164);
+  --stage-card-radius: var(--radius);
   --shadow: oklch(.075 .009 165 / .55); --guess-red: oklch(.79 .12 25);
   --veil: oklch(.12 .02 169 / .94); --veil-edge: oklch(.12 .02 169 / .80);
   --ease: cubic-bezier(.22, 1, .36, 1); --font-game: "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif;
@@ -56,14 +57,14 @@
     .card-slot:first-child { margin-left: 0; }
     .card-slot:hover { transform: translateY(-22px) rotate(0deg) scale(1.065); z-index: 3; }
     .card-slot.is-entering { animation: poker-card-stage-deal-in 540ms var(--ease) backwards; animation-delay: calc(var(--deal-i) * 55ms); }
-    .ability-card { display: block; position: relative; width: 100%; aspect-ratio: .64; padding: 0; border: 0; border-radius: 12px; text-align: left; color: var(--card-ink); background: var(--card-paper); transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform 160ms ease-out; isolation: isolate; }
+    .ability-card { display: block; position: relative; width: 100%; aspect-ratio: .64; padding: 0; border: 0; border-radius: var(--stage-card-radius); text-align: left; color: var(--card-ink); background: var(--card-paper); transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform 160ms ease-out; isolation: isolate; }
     .ability-card::before { content: ""; position: absolute; inset: 0; z-index: 2; border: 2px solid color-mix(in oklch, var(--brass-dark) 70%, var(--card-paper)); border-radius: inherit; pointer-events: none; }
     .ability-card::after { content: ""; position: absolute; inset: 5px; z-index: 2; border: 1px solid color-mix(in oklch, var(--brass) 55%, transparent); border-radius: 8px; pointer-events: none; }
-    .card-slot:hover .ability-card::before, .card-slot[data-chosen="true"] .ability-card::before { border-color: var(--brass-light); }
-    .ability-art { display: block; width: 100%; height: 56%; object-fit: cover; object-position: 50% 48%; border-radius: 12px 12px 0 0; user-select: none; -webkit-user-drag: none; }
+    .card-slot:hover .ability-card::before, .ability-card[aria-pressed="true"]::before { border-color: var(--brass-light); }
+    .ability-art { display: block; width: 100%; height: 56%; object-fit: cover; object-position: 50% 48%; user-select: none; -webkit-user-drag: none; }
     .card-type { position: absolute; top: 13px; left: 13px; z-index: 1; display: flex; align-items: center; gap: 5px; padding: .2em .45em; border-radius: .35em; font-size: 10px; color: var(--card-ink); background: var(--card-paper); }
     .card-type svg { width: 13px; height: 13px; }
-    .card-body { position: absolute; inset: 54% 0 0; padding: 12px 19px 16px; background: var(--card-paper); border-radius: 0 0 12px 12px; display: flex; flex-direction: column; }
+    .card-body { position: absolute; inset: 54% 0 0; padding: 12px 19px 16px; background: var(--card-paper); display: flex; flex-direction: column; }
     .card-name { display: block; text-align: center; font: 600 21px/1.3 "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif; letter-spacing: .065em; }
     .card-divider { display: flex; align-items: center; gap: 8px; color: var(--brass-dark); margin: 8px 8px 7px; }
     .card-divider::before, .card-divider::after { content: ""; height: 1px; flex: 1; background: color-mix(in oklch, var(--brass-dark) 32%, transparent); }
@@ -108,20 +109,20 @@
     .choice-field { border: 0; padding: 0; margin: 0; min-width: 0; }
     .choice-field legend { font: 600 17px/1.5 var(--font-game); letter-spacing: .03em; padding: 0; margin-bottom: 12px; color: var(--brass-light); }
     .hole-options { display: flex; gap: 16px; padding: 4px; }
-    .hole-choice { position: relative; padding: 0; border: 0; border-radius: 5px; background: transparent; transition: transform 180ms var(--ease); }
+    .hole-choice { position: relative; padding: 0; border: 0; border-radius: var(--stage-card-radius); background: transparent; transition: transform 180ms var(--ease); }
     .hole-choice :is(.poker-card, .poker-card-placeholder) { width: 68px; }
     .hole-choice:hover { transform: translateY(-4px); }
-    .hole-choice[aria-pressed="true"] { outline: 2px solid var(--brass-light); outline-offset: 4px; }
-    .selection-tick { position: absolute; right: -7px; bottom: -5px; width: 19px; height: 19px; background: var(--brass-light); border-radius: 50%; color: var(--stage-deep); display: grid; place-items: center; }
+    .selection-tick {
+      position: absolute; inset: -4px -4px auto auto; z-index: 4;
+      width: 1.125rem; height: 1.125rem; display: grid; place-items: center;
+      border-radius: 50%; background: var(--brass-light); color: var(--stage-deep); pointer-events: none;
+    }
     .selection-tick svg { width: 12px; height: 12px; }
     .target-options { display: flex; gap: 12px; flex-wrap: wrap; }
-    .target-choice { min-height: 64px; padding: 12px 16px; display: flex; gap: 12px; align-items: center; background: var(--stage-raised); border: 1px solid var(--stage-line); border-radius: 6px; color: var(--stage-ink); font-size: 16px; font-weight: 500; }
+    .target-choice { min-height: 64px; padding: 12px 16px; display: flex; gap: 12px; align-items: center; background: var(--stage-raised); border: 1px solid var(--stage-line); color: var(--stage-ink); font-size: 16px; font-weight: 500; }
     .target-choice .avatar { width: 36px; height: 36px; font-size: 14px; background: var(--stage-deep); border: 1px solid var(--brass-dark); color: var(--brass-light); }
-    .target-choice > span:not(.avatar) { min-width: 0; overflow-wrap: anywhere; }
-    .target-choice:hover { border-color: var(--brass); color: var(--stage-ink); }
-    .target-choice[aria-pressed="true"] { border-color: var(--brass-light); color: var(--brass-light); background: var(--stage-raised); }
+    .target-choice > span:not(.avatar, .selection-tick) { min-width: 0; overflow-wrap: anywhere; }
     .target-choice > svg { width: 16px; height: 16px; }
-    :is(.target-choice, .color-choice, .effect-choice) { position: relative; }
     .game-button {
       --button-bevel: 4px;
       --button-depth: var(--button-bevel);
@@ -174,20 +175,19 @@
       }
     }
     .choice-empty { font-size: 15px; line-height: 1.7; margin: 0; color: var(--stage-muted); }
-    .choice-field button:disabled { opacity: .5; }
+    :is(.choice-field, .candidate-stage) button:disabled { opacity: .5; }
     .opponent-hands { display: flex; gap: 20px; overflow-x: auto; overflow-y: hidden; padding: 6px 4px 10px; }
     .opponent-group { flex: none; min-width: 128px; }
     .opponent-name { display: flex; align-items: center; gap: 8px; color: var(--stage-ink); font-size: 15px; margin-bottom: 12px; }
     .opponent-slots { display: flex; gap: 12px; }
-    .hidden-hole { width: 56px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--stage-ink); position: relative; }
+    .hidden-hole { width: 56px; padding: 0; border: 0; border-radius: var(--stage-card-radius); background: transparent; color: var(--stage-ink); position: relative; }
     .hidden-hole :is(.poker-card, .poker-card-placeholder) { width: 56px; }
     .hidden-hole small { display: block; margin-top: 8px; font-size: 13px; color: var(--stage-muted); }
     .hidden-hole[aria-pressed="true"] small { color: var(--brass-light); }
     .color-options { display: flex; flex-wrap: wrap; gap: 12px; }
-    .color-choice { display: flex; flex: 1 0 120px; align-items: center; justify-content: center; gap: 12px; min-height: 62px; padding: 12px 18px; border: 1px solid var(--stage-line); border-radius: 6px; background: var(--stage-raised); color: var(--stage-ink); font-size: 16px; }
+    .color-choice { display: flex; flex: 1 0 120px; align-items: center; justify-content: center; gap: 12px; min-height: 62px; padding: 12px 18px; border: 1px solid var(--stage-line); background: var(--stage-raised); color: var(--stage-ink); font-size: 16px; }
     .color-choice b { font: 28px Georgia, serif; }
     .color-choice[data-value="red"] b { color: var(--guess-red); }
-    .color-choice[aria-pressed="true"] { border-color: var(--brass-light); background: var(--stage-raised); }
     .ability-options { display: flex; gap: 13px; overflow-x: auto; overflow-y: hidden; padding: 8px 5px 12px; scroll-snap-type: x proximity; }
     .ability-options .card-slot { width: 154px; margin: 0; transform: none; filter: none; flex: none; scroll-snap-align: start; }
     .ability-options .card-slot:hover { transform: translateY(-3px); }
@@ -200,17 +200,15 @@
     .ability-options .card-cost { display: none; }
     .ability-options .card-type { top: 10px; left: 10px; font-size: 10px; gap: 4px; }
     .ability-options .card-type svg { width: 13px; height: 13px; }
-    .ability-options .card-slot[data-picked="true"] .ability-card { outline: 2px solid var(--brass-light); outline-offset: 3px; }
     .material-outcome { display: block; color: var(--stage-muted); text-align: center; font-size: 13px; margin-top: 10px; min-height: 18px; }
     .card-slot[data-picked="true"] .material-outcome { color: var(--brass-light); }
     .effect-options { display: flex; flex-direction: column; gap: 10px; padding: 4px; }
-    .effect-choice { display: flex; gap: 12px; align-items: center; text-align: left; padding: 14px 16px; min-height: 74px; border: 1px solid var(--stage-line); border-radius: 6px; background: var(--stage-raised); color: var(--stage-ink); }
+    .effect-choice { display: flex; gap: 12px; align-items: center; text-align: left; padding: 14px 16px; min-height: 74px; border: 1px solid var(--stage-line); background: var(--stage-raised); color: var(--stage-ink); }
     .effect-choice > svg { color: var(--brass); width: 28px; height: 28px; }
-    .effect-choice > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
-    .effect-choice[aria-pressed="true"] { border-color: var(--brass-light); background: var(--stage-raised); }
-    .target-choice, .color-choice, .effect-choice { box-shadow: inset 0 1px 0 color-mix(in oklch, var(--brass) 16%, transparent), inset 0 -3px 0 var(--stage-deep); transition: border-color 160ms, transform 160ms var(--ease); }
-    .target-choice:not(:disabled):hover, .color-choice:not(:disabled):hover, .effect-choice:not(:disabled):hover { border-color: var(--brass); transform: translateY(-2px); }
-    .target-choice[aria-pressed="true"], .color-choice[aria-pressed="true"], .effect-choice[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--brass-dark), inset 0 -3px 0 var(--stage-deep); }
+    .effect-choice > span:not(.selection-tick) { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+    :is(.target-choice, .color-choice, .effect-choice) { position: relative; border-radius: var(--stage-card-radius); box-shadow: inset 0 1px 0 color-mix(in oklch, var(--brass) 16%, transparent), inset 0 -3px 0 var(--stage-deep); transition: border-color 160ms, transform 160ms var(--ease); }
+    :is(.target-choice, .color-choice, .effect-choice):enabled:hover { border-color: var(--brass); transform: translateY(-2px); }
+    :is(.target-choice, .color-choice, .effect-choice)[aria-pressed="true"] { border-color: var(--brass-light); color: var(--brass-light); box-shadow: inset 0 0 0 1px var(--brass-dark), inset 0 -3px 0 var(--stage-deep); }
     .private-symbol { min-width: 110px; padding: 25px; border: 1px solid var(--stage-line); border-radius: 8px; text-align: center; font: 42px Georgia, serif; }
     .private-ability { width: max(32px, min(214px, calc((100cqh - 128px) * .64))); container-type: inline-size; filter: drop-shadow(0 9px 12px var(--shadow)); }
     .private-ability .ability-card { pointer-events: none; }
@@ -218,11 +216,18 @@
     .view > [data-selector$="-candidate"] { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
     .candidate-stage .hand-row { gap: 26px; }
     .candidate-stage .card-slot { margin: 0; }
-    .candidate-stage .card-slot[data-chosen="true"] .ability-card { outline: 2px solid var(--brass-light); outline-offset: 5px; }
-    .poker-candidate { aspect-ratio: 5 / 7; border-radius: 9px; background: transparent; border: 0; padding: 0; display: block; width: 100%; }
-    .poker-candidate :is(.poker-card, .poker-card-placeholder) { width: 100%; border-radius: 9px; }
+    .candidate-stage .card-slot:hover { transform: none; }
+    .candidate-stage .card-slot:has(button:enabled):hover { transform: translateY(-4px); }
+    .poker-candidate { position: relative; border-radius: var(--stage-card-radius); background: transparent; border: 0; padding: 0; display: block; width: 100%; }
+    :is(.hole-options, .opponent-slots, .poker-candidates, .intel-values) :is(.poker-card, .poker-card-front, .poker-card-back, .poker-card-placeholder) { border-radius: var(--stage-card-radius); }
+    /* The SVG already paints its face and edge. Leave its rounded corners transparent. */
+    :is(.hole-options, .poker-candidates, .intel-values) .poker-card-front { background: transparent; }
     .candidate-stage.poker-candidates { --card-w: max(32px, min(172px, 21vw, calc((100cqh - 48px) * 5 / 7))); }
-    .poker-candidates .card-slot[data-chosen="true"] .poker-candidate { outline: 2px solid var(--brass-light); outline-offset: 6px; }
+    :is(.poker-candidate, .ability-card)[aria-pressed="true"],
+    :is(.hole-choice, .hidden-hole)[aria-pressed="true"] :is(.poker-card, .poker-card-placeholder) {
+      outline: 2px solid var(--brass-light); outline-offset: 2px;
+    }
+    button[data-choice]:focus-visible { outline: 2px dashed var(--stage-ink); outline-offset: 4px; }
   .stage-heading h2 { overflow-wrap: anywhere; }
   .stage-heading[data-inspect="true"] { height: 0; padding: 0; overflow: hidden; }
   .stage-heading[data-inspect="true"] h2 { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
@@ -239,7 +244,6 @@
   .hole-choice, .hidden-hole { color: var(--stage-ink); }
   .hole-choice small { display: block; font-size: 13px; padding-top: 8px; }
   .hidden-hole { --cw: 56px; }
-  .hidden-hole[aria-pressed="true"] .poker-card { outline: 2px solid var(--brass-light); outline-offset: 3px; }
   .target-choice small { display: block; color: var(--stage-muted); font-size: 12px; margin-top: 4px; }
   .card-unavailable { color: var(--brass-light); font-size: 15px; margin-top: 16px; }
   .candidate-view { flex: 1; min-height: 0; display: flex; overflow: hidden; }
@@ -320,7 +324,7 @@
     .candidate-stage { --card-w: max(32px, min(216px, 68vw, calc((100cqh - 56px) * .64))); padding: 8px 0; overflow: hidden; }
     .candidate-stage .hand-row { gap: 20px; }
     .candidate-stage.poker-candidates { --card-w: max(32px, min(104px, 24vw, calc((100cqh - 40px) * 5 / 7))); padding: 8px 16px; }
-    .poker-candidates .hand-row { justify-content: center; gap: 14px; padding: 12px 6px; overflow: hidden; }
+    .poker-candidates .hand-row { justify-content: safe center; gap: 14px; padding: 12px 6px; overflow-x: auto; scroll-padding-inline: 6px; scroll-snap-type: x proximity; }
   }
   @media (max-width: 360px) {
     .hud-right { gap: 8px; }

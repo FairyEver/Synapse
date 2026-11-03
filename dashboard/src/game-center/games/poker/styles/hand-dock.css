@@ -209,7 +209,8 @@
   padding: .5rem 0;
   overflow: visible;
 }
-.poker-card-stage.poker-card-dock-stage .candidate-stage.poker-candidates { --card-w: min(17cqw, var(--dock-candidate-width), 8.75rem); }
+.poker-card-stage.poker-card-dock-stage .candidate-stage.poker-candidates { --card-w: min(26cqw, var(--dock-candidate-width), 8rem); }
+.poker-card-stage.poker-card-dock-stage .candidate-stage.poker-candidates:has(.card-slot:nth-child(4)) { --card-w: min(17cqw, var(--dock-candidate-width), 8rem); }
 .poker-card-stage.poker-card-dock-stage .candidate-stage .hand-row {
   justify-content: center;
   height: auto;
@@ -218,8 +219,8 @@
   overflow: visible;
   scroll-snap-type: none;
 }
-.poker-card-dock-stage-actions .game-button { width: min(100%, 16rem); min-width: 0; }
-.poker-card-dock-stage :is(.game-button, .text-action, .close-overlay, .hole-choice, .target-choice, .hidden-hole, .color-choice, .effect-choice, .ability-card, .poker-candidate):focus-visible { outline: 2px solid var(--brass-light); outline-offset: 3px; }
+.poker-card-dock-stage-actions .game-button { min-width: min(100%, 10rem); max-width: 100%; }
+.poker-card-dock-stage :is(.text-action, .close-overlay):focus-visible { outline: 2px solid var(--brass-light); outline-offset: 3px; }
 @media (max-height: 500px) {
   .poker-card-dock-stage.poker-card-stage { --dock-stage-hud: 3.25rem; --dock-candidate-width: 23dvh; }
   .poker-card-dock-task-scroll { padding-block: .5rem; }
