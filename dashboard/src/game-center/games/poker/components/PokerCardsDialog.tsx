@@ -28,6 +28,7 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
   const [view, setView] = useState<View>("hand"), [page, setPage] = useState(0)
   const stage = useRef<HTMLDivElement>(null), heading = useId()
   const cards = table.cards, pending = cards?.pending, hand = cards?.ownHand ?? [], card = hand.find(item => item.instanceId === selected)
+  const visible = open && !!cards
   const definition = card && cards?.definitions?.[card.cardId], selections = reconcileCardSelections(card?.choices ?? [], rawValues)
   const blocked = disabled || controls.blocked || controls.storageError || !controls.canControl
   const inspect = !pending && view === "inspect" && !!card && !!definition
@@ -47,6 +48,17 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
     if (JSON.stringify(rawValues) !== JSON.stringify(selections)) setValues(selections)
   }, [card?.choices, rawValues])
   useEffect(() => { if (candidate && !validCandidate) setCandidate("") }, [candidate, validCandidate])
+  useEffect(() => {
+    if (!visible) return
+    // Focus can stay outside the stage when it opens.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return
+      event.preventDefault()
+      onOpenChange(false)
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [visible, onOpenChange])
   // Block the table behind the stage without moving or restoring pointer focus.
   useLayoutEffect(() => {
     if (!open || !stage.current) return
@@ -56,33 +68,35 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
     return () => { for (const [element, inert] of prior) element.inert = inert }
   }, [open, container])
   if (!open || !cards) return null
-  return <div className="poker-card-stage card-overlay" data-standalone={container === document.body} ref={stage} role="dialog" aria-modal="true" aria-labelledby={heading}>
+  return <div className="poker-card-stage card-overlay" data-standalone={container === document.body} ref={stage} role="dialog" aria-modal="true" aria-labelledby={heading} onClick={event => {
+    if (event.target instanceof Element && !event.target.closest("button, [data-card-stage-content]")) close()
+  }}>
     <div className="overlay-layout">
       <header className="stage-top">
-        <div className="stage-hud">
+        <div className="stage-hud" data-card-stage-content="">
           <div className="round-context"><span>第 {table.handNo} 手</span><strong>{streetLabel[table.street ?? ""]}</strong></div>
           <div className="hud-board" aria-label="卡牌面板公共牌"><span className="hud-board-label">公共牌</span>{Array.from({ length: 5 }, (_, index) => <Card key={index} card={table.board[index]} />)}</div>
           <div className="hud-right">{table.deadlineMs != null && <span className="time" role="timer" aria-label="行动剩余时间"><Clock3 aria-hidden="true" />{remaining(table.deadlineMs)}</span>}<button type="button" className="close-overlay" aria-label="关闭卡牌" onClick={close}><X aria-hidden="true" /></button></div>
         </div>
-        <div className="stage-heading" data-inspect={inspect}><h2 id={heading}>{title}</h2></div>
+        <div className="stage-heading" data-inspect={inspect}><h2 id={heading} data-card-stage-content="">{title}</h2></div>
       </header>
       {information ? <main className="view inspect-view"><div className="inspect-layout">
-        <div className="inspect-emblem" aria-hidden="true">{effectiveView === "intel" ? <Eye /> : <Shield />}</div>
-        <div className="inspect-details"><div className="inspect-body">{effectiveView === "intel" ? <PokerCardIntel cards={cards} /> : <PokerCardStageStatuses cards={cards} seats={table.seats} />}</div></div>
+        <div className="inspect-emblem" aria-hidden="true" data-card-stage-content="">{effectiveView === "intel" ? <Eye /> : <Shield />}</div>
+        <div className="inspect-details" data-card-stage-content=""><div className="inspect-body">{effectiveView === "intel" ? <PokerCardIntel cards={cards} /> : <PokerCardStageStatuses cards={cards} seats={table.seats} />}</div></div>
       </div></main> : pending ? candidateInfo ? <main className="view inspect-view"><div className="inspect-layout">
-        <div className="inspect-card"><PokerAbilityCard definition={candidateInfo} interactive={false} /></div>
-        <div className="inspect-details"><div className="inspect-body"><p className="full-description">{candidateInfo.description}</p><PokerCardCandidates pending={pending} table={table} value={candidate} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} compact /></div></div>
+        <div className="inspect-card" data-card-stage-content=""><PokerAbilityCard definition={candidateInfo} interactive={false} /></div>
+        <div className="inspect-details" data-card-stage-content=""><div className="inspect-body"><p className="full-description">{candidateInfo.description}</p><PokerCardCandidates pending={pending} table={table} value={candidate} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} compact /></div></div>
       </div></main> : <div className="view"><PokerCardCandidates pending={pending} table={table} value={validCandidate ? candidate : ""} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} /></div>
         : inspect ? <main className="view inspect-view"><div className="inspect-layout">
-          <div className="inspect-card"><PokerAbilityCard definition={definition} cost={card.payment.paidAmount ? `${amount(card.payment.paidAmount)} 筹码` : "无需筹码"} interactive={false} /></div>
-          <div className="inspect-details"><div className="inspect-body">
+          <div className="inspect-card" data-card-stage-content=""><PokerAbilityCard definition={definition} cost={card.payment.paidAmount ? `${amount(card.payment.paidAmount)} 筹码` : "无需筹码"} interactive={false} /></div>
+          <div className="inspect-details" data-card-stage-content=""><div className="inspect-body">
             <p className="full-description">{definition.description}</p>
             {!card.available && <p className="card-unavailable" role="status">{cardUnavailableReason(card.reason)}</p>}
             <PokerCardSelection table={table} definition={definition} choices={card.choices} values={selections} onChange={setValues} disabled={!!blocked || !card.available} />
           </div></div>
         </div></main>
           : <main className="view"><div className="hand-stage">
-              {!hand.length ? <p className="choice-empty">暂无卡牌</p> : <div className="hand-row" key={currentPage} aria-label="持有卡牌">{displayed.map((item, index) => {
+              {!hand.length ? <p className="choice-empty" data-card-stage-content="">暂无卡牌</p> : <div className="hand-row" key={currentPage} aria-label="持有卡牌">{displayed.map((item, index) => {
                 const info = cards.definitions?.[item.cardId]
                 return <div className="card-slot is-entering" data-unavailable={!item.available} key={item.instanceId} style={cardFanStyle(index, displayed.length)}>
                   <PokerAbilityCard definition={info} data-held-card={item.instanceId} aria-label={info?.name ?? "卡牌"} onClick={() => select(item.instanceId)} disabled={controls.busy} cost={item.payment.paidAmount ? `${amount(item.payment.paidAmount)} 筹码` : "无需筹码"} />
@@ -91,7 +105,7 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
               })}</div>}
               {pageCount > 1 && <><button type="button" className="page-arrow previous" aria-label="上一组卡牌" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft /></button><button type="button" className="page-arrow next" aria-label="下一组卡牌" disabled={currentPage === pageCount - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight /></button></>}
             </div></main>}
-      <footer className="stage-footer" data-mode={inspect ? "inspect" : information ? "information" : pending ? "candidate" : "hand"} data-has-primary={hasPrimary}>
+      <footer className="stage-footer" data-card-stage-content="" data-mode={inspect ? "inspect" : information ? "information" : pending ? "candidate" : "hand"} data-has-primary={hasPrimary}>
         <div className="footer-meta">
           {controls.error && <p role="alert" className="stage-error" title={controls.error}>{controls.error}</p>}
           {controls.uncertain && <p role="status" className="stage-error">结果待核对，保留原请求。</p>}

@@ -184,7 +184,7 @@ for (const [width, height] of [[320, 568], [568, 320]]) for (const recovery of [
     await page.screenshot({ path: `${evidence}/${width}-${height}-${recovery}.png` })
   } finally { await screen.unmount() }
 })
-it("候选选中保持静态描边，另一张 hover 抬起，Escape 不触发卡牌关闭", async () => {
+it("候选选中保持静态描边，另一张 hover 抬起，Escape 关闭卡牌", async () => {
   await page.viewport(1280, 800)
   const screen = await render(<Fixture panel="poker" />)
   try {
@@ -197,8 +197,7 @@ it("候选选中保持静态描边，另一张 hover 抬起，Escape 不触发�
     expect(new DOMMatrix(getComputedStyle(selected).transform).m42).toBe(0)
     expect(new DOMMatrix(getComputedStyle(hovered.element().parentElement!).transform).m42).toBeLessThan(0)
     await userEvent.keyboard("{Escape}")
-    await expect.element(page.getByRole("dialog")).toBeVisible()
-    await page.getByRole("button", { name: "关闭卡牌", exact: true }).click()
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument()
   } finally { await screen.unmount() }
 })
 it("少量详情与左卡在中间区域居中，能力候选完整规则只在右侧滚动", async () => {

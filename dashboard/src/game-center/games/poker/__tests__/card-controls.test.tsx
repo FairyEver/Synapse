@@ -24,6 +24,8 @@ async function openCard() { await click("卡牌"); await act(async () => documen
 it("打开及选中不施放，选择合法目标后明确确认才付款，携带报价版本", async () => {
   await mount(<HumanControls table={cardTable} perspective="owner" identityKey="open-card" onRefresh={vi.fn()} />)
   await openCard(); expect(api.play).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("实付 2 筹码")
+  await act(async () => document.querySelector<HTMLElement>(".full-description")!.click())
+  expect(document.querySelector(".poker-card-stage")).not.toBeNull()
   for (const [name, value] of [["hole", "1"], ["player", "1"]]) await act(async () => document.querySelector<HTMLButtonElement>(`button[data-choice="${name}"][value="${value}"]`)!.click())
   await click("使用卡牌")
   expect(api.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instanceId: "card-instance", selections: { hole: "1", player: "1" }, expectedPaymentVersion: "card-quote", expectedActionSeq: 3, controlVersion: 2 }))
@@ -114,11 +116,18 @@ it.each(["transport", "domain"])("%s失败只有确定领域拒绝才清理原�
   await mount(<Harness identity={`reject-${kind}`} />); await act(async () => controls.play(input))
   expect(controls.uncertain).toBe(kind === "transport"); expect(api.play).toHaveBeenCalledOnce()
 })
-it("待选可关闭重开，普通行动保持禁用；行动点变化清掉未提交选择", async () => {
-  const refresh = vi.fn(), identity = "choice-reopen", table = { ...cardTable, cards: { ...cardTable.cards!, pending: { choiceId: "reopen-choice", kind: "poker" as const, origin: "card" as const, paymentVersion: "original-paid", candidates: ["2c", "3c", "4c"] } } }
+it.each(["点击空白", "按 Esc"])("通过%s关闭后可恢复待选，行动点变化清掉未提交选择", async dismiss => {
+  const refresh = vi.fn(), identity = `choice-reopen-${dismiss}`, table = { ...cardTable, cards: { ...cardTable.cards!, pending: { choiceId: "reopen-choice", kind: "poker" as const, origin: "card" as const, paymentVersion: "original-paid", candidates: ["2c", "3c", "4c"] } } }
   const root = await mount(<HumanControls table={table} perspective="owner" identityKey={identity} onRefresh={refresh} />)
-  expect(document.querySelector('button[data-choice="candidate"]')).not.toBeNull()
-  await click("关闭卡牌"); expect(document.querySelector('[role="dialog"]')).toBeNull(); await click("卡牌")
+  const candidate = () => document.querySelector<HTMLButtonElement>('button[data-choice="candidate"][value="1"]')!
+  await act(async () => candidate().click())
+  expect(candidate().getAttribute("aria-pressed")).toBe("true")
+  await act(async () => {
+    if (dismiss === "点击空白") document.querySelector<HTMLElement>(".candidate-stage .hand-row")!.click()
+    else document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  })
+  expect(document.querySelector('[role="dialog"]')).toBeNull(); await click("卡牌")
+  expect(candidate().getAttribute("aria-pressed")).toBe("true")
   expect(document.querySelectorAll('button[data-choice="candidate"]')).toHaveLength(3); expect(api.choose).not.toHaveBeenCalled()
   await click("关闭卡牌")
   await act(async () => root.render(<HumanControls table={cardTable} perspective="owner" identityKey={identity} onRefresh={refresh} />))
