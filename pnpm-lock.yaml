@@ -287,6 +287,9 @@ importers:
       github-markdown-css:
         specifier: 5.9.0
         version: 5.9.0
+      gsap:
+        specifier: 3.15.0
+        version: 3.15.0
       lib0:
         specifier: 0.2.117
         version: 0.2.117
@@ -8090,6 +8093,9 @@ packages:
   graphql@16.13.2:
     resolution: {integrity: sha512-5bJ+nf/UCpAjHM8i06fl7eLyVC9iuNAjm9qzkiu2ZGhM0VscSvS6WDPfAwkdkBuoXGM9FJSbKl6wylMwP9Ktig==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
+
+  gsap@3.15.0:
+    resolution: {integrity: sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==}
 
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
@@ -20124,6 +20130,8 @@ snapshots:
       tinygradient: 1.1.5
 
   graphql@16.13.2: {}
+
+  gsap@3.15.0: {}
 
   hachure-fill@0.5.2: {}
 
