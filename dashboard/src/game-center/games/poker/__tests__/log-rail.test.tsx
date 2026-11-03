@@ -26,7 +26,7 @@ it("公开日志按最新排序，悬停、键盘、触摸打开同一详情且 
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)
   const render = async (view = table) => act(async () => root.render(<PokerLogRail table={view} />))
-  const tooltip = () => host.querySelector('[role="tooltip"]')
+  const tooltip = () => document.body.querySelector('[role="tooltip"]')
   try {
     await render()
     const [card, call] = host.querySelectorAll("button")

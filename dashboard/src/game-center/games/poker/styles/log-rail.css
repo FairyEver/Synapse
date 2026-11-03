@@ -45,13 +45,10 @@
   position: absolute;
   grid-area: 2 / 1 / 3 / -1;
   inset: 0;
-  z-index: 6;
-  container-type: inline-size;
   pointer-events: none;
 }
 .poker-log-tip {
-  inline-size: min(19rem, calc(100cqw - 3.75rem));
-  max-block-size: calc(100% - 1rem);
+  inline-size: min(19rem, calc(100dvw - 3.75rem));
   overflow-y: auto;
   pointer-events: auto;
 }

@@ -93,20 +93,20 @@ function HandLogRail({ table }: { table: PokerTableView }) {
         })}
       </ol>
     </aside>
-    <div ref={setBoundary} className="poker-log-tip-boundary">
-      {current && boundary && <Popover.Content
-        key={current.seq} isOpen isNonModal shouldSkipAnimation onOpenChange={open => { if (!open) dismiss() }}
-        triggerRef={anchorRef} placement="left" shouldFlip={false} offset={8} containerPadding={8}
-        boundaryElement={boundary} UNSTABLE_portalContainer={boundary}
-        shouldCloseOnInteractOutside={target => !rail.current?.contains(target)}
-        className={`${popover.base()} poker-log-tip font-sans text-foreground scheme-light`}
-        onPointerEnter={keepHover} onPointerLeave={leaveHover}>
-        <div role="tooltip" id={tipId} className="poker-log-tip-content">
-          <LogVisual entry={current} Icon={logActionIcon(current)} />
-          <LogDetails entry={current} practice={table.mode === "practice"} />
-        </div>
-      </Popover.Content>}
-    </div>
+    {/* Use the board for collision bounds and the viewport for popover coordinates. */}
+    <div ref={setBoundary} className="poker-log-tip-boundary" aria-hidden="true" />
+    {current && boundary && <Popover.Content
+      key={current.seq} isOpen isNonModal shouldSkipAnimation onOpenChange={open => { if (!open) dismiss() }}
+      triggerRef={anchorRef} placement="left" shouldFlip={false} offset={8} containerPadding={8}
+      boundaryElement={boundary}
+      shouldCloseOnInteractOutside={target => !rail.current?.contains(target)}
+      className={`${popover.base()} poker-log-tip font-sans text-foreground scheme-light`}
+      onPointerEnter={keepHover} onPointerLeave={leaveHover}>
+      <div role="tooltip" id={tipId} className="poker-log-tip-content">
+        <LogVisual entry={current} Icon={logActionIcon(current)} />
+        <LogDetails entry={current} practice={table.mode === "practice"} />
+      </div>
+    </Popover.Content>}
   </>
 }
 

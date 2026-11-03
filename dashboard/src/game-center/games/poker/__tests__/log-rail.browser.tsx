@@ -36,15 +36,21 @@ it.each([[1280, 800], [390, 667]])("%s×%s 牌桌的窄轨只显示图标，详�
     await expect.element(tooltip).toHaveTextContent("实付 24 筹码入主池")
     await expect.element(tooltip).toHaveTextContent("从五张候选中选一张")
     const { tip, dock, rail } = boxes()
+    const cardBounds = card.element().getBoundingClientRect()
     expect(tip.left).toBeGreaterThanOrEqual(0)
-    expect(tip.right).toBeLessThan(card.element().getBoundingClientRect().left)
+    expect(tip.right).toBeLessThan(cardBounds.left)
     expect(tip.top).toBeGreaterThanOrEqual(rail.top)
+    expect(tip.top).toBeLessThan(cardBounds.bottom)
     expect(tip.bottom).toBeLessThanOrEqual(dock.top)
     expect(rail.width).toBeLessThanOrEqual(56)
 
     await action.hover()
     await expect.element(tooltip).toHaveTextContent("30 筹码")
-    expect(boxes().tip.top).toBeGreaterThan(tip.top)
+    const actionTip = boxes().tip
+    const actionBounds = action.element().getBoundingClientRect()
+    expect(actionTip.top).toBeGreaterThan(tip.top)
+    expect(actionTip.top).toBeLessThan(actionBounds.bottom)
+    expect(actionTip.bottom).toBeGreaterThan(actionBounds.top)
     await userEvent.keyboard("{Escape}")
     await expect.element(tooltip).not.toBeInTheDocument()
 
