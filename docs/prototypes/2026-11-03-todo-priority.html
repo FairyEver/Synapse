@@ -42,9 +42,14 @@
     .button.icon-only { width: 32px; padding: 0; }
     .segments { display: flex; padding: 3px; gap: 2px; border-radius: var(--radius); background: var(--muted); }
     .segment { min-height: 28px; padding: 0 12px; border-radius: calc(var(--radius) - 3px); color: var(--muted-foreground); }
-    .segment[aria-pressed="true"] { background: var(--card); color: var(--foreground); border-color: var(--border); }
+    .segment[aria-pressed="true"], .filter-option input:checked + .segment { background: var(--card); color: var(--foreground); border-color: var(--border); }
     main { width: min(100%, 952px); margin-inline: auto; padding: 24px 24px 80px; }
-    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .priority-filters { flex-wrap: wrap; }
+    .filter-option { position: relative; }
+    .filter-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+    .filter-option:hover .segment { background: var(--selected); }
+    .filter-option input:focus-visible + .segment { outline: 2px solid var(--ring); outline-offset: 2px; }
     .control { min-width: 0; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: 5px 10px; }
     .toolbar select { cursor: pointer; }
     .select-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -63,12 +68,11 @@
     .quick-fields:not(:has(> :not([hidden]))) { display: none; }
     .quick-fields .quick-note { grid-column: 1 / -1; }
     .list-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-    .list-head, .task { display: grid; grid-template-columns: 32px minmax(0, 1fr) 94px 32px; column-gap: 12px; align-items: center; padding-inline: 16px; }
-    .list-head { min-height: 36px; border-radius: var(--radius) var(--radius) 0 0; background: var(--muted); color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
-    .list-head .priority-heading { text-align: center; }
+    .task { display: grid; grid-template-columns: 32px minmax(0, 1fr) 94px 32px; column-gap: 12px; align-items: center; min-height: 52px; padding-inline: 16px; }
     #tasks { padding: 0; margin: 0; list-style: none; }
-    .task { min-height: 52px; border-top: 1px solid var(--border); }
-    .task:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+    .task + .task { border-top: 1px solid var(--border); }
+    .task:first-child { border-top-left-radius: var(--radius); border-top-right-radius: var(--radius); }
+    .task:last-child { border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
     .task:hover, .task:focus-within { background: color-mix(in oklab, var(--muted) 58%, var(--card)); }
     .check { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; }
     .check:hover { background: var(--muted); }
@@ -99,7 +103,7 @@
     .menu button:is(:hover, :focus-visible) { background: var(--muted); }
     .menu button .selected-check { margin-left: auto; }
     .menu-separator { border-top: 1px solid var(--border); margin: 4px; }
-    .empty { display: grid; justify-items: center; gap: 12px; padding: 56px 16px; border-top: 1px solid var(--border); }
+    .empty { display: grid; justify-items: center; gap: 12px; padding: 56px 16px; }
     .empty > .icon { width: 22px; height: 22px; color: var(--muted-foreground); }
     dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--foreground); }
     dialog::backdrop { background: light-dark(color-mix(in oklab, var(--foreground) 20%, transparent), color-mix(in oklab, var(--background) 70%, transparent)); }
@@ -136,7 +140,7 @@
       .topbar { padding: 8px 12px; gap: 6px; }
       .segment { padding-inline: 6px; }
       main { padding: 16px 12px 80px; }
-      .list-head, .task { grid-template-columns: 28px minmax(0, 1fr) 54px 28px; column-gap: 5px; padding-inline: 7px; }
+      .task { grid-template-columns: 28px minmax(0, 1fr) 54px 28px; column-gap: 5px; padding-inline: 7px; }
       .task .icon-only, .check { width: 28px; }
       .priority-trigger { min-width: 50px; padding-inline: 0; }
       .metadata { column-gap: 8px; }
@@ -216,17 +220,13 @@
     </form>
 
     <div class="toolbar" aria-label="待办筛选与排序">
-      <span class="select-wrap">
-        <svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg>
-        <select class="control" id="filter" aria-label="筛选优先级">
-          <option value="all">全部优先级</option>
-          <option value="high">高优先级</option>
-          <option value="medium">中优先级</option>
-          <option value="low">低优先级</option>
-          <option value="none">未设置</option>
-        </select>
-        <svg class="icon" aria-hidden="true"><use href="#i-low"/></svg>
-      </span>
+      <fieldset class="segments priority-filters" id="priority-filter" aria-label="筛选优先级">
+        <label class="filter-option"><input type="radio" name="priority-filter" value="all" checked><span class="segment">全部优先级</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="high" aria-label="高优先级"><span class="segment">高</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="medium" aria-label="中优先级"><span class="segment">中</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="low" aria-label="低优先级"><span class="segment">低</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="none"><span class="segment">未设置</span></label>
+      </fieldset>
       <span class="select-wrap">
         <svg class="icon" aria-hidden="true"><use href="#i-sort"/></svg>
         <select class="control" id="sort" aria-label="排序方式">
@@ -237,7 +237,6 @@
       </span>
     </div>
     <section class="list-card" aria-label="待办列表">
-      <div class="list-head" aria-hidden="true"><span></span><span>事项</span><span class="priority-heading">优先级</span></div>
       <ul id="tasks" aria-label="待办事项"></ul>
       <div id="empty" class="empty" hidden>
         <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>
@@ -338,8 +337,10 @@
       return null;
     }
 
+    const selectedPriority = () => $("priority-filter").querySelector("input:checked").value;
+
     function visibleItems() {
-      const filter = $("filter").value;
+      const filter = selectedPriority();
       const sort = $("sort").value;
       return items.filter(item => (status === "all" || !item.doneAt) && (filter === "all" || filter === item.priority))
         .sort((left, right) => {
@@ -393,7 +394,7 @@
       const visible = visibleItems();
       $("tasks").innerHTML = visible.map(row).join("");
       $("empty").hidden = visible.length > 0;
-      const filtered = $("filter").value !== "all";
+      const filtered = selectedPriority() !== "all";
       $("empty-text").textContent = filtered ? "没有符合筛选条件的待办" : status === "pending" ? "没有未完成事项" : "没有待办事项";
       $("empty-action").hidden = !filtered;
       if (focusId != null) focusTask(focusId, focusAction);
@@ -548,12 +549,13 @@
       document.querySelectorAll("[data-status]").forEach(tab => tab.setAttribute("aria-pressed", String(tab === button)));
       render();
     }));
-    $("filter").addEventListener("change", () => render());
+    $("priority-filter").addEventListener("change", () => render());
     $("sort").addEventListener("change", () => render());
     $("empty-action").addEventListener("click", () => {
-      $("filter").value = "all";
+      const allPriorities = $("priority-filter").querySelector('[value="all"]');
+      allPriorities.checked = true;
       render();
-      $("filter").focus();
+      allPriorities.focus();
     });
     $("quick-form").addEventListener("input", updateQuickOptions);
     [$("quick-form"), $("task-form")].forEach(form => {
@@ -592,7 +594,8 @@
           Object.assign(existing, values);
           $("editor").close();
         }
-        const filteredOut = $("filter").value !== "all" && $("filter").value !== values.priority;
+        const filter = selectedPriority();
+        const filteredOut = filter !== "all" && filter !== values.priority;
         render();
         notice(`${isQuick ? "已添加待办" : "已保存待办"}${filteredOut ? "，已从当前筛选结果隐藏" : ""}`);
       });
@@ -608,7 +611,8 @@
       } else if (action === "set-priority") {
         if (item.priority === button.dataset.value) return closeMenu(true);
         item.priority = button.dataset.value;
-        const filteredOut = $("filter").value !== "all" && $("filter").value !== item.priority;
+        const filter = selectedPriority();
+        const filteredOut = filter !== "all" && filter !== item.priority;
         render(item.id, "priority");
         const message = item.priority === "none" ? "已清除优先级" : `已设为${priorities[item.priority]}优先级`;
         notice(`${message}${filteredOut ? "，已从当前筛选结果隐藏" : ""}`);
