@@ -39,9 +39,10 @@ export const pokerCardViewSchema = z.object({
     choices: z.array(z.object({ key: z.string(), label: z.string(), kind: z.enum(["hole", "player", "ability", "status", "color"]), options: z.array(z.object({ value: z.string(), label: z.string() }).strict()) }).strict()),
   }).strict()).max(1024).optional(),
   pending: z.object({ choiceId: z.string(), kind: z.enum(["poker", "ability"]), origin: z.enum(["roll", "card"]), paymentVersion: z.string(), sourceCardId: z.string().optional(), cardIndex: z.number().int().min(0).max(1).optional(), candidates: z.array(z.string()).min(1).max(5), candidateCards: z.array(definition).max(3).optional() }).strict().nullable().optional(),
-  used: z.array(z.object({ id: z.string(), cardId: z.string(), name: z.string(), seatNo: amount, seq: amount, status: z.enum(["completed", "blocked", "choice_required"]) }).strict()),
+  used: z.array(z.object({ id: z.string(), cardId: z.string(), name: z.string(), seatNo: amount, seq: amount, status: z.enum(["completed", "blocked", "choice_required"]),
+    artId: z.string().optional(), description: z.string().optional() }).strict()),
   statuses: z.array(pokerCardStatusSchema),
-  privateResults: z.array(z.object({ id: z.string(), cardId: z.string(), label: z.string(), values: z.array(z.string()), valid: z.boolean() }).strict()).optional(),
+  privateResults: z.array(z.object({ id: z.string(), cardId: z.string(), label: z.string(), values: z.array(z.string()), valid: z.boolean(), targetSeatNo: z.number().int().min(0).max(9).optional() }).strict()).optional(),
 }).strict()
 export const pokerCardResultSchema = z.object({ ok: z.literal(true), handId: z.string(), actionSeq: amount, cursor: z.string(), status: z.enum(["completed", "choice_required", "blocked"]) }).strict()
 export const pokerResolutionFrameSchema = z.object({ id: z.string(), handId: z.string(), seq: amount, events: z.array(z.object({ index: amount, type: z.string(), actorSeatNo: amount.optional(), targetSeatNo: amount.optional(), cardId: z.string().optional(), amount: amount.optional(), nominalAmount: amount.optional(), waivedAmount: amount.optional(), status: z.string().optional(), cards: z.array(z.string()).optional(), color: z.enum(["red", "black"]).optional(), matched: z.boolean().optional(), count: amount.optional() }).strict()).max(1024) }).strict()

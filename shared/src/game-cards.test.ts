@@ -31,6 +31,14 @@ describe("卡牌模式线协议", () => {
     expect(supportsPokerCardRules("cards-v3,chips-v2")).toBe(true)
     expect(pokerCardViewSchema.safeParse({ enabled: true, version: "cards-v3", definitions: { "07": definition }, pending, used: [], statuses: [] }).success).toBe(true)
   })
+  it("读回出牌后牌桌快照的公开牌面和本人私查目标，拒绝公开用牌记录夹带私查字段", () => {
+    const used = { id: "used", cardId: "14", name: "明察秋毫", seatNo: 1, seq: 2, status: "completed", artId: "v1/14", description: "私查底牌" }
+    const privateResult = { id: "intel", cardId: "14", label: "底牌", values: ["As", "Kd"], valid: true, targetSeatNo: 0 }
+    const cards = { enabled: true, version: "cards-v3", used: [used], statuses: [] }
+    expect(pokerCardViewSchema.parse(cards).used).toEqual([used])
+    expect(pokerCardViewSchema.parse({ ...cards, privateResults: [privateResult] }).privateResults).toEqual([privateResult])
+    expect(pokerCardViewSchema.safeParse({ ...cards, used: [{ ...used, targetSeatNo: 0 }] }).success).toBe(false)
+  })
   it("新房允许卡牌模式且不接受 Roll 或配置卡池", () => {
     const tool = GAME_TOOLS.find(t => t.id === "app.game.poker.room.create")!
     const schema = z.fromJSONSchema(tool.inputSchema as Parameters<typeof z.fromJSONSchema>[0])
