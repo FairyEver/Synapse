@@ -44,6 +44,7 @@
     button, a { touch-action: manipulation; }
     button:disabled { cursor: not-allowed; }
     button:focus-visible { outline: 2px solid var(--brass-light); outline-offset: 5px; }
+    .ability-card:focus-visible, .poker-candidate:focus-visible { outline: none; }
     .table-shell button:focus-visible, .demo-bar button:focus-visible { outline-color: var(--accent); }
     button svg { width: 18px; height: 18px; flex: none; }
     button[hidden], [hidden] { display: none !important; }
@@ -124,13 +125,12 @@
     .hand-row .card-cost { font-size: 4.7cqw; padding-top: 2.8cqw; }
     .card-slot { position: relative; width: var(--card-w); flex: none; margin-left: -7px; padding: 0; transform: translateY(var(--rest-y, 0px)) rotate(var(--rest-r, 0deg)); transition: transform 300ms var(--ease), filter 200ms; z-index: 1; filter: drop-shadow(0 12px 13px var(--shadow)); }
     .card-slot:first-child { margin-left: 0; }
-    .card-slot:hover, .card-slot:focus-within { transform: translateY(-22px) rotate(0deg) scale(1.065); z-index: 3; }
-    .card-slot:has(.ability-card:active) { transform: translateY(-17px) rotate(0deg) scale(1.035); }
+    .card-slot:hover { transform: translateY(-22px) rotate(0deg) scale(1.065); z-index: 3; }
     .card-slot.is-entering { animation: deal-in 540ms var(--ease) both; animation-delay: calc(var(--deal-i) * 55ms); }
     .ability-card { display: block; position: relative; width: 100%; aspect-ratio: .64; padding: 0; border: 0; border-radius: 12px; text-align: left; color: var(--card-ink); background: var(--card-paper); transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform 160ms ease-out; isolation: isolate; }
     .ability-card::before { content: ""; position: absolute; inset: 0; z-index: 2; border: 2px solid color-mix(in oklch, var(--brass-dark) 70%, var(--card-paper)); border-radius: inherit; pointer-events: none; }
     .ability-card::after { content: ""; position: absolute; inset: 5px; z-index: 2; border: 1px solid color-mix(in oklch, var(--brass) 55%, transparent); border-radius: 8px; pointer-events: none; }
-    .card-slot:hover .ability-card::before, .card-slot:focus-within .ability-card::before, .card-slot.is-chosen .ability-card::before { border-color: var(--brass-light); }
+    .card-slot:hover .ability-card::before, .card-slot.is-chosen .ability-card::before { border-color: var(--brass-light); }
     .ability-art { display: block; width: 100%; height: 56%; object-fit: cover; object-position: 50% 48%; border-radius: 12px 12px 0 0; user-select: none; -webkit-user-drag: none; }
     .card-type { position: absolute; top: 13px; left: 13px; z-index: 1; display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--card-muted); }
     .card-type svg { width: 13px; height: 13px; }
@@ -226,7 +226,7 @@
     .color-choice[aria-pressed="true"] { border-color: var(--brass-light); background: var(--stage-raised); }
     .ability-options { display: flex; gap: 13px; overflow-x: auto; overflow-y: hidden; padding: 8px 5px 12px; scroll-snap-type: x proximity; }
     .ability-options .card-slot { width: 154px; margin: 0; transform: none; filter: none; flex: none; scroll-snap-align: start; }
-    .ability-options .card-slot:hover, .ability-options .card-slot:focus-within { transform: translateY(-3px); }
+    .ability-options .card-slot:hover { transform: translateY(-3px); }
     .ability-options .ability-card { aspect-ratio: .64; }
     .ability-options .ability-art { height: 54%; }
     .ability-options .card-body { inset: 51% 0 0; padding: 9px 12px 13px; }
@@ -262,7 +262,6 @@
     .view > [data-selector$="-candidate"] { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
     .candidate-stage .hand-row { gap: 26px; }
     .candidate-stage .card-slot { margin: 0; }
-    .candidate-stage .card-slot.is-chosen { transform: translateY(-15px) scale(1.035); }
     .candidate-stage .card-slot.is-chosen .ability-card { outline: 2px solid var(--brass-light); outline-offset: 5px; }
     .poker-candidate { aspect-ratio: 5 / 7; border-radius: 9px; background: transparent; border: 0; padding: 0; display: block; width: 100%; }
     .poker-candidate .playing { width: 100%; border-radius: 9px; }
@@ -318,7 +317,7 @@
       .hand-row { height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-inline: calc((100vw - var(--card-w)) / 2); justify-content: flex-start; gap: 18px; padding: 16px max(16px, calc((100% - var(--card-w)) / 2)); scrollbar-width: none; perspective: none; }
       .hand-row::-webkit-scrollbar { display: none; }
       .card-slot { margin: 0; transform: none; scroll-snap-align: center; }
-      .card-slot:hover, .card-slot:focus-within, .card-slot:has(.ability-card:active) { transform: translateY(-7px); }
+      .card-slot:hover { transform: translateY(-7px); }
       .card-slot.is-entering { --rest-r: 0deg !important; --rest-y: 0px !important; }
       .stage-footer { width: calc(100% - 32px); min-height: 64px; gap: 8px; }
       .stage-footer .game-button { min-width: 160px; }
@@ -345,7 +344,6 @@
       .hole-choice .playing { width: 56px; }
       .candidate-stage { --card-w: max(32px, min(216px, 68vw, calc((100cqh - 56px) * .64))); padding: 8px 0; overflow: hidden; }
       .candidate-stage .hand-row { gap: 20px; }
-      .candidate-stage .card-slot.is-chosen { transform: translateY(-5px); }
       .candidate-stage.poker-candidates { --card-w: max(32px, min(104px, 24vw, calc((100cqh - 40px) * 5 / 7))); padding: 8px 16px; }
       .poker-candidates .hand-row { justify-content: center; gap: 14px; padding: 12px 6px; overflow: hidden; }
       .scene { min-height: 480px; height: calc(100dvh - 270px); }
@@ -375,7 +373,7 @@
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-      .card-slot:hover, .card-slot:focus-within { transform: none; }
+      .card-slot:hover { transform: none; }
       .ability-card { transform: none !important; }
     }
   </style>
@@ -530,7 +528,7 @@
   let serial = 0, hand = [], abilityPool = [], ownHoles = [], publicOwn = [], players = [], effects = [], privateResults = [];
   let stack = 2140, reserve = 60, refundable = 0, selected = null, selections = {}, pending = null, page = 0;
   let isOpen = false, busy = false, scenario = 'hand', generation = 0, closeVersion = 0, noticeTimer;
-  let deadline = Date.now() + 520000, restoreFocus = null;
+  let deadline = Date.now() + 520000;
   const pageSize = 5;
   const makeInstance = cardId => ({ id: `${cardId}-${++serial}`, cardId });
   const current = () => hand.find(item => item.id === selected);
@@ -711,25 +709,22 @@
     const cards = innerWidth <= 850 ? hand : hand.slice(page * pageSize, (page + 1) * pageSize);
     content.innerHTML = hand.length ? `<div class="hand-stage"><button class="page-arrow previous" type="button" aria-label="上一组手牌" ${page === 0 ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('left')}</button><div class="hand-row" aria-label="能力手牌">${cards.map((item, index) => cardMarkup(item, index, cards.length)).join('')}</div><button class="page-arrow next" type="button" aria-label="下一组手牌" ${(page + 1) * pageSize >= hand.length ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('right')}</button></div>` : `<div class="empty-hand">${icon('cards')}<span>暂无手牌</span></div>`;
     $$('.hand-stage .card-slot', content).forEach(slot => $('.ability-card', slot).addEventListener('click', () => inspect(slot.dataset.instance, slot)));
-    $('.previous', content)?.addEventListener('click', () => { page--; renderHand(); focusFirstChoice(); });
-    $('.next', content)?.addEventListener('click', () => { page++; renderHand(); focusFirstChoice(); });
+    $('.previous', content)?.addEventListener('click', () => { page--; renderHand(); });
+    $('.next', content)?.addEventListener('click', () => { page++; renderHand(); });
     attachCardMotion(content); renderFooter();
-  }
-  function focusFirstChoice() {
-    requestAnimationFrame(() => { if (isOpen) ($('[data-choice-key]:not(:disabled)', content) || $('.hand-row button', content) || $('#cast-card:not(:disabled)') || $('#private-continue') || $('#close-cards'))?.focus({ preventScroll: true }); });
   }
   function inspect(instanceId, origin) {
     if (busy || pending) return;
     const item = hand.find(entry => entry.id === instanceId); if (!item) return;
     const originRect = origin?.getBoundingClientRect(); selected = instanceId; selections = {};
     const d = defs[item.cardId]; content.className = 'view inspect-view'; setHeading(d.name, '', false);
-    content.innerHTML = `<div class="inspect-layout"><div class="inspect-card">${cardMarkup(item, 0, 1, { display: true })}</div><div class="inspect-details" tabindex="0" role="region" aria-label="卡牌目标选择"><div class="inspect-body"><h2 class="sr-only">${esc(d.name)}</h2><p class="full-description">${esc(d.description)}</p><div class="selection-fields" id="selection-fields"></div></div></div></div>`;
+    content.innerHTML = `<div class="inspect-layout"><div class="inspect-card">${cardMarkup(item, 0, 1, { display: true })}</div><div class="inspect-details" role="region" aria-label="卡牌目标选择"><div class="inspect-body"><h2 class="sr-only">${esc(d.name)}</h2><p class="full-description">${esc(d.description)}</p><div class="selection-fields" id="selection-fields"></div></div></div></div>`;
     renderFooter('inspect'); renderChoices();
     if (originRect && !reduced.matches && typeof Element.prototype.animate === 'function') {
       const artwork = $('.inspect-card'), to = artwork.getBoundingClientRect();
       artwork.animate([{ transform: `translate(${originRect.left - to.left}px,${originRect.top - to.top}px) scale(${originRect.width / (to.width || 1)})` }, { transform: 'none' }], { duration: 350, easing: 'cubic-bezier(.22,1,.36,1)' });
     }
-    focusFirstChoice(); announce(`已选择${d.name}${d.choices.length ? '，请选择目标' : '，确认后使用'}`);
+    announce(`已选择${d.name}${d.choices.length ? '，请选择目标' : '，确认后使用'}`);
   }
   function renderChoices() {
     const item = current(); if (!item) return;
@@ -759,8 +754,7 @@
     footer.dataset.hasMeta = String(!!(summary.length || quote.nominal || warning));
   }
   function backToHand() {
-    if (busy) return; const id = selected; renderHand();
-    requestAnimationFrame(() => { if (isOpen) $(`[data-instance="${id}"] .ability-card`, content)?.focus({ preventScroll: true }); });
+    if (busy) return; renderHand();
   }
   function addEffect(cardId, seatNo, extra = {}) {
     effects.push({ id: `effect-${++serial}`, cardId, seatNo, polarity: 'positive', remaining: 1, dispellable: true, ...extra });
@@ -845,7 +839,7 @@
     stack -= quote.paid; reserve += quote.paid; if (quote.paid) refundable = quote.paid;
     if (quote.nominal) effects = effects.filter(effect => !(effect.seatNo === 3 && ((!d.ignoreSurcharges && effect.cardId === '49') || quote.waived && ['31', '32'].includes(effect.cardId))));
     const outcome = applyDemoOutcome(d, values, material);
-    if (outcome.pending || outcome.private) { busy = false; updateTable(); outcome.pending ? renderPending() : renderPrivate(); focusFirstChoice(); return; }
+    if (outcome.pending || outcome.private) { busy = false; updateTable(); outcome.pending ? renderPending() : renderPrivate(); return; }
     const target = values.player === undefined ? values.targetHole?.split(':')[0] : values.player;
     const destination = $(`[data-seat="${target === undefined ? 'self' : playerAt(target)?.id || 'self'}"] .seat-plate`);
     const flight = flyCard($('.inspect-card'), destination); await closeCards(false); await flight; if (token !== generation) return;
@@ -879,19 +873,19 @@
     selected = null; content.className = 'view private-view'; setHeading('本人情报', '', false);
     const visual = result.type === 'poker' ? `<div class="private-cards">${result.values.map(card => `<div class="private-card">${playing(card)}</div>`).join('')}</div>` : result.type === 'ability' ? `<div class="private-ability">${cardMarkup({ id: 'observed', cardId: result.values[0] }, 0, 1, { display: true })}</div>` : `<div class="private-symbol">${esc(result.values[0])}</div>`;
     content.innerHTML = `<span class="private-label">${icon('lock')}仅你可见${!result.valid ? ' · 已失效' : ''}</span><h2>${esc(result.label)}</h2>${visual}${result.valid && result.future ? `<p>${result.label.startsWith('牌堆顶部') ? '含烧牌 · ' : ''}牌序变化后失效</p>` : ''}`;
-    renderFooter('private'); requestAnimationFrame(() => $('#private-continue')?.focus({ preventScroll: true }));
+    renderFooter('private');
   }
   function openCards() {
     if (busy || Date.now() >= deadline) return;
-    closeVersion++; overlay.classList.remove('overlay-out'); if (!isOpen) restoreFocus = document.activeElement;
+    closeVersion++; overlay.classList.remove('overlay-out');
     isOpen = true; overlay.hidden = false; table.inert = true; document.body.classList.add('overlay-open'); $('#open-cards').setAttribute('aria-expanded', 'true'); dismissNotice();
-    pending ? renderPending() : renderHand(); focusFirstChoice();
+    pending ? renderPending() : renderHand();
   }
   async function closeCards(allowBusy = true) {
     if (allowBusy && busy) return; const version = ++closeVersion;
     isOpen = false; table.inert = false; $('#open-cards').setAttribute('aria-expanded', 'false'); overlay.classList.add('overlay-out');
     if (!reduced.matches) await new Promise(resolve => setTimeout(resolve, 200)); if (isOpen || version !== closeVersion) return;
-    overlay.hidden = true; overlay.classList.remove('overlay-out'); document.body.classList.remove('overlay-open'); (restoreFocus?.isConnected && !restoreFocus.closest('#card-overlay') ? restoreFocus : $('#open-cards')).focus({ preventScroll: true });
+    overlay.hidden = true; overlay.classList.remove('overlay-out'); document.body.classList.remove('overlay-open');
   }
   let turnStartedAt = Date.now();
   const demoCards = { 'own-hole': '06', player: '13', 'opponent-hole': '18', color: '18', 'ability-material': '24', 'ability-copy': '29', status: '45', cleanse: '46', empty: '15' };
@@ -943,28 +937,10 @@
     const rails = $$('.inspect-details, .ability-options, .opponent-hands, .candidate-stage .hand-row', content).map(node => [node.className, node.scrollLeft, node.scrollTop]);
     pending ? renderPending(false) : renderChoices();
     rails.forEach(([className, left, top]) => { const rail = $(`.${className}`, content); if (rail) { rail.scrollLeft = left; rail.scrollTop = top; } });
-    $$('[data-choice-key]', content).find(node => node.dataset.choiceKey === key && node.dataset.value === value)?.focus({ preventScroll: true });
     announce(`已选择${picked(requests.find(request => request.key === key), value).label}`);
   });
   ['#fold-demo', '#check-demo'].forEach(selector => $(selector).addEventListener('click', () => notify(pending ? '请先完成待选卡牌' : '此原型仅演示卡牌操作')));
   overlay.addEventListener('click', event => { if (event.target === overlay || event.target.classList.contains('overlay-layout')) void closeCards(); });
-  document.addEventListener('keydown', event => {
-    if (!isOpen || busy || event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.key === 'Escape') { event.preventDefault(); selected ? backToHand() : void closeCards(); return; }
-    if (event.key === 'Tab') {
-      const elements = $$('button:not(:disabled):not([tabindex="-1"])', overlay).filter(node => node.getClientRects().length && !node.closest('[hidden]'));
-      const first = elements[0], last = elements.at(-1); if (!first) return;
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-      const active = document.activeElement, field = active?.closest('.choice-field'), row = active?.closest('.hand-row');
-      const root = field || row; if (!root) return;
-      const options = $$('button:not(:disabled):not([tabindex="-1"])', root); if (!options.length) return;
-      event.preventDefault(); const index = options.indexOf(active), next = (index + (event.key === 'ArrowRight' ? 1 : -1) + options.length) % options.length;
-      options[next].focus({ preventScroll: true }); options[next].scrollIntoView({ behavior: reduced.matches ? 'instant' : 'smooth', block: 'nearest', inline: 'center' });
-    }
-  });
   let wasNarrow = innerWidth <= 850;
   window.addEventListener('resize', () => { const narrow = innerWidth <= 850; if (narrow === wasNarrow) return; wasNarrow = narrow; if (isOpen && !selected && !pending) renderHand(); });
   setInterval(tick, 1000); reset();
