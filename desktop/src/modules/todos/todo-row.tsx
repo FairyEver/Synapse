@@ -1,4 +1,4 @@
-import { Calendar, Bell, MoreHorizontal } from "lucide-react"
+import { Calendar, Bell, CircleCheck, MoreHorizontal } from "lucide-react"
 import type { MouseEvent } from "react"
 import { TODO_PRIORITIES, type TodoItemDto, type TodoPriority } from "@synapse/shared/todo-contracts"
 import { Button } from "@/components/ui/button"
@@ -50,10 +50,11 @@ export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, 
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      <Button type="button" variant="outline" data-track="todos.complete" disabled={disabled} onClick={onComplete}
-        aria-label={`${item.completedAt ? "恢复为未完成" : "标为完成"}：${item.title}`}>
-        {item.completedAt ? "恢复待办" : "标为完成"}
-      </Button>
+      {!item.completedAt && <Button type="button" variant="outline" data-track="todos.complete" disabled={disabled} onClick={onComplete}
+        aria-label={`标为完成：${item.title}`}>
+        <CircleCheck data-icon="inline-start" className="text-muted-foreground" aria-hidden="true" />
+        完成
+      </Button>}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button type="button" variant="ghost" size="icon-sm" data-track="todos.menu" aria-label={`${item.title}的操作`} disabled={disabled}><MoreHorizontal /></Button>
@@ -61,7 +62,7 @@ export function TodoRow({ item, disabled, onOpen, onEdit, onComplete, onDelete, 
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
             <DropdownMenuItem data-track="todos.edit" onSelect={onEdit}>编辑</DropdownMenuItem>
-            <DropdownMenuItem data-track="todos.complete" onSelect={onComplete}>{item.completedAt ? "恢复" : "完成"}</DropdownMenuItem>
+            <DropdownMenuItem data-track="todos.complete" onSelect={onComplete}>{item.completedAt ? "恢复为待办" : "完成"}</DropdownMenuItem>
             <DropdownMenuItem data-track="todos.copy" onSelect={onCopy}>复制 ID</DropdownMenuItem>
             <DropdownMenuItem data-track="todos.delete" variant="destructive" onSelect={onDelete}>删除</DropdownMenuItem>
           </DropdownMenuGroup>

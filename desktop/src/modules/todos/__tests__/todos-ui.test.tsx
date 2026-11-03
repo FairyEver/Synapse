@@ -180,7 +180,7 @@ describe("Todo visible actions", () => {
     }
     act(() => document.querySelector<HTMLButtonElement>('[aria-label="报销的操作"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })))
     await flush()
-    const action = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((entry) => entry.textContent === (completed ? "恢复" : "完成"))
+    const action = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((entry) => entry.textContent === (completed ? "恢复为待办" : "完成"))
     expect(action).toBeDefined()
     mocks.setCompleted.mockResolvedValueOnce({ ...initial, completedAt: completed ? null : item.createdAt, version: 2 })
     mocks.list.mockResolvedValue({ items: completed ? [{ ...initial, completedAt: null, version: 2 }] : [], nextOffset: null })
@@ -251,7 +251,7 @@ describe("Todo visible actions", () => {
     expect(document.querySelector('#todo-title')).toBeNull()
     expect(consumed).toHaveBeenCalledWith("new-target")
   })
-  it("places a labeled completion action after the item content and restores completed items from All", async () => {
+  it("completes from the row and restores from the completed item's menu", async () => {
     mount(<TodosModule />); await flush()
     expect([...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(["未完成", "全部"])
     expect(document.querySelector('aside,input[type="search"]')).toBeNull()
@@ -259,7 +259,8 @@ describe("Todo visible actions", () => {
     const row = document.querySelector("li")!
     expect(row.querySelector('[role="checkbox"]')).toBeNull()
     const control = row.querySelector<HTMLButtonElement>('[aria-label="标为完成：报销"]')!
-    expect(control.textContent).toBe("标为完成")
+    expect(control.textContent).toBe("完成")
+    expect(control.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
     expect(row.querySelector('[data-track="todos.open"]')!.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     act(() => control.click()); expect(document.body.textContent).toContain("报销")
     expect(control.disabled).toBe(true)
@@ -271,8 +272,11 @@ describe("Todo visible actions", () => {
     const completed = { ...item, completedAt: item.createdAt, version: 2 }
     mocks.list.mockResolvedValue({ items: [completed], nextOffset: null })
     act(() => document.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))); await flush()
-    const restore = document.querySelector<HTMLButtonElement>('[aria-label="恢复为未完成：报销"]')!
-    expect(restore.textContent).toBe("恢复待办")
+    const menuTrigger = document.querySelector<HTMLButtonElement>('[aria-label="报销的操作"]')!
+    expect(menuTrigger.closest("li")?.querySelector('button[data-track="todos.complete"]')).toBeNull()
+    act(() => menuTrigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))); await flush()
+    const restore = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(entry => entry.textContent === "恢复为待办")!
+    expect(restore).toBeDefined()
     const restored = { ...item, version: 3 }
     mocks.setCompleted.mockResolvedValueOnce(restored)
     mocks.list.mockResolvedValue({ items: [restored], nextOffset: null })
