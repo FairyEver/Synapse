@@ -1,5 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from "react"
 import { createPortal } from "react-dom"
+import gsap from "gsap"
+import { useReducedMotion } from "../hooks/useReducedMotion"
 import type { PokerCardHandView, PokerTableView } from "@synapse/shared/game-contracts"
 import { PokerAbilityDetails, PokerAbilityFace } from "./PokerAbilityDetails"
 import { cardUnavailableReason } from "../lib/card-view"
@@ -8,7 +10,7 @@ import "../styles/hand-dock.css"
 
 type Preview = { id: string; anchor: HTMLButtonElement; input: "mouse" | "keyboard" | "touch" }
 type PreviewPosition = { left: number; bottom: number; maxHeight: number }
-type Drag = { id: string; pointer: number; x: number; y: number; started: boolean }
+type Drag = { id: string; pointer: number; x: number; y: number; started: boolean; anchor: HTMLButtonElement }
 type Props = { table: PokerTableView; canPlay: boolean; dropArea?: RefObject<HTMLDivElement | null>; onPlay: (card: PokerCardHandView) => void }
 
 export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
@@ -20,6 +22,11 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
   const closePreview = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [ghost, setGhost] = useState<{ id: string; x: number; y: number; onTable: boolean } | null>(null)
   const drag = useRef<Drag | null>(null)
+  const ghostFace = useRef<HTMLDivElement>(null)
+  const tiltGhost = useRef<ReturnType<typeof gsap.quickTo> | null>(null)
+  const lastGhostX = useRef(0)
+  const reduced = useReducedMotion()
+  const [landing, setLanding] = useState<{ x: number; y: number; scale: number; accepted: boolean } | null>(null)
   const suppressClick = useRef(false)
   const pointerType = useRef("")
   const previewId = useId()
@@ -33,7 +40,37 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
     const bounds = dropArea?.current?.getBoundingClientRect()
     return !!bounds && x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom
   }
-  const isOverTable = !!ghost?.onTable
+  const isOverTable = !landing && !!ghost?.onTable
+  const hasGhost = !!ghost
+  useLayoutEffect(() => {
+    const face = ghostFace.current
+    if (!hasGhost || !face || reduced) return
+    const sourceWidth = drag.current?.anchor.getBoundingClientRect().width
+    const startScale = sourceWidth && face.offsetWidth ? Math.min(1, sourceWidth / face.offsetWidth) : .84
+    const lift = gsap.fromTo(face, { scale: startScale }, { scale: 1, duration: .18, ease: "power2.out" })
+    tiltGhost.current = gsap.quickTo(face, "rotation", { duration: .15, ease: "power2.out" })
+    return () => {
+      lift.kill()
+      tiltGhost.current?.tween.kill()
+      tiltGhost.current = null
+      gsap.set(face, { clearProps: "transform,opacity" })
+    }
+  }, [hasGhost, reduced])
+  useLayoutEffect(() => {
+    const face = ghostFace.current
+    if (!landing || !face || reduced) return
+    tiltGhost.current?.tween.pause()
+    const tween = gsap.to(face, {
+      x: landing.x, y: landing.y, scale: landing.scale, rotation: 0,
+      opacity: landing.accepted ? .25 : 1, duration: landing.accepted ? .17 : .24,
+      ease: "power2.out", onComplete: () => { setLanding(null); setGhost(null) },
+    })
+    return () => { tween.kill() }
+  }, [landing, reduced])
+  useLayoutEffect(() => {
+    if (!landing || hasGhost && draggedDefinition && !reduced) return
+    setLanding(null); setGhost(null)
+  }, [landing, hasGhost, draggedDefinition, reduced])
   useLayoutEffect(() => {
     const element = dropArea?.current
     if (!element || !isOverTable) return
@@ -81,7 +118,9 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
     suppressClick.current = false
     pointerType.current = event.pointerType
     if (!event.isPrimary || event.button !== 0 || !canPlay || !card.available) return
-    drag.current = { id: card.instanceId, pointer: event.pointerId, x: event.clientX, y: event.clientY, started: false }
+    setLanding(null); setGhost(null)
+    lastGhostX.current = event.clientX
+    drag.current = { id: card.instanceId, pointer: event.pointerId, x: event.clientX, y: event.clientY, started: false, anchor: event.currentTarget }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   const move = (event: PointerEvent<HTMLButtonElement>) => {
@@ -94,16 +133,30 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
       suppressClick.current = true
       setPreview(null)
     }
+    const delta = event.clientX - lastGhostX.current
+    lastGhostX.current = event.clientX
+    tiltGhost.current?.(Math.max(-11, Math.min(11, delta * .55)))
     setGhost({ id: current.id, x: event.clientX, y: event.clientY, onTable: isOnTable(event.clientX, event.clientY) })
+  }
+  const finishDrag = (current: Drag, accepted: boolean) => {
+    drag.current = null
+    if (current.anchor.hasPointerCapture(current.pointer)) current.anchor.releasePointerCapture(current.pointer)
+    if (current.started && ghost && !reduced && ghostFace.current) {
+      const target = current.anchor.getBoundingClientRect()
+      const floating = ghostFace.current.getBoundingClientRect()
+      setLanding({
+        x: accepted ? 0 : target.left + target.width / 2 - (floating.left + floating.width / 2),
+        y: accepted ? 12 : target.top + target.height / 2 - (floating.top + floating.height / 2),
+        scale: accepted ? .9 : target.width / (ghostFace.current.offsetWidth || target.width || 1), accepted,
+      })
+    } else setGhost(null)
   }
   const end = (event: PointerEvent<HTMLButtonElement>, card: PokerCardHandView, drop: boolean) => {
     const current = drag.current
     if (!current || current.pointer !== event.pointerId) return
-    drag.current = null
-    setGhost(null)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-    if (!drop || !current.started || !canPlay || !card.available) return
-    if (isOnTable(event.clientX, event.clientY)) onPlay(card)
+    const accepted = drop && current.started && canPlay && card.available && isOnTable(event.clientX, event.clientY)
+    finishDrag(current, accepted)
+    if (accepted) onPlay(card)
   }
 
   if (!hand.length) return null
@@ -115,13 +168,20 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
         const info = definitions?.[card.cardId]
         return <button key={card.instanceId} type="button" className="poker-hand-dock-card" aria-label={`${info?.name ?? "能力牌"}，${amount(card.payment.paidAmount)} 筹码`} aria-describedby={previewed === card && definition && !ghost ? previewId : undefined}
           aria-keyshortcuts="Enter Space" aria-haspopup={info?.play && (card.choices.length > 0 || info.play.result !== "table") ? "dialog" : undefined}
-          aria-disabled={!canPlay || !card.available} data-dragging={ghost?.id === card.instanceId}
+          aria-disabled={!canPlay || !card.available} data-dragging={ghost?.id === card.instanceId} data-card-motion-anchor={`ability:${card.instanceId}`}
           onPointerEnter={event => { if (event.pointerType === "mouse" && !drag.current) { keepPreview(); setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "mouse" }) } }}
           onPointerLeave={event => { if (event.pointerType === "mouse" && !event.currentTarget.matches(":focus-visible")) leavePreview() }}
           onFocus={event => { if (event.currentTarget.matches(":focus-visible")) setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "keyboard" }) }}
           onBlur={() => setPreview(current => current?.id === card.instanceId ? null : current)}
           onPointerDown={event => begin(event, card)} onPointerMove={move} onPointerUp={event => end(event, card, true)} onPointerCancel={event => end(event, card, false)} onLostPointerCapture={event => end(event, card, false)}
-          onKeyDown={event => { if (event.key === "Escape") setPreview(null) }}
+          onKeyDown={event => {
+            if (event.key !== "Escape") return
+            setPreview(null)
+            if (drag.current?.started) {
+              event.stopPropagation()
+              finishDrag(drag.current, false)
+            }
+          }}
           onClick={event => {
             if (event.detail === 0) {
               if (canPlay && card.available) { setPreview(null); onPlay(card) }
@@ -149,7 +209,7 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
       </PokerAbilityDetails>
     </div>, document.body)}
     {ghost && draggedDefinition && createPortal(<div className="poker-hand-dock-ghost" aria-hidden="true" style={{ left: ghost.x, top: ghost.y }}>
-      <PokerAbilityFace name={draggedDefinition.name} artId={draggedDefinition.artId} size="lg" />
+      <div ref={ghostFace}><PokerAbilityFace name={draggedDefinition.name} artId={draggedDefinition.artId} size="lg" /></div>
     </div>, document.body)}
   </div>
 }

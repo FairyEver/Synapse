@@ -1,78 +1,57 @@
 /** @vitest-environment jsdom */
 import { act } from "react"
 import { createRoot } from "react-dom/client"
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { useDealAnimation } from "../hooks/useDealAnimation"
+import { afterEach, expect, it, vi } from "vitest"
+import type { PokerTableView } from "@synapse/shared/game-contracts"
+import { usePokerCardMotion } from "../hooks/usePokerCardMotion"
+import { cardTable } from "./card-stage-fixture"
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-function Cards({
-  count,
-  hand = "h",
-  replay = 0,
-}: {
-  count: number
-  hand?: string
-  replay?: number
-}) {
-  return <output>{useDealAnimation(hand, count, replay)}</output>
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
+
+async function mount(initial: PokerTableView) {
+  const host = document.createElement("div"), root = createRoot(host)
+  function Motion({ table, scope }: { table: PokerTableView; scope: string }) {
+    const { batch, queued, complete } = usePokerCardMotion(table, scope)
+    return <button data-queued={queued?.deals.join(",")} onClick={() => batch && complete(batch)}>{batch?.deals.join(",")}</button>
+  }
+  const render = (table: PokerTableView, scope = "owner") => act(async () => root.render(<Motion table={table} scope={scope} />))
+  await render(initial)
+  return { host, render, close: () => act(async () => root.unmount()) }
 }
-afterEach(() => {
-  vi.useRealTimers()
-  vi.unstubAllGlobals()
+
+it("首次进入不重播，下一手发牌并在它结束后接新增公共牌", async () => {
+  const initial = { ...cardTable, handNo: 1 }
+  const { host, render, close } = await mount(initial)
+  try {
+    expect(host.textContent).toBe("")
+    const next = { ...initial, handNo: 2, handId: "new", street: "preflop" as const, board: [], actionSeq: 0 }
+    await render(next)
+    expect(host.textContent).toContain("hole:0:0")
+    await render({ ...next, board: ["As", "Kd", "Qc"], actionSeq: 1 })
+    const button = host.querySelector("button")!
+    expect(button.dataset.queued).toBe("board:0,board:1,board:2")
+    await act(async () => button.click())
+    expect(host.textContent).toBe("board:0,board:1,board:2")
+  } finally { await close() }
 })
-describe("发牌观看连续性", () => {
-  it("同一手新增公共牌时保留已展示的牌，只逐张加入新牌", async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal("matchMedia", () => ({ matches: false }))
-    const host = document.createElement("div"),
-      root = createRoot(host)
-    await act(async () => root.render(<Cards count={2} />))
-    await act(async () => vi.advanceTimersByTime(110))
-    expect(host.textContent).toBe("2")
-    await act(async () => root.render(<Cards count={5} />))
-    expect(host.textContent).toBe("2")
-    await act(async () => vi.advanceTimersByTime(55))
-    expect(host.textContent).toBe("3")
-    await act(async () => vi.advanceTimersByTime(110))
-    expect(host.textContent).toBe("5")
-    await act(async () => root.render(<Cards count={5} replay={1} />))
-    expect(host.textContent).toBe("0")
-    await act(async () => vi.advanceTimersByTime(55))
-    await act(async () => root.render(<Cards count={2} hand="next" />))
-    expect(host.textContent).toBe("0")
-    await act(async () => root.unmount())
-  })
-  it("重进当前手直接呈现，只有随后新手顺序发牌", async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal("matchMedia", () => ({ matches: false }))
-    const host = document.createElement("div"), root = createRoot(host)
-    await act(async () => root.render(<Cards count={7} />))
-    expect(host.textContent).toBe("7")
-    expect(vi.getTimerCount()).toBe(0)
-    await act(async () => root.render(<Cards count={2} hand="next" />))
-    expect(host.textContent).toBe("0")
-    await act(async () => vi.advanceTimersByTime(110))
-    expect(host.textContent).toBe("2")
-    await act(async () => root.unmount())
-  })
-  it("断流后的公共牌直接收敛到最新状态", async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal("matchMedia", () => ({ matches: false }))
-    const host=document.createElement("div"), root=createRoot(host)
-    await act(async()=>root.render(<Cards count={2} />))
-    await act(async()=>vi.advanceTimersByTime(4000))
-    await act(async()=>root.render(<Cards count={7} />))
-    expect(host.textContent).toBe("7")
-    expect(vi.getTimerCount()).toBe(0)
-    await act(async()=>root.unmount())
-  })
-  it("减弱动态效果下直接呈现所有牌，不等待发牌间隔", async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal("matchMedia", () => ({ matches: true }))
-    const host = document.createElement("div"),
-      root = createRoot(host)
-    await act(async () => root.render(<Cards count={5} />))
-    expect(host.textContent).toBe("5")
-    expect(vi.getTimerCount()).toBe(0)
-    await act(async () => root.unmount())
-  })
+
+it("断流、视角切换或减少动态效果时直接显示快照", async () => {
+  vi.useFakeTimers()
+  const initial = { ...cardTable, board: [] }
+  const { host, render, close } = await mount(initial)
+  try {
+    vi.advanceTimersByTime(4000)
+    await render({ ...initial, board: ["As"] })
+    expect(host.textContent).toBe("")
+    await render({ ...initial, board: ["As", "Kd"] }, "public")
+    expect(host.textContent).toBe("")
+    vi.spyOn(window, "matchMedia").mockImplementation(query => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList)
+    await close()
+    const reduced = await mount(initial)
+    try {
+      await reduced.render({ ...initial, board: ["As"] })
+      expect(reduced.host.textContent).toBe("")
+    } finally { await reduced.close() }
+  } finally { if (host.firstChild) await close() }
 })

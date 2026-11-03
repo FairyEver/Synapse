@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { gameApi } from "../../../lib/api"
 import { useGameQuery } from "../../../hooks/useGameQuery"
 import { projectTable } from "../lib/view"
@@ -9,6 +9,6 @@ export function usePokerRoom(roomCode: string) {
     `room:${roomCode}:${perspective}`,
     1000,
   )
-  const table = query.data ? projectTable(query.data, perspective) : null
+  const table = useMemo(() => query.data ? projectTable(query.data, perspective) : null, [query.data, perspective])
   return { ...query, table, perspective, setPerspective }
 }

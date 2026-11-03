@@ -1,5 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react"
 import { createPortal } from "react-dom"
+import gsap from "gsap"
+import { useReducedMotion } from "../hooks/useReducedMotion"
 import { Clock3, X } from "lucide-react"
 import type { PokerCardDefinitionView, PokerCardHandView, PokerResolutionFrameView, PokerTableView } from "@synapse/shared/game-contracts"
 import type { usePokerCards } from "../hooks/usePokerCards"
@@ -63,11 +65,28 @@ export function PokerCardDockFlow({ table, controls, disabled, showHand = true, 
     : usedResult ? used.status === "blocked" ? "用牌被抵挡" : resultKind === "holes" ? "换牌完成" : "私密情报"
     : targetStage ? choiceTitle ?? "选择目标" : review ? "私密情报" : "正在使用卡牌…"
   const dialog = useRef<HTMLDialogElement>(null), headingRef = useRef<HTMLHeadingElement>(null), heading = useId()
+  const reduced = useReducedMotion()
+  const choiceMotion = pending ? `choice:${pending.choiceId}` : null
+  const revealMotion = usedResult && resultKind === "holes" && used.status !== "blocked" ? `result:${used.id}` : null
+  const motionKey = choiceMotion ?? revealMotion
+  const previousMotion = useRef(motionKey)
   const stage = pending ? pending.choiceId : usedResult ? "result" : targetStage ? card.instanceId : recovery ? "recovery" : review ? "intel" : "waiting"
 
   useLayoutEffect(() => {
     if (open && dialog.current && !dialog.current.open) dialog.current.showModal()
   }, [open])
+  useLayoutEffect(() => {
+    const previous = previousMotion.current
+    previousMotion.current = motionKey
+    if (!motionKey || previous === motionKey || reduced || !dialog.current) return
+    const items = dialog.current.querySelectorAll(choiceMotion ? ".candidate-view .card-slot" : ".intel-values .poker-card-turn")
+    if (!items.length) return
+    const motion = gsap.context(() => {
+      if (choiceMotion) gsap.from(items, { opacity: 0, y: 30, scale: .88, duration: .28, stagger: .05, ease: "power2.out", clearProps: "opacity,transform" })
+      else gsap.from(items, { rotationY: 180, duration: .24, stagger: .05, ease: "power1.inOut", clearProps: "transform" })
+    })
+    return () => motion.revert()
+  }, [motionKey, choiceMotion, reduced])
   useEffect(() => { if (open) headingRef.current?.focus() }, [open, stage])
 
   const reset = () => {
