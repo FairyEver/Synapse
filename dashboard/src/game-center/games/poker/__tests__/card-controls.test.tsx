@@ -1,10 +1,10 @@
 /** @vitest-environment jsdom */
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { cardTable } from "./card-stage-fixture"
-import { HumanControls } from "../components/HumanControls"
+import { HumanControls, type PokerControlPanel } from "../components/HumanControls"
 import { usePokerCards } from "../hooks/usePokerCards"
 import { cardIntentStore } from "../lib/card-intent-store"
 import { projectTable } from "../lib/view"
@@ -29,6 +29,23 @@ it("打开及选中不施放，选择合法目标后明确确认才付款，携�
   expect(api.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instanceId: "card-instance", selections: { hole: "1", player: "1" }, expectedPaymentVersion: "card-quote", expectedActionSeq: 3, controlVersion: 2 }))
   expect(api.play.mock.calls[0][0]).not.toHaveProperty("caller")
 })
+it("回合结束关闭卡牌面板，其他人的回合不开放卡牌入口", async () => {
+  function Controlled({ table }: { table: PokerTableView }) {
+    const [panel, setPanel] = useState<PokerControlPanel | null>(null)
+    return <HumanControls table={table} perspective="owner" identityKey="card-turn" onRefresh={vi.fn()} activePanel={panel} onPanelChange={setPanel} />
+  }
+  const root = await mount(<Controlled table={cardTable} />)
+  await openCard()
+  expect(button("使用卡牌")).toBeDefined()
+
+  await act(async () => root.render(<Controlled table={{ ...cardTable, actionOnSeat: 1, actionSeq: 4 }} />))
+  expect(button("卡牌")).toBeUndefined()
+  expect(document.querySelector(".poker-card-stage")).toBeNull()
+
+  await act(async () => root.render(<Controlled table={{ ...cardTable, actionSeq: 5 }} />))
+  expect(button("卡牌").disabled).toBe(false)
+  expect(document.querySelector(".poker-card-stage")).toBeNull()
+})
 it("公开视角本地剥离持牌、候选、情报、报价与付款版本，DOM无私密名称", async () => {
   const table = projectTable(cardTable, "public")
   expect(table.cards).not.toHaveProperty("ownHand"); expect(table.cards).not.toHaveProperty("definitions"); expect(table).not.toHaveProperty("paymentVersion")
@@ -47,6 +64,16 @@ it("存储失败只禁止新的卡牌写，不误禁合法普通行动", async (
 let controls!: ReturnType<typeof usePokerCards>
 function Harness({ table = cardTable, identity = "card-hook", refresh = vi.fn() }: { table?: PokerTableView; identity?: string; refresh?: () => void }) { controls = usePokerCards(table, "owner", refresh, identity); return null }
 const input = { roomCode: "1234", handId: "card-ui-hand", street: "flop" as const, expectedActionSeq: 3, controlVersion: 2, actionId: "8529bfca-a8e8-4de4-89da-162f516d2f01", expectedPaymentVersion: "card-quote", instanceId: "card-instance", selections: { hole: "0", player: "1" } }
+it("其他人的回合仍能核对已保存的原请求", async () => {
+  const identityKey = "card-turn-retry"
+  cardIntentStore.save({ identityKey, roomCode: cardTable.roomCode }, { operation: "play", input })
+  await mount(<HumanControls table={{ ...cardTable, actionOnSeat: 1, actionSeq: 4 }} perspective="owner" identityKey={identityKey} onRefresh={vi.fn()} />)
+  expect(button("核对原用牌请求")).toBeDefined()
+  await click("核对原用牌请求")
+  expect(api.state.mock.invocationCallOrder[0]).toBeLessThan(api.play.mock.invocationCallOrder[0])
+  expect(api.play).toHaveBeenCalledExactlyOnceWith(input)
+  expect(button("卡牌")).toBeUndefined()
+})
 it("硬刷新从持久参数核对原UUID，不被新手/序号/控制版本改写", async () => {
   const scope = { identityKey: "hard-card", roomCode: "1234" }
   cardIntentStore.save(scope, { operation: "play", input })
