@@ -32,11 +32,13 @@
       --veil: oklch(.12 .02 169 / .92); --veil-edge: oklch(.12 .02 169 / .72);
       --z-table: 0; --z-overlay: 10; --z-flight: 20; --z-notice: 30; --z-demo: 40;
       --ease: cubic-bezier(.22, 1, .36, 1);
+      --demo-height: 40px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       font-synthesis: none; -webkit-font-smoothing: antialiased;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--background); color: var(--foreground); }
+    body { margin: 0; padding-top: var(--demo-height); background: var(--background); color: var(--foreground); }
+    body.overlay-open { height: 100dvh; overflow: hidden; }
     button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     button, a { touch-action: manipulation; }
     button:disabled { cursor: not-allowed; }
@@ -45,7 +47,7 @@
     button svg { width: 18px; height: 18px; flex: none; }
     button[hidden], [hidden] { display: none !important; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .demo-bar { position: relative; z-index: var(--z-demo); min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 18px; background: var(--surface); color: var(--muted); border-bottom: 1px solid var(--line); font-size: 11px; }
+    .demo-bar { position: fixed; inset: 0 0 auto; z-index: var(--z-demo); height: var(--demo-height); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 18px; background: var(--surface); color: var(--muted); border-bottom: 1px solid var(--line); font-size: 11px; }
     .demo-label { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
     .demo-label strong { font-weight: 600; color: var(--foreground); }
     .demo-actions { display: flex; gap: 4px; align-items: center; }
@@ -87,9 +89,10 @@
     .status-on-table { color: var(--muted); font-size: 11px; text-align: center; min-height: 18px; }
 
     /* The game overlay has no dialog box. The original table remains mounted behind it. */
-    .card-overlay { position: fixed; inset: 40px 0 0; z-index: var(--z-overlay); color: var(--stage-ink); overflow: hidden auto; overscroll-behavior: contain; background: radial-gradient(ellipse at 50% 44%, var(--veil) 22%, var(--veil-edge) 100%); animation: veil-in 240ms ease-out both; }
-    .overlay-layout { min-height: 100%; display: flex; flex-direction: column; }
-    .stage-hud { width: min(1180px, calc(100% - 64px)); min-height: 106px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 30px; border-bottom: 1px solid color-mix(in oklch, var(--stage-line) 55%, transparent); }
+    .card-overlay { position: fixed; inset: var(--demo-height) 0 0; z-index: var(--z-overlay); color: var(--stage-ink); overflow: hidden; overscroll-behavior: contain; background: radial-gradient(ellipse at 50% 44%, var(--veil) 22%, var(--veil-edge) 100%); animation: veil-in 240ms ease-out both; }
+    .overlay-layout { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+    .stage-top { min-width: 0; }
+    .stage-hud { width: min(1180px, calc(100% - 48px)); min-height: 64px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; border-bottom: 1px solid color-mix(in oklch, var(--stage-line) 55%, transparent); }
     .round-context { font-size: 13px; display: flex; align-items: center; gap: 12px; }
     .round-context > span { color: var(--stage-muted); }
     .round-context strong { font-weight: 500; }
@@ -103,16 +106,21 @@
     .time[data-urgent="true"] { color: var(--brass-light); }
     .close-overlay { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: transparent; color: var(--stage-muted); border: 1px solid var(--stage-line); transition: color 150ms, border-color 150ms; }
     .close-overlay:hover { color: var(--stage-ink); border-color: var(--brass); }
-    .stage-heading { text-align: center; padding: 31px 20px 4px; }
-    .stage-heading h1 { margin: 0; font-family: "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif; font-size: 32px; font-weight: 600; letter-spacing: .12em; text-wrap: balance; }
-    .stage-heading p { font-size: 12px; color: var(--stage-muted); margin: 12px 0 0; letter-spacing: .035em; }
-    .stage-heading .heading-rule { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 17px auto 0; color: var(--brass); }
-    .heading-rule::before, .heading-rule::after { content: ""; height: 1px; width: 44px; background: color-mix(in oklch, var(--brass) 40%, transparent); }
-    .heading-rule svg { width: 10px; height: 10px; }
-    .view { flex: 1; display: flex; flex-direction: column; }
-    .hand-stage { --card-w: min(214px, 17.2vw); position: relative; min-height: 365px; flex: 1; display: flex; align-items: center; justify-content: center; padding: 37px 44px 46px; }
-    .hand-stage::after { content: ""; position: absolute; bottom: 20px; left: 15%; right: 15%; height: 1px; background: linear-gradient(90deg, transparent, var(--stage-line), transparent); pointer-events: none; }
+    .stage-heading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 16px; }
+    .stage-heading h1 { margin: 0; font-family: "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif; font-size: 22px; line-height: 1.25; font-weight: 600; letter-spacing: .06em; }
+    .stage-heading p { font-size: 11px; color: var(--stage-muted); margin: 0; }
+    .view { min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+    .hand-stage { --card-w: max(32px, min(214px, 17.2vw, calc((100cqh - 72px) * .64))); position: relative; min-height: 0; min-width: 0; flex: 1; display: flex; align-items: center; justify-content: center; padding: 16px 44px; container-type: size; }
     .hand-row { display: flex; justify-content: center; align-items: center; width: 100%; perspective: 1300px; }
+    .hand-row > .card-slot { container-type: inline-size; }
+    .hand-row .card-body { padding: 5.6cqw 8.9cqw 7.5cqw; }
+    .hand-row .card-name { font-size: 9.8cqw; }
+    .hand-row .card-description { font-size: 5.4cqw; }
+    .hand-row .card-divider { margin: 3.5cqw; gap: 3.5cqw; }
+    .hand-row .card-divider svg { width: 2.3cqw; height: 2.3cqw; }
+    .hand-row .card-type { top: 6cqw; left: 6cqw; font-size: 4.7cqw; gap: 2.3cqw; }
+    .hand-row .card-type svg { width: 6cqw; height: 6cqw; }
+    .hand-row .card-cost { font-size: 4.7cqw; padding-top: 2.8cqw; }
     .card-slot { position: relative; width: var(--card-w); flex: none; margin-left: -7px; padding: 0; transform: translateY(var(--rest-y, 0px)) rotate(var(--rest-r, 0deg)); transition: transform 300ms var(--ease), filter 200ms; z-index: 1; filter: drop-shadow(0 12px 13px var(--shadow)); }
     .card-slot:first-child { margin-left: 0; }
     .card-slot:hover, .card-slot:focus-within { transform: translateY(-22px) rotate(0deg) scale(1.065); z-index: 3; }
@@ -141,30 +149,32 @@
     .page-arrow:hover { border-color: var(--brass); }
     .page-arrow:disabled { opacity: .22; }
     .page-arrow.previous { left: 20px; } .page-arrow.next { right: 20px; }
-    .hand-status { min-height: 34px; font-size: 12px; color: var(--stage-muted); text-align: center; padding: 0 20px; }
-    .hand-status strong { color: var(--brass-light); font-weight: 500; }
-    .stage-footer { width: min(1120px, calc(100% - 64px)); display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 0 auto; min-height: 77px; padding: 14px 0 20px; }
+    .stage-footer { width: min(1120px, calc(100% - 48px)); min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 0 auto; min-height: 60px; padding: 8px 0; border-top: 1px solid color-mix(in oklch, var(--stage-line) 55%, transparent); }
     .held-count { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--stage-muted); }
+    .stage-footer[data-mode="candidate"] .held-count { min-width: 0; flex: 1; }
+    .held-count > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .held-count svg { width: 17px; height: 17px; color: var(--brass); }
     .held-count b { color: var(--stage-ink); font-weight: 500; }
-    .key-hints { display: flex; align-items: center; gap: 15px; font-size: 11px; color: var(--stage-muted); }
-    kbd { font: inherit; padding: 2px 4px; border: 1px solid var(--stage-line); border-radius: 3px; color: var(--stage-ink); margin-right: 4px; }
     .text-action { border: 0; padding: 9px 0; color: var(--stage-muted); background: transparent; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     .text-action:hover { color: var(--stage-ink); }
-    .footer-actions { display: flex; align-items: center; gap: 20px; }
-    .inspect-view { padding: 24px 32px 30px; }
-    .inspect-top { width: min(850px, 100%); margin: 0 auto 15px; }
-    .inspect-layout { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 74px; width: min(850px, 100%); margin: auto; align-items: center; }
-    .inspect-card { filter: drop-shadow(0 14px 16px var(--shadow)); align-self: center; }
+    .footer-actions { display: flex; align-items: center; gap: 16px; margin-left: auto; flex: none; }
+    .footer-meta { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .stage-footer[data-has-meta="false"] .footer-meta { display: none; }
+    .inspect-view { padding: 12px 24px; }
+    .inspect-layout { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 32px; width: min(900px, 100%); height: 100%; min-height: 0; min-width: 0; margin: 0 auto; align-items: start; overflow: hidden; container-type: size; }
+    .inspect-card { width: min(100%, max(32px, calc((100cqh - 8px) * .64))); min-width: 0; filter: drop-shadow(0 14px 16px var(--shadow)); justify-self: center; align-self: start; container-type: inline-size; }
     .inspect-card .ability-card { pointer-events: none; }
-    .inspect-card .card-name { font-size: 23px; }
-    .inspect-card .card-description { font-size: 12px; }
-    .inspect-details { animation: details-in 260ms var(--ease) both; }
-    .inspect-category { display: inline-flex; gap: 7px; align-items: center; font-size: 12px; color: var(--brass); }
-    .inspect-category svg { width: 16px; height: 16px; }
-    .inspect-details h2 { margin: 11px 0 14px; font: 600 29px/1.3 "Songti SC", "Noto Serif CJK SC", "STSong", Georgia, serif; letter-spacing: .075em; }
-    .full-description { max-width: 38ch; margin: 0; font-size: 13px; line-height: 1.85; color: var(--stage-muted); text-wrap: pretty; }
-    .selection-fields { display: flex; flex-direction: column; gap: 22px; margin-top: 24px; }
+    .inspect-card .card-body, .private-ability .card-body { padding: 4.8cqw 7.6cqw 6.4cqw; }
+    .inspect-card .card-name, .private-ability .card-name { font-size: 9.3cqw; }
+    .inspect-card .card-description, .private-ability .card-description { font-size: 4.8cqw; }
+    .inspect-card .card-divider, .private-ability .card-divider { margin: 3.2cqw; gap: 3.2cqw; }
+    .inspect-card .card-divider svg, .private-ability .card-divider svg { width: 2cqw; height: 2cqw; }
+    .inspect-card .card-cost, .private-ability .card-cost { font-size: 4cqw; padding-top: 2.4cqw; }
+    .inspect-card .card-type, .private-ability .card-type { top: 5.2cqw; left: 5.2cqw; font-size: 4cqw; gap: 2cqw; }
+    .inspect-card .card-type svg, .private-ability .card-type svg { width: 5.2cqw; height: 5.2cqw; }
+    .inspect-details { min-height: 0; min-width: 0; height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none; scrollbar-gutter: stable; padding: 4px 10px 4px 4px; animation: details-in 260ms var(--ease) both; }
+    .full-description { max-width: 42ch; margin: 0; font-size: 13px; line-height: 1.65; color: var(--stage-muted); text-wrap: pretty; }
+    .selection-fields { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
     .choice-field { border: 0; padding: 0; margin: 0; min-width: 0; }
     .choice-field legend { font-size: 12px; padding: 0; margin-bottom: 10px; color: var(--stage-ink); }
     .hole-options { display: flex; gap: 13px; }
@@ -180,9 +190,8 @@
     .target-choice:hover { border-color: var(--brass); color: var(--stage-ink); }
     .target-choice[aria-pressed="true"] { border-color: var(--brass-light); color: var(--brass-light); background: var(--stage-raised); }
     .target-choice > svg { width: 13px; height: 13px; }
-    .cast-area { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--stage-line); }
-    .intent-preview { font-size: 12px; line-height: 1.7; color: var(--stage-muted); margin: 0 0 13px; min-height: 21px; }
-    .payment { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; color: var(--stage-muted); font-size: 12px; margin-bottom: 16px; }
+    .intent-preview { font-size: 12px; line-height: 1.5; color: var(--brass-light); margin: 0; }
+    .payment { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; color: var(--stage-muted); font-size: 12px; }
     .payment strong { color: var(--brass-light); font-weight: 500; }
     .payment span + span { padding-left: 9px; border-left: 1px solid var(--stage-line); }
     .game-button { min-height: 46px; min-width: 190px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 24px; border: 0; border-radius: 6px; background: var(--brass); color: var(--stage-deep); box-shadow: inset 0 -3px 0 color-mix(in oklch, var(--brass-dark) 70%, transparent), inset 0 1px 0 var(--brass-light); font-size: 13px; font-weight: 600; letter-spacing: .04em; transition: background 150ms, transform 150ms; }
@@ -190,17 +199,10 @@
     .game-button:active { transform: translateY(1px); }
     .game-button:disabled { background: var(--stage-raised); color: var(--stage-muted); box-shadow: inset 0 0 0 1px var(--stage-line); transform: none; }
     .game-button svg { width: 16px; height: 16px; }
-    .cast-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-    .inspect-warning { font-size: 12px; line-height: 1.7; color: var(--brass-light); }
-    .step-summary { color: var(--stage-muted); font-size: 11px; margin: 0 0 20px; line-height: 1.8; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-    .step-summary .step-current { color: var(--brass-light); }
-    .step-summary .step-complete { color: var(--sage); }
-    .step-summary svg { width: 12px; height: 12px; }
-    .choice-hint, .choice-empty { font-size: 11px; line-height: 1.7; color: var(--stage-muted); margin: 9px 0 0; }
-    .choice-empty { padding: 14px 0; color: var(--brass-light); }
+    .choice-empty { font-size: 11px; line-height: 1.7; margin: 0; color: var(--stage-muted); }
     .choice-field[data-blocked="true"] { opacity: .55; }
     .choice-field button:disabled { opacity: .5; }
-    .opponent-hands { display: flex; gap: 13px; overflow-x: auto; padding: 4px 4px 9px; }
+    .opponent-hands { display: flex; gap: 13px; overflow-x: auto; overflow-y: hidden; padding: 4px 4px 9px; }
     .opponent-group { flex: none; min-width: 92px; }
     .opponent-name { display: flex; align-items: center; gap: 6px; color: var(--stage-muted); font-size: 11px; margin-bottom: 11px; }
     .opponent-name .avatar { width: 21px; height: 21px; background: var(--stage-raised); color: var(--stage-ink); font-size: 9px; }
@@ -216,7 +218,7 @@
     .color-choice b { font: 23px Georgia, serif; }
     .color-choice[data-value="red"] b { color: var(--guess-red); }
     .color-choice[aria-pressed="true"] { border-color: var(--brass-light); background: var(--stage-raised); }
-    .ability-options { display: flex; gap: 13px; overflow: auto; padding: 8px 5px 12px; scroll-snap-type: x proximity; }
+    .ability-options { display: flex; gap: 13px; overflow-x: auto; overflow-y: hidden; padding: 8px 5px 12px; scroll-snap-type: x proximity; }
     .ability-options .card-slot { width: 117px; margin: 0; transform: none; filter: none; flex: none; scroll-snap-align: start; }
     .ability-options .card-slot:hover, .ability-options .card-slot:focus-within { transform: translateY(-3px); }
     .ability-options .ability-card { aspect-ratio: .64; }
@@ -231,7 +233,7 @@
     .ability-options .card-slot.is-picked .ability-card { outline: 2px solid var(--brass-light); outline-offset: 3px; }
     .material-outcome { display: block; color: var(--stage-muted); text-align: center; font-size: 10px; margin-top: 9px; min-height: 15px; }
     .card-slot.is-picked .material-outcome { color: var(--brass-light); }
-    .effect-options { display: flex; flex-direction: column; gap: 8px; max-height: 235px; overflow: auto; padding: 4px; }
+    .effect-options { display: flex; flex-direction: column; gap: 8px; padding: 4px; }
     .effect-group-label { color: var(--stage-muted); margin: 5px 0 0; font-size: 10px; }
     .effect-choice { display: flex; gap: 10px; align-items: center; text-align: left; padding: 12px; min-height: 57px; border: 1px solid var(--stage-line); border-radius: 6px; background: transparent; color: var(--stage-ink); }
     .effect-choice > svg { color: var(--brass); width: 22px; height: 22px; }
@@ -239,35 +241,31 @@
     .effect-choice small { display: block; font-size: 10px; color: var(--stage-muted); margin-top: 5px; line-height: 1.5; }
     .effect-choice .effect-tick { margin-left: auto; flex: none; width: 15px; height: 15px; }
     .effect-choice[aria-pressed="true"] { border-color: var(--brass-light); background: var(--stage-raised); }
-    .selection-receipt { color: var(--stage-ink); margin: 0 0 14px; font-size: 12px; line-height: 1.8; }
+    .selection-receipt { color: var(--stage-ink); margin: 0; font-size: 12px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .selection-receipt strong { color: var(--brass-light); font-weight: 500; }
     .private-cards { display: flex; gap: 14px; max-width: 100%; justify-content: center; }
-    .private-cards .private-card { width: 102px; }
     .private-symbol { min-width: 110px; padding: 25px; border: 1px solid var(--stage-line); border-radius: 8px; text-align: center; font: 42px Georgia, serif; }
-    .private-ability { width: 190px; filter: drop-shadow(0 9px 12px var(--shadow)); }
+    .private-ability { width: max(32px, min(190px, calc((100cqh - 100px) * .64))); container-type: inline-size; filter: drop-shadow(0 9px 12px var(--shadow)); }
     .private-ability .card-slot { width: 100%; transform: none; }
     .private-ability .ability-card { pointer-events: none; }
-    .candidate-stage { --card-w: min(236px, 23vw); min-height: 340px; flex: 1; display: flex; align-items: center; justify-content: center; padding: 36px 28px 30px; }
-    .view > [data-selector$="-candidate"] { flex: 1; display: flex; flex-direction: column; }
+    .candidate-stage { --card-w: max(32px, min(236px, 23vw, calc((100cqh - 48px) * .64))); min-height: 0; min-width: 0; flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px 16px; container-type: size; }
+    .view > [data-selector$="-candidate"] { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
     .candidate-stage .hand-row { gap: 26px; }
     .candidate-stage .card-slot { margin: 0; }
     .candidate-stage .card-slot.is-chosen { transform: translateY(-15px) scale(1.035); }
     .candidate-stage .card-slot.is-chosen .ability-card { outline: 2px solid var(--brass-light); outline-offset: 5px; }
-    .candidate-stage .card-slot.is-chosen::after { content: "已选择"; position: absolute; left: 50%; bottom: -29px; translate: -50% 0; color: var(--brass-light); font-size: 11px; white-space: nowrap; }
-    .candidate-footer { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; padding: 13px 20px 29px; }
-    .candidate-footer p { margin: 0; color: var(--stage-muted); font-size: 11px; text-align: center; line-height: 1.7; }
     .poker-candidate { aspect-ratio: 5 / 7; border-radius: 9px; background: transparent; border: 0; padding: 0; display: block; width: 100%; }
     .poker-candidate .playing { width: 100%; border-radius: 9px; }
-    .candidate-stage.poker-candidates { --card-w: min(172px, 21vw); min-height: 320px; }
+    .candidate-stage.poker-candidates { --card-w: max(32px, min(172px, 21vw, calc((100cqh - 48px) * 5 / 7))); }
     .poker-candidates .card-slot.is-chosen .poker-candidate { outline: 2px solid var(--brass-light); outline-offset: 6px; }
-    .private-view { align-items: center; justify-content: center; padding: 36px 24px; gap: 24px; }
+    .private-view { align-items: center; justify-content: center; padding: 12px 20px; gap: 12px; container-type: size; }
     .private-label { color: var(--brass); display: flex; align-items: center; gap: 7px; font-size: 12px; }
     .private-label svg { width: 15px; height: 15px; }
     .private-view h2 { font-size: 22px; font-weight: 500; margin: 0; }
-    .private-card { width: 112px; filter: drop-shadow(0 9px 12px var(--shadow)); animation: private-reveal 430ms var(--ease) both; }
+    .private-card, .private-cards .private-card { width: max(32px, min(112px, 28vw, calc((100cqh - 100px) * 5 / 7))); filter: drop-shadow(0 9px 12px var(--shadow)); animation: private-reveal 430ms var(--ease) both; }
     .private-card .playing { width: 100%; }
     .private-view p { margin: 0; max-width: 35ch; font-size: 12px; line-height: 1.8; text-align: center; color: var(--stage-muted); }
-    .empty-hand { min-height: 310px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; color: var(--stage-muted); font-size: 13px; }
+    .empty-hand { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--stage-muted); font-size: 13px; }
     .empty-hand svg { color: var(--brass); width: 36px; height: 36px; }
     .notice { position: fixed; z-index: var(--z-notice); bottom: 110px; left: 50%; translate: -50% 0; max-width: calc(100% - 32px); padding: 13px 20px; border-radius: 6px; background: var(--stage); color: var(--stage-ink); font-size: 13px; display: flex; gap: 10px; align-items: center; text-align: center; animation: details-in 220ms var(--ease) both; pointer-events: none; }
     .notice svg { width: 16px; height: 16px; flex: none; color: var(--brass); }
@@ -282,79 +280,53 @@
     @keyframes impact { from { opacity: .9; transform: scale(.4); } to { opacity: 0; transform: scale(1.6); } }
 
     @media (min-width: 1500px) and (min-height: 850px) {
-      .hand-stage { --card-w: 242px; padding-block: 55px; } .hand-stage .card-description { font-size: 13px; }
-      .hand-stage .card-name { font-size: 24px; } .hand-stage .card-cost { font-size: 11px; }
-      .stage-heading { padding-top: 42px; } .stage-heading h1 { font-size: 36px; }
-      .inspect-layout { grid-template-columns: 278px minmax(0, 1fr); gap: 90px; }
+      .hand-stage { --card-w: min(242px, 17.2vw, calc((100cqh - 72px) * .64)); }
+      .inspect-layout { grid-template-columns: 278px minmax(0, 1fr); gap: 40px; }
     }
     @media (max-height: 760px) and (min-width: 851px) {
-      .stage-hud { min-height: 82px; } .stage-heading { padding-top: 21px; }
-      .stage-heading h1 { font-size: 28px; } .stage-heading .heading-rule { margin-top: 12px; }
-      .hand-stage { --card-w: min(194px, 16.4vw); min-height: 315px; padding-top: 25px; padding-bottom: 30px; }
-      .stage-footer { min-height: 60px; padding-top: 10px; } .card-body { padding-inline: 16px; }
-      .card-name { font-size: 19px; } .card-description { font-size: 11px; line-height: 1.65; }
-      .candidate-stage { --card-w: 202px; min-height: 315px; padding-block: 25px; }
-      .inspect-layout { grid-template-columns: 215px minmax(0, 1fr); gap: 60px; }
-      .selection-fields { gap: 15px; margin-top: 18px; } .cast-area { margin-top: 18px; padding-top: 15px; }
-      .inspect-view { padding-top: 10px; } .inspect-top { margin-bottom: 6px; }
+      .inspect-layout { grid-template-columns: 215px minmax(0, 1fr); }
     }
     @media (max-width: 1100px) and (min-width: 851px) {
-      .hand-stage { --card-w: 17.3vw; padding-inline: 26px; } .card-body { inset-block-start: 52%; padding: 10px 13px 12px; }
-      .ability-card { aspect-ratio: .60; } .ability-art { height: 54%; }
-      .card-name { font-size: 18px; } .card-description { font-size: 10.5px; line-height: 1.6; }
-      .card-divider { margin-block: 6px; } .key-hints { gap: 7px; }
+      .hand-stage { padding-inline: 26px; }
     }
     @media (max-width: 850px) {
-      .demo-bar { padding: 7px 12px; flex-wrap: wrap; gap: 6px; min-height: 68px; }
+      :root { --demo-height: 68px; }
+      .demo-bar { padding: 7px 12px; flex-wrap: wrap; gap: 6px; }
       .demo-label { font-size: 10px; } .demo-actions { width: 100%; justify-content: space-between; gap: 0; }
       .demo-actions button { padding: 5px 6px; font-size: 10px; } .demo-actions .demo-reset { margin-left: 0; }
       .demo-actions select { width: 132px; max-width: 40vw; font-size: 10px; }
-      .card-overlay { inset-block-start: 68px; } .table-shell { min-height: calc(100dvh - 68px); }
+      .table-shell { min-height: calc(100dvh - var(--demo-height)); }
       .table-top { padding: 16px; } .room-info { gap: 8px; font-size: 12px; } .table-top > span { display: none; }
-      .stage-hud { width: calc(100% - 36px); min-height: 90px; grid-template-columns: 1fr auto; gap: 5px 12px; padding: 13px 0 10px; }
+      .stage-hud { width: calc(100% - 32px); min-height: 72px; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 8px 0; }
       .round-context { font-size: 11px; gap: 8px; } .hud-right { gap: 13px; grid-area: 1 / 2 / 3 / 3; }
       .time { font-size: 16px; gap: 6px; } .time svg { width: 18px; height: 18px; }
       .hud-board { grid-column: 1; gap: 4px; } .hud-board .playing, .hud-board .empty-card { width: 23px; }
       .hud-board-label { font-size: 10px; margin-right: 3px; }
       .close-overlay { width: 33px; height: 33px; }
-      .stage-heading { padding-top: 23px; } .stage-heading h1 { font-size: 26px; }
-      .stage-heading p { font-size: 11px; margin-top: 10px; } .stage-heading .heading-rule { margin-top: 13px; }
-      .hand-stage { --card-w: 216px; padding: 28px 0 25px; min-height: 366px; width: 100%; display: block; overflow: hidden; }
-      .hand-stage::after { bottom: 12px; }
-      .hand-row { overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-inline: calc((100vw - 216px) / 2); justify-content: flex-start; gap: 18px; padding: 20px max(24px, calc((100% - 216px) / 2)) 28px; scrollbar-width: none; perspective: none; }
+      .stage-heading h1 { font-size: 20px; }
+      .hand-stage { --card-w: max(32px, min(216px, 68vw, calc((100cqh - 56px) * .64))); padding: 8px 0; width: 100%; overflow: hidden; }
+      .hand-row { height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-inline: calc((100vw - var(--card-w)) / 2); justify-content: flex-start; gap: 18px; padding: 16px max(16px, calc((100% - var(--card-w)) / 2)); scrollbar-width: none; perspective: none; }
       .hand-row::-webkit-scrollbar { display: none; }
       .card-slot { margin: 0; transform: none; scroll-snap-align: center; }
       .card-slot:hover, .card-slot:focus-within, .card-slot:has(.ability-card:active) { transform: translateY(-7px); }
       .card-slot.is-entering { --rest-r: 0deg !important; --rest-y: 0px !important; }
-      .card-name { font-size: 21px; } .card-description { font-size: 11.5px; }
-      .hand-status { min-height: 35px; font-size: 11px; } .stage-footer { width: calc(100% - 36px); min-height: 65px; gap: 10px; padding-top: 8px; }
-      .key-hints { display: none; } .held-count { font-size: 11px; }
+      .stage-footer { width: calc(100% - 32px); min-height: 54px; gap: 8px; }
+      .stage-footer[data-mode="inspect"] { flex-direction: column; align-items: stretch; }
+      .stage-footer[data-mode="inspect"] .footer-actions { width: 100%; justify-content: space-between; margin: 0; }
+      .stage-footer[data-mode="inspect"] .game-button { min-width: 0; flex: 1; max-width: 220px; }
+      .held-count { font-size: 11px; }
       .page-arrow { display: none !important; }
-      .inspect-view { padding: 14px 24px 28px; }
-      .inspect-top { margin-bottom: 15px; }
-      .inspect-layout { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 21px; align-items: start; }
-      .inspect-card { align-self: start; grid-column: 1; grid-row: 1; }
-      .inspect-card .card-name { font-size: 13px; } .inspect-card .card-body { padding: 8px 10px 9px; }
-      .inspect-card .card-description { font-size: 8px; line-height: 1.5; }
-      .inspect-card .card-divider { margin: 5px 6px; } .inspect-card .card-cost { font-size: 7px; padding-top: 3px; }
-      .inspect-card .card-type { top: 10px; left: 10px; font-size: 7px; gap: 3px; } .inspect-card .card-type svg { width: 10px; height: 10px; }
-      .inspect-details { display: contents; }
-      .step-summary { grid-column: 1 / -1; margin: 0; }
-      .inspect-intro { grid-row: 1; }
-      .inspect-intro { grid-column: 2; align-self: center; }
-      .inspect-details h2 { font-size: 23px; margin: 10px 0 12px; } .inspect-category { font-size: 10px; }
-      .full-description { font-size: 12px; line-height: 1.8; }
-      .selection-fields { grid-column: 1 / -1; margin-top: 5px; gap: 21px; }
-      .cast-area { grid-column: 1 / -1; margin-top: 0; padding-top: 17px; }
+      .inspect-view { padding: 10px 16px; }
+      .inspect-layout { grid-template-columns: minmax(0, 130px) minmax(0, 1fr); gap: 16px; }
+      .full-description { font-size: 12px; }
+      .selection-fields { gap: 14px; margin-top: 12px; }
       .target-choice { flex: 1; justify-content: center; padding-inline: 9px; font-size: 11px; }
-      .game-button { min-height: 46px; } .cast-row .game-button { flex: 1; }
-      .candidate-stage { --card-w: 216px; min-height: 360px; padding: 20px 0 15px; display: block; overflow: hidden; }
-      .candidate-stage .hand-row { gap: 20px; padding-block: 24px 40px; }
+      .game-button { min-height: 44px; }
+      .candidate-stage { --card-w: max(32px, min(216px, 68vw, calc((100cqh - 56px) * .64))); padding: 8px 0; overflow: hidden; }
+      .candidate-stage .hand-row { gap: 20px; }
       .candidate-stage .card-slot.is-chosen { transform: translateY(-5px); }
-      .candidate-footer { padding: 10px 24px 25px; }
-      .candidate-stage.poker-candidates { --card-w: min(104px, 24vw); min-height: 235px; display: flex; padding: 35px 18px 45px; }
-      .poker-candidates .hand-row { justify-content: center; gap: 14px; padding: 12px 6px 35px; overflow: visible; }
-      .private-view { min-height: 430px; }
+      .candidate-stage.poker-candidates { --card-w: max(32px, min(104px, 24vw, calc((100cqh - 40px) * 5 / 7))); padding: 8px 16px; }
+      .poker-candidates .hand-row { justify-content: center; gap: 14px; padding: 12px 6px; overflow: hidden; }
       .scene { min-height: 480px; height: calc(100dvh - 270px); }
       .felt { inset: 9% 5% 9%; border-radius: 43%; } .felt::after { inset: 11px; }
       .seat { width: 112px; } .seat.north { top: 15%; } .seat.west { left: 18%; top: 48%; } .seat.east { left: 82%; top: 48%; } .seat.south { top: 84%; }
@@ -366,11 +338,20 @@
       .notice { bottom: 95px; font-size: 12px; padding: 12px 14px; }
     }
     @media (max-width: 360px) {
-      .demo-label span { display: none; } .demo-actions button { padding-inline: 4px; }
+      .demo-actions button { padding-inline: 4px; }
       .hud-right { gap: 8px; } .round-context { gap: 5px; }
-      .inspect-view { padding-inline: 18px; } .inspect-layout { grid-template-columns: 112px minmax(0, 1fr); gap: 18px; }
-      .inspect-details h2 { font-size: 21px; } .full-description { font-size: 11px; }
+      .inspect-layout { grid-template-columns: minmax(0, 104px) minmax(0, 1fr); gap: 12px; }
+      .full-description { font-size: 11px; }
       .target-choice { gap: 5px; padding-inline: 6px; } .target-choice .avatar { width: 21px; height: 21px; }
+    }
+    @media (max-height: 500px) {
+      .stage-hud { min-height: 52px; padding-block: 4px; }
+      .stage-heading { padding-block: 4px; }
+      .stage-heading h1 { font-size: 18px; }
+      .hand-stage, .candidate-stage { padding-block: 4px; --card-w: max(32px, min(172px, 25vw, calc((100cqh - 24px) * .64))); }
+      .hand-row { padding-block: 8px; }
+      .inspect-view { padding-block: 6px; }
+      .stage-footer { padding-block: 6px; min-height: 50px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
@@ -381,7 +362,7 @@
 </head>
 <body>
   <header class="demo-bar" aria-label="原型场景">
-    <div class="demo-label"><strong>卡牌舞台 / 交互原型</strong><span>本地演示，不连接牌局</span></div>
+    <div class="demo-label"><strong>卡牌原型</strong></div>
     <nav class="demo-actions" aria-label="切换演示场景">
       <button type="button" data-demo="hand" aria-pressed="true">手牌</button>
       <select id="interaction-demo" aria-label="体验八类选择交互">
@@ -415,12 +396,12 @@
 
   <section class="card-overlay" id="card-overlay" role="dialog" aria-modal="true" aria-labelledby="stage-title" hidden>
     <div class="overlay-layout">
-      <header class="stage-hud">
+      <div class="stage-top"><header class="stage-hud">
         <div class="round-context"><span>第 12 手</span><strong>转牌 · 你的回合</strong></div>
         <div class="hud-board" id="hud-board" aria-label="公共牌"></div>
         <div class="hud-right"><div class="time" aria-label="当前回合剩余时间"><span id="clock-icon" aria-hidden="true"></span><span data-clock>08:40</span></div><button type="button" class="close-overlay" id="close-cards" aria-label="收起卡牌"></button></div>
       </header>
-      <div class="stage-heading" id="stage-heading"><h1 id="stage-title">你的手牌</h1><p id="stage-subtitle">选择一张卡牌</p><div class="heading-rule" id="heading-rule" aria-hidden="true"></div></div>
+      <div class="stage-heading" id="stage-heading"><h1 id="stage-title">你的手牌</h1><p id="stage-subtitle" hidden></p></div></div>
       <div id="stage-content" class="view"></div>
       <footer class="stage-footer" id="stage-footer"></footer>
     </div>
@@ -511,14 +492,14 @@
     "60": {"id":"60","name":"众目睽睽","copies":1,"type":"时序","icon":"clock","short":"本阶段所有未弃牌玩家各有一张随机底牌公开，…","description":"本阶段所有未弃牌玩家各有一张随机底牌公开，受信息保护者排除；标记随实体牌移动。","choices":[]}
   };
   const profiles = {
-    HOLE: { key: 'hole', ui: 'own-hole', label: '选择你的底牌' },
-    PLAYER: { key: 'player', ui: 'player', label: '选择目标玩家', target: 'other_alive' },
-    HUMAN: { key: 'player', ui: 'player', label: '选择目标玩家', target: 'other_human' },
-    HIDDEN: { key: 'targetHole', ui: 'opponent-hole', label: '选择对手的一张暗牌' },
-    COLOR: { key: 'color', ui: 'color', label: '猜测这张牌的颜色', dependsOn: ['targetHole'] },
-    EXTRA: { key: 'ability', ui: 'ability', label: '选择另一张能力牌' },
-    STATUS: { key: 'status', ui: 'status', label: '选择要驱散的效果', target: 'public_effect' },
-    CLEANSE: { key: 'status', ui: 'status', label: '选择要净化的效果', target: 'own_negative' }
+    HOLE: { key: 'hole', ui: 'own-hole', label: '你的底牌' },
+    PLAYER: { key: 'player', ui: 'player', label: '目标玩家', target: 'other_alive' },
+    HUMAN: { key: 'player', ui: 'player', label: '目标玩家', target: 'other_human' },
+    HIDDEN: { key: 'targetHole', ui: 'opponent-hole', label: '对手暗牌' },
+    COLOR: { key: 'color', ui: 'color', label: '猜颜色', dependsOn: ['targetHole'] },
+    EXTRA: { key: 'ability', ui: 'ability', label: '另一张能力牌' },
+    STATUS: { key: 'status', ui: 'status', label: '驱散效果', target: 'public_effect' },
+    CLEANSE: { key: 'status', ui: 'status', label: '净化效果', target: 'own_negative' }
   };
   // Selection UI consumes authorized options. Only this fixture adapter manufactures them locally.
   const rankNames = { K: 'K', J: 'J', A: 'A', Q: 'Q', T: '10' }, suits = { s: '♠', h: '♥', c: '♣', d: '♦' };
@@ -655,7 +636,7 @@
     return null;
   }
   function setHeading(title, subtitle, show = true) {
-    $('#stage-heading').hidden = !show; $('#stage-title').textContent = title; $('#stage-subtitle').textContent = subtitle;
+    $('#stage-heading').hidden = !show; $('#stage-title').textContent = title; $('#stage-subtitle').textContent = subtitle; $('#stage-subtitle').hidden = !subtitle;
   }
   function updateTable() {
     $('#own-holes').innerHTML = ownHoles.map(playing).join('');
@@ -690,31 +671,40 @@
     });
   }
   function renderFooter(kind = 'hand') {
-    footer.innerHTML = `<div class="held-count">${icon('cards')}<span>${kind === 'hand' ? `<b>${hand.length}</b> 张手牌${hand.length > pageSize && innerWidth > 850 ? ` · ${page * pageSize + 1}–${Math.min((page + 1) * pageSize, hand.length)}` : ''}` : pending ? '待选结果仅你可见' : '手牌仅你可见'}</span></div><div class="key-hints"><span><kbd>← →</kbd>切换</span><span><kbd>Enter</kbd>选择</span><span><kbd>Esc</kbd>${selected ? '返回' : '收起'}</span></div><div class="footer-actions">${privateResults.length && kind === 'hand' ? '<button type="button" class="text-action" id="revisit-private">本人情报</button>' : ''}<button type="button" class="text-action" id="return-table">收起卡牌 ${icon('back')}</button></div>`;
-    $('#return-table').addEventListener('click', () => void closeCards()); $('#revisit-private')?.addEventListener('click', renderPrivate); footer.hidden = false;
+    footer.dataset.mode = kind; footer.dataset.hasMeta = 'true';
+    if (kind === 'inspect') {
+      footer.innerHTML = `<div class="footer-meta"><p class="selection-receipt" id="selection-receipt" hidden></p><div class="payment" id="payment" hidden></div><p class="intent-preview" id="intent-preview" role="status" hidden></p></div><div class="footer-actions"><button class="text-action" id="back-hand" type="button">${icon('back')} 返回手牌</button><button class="game-button" type="button" id="cast-card">使用卡牌 ${icon('arrow')}</button></div>`;
+      $('#back-hand').addEventListener('click', backToHand); $('#cast-card').addEventListener('click', () => void castCard());
+    } else {
+      const request = pending && pendingRequest(), choice = request && picked(request, selections.candidate);
+      const summary = kind === 'hand' ? `<b>${hand.length}</b> 张${hand.length > pageSize && innerWidth > 850 ? ` · ${page * pageSize + 1}–${Math.min((page + 1) * pageSize, hand.length)}` : ''}` : kind === 'candidate' ? esc(choice?.label || '') : '';
+      footer.innerHTML = `<div class="held-count">${kind === 'hand' ? icon('cards') : ''}<span>${summary}</span></div><div class="footer-actions">${privateResults.length && kind === 'hand' ? '<button type="button" class="text-action" id="revisit-private">本人情报</button>' : ''}<button type="button" class="text-action" id="return-table" ${pending ? 'title="候选保留，倒计时继续；超时默认第一张"' : ''}>收起</button>${kind === 'candidate' ? `<button class="game-button" id="choose-candidate" type="button" ${validChoice(request, selections) ? '' : 'disabled'}>${pending.ui === 'poker-candidate' ? '替换底牌' : '加入手牌'} ${icon('arrow')}</button>` : kind === 'private' ? `<button class="game-button" id="private-continue" type="button">继续选牌 ${icon('cards')}</button>` : ''}</div>`;
+      $('#return-table').addEventListener('click', () => void closeCards()); $('#revisit-private')?.addEventListener('click', renderPrivate);
+      $('#choose-candidate')?.addEventListener('click', () => void chooseCandidate()); $('#private-continue')?.addEventListener('click', renderHand);
+    }
+    footer.hidden = false;
   }
   function renderHand() {
     selected = null; selections = {}; content.className = 'view';
-    setHeading('你的手牌', innerWidth <= 850 ? '左右滑动 · 轻点选牌' : '悬停查看 · 点击选牌');
+    setHeading('你的手牌', '');
     page = Math.min(page, Math.max(0, Math.ceil(hand.length / pageSize) - 1));
     const cards = innerWidth <= 850 ? hand : hand.slice(page * pageSize, (page + 1) * pageSize);
-    content.innerHTML = hand.length ? `<div class="hand-stage"><button class="page-arrow previous" type="button" aria-label="上一组手牌" ${page === 0 ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('left')}</button><div class="hand-row" aria-label="能力手牌">${cards.map((item, index) => cardMarkup(item, index, cards.length)).join('')}</div><button class="page-arrow next" type="button" aria-label="下一组手牌" ${(page + 1) * pageSize >= hand.length ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('right')}</button></div><div class="hand-status">可连续使用卡牌，再完成本轮下注</div>` : `<div class="empty-hand">${icon('cards')}<span>本轮手牌已用完</span><button class="text-action" type="button" id="empty-return">返回牌桌 ${icon('back')}</button></div>`;
+    content.innerHTML = hand.length ? `<div class="hand-stage"><button class="page-arrow previous" type="button" aria-label="上一组手牌" ${page === 0 ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('left')}</button><div class="hand-row" aria-label="能力手牌">${cards.map((item, index) => cardMarkup(item, index, cards.length)).join('')}</div><button class="page-arrow next" type="button" aria-label="下一组手牌" ${(page + 1) * pageSize >= hand.length ? 'disabled' : ''} ${hand.length <= pageSize ? 'hidden' : ''}>${icon('right')}</button></div>` : `<div class="empty-hand">${icon('cards')}<span>暂无手牌</span></div>`;
     $$('.hand-stage .card-slot', content).forEach(slot => $('.ability-card', slot).addEventListener('click', () => inspect(slot.dataset.instance, slot)));
     $('.previous', content)?.addEventListener('click', () => { page--; renderHand(); focusFirstChoice(); });
     $('.next', content)?.addEventListener('click', () => { page++; renderHand(); focusFirstChoice(); });
-    $('#empty-return')?.addEventListener('click', () => void closeCards()); attachCardMotion(content); renderFooter();
+    attachCardMotion(content); renderFooter();
   }
   function focusFirstChoice() {
-    requestAnimationFrame(() => { if (isOpen) ($('[data-choice-key]:not(:disabled)', content) || $('.hand-row button', content) || $('#cast-card:not(:disabled)') || $('#close-cards'))?.focus({ preventScroll: true }); });
+    requestAnimationFrame(() => { if (isOpen) ($('[data-choice-key]:not(:disabled)', content) || $('.hand-row button', content) || $('#cast-card:not(:disabled)') || $('#private-continue') || $('#close-cards'))?.focus({ preventScroll: true }); });
   }
   function inspect(instanceId, origin) {
     if (busy || pending) return;
     const item = hand.find(entry => entry.id === instanceId); if (!item) return;
     const originRect = origin?.getBoundingClientRect(); selected = instanceId; selections = {};
     const d = defs[item.cardId]; content.className = 'view inspect-view'; setHeading(d.name, '', false);
-    content.innerHTML = `<div class="inspect-top"><button class="text-action" id="back-hand" type="button">${icon('back')} 返回手牌</button></div><div class="inspect-layout"><div class="inspect-card">${cardMarkup(item, 0, 1, { display: true })}</div><div class="inspect-details"><div class="inspect-intro"><span class="inspect-category">${icon(d.icon)}${esc(d.type)}</span><h2>${esc(d.name)}</h2><p class="full-description">${esc(d.description)}</p></div><div class="selection-fields" id="selection-fields"></div><div class="cast-area"><div class="step-summary" id="step-summary"></div><p class="intent-preview" id="intent-preview"></p><p class="selection-receipt" id="selection-receipt"></p><div class="payment" id="payment"></div><div class="cast-row"><button class="game-button" type="button" id="cast-card"></button><button class="text-action" type="button" id="cancel-card">换一张</button></div><p class="inspect-warning" id="inspect-warning" hidden></p></div></div></div>`;
-    $('#back-hand').addEventListener('click', backToHand); $('#cancel-card').addEventListener('click', backToHand); $('#cast-card').addEventListener('click', () => void castCard());
-    renderChoices(); renderFooter('inspect');
+    content.innerHTML = `<div class="inspect-layout"><div class="inspect-card">${cardMarkup(item, 0, 1, { display: true })}</div><div class="inspect-details" tabindex="0" role="region" aria-label="卡牌目标选择"><h2 class="sr-only">${esc(d.name)}</h2><p class="full-description">${esc(d.description)}</p><div class="selection-fields" id="selection-fields"></div></div></div>`;
+    renderFooter('inspect'); renderChoices();
     if (originRect && !reduced.matches && typeof Element.prototype.animate === 'function') {
       const artwork = $('.inspect-card'), to = artwork.getBoundingClientRect();
       artwork.animate([{ transform: `translate(${originRect.left - to.left}px,${originRect.top - to.top}px) scale(${originRect.width / (to.width || 1)})` }, { transform: 'none' }], { duration: 350, easing: 'cubic-bezier(.22,1,.36,1)' });
@@ -726,7 +716,7 @@
     const requests = fixtureChoices(item);
     // Revalidate every refresh; a stale or dependent selection cannot enable submission.
     selections = reconcileChoices(requests, selections);
-    $('#selection-fields').innerHTML = requests.map(request => `<fieldset class="choice-field" data-selector="${request.ui}" data-blocked="${!dependencyReady(request, selections)}"><legend>${esc(request.label)}</legend>${request.options.length ? renderSelection(request) : '<p class="choice-empty">当前没有可选择的目标</p>'}${request.ui === 'ability' ? `<p class="choice-hint">${request.purpose === 'copy' ? '原牌保留，副本放入共享牌池' : '与正在使用的卡牌一起消耗'}</p>` : ''}${!dependencyReady(request, selections) ? '<p class="choice-hint">先选择上一步的目标</p>' : ''}</fieldset>`).join('');
+    $('#selection-fields').innerHTML = requests.map(request => `<fieldset class="choice-field" data-selector="${request.ui}" data-blocked="${!dependencyReady(request, selections)}"><legend>${esc(request.ui === 'ability' ? request.purpose === 'copy' ? '复制卡牌' : '消耗卡牌' : request.label)}</legend>${request.options.length ? renderSelection(request) : '<p class="choice-empty">暂无目标</p>'}${!dependencyReady(request, selections) ? '<span class="sr-only">先选择上一步的目标</span>' : ''}</fieldset>`).join('');
     updateIntent(); attachCardMotion($('#selection-fields'));
   }
   function updateIntent() {
@@ -734,17 +724,19 @@
     const d = defs[item.cardId], requests = fixtureChoices(item), quote = quoteFor(d), reason = unavailableFor(item);
     const next = requests.find(request => !validChoice(request, selections));
     $('#cast-card').disabled = busy || !!next || !!reason;
-    $('#cast-card').innerHTML = `${quote.paid ? `支付 ${quote.paid} 筹码并使用` : '使用卡牌'} ${icon('arrow')}`;
-    $('#payment').innerHTML = quote.nominal ? `<span>代价 ${quote.nominal} 筹码${quote.surcharge ? `（含追加 ${quote.surcharge}）` : ''}</span><span>豁免 ${quote.waived}</span><span>实付 <strong>${quote.paid} 筹码</strong></span>` : '<span>无需筹码</span>';
-    $('#intent-preview').textContent = reason || (next ? next.label : d.followUp ? '确认使用后获取候选，再选择一张' : '目标已就绪，确认后施放');
-    $('#step-summary').innerHTML = requests.map((request, index) => `<span class="${validChoice(request, selections) ? 'step-complete' : request === next ? 'step-current' : ''}">${validChoice(request, selections) ? '✓ ' : ''}${esc(request.label)}</span>${index < requests.length - 1 ? icon('right') : ''}`).join('');
+    $('#cast-card').innerHTML = `使用卡牌 ${icon('arrow')}`;
+    $('#payment').innerHTML = quote.nominal ? `<span>代价 ${quote.nominal}${quote.surcharge ? `（追加 ${quote.surcharge}）` : ''}</span><span>豁免 ${quote.waived}</span><span>实付 <strong>${quote.paid} 筹码</strong></span>` : '';
+    $('#payment').hidden = !quote.nominal;
+    const warning = reason && !requests.some(request => !request.options.length) ? reason : '';
+    $('#intent-preview').textContent = warning; $('#intent-preview').hidden = !warning;
     const summary = requests.filter(request => validChoice(request, selections)).map(request => {
       const value = picked(request, selections[request.key]);
       const label = request.ui === 'status' ? `${value.meta.owner} · ${value.label} · ${effectDetail(value.meta.effect)}` : value.label;
-      return `${request.ui === 'ability' ? request.purpose === 'copy' ? '保留并复制' : '额外消耗' : request.ui === 'status' ? '移除' : request.ui === 'color' ? '猜' : '选择'} <strong>${esc(label)}</strong>`;
+      return `${request.ui === 'ability' ? request.purpose === 'copy' ? '保留并复制 ' : '额外消耗 ' : request.ui === 'status' ? '移除 ' : request.ui === 'color' ? '猜 ' : ''}<strong>${esc(label)}</strong>`;
     });
     $('#selection-receipt').innerHTML = summary.join(' · '); $('#selection-receipt').hidden = !summary.length;
-    $('#inspect-warning').hidden = !reason; $('#inspect-warning').textContent = reason ? '尚未施放，卡牌与筹码会保留。' : '';
+    $('#selection-receipt').title = $('#selection-receipt').textContent;
+    footer.dataset.hasMeta = String(!!(summary.length || quote.nominal || warning));
   }
   function backToHand() {
     if (busy) return; const id = selected; renderHand();
@@ -842,10 +834,10 @@
   function renderPending(animate = true) {
     if (!pending) return; selected = null; content.className = 'view';
     const request = pendingRequest(), poker = request.ui === 'poker-candidate';
-    setHeading('选择一张', `${pending.source} · ${poker ? `替换你的 ${cardText(ownHoles[pending.hole])}` : '将一张能力牌加入手牌'}`);
-    content.innerHTML = `<div data-selector="${request.ui}">${renderSelection(request)}</div><div class="candidate-footer"><button class="game-button" id="choose-candidate" type="button" ${validChoice(request, selections) ? '' : 'disabled'}>${poker ? '替换底牌' : '加入手牌'} ${icon('arrow')}</button><p>其余候选归还牌池 · 收起后仍可继续选择<br>超时默认选择第一张，倒计时继续</p></div>`;
+    setHeading('选择一张', `${pending.source}${poker ? ` · 替换 ${cardText(ownHoles[pending.hole])}` : ''}`);
+    content.innerHTML = `<div data-selector="${request.ui}">${renderSelection(request)}</div>`;
     if (!animate) $$('.is-entering', content).forEach(node => node.classList.remove('is-entering'));
-    $('#choose-candidate').addEventListener('click', () => void chooseCandidate()); attachCardMotion(content); renderFooter('candidate');
+    attachCardMotion(content); renderFooter('candidate');
   }
   function completePending(index) {
     const resolved = pending, value = resolved.candidates[index];
@@ -866,20 +858,20 @@
     const result = privateResults.at(-1); if (!result) return;
     selected = null; content.className = 'view private-view'; setHeading('本人情报', '', false);
     const visual = result.type === 'poker' ? `<div class="private-cards">${result.values.map(card => `<div class="private-card">${playing(card)}</div>`).join('')}</div>` : result.type === 'ability' ? `<div class="private-ability">${cardMarkup({ id: 'observed', cardId: result.values[0] }, 0, 1, { display: true })}</div>` : `<div class="private-symbol">${esc(result.values[0])}</div>`;
-    content.innerHTML = `<span class="private-label">${icon('lock')}仅你可见${!result.valid ? ' · 已失效' : ''}</span><h2>${esc(result.label)}</h2>${visual}<p>${!result.valid ? '牌序已经变化，这条预览已失效。' : result.future ? '仅对应当前牌序，牌序变化后失效。' : '这是本次查看时的结果。'}${result.label.startsWith('牌堆顶部') ? '<br>包含可能被烧掉的牌。' : ''}</p><button type="button" class="game-button" id="private-continue">继续选牌 ${icon('cards')}</button>`;
-    $('#private-continue').addEventListener('click', renderHand); renderFooter('private'); requestAnimationFrame(() => $('#private-continue')?.focus({ preventScroll: true }));
+    content.innerHTML = `<span class="private-label">${icon('lock')}仅你可见${!result.valid ? ' · 已失效' : ''}</span><h2>${esc(result.label)}</h2>${visual}${result.valid && result.future ? `<p>${result.label.startsWith('牌堆顶部') ? '含烧牌 · ' : ''}牌序变化后失效</p>` : ''}`;
+    renderFooter('private'); requestAnimationFrame(() => $('#private-continue')?.focus({ preventScroll: true }));
   }
   function openCards() {
     if (busy || Date.now() >= deadline) return;
     closeVersion++; overlay.classList.remove('overlay-out'); if (!isOpen) restoreFocus = document.activeElement;
-    isOpen = true; overlay.hidden = false; table.inert = true; $('#open-cards').setAttribute('aria-expanded', 'true'); dismissNotice();
+    isOpen = true; overlay.hidden = false; table.inert = true; document.body.classList.add('overlay-open'); $('#open-cards').setAttribute('aria-expanded', 'true'); dismissNotice();
     pending ? renderPending() : renderHand(); focusFirstChoice();
   }
   async function closeCards(allowBusy = true) {
     if (allowBusy && busy) return; const version = ++closeVersion;
     isOpen = false; table.inert = false; $('#open-cards').setAttribute('aria-expanded', 'false'); overlay.classList.add('overlay-out');
     if (!reduced.matches) await new Promise(resolve => setTimeout(resolve, 200)); if (isOpen || version !== closeVersion) return;
-    overlay.hidden = true; overlay.classList.remove('overlay-out'); (restoreFocus?.isConnected && !restoreFocus.closest('#card-overlay') ? restoreFocus : $('#open-cards')).focus({ preventScroll: true });
+    overlay.hidden = true; overlay.classList.remove('overlay-out'); document.body.classList.remove('overlay-open'); (restoreFocus?.isConnected && !restoreFocus.closest('#card-overlay') ? restoreFocus : $('#open-cards')).focus({ preventScroll: true });
   }
   let turnStartedAt = Date.now();
   const demoCards = { 'own-hole': '06', player: '13', 'opponent-hole': '18', color: '18', 'ability-material': '24', 'ability-copy': '29', status: '45', cleanse: '46', empty: '15' };
@@ -917,7 +909,7 @@
       $('#table-status').textContent = `本回合已超时${hadPending ? ' · 待选已按第一张处理' : ''} · 切换演示场景可重置`;
     }
   }
-  $('#clock-icon').innerHTML = icon('clock'); $('#close-cards').innerHTML = icon('x'); $('#heading-rule').innerHTML = icon('diamond');
+  $('#clock-icon').innerHTML = icon('clock'); $('#close-cards').innerHTML = icon('x');
   const board = ['Ks', '9h', '7c', '2d'].map(playing).join('') + '<span class="empty-card" aria-label="河牌未发"></span>';
   $('#table-board').innerHTML = board; $('#hud-board').innerHTML = '<span class="hud-board-label">公共牌</span>' + board;
   $('#open-cards').addEventListener('click', openCards); $('#close-cards').addEventListener('click', () => void closeCards());
@@ -928,7 +920,7 @@
     const requests = pending ? [pendingRequest()] : current() ? fixtureChoices(current()) : [];
     if (!setChoice(requests, button.dataset.choiceKey, button.dataset.value)) return;
     const key = button.dataset.choiceKey, value = button.dataset.value;
-    const rails = $$('.ability-options, .effect-options, .opponent-hands', content).map(node => [node.className, node.scrollLeft, node.scrollTop]);
+    const rails = $$('.inspect-details, .ability-options, .opponent-hands, .candidate-stage .hand-row', content).map(node => [node.className, node.scrollLeft, node.scrollTop]);
     pending ? renderPending(false) : renderChoices();
     rails.forEach(([className, left, top]) => { const rail = $(`.${className}`, content); if (rail) { rail.scrollLeft = left; rail.scrollTop = top; } });
     $$('[data-choice-key]', content).find(node => node.dataset.choiceKey === key && node.dataset.value === value)?.focus({ preventScroll: true });
