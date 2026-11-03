@@ -82,18 +82,14 @@
     .quick-fields:not(:has(> :not([hidden]))) { display: none; }
     .quick-fields .quick-note { grid-column: 1 / -1; }
     .list-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-    .task { display: grid; grid-template-columns: 32px minmax(0, 1fr) 94px 32px; column-gap: 12px; align-items: center; min-height: 52px; padding-inline: 16px; }
+    .task { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 52px; padding: 12px 20px; }
     #tasks { padding: 0; margin: 0; list-style: none; }
     .task + .task { border-top: 1px solid var(--border); }
     .task:first-child { border-top-left-radius: var(--radius); border-top-right-radius: var(--radius); }
     .task:last-child { border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
     .task:hover, .task:focus-within { background: color-mix(in oklab, var(--muted) 58%, var(--card)); }
-    .check { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; }
-    .check:hover { background: var(--muted); }
-    .check-mark { display: grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--ring); border-radius: 4px; }
-    .check[aria-checked="true"] .check-mark { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
-    .check-mark .icon { width: 13px; height: 13px; stroke-width: 2.2; }
-    .task-main { min-width: 0; padding-block: 10px; }
+    .task-main { flex: 1 1 10rem; min-width: 0; }
+    .task-actions { display: flex; flex: none; align-items: center; gap: 8px; margin-inline-start: auto; }
     .task-content { display: block; width: 100%; padding: 0; border: 0; border-radius: 4px; background: transparent; text-align: left; }
     .task-title { display: block; overflow-wrap: anywhere; font-weight: 550; }
     .is-done .task-title { color: var(--muted-foreground); text-decoration: line-through; }
@@ -112,7 +108,7 @@
     .remove-image:hover { background: var(--muted); }
     .remove-image .icon { width: 13px; height: 13px; }
     .overdue, .danger { color: var(--destructive); }
-    .picker { position: relative; justify-self: center; }
+    .picker { position: relative; }
     .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 23px; border-radius: 999px; padding: 0 8px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
     .badge[data-priority] { color: var(--color-white); background: var(--priority-fill); }
     .priority-trigger { padding: 0 5px; min-width: 60px; }
@@ -172,8 +168,9 @@
       .topbar { padding: 8px 12px; gap: 6px; }
       .segment { padding-inline: 6px; }
       main { padding: 16px 12px 80px; }
-      .task { grid-template-columns: 28px minmax(0, 1fr) 54px 28px; column-gap: 5px; padding-inline: 7px; }
-      .task .icon-only, .check { width: 28px; }
+      .task { column-gap: 8px; padding-inline: 12px; }
+      .task-actions { gap: 4px; }
+      .task .icon-only { width: 28px; }
       .priority-trigger { min-width: 50px; padding-inline: 0; }
       .metadata { column-gap: 8px; }
       .task-main .thumbnail { width: 50px; height: 38px; }
@@ -515,32 +512,36 @@
       const overdue = !item.doneAt && item.due && new Date(item.due).getTime() < Date.now();
       const remindLabel = item.doneAt && remind && new Date(remind).getTime() > item.doneAt ? "提醒已取消" : remind ? `提醒 ${dateLabel(remind)}` : "";
       const completion = item.doneAt ? "恢复" : "完成";
+      const completionLabel = item.doneAt ? "恢复待办" : "标为完成";
+      const completionAction = item.doneAt ? "恢复为未完成" : "标为完成";
       return `<li class="task ${item.doneAt ? "is-done" : ""}" data-id="${item.id}">
-        <button class="check" type="button" role="checkbox" aria-checked="${Boolean(item.doneAt)}" aria-label="${completion}：${title}" data-action="complete"><span class="check-mark">${item.doneAt ? icon("check") : ""}</span></button>
         <div class="task-main">
-        <button class="task-content" type="button" data-action="detail">
-          <span class="task-title">${title}</span>
-          ${item.note ? `<span class="note-preview">${escaped(item.note)}</span>` : ""}
-          ${due || remindLabel ? `<span class="metadata">
-            ${due ? `<span class="${overdue ? "overdue" : ""}">${icon("calendar")}${overdue ? "已逾期" : "截止"} ${due}</span>` : ""}
-            ${remindLabel ? `<span>${icon("bell")}${remindLabel}</span>` : ""}
-          </span>` : ""}
-        </button>
-        ${imageStrip(item.images, { limit: 3 })}
+          <button class="task-content" type="button" data-action="detail">
+            <span class="task-title">${title}</span>
+            ${item.note ? `<span class="note-preview">${escaped(item.note)}</span>` : ""}
+            ${due || remindLabel ? `<span class="metadata">
+              ${due ? `<span class="${overdue ? "overdue" : ""}">${icon("calendar")}${overdue ? "已逾期" : "截止"} ${due}</span>` : ""}
+              ${remindLabel ? `<span>${icon("bell")}${remindLabel}</span>` : ""}
+            </span>` : ""}
+          </button>
+          ${imageStrip(item.images, { limit: 3 })}
         </div>
-        <div class="picker">
-          <button class="button priority-trigger ${item.priority === "none" ? "unset" : ""}" type="button" data-action="priority" aria-haspopup="menu" aria-expanded="false" aria-label="${title}，优先级${priorities[item.priority]}" title="${item.priority === "none" ? "设置优先级" : "修改优先级"}">${item.priority === "none" ? priorities.none : badge(item.priority)}</button>
-          <div class="menu" role="menu" aria-label="设置优先级" hidden>
-            ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}" data-priority="${priority}">${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
+        <div class="task-actions">
+          <div class="picker">
+            <button class="button priority-trigger ${item.priority === "none" ? "unset" : ""}" type="button" data-action="priority" aria-haspopup="menu" aria-expanded="false" aria-label="${title}，优先级${priorities[item.priority]}" title="${item.priority === "none" ? "设置优先级" : "修改优先级"}">${item.priority === "none" ? priorities.none : badge(item.priority)}</button>
+            <div class="menu" role="menu" aria-label="设置优先级" hidden>
+              ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}" data-priority="${priority}">${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
+            </div>
           </div>
-        </div>
-        <div class="picker">
-          <button class="button icon-only more-trigger" type="button" data-action="more" aria-haspopup="menu" aria-expanded="false" aria-label="${title}的更多操作">${icon("more")}</button>
-          <div class="menu" role="menu" aria-label="更多操作" hidden>
-            <button type="button" role="menuitem" tabindex="-1" data-action="edit">编辑</button>
-            <button type="button" role="menuitem" tabindex="-1" data-action="complete">${completion}</button>
-            <div class="menu-separator" role="separator"></div>
-            <button type="button" role="menuitem" tabindex="-1" class="danger" data-action="delete">删除</button>
+          <button class="button outline" type="button" data-action="complete" aria-label="${completionAction}：${title}">${completionLabel}</button>
+          <div class="picker">
+            <button class="button icon-only more-trigger" type="button" data-action="more" aria-haspopup="menu" aria-expanded="false" aria-label="${title}的更多操作">${icon("more")}</button>
+            <div class="menu" role="menu" aria-label="更多操作" hidden>
+              <button type="button" role="menuitem" tabindex="-1" data-action="edit">编辑</button>
+              <button type="button" role="menuitem" tabindex="-1" data-action="complete">${completion}</button>
+              <div class="menu-separator" role="separator"></div>
+              <button type="button" role="menuitem" tabindex="-1" class="danger" data-action="delete">删除</button>
+            </div>
           </div>
         </div>
       </li>`;
