@@ -251,20 +251,33 @@ describe("Todo visible actions", () => {
     expect(document.querySelector('#todo-title')).toBeNull()
     expect(consumed).toHaveBeenCalledWith("new-target")
   })
-  it("shows two tabs and a completion control, then hides only the successfully completed row", async () => {
+  it("places a labeled completion action after the item content and restores completed items from All", async () => {
     mount(<TodosModule />); await flush()
     expect([...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(["未完成", "全部"])
     expect(document.querySelector('aside,input[type="search"]')).toBeNull()
     const done = deferred<typeof item>(); mocks.setCompleted.mockReturnValueOnce(done.promise)
-    const control = document.querySelector<HTMLButtonElement>('[role="checkbox"]')!
+    const row = document.querySelector("li")!
+    expect(row.querySelector('[role="checkbox"]')).toBeNull()
+    const control = row.querySelector<HTMLButtonElement>('[aria-label="标为完成：报销"]')!
+    expect(control.textContent).toBe("标为完成")
+    expect(row.querySelector('[data-track="todos.open"]')!.compareDocumentPosition(control) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     act(() => control.click()); expect(document.body.textContent).toContain("报销")
+    expect(control.disabled).toBe(true)
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull()
     mocks.list.mockResolvedValue({ items: [], nextOffset: null })
     await act(async () => { done.resolve({ ...item, version: 2, completedAt: item.createdAt }); await done.promise })
-    await flush(); expect(document.querySelector('[role="checkbox"]')).toBeNull()
+    await flush(); expect(document.querySelector('[aria-label="标为完成：报销"]')).toBeNull()
     expect(mocks.setCompleted).toHaveBeenCalledTimes(1)
     const completed = { ...item, completedAt: item.createdAt, version: 2 }
     mocks.list.mockResolvedValue({ items: [completed], nextOffset: null })
     act(() => document.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))); await flush()
-    expect(document.querySelector('[role="checkbox"]')?.getAttribute("aria-label")).toBe("恢复 报销")
+    const restore = document.querySelector<HTMLButtonElement>('[aria-label="恢复为未完成：报销"]')!
+    expect(restore.textContent).toBe("恢复待办")
+    const restored = { ...item, version: 3 }
+    mocks.setCompleted.mockResolvedValueOnce(restored)
+    mocks.list.mockResolvedValue({ items: [restored], nextOffset: null })
+    act(() => restore.click()); await flush()
+    expect(mocks.setCompleted).toHaveBeenLastCalledWith(item.id, expect.objectContaining({ completed: false, expectedVersion: 2 }))
+    expect(document.querySelector('[aria-label="标为完成：报销"]')).not.toBeNull()
   })
 })
