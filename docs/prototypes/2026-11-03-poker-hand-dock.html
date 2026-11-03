@@ -188,23 +188,33 @@
       font-family: var(--system-font); background-color: var(--stage-deep);
     }
     .prototype-stage::backdrop { background: transparent; }
+    .prototype-stage .overlay-layout { grid-template-rows: auto minmax(0, 1fr); }
     .prototype-stage .stage-content {
-      min-width: 0; min-height: 0; display: grid; align-content: center; justify-items: center; gap: 20px;
+      min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center;
       padding: 12px 14px; overflow: auto; text-align: center;
     }
+    .prototype-stage .stage-task {
+      width: min(920px, 100%); flex: none; display: grid; justify-items: center; gap: 12px; margin-block: auto;
+    }
+    .prototype-stage .stage-heading { padding: 0; }
     .prototype-stage .stage-options {
       --cw: min(140px, 16vw, 31dvh); display: flex; justify-content: center; flex-wrap: wrap; gap: clamp(8px, 2vw, 22px);
-      width: min(920px, 100%); padding: 6px;
+      width: 100%; padding: 6px;
     }
     .prototype-stage .stage-options .poker-candidate { width: var(--cw); flex: none; }
     .prototype-stage .stage-options .target-choice { flex: 0 1 auto; min-width: min(120px, 100%); }
     .prototype-stage .poker-candidate[aria-pressed="true"],
     .prototype-stage button:focus-visible { outline: 2px solid var(--brass-light); outline-offset: 4px; }
     .prototype-stage .stage-context { color: var(--stage-muted); font-size: .875rem; }
-    .prototype-stage .intel-list { width: min(520px, 100%); text-align: left; }
-    .prototype-stage .intel-values { --cw: min(108px, 19vw, 25dvh); }
-    .prototype-stage .stage-footer[data-has-primary="false"] .footer-actions { margin-left: auto; }
+    .prototype-stage .intel-list { width: min(520px, 100%); justify-items: center; }
+    .prototype-stage .intel-values { --cw: min(108px, 19vw, 25dvh); justify-content: center; }
+    .prototype-stage .stage-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px; }
+    .prototype-stage .stage-controls .game-button { min-width: 0; }
     .prototype-stage .stage-error { color: var(--brass-light); }
+    @media (max-height: 500px) {
+      .prototype-stage .stage-content { padding-block: 8px; }
+      .prototype-stage .stage-task { gap: 8px; }
+    }
 
     .web-popover {
       position: fixed; inset: auto; z-index: 9; max-width: calc(100vw - 1rem); max-height: min(55dvh, 30rem);
@@ -1339,18 +1349,19 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     }
     const payment = selecting ? (stage.amount ? '完成后支付 ' + num(stage.amount) + ' 筹码' : '无需筹码') :
       (stage.amount ? '已支付 ' + num(stage.amount) + ' 筹码' : '');
+    const done = '<button type="button" class="game-button" data-stage-close data-focus="stage-confirm">完成</button>';
+    const cancel = '<button type="button" class="text-action" data-stage-close>放弃使用</button>';
     const board = Array.from({ length: 5 }, (_, i) => tableCard(state.board[i])).join('');
     panel.innerHTML = '<div class="overlay-layout"><header class="stage-top"><div class="stage-hud">' +
       '<div class="round-context"><span>第 1 手</span><strong>' + streets[state.street] + '</strong></div>' +
       '<div class="hud-board" data-card-size="xs" aria-label="公共牌"><span class="hud-board-label">公共牌</span>' + board +
       '</div><div class="hud-right"><span class="time">' + icon('clock') + '5:00</span>' +
       '<button type="button" class="close-overlay" data-stage-close data-focus="stage-close" aria-label="关闭卡牌">' + icon('close') +
-      '</button></div></div><div class="stage-heading"><h2 id="stage-title">' + title + '</h2></div></header>' +
-      '<div class="stage-content">' + content + '</div><footer class="stage-footer" data-has-primary="' + Boolean(confirm) +
-      '"><div class="footer-meta"><p class="payment">' + payment + '</p>' +
+      '</button></div></div></header><div class="stage-content"><div class="stage-task">' +
+      '<div class="stage-heading"><h2 id="stage-title" data-focus="stage-heading" tabindex="-1">' + title + '</h2></div>' + content +
       (stage.error ? '<p class="stage-error" role="alert">' + stage.error + '</p>' : '') +
-      '</div><div class="footer-actions"><button type="button" class="text-action" data-stage-close>' +
-      (selecting ? '放弃使用' : '完成') + '</button>' + confirm + '</div></footer></div>';
+      '<div class="stage-controls">' + (payment ? '<p class="payment">' + payment + '</p>' : '') +
+      (selecting ? confirm + cancel : done) + '</div></div></div></div>';
     if (!panel.open) panel.showModal();
     if (focus) focusAt(focus);
   }
@@ -1388,7 +1399,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     }
     announce(cards[key].name + '已使用');
     render(showResult ? null : 'bet-call');
-    if (showResult) renderStage('stage-close');
+    if (showResult) renderStage('stage-confirm');
   }
 
   function resolveStage() {
@@ -1424,7 +1435,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     stage = { id, key, amount: quote(state, key), target: null };
     if (cards[key].target) {
       stage.mode = 'target';
-      renderStage('stage-close');
+      renderStage('stage-heading');
     } else {
       resolveStage();
     }
@@ -1708,7 +1719,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       systemPanel.close();
       hidePreview();
       stage = { mode: 'intel' };
-      return renderStage('stage-close');
+      return renderStage('stage-confirm');
     }
     if (target?.hasAttribute('data-match-tab')) {
       matchTab = target.dataset.matchTab;
