@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client"
 import { afterEach, expect, it, vi } from "vitest"
 import { HumanControls } from "../components/HumanControls"
 import { table } from "./settlement-fixture"
+import { cardTable } from "./card-stage-fixture"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 const api = vi.hoisted(() => ({ start: vi.fn(), ready: vi.fn(), control: vi.fn() }))
 vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: { room: { start: api.start }, seat: { ready: api.ready }, control: { set: api.control } } }) }))
@@ -27,7 +28,8 @@ it("底部无需打开结算即可准备，携带当前手牌版本；准备后�
   await screen.update({ ...table, seats: table.seats.map(s => s.isMe ? { ...s, readyForNextHand: true } : s) })
   expect(document.body.textContent).toContain("已准备 1 / 2")
   expect(document.body.textContent).toContain("等待 对手")
-  expect(button("已准备")!.disabled).toBe(true)
+  expect(document.querySelector('[role="status"]')?.textContent).toContain("你已准备")
+  expect(button("已准备")).toBeUndefined()
   await act(async () => screen.root.unmount())
 })
 it("底部接回后提示重新准备，身份变化不沿用提示，旁观和历史座位不提供准备", async () => {
@@ -75,7 +77,7 @@ it("首局房主不显示准备，其他玩家准备后由房主开始", async (
   expect(button("准备")).toBeUndefined()
   expect(api.ready).not.toHaveBeenCalled()
   expect(api.start).not.toHaveBeenCalled()
-  expect(button("开始")!.disabled).toBe(true)
+  expect(button("开始")).toBeUndefined()
   const allReady = { ...first, canStart: true, seats: first.seats.map(s => ({ ...s, readyForNextHand: true })) }
   await screen.update(allReady)
   expect(document.body.textContent).toContain("等待房主开始")
@@ -102,4 +104,41 @@ it("首局非房主仍须准备，提交null手牌且没有开始入口", async 
   expect(api.ready).toHaveBeenCalledExactlyOnceWith({ roomCode: "1234", handId: null, controlVersion: 3 })
   expect(button("开始")).toBeUndefined()
   await act(async () => screen.root.unmount())
+})
+
+it("卡牌房结算仅显示准备进度和可用操作，开始下一手才恢复玩法底栏", async () => {
+  const cards = { ...cardTable.cards!, version: "cards-v2" as const }
+  const settled = { ...table, cards, isRoomOwner: true, canStart: false }
+  const screen = await render(settled)
+  try {
+    const controls = document.querySelector(".poker-human-controls")!
+    expect(controls.querySelector('[aria-label="下一手操作"] [role="status"]')?.textContent).toContain("已准备 0 / 2")
+    expect(controls.querySelector(".poker-hand-dock-slot")).toBeNull()
+    expect(controls.querySelector(".poker-action-dock")).toBeNull()
+    expect(button("准备下一手")).toBeDefined()
+    expect(button("开始")).toBeUndefined()
+
+    await screen.update({ ...settled, canStart: true, seats: settled.seats.map(seat => ({ ...seat, readyForNextHand: true })) })
+    expect(button("准备下一手")).toBeUndefined()
+    expect(button("开始")?.disabled).toBe(false)
+    expect(controls.querySelector(".poker-hand-dock-slot")).toBeNull()
+
+    await screen.update({ ...cardTable, cards })
+    expect(controls.querySelector(".poker-hand-dock-slot")).not.toBeNull()
+    expect(controls.querySelector(".poker-action-dock")).not.toBeNull()
+
+    for (const changes of [
+      { status: "paused", pauseReason: "user" },
+      { status: "closed" },
+      { street: "showdown" },
+      { seats: cardTable.seats.map(seat => seat.isMe ? { ...seat, status: "folded" } : seat) },
+      { seats: cardTable.seats.map(seat => seat.isMe ? { ...seat, status: "allin" } : seat) },
+      { seats: cardTable.seats.map(seat => seat.isMe ? { ...seat, inCurrentHand: false } : seat) },
+    ] satisfies Partial<PokerTableView>[]) {
+      await screen.update({ ...cardTable, cards, ...changes })
+      expect(controls.querySelector(".poker-hand-dock-slot, .poker-action-dock"), JSON.stringify(changes)).toBeNull()
+    }
+  } finally {
+    await act(async () => screen.root.unmount())
+  }
 })

@@ -1,6 +1,15 @@
 import type { PokerTableView } from "@synapse/shared/game-contracts"
 import { waitingForPlayers } from "./room-entry"
 
+export function hasPokerPlayControls(table: PokerTableView, perspective: "owner" | "public") {
+  if (perspective !== "owner" || table.status !== "running" || table.awaitingReady || !table.handId ||
+    !["preflop", "flop", "turn", "river"].includes(table.street ?? "")) return false
+  const mine = table.seats.find(seat => seat.seatNo === table.mySeatNo)
+  return !!mine && !mine.isHistorical && mine.inCurrentHand !== false &&
+    !["folded", "allin", "sitting_out", "waiting", "ready", "left"].includes(mine.status) &&
+    (table.controller ?? mine.controller) === "human"
+}
+
 export function betPaymentPreview(table: PokerTableView, nominalAmount: number) {
   const nominal = Number.isSafeInteger(nominalAmount) && nominalAmount > 0 ? nominalAmount : 0
   const waivedAmount = Math.min(nominal, Math.max(0, table.betWaiverCap ?? 0))

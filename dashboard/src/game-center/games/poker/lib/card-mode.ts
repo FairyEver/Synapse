@@ -7,6 +7,6 @@ export function isPokerCardMode(table: { ruleOptions?: PokerRuleOptions; rules?:
 export function usesPokerHandDock(table: PokerTableView): boolean {
   return (table.cards?.version ?? table.rules?.cardRulesVersion) === "cards-v2"
 }
-export function hasPokerHandDock(table: PokerTableView, perspective: "owner" | "public"): boolean {
+export function hasPokerCardFlow(table: PokerTableView, perspective: "owner" | "public"): boolean {
   return usesPokerHandDock(table) && perspective === "owner" && table.mySeatNo !== null
 }

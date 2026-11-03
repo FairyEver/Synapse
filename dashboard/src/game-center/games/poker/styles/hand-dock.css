@@ -3,8 +3,6 @@
   --hand-bleed: 1.25rem;
   --hand-dock-row-gap: .5rem;
   position: relative;
-  background: var(--game-bg, var(--background));
-  border-top: 0;
   padding-block-start: .25rem;
 }
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-human-controls {

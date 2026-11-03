@@ -273,7 +273,7 @@ it("少量详情与左卡在中间区域居中，能力候选完整规则只在�
     expect(Math.abs(middle(card) - middle(details))).toBeLessThan(3)
   } finally { await screen.unmount() }
 })
-it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手牌变化保持桌沿与按钮位置，矮屏预览避开手牌", async (width, height) => {
+it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手牌变化保持桌沿与按钮位置，结算底栏收回空白", async (width, height) => {
   await page.viewport(width, height)
   const hand = cardTable.cards!.ownHand!
   const fixture = (ownHand: typeof hand, changes: Partial<PokerTableView> = {}) => <div className="h-dvh">
@@ -285,6 +285,7 @@ it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手�
     const nextLayout = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
     await nextLayout()
     const anchor = document.querySelector(".poker-controls-anchor")!
+    const main = document.querySelector(".poker-table-main")!
     const actions = anchor.querySelector(".poker-action-buttons")!
     const presets = anchor.querySelector(".poker-bet-presets")!
     const card = anchor.querySelector(".poker-hand-dock-card")!
@@ -302,6 +303,7 @@ it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手�
     expect(Math.abs(gapBelowCards - gapBelowPresets)).toBeLessThan(1)
     expect(bounds.width).toBeLessThan(anchor.getBoundingClientRect().width)
     const board = viewport.getBoundingClientRect().toJSON()
+    const mainHeight = main.getBoundingClientRect().height
     const railBounds = rail.getBoundingClientRect().toJSON()
     const expectStableLayout = async () => {
       await nextLayout()
@@ -338,6 +340,23 @@ it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手�
       expect(actions.textContent).toContain("跟注 49,990")
       expect(actions.textContent).toContain("实付 49,988")
       await expectStableLayout()
+    }
+    const fullRoom = { ...settled, maxSeats: settled.seats.length, isRoomOwner: true, canStart: false }
+    await screen.rerender(fixture([], fullRoom))
+    await page.getByRole("button", { name: "返回牌桌", exact: true }).click()
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument()
+    await expect.element(page.getByRole("button", { name: "准备下一手", exact: true })).toBeVisible()
+    await nextLayout()
+    expect(anchor.querySelector(".poker-hand-dock-slot, .poker-action-dock")).toBeNull()
+    expect(anchor.getBoundingClientRect().height).toBeLessThan(80)
+    expect(main.getBoundingClientRect().height).toBeGreaterThan(mainHeight)
+    expect(getComputedStyle(anchor).backgroundColor).toBe(getComputedStyle(anchor.closest(".poker-table")!).backgroundColor)
+    if (width === 320) {
+      await screen.rerender(fixture([], { ...fullRoom, maxSeats: fullRoom.maxSeats + 1 }))
+      const invite = page.getByRole("button", { name: "邀请玩家", exact: true })
+      await expect.element(invite).toBeVisible()
+      fits(invite.element(), "邀请玩家")
+      expect(main.getBoundingClientRect().height).toBeGreaterThan(mainHeight)
     }
   } finally { await screen.unmount() }
 })

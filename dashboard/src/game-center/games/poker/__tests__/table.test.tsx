@@ -67,7 +67,7 @@ describe("牌桌", () => {
     document.body.append(host)
     const cards = { ...cardTable.cards!, version: "cards-v2" as const }
     const render = (ownHand = cards.ownHand) => act(async () => root.render(
-      <Table table={{ ...state, hole: state.seats[0].hole, cards: { ...cards, ownHand } }} perspective="owner" onPerspective={() => {}} onBack={() => {}} />,
+      <Table table={{ ...state, controller: "human", hole: state.seats[0].hole, cards: { ...cards, ownHand } }} perspective="owner" onPerspective={() => {}} onBack={() => {}} />,
     ))
     try {
       await render()

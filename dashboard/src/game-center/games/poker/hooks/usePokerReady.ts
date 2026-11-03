@@ -52,6 +52,6 @@ export function usePokerReady(table: PokerTableView, perspective: "owner" | "pub
     try { await onRefresh() }
     catch (cause) { if (mounted.current && current.current === commandScope) setError(cause instanceof Error ? cause.message : "刷新牌桌失败") }
   }
-  return { busy, error, prepared, eligible: !!mine, showStart, canStart, start: () => submit("start"), canReady, canTakeover, controller, summary: progress.summary, notice: reclaimed && canReady && !prepared ? "已接管，请重新准备" : null, ready: () => submit("ready"), takeover: () => submit("takeover"), refresh }
+  return { busy, error, prepared, eligible: !!mine, canStart, start: () => submit("start"), canReady, canTakeover, controller, summary: progress.summary, notice: reclaimed && canReady && !prepared ? "已接管，请重新准备" : null, ready: () => submit("ready"), takeover: () => submit("takeover"), refresh }
 }
 export type PokerReadyControls = ReturnType<typeof usePokerReady>

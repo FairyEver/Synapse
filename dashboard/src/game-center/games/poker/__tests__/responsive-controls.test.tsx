@@ -223,6 +223,7 @@ describe("统一底部操作与按需侧栏", () => {
       await render({ ...value, actionOnSeat: 1, actionSeq: 4, legalActions: [],
         seats: value.seats.map(seat => seat.isMe ? { ...seat, status: "sitting_out" } : seat) })
       expect(host.querySelector('[aria-label="恢复牌桌操作"] button')?.textContent).toBe("回到牌桌")
+      expect(host.querySelector(".poker-hand-dock-slot, .poker-action-dock")).toBeNull()
 
       await render({ ...value, actionSeq: 5, legalActions: ["fold", "call"] })
       expect(button(host, "弃牌").disabled).toBe(false)
@@ -233,15 +234,16 @@ describe("统一底部操作与按需侧栏", () => {
       await render({ ...value, actionSeq: 6 })
       expect(button(host, "自定义").disabled).toBe(false)
       expect(host.querySelector('input[type="number"]')).toBeNull()
-      expect(status?.querySelector(".sr-only")?.textContent).toBe("轮到你")
+      const restoredStatus = host.querySelector(".poker-action-dock-status")
+      expect(restoredStatus?.querySelector(".sr-only")?.textContent).toBe("轮到你")
 
       let finish!: (result: { ok: true }) => void
       api.act.mockReturnValueOnce(new Promise<{ ok: true }>(resolve => { finish = resolve }))
       await click(host, "弃牌")
-      expect(status?.textContent).toBe("正在提交…")
-      expect(actions.every(action => action.disabled)).toBe(true)
+      expect(restoredStatus?.textContent).toBe("正在提交…")
+      expect([...host.querySelectorAll<HTMLButtonElement>(".poker-action-buttons button")].every(action => action.disabled)).toBe(true)
       await act(async () => finish({ ok: true }))
-      expect(status?.querySelector(".sr-only")?.textContent).toBe("轮到你")
+      expect(restoredStatus?.querySelector(".sr-only")?.textContent).toBe("轮到你")
     } finally {
       await act(async () => root.unmount())
     }

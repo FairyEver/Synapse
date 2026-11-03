@@ -5,7 +5,8 @@ import { Button } from "@heroui/react"
 import { Card } from "./Card"
 import { Seat, EmptySeat } from "./Seat"
 import { PokerLogRail } from "./PokerLogRail"
-import { hasPokerHandDock, usesPokerHandDock } from "../lib/card-mode"
+import { usesPokerHandDock } from "../lib/card-mode"
+import { hasPokerPlayControls } from "../lib/action-view"
 import { PokerMatchOverviewDialog } from "./PokerMatchOverviewDialog"
 import { HumanControls, type PokerControlPanel } from "./HumanControls"
 import { PokerMembersPanel } from "./PokerMembersPanel"
@@ -71,7 +72,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const cash = usePokerChips(view, `${identityKey}:${perspective}:${table.controlVersion}:${fit.scene.mode}:${fit.scale}`)
   const presentedReady = cash.blocked ? {...nextHand,busy:true} : nextHand
   const cardDock = usesPokerHandDock(view)
-  const showHandDock = hasPokerHandDock(view, perspective)
+  const showPlayControls = hasPokerPlayControls(view, perspective)
   const showRoll = !cardDock && (!!view.reserve || !!view.roll?.enabled || !!view.ruleOptions?.roll || chipValue(cash.funds.roll) > 0)
   const dealt = useDealAnimation(table.handId, table.seats.length + table.board.length, 0, table)
   useLayoutEffect(() => {
@@ -118,7 +119,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const closePlayerInfo = () => { const trigger = inspectedTrigger.current; setPanel(null); setInspected(null); requestAnimationFrame(() => { if (trigger?.isConnected) trigger.focus() }) }
   const closeRollFees = () => { setPanel(null); requestAnimationFrame(() => rollFeesTrigger.current?.focus()) }
   const closePotSources = () => { setPanel(null); requestAnimationFrame(() => potSourcesTrigger.current?.focus()) }
-  return <section ref={surface} className="poker-table poker-immersive" data-control-layout="bottom" data-hand-dock={showHandDock} data-entry-controls={view.mySeatNo === null || view.status !== "running"} data-compact-controls={compact} aria-label={`牌桌 ${table.roomCode}`}>
+  return <section ref={surface} className="poker-table poker-immersive" data-control-layout="bottom" data-hand-dock={cardDock && showPlayControls} data-play-controls={showPlayControls} data-compact-controls={compact} aria-label={`牌桌 ${table.roomCode}`}>
     <div className="poker-table-layout">
         <div className="poker-edge-controls bg-surface font-sans text-foreground scheme-light">
           <Button type="button" variant="tertiary" isIconOnly={compact} aria-label="返回房间" onPress={onBack}><ArrowLeft aria-hidden="true" />{!compact && "返回房间"}</Button>

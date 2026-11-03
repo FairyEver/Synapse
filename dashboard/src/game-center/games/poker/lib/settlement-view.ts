@@ -13,8 +13,10 @@ export function readinessView(table: PokerTableView) {
   const mine = seats.find(s => s.isMe && s.seatNo === table.mySeatNo)
   const ready = seats.filter(s => s.readyForNextHand).length
   const waiting = seats.filter(s => !s.readyForNextHand)
-  const names = waiting.slice(0, 2).map(s => s.isMe ? "你" : s.displayName).join("、")
-  const waitingLabel = waiting.length ? `等待 ${names}${waiting.length > 2 ? ` 等 ${waiting.length} 人` : ""}` : seats.length < 2 ? "等待玩家入座" : "等待房主开始"
+  const selfLabel = (table.controller ?? mine?.controller) === "ai" ? "你的 AI" : "你"
+  const names = waiting.slice(0, 2).map(s => s.isMe ? selfLabel : s.displayName).join("、")
+  const enoughPlayers = seats.length >= 2 && seats.some(seat => seat.participantKind !== "bot")
+  const waitingLabel = waiting.length ? `等待 ${names}${waiting.length > 2 ? ` 等 ${waiting.length} 人` : ""}` : enoughPlayers ? "等待房主开始" : "等待玩家入座"
   return { seats, mine, ready, summary: `已准备 ${ready} / ${seats.length} · ${waitingLabel}` }
 }
 export const invested = (seat: PokerSettlementView["seats"][number]) => Math.max(0, seat.payout - (seat.pokerDelta ?? (seat.delta + (seat.rollPaid ?? 0) - (seat.rollReceived ?? 0))))

@@ -1,9 +1,13 @@
 .poker-immersive[data-control-layout] .poker-table-layout:has(> .poker-log-rail) {
   grid-template-columns: minmax(0, 1fr) 3rem;
 }
-.poker-immersive[data-control-layout] .poker-table-layout:has(> .poker-log-rail) .poker-edge-controls,
+.poker-immersive[data-control-layout] .poker-table-layout:has(> .poker-log-rail) .poker-edge-controls {
+  grid-column: 1 / -1;
+}
 .poker-immersive[data-control-layout] .poker-table-layout:has(> .poker-log-rail) .poker-controls-anchor {
   grid-column: 1 / -1;
+  background: var(--game-bg, var(--background));
+  border-top: 0;
 }
 .poker-log-rail {
   grid-area: 2 / 2;

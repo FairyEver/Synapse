@@ -19,6 +19,7 @@ type Props = {
   table: PokerTableView
   controls: ReturnType<typeof usePokerCards>
   disabled: boolean
+  showHand?: boolean
   frames?: readonly PokerResolutionFrameView[]
   dropArea?: RefObject<HTMLDivElement | null>
   onActivate: () => void
@@ -27,7 +28,7 @@ type Props = {
   onIntelClose?: () => void
 }
 
-export function PokerCardDockFlow({ table, controls, disabled, frames = [], dropArea, onActivate, onRefresh, intelOpen = false, onIntelClose }: Props) {
+export function PokerCardDockFlow({ table, controls, disabled, showHand = true, frames = [], dropArea, onActivate, onRefresh, intelOpen = false, onIntelClose }: Props) {
   const cards = table.cards
   const pending = cards?.pending?.origin === "card" ? cards.pending : null
   const [selected, setSelected] = useState<{ instanceId: string; quote: number } | null>(null)
@@ -108,9 +109,9 @@ export function PokerCardDockFlow({ table, controls, disabled, frames = [], drop
   }
 
   return <>
-    <div className="poker-hand-dock-slot">
+    {showHand && <div className="poker-hand-dock-slot">
       <PokerHandDock table={table} canPlay={!open && !locked} dropArea={dropArea} onPlay={activate} />
-    </div>
+    </div>}
     {!open && controls.error && <p className="poker-card-dock-error" role="alert">{controls.error}</p>}
     {open && cards && createPortal(<dialog ref={dialog} className="poker-card-stage card-overlay poker-card-dock-stage" aria-labelledby={heading} onCancel={event => { event.preventDefault(); if (dismissible) reset() }}>
       <div className="poker-card-dock-stage-layout">
