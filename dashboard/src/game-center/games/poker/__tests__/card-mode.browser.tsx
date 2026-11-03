@@ -273,7 +273,7 @@ it("少量详情与左卡在中间区域居中，能力候选完整规则只在�
     expect(Math.abs(middle(card) - middle(details))).toBeLessThan(3)
   } finally { await screen.unmount() }
 })
-it.each([[1280, 800], [320, 568]])("%s×%s 只有主行动按钮在白底内，能力牌增减不移动底栏", async (width, height) => {
+it.each([[1280, 800], [320, 568]])("%s×%s 底部沿用牌桌背景，能力牌增减不移动行动按钮", async (width, height) => {
   await page.viewport(width, height)
   const hand = cardTable.cards!.ownHand!
   const fixture = (ownHand: typeof hand) => <div className="h-dvh">
@@ -287,8 +287,8 @@ it.each([[1280, 800], [320, 568]])("%s×%s 只有主行动按钮在白底内，�
     const card = anchor.querySelector(".poker-hand-dock-card")!
     const viewport = document.querySelector(".poker-canvas-viewport")!
     const bounds = actions.getBoundingClientRect()
-    expect(getComputedStyle(actions).backgroundColor).toBe(getComputedStyle(document.querySelector(".poker-edge-controls")!).backgroundColor)
-    expect(getComputedStyle(anchor).backgroundColor).not.toBe(getComputedStyle(actions).backgroundColor)
+    expect(getComputedStyle(actions).backgroundColor).toBe("rgba(0, 0, 0, 0)")
+    expect(getComputedStyle(anchor).backgroundColor).toBe(getComputedStyle(anchor.closest(".poker-table")!).backgroundColor)
     expect(presets.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top)
     expect(card.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top)
     expect(bounds.width).toBeLessThan(anchor.getBoundingClientRect().width)
