@@ -27,6 +27,7 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
   const [selected, setSelected] = useState(""), [rawValues, setValues] = useState<CardSelectionValues>({}), [candidate, setCandidate] = useState("")
   const [view, setView] = useState<View>("hand"), [page, setPage] = useState(0)
   const stage = useRef<HTMLDivElement>(null), heading = useId()
+  const playButton = useRef<HTMLButtonElement>(null)
   const cards = table.cards, pending = cards?.pending, hand = cards?.ownHand ?? [], card = hand.find(item => item.instanceId === selected)
   const visible = open && !!cards
   const definition = card && cards?.definitions?.[card.cardId], selections = reconcileCardSelections(card?.choices ?? [], rawValues)
@@ -38,12 +39,13 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
   const candidateInfo = pending?.kind === "ability" && validCandidate ? pending.candidateCards?.[Number(candidate)] : undefined
   const information = effectiveView === "intel" || effectiveView === "statuses"
   const recovery = controls.storageError || controls.uncertain
-  const hasPrimary = recovery || !information && (!!pending || inspect)
-  const returnLabel = information && pending ? "返回选牌" : information || inspect ? "返回手牌" : "收起卡牌"
+  const hasFooterPrimary = !inspect && (recovery || !information && !!pending)
+  const returnLabel = information && pending ? "返回选牌" : information ? "返回手牌" : "收起卡牌"
   const title = information ? effectiveView === "intel" ? "本人情报" : "牌局状态" : pending ? "选择一张" : inspect ? definition.name : "你的手牌"
   const select = (value: string) => { setSelected(value); setValues({}); setView("inspect") }
   const confirm = () => { if (card && !blocked && card.available && validCardSelections(card, selections)) void controls.play(cardPlayInput(table, card, selections)) }
   const close = () => onOpenChange(false)
+  const recoveryButton = recovery ? <button type="button" className="game-button" disabled={controls.busy} onClick={() => void controls.retry()}>{controls.busy ? "正在核对…" : controls.storageError ? "重试恢复记录" : "核对原用牌请求"}</button> : null
   useEffect(() => {
     if (JSON.stringify(rawValues) !== JSON.stringify(selections)) setValues(selections)
   }, [card?.choices, rawValues])
@@ -52,13 +54,24 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
     if (!visible) return
     // Focus can stay outside the stage when it opens.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return
+      if (event.defaultPrevented || event.isComposing) return
+      if (event.key === "Escape") {
+        event.preventDefault()
+        if (event.repeat) return
+        if (inspect) setView("hand")
+        else onOpenChange(false)
+        return
+      }
+      const button = playButton.current
+      if (event.key !== "Enter" || !button || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      // Keep native activation for other actions and targets that are still unselected.
+      if (event.target instanceof HTMLButtonElement && event.target !== button && event.target.getAttribute("aria-pressed") !== "true") return
       event.preventDefault()
-      onOpenChange(false)
+      if (!event.repeat) button.click()
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [visible, onOpenChange])
+  }, [visible, inspect, onOpenChange])
   // Block the table behind the stage without moving or restoring pointer focus.
   useLayoutEffect(() => {
     if (!open || !stage.current) return
@@ -93,6 +106,10 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
             <p className="full-description">{definition.description}</p>
             {!card.available && <p className="card-unavailable" role="status">{cardUnavailableReason(card.reason)}</p>}
             <PokerCardSelection table={table} definition={definition} choices={card.choices} values={selections} onChange={setValues} disabled={!!blocked || !card.available} />
+            <div className="inspect-actions">
+              <button type="button" className="text-action" aria-label="返回手牌" aria-keyshortcuts="Escape" onClick={() => setView("hand")}><ArrowLeft aria-hidden="true" />返回</button>
+              {recoveryButton ?? <button ref={playButton} type="button" className="game-button" aria-keyshortcuts="Enter" disabled={!!blocked || !card.available || !validCardSelections(card, selections)} onClick={confirm}>{controls.busy ? "正在施放…" : "使用卡牌"}</button>}
+            </div>
           </div></div>
         </div></main>
           : <main className="view"><div className="hand-stage">
@@ -105,7 +122,7 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
               })}</div>}
               {pageCount > 1 && <><button type="button" className="page-arrow previous" aria-label="上一组卡牌" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft /></button><button type="button" className="page-arrow next" aria-label="下一组卡牌" disabled={currentPage === pageCount - 1} onClick={() => setPage(currentPage + 1)}><ChevronRight /></button></>}
             </div></main>}
-      <footer className="stage-footer" data-card-stage-content="" data-mode={inspect ? "inspect" : information ? "information" : pending ? "candidate" : "hand"} data-has-primary={hasPrimary}>
+      <footer className="stage-footer" data-card-stage-content="" data-mode={inspect ? "inspect" : information ? "information" : pending ? "candidate" : "hand"} data-has-primary={hasFooterPrimary}>
         <div className="footer-meta">
           {controls.error && <p role="alert" className="stage-error" title={controls.error}>{controls.error}</p>}
           {controls.uncertain && <p role="status" className="stage-error">结果待核对，保留原请求。</p>}
@@ -115,12 +132,10 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
               <nav className="stage-links" aria-label="卡牌信息"><button type="button" className="text-action" aria-label="本人情报" onClick={() => setView("intel")}><Eye aria-hidden="true" />情报{cards.privateResults?.filter(result => result.valid).length ? <b>{cards.privateResults.filter(result => result.valid).length}</b> : null}</button><button type="button" className="text-action" aria-label="牌局状态" onClick={() => setView("statuses")}><Shield aria-hidden="true" />状态</button></nav>
             </div>}
         </div>
-        <div className="footer-actions">
-          <button type="button" className="text-action" aria-label={returnLabel} onClick={information || inspect ? () => setView("hand") : close}>{information || inspect ? <><ArrowLeft aria-hidden="true" />返回</> : "收起"}</button>
-          {recovery ? <button type="button" className="game-button" disabled={controls.busy} onClick={() => void controls.retry()}>{controls.busy ? "正在核对…" : controls.storageError ? "重试恢复记录" : "核对原用牌请求"}</button>
-            : pending && !information ? <button type="button" className="game-button" disabled={!!blocked || !validCandidate || pending.origin !== "card"} onClick={() => void controls.choose(Number(candidate))}>{controls.busy ? "正在确认…" : "选择这张牌"}</button>
-              : inspect && <button type="button" className="game-button" disabled={!!blocked || !card.available || !validCardSelections(card, selections)} onClick={confirm}>{controls.busy ? "正在施放…" : "使用卡牌"}</button>}
-        </div>
+        {!inspect && <div className="footer-actions">
+          <button type="button" className="text-action" aria-label={returnLabel} onClick={information ? () => setView("hand") : close}>{information ? <><ArrowLeft aria-hidden="true" />返回</> : "收起"}</button>
+          {recoveryButton ?? (pending && !information && <button type="button" className="game-button" disabled={!!blocked || !validCandidate || pending.origin !== "card"} onClick={() => void controls.choose(Number(candidate))}>{controls.busy ? "正在确认…" : "选择这张牌"}</button>)}
+        </div>}
       </footer>
     </div>
   </div>

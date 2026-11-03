@@ -21,6 +21,9 @@ async function mount(content: React.ReactNode) { const host = document.createEle
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.trim() === label || b.getAttribute("aria-label") === label)!
 async function click(label: string) { await act(async () => button(label).click()) }
 async function openCard() { await click("卡牌"); await act(async () => document.querySelector<HTMLButtonElement>('button[data-held-card="card-instance"]')!.click()) }
+async function pressKey(key: string, target: EventTarget = document.body, repeat = false) {
+  await act(async () => target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, repeat })))
+}
 it("打开及选中不施放，选择合法目标后明确确认才付款，携带报价版本", async () => {
   await mount(<HumanControls table={cardTable} perspective="owner" identityKey="open-card" onRefresh={vi.fn()} />)
   await openCard(); expect(api.play).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("实付 2 筹码")
@@ -30,6 +33,37 @@ it("打开及选中不施放，选择合法目标后明确确认才付款，携�
   await click("使用卡牌")
   expect(api.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instanceId: "card-instance", selections: { hole: "1", player: "1" }, expectedPaymentVersion: "card-quote", expectedActionSeq: 3, controlVersion: 2 }))
   expect(api.play.mock.calls[0][0]).not.toHaveProperty("caller")
+})
+it("卡牌详情按 Esc 返回手牌，长按不关闭，松开再按才收起", async () => {
+  await mount(<HumanControls table={cardTable} perspective="owner" identityKey="card-detail-escape" onRefresh={vi.fn()} />)
+  await openCard()
+  await pressKey("Escape")
+  expect(button("使用卡牌")).toBeUndefined()
+  expect(document.querySelector('button[data-held-card="card-instance"]')).not.toBeNull()
+  await pressKey("Escape", document.body, true)
+  expect(document.querySelector(".poker-card-stage")).not.toBeNull()
+  await pressKey("Escape")
+  expect(document.querySelector(".poker-card-stage")).toBeNull()
+  expect(api.play).not.toHaveBeenCalled()
+})
+it("详情按 Enter 使用卡牌，目标不完整或按键重复时不提交", async () => {
+  await mount(<HumanControls table={cardTable} perspective="owner" identityKey="card-detail-enter" onRefresh={vi.fn()} />)
+  await openCard()
+  await pressKey("Enter")
+  expect(api.play).not.toHaveBeenCalled()
+
+  const hole = document.querySelector<HTMLButtonElement>('button[data-choice="hole"][value="1"]')!
+  const player = document.querySelector<HTMLButtonElement>('button[data-choice="player"][value="1"]')!
+  await act(async () => hole.click())
+  await act(async () => player.click())
+  expect(button("使用卡牌").disabled).toBe(false)
+  await pressKey("Enter", player, true)
+  expect(api.play).not.toHaveBeenCalled()
+  await pressKey("Enter", player)
+  expect(api.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ selections: { hole: "1", player: "1" }, expectedPaymentVersion: "card-quote" }))
+  const details = document.querySelector(".inspect-details")!
+  expect(details.contains(button("返回手牌"))).toBe(true)
+  expect(details.contains(button("使用卡牌"))).toBe(true)
 })
 it("回合结束关闭卡牌面板，其他人的回合不开放卡牌入口", async () => {
   function Controlled({ table }: { table: PokerTableView }) {
