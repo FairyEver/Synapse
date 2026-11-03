@@ -83,7 +83,14 @@
     .poker-table[data-control-layout] .poker-edge-controls,
     .poker-table[data-control-layout] .poker-controls-anchor { grid-column: 1 / -1; }
     .poker-table[data-control-layout] .poker-table-main { grid-area: 2 / 1; }
-    .poker-table[data-control-layout] .poker-controls-anchor { padding-bottom: .875rem; }
+    .poker-table[data-control-layout] .poker-controls-anchor {
+      --hand-height: clamp(92px, 12vw, 108px); --dock-inset: .5rem;
+      padding-block: var(--dock-inset) .875rem; border-top: 0; background: transparent; isolation: isolate;
+    }
+    .poker-controls-anchor::before {
+      content: ""; position: absolute; z-index: -1; inset: calc(var(--dock-inset) + var(--hand-height) / 2) 0 0;
+      background: var(--surface); border-top: 1px solid var(--separator); pointer-events: none;
+    }
     .poker-table[data-control-layout][data-compact-controls="true"] .poker-table-layout {
       grid-template-rows: 5.5rem minmax(0, 1fr) auto;
       grid-template-columns: minmax(0, 1fr) 2.75rem;
@@ -99,25 +106,21 @@
     #results .poker-settlement strong { max-width: none; }
 
     .hand-dock {
-      display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: .375rem;
-      width: min(100%, 45rem); margin: 0 auto .35rem;
+      display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .375rem;
+      width: min(100%, 45rem); height: var(--hand-height); margin: 0 auto .35rem;
     }
-    .dock-label { display: flex; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: .6875rem; white-space: nowrap; }
-    .dock-label strong { color: var(--foreground); font-size: .8125rem; font-weight: 650; }
-    .own { display: grid; gap: 4px; padding-bottom: 6px; pointer-events: none; user-select: none; }
+    .own { pointer-events: none; user-select: none; }
     .own-cards { display: flex; gap: 4px; }
-    .own-cards .playing { width: 42px; }
-    .shield { display: inline-flex; color: var(--accent); }
-    .shield svg { width: 15px; height: 15px; }
+    .own-cards .playing { width: 42px; box-shadow: 0 2px 0 var(--border), 0 5px 9px var(--shadow); }
+    .seat-shield { display: inline-flex; color: var(--accent); }
+    .seat-shield svg { width: 1em; height: 1em; }
     .hand { min-width: 0; }
-    .hand-title { padding-left: 7px; }
-    .hand-title .button { min-height: 24px; width: 24px; min-width: 24px; }
     .fan { min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
-    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; min-height: 98px; padding: 9px 7px 6px; }
+    .fan-inner { display: flex; align-items: center; width: max-content; min-width: 100%; height: var(--hand-height); padding: 9px 7px 9px; }
     .ability {
       position: relative; flex: 0 0 auto; display: grid; gap: 3px; justify-items: center; width: clamp(58px, 6.3vw, 78px);
       padding: 4px 4px 5px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card-paper);
-      color: var(--foreground); box-shadow: 0 2px 5px var(--shadow); transition: transform 150ms ease-out;
+      color: var(--foreground); box-shadow: 0 2px 0 var(--border), 0 5px 8px var(--shadow); transition: transform 150ms ease-out;
       touch-action: pan-x; cursor: grab; user-select: none;
     }
     .ability + .ability { margin-left: -6px; }
@@ -214,6 +217,7 @@
     .web-popover input[type="number"] { width: 6rem; border: 1px solid var(--border); border-radius: var(--radius); padding: .45rem; }
     .web-popover input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
     .web-popover .menu-group { display: flex; gap: .5rem; align-items: center; }
+    .web-popover [data-intel] { margin-top: .625rem; }
     .web-popover .panel-tabs { display: flex; gap: .375rem; margin-bottom: .5rem; }
     .web-popover .panel-tabs button { flex: 1; }
 
@@ -227,8 +231,7 @@
       .hand-dock { gap: .5rem; }
       .own-cards { gap: 3px; }
       .own-cards .playing { width: 32px; }
-      .hand-title { justify-content: start; padding-left: 4px; }
-      .fan-inner { justify-content: start; min-height: 84px; gap: 4px; }
+      .fan-inner { gap: 4px; }
       .ability + .ability { margin-left: 0; }
       .rail { padding: 9px 2px 4px; gap: 4px; }
       .log-entry { width: 32px; height: 32px; }
@@ -283,16 +286,13 @@
       <footer class="poker-controls-anchor" aria-label="你的手牌和操作">
         <div class="hand-dock font-sans">
           <section class="own" aria-label="你的底牌">
-            <div class="dock-label"><strong>你的底牌</strong><span id="shield" class="shield" hidden></span></div>
             <div class="own-cards" id="holes"></div>
           </section>
           <section class="hand" aria-label="你的能力牌">
-            <div class="dock-label hand-title"><strong>能力牌</strong><span id="hand-count"></span><button class="button icon quiet" type="button" id="intel" aria-label="私密情报" title="私密情报" hidden></button></div>
             <div class="fan" id="fan"><div class="fan-inner" id="hand"></div></div>
           </section>
         </div>
-        <div id="controls" class="poker-human-controls" aria-label="本人牌桌操作">
-          <div class="poker-control-state"><span class="poker-action-indicator" aria-hidden="true"></span><span id="turn" role="status"></span><span id="clock" class="poker-action-clock" aria-label="行动剩余时间"></span></div>
+        <div class="poker-human-controls" aria-label="本人牌桌操作">
           <section id="actions" class="poker-action-dock" aria-label="下注操作"></section>
         </div>
       </footer>
@@ -1158,6 +1158,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
         '</span><span class="poker-stack">' + num(seat.stack) + '</span></span>' +
         (mine ? '<span class="poker-dealer" role="img" aria-label="按钮位">D</span>' : '') +
         '</div><div class="poker-seat-meta"><span class="poker-ai-state" data-acting="' + acting + '">' + status + '</span>' +
+        (mine && state.shield ? '<span class="seat-shield" title="反制咒已生效">' + icon('shield') + '<span class="sr-only">反制咒已生效</span></span>' : '') +
         '<span class="poker-wager" data-visible="' + Boolean(!settled && seat.streetBet) +
         '" aria-label="' + seat.name + '本轮下注 ' + num(seat.streetBet) + '">' + icon('chips') +
         '<span>' + num(seat.streetBet) + '</span></span></div>' +
@@ -1205,10 +1206,6 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
 
   function renderDock() {
     $('#holes').innerHTML = state.seats[0].holes.map(card => face(card, true)).join('');
-    $('#shield').hidden = !state.shield;
-    $('#hand-count').textContent = state.hand.length + ' 张';
-    $('#intel').hidden = !state.intel.length;
-    $('#intel').setAttribute('aria-expanded', String(stage?.mode === 'intel'));
     $('#hand').innerHTML = state.hand.map(instance => {
       const key = instance.key;
       const amount = quote(state, key);
@@ -1226,14 +1223,6 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       (primary ? ' data-tone="primary"' : '') + (disabled ? ' disabled' : '') + '>' + text + '</button>';
     const owed = toCall(state);
     const hero = state.seats[0];
-    const actor = activeSeat();
-    const active = state.phase === 'active';
-    const status = state.phase === 'settled' ? '本手结束' : state.pending ? '请选择候选牌' :
-      active ? '轮到你' : hero.folded ? '已弃牌 · 等待下一手' : actor > 0 ? '等待 ' + state.seats[actor].name + ' 行动' : '等待结算';
-    $('#controls').dataset.acting = String(active);
-    $('#turn').textContent = status;
-    $('#clock').hidden = !active;
-    $('#clock').innerHTML = icon('clock') + '5:00';
     let controls;
     if (state.phase === 'settled') {
       controls = button('重玩本手', 'data-restart data-focus="next"', 'primary');
@@ -1372,13 +1361,12 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     stage = null;
     if (panel.open) panel.close();
     panel.innerHTML = '';
-    $('#intel').setAttribute('aria-expanded', 'false');
     if (previous?.mode === 'target' || previous?.mode === 'candidate') {
       announce('已放弃使用，卡牌已放回手里');
       focusAt('card-' + previous.id);
       hidePreview();
     } else if (previous?.mode === 'intel') {
-      $('#intel').focus({ preventScroll: true });
+      $('[data-system="menu"]').focus({ preventScroll: true });
     } else {
       focusAt('bet-call');
     }
@@ -1537,8 +1525,9 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     if (kind === 'menu') {
       const options = Object.entries(scenarioNames).map(([key, name]) => '<option value="' + key + '"' +
         (key === scenario ? ' selected' : '') + '>' + name + '</option>').join('');
+      const intel = state.intel.length ? button(icon('eye') + '私密情报', 'data-intel aria-haspopup="dialog"') : '';
       return ['更多操作', '<div class="menu-group"><label for="scenario">演示场景</label><select id="scenario">' +
-        options + '</select>' + button(icon('reset'), 'data-restart aria-label="重置场景"', 'icon') + '</div>'];
+        options + '</select>' + button(icon('reset'), 'data-restart aria-label="重置场景"', 'icon') + '</div>' + intel];
     }
     if (kind === 'match') return ['对局信息', matchContent()];
     if (kind === 'members') return ['成员管理', '<ul>' + state.seats.map((seat, i) =>
@@ -1611,8 +1600,6 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   }
 
   document.querySelectorAll('[data-symbol]').forEach(element => { element.innerHTML = icon(element.dataset.symbol); });
-  $('#intel').innerHTML = icon('eye');
-  $('#shield').innerHTML = icon('shield') + '<span class="sr-only">反制咒已生效</span>';
   const systemPanel = $('#system-panel');
   systemPanel.addEventListener('change', event => {
     if (event.target.id !== 'scenario') return;
@@ -1629,14 +1616,6 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     systemPanel.close();
     render('bet-custom');
   });
-  $('#intel').addEventListener('click', () => {
-    if (stage || !state.intel.length) return;
-    hidePreview();
-    stage = { mode: 'intel' };
-    $('#intel').setAttribute('aria-expanded', 'true');
-    renderStage('stage-close');
-  });
-
   $('#card-stage').addEventListener('cancel', event => {
     event.preventDefault();
     closeStage();
@@ -1725,6 +1704,12 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     const target = event.target.closest('button');
     if (target?.hasAttribute('data-system')) return openPanel(target);
     if (target?.hasAttribute('data-system-close')) return systemPanel.close();
+    if (target?.hasAttribute('data-intel') && !stage && state.intel.length) {
+      systemPanel.close();
+      hidePreview();
+      stage = { mode: 'intel' };
+      return renderStage('stage-close');
+    }
     if (target?.hasAttribute('data-match-tab')) {
       matchTab = target.dataset.matchTab;
       $('#system-body').innerHTML = matchContent();
