@@ -17,6 +17,12 @@
 }
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-human-controls { width: min(100%, 52rem); position: relative; }
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock { width: min(100%, 40rem); margin-inline: auto; }
+/* Reserve the row even when the hand has no cards to render. */
+.poker-hand-dock-slot {
+  flex: none;
+  height: var(--hand-height);
+  margin-block-end: .375rem;
+}
 .poker-hand-dock {
   --hand-card-width: calc(var(--hand-height) / 1.4);
   --hand-gap: .625rem;
@@ -24,10 +30,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: var(--hand-height);
+  height: 100%;
   min-width: 0;
   padding-inline: var(--hand-gap);
-  margin-block-end: .375rem;
 }
 .poker-hand-dock-holes {
   --cw: var(--hand-card-width);

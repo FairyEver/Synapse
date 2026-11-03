@@ -9,5 +9,4 @@ export function usesPokerHandDock(table: PokerTableView): boolean {
 }
 export function hasPokerHandDock(table: PokerTableView, perspective: "owner" | "public"): boolean {
   return usesPokerHandDock(table) && perspective === "owner" && table.mySeatNo !== null
-    && (!!table.cards?.ownHand || !!table.hole?.length)
 }

@@ -108,7 +108,9 @@ export function PokerCardDockFlow({ table, controls, disabled, frames = [], drop
   }
 
   return <>
-    <PokerHandDock table={table} canPlay={!open && !locked} dropArea={dropArea} onPlay={activate} />
+    <div className="poker-hand-dock-slot">
+      <PokerHandDock table={table} canPlay={!open && !locked} dropArea={dropArea} onPlay={activate} />
+    </div>
     {!open && controls.error && <p className="poker-card-dock-error" role="alert">{controls.error}</p>}
     {open && cards && createPortal(<dialog ref={dialog} className="poker-card-stage card-overlay poker-card-dock-stage" aria-labelledby={heading} onCancel={event => { event.preventDefault(); if (dismissible) reset() }}>
       <div className="poker-card-dock-stage-layout">

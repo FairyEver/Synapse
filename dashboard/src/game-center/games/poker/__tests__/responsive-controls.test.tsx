@@ -155,6 +155,32 @@ describe("窄屏精简出牌", () => {
 })
 
 describe("统一底部操作与按需侧栏", () => {
+  it("能力牌从空手到多张再清空时，保留牌区占位和行动按钮", async () => {
+    const host = document.createElement("div"), root = createRoot(host)
+    document.body.append(host)
+    const cards = { ...cardTable.cards!, version: "cards-v2" as const }
+    const card = cards.ownHand![0]
+    const render = (ownHand: typeof cards.ownHand) => act(async () => root.render(
+      <Table table={{ ...table, cards: { ...cards, ownHand } }} perspective="owner" onPerspective={vi.fn()} onBack={vi.fn()} />,
+    ))
+    try {
+      await render([card])
+      const surface = host.querySelector(".poker-table")!
+      const slot = host.querySelector(".poker-hand-dock-slot")
+      const actions = host.querySelector(".poker-action-buttons")
+      for (const hand of [[], undefined, [card, { ...card, instanceId: "second-card" }], []]) {
+        await render(hand)
+        expect(surface.getAttribute("data-hand-dock")).toBe("true")
+        expect(slot).not.toBeNull()
+        expect(host.querySelector(".poker-hand-dock-slot")).toBe(slot)
+        expect(slot!.querySelectorAll("button")).toHaveLength(hand?.length ?? 0)
+        expect(host.querySelector(".poker-action-buttons")).toBe(actions)
+      }
+    } finally {
+      await act(async () => root.unmount())
+    }
+  })
+
   it("卡牌桌失去行动权后保留底栏，关闭金额面板并禁用出牌，轮到本人后恢复", async () => {
     const value: PokerTableView = { ...table, hole: cardTable.hole, cards: { ...cardTable.cards!, version: "cards-v2" } }
     const { host, root, render } = await controls(value)
