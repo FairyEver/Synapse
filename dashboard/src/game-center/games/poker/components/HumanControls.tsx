@@ -110,8 +110,24 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
   const validAmount = to.trim() !== "" && Number.isSafeInteger(numeric) && numeric >= (table.minRaiseTo ?? Infinity) && numeric <= (table.maxRaiseTo ?? -1)
   const acting = perspective === "owner" && controller === "human" && table.actionOnSeat === table.mySeatNo && table.status === "running" && !!table.handId && version != null
   const disabled = busy || uncertain || nextHand.busy || roll.blocked || rollPending || cards.blocked || cardPending
+  const actionDisabled = !acting || disabled || confirmAllIn
   const canBet = legal.includes("bet") || legal.includes("raise")
+  const canFold = legal.includes("fold")
+  const canCheck = legal.includes("check")
+  const canCall = legal.includes("call")
+  const canAllIn = !canBet && legal.includes("allin")
+  const showCall = canCall || (showCardDock && !canCheck && (table.toCall ?? 0) > 0)
+  const showBetChoices = showCardDock || canBet
+  const betDisabled = actionDisabled || !canBet
   const raise = legal.includes("raise")
+  const betOpen = acting && canBet && (!showCardDock || !disabled) && panel === "bet"
+  const canKeepBetPanel = acting && !disabled && (allInAction ? legal.includes(allInAction) : canBet)
+  useEffect(() => {
+    if (showCardDock && panel === "bet" && !canKeepBetPanel) {
+      setAllInAction(null)
+      setPanel(null)
+    }
+  }, [showCardDock, panel, canKeepBetPanel, setPanel])
   const preview = betPaymentPreview(table, Math.max(0, numeric - (mine?.streetBet ?? 0)))
   const callPreview = betPaymentPreview(table, table.toCall ?? 0)
   const contribution = preview.paidAmount
@@ -197,22 +213,25 @@ function ScopedHumanControls({ table, perspective, onPerspective, onRefresh, ide
 
     {canOpenCards && <PokerCardsDialog table={table} open={panel === "cards"} onOpenChange={open => setPanel(open ? "cards" : null)} controls={cards} disabled={busy || uncertain || nextHand.busy || roll.blocked || rollPending} epoch={cardEpoch} frames={cardFrames} />}
     {!acting && (rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light">{rollEntry}{cardEntry}</div>}
-    {acting && <div className="poker-action-dock">
-      {(canBet || rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light" role="group" aria-label="下注金额选择">
+    {(acting || showCardDock) && <div className="poker-action-dock">
+      {(showBetChoices || rollEntry || cardEntry) && <div className="poker-bet-presets font-sans text-foreground scheme-light" role="group" aria-label="下注金额选择">
         {rollEntry}{cardEntry}
-        {canBet && presets.map(preset => <Button key={preset.label} size="sm" variant={numeric === preset.to ? "secondary" : "tertiary"} aria-pressed={numeric === preset.to} isDisabled={disabled || confirmAllIn} onPress={() => setTo(String(preset.to))}>{preset.label}</Button>)}
-        {canBet && <Button ref={betTrigger} size="sm" variant="tertiary" isDisabled={disabled || confirmAllIn} aria-expanded={panel === "bet"} aria-controls={`${betId}-panel`} onPress={() => setPanel(panel === "bet" ? null : "bet")}>自定义<ChevronUp aria-hidden="true" /></Button>}
+        {showBetChoices && presets.map(preset => {
+          const selected = acting && canBet && numeric === preset.to
+          return <Button key={preset.label} size="sm" variant={selected ? "secondary" : "tertiary"} aria-pressed={selected} isDisabled={betDisabled} onPress={() => setTo(String(preset.to))}>{preset.label}</Button>
+        })}
+        {showBetChoices && <Button ref={betTrigger} size="sm" variant="tertiary" isDisabled={betDisabled} aria-expanded={betOpen} aria-controls={`${betId}-panel`} onPress={() => setPanel(betOpen ? null : "bet")}>自定义<ChevronUp aria-hidden="true" /></Button>}
       </div>}
       <div className="poker-action-buttons">
-        {legal.includes("fold") && <PokerButton className="poker-fold-action" disabled={disabled || confirmAllIn} onClick={() => act("fold")}>弃牌</PokerButton>}
-        {legal.includes("check") && <PokerButton tone="primary" disabled={disabled || confirmAllIn} onClick={() => act("check")}>过牌{!compact && <span>无需跟注</span>}</PokerButton>}
-        {legal.includes("call") && <PokerButton ref={!canBet && !legal.includes("allin") ? betTrigger : undefined} tone="primary" disabled={disabled || confirmAllIn} onClick={() => submit("call")}>跟注 {amount(table.toCall ?? 0)}{callPreview.waivedAmount > 0 && <span>实付 {amount(callPreview.paidAmount)}</span>}</PokerButton>}
-        {canBet && <PokerButton className="poker-raise-action" disabled={disabled || confirmAllIn || !validAmount} aria-label={`确认${raise ? "加注" : "下注"} ${amount(numeric)}`} onClick={() => submit(raise ? "raise" : "bet")}>{raise ? "加注到" : "下注到"} {validAmount ? amount(numeric) : "—"}</PokerButton>}
-        {!canBet && legal.includes("allin") && <PokerButton ref={betTrigger} tone="danger" disabled={disabled || confirmAllIn} onClick={() => openConfirmation("allin")} aria-expanded={confirmAllIn}>全下</PokerButton>}
+        {(showCardDock || canFold) && <PokerButton className="poker-fold-action" disabled={actionDisabled || !canFold} onClick={() => act("fold")}>弃牌</PokerButton>}
+        {(canCheck || (showCardDock && !showCall)) && <PokerButton tone="primary" disabled={actionDisabled || !canCheck} onClick={() => act("check")}>过牌{canCheck && !compact && <span>无需跟注</span>}</PokerButton>}
+        {showCall && <PokerButton ref={!showCardDock && !canBet && !canAllIn ? betTrigger : undefined} tone="primary" disabled={actionDisabled || !canCall} onClick={() => submit("call")}>跟注 {amount(table.toCall ?? 0)}{callPreview.waivedAmount > 0 && <span>实付 {amount(callPreview.paidAmount)}</span>}</PokerButton>}
+        {(canBet || (showCardDock && !canAllIn)) && <PokerButton className="poker-raise-action" disabled={actionDisabled || !canBet || !validAmount} aria-label={canBet ? `确认${raise ? "加注" : "下注"} ${amount(numeric)}` : undefined} onClick={() => submit(raise ? "raise" : "bet")}>{raise ? "加注到" : "下注到"} {canBet && validAmount ? amount(numeric) : "—"}</PokerButton>}
+        {canAllIn && <PokerButton ref={showCardDock ? undefined : betTrigger} tone="danger" disabled={actionDisabled} onClick={() => openConfirmation("allin")} aria-expanded={confirmAllIn}>全下</PokerButton>}
       </div>
 
     </div>}
-    {<PokerControlPopover open={acting && panel === "bet" && canBet} onOpenChange={closeBet} trigger={betTrigger} container={popoverContainer ?? controlsRef.current} title={raise ? "加注" : "下注"} id={`${betId}-panel`} restoreFocus={panel === null && !confirmAllIn}>
+    {<PokerControlPopover open={betOpen} onOpenChange={closeBet} trigger={betTrigger} container={popoverContainer ?? controlsRef.current} title={raise ? "加注" : "下注"} id={`${betId}-panel`} restoreFocus={panel === null && !confirmAllIn}>
       {betEditor}
     </PokerControlPopover>}
     {!menuTrigger && mine && table.status !== "closed" && <div className="poker-local-menu font-sans text-foreground scheme-light"><Button ref={localMenuTrigger} variant="tertiary" aria-label="更多牌桌操作" aria-expanded={panel === "menu"} aria-controls={menuId} onPress={() => setPanel(panel === "menu" ? null : "menu")}><MoreHorizontal aria-hidden="true" />座位管理</Button></div>}

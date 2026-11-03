@@ -19,6 +19,7 @@
 .poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock { width: min(100%, 40rem); margin-inline: auto; }
 .poker-hand-dock {
   --ability-width: calc(var(--hand-height) * .77);
+  --hand-card-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -28,7 +29,7 @@
   margin-block-end: .375rem;
 }
 .poker-hand-dock-holes {
-  --cw: calc(var(--hand-height) * .44);
+  --cw: calc(var(--hand-height) / 1.4);
   display: flex;
   flex: none;
   gap: .25rem;
@@ -36,15 +37,20 @@
   user-select: none;
 }
 .poker-hand-dock-holes:empty { display: none; }
-.poker-hand-dock-holes .poker-card { box-shadow: 0 .2rem 0 var(--separator), 0 .4rem .65rem color-mix(in oklch, var(--foreground) 12%, transparent); }
+.poker-hand-dock-holes :is(.poker-card-front, .poker-card-back, .poker-card-placeholder) {
+  border: 1px solid var(--separator);
+  border-radius: var(--hand-card-radius);
+  box-shadow: none;
+}
 .poker-hand-dock-fan { min-width: 0; height: 100%; position: relative; width: max-content; }
 .poker-hand-dock-cards {
   display: flex;
   align-items: center;
+  gap: .25rem;
   width: max-content;
   max-width: 100%;
   height: calc(100% + 2 * var(--hand-bleed));
-  padding: var(--hand-bleed) .875rem;
+  padding: var(--hand-bleed) .375rem;
   margin-block: calc(-1 * var(--hand-bleed));
   overflow-x: auto;
   overflow-y: hidden;
@@ -58,7 +64,6 @@
   border: 1px solid var(--separator);
   border-radius: .45rem;
   padding: .25rem;
-  box-shadow: 0 .15rem 0 var(--separator), 0 .35rem .55rem color-mix(in oklch, var(--foreground) 14%, transparent);
   text-align: center;
 }
 .poker-hand-dock-card {
@@ -66,8 +71,8 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   flex: 0 0 var(--ability-width);
-  height: calc(var(--hand-height) - .375rem);
-  transform: translateY(var(--hand-rise)) rotate(var(--hand-tilt));
+  height: var(--hand-height);
+  border-radius: var(--hand-card-radius);
   font: inherit;
   font-size: clamp(.625rem, 1vw, .75rem);
   line-height: 1.1;
@@ -78,7 +83,7 @@
   user-select: none;
   transition: transform 120ms ease-out;
 }
-.poker-hand-dock-card + .poker-hand-dock-card { margin-inline-start: -.25rem; }
+.poker-hand-dock-face { box-shadow: 0 .15rem 0 var(--separator), 0 .35rem .55rem color-mix(in oklch, var(--foreground) 14%, transparent); }
 .poker-hand-dock-card[aria-disabled="true"] { cursor: default; }
 .poker-hand-dock-card[aria-disabled="true"] .poker-hand-dock-cost { background: var(--muted); }
 .poker-hand-dock-card:is(:hover, :focus-visible) { z-index: 1; transform: translateY(-.2rem); }

@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type RefObject } from "react"
+import { useId, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from "react"
 import { createPortal } from "react-dom"
 import type { PokerCardHandView, PokerTableView } from "@synapse/shared/game-contracts"
 import { cardArtwork } from "../lib/card-artwork"
@@ -93,15 +93,14 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
   }
 
   return <div className="poker-hand-dock" aria-label="手牌区">
-    <div className="poker-hand-dock-holes" aria-label="你的底牌" data-card-size="sm">{table.hole?.map((value, index) => <Card key={index} card={value} />)}</div>
-    <div className="poker-hand-dock-fan"><div className="poker-hand-dock-cards" role="group" aria-label="能力牌"
+    <div className="poker-hand-dock-holes" aria-label="你的底牌">{table.hole?.map((value, index) => <Card key={index} card={value} />)}</div>
+    {hand.length > 0 && <div className="poker-hand-dock-fan"><div className="poker-hand-dock-cards" role="group" aria-label="能力牌"
       onScroll={() => { if (preview?.input === "touch") setPreview(null) }}>
-      {hand.map((card, index) => {
+      {hand.map(card => {
         const info = definitions?.[card.cardId]
-        const offset = Math.max(-4, Math.min(4, index - (hand.length - 1) / 2))
         return <button key={card.instanceId} type="button" className="poker-hand-dock-card" aria-label={`${info?.name ?? "能力牌"}，${amount(card.payment.paidAmount)} 筹码`} aria-describedby={previewed === card && definition && !ghost ? previewId : undefined}
           aria-keyshortcuts="Enter Space" aria-haspopup={info?.play && (card.choices.length > 0 || info.play.result !== "table") ? "dialog" : undefined}
-          aria-disabled={!canPlay || !card.available} data-dragging={ghost?.id === card.instanceId} style={{ "--hand-tilt": `${offset * 1.2}deg`, "--hand-rise": `${Math.abs(offset) * 1.2}px` } as CSSProperties}
+          aria-disabled={!canPlay || !card.available} data-dragging={ghost?.id === card.instanceId}
           onPointerEnter={event => { if (event.pointerType === "mouse" && !drag.current) setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "mouse" }) }}
           onPointerLeave={event => { if (event.pointerType === "mouse" && !event.currentTarget.matches(":focus-visible")) setPreview(current => current?.id === card.instanceId ? null : current) }}
           onFocus={event => { if (event.currentTarget.matches(":focus-visible")) setPreview({ id: card.instanceId, anchor: event.currentTarget, input: "keyboard" }) }}
@@ -125,7 +124,7 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
           <b className="poker-hand-dock-cost">{amount(card.payment.paidAmount)}</b>
         </button>
       })}
-    </div></div>
+    </div></div>}
     {previewed && definition && !ghost && createPortal(<div ref={previewBox} id={previewId} className="poker-hand-dock-preview" role="tooltip" style={position}>
       <div className="poker-hand-dock-face"><img src={cardArtwork(definition.id)} alt="" /><strong>{definition.name}</strong></div>
       <div className="poker-hand-dock-description"><strong>{definition.name}</strong><p>{definition.description}</p>

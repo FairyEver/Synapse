@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 const responsiveCss=readFileSync(resolve(process.cwd(),"src/game-center/games/poker/styles/responsive-controls.css"),"utf8")
 import { Table } from "../components/Table"
+import { cardTable } from "./card-stage-fixture"
 
 const api = vi.hoisted(() => ({ act: vi.fn(), control: vi.fn(), rollStart:vi.fn() }))
 vi.mock("../../../lib/api", () => ({ gameApi: () => ({ poker: {roll:{start:api.rollStart}, action: { act: api.act }, control: { set: api.control } } }) }))
@@ -154,6 +155,53 @@ describe("窄屏精简出牌", () => {
 })
 
 describe("统一底部操作与按需侧栏", () => {
+  it("卡牌桌失去行动权后保留底栏，关闭金额面板并禁用出牌，轮到本人后恢复", async () => {
+    const value: PokerTableView = { ...table, hole: cardTable.hole, cards: { ...cardTable.cards!, version: "cards-v2" } }
+    const { host, root, render } = await controls(value)
+    const custom = button(host, "自定义")
+    const presets = ["最小", "半池", "一池", "自定义"]
+    try {
+      await click(host, "自定义")
+      expect(host.querySelector('input[type="number"]')).not.toBeNull()
+
+      await render({ ...value, actionOnSeat: 1, actionSeq: 4, legalActions: [], toCall: 0, minRaiseTo: 0, maxRaiseTo: 0 })
+      expect(host.querySelectorAll(".poker-hand-dock-holes [data-card]")).toHaveLength(2)
+      expect(host.querySelector('input[type="number"]')).toBeNull()
+      expect(button(host, "自定义")).toBe(custom)
+      for (const label of presets) {
+        expect(button(host, label)?.disabled).toBe(true)
+        await click(host, label)
+      }
+      const actions = [...host.querySelectorAll<HTMLButtonElement>(".poker-action-buttons button")]
+      expect(actions).toHaveLength(3)
+      for (const action of actions) {
+        expect(action.disabled).toBe(true)
+        await act(async () => action.click())
+      }
+      expect(host.querySelector('input[type="number"]')).toBeNull()
+      expect(api.act).not.toHaveBeenCalled()
+
+      const card = host.querySelector<HTMLButtonElement>(".poker-hand-dock-card")!
+      expect(card.getAttribute("aria-disabled")).toBe("true")
+      await act(async () => card.dispatchEvent(Object.assign(new MouseEvent("pointerover", { bubbles: true }), { pointerType: "mouse" })))
+      expect(document.querySelector('[role="tooltip"]')?.textContent).toContain("偷梁换柱")
+      await act(async () => card.click())
+      expect(document.querySelector("dialog[open]")).toBeNull()
+
+      await render({ ...value, actionSeq: 5, legalActions: ["fold", "call"] })
+      expect(button(host, "弃牌").disabled).toBe(false)
+      expect(button(host, "跟注 4").disabled).toBe(false)
+      expect(button(host, "自定义").disabled).toBe(true)
+      expect(host.querySelectorAll(".poker-action-buttons button")).toHaveLength(3)
+
+      await render({ ...value, actionSeq: 6 })
+      expect(button(host, "自定义").disabled).toBe(false)
+      expect(host.querySelector('input[type="number"]')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+    }
+  })
+
   it("Roll未知结果关闭面板后仍只占原工具行，不追加恢复块挤压正常动作",async()=>{
     api.rollStart.mockRejectedValueOnce(new Error("响应丢失"))
     const host=document.createElement("div"),root=createRoot(host);document.body.append(host)

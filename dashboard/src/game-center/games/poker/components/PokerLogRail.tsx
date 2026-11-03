@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Button, Popover, popoverVariants } from "@heroui/react"
 import type { PokerHandLogEntry, PokerTableView } from "@synapse/shared/game-contracts"
-import { List, type LucideIcon } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { cardArtwork } from "../lib/card-artwork"
 import { matchLog } from "../lib/match-information"
 import { amount, streetLabel } from "../lib/view"
@@ -59,15 +59,14 @@ function HandLogRail({ table }: { table: PokerTableView }) {
   }, [!!current, dismiss])
 
   return <>
-    <aside ref={rail} className="poker-log-rail bg-background text-foreground" aria-label="本手公开日志">
-      <List aria-hidden="true" className="mx-auto size-4 shrink-0 text-muted" />
+    <aside ref={rail} className="poker-log-rail text-foreground" aria-label="本手公开日志">
       <ol className="poker-log-entries">
         {[...entries].reverse().map(entry => {
           const selected = current?.seq === entry.seq
           const Icon = logActionIcon(entry)
           return <li key={entry.seq}>
-            <Button type="button" isIconOnly size="sm" variant={selected ? "secondary" : "tertiary"}
-              className="poker-log-entry" data-log-seq={entry.seq} data-card-art={!!entry.card}
+            <Button type="button" isIconOnly size="sm" variant="ghost"
+              className="poker-log-entry" data-log-seq={entry.seq}
               aria-label={`${entry.displayName}，${logEntryLabel(entry)}`}
               aria-expanded={selected} aria-describedby={selected ? tipId : undefined}
               onPointerEnter={event => {
