@@ -20,8 +20,19 @@
       --border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
       --ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
       --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
+      /* 独立 HTML 内嵌 Tailwind 主题的对应色阶。 */
+      --color-rose-800: oklch(45.5% 0.188 13.697);
+      --color-rose-300: oklch(81% 0.117 11.638);
+      --color-amber-800: oklch(47.3% 0.137 46.201);
+      --color-amber-300: oklch(87.9% 0.169 91.605);
+      --color-sky-800: oklch(44.3% 0.11 240.79);
+      --color-sky-300: oklch(82.8% 0.111 230.318);
       --radius: 0.625rem;
     }
+    [data-priority="high"] { --priority-ink: light-dark(var(--color-rose-800), var(--color-rose-300)); }
+    [data-priority="medium"] { --priority-ink: light-dark(var(--color-amber-800), var(--color-amber-300)); }
+    [data-priority="low"] { --priority-ink: light-dark(var(--color-sky-800), var(--color-sky-300)); }
+    [data-priority="none"] { --priority-ink: var(--muted-foreground); }
     *, *::before, *::after { box-sizing: border-box; }
     [hidden] { display: none !important; }
     body { margin: 0; background: var(--surface); color: var(--foreground); font: 14px/1.5 "Geist Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
@@ -50,6 +61,7 @@
     .filter-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
     .filter-option:hover .segment { background: var(--selected); }
     .filter-option input:focus-visible + .segment { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .filter-option .icon { width: 14px; height: 14px; }
     .control { min-width: 0; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: 5px 10px; }
     .toolbar select { cursor: pointer; }
     .select-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -57,6 +69,7 @@
     .select-wrap > .icon:first-child { left: 10px; }
     .select-wrap > .icon:last-child { right: 9px; width: 13px; }
     .select-wrap > select { appearance: none; padding-inline: 32px 29px; }
+    .priority-symbol, .select-wrap > .priority-symbol { color: var(--priority-ink, var(--muted-foreground)); }
     .quick-create { display: grid; gap: 8px; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
     .quick-title-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
     .quick-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -90,9 +103,7 @@
     .picker { position: relative; justify-self: center; }
     .badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 50px; min-height: 23px; border: 1px solid transparent; border-radius: 999px; padding: 0 7px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
     .badge .icon { width: 13px; height: 13px; }
-    .badge.high { color: var(--primary-foreground); background: var(--primary); }
-    .badge.medium { background: var(--selected); }
-    .badge.low { border-color: var(--border); color: var(--muted-foreground); }
+    .badge[data-priority] { color: var(--priority-ink); background: color-mix(in oklab, var(--priority-ink) 12%, var(--card)); }
     .priority-trigger { padding: 0 5px; min-width: 60px; }
     .priority-trigger[aria-expanded="true"], .more-trigger[aria-expanded="true"] { background: var(--selected); }
     .priority-trigger.unset { color: var(--muted-foreground); }
@@ -101,6 +112,8 @@
     .menu.above { top: auto; bottom: calc(100% + 4px); }
     .menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; white-space: nowrap; }
     .menu button:is(:hover, :focus-visible) { background: var(--muted); }
+    .menu [data-priority]:not([data-priority="none"]) { color: var(--priority-ink); }
+    .menu [aria-checked="true"] { background: color-mix(in oklab, var(--priority-ink) 10%, var(--card)); }
     .menu button .selected-check { margin-left: auto; }
     .menu-separator { border-top: 1px solid var(--border); margin: 4px; }
     .empty { display: grid; justify-items: center; gap: 12px; padding: 56px 16px; }
@@ -139,6 +152,8 @@
     @media (max-width: 580px) {
       .topbar { padding: 8px 12px; gap: 6px; }
       .segment { padding-inline: 6px; }
+      .filter-option .segment { gap: 3px; padding-inline: 5px; }
+      .filter-option .icon { width: 13px; height: 13px; }
       main { padding: 16px 12px 80px; }
       .task { grid-template-columns: 28px minmax(0, 1fr) 54px 28px; column-gap: 5px; padding-inline: 7px; }
       .task .icon-only, .check { width: 28px; }
@@ -183,8 +198,8 @@
         <button class="button primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>添加待办</button>
       </div>
       <div class="quick-options" role="group" aria-label="待办选项">
-        <span class="select-wrap">
-          <svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg>
+        <span class="select-wrap" data-priority="none">
+          <svg class="icon priority-symbol" aria-hidden="true"><use href="#i-flag"/></svg>
           <select class="control" name="priority" id="quick-priority" aria-label="新待办优先级">
             <option value="none">优先级未设置</option>
             <option value="high">高优先级</option>
@@ -222,10 +237,10 @@
     <div class="toolbar" aria-label="待办筛选与排序">
       <fieldset class="segments priority-filters" id="priority-filter" aria-label="筛选优先级">
         <label class="filter-option"><input type="radio" name="priority-filter" value="all" checked><span class="segment">全部优先级</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="high" aria-label="高优先级"><span class="segment">高</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="medium" aria-label="中优先级"><span class="segment">中</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="low" aria-label="低优先级"><span class="segment">低</span></label>
-        <label class="filter-option"><input type="radio" name="priority-filter" value="none"><span class="segment">未设置</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="high" aria-label="高优先级"><span class="segment" data-priority="high"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-high"/></svg>高</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="medium" aria-label="中优先级"><span class="segment" data-priority="medium"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-medium"/></svg>中</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="low" aria-label="低优先级"><span class="segment" data-priority="low"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-low"/></svg>低</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="none"><span class="segment" data-priority="none"><svg class="icon priority-symbol" aria-hidden="true"><use href="#i-none"/></svg>未设置</span></label>
       </fieldset>
       <span class="select-wrap">
         <svg class="icon" aria-hidden="true"><use href="#i-sort"/></svg>
@@ -352,7 +367,7 @@
         });
     }
 
-    const badge = priority => `<span class="badge ${priority}">${icon(priority)}${priorities[priority]}</span>`;
+    const badge = priority => `<span class="badge" data-priority="${priority}">${icon(priority)}${priorities[priority]}</span>`;
 
     function row(item) {
       const title = escaped(item.title);
@@ -374,7 +389,7 @@
         <div class="picker">
           <button class="button priority-trigger ${item.priority === "none" ? "unset" : ""}" type="button" data-action="priority" aria-haspopup="menu" aria-expanded="false" aria-label="${title}，优先级${priorities[item.priority]}" title="${item.priority === "none" ? "设置优先级" : "修改优先级"}">${item.priority === "none" ? icon("flag") : badge(item.priority)}</button>
           <div class="menu" role="menu" aria-label="设置优先级" hidden>
-            ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}">${icon(priority)}${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
+            ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}" data-priority="${priority}">${icon(priority, "priority-symbol")}${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
           </div>
         </div>
         <div class="picker">
@@ -500,7 +515,11 @@
       $("quick-due-toggle").querySelector("span").textContent = due ? `截止 ${dateLabel(due)}` : "截止时间";
       $("quick-due-toggle").dataset.configured = String(!!due);
       $("quick-note-toggle").dataset.configured = String(!!$("quick-note").value.trim());
-      $("quick-priority").dataset.configured = String($("quick-priority").value !== "none");
+      const priority = $("quick-priority").value;
+      const priorityControl = $("quick-priority").parentElement;
+      $("quick-priority").dataset.configured = String(priority !== "none");
+      priorityControl.dataset.priority = priority;
+      priorityControl.querySelector(".priority-symbol use").setAttribute("href", `#i-${priority === "none" ? "flag" : priority}`);
       $("quick-reminder").dataset.configured = String($("quick-reminder").value !== "none");
     }
 
@@ -536,7 +555,7 @@
     }
 
     $("priority-choices").innerHTML = ["none", "high", "medium", "low"].map(priority =>
-      `<label><input type="radio" name="priority" value="${priority}" ${priority === "none" ? "checked" : ""}><span>${icon(priority)}${priorities[priority]}</span></label>`).join("");
+      `<label><input type="radio" name="priority" value="${priority}" ${priority === "none" ? "checked" : ""}><span data-priority="${priority}">${icon(priority, "priority-symbol")}${priorities[priority]}</span></label>`).join("");
     ["due", "note"].forEach(name => {
       $(`quick-${name}-toggle`).addEventListener("click", () => {
         const expand = $(`quick-${name}-field`).hidden;
