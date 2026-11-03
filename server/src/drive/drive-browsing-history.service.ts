@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import type { Request } from "express"
 import { createHash } from "node:crypto"
 import { normalizePublicAppUrl, type DriveBrowsingHistoryEntryDto, type DriveBrowsingHistoryKind, type DriveBrowsingHistoryListInput, type DriveBrowsingHistoryPageDto } from "@synapse/shared"
@@ -11,6 +11,15 @@ const authorSelect = { handle: true, nickname: true, email: true } as const
 type HistoryAuthor = { readonly handle: string; readonly nickname: string; readonly email: string }
 type HistorySnapshot = { readonly title: string; readonly kind: DriveBrowsingHistoryKind; readonly path: string; readonly author: HistoryAuthor }
 type HistoryCursor = { readonly binding: string; readonly visitedAt: string; readonly id: string }
+type DailyHistoryRow = {
+  readonly id: string
+  readonly title: string
+  readonly authorHandle: string
+  readonly kind: DriveBrowsingHistoryKind
+  readonly path: string
+  readonly visitedAt: Date
+  readonly visitCount: bigint
+}
 
 /** Fetch metadata is intentionally required: crawlers/MCP, iframes and resource requests are not visits. */
 export function isDriveHistoryNavigation(request: Pick<Request, "method" | "headers" | "query">): boolean {
@@ -27,27 +36,44 @@ export class DriveBrowsingHistoryService {
 
   constructor(private readonly prisma: PrismaService, private readonly drive: DriveService) {}
 
-  async list(viewerId: string, input: DriveBrowsingHistoryListInput = {}): Promise<DriveBrowsingHistoryPageDto> {
+  async list(viewerId: string, input: DriveBrowsingHistoryListInput = {}, requestedTimeZone?: string): Promise<DriveBrowsingHistoryPageDto> {
+    const timeZone = resolveHistoryTimeZone(requestedTimeZone)
     const terms = driveSearchTerms(normalizeHistorySearchQuery(input.query))
-    const binding = createHash("sha256").update(JSON.stringify([viewerId, terms, input.kind ?? null])).digest("hex")
+    const binding = createHash("sha256").update(JSON.stringify([viewerId, terms, input.kind ?? null, timeZone])).digest("hex")
     const cursor = input.cursor ? parseCursor(input.cursor, binding) : null
     const limit = Math.min(100, Math.max(1, Math.floor(input.limit ?? 50)))
-    const where: Prisma.DriveBrowsingHistoryWhereInput = {
-      viewerId, cleared: false,
-      ...(input.kind ? { kind: input.kind } : {}),
-      AND: terms.map((term) => ({ searchIndex: { contains: term.replace(/[\\%_]/gu, "\\$&") } })),
-      ...(cursor ? { OR: [
-        { visitedAt: { lt: new Date(cursor.visitedAt) } },
-        { visitedAt: new Date(cursor.visitedAt), id: { lt: cursor.id } },
-      ] } : {}),
-    }
-    const rows = await this.prisma.driveBrowsingHistory.findMany({ where, orderBy: [{ visitedAt: "desc" }, { id: "desc" }], take: limit + 1 })
+    const filters = [
+      Prisma.sql`position = 1`,
+      ...(input.kind ? [Prisma.sql`"kind" = ${input.kind}`] : []),
+      ...terms.map((term) => Prisma.sql`strpos("searchIndex", ${term}) > 0`),
+      ...(cursor ? [Prisma.sql`("visitedAt", "id") < (${new Date(cursor.visitedAt).toISOString()}::timestamp, ${cursor.id})`] : []),
+    ]
+    // Count the whole day before filtering or paging its latest snapshot.
+    const rows = await this.prisma.$queryRaw<DailyHistoryRow[]>(Prisma.sql`
+      WITH daily AS (
+        SELECT "id", "title", "authorHandle", "kind", "path", "visitedAt", "searchIndex",
+          count(*) OVER visits AS "visitCount",
+          row_number() OVER visits AS position
+        FROM "DriveBrowsingHistory"
+        WHERE "viewerId" = ${viewerId} AND NOT "cleared"
+        WINDOW visits AS (
+          PARTITION BY "path", timezone(${timeZone}::text, "visitedAt" AT TIME ZONE 'UTC')::date
+          ORDER BY "visitedAt" DESC, "id" DESC
+          ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        )
+      )
+      SELECT "id", "title", "authorHandle", "kind", "path", "visitedAt", "visitCount"
+      FROM daily
+      WHERE ${Prisma.join(filters, " AND ")}
+      ORDER BY "visitedAt" DESC, "id" DESC
+      LIMIT ${limit + 1}
+    `)
     const page = rows.slice(0, limit)
     const last = page.at(-1)
     return {
       items: page.map((row): DriveBrowsingHistoryEntryDto => ({
-        id: row.id, title: row.title, author: row.authorHandle, kind: row.kind as DriveBrowsingHistoryKind,
-        url: `${publicAppUrl()}${row.path}`, visitedAt: row.visitedAt.toISOString(),
+        id: row.id, title: row.title, author: row.authorHandle, kind: row.kind,
+        url: `${publicAppUrl()}${row.path}`, visitedAt: row.visitedAt.toISOString(), visitCount: Number(row.visitCount),
       })),
       nextCursor: rows.length > limit && last
         ? Buffer.from(JSON.stringify({ binding, visitedAt: last.visitedAt.toISOString(), id: last.id })).toString("base64url")
@@ -95,20 +121,11 @@ export class DriveBrowsingHistoryService {
 
   private async save(viewerId: string, visitId: string, snapshot: HistorySnapshot): Promise<void> {
     try {
-      // One row per viewer and target: a repeated open only refreshes the snapshot and its visit time.
+      // Keep each independent event so later visits cannot erase earlier days or their receipts.
       const snapshotData = {
         visitId, title: snapshot.title, kind: snapshot.kind, path: snapshot.path,
         authorHandle: snapshot.author.handle,
         searchIndex: normalizeDriveSearchText([snapshot.title, `${publicAppUrl()}${snapshot.path}`, snapshot.author.handle, snapshot.author.nickname, snapshot.author.email].join("\n")),
-      }
-      const previous = await this.prisma.driveBrowsingHistory.findFirst({
-        where: { viewerId, path: snapshot.path, cleared: false },
-        orderBy: [{ visitedAt: "desc" }, { id: "desc" }],
-        select: { id: true },
-      })
-      if (previous) {
-        await this.prisma.driveBrowsingHistory.update({ where: { id: previous.id }, data: { ...snapshotData, visitedAt: new Date() } })
-        return
       }
       await this.prisma.driveBrowsingHistory.createMany({ data: { viewerId, ...snapshotData }, skipDuplicates: true })
     } catch (error) {
@@ -117,6 +134,17 @@ export class DriveBrowsingHistoryService {
       throw new ServiceUnavailableException("浏览历史暂时无法保存，请稍后重试。")
     }
   }
+}
+
+function resolveHistoryTimeZone(value = "UTC"): string {
+  if (value.length <= 100 && /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)*$/u.test(value)) {
+    try {
+      return new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error
+    }
+  }
+  throw new BadRequestException("浏览历史时区无效。")
 }
 
 /** Recognized first-party links address the same visit without secret queries or share reader suffixes. */

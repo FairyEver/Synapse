@@ -43,6 +43,29 @@ it("offers exactly one unified search and one type selector", () => {
   expect(document.querySelectorAll("select")).toHaveLength(1)
   expect(document.querySelector("select")?.textContent).toBe("全部类型网页文档文件夹其他")
 })
+it("shows the last time and count on one row while retaining the same link on an older date", async () => {
+  const today = new Date()
+  today.setHours(13, 32, 0, 0)
+  vi.setSystemTime(today)
+  const earlier = new Date(today)
+  earlier.setDate(earlier.getDate() - 1)
+  const entry = { title: "重复打开的文档", author: "author", kind: "document", url: "https://example.com/share" }
+  mocks.list.mockResolvedValue({
+    items: [
+      { ...entry, id: "today", visitedAt: today.toISOString(), visitCount: 3 },
+      { ...entry, id: "earlier", visitedAt: earlier.toISOString(), visitCount: 1 },
+    ],
+    nextCursor: null,
+  })
+  await search("重复")
+  const clear = document.querySelector<HTMLButtonElement>('button[aria-label="清除关键词"]')!
+  await act(async () => { clear.click(); await vi.advanceTimersByTimeAsync(260) })
+  const recent = document.querySelector('section[aria-label="今天"] button')
+  const older = document.querySelector('section[aria-label="昨天"] button')
+  expect(recent?.textContent).toContain("13:32 · 3 次")
+  expect(older?.textContent).toContain("13:32")
+  expect(older?.textContent).not.toContain("1 次")
+})
 it("clears only the search words, keeps the selected type and returns focus to the search", async () => {
   const select = document.querySelector("select")!
   await act(async () => { select.value = "document"; select.dispatchEvent(new Event("change", { bubbles: true })) })

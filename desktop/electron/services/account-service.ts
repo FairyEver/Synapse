@@ -1396,7 +1396,11 @@ export class AccountService {
     if (input.limit !== undefined) params.set("limit", String(input.limit))
     const query = params.toString()
     const accountScope = { accountId: this.state.status === "authenticated" ? this.state.profile.user.id : null, authRevision: this.authRevision }
-    return this.requestAuthenticatedJson<DriveBrowsingHistoryPageDto>("GET", `${apiBaseUrl()}/drive/browsing-history${query ? `?${query}` : ""}`, undefined, "浏览历史加载失败。", { accountScope })
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return this.requestAuthenticatedJson<DriveBrowsingHistoryPageDto>("GET", `${apiBaseUrl()}/drive/browsing-history${query ? `?${query}` : ""}`, undefined, "浏览历史加载失败。", {
+      accountScope,
+      headers: { "x-synapse-drive-history-time-zone": timeZone },
+    })
   }
 
   async clearDriveBrowsingHistory(): Promise<{ ok: true }> {
@@ -2721,12 +2725,13 @@ export class AccountService {
     url: string,
     body: unknown,
     errorMessage: string,
-    options: { readonly signal?: AbortSignal; readonly accountScope?: AccountRequestScope } = {},
+    options: { readonly signal?: AbortSignal; readonly accountScope?: AccountRequestScope; readonly headers?: Record<string, string> } = {},
   ): Promise<T> {
     const response = await this.fetchAuthenticated(url, {
       method,
       signal: options.signal,
       headers: {
+        ...options.headers,
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),

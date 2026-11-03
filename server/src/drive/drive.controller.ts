@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Head, Header, HttpStatus, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Head, Header, Headers, HttpStatus, Inject, Logger, NotFoundException, Optional, Param, Patch, PayloadTooLargeException, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import { Buffer } from "node:buffer"
@@ -299,9 +299,13 @@ export class DriveUserController {
 
   @Get("/browsing-history")
   @Header("Cache-Control", "no-store")
-  listBrowsingHistory(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {
+  listBrowsingHistory(
+    @Query() query: Record<string, unknown>,
+    @Req() request: AuthenticatedUserRequest,
+    @Headers("x-synapse-drive-history-time-zone") timeZone?: string,
+  ) {
     return requireBrowsingHistoryService(this.browsingHistory).list(request.user!.id,
-      parseBody(driveBrowsingHistoryQuerySchema, query, "浏览历史查询条件无效。"))
+      parseBody(driveBrowsingHistoryQuerySchema, query, "浏览历史查询条件无效。"), timeZone)
   }
 
   @Delete("/browsing-history")

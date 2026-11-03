@@ -15,6 +15,8 @@ export interface DriveBrowsingHistoryEntryDto {
   readonly kind: DriveBrowsingHistoryKind
   readonly url: string
   readonly visitedAt: string
+  /** Older servers omit this field. */
+  readonly visitCount?: number
 }
 
 export interface DriveBrowsingHistoryPageDto {

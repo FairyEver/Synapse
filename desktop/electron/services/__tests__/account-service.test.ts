@@ -202,6 +202,7 @@ describe("AccountService", () => {
     expect(url.pathname).toBe("/api/drive/browsing-history")
     expect(Object.fromEntries(url.searchParams)).toEqual({ query: "文档 & author", kind: "document", cursor: "cursor/1", limit: "25" })
     expect(fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer access-1")
+    expect(fetch.mock.calls[0][1].headers["x-synapse-drive-history-time-zone"]).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
     await service.clearDriveBrowsingHistory()
     expect(fetch.mock.calls[1][1].method).toBe("DELETE")
     await expect(service.listDriveBrowsingHistory()).rejects.toThrow("history unavailable")

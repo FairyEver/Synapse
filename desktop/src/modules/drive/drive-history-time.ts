@@ -1,12 +1,14 @@
 import { differenceInCalendarDays, format } from "date-fns"
 
 /**
+ * 同一天打开多次时，显示最后一次的时刻。
  * 列表按天分组时，今天的行显示相对时间，更早的行只补访问时刻。
  * 搜索或筛选后跨天结果混在一起，改用「今天 N小时前 / N天前 / M月d日」。
  */
-export function formatDriveHistoryVisitTime(value: string, input: { readonly filtered: boolean; readonly now?: Date }): string {
+export function formatDriveHistoryVisitTime(value: string, input: { readonly filtered: boolean; readonly exactTime?: boolean; readonly now?: Date }): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "-"
+  if (input.exactTime) return format(date, "HH:mm")
   const now = input.now ?? new Date()
   const days = differenceInCalendarDays(now, date)
   if (input.filtered) {

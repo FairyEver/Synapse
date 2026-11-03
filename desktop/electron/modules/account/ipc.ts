@@ -1292,7 +1292,13 @@ export const accountIpcModule: IpcModule = {
       kind: "invoke",
       operationId: "app.drive.browsing_history.list",
       request: driveBrowsingHistoryInputSchema,
-      response: z.object({ items: z.array(z.object({ id: z.string(), title: z.string(), author: z.string(), kind: z.enum(["web", "document", "folder", "other"]), url: z.string().url(), visitedAt: z.string() })), nextCursor: z.string().nullable() }),
+      response: z.object({
+        items: z.array(z.object({
+          id: z.string(), title: z.string(), author: z.string(), kind: z.enum(["web", "document", "folder", "other"]),
+          url: z.string().url(), visitedAt: z.string(), visitCount: z.number().int().positive().optional(),
+        })),
+        nextCursor: z.string().nullable(),
+      }),
       handler: async (_ctx, input) => accountService.listDriveBrowsingHistory(driveBrowsingHistoryInputSchema.parse(input)),
     },
     clearDriveBrowsingHistory: {

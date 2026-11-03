@@ -1,5 +1,7 @@
 # 云盘浏览历史 Implementation Plan
 
+2026-11-03 后，本文初版的全局链接去重规则由[按天合并设计](../specs/2026-10-28-drive-browsing-history-design.md#2026-11-03-按天合并)替代。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement task-by-task. Follow the user's current-branch constraint; no new branch/worktree. Independent server, desktop and browser files may be delegated after the shared contract is fixed.
 
 **Goal:** 在现有桌面云盘中找回浏览器账号下每次成功打开的分享链接。

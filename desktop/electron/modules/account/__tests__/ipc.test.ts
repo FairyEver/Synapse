@@ -164,7 +164,10 @@ describe("accountIpcModule", () => {
     for (const invalid of [{ limit: 0 }, { limit: 101 }, { limit: 1.5 }, { kind: "image" }, { query: "x".repeat(501) }, { cursor: "" }, { accountId: "other" }]) {
       expect(() => operation.request.parse(invalid)).toThrow()
     }
-    expect(operation.response?.parse({ items: [{ id: "visit-1", title: "Title", author: "author", kind: "web", url: "https://example.com/share", visitedAt: "2026-10-28T00:00:00Z" }], nextCursor: null })).toMatchObject({ nextCursor: null })
+    const entry = { id: "visit-1", title: "Title", author: "author", kind: "web", url: "https://example.com/share", visitedAt: "2026-10-28T00:00:00Z" }
+    expect(operation.response?.parse({ items: [entry, { ...entry, visitCount: 3 }], nextCursor: null }))
+      .toEqual({ items: [entry, { ...entry, visitCount: 3 }], nextCursor: null })
+    expect(() => operation.response?.parse({ items: [{ ...entry, visitCount: 0 }], nextCursor: null })).toThrow()
     expect(() => accountIpcModule.methods.clearDriveBrowsingHistory.request.parse({ accountId: "other" })).toThrow()
   })
 
