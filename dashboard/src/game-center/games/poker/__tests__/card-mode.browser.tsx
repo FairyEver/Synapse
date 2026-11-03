@@ -285,7 +285,9 @@ it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手�
     const nextLayout = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
     await nextLayout()
     const anchor = document.querySelector(".poker-controls-anchor")!
-    const main = document.querySelector(".poker-table-main")!
+    const main = document.querySelector<HTMLElement>(".poker-table-main")!
+    // Capture the baseline once the compact toolbar's final layout has been measured.
+    await expect.poll(() => Math.abs(main.scrollTop - (main.scrollHeight - main.clientHeight) / 2)).toBeLessThan(1)
     const actions = anchor.querySelector(".poker-action-buttons")!
     const presets = anchor.querySelector(".poker-bet-presets")!
     const card = anchor.querySelector(".poker-hand-dock-card")!
@@ -360,6 +362,20 @@ it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手�
     }
   } finally { await screen.unmount() }
 })
+it("从桌面切到窄屏后，按最终可见高度居中牌桌", async () => {
+  await page.viewport(1482, 834)
+  const snapshot: PokerTableView = { ...cardTable, cards: { ...cardTable.cards!, version: "cards-v2" } }
+  const screen = await render(<div className="h-dvh"><Table table={snapshot} perspective="owner" onPerspective={noop} onBack={noop} /></div>)
+  try {
+    const main = document.querySelector<HTMLElement>(".poker-table-main")!
+    await expect.poll(() => main.clientWidth).toBeGreaterThan(850)
+    await page.viewport(390, 667)
+    await expect.poll(() => main.closest(".poker-table")?.getAttribute("data-compact-controls")).toBe("true")
+    expect(main.scrollHeight).toBeGreaterThan(main.clientHeight)
+    await expect.poll(() => Math.abs(main.scrollTop - (main.scrollHeight - main.clientHeight) / 2)).toBeLessThan(1)
+  } finally { await screen.unmount() }
+})
+
 it("850px两侧切换和卡牌面板开关复用原画布，减少动态效果仍可操作", async () => {
   const original = window.matchMedia.bind(window)
   const spy = vi.spyOn(window, "matchMedia").mockImplementation(query => query.includes("prefers-reduced-motion") ? { ...original(query), matches: true, addEventListener: noop, removeEventListener: noop } : original(query))

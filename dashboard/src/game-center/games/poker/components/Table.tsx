@@ -76,8 +76,8 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
   const showRoll = !cardDock && (!!view.reserve || !!view.roll?.enabled || !!view.ruleOptions?.roll || chipValue(cash.funds.roll) > 0)
   const dealt = useDealAnimation(table.handId, table.seats.length + table.board.length, 0, table)
   useLayoutEffect(() => {
-    const element = viewport.current, container = surface.current
-    if (!element || !container || typeof ResizeObserver === "undefined") return
+    const element = viewport.current, container = surface.current, scroller = cardDropArea.current
+    if (!element || !container || !scroller || typeof ResizeObserver === "undefined") return
     let frame: number | undefined, width: number | undefined, height = 0, containerWidth: number | undefined, containerHeight: number | undefined, centeredSize = ""
     const apply = () => {
       frame = undefined
@@ -85,12 +85,6 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
       if (width !== undefined) {
         const next = fitTableScene(width, height)
         setFit(previous => previous.scale === next.scale && previous.scene.mode === next.scene.mode ? previous : next)
-        const size = `${containerWidth}:${containerHeight}:${width}:${height}`
-        const scroller = element.parentElement
-        if (scroller && centeredSize !== size) {
-          scroller.scrollTop = Math.max(0, (scroller.scrollHeight - scroller.clientHeight) / 2)
-          centeredSize = size
-        }
       }
     }
     const observer = new ResizeObserver(entries => {
@@ -101,10 +95,18 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
           height = entry.contentRect.height
         }
       }
+      const visibleHeight = scroller.clientHeight, scrollHeight = scroller.scrollHeight
+      const size = `${containerWidth}:${containerHeight}:${width}:${height}:${visibleHeight}:${scrollHeight}`
+      if (width !== undefined && centeredSize !== size) {
+        scroller.scrollTop = Math.max(0, (scrollHeight - visibleHeight) / 2)
+        centeredSize = size
+      }
       if (frame === undefined) frame = requestAnimationFrame(apply)
     })
     observer.observe(container)
     observer.observe(element)
+    // The toolbar can change the visible area while the canvas stays at its minimum height.
+    observer.observe(scroller)
     return () => { observer.disconnect(); if (frame !== undefined) cancelAnimationFrame(frame) }
   }, [])
   const slots = Array.from({ length: view.maxSeats }, (_, seatNo) => ({ seatNo, index: view.seats.findIndex(s => s.seatNo === seatNo), seat: view.seats.find(s => s.seatNo === seatNo) }))
