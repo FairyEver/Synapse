@@ -292,6 +292,11 @@ it.each([[1280, 800], [320, 568], [568, 320]])("%s×%s 等待状态和手牌增�
     expect(getComputedStyle(anchor).backgroundColor).toBe(getComputedStyle(anchor.closest(".poker-table")!).backgroundColor)
     expect(presets.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top)
     expect(card.getBoundingClientRect().bottom).toBeLessThanOrEqual(bounds.top)
+    const presetsBounds = presets.getBoundingClientRect()
+    const gapBelowCards = presetsBounds.top - card.getBoundingClientRect().bottom
+    const gapBelowPresets = bounds.top - presetsBounds.bottom
+    expect(gapBelowCards).toBeGreaterThan(0)
+    expect(Math.abs(gapBelowCards - gapBelowPresets)).toBeLessThan(1)
     expect(bounds.width).toBeLessThan(anchor.getBoundingClientRect().width)
     const board = viewport.getBoundingClientRect().toJSON()
     if (height === 320) {
