@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>待办事项 · 图片附件原型</title>
+  <style>
+    /* Synapse 的中性色、状态色和圆角来自 desktop/src/styles/globals.css。 */
+    :root {
+      color-scheme: light dark;
+      --foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+      --background: light-dark(oklch(1 0 0), oklch(0.145 0 0));
+      --card: light-dark(oklch(1 0 0), oklch(0.205 0 0));
+      --surface: light-dark(oklch(0.965 0 0), oklch(0.175 0 0));
+      --primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
+      --primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+      --muted: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+      --muted-foreground: light-dark(oklch(0.556 0 0), oklch(0.708 0 0));
+      --selected: light-dark(oklch(0.945 0 0), oklch(0.3 0 0));
+      --border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+      --ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
+      --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
+      /* 独立 HTML 内嵌 Tailwind 主题的对应色阶。 */
+      --color-white: oklch(1 0 0);
+      --color-red-700: oklch(50.5% 0.213 27.518);
+      --color-red-300: oklch(80.8% 0.114 19.571);
+      --color-purple-700: oklch(49.6% 0.265 301.924);
+      --color-purple-300: oklch(82.7% 0.119 306.383);
+      --color-blue-700: oklch(48.8% 0.243 264.376);
+      --color-blue-300: oklch(80.9% 0.105 251.813);
+      --radius: 0.625rem;
+    }
+    [data-priority="high"] { --priority-fill: var(--color-red-700); --priority-ink: light-dark(var(--priority-fill), var(--color-red-300)); }
+    [data-priority="medium"] { --priority-fill: var(--color-purple-700); --priority-ink: light-dark(var(--priority-fill), var(--color-purple-300)); }
+    [data-priority="low"] { --priority-fill: var(--color-blue-700); --priority-ink: light-dark(var(--priority-fill), var(--color-blue-300)); }
+    [data-priority="none"] { --priority-ink: var(--muted-foreground); }
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--surface); color: var(--foreground); font: 14px/1.5 "Geist Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    h1, h2, p, dl, dd { margin: 0; }
+    .sprites { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .topbar { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; min-height: 56px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--background); }
+    h1 { font-size: 16px; font-weight: 650; white-space: nowrap; }
+    .button, .segment { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; font-weight: 500; white-space: nowrap; }
+    .button:hover, .segment:hover { background: var(--muted); }
+    .button.outline { border-color: var(--border); background: var(--background); }
+    .button.outline:hover { background: var(--muted); }
+    .button.primary { background: var(--primary); color: var(--primary-foreground); }
+    .button.primary:hover { opacity: .88; }
+    .button.icon-only { width: 32px; padding: 0; }
+    .segments { display: flex; padding: 3px; gap: 2px; border-radius: var(--radius); background: var(--muted); }
+    .segment { min-height: 28px; padding: 0 12px; border-radius: calc(var(--radius) - 3px); color: var(--priority-ink, var(--muted-foreground)); }
+    .segment[aria-pressed="true"] { background: var(--card); color: var(--foreground); border-color: var(--border); }
+    main { width: min(100%, 952px); margin-inline: auto; padding: 24px 24px 80px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .priority-filters { flex-wrap: wrap; }
+    .filter-option { position: relative; }
+    .filter-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+    .filter-option:hover .segment { background: var(--selected); }
+    .filter-option input:checked + .segment, .choices input:checked + span { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); font-weight: 650; }
+    .filter-option input:focus-visible + .segment { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .control { min-width: 0; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: 5px 10px; }
+    .toolbar select { cursor: pointer; }
+    .select-wrap { position: relative; display: inline-flex; align-items: center; }
+    .select-wrap > .icon { position: absolute; pointer-events: none; color: var(--muted-foreground); }
+    .select-wrap > .icon:first-child { left: 10px; }
+    .select-wrap > .icon:last-child { right: 9px; width: 13px; }
+    .select-wrap > select { appearance: none; padding-inline: 32px 29px; }
+    .select-wrap > select:first-child { padding-left: 10px; }
+    .quick-create { display: grid; gap: 8px; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    .quick-title-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .quick-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+    .quick-options select, .quick-options button { background: transparent; border-color: transparent; cursor: pointer; }
+    .quick-options select:hover, .quick-options button:hover { background: var(--muted); }
+    .quick-options button[aria-expanded="true"], .quick-options [data-configured="true"] { background: var(--muted); }
+    .quick-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 8px; }
+    .quick-fields:has(> :not([hidden])) { padding-top: 4px; }
+    .quick-fields:not(:has(> :not([hidden]))) { display: none; }
+    .quick-fields .quick-note { grid-column: 1 / -1; }
+    .list-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    .task { display: grid; grid-template-columns: 32px minmax(0, 1fr) 94px 32px; column-gap: 12px; align-items: center; min-height: 52px; padding-inline: 16px; }
+    #tasks { padding: 0; margin: 0; list-style: none; }
+    .task + .task { border-top: 1px solid var(--border); }
+    .task:first-child { border-top-left-radius: var(--radius); border-top-right-radius: var(--radius); }
+    .task:last-child { border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
+    .task:hover, .task:focus-within { background: color-mix(in oklab, var(--muted) 58%, var(--card)); }
+    .check { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; }
+    .check:hover { background: var(--muted); }
+    .check-mark { display: grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--ring); border-radius: 4px; }
+    .check[aria-checked="true"] .check-mark { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
+    .check-mark .icon { width: 13px; height: 13px; stroke-width: 2.2; }
+    .task-main { min-width: 0; padding-block: 10px; }
+    .task-content { display: block; width: 100%; padding: 0; border: 0; border-radius: 4px; background: transparent; text-align: left; }
+    .task-title { display: block; overflow-wrap: anywhere; font-weight: 550; }
+    .is-done .task-title { color: var(--muted-foreground); text-decoration: line-through; }
+    .note-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; font-size: 13px; color: var(--muted-foreground); }
+    .metadata { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; margin-top: 4px; color: var(--muted-foreground); font-size: 12px; }
+    .metadata > span { display: inline-flex; align-items: center; gap: 4px; }
+    .metadata .icon { width: 14px; height: 14px; }
+    .attachment-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .task-main > .attachment-strip, .detail-images > .attachment-strip { margin-top: 8px; }
+    .attachment { position: relative; flex: none; }
+    .thumbnail { display: grid; place-items: center; width: 68px; height: 48px; overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--muted); }
+    .thumbnail:hover, .thumbnail:focus-visible { border-color: var(--ring); }
+    .thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .thumbnail-more { color: var(--muted-foreground); font-size: 12px; }
+    .remove-image { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--card); }
+    .remove-image:hover { background: var(--muted); }
+    .remove-image .icon { width: 13px; height: 13px; }
+    .overdue, .danger { color: var(--destructive); }
+    .picker { position: relative; justify-self: center; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 23px; border-radius: 999px; padding: 0 8px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
+    .badge[data-priority] { color: var(--color-white); background: var(--priority-fill); }
+    .priority-trigger { padding: 0 5px; min-width: 60px; }
+    .priority-trigger[aria-expanded="true"], .more-trigger[aria-expanded="true"] { background: var(--selected); }
+    .priority-trigger.unset { color: var(--muted-foreground); font-size: 12px; }
+    .menu { position: absolute; z-index: 1; top: calc(100% + 4px); right: 0; min-width: 152px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    .menu.above { top: auto; bottom: calc(100% + 4px); }
+    .menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; white-space: nowrap; }
+    .menu button:is(:hover, :focus-visible) { background: var(--muted); }
+    .menu [data-priority]:not([data-priority="none"]) { color: var(--priority-ink); }
+    .menu [aria-checked="true"] { background: color-mix(in oklab, var(--priority-ink) 10%, var(--card)); }
+    .menu button .selected-check { margin-left: auto; }
+    .menu-separator { border-top: 1px solid var(--border); margin: 4px; }
+    .empty { display: grid; justify-items: center; gap: 12px; padding: 56px 16px; }
+    .empty > .icon { width: 22px; height: 22px; color: var(--muted-foreground); }
+    dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--foreground); }
+    dialog::backdrop { background: light-dark(color-mix(in oklab, var(--foreground) 20%, transparent), color-mix(in oklab, var(--background) 70%, transparent)); }
+    dialog.sheet { margin: 0 0 0 auto; width: min(440px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; border-width: 0 0 0 1px; }
+    dialog[open].sheet { display: flex; flex-direction: column; }
+    dialog.image-preview { width: min(860px, calc(100% - 24px)); }
+    .image-preview .panel-head h2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-stage { display: grid; place-items: center; min-height: min(200px, 30dvh); padding: 12px; background: var(--muted); }
+    .preview-stage img { display: block; max-width: 100%; max-height: calc(100dvh - 170px); object-fit: contain; }
+    .preview-nav { justify-content: center; }
+    .preview-nav button:disabled { opacity: .4; cursor: default; }
+    .preview-counter { min-width: 54px; color: var(--muted-foreground); text-align: center; font-variant-numeric: tabular-nums; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); padding: 12px 20px; }
+    .panel-head h2 { font-size: 16px; }
+    .panel-body { padding: 20px; }
+    .panel-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+    .sheet .panel-body { flex: 1; min-height: 0; overflow-y: auto; }
+    .detail-state { color: var(--muted-foreground); font-size: 12px; }
+    .detail-title { margin-top: 4px; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+    .detail-note { margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .detail-images { margin-top: 16px; }
+    .detail-images h3 { margin: 0; font-size: 14px; font-weight: 500; }
+    .attachment-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .detail-fields { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .detail-fields dt { color: var(--muted-foreground); }
+    .fields { display: grid; gap: 14px; }
+    .field { display: grid; gap: 5px; min-width: 0; }
+    .field label, legend { font-weight: 500; }
+    .field .control { width: 100%; }
+    textarea { resize: vertical; min-height: 65px; }
+    fieldset { margin: 0; padding: 0; min-width: 0; border: 0; }
+    legend { margin-bottom: 6px; padding: 0; }
+    .choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .choices label { position: relative; cursor: pointer; }
+    .choices input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+    .choices label > span { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius); white-space: nowrap; }
+    .choices input:focus-visible + span { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .choices label:hover input:not(:checked) + span { background: var(--muted); }
+    .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .required { color: var(--destructive); }
+    .notice { position: fixed; z-index: 3; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 6px 8px 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    @media (max-width: 580px) {
+      .topbar { padding: 8px 12px; gap: 6px; }
+      .segment { padding-inline: 6px; }
+      main { padding: 16px 12px 80px; }
+      .task { grid-template-columns: 28px minmax(0, 1fr) 54px 28px; column-gap: 5px; padding-inline: 7px; }
+      .task .icon-only, .check { width: 28px; }
+      .priority-trigger { min-width: 50px; padding-inline: 0; }
+      .metadata { column-gap: 8px; }
+      .task-main .thumbnail { width: 50px; height: 38px; }
+      .attachment-strip { gap: 6px; }
+    }
+    @media (max-width: 360px) {
+      .field-pair { grid-template-columns: 1fr; }
+      .panel-body, .panel-head, .panel-footer { padding-inline: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <svg class="sprites" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M8 4v16m-4-4 4 4 4-4m4 4V4m-4 4 4-4 4 4"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 12 2 2 3-4m3 2h3"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Zm0 0v6h6M8 13h8m-8 4h8"/></symbol>
+  </svg>
+  <header class="topbar">
+    <h1>待办事项</h1>
+    <div class="segments" role="group" aria-label="完成状态">
+      <button class="segment" data-status="pending" aria-pressed="true">未完成</button>
+      <button class="segment" data-status="all" aria-pressed="false">全部</button>
+    </div>
+  </header>
+
+  <main>
+    <form id="quick-form" class="quick-create" aria-label="快速新建待办">
+      <div class="quick-title-row">
+        <input class="control" id="quick-title" name="title" aria-label="待办标题" placeholder="输入待办标题" required maxlength="200" enterkeyhint="done">
+        <button class="button primary" type="submit"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>添加待办</button>
+      </div>
+      <div class="quick-options" role="group" aria-label="待办选项">
+        <span class="select-wrap">
+          <select class="control" name="priority" id="quick-priority" aria-label="新待办优先级">
+            <option value="none">优先级未设置</option>
+            <option value="high">高优先级</option>
+            <option value="medium">中优先级</option>
+            <option value="low">低优先级</option>
+          </select>
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+        </span>
+        <button class="button" type="button" id="quick-due-toggle" aria-expanded="false" aria-controls="quick-due-field">
+          <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg><span>截止时间</span>
+        </button>
+        <span class="select-wrap">
+          <svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg>
+          <select class="control" name="reminder" id="quick-reminder" aria-label="新待办提醒">
+            <option value="none">不提醒</option>
+            <option value="at_due">截止时提醒</option>
+            <option value="before_due">提前提醒</option>
+            <option value="custom">自定提醒</option>
+          </select>
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+        </span>
+        <button class="button" type="button" id="quick-note-toggle" aria-expanded="false" aria-controls="quick-note-field">
+          <svg class="icon" aria-hidden="true"><use href="#i-note"/></svg><span>备注</span>
+        </button>
+        <button class="button" type="button" data-choose-images title="选择图片，或在标题、备注中粘贴图片">
+          <svg class="icon" aria-hidden="true"><use href="#i-image"/></svg>添加图片
+        </button>
+        <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/x-icon,image/vnd.microsoft.icon,.ico" multiple data-image-input hidden>
+      </div>
+      <div class="quick-fields">
+        <div class="field" id="quick-due-field" hidden><label for="quick-due">截止时间</label><input class="control" type="datetime-local" id="quick-due" name="due"></div>
+        <div class="field" data-for-reminder="before_due" hidden><label for="quick-offset">提前</label><select class="control" id="quick-offset" name="offset"><option value="10">10 分钟</option><option value="60">1 小时</option><option value="1440">1 天</option></select></div>
+        <div class="field" data-for-reminder="custom" hidden><label for="quick-custom">提醒时间</label><input class="control" type="datetime-local" id="quick-custom" name="custom"></div>
+        <div class="field quick-note" id="quick-note-field" hidden><label for="quick-note">备注</label><textarea class="control" id="quick-note" name="note" rows="2" maxlength="10000"></textarea></div>
+      </div>
+      <div data-draft-images hidden></div>
+      <p class="danger" role="alert" hidden></p>
+    </form>
+
+    <div class="toolbar" aria-label="待办筛选与排序">
+      <fieldset class="segments priority-filters" id="priority-filter" aria-label="筛选优先级">
+        <label class="filter-option"><input type="radio" name="priority-filter" value="all" checked><span class="segment">全部优先级</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="high" aria-label="高优先级"><span class="segment" data-priority="high">高</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="medium" aria-label="中优先级"><span class="segment" data-priority="medium">中</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="low" aria-label="低优先级"><span class="segment" data-priority="low">低</span></label>
+        <label class="filter-option"><input type="radio" name="priority-filter" value="none"><span class="segment">未设置</span></label>
+      </fieldset>
+      <span class="select-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-sort"/></svg>
+        <select class="control" id="sort" aria-label="排序方式">
+          <option value="due">按截止时间</option>
+          <option value="priority">按优先级</option>
+        </select>
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </span>
+    </div>
+    <section class="list-card" aria-label="待办列表">
+      <ul id="tasks" aria-label="待办事项"></ul>
+      <div id="empty" class="empty" hidden>
+        <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>
+        <p id="empty-text"></p>
+        <button class="button outline" id="empty-action" hidden>清除筛选</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="detail" class="sheet" aria-labelledby="detail-heading">
+    <header class="panel-head"><h2 id="detail-heading">待办详情</h2><button class="button icon-only" data-close aria-label="关闭详情" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header>
+    <div id="detail-body" class="panel-body"></div>
+    <footer class="panel-footer"><button class="button outline" id="edit-task">编辑</button></footer>
+  </dialog>
+
+  <dialog id="editor" aria-labelledby="editor-heading">
+    <header class="panel-head"><h2 id="editor-heading">编辑待办</h2><button class="button icon-only" data-close aria-label="关闭表单"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header>
+    <form id="task-form">
+      <div class="panel-body fields">
+        <div class="field"><label for="title">标题 <span class="required" aria-hidden="true">*</span></label><input class="control" id="title" name="title" required maxlength="200" autofocus></div>
+        <fieldset><legend>优先级</legend><div class="choices" id="priority-choices"></div></fieldset>
+        <div class="field"><label for="note">备注</label><textarea class="control" id="note" name="note" rows="2" maxlength="10000"></textarea></div>
+        <div class="field-pair">
+          <div class="field"><label for="due">截止时间</label><input class="control" type="datetime-local" id="due" name="due"></div>
+          <div class="field"><label for="reminder">提醒</label><select class="control" id="reminder" name="reminder"><option value="none">不提醒</option><option value="at_due">截止时</option><option value="before_due">提前</option><option value="custom">自定时间</option></select></div>
+        </div>
+        <div class="field" data-for-reminder="before_due" hidden><label for="offset">提前</label><select class="control" id="offset" name="offset"><option value="10">10 分钟</option><option value="60">1 小时</option><option value="1440">1 天</option></select></div>
+        <div class="field" data-for-reminder="custom" hidden><label for="custom">提醒时间</label><input class="control" type="datetime-local" id="custom" name="custom"></div>
+        <section class="field" aria-label="图片附件">
+          <div class="attachment-heading"><span>图片</span><button class="button outline" type="button" data-choose-images title="选择图片，或在标题、备注中粘贴图片"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg>添加图片</button></div>
+          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/x-icon,image/vnd.microsoft.icon,.ico" multiple data-image-input hidden>
+          <div data-draft-images hidden></div>
+        </section>
+        <p class="danger" role="alert" hidden></p>
+      </div>
+      <footer class="panel-footer"><button type="button" class="button outline" data-close>取消</button><button class="button primary" type="submit">保存</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="image-preview" class="image-preview" aria-labelledby="preview-heading">
+    <header class="panel-head">
+      <h2 id="preview-heading">图片预览</h2>
+      <button class="button icon-only" type="button" data-close aria-label="关闭图片预览" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+    </header>
+    <div class="preview-stage"><img id="preview-image" alt=""></div>
+    <footer class="panel-footer preview-nav" id="preview-nav" hidden>
+      <button class="button outline" type="button" id="preview-prev">上一张</button>
+      <span class="preview-counter" id="preview-counter" aria-live="polite"></span>
+      <button class="button outline" type="button" id="preview-next">下一张</button>
+    </footer>
+  </dialog>
+
+  <dialog id="delete-dialog" aria-labelledby="delete-heading" aria-describedby="delete-title">
+    <header class="panel-head"><h2 id="delete-heading">删除待办？</h2></header>
+    <p class="panel-body" id="delete-title"></p>
+    <footer class="panel-footer"><button class="button outline" data-close autofocus>取消</button><button class="button outline danger" id="confirm-delete">删除</button></footer>
+  </dialog>
+
+  <div id="notice" class="notice" hidden>
+    <span id="notice-text" role="status"></span>
+    <button class="button" id="undo" hidden>撤销</button>
+    <button class="button icon-only" id="close-notice" aria-label="关闭提示"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const priorities = { high: "高", medium: "中", low: "低", none: "未设置" };
+    const priorityOrder = ["high", "medium", "low", "none"];
+    const icon = (name, extra = "") => `<svg class="icon ${extra}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+    const escaped = value => String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    const MAX_IMAGES = 10;
+    const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+    const draftImages = new Map([["quick-form", []], ["task-form", []]]);
+    const imageUrls = new Set();
+    const exampleImage = (name, content) => ({
+      name,
+      url: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 440">
+        <rect width="640" height="440" fill="#f5f5f5"/>
+        <rect x="24" y="24" width="592" height="392" rx="12" fill="white" stroke="#e5e5e5"/>
+        <text x="56" y="81" font-size="24" font-family="system-ui, sans-serif" fill="#171717">${name}</text>
+        ${content}
+      </svg>`),
+    });
+    const sampleImages = [
+      exampleImage("页面访问趋势", `<path d="M56 320H584M56 264H584M56 208H584M56 152H584" stroke="#e5e5e5"/>
+        <path d="M56 302l74-46 74 16 74-79 74 20 74-37 74 14 74-64" fill="none" stroke="#1447e6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="56" y="354" width="106" height="11" rx="5" fill="#d4d4d4"/>`),
+      exampleImage("事件清单", `<rect x="56" y="119" width="528" height="52" rx="6" fill="#eff6ff"/>
+        <path d="M56 181H584M56 237H584M56 293H584M56 349H584M280 119V349M430 119V349" stroke="#d4d4d4"/>
+        <path d="M76 145H207M300 145H376M450 145H546M76 206H224M76 262H186M76 318H203M300 206H374M300 262H381M300 318H349" stroke="#737373" stroke-width="7" stroke-linecap="round"/>
+        <path d="M451 206h70m-70 56h59m-59 56h83" stroke="#155dfb" stroke-width="7" stroke-linecap="round"/>`),
+    ];
+    const localInputValue = date => {
+      if (!date) return "";
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    };
+    function sampleDate(days, hour, minute = 0) {
+      const date = new Date();
+      date.setDate(date.getDate() + days);
+      date.setHours(hour, minute, 0, 0);
+      return localInputValue(date);
+    }
+    const samples = [
+      { title: "神策埋点梳理", note: "梳理页面浏览和关键事件埋点", due: sampleDate(1, 17, 30), priority: "high", images: sampleImages },
+      { title: "小慧知识空间梳理和补充知识", note: "调整文件夹结构，补充经营班课程和常用脚本。", due: sampleDate(2, 10), reminder: "before_due", offset: 60, priority: "medium" },
+      { title: "直播梳理", due: sampleDate(-1, 18) },
+      { title: "产品设计说明书编写技能", priority: "low" },
+      { title: "产品设计 App 原型设计模型" },
+      { title: "产品设计规范" },
+      { title: "小程序微信认证" },
+      { title: "规范 PC 端筛选项折叠规则" },
+      { title: "整理设计评审记录", doneAt: Date.now() }
+    ];
+    let items = samples.map((sample, index) => ({
+      id: index + 1, priority: "none", note: "", due: "", reminder: "none", offset: 10, custom: "", doneAt: 0, images: [], ...sample
+    }));
+    let nextId = items.length + 1;
+    let status = "pending";
+    let activeMenu = null;
+    let dialogReturn = null;
+    let detailId = null;
+    let editId = null;
+    let deleteId = null;
+    let noticeTimer;
+    let undoCompletion = null;
+    let preview = null;
+
+    function imageStrip(images, { removable = false, limit = images.length } = {}) {
+      if (!images.length) return "";
+      const remaining = images.length - limit;
+      return `<div class="attachment-strip" role="group" aria-label="图片附件">
+        ${images.slice(0, limit).map((image, index) => `<div class="attachment">
+          <button class="thumbnail" type="button" data-image-index="${index}" aria-label="预览 ${escaped(image.name)}">
+            <img src="${escaped(image.url)}" alt="" loading="lazy">
+          </button>
+          ${removable ? `<button class="remove-image" type="button" data-remove-image="${index}" aria-label="移除 ${escaped(image.name)}">${icon("close")}</button>` : ""}
+        </div>`).join("")}
+        ${remaining > 0 ? `<button class="button outline thumbnail-more" type="button" data-image-index="${limit}" aria-label="查看其余 ${remaining} 张图片">+${remaining}</button>` : ""}
+      </div>`;
+    }
+
+    function renderDraftImages(form) {
+      const images = draftImages.get(form.id);
+      const strip = form.querySelector("[data-draft-images]");
+      strip.innerHTML = imageStrip(images, { removable: true });
+      strip.hidden = images.length === 0;
+    }
+
+    function releaseUnusedImages() {
+      const retained = new Set(items.flatMap(item => item.images.map(image => image.url)));
+      for (const images of draftImages.values()) {
+        for (const image of images) retained.add(image.url);
+      }
+      for (const url of imageUrls) {
+        if (retained.has(url)) continue;
+        URL.revokeObjectURL(url);
+        imageUrls.delete(url);
+      }
+    }
+
+    function addImages(form, files, pasted = false) {
+      const images = draftImages.get(form.id);
+      const errors = new Set();
+      for (const file of files) {
+        if (images.length >= MAX_IMAGES) { errors.add(`每条待办最多添加 ${MAX_IMAGES} 张图片`); break; }
+        const imageType = /^image\/(png|jpeg|gif|webp|avif|x-icon|vnd\.microsoft\.icon)$/i.test(file.type);
+        const imageExtension = !file.type && /\.(png|jpe?g|gif|webp|avif|ico)$/i.test(file.name);
+        if (!imageType && !imageExtension) { errors.add("请选择 PNG、JPEG、GIF、WebP、AVIF 或 ICO 图片"); continue; }
+        if (!file.size || file.size > MAX_IMAGE_BYTES) { errors.add("图片不能为空，单张最多 20 MB"); continue; }
+        const url = URL.createObjectURL(file);
+        imageUrls.add(url);
+        images.push({ name: pasted ? "剪贴板图片" : file.name, url });
+      }
+      renderDraftImages(form);
+      const error = form.querySelector('[role="alert"]');
+      error.textContent = [...errors].join("。");
+      error.hidden = errors.size === 0;
+    }
+
+    function renderPreview() {
+      const { images, index } = preview;
+      const image = images[index];
+      $("preview-heading").textContent = image.name;
+      $("preview-image").src = image.url;
+      $("preview-image").alt = image.name;
+      $("preview-nav").hidden = images.length < 2;
+      $("preview-counter").textContent = `${index + 1} / ${images.length}`;
+      $("preview-prev").disabled = index === 0;
+      $("preview-next").disabled = index === images.length - 1;
+    }
+
+    function openPreview(images, index) {
+      if (!images[index]) return;
+      preview = { images, index };
+      renderPreview();
+      $("image-preview").showModal();
+    }
+
+    function stepPreview(direction) {
+      const next = preview.index + direction;
+      if (!preview.images[next]) return;
+      preview.index = next;
+      renderPreview();
+    }
+
+    function dateLabel(value) {
+      const date = new Date(value);
+      const day = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(date);
+      const time = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+      return `${day} ${time}`;
+    }
+
+    function reminderTime(item) {
+      if (item.reminder === "custom") return item.custom;
+      if (item.reminder === "at_due") return item.due;
+      if (item.reminder === "before_due") return new Date(new Date(item.due).getTime() - item.offset * 60000);
+      return null;
+    }
+
+    const selectedPriority = () => $("priority-filter").querySelector("input:checked").value;
+
+    function visibleItems() {
+      const filter = selectedPriority();
+      const sort = $("sort").value;
+      return items.filter(item => (status === "all" || !item.doneAt) && (filter === "all" || filter === item.priority))
+        .sort((left, right) => {
+          if (left.doneAt || right.doneAt) return left.doneAt && right.doneAt
+            ? right.doneAt - left.doneAt || right.id - left.id
+            : Number(Boolean(left.doneAt)) - Number(Boolean(right.doneAt));
+          if (sort === "priority" && left.priority !== right.priority) return priorityOrder.indexOf(left.priority) - priorityOrder.indexOf(right.priority);
+          return (left.due || "9999").localeCompare(right.due || "9999") || left.id - right.id;
+        });
+    }
+
+    const badge = priority => `<span class="badge" data-priority="${priority}">${priorities[priority]}</span>`;
+
+    function row(item) {
+      const title = escaped(item.title);
+      const due = item.due ? dateLabel(item.due) : "";
+      const remind = reminderTime(item);
+      const overdue = !item.doneAt && item.due && new Date(item.due).getTime() < Date.now();
+      const remindLabel = item.doneAt && remind && new Date(remind).getTime() > item.doneAt ? "提醒已取消" : remind ? `提醒 ${dateLabel(remind)}` : "";
+      const completion = item.doneAt ? "恢复" : "完成";
+      return `<li class="task ${item.doneAt ? "is-done" : ""}" data-id="${item.id}">
+        <button class="check" type="button" role="checkbox" aria-checked="${Boolean(item.doneAt)}" aria-label="${completion}：${title}" data-action="complete"><span class="check-mark">${item.doneAt ? icon("check") : ""}</span></button>
+        <div class="task-main">
+        <button class="task-content" type="button" data-action="detail">
+          <span class="task-title">${title}</span>
+          ${item.note ? `<span class="note-preview">${escaped(item.note)}</span>` : ""}
+          ${due || remindLabel ? `<span class="metadata">
+            ${due ? `<span class="${overdue ? "overdue" : ""}">${icon("calendar")}${overdue ? "已逾期" : "截止"} ${due}</span>` : ""}
+            ${remindLabel ? `<span>${icon("bell")}${remindLabel}</span>` : ""}
+          </span>` : ""}
+        </button>
+        ${imageStrip(item.images, { limit: 3 })}
+        </div>
+        <div class="picker">
+          <button class="button priority-trigger ${item.priority === "none" ? "unset" : ""}" type="button" data-action="priority" aria-haspopup="menu" aria-expanded="false" aria-label="${title}，优先级${priorities[item.priority]}" title="${item.priority === "none" ? "设置优先级" : "修改优先级"}">${item.priority === "none" ? priorities.none : badge(item.priority)}</button>
+          <div class="menu" role="menu" aria-label="设置优先级" hidden>
+            ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}" data-priority="${priority}">${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
+          </div>
+        </div>
+        <div class="picker">
+          <button class="button icon-only more-trigger" type="button" data-action="more" aria-haspopup="menu" aria-expanded="false" aria-label="${title}的更多操作">${icon("more")}</button>
+          <div class="menu" role="menu" aria-label="更多操作" hidden>
+            <button type="button" role="menuitem" tabindex="-1" data-action="edit">编辑</button>
+            <button type="button" role="menuitem" tabindex="-1" data-action="complete">${completion}</button>
+            <div class="menu-separator" role="separator"></div>
+            <button type="button" role="menuitem" tabindex="-1" class="danger" data-action="delete">删除</button>
+          </div>
+        </div>
+      </li>`;
+    }
+
+    function render(focusId, focusAction = "detail") {
+      closeMenu();
+      const visible = visibleItems();
+      $("tasks").innerHTML = visible.map(row).join("");
+      $("empty").hidden = visible.length > 0;
+      const filtered = selectedPriority() !== "all";
+      $("empty-text").textContent = filtered ? "没有符合筛选条件的待办" : status === "pending" ? "没有未完成事项" : "没有待办事项";
+      $("empty-action").hidden = !filtered;
+      if (focusId != null) focusTask(focusId, focusAction);
+    }
+
+    function focusTask(id, action) {
+      const target = $("tasks").querySelector(`[data-id="${id}"] [data-action="${action}"]`);
+      const fallback = $("tasks").querySelector('[data-action="detail"]') || ($("empty-action").hidden ? $("quick-title") : $("empty-action"));
+      (target || fallback).focus();
+    }
+
+    function closeMenu(restore = false) {
+      if (!activeMenu) return;
+      const { trigger, menu } = activeMenu;
+      menu.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+      if (restore) trigger.focus();
+      activeMenu = null;
+    }
+
+    function openMenu(trigger, focusLast = false) {
+      const wasOpen = activeMenu?.trigger === trigger;
+      closeMenu();
+      if (wasOpen) return;
+      const menu = trigger.nextElementSibling;
+      menu.hidden = false;
+      menu.classList.remove("above");
+      const bounds = trigger.getBoundingClientRect();
+      if (bounds.bottom + menu.offsetHeight + 8 > window.innerHeight && bounds.top > menu.offsetHeight + 60) menu.classList.add("above");
+      trigger.setAttribute("aria-expanded", "true");
+      activeMenu = { trigger, menu };
+      const buttons = [...menu.querySelectorAll("button")];
+      const selected = menu.querySelector('[aria-checked="true"]');
+      (focusLast ? buttons.at(-1) : selected || buttons[0]).focus();
+    }
+
+    function notice(message, undo = null) {
+      window.clearTimeout(noticeTimer);
+      undoCompletion = undo;
+      $("notice").hidden = false;
+      $("notice-text").textContent = message;
+      $("undo").hidden = !undo;
+      if (!undo) noticeTimer = window.setTimeout(hideNotice, 3000);
+    }
+
+    function hideNotice() {
+      window.clearTimeout(noticeTimer);
+      const hadFocus = $("notice").contains(document.activeElement);
+      $("notice").hidden = true;
+      undoCompletion = null;
+      if (hadFocus) $("quick-title").focus();
+    }
+
+    function setCompletion(item) {
+      const previous = item.doneAt;
+      item.doneAt = previous ? 0 : Date.now();
+      render(item.id, "complete");
+      notice(item.doneAt ? "已完成待办" : "已恢复待办", { id: item.id, previous });
+    }
+
+    function showDetail(item) {
+      detailId = item.id;
+      const remind = reminderTime(item);
+      $("detail-body").innerHTML = `<p class="detail-state">${item.doneAt ? "已完成" : "未完成"}</p>
+        <p class="detail-title">${escaped(item.title)}</p>
+        ${item.note ? `<p class="detail-note">${escaped(item.note)}</p>` : ""}
+        ${item.images.length ? `<section class="detail-images" aria-label="图片附件"><h3>图片</h3>${imageStrip(item.images)}</section>` : ""}
+        <dl class="detail-fields">
+          <dt>优先级</dt><dd>${item.priority === "none" ? "未设置" : badge(item.priority)}</dd>
+          <dt>截止时间</dt><dd>${item.due ? dateLabel(item.due) : "未设置"}</dd>
+          <dt>提醒</dt><dd>${remind ? dateLabel(remind) : "不提醒"}</dd>
+          ${item.doneAt ? `<dt>完成时间</dt><dd>${dateLabel(item.doneAt)}</dd>` : ""}
+        </dl>`;
+      $("detail").showModal();
+    }
+
+    function updateReminderFields(form) {
+      const reminder = form.elements.reminder.value;
+      form.querySelectorAll("[data-for-reminder]").forEach(field => {
+        field.hidden = field.dataset.forReminder !== reminder;
+      });
+    }
+
+    function openEditor(item) {
+      editId = item.id;
+      const form = $("task-form");
+      draftImages.set(form.id, [...item.images]);
+      renderDraftImages(form);
+      for (const [name, value] of Object.entries(item)) {
+        const field = form.elements.namedItem(name);
+        if (field) field.value = value;
+      }
+      form.querySelector('[role="alert"]').hidden = true;
+      updateReminderFields(form);
+      $("editor").showModal();
+      $("title").focus();
+    }
+
+    function toggleQuickField(name, expanded) {
+      $(`quick-${name}-toggle`).setAttribute("aria-expanded", String(expanded));
+      $(`quick-${name}-field`).hidden = !expanded;
+    }
+
+    function updateQuickOptions() {
+      const due = $("quick-due").value;
+      $("quick-due-toggle").querySelector("span").textContent = due ? `截止 ${dateLabel(due)}` : "截止时间";
+      $("quick-due-toggle").dataset.configured = String(!!due);
+      $("quick-note-toggle").dataset.configured = String(!!$("quick-note").value.trim());
+      $("quick-priority").dataset.configured = String($("quick-priority").value !== "none");
+      $("quick-reminder").dataset.configured = String($("quick-reminder").value !== "none");
+    }
+
+    function readDraft(form) {
+      const fields = new FormData(form);
+      const reminder = fields.get("reminder");
+      return {
+        title: fields.get("title").trim(), note: fields.get("note").trim(),
+        priority: fields.get("priority"), due: fields.get("due"), reminder,
+        offset: Number(fields.get("offset")), custom: reminder === "custom" ? fields.get("custom") : "",
+        images: [...draftImages.get(form.id)]
+      };
+    }
+
+    function validateDraft(values, existing) {
+      if (!values.title) return { field: "title", message: "请输入标题" };
+      if (["at_due", "before_due"].includes(values.reminder) && !values.due) {
+        return { field: "due", message: "请设置截止时间，或选择其他提醒方式" };
+      }
+      if (values.reminder === "custom" && !values.custom) return { field: "custom", message: "请选择提醒时间" };
+      const reminder = reminderTime(values);
+      const previousReminder = existing && reminderTime(existing);
+      if (reminder && new Date(reminder).getTime() !== new Date(previousReminder).getTime() && new Date(reminder).getTime() <= Date.now()) {
+        return { field: values.reminder === "custom" ? "custom" : "due", message: "提醒时间需晚于当前时间" };
+      }
+      return null;
+    }
+
+    function returnFromDialog() {
+      if (!dialogReturn) return;
+      const destination = dialogReturn;
+      dialogReturn = null;
+      focusTask(destination.id, destination.action);
+    }
+
+    $("priority-choices").innerHTML = ["none", "high", "medium", "low"].map(priority =>
+      `<label><input type="radio" name="priority" value="${priority}" ${priority === "none" ? "checked" : ""}><span>${priorities[priority]}</span></label>`).join("");
+    ["due", "note"].forEach(name => {
+      $(`quick-${name}-toggle`).addEventListener("click", () => {
+        const expand = $(`quick-${name}-field`).hidden;
+        toggleQuickField(name, expand);
+        if (expand) $(`quick-${name}`).focus();
+      });
+    });
+    document.querySelectorAll("[data-status]").forEach(button => button.addEventListener("click", () => {
+      status = button.dataset.status;
+      document.querySelectorAll("[data-status]").forEach(tab => tab.setAttribute("aria-pressed", String(tab === button)));
+      render();
+    }));
+    $("priority-filter").addEventListener("change", () => render());
+    $("sort").addEventListener("change", () => render());
+    $("empty-action").addEventListener("click", () => {
+      const allPriorities = $("priority-filter").querySelector('[value="all"]');
+      allPriorities.checked = true;
+      render();
+      allPriorities.focus();
+    });
+    $("quick-form").addEventListener("input", updateQuickOptions);
+    [$("quick-form"), $("task-form")].forEach(form => {
+      const isQuick = form === $("quick-form");
+      const error = form.querySelector('[role="alert"]');
+      const imageInput = form.querySelector("[data-image-input]");
+      const chooseImages = form.querySelector("[data-choose-images]");
+      chooseImages.addEventListener("click", () => imageInput.click());
+      imageInput.addEventListener("change", () => {
+        if (imageInput.files.length) addImages(form, imageInput.files);
+        imageInput.value = "";
+      });
+      form.addEventListener("paste", event => {
+        if (!event.target.matches('input[name="title"], textarea[name="note"]')) return;
+        const clipboard = event.clipboardData;
+        if (!clipboard) return;
+        const files = [...clipboard.files].filter(file => file.type.startsWith("image/"));
+        if (!files.length) {
+          for (const entry of clipboard.items) {
+            if (entry.kind !== "file" || !entry.type.startsWith("image/")) continue;
+            const file = entry.getAsFile();
+            if (file) files.push(file);
+          }
+        }
+        if (!files.length) return;
+        event.preventDefault();
+        addImages(form, files, true);
+      });
+      form.querySelector("[data-draft-images]").addEventListener("click", event => {
+        const remove = event.target.closest("[data-remove-image]");
+        if (remove) {
+          const images = draftImages.get(form.id);
+          const index = Number(remove.dataset.removeImage);
+          images.splice(index, 1);
+          renderDraftImages(form);
+          releaseUnusedImages();
+          error.hidden = true;
+          const removeButtons = form.querySelectorAll("[data-remove-image]");
+          (removeButtons[Math.min(index, removeButtons.length - 1)] || chooseImages).focus();
+          return;
+        }
+        const thumbnail = event.target.closest("[data-image-index]");
+        if (thumbnail) openPreview(draftImages.get(form.id), Number(thumbnail.dataset.imageIndex));
+      });
+      form.elements.reminder.addEventListener("change", () => {
+        updateReminderFields(form);
+        const reminder = form.elements.reminder.value;
+        if (isQuick && ["at_due", "before_due"].includes(reminder) && !$("quick-due").value) {
+          toggleQuickField("due", true);
+        }
+      });
+      form.addEventListener("input", () => { error.hidden = true; });
+      form.addEventListener("submit", event => {
+        event.preventDefault();
+        const existing = isQuick ? null : items.find(item => item.id === editId);
+        const values = readDraft(form);
+        const issue = validateDraft(values, existing);
+        if (issue) {
+          if (isQuick && issue.field === "due") toggleQuickField("due", true);
+          error.textContent = issue.message;
+          error.hidden = false;
+          form.elements.namedItem(issue.field).focus();
+          return;
+        }
+        if (isQuick) {
+          items.push({ ...values, id: nextId++, doneAt: 0 });
+          form.reset();
+          draftImages.set(form.id, []);
+          renderDraftImages(form);
+          toggleQuickField("due", false);
+          toggleQuickField("note", false);
+          updateReminderFields(form);
+          updateQuickOptions();
+          error.hidden = true;
+          $("quick-title").focus();
+        } else {
+          Object.assign(existing, values);
+          $("editor").close();
+        }
+        const filter = selectedPriority();
+        const filteredOut = filter !== "all" && filter !== values.priority;
+        render();
+        notice(`${isQuick ? "已添加待办" : "已保存待办"}${filteredOut ? "，已从当前筛选结果隐藏" : ""}`);
+      });
+    });
+
+    $("tasks").addEventListener("click", event => {
+      const button = event.target.closest("button[data-action], button[data-image-index]");
+      if (!button) return;
+      const item = items.find(task => task.id === Number(button.closest("li").dataset.id));
+      if (button.hasAttribute("data-image-index")) {
+        openPreview(item.images, Number(button.dataset.imageIndex));
+        return;
+      }
+      const action = button.dataset.action;
+      if (action === "priority" || action === "more") {
+        openMenu(button);
+      } else if (action === "set-priority") {
+        if (item.priority === button.dataset.value) return closeMenu(true);
+        item.priority = button.dataset.value;
+        const filter = selectedPriority();
+        const filteredOut = filter !== "all" && filter !== item.priority;
+        render(item.id, "priority");
+        const message = item.priority === "none" ? "已清除优先级" : `已设为${priorities[item.priority]}优先级`;
+        notice(`${message}${filteredOut ? "，已从当前筛选结果隐藏" : ""}`);
+      } else if (action === "complete") {
+        setCompletion(item);
+      } else {
+        closeMenu();
+        dialogReturn = { id: item.id, action: action === "detail" ? "detail" : "more" };
+        if (action === "detail") showDetail(item);
+        if (action === "edit") openEditor(item);
+        if (action === "delete") {
+          deleteId = item.id;
+          $("delete-title").textContent = item.title;
+          $("delete-dialog").showModal();
+        }
+      }
+    });
+
+    $("edit-task").addEventListener("click", () => {
+      const item = items.find(task => task.id === detailId);
+      $("detail").close();
+      openEditor(item);
+    });
+    $("detail-body").addEventListener("click", event => {
+      const thumbnail = event.target.closest("[data-image-index]");
+      if (!thumbnail) return;
+      const item = items.find(task => task.id === detailId);
+      if (item) openPreview(item.images, Number(thumbnail.dataset.imageIndex));
+    });
+    $("preview-prev").addEventListener("click", () => stepPreview(-1));
+    $("preview-next").addEventListener("click", () => stepPreview(1));
+    $("image-preview").addEventListener("close", () => {
+      if ($("image-preview").open) return;
+      preview = null;
+      $("preview-image").removeAttribute("src");
+    });
+    $("editor").addEventListener("close", () => {
+      if ($("editor").open) return;
+      draftImages.set("task-form", []);
+      renderDraftImages($("task-form"));
+      releaseUnusedImages();
+    });
+    $("confirm-delete").addEventListener("click", () => {
+      items = items.filter(task => task.id !== deleteId);
+      releaseUnusedImages();
+      $("delete-dialog").close();
+      render();
+      notice("已删除待办");
+    });
+    $("undo").addEventListener("click", () => {
+      const item = items.find(task => task.id === undoCompletion?.id);
+      if (item) {
+        item.doneAt = undoCompletion.previous;
+        render(item.id, "complete");
+        notice("已撤销");
+      }
+    });
+    $("close-notice").addEventListener("click", hideNotice);
+
+    document.querySelectorAll("[data-close]").forEach(button => button.addEventListener("click", () => button.closest("dialog").close()));
+    document.querySelectorAll("dialog").forEach(dialog => dialog.addEventListener("close", () => {
+      if (!document.querySelector("dialog[open]")) returnFromDialog();
+    }));
+    document.addEventListener("click", event => {
+      if (activeMenu && !activeMenu.trigger.parentElement.contains(event.target)) closeMenu();
+    });
+    document.addEventListener("focusin", event => {
+      if (activeMenu && !activeMenu.trigger.parentElement.contains(event.target)) closeMenu();
+    });
+    document.addEventListener("keydown", event => {
+      if ($("image-preview").open) {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          stepPreview(event.key === "ArrowLeft" ? -1 : 1);
+        }
+        return;
+      }
+      if (!activeMenu) {
+        const trigger = event.target.closest('[aria-haspopup="menu"]');
+        if (trigger && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+          event.preventDefault();
+          openMenu(trigger, event.key === "ArrowUp");
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu(true);
+        return;
+      }
+      if (event.key === "Tab") {
+        closeMenu(true);
+        return;
+      }
+      const options = [...activeMenu.menu.querySelectorAll("button")];
+      const current = options.indexOf(document.activeElement);
+      let next;
+      if (event.key === "ArrowDown") next = (current + 1) % options.length;
+      if (event.key === "ArrowUp") next = (current + options.length - 1) % options.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = options.length - 1;
+      if (next != null) {
+        event.preventDefault();
+        options[next].focus();
+      }
+    });
+    render();
+  </script>
+</body>
+</html>
