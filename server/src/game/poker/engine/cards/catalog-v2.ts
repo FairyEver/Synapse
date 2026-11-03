@@ -3,6 +3,7 @@ import { CARD_CATALOG_V1 } from "./catalog-v1"
 import { step } from "./catalog/definition"
 import { CardRegistry } from "./registry"
 import type { CardDefinition } from "./types"
+import { CARD_PRICING_V3 } from "./pricing-v3"
 
 function revise(id: string, changes: Partial<CardDefinition> & { description: string; play: NonNullable<CardDefinition["play"]> }): CardDefinition {
   const previous = CARD_CATALOG_V1.find(card => card.id === id)
@@ -63,10 +64,18 @@ export const CARD_CATALOG_V2_SNAPSHOT = Object.freeze({
   recipe: definitions.map(card => ({ id: card.id, copies: card.copies! })),
 })
 
-export function createCardRegistryV2(): CardRegistry {
+export function createCardRegistryV2(version: "cards-v2" | "cards-v3" = "cards-v2"): CardRegistry {
   if (CARD_CATALOG_V2_SNAPSHOT.digest !== "8b0ed5666c84f35babb5f07a7b1066fdae259c813fc10b82c17589dd7d6cc430") throw new Error("POKER_CARD_VERSION_UNSUPPORTED")
+  if (version === "cards-v3" && CARD_CATALOG_V3_SNAPSHOT.digest !== "846fb5bb6f504181f82259a1a7ddf20e097272c4150d91183f1e2caa421b19de") throw new Error("POKER_CARD_VERSION_UNSUPPORTED")
   return new CardRegistry(definitions)
 }
+
+// v3 keeps the v2 effects and deck recipe, but freezes its own pricing policy.
+export const CARD_CATALOG_V3_SNAPSHOT = Object.freeze({
+  ...CARD_CATALOG_V2_SNAPSHOT,
+  version: "cards-v3",
+  digest: createHash("sha256").update(JSON.stringify([CARD_CATALOG_V2_SNAPSHOT.digest, CARD_PRICING_V3])).digest("hex"),
+})
 
 // Artwork is a presentation reference and does not change the frozen rules digest.
 export function cardArtworkV2(definition: Pick<CardDefinition, "id" | "artId">): string {

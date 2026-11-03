@@ -25,12 +25,12 @@ describe("本手公开行动日志", () => {
     const log = projectHandLog({ ...input, hand: { ...funded, actionSeq: 1 }, actions: [cardAction], cards: [{ cardId: "24", seq: 1, status: "completed" }] })
     expect(log?.entries.at(-1)).toMatchObject({ action: "card", card: { id: "24", name: "弃旧图新" } })
   })
-  it("五选一公开能力牌和实付费用，不公开候选或暗牌，也不重复记录选择", () => {
+  it.each(["cards-v2", "cards-v3"])("%s 五选一公开能力牌和实付费用，不公开候选或暗牌，也不重复记录选择", cardRulesVersion => {
     const actionsV2 = [
       { ...actions[0], action: "card_play", rollId: null, amount: 24 },
       { ...actions[1], action: "card_choose", rollId: null, amount: 0 },
     ]
-    const log = projectHandLog({ ...input, hand: { ...hand, rules: { ...hand.rules, cardRulesVersion: "cards-v2", chipRulesVersion: "chips-v2", ruleOptions: { cards: true } }, actionSeq: 2 },
+    const log = projectHandLog({ ...input, hand: { ...hand, rules: { ...hand.rules, cardRulesVersion, chipRulesVersion: "chips-v2", ruleOptions: { cards: true } }, actionSeq: 2 },
       actions: actionsV2, cards: [{ cardId: "07", seq: 1, status: "completed", paidAmount: 24,
         ...{ candidates: ["Ks"], targetHole: "As", ownerAdmissionId: "private-id" } }],
     })

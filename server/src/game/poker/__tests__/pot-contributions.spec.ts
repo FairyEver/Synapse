@@ -56,8 +56,8 @@ describe("本手累计底池来源", () => {
     expect(hot.total).toBe(cold.total)
     expect(hot.players[1]).toMatchObject({ folded: true, amount: 16 })
   })
-  it("新版卡费入主池，但实时与归档的普通下注来源均不计入卡费", () => {
-    const rules = { ...hand.rules, cardRulesVersion: "cards-v2", chipRulesVersion: "chips-v2", ruleOptions: { cards: true } }
+  it.each(["cards-v2", "cards-v3"])("%s 新版卡费入主池，但实时与归档的普通下注来源均不计入卡费", cardRulesVersion => {
+    const rules = { ...hand.rules, cardRulesVersion, chipRulesVersion: "chips-v2", ruleOptions: { cards: true } }
     const input = { ...base, hand: { ...hand, rules, actionSeq: 3 } }
     const engine = state()
     engine.seats[0].total = 2

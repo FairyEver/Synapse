@@ -26,7 +26,10 @@ describe("卡牌模式线协议", () => {
     expect(schema.safeParse({ ...base, choiceId: "c", candidateIndex: 5 }).success).toBe(false)
     expect(supportsPokerCardRules("cards-v1,chips-v2")).toBe(false)
     expect(supportsPokerCardRules("cards-v1,chips-v2", "cards-v1")).toBe(true)
-    expect(supportsPokerCardRules("cards-v2,chips-v2")).toBe(true)
+    expect(supportsPokerCardRules("cards-v2,chips-v2")).toBe(false)
+    expect(supportsPokerCardRules("cards-v2,chips-v2", "cards-v2")).toBe(true)
+    expect(supportsPokerCardRules("cards-v3,chips-v2")).toBe(true)
+    expect(pokerCardViewSchema.safeParse({ enabled: true, version: "cards-v3", definitions: { "07": definition }, pending, used: [], statuses: [] }).success).toBe(true)
   })
   it("新房允许卡牌模式且不接受 Roll 或配置卡池", () => {
     const tool = GAME_TOOLS.find(t => t.id === "app.game.poker.room.create")!

@@ -1,4 +1,4 @@
-import { addChipPayment, chipBreakdown, type PokerChipContribution, type PokerChipState } from "@synapse/shared/game-contracts"
+import { addChipPayment, chipBreakdown, isModernPokerCardRules, type PokerChipContribution, type PokerChipState } from "@synapse/shared/game-contracts"
 import type { ReserveState } from "./engine/chips/types"
 import type { ResolutionFrame } from "./engine/cards/types"
 import type { Prisma } from "@prisma/client"
@@ -29,7 +29,7 @@ export async function projectChipState(tx: Pick<Prisma.TransactionClient,"gamePo
   const paid = new Map(rolls.map(r=>[r.id,r]))
   const consume = (actions: ChipAction[]) => {
     for (const action of actions) {
-      if (action.action === "card_choose" || action.action === "card_play" && rules.cardRulesVersion !== "cards-v2") continue
+      if (action.action === "card_choose" || action.action === "card_play" && !isModernPokerCardRules(rules.cardRulesVersion)) continue
       if (action.action==="roll_choose") continue
       const fund = action.action==="roll_start" ? "roll" : "pot"
       const amount = fund==="roll" ? paid.get(action.rollId ?? "")?.fee : action.amount

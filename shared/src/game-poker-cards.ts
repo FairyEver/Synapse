@@ -1,6 +1,9 @@
-export const POKER_CARD_RULES_VERSIONS = ["cards-v1", "cards-v2"] as const
+export const POKER_CARD_RULES_VERSIONS = ["cards-v1", "cards-v2", "cards-v3"] as const
 export type PokerCardRulesVersion = typeof POKER_CARD_RULES_VERSIONS[number]
-export const POKER_CARD_RULES_VERSION = "cards-v2" as const
+export const POKER_CARD_RULES_VERSION = "cards-v3" as const
+export function isModernPokerCardRules(version: unknown): version is "cards-v2" | "cards-v3" {
+  return version === "cards-v2" || version === "cards-v3"
+}
 export const POKER_CHIP_RULES_VERSION = "chips-v2" as const
 export const GAME_POKER_RULES_HEADER = "x-synapse-poker-rules"
 export const SUPPORTED_POKER_RULES = [...POKER_CARD_RULES_VERSIONS, POKER_CHIP_RULES_VERSION] as const

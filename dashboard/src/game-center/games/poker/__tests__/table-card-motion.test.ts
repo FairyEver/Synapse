@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { PokerTableView } from "@synapse/shared/game-contracts"
+import { usesPokerHandDock } from "../lib/card-mode"
 import { planPokerCardMotion } from "../lib/table-card-motion"
 import { cardTable } from "./card-stage-fixture"
 
@@ -45,8 +46,10 @@ describe("牌桌动画读取已确认的变化", () => {
     expect(planPokerCardMotion(previous, current)?.changes).toEqual([{ kind: "replaced", seats: [0], count: 1 }])
   })
 
-  it("公开施放与实付筹码关联，本人抽牌按实例识别，旁观没有抽牌身份", () => {
+  it.each(["cards-v2", "cards-v3"] as const)("%s 公开施放与实付筹码关联，本人抽牌按实例识别，旁观没有抽牌身份", version => {
     const previous = table(), current = table()
+    previous.cards!.version = current.cards!.version = version
+    expect(usesPokerHandDock(current)).toBe(true)
     current.actionSeq = 4
     current.cards!.used = [{ id: "used", cardId: "22", name: "灵感迸发", seatNo: 0, seq: 4, status: "completed" }]
     current.cards!.ownHand = [{ ...current.cards!.ownHand![0], instanceId: "new-copy" }]

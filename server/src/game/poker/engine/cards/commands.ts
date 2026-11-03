@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { PokerCardPlayInput, PokerCardChooseInput, PokerCardChoiceSpec } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, type PokerCardPlayInput, type PokerCardChooseInput, type PokerCardChoiceSpec } from "@synapse/shared/game-contracts"
 import type { HandState } from "../hand-runner"
 import { after } from "../seat-order"
 import { quoteChipPayment } from "../chips/payment"
@@ -10,6 +10,7 @@ import { OperationRegistry, type CardRegistry } from "./registry"
 import { registerPokerCardOperations, publicHoleCards } from "./poker-operations"
 import { registerCardStatusOperations, paymentModifiers, cardSurcharges } from "./statuses"
 import { applyCardPoolOperation } from "./pool"
+import { cardBasePriceV3 } from "./pricing-v3"
 import { CardRuleError, type CardDefinition, type DomainOperation, type ResolutionContext } from "./types"
 
 function own(h: HandState, input: Pick<PokerCardPlayInput, "instanceId">, admissionId: string, registry: CardRegistry) {
@@ -18,6 +19,7 @@ function own(h: HandState, input: Pick<PokerCardPlayInput, "instanceId">, admiss
   return { instance, definition: registry.get(instance.definitionId) }
 }
 function cardBasePrice(h: HandState, definition: CardDefinition, seatNo: number, registry: CardRegistry): number {
+  if (h.cardRulesVersion === "cards-v3") return cardBasePriceV3(h, definition.id, seatNo)
   const replacement = definition.replacement
   if (!replacement) return (definition.costBB ?? 0) * h.bigBlind
   const { effectivePot, effectiveFuture } = rollFinancials(h, seatNo)
@@ -100,7 +102,7 @@ export function planCardPlay(h: HandState, input: PokerCardPlayInput, context: R
   if (h.cards!.pending || h.roll?.pending) throw new CardRuleError("POKER_CARD_CHOICE_REQUIRED")
   const { definition } = own(h, input, person.admissionId, registry)
   const requirement = cardRequirementReason(h, definition, person.admissionId, context.actionSeq)
-  if (requirement) throw new CardRuleError(h.cardRulesVersion === "cards-v2" ? requirement : "POKER_CARD_INVALID_SELECTION")
+  if (requirement) throw new CardRuleError(isModernPokerCardRules(h.cardRulesVersion) ? requirement : "POKER_CARD_INVALID_SELECTION")
   const choices = cardChoices(h, definition, person.admissionId, input.instanceId, registry)
   if (Object.keys(input.selections).length !== choices.length || choices.some(c => !c.options.some(o => o.value === String(input.selections[c.key])))) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
   const quote = quoteCardPlay(h, input, registry)

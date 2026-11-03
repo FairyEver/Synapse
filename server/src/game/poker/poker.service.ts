@@ -8,7 +8,7 @@ import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
 import { resolveRules, type PokerVariant } from "./engine/rules"
-import { POKER_BUY_IN_PRESETS, POKER_CARD_RULES_VERSION, POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, POKER_BUY_IN_PRESETS, POKER_CARD_RULES_VERSION, POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
 import { nextHandEligible, preparedForNextHand } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
 import { engine } from "./poker-lifecycle"
@@ -429,7 +429,7 @@ export class PokerService {
             const context = roomResolutionContext(c, hand.id, hand.actionSeq + 1, actionId, actor, "human")
             const resolution = resolveHandCommand(before, { kind: "hand.cancel", funding: "practice", scope: reserveScope(c, hand.id) }, context, createCardRegistry())
             await persistHandResolution(this, c, resolution, context, before)
-            if (before.cardRulesVersion !== POKER_CARD_RULES_VERSION) await this.hall.freezeTransfers(c.tx, await this.reserves.finalize(c.tx, hand.id), c.now)
+            if (!isModernPokerCardRules(before.cardRulesVersion)) await this.hall.freezeTransfers(c.tx, await this.reserves.finalize(c.tx, hand.id), c.now)
             await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: context.actionSeq, status: "cancelled", street: "settled", pot: 0, endedAt: c.now, engineState: json(resolution.state), result: resolution.state.cardAudit ? json({ cardAudit: resolution.state.cardAudit }) : Prisma.DbNull } })
             if (actor) await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq: context.actionSeq, seatNo: actor.seatNo, street: hand.street, action: "hand_cancel", amount: 0, nominalAmount: 0, waivedAmount: 0, potAfter: 0, actionSource: "human", actionId, createdAt: c.now } })
           }

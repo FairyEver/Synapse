@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import type { GamePokerAction, GamePokerHandSeat } from "@prisma/client"
-import type { PokerPotContributions } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, type PokerPotContributions } from "@synapse/shared/game-contracts"
 import type { HandState } from "./engine/hand-runner"
 import { resolveRules } from "./engine/rules"
 import { seatOrder } from "./engine/seat-order"
@@ -41,7 +41,7 @@ export function projectPotContributions(input: PotContributionsInput): PokerPotC
       // Historical snapshots without rules retain the engine's original 1/2 default.
       if (hand.rules !== undefined && hand.rules !== null && (typeof hand.rules !== "object" || Array.isArray(hand.rules))) return undefined
       const rules = resolveRules((hand.rules ?? {}) as Parameters<typeof resolveRules>[0])
-      cardFeesToMain = rules.cardRulesVersion === "cards-v2"
+      cardFeesToMain = isModernPokerCardRules(rules.cardRulesVersion)
       const order = seatOrder(participants.map(player => player.seatNo), hand.dealerSeat)
       blinds = [[order.smallBlind, rules.smallBlind], [order.bigBlind, rules.bigBlind]]
     } catch {

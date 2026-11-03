@@ -1,8 +1,8 @@
 import { z } from "zod"
-import type { PokerCardPlayInput, PokerCardChooseInput, PokerRollStartInput, PokerRollChooseInput, GameReserveScope } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, type PokerCardPlayInput, type PokerCardChooseInput, type PokerRollStartInput, type PokerRollChooseInput, type GameReserveScope } from "@synapse/shared/game-contracts"
 import { createCardOperationRegistry, planCardPlay, planCardChoice } from "./cards/commands"
 import { CARD_CATALOG_V1_SNAPSHOT } from "./cards/catalog-v1"
-import { CARD_CATALOG_V2_SNAPSHOT, createCardRegistryV2 } from "./cards/catalog-v2"
+import { CARD_CATALOG_V2_SNAPSHOT, CARD_CATALOG_V3_SNAPSHOT, createCardRegistryV2 } from "./cards/catalog-v2"
 import { createCardPool, applyCardPoolOperation, invalidatePokerObservations } from "./cards/pool"
 import { runResolution } from "./cards/runner"
 import type { CardRegistry } from "./cards/registry"
@@ -41,8 +41,8 @@ export function resolveHandCommand(original: HandState, command: HandCommand, co
     return { state, frame: { id: `${context.handId}:${context.actionSeq}`, handId: context.handId, seq: context.actionSeq, rootActionId: context.rootActionId, events: [] } }
   }
   const version = original.cardRulesVersion ?? "cards-v1"
-  const catalog = version === "cards-v2" ? createCardRegistryV2() : legacyCatalog
-  const snapshot = version === "cards-v2" ? CARD_CATALOG_V2_SNAPSHOT : CARD_CATALOG_V1_SNAPSHOT
+  const catalog = isModernPokerCardRules(version) ? createCardRegistryV2(version) : legacyCatalog
+  const snapshot = version === "cards-v3" ? CARD_CATALOG_V3_SNAPSHOT : version === "cards-v2" ? CARD_CATALOG_V2_SNAPSHOT : CARD_CATALOG_V1_SNAPSHOT
   if (command.kind !== "hand.start" && original.cards && (original.cards.version !== version || original.cards.catalogSnapshot?.digest !== snapshot.digest)) throw new CardRuleError("POKER_CARD_VERSION_UNSUPPORTED")
   if (!["hand.start", "hand.cancel", "timeout", "participant.leave"].includes(command.kind)) {
     if (original.ruleOptions?.cards && context.source === "mcp") throw new CardRuleError("POKER_CARD_AI_DISABLED")
@@ -55,7 +55,7 @@ export function resolveHandCommand(original: HandState, command: HandCommand, co
   const registry = createCardOperationRegistry(catalog)
   registry.register({ id: "hand.start", schema: empty, apply(h, _input, api) {
     if (!h.participants || h.participants.length !== h.seats.length) throw new CardRuleError("POKER_CARD_STATE_INVALID")
-    if (version !== "cards-v2") h.reserve = { revision: 0, lots: [], claims: [], movements: [], finalized: false }
+    if (!isModernPokerCardRules(version)) h.reserve = { revision: 0, lots: [], claims: [], movements: [], finalized: false }
     api.emit("bet.blinds", { amounts: h.seats.map(s => ({ seatNo: s.seatNo, amount: s.total })) }, "public")
     if (h.ruleOptions?.cards) {
       h.cards = createCardPool(catalog.all(), context, version)

@@ -17,7 +17,7 @@ vi.mock("@/game-center/runtime/account", () => ({
 vi.mock("../../../lib/api", () => ({
   gameApi: () => ({
     hall: { overview: async () => ({ sessions: [] }) },
-    poker: { guide: async () => ({ cards: { available: true, supportedVersions: ["cards-v1", "cards-v2", "chips-v2"] } }), lobby: { list: async () => ({ items: [], nextOffset: null }) }, room: { create: api.create }, table: {state:api.state}, control:{set:api.control} },
+    poker: { guide: async () => ({ cards: { available: true, supportedVersions: ["cards-v1", "cards-v2", "cards-v3", "chips-v2"] } }), lobby: { list: async () => ({ items: [], nextOffset: null }) }, room: { create: api.create }, table: {state:api.state}, control:{set:api.control} },
   }),
 }))
 vi.mock("../components/LobbyView", () => ({

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { Injectable } from "@nestjs/common"
-import { POKER_CARD_RULES_VERSION, POKER_CARD_RULES_VERSIONS, type PokerCardPlayInput, type PokerCardChooseInput, type PokerCardResult } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, POKER_CARD_RULES_VERSIONS, type PokerCardPlayInput, type PokerCardChooseInput, type PokerCardResult } from "@synapse/shared/game-contracts"
 import { PokerService, sampleRoomTime, json } from "./poker.service"
 import { engine, saveHand } from "./poker-lifecycle"
 import { assertController, type PokerCaller } from "./poker-control"
@@ -44,7 +44,7 @@ export class PokerCardService {
       const played = resolution.state.cards!.used.find(r => r.seq === context.actionSeq)
       const result: PokerCardResult = { ok: true, handId: hand.id, actionSeq: context.actionSeq, cursor: `${hand.handNo}:${context.actionSeq}`, status: operation === "choose" ? "completed" : played?.status ?? "completed" }
       await persistHandResolution(this.poker, c, resolution, context, before)
-      const payment = c.room.cardRulesVersion === POKER_CARD_RULES_VERSION && operation === "play" ? played : undefined
+      const payment = isModernPokerCardRules(c.room.cardRulesVersion) && operation === "play" ? played : undefined
       await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq: context.actionSeq, seatNo: seat.seatNo, street: hand.street, action: `card_${operation}`, amount: payment?.paidAmount ?? 0, nominalAmount: payment?.nominalAmount ?? 0, waivedAmount: payment?.waivedAmount ?? 0,
         actionSource: "human", isAuto: false, potAfter: handPotAmount(resolution.state), actionId: input.actionId, elapsedMs: Math.max(0, c.now.getTime() - (c.room.actionStartedAt?.getTime() ?? c.now.getTime())), response: json(result), createdAt: c.now } })
       await c.tx.gamePokerActionReceipt.create({ data: { actionId: input.actionId, userId, roomId: c.room.id, requestHash, response: json(result), createdAt: c.now } })

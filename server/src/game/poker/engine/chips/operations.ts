@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { isModernPokerCardRules } from "@synapse/shared/game-contracts"
 import type { HandState } from "../hand-runner"
 import { after } from "../seat-order"
 import type { OperationRegistry } from "../cards/registry"
@@ -32,7 +33,7 @@ export function registerChipCardOperations(registry: OperationRegistry<HandState
     const quote = quoteChipPayment({ payerId: person.admissionId, resource: "chips", purpose: input.purpose, nominalAmount: input.nominalAmount, balance: seat.stack, revision: input.revision, components: input.components }, paymentModifiers(h, input.seatNo))
     if (quote.version !== input.version || !quote.satisfied) throw new Error("POKER_CARD_PRICE_CHANGED")
     if (h.cards) consumeEffects(h, [...quote.consumedModifierIds, ...input.surchargeIds])
-    const intoPot = h.cardRulesVersion === "cards-v2" && input.purpose === "card"
+    const intoPot = isModernPokerCardRules(h.cardRulesVersion) && input.purpose === "card"
     if (quote.paidAmount && intoPot) {
       seat.stack -= quote.paidAmount
       const fees = h.mainPotFees ??= {}

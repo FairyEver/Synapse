@@ -46,7 +46,7 @@ describe("卡牌模式服务策略", () => {
     await service.createRoom("u", { maxSeats: 2, buyIn: 1000 })
     expect(creates[0]).toMatchObject({ chipRulesVersion: "chips-v2" }); expect(creates[0]).not.toHaveProperty("cardRulesVersion")
     await service.createRoom("u", { maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }, "human", true)
-    expect(creates[1]).toMatchObject({ cardRulesVersion: "cards-v2", chipRulesVersion: "chips-v2" })
+    expect(creates[1]).toMatchObject({ cardRulesVersion: "cards-v3", chipRulesVersion: "chips-v2" })
     const f = await rollStore(); expect(f.room.chipRulesVersion).toBeUndefined(); expect(f.hands[0].engineState.chipRulesVersion).toBeUndefined()
   })
   it("读取策略将卡牌房MCP降为公开，不影响普通房的本人策略", () => {

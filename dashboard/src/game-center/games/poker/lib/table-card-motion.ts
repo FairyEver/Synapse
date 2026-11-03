@@ -1,4 +1,4 @@
-import type { PokerTableView } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, type PokerTableView } from "@synapse/shared/game-contracts"
 
 export type PokerCardChange = {
   kind: "replaced" | "exchanged" | "reordered" | "shuffled" | "effect"
@@ -19,7 +19,7 @@ function participating(table: PokerTableView) {
 }
 
 export function planPokerCardMotion(previous: PokerTableView, current: PokerTableView): PokerCardMotionBatch | null {
-  if (!current.handId || current.cards?.version !== "cards-v2" || current.handNo < previous.handNo || current.status === "closed") return null
+  if (!current.handId || !current.cards || !isModernPokerCardRules(current.cards.version) || current.handNo < previous.handNo || current.status === "closed") return null
   const sameHand = current.handId === previous.handId
   const lastSeq = sameHand ? previous.actionSeq ?? 0 : 0
   if ((current.actionSeq ?? 0) < lastSeq || (!sameHand && current.settlement)) return null

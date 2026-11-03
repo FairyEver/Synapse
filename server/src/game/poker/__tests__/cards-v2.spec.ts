@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { PokerCardChooseInput, PokerCardPlayInput } from "@synapse/shared/game-contracts"
+import type { PokerCardChooseInput, PokerCardPlayInput, PokerCardRulesVersion } from "@synapse/shared/game-contracts"
 import { projectCardView, projectResolutionFrame } from "../poker-card-projection"
 import { createCardRegistry } from "../engine/cards/catalog-v1"
 import { CARD_CATALOG_V2_SNAPSHOT, createCardRegistryV2 } from "../engine/cards/catalog-v2"
@@ -22,10 +22,10 @@ function resolve(h: HandState, command: HandCommand, seq: number, entropy: numbe
   }), createCardRegistry())
 }
 
-function start(stacks = [1000, 1000], prefix: string[] = []) {
+function start(stacks = [1000, 1000], prefix: string[] = [], version: PokerCardRulesVersion = "cards-v2", bigBlind = 2) {
   const deck = [...prefix, ...orderedDeck().filter(card => !prefix.includes(card))]
   const h = startHand(stacks.map((stack, seatNo) => ({ stack, seatNo })), 0, deck, {
-    cardRulesVersion: "cards-v2", chipRulesVersion: "chips-v2", ruleOptions: { cards: true },
+    cardRulesVersion: version, chipRulesVersion: "chips-v2", ruleOptions: { cards: true }, smallBlind: bigBlind / 2, bigBlind,
   }, { deferProgress: true })
   h.participants = h.seats.map(p => ({ admissionId: `admission-${p.seatNo}`, userId: `user-${p.seatNo}`, seatNo: p.seatNo, kind: "human" }))
   return resolve(h, { kind: "hand.start" }, 0).state
@@ -244,5 +244,99 @@ describe("新版能力牌", () => {
       { amount: 398, eligible: [0, 2], refund: false, winners: sideWinners, shares: sideWinners.length > 1 ? { 0: 199, 2: 199 } : { 2: 398 } },
     ])
     assertHandIntegrity(h)
+  })
+})
+
+describe("cards-v3 筹码定价", () => {
+  it("八张牌在 6BB 翻牌池独立报价，不随对手剩余筹码变动", () => {
+    const h = start(Array(6).fill(50_000), [], "cards-v3", 20)
+    h.street = "flop"
+    h.seats[0].stack -= 90
+    h.seats[0].total += 90
+    const cards = ["01", "02", "06", "07", "11", "14", "22", "48"]
+    const prices = () => cards.map(id => cardPlay(h, id, 1).quote.paidAmount)
+    expect(prices()).toEqual([10, 11, 30, 30, 7, 15, 10, 0])
+    for (const seat of h.seats.filter(seat => seat.seatNo !== h.actionOnSeat)) seat.stack *= 10
+    expect(prices()).toEqual([10, 11, 30, 30, 7, 15, 10, 0])
+    expect(h.cards?.catalogSnapshot).toMatchObject({ version: "cards-v3", recipe: CARD_CATALOG_V2_SNAPSHOT.recipe })
+    expect(h.cards?.catalogSnapshot?.digest).not.toBe(CARD_CATALOG_V2_SNAPSHOT.digest)
+  })
+
+  it("只用普通可匹配资金计价：排除超额侧池、过去牌费和未来余额", () => {
+    const h = start([200, 1000, 1000], [], "cards-v3", 20)
+    const actor = h.seats.find(s => s.seatNo === h.actionOnSeat)!
+    actor.stack = 80
+    actor.total = 20
+    const opponents = h.seats.filter(s => s !== actor)
+    opponents[0].total = 500
+    opponents[1].total = 400
+    opponents[1].folded = true
+    h.mainPotFees = { [opponents[0].seatNo]: 300 }
+    const price = () => cardPlay(h, "07", 1).quote.paidAmount
+    expect(price()).toBe(29) // 220 × 12% × 0.5 + 15
+    h.street = "flop"
+    expect(price()).toBe(42)
+    h.street = "turn"
+    expect(price()).toBe(48)
+    h.street = "river"
+    expect(price()).toBe(55)
+  })
+
+  it("跨牌累进、四档封顶，候选确认无二次支付，筹码守恒", () => {
+    let h = start([20_000, 20_000], [], "cards-v3", 20)
+    h = bet(h, 1, { action: "call" })
+    h = bet(h, 2, { action: "check" })
+    const actor = h.actionOnSeat!
+    const first = cardPlay(h, "06", 3, { hole: 1 })
+    expect(first.quote.paidAmount).toBe(20)
+    const before = handPotAmount(h)
+    const pending = resolve(h, { kind: "card.play", input: first.input }, 3).state
+    expect(cardView(pending, actor, 3).pending?.candidates).toHaveLength(3)
+    expect(cardView(pending, 1 - actor, 3).pending).toBeNull()
+    expect(handPotAmount(pending)).toBe(before + 20)
+    h = choose(pending, 4, 1).state
+    expect(handPotAmount(h)).toBe(before + 20)
+    const shield = cardPlay(h, "48", 5)
+    h = resolve(h, { kind: "card.play", input: shield.input }, 5).state
+    expect(handPotAmount(h)).toBe(before + 20)
+    for (const [index, expected] of [27, 34, 41, 41].entries()) {
+      const seq = 6 + index * 2, offer = cardPlay(h, "07", seq)
+      expect(offer.quote.paidAmount).toBe(expected)
+      const paid = resolve(h, { kind: "card.play", input: offer.input }, seq).state
+      expect(handPotAmount(paid) - handPotAmount(h)).toBe(expected)
+      h = choose(paid, seq + 1, 0).state
+      expect(handPotAmount(h)).toBe(handPotAmount(paid))
+      assertHandIntegrity(h)
+    }
+    for (const seq of [14, 15]) h = bet(h, seq, { action: "check" })
+    expect(h.street).toBe("turn")
+    expect(cardPlay(h, "07", 16).quote.paidAmount).toBe(44)
+  })
+
+  it("情报被反制仍扣一次，补给只按拿到的张数计价", () => {
+    let h = start([1000, 1000], [], "cards-v3", 20)
+    const shield = cardPlay(h, "48", 1)
+    h = resolve(h, { kind: "card.play", input: shield.input }, 1).state
+    h = bet(h, 2, { action: "call" })
+    const actor = h.actionOnSeat!
+    const inspect = cardPlay(h, "14", 3, { player: 1 - actor })
+    expect(inspect.quote.paidAmount).toBe(12)
+    const blocked = resolve(h, { kind: "card.play", input: inspect.input }, 3).state
+    expect(blocked.cards?.used.at(-1)).toMatchObject({ status: "blocked", paidAmount: 12 })
+    expect(cardView(blocked, actor, 3).privateResults).toEqual([])
+    expect(handPotAmount(blocked)).toBe(handPotAmount(h) + 12)
+    h = blocked
+    const draw = cardPlay(h, "22", 4)
+    const own = h.cards!.hands[`admission-${actor}`]
+    own.push(...h.cards!.pool.splice(0, h.cards!.pool.length - 1))
+    const last = cardPlay(h, "22", 4)
+    expect(last.quote.paidAmount).toBe(5)
+    expect(() => resolve(h, { kind: "card.play", input: draw.input }, 4)).toThrow("POKER_CARD_PRICE_CHANGED")
+    const final = resolve(h, { kind: "card.play", input: last.input }, 4).state
+    expect(handPotAmount(final)).toBe(handPotAmount(h) + 5)
+    expect(final.cards?.pool).toEqual([])
+    const empty = cardPlay(final, "22", 5)
+    expect(() => resolve(final, { kind: "card.play", input: empty.input }, 5)).toThrow("POKER_CARD_POOL_EMPTY")
+    assertHandIntegrity(final)
   })
 })

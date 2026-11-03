@@ -2,7 +2,7 @@
 
 - 卡牌房既有 `table.state` / `room.get` 的公开 `handLog.entries` 可追加类型化 `effects`。热手按已读取的最多 1000 条动作序号取结算帧，归档读同一审计数据。仅返回实际可公开的效果和参赛快照名。响应 schema、MCP 描述与系统 Skill 同步，现有注册数、路由、权限和表结构保持原样。
 
-- 新建卡牌房要求 `cards-v2,chips-v2`，旧卡牌房继续按房间快照校验版本。既有真人私有 `card.play` / `card.choose` 支持新版五选一，公开建房参数停用 Roll 及钻石额度。旧 Roll 路由仍可操作已有 Roll 房。保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0，其他注册数量与例外无变化。
+- 新建卡牌房要求 `cards-v3,chips-v2`，旧卡牌房继续按房间快照校验版本。既有真人私有 `card.play` / `card.choose` 支持新版五选一，公开建房参数停用 Roll 及钻石额度。旧 Roll 路由仍可操作已有 Roll 房。保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0，其他注册数量与例外无变化。
 
 - 2026-11-03 卡牌验收同步：保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0。网页 `invoke` 的既有建房入口仅对创建操作传递已认证 Cookie 真人来源和规则支持信息，卡牌创建在 REST/invoke 两条入口均拒绝 Bearer 和缺版本请求；其他公开 invoke 行为与私有用牌边界不扩大。生成的系统 API 参考仍只包含原 30 个 MCP 工具。
 

@@ -8,7 +8,7 @@ import { quoteChipPayment } from "./chips/payment"
 import { paymentModifiers } from "./cards/statuses"
 import { assertReserveIntegrity } from "./chips/reserve"
 import { mainPotFeeAmount } from "./chips/main-pot"
-import type { PokerPaymentView } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, type PokerPaymentView } from "@synapse/shared/game-contracts"
 export { ROLL_PRICING_VERSION } from "./rules"
 export type RollKind = "normal" | "super"
 export interface RollHistory {
@@ -160,7 +160,7 @@ export function assertHandIntegrity(h: HandState): void {
   if (h.cards?.pending && h.roll?.pending) throw new Error("POKER_CARD_CHOICE_REQUIRED")
   if (integers.some(n => !Number.isSafeInteger(n) || n < 0)) throw new Error("POKER_HAND_MONEY_INVALID")
   const fees = Object.entries(h.mainPotFees ?? {}).reduce((sum, [no, amount]) => {
-    if (h.cardRulesVersion !== "cards-v2" || !h.seats.some(seat => String(seat.seatNo) === no) || !Number.isSafeInteger(amount) || amount <= 0) throw new Error("POKER_HAND_MONEY_INVALID")
+    if (!isModernPokerCardRules(h.cardRulesVersion) || !h.seats.some(seat => String(seat.seatNo) === no) || !Number.isSafeInteger(amount) || amount <= 0) throw new Error("POKER_HAND_MONEY_INVALID")
     return sum + BigInt(amount)
   }, 0n)
   const original = h.seats.reduce((sum, s) => sum + BigInt(s.startingStack), 0n)

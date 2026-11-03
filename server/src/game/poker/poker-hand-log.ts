@@ -1,4 +1,4 @@
-import type { PokerHandLog, PokerHandLogEntry } from "@synapse/shared/game-contracts"
+import { isModernPokerCardRules, type PokerHandLog, type PokerHandLogEntry } from "@synapse/shared/game-contracts"
 import { resolveRules } from "./engine/rules"
 import { seatOrder } from "./engine/seat-order"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
@@ -25,7 +25,7 @@ const money = (n: number) => Number.isSafeInteger(n) && n >= 0
 export function projectHandLog(input: Input): PokerHandLog | undefined {
   const { hand, participants } = input
   const funded = !!hand.rules && typeof hand.rules === "object" && "chipRulesVersion" in hand.rules && hand.rules.chipRulesVersion === "chips-v2"
-  const cardsV2 = !!hand.rules && typeof hand.rules === "object" && "cardRulesVersion" in hand.rules && hand.rules.cardRulesVersion === "cards-v2"
+  const modernCards = !!hand.rules && typeof hand.rules === "object" && "cardRulesVersion" in hand.rules && isModernPokerCardRules(hand.rules.cardRulesVersion)
   if (participants.length < 2 || participants.length > 10 || participants.some(p => p.handId !== hand.id || !money(p.startingStack)) ||
       new Set(participants.map(p => p.seatNo)).size !== participants.length) return undefined
   const ordered = [...input.actions].sort((a, b) => a.seq - b.seq)
@@ -61,10 +61,10 @@ export function projectHandLog(input: Input): PokerHandLog | undefined {
       const played = input.cards?.find(c => c.seq === a.seq)
       if (!played || !money(played.paidAmount ?? a.amount)) return undefined
       try {
-        cardRegistry ??= cardsV2 ? createCardRegistryV2() : createCardRegistry()
+        cardRegistry ??= modernCards ? createCardRegistryV2() : createCardRegistry()
         const definition = cardRegistry.get(played.cardId)
         const { id, name, description } = definition
-        const artId = cardsV2 ? cardArtworkV2(definition) : definition.artId
+        const artId = modernCards ? cardArtworkV2(definition) : definition.artId
         entries.push({ ...base, action: "card", amount: played.paidAmount ?? a.amount,
           ...(played.nominalAmount === undefined ? {} : { nominalAmount: played.nominalAmount, waivedAmount: played.waivedAmount ?? 0 }),
           card: { id, name, artId, description, status: played.status },
@@ -82,7 +82,7 @@ export function projectHandLog(input: Input): PokerHandLog | undefined {
     const bySeq = new Map(entries.map(entry => [entry.seq, entry]))
     const byAction = new Map(ordered.map(action => [action.seq, action]))
     const players = new Map(participants.map(({ seatNo, displayName }) => [seatNo, { seatNo, displayName }]))
-    cardRegistry ??= cardsV2 ? createCardRegistryV2() : createCardRegistry()
+    cardRegistry ??= modernCards ? createCardRegistryV2() : createCardRegistry()
     const names = new Map(cardRegistry.all().map(({ id, name }) => [id, name]))
     for (const frame of [...input.frames].sort((a, b) => a.seq - b.seq)) {
       if (frame.handId !== hand.id || !Array.isArray(frame.events)) continue
@@ -100,7 +100,7 @@ export function projectHandLog(input: Input): PokerHandLog | undefined {
         if (!destination) continue
         const cardId = destination.card?.id
         const effect = projectHandLogEffect(event, players, names, cardId)
-          ?? (cardsV2 && !hasReplacementFact ? projectLegacyOwnReplacement(event, players.get(action.seatNo), cardId) : undefined)
+          ?? (modernCards && !hasReplacementFact ? projectLegacyOwnReplacement(event, players.get(action.seatNo), cardId) : undefined)
         if (effect) (destination.effects ??= []).push(effect)
       }
     }

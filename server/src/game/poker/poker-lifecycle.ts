@@ -1,4 +1,5 @@
 import { randomInt, randomUUID } from "node:crypto"
+import { isModernPokerCardRules } from "@synapse/shared/game-contracts"
 import type { GamePokerHand } from "@prisma/client"
 import type { PokerService, RoomContext } from "./poker.service"
 import { json, sampleRoomTime } from "./poker.service"
@@ -185,7 +186,7 @@ export async function saveHand(
     })
   }
   if (settled) {
-    if (state.chipRulesVersion === "chips-v2" && state.cardRulesVersion !== "cards-v2") await poker.hall.freezeTransfers(c.tx, await poker.reserves.finalize(c.tx, hand.id), c.now)
+    if (state.chipRulesVersion === "chips-v2" && !isModernPokerCardRules(state.cardRulesVersion)) await poker.hall.freezeTransfers(c.tx, await poker.reserves.finalize(c.tx, hand.id), c.now)
     if (state.roll || state.reserve) await poker.hall.releaseTransfers(c.tx, hand.id, active.map(s => ({ admissionId: s.id, userId: s.userId, gameKind: "poker", gameRoomId: c.room.id, funding: c.room.mode === "practice" ? "practice" : "points" })), c.now)
     for (const p of state.seats) {
       const participant = participants.find((s) => s.seatNo === p.seatNo)!

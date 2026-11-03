@@ -20,8 +20,8 @@ describe("公开筹码展示投影", () => {
     expect(projected.recent.map(e => [e.fund, e.direction, e.amount])).toEqual([["reserve", "in", 120], ["reserve", "out", 60], ["reserve", "out", 60]])
     expect(JSON.stringify(projected)).not.toMatch(/As|private-root|nominal|waived/)
   })
-  it("新版换牌费进入主池筹码堆，待选完成不重放筹码且没有暂存", async () => {
-    const modern = { ...hand, rules: { ...hand.rules, chipRulesVersion: "chips-v2", cardRulesVersion: "cards-v2", ruleOptions: { cards: true } } }
+  it.each(["cards-v2", "cards-v3"])("%s 新版换牌费进入主池筹码堆，待选完成不重放筹码且没有暂存", async cardRulesVersion => {
+    const modern = { ...hand, rules: { ...hand.rules, chipRulesVersion: "chips-v2", cardRulesVersion, ruleOptions: { cards: true } } }
     const base = await projectChipState({} as any, modern, seats, [], [
       { seq: 1, seatNo: 0, action: "card_play", amount: 25 },
       { seq: 2, seatNo: 0, action: "card_choose", amount: 0 },

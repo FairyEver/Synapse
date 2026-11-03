@@ -15,7 +15,7 @@ vi.mock("@heroui/react", async original => ({ ...await original<typeof import("@
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 const roots = new Set<Root>()
-beforeEach(() => { api.identity = "card-room-user"; vi.clearAllMocks(); localStorage.clear(); api.guide.mockResolvedValue({ cards: { available: true, supportedVersions: ["cards-v1", "cards-v2", "chips-v2"] } }); api.create.mockResolvedValue({ roomCode: "4567" }) })
+beforeEach(() => { api.identity = "card-room-user"; vi.clearAllMocks(); localStorage.clear(); api.guide.mockResolvedValue({ cards: { available: true, supportedVersions: ["cards-v1", "cards-v2", "cards-v3", "chips-v2"] } }); api.create.mockResolvedValue({ roomCode: "4567" }) })
 afterEach(async () => { for (const root of roots) await act(async () => root.unmount()); roots.clear(); document.body.replaceChildren(); localStorage.clear() })
 async function mount(content: React.ReactNode) { const host = document.createElement("div"), root = createRoot(host); roots.add(root); document.body.append(host); await act(async () => root.render(content)); return { host, root } }
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.trim() === label)!
@@ -60,6 +60,6 @@ it("迟到的账号偏好与guide不进入新账号状态", async () => {
   const { root } = await mount(<Harness />)
   let oldLoad!: Promise<boolean>
   await act(async () => { oldLoad = draft.loadDraft(); api.identity = "another"; root.render(<Harness />) })
-  await act(async () => { oldGuide({ cards: { available: true, supportedVersions: ["cards-v1", "chips-v2"] } }); await oldLoad })
+  await act(async () => { oldGuide({ cards: { available: true, supportedVersions: ["cards-v1", "cards-v2", "chips-v2"] } }); await oldLoad })
   expect(state.available).toBe(false); expect(draft.draft.cards).toBe(false)
 })
