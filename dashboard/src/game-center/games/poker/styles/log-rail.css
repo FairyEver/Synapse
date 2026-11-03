@@ -24,13 +24,27 @@
   padding-block: 0.1875rem;
 }
 .poker-log-entry {
-  --button-bg-hover: var(--surface);
-  --button-bg-pressed: var(--surface);
+  --button-bg-hover: transparent;
+  --button-bg-pressed: transparent;
   inline-size: 1.75rem;
   block-size: 1.75rem;
   border-radius: var(--radius-sm);
 }
-.poker-log-entry > .poker-log-card-art {
+.poker-log-entry-visual {
+  display: grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.poker-log-entry:is([data-hovered="true"], [data-pressed="true"], [aria-pressed="true"]) > .poker-log-entry-visual {
+  background: var(--surface);
+}
+@media (any-pointer: coarse) {
+  .poker-log-entry { inline-size: 2.5rem; block-size: 2.5rem; }
+}
+.poker-log-entry-visual > .poker-log-card-art {
   inline-size: 1.25rem;
   block-size: 1.25rem;
   border-radius: var(--radius-xs);

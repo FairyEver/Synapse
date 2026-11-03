@@ -12,11 +12,11 @@ export function PokerAbilityFace({ name, artId, size, children }: Face & { size:
   </span>
 }
 
-export function PokerAbilityDetails({ name, artId, description, children }: Face & { description?: string; children?: ReactNode }) {
+export function PokerAbilityDetails({ name, artId, description, showTitle = true, children }: Face & { description?: string; showTitle?: boolean; children?: ReactNode }) {
   return <div className="poker-ability-details">
     <PokerAbilityFace name={name} artId={artId} size="lg" />
     <div className="poker-ability-details-text">
-      <strong>{name}</strong>
+      {showTitle && <strong>{name}</strong>}
       {description && <p>{description}</p>}
       {children}
     </div>

@@ -40,7 +40,7 @@ function HandLogRail({ table }: { table: PokerTableView }) {
   const [pinned, setPinned] = useState<Anchor | null>(null)
   const clearHover = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const tipId = useId()
-  const active = hovered ?? focused ?? pinned
+  const active = pinned ?? hovered ?? focused
   const button = active?.button ?? null
   const anchorRef = useMemo(() => ({ current: button }), [button])
   const current = items.find(item => item.id === active?.id)
@@ -65,14 +65,15 @@ function HandLogRail({ table }: { table: PokerTableView }) {
   useEffect(() => {
     if (!current) return
     function escape(event: KeyboardEvent) {
-      if (event.key !== "Escape" || (event.target instanceof Element && event.target.closest('[role="dialog"], [role="alertdialog"]'))) return
+      if (event.key !== "Escape" || (event.target instanceof Element && event.target.closest('dialog[open], [role="dialog"], [role="alertdialog"]'))) return
       event.preventDefault()
       event.stopPropagation()
+      if (pinned?.button.isConnected) pinned.button.focus({ preventScroll: true })
       dismiss()
     }
     document.addEventListener("keydown", escape, true)
     return () => document.removeEventListener("keydown", escape, true)
-  }, [!!current, dismiss])
+  }, [!!current, dismiss, pinned])
 
   return <>
     <aside ref={rail} className="poker-log-rail text-foreground" aria-label="本手公开日志">
@@ -85,27 +86,29 @@ function HandLogRail({ table }: { table: PokerTableView }) {
             <Button type="button" isIconOnly size="sm" variant="ghost"
               className="poker-log-entry" data-log-seq={entry?.seq}
               aria-label={label}
-              aria-expanded={selected} aria-describedby={selected ? tipId : undefined}
+              aria-expanded={selected} aria-pressed={pinned?.id === item.id} aria-describedby={selected ? tipId : undefined}
               onPointerEnter={event => {
-                if (event.pointerType !== "mouse") return
+                if (pinned || event.pointerType !== "mouse") return
                 keepHover()
                 setHovered({ id: item.id, button: event.currentTarget })
               }}
-              onPointerLeave={event => { if (event.pointerType === "mouse") leaveHover() }}
+              onPointerLeave={event => { if (!pinned && event.pointerType === "mouse") leaveHover() }}
               onFocus={event => {
                 const target = event.currentTarget
-                if (target instanceof HTMLButtonElement) setFocused({ id: item.id, button: target })
+                if (!pinned && target instanceof HTMLButtonElement) setFocused({ id: item.id, button: target })
               }}
               onBlur={() => setFocused(value => value?.id === item.id ? null : value)}
               onPress={event => {
                 const target = event.target
                 if (!(target instanceof HTMLButtonElement)) return
-                if (event.pointerType !== "keyboard") setFocused(null)
-                setPinned(value => value?.id === item.id ? null : { id: item.id, button: target })
+                dismiss()
+                if (pinned?.id !== item.id) setPinned({ id: item.id, button: target })
               }}>
-              {entry?.card
-                ? <img className="poker-log-card-art" src={cardArtwork(entry.card.artId ?? entry.card.id)} alt="" loading="lazy" draggable={false} />
-                : <LogIcon entry={entry} />}
+              <span className="poker-log-entry-visual">
+                {entry?.card
+                  ? <img className="poker-log-card-art" src={cardArtwork(entry.card.artId ?? entry.card.id)} alt="" loading="lazy" draggable={false} />
+                  : <LogIcon entry={entry} />}
+              </span>
             </Button>
           </li>
         })}
@@ -160,7 +163,7 @@ function ActionDetails({ entry, practice }: { entry: PokerHandLogEntry; practice
           <li key={index}><EffectDetail effect={effect} /></li>)}</ul>}
       </div>
     </div>
-    {entry.card && <PokerAbilityDetails name={entry.card.name} artId={entry.card.artId ?? entry.card.id} description={entry.card.description} />}
+    {entry.card && <PokerAbilityDetails name={entry.card.name} artId={entry.card.artId ?? entry.card.id} description={entry.card.description} showTitle={false} />}
   </>
 }
 
