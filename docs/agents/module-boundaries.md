@@ -361,7 +361,7 @@ RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选
 - 新规则的开局、下注、Roll、用牌、选择、超时与取消走同一个有界执行器。派生链先于下一根步骤收敛；每个根操作只加一次序号，并在房间事务中共同保存状态、暂存差量、完整根帧、动作和回执。超时选择持久化第一候选再按原规则撤出，不拆成多个根动作。单人陪练取消先收回候选、作废练习暂存并清空运行态，保留审计。
 - 默认真实时钟在持锁后及资金锁等待后采样；显式传入Date仅作为受控内部/测试时钟。行动起点与截止时间分别保存；用牌、Roll和选择不重开时限，延时最多至原起点后1200秒。新规则的机器人/超时调度进入事务时重新取时，不使用扫描时刻充当提交时刻。
 - 卡牌能力仅发给并允许真人主动使用，程序机器人保留下注/Roll但不领牌。卡牌房MCP读取降为公开受众，私密字段按原入座与认证用户核对；模式拒绝必须先于回执查询。只公开实际施放卡牌，额外消耗不公开身份；私有观察不进入共享动画帧。根帧分页不能切开同一次因果链，历史返回必须白名单剔除原始审计。
-- 上述新表/列由 `20261103000000_game_card_mode_and_reserve` 迁移提供，先迁移再启动相应API；已在专用本机 `_e2e` 恢复副本验收，尚未对业务库执行。暂存原付款/原份额身份在数据库中不可变，仅余额、状态和版本按受控事务推进。不得回退到忽略暂存、候选或名义下注的旧API；停用应先关闭新建，按原版本完成已有局和审计。
+- 上述新表/列由 `20261103000000_game_card_mode_and_reserve` 迁移提供，先迁移再启动相应API；已在专用本机 `_e2e` 恢复副本验收。暂存原付款/原份额身份在数据库中不可变，仅余额、状态和版本按受控事务推进。不得回退到忽略暂存、候选或名义下注的旧API；需要暂停新建时使用仍能完成已有局和审计的兼容修复版本。
 
 - 2026-10-31 完整迁移：UI、素材、动画和音效仅位于 `dashboard/src/game-center/`，使用现有 Web 工程的独立 HTML 入口。2026-11-02 起 Console 普通账号侧栏不再展示游戏入口，独立 `/game/` Web 页面保留；游戏不加载 Console Layout。游戏固定配色是独立页面例外，Console 继续仅浅色。
 - Web 复用 HttpOnly 用户会话；合法 `/game/` 地址登录后整页回跳。Cookie 游戏请求携带 `X-Synapse-Game-User-Id` 与认证身份比较，身份变化拒绝并清空旧页面状态；Cookie 写操作校验同源，invoke 仅允许无专用 REST 的 UI 操作。Bearer、本机 26 项 MCP、权限审计和控制语义保持兼容；浏览器与本机须登录同账号才共用原座位。
@@ -375,7 +375,7 @@ RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选
 - 独立 Web 入口为 `/game/`；桌面不注册游戏 System App；大厅只拥有GameAccount与GameSession，游戏注册表驱动入口。大厅不得join游戏内部表或按具体gameKind分支。
 - GameAccount.points存可用余额，GameSession.inPlay保存占用；总额=可用+占用，初始1,000,000。入座扣点、座位与会话同事务，账户/房间行锁；同房间账号与位置唯一约束由数据库保证。
 - 首个游戏为无限注德州扑克，不托管模型。2026-10-30用户批准Web本人入座、出牌与接管；真人与AI共用同账号同房唯一座位、筹码和当前手。Web UI 通过专用 REST 开放 join/act/control.set/events，不开放 table.wait/claim/checkpoint；桌面游戏 UI IPC 与 preload bridge 已移除。MCP act仅AI来源，UI专用路由由服务端确定human来源，客户端不能指定source/controller，人工动作不绑定persona/note；程序机器人仅陪练房允许。
-- 2026-11-03 当前游戏公共 capability/MCP 为30项，Web为30项，桌面游戏IPC为0；card.play/choose 与 room.close/control.set 仅Web私有。卡牌房仅真人同源Cookie和受支持版本可写，MCP/Bearer不能参赛、接入AI或读取本人私密牌；普通旧房保持兼容。创建开关默认关闭，开关仅约束新建，不能改变已有房规。
+- 2026-11-03 当前游戏公共 capability/MCP 为30项，Web为30项，桌面游戏IPC为0；card.play/choose 与 room.close/control.set 仅Web私有。卡牌房仅真人同源Cookie和受支持版本可写，MCP/Bearer不能参赛、接入AI或读取本人私密牌；普通旧房保持兼容。各环境都允许符合上述要求的网页用户选择创建卡牌房，房间规则仍在创建时固定。
 - MCP为game域29项索引能力（大厅3、扑克26），公开仍仅search/invoke。Web27项UI操作、桌面游戏IPC为0，room.close与control.set为UI私有，不进入capability/MCP目录；control.claim、checkpoint.get/save、table.wait仅Agent使用，table.events两端共用。bot.add/remove不授予机器人动作控制权，深链仅打开房间，不自动入座或交接。
 - 座位不签发令牌，当前账号+roomCode重连；同账号可同时参加多个游戏/多个房间。modelName为可空公开自述，仅展示，不校验后端身份、不参与规则或统计逻辑。
 - persona、历史版本、note仅本人可读，所有查询服务端白名单投影。玩家/MCP/机器人决策不返回对手未摊牌或弃牌暗牌；合法摊牌按实际手牌参与身份判定。Web教学旁观仅从未入座账号可看全牌，包括closed的GameSession为永久参与证据；参与点数房不能看他人暗牌，参与陪练房仅程序机器人可教学明牌，不扩大他人历史读取。UI公开投影剥离私密配置与合法动作，但保留服务端已授权hole和本人mySeatNo。版本与动作不可改写，行动与生效版本同事务保存；口述风格personaSource=session绑定null且不写回设置。

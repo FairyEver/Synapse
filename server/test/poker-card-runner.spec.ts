@@ -14,10 +14,9 @@ describe("卡牌隔离测试入口", () => {
     expect(spawn.mock.calls[0]).toMatchObject(["pnpm", ["--filter", "@synapse/shared", "run", "build"], { env: { DATABASE_URL: url }, stdio: "inherit" }])
     expect(spawn.mock.calls.every(call => !call[2].shell)).toBe(true)
   })
-  it("只运行指定真实PG测试并开启本地卡牌功能", () => {
+  it("只运行指定真实PG测试", () => {
     const spawn = vi.fn().mockReturnValue({ status: 0 })
     expect(runPokerCardE2e({ GAME_E2E_DATABASE_URL: "postgresql://127.0.0.1/card_e2e" }, spawn)).toBe(0)
     expect(spawn.mock.calls.at(-1)?.[1]).toEqual(["exec", "vitest", "run", "--config", "vitest.e2e.config.ts", "test/poker-card.e2e.spec.ts"])
-    expect(spawn.mock.calls.at(-1)?.[2].env.GAME_POKER_CARD_MODE_ENABLED).toBe("true")
   })
 })

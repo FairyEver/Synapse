@@ -11,7 +11,6 @@ import { PokerReadService } from "./poker/poker-read.service"
 import { PokerNudgeService } from "./poker/poker-nudge.service"
 import { PokerBotService } from "./poker/poker-bot.service"
 import { PokerEventsService } from "./poker/poker-events.service"
-import { pokerCardModeEnabled } from "./poker/poker-mode-policy"
 import { SUPPORTED_POKER_RULES } from "@synapse/shared/game-contracts"
 import type { PokerCaller } from "./poker/poker-control"
 @Injectable()
@@ -72,7 +71,7 @@ export class GameApiService {
       }
       case "app.game.poker.guide":
         return {
-          cards: { available: pokerCardModeEnabled(), supportedVersions: [...SUPPORTED_POKER_RULES], humanPlay: true, aiPlay: false, botReceivesCards: false, botUsesCards: false },
+          cards: { available: true, supportedVersions: [...SUPPORTED_POKER_RULES], humanPlay: true, aiPlay: false, botReceivesCards: false, botUsesCards: false },
           rules: {
             game: "无限注德州扑克",
             seats: `2–${POKER_MAX_SEATS}`,
@@ -96,7 +95,7 @@ export class GameApiService {
             "使用会话口述覆盖时，act传personaSource=session，行动不绑定游戏内版本；口述优先于游戏设置，仅本会话生效；未经用户明确要求不写回。模型自述可选，不确定留空。",
           errors: {
             POKER_CARD_AI_DISABLED: "停止在此房间的AI操作；仅可读取公开信息，不尝试claim或接入。",
-            POKER_CARD_MODE_UNAVAILABLE: "停止新建卡牌房，不把不可用设置静默改成普通房。",
+            POKER_CARD_MODE_UNAVAILABLE: "当前房间或牌局不支持卡牌操作。",
             POKER_CARD_VERSION_UNSUPPORTED: "停止写入，使用支持cards-v1/chips-v2的客户端。",
             POKER_ROLL_CHOICE_REQUIRED: "读取table.state或wait，完成原roll.choose。",
             POKER_ROLL_PRICE_CHANGED: "重新读取报价，确认后使用新UUID。",

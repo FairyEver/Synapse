@@ -15,7 +15,7 @@ import { engine } from "./poker-lifecycle"
 import { resolveHandCommand } from "./engine/resolve-hand"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
 import { persistHandResolution, reserveScope, roomResolutionContext } from "./poker-resolution"
-import { assertPokerModeAccess, pokerCardModeEnabled } from "./poker-mode-policy"
+import { assertPokerModeAccess } from "./poker-mode-policy"
 
 export type RoomContext = {
   tx: Prisma.TransactionClient
@@ -91,7 +91,6 @@ export class PokerService {
   ) {
     if (input.ruleOptions?.cards) {
       if (caller !== "human") reject("POKER_CARD_AI_DISABLED", "卡牌房当前仅支持真人操作。")
-      if (!pokerCardModeEnabled()) reject("POKER_CARD_MODE_UNAVAILABLE", "卡牌模式尚未开放。")
       if (!supportedRules) reject("POKER_CARD_VERSION_UNSUPPORTED", "客户端不支持当前卡牌规则。")
     }
     if (

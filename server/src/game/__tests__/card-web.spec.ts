@@ -25,7 +25,7 @@ const headers = { "x-synapse-game-user-id": "u", origin: "https://synapse.test",
 const cookie = "synapse_user_session=test-session"
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs() })
 async function fixture(cardMode = true) {
-  vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test"); vi.stubEnv("GAME_POKER_CARD_MODE_ENABLED", "true")
+  vi.stubEnv("APP_PUBLIC_URL", "https://synapse.test")
   const f = await rollStore("points", 2, cardMode ? { ruleOptions: { cards: true, roll: true }, rollPricingVersion: "roll-v1", cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2" } : undefined)
   vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(f.now)
   const actions = new PokerActionService(f.poker), read = new PokerReadService(f.poker), events = new PokerEventsService(f.poker), cards = new PokerCardService(f.poker), wait = new PokerWaitService(actions)
@@ -92,7 +92,7 @@ describe("真人卡牌HTTP边界", () => {
       expect(x.f.hands[0].engineState.cards.pending).toBeNull()
     } finally { await x.close() }
   })
-  it("Bearer访问Web状态仍为公开投影，Cookie保留本人持牌；创建默认门槛关闭", async () => {
+  it("Bearer访问Web状态仍为公开投影，Cookie保留本人持牌", async () => {
     const x = await fixture(), path = `/api/game/poker/rooms/${x.f.room.code}/state?perspective=owner`
     try {
       const bearer = await request(x.app.getHttpServer()).get(path).set(headers).set("Authorization", "Bearer test-bearer").expect(200)
@@ -100,10 +100,21 @@ describe("真人卡牌HTTP边界", () => {
       const own = await request(x.app.getHttpServer()).get(path).set(headers).set("Cookie", cookie).expect(200)
       expect(own.body.cards.ownHand).toHaveLength(3)
       expect(own.headers["cache-control"]).toBe("private, no-store")
-      vi.stubEnv("GAME_POKER_CARD_MODE_ENABLED", "false")
-      const created = await request(x.app.getHttpServer()).post("/api/game/poker/rooms").set(headers).set("Cookie", cookie).send({ maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }).expect(400)
-      expect(created.body.code).toBe("POKER_CARD_MODE_UNAVAILABLE")
       await request(x.app.getHttpServer()).post("/api/game/poker/rooms").set(headers).set("Authorization", "Bearer test-bearer").send({ maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }).expect(403)
+    } finally { await x.close() }
+  })
+  it.each([undefined, "false"])("未设置环境开关或残留旧配置（%s）时，网页仍可建卡牌房", async legacySetting => {
+    vi.stubEnv("GAME_POKER_CARD_MODE_ENABLED", legacySetting)
+    const x = await fixture(), http = request(x.app.getHttpServer())
+    try {
+      const guide = await http.post("/api/game/invoke").set(headers).set("Cookie", cookie).send({ operation: "app.game.poker.guide", params: {} }).expect(201)
+      for (const mode of ["points", "practice"]) {
+        const created = await http.post("/api/game/poker/rooms").set(headers).set("Cookie", cookie)
+          .send({ mode, maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }).expect(201)
+        const room = await x.f.poker.prisma.gamePokerRoom.findUnique({ where: { code: created.body.roomCode } })
+        expect(room).toMatchObject({ mode, ruleOptions: { cards: true }, cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2" })
+      }
+      expect(guide.body).toMatchObject({ ok: true, data: { cards: { available: true, supportedVersions: ["cards-v1", "chips-v2"], aiPlay: false } } })
     } finally { await x.close() }
   })
   it("普通旧房保留Bearer网页读取与控制交接，不要求卡牌版本", async () => {

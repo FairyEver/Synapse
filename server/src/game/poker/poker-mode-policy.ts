@@ -3,7 +3,6 @@ import { reject } from "./poker-error"
 
 type ModeRoom = { ruleOptions?: unknown; cardRulesVersion?: string | null }
 export function isCardRoom(room: ModeRoom): boolean { return !!room.cardRulesVersion || !!(room.ruleOptions as { cards?: boolean } | null)?.cards }
-export function pokerCardModeEnabled(): boolean { return process.env.GAME_POKER_CARD_MODE_ENABLED === "true" }
 export function assertPokerModeAccess(room: ModeRoom, caller: "human" | "mcp" | "rules_bot" | "timeout" | "system", operation: string): void {
   if (!isCardRoom(room)) return
   const writes = ["join", "ready", "start", "act", "roll.start", "roll.choose", "card.play", "card.choose", "claim", "sit", "checkpoint"]

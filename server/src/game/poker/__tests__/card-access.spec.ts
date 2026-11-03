@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { PokerService } from "../poker.service"
 import { PokerActionService } from "../poker-action.service"
 import { PokerRollService } from "../poker-roll.service"
@@ -8,7 +8,6 @@ import { rollStore } from "./roll-service-store"
 import { randomUUID } from "node:crypto"
 import { GameApiService } from "../../game-api.service"
 
-afterEach(() => vi.unstubAllEnvs())
 const fixture = () => rollStore("points", 2, { ruleOptions: { cards: true, roll: true }, rollPricingVersion: "roll-v1", cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2" })
 describe("卡牌模式服务策略", () => {
   it.each(["join", "ready", "start", "claim", "request_ai", "sit", "checkpoint"])("直接%s也拒绝AI参赛或交接", async operation => {
@@ -38,13 +37,10 @@ describe("卡牌模式服务策略", () => {
     for (const operation of ["app.game.poker.card.play", "app.game.poker.card.choose"]) await expect(api.run("u", operation, {})).rejects.toThrow("未知游戏操作")
     await expect(api.run("u", "app.game.poker.seat.join", { roomCode: "1234", caller: "human" })).rejects.toThrow()
   })
-  it("创建门槛默认关闭；普通新房固定chips-v2，旧房不回填", async () => {
+  it("创建卡牌房仍要求真人及受支持版本；普通新房固定chips-v2，旧房不回填", async () => {
     const creates: Record<string, unknown>[] = []
     const prisma = { user: { findUnique: async () => null }, gamePokerRoom: { create: async ({ data }: { data: Record<string, unknown> }) => { creates.push(data); return { code: "5678" } } } }
     const service = new PokerService(prisma as never, {} as never)
-    vi.stubEnv("GAME_POKER_CARD_MODE_ENABLED", "false")
-    await expect(service.createRoom("u", { maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }, "human", true)).rejects.toMatchObject({ response: { code: "POKER_CARD_MODE_UNAVAILABLE" } })
-    vi.stubEnv("GAME_POKER_CARD_MODE_ENABLED", "true")
     await expect(service.createRoom("u", { maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }, "mcp", true)).rejects.toMatchObject({ response: { code: "POKER_CARD_AI_DISABLED" } })
     await expect(service.createRoom("u", { maxSeats: 2, buyIn: 1000, ruleOptions: { cards: true } }, "human", false)).rejects.toMatchObject({ response: { code: "POKER_CARD_VERSION_UNSUPPORTED" } })
     await service.createRoom("u", { maxSeats: 2, buyIn: 1000 })

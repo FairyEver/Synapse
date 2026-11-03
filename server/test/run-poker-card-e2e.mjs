@@ -12,7 +12,7 @@ export function runPokerCardE2e(environment = process.env, spawn = spawnSync) {
     ["exec", "vitest", "run", "--config", "vitest.e2e.config.ts", "test/poker-card.e2e.spec.ts"],
   ]
   for (const args of commands) {
-    const result = spawn("pnpm", args, { stdio: "inherit", env: { ...environment, DATABASE_URL: database, GAME_POKER_CARD_MODE_ENABLED: "true" } })
+    const result = spawn("pnpm", args, { stdio: "inherit", env: { ...environment, DATABASE_URL: database } })
     if (result.error) throw new Error("Poker card e2e command could not start")
     if (result.status !== 0) return result.status ?? 1
   }
