@@ -35,7 +35,7 @@ export function AgentLongContentDialog({
           <DialogFrameBody>
             <ScrollArea className="h-full" viewportClassName="px-5 py-4">
               {viewer.error ? <Button variant="ghost" onClick={() => void viewer.retry()}>{viewer.error}</Button> : null}
-              <pre className="whitespace-pre-wrap break-words text-sm">{viewer.loading ? "加载中" : viewer.content}</pre>
+              <pre className="whitespace-pre-wrap wrap-anywhere text-sm">{viewer.loading ? "加载中" : viewer.content}</pre>
             </ScrollArea>
           </DialogFrameBody>
           <DialogFrameFooter>

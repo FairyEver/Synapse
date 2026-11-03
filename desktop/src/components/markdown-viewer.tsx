@@ -21,25 +21,25 @@ type MarkdownViewerProps = {
 }
 
 export const MARKDOWN_BODY_CLASSNAME = cn(
-  "min-w-0 max-w-full break-words text-sm leading-6 text-foreground",
+  "min-w-0 max-w-full wrap-anywhere text-sm leading-6 text-foreground",
   "[&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4",
   "[&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground",
   "[&_code]:break-all [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.8125rem]",
-  "[&_h1]:break-words [&_h1]:text-lg [&_h1]:font-semibold",
-  "[&_h2]:break-words [&_h2]:text-base [&_h2]:font-semibold",
-  "[&_h3]:break-words [&_h3]:font-medium",
+  "[&_h1]:wrap-anywhere [&_h1]:text-lg [&_h1]:font-semibold",
+  "[&_h2]:wrap-anywhere [&_h2]:text-base [&_h2]:font-semibold",
+  "[&_h3]:wrap-anywhere [&_h3]:font-medium",
   "[&_hr]:my-4 [&_hr]:border-border",
   "[&_img]:max-w-full",
-  "[&_li]:break-words",
+  "[&_li]:wrap-anywhere",
   "[&_li>p]:my-1",
   "[&_ol]:list-decimal [&_ol]:pl-5",
-  "[&_p]:break-words",
+  "[&_p]:wrap-anywhere",
   "[&_pre]:max-w-full [&_pre]:overflow-hidden [&_pre]:whitespace-pre-wrap [&_pre]:break-all [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-border [&_pre]:bg-muted/40 [&_pre]:p-0",
   "[&_pre_code]:block [&_pre_code]:min-w-0 [&_pre_code]:max-w-full [&_pre_code]:whitespace-pre-wrap [&_pre_code]:break-all [&_pre_code]:bg-transparent [&_pre_code]:p-4",
   "[&_table]:w-full [&_table]:max-w-full [&_table]:table-fixed [&_table]:border-collapse",
   "[&_tbody_tr]:border-t [&_tbody_tr]:border-border",
-  "[&_td]:break-words [&_td]:align-top [&_td]:px-3 [&_td]:py-2",
-  "[&_th]:break-words [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-medium",
+  "[&_td]:wrap-anywhere [&_td]:align-top [&_td]:px-3 [&_td]:py-2",
+  "[&_th]:wrap-anywhere [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-medium",
   "[&_ul]:list-disc [&_ul]:pl-5",
   "[&_*+blockquote]:mt-4 [&_*+h1]:mt-6 [&_*+h2]:mt-6 [&_*+h3]:mt-5 [&_*+hr]:mt-6 [&_*+ol]:mt-3 [&_*+p]:mt-3 [&_*+pre]:mt-4 [&_*+table]:mt-4 [&_*+ul]:mt-3",
   // 代码块样式 - 使用 github 主题作为基础
@@ -158,7 +158,7 @@ function MarkdownViewer({
         !showTabs && className,
       )}
     >
-      <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground">
+      <pre className="whitespace-pre-wrap wrap-anywhere font-mono text-sm leading-6 text-foreground">
         {content}
       </pre>
     </div>

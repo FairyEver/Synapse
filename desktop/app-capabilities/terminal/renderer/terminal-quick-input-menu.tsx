@@ -137,7 +137,7 @@ export function TerminalQuickInputMenu({ items, disabled, onPick }: TerminalQuic
                 <X />
               </Button>
             </div>
-            <p className="px-1.5 py-1 leading-relaxed select-text whitespace-pre-wrap">{previewed.content}</p>
+            <p className="px-1.5 py-1 leading-relaxed select-text whitespace-pre-wrap wrap-anywhere">{previewed.content}</p>
           </div>
         ) : null}
       </PopoverContent>

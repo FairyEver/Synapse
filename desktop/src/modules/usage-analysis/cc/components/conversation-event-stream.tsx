@@ -44,7 +44,7 @@ export function ConversationEventStream({
             <span className="text-xs text-muted-foreground">{event.timestamp ?? `#${event.lineNumber}`}</span>
           </div>
           <ScrollArea className="mt-2 max-h-40">
-            <pre className="whitespace-pre-wrap text-xs" data-allow-select="true">
+            <pre className="whitespace-pre-wrap wrap-anywhere text-xs" data-allow-select="true">
               {eventText(event) || JSON.stringify(redactSensitiveValue(event.raw), null, 2)}
             </pre>
           </ScrollArea>

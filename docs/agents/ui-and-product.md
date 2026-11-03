@@ -93,6 +93,7 @@
 
 ## Dialog
 
+- 普通弹窗和确认弹窗的默认单列须允许内容收缩。展示正文、引用、日志预览或用户输入时，连续链接、路径和标识也须能折行，原有段落须保留；用 `wrap-anywhere`，多行纯文本同时使用 `whitespace-pre-wrap`。需要保持原始列对齐的源码、表格等由自身容器横向滚动，不得撑宽外层弹窗。验收使用窄窗口和长连续文本，检查正文、相邻控件和操作区。
 - 普通小表单、确认、导入弹窗使用默认 shadcn `DialogContent` 关闭按钮。
 - 固定高度、`p-0`、主体滚动、右侧 header actions 或标题栏中间有 tabs 的大弹窗，使用 `desktop/src/components/ui/dialog.tsx` 的 `DialogFrame`、`DialogFrameHeader`、`DialogFrameBody`、`DialogFrameFooter`。
 - 大弹窗在 `DialogContent` 显式 `showCloseButton={false}`，由 `DialogFrameHeader` 放置关闭按钮；不得用 `pr-8`/`pr-12` 给绝对定位关闭按钮让位。

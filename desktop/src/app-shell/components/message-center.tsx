@@ -58,11 +58,11 @@ function listSubtitle(item: SynapseNotification): string {
 
 function DiscussionDetail({ item }: { item: SynapseNotification }) {
   const snapshot = item.driveDiscussion?.snapshot
-  if (!snapshot) return <p className="whitespace-pre-wrap break-words text-sm">{item.body}</p>
+  if (!snapshot) return <p className="whitespace-pre-wrap wrap-anywhere text-sm">{item.body}</p>
   return <div className="flex flex-col gap-5 text-sm">
-    {snapshot.original && <section className="flex flex-col gap-2"><h4 className="font-medium">{snapshot.original.kind === "image" ? "评论图片" : "评论原文"}</h4><p className="whitespace-pre-wrap break-words text-muted-foreground">{snapshot.original.text}</p></section>}
-    {snapshot.replyTo && <section className="flex flex-col gap-2"><h4 className="font-medium">回复对象 · {snapshot.replyTo.authorName}</h4><p className="whitespace-pre-wrap break-words text-muted-foreground">{snapshot.replyTo.content || "无文本内容"}</p></section>}
-    <section className="flex flex-col gap-2"><h4 className="font-medium">{discussionContentLabel(item.driveDiscussion)}</h4><p className="whitespace-pre-wrap break-words">{snapshot.content || "无文本内容"}</p></section>
+    {snapshot.original && <section className="flex flex-col gap-2"><h4 className="font-medium">{snapshot.original.kind === "image" ? "评论图片" : "评论原文"}</h4><p className="whitespace-pre-wrap wrap-anywhere text-muted-foreground">{snapshot.original.text}</p></section>}
+    {snapshot.replyTo && <section className="flex flex-col gap-2"><h4 className="font-medium">回复对象 · {snapshot.replyTo.authorName}</h4><p className="whitespace-pre-wrap wrap-anywhere text-muted-foreground">{snapshot.replyTo.content || "无文本内容"}</p></section>}
+    <section className="flex flex-col gap-2"><h4 className="font-medium">{discussionContentLabel(item.driveDiscussion)}</h4><p className="whitespace-pre-wrap wrap-anywhere">{snapshot.content || "无文本内容"}</p></section>
   </div>
 }
 
@@ -143,7 +143,7 @@ function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; q
   const mail = center.mail?.messageId === item.targetId ? center.mail : null
   const action = primaryAction(item)
 
-  return <article className="mx-auto w-full max-w-2xl">
+  return <article className="mx-auto w-full max-w-2xl wrap-anywhere">
     <div className="mb-7 flex items-center justify-between gap-2">
       <Button type="button" variant="ghost" size="sm" className="-ml-2 @3xl/message-center:hidden" onClick={center.closeDetail}><ArrowLeft />返回列表</Button>
       <span className="text-xs text-muted-foreground">{sourceName(item)}{isPending(item) && " · 待处理"}</span>
@@ -155,12 +155,12 @@ function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; q
       </DropdownMenu>
     </div>
     {isMail && center.mailLoading && !mail ? <div role="status" aria-label="加载站内信中" className="space-y-3"><Skeleton className="h-7 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-28 w-full" /></div> : <>
-      <h3 className="break-words text-xl font-semibold leading-snug">{item.source === "drive-discussion" ? item.driveDiscussion?.snapshot?.detailTitle ?? item.title : mail?.subject ?? item.title}</h3>
-      {isMail && mail ? <dl className="mt-5 grid grid-cols-[4rem_1fr] gap-x-3 gap-y-1.5 text-sm">
+      <h3 className="text-xl font-semibold leading-snug">{item.source === "drive-discussion" ? item.driveDiscussion?.snapshot?.detailTitle ?? item.title : mail?.subject ?? item.title}</h3>
+      {isMail && mail ? <dl className="mt-5 grid grid-cols-[4rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
         <dt className="text-muted-foreground">发件人</dt><dd>{personName(mail.sender)}</dd>
         <dt className="text-muted-foreground">收件人</dt><dd>{recipientNames(mail.toAddresses, mail.toRecipients)}</dd>
         <dt className="text-muted-foreground">时间</dt><dd>{new Date(mail.sentAt).toLocaleString("zh-CN")}</dd>
-      </dl> : <dl className="mt-5 grid grid-cols-[4rem_1fr] gap-x-3 gap-y-1.5 text-sm">
+      </dl> : <dl className="mt-5 grid grid-cols-[4rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
         <dt className="text-muted-foreground">来源</dt><dd>{sourceName(item)}</dd>
         <dt className="text-muted-foreground">时间</dt><dd>{new Date(item.createdAt).toLocaleString("zh-CN")}</dd>
       </dl>}
