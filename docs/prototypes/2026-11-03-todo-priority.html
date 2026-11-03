@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>待办事项 · 优先级交互原型</title>
+  <style>
+    /* Synapse 的中性色、状态色和圆角来自 desktop/src/styles/globals.css。 */
+    :root {
+      color-scheme: light dark;
+      --foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+      --background: light-dark(oklch(1 0 0), oklch(0.145 0 0));
+      --card: light-dark(oklch(1 0 0), oklch(0.205 0 0));
+      --surface: light-dark(oklch(0.965 0 0), oklch(0.175 0 0));
+      --primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
+      --primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+      --muted: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+      --muted-foreground: light-dark(oklch(0.556 0 0), oklch(0.708 0 0));
+      --selected: light-dark(oklch(0.945 0 0), oklch(0.3 0 0));
+      --border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+      --ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
+      --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
+      --radius: 0.625rem;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--surface); color: var(--foreground); font: 14px/1.5 "Geist Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    h1, h2, p, dl, dd { margin: 0; }
+    .sprites { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .topbar { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; min-height: 56px; padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--background); }
+    h1 { font-size: 16px; font-weight: 650; white-space: nowrap; }
+    .topbar > .button { justify-self: end; }
+    .button, .segment { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; font-weight: 500; white-space: nowrap; }
+    .button:hover, .segment:hover { background: var(--muted); }
+    .button.outline { border-color: var(--border); background: var(--background); }
+    .button.outline:hover { background: var(--muted); }
+    .button.primary { background: var(--primary); color: var(--primary-foreground); }
+    .button.primary:hover { opacity: .88; }
+    .button.icon-only { width: 32px; padding: 0; }
+    .segments { display: flex; padding: 3px; gap: 2px; border-radius: var(--radius); background: var(--muted); }
+    .segment { min-height: 28px; padding: 0 12px; border-radius: calc(var(--radius) - 3px); color: var(--muted-foreground); }
+    .segment[aria-pressed="true"] { background: var(--card); color: var(--foreground); border-color: var(--border); }
+    main { width: min(100%, 952px); margin-inline: auto; padding: 24px 24px 80px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .control { min-width: 0; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: 5px 10px; }
+    .toolbar select { cursor: pointer; }
+    .select-wrap { position: relative; display: inline-flex; align-items: center; }
+    .select-wrap > .icon { position: absolute; pointer-events: none; color: var(--muted-foreground); }
+    .select-wrap > .icon:first-child { left: 10px; }
+    .select-wrap > .icon:last-child { right: 9px; width: 13px; }
+    .select-wrap > select { appearance: none; padding-inline: 32px 29px; }
+    .list-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    .list-head, .task { display: grid; grid-template-columns: 32px minmax(0, 1fr) 94px 32px; column-gap: 12px; align-items: center; padding-inline: 16px; }
+    .list-head { min-height: 36px; border-radius: var(--radius) var(--radius) 0 0; background: var(--muted); color: var(--muted-foreground); font-size: 12px; font-weight: 500; }
+    .list-head .priority-heading { text-align: center; }
+    #tasks { padding: 0; margin: 0; list-style: none; }
+    .task { min-height: 52px; border-top: 1px solid var(--border); }
+    .task:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+    .task:hover, .task:focus-within { background: color-mix(in oklab, var(--muted) 58%, var(--card)); }
+    .check { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; }
+    .check:hover { background: var(--muted); }
+    .check-mark { display: grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--ring); border-radius: 4px; }
+    .check[aria-checked="true"] .check-mark { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
+    .check-mark .icon { width: 13px; height: 13px; stroke-width: 2.2; }
+    .task-content { display: block; padding: 10px 0; min-width: 0; border: 0; border-radius: 4px; background: transparent; text-align: left; }
+    .task-title { display: block; overflow-wrap: anywhere; font-weight: 550; }
+    .is-done .task-title { color: var(--muted-foreground); text-decoration: line-through; }
+    .note-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; font-size: 13px; color: var(--muted-foreground); }
+    .metadata { display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px; margin-top: 4px; color: var(--muted-foreground); font-size: 12px; }
+    .metadata > span { display: inline-flex; align-items: center; gap: 4px; }
+    .metadata .icon { width: 14px; height: 14px; }
+    .overdue, .danger { color: var(--destructive); }
+    .picker { position: relative; justify-self: center; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 50px; min-height: 23px; border: 1px solid transparent; border-radius: 999px; padding: 0 7px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
+    .badge .icon { width: 13px; height: 13px; }
+    .badge.high { color: var(--primary-foreground); background: var(--primary); }
+    .badge.medium { background: var(--selected); }
+    .badge.low { border-color: var(--border); color: var(--muted-foreground); }
+    .priority-trigger { padding: 0 5px; min-width: 60px; }
+    .priority-trigger[aria-expanded="true"], .more-trigger[aria-expanded="true"] { background: var(--selected); }
+    .priority-trigger.unset { color: var(--muted-foreground); }
+    .priority-trigger.unset .icon { width: 15px; height: 15px; }
+    .menu { position: absolute; z-index: 1; top: calc(100% + 4px); right: 0; min-width: 152px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    .menu.above { top: auto; bottom: calc(100% + 4px); }
+    .menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; text-align: left; white-space: nowrap; }
+    .menu button:is(:hover, :focus-visible) { background: var(--muted); }
+    .menu button .selected-check { margin-left: auto; }
+    .menu-separator { border-top: 1px solid var(--border); margin: 4px; }
+    .empty { display: grid; justify-items: center; gap: 12px; padding: 56px 16px; border-top: 1px solid var(--border); }
+    .empty > .icon { width: 22px; height: 22px; color: var(--muted-foreground); }
+    dialog { width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); color: var(--foreground); }
+    dialog::backdrop { background: light-dark(color-mix(in oklab, var(--foreground) 20%, transparent), color-mix(in oklab, var(--background) 70%, transparent)); }
+    dialog.sheet { margin: 0 0 0 auto; width: min(440px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; border-width: 0 0 0 1px; }
+    dialog[open].sheet { display: flex; flex-direction: column; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); padding: 12px 20px; }
+    .panel-head h2 { font-size: 16px; }
+    .panel-body { padding: 20px; }
+    .panel-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+    .sheet .panel-body { flex: 1; min-height: 0; overflow-y: auto; }
+    .detail-state { color: var(--muted-foreground); font-size: 12px; }
+    .detail-title { margin-top: 4px; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+    .detail-note { margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .detail-fields { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .detail-fields dt { color: var(--muted-foreground); }
+    .fields { display: grid; gap: 14px; }
+    .field { display: grid; gap: 5px; min-width: 0; }
+    .field label, legend { font-weight: 500; }
+    .field .control { width: 100%; }
+    textarea { resize: vertical; min-height: 65px; }
+    fieldset { margin: 0; padding: 0; min-width: 0; border: 0; }
+    legend { margin-bottom: 6px; padding: 0; }
+    .choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .choices label { position: relative; cursor: pointer; }
+    .choices input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+    .choices label > span { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius); white-space: nowrap; }
+    .choices input:checked + span { background: var(--selected); border-color: var(--ring); font-weight: 600; }
+    .choices input:focus-visible + span { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .choices label:hover > span { background: var(--muted); }
+    .field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .required { color: var(--destructive); }
+    .notice { position: fixed; z-index: 3; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 6px 8px 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+    @media (max-width: 580px) {
+      .topbar { padding: 8px 12px; gap: 6px; }
+      .segment { padding-inline: 6px; }
+      .topbar > .button { padding-inline: 5px; }
+      main { padding: 16px 12px 80px; }
+      .list-head, .task { grid-template-columns: 28px minmax(0, 1fr) 54px 28px; column-gap: 5px; padding-inline: 7px; }
+      .task .icon-only, .check { width: 28px; }
+      .priority-trigger { min-width: 50px; padding-inline: 0; }
+      .metadata { column-gap: 8px; }
+    }
+    @media (max-width: 360px) {
+      .topbar > .button .icon { display: none; }
+      .field-pair { grid-template-columns: 1fr; }
+      .panel-body, .panel-head, .panel-footer { padding-inline: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <svg class="sprites" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 22V3m0 1c5-5 11 5 16 0v12c-5 5-11-5-16 0"/></symbol>
+    <symbol id="i-high" viewBox="0 0 24 24"><path d="m7 11 5-5 5 5m-10 6 5-5 5 5"/></symbol>
+    <symbol id="i-medium" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-low" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-none" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M8 4v16m-4-4 4 4 4-4m4 4V4m-4 4 4-4 4 4"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 12 2 2 3-4m3 2h3"/></symbol>
+  </svg>
+  <header class="topbar">
+    <h1>待办事项</h1>
+    <div class="segments" role="group" aria-label="完成状态">
+      <button class="segment" data-status="pending" aria-pressed="true">未完成</button>
+      <button class="segment" data-status="all" aria-pressed="false">全部</button>
+    </div>
+    <button class="button" id="new-task"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>新建待办</button>
+  </header>
+
+  <main>
+    <div class="toolbar" aria-label="待办筛选与排序">
+      <span class="select-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg>
+        <select class="control" id="filter" aria-label="筛选优先级">
+          <option value="all">全部优先级</option>
+          <option value="high">高优先级</option>
+          <option value="medium">中优先级</option>
+          <option value="low">低优先级</option>
+          <option value="none">未设置</option>
+        </select>
+        <svg class="icon" aria-hidden="true"><use href="#i-low"/></svg>
+      </span>
+      <span class="select-wrap">
+        <svg class="icon" aria-hidden="true"><use href="#i-sort"/></svg>
+        <select class="control" id="sort" aria-label="排序方式">
+          <option value="due">按截止时间</option>
+          <option value="priority">按优先级</option>
+        </select>
+        <svg class="icon" aria-hidden="true"><use href="#i-low"/></svg>
+      </span>
+    </div>
+    <section class="list-card" aria-label="待办列表">
+      <div class="list-head" aria-hidden="true"><span></span><span>事项</span><span class="priority-heading">优先级</span></div>
+      <ul id="tasks" aria-label="待办事项"></ul>
+      <div id="empty" class="empty" hidden>
+        <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>
+        <p id="empty-text"></p>
+        <button class="button outline" id="empty-action"></button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="detail" class="sheet" aria-labelledby="detail-heading">
+    <header class="panel-head"><h2 id="detail-heading">待办详情</h2><button class="button icon-only" data-close aria-label="关闭详情" autofocus><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header>
+    <div id="detail-body" class="panel-body"></div>
+    <footer class="panel-footer"><button class="button outline" id="edit-task">编辑</button></footer>
+  </dialog>
+
+  <dialog id="editor" aria-labelledby="editor-heading">
+    <header class="panel-head"><h2 id="editor-heading"></h2><button class="button icon-only" data-close aria-label="关闭表单"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button></header>
+    <form id="task-form">
+      <div class="panel-body fields">
+        <div class="field"><label for="title">标题 <span class="required" aria-hidden="true">*</span></label><input class="control" id="title" name="title" required maxlength="200" autofocus></div>
+        <fieldset><legend>优先级</legend><div class="choices" id="priority-choices"></div></fieldset>
+        <div class="field"><label for="note">备注</label><textarea class="control" id="note" name="note" rows="2" maxlength="10000"></textarea></div>
+        <div class="field-pair">
+          <div class="field"><label for="due">截止时间</label><input class="control" type="datetime-local" id="due" name="due"></div>
+          <div class="field"><label for="reminder">提醒</label><select class="control" id="reminder" name="reminder"><option value="none">不提醒</option><option value="at_due">截止时</option><option value="before_due">提前</option><option value="custom">自定时间</option></select></div>
+        </div>
+        <div class="field" id="offset-field" hidden><label for="offset">提前</label><select class="control" id="offset" name="offset"><option value="10">10 分钟</option><option value="60">1 小时</option><option value="1440">1 天</option></select></div>
+        <div class="field" id="custom-field" hidden><label for="custom">提醒时间</label><input class="control" type="datetime-local" id="custom" name="custom"></div>
+        <p id="form-error" class="danger" role="alert" hidden></p>
+      </div>
+      <footer class="panel-footer"><button type="button" class="button outline" data-close>取消</button><button class="button primary" type="submit" id="save-task">保存</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="delete-dialog" aria-labelledby="delete-heading" aria-describedby="delete-title">
+    <header class="panel-head"><h2 id="delete-heading">删除待办？</h2></header>
+    <p class="panel-body" id="delete-title"></p>
+    <footer class="panel-footer"><button class="button outline" data-close autofocus>取消</button><button class="button outline danger" id="confirm-delete">删除</button></footer>
+  </dialog>
+
+  <div id="notice" class="notice" hidden>
+    <span id="notice-text" role="status"></span>
+    <button class="button" id="undo" hidden>撤销</button>
+    <button class="button icon-only" id="close-notice" aria-label="关闭提示"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const priorities = { high: "高", medium: "中", low: "低", none: "未设置" };
+    const priorityOrder = ["high", "medium", "low", "none"];
+    const icon = (name, extra = "") => `<svg class="icon ${extra}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+    const escaped = value => String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    const localInputValue = date => {
+      if (!date) return "";
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    };
+    function sampleDate(days, hour, minute = 0) {
+      const date = new Date();
+      date.setDate(date.getDate() + days);
+      date.setHours(hour, minute, 0, 0);
+      return localInputValue(date);
+    }
+    const samples = [
+      { title: "神策埋点梳理", note: "梳理页面浏览和关键事件埋点", due: sampleDate(1, 17, 30), priority: "high" },
+      { title: "小慧知识空间梳理和补充知识", note: "调整文件夹结构，补充经营班课程和常用脚本。", due: sampleDate(2, 10), reminder: "before_due", offset: 60, priority: "medium" },
+      { title: "直播梳理", due: sampleDate(-1, 18) },
+      { title: "产品设计说明书编写技能", priority: "low" },
+      { title: "产品设计 App 原型设计模型" },
+      { title: "产品设计规范" },
+      { title: "小程序微信认证" },
+      { title: "规范 PC 端筛选项折叠规则" },
+      { title: "整理设计评审记录", doneAt: Date.now() }
+    ];
+    let items = samples.map((sample, index) => ({
+      id: index + 1, priority: "none", note: "", due: "", reminder: "none", offset: 10, custom: "", doneAt: 0, ...sample
+    }));
+    let nextId = items.length + 1;
+    let status = "pending";
+    let activeMenu = null;
+    let dialogReturn = null;
+    let detailId = null;
+    let editId = null;
+    let deleteId = null;
+    let noticeTimer;
+    let undoCompletion = null;
+
+    function dateLabel(value) {
+      const date = new Date(value);
+      const day = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(date);
+      const time = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+      return `${day} ${time}`;
+    }
+
+    function reminderTime(item) {
+      if (item.reminder === "custom") return item.custom;
+      if (item.reminder === "at_due") return item.due;
+      if (item.reminder === "before_due") return new Date(new Date(item.due).getTime() - item.offset * 60000);
+      return null;
+    }
+
+    function visibleItems() {
+      const filter = $("filter").value;
+      const sort = $("sort").value;
+      return items.filter(item => (status === "all" || !item.doneAt) && (filter === "all" || filter === item.priority))
+        .sort((left, right) => {
+          if (left.doneAt || right.doneAt) return left.doneAt && right.doneAt
+            ? right.doneAt - left.doneAt || right.id - left.id
+            : Number(Boolean(left.doneAt)) - Number(Boolean(right.doneAt));
+          if (sort === "priority" && left.priority !== right.priority) return priorityOrder.indexOf(left.priority) - priorityOrder.indexOf(right.priority);
+          return (left.due || "9999").localeCompare(right.due || "9999") || left.id - right.id;
+        });
+    }
+
+    const badge = priority => `<span class="badge ${priority}">${icon(priority)}${priorities[priority]}</span>`;
+
+    function row(item) {
+      const title = escaped(item.title);
+      const due = item.due ? dateLabel(item.due) : "";
+      const remind = reminderTime(item);
+      const overdue = !item.doneAt && item.due && new Date(item.due).getTime() < Date.now();
+      const remindLabel = item.doneAt && remind && new Date(remind).getTime() > item.doneAt ? "提醒已取消" : remind ? `提醒 ${dateLabel(remind)}` : "";
+      const completion = item.doneAt ? "恢复" : "完成";
+      return `<li class="task ${item.doneAt ? "is-done" : ""}" data-id="${item.id}">
+        <button class="check" type="button" role="checkbox" aria-checked="${Boolean(item.doneAt)}" aria-label="${completion}：${title}" data-action="complete"><span class="check-mark">${item.doneAt ? icon("check") : ""}</span></button>
+        <button class="task-content" type="button" data-action="detail">
+          <span class="task-title">${title}</span>
+          ${item.note ? `<span class="note-preview">${escaped(item.note)}</span>` : ""}
+          ${due || remindLabel ? `<span class="metadata">
+            ${due ? `<span class="${overdue ? "overdue" : ""}">${icon("calendar")}${overdue ? "已逾期" : "截止"} ${due}</span>` : ""}
+            ${remindLabel ? `<span>${icon("bell")}${remindLabel}</span>` : ""}
+          </span>` : ""}
+        </button>
+        <div class="picker">
+          <button class="button priority-trigger ${item.priority === "none" ? "unset" : ""}" type="button" data-action="priority" aria-haspopup="menu" aria-expanded="false" aria-label="${title}，优先级${priorities[item.priority]}" title="${item.priority === "none" ? "设置优先级" : "修改优先级"}">${item.priority === "none" ? icon("flag") : badge(item.priority)}</button>
+          <div class="menu" role="menu" aria-label="设置优先级" hidden>
+            ${["none", "high", "medium", "low"].map(priority => `<button type="button" role="menuitemradio" tabindex="-1" aria-checked="${item.priority === priority}" data-action="set-priority" data-value="${priority}">${icon(priority)}${priorities[priority]}${item.priority === priority ? icon("check", "selected-check") : ""}</button>`).join("")}
+          </div>
+        </div>
+        <div class="picker">
+          <button class="button icon-only more-trigger" type="button" data-action="more" aria-haspopup="menu" aria-expanded="false" aria-label="${title}的更多操作">${icon("more")}</button>
+          <div class="menu" role="menu" aria-label="更多操作" hidden>
+            <button type="button" role="menuitem" tabindex="-1" data-action="edit">编辑</button>
+            <button type="button" role="menuitem" tabindex="-1" data-action="complete">${completion}</button>
+            <div class="menu-separator" role="separator"></div>
+            <button type="button" role="menuitem" tabindex="-1" class="danger" data-action="delete">删除</button>
+          </div>
+        </div>
+      </li>`;
+    }
+
+    function render(focusId, focusAction = "detail") {
+      closeMenu();
+      const visible = visibleItems();
+      $("tasks").innerHTML = visible.map(row).join("");
+      $("empty").hidden = visible.length > 0;
+      const filtered = $("filter").value !== "all";
+      $("empty-text").textContent = filtered ? "没有符合筛选条件的待办" : status === "pending" ? "没有未完成事项" : "没有待办事项";
+      $("empty-action").textContent = filtered ? "清除筛选" : "新建待办";
+      if (focusId != null) focusTask(focusId, focusAction);
+    }
+
+    function focusTask(id, action) {
+      const target = $("tasks").querySelector(`[data-id="${id}"] [data-action="${action}"]`);
+      const fallback = $("tasks").querySelector('[data-action="detail"]') || $("empty-action");
+      (target || fallback).focus();
+    }
+
+    function closeMenu(restore = false) {
+      if (!activeMenu) return;
+      const { trigger, menu } = activeMenu;
+      menu.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+      if (restore) trigger.focus();
+      activeMenu = null;
+    }
+
+    function openMenu(trigger, focusLast = false) {
+      const wasOpen = activeMenu?.trigger === trigger;
+      closeMenu();
+      if (wasOpen) return;
+      const menu = trigger.nextElementSibling;
+      menu.hidden = false;
+      menu.classList.remove("above");
+      const bounds = trigger.getBoundingClientRect();
+      if (bounds.bottom + menu.offsetHeight + 8 > window.innerHeight && bounds.top > menu.offsetHeight + 60) menu.classList.add("above");
+      trigger.setAttribute("aria-expanded", "true");
+      activeMenu = { trigger, menu };
+      const buttons = [...menu.querySelectorAll("button")];
+      const selected = menu.querySelector('[aria-checked="true"]');
+      (focusLast ? buttons.at(-1) : selected || buttons[0]).focus();
+    }
+
+    function notice(message, undo = null) {
+      window.clearTimeout(noticeTimer);
+      undoCompletion = undo;
+      $("notice").hidden = false;
+      $("notice-text").textContent = message;
+      $("undo").hidden = !undo;
+      if (!undo) noticeTimer = window.setTimeout(hideNotice, 3000);
+    }
+
+    function hideNotice() {
+      window.clearTimeout(noticeTimer);
+      const hadFocus = $("notice").contains(document.activeElement);
+      $("notice").hidden = true;
+      undoCompletion = null;
+      if (hadFocus) $("new-task").focus();
+    }
+
+    function setCompletion(item) {
+      const previous = item.doneAt;
+      item.doneAt = previous ? 0 : Date.now();
+      render(item.id, "complete");
+      notice(item.doneAt ? "已完成待办" : "已恢复待办", { id: item.id, previous });
+    }
+
+    function showDetail(item) {
+      detailId = item.id;
+      const remind = reminderTime(item);
+      $("detail-body").innerHTML = `<p class="detail-state">${item.doneAt ? "已完成" : "未完成"}</p>
+        <p class="detail-title">${escaped(item.title)}</p>
+        ${item.note ? `<p class="detail-note">${escaped(item.note)}</p>` : ""}
+        <dl class="detail-fields">
+          <dt>优先级</dt><dd>${item.priority === "none" ? "未设置" : badge(item.priority)}</dd>
+          <dt>截止时间</dt><dd>${item.due ? dateLabel(item.due) : "未设置"}</dd>
+          <dt>提醒</dt><dd>${remind ? dateLabel(remind) : "不提醒"}</dd>
+          ${item.doneAt ? `<dt>完成时间</dt><dd>${dateLabel(item.doneAt)}</dd>` : ""}
+        </dl>`;
+      $("detail").showModal();
+    }
+
+    function updateReminderFields() {
+      const reminder = $("reminder").value;
+      $("offset-field").hidden = reminder !== "before_due";
+      $("custom-field").hidden = reminder !== "custom";
+    }
+
+    function openEditor(item) {
+      editId = item?.id ?? null;
+      $("task-form").reset();
+      $("editor-heading").textContent = item ? "编辑待办" : "新建待办";
+      $("save-task").textContent = item ? "保存" : "新建";
+      $("title").value = item?.title ?? "";
+      $("note").value = item?.note ?? "";
+      $("due").value = item?.due ?? "";
+      $("reminder").value = item?.reminder ?? "none";
+      $("offset").value = item?.offset ?? 10;
+      $("custom").value = item?.custom ?? "";
+      $("task-form").elements.priority.value = item?.priority ?? "none";
+      $("form-error").hidden = true;
+      updateReminderFields();
+      $("editor").showModal();
+      $("title").focus();
+    }
+
+    function formError(message, field) {
+      $("form-error").textContent = message;
+      $("form-error").hidden = false;
+      $(field).focus();
+    }
+
+    function returnFromDialog() {
+      if (!dialogReturn) return;
+      const destination = dialogReturn;
+      dialogReturn = null;
+      if (destination.id) focusTask(destination.id, destination.action);
+      else $("new-task").focus();
+    }
+
+    $("priority-choices").innerHTML = ["none", "high", "medium", "low"].map(priority =>
+      `<label><input type="radio" name="priority" value="${priority}" ${priority === "none" ? "checked" : ""}><span>${icon(priority)}${priorities[priority]}</span></label>`).join("");
+    $("new-task").addEventListener("click", () => {
+      dialogReturn = {};
+      openEditor();
+    });
+    document.querySelectorAll("[data-status]").forEach(button => button.addEventListener("click", () => {
+      status = button.dataset.status;
+      document.querySelectorAll("[data-status]").forEach(tab => tab.setAttribute("aria-pressed", String(tab === button)));
+      render();
+    }));
+    $("filter").addEventListener("change", () => render());
+    $("sort").addEventListener("change", () => render());
+    $("empty-action").addEventListener("click", () => {
+      if ($("filter").value === "all") {
+        $("new-task").click();
+      } else {
+        $("filter").value = "all";
+        render();
+        $("filter").focus();
+      }
+    });
+    $("reminder").addEventListener("change", updateReminderFields);
+    $("task-form").addEventListener("input", () => { $("form-error").hidden = true; });
+    $("task-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const fields = new FormData(event.currentTarget);
+      const existing = items.find(item => item.id === editId);
+      const values = {
+        title: fields.get("title").trim(), note: fields.get("note").trim(),
+        priority: fields.get("priority"), due: fields.get("due"), reminder: fields.get("reminder"),
+        offset: Number(fields.get("offset")), custom: fields.get("reminder") === "custom" ? fields.get("custom") : ""
+      };
+      if (!values.title) return formError("请输入标题", "title");
+      if (["at_due", "before_due"].includes(values.reminder) && !values.due) return formError("请设置截止时间，或选择其他提醒方式", "due");
+      if (values.reminder === "custom" && !values.custom) return formError("请选择提醒时间", "custom");
+      const reminder = reminderTime(values);
+      const previousReminder = existing && reminderTime(existing);
+      if (reminder && new Date(reminder).getTime() !== new Date(previousReminder).getTime() && new Date(reminder).getTime() <= Date.now()) {
+        return formError("提醒时间需晚于当前时间", values.reminder === "custom" ? "custom" : "due");
+      }
+      if (existing) Object.assign(existing, values);
+      else items.push({ ...values, id: nextId++, doneAt: 0 });
+      const filteredOut = $("filter").value !== "all" && $("filter").value !== values.priority;
+      $("editor").close();
+      render();
+      notice(`${existing ? "已保存待办" : "已新建待办"}${filteredOut ? "，已从当前筛选结果隐藏" : ""}`);
+    });
+
+    $("tasks").addEventListener("click", event => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const item = items.find(task => task.id === Number(button.closest("li").dataset.id));
+      const action = button.dataset.action;
+      if (action === "priority" || action === "more") {
+        openMenu(button);
+      } else if (action === "set-priority") {
+        if (item.priority === button.dataset.value) return closeMenu(true);
+        item.priority = button.dataset.value;
+        const filteredOut = $("filter").value !== "all" && $("filter").value !== item.priority;
+        render(item.id, "priority");
+        const message = item.priority === "none" ? "已清除优先级" : `已设为${priorities[item.priority]}优先级`;
+        notice(`${message}${filteredOut ? "，已从当前筛选结果隐藏" : ""}`);
+      } else if (action === "complete") {
+        setCompletion(item);
+      } else {
+        closeMenu();
+        dialogReturn = { id: item.id, action: action === "detail" ? "detail" : "more" };
+        if (action === "detail") showDetail(item);
+        if (action === "edit") openEditor(item);
+        if (action === "delete") {
+          deleteId = item.id;
+          $("delete-title").textContent = item.title;
+          $("delete-dialog").showModal();
+        }
+      }
+    });
+
+    $("edit-task").addEventListener("click", () => {
+      const item = items.find(task => task.id === detailId);
+      $("detail").close();
+      openEditor(item);
+    });
+    $("confirm-delete").addEventListener("click", () => {
+      items = items.filter(task => task.id !== deleteId);
+      $("delete-dialog").close();
+      render();
+      notice("已删除待办");
+    });
+    $("undo").addEventListener("click", () => {
+      const item = items.find(task => task.id === undoCompletion?.id);
+      if (item) {
+        item.doneAt = undoCompletion.previous;
+        render(item.id, "complete");
+        notice("已撤销");
+      }
+    });
+    $("close-notice").addEventListener("click", hideNotice);
+
+    document.querySelectorAll("[data-close]").forEach(button => button.addEventListener("click", () => button.closest("dialog").close()));
+    document.querySelectorAll("dialog").forEach(dialog => dialog.addEventListener("close", () => {
+      if (!document.querySelector("dialog[open]")) returnFromDialog();
+    }));
+    document.addEventListener("click", event => {
+      if (activeMenu && !activeMenu.trigger.parentElement.contains(event.target)) closeMenu();
+    });
+    document.addEventListener("focusin", event => {
+      if (activeMenu && !activeMenu.trigger.parentElement.contains(event.target)) closeMenu();
+    });
+    document.addEventListener("keydown", event => {
+      if (!activeMenu) {
+        const trigger = event.target.closest('[aria-haspopup="menu"]');
+        if (trigger && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+          event.preventDefault();
+          openMenu(trigger, event.key === "ArrowUp");
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu(true);
+        return;
+      }
+      if (event.key === "Tab") {
+        closeMenu(true);
+        return;
+      }
+      const options = [...activeMenu.menu.querySelectorAll("button")];
+      const current = options.indexOf(document.activeElement);
+      let next;
+      if (event.key === "ArrowDown") next = (current + 1) % options.length;
+      if (event.key === "ArrowUp") next = (current + options.length - 1) % options.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = options.length - 1;
+      if (next != null) {
+        event.preventDefault();
+        options[next].focus();
+      }
+    });
+    render();
+  </script>
+</body>
+</html>
