@@ -5,6 +5,7 @@ import { after } from "../seat-order"
 import { quoteChipPayment } from "../chips/payment"
 import { lastReserveDeposit } from "../chips/reserve"
 import { registerChipCardOperations } from "../chips/operations"
+import { replacementPriceBases, rollFinancials } from "../roll"
 import { OperationRegistry, type CardRegistry } from "./registry"
 import { registerPokerCardOperations, publicHoleCards } from "./poker-operations"
 import { registerCardStatusOperations, paymentModifiers, cardSurcharges } from "./statuses"
@@ -16,12 +17,22 @@ function own(h: HandState, input: Pick<PokerCardPlayInput, "instanceId">, admiss
   if (!instance) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
   return { instance, definition: registry.get(instance.definitionId) }
 }
+function cardBasePrice(h: HandState, definition: CardDefinition, seatNo: number, registry: CardRegistry): number {
+  const replacement = definition.replacement
+  if (!replacement) return (definition.costBB ?? 0) * h.bigBlind
+  const { effectivePot, effectiveFuture } = rollFinancials(h, seatNo)
+  const base = replacementPriceBases(h.street, effectivePot, effectiveFuture)[replacement.tier]
+  const count = h.cards!.used.filter(use => use.seatNo === seatNo && use.status !== "blocked" && registry.get(use.cardId).replacement).length
+  const price = (base * BigInt(count + 1) * BigInt(replacement.halfUnits) + 3999n) / 4000n
+  if (price > BigInt(Number.MAX_SAFE_INTEGER)) throw new CardRuleError("POKER_INVALID_PAYMENT")
+  return Number(price)
+}
 export function quoteCardPlay(h: HandState, input: Pick<PokerCardPlayInput, "instanceId" | "handId" | "expectedActionSeq" | "controlVersion">, registry: CardRegistry) {
   const person = h.cards?.participants.find(p => h.cards?.hands[p.admissionId]?.some(c => c.id === input.instanceId))
   if (!person) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
   const { definition } = own(h, input, person.admissionId, registry), seat = h.seats.find(s => s.seatNo === person.seatNo)!
   const surcharge = cardSurcharges(h, person.seatNo, definition.ignoreSurcharges)
-  const components = [{ source: "base", amount: (definition.costBB ?? 0) * h.bigBlind }, { source: "surcharge", amount: surcharge.amount }]
+  const components = [{ source: "base", amount: cardBasePrice(h, definition, person.seatNo, registry) }, { source: "surcharge", amount: surcharge.amount }]
   const revision = JSON.stringify([input.handId, input.expectedActionSeq, input.controlVersion, input.instanceId, h.cardRulesVersion])
   return { ...quoteChipPayment({ payerId: person.admissionId, resource: "chips", purpose: "card", nominalAmount: components.reduce((n, c) => n + c.amount, 0), balance: seat.stack, revision, components }, paymentModifiers(h, person.seatNo)), revision, components, surchargeIds: surcharge.effectIds }
 }
@@ -58,7 +69,7 @@ export function cardChoices(h: HandState, definition: CardDefinition, admissionI
   })
 }
 function validateActor(h: HandState, input: PokerCardPlayInput | PokerCardChooseInput, context: ResolutionContext) {
-  if (!h.cards || h.cardRulesVersion !== "cards-v1" || !h.ruleOptions?.cards) throw new CardRuleError("POKER_CARD_MODE_UNAVAILABLE")
+  if (!h.cards || h.cardRulesVersion !== h.cards.version || !h.ruleOptions?.cards) throw new CardRuleError("POKER_CARD_MODE_UNAVAILABLE")
   if (context.source !== "human") throw new CardRuleError("POKER_CARD_AI_DISABLED")
   const person = h.cards.participants.find(p => p.admissionId === context.actorAdmissionId && p.seatNo === context.actorSeatNo && p.kind === "human")
   const seat = h.seats.find(s => s.seatNo === context.actorSeatNo && !s.folded && !s.allIn)
@@ -74,9 +85,11 @@ function richest(h: HandState, admissionId: string) {
 }
 export function cardRequirementReason(h: HandState, definition: CardDefinition, admissionId: string, seq: number): string | undefined {
   if (definition.excludeRiver && h.street === "river") return "POKER_CARD_RIVER_UNAVAILABLE"
+  if (definition.replacement && h.deck.length < definition.replacement.draws) return "POKER_CARD_DECK_EMPTY"
   for (const requirement of definition.requirements ?? []) {
     if (requirement === "deck" && !h.deck.length) return "POKER_CARD_DECK_EMPTY"
     if (requirement === "candidate_pool" && !h.cards!.pool.length) return "POKER_CARD_POOL_EMPTY"
+    if (requirement === "inactive_counter" && h.cards!.effects.some(e => e.kind === "counter" && e.ownerAdmissionId === admissionId && (e.remaining === null || e.remaining > 0))) return "POKER_CARD_COUNTER_ACTIVE"
     if (requirement === "stealable" && !richest(h, admissionId)?.amount) return "POKER_CARD_NO_RESERVE_SHARES"
     if (requirement === "recent_deposit" && !lastReserveDeposit(h.reserve ?? { revision: 0, lots: [], claims: [], movements: [], finalized: false }, admissionId, seq)?.remainingAmount) return "POKER_CARD_NO_RECENT_DEPOSIT"
   }
@@ -86,7 +99,8 @@ export function planCardPlay(h: HandState, input: PokerCardPlayInput, context: R
   const person = validateActor(h, input, context)
   if (h.cards!.pending || h.roll?.pending) throw new CardRuleError("POKER_CARD_CHOICE_REQUIRED")
   const { definition } = own(h, input, person.admissionId, registry)
-  if (cardRequirementReason(h, definition, person.admissionId, context.actionSeq)) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
+  const requirement = cardRequirementReason(h, definition, person.admissionId, context.actionSeq)
+  if (requirement) throw new CardRuleError(h.cardRulesVersion === "cards-v2" ? requirement : "POKER_CARD_INVALID_SELECTION")
   const choices = cardChoices(h, definition, person.admissionId, input.instanceId, registry)
   if (Object.keys(input.selections).length !== choices.length || choices.some(c => !c.options.some(o => o.value === String(input.selections[c.key])))) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
   const quote = quoteCardPlay(h, input, registry)

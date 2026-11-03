@@ -1,4 +1,4 @@
-import { POKER_CARD_LIMITS } from "@synapse/shared/game-contracts"
+import { POKER_CARD_LIMITS, type PokerCardRulesVersion } from "@synapse/shared/game-contracts"
 import { shuffle } from "../deck"
 import type { CardDefinition, EffectInstance, PendingChoice, ResolutionContext } from "./types"
 import { CardRuleError } from "./types"
@@ -9,7 +9,7 @@ export interface CardUseRecord { id: string; instanceId: string; cardId: string;
 export interface CardPrivateResult { id: string; ownerAdmissionId: string; cardId: string; label: string; values: string[]; valid: boolean; deckRevision?: number }
 export interface PublicCardMarker { id: string; card: string; cardId: string; ownerAdmissionId: string; sourceInstanceId?: string; expiresStreet?: string; parentEffectId?: string; dispellable: boolean }
 export interface CardModeState {
-  version: "cards-v1"; initialCount: number; generatedCount: number; catalogIds: string[]
+  version: PokerCardRulesVersion; initialCount: number; generatedCount: number; catalogIds: string[]
   pool: CardInstance[]; hands: Record<string, CardInstance[]>; reserved: CardInstance[]; spent: CardInstance[]
   participants: CardParticipant[]; effects: EffectInstance[]; used: CardUseRecord[]; privateResults: CardPrivateResult[]
   pending: PendingChoice | null; dealtStages: string[]; deckRevision: number
@@ -39,7 +39,7 @@ export function assertCardPoolIntegrity(state: CardModeState): void {
   if (all.length !== state.initialCount + state.generatedCount || new Set(all.map(c => c.id)).size !== all.length || all.some(c => !state.catalogIds.includes(c.definitionId))) throw new CardRuleError("POKER_CARD_STATE_INVALID")
   if (all.length > POKER_CARD_LIMITS.instances) throw new CardRuleError("POKER_CARD_BUDGET_EXCEEDED")
 }
-export function createCardPool(definitions: readonly CardDefinition[], context: ResolutionContext): CardModeState {
+export function createCardPool(definitions: readonly CardDefinition[], context: ResolutionContext, version: PokerCardRulesVersion = "cards-v1"): CardModeState {
   const pool: CardInstance[] = [], ids = new Set<string>()
   let total = 0
   for (const definition of definitions) {
@@ -53,7 +53,7 @@ export function createCardPool(definitions: readonly CardDefinition[], context: 
   for (const definition of definitions) {
     for (let i = 0; i < (definition.copies ?? 1); i++) pool.push({ id: context.nextId(), definitionId: definition.id })
   }
-  const state: CardModeState = { version: "cards-v1", initialCount: pool.length, generatedCount: 0, catalogIds: [...ids], pool: shuffle(pool, context.randomInt), hands: {}, reserved: [], spent: [], participants: [], effects: [], used: [], privateResults: [], pending: null, dealtStages: [], deckRevision: 0 }
+  const state: CardModeState = { version, initialCount: pool.length, generatedCount: 0, catalogIds: [...ids], pool: shuffle(pool, context.randomInt), hands: {}, reserved: [], spent: [], participants: [], effects: [], used: [], privateResults: [], pending: null, dealtStages: [], deckRevision: 0 }
   assertCardPoolIntegrity(state)
   return state
 }

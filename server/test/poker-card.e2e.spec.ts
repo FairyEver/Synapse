@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest"
-import { randomUUID } from "node:crypto"
+import { randomInt, randomUUID } from "node:crypto"
 import { PrismaClient, type Prisma } from "@prisma/client"
 import type { PrismaService } from "../src/prisma/prisma.service"
 import { HallService } from "../src/game/hall/hall.service"
@@ -24,7 +24,11 @@ afterAll(async () => { vi.restoreAllMocks(); await db.$disconnect() })
 
 async function fixture(humans = 2, now = new Date()) {
   const users = Array.from({ length: humans }, () => randomUUID())
-  const code = (await poker.createRoom(users[0], { maxSeats: humans, buyIn: 1000, ruleOptions: { cards: true, roll: true } }, "human", true)).roomCode
+  const { code } = await db.gamePokerRoom.create({ data: {
+    code: String(randomInt(100000, 1000000)),
+    ownerUserId: users[0], maxSeats: humans, buyIn: 1000, name: "旧版卡牌房",
+    ruleOptions: { cards: true, roll: true }, rollPricingVersion: "roll-v1", cardRulesVersion: "cards-v1", chipRulesVersion: "chips-v2",
+  } })
   for (const user of users) await poker.join(user, code, {}, now, "human")
   await prepareAndStartInitialHand(poker, code, now)
   const room = await db.gamePokerRoom.findUniqueOrThrow({ where: { code } }), handId = room.currentHandId!

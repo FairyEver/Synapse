@@ -17,7 +17,8 @@ const url=gameTestDatabaseUrl()
   const hall=new HallService(db),poker=new PokerService(db,hall),rolls=new PokerRollService(poker),actions=new PokerActionService(poker),wait=new PokerWaitService(actions)
   afterAll(async()=>{wait.onModuleDestroy();await db.$disconnect()})
   async function setup(){
-    const user=randomUUID(),other=randomUUID(),code=(await poker.createRoom(user,{maxSeats:2,buyIn:1000,ruleOptions:{roll:true}})).roomCode
+    const user=randomUUID(),other=randomUUID(),code=randomUUID()
+    await db.gamePokerRoom.create({data:{code,ownerUserId:user,maxSeats:2,buyIn:1000,ruleOptions:{roll:true},rollPricingVersion:"roll-v1"}})
     await joinForStartedHand(poker, user,code,{});await joinForStartedHand(poker, other,code,{})
     const state=await actions.state(user,code),room=await db.gamePokerRoom.findUniqueOrThrow({where:{code}})
     const input={roomCode:code,handId:state.handId!,street:"preflop" as const,expectedActionSeq:0,controlVersion:0,actionId:randomUUID(),kind:"super" as const,cardIndex:0,expectedFee:state.roll.super!.fee}
@@ -89,7 +90,8 @@ const url=gameTestDatabaseUrl()
   })
   it("超级待选陪练立即解散只作废练习资产，保留候选审计和原请求回执",async()=>{
     const user=randomUUID(),bots=new PokerBotService(poker)
-    const code=(await poker.createRoom(user,{maxSeats:2,buyIn:1000,mode:"practice",ruleOptions:{roll:true}})).roomCode
+    const code=randomUUID()
+    await db.gamePokerRoom.create({data:{code,ownerUserId:user,maxSeats:2,buyIn:1000,mode:"practice",ruleOptions:{roll:true},rollPricingVersion:"roll-v1"}})
     await joinForStartedHand(poker, user,code,{})
     const bot=await bots.add(user,code,randomUUID())
     await prepareAndStartInitialHand(poker, code)

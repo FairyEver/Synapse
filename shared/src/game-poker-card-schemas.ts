@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { POKER_CARD_RULES_VERSIONS } from "./game-poker-cards.js"
 
 const integer = { type: "integer", minimum: 0, maximum: 2147483647 } as const
 const text = { type: "string", minLength: 1, maxLength: 200 } as const
@@ -8,20 +9,21 @@ const common = {
   actionId: { type: "string", format: "uuid", maxLength: 36 }, expectedPaymentVersion: text,
 }
 const playProperties = { ...common, instanceId: text, selections: { type: "object", maxProperties: 8, additionalProperties: { anyOf: [text, integer] } } }
-const chooseProperties = { ...common, choiceId: text, candidateIndex: { type: "integer", minimum: 0, maximum: 2 } }
+const chooseProperties = { ...common, choiceId: text, candidateIndex: { type: "integer", minimum: 0, maximum: 4 } }
 export const POKER_CARD_PLAY_SCHEMA = { type: "object", properties: playProperties, required: Object.keys(playProperties), additionalProperties: false }
 export const POKER_CARD_CHOOSE_SCHEMA = { type: "object", properties: chooseProperties, required: Object.keys(chooseProperties), additionalProperties: false }
 const amount = z.number().int().nonnegative()
 export const pokerPaymentSchema = z.object({ nominalAmount: amount, waivedAmount: amount, paidAmount: amount, version: z.string().min(1) }).strict().refine(v => v.nominalAmount === v.waivedAmount + v.paidAmount)
-const definition = z.object({ id: z.string(), name: z.string(), description: z.string(), artId: z.string(), cost: amount, consumeSelected: z.boolean().optional() }).strict()
+const playPolicy = z.object({ cancelUntil: z.enum(["target-confirm", "never"]), result: z.enum(["table", "holes", "intel"]), candidates: z.number().int().min(1).max(5).optional() }).strict()
+const definition = z.object({ id: z.string(), name: z.string(), description: z.string(), artId: z.string(), cost: amount, consumeSelected: z.boolean().optional(), play: playPolicy.optional() }).strict()
 export const pokerCardStatusSchema = z.object({ id: z.string(), cardId: z.string(), title: z.string(), polarity: z.enum(["positive", "negative", "neutral"]), seatNo: amount.optional(), remaining: amount.optional(), expiresAt: amount.optional(), expiresStreet: z.string().optional(), dispellable: z.boolean() }).strict()
 export const pokerCardViewSchema = z.object({
-  enabled: z.boolean(), version: z.literal("cards-v1"),
+  enabled: z.boolean(), version: z.enum(POKER_CARD_RULES_VERSIONS),
   definitions: z.record(z.string(), definition).optional(),
   ownHand: z.array(z.object({ instanceId: z.string(), cardId: z.string(), available: z.boolean(), reason: z.string().optional(), payment: pokerPaymentSchema,
     choices: z.array(z.object({ key: z.string(), label: z.string(), kind: z.enum(["hole", "player", "ability", "status", "color"]), options: z.array(z.object({ value: z.string(), label: z.string() }).strict()) }).strict()),
   }).strict()).max(1024).optional(),
-  pending: z.object({ choiceId: z.string(), kind: z.enum(["poker", "ability"]), origin: z.enum(["roll", "card"]), paymentVersion: z.string(), sourceCardId: z.string().optional(), cardIndex: z.number().int().min(0).max(1).optional(), candidates: z.array(z.string()).min(1).max(3), candidateCards: z.array(definition).max(3).optional() }).strict().nullable().optional(),
+  pending: z.object({ choiceId: z.string(), kind: z.enum(["poker", "ability"]), origin: z.enum(["roll", "card"]), paymentVersion: z.string(), sourceCardId: z.string().optional(), cardIndex: z.number().int().min(0).max(1).optional(), candidates: z.array(z.string()).min(1).max(5), candidateCards: z.array(definition).max(3).optional() }).strict().nullable().optional(),
   used: z.array(z.object({ id: z.string(), cardId: z.string(), name: z.string(), seatNo: amount, seq: amount, status: z.enum(["completed", "blocked", "choice_required"]) }).strict()),
   statuses: z.array(pokerCardStatusSchema),
   privateResults: z.array(z.object({ id: z.string(), cardId: z.string(), label: z.string(), values: z.array(z.string()), valid: z.boolean() }).strict()).optional(),

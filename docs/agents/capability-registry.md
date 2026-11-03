@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 新建卡牌房要求 `cards-v2,chips-v2`，旧卡牌房继续按房间快照校验版本。既有真人私有 `card.play` / `card.choose` 支持新版五选一，公开建房参数停用 Roll 及钻石额度。旧 Roll 路由仍可操作已有 Roll 房。保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0，其他注册数量与例外无变化。
+
 - 2026-11-03 卡牌验收同步：保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0。网页 `invoke` 的既有建房入口仅对创建操作传递已认证 Cookie 真人来源和规则支持信息，卡牌创建在 REST/invoke 两条入口均拒绝 Bearer 和缺版本请求；其他公开 invoke 行为与私有用牌边界不扩大。生成的系统 API 参考仍只包含原 30 个 MCP 工具。
 
 - 2026-11-03 卡牌真人入口：Web新增私有 `app.game.poker.card.play` / `app.game.poker.card.choose`，对应 POST `/api/game/poker/rooms/:code/card/play`、`/card/choose`，游戏 Web 28→30。两项不进入公共 capability/MCP；game 30、全局 capability 364 / MCP 索引360、System App22、默认Dock9、游戏桌面IPC0及兼容深链不变。卡牌写入要求受信同源 Cookie 会话、账号头与 cards-v1/chips-v2 版本头；Bearer/MCP 不得参赛或接入AI，读取强制公开投影。Poker guide 的 `cards.available` 返回 true，创建卡牌房无环境开关；无卡旧房兼容行为保留。私有响应禁止缓存，公开 search/invoke 仍仅2项。

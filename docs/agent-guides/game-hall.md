@@ -1,5 +1,7 @@
 # 游戏大厅接入与验证
 
+新建房间停用 Roll 和钻石额度。真人同源网页可创建 `cards-v2` 卡牌房，使用八种能力牌；四种换牌可用至河牌，牌费直接进入主池，不计普通下注或边池资格。候选只对本人显示，亮出后须完成选择，选牌不再收费。公开 `handLog` 可包含 `action=card`、实际牌费及牌名、封面标识、公开效果和状态，排除私密内容；`potContributions` 仍只统计普通投入。MCP 只读卡牌房公开信息，旧 Roll 和 `cards-v1` 房按原快照运行。以下 Roll、钻石与暂存说明仅适用于存量规则。
+
 2026-11-02 对局信息：牌桌顶部入口由“日志”改为“对局信息”，固定“日志 / 总览 / AI”三个Tab。日志仅按阶段合并实际盲注、普通行动及成功Roll start，不含累计指标、玩家汇总、资产或完整结算；choose只更新原Roll状态，不新增收费。总览复用本手potContributions/rollLedger，按原参赛身份展示累计下注、普通/超级次数、支出和补偿，可展开各轮投入；缺字段显示不可用，不从recentActions或近期事件推算。完整结算仅在总览；AI判断/提示词仅本人视角且已入座可见，其他视角显示不可用。身份、房间、手牌、视角变化重置Tab，保留面板互斥、焦点返回、画布和850px行为。
 
 table_state/room_get可选公开handLog={handId,complete,entries}，绑定当前手牌。entries按seq排列，仅含seq/seatNo/displayName/street/action/amount/isAuto/actionSource及可选roll={kind,count,status}；street为preflop/flop/turn/river，action为small_blind/big_blind/fold/check/call/bet/raise/allin/roll，金额为实际追加或Roll费用。seq=-1/0为按本手初始筹码与规则恢复的实际小/大盲，正数沿用动作序号；choose不生成第二条，序号可有间隔。roll.status=pending/completed/replaced/cancelled，分别为待选/完成/被重抽替代/手牌取消，取消不表示费用到账。查询只取本手最近最多1000条原始动作，完整时额外含两笔盲注（最多1002项）；complete=false表示截断或缺口，不附加盲注，也不能算整手或各轮完整下注；缺字段表示不可用。姓名只取本手参赛快照，不公开userId/admissionId、底牌、候选、旧牌、槽位、note或persona。保留原recentActions最近30条普通行动及本人AI隐私；既有table.state/room.get只读扩展，无新工具、输入、路由、权限、迁移或写入。

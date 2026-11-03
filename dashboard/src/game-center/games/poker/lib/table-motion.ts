@@ -14,7 +14,7 @@ export function tableMotion(previous: PokerTableView, table: PokerTableView): Ta
   const street = sameHand ? previous.street : "preflop"
   const bets = new Map(sameHand ? previous.seats.map(s => [s.seatNo,s.streetBet]) : [])
   for (const a of actions) {
-    if (a.amount <= 0) continue
+    if (a.amount <= 0 || a.action === "card_play") continue
     if (a.street === street) bets.set(a.seatNo,(bets.get(a.seatNo) ?? 0)+a.amount)
     if (a.street === table.street || a.street === street) transfers.push({id:`${table.handId}:${a.seq}:bet`,seatNo:a.seatNo,amount:a.amount,kind:"bet",delay:0})
   }

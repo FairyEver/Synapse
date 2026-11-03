@@ -34,10 +34,13 @@ function observe(h: HandState, api: OperationApi, observer: number, label: strin
   api.emit("poker.observed", { label, values }, "owner", undefined, owner.admissionId)
 }
 export function registerPokerCardOperations(registry: OperationRegistry<HandState>): void {
-  registry.register({ id: "poker.replace", schema: z.object({ seatNo, cardIndex: slot, mode: z.enum(["draw", "candidates", "highest", "red", "black"]), paymentVersion: z.string().optional(), ...metadata }).strict(),
+  registry.register({ id: "poker.replace", schema: z.object({ seatNo, cardIndex: slot.optional(), mode: z.enum(["draw", "candidates", "highest", "red", "black"]), candidateCount: z.union([z.literal(3), z.literal(5)]).optional(), paymentVersion: z.string().optional(), ...metadata }).strict(),
     apply(h, input, api) {
-      noPending(h); const p = activeSeat(h, input.seatNo), old = p.hole[input.cardIndex]
-      const amount = input.mode === "candidates" ? 3 : input.mode === "highest" ? 2 : 1
+      noPending(h); const p = activeSeat(h, input.seatNo)
+      if (input.cardIndex === undefined && input.candidateCount !== 5) throw new CardRuleError("POKER_CARD_INVALID_SELECTION")
+      const cardIndex = input.cardIndex ?? pick([0, 1], api), old = p.hole[cardIndex]
+      const amount = input.mode === "candidates" ? input.candidateCount ?? 3 : input.mode === "highest" ? 2 : 1
+      if (input.candidateCount && h.deck.length < amount) throw new CardRuleError("POKER_CARD_DECK_EMPTY")
       const candidates: string[] = []
       for (let n = 0; n < amount && h.deck.length; n++) {
         if (input.mode === "red" || input.mode === "black") {
@@ -56,19 +59,26 @@ export function registerPokerCardOperations(registry: OperationRegistry<HandStat
       if (input.mode === "candidates") {
         const owner = h.cards!.participants.find(p => p.seatNo === input.seatNo)!
         h.cards!.pending = { id: api.context.nextId(), kind: "poker", origin: "card", ownerAdmissionId: owner.admissionId, ownerSeatNo: input.seatNo, handId: api.context.handId, street: h.street,
-          sourceActionSeq: api.context.actionSeq, sourceCardId: api.operation.cardId, paymentVersion: input.paymentVersion ?? "", candidates, cardIndex: input.cardIndex }
-        observe(h, api, input.seatNo, "候选", [...candidates])
+          sourceActionSeq: api.context.actionSeq, sourceCardId: api.operation.cardId, paymentVersion: input.paymentVersion ?? "", candidates, cardIndex }
+        if (!input.candidateCount) observe(h, api, input.seatNo, "候选", [...candidates])
       } else {
         const best = input.mode === "highest" ? [...candidates].sort((a, b) => "23456789TJQKA".indexOf(b[0]) - "23456789TJQKA".indexOf(a[0]) || "shdc".indexOf(a[1]) - "shdc".indexOf(b[1]))[0] : candidates[0]
-        p.hole[input.cardIndex] = best
+        p.hole[cardIndex] = best
         h.deck = shuffle([...h.deck, old, ...candidates.filter(c => c !== best)], api.context.randomInt)
       }
       invalidatePokerObservations(h); assertHandIntegrity(h)
     } })
-  registry.register({ id: "poker.reset", schema: z.object({ seatNo, ...metadata }).strict(), apply(h, input, api) {
+  registry.register({ id: "poker.reset", schema: z.object({ seatNo, excludeOld: z.boolean().optional(), ...metadata }).strict(), apply(h, input, api) {
     noPending(h); const p = activeSeat(h, input.seatNo)
-    h.deck = shuffle([...h.deck, ...p.hole], api.context.randomInt)
-    p.hole = [pick(h.deck, api), pick(h.deck, api)]
+    if (input.excludeOld) {
+      if (h.deck.length < 2) throw new CardRuleError("POKER_CARD_DECK_EMPTY")
+      const replacements = [pick(h.deck, api), pick(h.deck, api)]
+      h.deck = shuffle([...h.deck, ...p.hole], api.context.randomInt)
+      p.hole = replacements
+    } else {
+      h.deck = shuffle([...h.deck, ...p.hole], api.context.randomInt)
+      p.hole = [pick(h.deck, api), pick(h.deck, api)]
+    }
     invalidatePokerObservations(h); assertHandIntegrity(h)
   } })
   registry.register({ id: "poker.randomExchange", schema: z.object({ seatNo, cardIndex: slot }).strict(), apply(h, input, api) {

@@ -2,7 +2,7 @@ import { randomInt, randomUUID } from "node:crypto"
 import type { GamePokerHand } from "@prisma/client"
 import type { PokerService, RoomContext } from "./poker.service"
 import { json, sampleRoomTime } from "./poker.service"
-import { startHand, type HandState } from "./engine/hand-runner"
+import { handPotAmount, startHand, type HandState } from "./engine/hand-runner"
 import { orderedDeck, shuffle } from "./engine/deck"
 import { after } from "./engine/seat-order"
 import { resolveRules, type PokerRules } from "./engine/rules"
@@ -118,7 +118,7 @@ export async function saveHand(
   const rules = resolveRules(state)
   const settled = state.street === "settled"
   const reserveResult = reserveResults(state)
-  const pot = settled ? 0 : state.seats.reduce((sum, s) => sum + s.total, 0)
+  const pot = settled ? 0 : handPotAmount(state)
   await c.tx.gamePokerHand.update({
     where: { id: hand.id },
     data: {
@@ -176,7 +176,7 @@ export async function saveHand(
         status: { not: "closed" },
       },
       data: {
-        inPlay: c.room.mode === "practice" ? 0 : p.stack + (settled ? 0 : p.total),
+        inPlay: c.room.mode === "practice" ? 0 : p.stack + (settled ? 0 : p.total + (state.mainPotFees?.[p.seatNo] ?? 0)),
         status: ["waiting", "sitting_out"].includes(s.status) ? s.status : "active",
         needsAction: !settled && state.actionOnSeat === s.seatNo,
         deadlineAt: !settled && state.actionOnSeat === s.seatNo ? deadlineAt : null,
@@ -185,7 +185,7 @@ export async function saveHand(
     })
   }
   if (settled) {
-    if (state.chipRulesVersion === "chips-v2") await poker.hall.freezeTransfers(c.tx, await poker.reserves.finalize(c.tx, hand.id), c.now)
+    if (state.chipRulesVersion === "chips-v2" && state.cardRulesVersion !== "cards-v2") await poker.hall.freezeTransfers(c.tx, await poker.reserves.finalize(c.tx, hand.id), c.now)
     if (state.roll || state.reserve) await poker.hall.releaseTransfers(c.tx, hand.id, active.map(s => ({ admissionId: s.id, userId: s.userId, gameKind: "poker", gameRoomId: c.room.id, funding: c.room.mode === "practice" ? "practice" : "points" })), c.now)
     for (const p of state.seats) {
       const participant = participants.find((s) => s.seatNo === p.seatNo)!

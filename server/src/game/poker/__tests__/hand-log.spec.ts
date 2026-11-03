@@ -24,6 +24,21 @@ describe("本手公开行动日志", () => {
     const log = projectHandLog({ ...input, hand: { ...funded, actionSeq: 1 }, actions: [cardAction], cards: [{ cardId: "24", seq: 1, status: "completed" }] })
     expect(log?.entries.at(-1)).toMatchObject({ action: "card", card: { id: "24", name: "弃旧图新" } })
   })
+  it("五选一公开能力牌和实付费用，不公开候选或暗牌，也不重复记录选择", () => {
+    const actionsV2 = [
+      { ...actions[0], action: "card_play", rollId: null, amount: 24 },
+      { ...actions[1], action: "card_choose", rollId: null, amount: 0 },
+    ]
+    const log = projectHandLog({ ...input, hand: { ...hand, rules: { ...hand.rules, cardRulesVersion: "cards-v2", chipRulesVersion: "chips-v2", ruleOptions: { cards: true } }, actionSeq: 2 },
+      actions: actionsV2, cards: [{ cardId: "07", seq: 1, status: "completed", paidAmount: 24,
+        ...{ candidates: ["Ks"], targetHole: "As", ownerAdmissionId: "private-id" } }],
+    })
+    expect(log?.entries.slice(2)).toEqual([{
+      seq: 1, seatNo: 0, displayName: "原玩家0", street: "preflop", action: "card", amount: 24, isAuto: false, actionSource: "human",
+      card: { id: "07", artId: "v1/07", name: "五选其一", description: expect.any(String), status: "completed" },
+    }])
+    expect(JSON.stringify(log)).not.toMatch(/Ks|As|private-id|candidates|targetHole|ownerAdmissionId/)
+  })
   it("实际短筹码盲注先行，下注和Roll按seq合并且choose不重复收费", () => {
     const log = projectHandLog(input)!
     expect(log.complete).toBe(true)

@@ -92,7 +92,7 @@
 
 ## app_game_poker_room_create
 
-创建2–6人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。ruleOptions.rollCoins可设置每手钻石（正整数，默认12），normal/super消耗固定1/3，不可配置。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+创建2–6人桌；省略或空白name使用当前昵称和房间号命名；默认standard52和1/2，short32使用7到A的32张牌；可传creationId(UUID)，同次创建重试复用，新开一桌更换。新房不开放独立换牌；卡牌房仅可通过真人网页创建。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -105,12 +105,8 @@
           "type": "boolean"
         },
         "roll": {
-          "type": "boolean"
-        },
-        "rollCoins": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 2147483647
+          "type": "boolean",
+          "const": false
         }
       },
       "additionalProperties": false
@@ -172,7 +168,7 @@
 
 ## app_game_poker_roll_start
 
-按本人当前报价确认换牌，另付筹码；有coins快照的每手额度由建房rollCoins确定（默认12），normal固定扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+仅限已开启Roll的旧房间。按本人当前报价换牌，另付筹码；每手钻石额度沿用房间快照，normal固定扣1/super扣3，余额不足拒绝；超级待选可在原cardIndex付费重抽且不退款，共用次数、不续时，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -248,7 +244,7 @@
 
 ## app_game_poker_roll_choose
 
-从本人待选超级换牌候选中选一张，不再扣筹码或钻石，零钻石仍可选择；候选仅本人可见，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+仅限已开启Roll的旧房间。从本人待选超级换牌候选中选一张，不再扣筹码或钻石，零钻石仍可选择；候选仅本人可见，未知结果复用原actionId。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -335,7 +331,7 @@
 
 ## app_game_poker_room_get
 
-只读旁观快照，不返回底牌、私密提示词或note；可选公开rollLedger按本手身份快照列出全部成功start及原补偿分配，status区分待结算、已释放和已取消，缺失不等于零。可选公开handLog按当前手seq合并实际盲注、下注与Roll支付，仅公开姓名/座位/阶段/金额/来源和Roll次数状态；choose不重复。原始动作最多1000条，complete=false或缺字段不能推算完整合计，不含私牌、候选、note或账号标识。可选公开potContributions包含本手全部普通累计投入（含实际盲注、弃牌投入、退款及边池，不含Roll），按原参赛身份显示来源；status为pending/settled/cancelled，结算或取消不表示仍在池中，缺失不等于零。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+只读旁观快照，不返回底牌、私密提示词或note；可选公开rollLedger按本手身份快照列出全部成功start及原补偿分配，status区分待结算、已释放和已取消，缺失不等于零。可选公开handLog按当前手seq合并实际盲注、下注、公开能力牌及旧版Roll支付，公开行动、牌名、效果与状态；choose不重复。原始动作最多1000条，complete=false或缺字段不能推算完整合计，不含私牌、候选、note或账号标识。可选公开potContributions包含本手全部普通累计投入（含实际盲注、弃牌投入、退款及边池，不含能力牌或Roll费用），按原参赛身份显示来源；status为pending/settled/cancelled，结算或取消不表示仍在池中，缺失不等于零。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {
@@ -589,7 +585,7 @@
 
 ## app_game_poker_table_state
 
-本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断钻石额度。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。可选rollLedger按本手身份快照列出全部成功start及原补偿分配，status区分待结算、已释放和已取消，缺失不等于零。可选公开handLog按当前手seq合并实际盲注、下注与Roll支付，仅公开姓名/座位/阶段/金额/来源和Roll次数状态；choose不重复。原始动作最多1000条，complete=false或缺字段不能推算完整合计，不含私牌、候选、note或账号标识。可选公开potContributions包含本手全部普通累计投入（含实际盲注、弃牌投入、退款及边池，不含Roll），按原参赛身份显示来源；status为pending/settled/cancelled，结算或取消不表示仍在池中，缺失不等于零。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
+本人快照；刷新AI心跳，不得读取对手未摊牌底牌。可选roll.coins为本手余额/上限，各档coinCost独立于筹码fee；旧手无字段不推断钻石额度。公开rollStats含本手与房间累计（包含本手）的players/count/paid，以及桌上每个seatNo对应账号的hand/room次数和支出；按账号归属、成功start计一次，choose不重复。可选rollLedger按本手身份快照列出全部成功start及原补偿分配，status区分待结算、已释放和已取消，缺失不等于零。可选公开handLog按当前手seq合并实际盲注、下注、公开能力牌及旧版Roll支付，公开行动、牌名、效果与状态；choose不重复。原始动作最多1000条，complete=false或缺字段不能推算完整合计，不含私牌、候选、note或账号标识。可选公开potContributions包含本手全部普通累计投入（含实际盲注、弃牌投入、退款及边池，不含能力牌或Roll费用），按原参赛身份显示来源；status为pending/settled/cancelled，结算或取消不表示仍在池中，缺失不等于零。 游戏大厅、德州扑克、牌桌、入座、跟注、加注、弃牌、提示词、战绩、提醒、暂离。 Permissions: network.connect; signed-in account.
 
 ```json
 {

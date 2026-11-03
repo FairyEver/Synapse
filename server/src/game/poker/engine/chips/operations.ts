@@ -32,13 +32,19 @@ export function registerChipCardOperations(registry: OperationRegistry<HandState
     const quote = quoteChipPayment({ payerId: person.admissionId, resource: "chips", purpose: input.purpose, nominalAmount: input.nominalAmount, balance: seat.stack, revision: input.revision, components: input.components }, paymentModifiers(h, input.seatNo))
     if (quote.version !== input.version || !quote.satisfied) throw new Error("POKER_CARD_PRICE_CHANGED")
     if (h.cards) consumeEffects(h, [...quote.consumedModifierIds, ...input.surchargeIds])
-    if (quote.paidAmount) {
+    const intoPot = h.cardRulesVersion === "cards-v2" && input.purpose === "card"
+    if (quote.paidAmount && intoPot) {
+      seat.stack -= quote.paidAmount
+      const fees = h.mainPotFees ??= {}
+      fees[seat.seatNo] = (fees[seat.seatNo] ?? 0) + quote.paidAmount
+      assertHandIntegrity(h)
+    } else if (quote.paidAmount) {
       const recipients = handParticipants(h).filter(p => p.seatNo !== input.seatNo && h.seats.some(s => s.seatNo === p.seatNo && !s.folded))
       const result = applyReserveOperation(h.reserve ?? emptyReserve(), { kind: "deposit", payer: person, recipients, amount: quote.paidAmount, sourceId: `${api.context.rootActionId}:${input.purpose}`, sourceType: input.purpose }, api.context, after(h.seats.map(s => s.seatNo), h.dealerSeat))
       applyHandReserveDelta(h, result)
       api.emit("chips.deposited", { admissionId: person.admissionId, amount: quote.paidAmount, targetSeatNo: person.seatNo }, "public")
     }
-    api.emit("chips.paid", { targetSeatNo: input.seatNo, amount: quote.paidAmount, nominalAmount: quote.nominalAmount, waivedAmount: quote.waivedAmount }, "public")
+    api.emit("chips.paid", { targetSeatNo: input.seatNo, amount: quote.paidAmount, nominalAmount: quote.nominalAmount, waivedAmount: quote.waivedAmount, ...(intoPot ? { destination: "pot" } : {}) }, "public")
   } })
   registry.register({ id: "chips.steal", schema: z.object({ actorAdmissionId: z.string(), cap: z.number().int().positive(), target: z.enum(["all", "richest"]), targetAdmissionId: z.string().optional(), targetSeatNo: z.number().int().optional(), hostile: z.boolean().optional(), singleTarget: z.boolean().optional() }).strict(), apply(h, input, api) {
     const protections = (h.cards?.effects ?? []).filter(e => e.kind === "theft_guard" && (e.remaining === null || e.remaining > 0)).sort((a, b) => a.installedSeq - b.installedSeq || a.id.localeCompare(b.id))

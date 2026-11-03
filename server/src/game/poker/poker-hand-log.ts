@@ -2,6 +2,7 @@ import type { PokerHandLog, PokerHandLogEntry } from "@synapse/shared/game-contr
 import { resolveRules } from "./engine/rules"
 import { seatOrder } from "./engine/seat-order"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
+import { createCardRegistryV2 } from "./engine/cards/catalog-v2"
 
 interface Input {
   roomId: string
@@ -21,11 +22,13 @@ const money = (n: number) => Number.isSafeInteger(n) && n >= 0
 export function projectHandLog(input: Input): PokerHandLog | undefined {
   const { hand, participants } = input
   const funded = !!hand.rules && typeof hand.rules === "object" && "chipRulesVersion" in hand.rules && hand.rules.chipRulesVersion === "chips-v2"
+  const cardsV2 = !!hand.rules && typeof hand.rules === "object" && "cardRulesVersion" in hand.rules && hand.rules.cardRulesVersion === "cards-v2"
   if (participants.length < 2 || participants.length > 10 || participants.some(p => p.handId !== hand.id || !money(p.startingStack)) ||
       new Set(participants.map(p => p.seatNo)).size !== participants.length) return undefined
   const ordered = [...input.actions].sort((a, b) => a.seq - b.seq)
   const complete = ordered.length === hand.actionSeq && ordered.every((a, i) => a.seq === i + 1)
   const entries: PokerHandLogEntry[] = []
+  let cardRegistry: ReturnType<typeof createCardRegistry> | undefined
   if (complete) {
     try {
       const rules = resolveRules((hand.rules ?? {}) as Parameters<typeof resolveRules>[0])
@@ -53,8 +56,18 @@ export function projectHandLog(input: Input): PokerHandLog | undefined {
         status: hand.status === "cancelled" ? "cancelled" : input.pendingRollId === r.id ? "pending" : r.selectedIndex !== null ? "completed" : "replaced" } })
     } else if (a.action === "card_play") {
       const played = input.cards?.find(c => c.seq === a.seq)
-      if (!played) return undefined
-      entries.push({ ...base, action: "card", amount: played.paidAmount ?? 0, ...(played.nominalAmount === undefined ? {} : { nominalAmount: played.nominalAmount, waivedAmount: played.waivedAmount ?? 0 }), card: { id: played.cardId, name: createCardRegistry().get(played.cardId).name, status: played.status } })
+      if (!played || !money(played.paidAmount ?? a.amount)) return undefined
+      try {
+        cardRegistry ??= cardsV2 ? createCardRegistryV2() : createCardRegistry()
+        const { id, name, artId, description } = cardRegistry.get(played.cardId)
+        entries.push({ ...base, action: "card", amount: played.paidAmount ?? a.amount,
+          ...(played.nominalAmount === undefined ? {} : { nominalAmount: played.nominalAmount, waivedAmount: played.waivedAmount ?? 0 }),
+          card: { id, name, artId, description, status: played.status },
+        })
+      } catch {
+        // An unknown historical definition cannot produce a trustworthy public card entry.
+        return undefined
+      }
     } else {
       if (!actions.includes(a.action)) return undefined
       entries.push({ ...base, action: a.action as PokerHandLogEntry["action"], amount: a.amount })

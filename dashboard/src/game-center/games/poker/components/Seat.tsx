@@ -10,6 +10,7 @@ export function Seat({
   origin = 0,
   acting,
   showWager = true,
+  hideHoleCards = false,
   hasStarted = true,
   dealer,
   dealt,
@@ -25,6 +26,7 @@ export function Seat({
   onInspect?: (trigger: HTMLButtonElement) => void
   hasStarted?: boolean
   showWager?: boolean
+  hideHoleCards?: boolean
   departed?: boolean
   result?: PokerSettlementView | null
   feedback?: PokerTableView["recentActions"][number]
@@ -62,8 +64,8 @@ export function Seat({
       data-mine={seat.isMe}
       aria-label={`座位 ${seat.seatNo + 1} · ${seat.displayName}`}
     >
-      <div className="poker-seat-objects">
-        {!waiting && <div className="poker-seat-cards" data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!seat.hole}>
+      <div className="poker-seat-objects" data-dock-holes={hideHoleCards && !waiting ? true : undefined}>
+        {!waiting && !hideHoleCards && <div className="poker-seat-cards" data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!seat.hole}>
           <Card card={hole[0]} faceUp={!!hole[0] && dealt} />
           <Card card={hole[1]} faceUp={!!hole[1] && dealt} />
         </div>}

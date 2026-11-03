@@ -1,0 +1,180 @@
+.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-controls-anchor {
+  --hand-height: clamp(4.5rem, 7vw, 6rem);
+  --hand-bleed: 1.25rem;
+  --dock-top: .25rem;
+  position: relative;
+  background: var(--game-bg, var(--background));
+  border-top: 0;
+  padding-block-start: var(--dock-top);
+}
+.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-controls-anchor::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--dock-top) + var(--hand-height) / 2) 0 0;
+  background: var(--surface);
+  border-top: 1px solid var(--separator);
+  pointer-events: none;
+}
+.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-human-controls { width: min(100%, 52rem); position: relative; }
+.poker-immersive[data-control-layout][data-hand-dock="true"] .poker-action-dock { width: min(100%, 40rem); margin-inline: auto; }
+.poker-hand-dock {
+  --ability-width: calc(var(--hand-height) * .77);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .25rem;
+  height: var(--hand-height);
+  min-width: 0;
+  margin-block-end: .375rem;
+}
+.poker-hand-dock-holes {
+  --cw: calc(var(--hand-height) * .44);
+  display: flex;
+  flex: none;
+  gap: .25rem;
+  pointer-events: none;
+  user-select: none;
+}
+.poker-hand-dock-holes:empty { display: none; }
+.poker-hand-dock-holes .poker-card { box-shadow: 0 .2rem 0 var(--separator), 0 .4rem .65rem color-mix(in oklch, var(--foreground) 12%, transparent); }
+.poker-hand-dock-fan { min-width: 0; height: 100%; position: relative; width: max-content; }
+.poker-hand-dock-cards {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  height: calc(100% + 2 * var(--hand-bleed));
+  padding: var(--hand-bleed) .875rem;
+  margin-block: calc(-1 * var(--hand-bleed));
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+}
+.poker-hand-dock-cards::-webkit-scrollbar { display: none; }
+.poker-hand-dock-card, .poker-hand-dock-face {
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--surface) 92%, var(--warning, var(--default)));
+  border: 1px solid var(--separator);
+  border-radius: .45rem;
+  padding: .25rem;
+  box-shadow: 0 .15rem 0 var(--separator), 0 .35rem .55rem color-mix(in oklch, var(--foreground) 14%, transparent);
+  text-align: center;
+}
+.poker-hand-dock-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  flex: 0 0 var(--ability-width);
+  height: calc(var(--hand-height) - .375rem);
+  transform: translateY(var(--hand-rise)) rotate(var(--hand-tilt));
+  font: inherit;
+  font-size: clamp(.625rem, 1vw, .75rem);
+  line-height: 1.1;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: pan-x;
+  user-select: none;
+  transition: transform 120ms ease-out;
+}
+.poker-hand-dock-card + .poker-hand-dock-card { margin-inline-start: -.25rem; }
+.poker-hand-dock-card[aria-disabled="true"] { cursor: default; }
+.poker-hand-dock-card[aria-disabled="true"] .poker-hand-dock-cost { background: var(--muted); }
+.poker-hand-dock-card:is(:hover, :focus-visible) { z-index: 1; transform: translateY(-.2rem); }
+.poker-hand-dock-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.poker-hand-dock-card[data-dragging="true"] { opacity: .45; }
+.poker-hand-dock-card img, .poker-hand-dock-face img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .3rem; }
+.poker-hand-dock-card > span { display: block; margin-top: .2rem; overflow: hidden; text-overflow: ellipsis; }
+.poker-hand-dock-cost {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding-inline: .15rem;
+  inset: -.28rem auto auto -.32rem;
+  border: 2px solid var(--surface);
+  border-radius: 1rem;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  line-height: 1;
+}
+.poker-hand-dock-preview, .poker-hand-dock-ghost { position: fixed; z-index: 65; pointer-events: none; }
+.poker-hand-dock-preview {
+  display: grid;
+  grid-template-columns: minmax(5rem, 2fr) 3fr;
+  align-items: center;
+  gap: .75rem;
+  width: min(calc(100vw - 1rem), 350px);
+  padding: .625rem;
+  border-radius: .75rem;
+  border: 1px solid var(--separator);
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: 0 .55rem 1.5rem color-mix(in oklch, var(--foreground) 18%, transparent);
+}
+.poker-hand-dock-card img { height: 100%; min-height: 0; aspect-ratio: auto; }
+.poker-hand-dock-face img { aspect-ratio: 4 / 5; object-fit: contain; }
+.poker-hand-dock-face strong { display: block; margin: .25rem .125rem; }
+.poker-hand-dock-description { display: grid; gap: .25rem; font-size: .875rem; }
+.poker-hand-dock-description p { margin: 0; }
+.poker-hand-dock-description b { color: var(--accent-soft-foreground); }
+.poker-hand-dock-description small { color: var(--muted); }
+.poker-hand-dock-ghost { width: 6.25rem; transform: translate(-50%, -60%) rotate(-5deg); }
+.poker-canvas .poker-seat-objects[data-dock-holes="true"] { min-height: 78px; }
+.poker-table-main[data-card-drop] { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.poker-card-dock-error { margin: 0; font-size: .875rem; color: var(--danger); text-align: center; }
+
+.poker-card-dock-stage.poker-card-stage {
+  --dock-stage-hud: 4rem;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background-color: var(--stage-deep);
+}
+.poker-card-dock-stage::backdrop { background: transparent; }
+.poker-card-dock-stage-layout { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+.poker-card-dock-stage.poker-card-stage .stage-hud { min-height: var(--dock-stage-hud); }
+.poker-card-dock-task-scroll { display: flex; flex-direction: column; align-items: center; overflow: auto; scrollbar-gutter: stable both-edges; padding: 1rem; }
+.poker-card-dock-task-scroll::after { content: ""; flex: 0 1 var(--dock-stage-hud); }
+.poker-card-dock-task {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: clamp(.625rem, 2dvh, 1.25rem);
+  flex: none;
+  margin-block: auto;
+  width: min(100%, 55rem);
+}
+.poker-card-dock-stage .stage-heading { padding: 0; }
+.poker-card-dock-stage-description { color: var(--stage-muted); }
+.poker-card-dock-stage .selection-fields { margin: 0; }
+.poker-card-dock-stage :is(.target-options, .hole-options, .intel-values, .intel-result header) { justify-content: center; }
+.poker-card-dock-stage .intel-values { --cw: clamp(3.25rem, 16vw, 6.5rem); }
+.poker-card-stage.poker-card-dock-stage .candidate-view { display: block; width: 100%; overflow: visible; container-type: inline-size; }
+.poker-card-stage.poker-card-dock-stage .candidate-stage.poker-candidates {
+  --card-w: clamp(1.75rem, min(17cqw, 31dvh), 8.75rem);
+  container-type: normal;
+  padding: .5rem 0;
+  overflow: visible;
+}
+.poker-card-stage.poker-card-dock-stage .candidate-stage .hand-row {
+  justify-content: center;
+  height: auto;
+  padding: 0;
+  gap: clamp(.375rem, 1.6vw, 1rem);
+  overflow: visible;
+  scroll-snap-type: none;
+}
+.poker-card-dock-stage-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .75rem; }
+.poker-card-dock-stage-actions .game-button { min-width: min(10rem, 100%); }
+.poker-card-dock-stage :is(.game-button, .text-action, .close-overlay, .hole-choice, .target-choice, .poker-candidate):focus-visible { outline: 2px solid var(--brass-light); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .poker-hand-dock-card { transition: none; }
+}

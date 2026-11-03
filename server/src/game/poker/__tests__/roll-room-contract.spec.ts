@@ -10,25 +10,17 @@ describe("房间规则价格版本快照",()=>{
     const poker=new PokerService(prisma as unknown as PrismaService,{} as HallService)
     return {poker,read:new PokerReadService(poker),rooms}
   }
-  it("创建注入服务端roll-v1，缺省/空选项关闭且未知选项拒绝",async()=>{
+  it("新房不启用 Roll，拒绝旧版开关及钻石额度",async()=>{
     const f=setup()
-    for(const ruleOptions of [undefined,{}, {roll:false},{roll:true}]) await f.poker.createRoom("u",{name:"test",maxSeats:3,buyIn:1000,ruleOptions})
-    expect(f.rooms[0].ruleOptions).toBeUndefined();expect(f.rooms[1].ruleOptions).toEqual({});expect(f.rooms[2].ruleOptions).toEqual({roll:false})
-    expect(f.rooms[3]).toMatchObject({ruleOptions:{roll:true},rollPricingVersion:"roll-v1"})
-    await expect(f.poker.createRoom("u",{name:"test",maxSeats:3,buyIn:1000,ruleOptions:{extra:true} as never})).rejects.toThrow()
+    for(const ruleOptions of [undefined, {}, {roll:false}]) await f.poker.createRoom("u",{name:"test",maxSeats:3,buyIn:1000,ruleOptions})
+    expect(f.rooms.map(room => room.ruleOptions)).toEqual([undefined, {}, {roll:false}])
+    for(const ruleOptions of [{roll:true}, {roll:true,rollCoins:21}, {rollCoins:21}, {extra:true}])
+      await expect(f.poker.createRoom("u",{name:"test",maxSeats:3,buyIn:1000,ruleOptions:ruleOptions as never})).rejects.toThrow()
+    expect(f.rooms.every(room => !room.rollPricingVersion)).toBe(true)
   })
-  it("accepts a custom coin allowance but rejects invalid budgets and configurable costs",async()=>{
+  it("大厅列表与个人历史仍读取旧房的不可变规则",async()=>{
     const f=setup()
-    await f.poker.createRoom("u",{name:"custom",maxSeats:3,buyIn:1000,ruleOptions:{roll:true,rollCoins:21}})
-    expect(f.rooms[0].ruleOptions).toEqual({roll:true,rollCoins:21})
-    await f.poker.createRoom("u",{name:"default",maxSeats:3,buyIn:1000,ruleOptions:{roll:true}})
-    expect(f.rooms[1].ruleOptions).toEqual({roll:true,rollCoins:12})
-    for(const options of [{roll:true,rollCoins:0},{roll:true,rollCoins:-1},{roll:true,rollCoins:1.5},{roll:true,rollCoins:2147483648},{roll:true,normalCost:2},{roll:true,superCost:4}])
-      await expect(f.poker.createRoom("u",{name:"bad",maxSeats:3,buyIn:1000,ruleOptions:options as never})).rejects.toThrow()
-    expect(f.rooms).toHaveLength(2)
-  })
-  it("大厅列表与个人历史读取完整不可变规则",async()=>{
-    const f=setup();await f.poker.createRoom("u",{name:"test",maxSeats:3,buyIn:1000,ruleOptions:{roll:true}})
+    f.rooms.push({id:"room",code:"1234",name:"旧房",variant:"standard52",smallBlind:1,bigBlind:2,ruleOptions:{roll:true},rollPricingVersion:"roll-v1"})
     expect((await f.read.lobby()).items[0].rules).toMatchObject({ruleOptions:{roll:true},rollPricingVersion:"roll-v1"})
     expect((await f.read.history("u")).items[0].rules).toMatchObject({ruleOptions:{roll:true},rollPricingVersion:"roll-v1"})
   })

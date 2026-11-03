@@ -15,21 +15,20 @@ vi.mock("@heroui/react", async original => ({ ...await original<typeof import("@
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} })
 const roots = new Set<Root>()
-beforeEach(() => { api.identity = "card-room-user"; vi.clearAllMocks(); localStorage.clear(); api.guide.mockResolvedValue({ cards: { available: true, supportedVersions: ["cards-v1", "chips-v2"] } }); api.create.mockResolvedValue({ roomCode: "4567" }) })
+beforeEach(() => { api.identity = "card-room-user"; vi.clearAllMocks(); localStorage.clear(); api.guide.mockResolvedValue({ cards: { available: true, supportedVersions: ["cards-v1", "cards-v2", "chips-v2"] } }); api.create.mockResolvedValue({ roomCode: "4567" }) })
 afterEach(async () => { for (const root of roots) await act(async () => root.unmount()); roots.clear(); document.body.replaceChildren(); localStorage.clear() })
 async function mount(content: React.ReactNode) { const host = document.createElement("div"), root = createRoot(host); roots.add(root); document.body.append(host); await act(async () => root.render(content)); return { host, root } }
 const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.trim() === label)!
 async function click(label: string) { await act(async () => button(label).click()) }
 async function toggle(label: string) { const input = [...document.querySelectorAll<HTMLInputElement>('input[role="switch"]')].find(i => i.closest("label")?.textContent?.includes(label))!; await act(async () => input.click()) }
 async function submit() { await act(async () => document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))) }
-it.each([[false, false], [true, false], [false, true], [true, true]])("cards=%s roll=%s 独立建房且重试保留原意图", async (cards, roll) => {
+it.each([false, true])("cards=%s 建房且重试保留原意图", async cards => {
   api.create.mockRejectedValueOnce(new Error("响应丢失"))
   await mount(<Lobby onRoom={vi.fn()} />); await click("创建房间")
   if (cards) await toggle("卡牌模式")
-  if (roll) await toggle("Roll 换牌")
   await submit(); await submit()
   const [first, second] = api.create.mock.calls.map(([input]) => input)
-  expect(first.ruleOptions).toEqual({ cards, roll, ...(roll ? { rollCoins: 12 } : {}) })
+  expect(first.ruleOptions).toEqual({ cards })
   expect(second).toEqual(first)
   expect(first.creationId).toMatch(/^[0-9a-f-]{36}$/)
 })

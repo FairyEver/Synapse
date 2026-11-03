@@ -50,7 +50,7 @@ export function updateChipPresentation(state: ChipPresentation, table: PokerTabl
     const seen=new Set(transfers.map(t=>t.id))
     for (const payment of inventory.recent) if (payment.seq>seq(state.table) && !seen.has(payment.id) && visible(payment.seatNo)) {
       seen.add(payment.id)
-      if (payment.amount > 0) transfers.push({...payment,fund:payment.fund === "reserve" ? "roll" : payment.fund,direction:"in",chips:chipBreakdown(payment.amount),kind:payment.fund==="roll"?"roll":"bet",started:false})
+      if (payment.amount > 0) transfers.push({...payment,fund:payment.fund === "reserve" ? "roll" : payment.fund,direction:"in",chips:chipBreakdown(payment.amount),kind:payment.kind ?? (payment.fund==="roll"?"roll":"bet"),started:false})
     }
   }
   const banks=Object.fromEntries(table.seats.map(s=>[s.seatNo,s.stack]))

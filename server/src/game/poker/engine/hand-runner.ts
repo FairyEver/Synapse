@@ -10,6 +10,8 @@ import type { ReserveState } from "./chips/types"
 import type { TurnClock } from "./cards/deadlines"
 import { nextHandTransition } from "./hand-transitions"
 import { splitFundedPots } from "./chips/funded-pots"
+import { mainPotFeeAmount } from "./chips/main-pot"
+export { handPotAmount } from "./chips/main-pot"
 export { quoteRoll, startRoll, chooseRollCard, assertHandIntegrity, ROLL_PRICING_VERSION } from "./roll"
 export type { RollHistory, RollKind, RollState, RollQuote, RollOffer } from "./roll"
 export { legalActions } from "./betting"
@@ -17,6 +19,8 @@ export interface HandState extends BettingState, PokerRules {
   participants?: { admissionId: string; userId: string; seatNo: number; kind: "human" | "bot"; active?: boolean }[]
   cards?: CardModeState
   reserve?: ReserveState
+  /** Ability payments belong to the main pot and never count as a wager. */
+  mainPotFees?: Record<number, number>
   turnClock?: TurnClock | null
   cardAudit?: CardModeState
   cancelledChips?: number
@@ -154,6 +158,12 @@ function settle(h: HandState, showdown: boolean): void {
   const live = h.seats.filter((s) => !s.folded)
   h.showdownSeats = showdown ? live.map((s) => s.seatNo) : []
   h.pots = h.chipRulesVersion === "chips-v2" ? splitFundedPots(h.seats.map(s => ({ seatNo: s.seatNo, nominalTotal: s.nominalTotal ?? s.total, paidTotal: s.total, folded: s.folded })), after(h.seats.map(s => s.seatNo), h.dealerSeat)) : splitPots(h.seats)
+  const fees = mainPotFeeAmount(h)
+  if (fees) {
+    const main = h.pots.find(pot => !pot.refund)
+    if (main) main.amount += fees
+    else h.pots.unshift({ amount: fees, eligible: live.map(seat => seat.seatNo), refund: false })
+  }
   const order = after(
     h.seats.map((s) => s.seatNo),
     h.dealerSeat,

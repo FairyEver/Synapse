@@ -1,6 +1,7 @@
 import { pokerCardResultSchema, pokerCardViewSchema, pokerReserveViewSchema, pokerResolutionFrameSchema, pokerPaymentSchema } from "./game-poker-card-schemas.js"
 import { z } from "zod"
 import { POKER_MAX_ROLL_COINS } from "./game.js"
+import { POKER_CARD_RULES_VERSIONS } from "./game-poker-cards.js"
 
 const controlFields = {
   controller: z.enum(["human", "ai"]).nullable(),
@@ -51,7 +52,7 @@ const rollLedger = z.object({
   }
 })
 const rollResult = z.object({ ok: z.literal(true), handId: z.string(), rollId: z.string(), actionSeq: z.number().int().nonnegative(), cursor: z.string(), status: z.enum(["completed", "choice_required"]) }).passthrough()
-const rules = z.object({ cardRulesVersion: z.literal("cards-v1").optional(), chipRulesVersion: z.literal("chips-v2").optional(), ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
+const rules = z.object({ cardRulesVersion: z.enum(POKER_CARD_RULES_VERSIONS).optional(), chipRulesVersion: z.literal("chips-v2").optional(), ruleOptions: ruleOptions.optional(), rollPricingVersion: z.string().optional(), variant: z.enum(["standard52", "short32"]), smallBlind: z.number(), bigBlind: z.number() }).passthrough()
 const checkpoint = z.object({
   roomCode: z.string(), cursor: z.string(), controlVersion: z.number().int().nonnegative(),
   sessionStyle: z.string(), continueIntent: z.boolean(), pauseReason: z.literal("context_maintenance"), savedAt: z.string(),
@@ -140,7 +141,7 @@ const handLog = z.object({
     action: z.enum(["small_blind", "big_blind", "fold", "check", "call", "bet", "raise", "allin", "roll", "card"]),
     amount: z.number().int().nonnegative(), nominalAmount: z.number().int().nonnegative().optional(), waivedAmount: z.number().int().nonnegative().optional(), isAuto: z.boolean(),
     actionSource: z.enum(["mcp", "human", "timeout", "rules_bot"]).optional(),
-    card: z.object({ id: z.string(), name: z.string(), status: z.enum(["completed", "blocked", "choice_required"]) }).strict().optional(),
+    card: z.object({ id: z.string(), name: z.string(), artId: z.string().optional(), description: z.string().optional(), status: z.enum(["completed", "blocked", "choice_required"]) }).strict().optional(),
     roll: z.object({ kind: z.enum(["normal", "super"]), count: z.number().int().positive(), status: z.enum(["pending", "completed", "replaced", "cancelled"]) }).strict().optional(),
   }).strict()).max(1002),
 }).strict().superRefine((log, ctx) => {

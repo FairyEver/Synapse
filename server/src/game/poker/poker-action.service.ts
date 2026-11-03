@@ -10,7 +10,7 @@ import { projectPotContributions } from "./poker-pot-contributions"
 import { projectChipState, projectFundedChipState } from "./poker-chip-projection"
 import { chooseBotAction } from "./bot-policy"
 import type { ActionKind } from "./engine/betting"
-import { act, legalActions, removeFromHand } from "./engine/hand-runner"
+import { act, handPotAmount, legalActions, removeFromHand } from "./engine/hand-runner"
 import { PokerService, sampleRoomTime, json, type RoomContext } from "./poker.service"
 import { engine, saveHand, startNext, ACTION_WINDOW_MS } from "./poker-lifecycle"
 import { reject } from "./poker-error"
@@ -154,7 +154,7 @@ export class PokerActionService {
         actionSource: source,
         amount: after.total - before.total,
         ...(funded ? { nominalAmount: (after.nominalTotal ?? after.total) - (before.nominalTotal ?? before.total), waivedAmount: (after.nominalTotal ?? after.total) - (before.nominalTotal ?? before.total) - (after.total - before.total) } : {}),
-        potAfter: next.seats.reduce((sum, s) => sum + s.total, 0),
+        potAfter: handPotAmount(next),
         personaVersionId: input.personaSource === "session" ? null : agent?.currentVersionId,
         note: source === "human" ? null : input.note,
         elapsedMs: Math.max(
@@ -209,7 +209,7 @@ export class PokerActionService {
       const me = h.seats.find((s) => s.seatNo === seat.seatNo)!
       const decision = chooseBotAction({ hole: [...me.hole], board: [...h.board],
         variant: h.variant,
-        stack: me.stack, streetBet: me.streetBet, pot: h.seats.reduce((n, s) => n + s.total, 0),
+        stack: me.stack, streetBet: me.streetBet, pot: handPotAmount(h),
         legal: legalActions(h, seat.seatNo),
       }, randomInt(1000000) / 1000000)
       const actionId = rollActionId(hand.id, hand.actionSeq, seat.id, "act")
@@ -268,7 +268,7 @@ export class PokerActionService {
             seatNo: seat.seatNo,
             street: hand.street,
             action,
-            potAfter: h.seats.reduce((sum, s) => sum + s.total, 0),
+            potAfter: handPotAmount(h),
             isAuto: true,
             actionSource: "timeout",
             personaVersionId: agent?.currentVersionId,
@@ -296,7 +296,7 @@ export class PokerActionService {
     const resolution = resolveHandCommand(h, { kind: "timeout", seatNo: seat.seatNo, scope: reserveScope(c, hand.id) }, context, createCardRegistry())
     await persistHandResolution(this.poker, c, resolution, context, h)
     await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId: seat.userId, seq, seatNo: seat.seatNo, street: hand.street, action, amount: 0, nominalAmount: 0, waivedAmount: 0,
-      potAfter: resolution.state.seats.reduce((n, s) => n + s.total, 0), isAuto: true, actionSource: "timeout", elapsedMs: Math.max(0, (c.room.actionDeadlineAt?.getTime() ?? c.now.getTime()) - (c.room.actionStartedAt?.getTime() ?? c.now.getTime())), actionId, createdAt: c.now } })
+      potAfter: handPotAmount(resolution.state), isAuto: true, actionSource: "timeout", elapsedMs: Math.max(0, (c.room.actionDeadlineAt?.getTime() ?? c.now.getTime()) - (c.room.actionStartedAt?.getTime() ?? c.now.getTime())), actionId, createdAt: c.now } })
     await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: seq } })
     seat.leavePending = true
     await saveHand(this.poker, c, hand, resolution.state)

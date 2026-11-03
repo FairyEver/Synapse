@@ -1,7 +1,7 @@
-import { POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS, type PokerRuleOptions } from "@synapse/shared/game-contracts"
+import { POKER_DEFAULT_ROLL_COINS, POKER_MAX_ROLL_COINS, type PokerCardRulesVersion, type PokerRuleOptions } from "@synapse/shared/game-contracts"
 export type PokerVariant = "standard52" | "short32"
 export interface PokerRules {
-  cardRulesVersion?: "cards-v1"
+  cardRulesVersion?: PokerCardRulesVersion
   chipRulesVersion?: "chips-v2"
   variant: PokerVariant
   smallBlind: number
@@ -27,7 +27,9 @@ export function resolveRules(input: Omit<Partial<PokerRules>, "rollPricingVersio
     throw new Error("无效扑克规则")
   if (input.ruleOptions?.roll && input.rollPricingVersion !== ROLL_PRICING_VERSION)
     throw new Error("POKER_ROLL_VERSION_UNSUPPORTED")
-  if (options?.cards && (input.cardRulesVersion !== "cards-v1" || input.chipRulesVersion !== "chips-v2") || input.cardRulesVersion !== undefined && input.cardRulesVersion !== null && input.cardRulesVersion !== "cards-v1"
+  const knownCards = input.cardRulesVersion === "cards-v1" || input.cardRulesVersion === "cards-v2"
+  if (options?.cards && (!knownCards || input.chipRulesVersion !== "chips-v2") || input.cardRulesVersion != null && !knownCards
+    || input.cardRulesVersion === "cards-v2" && (options?.cards !== true || options.roll === true || options.rollCoins !== undefined)
     || input.chipRulesVersion !== undefined && input.chipRulesVersion !== null && input.chipRulesVersion !== "chips-v2") throw new Error("POKER_CARD_VERSION_UNSUPPORTED")
   return { variant, smallBlind, bigBlind,
     ...(options ? { ruleOptions: { ...options, ...(options.roll ? { rollCoins: options.rollCoins ?? POKER_DEFAULT_ROLL_COINS } : {}) } } : {}),

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { Injectable } from "@nestjs/common"
-import type { PokerCardPlayInput, PokerCardChooseInput, PokerCardResult } from "@synapse/shared/game-contracts"
+import { POKER_CARD_RULES_VERSION, POKER_CARD_RULES_VERSIONS, type PokerCardPlayInput, type PokerCardChooseInput, type PokerCardResult } from "@synapse/shared/game-contracts"
 import { PokerService, sampleRoomTime, json } from "./poker.service"
 import { engine, saveHand } from "./poker-lifecycle"
 import { assertController, type PokerCaller } from "./poker-control"
@@ -10,6 +10,7 @@ import { createCardRegistry } from "./engine/cards/catalog-v1"
 import { persistHandResolution, reserveScope, roomResolutionContext } from "./poker-resolution"
 import { reject } from "./poker-error"
 import { CardRuleError } from "./engine/cards/types"
+import { handPotAmount } from "./engine/chips/main-pot"
 
 @Injectable()
 export class PokerCardService {
@@ -19,7 +20,7 @@ export class PokerCardService {
   private async submit(userId: string, operation: "play" | "choose", input: PokerCardPlayInput | PokerCardChooseInput, caller: PokerCaller, now?: Date): Promise<PokerCardResult> {
     return this.poker.withRoom(input.roomCode, async c => {
       assertPokerModeAccess(c.room, caller, `card.${operation}`)
-      if (!isCardRoom(c.room) || c.room.cardRulesVersion !== "cards-v1") reject("POKER_CARD_MODE_UNAVAILABLE", "房间未启用卡牌模式。")
+      if (!isCardRoom(c.room) || !POKER_CARD_RULES_VERSIONS.some(version => version === c.room.cardRulesVersion)) reject("POKER_CARD_MODE_UNAVAILABLE", "房间未启用卡牌模式。")
       if (caller !== "human") reject("POKER_CARD_AI_DISABLED", "卡牌房当前仅支持真人操作。")
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.actionId)) reject("POKER_CARD_INVALID_SELECTION", "操作标识无效。")
       const extra = operation === "play" ? ["instanceId" in input ? input.instanceId : null, "selections" in input ? Object.entries(input.selections).sort(([a], [b]) => a.localeCompare(b)) : null] : ["choiceId" in input ? input.choiceId : null, "candidateIndex" in input ? input.candidateIndex : null]
@@ -43,8 +44,9 @@ export class PokerCardService {
       const played = resolution.state.cards!.used.find(r => r.seq === context.actionSeq)
       const result: PokerCardResult = { ok: true, handId: hand.id, actionSeq: context.actionSeq, cursor: `${hand.handNo}:${context.actionSeq}`, status: operation === "choose" ? "completed" : played?.status ?? "completed" }
       await persistHandResolution(this.poker, c, resolution, context, before)
-      await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq: context.actionSeq, seatNo: seat.seatNo, street: hand.street, action: `card_${operation}`, amount: 0, nominalAmount: 0, waivedAmount: 0,
-        actionSource: "human", isAuto: false, potAfter: resolution.state.seats.reduce((n, s) => n + s.total, 0), actionId: input.actionId, elapsedMs: Math.max(0, c.now.getTime() - (c.room.actionStartedAt?.getTime() ?? c.now.getTime())), response: json(result), createdAt: c.now } })
+      const payment = c.room.cardRulesVersion === POKER_CARD_RULES_VERSION && operation === "play" ? played : undefined
+      await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq: context.actionSeq, seatNo: seat.seatNo, street: hand.street, action: `card_${operation}`, amount: payment?.paidAmount ?? 0, nominalAmount: payment?.nominalAmount ?? 0, waivedAmount: payment?.waivedAmount ?? 0,
+        actionSource: "human", isAuto: false, potAfter: handPotAmount(resolution.state), actionId: input.actionId, elapsedMs: Math.max(0, c.now.getTime() - (c.room.actionStartedAt?.getTime() ?? c.now.getTime())), response: json(result), createdAt: c.now } })
       await c.tx.gamePokerActionReceipt.create({ data: { actionId: input.actionId, userId, roomId: c.room.id, requestHash, response: json(result), createdAt: c.now } })
       await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: context.actionSeq } })
       await c.tx.gamePokerSeat.update({ where: { id: seat.id }, data: { lastSeenAt: c.now } })

@@ -1,6 +1,6 @@
 import type { GameReserveWriteBatch } from "@synapse/shared/game-contracts"
 import type { HandState } from "../hand-runner"
-import type { PokerCardChoiceSpec } from "@synapse/shared/game-contracts"
+import type { PokerCardChoiceSpec, PokerCardPlayPolicy } from "@synapse/shared/game-contracts"
 
 export type Audience = "public" | "owner" | "internal"
 export interface ResolutionContext {
@@ -35,7 +35,9 @@ export interface CardDefinition {
   tags: readonly string[]; selections: readonly CardSelectionDefinition[]; steps: readonly DomainOperation[]
   excludeRiver?: boolean; ignoreSurcharges?: boolean
   consumeSelected?: boolean
-  requirements?: readonly ("deck" | "candidate_pool" | "target_holds_ability" | "stealable" | "recent_deposit")[]
+  play?: PokerCardPlayPolicy
+  replacement?: { tier: "normal" | "super"; halfUnits: number; draws: number }
+  requirements?: readonly ("deck" | "candidate_pool" | "target_holds_ability" | "stealable" | "recent_deposit" | "inactive_counter")[]
 }
 export interface ResolutionResult<S> { state: S; frame: ResolutionFrame; reserveBatch?: GameReserveWriteBatch; pending?: PendingChoice }
 export type HandResolution = ResolutionResult<HandState>

@@ -10,7 +10,7 @@ describe('浏览器游戏请求', () => {
     const params = { roomCode: "1234", actionId: "original-uuid" }
     expect(await client.call(`app.game.poker.card.${operation}`, params)).toEqual(result)
     expect(fetch.mock.calls[0][0]).toBe(`/api/game/poker/rooms/1234/card/${operation}`)
-    expect(new Headers(fetch.mock.calls[0][1]?.headers).get("x-synapse-poker-rules")).toBe("cards-v1,chips-v2")
+    expect(new Headers(fetch.mock.calls[0][1]?.headers).get("x-synapse-poker-rules")).toBe("cards-v1,cards-v2,chips-v2")
     client.dispose()
   })
   it.each(["start","choose"])("Roll %s走窄POST并完整保留UUID和原参数",async(operation)=>{

@@ -17,7 +17,7 @@ vi.mock("@/game-center/runtime/account", () => ({
 vi.mock("../../../lib/api", () => ({
   gameApi: () => ({
     hall: { overview: async () => ({ sessions: [] }) },
-    poker: { guide: async () => ({ cards: { available: false } }), lobby: { list: async () => ({ items: [], nextOffset: null }) }, room: { create: api.create }, table: {state:api.state}, control:{set:api.control} },
+    poker: { guide: async () => ({ cards: { available: true, supportedVersions: ["cards-v1", "cards-v2", "chips-v2"] } }), lobby: { list: async () => ({ items: [], nextOffset: null }) }, room: { create: api.create }, table: {state:api.state}, control:{set:api.control} },
   }),
 }))
 vi.mock("../components/LobbyView", () => ({
@@ -54,26 +54,21 @@ async function clickSwitchPart(target: HTMLElement) {
   })
 }
 describe("建房请求身份", () => {
-  it("Roll coin allowance defaults to twelve, edits and persists while one/three costs stay fixed",async()=>{
-    api.create.mockReset().mockRejectedValueOnce(new Error("retry"))
-    const host=document.createElement("div"),root=createRoot(host);roots.add(root);document.body.append(host)
-    await act(async()=>root.render(<Lobby onRoom={vi.fn()}/>));await open(host)
+  it("旧 Roll 建房偏好可读取，但不会显示或提交钻石和 Roll 开关", async () => {
+    settings.get.mockResolvedValueOnce({ mode: "practice", variant: "standard52", blindPreset: "1/2", maxSeats: 6, buyIn: 1000, roll: true, rollCoins: 21 })
+    api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
+    const host = document.createElement("div"), root = createRoot(host)
+    roots.add(root); document.body.append(host)
+    await act(async () => root.render(<Lobby onRoom={vi.fn()} />)); await open(host)
     expect(document.getElementById("poker-roll-coins")).toBeNull()
-    await clickSwitchPart(document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!)
-    const coins=document.getElementById("poker-roll-coins") as HTMLInputElement
-    expect(coins?.value).toBe("12")
-    expect(document.body.textContent).toContain("普通 1／超级 3 钻石")
-    await act(async()=>[...document.querySelectorAll<HTMLButtonElement>("button")].find(b=>b.getAttribute("aria-label")==="增加每手钻石")!.click())
-    expect(coins.value).toBe("13")
+    expect(document.querySelector("form")?.textContent).not.toContain("Roll")
     await submit()
-    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ruleOptions:{cards:false,roll:true,rollCoins:13}}))
-    await act(async()=>document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click());await open(host)
-    expect((document.getElementById("poker-roll-coins") as HTMLInputElement).value).toBe("13")
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ mode: "practice", ruleOptions: { cards: false } }))
   })
   it.each([
     ["points", "standard52"], ["points", "short32"],
     ["practice", "standard52"], ["practice", "short32"],
-  ])("%s / %s 可点击 Roll 滑块和文字切换，并提交选中的房规", async (mode, variant) => {
+  ])("%s / %s 可点击卡牌模式滑块和文字切换，并提交选中的房规", async (mode, variant) => {
     api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
     const host = document.createElement("div"), root = createRoot(host)
     roots.add(root); document.body.append(host)
@@ -85,7 +80,7 @@ describe("建房请求身份", () => {
     const toggle = document.querySelector<HTMLInputElement>('input[role="switch"]')!
     const thumb = document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!
     const control = document.querySelector<HTMLElement>('[data-slot="switch-control"]')!
-    const label = [...document.querySelectorAll<HTMLElement>('[data-slot="label"]')].find(node => node.textContent === "Roll 换牌")!
+    const label = [...document.querySelectorAll<HTMLElement>('[data-slot="label"]')].find(node => node.textContent === "卡牌模式")!
     expect(toggle.checked).toBe(false)
     await clickSwitchPart(thumb)
     expect(toggle.checked).toBe(true)
@@ -94,7 +89,7 @@ describe("建房请求身份", () => {
     await clickSwitchPart(control)
     expect(toggle.checked).toBe(true)
     await submit()
-    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ mode, variant, ruleOptions: { cards: false, roll: true, rollCoins: 12 } }))
+    expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ mode, variant, ruleOptions: { cards: true } }))
   })
   it("默认名称使用当前昵称，每次新建重置名称，默认名称交由服务端补实际房间号", async () => {
     api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
@@ -131,7 +126,7 @@ describe("建房请求身份", () => {
     }
     expect(document.querySelector("#poker-seats")?.textContent).toContain("5")
     const saved = settings.update.mock.calls.at(-1)![1]
-    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 5, buyIn: 50000, roll: true, rollCoins: 12, cards: false })
+    expect(saved).toEqual({ mode: "practice", variant: "short32", blindPreset: "10/20", maxSeats: 5, buyIn: 50000, cards: true })
     await act(async () => document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')!.click())
     identity.user = { id: "another", nickname: "另一人", handle: "other" }
     await act(async () => root.render(<Lobby onRoom={vi.fn()} />))
@@ -199,18 +194,18 @@ describe("建房请求身份", () => {
     expect(document.querySelector<HTMLFieldSetElement>("fieldset")?.disabled).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
     expect(document.querySelector('button[type="submit"]')?.textContent).toContain("创建中")
-    const roll = document.querySelector<HTMLInputElement>('input[role="switch"]')!
-    expect(roll.disabled).toBe(true)
+    const cards = document.querySelector<HTMLInputElement>('input[role="switch"]')!
+    expect(cards.disabled).toBe(true)
     await clickSwitchPart(document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!)
-    expect(roll.checked).toBe(false)
+    expect(cards.checked).toBe(false)
     await submit()
     expect(api.create).toHaveBeenCalledOnce()
     await act(async () => reject(new Error("创建失败")))
     expect(document.querySelector<HTMLFieldSetElement>("fieldset")?.disabled).toBe(false)
     expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false)
-    expect(roll.disabled).toBe(false)
+    expect(cards.disabled).toBe(false)
     await clickSwitchPart(document.querySelector<HTMLElement>('[data-slot="switch-thumb"]')!)
-    expect(roll.checked).toBe(true)
+    expect(cards.checked).toBe(true)
   })
   it("直接点选配置并调节座位后，提交对应房间参数", async () => {
     api.create.mockReset().mockResolvedValue({ roomCode: "5678" })
@@ -290,7 +285,7 @@ describe("建房请求身份", () => {
     else expect(second).not.toBe(first)
     expect(onRoom).toHaveBeenCalledWith("1234")
   })
-  it("成功确认后再建同配置房间使用新UUID，Roll开关进入请求意图",async()=>{
+  it("成功确认后再建同配置房间使用新UUID，卡牌开关进入请求意图",async()=>{
     api.create.mockReset().mockResolvedValue({roomCode:"5678"})
     const host=document.createElement("div"),root=createRoot(host);roots.add(root);document.body.append(host)
     await act(async()=>root.render(<Lobby onRoom={vi.fn()}/>))
@@ -298,7 +293,7 @@ describe("建房请求身份", () => {
     await act(async()=>document.querySelector<HTMLInputElement>('input[role="switch"]')!.click())
     await submit();const first=api.create.mock.calls[0][0]
     await open(host);await submit();const second=api.create.mock.calls[1][0]
-    expect(first.ruleOptions).toEqual({cards:false,roll:true,rollCoins:12});expect(second.ruleOptions).toEqual({cards:false,roll:true,rollCoins:12})
+    expect(first.ruleOptions).toEqual({cards:true});expect(second.ruleOptions).toEqual({cards:true})
     expect(second.creationId).not.toBe(first.creationId)
     expect(second).not.toHaveProperty("roll")
   })

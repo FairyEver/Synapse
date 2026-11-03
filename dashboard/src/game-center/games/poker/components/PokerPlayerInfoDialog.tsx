@@ -1,10 +1,12 @@
 import { Button, Modal } from "@heroui/react"
 import type { PokerSeatView, PokerTableView } from "@synapse/shared/game-contracts"
+import { usesPokerHandDock } from "../lib/card-mode"
 import { amount } from "../lib/view"
 
 const statusLabels: Record<string, string> = { active: "对局中", folded: "已弃牌", allin: "已全下", sitting_out: "已暂离", waiting: "等待加入", left: "已离桌" }
 export function PokerPlayerInfoDialog({ table, seat, onClose }: { table: PokerTableView; seat: PokerSeatView; onClose: () => void }) {
   const unit = table.mode === "practice" ? "筹码" : "点数"
+  const cardsV2 = usesPokerHandDock(table)
   const stats = table.rollStats?.seats.find(entry => entry.seatNo === seat.seatNo)
   const pending = seat.inCurrentHand !== false && table.roll?.pendingSeatNo === seat.seatNo
   const status = pending ? "正在选牌" : table.status === "running" && seat.inCurrentHand !== false && table.actionOnSeat === seat.seatNo ? "行动中" : statusLabels[seat.status] ?? "等待中"
@@ -19,13 +21,13 @@ export function PokerPlayerInfoDialog({ table, seat, onClose }: { table: PokerTa
           <dt className="text-muted">可用{unit}</dt><dd className="text-right text-foreground tabular-nums wrap-anywhere">{amount(seat.stack)}</dd>
           <dt className="text-muted">状态</dt><dd className="text-right text-foreground">{status}</dd>
         </dl>
-        <section aria-label="玩家换牌统计" className="space-y-3">
+        {!cardsV2 && <section aria-label="玩家换牌统计" className="space-y-3">
           <h3 className="text-sm font-medium">换牌统计</h3>
           {table.roll?.enabled ? <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             {(["hand", "room"] as const).map(scope => <div key={scope} className="contents"><dt className="text-muted">{scope === "hand" ? "本手" : "房间累计"}</dt><dd className="flex min-w-0 flex-col gap-1 text-right text-foreground tabular-nums">{stats ? <><span className="wrap-anywhere">{amount(stats[scope].count)} 次</span><span className="wrap-anywhere">支出 {amount(stats[scope].paid)} <span className="whitespace-nowrap">{unit}</span></span></> : "暂不可用"}</dd></div>)}
           </dl> : <p className="text-sm text-muted">本房间未启用换牌</p>}
-        </section>
-        {table.roll?.enabled && <section aria-label="全桌换牌统计" className="space-y-3">
+        </section>}
+        {!cardsV2 && table.roll?.enabled && <section aria-label="全桌换牌统计" className="space-y-3">
           <h3 className="text-sm font-medium">全桌合计</h3>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">{(["hand", "room"] as const).map(scope => <div key={scope} className="contents"><dt className="text-muted">{scope === "hand" ? "本手" : "房间累计"}</dt><dd className="flex min-w-0 flex-col gap-1 text-right text-foreground tabular-nums">{table.rollStats ? <><span className="wrap-anywhere">{amount(table.rollStats[scope].players)} 人 · {amount(table.rollStats[scope].count)} 次</span><span className="wrap-anywhere">支出 {amount(table.rollStats[scope].paid)} <span className="whitespace-nowrap">{unit}</span></span></> : "暂不可用"}</dd></div>)}</dl>
           <p className="text-xs text-muted">房间累计包含本手</p>

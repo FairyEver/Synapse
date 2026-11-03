@@ -14,10 +14,25 @@ describe("公开筹码展示投影", () => {
       { id: "4", index: 4, type: "chips.refunded", phase: "after", audience: "public", actorSeatNo: 0, data: { amount: 60 } },
       { id: "5", index: 5, type: "poker.observed", phase: "after", audience: "owner", actorSeatNo: 0, data: { cards: ["As"] } },
     ] }
-    const projected = projectFundedChipState({ pot: [], roll: [], recent: [] }, undefined, [], [root])
+    const reserve = { revision: 0, finalized: false, lots: [], claims: [], movements: [] }
+    const projected = projectFundedChipState({ pot: [], roll: [], recent: [] }, reserve, [], [root])
     expect(projected.reserve).toEqual([])
     expect(projected.recent.map(e => [e.fund, e.direction, e.amount])).toEqual([["reserve", "in", 120], ["reserve", "out", 60], ["reserve", "out", 60]])
     expect(JSON.stringify(projected)).not.toMatch(/As|private-root|nominal|waived/)
+  })
+  it("新版换牌费进入主池筹码堆，待选完成不重放筹码且没有暂存", async () => {
+    const modern = { ...hand, rules: { ...hand.rules, chipRulesVersion: "chips-v2", cardRulesVersion: "cards-v2", ruleOptions: { cards: true } } }
+    const base = await projectChipState({} as any, modern, seats, [], [
+      { seq: 1, seatNo: 0, action: "card_play", amount: 25 },
+      { seq: 2, seatNo: 0, action: "card_choose", amount: 0 },
+    ])
+    const root: ResolutionFrame = { id: "root", handId: "h", seq: 1, rootActionId: "play", events: [
+      { id: "0", index: 0, type: "chips.paid", phase: "after", audience: "public", actorSeatNo: 0, data: { amount: 25, destination: "pot" } },
+    ] }
+    const view = projectFundedChipState(base, undefined, seats.map(s => ({ ...s, admissionId: null })), [root])
+    expect(view.pot).toEqual([{ value: 25, count: 1 }, { value: 10, count: 1 }, { value: 5, count: 1 }])
+    expect(view.recent).toEqual([{ id: "root:0", seq: 1, seatNo: 0, amount: 25, fund: "pot", direction: "in", kind: "card" }])
+    expect(view).not.toHaveProperty("reserve")
   })
   it("最终分配按原接收人汇总动画，长期Roll不能把单根展示撑破预算", () => {
     const root: ResolutionFrame = { id: "settle", handId: "h", seq: 2001, rootActionId: "final", events: [{ id: "final", index: 0, type: "chips.distributed", phase: "after", audience: "public", actorSeatNo: 0, data: { amount: 2000 } }] }

@@ -7,8 +7,8 @@ import { GameReserveService } from "../hall/game-reserve.service"
 import { startNext } from "./poker-lifecycle"
 import { reject } from "./poker-error"
 import { assertController, changeControl, claimControl, type PokerCaller } from "./poker-control"
-import { resolveRules, ROLL_PRICING_VERSION, type PokerVariant } from "./engine/rules"
-import { POKER_BUY_IN_PRESETS, POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
+import { resolveRules, type PokerVariant } from "./engine/rules"
+import { POKER_BUY_IN_PRESETS, POKER_CARD_RULES_VERSION, POKER_MAX_SEATS, type PokerResumeCheckpoint, type PokerRuleOptions } from "@synapse/shared/game-contracts"
 import { nextHandEligible, preparedForNextHand } from "./poker-ready"
 import { currentHand } from "./poker-current-hand"
 import { engine } from "./poker-lifecycle"
@@ -89,6 +89,8 @@ export class PokerService {
     caller: PokerCaller = "mcp",
     supportedRules = false,
   ) {
+    if (input.ruleOptions?.roll || input.ruleOptions?.rollCoins !== undefined)
+      reject("POKER_ROLL_DISABLED", "新房间通过能力牌换牌。")
     if (input.ruleOptions?.cards) {
       if (caller !== "human") reject("POKER_CARD_AI_DISABLED", "卡牌房当前仅支持真人操作。")
       if (!supportedRules) reject("POKER_CARD_VERSION_UNSUPPORTED", "客户端不支持当前卡牌规则。")
@@ -104,9 +106,9 @@ export class PokerService {
     let rules
     try {
       const [smallBlind, bigBlind] = (input.blindPreset ?? "1/2").split("/").map(Number)
-      rules = resolveRules({ variant: input.variant, smallBlind, bigBlind, chipRulesVersion: "chips-v2", ...(input.ruleOptions?.cards ? { cardRulesVersion: "cards-v1" } : {}), ...(input.ruleOptions ? { ruleOptions: input.ruleOptions } : {}), ...(input.ruleOptions?.roll ? { rollPricingVersion: ROLL_PRICING_VERSION } : {}) })
+      rules = resolveRules({ variant: input.variant, smallBlind, bigBlind, chipRulesVersion: "chips-v2", ...(input.ruleOptions?.cards ? { cardRulesVersion: POKER_CARD_RULES_VERSION } : {}), ...(input.ruleOptions ? { ruleOptions: input.ruleOptions } : {}) })
     } catch {
-      reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库、盲注和每手钻石额度。")
+      reject("POKER_ILLEGAL_ACTION", "请选择有效的牌库和盲注。")
     }
     const id =
       input.creationId === undefined
@@ -427,7 +429,7 @@ export class PokerService {
             const context = roomResolutionContext(c, hand.id, hand.actionSeq + 1, actionId, actor, "human")
             const resolution = resolveHandCommand(before, { kind: "hand.cancel", funding: "practice", scope: reserveScope(c, hand.id) }, context, createCardRegistry())
             await persistHandResolution(this, c, resolution, context, before)
-            await this.hall.freezeTransfers(c.tx, await this.reserves.finalize(c.tx, hand.id), c.now)
+            if (before.cardRulesVersion !== POKER_CARD_RULES_VERSION) await this.hall.freezeTransfers(c.tx, await this.reserves.finalize(c.tx, hand.id), c.now)
             await c.tx.gamePokerHand.update({ where: { id: hand.id }, data: { actionSeq: context.actionSeq, status: "cancelled", street: "settled", pot: 0, endedAt: c.now, engineState: json(resolution.state), result: resolution.state.cardAudit ? json({ cardAudit: resolution.state.cardAudit }) : Prisma.DbNull } })
             if (actor) await c.tx.gamePokerAction.create({ data: { handId: hand.id, roomId: c.room.id, userId, seq: context.actionSeq, seatNo: actor.seatNo, street: hand.street, action: "hand_cancel", amount: 0, nominalAmount: 0, waivedAmount: 0, potAfter: 0, actionSource: "human", actionId, createdAt: c.now } })
           }

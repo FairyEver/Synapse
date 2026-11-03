@@ -36,10 +36,12 @@ export function projectPotContributions(input: PotContributionsInput): PokerPotC
   } else {
     if (!archivedActions || !Number.isSafeInteger(hand.actionSeq) || hand.actionSeq < 0 || archivedActions.length !== hand.actionSeq || archivedActions.some(action => !action)) return undefined
     let blinds: [number, number][]
+    let cardFeesToMain = false
     try {
       // Historical snapshots without rules retain the engine's original 1/2 default.
       if (hand.rules !== undefined && hand.rules !== null && (typeof hand.rules !== "object" || Array.isArray(hand.rules))) return undefined
       const rules = resolveRules((hand.rules ?? {}) as Parameters<typeof resolveRules>[0])
+      cardFeesToMain = rules.cardRulesVersion === "cards-v2"
       const order = seatOrder(participants.map(player => player.seatNo), hand.dealerSeat)
       blinds = [[order.smallBlind, rules.smallBlind], [order.bigBlind, rules.bigBlind]]
     } catch {
@@ -53,7 +55,7 @@ export function projectPotContributions(input: PotContributionsInput): PokerPotC
       const player = participants.find(player => player.seatNo === action.seatNo)
       if (action.seq !== index + 1 || action.handId !== hand.id || action.roomId !== roomId || !player || action.userId !== player.userId || !amountIsValid(action.amount)) return undefined
       if (["roll_start", "roll_choose", "card_play", "card_choose"].includes(action.action)) {
-        if (action.amount !== 0) return undefined
+        if (action.amount !== 0 && !(cardFeesToMain && action.action === "card_play")) return undefined
         continue
       }
       if (!["fold", "check", "call", "bet", "raise", "allin"].includes(action.action) ||

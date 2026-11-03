@@ -12,6 +12,7 @@ type RollPayment = { id: string; seatNo: number; fee: number }
 /** No cards, notes, identity or quote data crosses this public presentation boundary. */
 export async function projectChipState(tx: Pick<Prisma.TransactionClient,"gamePokerAction">, hand: ChipHand, seats: ChipSeat[], rolls: RollPayment[], archivedActions?: ChipAction[]): Promise<PokerChipState> {
   const result: PokerChipState = {pot:[],roll:[],recent:[]}
+  const rules = resolveRules((hand.rules ?? {}) as Parameters<typeof resolveRules>[0])
   const append = (payment: PokerChipContribution & { fund: "pot" | "roll" }) => {
     if (!payment.amount) return
     result[payment.fund] = addChipPayment(result[payment.fund],payment.amount)
@@ -19,7 +20,6 @@ export async function projectChipState(tx: Pick<Prisma.TransactionClient,"gamePo
     if (result.recent.length>32) result.recent.shift()
   }
   if (seats.length>=2) {
-    const rules = resolveRules(hand.rules as Parameters<typeof resolveRules>[0])
     const order = seatOrder(seats.map(s=>s.seatNo),hand.dealerSeat)
     for (const [seatNo,blind] of [[order.smallBlind,rules.smallBlind],[order.bigBlind,rules.bigBlind]]) {
       const amount = Math.min(seats.find(s=>s.seatNo===seatNo)!.startingStack,blind)
@@ -29,7 +29,7 @@ export async function projectChipState(tx: Pick<Prisma.TransactionClient,"gamePo
   const paid = new Map(rolls.map(r=>[r.id,r]))
   const consume = (actions: ChipAction[]) => {
     for (const action of actions) {
-      if (action.action === "card_play" || action.action === "card_choose") continue
+      if (action.action === "card_choose" || action.action === "card_play" && rules.cardRulesVersion !== "cards-v2") continue
       if (action.action==="roll_choose") continue
       const fund = action.action==="roll_start" ? "roll" : "pot"
       const amount = fund==="roll" ? paid.get(action.rollId ?? "")?.fee : action.amount
@@ -63,6 +63,7 @@ export function projectFundedChipState(base: PokerChipState, reserve: ReserveSta
     if (event.audience !== "public") continue
     const target = typeof event.data.targetSeatNo === "number" ? event.data.targetSeatNo : event.actorSeatNo
     if (event.type === "bet.completed") append(root, event.index, target, event.data.amount, "pot", "in", "bet")
+    if (event.type === "chips.paid" && event.data.destination === "pot") append(root, event.index, target, event.data.amount, "pot", "in", "card")
     if (event.type === "chips.deposited") append(root, event.index, target, event.data.amount, "reserve", "in", event.cardId ? "card" : "roll")
     if (event.type === "chips.stolen" || event.type === "chips.refunded") append(root, event.index, event.actorSeatNo, event.data.amount, "reserve", "out", event.type === "chips.stolen" ? "steal" : "refund")
     if (event.type === "chips.distributed") {
@@ -74,5 +75,8 @@ export function projectFundedChipState(base: PokerChipState, reserve: ReserveSta
       for (const [seatNo, amount] of credits) append(root, `${event.index}:${seatNo}`, seatNo, amount, "reserve", "out", "compensation")
     }
   }
-  return { pot: base.pot, roll: [], reserve: chipBreakdown((reserve?.lots ?? []).reduce((sum, lot) => sum + lot.remainingAmount, 0)), recent }
+  return {
+    pot: base.pot, roll: [], recent,
+    ...(reserve ? { reserve: chipBreakdown(reserve.lots.reduce((sum, lot) => sum + lot.remainingAmount, 0)) } : {}),
+  }
 }

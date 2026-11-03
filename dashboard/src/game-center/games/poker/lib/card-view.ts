@@ -11,6 +11,7 @@ export function cardPlayInput(table: PokerTableView, card: PokerCardHandView, se
 const reasons: Record<string, string> = {
   POKER_NOT_YOUR_TURN: "等待你的回合", POKER_ACTION_EXPIRED: "本回合已超时", POKER_CARD_CHOICE_REQUIRED: "请先完成待选",
   POKER_CARD_INSUFFICIENT_STACK: "筹码不足，须保留至少 1 筹码", POKER_CARD_INVALID_SELECTION: "暂无合法目标",
+  POKER_CARD_COUNTER_ACTIVE: "反制咒已生效",
   POKER_CARD_RIVER_UNAVAILABLE: "河牌阶段无法使用", POKER_CARD_DECK_EMPTY: "扑克牌堆已空", POKER_CARD_POOL_EMPTY: "能力牌池已空",
   POKER_CARD_NO_RESERVE_SHARES: "其他玩家没有可偷取的暂存", POKER_CARD_NO_RECENT_DEPOSIT: "你最近一笔暂存没有可取回的筹码",
   POKER_CARD_NO_ABILITY_TARGET: "没有持有能力牌的对手", POKER_CARD_NO_MATERIAL: "你没有另一张能力牌",
