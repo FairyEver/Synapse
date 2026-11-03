@@ -329,8 +329,13 @@ it.each([[1413, 962], [850, 700], [320, 568], [568, 320]])("%s×%s 回合和手�
     await screen.rerender(fixture([], opponentTurn))
     expect(anchor.querySelector(".poker-hand-dock-card")).toBeNull()
     await expectStableLayout()
-    for (const legalActions of [["fold", "call", "raise", "allin"], ["fold", "call", "allin"]]) {
+    const callAndRaise = ["fold", "call", "raise", "allin"]
+    await screen.rerender(fixture(hand, { legalActions: callAndRaise, toCall: 10, minRaiseTo: 20 }))
+    expect(actions.textContent).toContain("跟注 10")
+    await expectStableLayout()
+    for (const legalActions of [callAndRaise, ["fold", "call", "allin"]]) {
       await screen.rerender(fixture(hand, { legalActions, toCall: 49990, betWaiverCap: 2, minRaiseTo: 99980 }))
+      expect(actions.textContent).toContain("跟注 49,990")
       expect(actions.textContent).toContain("实付 49,988")
       await expectStableLayout()
     }
