@@ -6,7 +6,7 @@ import { CardRuleError } from "./types"
 export interface CardInstance { id: string; definitionId: string }
 export interface CardParticipant { admissionId: string; userId: string; seatNo: number; kind: "human" | "bot"; folded: boolean; allIn: boolean; active?: boolean }
 export interface CardUseRecord { id: string; instanceId: string; cardId: string; seatNo: number; seq: number; status: "completed" | "blocked" | "choice_required"; paidAmount?: number; nominalAmount?: number; waivedAmount?: number }
-export interface CardPrivateResult { id: string; ownerAdmissionId: string; cardId: string; label: string; values: string[]; valid: boolean; deckRevision?: number }
+export interface CardPrivateResult { id: string; ownerAdmissionId: string; cardId: string; label: string; values: string[]; valid: boolean; deckRevision?: number; targetSeatNo?: number }
 export interface PublicCardMarker { id: string; card: string; cardId: string; ownerAdmissionId: string; sourceInstanceId?: string; expiresStreet?: string; parentEffectId?: string; dispellable: boolean }
 export interface CardModeState {
   version: PokerCardRulesVersion; initialCount: number; generatedCount: number; catalogIds: string[]
@@ -118,7 +118,7 @@ export function applyCardPoolOperation(input: CardModeState, operation: CardPool
       state.spent.push(...state.pool, ...Object.values(state.hands).flat(), ...state.reserved)
       state.pool = []; state.reserved = []; state.pending = null; state.effects = []
       for (const id of Object.keys(state.hands)) state.hands[id] = []
-      for (const result of state.privateResults) result.valid = false
+      for (const result of state.privateResults) if (result.targetSeatNo === undefined) result.valid = false
       break
     }
   }

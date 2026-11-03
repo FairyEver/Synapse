@@ -84,3 +84,11 @@
 .poker-canvas[data-table-shape="landscape"] { --scene-label: 24px; --seat-label: 22px; }
 .poker-seat-info-trigger { position: absolute; inset: 0; width: 100%; border: 0; border-radius: var(--radius); background: transparent; cursor: pointer; }
 .poker-seat-info-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* Keep the top seats inside the viewport when their activity extends below the nameplate. */
+.poker-canvas[data-seat-card-history] { --seat-activity-clearance: 32px; }
+.poker-canvas[data-seat-card-history]:not([data-table-shape="portrait"]) .poker-seat[data-position="4"] { top: calc(var(--poker-seat-4-y) + var(--seat-activity-clearance)); }
+.poker-canvas[data-seat-card-history] .poker-seat[data-position="5"] { top: calc(var(--poker-seat-5-y) + var(--seat-activity-clearance)); }
+.poker-canvas[data-seat-card-history]:not([data-table-shape="portrait"]) .poker-seat[data-position="6"] { top: calc(var(--poker-seat-6-y) + var(--seat-activity-clearance)); }
+.poker-seat-used-cards { position: relative; display: flex; justify-content: center; gap: 4px; }
+.poker-seat-used-art { width: 24px; height: 28px; object-fit: cover; border-radius: var(--radius-sm); }
+.poker-seat-previous-hole { color: var(--muted); font-size: var(--seat-label); line-height: 1.2; }

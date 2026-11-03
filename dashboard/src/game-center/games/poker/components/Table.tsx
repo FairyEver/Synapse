@@ -116,6 +116,10 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
     return () => { observer.disconnect(); if (frame !== undefined) cancelAnimationFrame(frame) }
   }, [])
   const slots = Array.from({ length: view.maxSeats }, (_, seatNo) => ({ seatNo, index: view.seats.findIndex(s => s.seatNo === seatNo), seat: view.seats.find(s => s.seatNo === seatNo) }))
+  const seatCardInfo = (seatNo: number) => ({
+    observedHole: view.cards?.privateResults?.filter(result => result.targetSeatNo === seatNo).at(-1),
+    usedCards: view.cards?.used.filter(card => card.seatNo === seatNo).sort((a, b) => a.seq - b.seq).slice(-5),
+  })
   const active = view.status === "closed" ? undefined : view.seats.find(s => s.seatNo === view.actionOnSeat)
   const canNudge = onNudge && perspective === "owner" && view.mySeatNo !== null && active && active.seatNo !== view.mySeatNo && active.participantKind !== "bot"
   const stage = view.status === "closed" ? "房间已解散" : streetLabel[view.street ?? ""] ?? (view.status === "paused" ? "等待对手" : "等待开局")
@@ -147,7 +151,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
       <div className="poker-table-main" ref={cardDropArea}>
         {view.settlement && !cash.blocked && <div className="poker-results-anchor"><Settlement settlement={view.settlement} /></div>}
         <div className="poker-canvas-viewport" ref={viewport}>
-          <div className="poker-canvas" data-table-shape={fit.scene.mode} data-compact={fit.scale<0.65} style={{ ...tableSceneVariables(fit.scene), "--poker-scale":fit.scale || 1, width:fit.scene.width, height:fit.scene.height, transform:`translate(-50%, -50%) scale(${fit.scale})` } as CSSProperties}>
+          <div className="poker-canvas" data-table-shape={fit.scene.mode} data-seat-card-history={cardDock || undefined} data-compact={fit.scale<0.65} style={{ ...tableSceneVariables(fit.scene), "--poker-scale":fit.scale || 1, width:fit.scene.width, height:fit.scene.height, transform:`translate(-50%, -50%) scale(${fit.scale})` } as CSSProperties}>
             <div className="poker-rail" aria-hidden="true"><div className="poker-felt" /></div>
             <div className="poker-table-content">
               <div className="poker-center">
@@ -166,7 +170,7 @@ export function Table({ table, perspective, onPerspective, onNudge, onBack, onRe
                 <div className="poker-board-caption"><span className="poker-street">{stage}</span><PokerCardFeedback frames={animateFrames} handId={table.handId} scope={`${table.roomCode}:${identityKey}:${perspective}:${controlVersion}`} /></div>
                 {view.status === "paused" && view.pauseReason && <p className="poker-pause-reason">{({user:"牌局已暂停",all_humans_away:"真人均已暂离",no_human:"等待本人或 AI 入座",insufficient_players:"等待对手",insufficient_chips:"等待有筹码的玩家"} as Record<string,string>)[view.pauseReason] ?? "等待可参与的玩家"}</p>}
               </div>
-              {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} flatHoleCards={cardDock && seat.isMe} amountScope={`${cash.scope}:${view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? ""}`} onStackAnimating={active => cash.numberMotion(`seat:${seatNo}`, active)} displayStack={cash.banks[seatNo] ?? seat.stack} onInspect={trigger => { inspectedTrigger.current = trigger; setInspected({ seatNo, key: view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? seat.botId ?? seat.displayName }); setPanel("playerInfo") }} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} hasStarted={!!view.handId} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
+              {slots.map(({seatNo,seat,index}) => seat ? <Seat key={seatNo} seat={seat} {...(cardDock && seat.inCurrentHand !== false ? seatCardInfo(seatNo) : {})} flatHoleCards={cardDock && seat.isMe} amountScope={`${cash.scope}:${view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? ""}`} onStackAnimating={active => cash.numberMotion(`seat:${seatNo}`, active)} displayStack={cash.banks[seatNo] ?? seat.stack} onInspect={trigger => { inspectedTrigger.current = trigger; setInspected({ seatNo, key: view.rollStats?.seats.find(entry => entry.seatNo === seatNo)?.key ?? seat.botId ?? seat.displayName }); setPanel("playerInfo") }} showWager={view.street !== "settled"} departed={seat.isMe && view.mySeatNo === null} result={view.settlement} feedback={motion.actions.filter(a=>a.seatNo===seatNo).at(-1)} feedbackKey={motion.id} turnPulse={motion.turn === seatNo} celebrate={motion.celebrate.includes(seatNo)} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} acting={view.status === "running" && seat.inCurrentHand !== false && seat.seatNo === view.actionOnSeat} deadlineMs={view.deadlineMs} dealer={seatNo === view.dealerSeat} dealt={dealt > index} hasStarted={!!view.handId} /> : <EmptySeat key={seatNo} seatNo={seatNo} maxSeats={view.maxSeats} origin={view.mySeatNo ?? 0} />)}
               <ChipMotion transfers={cash.active} layout={`${fit.scene.mode}:${fit.scale}`} scope={cash.scope} onStart={cash.start} onComplete={cash.complete} onLand={chipLanded} />
             </div>
           </div>

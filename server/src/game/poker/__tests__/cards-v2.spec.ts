@@ -195,6 +195,36 @@ describe("新版能力牌", () => {
     expect(handPotAmount(drawn.state)).toBe(handPotAmount(h))
   })
 
+  it.each(["01", "02", "06", "07"])("明察秋毫仅向本人绑定目标，换牌 %s 后整副情报失效", cardId => {
+    let h = start([1000, 1000, 1000])
+    const observer = h.actionOnSeat!
+    const target = (observer + 1) % h.seats.length
+    const old = [...h.seats[target].hole]
+    const inspect = cardPlay(h, "14", 1, { player: target })
+    h = resolve(h, { kind: "card.play", input: inspect.input }, 1).state
+    const intel = () => cardView(h, observer, 5).privateResults?.find(result => result.cardId === "14")
+    expect(intel()).toMatchObject({ targetSeatNo: target, values: old, valid: true })
+    expect(cardView(h, target, 1).privateResults).toEqual([])
+    const publicView = projectCardView(h, { audience: "desktop", perspective: "public", actionSeq: 1, handId, nowMs: 0 })!
+    expect(publicView.privateResults).toBeUndefined()
+    expect(publicView.used).toMatchObject([{ cardId: "14", seatNo: observer, artId: "v1/14", description: expect.any(String) }])
+
+    const ownChange = cardPlay(h, "01", 2, { hole: 0 })
+    h = resolve(h, { kind: "card.play", input: ownChange.input }, 2).state
+    h = bet(h, 3, { action: "call" })
+    expect(h.actionOnSeat).toBe(target)
+    expect(intel()).toMatchObject({ values: old, valid: true })
+
+    const replace = cardPlay(h, cardId, 4, cardId === "01" || cardId === "06" ? { hole: 1 } : {})
+    h = resolve(h, { kind: "card.play", input: replace.input }, 4).state
+    if (h.cards!.pending) {
+      expect(intel()).toMatchObject({ values: old, valid: true })
+      h = choose(h, 5, 0).state
+    }
+    expect(h.seats[target].hole).not.toEqual(old)
+    expect(intel()).toMatchObject({ targetSeatNo: target, values: old, valid: false })
+  })
+
   it.each([
     { board: ["2c", "7s", "8h", "9d", "Jh"], mainWinners: [1], sideWinners: [2], shares: { 1: 301 } },
     { board: ["Ts", "Js", "Qs", "Ks", "As"], mainWinners: [0, 1, 2], sideWinners: [0, 2], shares: { 0: 100, 1: 101, 2: 100 } },

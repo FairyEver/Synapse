@@ -1,9 +1,11 @@
-import { chipBreakdown, type PokerSeatView, type PokerSettlementView, type PokerTableView } from "@synapse/shared/game-contracts"
-import { Coins } from "lucide-react"
+import { chipBreakdown, type PokerCardPrivateResultView, type PokerCardView, type PokerSeatView, type PokerSettlementView, type PokerTableView } from "@synapse/shared/game-contracts"
+import { Button, Tooltip } from "@heroui/react"
+import { Coins, Layers } from "lucide-react"
 import { Card } from "./Card"
 import { PokerChipPile } from "./PokerChipPile"
 import { RollingAmount } from "./RollingAmount"
-import { actionLabel, amount, seatPosition } from "../lib/view"
+import { cardArtwork } from "../lib/card-artwork"
+import { actionLabel, amount, playingCardLabel, seatPosition } from "../lib/view"
 export function Seat({
   seat,
   maxSeats,
@@ -19,7 +21,11 @@ export function Seat({
   displayStack = seat.stack,
   amountScope = "",
   onStackAnimating,
+  observedHole,
+  usedCards,
 }: {
+  observedHole?: PokerCardPrivateResultView
+  usedCards?: PokerCardView["used"]
   displayStack?: number
   amountScope?: string
   onStackAnimating?: (active: boolean) => void
@@ -42,7 +48,8 @@ export function Seat({
   deadlineMs: number | null
 }) {
   const publicHole = new Map(seat.publicHole?.map(card => [card.index, card.card]))
-  const hole = [seat.hole?.[0] ?? publicHole.get(0), seat.hole?.[1] ?? publicHole.get(1)]
+  const visibleHole = seat.hole ?? (observedHole?.valid ? observedHole.values : undefined)
+  const hole = [visibleHole?.[0] ?? publicHole.get(0), visibleHole?.[1] ?? publicHole.get(1)]
   const won = seat.inCurrentHand !== false && !!result?.pots.some(p=>!p.refund && p.winners.includes(seat.seatNo))
   const wonChips = result?.pots.filter(p=>!p.refund).reduce((sum,p)=>sum+(p.shares[seat.seatNo] ?? 0),0) ?? 0
   const returned = result?.pots.filter(p=>p.refund).reduce((sum,p)=>sum+(p.shares[seat.seatNo] ?? 0),0) ?? 0
@@ -65,7 +72,7 @@ export function Seat({
       aria-label={`座位 ${seat.seatNo + 1} · ${seat.displayName}`}
     >
       <div className="poker-seat-objects">
-        {!waiting && <div className="poker-seat-cards" data-flat={flatHoleCards || undefined} data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!seat.hole}>
+        {!waiting && <div className="poker-seat-cards" data-flat={flatHoleCards || undefined} data-card-size={seat.status === "folded" ? "xs" : "sm"} data-dealt={dealt} data-visible-hole={!!visibleHole}>
           <Card card={hole[0]} faceUp={!!hole[0] && dealt} />
           <Card card={hole[1]} faceUp={!!hole[1] && dealt} />
         </div>}
@@ -110,6 +117,23 @@ export function Seat({
         <span className="poker-wager" data-seat={seat.seatNo} data-visible={showWager && seat.streetBet > 0} aria-label={`${seat.isMe ? "你" : seat.displayName} 本轮下注 ${amount(seat.streetBet)}`}><Coins aria-hidden="true" /><span title={amount(seat.streetBet)}>{amount(seat.streetBet)}</span></span>
       </div>
       {onInspect && <button type="button" className="poker-seat-info-trigger" aria-label={`查看${seat.isMe ? "你" : seat.displayName}的玩家信息`} onClick={event => onInspect(event.currentTarget)} />}
+      {!!usedCards?.length && <div className="poker-seat-used-cards" role="group" aria-label="最近用牌">
+        {usedCards.map(card => <Tooltip key={card.id} delay={250}>
+          <Button type="button" isIconOnly size="sm" variant="ghost" aria-label={card.name}>
+            {card.artId ? <img className="poker-seat-used-art" src={cardArtwork(card.artId)} alt="" loading="lazy" draggable={false} />
+              : <Layers aria-hidden="true" />}
+          </Button>
+          <Tooltip.Content placement="top" className="max-w-64 font-sans scheme-light">
+            <strong>{card.name}</strong>
+            {card.description && <p>{card.description}</p>}
+            {card.status === "blocked" && <p>被阻挡</p>}
+            {card.status === "choice_required" && <p>待选择</p>}
+          </Tooltip.Content>
+        </Tooltip>)}
+      </div>}
+      {observedHole && !observedHole.valid && <div className="poker-seat-previous-hole">
+        曾见 {observedHole.values.map(playingCardLabel).join(" ")}
+      </div>}
     </div>
   )
 }

@@ -492,17 +492,16 @@ export class PokerActionService {
         joinedHandNo: hand!.handNo, status: p.folded ? "folded" : "left", lastSeenAt: new Date(0),
         controller: "ai", controlVersion: 0, handoffPending: false, leavePending: false, ghost: true,
       }))].map((s) => {
-        const p =
+        const inHand =
           hand && (s.joinedHandNo ?? 0) <= hand.handNo && participants.some((p) => p.seatNo === s.seatNo && p.userId === s.userId && ("ghost" in s || !p.admissionId || p.admissionId === s.id))
-            ? h?.seats.find((p) => p.seatNo === s.seatNo)
-            : undefined
+        const p = inHand ? h?.seats.find((p) => p.seatNo === s.seatNo) : undefined
         const visible = canSeeHole(userId, s.userId, s.participantKind, p?.folded ?? false, h?.showdownSeats.includes(s.seatNo) ?? false, participating, policy)
         return {
           seatNo: s.seatNo,
           isHistorical: "ghost" in s,
           nextHandEligible: !("ghost" in s) && nextHandEligible(s),
           readyForNextHand: !("ghost" in s) && (c.room.handNo === 0 || hand?.status === "settled") && preparedForNextHand(s, c.room),
-          inCurrentHand: !!p,
+          inCurrentHand: !!p || !!(inHand && archived?.cards && archived.cards.version !== "cards-v1"),
           participantKind: s.participantKind,
           ...(s.participantKind === "bot" && !("ghost" in s) ? { botId: s.id, leavePending: s.leavePending } : {}),
           controller: s.participantKind === "bot" ? null : s.controller ?? "ai",

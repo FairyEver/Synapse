@@ -62,6 +62,63 @@ const state: PokerTableView = {
   deckRemaining: 48,
 }
 describe("牌桌", () => {
+  it("仅玩家视角展示对手的私查牌面，失效时盖回整副并保留曾见牌", async () => {
+    const host = document.createElement("div"), root = createRoot(host)
+    document.body.append(host)
+    const render = (valid: boolean, perspective: "owner" | "public" = "owner", inCurrentHand = true) => act(async () => root.render(
+      <Table table={{ ...state, seats: [state.seats[0], { ...state.seats[1], inCurrentHand }], cards: {
+        ...cardTable.cards!, version: "cards-v2", privateResults: [
+          { id: "observed", cardId: "14", label: "two", values: ["Qc", "Jd"], valid, targetSeatNo: 1 },
+        ],
+      } }} perspective={perspective} onPerspective={() => {}} onBack={() => {}} />,
+    ))
+    const opponent = () => host.querySelector('.poker-seat[data-seat="1"]')!
+    const faceUp = () => Array.from(opponent().querySelectorAll(".poker-seat-cards [data-card]"), card => card.getAttribute("data-card"))
+    try {
+      await render(true)
+      expect(faceUp()).toEqual(["Qc", "Jd"])
+      await render(false)
+      expect(faceUp()).toEqual([])
+      expect(opponent().querySelectorAll('[data-face="down"]')).toHaveLength(2)
+      expect(opponent().textContent).toContain("曾见 Q♣ J♦")
+      await render(false, "public")
+      expect(opponent().textContent).not.toContain("Q♣ J♦")
+      await render(true, "owner", false)
+      expect(faceUp()).toEqual([])
+      expect(opponent().textContent).not.toContain("Q♣ J♦")
+    } finally {
+      await act(async () => root.unmount())
+      host.remove()
+    }
+  })
+
+  it("按座位横排最近五次公开用牌，保留重复使用并支持悬停查看详情", async () => {
+    const host = document.createElement("div"), root = createRoot(host)
+    document.body.append(host)
+    const used = ["11", "14", "14", "06", "07", "01", "02"].map((cardId, index) => ({
+      id: `use-${index}`, seq: index + 1, cardId, name: `用牌 ${index + 1}`, description: `规则 ${index + 1}`,
+      artId: cardId === "07" ? "v2/07" : `v1/${cardId}`, seatNo: index === 6 ? 0 : 1, status: "completed" as const,
+    }))
+    try {
+      await act(async () => root.render(<Table table={{ ...state, cards: { ...cardTable.cards!, version: "cards-v2", used } }}
+        perspective="public" onPerspective={() => {}} onBack={() => {}} />))
+      const buttons = [...host.querySelectorAll<HTMLButtonElement>('.poker-seat[data-seat="1"] [aria-label="最近用牌"] button')]
+      expect(buttons.map(button => button.getAttribute("aria-label"))).toEqual(["用牌 2", "用牌 3", "用牌 4", "用牌 5", "用牌 6"])
+      await act(async () => buttons[0].focus())
+      expect(document.querySelector('[role="tooltip"]')?.textContent).toContain("规则 2")
+      await act(async () => {
+        buttons[0].blur()
+        buttons[1].dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerType: "mouse" }))
+        buttons[1].dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }))
+        await new Promise(resolve => setTimeout(resolve, 300))
+      })
+      expect(document.querySelector('[role="tooltip"]')?.textContent).toContain("规则 3")
+    } finally {
+      await act(async () => root.unmount())
+      host.remove()
+    }
+  })
+
   it("新版卡牌桌在本人筹码左侧显示两张底牌，底栏只显示能力牌", async () => {
     const host = document.createElement("div"), root = createRoot(host)
     document.body.append(host)

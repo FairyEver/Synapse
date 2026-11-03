@@ -27,13 +27,18 @@ export interface PokerCardPendingView {
   choiceId: string; kind: "poker" | "ability"; origin: "roll" | "card"; paymentVersion: string
   sourceCardId?: string; cardIndex?: number; candidates: string[]; candidateCards?: PokerCardDefinitionView[]
 }
+export interface PokerCardPrivateResultView {
+  id: string; cardId: string; label: string; values: string[]; valid: boolean
+  /** Only for the observer's complete view of another seat's hole cards. */
+  targetSeatNo?: number
+}
 export interface PokerCardView {
   enabled: boolean; version: PokerCardRulesVersion
   definitions?: Record<string, PokerCardDefinitionView>
   ownHand?: PokerCardHandView[]; pending?: PokerCardPendingView | null
-  used: { id: string; cardId: string; name: string; seatNo: number; seq: number; status: "completed" | "blocked" | "choice_required" }[]
+  used: { id: string; cardId: string; name: string; seatNo: number; seq: number; status: "completed" | "blocked" | "choice_required"; artId?: string; description?: string }[]
   statuses: PokerCardStatusView[]
-  privateResults?: { id: string; cardId: string; label: string; values: string[]; valid: boolean }[]
+  privateResults?: PokerCardPrivateResultView[]
 }
 export interface PokerResolutionEventView {
   index: number; type: string; actorSeatNo?: number; targetSeatNo?: number; cardId?: string

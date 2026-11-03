@@ -40,7 +40,11 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
   const registry = cardsV2 ? createCardRegistryV2() : createCardRegistry()
   const name = (id: string) => registry.get(id).name
   const view: PokerCardView = { enabled: true, version: cards.version,
-    used: cards.used.map(c => ({ id: c.id, cardId: c.cardId, name: name(c.cardId), seatNo: c.seatNo, seq: c.seq, status: c.status })),
+    used: cards.used.map(c => {
+      const definition = registry.get(c.cardId)
+      return { id: c.id, cardId: c.cardId, name: definition.name, seatNo: c.seatNo, seq: c.seq, status: c.status,
+        ...(cards.version !== "cards-v1" ? { artId: cardArtworkV2(definition), description: definition.description } : {}) }
+    }),
     statuses: cards.effects.filter(e => e.remaining === null || e.remaining > 0).map(e => ({ id: e.id, cardId: e.cardId, title: name(e.cardId), polarity: e.polarity, dispellable: e.dispellable,
       ...(e.targetSeatNo !== undefined ? { seatNo: e.targetSeatNo } : {}), ...(e.remaining === null ? {} : { remaining: e.remaining }), ...(e.expiresStreet ? { expiresStreet: e.expiresStreet } : {}) })),
   }
@@ -51,9 +55,13 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
   const self = policy.audience === "desktop" && policy.perspective === "owner" && policy.self
     ? cards.participants.find(p => p.kind === "human" && p.userId === policy.self!.userId && p.admissionId === policy.self!.admissionId && p.seatNo === policy.self!.seatNo) : undefined
   if (!self) return view
+  const privateResults = cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId)
+  view.privateResults = privateResults.map(r => ({
+    id: r.id, cardId: r.cardId, label: r.label, values: [...r.values], valid: r.valid,
+    ...(r.targetSeatNo === undefined ? {} : { targetSeatNo: r.targetSeatNo }),
+  }))
   if ("archived" in state) {
     view.ownHand = []; view.definitions = {}; view.pending = null
-    view.privateResults = cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId).map(r => ({ id: r.id, cardId: r.cardId, label: r.label, values: [...r.values], valid: r.valid }))
     return view
   }
   const seat = state.seats.find(s => s.seatNo === self.seatNo), definitions: Record<string, PokerCardDefinitionView> = {}
@@ -77,13 +85,12 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
     return { instanceId: instance.id, cardId: definition.id, available: !reason, ...(reason ? { reason } : {}), payment: { nominalAmount: quote.nominalAmount, waivedAmount: quote.waivedAmount, paidAmount: quote.paidAmount, version: quote.version }, choices }
   })
   view.definitions = definitions
-  for (const result of cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId && r.label === "能力牌")) for (const id of result.values) definitions[id] ??= definitionView(id)
+  for (const result of privateResults.filter(r => r.label === "能力牌")) for (const id of result.values) definitions[id] ??= definitionView(id)
   const pending = cards.pending?.ownerAdmissionId === self.admissionId ? cards.pending : null
   if (cardsV2 && pending?.sourceCardId) definitions[pending.sourceCardId] ??= definitionView(pending.sourceCardId)
   view.pending = pending ? { choiceId: pending.id, kind: pending.kind, origin: pending.origin, paymentVersion: pending.paymentVersion, candidates: [...pending.candidates],
     ...(pending.sourceCardId ? { sourceCardId: pending.sourceCardId } : {}), ...(pending.cardIndex === undefined ? {} : { cardIndex: pending.cardIndex }),
     ...(pending.kind === "ability" ? { candidateCards: cards.reserved.map(c => definitionView(c.definitionId)) } : {}) } : null
-  view.privateResults = cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId).map(r => ({ id: r.id, cardId: r.cardId, label: r.label, values: [...r.values], valid: r.valid }))
   return view
 }
 const PUBLIC_FACTS = new Set(["ability.played", "ability.protected", "ability.statusInstalled", "ability.statusRemoved", "ability.blocked", "poker.revealed", "poker.guessed", "poker.sparked", "chips.paid", "chips.deposited", "chips.stolen", "chips.refunded", "chips.distributed", "chips.discarded", "bet.completed", "bet.blinds", "turn.started", "street.started", "hand.settled"])
