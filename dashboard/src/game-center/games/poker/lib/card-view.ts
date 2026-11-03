@@ -1,6 +1,10 @@
 import type { PokerCardPendingView, PokerCardHandView, PokerCardPlayInput, PokerResolutionFrameView, PokerTableView } from "@synapse/shared/game-contracts"
 import { amount } from "./view"
 
+export function cardConfirmLabel(paidAmount: number): string {
+  return paidAmount > 0 ? `支付 ${amount(paidAmount)} 筹码并确认` : "确定"
+}
+
 export function validCardSelections(card: PokerCardHandView, values: Record<string, string | number>): boolean {
   return Object.keys(values).length === card.choices.length && card.choices.every(choice => choice.options.some(option => option.value === String(values[choice.key])))
 }

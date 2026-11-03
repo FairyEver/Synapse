@@ -26,11 +26,11 @@ async function pressKey(key: string, target: EventTarget = document.body, repeat
 }
 it("打开及选中不施放，选择合法目标后明确确认才付款，携带报价版本", async () => {
   await mount(<HumanControls table={cardTable} perspective="owner" identityKey="open-card" onRefresh={vi.fn()} />)
-  await openCard(); expect(api.play).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("实付 2 筹码")
+  await openCard(); expect(api.play).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("支付 2 筹码并确认")
   await act(async () => document.querySelector<HTMLElement>(".full-description")!.click())
   expect(document.querySelector(".poker-card-stage")).not.toBeNull()
   for (const [name, value] of [["hole", "1"], ["player", "1"]]) await act(async () => document.querySelector<HTMLButtonElement>(`button[data-choice="${name}"][value="${value}"]`)!.click())
-  await click("使用卡牌")
+  await click("支付 2 筹码并确认")
   expect(api.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instanceId: "card-instance", selections: { hole: "1", player: "1" }, expectedPaymentVersion: "card-quote", expectedActionSeq: 3, controlVersion: 2 }))
   expect(api.play.mock.calls[0][0]).not.toHaveProperty("caller")
 })
@@ -38,7 +38,7 @@ it("卡牌详情按 Esc 返回手牌，长按不关闭，松开再按才收起",
   await mount(<HumanControls table={cardTable} perspective="owner" identityKey="card-detail-escape" onRefresh={vi.fn()} />)
   await openCard()
   await pressKey("Escape")
-  expect(button("使用卡牌")).toBeUndefined()
+  expect(button("支付 2 筹码并确认")).toBeUndefined()
   expect(document.querySelector('button[data-held-card="card-instance"]')).not.toBeNull()
   await pressKey("Escape", document.body, true)
   expect(document.querySelector(".poker-card-stage")).not.toBeNull()
@@ -56,14 +56,14 @@ it("详情按 Enter 使用卡牌，目标不完整或按键重复时不提交", 
   const player = document.querySelector<HTMLButtonElement>('button[data-choice="player"][value="1"]')!
   await act(async () => hole.click())
   await act(async () => player.click())
-  expect(button("使用卡牌").disabled).toBe(false)
+  expect(button("支付 2 筹码并确认").disabled).toBe(false)
   await pressKey("Enter", player, true)
   expect(api.play).not.toHaveBeenCalled()
   await pressKey("Enter", player)
   expect(api.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ selections: { hole: "1", player: "1" }, expectedPaymentVersion: "card-quote" }))
   const details = document.querySelector(".inspect-details")!
   expect(details.contains(button("返回手牌"))).toBe(true)
-  expect(details.contains(button("使用卡牌"))).toBe(true)
+  expect(details.contains(button("支付 2 筹码并确认"))).toBe(true)
 })
 it("回合结束关闭卡牌面板，其他人的回合不开放卡牌入口", async () => {
   function Controlled({ table }: { table: PokerTableView }) {
@@ -72,7 +72,7 @@ it("回合结束关闭卡牌面板，其他人的回合不开放卡牌入口", a
   }
   const root = await mount(<Controlled table={cardTable} />)
   await openCard()
-  expect(button("使用卡牌")).toBeDefined()
+  expect(button("支付 2 筹码并确认")).toBeDefined()
 
   await act(async () => root.render(<Controlled table={{ ...cardTable, actionOnSeat: 1, actionSeq: 4 }} />))
   expect(button("卡牌")).toBeUndefined()
@@ -91,7 +91,7 @@ it("公开视角本地剥离持牌、候选、情报、报价与付款版本，D
 it("存储失败只禁止新的卡牌写，不误禁合法普通行动", async () => {
   const bad = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied") })
   await mount(<HumanControls table={{ ...cardTable, cards: { ...cardTable.cards!, ownHand: [{ ...cardTable.cards!.ownHand![0], choices: [] }] } }} perspective="owner" identityKey="card-storage-fail" onRefresh={vi.fn()} />)
-  await openCard(); await click("使用卡牌"); expect(api.play).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("恢复记录")
+  await openCard(); await click("支付 2 筹码并确认"); expect(api.play).not.toHaveBeenCalled(); expect(document.body.textContent).toContain("恢复记录")
   bad.mockRestore(); await click("关闭卡牌")
   const check = [...document.querySelectorAll<HTMLButtonElement>("button")].find(b => b.textContent?.startsWith("过牌"))!
   expect(check.disabled).toBe(false); await act(async () => check.click()); expect(api.action).toHaveBeenCalledOnce()
@@ -143,7 +143,7 @@ it.each(["ability", "status", "color"] as const)("%s选择只提交服务端列�
   const table = { ...cardTable, cards: { ...cardTable.cards!, ownHand: [{ ...cardTable.cards!.ownHand![0], choices: [{ key: kind, label: kind, kind, options: [{ value: "server-option", label: "合法目标" }] }] }] } }
   await mount(<HumanControls table={table} perspective="owner" identityKey={`target-${kind}`} onRefresh={vi.fn()} />)
   await openCard(); await act(async () => document.querySelector<HTMLButtonElement>(`button[data-choice="${kind}"][value="server-option"]`)!.click())
-  await click("使用卡牌"); expect(api.play.mock.calls[0][0].selections).toEqual({ [kind]: "server-option" })
+  await click("支付 2 筹码并确认"); expect(api.play.mock.calls[0][0].selections).toEqual({ [kind]: "server-option" })
 })
 it.each(["transport", "domain"])("%s失败只有确定领域拒绝才清理原请求", async kind => {
   api.play.mockRejectedValueOnce(kind === "transport" ? new Error("网络中断") : Object.assign(new Error("报价变化"), { code: "POKER_CARD_PRICE_CHANGED" }))

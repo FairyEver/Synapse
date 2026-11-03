@@ -73,11 +73,26 @@ it("底牌保持静态，等待时预览价格；选择目标前可以放弃，�
   updated.cards!.ownHand![0].payment = { nominalAmount: 6, waivedAmount: 0, paidAmount: 6, version: "new-quote" }
   await render(updated)
   expect(dialog()!.querySelector('button[data-choice="hole"][value="1"]')?.getAttribute("aria-pressed")).toBe("true")
-  expect(dialog()?.textContent).toContain("报价已更新 · 实付 6 筹码")
-  await click(button("采用新报价"))
+  expect(dialog()?.textContent).toContain("报价已更新")
+  await click(button("采用 6 筹码报价"))
   expect(controls.play).not.toHaveBeenCalled()
-  await click(button("确认目标"))
+  await click(button("支付 6 筹码并确认"))
   expect(controls.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ selections: { hole: "1" }, expectedPaymentVersion: "new-quote", expectedActionSeq: 4 }))
+})
+
+it("免费选择玩家只显示确定，单一目标仍需主动选择", async () => {
+  const table = snapshot(), card = table.cards!.ownHand![0]
+  card.payment = { nominalAmount: 2, waivedAmount: 2, paidAmount: 0, version: "waived" }
+  card.choices = [{ key: "player", label: "目标玩家", kind: "player", options: [{ value: "1", label: "座位2" }] }]
+  const { controls } = await mount(table)
+  await click(document.querySelector(".poker-hand-dock-card"))
+  expect(dialog()?.querySelector("h2")?.textContent).toBe("选择玩家")
+  expect(dialog()?.textContent).not.toMatch(/无需筹码|实付|豁免|放弃使用/)
+  expect(button("确定").disabled).toBe(true)
+  expect(dialog()?.querySelectorAll('button[aria-label="放弃使用"]')).toHaveLength(1)
+  await click(dialog()!.querySelector('button[data-choice="player"]'))
+  await click(button("确定"))
+  expect(controls.play).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ selections: { player: "1" }, expectedPaymentVersion: "waived" }))
 })
 
 it("刷新恢复五选一时强制完成，不接受 Escape，完成后居中显示新底牌", async () => {
@@ -94,7 +109,7 @@ it("刷新恢复五选一时强制完成，不接受 Escape，完成后居中显
   expect(dialog()).not.toBeNull()
   expect(controls.choose).not.toHaveBeenCalled()
   await click(dialog()!.querySelector('button[data-choice="candidate"][value="2"]'))
-  await click(button("确认换牌"))
+  await click(button("确定"))
   expect(controls.choose).toHaveBeenCalledExactlyOnceWith(2)
   expect(controls.play).not.toHaveBeenCalled()
   const completed = structuredClone(pending)

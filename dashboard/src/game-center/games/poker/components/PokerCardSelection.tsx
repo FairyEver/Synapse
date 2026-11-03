@@ -19,8 +19,8 @@ function OwnHole(props: RendererProps) {
 function Players(props: RendererProps) {
   return <div className="target-options">{props.request.options.map(option => {
     const seat = props.table.seats.find(seat => String(seat.seatNo) === option.value)
-    return <button {...choiceProps(props, option)} className="target-choice" key={option.value} aria-label={`${seat?.displayName ?? option.label} · ${option.label}`}>
-      <span className="avatar" aria-hidden="true">{seat?.displayName.slice(0, 1) ?? <UserRound />}</span><span>{seat?.displayName ?? option.label}{seat && <small>{option.label}</small>}</span>{String(props.value) === option.value && <Check aria-hidden="true" />}
+    return <button {...choiceProps(props, option)} className="target-choice" key={option.value} aria-label={seat && seat.displayName !== option.label ? `${seat.displayName} · ${option.label}` : option.label}>
+      <span className="avatar" aria-hidden="true">{seat?.displayName.slice(0, 1) ?? <UserRound />}</span><span>{seat?.displayName ?? option.label}{seat && seat.displayName !== option.label && <small>{option.label}</small>}</span>{String(props.value) === option.value && <Tick />}
     </button>
   })}</div>
 }
@@ -39,7 +39,7 @@ function OpponentHole(props: RendererProps) {
 }
 function Colors(props: RendererProps) {
   return <div className="color-options">{props.request.options.map(option => <button {...choiceProps(props, option)} className="color-choice" data-value={option.value} key={option.value}>
-    <b aria-hidden="true">{option.value === "red" ? "♥ ♦" : option.value === "black" ? "♠ ♣" : ""}</b>{option.label}{String(props.value) === option.value && <Check aria-hidden="true" />}
+    <b aria-hidden="true">{option.value === "red" ? "♥ ♦" : option.value === "black" ? "♠ ♣" : ""}</b>{option.label}{String(props.value) === option.value && <Tick />}
   </button>)}</div>
 }
 function Materials(props: RendererProps) {
@@ -55,7 +55,7 @@ function Materials(props: RendererProps) {
 }
 function Statuses(props: RendererProps) {
   return <div className="effect-options">{props.request.options.map(option => <button {...choiceProps(props, option)} className="effect-choice" key={option.value}>
-    <Shield aria-hidden="true" /><span>{option.label}</span>{String(props.value) === option.value && <Check aria-hidden="true" />}
+    <Shield aria-hidden="true" /><span>{option.label}</span>{String(props.value) === option.value && <Tick />}
   </button>)}</div>
 }
 function PokerCandidates(props: RendererProps) {
@@ -76,12 +76,12 @@ const selectors: Record<CardSelectionUI, ComponentType<RendererProps>> = {
   "own-hole": OwnHole, player: Players, "opponent-hole": OpponentHole, color: Colors,
   "ability-material": Materials, status: Statuses, "poker-candidate": PokerCandidates, "ability-candidate": AbilityCandidates,
 }
-export function PokerCardSelection({ choices, values, onChange, disabled, table, definition }: { choices: PokerCardChoiceSpec[]; values: CardSelectionValues; onChange: (values: CardSelectionValues) => void; disabled: boolean; table: PokerTableView; definition?: PokerCardDefinitionView }) {
+export function PokerCardSelection({ choices, values, onChange, disabled, table, definition, hideLegend = false }: { choices: PokerCardChoiceSpec[]; values: CardSelectionValues; onChange: (values: CardSelectionValues) => void; disabled: boolean; table: PokerTableView; definition?: PokerCardDefinitionView; hideLegend?: boolean }) {
   return <div className="selection-fields">{cardChoiceRequests(choices).map(request => {
     const Renderer = selectors[request.ui], dependent = request.ui === "color" && choices.some(choice => choice.key === "targetHole") && values.targetHole === undefined
     const label = request.ui === "ability-material" && definition?.consumeSelected !== undefined ? definition.consumeSelected ? "消耗另一张能力牌" : "复制另一张能力牌" : request.label
     return <fieldset className="choice-field" data-selector={request.ui} key={request.key} disabled={disabled || dependent}>
-      <legend>{label}</legend>{!request.options.length ? <p className="choice-empty">暂无合法目标</p> : <Renderer request={request} table={table} value={values[request.key]} disabled={disabled || dependent} definition={definition} onSelect={value => onChange(changeCardSelection(choices, values, request.key, value))} />}
+      <legend className={hideLegend ? "sr-only" : undefined}>{label}</legend>{!request.options.length ? <p className="choice-empty">暂无合法目标</p> : <Renderer request={request} table={table} value={values[request.key]} disabled={disabled || dependent} definition={definition} onSelect={value => onChange(changeCardSelection(choices, values, request.key, value))} />}
     </fieldset>
   })}</div>
 }

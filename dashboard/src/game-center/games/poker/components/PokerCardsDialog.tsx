@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 import { ArrowLeft, ChevronLeft, ChevronRight, Clock3, Layers3, Shield, Eye, Sparkles, X } from "lucide-react"
 import type { PokerResolutionFrameView, PokerTableView } from "@synapse/shared/game-contracts"
 import type { usePokerCards } from "../hooks/usePokerCards"
-import { cardChoiceBaseline, cardPlayBaseline, cardPlayFeedback, cardPlayInput, cardUnavailableReason, validCardSelections } from "../lib/card-view"
+import { cardChoiceBaseline, cardConfirmLabel, cardPlayBaseline, cardPlayFeedback, cardPlayInput, cardUnavailableReason, validCardSelections } from "../lib/card-view"
 import { reconcileCardSelections, type CardSelectionValues } from "../lib/card-selection"
 import { amount, playingCardLabel, remaining, streetLabel } from "../lib/view"
 import { Card } from "./Card"
@@ -127,14 +127,14 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
         <div className="inspect-details" data-card-stage-content=""><div className="inspect-body"><p className="full-description">{candidateInfo.description}</p><PokerCardCandidates pending={pending} table={table} value={candidate} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} compact /></div></div>
       </div></main> : <div className="view"><PokerCardCandidates pending={pending} table={table} value={validCandidate ? candidate : ""} onChange={setCandidate} disabled={!!blocked || pending.origin !== "card"} /></div>
         : inspect ? <main className="view inspect-view"><div className="inspect-layout">
-          <div className="inspect-card" data-card-stage-content=""><PokerAbilityCard definition={definition} cost={card.payment.paidAmount ? `${amount(card.payment.paidAmount)} 筹码` : "无需筹码"} interactive={false} /></div>
+          <div className="inspect-card" data-card-stage-content=""><PokerAbilityCard definition={definition} interactive={false} /></div>
           <div className="inspect-details" data-card-stage-content=""><div className="inspect-body">
             <p className="full-description">{definition.description}</p>
             {!card.available && <p className="card-unavailable" role="status">{cardUnavailableReason(card.reason)}</p>}
             <PokerCardSelection table={table} definition={definition} choices={card.choices.filter(choice => choice.options.length > 0)} values={selections} onChange={setValues} disabled={!!blocked || !card.available} />
             <div className="inspect-actions">
               <button type="button" className="text-action" aria-label="返回手牌" aria-keyshortcuts="Escape" onClick={() => setView("hand")}><ArrowLeft aria-hidden="true" />返回</button>
-              {recoveryButton ?? <button ref={playButton} type="button" className="game-button" aria-keyshortcuts="Enter" disabled={!!blocked || !card.available || !validCardSelections(card, selections)} onClick={confirm}>{controls.busy ? "正在施放…" : "使用卡牌"}</button>}
+              {recoveryButton ?? <button ref={playButton} type="button" className="game-button" aria-keyshortcuts="Enter" disabled={!!blocked || !card.available || !validCardSelections(card, selections)} onClick={confirm}>{controls.busy ? "正在使用…" : cardConfirmLabel(card.payment.paidAmount)}</button>}
             </div>
           </div></div>
         </div></main>
@@ -142,7 +142,7 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
               {!hand.length ? <p className="choice-empty" data-card-stage-content="">暂无卡牌</p> : <div className="hand-row" key={currentPage} aria-label="持有卡牌">{displayed.map((item, index) => {
                 const info = cards.definitions?.[item.cardId]
                 return <div className="card-slot is-entering" data-unavailable={!item.available} key={item.instanceId} style={cardFanStyle(index, displayed.length)}>
-                  <PokerAbilityCard definition={info} data-held-card={item.instanceId} aria-label={info?.name ?? "卡牌"} onClick={() => select(item.instanceId)} disabled={controls.busy} cost={item.payment.paidAmount ? `${amount(item.payment.paidAmount)} 筹码` : "无需筹码"} />
+                  <PokerAbilityCard definition={info} data-held-card={item.instanceId} aria-label={info?.name ?? "卡牌"} onClick={() => select(item.instanceId)} disabled={controls.busy} cost={item.payment.paidAmount ? `${amount(item.payment.paidAmount)} 筹码` : undefined} />
                   {!item.available && <span className="held-unavailable">{cardUnavailableReason(item.reason)}</span>}
                 </div>
               })}</div>}
@@ -154,16 +154,15 @@ function CardStageSession({ table, open, onOpenChange, controls, disabled, conta
           {controls.error && <p role="alert" className="stage-error" title={controls.error}>{controls.error}</p>}
           {controls.uncertain && <p role="status" className="stage-error">结果待核对，保留原请求。</p>}
           {pending && pending.origin !== "card" && <p className="stage-error">请在换牌中完成选择</p>}
-          {inspect ? <p className="payment">{card.payment.nominalAmount ? <><span>代价 {amount(card.payment.nominalAmount)} 筹码</span>{card.payment.waivedAmount > 0 && <span>豁免 {amount(card.payment.waivedAmount)}</span>}<strong>实付 {amount(card.payment.paidAmount)} 筹码</strong></> : "无需筹码"}</p>
-            : !information && <div className="footer-summary"><span className="held-count"><Layers3 aria-hidden="true" /><span>{pending ? pending.kind === "poker" && pending.cardIndex !== undefined
+          {!inspect && !information && <div className="footer-summary">{(!pending || pending.kind === "poker" && pending.cardIndex !== undefined) && <span className="held-count"><Layers3 aria-hidden="true" /><span>{pending && pending.cardIndex !== undefined
                 ? `替换底牌 ${pending.cardIndex + 1} · ${playingCardLabel(table.hole?.[pending.cardIndex])}`
-                : validCandidate ? `已选第 ${Number(candidate) + 1} 张` : "请选择一张" : `${hand.length} 张${pageCount > 1 ? ` · ${currentPage + 1}/${pageCount}` : ""}`}</span></span>
+                : `${hand.length} 张${pageCount > 1 ? ` · ${currentPage + 1}/${pageCount}` : ""}`}</span></span>}
               <nav className="stage-links" aria-label="卡牌信息"><button type="button" className="text-action" aria-label="本人情报" onClick={() => setView("intel")}><Eye aria-hidden="true" />情报{cards.privateResults?.filter(result => result.valid).length ? <b>{cards.privateResults.filter(result => result.valid).length}</b> : null}</button><button type="button" className="text-action" aria-label="牌局状态" onClick={() => setView("statuses")}><Shield aria-hidden="true" />状态</button></nav>
             </div>}
         </div>
         {!inspect && <div className="footer-actions">
           <button type="button" className="text-action" aria-label={returnLabel} onClick={information ? () => setView("hand") : close}>{information ? <><ArrowLeft aria-hidden="true" />返回</> : "收起"}</button>
-          {recoveryButton ?? (pending && !information && <button type="button" className="game-button" disabled={!!blocked || !validCandidate || pending.origin !== "card"} onClick={choose}>{controls.busy ? "正在确认…" : "选择这张牌"}</button>)}
+          {recoveryButton ?? (pending && !information && <button type="button" className="game-button" disabled={!!blocked || !validCandidate || pending.origin !== "card"} onClick={choose}>{controls.busy ? "正在确认…" : "确定"}</button>)}
         </div>}
       </footer>
     </div>

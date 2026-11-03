@@ -121,15 +121,14 @@
     .target-choice:hover { border-color: var(--brass); color: var(--stage-ink); }
     .target-choice[aria-pressed="true"] { border-color: var(--brass-light); color: var(--brass-light); background: var(--stage-raised); }
     .target-choice > svg { width: 16px; height: 16px; }
-    .payment { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; color: var(--stage-muted); font-size: 14px; }
-    .payment strong { color: var(--brass-light); font-weight: 500; }
-    .payment span + span { padding-left: 9px; border-left: 1px solid var(--stage-line); }
+    :is(.target-choice, .color-choice, .effect-choice) { position: relative; }
     .game-button { position: relative; min-height: 54px; min-width: 210px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 26px; border: 0; border-radius: 5px; background: linear-gradient(180deg, var(--brass-light), var(--brass)); color: var(--stage-deep); box-shadow: inset 0 -4px 0 var(--brass-dark), inset 0 1px 0 var(--brass-light); font: 600 18px/1.4 var(--font-game); letter-spacing: .08em; transition: background 150ms, transform 150ms; }
     .game-button::before { content: ""; position: absolute; inset: 4px; border: 1px solid var(--brass-dark); border-radius: 2px; pointer-events: none; }
     .game-button:hover { background: var(--brass-light); transform: translateY(-1px); }
     .game-button:disabled { background: var(--stage-raised); color: var(--stage-muted); box-shadow: inset 0 0 0 1px var(--stage-line); transform: none; }
     .game-button:disabled::before { border-color: var(--stage-line); }
     .game-button svg { width: 20px; height: 20px; }
+    .game-button { font-family: inherit; font-size: 1rem; letter-spacing: normal; overflow-wrap: anywhere; }
     .choice-empty { font-size: 15px; line-height: 1.7; margin: 0; color: var(--stage-muted); }
     .choice-field button:disabled { opacity: .5; }
     .opponent-hands { display: flex; gap: 20px; overflow-x: auto; overflow-y: hidden; padding: 6px 4px 10px; }
@@ -296,7 +295,6 @@
     .stage-footer { padding-block: 6px; min-height: 50px; }
     .stage-footer[data-has-primary="true"] { flex-direction: row; }
     .stage-footer[data-has-primary="true"] .footer-actions { width: auto; }
-    .payment { font-size: 12px; gap: 4px; }
   }
   @media (hover: none) { .card-slot:hover, .hole-choice:hover, .target-choice:hover, .color-choice:hover, .effect-choice:hover { transform: none !important; } }
   @media (prefers-reduced-motion: reduce) {

@@ -20,7 +20,7 @@ async function mount(table = cardTable) {
   return { render, actions }
 }
 async function click(selector: string) { const target = document.querySelector<HTMLButtonElement>(selector)!; expect(target).not.toBeNull(); await act(async () => target.click()) }
-const primary = () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent?.trim() === "使用卡牌")!
+const primary = () => document.querySelector<HTMLButtonElement>('.inspect-actions button[aria-keyshortcuts="Enter"]')!
 
 it("开牌和检查不自动聚焦、不施放，撤回合法目标后确认立即禁用", async () => {
   const origin = document.createElement("button"); document.body.append(origin); origin.focus()
@@ -29,6 +29,7 @@ it("开牌和检查不自动聚焦、不施放，撤回合法目标后确认立�
   await click('button[data-held-card="card-instance"]')
   expect(document.activeElement).toBe(origin); expect(actions.play).not.toHaveBeenCalled()
   await click('button[data-choice="hole"][value="0"]'); await click('button[data-choice="player"][value="1"]')
+  expect(primary().textContent).toBe("支付 2 筹码并确认")
   expect(primary().disabled).toBe(false)
   const revoked = structuredClone(cardTable); revoked.cards!.ownHand![0].choices[1].options = []
   await render(revoked)
@@ -61,7 +62,7 @@ it("待选保留真实索引，关闭重开仍选中；新行动点清空旧选�
   await render(snapshot, false); expect(document.querySelector('[role="dialog"]')).toBeNull()
   await render(snapshot, true)
   expect(document.querySelector('button[data-choice="candidate"]')!.getAttribute("aria-pressed")).toBe("true")
-  const choose = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "选择这张牌")!
+  const choose = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "确定")!
   await act(async () => choose.click()); expect(actions.choose).toHaveBeenCalledExactlyOnceWith(0)
   await render(snapshot, true, "owner:room:hand:4")
   expect(document.querySelector('button[data-choice="candidate"]')!.getAttribute("aria-pressed")).toBe("false")

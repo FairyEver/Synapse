@@ -7,10 +7,12 @@ import { expect, it, vi } from "vitest"
 import { page, userEvent } from "vitest/browser"
 import { render } from "vitest-browser-react"
 import { PokerCardsDialog } from "../components/PokerCardsDialog"
+import { PokerCardDockFlow } from "../components/PokerCardDockFlow"
 import { PokerReserveDialog } from "../components/PokerReserveDialog"
 import { SettlementPanel } from "../components/SettlementPanel"
 import { Table } from "../components/Table"
 import { rollTable } from "./roll-visibility-fixtures"
+import { cardTable } from "./card-stage-fixture"
 import { table as settled } from "./settlement-fixture"
 import manifest from "../assets/ability-cards/v1/manifest.json"
 
@@ -114,20 +116,20 @@ for (const [width, height] of [[1280, 800], [390, 667], [390, 844], [320, 568], 
       await page.screenshot({ path: `${evidence}/${width}-${height}-${panel}-top.png` })
       if (panel === "status") {
         await page.getByRole("button", { name: "座位2 · 缄默护罩 · 剩余2次", exact: true }).click()
-        await page.getByRole("button", { name: "使用卡牌", exact: true }).click()
+        await page.getByRole("button", { name: "确定", exact: true }).click()
         expect(controls.play).toHaveBeenLastCalledWith(expect.objectContaining({ instanceId: "dispel", selections: { status: "shield-other" } }))
       }
       if (panel === "guess") {
         await page.getByRole("button", { name: "座位2 · 底牌1", exact: true }).click()
         await page.getByRole("button", { name: "红色", exact: true }).click()
-        await page.getByRole("button", { name: "使用卡牌", exact: true }).click()
+        await page.getByRole("button", { name: "确定", exact: true }).click()
         expect(controls.play).toHaveBeenLastCalledWith(expect.objectContaining({ selections: { targetHole: "1:0", color: "red" } }))
       }
       if (panel === "ability" || panel === "poker") {
         const previous = controls.choose.mock.calls.length
-        await page.getByRole("button", { name: panel === "ability" ? "候选 1，换牌术" : "候选 1", exact: true }).click()
-        await expect.element(page.getByRole("button", { name: "选择这张牌", exact: true })).toBeEnabled()
-        await page.getByRole("button", { name: "选择这张牌", exact: true }).click()
+        await page.getByRole("button", { name: /^候选 1，/ }).click()
+        await expect.element(page.getByRole("button", { name: "确定", exact: true })).toBeEnabled()
+        await page.getByRole("button", { name: "确定", exact: true }).click()
         expect(controls.choose).toHaveBeenCalledTimes(previous + 1)
         expect(controls.choose).toHaveBeenLastCalledWith(0)
       }
@@ -156,7 +158,7 @@ for (const width of [1280, 320]) it(`${width}px 待选回看情报并返回同�
   try {
     const previous = controls.choose.mock.calls.length
     await page.getByRole("button", { name: "打开测试面板", exact: true }).click()
-    await page.getByRole("button", { name: "候选 2", exact: true }).click()
+    await page.getByRole("button", { name: /^候选 2，/ }).click()
     await page.getByRole("button", { name: "本人情报", exact: true }).click()
     await expect.element(page.getByRole("heading", { name: "本人情报", exact: true })).toBeVisible()
     fits(document.querySelector('.intel-values [data-card="2s"]')!, "authorized observation")
@@ -164,10 +166,54 @@ for (const width of [1280, 320]) it(`${width}px 待选回看情报并返回同�
     expect(controls.choose).toHaveBeenCalledTimes(previous)
     await page.screenshot({ path: `${evidence}/${width}-pending-intel.png` })
     await page.getByRole("button", { name: "返回选牌", exact: true }).click()
-    await expect.element(page.getByRole("button", { name: "候选 2", exact: true })).toHaveAttribute("aria-pressed", "true")
-    await page.getByRole("button", { name: "选择这张牌", exact: true }).click()
+    await expect.element(page.getByRole("button", { name: /^候选 2，/ })).toHaveAttribute("aria-pressed", "true")
+    await page.getByRole("button", { name: "确定", exact: true }).click()
     expect(controls.choose).toHaveBeenCalledTimes(previous + 1)
     expect(controls.choose).toHaveBeenLastCalledWith(1)
+  } finally { await screen.unmount() }
+})
+
+for (const [width, height] of [[1280, 800], [320, 568], [568, 320]]) it(`${width}×${height} 手牌任务的玩家、候选与确认共用中轴`, async () => {
+  await page.viewport(width, height)
+  const table = structuredClone(cardTable), hand = table.cards!.ownHand![0]
+  hand.choices = [{ key: "player", kind: "player", label: "目标玩家", options: [{ value: "1", label: "座位2" }] }]
+  table.seats[1].displayName = "LongUnbrokenPlayerName".repeat(2)
+  table.cards!.definitions![hand.cardId].play = { cancelUntil: "target-confirm", result: "intel" }
+  const flow = (snapshot: PokerTableView) => <div className="poker-immersive" data-control-layout="docked" data-hand-dock="true"><div className="poker-controls-anchor">
+    <PokerCardDockFlow table={snapshot} controls={controls} disabled={false} onActivate={noop} onRefresh={noop} />
+  </div></div>
+  const screen = await render(flow(table))
+  const center = (element: Element) => { const { left, width } = element.getBoundingClientRect(); return left + width / 2 }
+  try {
+    page.getByRole("button", { name: /偷梁换柱/ }).element().dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    const dialog = page.getByRole("dialog"), heading = dialog.getByRole("heading", { name: "选择玩家" })
+    const option = dialog.getByRole("button", { name: /LongUnbrokenPlayerName/ })
+    const confirm = dialog.getByRole("button", { name: "支付 2 筹码并确认" })
+    await expect.element(heading).toBeVisible()
+    await Promise.all(dialog.element().getAnimations().map(animation => animation.finished))
+    const axis = center(dialog.element())
+    for (const element of [heading.element(), option.element(), confirm.element()]) {
+      expect(center(element)).toBeCloseTo(axis, 0)
+      fits(element, "player task")
+    }
+    const optionWidth = option.element().getBoundingClientRect().width
+    const optionButton = option.element() as HTMLButtonElement
+    optionButton.click()
+    await expect.element(option).toHaveAttribute("aria-pressed", "true")
+    expect(option.element().getBoundingClientRect().width).toBe(optionWidth)
+    await page.screenshot({ path: `${evidence}/${width}-${height}-dock-player.png` })
+
+    const pending = structuredClone(table)
+    pending.cards!.pending = { choiceId: "five", kind: "poker", origin: "card", paymentVersion: "paid", cardIndex: 1, candidates: ["2c", "Qc", "8d", "Td", "7s"] }
+    await screen.rerender(flow(pending))
+    const candidates = dialog.getByRole("button", { name: /^候选 \d，/ }).elements()
+    expect(candidates).toHaveLength(5)
+    for (const card of candidates) fits(card, "candidate card")
+    expect((candidates[0].getBoundingClientRect().left + candidates.at(-1)!.getBoundingClientRect().right) / 2).toBeCloseTo(axis, 0)
+    const choose = dialog.getByRole("button", { name: "确定", exact: true })
+    fits(choose.element(), "candidate confirm")
+    expect(center(choose.element())).toBeCloseTo(axis, 0)
+    await page.screenshot({ path: `${evidence}/${width}-${height}-dock-candidates.png` })
   } finally { await screen.unmount() }
 })
 for (const [width, height] of [[320, 568], [568, 320]]) for (const recovery of ["uncertain", "storage"] as const) it(`${width}×${height} ${recovery} 恢复按钮和信息入口始终在底栏内`, async () => {
