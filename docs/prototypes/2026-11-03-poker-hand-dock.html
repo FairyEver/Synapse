@@ -184,14 +184,20 @@
     .poker-table-main[data-drop] { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
 
     .prototype-stage {
+      --stage-header-height: 64px;
       width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0;
       font-family: var(--system-font); background-color: var(--stage-deep);
     }
     .prototype-stage::backdrop { background: transparent; }
     .prototype-stage .overlay-layout { grid-template-rows: auto minmax(0, 1fr); }
+    .prototype-stage .stage-hud { height: var(--stage-header-height); min-height: 0; }
     .prototype-stage .stage-content {
       min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center;
-      padding: 12px 14px; overflow: auto; text-align: center;
+      padding: 12px 14px; overflow: auto; scrollbar-width: thin; scrollbar-gutter: stable both-edges; text-align: center;
+    }
+    /* Balance the top HUD when the task fits. Let the spacer shrink before the task needs to scroll. */
+    .prototype-stage .stage-content::after {
+      content: ""; flex: 0 1 var(--stage-header-height);
     }
     .prototype-stage .stage-task {
       width: min(920px, 100%); flex: none; display: grid; justify-items: center; gap: 12px; margin-block: auto;
@@ -207,11 +213,14 @@
     .prototype-stage button:focus-visible { outline: 2px solid var(--brass-light); outline-offset: 4px; }
     .prototype-stage .stage-context { color: var(--stage-muted); font-size: .875rem; }
     .prototype-stage .intel-list { width: min(520px, 100%); justify-items: center; }
+    .prototype-stage .intel-result { display: grid; justify-items: center; max-width: 100%; overflow-wrap: anywhere; }
     .prototype-stage .intel-values { --cw: min(108px, 19vw, 25dvh); justify-content: center; }
     .prototype-stage .stage-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px; }
     .prototype-stage .stage-controls .game-button { min-width: 0; }
     .prototype-stage .stage-error { color: var(--brass-light); }
+    @media (max-width: 850px) { .prototype-stage { --stage-header-height: 72px; } }
     @media (max-height: 500px) {
+      .prototype-stage { --stage-header-height: 56px; }
       .prototype-stage .stage-content { padding-block: 8px; }
       .prototype-stage .stage-task { gap: 8px; }
     }
