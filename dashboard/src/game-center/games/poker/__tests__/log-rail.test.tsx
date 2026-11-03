@@ -25,11 +25,11 @@ function pointer(target: Element, type: string, pointerType: string) {
 it("公开日志按最新排序，悬停、键盘、触摸打开同一详情且 Escape 保留焦点", async () => {
   const host = document.body.appendChild(document.createElement("div"))
   const root = createRoot(host)
-  const render = async (view = table) => act(async () => root.render(<PokerLogRail table={view} />))
+  const render = async (view = table) => act(async () => root.render(<PokerLogRail table={view} historyOpen={false} onHistoryOpenChange={() => {}} />))
   const tooltip = () => document.body.querySelector('[role="tooltip"]')
   try {
     await render()
-    const [card, call] = host.querySelectorAll("button")
+    const [card, call] = host.querySelectorAll<HTMLButtonElement>(".poker-log-entries button")
     expect([card.ariaLabel, call.ariaLabel]).toEqual(["选手，五选其一", "选手，跟注"])
     expect(card.textContent).toBe("")
     expect(card.querySelector("img")?.getAttribute("src")).toContain("/v2/07.png")
@@ -94,7 +94,7 @@ it("悬停分别显示各轮新翻的牌，以及能力牌详情和实际公开�
   const faces = () => Array.from(tooltip().querySelectorAll("[data-card]"), node => node.getAttribute("data-card"))
   const hover = (name: string) => act(async () => pointer(host.querySelector(`button[aria-label="${name}"]`)!, "pointerover", "mouse"))
   try {
-    await act(async () => root.render(<PokerLogRail table={view} />))
+    await act(async () => root.render(<PokerLogRail table={view} historyOpen={false} onHistoryOpenChange={() => {}} />))
     await hover("翻牌")
     expect(faces()).toEqual(["2c", "3h", "4d"])
     await hover("河牌")

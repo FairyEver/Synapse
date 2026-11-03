@@ -30,7 +30,7 @@ it.each([[1280, 800], [390, 667]])("%s×%s 牌桌的窄轨只显示图标，详�
       dock: document.querySelector(".poker-controls-anchor")!.getBoundingClientRect(),
       rail: region.element().getBoundingClientRect(),
     })
-    const entries = region.getByRole("button").elements()
+    const entries = region.getByRole("list").getByRole("button").elements()
     expect(entries.every(button => button.textContent === "")).toBe(true)
     expect(entries.map(button => button.getAttribute("aria-label"))).toEqual(["选手，五选其一", "河牌", "转牌", "阿岚，加注", "翻牌"])
     await card.hover()
@@ -74,5 +74,82 @@ it.each([[1280, 800], [390, 667]])("%s×%s 牌桌的窄轨只显示图标，详�
     await expect.element(tooltip).toHaveTextContent("阿岚 · 翻牌")
     await userEvent.keyboard("{Escape}")
     await expect.element(tooltip).not.toBeInTheDocument()
+  } finally { await screen.unmount() }
+})
+
+it.each([[1280, 800], [390, 667]])("%s×%s 展开本手历史，按轮次预览和固定公开事件", async (width, height) => {
+  await page.viewport(width, height)
+  const view: PokerTableView = {
+    ...table,
+    handLog: { ...table.handLog!, entries: [
+      { seq: 0, seatNo: 0, displayName: "选手", street: "preflop", action: "small_blind", amount: 5, isAuto: false },
+      table.handLog!.entries[0],
+      ...Array.from({ length: 42 }, (_, index) => ({
+        seq: index + 2, seatNo: index % 2, displayName: index % 2 ? "阿岚" : "选手",
+        street: "turn" as const, action: "raise" as const, amount: 60 + index * 10, isAuto: false,
+      })),
+      { ...table.handLog!.entries[1], seq: 44 },
+    ] },
+  }
+  const screen = await render(<div className="h-dvh"><Table table={view} perspective="public" onPerspective={() => {}} onBack={() => {}} /></div>)
+  try {
+    const rail = page.getByRole("complementary", { name: "本手公开日志" })
+    const railList = rail.getByRole("list").element()
+    await rail.getByRole("button", { name: "跳到开局记录" }).click()
+    expect(railList.scrollHeight).toBeGreaterThan(railList.clientHeight)
+    expect(railList.scrollTop).toBe(railList.scrollHeight - railList.clientHeight)
+    await rail.getByRole("button", { name: "跳到最新记录" }).click()
+    expect(railList.scrollTop).toBe(0)
+
+    const trigger = rail.getByRole("button", { name: "查看全部" })
+    await trigger.click()
+    const dialog = page.getByRole("dialog", { name: "对局历史" })
+    const detail = dialog.getByRole("region", { name: "事件详情" })
+    expect(dialog.getByRole("heading", { level: 3 }).elements().map(node => node.textContent)).toEqual(["盲注", "翻牌", "转牌", "河牌"])
+    await expect.element(detail).toHaveTextContent("5 筹码")
+
+    const flop = dialog.getByRole("button", { name: "翻牌", exact: true })
+    const river = dialog.getByRole("button", { name: "选手，五选其一" })
+    await flop.hover()
+    expect(detail.element().querySelectorAll("[data-card]")).toHaveLength(3)
+    await flop.click()
+    await dialog.getByRole("button", { name: "河牌", exact: true }).hover()
+    await expect.element(detail).toHaveTextContent("翻牌")
+    await river.click()
+    await expect.element(detail).toHaveTextContent("实付 24 筹码入主池")
+    await expect.element(dialog.getByRole("button", { name: "取消固定" })).toBeVisible()
+
+    const box = dialog.element().getBoundingClientRect()
+    const detailBox = detail.element().getBoundingClientRect()
+    const headingBox = dialog.getByRole("heading", { name: "对局历史" }).element().getBoundingClientRect()
+    expect(headingBox.left - box.left).toBeGreaterThanOrEqual(22)
+    expect(headingBox.top - box.top).toBeGreaterThanOrEqual(22)
+    expect(detailBox.right).toBeLessThan(box.right)
+    expect(detailBox.bottom).toBeLessThanOrEqual(box.bottom)
+    expect(box.width).toBeLessThan(width)
+    const scroller = dialog.element().querySelector(".poker-history-body")!
+    expect(scroller.scrollHeight).toBeGreaterThan(scroller.clientHeight)
+    const timelineBox = scroller.getBoundingClientRect()
+    const navigationBox = dialog.getByRole("navigation", { name: "历史定位" }).element().getBoundingClientRect()
+    expect(navigationBox.bottom).toBeLessThan(timelineBox.top)
+    if (width > 640) {
+      expect(box.width).toBeGreaterThan(640)
+      expect(timelineBox.right).toBeLessThan(detailBox.left)
+    } else {
+      expect(timelineBox.bottom).toBeLessThan(detailBox.top)
+    }
+    await dialog.getByRole("button", { name: "开局", exact: true }).click()
+    expect(scroller.scrollTop).toBe(0)
+    await dialog.getByRole("button", { name: "最新", exact: true }).click()
+    expect(scroller.scrollTop).toBe(scroller.scrollHeight - scroller.clientHeight)
+    await expect.element(detail).toHaveTextContent("五选其一")
+    if (width > 640) {
+      await page.viewport(390, 667)
+      await expect.element(detail).toHaveTextContent("五选其一")
+    }
+
+    await userEvent.keyboard("{Escape}")
+    await expect.element(dialog).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(trigger.element())
   } finally { await screen.unmount() }
 })
