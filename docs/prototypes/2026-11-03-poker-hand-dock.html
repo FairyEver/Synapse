@@ -159,9 +159,9 @@
       border-radius: calc(var(--radius) * 1.5); box-shadow: 0 6px 18px var(--shadow);
     }
     .log-tip {
-      z-index: 2; inset: .5rem .375rem auto auto; width: min(275px, calc(100% - 14px));
+      z-index: 2; width: min(275px, calc(100% - 16px));
       display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px;
-      max-height: min(125px, 37%); overflow: auto; padding: 10px; font-size: .75rem; line-height: 1.45;
+      max-height: calc(100% - 16px); overflow: auto; padding: 10px; font-size: .75rem; line-height: 1.45;
     }
     .log-tip img { width: 47px; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 6px; }
     .log-tip > svg { color: var(--accent); }
@@ -300,7 +300,7 @@
       </div>
 
       <div class="prototype-overlay font-sans">
-        <div id="log-tip" class="log-tip" hidden></div>
+        <div id="log-tip" class="log-tip" role="tooltip" hidden></div>
       </div>
       <aside class="rail font-sans" aria-label="对局日志">
         <span id="rail-icon" data-symbol="log" aria-hidden="true"></span>
@@ -1471,19 +1471,49 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     drag = null;
   }
 
+  function positionLogTip() {
+    const list = $('#log');
+    const trigger = list.querySelector('[data-active="true"]');
+    const tip = $('#log-tip');
+    if (!trigger) {
+      tip.hidden = true;
+      return;
+    }
+    const anchor = trigger.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    const visibleTop = Math.max(anchor.top, listRect.top);
+    const visibleBottom = Math.min(anchor.bottom, listRect.bottom);
+    tip.hidden = visibleBottom <= visibleTop;
+    trigger.setAttribute('aria-expanded', String(!tip.hidden));
+    if (tip.hidden) {
+      trigger.removeAttribute('aria-describedby');
+      return;
+    }
+
+    trigger.setAttribute('aria-describedby', tip.id);
+    const bounds = tip.parentElement.getBoundingClientRect();
+    const { width, height } = tip.getBoundingClientRect();
+    const inset = 8;
+    const x = anchor.left - bounds.left - width - inset;
+    const y = (visibleTop + visibleBottom - height) / 2 - bounds.top;
+    tip.style.left = Math.max(inset, x) + 'px';
+    tip.style.top = Math.max(inset, Math.min(y, bounds.height - height - inset)) + 'px';
+  }
+
   function renderTip() {
     const id = hoveredLog ?? focusedLog ?? pinnedLog;
     const entry = state.log.find(item => item.id === id);
     const tip = $('#log-tip');
-    tip.hidden = !entry;
     document.querySelectorAll('[data-log]').forEach(button => {
       const active = Number(button.dataset.log) === id;
       button.dataset.active = String(active);
-      button.setAttribute('aria-expanded', String(active));
-      if (active) button.setAttribute('aria-describedby', 'log-tip');
-      else button.removeAttribute('aria-describedby');
+      if (!active) {
+        button.setAttribute('aria-expanded', 'false');
+        button.removeAttribute('aria-describedby');
+      }
     });
     if (!entry) {
+      tip.hidden = true;
       tip.innerHTML = '';
       return;
     }
@@ -1495,13 +1525,13 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
       (entry.card ? '<p>' + cards[entry.card].description + '</p>' : '') +
       ([amount, entry.result].some(Boolean) ? '<p class="log-result">' + [amount, entry.result].filter(Boolean).join(' · ') + '</p>' : '') +
       '</div>';
+    positionLogTip();
   }
 
   function renderLog() {
     $('#log').innerHTML = state.log.map(entry => '<button type="button" class="log-entry" data-log="' + entry.id +
       '" data-focus="log-' + entry.id + '" aria-controls="log-tip" aria-label="' + [entry.actor, logHeading(entry)].filter(Boolean).join('，') +
       '">' + (entry.card ? artwork(entry.card) : icon(entry.action)) + '</button>').join('');
-    renderTip();
   }
 
   function render(focus) {
@@ -1514,6 +1544,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     renderLog();
     $('#fan').scrollLeft = scroll;
     $('#log').scrollTop = logScroll;
+    renderTip();
     if (focus || priorFocus) focusAt(focus || priorFocus);
   }
 
@@ -1724,6 +1755,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
     focusedLog = null;
     renderTip();
   });
+  $('#log').addEventListener('scroll', positionLogTip, { passive: true });
 
   document.addEventListener('click', event => {
     const target = event.target.closest('button');
@@ -1806,6 +1838,7 @@ return { chipBreakdown, layoutChipPile, addChipPayment };
   const resize = new ResizeObserver(() => {
     table.dataset.compactControls = String(table.clientWidth <= 850);
     fitCanvas();
+    positionLogTip();
     if (previewTrigger) showPreview(previewTrigger);
   });
   resize.observe(table);
