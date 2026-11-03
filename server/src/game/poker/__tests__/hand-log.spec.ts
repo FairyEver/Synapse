@@ -35,7 +35,7 @@ describe("本手公开行动日志", () => {
     })
     expect(log?.entries.slice(2)).toEqual([{
       seq: 1, seatNo: 0, displayName: "原玩家0", street: "preflop", action: "card", amount: 24, isAuto: false, actionSource: "human",
-      card: { id: "07", artId: "v1/07", name: "五选其一", description: expect.any(String), status: "completed" },
+      card: { id: "07", artId: "v2/07", name: "五选其一", description: expect.any(String), status: "completed" },
     }])
     expect(JSON.stringify(log)).not.toMatch(/Ks|As|private-id|candidates|targetHole|ownerAdmissionId/)
   })

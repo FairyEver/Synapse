@@ -111,7 +111,7 @@ function HandLogRail({ table }: { table: PokerTableView }) {
 
 function LogVisual({ entry, Icon }: { entry: PokerHandLogEntry; Icon: LucideIcon }) {
   return entry.card
-    ? <img className="poker-log-card-art" src={cardArtwork(entry.card.artId?.split("/").at(-1) ?? entry.card.id)} alt="" loading="lazy" draggable={false} />
+    ? <img className="poker-log-card-art" src={cardArtwork(entry.card.artId ?? entry.card.id)} alt="" loading="lazy" draggable={false} />
     : <Icon aria-hidden="true" className="poker-log-action-icon" />
 }
 

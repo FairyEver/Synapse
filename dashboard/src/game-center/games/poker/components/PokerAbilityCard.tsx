@@ -14,7 +14,7 @@ function tilt(event: PointerEvent<HTMLButtonElement>) {
 export function PokerAbilityCard({ definition, caption, cost, interactive = true, className = "", ...button }: Props) {
   const face = <>
     <span className="card-type"><Layers3 aria-hidden="true" />{caption ?? "能力牌"}</span>
-    {definition && <img className="ability-art" src={cardArtwork(definition.id)} alt="" width={1122} height={1402} loading="lazy" draggable={false} />}
+    {definition && <img className="ability-art" src={cardArtwork(definition.artId)} alt="" width={1122} height={1402} loading="lazy" draggable={false} />}
     <span className="card-body"><strong className="card-name">{definition?.name ?? caption ?? "卡牌"}</strong><span className="card-divider" aria-hidden="true"><Diamond /></span>
       {definition && <span className="card-description">{definition.description}</span>}{cost && <span className="card-cost">{cost}</span>}
     </span>

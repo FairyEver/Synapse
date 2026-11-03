@@ -14,7 +14,7 @@ const table: PokerTableView = {
   handLog: { handId: "hand", complete: true, entries: [
     { seq: 1, seatNo: 0, displayName: "选手", street: "preflop", action: "call", amount: 2, isAuto: false },
     { seq: 2, seatNo: 0, displayName: "选手", street: "preflop", action: "card", amount: 8, isAuto: false,
-      card: { id: "07", artId: "v1/07", name: "五选其一", description: "从五张候选中选一张。", status: "choice_required" } },
+      card: { id: "07", artId: "v2/07", name: "五选其一", description: "从五张候选中选一张。", status: "choice_required" } },
   ] },
 }
 
@@ -32,7 +32,7 @@ it("公开日志按最新排序，悬停、键盘、触摸打开同一详情且 
     const [card, call] = host.querySelectorAll("button")
     expect([card.ariaLabel, call.ariaLabel]).toEqual(["选手，五选其一", "选手，跟注"])
     expect(card.textContent).toBe("")
-    expect(card.querySelector("img")).not.toBeNull()
+    expect(card.querySelector("img")?.getAttribute("src")).toContain("/v2/07.png")
     expect(tooltip()).toBeNull()
 
     await act(async () => pointer(card, "pointerover", "mouse"))

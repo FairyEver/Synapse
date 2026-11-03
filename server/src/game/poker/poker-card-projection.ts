@@ -1,7 +1,7 @@
 import type { PokerCardChoiceSpec, PokerCardDefinitionView, PokerCardView, PokerResolutionFrameView, PokerResolutionEventView } from "@synapse/shared/game-contracts"
 import type { HandState } from "./engine/hand-runner"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
-import { createCardRegistryV2 } from "./engine/cards/catalog-v2"
+import { cardArtworkV2, createCardRegistryV2 } from "./engine/cards/catalog-v2"
 import { cardChoices, cardRequirementReason, quoteCardPlay } from "./engine/cards/commands"
 import type { ResolutionFrame } from "./engine/cards/types"
 import type { CardModeState } from "./engine/cards/pool"
@@ -36,7 +36,8 @@ function missingChoiceReason(choices: PokerCardChoiceSpec[], requiresAbilityHold
 export function projectCardView(state: HandState | { archived: true; cards: CardModeState; seats: { seatNo: number; hole: string[] }[]; street: string }, policy: CardViewPolicy): PokerCardView | undefined {
   const cards = state.cards
   if (!cards) return undefined
-  const registry = cards.version === "cards-v2" ? createCardRegistryV2() : createCardRegistry()
+  const cardsV2 = cards.version === "cards-v2"
+  const registry = cardsV2 ? createCardRegistryV2() : createCardRegistry()
   const name = (id: string) => registry.get(id).name
   const view: PokerCardView = { enabled: true, version: cards.version,
     used: cards.used.map(c => ({ id: c.id, cardId: c.cardId, name: name(c.cardId), seatNo: c.seatNo, seq: c.seq, status: c.status })),
@@ -59,7 +60,8 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
   const chips = (blinds: number) => `${blinds * state.bigBlind} 筹码`
   const definitionView = (id: string): PokerCardDefinitionView => {
     const definition = registry.get(id)
-    return { id, name: definition.name, description: chipCardDescriptions[id]?.(chips) ?? definition.description, artId: definition.artId, cost: (definition.costBB ?? 0) * state.bigBlind,
+    return { id, name: definition.name, description: chipCardDescriptions[id]?.(chips) ?? definition.description,
+      artId: cardsV2 ? cardArtworkV2(definition) : definition.artId, cost: (definition.costBB ?? 0) * state.bigBlind,
       ...(definition.play ? { play: definition.play } : {}),
       ...(definition.selections.some(selection => selection.kind === "ability") ? { consumeSelected: !!definition.consumeSelected } : {}) }
   }
@@ -77,7 +79,7 @@ export function projectCardView(state: HandState | { archived: true; cards: Card
   view.definitions = definitions
   for (const result of cards.privateResults.filter(r => r.ownerAdmissionId === self.admissionId && r.label === "能力牌")) for (const id of result.values) definitions[id] ??= definitionView(id)
   const pending = cards.pending?.ownerAdmissionId === self.admissionId ? cards.pending : null
-  if (cards.version === "cards-v2" && pending?.sourceCardId) definitions[pending.sourceCardId] ??= definitionView(pending.sourceCardId)
+  if (cardsV2 && pending?.sourceCardId) definitions[pending.sourceCardId] ??= definitionView(pending.sourceCardId)
   view.pending = pending ? { choiceId: pending.id, kind: pending.kind, origin: pending.origin, paymentVersion: pending.paymentVersion, candidates: [...pending.candidates],
     ...(pending.sourceCardId ? { sourceCardId: pending.sourceCardId } : {}), ...(pending.cardIndex === undefined ? {} : { cardIndex: pending.cardIndex }),
     ...(pending.kind === "ability" ? { candidateCards: cards.reserved.map(c => definitionView(c.definitionId)) } : {}) } : null

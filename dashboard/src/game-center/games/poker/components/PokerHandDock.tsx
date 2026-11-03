@@ -120,7 +120,7 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
             }
           }}>
           <span className="poker-hand-dock-thumbnail">
-            <img src={cardArtwork(card.cardId)} alt="" draggable={false} />
+            <img src={cardArtwork(info?.artId ?? card.cardId)} alt="" draggable={false} />
             <span>{info?.name ?? "能力牌"}</span>
             <b className="poker-hand-dock-cost">{amount(card.payment.paidAmount)}</b>
           </span>
@@ -128,14 +128,14 @@ export function PokerHandDock({ table, canPlay, dropArea, onPlay }: Props) {
       })}
     </div></div>}
     {previewed && definition && !ghost && createPortal(<div ref={previewBox} id={previewId} className="poker-hand-dock-preview" role="tooltip" style={position}>
-      <div className="poker-hand-dock-face"><img src={cardArtwork(definition.id)} alt="" /><strong>{definition.name}</strong></div>
+      <div className="poker-hand-dock-face"><img src={cardArtwork(definition.artId)} alt="" /><strong>{definition.name}</strong></div>
       <div className="poker-hand-dock-description"><strong>{definition.name}</strong><p>{definition.description}</p>
         <b>{previewed.payment.paidAmount ? `实付 ${amount(previewed.payment.paidAmount)} 筹码` : "无需筹码"}</b>
         <small>{cardUnavailableReason(previewed.reason) ?? (!canPlay ? "等待你的回合" : definition.play?.candidates ? `${useHint} · 亮出候选后不可取消` : useHint)}</small>
       </div>
     </div>, document.body)}
     {ghost && draggedDefinition && createPortal(<div className="poker-hand-dock-ghost" aria-hidden="true" style={{ left: ghost.x, top: ghost.y }}>
-      <div className="poker-hand-dock-face"><img src={cardArtwork(draggedDefinition.id)} alt="" /><strong>{draggedDefinition.name}</strong></div>
+      <div className="poker-hand-dock-face"><img src={cardArtwork(draggedDefinition.artId)} alt="" /><strong>{draggedDefinition.name}</strong></div>
     </div>, document.body)}
   </div>
 }

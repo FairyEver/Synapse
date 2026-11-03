@@ -71,7 +71,7 @@ function cardView(h: HandState, seatNo: number, seq: number) {
 }
 
 describe("新版能力牌", () => {
-  it("只发八种牌，保留原牌面和逐牌取消策略", () => {
+  it("只发八种牌，保留冻结规则和逐牌取消策略", () => {
     const h = start()
     expect(h.cards).toMatchObject({ version: "cards-v2", catalogSnapshot: CARD_CATALOG_V2_SNAPSHOT, initialCount: 64 })
     expect(catalog.all().map(card => [card.id, card.artId, card.play?.cancelUntil, card.play?.candidates])).toEqual([
@@ -138,6 +138,7 @@ describe("新版能力牌", () => {
     expect(pending.cardIndex).toBe(1)
     expect(new Set(pending.candidates).size).toBe(5)
     expect(pending.candidates.every(card => h.deck.includes(card))).toBe(true)
+    expect(cardView(five.state, actor, 10).definitions?.["07"]).toMatchObject({ name: "五选其一", artId: "v2/07" })
     expect(projectResolutionFrame(five.frame).events.every(event => !event.cards)).toBe(true)
     const other = cardPlay(five.state, "02", 11)
     expect(() => resolve(five.state, { kind: "card.play", input: other.input }, 11)).toThrow("POKER_CARD_CHOICE_REQUIRED")

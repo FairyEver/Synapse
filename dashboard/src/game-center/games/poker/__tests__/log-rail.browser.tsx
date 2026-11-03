@@ -13,7 +13,7 @@ const table: PokerTableView = {
   handLog: { handId: "hand", complete: true, entries: [
     { seq: 1, seatNo: 1, displayName: "阿岚", street: "flop", action: "raise", amount: 30, isAuto: false },
     { seq: 2, seatNo: 0, displayName: "选手", street: "river", action: "card", amount: 24, isAuto: false,
-      card: { id: "07", artId: "v1/07", name: "五选其一", description: "随机锁定一张底牌，从五张候选中选一张。", status: "completed" } },
+      card: { id: "07", artId: "v2/07", name: "五选其一", description: "随机锁定一张底牌，从五张候选中选一张。", status: "completed" } },
   ] },
 }
 

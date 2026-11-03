@@ -2,7 +2,7 @@ import type { PokerHandLog, PokerHandLogEntry } from "@synapse/shared/game-contr
 import { resolveRules } from "./engine/rules"
 import { seatOrder } from "./engine/seat-order"
 import { createCardRegistry } from "./engine/cards/catalog-v1"
-import { createCardRegistryV2 } from "./engine/cards/catalog-v2"
+import { cardArtworkV2, createCardRegistryV2 } from "./engine/cards/catalog-v2"
 
 interface Input {
   roomId: string
@@ -59,7 +59,9 @@ export function projectHandLog(input: Input): PokerHandLog | undefined {
       if (!played || !money(played.paidAmount ?? a.amount)) return undefined
       try {
         cardRegistry ??= cardsV2 ? createCardRegistryV2() : createCardRegistry()
-        const { id, name, artId, description } = cardRegistry.get(played.cardId)
+        const definition = cardRegistry.get(played.cardId)
+        const { id, name, description } = definition
+        const artId = cardsV2 ? cardArtworkV2(definition) : definition.artId
         entries.push({ ...base, action: "card", amount: played.paidAmount ?? a.amount,
           ...(played.nominalAmount === undefined ? {} : { nominalAmount: played.nominalAmount, waivedAmount: played.waivedAmount ?? 0 }),
           card: { id, name, artId, description, status: played.status },

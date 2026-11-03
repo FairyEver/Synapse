@@ -98,7 +98,7 @@ it("免费选择玩家只显示确定，单一目标仍需主动选择", async (
 it("刷新恢复五选一时强制完成，不接受 Escape，完成后居中显示新底牌", async () => {
   const pending = snapshot()
   const cards = pending.cards!
-  cards.definitions!["07"] = { id: "07", name: "五选其一", artId: "v1/07", description: "随机锁定一张底牌。", cost: 12, play: { cancelUntil: "never", result: "holes", candidates: 5 } }
+  cards.definitions!["07"] = { id: "07", name: "五选其一", artId: "v2/07", description: "随机锁定一张底牌。", cost: 12, play: { cancelUntil: "never", result: "holes", candidates: 5 } }
   cards.pending = { choiceId: "choice", kind: "poker", origin: "card", paymentVersion: "paid", sourceCardId: "07", cardIndex: 1, candidates: ["2c", "Qc", "8d", "Td", "7s"] }
   cards.used = [{ id: "played", cardId: "07", name: "五选其一", seatNo: 0, seq: pending.actionSeq!, status: "choice_required" }]
   const { controls, render } = await mount(pending)

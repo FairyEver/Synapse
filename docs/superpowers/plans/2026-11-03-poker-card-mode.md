@@ -273,6 +273,8 @@
 
 ## Task 16: GPT生成全部60张正式封面
 
+本节记录首版素材交付。当前封面风格、无脸要求及重画流程以[德州扑克能力牌封面](../../agents/game-ui.md#德州扑克能力牌封面)为准。
+
 **Files:** Create `dashboard/src/game-center/games/poker/assets/ability-cards/v1/{01..60}.png`、`dashboard/src/game-center/games/poker/assets/ability-cards/v1/manifest.json`、`dashboard/src/game-center/games/poker/assets/ability-cards/v1/README.md`、`dashboard/src/game-center/games/poker/lib/card-artwork.ts`、`dashboard/scripts/check-poker-card-assets.mjs`；Modify `dashboard/package.json`、`dashboard/src/game-center/games/poker/components/PokerCardsDialog.tsx`。
 **Interfaces:** `manifest`每项含cardId、assetVersion、相对文件、实际尺寸、实际模型信息/未提供、完整提示词；`cardArtwork(cardId:string):string`仅映射已核对本地资源，不能返回生成占位图或私人远程URL。
 

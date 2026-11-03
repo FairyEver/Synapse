@@ -67,3 +67,8 @@ export function createCardRegistryV2(): CardRegistry {
   if (CARD_CATALOG_V2_SNAPSHOT.digest !== "8b0ed5666c84f35babb5f07a7b1066fdae259c813fc10b82c17589dd7d6cc430") throw new Error("POKER_CARD_VERSION_UNSUPPORTED")
   return new CardRegistry(definitions)
 }
+
+// Artwork is a presentation reference and does not change the frozen rules digest.
+export function cardArtworkV2(definition: Pick<CardDefinition, "id" | "artId">): string {
+  return definition.id === "07" ? "v2/07" : definition.artId
+}
