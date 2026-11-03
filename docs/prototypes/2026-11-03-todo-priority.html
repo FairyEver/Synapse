@@ -21,17 +21,18 @@
       --ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
       --destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
       /* 独立 HTML 内嵌 Tailwind 主题的对应色阶。 */
-      --color-rose-800: oklch(45.5% 0.188 13.697);
-      --color-rose-300: oklch(81% 0.117 11.638);
-      --color-amber-800: oklch(47.3% 0.137 46.201);
-      --color-amber-300: oklch(87.9% 0.169 91.605);
-      --color-sky-800: oklch(44.3% 0.11 240.79);
-      --color-sky-300: oklch(82.8% 0.111 230.318);
+      --color-white: oklch(1 0 0);
+      --color-red-700: oklch(50.5% 0.213 27.518);
+      --color-red-300: oklch(80.8% 0.114 19.571);
+      --color-orange-700: oklch(55.3% 0.195 38.402);
+      --color-orange-300: oklch(83.7% 0.128 66.29);
+      --color-blue-700: oklch(48.8% 0.243 264.376);
+      --color-blue-300: oklch(80.9% 0.105 251.813);
       --radius: 0.625rem;
     }
-    [data-priority="high"] { --priority-ink: light-dark(var(--color-rose-800), var(--color-rose-300)); }
-    [data-priority="medium"] { --priority-ink: light-dark(var(--color-amber-800), var(--color-amber-300)); }
-    [data-priority="low"] { --priority-ink: light-dark(var(--color-sky-800), var(--color-sky-300)); }
+    [data-priority="high"] { --priority-fill: var(--color-red-700); --priority-ink: light-dark(var(--priority-fill), var(--color-red-300)); }
+    [data-priority="medium"] { --priority-fill: var(--color-orange-700); --priority-ink: light-dark(var(--priority-fill), var(--color-orange-300)); }
+    [data-priority="low"] { --priority-fill: var(--color-blue-700); --priority-ink: light-dark(var(--priority-fill), var(--color-blue-300)); }
     [data-priority="none"] { --priority-ink: var(--muted-foreground); }
     *, *::before, *::after { box-sizing: border-box; }
     [hidden] { display: none !important; }
@@ -103,7 +104,7 @@
     .picker { position: relative; justify-self: center; }
     .badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 50px; min-height: 23px; border: 1px solid transparent; border-radius: 999px; padding: 0 7px; font-size: 12px; line-height: 1.2; white-space: nowrap; }
     .badge .icon { width: 13px; height: 13px; }
-    .badge[data-priority] { color: var(--priority-ink); background: color-mix(in oklab, var(--priority-ink) 12%, var(--card)); }
+    .badge[data-priority] { color: var(--color-white); background: var(--priority-fill); }
     .priority-trigger { padding: 0 5px; min-width: 60px; }
     .priority-trigger[aria-expanded="true"], .more-trigger[aria-expanded="true"] { background: var(--selected); }
     .priority-trigger.unset { color: var(--muted-foreground); }
