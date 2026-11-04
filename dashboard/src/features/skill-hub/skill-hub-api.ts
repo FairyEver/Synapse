@@ -1,6 +1,9 @@
 import {
   SKILL_HUB_LIMITS as limits, SKILL_HUB_WEB_SESSION_HEADER,
   skillHubDetailSchema, skillHubIdSchema, skillHubMainResultSchema, skillHubPageSchema, skillHubReceiptSchema, skillHubTeamPageSchema,
+  skillHubCreateInputSchema, skillHubDeleteResultSchema, skillHubPublishInputSchema, skillHubRevisionInputSchema,
+  skillHubUpdateInputSchema, skillHubUploadInputSchema, skillHubUploadResultSchema, skillHubWriteReplaySchema, skillHubWriteResultSchema,
+  type SkillHubCreateInput, type SkillHubPublishInput, type SkillHubRevisionInput, type SkillHubUpdateInput, type SkillHubUploadInput,
   type SkillHubListInput, type SkillHubReceiptInput, type SkillHubTeam, type SkillHubTeamPage,
 } from '@synapse/shared/skill-hub-contracts'
 import { ApiError, requestJson, requestResponse } from '@/lib/api-client'
@@ -21,11 +24,11 @@ export function assertHubSession(session: string) {
   }
 }
 
-export function hubRequestOptions(session: string, options: RequestInit): RequestInit {
+export function hubRequestOptions(session: string, options: RequestInit, timeoutMs = 45_000): RequestInit {
   assertHubSession(session)
   return { ...options, headers: { ...options.headers, [SKILL_HUB_WEB_SESSION_HEADER]: session },
     cache: 'no-store', redirect: 'error',
-    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(45_000)]) : AbortSignal.timeout(45_000) }
+    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) }
 }
 
 export async function hubJson<T>(session: string, path: string, schema: { parse(value: unknown): T }, options: RequestInit = {}) {
@@ -48,7 +51,28 @@ async function hubBinary(session: string, path: string, maxBytes: number, type: 
   return file
 }
 
+const writeResult = skillHubWriteResultSchema.or(skillHubWriteReplaySchema)
+const deleteResult = skillHubDeleteResultSchema.or(skillHubWriteReplaySchema)
+const write = (method: 'POST' | 'PATCH' | 'DELETE', body: unknown): RequestInit => ({ method, body: JSON.stringify(body) })
+
 export const skillHubApi = {
+  create: (session: string, input: SkillHubCreateInput) =>
+    hubJson(session, '/skills', writeResult, write('POST', skillHubCreateInputSchema.parse(input))),
+  publish: (session: string, id: string, input: SkillHubPublishInput) =>
+    hubJson(session, `${hubSkillPath(id)}/versions`, writeResult, write('POST', skillHubPublishInputSchema.parse(input))),
+  update: (session: string, id: string, input: SkillHubUpdateInput) =>
+    hubJson(session, hubSkillPath(id), writeResult, write('PATCH', skillHubUpdateInputSchema.parse(input))),
+  delete: (session: string, id: string, input: SkillHubRevisionInput) =>
+    hubJson(session, hubSkillPath(id), deleteResult, write('DELETE', skillHubRevisionInputSchema.parse(input))),
+  async upload(session: string, input: SkillHubUploadInput, file: Blob) {
+    const query = hubQuery(skillHubUploadInputSchema.parse(input))
+    const response = await requestResponse(`${base}/uploads${query}`, hubRequestOptions(session, {
+      method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' },
+    }, 120_000))
+    const value: unknown = await response.json()
+    assertHubSession(session)
+    return skillHubUploadResultSchema.parse(value)
+  },
   teams: (session: string, cursor?: string, signal?: AbortSignal) =>
     hubJson(session, `/teams${hubQuery({ cursor, limit: limits.maxPageSize })}`, skillHubTeamPageSchema, { signal }),
   list: (session: string, input: SkillHubListInput, signal?: AbortSignal) =>

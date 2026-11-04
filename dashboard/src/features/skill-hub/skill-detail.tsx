@@ -1,5 +1,5 @@
 import { Button, Skeleton, Tabs } from '@heroui/react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, File, PackageOpen } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { SkillHubDetail } from '@synapse/shared/skill-hub-contracts'
@@ -8,6 +8,7 @@ import { Main } from '@/components/layout/main'
 import { SkillHubIcon, SkillInstallButton } from './skill-catalog-item'
 import { skillHubApi } from './skill-hub-api'
 import type { SkillHubSearch } from './skill-hub-navigation'
+import { SkillMaintenance } from "./skill-maintenance"
 import { SkillMainView } from './skill-main-view'
 import { useSkillHubDetail, useSkillHubMain, useSkillHubSession } from './use-skill-hub'
 
@@ -16,6 +17,7 @@ const publishedDate = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" })
 export function SkillHubDetailPage({ skillId, search }: { skillId: string; search: SkillHubSearch }) {
   const session = useSkillHubSession()
   const detail = useSkillHubDetail(session, skillId)
+  const navigate = useNavigate()
   return <>
     <Header fixed={false}>
       <Link to="/skill-hub/" search={search} className="inline-flex items-center gap-2 rounded-sm text-sm font-medium hover:underline focus-visible:outline-2 focus-visible:outline-accent">
@@ -27,12 +29,12 @@ export function SkillHubDetailPage({ skillId, search }: { skillId: string; searc
         <p className="text-danger">{detail.error.message || '该 Skill 不可用。'}</p>
         <Button variant="secondary" onPress={() => void detail.refetch()}>重试</Button>
       </div> : detail.data ? <SkillDetail key={`${session}:${skillId}`} skill={detail.data} session={session}
-        reload={() => { void detail.refetch() }} /> : <Skeleton role="status" aria-label="正在读取 Skill" className="h-40 rounded-xl" />}
+        reload={() => { void detail.refetch() }} onDeleted={() => void navigate({ to: "/skill-hub/", search })} /> : <Skeleton role="status" aria-label="正在读取 Skill" className="h-40 rounded-xl" />}
     </Main>
   </>
 }
 
-export function SkillDetail({ skill, session, reload }: { skill: SkillHubDetail; session: string; reload: () => void }) {
+export function SkillDetail({ skill, session, reload, onDeleted = reload }: { skill: SkillHubDetail; session: string; reload: () => void; onDeleted?: () => void }) {
   const [tab, setTab] = useState('main')
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState('')
@@ -75,6 +77,7 @@ export function SkillDetail({ skill, session, reload }: { skill: SkillHubDetail;
       </div>
       <div className="flex flex-wrap gap-2"><SkillInstallButton id={skill.id} variant="primary" />
         <Button variant="secondary" isPending={downloading} onPress={() => void download()}><PackageOpen aria-hidden="true" />下载 ZIP</Button>
+        <SkillMaintenance skill={skill} session={session} onDeleted={onDeleted} />
       </div>
       {error ? <p role="alert" className="text-danger">{error}</p> : null}
       <dl className="grid min-w-0 gap-x-6 gap-y-3 text-sm @lg/content:grid-cols-2">

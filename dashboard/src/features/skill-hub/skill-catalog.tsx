@@ -1,6 +1,9 @@
-import { Button, Checkbox, Label, ListBox, SearchField, Select, Skeleton } from '@heroui/react'
+import { Button, Checkbox, Label, SearchField, Skeleton } from '@heroui/react'
 import { useEffect, useState } from 'react'
-import type { SkillHubTeam } from '@synapse/shared/skill-hub-contracts'
+import { Plus } from 'lucide-react'
+import { HubTeamSelect } from './hub-team-select'
+import { SkillUploadDialog } from './skill-upload-dialog'
+import { HubPendingWrites } from './hub-pending-writes'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { SkillCatalogItem } from './skill-catalog-item'
@@ -14,29 +17,10 @@ export function SkillHubCatalog(props: Props) {
   return <Catalog key={session} session={session} {...props} />
 }
 
-export function HubTeamSelect({ value, onChange, teams, all, variant = 'primary', disabled = false }: {
-  value?: string; onChange: (id?: string) => void; teams: SkillHubTeam[]; all?: boolean
-  variant?: 'primary' | 'secondary'; disabled?: boolean
-}) {
-  const choices = all ? [{ id: 'all-teams', name: '全部团队' }, ...teams] : teams
-  return <Select variant={variant} value={value ?? (all ? 'all-teams' : null)} isDisabled={disabled}
-    className="min-w-0" placeholder="选择团队"
-    onChange={(key) => onChange(typeof key === 'string' && key !== 'all-teams' ? key : undefined)}>
-    <Label>团队</Label>
-    <Select.Trigger><Select.Value className="min-w-0 truncate" /><Select.Indicator /></Select.Trigger>
-    <Select.Popover>
-      <ListBox items={choices}>
-        {(team) => <ListBox.Item id={team.id} textValue={team.name}>
-          <span className="min-w-0 truncate" title={team.name}>{team.name}</span><ListBox.ItemIndicator />
-        </ListBox.Item>}
-      </ListBox>
-    </Select.Popover>
-  </Select>
-}
-
 function Catalog({ session, search, onSearch }: Props & { session: string }) {
   const teams = useSkillHubTeams(session)
   const catalog = useSkillHubCatalog(session, { teamId: search.team, createdByMe: search.mine, query: search.q })
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [draft, setDraft] = useState(search.q ?? '')
   useEffect(() => { setDraft(search.q ?? '') }, [search.q])
   const skills = [...new Map(catalog.data?.pages.flatMap((page) => page.items.map((skill) => [skill.id, skill] as const))).values()]
@@ -45,8 +29,11 @@ function Catalog({ session, search, onSearch }: Props & { session: string }) {
   const error = teams.error ?? catalog.error
   const loading = teams.isPending || catalog.isPending
   return <>
-    <Header><h1>Skill Hub</h1></Header>
+    <Header className="flex-wrap"><h1 className="min-w-0 flex-1">Skill Hub</h1>
+      <Button isDisabled={!teams.data || noTeam || !!teams.error} onPress={() => setUploadOpen(true)}><Plus aria-hidden="true" />上传 Skill</Button>
+    </Header>
     <Main className="min-w-0 gap-5">
+      <HubPendingWrites session={session} />
       <div className="grid min-w-0 items-end gap-3 @lg/content:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
         {single ? <div className="min-w-0"><p className="text-sm font-medium">团队</p><p className="mt-1 truncate" title={single.name}>{single.name}</p></div>
           : <HubTeamSelect all teams={teams.data?.items ?? []} value={search.team}
@@ -74,5 +61,6 @@ function Catalog({ session, search, onSearch }: Props & { session: string }) {
       {!error && catalog.hasNextPage ? <Button variant="secondary" isPending={catalog.isFetchingNextPage}
         onPress={() => void catalog.fetchNextPage()}>加载更多</Button> : null}
     </Main>
+    {uploadOpen ? <SkillUploadDialog session={session} teams={teams.data} onClose={() => setUploadOpen(false)} /> : null}
   </>
 }

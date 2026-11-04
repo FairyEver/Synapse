@@ -2,50 +2,17 @@ import { randomUUID } from "node:crypto"
 import { BrowserWindow, nativeImage, session } from "electron"
 import { CHROMIUM_WORKER_WEB_PREFERENCES } from "../../script-runtime/main/chromium-worker-runner"
 import { externalAssetPath } from "../../../electron/runtime/data-repo/assets"
-import { SKILL_HUB_LIMITS as limits } from "@synapse/shared/skill-hub-contracts"
+import { SKILL_HUB_LIMITS as limits, inspectHubIconInput } from "@synapse/shared/skill-hub-contracts"
 import { withHubPermission, type HubSecurity, type SkillHubCaller } from "./access"
 import { readHubExternalFile } from "./package-service"
 import { SkillHubDesktopError } from "./error"
 
-const png = Buffer.from("89504e470d0a1a0a", "hex")
 const invalid = () => new SkillHubDesktopError("HUB_ICON_INVALID", "请选择有效的 PNG、JPEG 或 WebP 图标。")
 
-function jpegDimensions(bytes: Buffer): [number, number] | null {
-  let offset = 2
-  while (offset + 4 < bytes.length && bytes[offset++] === 0xff) {
-    while (bytes[offset] === 0xff) offset++
-    const marker = bytes[offset++]
-    if (marker === 0xda || marker === 0xd9 || offset + 2 > bytes.length) return null
-    const length = bytes.readUInt16BE(offset)
-    if (length < 2 || offset + length > bytes.length) return null
-    if ([0xc0, 0xc1, 0xc2].includes(marker) && length >= 7) return [bytes.readUInt16BE(offset + 5), bytes.readUInt16BE(offset + 3)]
-    offset += length
-  }
-  return null
-}
-
-function dimensions(bytes: Buffer): [number, number] | null {
-  if (bytes.length >= 24 && bytes.subarray(0, 8).equals(png) && bytes.toString("ascii", 12, 16) === "IHDR") {
-    return [bytes.readUInt32BE(16), bytes.readUInt32BE(20)]
-  }
-  if (bytes[0] === 0xff && bytes[1] === 0xd8) return jpegDimensions(bytes)
-  if (bytes.length < 30 || bytes.toString("ascii", 0, 4) !== "RIFF" || bytes.toString("ascii", 8, 12) !== "WEBP") return null
-  const tag = bytes.toString("ascii", 12, 16)
-  if (tag === "VP8X") return [bytes.readUIntLE(24, 3) + 1, bytes.readUIntLE(27, 3) + 1]
-  if (tag === "VP8L" && bytes[20] === 0x2f) {
-    const header = bytes.readUInt32LE(21)
-    return [(header & 0x3fff) + 1, ((header >>> 14) & 0x3fff) + 1]
-  }
-  if (tag === "VP8 " && bytes.subarray(23, 26).equals(Buffer.from([0x9d, 1, 0x2a]))) {
-    return [bytes.readUInt16LE(26) & 0x3fff, bytes.readUInt16LE(28) & 0x3fff]
-  }
-  return null
-}
-
 function boundedDimensions(bytes: Buffer): [number, number] {
-  const measured = bytes.length <= limits.originalIconBytes && dimensions(bytes)
-  if (!measured || !measured.every((size) => size > 0 && size <= 4096) || measured[0] * measured[1] > 16_000_000) throw invalid()
-  return measured
+  const measured = inspectHubIconInput(bytes)
+  if (!measured) throw invalid()
+  return [measured.width, measured.height]
 }
 
 export function normalizeHubIcon(bytes: Buffer, decode = nativeImage.createFromBuffer): Buffer {

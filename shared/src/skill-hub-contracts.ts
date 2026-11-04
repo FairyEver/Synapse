@@ -211,3 +211,39 @@ export type SkillHubMcpCreateInput = z.infer<typeof skillHubMcpCreateInputSchema
 export type SkillHubMcpPublishInput = z.infer<typeof skillHubMcpPublishInputSchema>
 export type SkillHubMcpUpdateInput = z.infer<typeof skillHubMcpUpdateInputSchema>
 export type SkillHubMcpDeleteInput = z.infer<typeof skillHubMcpDeleteInputSchema>
+
+/** Preflight decoder input without allocating image pixels. Actual decoders must still validate the bytes. */
+export function inspectHubIconInput(bytes: Uint8Array): { type: "image/png" | "image/jpeg" | "image/webp"; width: number; height: number } | null {
+  if (bytes.length < 12 || bytes.length > SKILL_HUB_LIMITS.originalIconBytes) return null
+  const data = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const tag = (offset: number, word: string) => [...word].every((character, index) => bytes[offset + index] === character.charCodeAt(0))
+  const valid = (type: "image/png" | "image/jpeg" | "image/webp", width: number, height: number) =>
+    width > 0 && height > 0 && width <= 4096 && height <= 4096 && width * height <= 16_000_000
+      ? { type, width, height } : null
+  if (bytes.length >= 24 && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, i) => byte === bytes[i]) && tag(12, "IHDR")) {
+    return valid("image/png", data.getUint32(16), data.getUint32(20))
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    for (let offset = 2; offset + 4 < bytes.length && bytes[offset++] === 0xff;) {
+      while (bytes[offset] === 0xff) offset++
+      const marker = bytes[offset++]
+      if (marker === 0xda || marker === 0xd9 || offset + 2 > bytes.length) return null
+      const length = data.getUint16(offset)
+      if (length < 2 || offset + length > bytes.length) return null
+      if ([0xc0, 0xc1, 0xc2].includes(marker) && length >= 7) return valid("image/jpeg", data.getUint16(offset + 5), data.getUint16(offset + 3))
+      offset += length
+    }
+    return null
+  }
+  if (bytes.length < 30 || !tag(0, "RIFF") || !tag(8, "WEBP")) return null
+  const u24 = (offset: number) => bytes[offset] + (bytes[offset + 1] << 8) + (bytes[offset + 2] << 16)
+  if (tag(12, "VP8X")) return valid("image/webp", u24(24) + 1, u24(27) + 1)
+  if (tag(12, "VP8L") && bytes[20] === 0x2f) {
+    const value = data.getUint32(21, true)
+    return valid("image/webp", (value & 0x3fff) + 1, ((value >>> 14) & 0x3fff) + 1)
+  }
+  if (tag(12, "VP8 ") && bytes[23] === 0x9d && bytes[24] === 1 && bytes[25] === 0x2a) {
+    return valid("image/webp", data.getUint16(26, true) & 0x3fff, data.getUint16(28, true) & 0x3fff)
+  }
+  return null
+}
