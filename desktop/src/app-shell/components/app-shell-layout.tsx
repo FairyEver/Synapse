@@ -16,22 +16,20 @@ function AppShellLayout({ dock, children, leading, actions }: AppShellLayoutProp
       <RepoOnboardingDialog />
       <QuickRepositorySwitchDialog />
       <SwitchRepositoryOnboardingDialog />
-      <div className="flex h-full flex-col">
-        <section className="min-h-0 h-full min-w-0 flex-1 overflow-hidden">
-          {children}
-        </section>
+      <div className="flex h-full">
+        <aside className="flex w-[54px] min-h-0 shrink-0 flex-col items-center border-r border-sidebar-border/50 pt-1 pb-1.5 group-has-[[data-system-app-immersive=true]]/app-shell:hidden">
+          {dock}
+          {actions && <div className="mt-auto shrink-0 pt-1">{actions}</div>}
+        </aside>
 
-        <footer className="shrink-0 border-t border-sidebar-border/50 group-has-[[data-system-app-immersive=true]]/app-shell:hidden">
-          <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_minmax(0,max-content)_minmax(0,1fr)] items-center gap-2 px-3">
-            <div className="min-w-0">{leading}</div>
-            <div className="min-w-0 justify-self-center">{dock}</div>
-            {actions && (
-              <div className="min-w-0 justify-self-end">
-                {actions}
-              </div>
-            )}
-          </div>
-        </footer>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <section className="min-h-0 flex-1 overflow-hidden">
+            {children}
+          </section>
+          <footer className="flex min-h-12 shrink-0 items-center border-t border-sidebar-border/50 px-3 empty:hidden group-has-[[data-system-app-immersive=true]]/app-shell:hidden">
+            {leading}
+          </footer>
+        </div>
       </div>
     </main>
   )

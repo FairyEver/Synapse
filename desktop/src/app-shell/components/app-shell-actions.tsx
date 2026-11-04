@@ -13,7 +13,7 @@ function AppShellActions({ onOpenAccountSettings, onOpenMeeting }: AppShellActio
   }
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-col items-center gap-1.5">
       <MessageCenter onOpenMeeting={onOpenMeeting} />
       <AccountUserControl onOpenSettings={onOpenAccountSettings} />
     </div>

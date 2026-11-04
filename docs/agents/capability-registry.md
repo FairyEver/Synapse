@@ -205,6 +205,8 @@ Settings 已移除空置的“实验功能”分类及占位内容。此调整�
 
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，共 9 项，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`mail-internal`、`mail`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 
+桌面主窗口的 Dock 位于左侧。固定应用按现有配置从上到下排列，空间不足时仅应用列表纵向滚动，通知和账号固定在栏底；沉浸模式隐藏整条栏。Dock 默认数量、应用注册和 MCP、Workflow、Automation、Deep Link 入口不变。
+
 Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。历史 `dock.mail-introduction.v1` 中的 `mail` 仍表示站内信；改名迁移先将其归入 `mail-internal`。新增 `dock.mail-apps-introduction.v1`，将末尾一次性排为 `mail-internal` → `mail` → `launcher`（「应用」），已有图标只移动且不重复，其它应用相对顺序不变，即使此前移除过站内信也会执行这次独立迁移。新安装默认包含两款邮件应用并预先记录当前迁移；用户之后移除任一邮件图标、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。
 
 Git 仍是普通 System App，不新增 MCP domain。其带恢复 journal 的原子 clone、仓库注册、状态与差异预览、主进程选择令牌、精确提交与按文件丢弃、同步、空仓库初始化与远端默认分支接入、缓存远程分支发现与 tracking 检出、SSH 主机密钥、操作状态与取消能力只通过窄类型化 Git IPC bridge 暴露；仓库目录定位复用受权限与审计保护的 Shell IPC，设为项目复用系统设置的全局项目配置与添加流程。Agent 项目与 Git 仓库根路径精确匹配时，composer 可复用同一 Git IPC 执行确认后的全部改动提交及常用远端操作，并可定向打开对应 Git 工作台；该入口不经过 Agent、MCP 或通用命令执行。这不改变上表的 capability 或 MCP 数量。远程分支、空仓库初始化与文件丢弃能力不注册任意 Git 命令入口，也不扩展为 Workflow、Automation、MCP 或 Deep Link 表面。

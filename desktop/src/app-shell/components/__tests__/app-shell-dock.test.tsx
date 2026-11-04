@@ -32,7 +32,7 @@ describe("AppShellDock", () => {
     document.body.innerHTML = ""
   })
 
-  it("renders pinned app icon buttons without extra space between their square slots", async () => {
+  it("keeps pinned apps in order in a vertically scrollable Dock", async () => {
     const onValueChange = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -46,13 +46,16 @@ describe("AppShellDock", () => {
 
     const activeButton = findButtonByLabel("对话")
     const dockItems = activeButton.parentElement
+    expect(activeButton.closest("[data-slot='scroll-area']")?.getAttribute("data-scrollbars")).toBe("vertical")
+    expect(Array.from(dockItems?.querySelectorAll("button") ?? [], (button) => button.getAttribute("aria-label")))
+      .toEqual(["对话", "云盘", "应用"])
     expect(dockItems?.className).toContain("gap-0")
     expect(activeButton.getAttribute("aria-current")).toBe("page")
     expect(activeButton.className).toContain("size-12")
     const activeIndicator = activeButton.querySelector("[data-slot='app-shell-dock-active-indicator']")
     expect(activeIndicator?.getAttribute("aria-hidden")).toBe("true")
     expect(activeIndicator?.className).toContain("size-1")
-    expect(activeIndicator?.className).toContain("bottom-0")
+    expect(activeIndicator?.className).toContain("left-0")
     expect(findButtonByLabel("应用").querySelector("[data-slot='app-shell-dock-active-indicator']")).toBeNull()
 
     await act(async () => {

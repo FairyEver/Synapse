@@ -18,12 +18,7 @@ import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/app
 
 type AppShellDockApp = Pick<SynapseSystemAppManifest, "id" | "name" | "icon">
 const ignoreDockPin = () => undefined
-const dockContextMenuCollisionPadding = {
-  top: 12,
-  right: 12,
-  bottom: 64,
-  left: 12,
-} as const
+const dockContextMenuCollisionPadding = 12
 
 type AppShellDockProps = {
   readonly apps: readonly AppShellDockApp[]
@@ -47,11 +42,12 @@ export function AppShellDock({
   return (
     <TooltipProvider>
       <nav
+        aria-label="Dock"
         data-track="app-shell-dock"
-        className="flex min-w-0 justify-center"
+        className="flex min-h-0 flex-col"
       >
-        <ScrollArea className="min-w-0 max-w-full" scrollbars="horizontal">
-          <div className="flex min-w-max items-center justify-center gap-0">
+        <ScrollArea scrollbars="vertical">
+          <div className="flex flex-col items-center gap-0">
             {apps.map((app) => {
               const active = app.id === value
 
@@ -98,7 +94,7 @@ function DockButton({
       type="button"
       variant="ghost"
       size="icon"
-      className="relative size-12 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
+      className="relative size-12 shrink-0 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
       aria-label={app.name}
       aria-current={active ? "page" : undefined}
       onClick={() => onValueChange(app.id)}
@@ -108,7 +104,7 @@ function DockButton({
         <span
           data-slot="app-shell-dock-active-indicator"
           aria-hidden="true"
-          className="absolute bottom-0 left-1/2 size-1 -translate-x-1/2 rounded-full bg-blue-500"
+          className="absolute top-1/2 left-0 size-1 -translate-y-1/2 rounded-full bg-blue-500"
         />
       ) : null}
     </Button>
@@ -120,7 +116,7 @@ function DockButton({
         <TooltipTrigger asChild>
           {button}
         </TooltipTrigger>
-        <TooltipContent side="top">{app.name}</TooltipContent>
+        <TooltipContent side="right">{app.name}</TooltipContent>
       </Tooltip>
     )
   }
@@ -133,7 +129,7 @@ function DockButton({
             {button}
           </ContextMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent side="top">{app.name}</TooltipContent>
+        <TooltipContent side="right">{app.name}</TooltipContent>
       </Tooltip>
       <ContextMenuContent collisionPadding={dockContextMenuCollisionPadding}>
         <DockAppMenuItems

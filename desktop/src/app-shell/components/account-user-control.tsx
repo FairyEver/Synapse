@@ -231,7 +231,7 @@ function AccountUserControl({
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent side="right" align="end" className="w-56">
         <DropdownMenuItem className="h-auto py-2" onSelect={handleOpenDashboard}>
           <div className="flex min-w-0 items-center gap-3">
             <AccountAvatar state={state} className="size-8" />
