@@ -1,5 +1,4 @@
-import { z } from "zod"
-import { batchSchema, createTableSchema, deleteRecordSchema, fieldSchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, resolveCollaboratorSchema, tableChangeSchema } from "./cloud-table-contract"
+import { cloudTableZod as z, batchSchema, createTableSchema, deleteRecordSchema, fieldSchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, resolveCollaboratorSchema, tableChangeSchema } from "./cloud-table-contract"
 
 export const CLOUD_TABLE_JSON_SCHEMA = { anyOf: [
   { type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" },
@@ -94,7 +93,7 @@ export function cloudTableOpenApiPaths() {
     const responseSchema = responseSchemas[operationId]
     if (!responseSchema) throw new Error(`Missing cloud-table response schema: ${operationId}`)
     paths[`/tables${suffix}`] ??= {}
-    paths[`/tables${suffix}`]![method] = { operationId, summary, tags: ["云端数据表"], description: `${instruction} 开放接口仅识别用户本人的API密钥或匿名身份，忽略Cookie，不接受普通登录Token；密钥同时受scope、表资源范围及当前表授权约束，协作者不能通过tables.manage成为表主。登录身份只用于官方Console的独立接口；Agent或Skill使用开放接口，不借用网页登录态。`, security: anonymous ? [{}, { ApiKeyBearer: [] }] : [{ ApiKeyBearer: [] }], parameters, ...(body ? { requestBody: { required: true, content: { "application/json": { schema: schema(body) } } } } : {}), responses: { [method === "post" ? "201" : "200"]: { description: "成功", content: { "application/json": { schema: responseSchema } } }, "400": error, "401": error, "403": error, "404": error, "409": error, "413": error, "503": error } }
+    paths[`/tables${suffix}`]![method] = { operationId, summary, tags: ["云端数据表"], description: `${instruction} 开放接口仅识别用户本人的API密钥或匿名身份，忽略Cookie，不接受普通登录Token；密钥同时受scope、表资源范围及当前表授权约束，协作者不能通过tables.manage成为表主。官方Console与桌面MCP使用独立的账号通路。`, security: anonymous ? [{}, { ApiKeyBearer: [] }] : [{ ApiKeyBearer: [] }], parameters, ...(body ? { requestBody: { required: true, content: { "application/json": { schema: schema(body) } } } } : {}), responses: { [method === "post" ? "201" : "200"]: { description: "成功", content: { "application/json": { schema: responseSchema } } }, "400": error, "401": error, "403": error, "404": error, "409": error, "413": error, "503": error } }
   }
   return paths
 }

@@ -153,6 +153,7 @@ type AccountHttpError = Error & {
   method?: string
   code?: string
   retryAfterMs?: number
+  requestId?: string
 }
 
 const DRIVE_UPLOAD_COMPLETE_RATE_LIMIT_RETRY_DELAY_MS = 5000
@@ -2996,6 +2997,7 @@ async function createHttpError(
   error.url = url
   error.method = method
   error.code = failure.code
+  error.requestId = response.headers.get("X-Request-Id") ?? undefined
   error.retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"))
   return error
 }
@@ -3026,9 +3028,11 @@ async function readHttpFailureBody(response: Response): Promise<{ readonly detai
 }
 
 function stableHttpErrorCode(value: unknown): string | undefined {
-  if (!value || typeof value !== "object" || !("code" in value)) return undefined
-  const code = (value as { readonly code?: unknown }).code
-  return typeof code === "string" ? code : undefined
+  if (!value || typeof value !== "object") return undefined
+  const { code, error } = value as { readonly code?: unknown; readonly error?: unknown }
+  if (typeof code === "string") return code
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined
+  return typeof error.code === "string" ? error.code : undefined
 }
 
 function redactHttpFailureDetail(value: unknown): unknown {

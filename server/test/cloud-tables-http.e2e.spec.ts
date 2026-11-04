@@ -7,6 +7,9 @@ import { z } from "zod"
 import { hashPassword } from "../src/auth/password"
 import { CLOUD_TABLE_JSON_SCHEMA, cloudTableOpenApiPaths } from "../src/cloud-tables/cloud-table-openapi"
 import { createTestApp } from "../src/test/test-app"
+import { createCloudTableCapabilityDispatcher } from "../../desktop/app-capabilities/cloud-tables/main/dispatcher"
+import { createSynapseToolRouterSurface } from "../../desktop/electron/services/agent-runtime/synapse-tool-router"
+import { MCP_TOOL_ACTIONS } from "../../desktop/synapse-capabilities/shared/registry"
 import { requireLoopbackE2eDatabase } from "./e2e-database-guard.mjs"
 
 const scopes = ["tables.manage", "tables.records.read", "tables.records.create", "tables.records.update", "tables.records.delete"]
@@ -256,6 +259,90 @@ describe("cloud table complete real HTTP contract", () => {
     await denied("GET", root, ownerCookie, undefined, 401, "INVALID_API_KEY")
     await call("DELETE", keyPath, ownerCookie)
     await denied("GET", `${root}/${a.id}`, auth, undefined, 401, "INVALID_API_KEY")
+  })
+
+  it("collects lunch suggestions through MCP account operations and anonymous form submission", async () => {
+    const signIn = async (id: string) => {
+      const { accessToken } = await call("POST", "/api/auth/login", {}, { email: `${id}@example.test`, password })
+      const dispatcher = createCloudTableCapabilityDispatcher({
+        account: {
+          captureAccountRequestScope: () => ({ accountId: id, authRevision: 1 }),
+          onBeforeIdentityChange: () => () => undefined,
+          async fetchAuthenticated(path, init) {
+            const headers = new Headers(init.headers)
+            expect(headers.has("Cookie")).toBe(false)
+            expect(headers.has("Authorization")).toBe(false)
+            headers.set("Authorization", `Bearer ${accessToken}`)
+            const response = await fetch(`${base}/api${path}`, { ...init, headers })
+            if (!response.ok) {
+              const { error, requestId } = await response.json()
+              throw Object.assign(new Error("Cloud table HTTP failure"), { status: response.status, code: error.code, requestId })
+            }
+            return response
+          },
+        },
+        permissionGuard: { check: async () => ({ allowed: true }) },
+        auditSink: { record: () => undefined },
+      })
+      return createSynapseToolRouterSurface((name, args) => dispatcher.dispatch(MCP_TOOL_ACTIONS[name]!, args, { source: "mcp-http" }))
+    }
+    const ownerMcp = await signIn(owner)
+    const memberMcp = await signIn(member)
+    expect(ownerMcp.listTools().map(tool => tool.name)).toEqual(["search", "invoke"])
+    const index = await ownerMcp.callTool("search", { domain: "cloud_tables" })
+    const names: string[] = JSON.parse(index.content[0]!.text).tools.map((tool: { name: string }) => tool.name)
+    async function invoke(mcp: typeof ownerMcp, name: string, args: Record<string, unknown>, errorCode?: string) {
+      const toolName = `app_cloud_tables_${name}`
+      expect(names).toContain(toolName)
+      const result = await mcp.callTool("invoke", { toolName, arguments: args })
+      expect(Boolean(result.isError)).toBe(Boolean(errorCode))
+      const data = JSON.parse(result.content[0]!.text)
+      if (errorCode) expect(data.code).toBe(errorCode)
+      return data
+    }
+
+    const created = await invoke(ownerMcp, "table_create", {
+      name: "中午吃什么",
+      fields: [
+        { key: "date", name: "午餐日期", type: "date", required: true },
+        { key: "dish", name: "想吃什么", type: "text", required: true },
+        { key: "budget", name: "预算", type: "singleSelect", options: [{ key: "under30", name: "30 元以内" }] },
+        { key: "tags", name: "饮食偏好", type: "multiSelect", options: [{ key: "light", name: "清淡" }] },
+        { key: "group_order", name: "愿意拼单", type: "boolean", defaultValue: false },
+      ],
+      idempotencyKey: "lunch-mcp-create",
+    })
+    const tableId = created.id
+    const details = await invoke(ownerMcp, "table_get", { tableId })
+    expect(details).toMatchObject({ ownerId: owner, viewerId: owner, anonymous: {}, schemaVersion: 1 })
+    await invoke(memberMcp, "table_get", { tableId }, "FORBIDDEN")
+    await invoke(ownerMcp, "permissions_update", {
+      tableId, version: details.schemaVersion, anonymous: { create: true }, members: [],
+    })
+    await invoke(memberMcp, "permissions_update", {
+      tableId, version: 2, anonymous: { read: true }, members: [],
+    }, "FORBIDDEN")
+    const publicPath = `/api/open/v1/tables/${tableId}`
+    expect(Object.keys(await call("GET", `${publicPath}/schema`)).sort()).toEqual(["fields", "id", "schemaVersion"])
+    const submission = { values: { date: "2026-11-04", dish: "番茄牛肉饭", budget: "under30", tags: ["light"] } }
+    const receipt = await call("POST", `${publicPath}/records`, {}, submission, 201, { "Idempotency-Key": "lunch-form-submit" })
+    expect(await call("POST", `${publicPath}/records`, {}, submission, 201, { "Idempotency-Key": "lunch-form-submit" })).toEqual(receipt)
+    await denied("POST", `${publicPath}/records/query`, {}, {}, 403, "FORBIDDEN")
+    await denied("PATCH", `${publicPath}/records/${receipt.id}`, {}, { version: 1, values: {} }, 403, "FORBIDDEN")
+    await denied("DELETE", `${publicPath}/records/${receipt.id}`, {}, { version: 1 }, 403, "FORBIDDEN")
+
+    const filters = [{ field: "date", op: "eq", value: submission.values.date }]
+    expect(await invoke(ownerMcp, "record_count", { tableId, filters })).toEqual({ count: 1 })
+    expect(await invoke(ownerMcp, "record_exists_get", { tableId, filters })).toEqual({ exists: true })
+    expect(await invoke(ownerMcp, "record_list", { tableId, filters, fields: ["dish", "group_order"] })).toMatchObject({
+      data: [{ id: receipt.id, creatorUserId: null, values: { dish: submission.values.dish, group_order: false } }],
+      nextCursor: null,
+    })
+    const mine = await invoke(ownerMcp, "record_create", { tableId, values: { ...submission.values, dish: "鸡腿饭" } })
+    expect(await invoke(ownerMcp, "record_get", { tableId, recordId: mine.id })).toMatchObject({ creatorUserId: owner })
+    expect((await invoke(ownerMcp, "log_list", { tableId })).data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ actorId: owner, apiKeyId: null }),
+    ]))
   })
 
   it("opens anonymous actions independently and ignores a valid owner Cookie on writes", async () => {

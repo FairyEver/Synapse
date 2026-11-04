@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-04 云端数据表接入独立 `cloud_tables` domain，共 20 项 capability / MCP 索引。使用当前登录桌面账号，沿用表主与协作者权限。只供现有 MCP `search` / `invoke`，无通用本机 HTTP、System App、Dock、IPC、Workflow、Automation 或 Deep Link 入口。指引随既有 Synapse 系统 Skill 分发。
+
 - 2026-11-04 Synapse Skill Hub：新增独立 `skill_hub` domain，共 10 项 capability / MCP 索引；实测全局 374 项 capability、370 项索引及工具定义，公开入口仍为 `search` / `invoke`。复用账号状态与登录能力。无 System App、默认 Dock、Workflow 或 Automation 入口；管理员治理仅 Web/API。旧 Skill Repository 工具和协议保持退役。另有 1 条严格声明式桌面深链 `synapse://skill-hub/install?skillId=<id>`、2 个仅限安装器窗口的私有 IPC（prepare_install / release_install）和 1 个定向窗口事件（skill_hub_install_open_request），均不进入 MCP 索引。
 
 - 2026-11-02 云端 Skills 下线：移除 `skill_repository` domain 的全部 9 项 capability/MCP 索引工具、桌面上传与安装 IPC、安装窗口和 `synapse://skill-install` 专用协议处理；旧链接按未知协议处理。Console/Admin 列表、探索、详情及公开路径同时删除，权威系统 Skill 不再分发该领域指南。全局 capability 373→364、MCP 索引 369→360，公开路由工具仍为 search/invoke 两个；System App 22、默认 Dock 9、Workflow/Automation 与其他 Deep Link 不变。资源仓库仅保留 `content` 领域。历史条目计数保留为当时基线，当前计数以下表为准。
@@ -79,6 +81,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Rule Installer | 否 | 否 | — | — | — | — |
 | Secrets | 是 | 否 | — | — | 6 | — |
 | Skill Hub | 否 | 否 | — | — | 10 | 1（Skill 安装） |
+| 云端数据表 | 否 | 否 | — | — | 20 | — |
 | Skill Installer | 否 | 否 | — | — | — | — |
 | Skill Uninstaller | 否 | 否 | — | — | — | — |
 | Synapse Skill | 是 | 否 | — | — | — | — |
@@ -229,13 +232,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
 | `skill_hub` | 10 | 10 |
-| 合计 | 344 | 340 |
+| `cloud_tables` | 20 | 20 |
+| 合计 | 364 | 360 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 340 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 360 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

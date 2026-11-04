@@ -22,6 +22,7 @@ export const SYNAPSE_TOOL_ROUTER_INVOKE_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVE
 export const SYNAPSE_MCP_TOOL_PREFIX = "mcp__synapse-mcp__"
 
 const DOMAIN_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  cloud_tables: ["云端数据表", "云表", "cloud table", "anonymous form", "匿名填写"],
   skill_hub: ["Synapse Skill Hub", "团队 Skill", "本人团队", "上传 Skill", "Skill 发布", "Skill 回执"],
   app: ["应用", "终端", "通知", "模板", "文件", "密钥", "app", "terminal", "notification", "secret"],
   automation: ["自动化", "定时任务", "调度", "cron", "automation", "schedule"],
@@ -305,7 +306,7 @@ export function buildSynapseToolCatalog(): readonly SynapseToolCatalogEntry[] {
 
 export async function searchSynapseTools(input: SynapseToolSearchInput): Promise<SynapseToolSearchResult> {
   const query = (input.query ?? "").trim()
-  const domain = input.domain?.trim()
+  const domain = input.domain?.trim() || (/云端数据表|云表|\bcloud[ _-]+tables?\b/iu.test(query) ? "cloud_tables" : undefined)
   if (domain && !availableDomains.includes(domain)) {
     return { mode: "search", tools: [], domains: availableDomains }
   }

@@ -298,7 +298,7 @@ describe("SynapseSkillService", () => {
     expect(skillRoot).toContain("修改现有 Skill")
     expect(skillRoot).toContain("`skill-authoring/index.md`")
     expect(skillRoot).toContain("not local Skill file authoring")
-    expect(skillRoot).toContain("A request only to publish or manage an existing Skill in Synapse is a Content operation")
+    expect(skillRoot).toContain("For team Skill Hub publication, use `skill-hub/index.md`; resource-repository publication uses `content/index.md`.")
     expect(authoringGuide).toContain("Inspect and edit the actual files")
     expect(authoringGuide).toContain("Limit YAML frontmatter to `name` and `description`")
     expect(authoringGuide).toContain("Use progressive disclosure")

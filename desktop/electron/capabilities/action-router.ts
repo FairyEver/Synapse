@@ -24,6 +24,7 @@ export type SynapseActionRouterDeps = {
   readonly mailInternalDispatch: DomainDispatch
   readonly todosDispatch?: DomainDispatch
   readonly skillHubDispatch?: DomainDispatch
+  readonly cloudTablesDispatch?: DomainDispatch
   readonly wecomDispatch?: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
@@ -48,6 +49,10 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "skill_hub") {
         if (!deps.skillHubDispatch) throw new Error("Skill Hub dispatcher is not configured")
         return deps.skillHubDispatch(action, params, context)
+      }
+      if (domainId === "cloud_tables") {
+        if (!deps.cloudTablesDispatch) throw new Error("Cloud table dispatcher is not configured")
+        return deps.cloudTablesDispatch(action, params, context)
       }
       if (domainId === "wecom") {
         if (!deps.wecomDispatch) throw new Error("WeCom dispatcher is not configured")

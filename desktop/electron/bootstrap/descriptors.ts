@@ -261,6 +261,7 @@ import { prepareContentIconImageBytes } from "../services/content-icon-image-ser
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
+import { createCloudTableCapabilityDispatcher } from "../../app-capabilities/cloud-tables/main/dispatcher"
 import { createSkillHubCapabilityDispatcher } from "../../app-capabilities/skill-hub/main/dispatcher"
 import { DesktopSkillHubService, SKILL_HUB_SERVICE_ID } from "../../app-capabilities/skill-hub/main/service"
 import { SkillHubCloudClient } from "../../app-capabilities/skill-hub/main/cloud-client"
@@ -1820,6 +1821,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       permissionGuard,
       auditSink,
     })
+    const cloudTablesDispatcher = createCloudTableCapabilityDispatcher({ account: accountService, permissionGuard, auditSink })
     const skillHubDispatcher = createSkillHubCapabilityDispatcher({ service: ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID) })
     const todosDispatcher = createTodoCapabilityDispatcher({ service: ctx.registry.get<TodoCloudService>(TODOS_SERVICE_ID), permissionGuard, auditSink })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
@@ -1921,6 +1923,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       skillHubDispatch: skillHubDispatcher.dispatch,
+      cloudTablesDispatch: cloudTablesDispatcher.dispatch,
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(

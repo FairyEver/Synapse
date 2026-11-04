@@ -57,6 +57,16 @@ describe("Synapse tool router catalog", () => {
     ])
   })
 
+  it("finds cloud table tools separately from the local Data Store", async () => {
+    const index = indexOf(await searchSynapseTools({ domain: "cloud_tables" }))
+    expect(index.total).toBe(20)
+    const found = searchMatches(await searchSynapseTools({ query: "新建云端数据表", limit: 1 }))
+    expect(found.tools[0]).toMatchObject({ name: "app_cloud_tables_table_create", domain: "cloud_tables" })
+    expect(found.tools[0]?.inputSchema).toHaveProperty("$defs.CloudTableJsonValue")
+    expect(isSynapseToolReadOnly("app_cloud_tables_permissions_update")).toBe(false)
+    expect(isSynapseToolReadOnly("app_cloud_tables_record_list")).toBe(true)
+  })
+
   it("searches Chinese domain aliases and schema fields with stable limits", async () => {
     const chinese = searchMatches(await searchSynapseTools({ query: "数据库表", domain: "database", limit: 3 }))
     const schema = searchMatches(await searchSynapseTools({ query: "tableName", domain: "database", limit: 5 }))
