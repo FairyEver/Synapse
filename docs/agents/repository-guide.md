@@ -90,6 +90,8 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 
 DataRepository 的原子批次与索引范围查询仅用于 schema 显式声明字段、索引和记录字节预算的 SQLite 集合。批次最多 128 项（含 CAS 前置条件）及 256 KiB，只允许同一连接同步提交；artifact IO、SDK 和权限等待不得放进事务。冲突必须显式返回，提交成功后才发布 ID 通知。范围读取使用声明索引的等值前缀与下一字段边界，最多 101 行，不允许业务 SQL 或深 OFFSET。原有 namespace 不自动切换通知或存储语义；Agent V2 切换仍须完成消费者、迁移及备份验收。
 
+Skill Hub 的隔离集成验收使用 `pnpm --filter @synapse/server run test:skill-hub:e2e`，要求明确提供本机 `SKILL_HUB_E2E_DATABASE_URL` 且库名以 `_e2e` 结尾。脚本不会用当前业务库或继承对象存储凭据；迁移及真实浏览器验收须获用户授权。
+
 当前 Backup 包含数据库、Drive 与 Platform Media 对象清单和 Skill Hub 的实际对象字节；Drive 与 Platform Media 仍只有清单。Skill Hub 对象回收与备份共享数据库锁，锁从 dump 前持有到校验复制结束；包缺失或摘要不符时整份备份失败。恢复先验证清单与每个对象，再向专用目标桶补写缺失对象并校验，目标服务保持停机。历史云端 Skills 对象字节也不在备份内，退役删除后不能仅凭数据库备份恢复。需要可恢复的新域必须同步设计 manifest、复制和恢复流程。
 
 ## 服务端 Node 安全基线

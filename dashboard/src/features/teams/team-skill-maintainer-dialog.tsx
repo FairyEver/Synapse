@@ -54,7 +54,7 @@ export function TeamSkillMaintainerDialog({ row, onClose, onSuccess }: {
                   isDisabled={action.busy || action.unknown} placeholder="选择有效成员"
                   onSelectionChange={(key) => setSelected(typeof key === 'string' ? key : undefined)}>
                   <Label>新维护者</Label><Select.Trigger><Select.Value className="min-w-0 truncate" /><Select.Indicator /></Select.Trigger>
-                  <Select.Popover><ListBox items={members.data}>{(member) => {
+                  <Select.Popover className="w-(--trigger-width)"><ListBox items={members.data}>{(member) => {
                     const label = member.handle || member.email
                     return <ListBox.Item id={member.userId} textValue={label}><span className="min-w-0 truncate" title={label}>{label}</span><ListBox.ItemIndicator /></ListBox.Item>
                   }}</ListBox></Select.Popover>

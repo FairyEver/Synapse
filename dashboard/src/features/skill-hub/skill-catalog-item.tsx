@@ -43,9 +43,9 @@ export function SkillCatalogItem({ skill, search, session }: { skill: SkillHubSu
     <div className="flex min-w-0 items-start gap-3">
       <SkillHubIcon session={session} skill={skill} />
       <div className="min-w-0">
-        <h2 className="truncate text-base font-semibold">
+        <h2 className="min-w-0 text-base font-semibold">
           <Link to="/skill-hub/$skillId" params={{ skillId: skill.id }} search={search}
-            title={skill.displayName} className="rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-accent">{skill.displayName}</Link>
+            title={skill.displayName} className="block truncate rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-accent">{skill.displayName}</Link>
         </h2>
         <p className="mt-1 line-clamp-2 wrap-anywhere text-sm leading-relaxed text-muted">{skill.displayDescription}</p>
       </div>

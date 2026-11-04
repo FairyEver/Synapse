@@ -265,3 +265,9 @@ WorkBuddy 的 `SKILL.md` 使用 YAML frontmatter，`name` 和 `description` 为�
 | Codex | 官方明确写 `SKILL.md` 必须包含 `name` 和 `description` | 始终写 `name` + `description` frontmatter | 符合官方要求 |
 | Cursor | 官方明确写 `SKILL.md` 使用 YAML frontmatter；`name`、`description` 必填。目录名等于 `name` 是社区建议，非官方强制 | 始终写 `name` + `description` frontmatter，并让目录名跟随 `skillName` | Synapse 选择保持一致，属于防御性做法 |
 | WorkBuddy | `SKILL.md` 使用 YAML frontmatter，`name`、`description` 必填 | 始终写 `name` + `description` frontmatter，并保留附件相对路径 | 符合 WorkBuddy 的 Skill 包格式 |
+
+## Skill Hub 安装来源
+
+桌面深链 `synapse://skill-hub/install?skillId=<id>` 使用当前登录账号查询和校验最新版，交给既有安装器选择编辑器和位置。它不能指定旧版本、路径或自动覆盖。安装记录按服务端与 Skill ID 确认来源，并记录包版本和内容指纹；本地记录损坏时不推断为最新版。包内 `SKILL.md` 原文、名称和介绍保留，商店资料不参与目标目录命名。已有本机 `.env` 的处理沿用安装器，运行变量不随发布包上传。
+
+同来源包改名时只检查选定的安装位置。确认后先构建并校验暂存目录，再将旧目录移入同父目录的隐藏备份容器，切换失败时恢复原目录；无法安全恢复时保留备份供用户处理。其他来源同名或身份不明时停止；不会改动其他编辑器或项目的安装。

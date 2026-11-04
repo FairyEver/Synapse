@@ -11,7 +11,7 @@ export function HubTeamSelect({ value, onChange, teams, all, variant = 'primary'
     onSelectionChange={(key) => onChange(typeof key === 'string' && key !== 'all-teams' ? key : undefined)}>
     <Label>团队</Label>
     <Select.Trigger><Select.Value className="min-w-0 truncate" /><Select.Indicator /></Select.Trigger>
-    <Select.Popover>
+    <Select.Popover className="w-(--trigger-width)">
       <ListBox items={choices}>
         {(team) => <ListBox.Item id={team.id} textValue={team.name}>
           <span className="min-w-0 truncate" title={team.name}>{team.name}</span><ListBox.ItemIndicator />

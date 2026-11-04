@@ -646,6 +646,30 @@ function verifySkillHubRuntime(header, unpackedPath, failures) {
   }
 }
 
+async function runSkillHubWorkerSmoke(unpackedPath, failures) {
+  const worker = new Worker(path.join(unpackedPath, "dist-electron/app-capabilities/skill-hub/main/package-worker.js"), {
+    workerData: { format: "markdown", bytes: Buffer.from("---\nname: hub-smoke\ndescription: Fixture\n---\nPackage smoke") },
+  })
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Skill Hub worker timed out")), 10_000)
+      const complete = (error, result) => { clearTimeout(timeout); if (error) reject(error); else resolve(result) }
+      worker.once("message", (value) => complete(null, value.result))
+      worker.once("error", complete)
+      worker.once("exit", () => complete(new Error("Skill Hub worker exited before answering")))
+    })
+    if (result?.package?.name !== "hub-smoke" || result?.manifest?.[0]?.path !== "SKILL.md"
+      || !/^sha256:[a-f0-9]{64}$/.test(result?.contentFingerprint) || !result?.bytes?.length) {
+      throw new Error("Invalid Skill Hub worker result")
+    }
+    console.log("Verified packaged Skill Hub package Worker smoke")
+  } catch {
+    failures.push("Skill Hub packaged package worker smoke failed")
+  } finally {
+    await worker.terminate()
+  }
+}
+
 function verifyTodoRuntime(asarPath, failures) {
   const smokeScript = [
     "const path = require('node:path')",
@@ -1244,6 +1268,7 @@ async function verifyResources(resourcesPath, label) {
   verifyTextExtractionWorker(header, unpackedPath, failures)
   verifyHtmlGenerationWorker(header, unpackedPath, failures)
   if (failures.length === 0) {
+    await runSkillHubWorkerSmoke(unpackedPath, failures)
     await runTextExtractionWorkerSmoke(unpackedPath, failures)
     await runHtmlGenerationWorkerSmoke(unpackedPath, failures)
   }

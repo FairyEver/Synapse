@@ -1,3 +1,4 @@
+import { validateSqliteSchema } from "../backends/sqlite-query"
 import { connectorsCredentialsSchema } from "../schemas/connectors"
 import { describe, expect, it } from "vitest"
 import {
@@ -49,6 +50,11 @@ import {
 } from "../index"
 
 describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
+  it("keeps every registered bounded SQLite schema valid for repository construction", () => {
+    for (const schema of allSchemas) {
+      if (schema.sqlite) expect(() => validateSqliteSchema(schema.name, schema.sqlite)).not.toThrow()
+    }
+  })
   it("rejects malformed persisted sync cleanup before any file processing", () => {
     const binding = { id: "binding", schemaVersion: 3, ownerUserId: "user", initialDirection: "bind_existing", initialPhase: null, initialCursor: null,
       driveItemId: "item", driveItemName: "spec.md", remoteParentId: null, drivePathHint: null, localPath: "/tmp/spec.md", kind: "file", status: "removed", remoteCursor: null,

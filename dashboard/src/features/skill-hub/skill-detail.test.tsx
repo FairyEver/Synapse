@@ -1,3 +1,5 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { SkillDetail } from './skill-detail'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { SkillMainView } from './skill-main-view'
@@ -14,9 +16,7 @@ describe('Skill Hub read-only package rendering', () => {
   })
 })
 
-it('keeps only the two latest-package tabs and distinguishes display data from the package', async () => {
-  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
-  const { SkillDetail } = await import('./skill-detail')
+it('keeps only the two latest-package tabs and distinguishes display data from the package', () => {
   const person = { id: 'user_a', displayName: '成员 A' }
   const detail = {
     id: 'skill_a', team: { id: 'team_a', name: '团队 A' }, displayName: '商店资料', displayDescription: '商店介绍',

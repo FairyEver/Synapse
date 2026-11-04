@@ -1,3 +1,4 @@
+import { DATA_REPO_ATOMIC_MAX_BYTES } from "../../../../config"
 import {
   skillHubIdSchema, skillHubManifestSchema, skillHubTeamSchema, skillHubWriteActionSchema,
 } from "@synapse/shared/skill-hub-contracts"
@@ -24,7 +25,7 @@ export const skillHubPreparedSourcesSchema: NamespaceSchema<HubPreparedRecord> =
   name: "app.skill-hub.prepared-sources", backend: "sqlite", currentVersion: 1, migrations: [], transferPolicy: "local-only",
   sqlite: {
     fields: ["id", "schemaVersion", "assetKey", "bootId", "accountId", "authRevision", "callerKey", "state", "team", "expiresAt", "archiveSha256", "manifest", "contentFingerprint"],
-    maxRecordBytes: 512 * 1024, atomic: false,
+    maxRecordBytes: DATA_REPO_ATOMIC_MAX_BYTES, atomic: false,
     indexes: [{ name: "expiry", fields: ["expiresAt", "id"] }],
   },
   validate: (value): value is HubPreparedRecord => prepared.safeParse(value).success,
