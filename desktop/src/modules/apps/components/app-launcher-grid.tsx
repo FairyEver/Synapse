@@ -105,7 +105,7 @@ export function AppLauncherGrid({
     <div
       ref={gridRef}
       data-app-launcher-grid
-      className="mx-auto grid w-fit grid-cols-5 justify-items-center gap-x-6 gap-y-5"
+      className="mx-auto grid w-fit grid-cols-5 justify-items-center gap-x-5 gap-y-4"
     >
       {apps.map((app) => {
         const pinned = pinnedAppIds.includes(app.id)
@@ -118,19 +118,19 @@ export function AppLauncherGrid({
           >
             <ContextMenu>
               <ContextMenuTrigger asChild>
-                <div className="group relative h-32 w-32">
+                <div className="group relative">
                   <button
                     data-track="app-launcher.open"
                     data-track-native="true"
                     ref={app.id === focusAppId ? focusTargetRef : undefined}
                     type="button"
-                    className="flex h-32 w-32 flex-col items-center justify-start rounded-md px-3 py-2 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+                    className="flex size-31 flex-col items-center justify-start rounded-md px-3 py-2 text-center outline-none transition-[background-color,transform] duration-150 ease-out hover:bg-background/60 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
                     onClick={() => onOpenApp(app.id)}
                   >
                     <img
                       src={app.icon}
                       alt=""
-                      className="size-20 shrink-0 object-cover transition-transform duration-150 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                      className="size-19 shrink-0 object-cover transition-transform duration-150 ease-out group-hover:scale-[1.035] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
                       draggable={false}
                     />
                     <span className="mt-2.5 flex min-w-0 flex-1 items-start">
