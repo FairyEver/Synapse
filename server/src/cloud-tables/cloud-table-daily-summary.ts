@@ -7,8 +7,8 @@ type SummaryTable = Pick<CloudTable, "id" | "ownerId" | "anonymous">
 const maxGroups = 100
 
 export function splitCloudTableAccess(value: Prisma.JsonValue) {
-  const { dailySummary, ...anonymous } = value as { dailySummary?: unknown } & Partial<Record<"read" | "create" | "update" | "delete", boolean>>
-  return { dailySummary, anonymous }
+  const { dailySummary, publicCount, ...anonymous } = value as { dailySummary?: unknown; publicCount?: unknown } & Partial<Record<"read" | "create" | "update" | "delete", boolean>>
+  return { dailySummary, publicCount: publicCount === true, anonymous }
 }
 
 async function summaryDate(tx: Tx, table: SummaryTable, settings: CloudDailySummary, publishing: boolean) {

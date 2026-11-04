@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import type { AccountService } from "../../../electron/services/account-service"
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import { mcpClientActorForSource, type DispatchContext, type DispatchResult } from "../../../synapse-capabilities/shared/types"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../../electron/generated/deployment-config.generated"
 import { cloudTableOperations, isCloudTableAction } from "../shared/capability"
 
 type CloudTableAccount = Pick<AccountService, "captureAccountRequestScope" | "onBeforeIdentityChange" | "fetchAuthenticated">
@@ -109,11 +110,23 @@ export function createCloudTableCapabilityDispatcher({ account, permissionGuard,
         const data: unknown = await response.json()
         if (changed() || signal.aborted) throw signal.reason ?? new Error("Cloud table account changed")
         if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid cloud table response")
+        if (action === "app.cloud_tables.publish_preflight.get") {
+          const preflight = data as { accountId?: unknown; publicAppUrl?: unknown; audience?: unknown }
+          if (preflight.accountId !== scope.accountId) throw new Error("Unexpected preflight account")
+          const desktopOrigin = new URL(SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl).origin
+          if (typeof preflight.publicAppUrl === "string" && preflight.publicAppUrl !== desktopOrigin) {
+            audit("allowed")
+            return { ok: true, data: { ...preflight, audience: "environment_mismatch", desktopPublicAppUrl: desktopOrigin } }
+          }
+        }
         audit("allowed")
         return { ok: true, data }
       } catch (error) {
         audit("failed")
         if (changed()) return failure("CLOUD_TABLE_ACCOUNT_CHANGED", "Synapse 登录账号已变化，请重新确认目标表。")
+        if (action === "app.cloud_tables.publish_preflight.get" && (error as { status?: number } | null)?.status === 404) {
+          return failure("CLOUD_TABLE_PREFLIGHT_UNAVAILABLE", "当前云表服务不支持发布前检查，请检查客户端和服务版本。")
+        }
         const result = context.abortSignal?.aborted
           ? failure("CLOUD_TABLE_CANCELLED", "云表请求已取消。")
           : describeFailure(error)

@@ -26,9 +26,11 @@ export class CloudTableController {
   @Get() list(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Query("cursor") cursor?: string) { return this.call(r,s,null,"table.list",{cursor}) }
   @Post() create(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Body() b: unknown) { return this.call(r,s,null,"table.create",b) }
   @Get("trash") trash(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Query("cursor") cursor?: string) { return this.call(r,s,null,"table.trash",{cursor}) }
+  @Get("publish-preflight") publishPreflight(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response) { return this.call(r,s,null,"publish.preflight") }
   @Get(":id") get(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string) { return this.call(r,s,id,"table.get") }
   @Get(":id/schema") schema(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string) { return this.call(r,s,id,"schema") }
   @Get(":id/daily-summary") dailySummary(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query() query: Record<string, unknown>) { return this.call(r,s,id,"daily.summary",query) }
+  @Get(":id/public-count") publicCount(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query() query: Record<string, unknown>) { return this.call(r,s,id,"public.count",query) }
   @Patch(":id") update(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"table.update",b) }
   @Patch(":id/permissions") permissions(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"permissions",b) }
   @Post(":id/collaborators/resolve") resolve(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"member.resolve",b) }

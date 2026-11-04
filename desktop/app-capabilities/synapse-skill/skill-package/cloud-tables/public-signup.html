@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="synapse-table" content="">
+<meta name="synapse-public-count" content="false">
+<title>活动报名</title>
+<style>
+  :root { color-scheme: light dark; font: 16px/1.6 system-ui, sans-serif; }
+  body { margin: 0; color: CanvasText; background: Canvas; }
+  main { width: min(100% - 2rem, 32rem); margin: clamp(1rem, 8vh, 4rem) auto; }
+  h1 { margin: 0 0 1rem; }
+  form { border-top: 1px solid GrayText; padding-top: 1.25rem; }
+  fieldset { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+  label { display: block; margin-bottom: 1rem; font-weight: 600; }
+  input, textarea, button { box-sizing: border-box; font: inherit; padding: .5rem .75rem; }
+  input, textarea { display: block; width: 100%; margin-top: .3rem; }
+  textarea { resize: vertical; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; }
+  :focus-visible { outline: 2px solid AccentColor; outline-offset: 2px; }
+  #public-count { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <h1>活动报名</h1>
+  <p id="public-count" hidden></p>
+  <form id="signup">
+    <fieldset id="fields" disabled>
+      <label>姓名<input name="name" id="name" maxlength="100" autocomplete="name" required></label>
+      <label id="note-label" hidden>备注（可选）<textarea name="note" id="note" maxlength="300"></textarea></label>
+      <button id="submit" type="submit">提交报名</button>
+    </fieldset>
+  </form>
+  <p id="status" role="status" aria-live="polite">正在加载报名表…</p>
+  <button id="retry" type="button" hidden>重新加载</button>
+</main>
+<script>
+"use strict";
+const get = id => document.getElementById(id);
+const tableId = document.querySelector('meta[name="synapse-table"]').content;
+const showCount = document.querySelector('meta[name="synapse-public-count"]').content === "true";
+const api = /^[A-Za-z0-9_-]{1,128}$/.test(tableId) ? "/api/open/v1/tables/" + tableId : "";
+const fields = get("fields");
+const status = get("status");
+let pending;
+let submitting = false;
+let countRequest;
+
+async function request(path, options = {}) {
+  const response = await fetch(api + path, {
+    ...options, credentials: "omit", redirect: "error", cache: "no-store",
+    signal: options.signal ?? AbortSignal.timeout(10000),
+  });
+  if (!response.ok) throw new Error(String(response.status));
+  return response.json();
+}
+
+async function loadForm() {
+  get("retry").hidden = true;
+  if (!api) { status.textContent = "报名表暂未发布。"; return; }
+  try {
+    const schema = await request("/schema");
+    const name = schema.fields.find(field => field.key === "name");
+    if (name?.type !== "text" || !name.required) throw new Error("schema");
+    get("note-label").hidden = !schema.fields.some(field => field.key === "note" && field.type === "text");
+    fields.disabled = false;
+    status.textContent = "";
+  } catch {
+    status.textContent = "报名表暂不可用。";
+    get("retry").hidden = false;
+  }
+}
+
+async function refreshCount() {
+  if (!showCount || !api || document.hidden) return;
+  countRequest?.abort();
+  const current = new AbortController();
+  countRequest = current;
+  const timeout = setTimeout(() => current.abort(), 8000);
+  const label = get("public-count");
+  try {
+    const { count } = await request("/public-count", { signal: current.signal });
+    if (countRequest !== current) return;
+    if (!Number.isSafeInteger(count) || count < 0) throw new Error("count");
+    label.textContent = "已报名 " + count + " 份";
+    label.hidden = false;
+  } catch {
+    if (countRequest !== current) return;
+    label.hidden = true;
+    label.textContent = "";
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+get("signup").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (fields.disabled || submitting) return;
+  const name = get("name").value.trim();
+  if (!name) { status.textContent = "请填写姓名。"; get("name").focus(); return; }
+  const values = { name };
+  const note = get("note").value.trim();
+  if (!get("note-label").hidden && note) values.note = note;
+  const body = JSON.stringify({ values });
+  if (pending?.body !== body) {
+    const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
+    pending = { body, key };
+  }
+  submitting = true;
+  fields.disabled = true;
+  status.textContent = "正在提交…";
+  try {
+    const receipt = await request("/records", {
+      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": pending.key }, body,
+    });
+    if (typeof receipt.id !== "string" || !Number.isSafeInteger(receipt.version)) throw new Error("receipt");
+    pending = undefined;
+    get("signup").hidden = true;
+    status.textContent = "报名已提交。";
+    void refreshCount();
+  } catch {
+    status.textContent = "提交未确认，请保留内容并重试。";
+    fields.disabled = false;
+  } finally {
+    submitting = false;
+  }
+});
+
+get("retry").addEventListener("click", loadForm);
+void loadForm();
+if (showCount) {
+  void refreshCount();
+  setInterval(refreshCount, 15000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) void refreshCount(); });
+}
+</script>
+</body>
+</html>

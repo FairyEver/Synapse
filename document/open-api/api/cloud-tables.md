@@ -20,7 +20,9 @@
 
 以下开放 HTTP API 面向独立脚本、外部集成与公开网页。
 
-## 准备密钥与表
+制作报名、征集等网页时，先调用 `app_cloud_tables_publish_preflight_get`。它通过当前登录身份返回服务地址、可用功能以及本机、需外网验收或配置异常等状态，不会创建表或发布链接。按系统 Synapse Skill 中的中文报名页流程完成建表、云盘发布、匿名验收和原链接更新。只在外部网络实际可访问后交付为公网链接。
+
+## 为独立脚本和外部集成准备密钥与表
 
 1. 用户在 Console 的“设置 > API 密钥”创建个人密钥，选择任务需要的云表操作权限；将密钥交由自己的 Agent、脚本或后端私有运行环境保管。
 2. **让 Agent 从零建表**：授予 `tables.manage`，表资源选择“自己的全部表”（`all_owned`）。Agent 可直接调用建表接口并配置字段，无需先到 Console 手工建表。需要读写记录时，另选对应记录 scope。
@@ -96,6 +98,7 @@ Content-Type: application/json
 | `getCloudTable` | GET | `/tables/{id}` | 至少一项可用的表权限 |
 | `getCloudTableSchema` | GET | `/tables/{id}/schema` | 至少一项可用的表权限 |
 | `getCloudTableDailySummary` | GET | `/tables/{id}/daily-summary` | 表主已发布的今日汇总可匿名访问 |
+| `getCloudTablePublicCount` | GET | `/tables/{id}/public-count` | 表主已启用的记录总数可匿名访问 |
 | `updateCloudTable` | PATCH | `/tables/{id}` | 表主 + `tables.manage` |
 | `setCloudTablePermissions` | PATCH | `/tables/{id}/permissions` | 表主 + `tables.manage` |
 | `resolveCloudTableCollaborator` | POST | `/tables/{id}/collaborators/resolve` | 表主 + `tables.manage` |
@@ -539,6 +542,12 @@ if (!response.ok) throw new Error(result.error?.message ?? `HTTP ${response.stat
 
 替换 `TABLE_ID` 为实际 ID。同一次提交因网络失败重试时保留首次幂等键和请求体，不重新生成 UUID。匿名新增不意味着可读、可改或可删，四项操作分别开放。
 
+### 仅公开记录总数
+
+报名页可只展示已报名份数。表主更新权限时保留 `anonymous` 和 `members`，另传 `publicCount: true`。省略保留原设置，`false` 关闭。表主读取表详情时可看到已开启的标志。
+
+`GET /tables/{id}/public-count` 无需登录，仅返回 `{"count":12}`。总数包括未删除的全部记录，接口不接受查询参数。原始记录和通用查询、计数、存在判断仍需记录读取权限。匿名报名不能按人去重，数字表示提交份数。整表恢复时关闭公开计数。若携带 API 密钥，仍需 `tables.records.read` 及表资源授权。
+
 ### 公开今日汇总
 
 公开收集页可以展示今日分类榜单，征集表仍可仅开放 `anonymous.create`。表主在 `PATCH /tables/{id}/permissions` 的现有请求中加入 `dailySummary`：
@@ -698,6 +707,7 @@ Console 按读取权限导出 JSON／CSV，CSV 处理公式注入，单次导出
 | 403 | `INSUFFICIENT_SCOPE` | 检查 scope 和密钥表资源，建表还需自己的全部表 |
 | 403 | `FORBIDDEN` | 检查表授权、本人范围或是否由表主执行管理操作 |
 | 403 | `DAILY_SUMMARY_UNAVAILABLE` | 今日汇总未发布或依赖配置已失效 |
+| 403 | `PUBLIC_COUNT_UNAVAILABLE` | 表主尚未开启公开计数，或已关闭 |
 | 404 | `NOT_FOUND` | 不存在、已删除、过期或不在可见范围；停止猜测 ID |
 | 409 | `VERSION_CONFLICT` | 读最新版本并解决冲突 |
 | 409 | `NOT_DELETED` | 表当前未删除，无需恢复；权限和版本保持不变 |

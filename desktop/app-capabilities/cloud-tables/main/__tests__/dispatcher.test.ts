@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { createCloudTableCapabilityDispatcher } from "../dispatcher"
+import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../../../electron/generated/deployment-config.generated"
 
 const caller = { source: "mcp-http", actor: { kind: "agent", id: "agent-1" } } as const
 const build = () => {
@@ -22,6 +23,19 @@ const build = () => {
 }
 
 describe("cloud table MCP", () => {
+  it("checks the pinned account and reports a deployment mismatch without publishing", async () => {
+    const f = build()
+    const origin = new URL(SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG.publicAppUrl).origin
+    const accountId = "signed-in"
+    const local = { accountId, publicAppUrl: origin, audience: "local_only", capabilities: { anonymousCreate: true, publicCount: true } }
+    f.account.fetchAuthenticated.mockResolvedValueOnce(Response.json(local))
+    expect(await f.dispatch("app.cloud_tables.publish_preflight.get", {}, caller)).toEqual({ ok: true, data: local })
+    expect(f.account.fetchAuthenticated.mock.calls[0]?.slice(0, 2)).toEqual(["/console/tables/publish-preflight", expect.objectContaining({ method: "GET", body: undefined })])
+    f.account.fetchAuthenticated.mockResolvedValueOnce(Response.json({ ...local, publicAppUrl: "https://mismatch.example" }))
+    expect(await f.dispatch("app.cloud_tables.publish_preflight.get", {}, caller)).toMatchObject({ ok: true, data: { audience: "environment_mismatch", desktopPublicAppUrl: origin } })
+    f.account.fetchAuthenticated.mockRejectedValueOnce(Object.assign(new Error(), { status: 404 }))
+    expect(await f.dispatch("app.cloud_tables.publish_preflight.get", {}, caller)).toMatchObject({ ok: false, code: "CLOUD_TABLE_PREFLIGHT_UNAVAILABLE" })
+  })
   it("creates a table via the pinned desktop account and audits without record content", async () => {
     const f = build()
     f.account.fetchAuthenticated.mockResolvedValue(Response.json({ id: "table_1", schemaVersion: 1 }, { status: 201 }))

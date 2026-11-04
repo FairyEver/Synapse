@@ -28,6 +28,7 @@ export function cloudTableOpenApiPaths() {
     ["/{id}", "get", "getCloudTable", null, true], ["/{id}", "patch", "updateCloudTable", tableChangeSchema, false], ["/{id}", "delete", "deleteCloudTable", deleteRecordSchema, false],
     ["/{id}/schema", "get", "getCloudTableSchema", null, true],
     ["/{id}/daily-summary", "get", "getCloudTableDailySummary", null, true],
+    ["/{id}/public-count", "get", "getCloudTablePublicCount", null, true],
     ["/{id}/permissions", "patch", "setCloudTablePermissions", permissionsSchema, false], ["/{id}/restore", "post", "restoreCloudTable", null, false],
     ["/{id}/collaborators/resolve", "post", "resolveCloudTableCollaborator", resolveCollaboratorSchema, false],
     ["/{id}/logs", "get", "listCloudTableLogs", null, false, true],
@@ -44,7 +45,8 @@ export function cloudTableOpenApiPaths() {
     getCloudTable: ["读取表配置与当前权限", "需至少一项可用的表权限及相应scope。表主可见协作者与归档字段；其他用户仅见活动字段。匿名须有至少一项开放操作，仅返回id、schemaVersion、fields。"],
     getCloudTableSchema: ["发现字段与结构版本", "认证与返回规则同读取表配置。先读取实际字段key、类型、选项key与schemaVersion，不凭显示名构造调用。"],
     updateCloudTable: ["修改表名、配置字段与恢复归档字段", "仅表主，需tables.manage。version取最新schemaVersion；fields完整替换活动字段列表，省略已有key会归档该字段，不传fields则保持字段不变。30天内按原key恢复归档字段；非空数据不允许不兼容的类型或选项变更。"],
-    setCloudTablePermissions: ["配置匿名操作与协作者权限", "仅表主，需tables.manage。version取最新schemaVersion；anonymous与members完整替换原配置，省略操作关闭、遗漏协作者撤权。dailySummary显式配置公开今日汇总，省略保留，null关闭。用户须授权本次公开或调整。"],
+    setCloudTablePermissions: ["配置匿名操作与协作者权限", "仅表主，需tables.manage。version取最新schemaVersion；anonymous与members完整替换原配置，省略操作关闭、遗漏协作者撤权。dailySummary配置公开今日汇总，省略保留，null关闭；publicCount配置公开记录总数，省略保留，false关闭。用户须授权本次公开或调整。"],
+    getCloudTablePublicCount: ["读取已公开的记录总数", "仅在表主启用publicCount后可用。只返回未删除记录总数，不接受查询参数，不需要开放匿名记录读取。携带API密钥时需tables.records.read及表资源授权。"],
     getCloudTableDailySummary: ["读取已公开的今日分类汇总", "仅在表主发布后可用。以配置时区的今日和同表主的公开目录为准，按公开标题返回最多100组选择数与布尔真值数。未匹配到目录的回答合并到other。不接受日期或其他筛选条件，不返回原始记录。若携带API密钥，需tables.records.read及表资源授权。"],
     deleteCloudTable: ["删除表并移入30天回收站", "仅表主，需tables.manage及当前schemaVersion作为version；删除后普通读取不可见，30天内可恢复。"],
     listDeletedCloudTables: ["列出自己的表回收站", "需任一云表scope，按密钥资源范围仅列本人30天内删除的表；不包含协作表。使用nextCursor继续分页。"],
@@ -66,16 +68,17 @@ export function cloudTableOpenApiPaths() {
   const row = { type: "object", required: ["id", "values", "version", "creatorUserId", "createdAt", "updatedAt", "deletedAt"], properties: { id: { type: "string" }, values: { type: "object", additionalProperties: true }, version: { type: "integer", minimum: 1 }, creatorUserId: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" }, deletedAt: { type: ["string", "null"] } } }
   const outputField = schema(fieldSchema.extend({ archivedAt: z.string().nullable().optional() }))
   const outputMembers = schema(permissionsSchema.shape.members.element.extend({ handle: z.string().optional(), nickname: z.string().optional() }).array())
-  const table = { type: "object", additionalProperties: false, required: ["id", "ownerId", "viewerId", "name", "schemaVersion", "fields", "anonymous", "permissions", "deletedAt", "createdAt"], properties: { id: { type: "string" }, ownerId: { type: "string" }, viewerId: { type: "string" }, name: { type: "string" }, schemaVersion: { type: "integer" }, fields: { type: "array", items: outputField }, anonymous: (schema(permissionsSchema).properties as Record<string, unknown>).anonymous, dailySummary: schema(dailySummarySchema), permissions: { type: "object", additionalProperties: { type: "string", enum: ["none", "own", "all"] } }, members: outputMembers, deletedAt: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" } } }
+  const table = { type: "object", additionalProperties: false, required: ["id", "ownerId", "viewerId", "name", "schemaVersion", "fields", "anonymous", "permissions", "deletedAt", "createdAt"], properties: { id: { type: "string" }, ownerId: { type: "string" }, viewerId: { type: "string" }, name: { type: "string" }, schemaVersion: { type: "integer" }, fields: { type: "array", items: outputField }, anonymous: (schema(permissionsSchema).properties as Record<string, unknown>).anonymous, dailySummary: schema(dailySummarySchema), publicCount: { const: true }, permissions: { type: "object", additionalProperties: { type: "string", enum: ["none", "own", "all"] } }, members: outputMembers, deletedAt: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" } } }
   const confirmation = { type: "object", additionalProperties: false, required: ["id", "version"], properties: { id: { type: "string" }, version: { type: "integer" } } }
   const page = (item: unknown) => ({ type: "object", additionalProperties: false, required: ["data", "nextCursor"], properties: { data: { type: "array", items: item }, nextCursor: { type: ["string", "null"] } } })
-  const summary = { ...table, required: table.required.filter(key => !["fields", "anonymous"].includes(key)), properties: Object.fromEntries(Object.entries(table.properties).filter(([key]) => !["fields", "anonymous", "dailySummary", "members"].includes(key))) }
+  const summary = { ...table, required: table.required.filter(key => !["fields", "anonymous"].includes(key)), properties: Object.fromEntries(Object.entries(table.properties).filter(([key]) => !["fields", "anonymous", "dailySummary", "publicCount", "members"].includes(key))) }
   const details = { anyOf: [table, { type: "object", additionalProperties: false, required: ["id", "schemaVersion", "fields"], properties: { id: table.properties.id, schemaVersion: table.properties.schemaVersion, fields: table.properties.fields } }] }
   const tableConfirmation = { type: "object", additionalProperties: false, required: ["id", "schemaVersion"], properties: { id: { type: "string" }, schemaVersion: { type: "integer", minimum: 1 } } }
   const log = { type: "object", additionalProperties: false, required: ["id", "ownerId", "tableId", "actorId", "apiKeyId", "requestId", "operation", "status", "durationMs", "createdAt"], properties: {
     id: { type: "string" }, ownerId: { type: "string" }, tableId: { type: ["string", "null"] }, actorId: { type: ["string", "null"] }, apiKeyId: { type: ["string", "null"] },
     requestId: { type: "string" }, operation: { type: "string" }, status: { type: "integer" }, durationMs: { type: "integer", minimum: 0 }, createdAt: { type: "string", format: "date-time" },
   } }
+  const count = schema(z.strictObject({ count: z.int().nonnegative() }))
   const responseSchemas: Record<string, unknown> = {
     listCloudTables: page(summary), listDeletedCloudTables: page(summary), createCloudTable: tableConfirmation,
     getCloudTable: details, getCloudTableSchema: details, updateCloudTable: table,
@@ -85,7 +88,7 @@ export function cloudTableOpenApiPaths() {
     listCloudTableLogs: page(log), queryCloudTableRecords: page(row), listDeletedCloudTableRecords: page(row),
     getCloudTableRecord: row, createCloudTableRecord: confirmation, updateCloudTableRecord: confirmation, deleteCloudTableRecord: confirmation, restoreCloudTableRecord: confirmation,
     mutateCloudTableRecords: { type: "object", additionalProperties: false, required: ["data"], properties: { data: { type: "array", minItems: 1, maxItems: 100, items: confirmation } } },
-    countCloudTableRecords: { type: "object", additionalProperties: false, required: ["count"], properties: { count: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER } } },
+    countCloudTableRecords: count, getCloudTablePublicCount: count,
     existsCloudTableRecords: { type: "object", additionalProperties: false, required: ["exists"], properties: { exists: { type: "boolean" } } },
     getCloudTableDailySummary: schema(z.strictObject({
       date: z.iso.date(),

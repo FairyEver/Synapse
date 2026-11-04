@@ -15,6 +15,7 @@ import {
 import type { McpToolDefinition } from "../../../synapse-capabilities/shared/types"
 import { excludedSearchDomains, lexiconTokens } from "./synapse-tool-router-lexicon"
 import { mailSearchIntent } from "./synapse-tool-router-mail"
+import { cloudTableAppSearchIntent } from "./synapse-tool-router-cloud-app"
 
 export const SYNAPSE_TOOL_ROUTER_SERVER_NAME = "synapse-tool-router"
 export const SYNAPSE_TOOL_ROUTER_SEARCH_TOOL = `mcp__${SYNAPSE_TOOL_ROUTER_SERVER_NAME}__search`
@@ -339,6 +340,19 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
       tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({ name, domain: entryDomain, description, inputSchema })),
       domains: availableDomains,
       guidance: "普通邮件、邮箱、收件箱默认使用 mail；只有明确站内信或其带类型引用才使用 mail_internal。单一已配置邮箱直接使用，不要询问选择账号。先读邮箱 Skill，发现工具不等于授权执行。",
+    }
+  }
+  const cloudAppTools = cloudTableAppSearchIntent(query, input.domain?.trim())
+  if (cloudAppTools) {
+    const entries = cloudAppTools.flatMap(name => {
+      const entry = catalogByName.get(name)
+      return entry && (!input.domain?.trim() || matchesScope(entry)) ? [entry] : []
+    }).slice(0, limit)
+    return {
+      mode: "search",
+      tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({ name, domain: entryDomain, description, inputSchema })),
+      domains: availableDomains,
+      guidance: "先读 Synapse Skill 的 cloud-tables/index.md 中文报名页流程，并调用发布前检查。使用当前桌面登录账号。公开人数用独立计数权限，名单仍关闭匿名读取。更新用原云盘文件和分享链接。",
     }
   }
   const exact = catalogByName.get(query)

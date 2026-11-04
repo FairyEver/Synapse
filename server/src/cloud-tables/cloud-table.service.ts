@@ -10,6 +10,7 @@ import { CloudTableScheduler } from "./cloud-table-scheduler"
 import { authorize, assertJsonBudget, fail, normalizeValues, parseCloudTableInput as parse, validateFields } from "./cloud-table-validation"
 import { batchSchema, createTableSchema, dailySummarySchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, resolveCollaboratorSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
 import { readDailySummary, splitCloudTableAccess, validateDailySummary } from "./cloud-table-daily-summary"
+import { cloudTablePublicationStatus } from "./cloud-table-publication"
 import { filterPlan, queryPlan, stableJson } from "./cloud-table-query"
 import { OpenApiHttpError } from "../open-api/open-api.types"
 
@@ -20,6 +21,10 @@ type Table = CloudTable & { fields: { key: string; definition: Prisma.JsonValue;
 const retentionMs = 30 * 86400000
 const json = (value: unknown) => value as Prisma.InputJsonValue
 const selectRow = { id: true, tableId: true, values: true, creatorUserId: true, version: true, createdAt: true, updatedAt: true, deletedAt: true } as const
+function safeCount(count: bigint): number {
+  if (count > BigInt(Number.MAX_SAFE_INTEGER)) fail("COUNT_TOO_LARGE", "匹配数量超出安全整数范围，请缩小筛选范围。")
+  return Number(count)
+}
 
 @Injectable()
 export class CloudTableService {
@@ -96,9 +101,9 @@ export class CloudTableService {
     for (const a of ["read", "create", "update", "delete", "manage"] as const) {
       try { permissions[a] = scopes && !scopes.includes(a === "manage" ? "tables.manage" : `tables.records.${a}`) ? "none" : authorize(this.access(table), actor.userId ?? null, a) } catch { permissions[a] = "none" }
     }
-    const { anonymous, dailySummary } = splitCloudTableAccess(table.anonymous)
+    const { anonymous, dailySummary, publicCount } = splitCloudTableAccess(table.anonymous)
     const settings = actor.userId === table.ownerId ? dailySummarySchema.safeParse(dailySummary).data : undefined
-    return { id: table.id, ownerId: table.ownerId, ...(actor.userId ? { viewerId: actor.userId } : {}), name: table.name, schemaVersion: table.schemaVersion, fields: this.fields(table), anonymous, ...(settings ? { dailySummary: settings } : {}), ...(actor.userId === table.ownerId ? { members: table.members as unknown as CloudMember[] } : {}), deletedAt: table.deletedAt?.toISOString() ?? null, createdAt: table.createdAt.toISOString(), permissions }
+    return { id: table.id, ownerId: table.ownerId, ...(actor.userId ? { viewerId: actor.userId } : {}), name: table.name, schemaVersion: table.schemaVersion, fields: this.fields(table), anonymous, ...(settings ? { dailySummary: settings } : {}), ...(actor.userId === table.ownerId ? { members: table.members as unknown as CloudMember[], ...(publicCount ? { publicCount: true as const } : {}) } : {}), deletedAt: table.deletedAt?.toISOString() ?? null, createdAt: table.createdAt.toISOString(), permissions }
   }
   private async perform(tx: Tx, actor: CloudActor, tableId: string | null, op: string, input: unknown, ctx: CloudContext): Promise<unknown> {
     const key = await this.identity(tx, actor)
@@ -107,6 +112,10 @@ export class CloudTableService {
     }
     if (!tableId) {
       if (!actor.userId) fail("INVALID_API_KEY", "需要有效身份。", 401)
+      if (op === "publish.preflight") {
+        if (!actor.console) fail("FORBIDDEN", "发布前检查仅供登录后的账号入口使用。", 403)
+        return { ...cloudTablePublicationStatus(process.env.APP_PUBLIC_URL), accountId: actor.userId, capabilities: { anonymousCreate: true, publicCount: true } }
+      }
       if (op === "table.create") {
         scope("manage")
         if (key && key.tableAccessMode !== "all_owned") fail("INSUFFICIENT_SCOPE", "建表需要自己的全部表管理权限。", 403)
@@ -134,7 +143,7 @@ export class CloudTableService {
         OR: op === "table.trash" ? [{ ownerId: actor.userId }] : [{ ownerId: actor.userId }, ...memberAccess],
         ...(key ? key.tableAccessMode === "all_owned" ? { ownerId: actor.userId } : { id: { ...(cursor ? { gt: cursor } : {}), in: key.tableIds } } : {}),
       }, orderBy: { id: "asc" }, take: 51 })
-      return { data: tables.slice(0, 50).map(t => { const { fields: _fields, members: _members, anonymous: _anonymous, dailySummary: _dailySummary, ...summary } = this.dto({ ...t, fields: [] }, actor, key?.scopes); return summary }), nextCursor: tables.length > 50 ? tables[49]!.id : null }
+      return { data: tables.slice(0, 50).map(t => { const { fields: _fields, members: _members, anonymous: _anonymous, dailySummary: _dailySummary, publicCount: _publicCount, ...summary } = this.dto({ ...t, fields: [] }, actor, key?.scopes); return summary }), nextCursor: tables.length > 50 ? tables[49]!.id : null }
     }
     const exclusive = ["table.update", "permissions", "table.delete", "table.restore"].includes(op)
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "CloudTable" WHERE "id" = ${tableId} ${Prisma.raw(exclusive ? "FOR UPDATE" : "FOR SHARE")}`)
@@ -148,6 +157,13 @@ export class CloudTableService {
       scope("read")
       if (Object.keys(input as object).length) fail("INVALID_REQUEST", "今日汇总不接受查询参数。")
       return readDailySummary(tx, table)
+    }
+    if (op === "public.count") {
+      scope("read")
+      if (Object.keys(input as object).length) fail("INVALID_REQUEST", "公开计数不接受查询参数。")
+      if (!splitCloudTableAccess(table.anonymous).publicCount) fail("PUBLIC_COUNT_UNAVAILABLE", "该表未开放总数。", 403)
+      const [result] = await tx.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS "count" FROM "CloudTableRecord" WHERE "tableId" = ${tableId} AND "deletedAt" IS NULL`
+      return { count: safeCount(result!.count) }
     }
     const permission = (action: CloudAction | "manage") => { scope(action); return authorize(this.access(table), actor.userId ?? null, action) }
     const describing = op === "table.get" || op === "schema"
@@ -230,8 +246,10 @@ export class CloudTableService {
       if (users.length !== change.members.length) fail("INVALID_MEMBERS", "协作者账号不存在或已停用。")
       const members = change.members.map(m => { const user = users.find(u => u.id === m.userId)!; return { ...m, handle: user.handle, nickname: user.nickname } })
       if (change.dailySummary) await validateDailySummary(tx, table, change.dailySummary)
-      const dailySummary = change.dailySummary === undefined ? splitCloudTableAccess(table.anonymous).dailySummary : change.dailySummary
-      await tx.cloudTable.update({ where: { id: tableId }, data: { anonymous: json({ ...change.anonymous, ...(dailySummary ? { dailySummary } : {}) }), members, schemaVersion: { increment: 1 } } })
+      const access = splitCloudTableAccess(table.anonymous)
+      const dailySummary = change.dailySummary === undefined ? access.dailySummary : change.dailySummary
+      const publicCount = change.publicCount ?? access.publicCount
+      await tx.cloudTable.update({ where: { id: tableId }, data: { anonymous: json({ ...change.anonymous, ...(dailySummary ? { dailySummary } : {}), ...(publicCount ? { publicCount: true } : {}) }), members, schemaVersion: { increment: 1 } } })
       return { schemaVersion: table.schemaVersion + 1 }
     }
     if (op === "table.delete" || op === "table.restore") {
@@ -264,8 +282,7 @@ export class CloudTableService {
           return { exists: result!.exists }
         }
         const [result] = await tx.$queryRaw<{ count: bigint }[]>`SELECT COUNT(*) AS "count" FROM "CloudTableRecord" r WHERE ${visible} AND ${filter}`
-        if (result!.count > BigInt(Number.MAX_SAFE_INTEGER)) fail("COUNT_TOO_LARGE", "匹配数量超出安全整数范围，请缩小筛选范围。")
-        return { count: Number(result!.count) }
+        return { count: safeCount(result!.count) }
       }
       const query = parse(querySchema, input)
       const plan = queryPlan(tableId, fields, query, `${actor.userId ?? "anonymous"}:${actor.apiKeyId ?? "console"}`, table.schemaVersion, this.cursorSecret)

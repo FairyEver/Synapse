@@ -275,6 +275,28 @@ describe("synapse tool router search", () => {
     expect(missing.join("\n")).toBe("")
   })
 
+  it("discovers a cloud form and its in-place update from plain-language requests", async () => {
+    const create = ["做个活动报名表，发给大家填", "收集大家的意见，给我分享链接", "做个网页让大家填写午餐建议，只有我能看原始回答", "Create a public registration form"]
+    for (const query of create) {
+      const result = await searchSynapseTools({ query })
+      expect(result.tools.map(tool => tool.name), query).toEqual([
+        "app_cloud_tables_publish_preflight_get", "app_cloud_tables_table_create", "app_cloud_tables_permissions_update", "app_drive_file_upload", "app_drive_share_create",
+      ])
+    }
+    const query = "在原链接加一个报名人数，别公开名单"
+    const update = await searchSynapseTools({ query })
+    expect(update.tools.map(tool => tool.name)).toEqual([
+      "app_cloud_tables_publish_preflight_get", "app_cloud_tables_table_get", "app_cloud_tables_permissions_update", "app_drive_link_resolve", "app_drive_file_upload",
+    ])
+    expect(update.mode === "search" && update.guidance).toContain("名单仍关闭匿名读取")
+    const scoped = await searchSynapseTools({ query, domain: "cloud_tables" })
+    expect(scoped.tools).toHaveLength(3)
+    expect(scoped.tools.every(tool => tool.domain === "cloud_tables")).toBe(true)
+    for (const query of ["用飞书做个活动报名表", "查询本地数据库的报名人数"]) {
+      expect((await searchSynapseTools({ query })).tools[0]?.name).not.toBe("app_cloud_tables_publish_preflight_get")
+    }
+  })
+
   it("reaches every tool through a chinese query built from its own name segments", async () => {
     // 段 -> 中文词的反查表，取表中第一条命中的
     const chineseFor = new Map<string, string>()

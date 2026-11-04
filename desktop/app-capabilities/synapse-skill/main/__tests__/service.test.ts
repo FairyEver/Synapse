@@ -241,6 +241,7 @@ describe("SynapseSkillService", () => {
     expect(source.mainContent).toMatch(/^---\nname: synapse-skill\ndescription: .+\n---\n/)
     expect(detail.content).not.toContain("name: synapse-skill")
     expect(detail.content).toContain("database/index.md")
+    expect(detail.content).toContain("cloud-tables/public-apps.md")
     expect(detail.content).toContain("workflow/index.md")
     expect(detail.content).toContain("wecom/wecomcli-shared/SKILL.md")
     expect(detail.content).toContain("case-insensitive) as a standalone word")
@@ -258,6 +259,8 @@ describe("SynapseSkillService", () => {
     expect(attachmentNames.filter((name) => name.startsWith("wecom/"))).toHaveLength(4)
     expect(attachmentNames).toEqual(expect.arrayContaining([
       "app/api-reference.md",
+      "cloud-tables/public-apps.md",
+      "cloud-tables/public-signup.html",
       "database/index.md",
       "drive/index.md",
       "skill-authoring/index.md",

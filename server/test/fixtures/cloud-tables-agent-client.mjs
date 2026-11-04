@@ -30,7 +30,7 @@ const contract = await fetch(contractUrl).then(r => { assert.equal(r.status, 200
 const apiPrefix = contract.servers[0].url
 assert.equal(apiPrefix, "/api/open/v1")
 const operations = new Map(Object.entries(contract.paths).filter(([p]) => p === "/tables" || p.startsWith("/tables/")).flatMap(([path, methods]) => Object.entries(methods).map(([method, operation]) => [operation.operationId, { path, method: method.toUpperCase(), ...operation }])))
-assert.equal(operations.size, 22)
+assert.equal(operations.size, 23)
 const trace = [], successful = new Set()
 const keys = { owner: process.env.SY_API_KEY, collaborator: process.env.SY_COLLAB_API_KEY, anonymous: undefined }
 assert(keys.owner && keys.collaborator)
@@ -121,15 +121,16 @@ try {
   const catalog = await call("createCloudTable", { body: { name: "公开目录", fields: [fields[0]] } })
   await call("setCloudTablePermissions", { params: { id: catalog.id }, body: { version: 1, anonymous: { read: true }, members: [] } })
   const dailySummary = { dateField: "date", selectionField: "note", flagField: "flag", catalogTableId: catalog.id, catalogLabelField: "name", timeZone: "Asia/Shanghai" }
-  await call("setCloudTablePermissions", { params, body: { version: schema.schemaVersion, anonymous: { create: true }, members, dailySummary } })
+  await call("setCloudTablePermissions", { params, body: { version: schema.schemaVersion, anonymous: { create: true }, members, dailySummary, publicCount: true } })
   const daily = await call("getCloudTableDailySummary", { params, identity: "anonymous" })
   assert.deepEqual(daily.other, { selections: 0, flagged: 0 })
   const anon = await call("createCloudTableRecord", { params, body: { values: { name: "匿名报名" } }, identity: "anonymous" })
   assert.equal((await call("getCloudTableRecord", { params: { ...params, recordId: anon.id } })).creatorUserId, null)
+  assert.deepEqual(await call("getCloudTablePublicCount", { params, identity: "anonymous" }), { count: 4 })
   await call("queryCloudTableRecords", { params, body: {}, identity: "anonymous", status: 403, code: "FORBIDDEN" })
   schema = await call("getCloudTable", { params })
   assert.equal(schema.members[0].userId, member.id)
-  await call("setCloudTablePermissions", { params, body: { version: schema.schemaVersion, anonymous: {}, members, dailySummary: null } })
+  await call("setCloudTablePermissions", { params, body: { version: schema.schemaVersion, anonymous: {}, members, dailySummary: null, publicCount: false } })
 
   record = await call("getCloudTableRecord", { params: recordParams })
   await call("deleteCloudTableRecord", { params: recordParams, body: { version: record.version } })

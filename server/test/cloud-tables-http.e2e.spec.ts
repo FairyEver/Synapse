@@ -103,7 +103,7 @@ describe("cloud table complete real HTTP contract", () => {
     process.stdout.write(`Cloud table HTTP evidence: ${JSON.stringify({ httpRequests, successfulRoutes: Object.fromEntries([...covered].map(([p, routes]) => [p, [...routes].sort()])) })}\n`)
   })
 
-  it.each(["open", "console"])("executes all 22 %s routes with persisted round trips", async mode => {
+  it.each(["open", "console"])("executes all 23 %s routes with persisted round trips", async mode => {
     const root = mode === "open" ? "/api/open/v1/tables" : "/api/console/tables", auth = mode === "open" ? ownerKey : ownerCookie
     const created = await call("POST", root, auth, { name: `完整流程-${mode}`, fields }, 201, { "Idempotency-Key": randomUUID() })
     const path = `${root}/${created.id}`
@@ -114,7 +114,7 @@ describe("cloud table complete real HTTP contract", () => {
     const catalog = await call("POST", root, auth, { name: "公开目录", fields: [fields[0]] })
     await call("PATCH", `${root}/${catalog.id}/permissions`, auth, { version: 1, anonymous: { read: true }, members: [] })
     const dailySummary = { dateField: "date", selectionField: "text", flagField: "boolean", catalogTableId: catalog.id, catalogLabelField: "text", timeZone: "Asia/Shanghai" }
-    await call("PATCH", `${path}/permissions`, auth, { version: 1, anonymous: { create: true }, members: [], dailySummary })
+    await call("PATCH", `${path}/permissions`, auth, { version: 1, anonymous: { create: true }, members: [], dailySummary, publicCount: true })
     expect(await call("GET", `${path}/daily-summary`, auth)).toMatchObject({ data: [], other: { selections: 0, flagged: 0 } })
     const changedFields = fields.map(f => f.key === "integer" ? { ...f, name: "改名后的整数", defaultValue: 9 } : f)
     const changed = await call("PATCH", path, auth, { version: 2, name: "重命名", fields: changedFields })
@@ -124,6 +124,7 @@ describe("cloud table complete real HTTP contract", () => {
     expect(Object.keys(record).sort()).toEqual(["id", "version"])
     const row = `${path}/records/${record.id}`
     expect(await call("GET", row, auth)).toMatchObject({ creatorUserId: owner, values: { ...values, datetime: "2026-11-01T00:00:00.000Z" }, version: 1 })
+    expect(await call("GET", `${path}/public-count`, auth)).toEqual({ count: 1 })
     const defaulted = await call("POST", `${path}/records`, auth, { values: { text: "默认值" } })
     expect((await call("GET", `${path}/records/${defaulted.id}`, auth)).values.integer).toBe(9)
     await call("PATCH", row, auth, { version: 1, values: { text: "更新" } })
@@ -158,7 +159,8 @@ describe("cloud table complete real HTTP contract", () => {
     await denied("GET", `${path}/daily-summary`, auth, undefined, 403, "DAILY_SUMMARY_UNAVAILABLE")
     expect((await call("GET", row, auth)).values.text).toBe("更新")
     const expected = Object.entries(cloudTableOpenApiPaths()).flatMap(([p, methods]) => Object.keys(methods).map(m => `${m} ${p}`)).sort()
-    expect(expected).toHaveLength(22)
+    await denied("GET", `${path}/public-count`, auth, undefined, 403, "PUBLIC_COUNT_UNAVAILABLE")
+    expect(expected).toHaveLength(23)
     expect([...covered.get(mode === "open" ? "/api/open/v1" : "/api/console")!].sort()).toEqual(expected)
   })
 
@@ -306,6 +308,11 @@ describe("cloud table complete real HTTP contract", () => {
       return data
     }
 
+    const preflight = await invoke(ownerMcp, "publish_preflight_get", {})
+    expect(preflight).toMatchObject({ accountId: owner, capabilities: { anonymousCreate: true, publicCount: true } })
+    expect((await fetch(base + "/api/console/tables/publish-preflight")).status).toBe(401)
+    await denied("GET", "/api/open/v1/tables/publish-preflight", ownerKey, undefined, 403, "FORBIDDEN")
+
     const created = await invoke(ownerMcp, "table_create", {
       name: "中午吃什么",
       fields: [
@@ -380,6 +387,29 @@ describe("cloud table complete real HTTP contract", () => {
     await denied("GET", summaryPath, {}, undefined, 403, "DAILY_SUMMARY_UNAVAILABLE")
     await invoke(ownerMcp, "permissions_update", { tableId, version: 3, anonymous: { create: true }, members: [], dailySummary: null })
     expect(await invoke(ownerMcp, "table_get", { tableId })).not.toHaveProperty("dailySummary")
+  })
+
+  it("publishes only the count, preserves it across ordinary ACL edits, and supports revocation", async () => {
+    const consoleRoot = "/api/console/tables"
+    const table = await call("POST", consoleRoot, ownerCookie, { name: "活动报名", fields: [{ key: "name", name: "姓名", type: "text", required: true }] })
+    const ownerPath = `${consoleRoot}/${table.id}`, publicPath = `/api/open/v1/tables/${table.id}`
+    const perms = { anonymous: { create: true }, members: [] }
+    await call("PATCH", `${ownerPath}/permissions`, ownerCookie, { ...perms, version: 1 })
+    const entry = await call("POST", `${publicPath}/records`, {}, { values: { name: "私有名单" } })
+    await denied("GET", `${publicPath}/public-count`, {}, undefined, 403, "PUBLIC_COUNT_UNAVAILABLE")
+    await denied("PATCH", `${ownerPath}/permissions`, memberCookie, { ...perms, version: 2, publicCount: true }, 403, "FORBIDDEN")
+    await call("PATCH", `${ownerPath}/permissions`, ownerCookie, { ...perms, version: 2, publicCount: true })
+    expect(await call("GET", `${publicPath}/public-count`)).toEqual({ count: 1 })
+    await denied("GET", `${publicPath}/public-count?field=name`, {}, undefined, 400, "INVALID_REQUEST")
+    for (const read of ["query", "count", "exists"]) await denied("POST", `${publicPath}/records/${read}`, {}, {}, 403, "FORBIDDEN")
+    await denied("GET", `${publicPath}/records/${entry.id}`, {}, undefined, 403, "FORBIDDEN")
+    await denied("GET", `${ownerPath}/records/${entry.id}`, memberCookie, undefined, 403, "FORBIDDEN")
+    expect(await call("GET", `${ownerPath}/records/${entry.id}`, ownerCookie)).toMatchObject({ values: { name: "私有名单" } })
+    await call("DELETE", `${ownerPath}/records/${entry.id}`, ownerCookie, { version: 1 })
+    await call("PATCH", `${ownerPath}/permissions`, ownerCookie, { ...perms, version: 3 })
+    expect(await call("GET", `${publicPath}/public-count`)).toEqual({ count: 0 })
+    await call("PATCH", `${ownerPath}/permissions`, ownerCookie, { ...perms, version: 4, publicCount: false })
+    await denied("GET", `${publicPath}/public-count`, {}, undefined, 403, "PUBLIC_COUNT_UNAVAILABLE")
   })
 
   it("opens anonymous actions independently and ignores a valid owner Cookie on writes", async () => {

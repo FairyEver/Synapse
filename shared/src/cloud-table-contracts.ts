@@ -32,6 +32,7 @@ export const permissionsSchema = z.object({
   anonymous: z.object({ read: z.boolean(), create: z.boolean(), update: z.boolean(), delete: z.boolean() }).partial().strict(),
   members: z.array(z.object({ userId: z.string().min(1).max(128), permissions: z.object({ read: z.enum(["none", "own", "all"]), create: z.enum(["none", "all"]), update: z.enum(["none", "own", "all"]), delete: z.enum(["none", "own", "all"]) }).partial().strict() }).strict()).max(100),
   dailySummary: dailySummarySchema.nullable().optional().describe("Explicitly publish today's catalog counts; omit to preserve the setting, or pass null to disable. Does not grant record read access."),
+  publicCount: z.boolean().optional().describe("Publish the total active record count without filters or record access. Omit to preserve the setting; false disables it."),
 }).strict()
 export const recordCreateSchema = z.object({ values: z.record(z.string(), cloudJsonValue) }).strict()
 export const recordUpdateSchema = recordCreateSchema.extend({ version: versionSchema }).strict()
