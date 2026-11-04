@@ -124,6 +124,7 @@ export const skillHubReceiptSchema = skillHubReceiptInputSchema.extend({
 }).refine((receipt) => receipt.resultAccessible
   ? receipt.status === "committed" && receipt.result !== undefined
   : receipt.result === undefined)
+export const skillHubWriteReplaySchema = z.strictObject({ replayed: z.literal(true), receipt: skillHubReceiptSchema })
 export const skillHubWriteResultSchema = z.strictObject({ skill: skillHubDetailSchema, outcome: writeOutcome })
 export const skillHubDeleteResultSchema = z.strictObject({ id, revision: positive, deletedAt: utc, outcome: z.literal("deleted") })
 export const skillHubAdminListInputSchema = z.strictObject({ ...paging, teamId: id, deleted: z.boolean().optional() })
@@ -188,6 +189,7 @@ export type SkillHubWriteAction = z.infer<typeof skillHubWriteActionSchema>
 export type SkillHubReceiptInput = z.infer<typeof skillHubReceiptInputSchema>
 export type SkillHubReceiptResult = z.infer<typeof skillHubReceiptResultSchema>
 export type SkillHubReceipt = z.infer<typeof skillHubReceiptSchema>
+export type SkillHubWriteReplay = z.infer<typeof skillHubWriteReplaySchema>
 export type SkillHubWriteResult = z.infer<typeof skillHubWriteResultSchema>
 export type SkillHubDeleteResult = z.infer<typeof skillHubDeleteResultSchema>
 export type SkillHubAdminListInput = z.infer<typeof skillHubAdminListInputSchema>

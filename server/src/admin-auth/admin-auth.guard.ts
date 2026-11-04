@@ -3,6 +3,7 @@ import type { Request } from "express"
 import { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { recordAuthGuardFailure } from "../common/auth-guard-audit"
+import { hubLogPath } from "../skill-hub/skill-hub-log"
 import { adminSessionCookieName } from "./admin-auth.controller"
 import { AdminAuthService } from "./admin-auth.service"
 import { assertTrustedAdminOrigin } from "./admin-origin"
@@ -38,7 +39,7 @@ export class AdminAuthGuard implements CanActivate {
         auditLog: this.auditLog,
         action: "admin.auth.verify.failed",
         logger: this.logger,
-        request,
+        request: { ip: request.ip, method: request.method, path: hubLogPath(request.path) ?? request.path },
         tokenPresent: typeof token === "string",
       })
       throw new UnauthorizedException("管理会话无效或已过期。")

@@ -9,6 +9,7 @@ import type { Request } from "express"
 import { PinoLogger } from "nestjs-pino"
 import { catchError, from, mergeMap, Observable, throwError } from "rxjs"
 import type { AdminRequest } from "../admin-auth/admin-auth.guard"
+import { hubLogPath } from "../skill-hub/skill-hub-log"
 import { formatAuditError } from "./audit-error"
 import { AuditLogService } from "./audit-log.service"
 
@@ -115,7 +116,7 @@ function redactSensitiveBody(value: unknown): unknown {
 }
 
 function resolveAuditPolicy(method: string, path: string, hasAuthenticatedAdmin: boolean): AuditPolicy {
-  if (PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN.test(path)) return noAudit
+  if (PROBLEM_FEEDBACK_ADMIN_PATH_PATTERN.test(path) || hubLogPath(path)) return noAudit
   if (path.startsWith("/api/admin/backup")) {
     const shouldAudit = shouldAuditBackupRequest(method, path)
     return { success: shouldAudit, failure: shouldAudit }
