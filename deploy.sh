@@ -69,13 +69,23 @@ esac
 
 docker compose --env-file .env config >/dev/null
 
-for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE PDF_RENDERER_URL PDF_RENDERER_INTERNAL_SECRET; do
+for key in USER_ACCESS_JWT_SECRET USER_ACCESS_TOKEN_MINUTES USER_REFRESH_TOKEN_DAYS APP_PUBLIC_URL DATABASE_POOL_SIZE PDF_RENDERER_URL PDF_RENDERER_INTERNAL_SECRET SKILL_HUB_COS_SECRET_ID SKILL_HUB_COS_SECRET_KEY SKILL_HUB_COS_BUCKET SKILL_HUB_COS_REGION; do
   value=$(read_env_value "$key")
   if [ -z "$value" ]; then
     echo "$key missing"
     exit 1
   fi
   printf "%s ok\n" "$key"
+done
+
+# Check bucket separation before building or stopping the running API.
+hub_bucket=$(read_env_value SKILL_HUB_COS_BUCKET | tr '[:upper:]' '[:lower:]')
+for domain in DRIVE PLATFORM_MEDIA MAIL BACKUP SKILL_REPOSITORY; do
+  other_bucket=$(read_env_value "${domain}_COS_BUCKET" | tr '[:upper:]' '[:lower:]')
+  if [ "$hub_bucket" = "$other_bucket" ]; then
+    echo "SKILL_HUB_COS_BUCKET must be separate from ${domain}_COS_BUCKET"
+    exit 1
+  fi
 done
 
 desktop_update_intent_secret=$(read_env_value DESKTOP_UPDATE_INTENT_SECRET)

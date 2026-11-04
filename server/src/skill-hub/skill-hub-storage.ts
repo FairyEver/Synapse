@@ -74,7 +74,7 @@ class CosSkillHubStorage implements SkillHubStoragePort {
     const checksum = createHash("sha256").update(bytes).digest("hex")
     await this.cos.putObject({
       ...this.args(key), Body: bytes, ContentType: contentType, ContentLength: bytes.length,
-      ACL: "private", "x-cos-meta-sha256": checksum,
+      ACL: "private", "x-cos-meta-sha256": checksum, Headers: { "x-cos-forbid-overwrite": "true" },
     })
   }
 

@@ -21,10 +21,11 @@ export interface BackupPackageManifestInput {
   readonly platformMediaBucket?: string
   readonly platformMediaRegion?: string
   readonly contents: BackupContentManifestItem[]
+  readonly skillHubObjectsIncluded?: true
 }
 
 export interface BackupPackageManifest {
-  readonly schemaVersion: 1
+  readonly schemaVersion: 1 | 2
   readonly createdAt: string
   readonly app: {
     readonly package: "@synapse/server"
@@ -55,11 +56,13 @@ export interface BackupPackageManifest {
   readonly secretsIncluded: false
   readonly driveObjectsIncluded: false
   readonly platformMediaObjectsIncluded: false
+  readonly skillHubObjectsIncluded?: true
 }
 
 export interface RestoreMarkdownInput {
   readonly createdAt: string
   readonly filename: string
+  readonly skillHubObjectsIncluded?: true
 }
 
 const secretLikePattern = /(?:secret|token|password|authorization|bearer|api[_-]?key)[\w-]*\s*[:=]/iu
@@ -71,7 +74,7 @@ export async function writeJsonFile(filePath: string, value: unknown): Promise<v
 
 export function createBackupManifest(input: BackupPackageManifestInput): BackupPackageManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: input.skillHubObjectsIncluded ? 2 : 1,
     createdAt: input.createdAt,
     app: {
       package: "@synapse/server",
@@ -110,6 +113,7 @@ export function createBackupManifest(input: BackupPackageManifestInput): BackupP
     secretsIncluded: false,
     driveObjectsIncluded: false,
     platformMediaObjectsIncluded: false,
+    ...(input.skillHubObjectsIncluded ? { skillHubObjectsIncluded: true as const } : {}),
   }
 }
 
@@ -154,6 +158,9 @@ export function createRestoreMarkdown(input: RestoreMarkdownInput): string {
     "- `postgres-globals.sql`：PostgreSQL 角色和全局权限。",
     "- `drive-cos-manifest.json`：Drive COS 对象清单，不包含文件内容。",
     "- `platform-media-cos-manifest.json` 包含平台媒体的文档图片和待办图片对象清单，图片字节存放于对象存储。",
+    ...(input.skillHubObjectsIncluded ? [
+      "- `skill-hub-objects.json` 和 `skill-hub-objects/`：Skill Hub 对象清单及实际文件，包含已软删除资产和内部版本。",
+    ] : []),
     "- `backup-manifest.json`：备份元信息和校验和。",
     "",
     "## 恢复步骤",
@@ -163,8 +170,14 @@ export function createRestoreMarkdown(input: RestoreMarkdownInput): string {
     "3. 启动 PostgreSQL。",
     "4. 按需导入 `postgres-globals.sql`。",
     "5. 解压并导入 `database.sql.gz`。",
-    "6. 启动 Synapse server。",
-    "7. 对照 Drive 与 Platform Media COS 清单抽查对象是否仍可访问。",
+    ...(input.skillHubObjectsIncluded ? [
+      "6. 使用 `server/scripts/restore-skill-hub-objects.cjs --dry-run <解压目录>` 校验 Skill Hub 文件，配置目标 Hub 私有桶后执行 `--execute <解压目录>`。恢复成功前不要启动 Synapse server。",
+      "7. 启动 Synapse server。",
+      "8. 对照 Drive 与 Platform Media COS 清单抽查对象是否仍可访问。",
+    ] : [
+      "6. 启动 Synapse server。",
+      "7. 对照 Drive 与 Platform Media COS 清单抽查对象是否仍可访问。",
+    ]),
     "",
   ].join("\n")
 }

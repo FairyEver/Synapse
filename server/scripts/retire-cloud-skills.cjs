@@ -23,7 +23,7 @@ async function retireCloudSkills({ db, env, createStorage, rehearsal = false, re
   if (!settings.some(Boolean) && !references.rows[0].required) return { skipped: true, deleted: 0 }
   if (!settings.every(Boolean)) throw new Error("Retiring cloud Skills requires the complete legacy SKILL_REPOSITORY_COS_* configuration.")
   const [secretId, secretKey, bucket, region] = settings
-  if (["DRIVE", "PLATFORM_MEDIA", "BACKUP", "MAIL"].some((domain) => env[`${domain}_COS_BUCKET`] === bucket)) {
+  if (["DRIVE", "PLATFORM_MEDIA", "BACKUP", "MAIL", "SKILL_HUB"].some((domain) => env[`${domain}_COS_BUCKET`]?.trim().toLowerCase() === bucket.trim().toLowerCase())) {
     throw new Error("Refusing cloud Skill cleanup in a shared storage bucket.")
   }
   const storage = createStorage({ SecretId: secretId, SecretKey: secretKey, Timeout: 30_000 })

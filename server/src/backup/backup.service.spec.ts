@@ -673,6 +673,50 @@ describe("BackupService", () => {
     }
   })
 
+  it("captures the database and Hub object bytes under one retention fence", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "backup-hub-tar-"))
+    const copiedTar = path.join(root, "copy.tar")
+    const putObject = vi.fn((options, callback) => {
+      const body = options.Body as NodeJS.ReadableStream
+      body.pipe(fs.createWriteStream(copiedTar)).on("finish", () => callback(null))
+    })
+    const service = createBackupService({ putObject }, { error: vi.fn(), info: vi.fn(), warn: vi.fn() })
+    let held = false
+    const bytes = Buffer.from("retained Hub object")
+    Object.assign(service, {
+      skillHub: {
+        async withObjectRetention(job: (signal: AbortSignal) => Promise<void>) {
+          held = true
+          try { await job(new AbortController().signal) } finally { held = false }
+        },
+        async exportObjects(directory: string) {
+          expect(held).toBe(true)
+          expect(await readFile(path.join(directory, "database.sql.gz"), "utf8")).toBe("dump")
+          fs.mkdirSync(path.join(directory, "skill-hub-objects", "fixture"), { recursive: true })
+          await writeFile(path.join(directory, "skill-hub-objects", "fixture", "main"), bytes)
+          await writeFile(path.join(directory, "skill-hub-objects.json"), '{"schemaVersion":1,"objects":[]}')
+        },
+      },
+    })
+    vi.spyOn(service as unknown as { dumpDatabase(): Promise<string> }, "dumpDatabase").mockImplementation(async () => {
+      expect(held).toBe(true)
+      const file = path.join(root, "database.sql.gz")
+      await writeFile(file, "dump")
+      return file
+    })
+    try {
+      await expect(service.performBackup()).resolves.toMatchObject({ status: "success" })
+      expect(held).toBe(false)
+      await tar.extract({ file: copiedTar, cwd: root })
+      expect(await readFile(path.join(root, "skill-hub-objects", "fixture", "main"))).toEqual(bytes)
+      const manifest = JSON.parse(await readFile(path.join(root, "backup-manifest.json"), "utf8"))
+      expect(manifest).toMatchObject({ schemaVersion: 2, skillHubObjectsIncluded: true, driveObjectsIncluded: false, platformMediaObjectsIncluded: false })
+      expect(manifest.contents).toEqual(expect.arrayContaining([expect.objectContaining({ path: "skill-hub-objects.json" })]))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it("fails the backup when postgres globals export fails", async () => {
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const service = createBackupService({

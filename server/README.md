@@ -591,3 +591,10 @@ dashboard/            # React + Vite + HeroUI 网页控制台，生产构建后�
 `skill-hub/` 前缀，与旧 Skill Repository、Drive、平台媒体、站内信和备份桶分离。
 非生产环境可使用独立的 `SYNAPSE_SKILL_HUB_LOCAL_ROOT`。上传使用二进制请求体，
 只有上传路由支持至多 50 MiB；未绑定上传在 24 小时后进入回收。
+
+备份归档 v2 中的 `skill-hub-objects.json` 与 `skill-hub-objects/` 一同保存受管对象
+的校验和和字节。恢复前在已构建的服务端运行
+`node server/scripts/restore-skill-hub-objects.cjs --dry-run <解压目录>`。
+确认数据库与归档来自同一份备份，目标服务停止、目标私有桶仅供恢复使用后，用
+`--execute <解压目录>` 写入并核对目标。缺少 v2 所声明的 Hub 清单或对象时中止，
+目标已有同名但不同内容时拒绝覆盖。v1 归档没有 Hub 数据。

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { createHash } from "node:crypto"
 import { Readable } from "node:stream"
+import { SkillHubAdminService } from "./skill-hub-admin.service"
 import { verifySkillHubObject } from "./skill-hub-object-read"
 
 describe("Skill Hub restore integrity", () => {
@@ -17,7 +18,6 @@ describe("Skill Hub restore integrity", () => {
 })
 
 it("leaves an existing deletion in place when restore cannot verify the current package", async () => {
-  const { SkillHubAdminService } = await import("./skill-hub-admin.service")
   const update = vi.fn()
   const asset = {
     deletedAt: new Date(), revision: 4, currentVersion: {

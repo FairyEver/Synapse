@@ -49,6 +49,13 @@ describe("cloud Skill retirement during deployment", () => {
     expect(f.storage.deleteMultipleObject).not.toHaveBeenCalled()
     await expect(retireCloudSkills({ ...fixture(), env: { ...env, DRIVE_COS_BUCKET: env.SKILL_REPOSITORY_COS_BUCKET } })).rejects.toThrow("shared")
   })
+  it("refuses to initialize the old COS client if its bucket is the Skill Hub bucket", async () => {
+    const f = fixture()
+    await expect(retireCloudSkills({ ...f, env: { ...env, SKILL_HUB_COS_BUCKET: env.SKILL_REPOSITORY_COS_BUCKET } }))
+      .rejects.toThrow("shared storage bucket")
+    expect(f.createStorage).not.toHaveBeenCalled()
+    expect(f.storage.deleteMultipleObject).not.toHaveBeenCalled()
+  })
   it("requires legacy storage credentials before dropping referenced data", async () => {
     const f = fixture()
     await expect(retireCloudSkills({ ...f, env: {} })).rejects.toThrow("configuration")

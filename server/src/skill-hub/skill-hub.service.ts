@@ -185,7 +185,7 @@ export class SkillHubService {
     const version = row.currentVersion!
     const chunks: Buffer[] = []
     try {
-      await consumeVerifiedHubObject(this.storage, version.mainObject, limits.mainBytes, (chunk) => chunks.push(chunk))
+      await consumeVerifiedHubObject(this.storage, version.mainObject, limits.mainBytes, (chunk) => { chunks.push(chunk) })
       return { content: decodeUtf8(Buffer.concat(chunks)), versionId: version.id }
     } catch {
       throw storageUnavailable()

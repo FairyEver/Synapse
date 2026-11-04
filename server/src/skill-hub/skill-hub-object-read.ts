@@ -15,7 +15,7 @@ export async function openSkillHubObject(storage: SkillHubStoragePort, object: H
 }
 
 export async function consumeVerifiedHubObject(
-  storage: SkillHubStoragePort, object: HubObjectLocation, max: number, onChunk?: (chunk: Buffer) => void,
+  storage: SkillHubStoragePort, object: HubObjectLocation, max: number, onChunk?: (chunk: Buffer) => void | Promise<void>,
   signal: AbortSignal = AbortSignal.timeout(30_000),
 ): Promise<void> {
   signal.throwIfAborted()
@@ -27,7 +27,7 @@ export async function consumeVerifiedHubObject(
     length += bytes.length
     if (length > object.size) throw new Error("Unexpected object length")
     hash.update(bytes)
-    onChunk?.(bytes)
+    await onChunk?.(bytes)
   }
   if (length !== object.size || hash.digest("hex") !== object.sha256) throw new Error("Object integrity verification failed")
 }

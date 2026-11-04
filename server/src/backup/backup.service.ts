@@ -13,6 +13,7 @@ import type COS from "cos-nodejs-sdk-v5"
 import { AuditLogService } from "../common/audit-log.service"
 import { formatAuditError } from "../common/audit-error"
 import { isBackupCosConfigured, isDriveCosConfigured, isPlatformMediaCosConfigured, loadEnv, type ServerEnv } from "../config/env"
+import { hubBackupDirectory, hubBackupManifest, SkillHubBackupService } from "../skill-hub/skill-hub-backup.service"
 import { TODO_IMAGE_STORAGE_PREFIX } from "../drive/platform-media-storage"
 import {
   contentManifestItem,
@@ -112,6 +113,7 @@ export class BackupService {
   constructor(
     private readonly logger: PinoLogger,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly skillHub?: SkillHubBackupService,
   ) {
     this.env = loadEnv(process.env)
     this.bucket = this.env.backupCosBucket ?? ""
@@ -159,20 +161,23 @@ export class BackupService {
     const tempDirs: string[] = []
 
     try {
-      const dbPath = await this.dumpDatabase()
-      tempFiles.push(dbPath)
-
       const createdAt = new Date().toISOString()
-      const packageDir = path.join(os.tmpdir(), `synapse-backup-package-${Date.now()}`)
+      const packageDir = fs.mkdtempSync(path.join(os.tmpdir(), "synapse-backup-package-"))
       tempDirs.push(packageDir)
-      fs.mkdirSync(packageDir, { recursive: true })
-
-      fs.copyFileSync(dbPath, path.join(packageDir, "database.sql.gz"))
+      const dumpAndCopy = async (signal?: AbortSignal) => {
+        const dbPath = await this.dumpDatabase(signal)
+        tempFiles.push(dbPath)
+        fs.copyFileSync(dbPath, path.join(packageDir, "database.sql.gz"))
+        if (this.skillHub && signal) await this.skillHub.exportObjects(packageDir, signal)
+      }
+      if (this.skillHub) await this.skillHub.withObjectRetention(dumpAndCopy)
+      else await dumpAndCopy()
+      const skillHubObjectsIncluded = this.skillHub ? true : undefined
       await this.dumpPostgresGlobals(path.join(packageDir, "postgres-globals.sql"))
       await this.writeDriveCosManifest(path.join(packageDir, "drive-cos-manifest.json"))
       await this.writePlatformMediaCosManifest(path.join(packageDir, "platform-media-cos-manifest.json"))
 
-      const restoreMarkdown = createRestoreMarkdown({ createdAt, filename })
+      const restoreMarkdown = createRestoreMarkdown({ createdAt, filename, skillHubObjectsIncluded })
       if (scanForSecretLikeText(restoreMarkdown)) {
         throw new Error("恢复说明包含疑似敏感信息。")
       }
@@ -188,17 +193,19 @@ export class BackupService {
         driveRegion: this.env.driveCosRegion,
         platformMediaBucket: this.env.platformMediaCosBucket,
         platformMediaRegion: this.env.platformMediaCosRegion,
+        skillHubObjectsIncluded,
         contents: [
           await contentManifestItem(packageDir, "database.sql.gz"),
           await contentManifestItem(packageDir, "postgres-globals.sql"),
           await contentManifestItem(packageDir, "drive-cos-manifest.json"),
           await contentManifestItem(packageDir, "platform-media-cos-manifest.json"),
           await contentManifestItem(packageDir, "restore.md"),
+          ...(skillHubObjectsIncluded ? [await contentManifestItem(packageDir, hubBackupManifest)] : []),
         ],
       })
       await writeJsonFile(path.join(packageDir, "backup-manifest.json"), manifest)
 
-      const archivePath = await this.packDirectory(packageDir)
+      const archivePath = await this.packDirectory(packageDir, skillHubObjectsIncluded)
       tempFiles.push(archivePath)
 
       await this.uploadToCos(archivePath, filename)
@@ -347,7 +354,7 @@ export class BackupService {
     })
   }
 
-  private async dumpDatabase(): Promise<string> {
+  private async dumpDatabase(signal?: AbortSignal): Promise<string> {
     const tmpDir = os.tmpdir()
     const dumpFile = path.join(tmpDir, `synapse-dump-${Date.now()}.sql`)
     const gzFile = `${dumpFile}.gz`
@@ -355,13 +362,13 @@ export class BackupService {
 
     try {
       const pgDump = buildPgDumpOptions(this.env.databaseUrl, dumpFile)
-      await execFileAsync("pg_dump", pgDump.args, { env: pgDump.env })
+      await execFileAsync("pg_dump", pgDump.args, { env: pgDump.env, signal })
 
       const readStream = fs.createReadStream(dumpFile)
       const writeStream = fs.createWriteStream(gzFile)
       const gzip = createGzip()
 
-      await pipeline(readStream, gzip, writeStream)
+      await pipeline(readStream, gzip, writeStream, { signal })
 
       completed = true
       return gzFile
@@ -546,7 +553,7 @@ export class BackupService {
     }
   }
 
-  private async packDirectory(directoryPath: string): Promise<string> {
+  private async packDirectory(directoryPath: string, skillHubObjectsIncluded?: true): Promise<string> {
     const archivePath = path.join(os.tmpdir(), `synapse-backup-${Date.now()}.tar`)
     let completed = false
 
@@ -557,7 +564,9 @@ export class BackupService {
           "database.sql.gz",
           "postgres-globals.sql",
           "drive-cos-manifest.json",
+          "platform-media-cos-manifest.json",
           "backup-manifest.json",
+          ...(skillHubObjectsIncluded ? [hubBackupManifest, hubBackupDirectory] : []),
           "restore.md",
         ],
       )

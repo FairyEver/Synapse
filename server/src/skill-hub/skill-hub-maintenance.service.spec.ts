@@ -4,7 +4,10 @@ import { join } from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { SkillHubMaintenanceService, skillHubCollectableObject } from "./skill-hub-maintenance.service"
 import type { SkillHubRepository } from "./skill-hub.repository"
+import type { SkillHubGcFence } from "./skill-hub-gc-fence"
 import { LocalSkillHubStorage } from "./skill-hub-storage"
+
+const fence = { run: async (job: (signal: AbortSignal) => unknown) => job(new AbortController().signal) } as SkillHubGcFence
 
 describe("Skill Hub object collection", () => {
   it("keeps object bytes referenced by deleted Skills and older versions", async () => {
@@ -23,7 +26,7 @@ describe("Skill Hub object collection", () => {
         skillHubUpload: { findMany: vi.fn().mockResolvedValue([]) },
         skillHubObject: { findMany, updateMany: vi.fn().mockResolvedValue({ count: 1 }), deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
       }
-      const gc = new SkillHubMaintenanceService({ prisma } as unknown as SkillHubRepository, storage)
+      const gc = new SkillHubMaintenanceService({ prisma } as unknown as SkillHubRepository, storage, fence)
       await expect(gc.pruneUnboundUploads(new Date())).resolves.toEqual({ processed: 1, retried: 0 })
       expect(await storage.head(boundObjectKey)).not.toBeNull()
       expect(await storage.head(orphanKey)).toBeNull()
@@ -50,7 +53,7 @@ describe("Skill Hub object collection", () => {
         deleteMany: vi.fn(),
       },
     }
-    const gc = new SkillHubMaintenanceService({ prisma } as unknown as SkillHubRepository, storage)
+    const gc = new SkillHubMaintenanceService({ prisma } as unknown as SkillHubRepository, storage, fence)
     await expect(gc.pruneUnboundUploads(now)).resolves.toEqual({ processed: 0, retried: 1 })
     expect(prisma.skillHubObject.deleteMany).not.toHaveBeenCalled()
     expect(prisma.skillHubObject.updateMany).toHaveBeenLastCalledWith({
