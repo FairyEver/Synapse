@@ -565,7 +565,7 @@ function ProviderPanelView({
         ) : visibleProviders.length === 0 ? (
           <div className="text-sm text-muted-foreground">暂无 Provider</div>
         ) : (
-          <div className="grid min-h-96 grid-cols-[13rem_minmax(0,1fr)] overflow-hidden rounded-lg border">
+          <div className="grid min-h-64 grid-cols-[13rem_minmax(0,1fr)] overflow-hidden rounded-lg border">
             <div
               className="min-w-0 border-r bg-surface p-2"
               role="group"
