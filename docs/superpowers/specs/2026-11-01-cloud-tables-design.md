@@ -14,6 +14,8 @@
 
 2026-11-02读取增强：查询支持fields活动业务字段投影与filterMode同级all/any；默认请求、权限和分页预算不变，字段选择在SQL执行，系统元数据保留。新增显式count/exists端点，仅接受相同filters/filterMode，按当前可读且未删除范围精确计数或短路判断。OR不能绕过表/own/软删除/游标边界；count超安全整数拒绝，超时仍503。列表不附带COUNT，跨请求不保证快照，exists不保证并发去重。不新增索引、迁移、MCP、Skill或Console控件。详细契约见[首批读取API设计](2026-11-02-cloud-tables-read-apis-design.md)。
 
+2026-11-04 补记：表主可显式发布受限的今日分类汇总，按配置时区和同表主的公开候选目录返回分组计数及布尔真值数。没有对应目录项的记录合并为其他，不暴露自由文本或原始记录；不提供通用聚合查询或实时订阅。参见[公开今日汇总](../../../document/open-api/api/cloud-tables.md#公开今日汇总)。
+
 Console复用HeroUI，支持字段/数据/权限/回收站/API示例/日志/JSON和安全CSV导出。页面沿用Dashboard V2的共享Header/Main及ServerDataTable；筛选按所在背景选择原生控件变体，游标翻页使用HeroUI Pagination，不虚构总数；标签文字保持单行，窄屏在标签栏与表格内部滚动。AI使用API文档与OpenAPI契约，通过私有环境变量持有密钥并发现表schema。无附件、公式、关联、SQL、实时订阅、修改历史、付费计量、专用CSV导入器。操作日志固定元数据保留30天，不记录values/凭据。
 
 验收使用隔离本地PostgreSQL16，覆盖权限、跨表、Cookie不升级、并发/幂等/撤权/schema竞态、恢复/清理、锁竞争、公平性和批量突发。完成UI桌面/窄屏自动测试、相关全套单测、类型和构建/契约检查。当前仓库当前分支实施，只本任务本地提交，不push或部署。

@@ -28,6 +28,7 @@ export class CloudTableController {
   @Get("trash") trash(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Query("cursor") cursor?: string) { return this.call(r,s,null,"table.trash",{cursor}) }
   @Get(":id") get(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string) { return this.call(r,s,id,"table.get") }
   @Get(":id/schema") schema(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string) { return this.call(r,s,id,"schema") }
+  @Get(":id/daily-summary") dailySummary(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Query() query: Record<string, unknown>) { return this.call(r,s,id,"daily.summary",query) }
   @Patch(":id") update(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"table.update",b) }
   @Patch(":id/permissions") permissions(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"permissions",b) }
   @Post(":id/collaborators/resolve") resolve(@Req() r: CloudRequest, @Res({ passthrough: true }) s: Response, @Param("id") id: string, @Body() b: unknown) { return this.call(r,s,id,"member.resolve",b) }

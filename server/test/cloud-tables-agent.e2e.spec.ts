@@ -69,14 +69,14 @@ describe("cloud tables document-only Agent simulation", () => {
     } finally { monitoring = false }
     const report = JSON.parse(result.stdout)
     expect(report.passed).toBe(true)
-    expect(report.successfulOperations).toHaveLength(21)
+    expect(report.successfulOperations).toHaveLength(22)
     expect(report.managementRejections).toBe(9)
     const tableRequests = audit.filter(r => r.path !== "/api/open/openapi.json")
     expect(audit.length - tableRequests.length).toBe(1)
     expect(tableRequests.length).toBe(report.trace.length)
     expect(tableRequests.every(r => r.path.startsWith("/api/open/v1/tables"))).toBe(true)
     expect(audit.some(r => r.cookie)).toBe(false)
-    expect(tableRequests.filter(r => !r.authorization)).toHaveLength(2)
+    expect(tableRequests.filter(r => !r.authorization)).toHaveLength(3)
     // Agent结束后再由表主独立观察，只读确认越权尝试没有改变表、ACL或业务数据。
     expect({ table: await bobCall("GET", `/${foreignId}`), records: await bobCall("POST", `/${foreignId}/records/query`, {}), trash: await bobCall("GET", `/${foreignId}/records/trash`) }).toEqual(foreignSnapshot)
     await writeFile(evidencePath, JSON.stringify({ ...report, consoleRequests: 0, cookieRequests: 0, foreignOwnerReadbackUnchanged: true }, null, 2))

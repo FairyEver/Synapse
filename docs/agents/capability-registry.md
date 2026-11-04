@@ -1,6 +1,6 @@
 # 能力注册清单
 
-- 2026-11-04 云端数据表接入独立 `cloud_tables` domain，共 20 项 capability / MCP 索引。使用当前登录桌面账号，沿用表主与协作者权限。只供现有 MCP `search` / `invoke`，无通用本机 HTTP、System App、Dock、IPC、Workflow、Automation 或 Deep Link 入口。指引随既有 Synapse 系统 Skill 分发。
+- 2026-11-04 云端数据表接入独立 `cloud_tables` domain，共 20 项 capability / MCP 索引。使用当前登录桌面账号，沿用表主与协作者权限。只供现有 MCP `search` / `invoke`，无通用本机 HTTP、System App、Dock、IPC、Workflow、Automation 或 Deep Link 入口。指引随既有 Synapse 系统 Skill 分发。现有云表权限配置可由表主发布或关闭今日汇总，网页通过开放 REST 读取；不增加 MCP 工具或改变注册数量。
 
 - 2026-11-04 Synapse Skill Hub：新增独立 `skill_hub` domain，共 10 项 capability / MCP 索引；实测全局 374 项 capability、370 项索引及工具定义，公开入口仍为 `search` / `invoke`。复用账号状态与登录能力。无 System App、默认 Dock、Workflow 或 Automation 入口；管理员治理仅 Web/API。旧 Skill Repository 工具和协议保持退役。另有 1 条严格声明式桌面深链 `synapse://skill-hub/install?skillId=<id>`、2 个仅限安装器窗口的私有 IPC（prepare_install / release_install）和 1 个定向窗口事件（skill_hub_install_open_request），均不进入 MCP 索引。
 

@@ -19,10 +19,19 @@ export const fieldSchema = z.object({
 export const createTableSchema = z.object({ name: z.string().trim().min(1).max(100), fields: z.array(fieldSchema).max(100).default([]) }).strict()
 export const versionSchema = z.number().int().positive()
 export const tableChangeSchema = z.object({ version: versionSchema, name: z.string().trim().min(1).max(100).optional(), fields: z.array(fieldSchema).max(100).optional() }).strict()
+export const dailySummarySchema = z.object({
+  dateField: fieldSchema.shape.key.describe("Date field of the private response table."),
+  selectionField: fieldSchema.shape.key.describe("Text field containing the public catalog record ID."),
+  flagField: fieldSchema.shape.key.describe("Boolean field counted when true."),
+  catalogTableId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u).describe("ID of a separate, publicly readable table owned by the response table owner."),
+  catalogLabelField: fieldSchema.shape.key.describe("Public catalog text field used as the row label."),
+  timeZone: z.string().min(1).max(100).describe("IANA time zone used to determine today's date, e.g. Asia/Shanghai."),
+}).strict()
 export const permissionsSchema = z.object({
   version: versionSchema,
   anonymous: z.object({ read: z.boolean(), create: z.boolean(), update: z.boolean(), delete: z.boolean() }).partial().strict(),
   members: z.array(z.object({ userId: z.string().min(1).max(128), permissions: z.object({ read: z.enum(["none", "own", "all"]), create: z.enum(["none", "all"]), update: z.enum(["none", "own", "all"]), delete: z.enum(["none", "own", "all"]) }).partial().strict() }).strict()).max(100),
+  dailySummary: dailySummarySchema.nullable().optional().describe("Explicitly publish today's catalog counts; omit to preserve the setting, or pass null to disable. Does not grant record read access."),
 }).strict()
 export const recordCreateSchema = z.object({ values: z.record(z.string(), cloudJsonValue) }).strict()
 export const recordUpdateSchema = recordCreateSchema.extend({ version: versionSchema }).strict()
@@ -47,3 +56,4 @@ export type CloudQuery = z.infer<typeof querySchema>
 export type CloudFilter = z.infer<typeof filterSchema>
 export type CloudBatch = z.infer<typeof batchSchema>
 export type CloudPermissions = z.infer<typeof permissionsSchema>
+export type CloudDailySummary = z.infer<typeof dailySummarySchema>

@@ -103,7 +103,7 @@ describe("cloud table complete real HTTP contract", () => {
     process.stdout.write(`Cloud table HTTP evidence: ${JSON.stringify({ httpRequests, successfulRoutes: Object.fromEntries([...covered].map(([p, routes]) => [p, [...routes].sort()])) })}\n`)
   })
 
-  it.each(["open", "console"])("executes all 21 %s routes with persisted round trips", async mode => {
+  it.each(["open", "console"])("executes all 22 %s routes with persisted round trips", async mode => {
     const root = mode === "open" ? "/api/open/v1/tables" : "/api/console/tables", auth = mode === "open" ? ownerKey : ownerCookie
     const created = await call("POST", root, auth, { name: `完整流程-${mode}`, fields }, 201, { "Idempotency-Key": randomUUID() })
     const path = `${root}/${created.id}`
@@ -111,7 +111,11 @@ describe("cloud table complete real HTTP contract", () => {
     expect(await call("GET", path, auth)).toMatchObject({ schemaVersion: 1, anonymous: {}, ownerId: owner })
     expect((await call("GET", `${path}/schema`, auth)).fields).toHaveLength(10)
     expect(await call("POST", `${path}/collaborators/resolve`, auth, { handle: member })).toEqual({ id: member, handle: member })
-    await call("PATCH", `${path}/permissions`, auth, { version: 1, anonymous: { create: true }, members: [] })
+    const catalog = await call("POST", root, auth, { name: "公开目录", fields: [fields[0]] })
+    await call("PATCH", `${root}/${catalog.id}/permissions`, auth, { version: 1, anonymous: { read: true }, members: [] })
+    const dailySummary = { dateField: "date", selectionField: "text", flagField: "boolean", catalogTableId: catalog.id, catalogLabelField: "text", timeZone: "Asia/Shanghai" }
+    await call("PATCH", `${path}/permissions`, auth, { version: 1, anonymous: { create: true }, members: [], dailySummary })
+    expect(await call("GET", `${path}/daily-summary`, auth)).toMatchObject({ data: [], other: { selections: 0, flagged: 0 } })
     const changedFields = fields.map(f => f.key === "integer" ? { ...f, name: "改名后的整数", defaultValue: 9 } : f)
     const changed = await call("PATCH", path, auth, { version: 2, name: "重命名", fields: changedFields })
     expect(changed.schemaVersion).toBe(3)
@@ -151,9 +155,10 @@ describe("cloud table complete real HTTP contract", () => {
     expect((await call("GET", `${root}/trash`, auth)).data.some((t: { id: string }) => t.id === created.id)).toBe(true)
     await call("POST", `${path}/restore`, auth)
     expect(await call("GET", path, auth)).toMatchObject({ anonymous: {}, schemaVersion: 5 })
+    await denied("GET", `${path}/daily-summary`, auth, undefined, 403, "DAILY_SUMMARY_UNAVAILABLE")
     expect((await call("GET", row, auth)).values.text).toBe("更新")
     const expected = Object.entries(cloudTableOpenApiPaths()).flatMap(([p, methods]) => Object.keys(methods).map(m => `${m} ${p}`)).sort()
-    expect(expected).toHaveLength(21)
+    expect(expected).toHaveLength(22)
     expect([...covered.get(mode === "open" ? "/api/open/v1" : "/api/console")!].sort()).toEqual(expected)
   })
 
@@ -309,6 +314,7 @@ describe("cloud table complete real HTTP contract", () => {
         { key: "budget", name: "预算", type: "singleSelect", options: [{ key: "under30", name: "30 元以内" }] },
         { key: "tags", name: "饮食偏好", type: "multiSelect", options: [{ key: "light", name: "清淡" }] },
         { key: "group_order", name: "愿意拼单", type: "boolean", defaultValue: false },
+        { key: "menu_item_id", name: "候选菜品", type: "text" },
       ],
       idempotencyKey: "lunch-mcp-create",
     })
@@ -316,15 +322,22 @@ describe("cloud table complete real HTTP contract", () => {
     const details = await invoke(ownerMcp, "table_get", { tableId })
     expect(details).toMatchObject({ ownerId: owner, viewerId: owner, anonymous: {}, schemaVersion: 1 })
     await invoke(memberMcp, "table_get", { tableId }, "FORBIDDEN")
-    await invoke(ownerMcp, "permissions_update", {
-      tableId, version: details.schemaVersion, anonymous: { create: true }, members: [],
-    })
+    const catalog = await invoke(ownerMcp, "table_create", { name: "公开菜单", fields: [{ key: "name", name: "菜名", type: "text" }] })
+    const candidate = await invoke(ownerMcp, "record_create", { tableId: catalog.id, values: { name: "番茄牛肉饭" } })
+    await invoke(ownerMcp, "record_create", { tableId: catalog.id, values: { name: "葱油拌面" } })
+    const dailySummary = { dateField: "date", selectionField: "menu_item_id", flagField: "group_order", catalogTableId: catalog.id, catalogLabelField: "name", timeZone: "Asia/Shanghai" }
+    const sharing = { tableId, version: details.schemaVersion, anonymous: { create: true }, members: [], dailySummary }
+    await invoke(ownerMcp, "permissions_update", sharing, "INVALID_DAILY_SUMMARY")
+    await invoke(ownerMcp, "permissions_update", { tableId: catalog.id, version: 1, anonymous: { read: true }, members: [] })
+    await invoke(ownerMcp, "permissions_update", sharing)
+    expect(await invoke(ownerMcp, "table_get", { tableId })).toMatchObject({ anonymous: { create: true }, dailySummary })
     await invoke(memberMcp, "permissions_update", {
       tableId, version: 2, anonymous: { read: true }, members: [],
     }, "FORBIDDEN")
     const publicPath = `/api/open/v1/tables/${tableId}`
     expect(Object.keys(await call("GET", `${publicPath}/schema`)).sort()).toEqual(["fields", "id", "schemaVersion"])
-    const submission = { values: { date: "2026-11-04", dish: "番茄牛肉饭", budget: "under30", tags: ["light"] } }
+    const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format()
+    const submission = { values: { date: today, dish: "番茄牛肉饭", budget: "under30", tags: ["light"], menu_item_id: candidate.id } }
     const receipt = await call("POST", `${publicPath}/records`, {}, submission, 201, { "Idempotency-Key": "lunch-form-submit" })
     expect(await call("POST", `${publicPath}/records`, {}, submission, 201, { "Idempotency-Key": "lunch-form-submit" })).toEqual(receipt)
     await denied("POST", `${publicPath}/records/query`, {}, {}, 403, "FORBIDDEN")
@@ -343,6 +356,30 @@ describe("cloud table complete real HTTP contract", () => {
     expect((await invoke(ownerMcp, "log_list", { tableId })).data).toEqual(expect.arrayContaining([
       expect.objectContaining({ actorId: owner, apiKeyId: null }),
     ]))
+    const privateDish = "私人建议含联系信息"
+    const custom = await call("POST", `${publicPath}/records`, {}, { values: { date: today, dish: privateDish, group_order: true } })
+    await call("POST", `${publicPath}/records`, {}, { values: { ...submission.values, group_order: true } })
+    await call("POST", `${publicPath}/records`, {}, { values: { ...submission.values, date: "2000-01-01", group_order: true } })
+    const summaryPath = `${publicPath}/daily-summary`
+    const expectedSummary = {
+      date: today,
+      data: [{ label: "番茄牛肉饭", selections: 3, flagged: 1 }, { label: "葱油拌面", selections: 0, flagged: 0 }],
+      other: { selections: 1, flagged: 1 },
+      hasMore: false,
+    }
+    expect(await call("GET", summaryPath)).toEqual(expectedSummary)
+    await denied("GET", `${summaryPath}?date=2000-01-01`, {}, undefined, 400, "INVALID_REQUEST")
+    for (const suffix of ["query", "count", "exists"]) await denied("POST", `${publicPath}/records/${suffix}`, {}, {}, 403, "FORBIDDEN")
+    await denied("GET", `${publicPath}/records/${custom.id}`, {}, undefined, 403, "FORBIDDEN")
+    expect(await invoke(ownerMcp, "record_get", { tableId, recordId: custom.id })).toMatchObject({ values: { dish: privateDish } })
+    await invoke(ownerMcp, "record_delete", { tableId, recordId: custom.id, version: 1 })
+    expect(await call("GET", summaryPath)).toEqual({ ...expectedSummary, other: { selections: 0, flagged: 0 } })
+    await invoke(ownerMcp, "permissions_update", { tableId, version: 2, anonymous: { create: true }, members: [] })
+    expect(await call("GET", summaryPath)).toEqual({ ...expectedSummary, other: { selections: 0, flagged: 0 } })
+    await invoke(ownerMcp, "permissions_update", { tableId: catalog.id, version: 2, anonymous: {}, members: [] })
+    await denied("GET", summaryPath, {}, undefined, 403, "DAILY_SUMMARY_UNAVAILABLE")
+    await invoke(ownerMcp, "permissions_update", { tableId, version: 3, anonymous: { create: true }, members: [], dailySummary: null })
+    expect(await invoke(ownerMcp, "table_get", { tableId })).not.toHaveProperty("dailySummary")
   })
 
   it("opens anonymous actions independently and ignores a valid owner Cookie on writes", async () => {

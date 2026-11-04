@@ -65,7 +65,7 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 
 ## 可用 API
 
-[云端数据表](/open-api/api/cloud-tables) 包含完整的 21 项接口、字段类型、请求／响应示例和错误码，可整页复制为 Markdown 供 AI 调用。表中列出常用入口，其余操作见完整文档。
+[云端数据表](/open-api/api/cloud-tables) 包含完整的 22 项接口、字段类型、请求／响应示例和错误码，可整页复制为 Markdown 供 AI 调用。表中列出常用入口，其余操作见完整文档。
 
 | operationId | 方法 | 路径 | 认证 | 文档 |
 |---|---|---|---|---|
@@ -74,6 +74,7 @@ Cookie、用户登录 token、`X-API-Key` 和 query 参数均不能替代该 hea
 | `queryCloudTableRecords` | `POST` | `/tables/{id}/records/query` | Bearer + 读取授权，或显式开放的匿名查询 | [查询记录](/open-api/api/cloud-tables#查询记录) |
 | `countCloudTableRecords` | `POST` | `/tables/{id}/records/count` | 同上，仅统计可读记录 | [条件计数](/open-api/api/cloud-tables#条件计数与存在判断) |
 | `existsCloudTableRecords` | `POST` | `/tables/{id}/records/exists` | 同上，仅检查可读记录 | [存在判断](/open-api/api/cloud-tables#条件计数与存在判断) |
+| `getCloudTableDailySummary` | `GET` | `/tables/{id}/daily-summary` | 表主已发布时可匿名读取汇总 | [公开今日汇总](/open-api/api/cloud-tables#公开今日汇总) |
 | `mutateCloudTableRecords` | `POST` | `/tables/{id}/records/batch` | 逐操作检查 scope、表资源及表授权，或显式开放的匿名操作 | [批量写入](/open-api/api/cloud-tables#批量新增、修改与删除) |
 | `createPublicLinkDownload` | `POST` | `/drive/public-links/downloads` | `Authorization: Bearer` 与 `drive.public_link.download` | [获取公共链接文件](/open-api/api/share-link-download) |
 | `createPublicLinkArticleMessage` | `POST` | `/drive/public-links/messages` | `Authorization: Bearer` 与 `drive.public_link.message.create` | [给分享文章留言](/open-api/api/article-message-create) |

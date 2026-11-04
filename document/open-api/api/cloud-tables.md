@@ -95,6 +95,7 @@ Content-Type: application/json
 | `createCloudTable` | POST | `/tables` | `tables.manage` + 自己的全部表 |
 | `getCloudTable` | GET | `/tables/{id}` | 至少一项可用的表权限 |
 | `getCloudTableSchema` | GET | `/tables/{id}/schema` | 至少一项可用的表权限 |
+| `getCloudTableDailySummary` | GET | `/tables/{id}/daily-summary` | 表主已发布的今日汇总可匿名访问 |
 | `updateCloudTable` | PATCH | `/tables/{id}` | 表主 + `tables.manage` |
 | `setCloudTablePermissions` | PATCH | `/tables/{id}/permissions` | 表主 + `tables.manage` |
 | `resolveCloudTableCollaborator` | POST | `/tables/{id}/collaborators/resolve` | 表主 + `tables.manage` |
@@ -538,6 +539,36 @@ if (!response.ok) throw new Error(result.error?.message ?? `HTTP ${response.stat
 
 替换 `TABLE_ID` 为实际 ID。同一次提交因网络失败重试时保留首次幂等键和请求体，不重新生成 UUID。匿名新增不意味着可读、可改或可删，四项操作分别开放。
 
+### 公开今日汇总
+
+公开收集页可以展示今日分类榜单，征集表仍可仅开放 `anonymous.create`。表主在 `PATCH /tables/{id}/permissions` 的现有请求中加入 `dailySummary`：
+
+```json
+{
+  "dateField": "date",
+  "selectionField": "menu_item_id",
+  "flagField": "group_order",
+  "catalogTableId": "公开候选表ID",
+  "catalogLabelField": "name",
+  "timeZone": "Asia/Shanghai"
+}
+```
+
+上述字段依次为征集表的日期、存放候选记录 ID 的文本字段、布尔值，以及同表主且开放 `anonymous.read` 的独立候选表及其文本标题字段。仍须提交当前 `version`、`anonymous` 和 `members`。省略 `dailySummary` 保留原配置，传 `null` 关闭。仅表主可在表详情中读取配置。
+
+网页使用 `GET /tables/{id}/daily-summary`，不发送凭据或查询参数。响应示例：
+
+```json
+{
+  "date": "2026-11-04",
+  "data": [{ "label": "番茄牛肉饭", "selections": 4, "flagged": 2 }],
+  "other": { "selections": 1, "flagged": 0 },
+  "hasMore": false
+}
+```
+
+结果按选择数、布尔真值数降序，再按标题排序，最多返回 100 个公开标题，包含零票候选。同名候选合并。未关联有效候选的记录合并为 `other`，不返回其自由文本。按配置时区计算当日，排除回收站记录。数字统计提交份数，匿名身份不支持按人去重。原始记录及通用查询、计数和存在判断仍需既有读取权限。菜单撤权、删除或所需字段失效时停止提供汇总。整表恢复时清除汇总配置。若请求携带 API 密钥，仍需 `tables.records.read` 与表资源授权。
+
 ## 回收站与操作记录
 
 表、记录删除后立即退出普通访问，保留 30 天；归档字段也保留 30 天。到期后分块清理，不保证截止时刻立即物理删除。没有逐次修改历史。
@@ -659,12 +690,14 @@ Console 按读取权限导出 JSON／CSV，CSV 处理公式注入，单次导出
 | 400 | `INVALID_FIELDS`、`INVALID_VALUE`、`UNKNOWN_FIELD` | 重新读结构，按类型和字段 key 构造请求 |
 | 400 | `INVALID_QUERY`、`INVALID_CURSOR` | 检查筛选／排序／活动投影字段；条件、组合模式、投影、身份或结构改变后从首分页重查 |
 | 400 | `COUNT_TOO_LARGE` | 精确数量超出安全整数范围，缩小筛选范围 |
+| 400 | `INVALID_DAILY_SUMMARY` | 检查时区、字段类型及同表主公开候选表 |
 | 400 | `INVALID_MEMBERS` | 检查用户是否有效、重复或包含表主 |
 | 400 | `INVALID_IDEMPOTENCY_KEY` | 使用 8–120 位合法幂等键 |
 | 400 | `JSON_TOO_COMPLEX`、`SCHEMA_TOO_LARGE` | 降低 JSON 复杂度或定义体积 |
 | 401 | `INVALID_API_KEY` | 检查密钥、撤销状态及账号，不降级匿名 |
 | 403 | `INSUFFICIENT_SCOPE` | 检查 scope 和密钥表资源，建表还需自己的全部表 |
 | 403 | `FORBIDDEN` | 检查表授权、本人范围或是否由表主执行管理操作 |
+| 403 | `DAILY_SUMMARY_UNAVAILABLE` | 今日汇总未发布或依赖配置已失效 |
 | 404 | `NOT_FOUND` | 不存在、已删除、过期或不在可见范围；停止猜测 ID |
 | 409 | `VERSION_CONFLICT` | 读最新版本并解决冲突 |
 | 409 | `NOT_DELETED` | 表当前未删除，无需恢复；权限和版本保持不变 |

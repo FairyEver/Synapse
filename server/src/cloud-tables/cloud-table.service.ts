@@ -8,7 +8,8 @@ import { CloudTableMaintenance } from "./cloud-table-maintenance"
 import { CloudTableDatabase } from "./cloud-table-database"
 import { CloudTableScheduler } from "./cloud-table-scheduler"
 import { authorize, assertJsonBudget, fail, normalizeValues, parseCloudTableInput as parse, validateFields } from "./cloud-table-validation"
-import { batchSchema, createTableSchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, resolveCollaboratorSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
+import { batchSchema, createTableSchema, dailySummarySchema, filterSchema, permissionsSchema, querySchema, recordCreateSchema, recordUpdateSchema, resolveCollaboratorSchema, tableChangeSchema, deleteRecordSchema, CLOUD_TABLE_SCHEMA_BYTES } from "./cloud-table-contract"
+import { readDailySummary, splitCloudTableAccess, validateDailySummary } from "./cloud-table-daily-summary"
 import { filterPlan, queryPlan, stableJson } from "./cloud-table-query"
 import { OpenApiHttpError } from "../open-api/open-api.types"
 
@@ -89,13 +90,15 @@ export class CloudTableService {
     return key
   }
   private fields(table: Table): CloudField[] { return table.fields.map(f => ({ ...(f.definition as unknown as CloudField), archivedAt: f.archivedAt?.toISOString() ?? null })) }
-  private access(table: Table) { return { ownerId: table.ownerId, anonymous: table.anonymous as Partial<Record<CloudAction, boolean>>, members: table.members as unknown as CloudMember[] } }
+  private access(table: Table) { return { ownerId: table.ownerId, anonymous: splitCloudTableAccess(table.anonymous).anonymous, members: table.members as unknown as CloudMember[] } }
   private dto(table: Table, actor: CloudActor, scopes?: string[]): CloudTableDto {
     const permissions = {} as Record<CloudAction | "manage", CloudRange>
     for (const a of ["read", "create", "update", "delete", "manage"] as const) {
       try { permissions[a] = scopes && !scopes.includes(a === "manage" ? "tables.manage" : `tables.records.${a}`) ? "none" : authorize(this.access(table), actor.userId ?? null, a) } catch { permissions[a] = "none" }
     }
-    return { id: table.id, ownerId: table.ownerId, ...(actor.userId ? { viewerId: actor.userId } : {}), name: table.name, schemaVersion: table.schemaVersion, fields: this.fields(table), anonymous: table.anonymous as Partial<Record<CloudAction, boolean>>, ...(actor.userId === table.ownerId ? { members: table.members as unknown as CloudMember[] } : {}), deletedAt: table.deletedAt?.toISOString() ?? null, createdAt: table.createdAt.toISOString(), permissions }
+    const { anonymous, dailySummary } = splitCloudTableAccess(table.anonymous)
+    const settings = actor.userId === table.ownerId ? dailySummarySchema.safeParse(dailySummary).data : undefined
+    return { id: table.id, ownerId: table.ownerId, ...(actor.userId ? { viewerId: actor.userId } : {}), name: table.name, schemaVersion: table.schemaVersion, fields: this.fields(table), anonymous, ...(settings ? { dailySummary: settings } : {}), ...(actor.userId === table.ownerId ? { members: table.members as unknown as CloudMember[] } : {}), deletedAt: table.deletedAt?.toISOString() ?? null, createdAt: table.createdAt.toISOString(), permissions }
   }
   private async perform(tx: Tx, actor: CloudActor, tableId: string | null, op: string, input: unknown, ctx: CloudContext): Promise<unknown> {
     const key = await this.identity(tx, actor)
@@ -131,7 +134,7 @@ export class CloudTableService {
         OR: op === "table.trash" ? [{ ownerId: actor.userId }] : [{ ownerId: actor.userId }, ...memberAccess],
         ...(key ? key.tableAccessMode === "all_owned" ? { ownerId: actor.userId } : { id: { ...(cursor ? { gt: cursor } : {}), in: key.tableIds } } : {}),
       }, orderBy: { id: "asc" }, take: 51 })
-      return { data: tables.slice(0, 50).map(t => { const { fields: _fields, members: _members, anonymous: _anonymous, ...summary } = this.dto({ ...t, fields: [] }, actor, key?.scopes); return summary }), nextCursor: tables.length > 50 ? tables[49]!.id : null }
+      return { data: tables.slice(0, 50).map(t => { const { fields: _fields, members: _members, anonymous: _anonymous, dailySummary: _dailySummary, ...summary } = this.dto({ ...t, fields: [] }, actor, key?.scopes); return summary }), nextCursor: tables.length > 50 ? tables[49]!.id : null }
     }
     const exclusive = ["table.update", "permissions", "table.delete", "table.restore"].includes(op)
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "CloudTable" WHERE "id" = ${tableId} ${Prisma.raw(exclusive ? "FOR UPDATE" : "FOR SHARE")}`)
@@ -141,10 +144,15 @@ export class CloudTableService {
     const owner = await tx.user.findUnique({ where: { id: table.ownerId }, select: { status: true } })
     if (owner?.status !== "active") fail("NOT_FOUND", "数据表不可用。", 404)
     if (key && !(key.tableAccessMode === "all_owned" && table.ownerId === actor.userId) && !(key.tableAccessMode === "selected" && key.tableIds.includes(tableId))) fail("INSUFFICIENT_SCOPE", "密钥未授权此表。", 403)
+    if (op === "daily.summary") {
+      scope("read")
+      if (Object.keys(input as object).length) fail("INVALID_REQUEST", "今日汇总不接受查询参数。")
+      return readDailySummary(tx, table)
+    }
     const permission = (action: CloudAction | "manage") => { scope(action); return authorize(this.access(table), actor.userId ?? null, action) }
     const describing = op === "table.get" || op === "schema"
     if (describing) {
-      if (!actor.userId) { if (!Object.values(table.anonymous as object).some(Boolean)) fail("FORBIDDEN", "表未开放匿名操作。", 403) }
+      if (!actor.userId) { if (!Object.values(this.access(table).anonymous).some(Boolean)) fail("FORBIDDEN", "表未开放匿名操作。", 403) }
       else if (!["manage", "read", "create", "update", "delete"].some(a => { try { permission(a as CloudAction | "manage"); return true } catch { return false } })) fail("FORBIDDEN", "没有访问此表的权限。", 403)
     }
     const fieldActions: Partial<Record<string, CloudAction | "manage">> = { "table.update": "manage", "records.get": "read", "records.query": "read", "records.count": "read", "records.exists": "read", "records.create": "create", "records.update": "update", "records.restore": "manage", "records.trash": "manage" }; const fieldAction = fieldActions[op]
@@ -176,7 +184,6 @@ export class CloudTableService {
     }
     if (op === "table.get" || op === "schema") {
       if (!actor.userId) {
-        if (!Object.values(table.anonymous as object).some(Boolean)) fail("FORBIDDEN", "表未开放匿名操作。", 403)
         return { id: table.id, schemaVersion: table.schemaVersion, fields: fields.filter(f => !f.archivedAt).map(({ archivedAt: _a, ...f }) => f) }
       }
       const allowed = ["manage", "read", "create", "update", "delete"].some(a => { try { permission(a as CloudAction | "manage"); return true } catch { return false } })
@@ -222,7 +229,9 @@ export class CloudTableService {
       const users = await tx.user.findMany({ where: { id: { in: change.members.map(m => m.userId) }, status: "active" }, select: { id: true, handle: true, nickname: true }, take: 100 })
       if (users.length !== change.members.length) fail("INVALID_MEMBERS", "协作者账号不存在或已停用。")
       const members = change.members.map(m => { const user = users.find(u => u.id === m.userId)!; return { ...m, handle: user.handle, nickname: user.nickname } })
-      await tx.cloudTable.update({ where: { id: tableId }, data: { anonymous: change.anonymous, members, schemaVersion: { increment: 1 } } })
+      if (change.dailySummary) await validateDailySummary(tx, table, change.dailySummary)
+      const dailySummary = change.dailySummary === undefined ? splitCloudTableAccess(table.anonymous).dailySummary : change.dailySummary
+      await tx.cloudTable.update({ where: { id: tableId }, data: { anonymous: json({ ...change.anonymous, ...(dailySummary ? { dailySummary } : {}) }), members, schemaVersion: { increment: 1 } } })
       return { schemaVersion: table.schemaVersion + 1 }
     }
     if (op === "table.delete" || op === "table.restore") {
