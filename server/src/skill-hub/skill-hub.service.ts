@@ -125,7 +125,7 @@ export class SkillHubService {
   async update(userId: string, skillId: string, input: SkillHubUpdateInput): Promise<SkillHubWriteResult | SkillHubWriteReplay> {
     return this.write(userId, "app.skill_hub.skill.update", input.requestId,
       [skillId, input.expectedRevision, input.displayName, input.displayDescription,
-        input.iconUploadId === undefined ? "keep" : input.iconUploadId],
+        input.iconUploadId !== undefined, input.iconUploadId],
       async (tx) => {
         const current = await this.maintain(tx, userId, skillId)
         checkHubRevision(input.expectedRevision, current.revision)

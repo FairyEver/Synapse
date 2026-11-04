@@ -1,3 +1,4 @@
+import { skillHubPreparedSourcesSchema, skillHubWriteIntentsSchema } from "./skill-hub"
 import { agentShareImagesSchema } from "./agent-share"
 import { mailSchemas } from "./mail"
 export { mailSchemas, type MailRecord, type MailEntity } from "./mail"
@@ -303,6 +304,8 @@ import type { NamespaceSchema } from "../types"
 /** Stable iteration order: framework reads/writes namespaces in this order. */
 export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   ...mailSchemas,
+  skillHubPreparedSourcesSchema,
+  skillHubWriteIntentsSchema,
   coreConfigSchema,
   clientTelemetryOutboxSchema,
   clientTelemetryEnvironmentSchema,

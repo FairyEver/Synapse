@@ -263,6 +263,10 @@ import { prepareContentIconImageBytes } from "../services/content-icon-image-ser
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
+import { DesktopSkillHubService, SKILL_HUB_SERVICE_ID } from "../../app-capabilities/skill-hub/main/service"
+import { SkillHubCloudClient } from "../../app-capabilities/skill-hub/main/cloud-client"
+import { HubPackageService } from "../../app-capabilities/skill-hub/main/package-service"
+import { skillHubPreparedSourcesSchema, type HubPreparedRecord } from "../runtime/data-repo/schemas/skill-hub"
 import { accountService } from "../services/account-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
@@ -3648,4 +3652,32 @@ export const coreMailBackgroundDescriptor: ServiceDescriptor<{ service: MailServ
   },
   start: instance => instance.service.startBackground(),
   stop: instance => { for (const detach of instance.detach) detach() },
+}
+
+export const coreSkillHubDescriptor: ServiceDescriptor<DesktopSkillHubService> = {
+  id: SKILL_HUB_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    const repository = ctx.registry.get<DataRepository>("core.data-repository")
+    const guard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const audit = ctx.registry.get<AuditSink>("core.audit-sink")
+    return new DesktopSkillHubService({
+      repository, guard, audit, cloud: new SkillHubCloudClient(accountService),
+      packages: new HubPackageService({
+        guard, audit,
+        records: repository.namespace<HubPreparedRecord>(skillHubPreparedSourcesSchema.name),
+        assets: new ManagedAssetStore(path.join(app.getPath("userData"), "skill-hub-assets")),
+        report: (code) => ctx.logger.warn("Skill Hub 本机资产维护失败", { code }),
+      }),
+    })
+  },
+  stop: (service) => service.dispose(),
+}
+
+export const coreSkillHubBackgroundDescriptor: ServiceDescriptor<DesktopSkillHubService> = {
+  id: "core.skill-hub.background", criticality: "degraded", startupPhase: "background", dependsOn: [SKILL_HUB_SERVICE_ID],
+  create(ctx) { return ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID) },
+  start: (service) => service.startBackground(),
+  stop: (service) => service.stopBackground(),
 }

@@ -115,6 +115,12 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(connectorsStateSchema.validate({ schemaVersion: 1, connectors: {}, portalBinding: { ...binding, credentialRef: null } })).toBe(false)
   })
 
+  it("keeps Hub prepared sources and write intents out of portable data", () => {
+    const hub = allSchemas.filter((schema) => schema.name.startsWith("app.skill-hub."))
+    expect(hub).toHaveLength(2)
+    expect(hub.every((schema) => schema.currentVersion === 1 && schema.transferPolicy === "local-only")).toBe(true)
+  })
+
   it("allSchemas exposes runtime namespaces", () => {
     const names = allSchemas.map((s) => s.name).sort()
     expect(names).toEqual(
@@ -154,6 +160,8 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.quick-input.settings",
         "app.secrets.items",
         "app.secrets.settings",
+        "app.skill-hub.prepared-sources",
+        "app.skill-hub.write-intents",
         "app.system-notifier.settings",
         "app.terminal.agent-notification-settings",
         "app.terminal.agent-sessions",

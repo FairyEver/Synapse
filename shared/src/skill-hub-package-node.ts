@@ -93,7 +93,18 @@ export function inspectHubSkillPackage(input: { format: "markdown" | "zip"; byte
     maxManifestBytes: limits.mainBytes,
     maxUncompressedBytes: limits.packageBytes,
     maxParseTimeMs: limits.parseTimeMs,
-    strict: { maxDirectories: limits.archiveDirectories, maxDepth: limits.directoryDepth + 1 },
+    strict: {
+      maxDirectories: limits.archiveDirectories, maxDepth: limits.directoryDepth + 1,
+      checkPath(path, directory) {
+        if (hubPathDisposition(path) === "system") return
+        const parts = path.split("/")
+        const possibleRootEnvExample = !directory && parts.length <= 2 && parts.at(-1) === ".env.example"
+          && (parts.length === 1 || hubPathDisposition(parts[0]) === "include")
+        if (!possibleRootEnvExample && hubPathDisposition(path) === "excluded") {
+          throw new Error("Skill package contains a hidden or runtime entry")
+        }
+      },
+    },
   })
   const all = [...parsed.values()].map(({ name, bytes, directory }) => ({
     path: directory ? name.slice(0, -1) : name, bytes, directory,

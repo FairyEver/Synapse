@@ -380,7 +380,7 @@ async function unavailableExternalUrlOpener(): Promise<void> {
   throw new Error("Account external opener is unavailable.")
 }
 
-type AccountRequestScope = { readonly accountId: string | null; readonly authRevision: number }
+export type AccountRequestScope = { readonly accountId: string | null; readonly authRevision: number }
 
 export class AccountService {
   private readonly namespace: EncryptedJsonNamespace<PersistedAccount>
@@ -429,6 +429,12 @@ export class AccountService {
 
   getState(): SynapseAccountState {
     return this.state
+  }
+
+  captureAccountRequestScope(): (AccountRequestScope & { accountId: string }) | null {
+    return this.state.status === "authenticated" && this.state.connectivity !== "offline"
+      ? { accountId: this.state.profile.user.id, authRevision: this.authRevision }
+      : null
   }
 
   getAccessTokenForLive(): string | null {

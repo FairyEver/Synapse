@@ -9,7 +9,7 @@ export type InstallPackageLimits = {
   readonly maxUncompressedBytes: number
   readonly maxCompressionRatio?: number
   readonly maxParseTimeMs?: number
-  readonly strict?: { readonly maxDirectories: number; readonly maxDepth: number }
+  readonly strict?: { readonly maxDirectories: number; readonly maxDepth: number; readonly checkPath?: (path: string, directory: boolean) => void }
 }
 
 export type ZipEntry = {
@@ -78,6 +78,7 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
     const safeName = directory ? name.slice(0, -1) : name
     assertSafeArchivePath(safeName)
     if (strict) {
+      strict.checkPath?.(safeName, directory)
       if (safeName.length > 1024 || safeName.split("/").some((part) => Buffer.byteLength(part) > 255)
         || safeName.split("/").length - (directory ? 0 : 1) > strict.maxDepth) {
         throw new Error("ZIP entry exceeds path limits")
