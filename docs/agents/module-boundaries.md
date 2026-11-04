@@ -439,3 +439,8 @@ RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选
 - 完整令牌仅供所属用户在管理接口中复制；历史、Live 下行与应用日志中的路径统一为 `/webhooks/***`，Nginx Webhook location 关闭 access log。MCP Webhook 列表仍只返回稳定标识和状态，不返回令牌。
 - `20261102120000_webhook_single_token` 是用户明确授权的唯一一次旧数据切换：按回执、投递历史、Webhook 的顺序清空所有用户的旧数据（包括软删除项），随后建立令牌哈希唯一索引。由 Prisma migration 在部署时执行，不在服务启动或每次重置时清理；日常删除仍保留历史，每个 Webhook 最近 100 条的策略不变。
 - 部署须保留部署前数据库备份并完成既有迁移预演；风险扫描会识别本迁移的删除与唯一索引，按既有 `ALLOW_RISKY_MIGRATIONS=1` 流程审查放行，不修改风险检测策略。代码回退不能恢复已清空数据，恢复旧数据必须使用部署前备份。
+
+
+## Snap Skill Hub 团队归属
+
+Skill Hub 的每个条目固定属于一个团队。团队是资产持有者；原贡献者和当前维护者分别记录，账号失效不删除团队资产。团队成员资格由现有 TeamMembership 与活跃账号状态共同决定，普通用户只可查询本人的团队。团队删除检查包含软删除的全部 Hub 条目，有资产时拒绝删除；团队删除、成员移除与 Hub 写入使用同一团队行锁。

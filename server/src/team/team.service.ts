@@ -4,6 +4,7 @@ import { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { PrismaService } from "../prisma/prisma.service"
+import { withTeamResourceLock } from "./team-resource-lock"
 
 type AuditRecordInput = Parameters<AuditLogService["record"]>[0]
 
@@ -180,15 +181,16 @@ export class TeamService {
   }
 
   async deleteTeam(id: string, actorEmail = "system", ipAddress = "system"): Promise<{ readonly ok: true }> {
-    const existing = await this.prisma.team.findUnique({
-      where: { id },
-      select: teamSelect,
-    })
-    if (!existing) throw new NotFoundException("团队不存在。")
-    // 成员关系随 Team 级联删除；用户账号不受影响。
-    await this.prisma.team.delete({ where: { id } }).catch((error: unknown) => {
-      if (isRecordNotFoundError(error)) throw new NotFoundException("团队不存在。")
-      throw error
+    const existing = await this.prisma.$transaction(async (tx) => {
+      if (!await withTeamResourceLock(tx, id)) throw new NotFoundException("团队不存在。")
+      const team = await tx.team.findUnique({ where: { id }, select: teamSelect })
+      if (!team) throw new NotFoundException("团队不存在。")
+      if (await tx.skillHubSkill.findFirst({ where: { teamId: id }, select: { id: true } })) {
+        throw new ConflictException({ code: "HUB_TEAM_HAS_ASSETS", message: "此团队有 Skill Hub 资产，不能删除团队。" })
+      }
+      // 成员关系随 Team 级联删除；用户账号不受影响。
+      await tx.team.delete({ where: { id } })
+      return team
     })
     await this.recordServiceManagedAuditSafely({
       adminEmail: actorEmail,
@@ -298,7 +300,10 @@ export class TeamService {
     actorEmail = "system",
     ipAddress = "system",
   ): Promise<{ readonly ok: true }> {
-    const result = await this.prisma.teamMembership.deleteMany({ where: { teamId: id, userId } })
+    const result = await this.prisma.$transaction(async (tx) => {
+      if (!await withTeamResourceLock(tx, id)) return { count: 0 }
+      return tx.teamMembership.deleteMany({ where: { teamId: id, userId } })
+    })
     if (result.count === 0) throw new BadRequestException("该用户不在这个团队中。")
     await this.recordServiceManagedAuditSafely({
       adminEmail: actorEmail,

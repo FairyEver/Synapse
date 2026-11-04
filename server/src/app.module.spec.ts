@@ -10,6 +10,7 @@ import { LiveModule } from "./live/live.module"
 import { MailModule } from "./mail/mail.module"
 import { MobileLiveModule } from "./mobile-live/mobile-live.module"
 import { OpenApiModule } from "./open-api/open-api.module"
+import { SkillHubModule } from "./skill-hub/skill-hub.module"
 import { TeamModule } from "./team/team.module"
 import { UpdateIntentModule } from "./update-intent/update-intent.module"
 import { VoiceModule } from "./voice/voice.module"
@@ -36,6 +37,7 @@ describe("AppModule", () => {
     const moduleNames = importsOf(AppModule).map(moduleType => (moduleType as { name?: string }).name)
 
     expect(moduleNames).toContain("TeamModule")
+    expect(moduleNames).toContain(SkillHubModule.name)
     expect(moduleNames).not.toContain("TeamsModule")
     expect(moduleNames).not.toContain("InvitationsModule")
     expect(moduleNames).not.toContain("SkillRepositoryModule")

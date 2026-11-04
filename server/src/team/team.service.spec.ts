@@ -34,6 +34,8 @@ function createPrismaMock() {
       if (typeof input === "function") return input(prisma)
       return Promise.all(input as Promise<unknown>[])
     }),
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "team-1" }]),
+    skillHubSkill: { findFirst: vi.fn().mockResolvedValue(null) },
     team: {
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
@@ -230,6 +232,16 @@ describe("TeamService", () => {
         targetId: "team-1",
         detail: { name: "产品组", memberCount: 3 },
       }))
+    })
+
+    it("rejects deleting a team with retained Skill Hub assets, including deleted assets", async () => {
+      prisma.skillHubSkill.findFirst.mockResolvedValue({ id: "removed-skill" })
+      const { service } = createService(prisma)
+      await expect(service.deleteTeam("team-1")).rejects.toMatchObject({
+        response: { code: "HUB_TEAM_HAS_ASSETS" },
+      })
+      expect(prisma.skillHubSkill.findFirst).toHaveBeenCalledWith({ where: { teamId: "team-1" }, select: { id: true } })
+      expect(prisma.team.delete).not.toHaveBeenCalled()
     })
 
     it("rejects an unknown team", async () => {

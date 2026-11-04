@@ -28,6 +28,7 @@ import { NotificationModule } from "./notifications/notification.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { ProfileAvatarModule } from "./profile-avatar/profile-avatar.module"
+import { SkillHubModule } from "./skill-hub/skill-hub.module"
 import { TeamModule } from "./team/team.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 import { sanitizeWebhookLogRequest } from "./webhooks/webhook-sanitize"
@@ -129,6 +130,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
     MeetingModule,
     MailModule,
     TeamModule,
+    SkillHubModule,
     HealthModule,
   ],
   providers: [

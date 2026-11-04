@@ -92,6 +92,9 @@ model User {
   clientTelemetryEvents          ClientTelemetryEvent[]
   meetings                       Meeting[]
   teamMemberships                TeamMembership[]
+  skillHubContributions          SkillHubSkill[]                  @relation("SkillHubCreator")
+  skillHubMaintained             SkillHubSkill[]                  @relation("SkillHubMaintainer")
+  skillHubDeletions              SkillHubSkill[]                  @relation("SkillHubDeleter")
   organizationMemberships        OrganizationMembership[]
   mailMessagesSent               MailMessage[]                   @relation("MailSender")
   mailRecipients                 MailRecipient[]
@@ -1351,7 +1354,7 @@ model MeetingSpeaker {
   @@unique([meetingId, speakerId])
 }
 
-// 管理员维护的组织关系。团队本身不承载任何权限或资源，只记录「谁属于哪些团队」。
+// 管理员维护团队成员关系；Skill Hub 条目归团队所有。
 model Team {
   id        String           @id @default(cuid())
   name      String           @unique @db.VarChar(30)
@@ -1359,6 +1362,7 @@ model Team {
   updatedAt DateTime         @updatedAt
   members   TeamMembership[]
   organizations Organization[]
+  skillHubSkills SkillHubSkill[]
 }
 
 model TeamMembership {
@@ -2007,4 +2011,143 @@ model GamePokerResolution {
   createdAt DateTime @default(now())
   @@unique([handId, seq])
   @@index([roomId, handId, seq])
+}
+
+enum SkillHubUploadPurpose {
+  package
+  icon
+}
+
+enum SkillHubUploadState {
+  staging
+  ready
+  bound
+  cleanup
+}
+
+enum SkillHubObjectKind {
+  archive
+  main
+  icon
+}
+
+enum SkillHubObjectState {
+  staging
+  ready
+  deletePending
+}
+
+model SkillHubSkill {
+  id                   String   @id @default(cuid())
+  teamId               String
+  team                 Team     @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdById          String?
+  createdBy            User?    @relation("SkillHubCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdByName        String
+  maintainerUserId     String?
+  maintainer           User?    @relation("SkillHubMaintainer", fields: [maintainerUserId], references: [id], onDelete: SetNull)
+  maintainerName       String
+  displayName          String
+  displayDescription   String
+  iconObjectId         String?
+  iconObject           SkillHubObject? @relation("SkillHubIcon", fields: [iconObjectId], references: [id], onDelete: Restrict)
+  currentVersionId     String?
+  currentVersion       SkillHubVersion? @relation("SkillHubCurrentVersion", fields: [id, currentVersionId], references: [skillId, id], onDelete: NoAction, onUpdate: NoAction)
+  versions             SkillHubVersion[] @relation("SkillHubVersions")
+  writeReceipts        SkillHubWriteReceipt[]
+  revision             Int      @default(1)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  publishedAt          DateTime @default(now())
+  deletedAt            DateTime?
+  deletedById          String?
+  deletedBy            User?    @relation("SkillHubDeleter", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([teamId, deletedAt, publishedAt, id])
+  @@index([createdById])
+  @@index([maintainerUserId])
+  @@index([deletedById])
+  @@index([iconObjectId])
+}
+
+model SkillHubVersion {
+  id                   String   @id @default(cuid())
+  skillId              String
+  skill                SkillHubSkill @relation("SkillHubVersions", fields: [skillId], references: [id], onDelete: Restrict)
+  currentFor           SkillHubSkill[] @relation("SkillHubCurrentVersion")
+  writeReceipts        SkillHubWriteReceipt[]
+  number               Int
+  packageName          String
+  packageDescription   String
+  manifest             Json
+  contentFingerprint   String
+  archiveObjectId      String
+  archiveObject        SkillHubObject @relation("SkillHubArchive", fields: [archiveObjectId], references: [id], onDelete: Restrict)
+  mainObjectId         String
+  mainObject           SkillHubObject @relation("SkillHubMain", fields: [mainObjectId], references: [id], onDelete: Restrict)
+  createdAt            DateTime @default(now())
+
+  @@unique([skillId, id])
+  @@unique([skillId, number])
+  @@index([archiveObjectId])
+  @@index([mainObjectId])
+}
+
+// Uploads are scoped to immutable caller/team IDs. Unbound staging must remain
+// reclaimable even if that user or an otherwise empty team is deleted.
+model SkillHubUpload {
+  id                   String   @id @default(cuid())
+  actorKey             String
+  teamId               String
+  requestId            String
+  purpose              SkillHubUploadPurpose
+  state                SkillHubUploadState @default(staging)
+  expiresAt            DateTime
+  inputSha256          String
+  packageName          String?
+  packageDescription   String?
+  manifest             Json?
+  contentFingerprint   String?
+  objects              SkillHubObject[]
+  createdAt            DateTime @default(now())
+
+  @@unique([actorKey, teamId, purpose, requestId])
+  @@index([state, expiresAt, id])
+}
+
+model SkillHubObject {
+  id                   String   @id @default(cuid())
+  uploadId             String
+  upload               SkillHubUpload @relation(fields: [uploadId], references: [id], onDelete: Restrict)
+  storageKey           String   @unique
+  kind                 SkillHubObjectKind
+  state                SkillHubObjectState @default(staging)
+  size                 Int
+  sha256               String
+  nextCleanupAt        DateTime?
+  cleanupAttempts      Int      @default(0)
+  archiveVersions      SkillHubVersion[] @relation("SkillHubArchive")
+  mainVersions         SkillHubVersion[] @relation("SkillHubMain")
+  iconSkills           SkillHubSkill[] @relation("SkillHubIcon")
+  createdAt            DateTime @default(now())
+
+  @@unique([uploadId, kind])
+  @@index([state, nextCleanupAt, id])
+}
+
+model SkillHubWriteReceipt {
+  id                   String   @id @default(cuid())
+  actorKey             String
+  action               String
+  requestId            String
+  requestDigest        String
+  skillId              String
+  skill                SkillHubSkill @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  versionId            String?
+  version              SkillHubVersion? @relation(fields: [skillId, versionId], references: [skillId, id], onDelete: Restrict)
+  result               Json
+  createdAt            DateTime @default(now())
+
+  @@unique([actorKey, action, requestId])
+  @@index([skillId, versionId])
 }
