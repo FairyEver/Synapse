@@ -35,6 +35,8 @@ COPY shared/ shared/
 COPY pdf-renderer/package.json pdf-renderer/package.json
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY .pnpmfile.cjs ./
+ARG NPM_REGISTRY
+ENV COREPACK_NPM_REGISTRY=$NPM_REGISTRY
 RUN pnpm --filter @synapse/server prisma:generate
 RUN pnpm --filter @synapse/server build
 RUN pnpm --filter @synapse/dashboard build
