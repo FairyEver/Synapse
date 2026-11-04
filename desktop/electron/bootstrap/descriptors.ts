@@ -263,6 +263,7 @@ import { prepareContentIconImageBytes } from "../services/content-icon-image-ser
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
+import { createSkillHubCapabilityDispatcher } from "../../app-capabilities/skill-hub/main/dispatcher"
 import { DesktopSkillHubService, SKILL_HUB_SERVICE_ID } from "../../app-capabilities/skill-hub/main/service"
 import { SkillHubCloudClient } from "../../app-capabilities/skill-hub/main/cloud-client"
 import { HubPackageService } from "../../app-capabilities/skill-hub/main/package-service"
@@ -1656,6 +1657,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
   dependsOn: [
     MAIL_SERVICE_ID,
     TODOS_SERVICE_ID,
+    SKILL_HUB_SERVICE_ID,
     GAME_SERVICE_ID,
     WECOM_CONNECTION_SERVICE_ID,
     "core.config",
@@ -1825,6 +1827,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       auditSink,
     })
     const gameDispatcher=createGameDispatcher({service:ctx.registry.get<GameHallService>(GAME_SERVICE_ID),permissionGuard,auditSink})
+    const skillHubDispatcher = createSkillHubCapabilityDispatcher({ service: ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID) })
     const todosDispatcher = createTodoCapabilityDispatcher({ service: ctx.registry.get<TodoCloudService>(TODOS_SERVICE_ID), permissionGuard, auditSink })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
       service: createDocumentTemplateService(),
@@ -1925,6 +1928,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
       gameDispatch:(action,params,context)=>gameDispatcher.dispatch(action,params,context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
+      skillHubDispatch: skillHubDispatcher.dispatch,
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(

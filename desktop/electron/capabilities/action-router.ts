@@ -24,6 +24,7 @@ export type SynapseActionRouterDeps = {
   readonly mailInternalDispatch: DomainDispatch
   readonly gameDispatch?: DomainDispatch
   readonly todosDispatch?: DomainDispatch
+  readonly skillHubDispatch?: DomainDispatch
   readonly wecomDispatch?: DomainDispatch
   readonly modelPriceDispatch: DomainDispatch
   readonly repositoryDispatch: DomainDispatch
@@ -45,6 +46,10 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       if (domainId === "todos") {
         if (!deps.todosDispatch) throw new Error("Todo dispatcher is not configured")
         return deps.todosDispatch(action, params, context)
+      }
+      if (domainId === "skill_hub") {
+        if (!deps.skillHubDispatch) throw new Error("Skill Hub dispatcher is not configured")
+        return deps.skillHubDispatch(action, params, context)
       }
       if (domainId === "wecom") {
         if (!deps.wecomDispatch) throw new Error("WeCom dispatcher is not configured")

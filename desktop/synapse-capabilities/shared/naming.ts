@@ -51,6 +51,8 @@ const CAPABILITY_ACTIONS = [
   "clear",
   "apply",
   "download_file",
+  "download",
+  "prepare",
   "ensure",
   "import",
   "materialize",

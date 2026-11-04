@@ -30,3 +30,13 @@ it("publishes 17 internal mail tools and 44 separate external mail tools", () =>
   expect(tools.filter(t => t.name.startsWith("app_mail_internal_"))).toHaveLength(17)
   expect(tools.filter(t => t.name.startsWith("app_mail_") && !t.name.startsWith("app_mail_internal_"))).toHaveLength(44)
 })
+
+
+it("registers exactly ten Skill Hub index entries without old Skill repository aliases", () => {
+  const tools = buildAllMcpTools().filter((tool) => tool.name.startsWith("app_skill_hub_"))
+  expect(tools).toHaveLength(10)
+  expect(Object.keys(MCP_TOOL_ACTIONS).filter((name) => name.startsWith("app_skill_hub_"))).toHaveLength(10)
+  expect(getActionDomainId("app.skill_hub.team.list")).toBe("skill_hub")
+  expect(getActionDomainId("app.skill_hub.skill.restore")).toBeNull()
+  expect(getActionDomainId("app.skill_repository.skill.list")).toBeNull()
+})

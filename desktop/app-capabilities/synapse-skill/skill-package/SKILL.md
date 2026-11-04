@@ -30,6 +30,7 @@ Before routing business operations, apply [Presenting Data](#presenting-data) to
 First classify the user's intent, then read the matching domain file before using tools:
 
 - Copied `synapse://mail-internal/<id>` -> `mail-internal/index.md`; copied `synapse:notification:<id>` -> `notifications/index.md`. The reference identifies the type even when the user says only “看这个” or “读一下”. Pass the complete reference unchanged to that domain's read tool. If the user gives only an untyped raw ID and context does not identify its source, ask which type it is.
+- Snap Skill Hub / 团队 Skill Hub, a `/console/skill-hub/<id>` detail link, team Skill listing, publishing, full package updates or write receipts -> `skill-hub/index.md`. This is a separate team asset domain; no legacy cloud repository fallback.
 - Creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory -> `skill-authoring/index.md`
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
 - Drive file search by name/extension and metadata, search refinements and numbered result follow-ups; files, folders, one-time upload, persistent local file or folder sync, download, preview, local Markdown document publishing with linked images or HTML, HTML page sharing, static site publishing or republishing, public assets, trash, versions; 云文档、在线文档、云盘、云存储、云空间、网盘 and equivalent terms when no other platform is explicitly named -> `drive/index.md`
@@ -77,7 +78,7 @@ When the answer includes a Synapse link for the user to open — a share link, a
 
 Use only the domain guidance that matches the current task. Do not apply Workflow rules to Automation items, Drive rules to local files unless the user asks for a Drive upload or sync operation, or Database SQL rules to Resource Repository resources.
 
-For local Skill file authoring, read `skill-authoring/index.md`. Do not also read `content/index.md` unless the user asks to publish or manage the Skill in Synapse. A request only to publish or manage an existing Skill in Synapse is a Content operation, not local Skill authoring.
+For local Skill file authoring, read `skill-authoring/index.md`. Do not also read `content/index.md` unless the user asks to publish or manage the Skill in Synapse. For team Skill Hub publication, use `skill-hub/index.md`; resource-repository publication uses `content/index.md`.
 
 Before destructive operations, follow the safety rules in the relevant domain file and ask when the user's intent is ambiguous.
 

@@ -157,8 +157,11 @@ export const skillHubPreparedSourceSchema = z.strictObject({
   }),
 })
 
-export const skillHubMcpGetInputSchema = z.strictObject({ skillId: id })
-export const skillHubMcpDownloadInputSchema = skillHubMcpGetInputSchema.extend({
+export const skillHubMcpGetInputSchema = z.strictObject({
+  skillId: id.optional(), reference: z.string().min(1).max(2048).optional(),
+}).refine(({ skillId, reference }) => (skillId === undefined) !== (reference === undefined))
+export const skillHubMcpDownloadInputSchema = z.strictObject({
+  skillId: id,
   destinationDirectory: localPath, expectedVersionId: id.optional(),
 })
 export const skillHubMcpPrepareInputSchema = z.strictObject({ sourcePath: localPath, teamId: id.optional() })

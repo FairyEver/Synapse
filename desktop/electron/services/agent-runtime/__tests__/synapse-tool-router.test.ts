@@ -322,3 +322,12 @@ describe("Published tool definitions", () => {
     expect(execute).toHaveBeenCalledTimes(1)
   })
 })
+
+
+it("discovers the team, upload and receipt operations in the Skill Hub domain", async () => {
+  for (const [query, suffix] of [["本人团队", "team_list"], ["首次发布", "skill_create"], ["查验结果", "receipt_get"]]) {
+    const result = searchMatches(await searchSynapseTools({ query, domain: "skill_hub", limit: 4 }))
+    expect(result.tools.map((tool) => tool.name)).toContain(`app_skill_hub_${suffix}`)
+  }
+  expect(buildSynapseToolRouterTools().map((tool) => tool.name)).toEqual(["search", "invoke"])
+})

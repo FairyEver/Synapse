@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-04 Snap Skill Hub：新增独立 `skill_hub` domain，共 10 项 capability / MCP 索引；实测全局 374 项 capability、370 项索引及工具定义，公开入口仍为 `search` / `invoke`。复用账号状态与登录能力。无 System App、默认 Dock、Workflow 或 Automation 入口；管理员治理仅 Web/API。旧 Skill Repository 工具和协议保持退役。
+
 - 卡牌房既有 `table.state` / `room.get` 的公开 `handLog.entries` 可追加类型化 `effects`。热手按已读取的最多 1000 条动作序号取结算帧，归档读同一审计数据。仅返回实际可公开的效果和参赛快照名。响应 schema、MCP 描述与系统 Skill 同步，现有注册数、路由、权限和表结构保持原样。
 
 - 新建卡牌房要求 `cards-v3,chips-v2`，旧卡牌房继续按房间快照校验版本。既有真人私有 `card.play` / `card.choose` 支持新版五选一，公开建房参数停用 Roll 及钻石额度。旧 Roll 路由仍可操作已有 Roll 房。保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0，其他注册数量与例外无变化。
@@ -151,6 +153,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Quick Input | 是 | 否 | — | — | — | — |
 | Rule Installer | 否 | 否 | — | — | — | — |
 | Secrets | 是 | 否 | — | — | 6 | — |
+| Skill Hub | 否 | 否 | — | — | 10 | — |
 | Skill Installer | 否 | 否 | — | — | — | — |
 | Skill Uninstaller | 否 | 否 | — | — | — | — |
 | Synapse Skill | 是 | 否 | — | — | — | — |
@@ -302,13 +305,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
 | `game` | 30 | 30 |
-| 合计 | 364 | 360 |
+| `skill_hub` | 10 | 10 |
+| 合计 | 374 | 370 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 360 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 370 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

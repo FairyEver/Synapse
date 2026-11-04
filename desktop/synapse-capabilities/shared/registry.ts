@@ -38,6 +38,7 @@ import {
 } from "./drive-domain"
 import { MAIL_DOMAIN, MAIL_MCP_TOOL_ACTIONS, buildMailTools } from "../../app-capabilities/mail/shared/capability"
 import { MAIL_INTERNAL_DOMAIN, MAIL_INTERNAL_MCP_TOOL_ACTIONS, buildMailInternalTools } from "./mail-internal-domain"
+import { SKILL_HUB_DOMAIN, SKILL_HUB_MCP_TOOL_ACTIONS, buildSkillHubTools } from "../../app-capabilities/skill-hub/shared/capability"
 import { TODOS_DOMAIN, TODOS_MCP_TOOL_ACTIONS, buildTodoTools } from "./todos-domain"
 import { WECOM_DOMAIN, WECOM_MCP_TOOL_ACTIONS, buildWecomTools } from "./wecom-domain"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
@@ -56,6 +57,7 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   MAIL_INTERNAL_DOMAIN,
   MAIL_DOMAIN,
   TODOS_DOMAIN,
+  SKILL_HUB_DOMAIN,
   WECOM_DOMAIN,
 ]
 
@@ -78,6 +80,7 @@ export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...MAIL_INTERNAL_MCP_TOOL_ACTIONS,
   ...MAIL_MCP_TOOL_ACTIONS,
   ...TODOS_MCP_TOOL_ACTIONS,
+  ...SKILL_HUB_MCP_TOOL_ACTIONS,
   ...WECOM_MCP_TOOL_ACTIONS,
 }
 
@@ -95,6 +98,7 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildMailInternalTools(),
     ...buildMailTools(),
     ...buildTodoTools(),
+    ...buildSkillHubTools(),
     ...buildWecomTools(),
   ]
 }
