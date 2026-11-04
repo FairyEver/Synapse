@@ -39,7 +39,10 @@ import {
   type ProviderPreset,
 } from "./claude-provider-presets"
 import { buildProviderInputFromClaudePreset } from "./provider-preset-adapter"
-import { LOCAL_CLAUDE_CODE_PROVIDER_ID as LOCAL_PROVIDER_ID } from "./types"
+import {
+  LOCAL_CLAUDE_CODE_PROVIDER_ID as LOCAL_PROVIDER_ID,
+  LOCAL_CLAUDE_CODE_PROVIDER_NAME,
+} from "./types"
 import {
   buildCcSwitchClaudeImportPreview,
   buildProviderInputFromCcSwitchCandidate,
@@ -1017,7 +1020,7 @@ export class ProviderService {
     const env = settings.env
     return {
       id: LOCAL_PROVIDER_ID,
-      name: "CC/Synapse",
+      name: LOCAL_CLAUDE_CODE_PROVIDER_NAME,
       category: "official",
       source: "local",
       readonly: true,

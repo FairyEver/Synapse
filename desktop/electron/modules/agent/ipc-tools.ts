@@ -763,7 +763,7 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
         projectId: request.projectId,
         agents: [{
           id: "claude-code",
-          label: "CC/Synapse",
+          label: "Claude Code 运行时",
           ready: issues.length === 0,
           cli: {
             required: false,

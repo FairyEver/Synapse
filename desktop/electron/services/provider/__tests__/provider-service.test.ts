@@ -23,6 +23,7 @@ import {
 } from "../provider-package"
 import {
   LOCAL_CLAUDE_CODE_PROVIDER_ID,
+  LOCAL_CLAUDE_CODE_PROVIDER_NAME,
   type CcSwitchClaudeProviderImportCandidate,
   type CcSwitchImportSource,
 } from "../types"
@@ -104,7 +105,7 @@ describe("ProviderService", () => {
     expect(resolveProviderPackageTargetId("packy", new Set(["deepseek"]))).toBe("packy")
   })
 
-  it("exposes local CC/Synapse as the default read-only provider", async () => {
+  it("exposes the local Claude Code configuration as the default read-only provider", async () => {
     const { service } = makeProviderService({
       localClaudeSettingsPath: "/Users/test/.claude/settings.json",
       readTextFile: async () => JSON.stringify({
@@ -120,7 +121,7 @@ describe("ProviderService", () => {
     await expect(service.listProviders()).resolves.toEqual([
       expect.objectContaining({
         id: LOCAL_CLAUDE_CODE_PROVIDER_ID,
-        name: "CC/Synapse",
+        name: LOCAL_CLAUDE_CODE_PROVIDER_NAME,
         source: "local",
         readonly: true,
         active: true,

@@ -55,6 +55,7 @@ function provider(input: {
   readonly id: string
   readonly name: string
   readonly source?: "local" | "user"
+  readonly readonly?: boolean
   readonly active?: boolean
   readonly model?: string
   readonly haikuModel?: string
@@ -67,6 +68,7 @@ function provider(input: {
     name: input.name,
     category: "anthropic" as const,
     source: input.source,
+    readonly: input.readonly,
     apiKeyField: "ANTHROPIC_AUTH_TOKEN" as const,
     active: input.active,
     model: input.model,
@@ -156,8 +158,9 @@ describe("ProviderModelSelectDialog", () => {
     bridge.agent.listProviders.mockResolvedValue([
       provider({
         id: "local-claude-code",
-        name: "CC/Synapse",
+        name: "Claude Code 本机配置",
         source: "local",
+        readonly: true,
         active: true,
       }),
     ])
@@ -168,7 +171,8 @@ describe("ProviderModelSelectDialog", () => {
       await Promise.resolve()
     })
 
-    expect(document.body.textContent).toContain("CC/Synapse")
+    expect(document.body.textContent).toContain("Claude Code 本机配置")
+    expect(document.body.textContent).toContain("只读")
     expect(document.body.textContent).toContain("Claude Code 默认")
     expect([...document.querySelectorAll("[data-tier]")]
       .map((el) => el.getAttribute("data-tier"))).toEqual(["default"])
@@ -184,7 +188,7 @@ describe("ProviderModelSelectDialog", () => {
     expect(props.onSelect).toHaveBeenCalledWith({
       providerId: "local-claude-code",
       modelTier: "default",
-      providerName: "CC/Synapse",
+      providerName: "Claude Code 本机配置",
       modelName: undefined,
     })
   })

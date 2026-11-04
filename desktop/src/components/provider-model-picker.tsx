@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { ModelTierLabel } from "@/components/model-tier-label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -122,13 +123,16 @@ function ProviderModelPicker({
                         disabled={disabled || !selectable}
                       />
                     </TableCell>
-                    <TableCell className="w-40 min-w-0 pl-1">
-                      <span
-                        title={provider.name}
-                        className={cn("block truncate font-medium", selected && "font-semibold")}
-                      >
-                        {provider.name}
-                      </span>
+                    <TableCell className="w-48 min-w-0 pl-1">
+                      <div className="flex min-w-0 flex-col items-start gap-1">
+                        <span
+                          title={provider.name}
+                          className={cn("block w-full truncate font-medium", selected && "font-semibold")}
+                        >
+                          {provider.name}
+                        </span>
+                        {provider.readonly ? <Badge variant="outline">只读</Badge> : null}
+                      </div>
                     </TableCell>
                     <TableCell className="min-w-0 py-2.5">
                       <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
@@ -193,7 +197,7 @@ function ProviderModelPickerSkeleton() {
       <TableCell className="w-8 py-3 pr-1 pl-2">
         <Skeleton className="size-4 rounded-full" />
       </TableCell>
-      <TableCell className="w-40 pl-1">
+      <TableCell className="w-48 pl-1">
         <Skeleton className="h-4 w-28" />
       </TableCell>
       <TableCell>

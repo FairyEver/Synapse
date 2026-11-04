@@ -43,6 +43,7 @@ export {
   type CcSwitchImportSource,
   type CcSwitchImportSourceKind,
   LOCAL_CLAUDE_CODE_PROVIDER_ID,
+  LOCAL_CLAUDE_CODE_PROVIDER_NAME,
   PROVIDER_SERVICE_ID,
   type CCProvider,
   type CCProviderPreset,

@@ -1,5 +1,6 @@
 export const PROVIDER_SERVICE_ID = "provider"
 export const LOCAL_CLAUDE_CODE_PROVIDER_ID = "local-claude-code"
+export const LOCAL_CLAUDE_CODE_PROVIDER_NAME = "Claude Code 本机配置"
 
 export type ProviderCategory =
   | "official"

@@ -757,8 +757,10 @@ describe("ProviderPanel dialog editor", () => {
     renderProviderPanel()
     await flush()
 
-    expect(document.body.textContent).toContain("Local Claude")
+    expect(document.body.textContent).toContain("Claude Code 本机配置")
     expect(document.body.textContent).toContain("claude-sonnet-4-5")
+    expect(document.body.textContent).toContain("只读")
+    expect(document.body.textContent).toContain("—")
     expect(document.body.textContent).not.toContain("编辑")
     expect(document.body.textContent).not.toContain("设为默认")
     expect(document.body.textContent).not.toContain("归档")
@@ -1473,7 +1475,7 @@ function customProvider(overrides: Partial<SynapseAgentProvider> = {}): SynapseA
 function readonlyProvider(): SynapseAgentProvider {
   return {
     id: "local-claude",
-    name: "Local Claude",
+    name: "Claude Code 本机配置",
     category: "official",
     source: "local",
     readonly: true,

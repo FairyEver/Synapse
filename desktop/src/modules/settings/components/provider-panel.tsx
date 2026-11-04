@@ -13,6 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -563,7 +564,7 @@ function ProviderPanelView({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-48">名称</TableHead>
+                <TableHead className="w-56">名称</TableHead>
                 <TableHead>模型</TableHead>
                 <TableHead className="w-64 text-right">操作</TableHead>
               </TableRow>
@@ -588,10 +589,14 @@ function ProviderPanelView({
                       <button
                         type="button"
                         className="min-w-0 truncate text-left font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                        title={provider.name}
                         onClick={() => onView(provider)}
                       >
                         {provider.name}
                       </button>
+                      {provider.readonly ? (
+                        <Badge variant="outline" className="shrink-0">只读</Badge>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="min-w-0 whitespace-normal">
@@ -762,7 +767,9 @@ function ProviderRowActions({
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onDelete: (provider: SynapseAgentProvider) => void
 }) {
-  if (provider.readonly) return null
+  if (provider.readonly) {
+    return <span className="text-sm text-muted-foreground">—</span>
+  }
 
   return (
     <div className="flex justify-end gap-2">

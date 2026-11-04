@@ -1567,6 +1567,7 @@ describe("agentIpcModule", () => {
     }) as {
       readonly agents: readonly {
         readonly id: string
+        readonly label: string
         readonly ready: boolean
         readonly issues: readonly string[]
         readonly provider?: {
@@ -1579,6 +1580,7 @@ describe("agentIpcModule", () => {
 
     expect(result.agents.map((agent) => agent.id)).toEqual(["claude-code"])
     expect(result.agents.find((agent) => agent.id === "claude-code")).toEqual(expect.objectContaining({
+      label: "Claude Code 运行时",
       ready: expect.any(Boolean),
       provider: {
         activeProviderId: "anthropic",

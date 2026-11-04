@@ -12,7 +12,7 @@ import type { SynapseAgentProvider } from "@/types/bridge"
 
 const LOCAL_PROVIDER_BASE = {
   id: "local-claude-code",
-  name: "CC/Synapse",
+  name: "Claude Code 本机配置",
   category: "official",
   source: "local",
   readonly: true,
