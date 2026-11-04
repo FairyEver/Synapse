@@ -1,6 +1,6 @@
 import { Button, Skeleton, Tabs } from '@heroui/react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, File, PackageOpen } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeft, File } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { SkillHubDetail } from '@synapse/shared/skill-hub-contracts'
 import { Header } from '@/components/layout/header'
@@ -66,42 +66,55 @@ export function SkillDetail({ skill, session, reload, onDeleted = reload }: { sk
   }
 
   return <div className="grid min-w-0 gap-6">
-    <div className="grid min-w-0 gap-4 border-b border-separator pb-6">
-      <div className="flex min-w-0 items-start gap-4">
-        <SkillHubIcon skill={skill} session={session} large />
-        <div className="min-w-0 space-y-1">
-          <p className="wrap-anywhere text-sm font-medium text-muted">{skill.team.name} · v{version.number} · <time dateTime={skill.publishedAt}>{publishedDate.format(new Date(skill.publishedAt))}</time></p>
-          <h1 className="wrap-anywhere text-2xl leading-tight font-semibold sm:text-3xl">{skill.displayName}</h1>
-          <p className="wrap-anywhere whitespace-pre-wrap text-sm leading-relaxed text-muted">{skill.displayDescription}</p>
-        </div>
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-3 sm:gap-x-4 @3xl/content:grid-cols-[auto_minmax(0,1fr)_auto]">
+      <SkillHubIcon skill={skill} session={session} large />
+      <div className="min-w-0 self-center">
+        <h1 className="wrap-anywhere text-2xl leading-tight font-semibold sm:text-3xl">{skill.displayName}</h1>
+        <p className="mt-1 wrap-anywhere text-sm text-muted">{skill.team.name} · <span className="tabular-nums">v{version.number}</span></p>
       </div>
-      <div className="flex flex-wrap gap-2"><SkillInstallButton id={skill.id} variant="primary" />
-        <Button variant="secondary" isPending={downloading} onPress={() => void download()}><PackageOpen aria-hidden="true" />下载 ZIP</Button>
+      <p className="col-span-full max-w-prose wrap-anywhere whitespace-pre-wrap text-sm leading-relaxed text-muted @3xl/content:col-start-2">
+        {skill.displayDescription}
+      </p>
+      <div className="col-span-full flex flex-wrap items-center gap-1.5 @3xl/content:col-start-3 @3xl/content:row-start-1 @3xl/content:self-center">
+        <SkillInstallButton id={skill.id} variant="primary" />
+        <Button variant="secondary" isPending={downloading} onPress={() => void download()}><ArrowDownToLine aria-hidden="true" />下载 ZIP</Button>
         <SkillMaintenance skill={skill} session={session} onDeleted={onDeleted} />
       </div>
-      {error ? <p role="alert" className="text-danger">{error}</p> : null}
-      <dl className="grid min-w-0 gap-x-6 gap-y-3 text-sm @lg/content:grid-cols-2">
-        <div><dt className="text-muted">包内名称</dt><dd className="wrap-anywhere font-mono">{skill.package.name}</dd></div>
-        <div><dt className="text-muted">包内介绍</dt><dd className="wrap-anywhere whitespace-pre-wrap">{skill.package.description}</dd></div>
-        <div><dt className="text-muted">贡献者</dt><dd className="wrap-anywhere">{skill.createdBy.displayName}</dd></div>
-        <div><dt className="text-muted">维护者</dt><dd className="wrap-anywhere">{skill.maintainer.displayName}{skill.maintainer.isActiveMember ? '' : '（已离队或停用）'}</dd></div>
-      </dl>
+      {error ? <p role="alert" className="col-span-full text-danger">{error}</p> : null}
     </div>
-    <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(String(key))}>
-      <Tabs.ListContainer><Tabs.List aria-label="Skill 包">
-        <Tabs.Tab id="main">说明<Tabs.Indicator /></Tabs.Tab><Tabs.Tab id="files">文件<Tabs.Indicator /></Tabs.Tab>
-      </Tabs.List></Tabs.ListContainer>
-      <Tabs.Panel id="main" className="min-w-0 pt-4">
-        {main.isError ? <div role="alert" className="flex flex-wrap items-center gap-3"><p className="text-danger">{main.error.message}</p>
-          <Button variant="secondary" onPress={() => { reload(); void main.refetch() }}>重新读取</Button></div>
-          : main.data ? <SkillMainView content={main.data.content} /> : <Skeleton aria-label="正在读取说明" role="status" className="h-24 rounded-lg" />}
-      </Tabs.Panel>
-      <Tabs.Panel id="files" className="min-w-0 pt-4">
-        <ul className="divide-y divide-separator">{skill.files.map((file) => <li key={file.path} className="flex min-w-0 items-center gap-2 py-3 text-sm">
-          <File className="size-4 shrink-0 text-muted" aria-hidden="true" /><span className="min-w-0 flex-1 wrap-anywhere font-mono">{file.path}</span>
-          <span className="shrink-0 text-muted tabular-nums">{file.size.toLocaleString()} B</span>
-        </li>)}</ul>
-      </Tabs.Panel>
-    </Tabs>
+    <div className="grid min-w-0 items-start gap-6 @3xl/content:grid-cols-[minmax(0,1fr)_minmax(11rem,14rem)]">
+      <Tabs variant="secondary" className="min-w-0" selectedKey={tab} onSelectionChange={(key) => setTab(String(key))}>
+        <Tabs.ListContainer><Tabs.List aria-label="Skill 包">
+          <Tabs.Tab id="main" className="w-auto min-w-20">说明<Tabs.Indicator /></Tabs.Tab>
+          <Tabs.Tab id="files" className="w-auto min-w-20 gap-1">
+            文件<span aria-hidden="true" className="text-xs text-muted tabular-nums">{skill.files.length}</span><Tabs.Indicator />
+          </Tabs.Tab>
+        </Tabs.List></Tabs.ListContainer>
+        <Tabs.Panel id="main" className="min-w-0 max-w-prose pt-5">
+          {main.isError ? <div role="alert" className="flex flex-wrap items-center gap-3"><p className="text-danger">{main.error.message}</p>
+            <Button variant="secondary" onPress={() => { reload(); void main.refetch() }}>重新读取</Button></div>
+            : main.data ? <>
+              <div className="mb-2 flex items-center gap-2 text-xs text-muted"><File className="size-4" aria-hidden="true" /><code>SKILL.md</code></div>
+              <SkillMainView content={main.data.content} />
+            </> : <Skeleton aria-label="正在读取说明" role="status" className="h-24 rounded-lg" />}
+        </Tabs.Panel>
+        <Tabs.Panel id="files" className="min-w-0 pt-4">
+          <ul className="divide-y divide-separator">{skill.files.map((file) => <li key={file.path} className="flex min-w-0 items-start gap-2 py-3 text-sm">
+            <File className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden="true" /><span className="min-w-0 flex-1 wrap-anywhere font-mono">{file.path}</span>
+            <span className="shrink-0 text-muted tabular-nums">{file.size.toLocaleString()} B</span>
+          </li>)}</ul>
+        </Tabs.Panel>
+      </Tabs>
+      <aside aria-label="包资料" className="min-w-0 border-t border-separator pt-4 @3xl/content:mt-12 @3xl/content:border-s @3xl/content:border-t-0 @3xl/content:ps-5 @3xl/content:pt-0">
+        <h2 className="mb-4 text-sm font-semibold">包资料</h2>
+        <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-3 text-sm @3xl/content:grid-cols-1">
+          <div><dt className="text-xs text-muted">包内名称</dt><dd className="mt-0.5 wrap-anywhere font-mono">{skill.package.name}</dd></div>
+          <div><dt className="text-xs text-muted">发布时间</dt><dd className="mt-0.5"><time dateTime={skill.publishedAt}>{publishedDate.format(new Date(skill.publishedAt))}</time></dd></div>
+          <div><dt className="text-xs text-muted">贡献者</dt><dd className="mt-0.5 wrap-anywhere">{skill.createdBy.displayName}</dd></div>
+          <div><dt className="text-xs text-muted">维护者</dt><dd className="mt-0.5 wrap-anywhere">{skill.maintainer.displayName}{skill.maintainer.isActiveMember ? '' : '（已离队或停用）'}</dd></div>
+          <div className="col-span-full"><dt className="text-xs text-muted">包内介绍</dt><dd className="mt-0.5 wrap-anywhere whitespace-pre-wrap">{skill.package.description}</dd></div>
+        </dl>
+      </aside>
+    </div>
   </div>
 }

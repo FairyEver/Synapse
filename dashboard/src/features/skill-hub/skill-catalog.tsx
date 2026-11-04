@@ -1,4 +1,4 @@
-import { Button, Checkbox, Label, SearchField, Skeleton, Spinner } from '@heroui/react'
+import { Button, Checkbox, Label, SearchField, Skeleton, Spinner, Surface } from '@heroui/react'
 import { useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { HubTeamSelect } from './hub-team-select'
@@ -71,11 +71,11 @@ function Catalog({ session, search, onSearch }: Props & { session: string }) {
             onChange={(text) => { setDraft(text); if (!text && search.q) submitSearch(text) }}
             onSubmit={submitSearch}>
             <Label className="sr-only">搜索 Skill</Label>
-            <SearchField.Group><SearchField.SearchIcon /><SearchField.Input maxLength={200} placeholder="搜索名称或介绍" /><SearchField.ClearButton /></SearchField.Group>
+            <SearchField.Group><SearchField.SearchIcon /><SearchField.Input className="min-w-0" maxLength={200} placeholder="名称或简介" /><SearchField.ClearButton /></SearchField.Group>
           </SearchField>
           <Button variant="secondary" onPress={() => submitSearch(draft)}>搜索</Button>
         </div>
-        {teams.data?.selectionState === 'multiple' ? <div className="w-full min-w-0 @2xl/content:w-56">
+        {teams.data?.selectionState === 'multiple' ? <div className="min-w-0 flex-1 @2xl/content:w-44 @2xl/content:flex-none">
           <HubTeamSelect all teams={teams.data.items} value={search.team} onChange={(team) => onSearch({ ...search, team })} />
         </div> : null}
         <Checkbox isSelected={Boolean(search.mine)} onChange={(selected) => onSearch({ ...search, mine: selected || undefined })}>
@@ -85,13 +85,15 @@ function Catalog({ session, search, onSearch }: Props & { session: string }) {
       {error ? <div role="alert" className="flex flex-wrap items-center gap-3">
         <p className="text-danger">{error.message || '暂时无法读取 Skill Hub。'}</p>
         <Button variant="secondary" onPress={() => { void teams.refetch(); void catalog.refetch() }}>重试</Button>
-      </div> : loading ? <div role="status" aria-label="正在读取 Skill Hub" className="grid gap-5 @2xl/content:grid-cols-2">
-        <Skeleton className="h-28 rounded-xl" /><Skeleton className="h-28 rounded-xl" />
-      </div> : noTeam ? <p className="py-8 text-muted">你还没有加入任何团队。</p>
+      </div> : loading ? <Surface role="status" aria-label="正在读取 Skill Hub" className="grid gap-4 rounded-xl p-3.5">
+        <Skeleton className="h-10 rounded-lg" /><Skeleton className="h-10 rounded-lg" />
+      </Surface> : noTeam ? <p className="py-8 text-muted">你还没有加入任何团队。</p>
         : !skills.length ? <p className="py-8 text-muted">{search.q || search.mine || search.team ? '没有符合条件的 Skill。' : '团队还没有 Skill。'}</p>
-          : <ul className="grid min-w-0 gap-x-8 @2xl/content:grid-cols-2 @6xl/content:grid-cols-3" aria-label="团队 Skill">
-            {skills.map((skill) => <SkillCatalogItem key={skill.id} skill={skill} session={session} search={search} showTeam={!single} />)}
-          </ul>}
+          : <Surface className="min-w-0 rounded-xl px-3 sm:px-3.5">
+            <ul className="divide-y divide-separator" aria-label="团队 Skill">
+              {skills.map((skill) => <SkillCatalogItem key={skill.id} skill={skill} session={session} search={search} showTeam={!single && !search.team} />)}
+            </ul>
+          </Surface>}
       {hasMore ? <div ref={nextPageRef} className="min-h-px shrink-0">
         <div role="status">
           {catalog.isFetchingNextPage ? <div className="flex items-center justify-center gap-2 text-sm text-muted">

@@ -239,14 +239,17 @@ for (const width of [320, 768, 1280]) describe(`Skill Hub browser fixture ${widt
   })
 })
 
-it('uses three content columns at a wide viewport', async () => {
+it('keeps adjacent catalog entries aligned in one continuous list at a wide viewport', async () => {
   await page.viewport(1600, 860)
   stubRead()
   const view = await mount()
   try {
     const list = page.getByRole('list', { name: '团队 Skill' })
     await expect.element(list).toBeVisible()
-    expect(getComputedStyle(list.element()).gridTemplateColumns.split(' ')).toHaveLength(3)
+    const [first, second] = [...list.element().children].map((row) => row.getBoundingClientRect())
+    expect(second.left).toBeCloseTo(first.left)
+    expect(second.width).toBeCloseTo(first.width)
+    expect(second.top).toBeCloseTo(first.bottom)
     await screenshot('catalog', 1600)
   } finally { await view.unmount() }
 })
