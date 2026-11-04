@@ -145,7 +145,7 @@ describe("ProviderPanel dialog editor", () => {
     expect(toast).toHaveBeenCalledWith("模型 ID 已复制")
   })
 
-  it("keeps row actions in a dedicated non-wrapping column", async () => {
+  it("shows the provider index and selected provider actions in the split view", async () => {
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
@@ -159,17 +159,15 @@ describe("ProviderPanel dialog editor", () => {
     renderProviderPanel()
     await flush()
 
-    const actionHead = Array.from(document.body.querySelectorAll("th"))
-      .find((cell) => cell.textContent === "操作")
-    const actionCell = buttonByText(document.body, "编辑").closest("td")
-
-    expect(actionHead?.className).toContain("w-64")
-    expect(actionCell?.className).toContain("whitespace-nowrap")
+    expect(document.body.querySelector('[aria-label="供应商列表"]')?.textContent)
+      .toContain("1 个模型")
+    expect(document.body.querySelector('[aria-label="Custom Provider 详情"]')?.textContent)
+      .toContain("导出密钥包")
     expect(buttonByText(document.body, "编辑").className).toContain("whitespace-nowrap")
     expect(document.body.textContent).not.toContain("设为默认")
   })
 
-  it("keeps the provider table outside and renders the cc-switch-like form only in the dialog", async () => {
+  it("keeps the provider split view outside and renders the cc-switch-like form only in the dialog", async () => {
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
@@ -185,10 +183,9 @@ describe("ProviderPanel dialog editor", () => {
 
     expect(document.body.textContent).toContain("模型供应商")
     expect(document.body.textContent).toContain("Custom Provider")
-    expect(document.body.textContent).toContain("名称")
-    expect(document.body.textContent).toContain("模型")
+    expect(document.body.textContent).toContain("1 个模型")
     expect(document.body.textContent).not.toContain("Key 字段")
-    expect(document.body.textContent).toContain("操作")
+    expect(document.body.textContent).toContain("导出密钥包")
     expect(document.body.textContent).not.toContain("供应商名称")
     expect(document.body.textContent).not.toContain("配置 JSON")
 
@@ -743,7 +740,7 @@ describe("ProviderPanel dialog editor", () => {
     expect(toast).toHaveBeenCalledWith("配置 JSON 格式错误")
   })
 
-  it("keeps readonly local provider values visible in the table and hides row actions", async () => {
+  it("keeps readonly local provider values visible in the detail view and hides actions", async () => {
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
@@ -760,11 +757,44 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("Claude Code 本机配置")
     expect(document.body.textContent).toContain("claude-sonnet-4-5")
     expect(document.body.textContent).toContain("只读")
-    expect(document.body.textContent).toContain("—")
     expect(document.body.textContent).not.toContain("编辑")
     expect(document.body.textContent).not.toContain("设为默认")
     expect(document.body.textContent).not.toContain("归档")
     expect(document.body.textContent).not.toContain("供应商名称")
+  })
+
+  it("switches the selected provider in the split view", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([
+            customProvider({ id: "alpha", name: "Alpha" }),
+            customProvider({ id: "beta", name: "Beta" }),
+          ]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    expect(document.body.querySelector('[aria-label="Alpha 详情"]')).not.toBeNull()
+
+    await act(async () => {
+      const betaButton = Array.from(
+        document.body.querySelectorAll<HTMLButtonElement>('[aria-label="供应商列表"] button'),
+      ).find((button) => button.textContent?.includes("Beta"))
+      betaButton?.click()
+      await Promise.resolve()
+    })
+
+    const betaIndex = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Beta"))
+    expect(betaIndex?.getAttribute("aria-pressed")).toBe("true")
+    expect(document.body.querySelector('[aria-label="Beta 详情"]')?.textContent)
+      .toContain("导出密钥包")
   })
 
   it("imports selected CC Switch Claude providers from the dialog", async () => {

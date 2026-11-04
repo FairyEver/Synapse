@@ -40,14 +40,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Tooltip,
@@ -526,9 +518,17 @@ function ProviderPanelView({
   onDelete,
   onRetry,
 }: ProviderPanelViewProps) {
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
   const visibleProviders = useMemo(
     () => providers.filter((provider) => !provider.archived),
     [providers],
+  )
+  const selectedProvider = useMemo(
+    () => visibleProviders.find((provider) => provider.id === selectedProviderId)
+      ?? visibleProviders.find((provider) => !provider.readonly)
+      ?? visibleProviders[0]
+      ?? null,
+    [selectedProviderId, visibleProviders],
   )
 
   return (
@@ -560,61 +560,79 @@ function ProviderPanelView({
               重试
             </Button>
           </div>
+        ) : loading ? (
+          <div className="text-sm text-muted-foreground">正在加载</div>
+        ) : visibleProviders.length === 0 ? (
+          <div className="text-sm text-muted-foreground">暂无 Provider</div>
         ) : (
-          <Table className="table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-56">名称</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead className="w-64 text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-muted-foreground">
-                    正在加载
-                  </TableCell>
-                </TableRow>
-              ) : visibleProviders.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-muted-foreground">
-                    暂无 Provider
-                  </TableCell>
-                </TableRow>
-              ) : visibleProviders.map((provider) => (
-                <TableRow key={provider.id}>
-                  <TableCell className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <button
-                        type="button"
-                        className="min-w-0 truncate text-left font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                        title={provider.name}
-                        onClick={() => onView(provider)}
-                      >
+          <div className="grid min-h-96 grid-cols-[13rem_minmax(0,1fr)] overflow-hidden rounded-lg border">
+            <div
+              className="min-w-0 border-r bg-surface p-2"
+              role="group"
+              aria-label="供应商列表"
+            >
+              <div className="flex flex-col gap-1">
+                {visibleProviders.map((provider) => {
+                  const selected = provider.id === selectedProvider?.id
+                  return (
+                    <button
+                      key={provider.id}
+                      type="button"
+                      aria-pressed={selected}
+                      className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 ${
+                        selected ? "bg-selected" : "hover:bg-muted/60"
+                      }`}
+                      onClick={() => setSelectedProviderId(provider.id)}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium" title={provider.name}>
                         {provider.name}
-                      </button>
+                      </span>
                       {provider.readonly ? (
                         <Badge variant="outline" className="shrink-0">只读</Badge>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="min-w-0 whitespace-normal">
-                    <ProviderModelList provider={provider} />
-                  </TableCell>
-                  <TableCell className="w-64 whitespace-nowrap text-right">
-                    <ProviderRowActions
-                      provider={provider}
-                      onExport={onExport}
-                      onEdit={onEdit}
-                      onArchive={onArchive}
-                      onDelete={onDelete}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      ) : (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {providerModelRows(provider).length} 个模型
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {selectedProvider ? (
+              <div
+                id="provider-detail-panel"
+                className="min-w-0 p-4"
+                role="region"
+                aria-label={`${selectedProvider.name} 详情`}
+              >
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b pb-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <button
+                      type="button"
+                      className="min-w-0 truncate text-left text-lg font-semibold underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                      title={selectedProvider.name}
+                      onClick={() => onView(selectedProvider)}
+                    >
+                      {selectedProvider.name}
+                    </button>
+                    {selectedProvider.readonly ? (
+                      <Badge variant="outline" className="shrink-0">只读</Badge>
+                    ) : null}
+                  </div>
+                  <ProviderRowActions
+                    provider={selectedProvider}
+                    onExport={onExport}
+                    onEdit={onEdit}
+                    onArchive={onArchive}
+                    onDelete={onDelete}
+                  />
+                </div>
+                <ProviderModelList provider={selectedProvider} />
+              </div>
+            ) : null}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -686,12 +704,15 @@ function ProviderModelList({ provider }: { readonly provider: SynapseAgentProvid
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col">
         {models.map((model) => (
-          <div key={model.tier} className="flex min-w-0 items-center gap-2">
+          <div
+            key={model.tier}
+            className="flex min-h-11 min-w-0 items-center gap-2 border-b py-2 last:border-b-0"
+          >
             <ModelTierLabel
               tier={model.tier}
-              className="w-14 shrink-0 text-xs text-muted-foreground"
+              className="w-8 shrink-0 text-xs text-muted-foreground"
             />
             <span className="min-w-0 truncate">{model.value}</span>
             <CopyProviderModelIdButton
@@ -767,9 +788,7 @@ function ProviderRowActions({
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onDelete: (provider: SynapseAgentProvider) => void
 }) {
-  if (provider.readonly) {
-    return <span className="text-sm text-muted-foreground">—</span>
-  }
+  if (provider.readonly) return null
 
   return (
     <div className="flex justify-end gap-2">
