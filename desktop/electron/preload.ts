@@ -1,3 +1,4 @@
+import { hubInstallOpenRequestSchema, type HubInstallOpenRequest } from "../app-capabilities/skill-hub/shared/install-source"
 import type { ShareDomainEvent } from "../app-capabilities/agent/shared/share"
 /**
  * Phase 0.3 — Minimal preload bridge.
@@ -374,6 +375,15 @@ const subscribe = (channel: string) => (listener: (payload: unknown) => void) =>
   }
 }
 
+let hubOpenListener: ((request: HubInstallOpenRequest) => void) | undefined
+let pendingHubOpen: HubInstallOpenRequest | undefined
+subscribe(IPC_CHANNELS.apps.skillHubInstallOpenRequest)((value) => {
+  const parsed = hubInstallOpenRequestSchema.safeParse(value)
+  if (!parsed.success) return
+  if (hubOpenListener) hubOpenListener(parsed.data)
+  else pendingHubOpen = parsed.data
+})
+
 const synapseBridge: SynapseBridge = {
   platform: process.platform,
   versions: {
@@ -382,7 +392,20 @@ const synapseBridge: SynapseBridge = {
     node: process.versions.node,
   },
   isPackaged: !process.env.VITE_DEV_SERVER_URL,
+  skillHub: {
+    prepareInstall: invoke(IPC_CHANNELS.skillHub.prepareInstall),
+    releaseInstall: invoke(IPC_CHANNELS.skillHub.releaseInstall),
+  },
   apps: {
+    onSkillHubInstallOpenRequest(listener) {
+      hubOpenListener = listener
+      if (pendingHubOpen) {
+        const request = pendingHubOpen
+        pendingHubOpen = undefined
+        listener(request)
+      }
+      return () => { if (hubOpenListener === listener) hubOpenListener = undefined }
+    },
     openSystemApp: (appId, options) => invoke(IPC_CHANNELS.apps.openSystemApp)({ appId, options }),
     onContentOpenRequest: createRawPayloadSubscription(
       subscribe,

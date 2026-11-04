@@ -65,6 +65,7 @@ import {
   coreMailDescriptor,
   coreMailBackgroundDescriptor,
   coreSkillHubDescriptor,
+  coreSkillHubInstallProviderDescriptor,
   coreSkillHubBackgroundDescriptor,
   coreRelayDescriptor,
   coreSideChannelDescriptor,
@@ -171,6 +172,7 @@ export function buildServiceRegistry(
   registry.register(coreMailDescriptor)
   registry.register(coreMailBackgroundDescriptor)
   registry.register(coreSkillHubDescriptor)
+  registry.register(coreSkillHubInstallProviderDescriptor)
   registry.register(coreSkillHubBackgroundDescriptor)
   registry.register(coreTodosDescriptor)
   registry.register(coreGameHallDescriptor)

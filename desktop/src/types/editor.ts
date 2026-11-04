@@ -92,6 +92,8 @@ export type SynapseEditorResolvedTarget =
       targetPath: string
       targetExists: boolean
       ownedTargetExists?: boolean
+      previousSkillPath?: string
+      hubInstallation?: { number: number; id: string; fingerprint: string } | null
     })
   | (SynapseEditorResolvedTargetBase & {
       status: "unsupported" | "unavailable"

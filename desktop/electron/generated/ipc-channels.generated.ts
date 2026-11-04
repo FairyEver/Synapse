@@ -133,6 +133,10 @@ export const IPC_CHANNELS = {
     "installSourceToEditor": "synapse:app:installers:operation:install_source_to_editor",
     "installSourceToEditorTargets": "synapse:app:installers:operation:install_source_to_editor_targets",
   },
+  "skillHub": {
+    "prepareInstall": "synapse:app:skill_hub:operation:prepare_install",
+    "releaseInstall": "synapse:app:skill_hub:operation:release_install",
+  },
   "synapse-skill": {
     "prepareInstallSource": "synapse:app:synapse_skill:install_source:prepare",
     "releaseInstallSource": "synapse:app:synapse_skill:install_source:release",
@@ -352,6 +356,7 @@ export const IPC_CHANNELS = {
     "openSystemApp": "synapse:app:apps:system_app:open",
     "mailOpenRequest": "synapse:app:apps:operation:mail_open_request",
     "viewOpenRequest": "synapse:app:apps:operation:view_open_request",
+    "skillHubInstallOpenRequest": "synapse:app:apps:operation:skill_hub_install_open_request",
     "todoOpenRequest": "synapse:app:apps:operation:todo_open_request",
   },
   "mcp": {

@@ -1,3 +1,4 @@
+import { HUB_SOURCE_IDENTITY_PREFIX, isHubSourceIdentity } from "../../app-capabilities/skill-hub/shared/install-source"
 import { randomUUID } from "node:crypto"
 import { lstat, open, opendir, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
@@ -425,6 +426,8 @@ async function readSynapseSkillMeta(
       sourceFingerprint?: unknown
     }
     if (meta.kind === "cloud-skill-repository") return null
+    if (typeof meta.id === "string" && (meta.kind === "skill-hub" || meta.id.startsWith(HUB_SOURCE_IDENTITY_PREFIX))
+      && (meta.kind !== "skill-hub" || !isHubSourceIdentity(meta.id))) return null
     if (typeof meta.id !== "string" || meta.id.trim().length === 0) {
       return null
     }

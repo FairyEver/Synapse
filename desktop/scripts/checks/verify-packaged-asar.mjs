@@ -633,6 +633,19 @@ function verifyDocumentParserLicense(unpackedPath, license, failures) {
   }
 }
 
+function verifySkillHubRuntime(header, unpackedPath, failures) {
+  const dir = "dist-electron/app-capabilities/skill-hub/main"
+  const worker = `${dir}/package-worker.js`
+  verifyPackedNode(header, `${dir}/package-worker-launch.js`, failures, "Skill Hub worker launcher is missing")
+  verifyUnpackedNode(header, unpackedPath, worker, failures, "Skill Hub package worker is missing")
+  verifyUnpackedSourceMap(header, unpackedPath, worker, failures)
+  for (const name of ["skill-hub-contracts", "skill-hub-package-node", "archive-package-node"]) {
+    for (const extension of ["js", "cjs"]) {
+      verifyPackedNode(header, `node_modules/@synapse/shared/dist/${name}.${extension}`, failures, "Skill Hub shared entry is missing")
+    }
+  }
+}
+
 function verifyTodoRuntime(asarPath, failures) {
   const smokeScript = [
     "const path = require('node:path')",
@@ -1225,6 +1238,7 @@ async function verifyResources(resourcesPath, label) {
     "packaged Claude runtime diagnostics are missing from app.asar",
   )
   verifySandboxedPreloadBundle(buffer, dataOffset, header, failures)
+  verifySkillHubRuntime(header, unpackedPath, failures)
   verifyTodoRuntime(asarPath, failures)
   verifyJsonRepairRuntime(asarPath, header, failures)
   verifyTextExtractionWorker(header, unpackedPath, failures)

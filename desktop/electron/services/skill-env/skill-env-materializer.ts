@@ -20,6 +20,7 @@ export type MaterializeSkillEnvInput = {
   readonly inheritExistingEnv?: boolean
   readonly replacementValues?: Readonly<Record<string, string>>
   readonly values: Readonly<Record<string, string>>
+  readonly retainedBackupPath?: string
   readonly registerPrecondition?: (guard: SkillEnvMaterializationGuard) => void
 }
 
@@ -407,6 +408,7 @@ function createMaterializationGuard(
   targetPath: string,
   targetDirectory: TargetDirectoryIdentity | null,
   existingEnv: ExistingEnvGuardSnapshot,
+  retainedBackupPath?: string,
 ): SkillEnvMaterializationGuard {
   async function assertExpectedEnv(targetDirectoryPath: string, directory: TargetDirectoryIdentity): Promise<void> {
     if (existingEnv.kind === "content") {
@@ -446,12 +448,13 @@ function createMaterializationGuard(
       const movedDirectory = await readMovedTargetDirectoryIdentity(
         movedTargetPath,
         targetDirectory,
+        retainedBackupPath,
       )
       await assertExpectedEnv(movedTargetPath, movedDirectory)
     },
     async validateMovedTargetForRestore(movedTargetPath) {
       if (targetDirectory === null) throw createChangedTargetDirectoryError()
-      await readMovedTargetDirectoryIdentity(movedTargetPath, targetDirectory)
+      await readMovedTargetDirectoryIdentity(movedTargetPath, targetDirectory, retainedBackupPath)
     },
   }
 }
@@ -459,6 +462,7 @@ function createMaterializationGuard(
 async function readMovedTargetDirectoryIdentity(
   movedTargetPath: string,
   expected: TargetDirectoryIdentity,
+  retainedBackupPath?: string,
 ): Promise<TargetDirectoryIdentity> {
   let movedEntry
   try {
@@ -475,9 +479,13 @@ async function readMovedTargetDirectoryIdentity(
     realpath(movedTargetPath),
     realpath(path.dirname(movedTargetPath)),
   ])
+  const expectedParent = path.dirname(expected.realPath)
+  const expectedMovedParent = retainedBackupPath && isSameFilesystemPath(movedTargetPath, retainedBackupPath)
+    ? path.join(expectedParent, path.basename(path.dirname(retainedBackupPath)))
+    : expectedParent
   if (
     !isSameFilesystemPath(path.dirname(movedRealPath), movedParentRealPath)
-    || !isSameFilesystemPath(movedParentRealPath, path.dirname(expected.realPath))
+    || !isSameFilesystemPath(movedParentRealPath, expectedMovedParent)
   ) {
     throw createChangedTargetDirectoryError()
   }
@@ -528,6 +536,7 @@ export async function materializeSkillEnv(
           input.existingTargetDirectoryPath,
           targetDirectory,
           envGuard,
+          input.retainedBackupPath,
         ),
   )
 

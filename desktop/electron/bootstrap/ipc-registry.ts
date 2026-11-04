@@ -1,3 +1,4 @@
+import { skillHubIpcModule } from "../../app-capabilities/skill-hub/main/ipc"
 /**
  * Phase 0.3 — Electron IPC transport adapter and module registration.
  *
@@ -103,6 +104,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(systemNotifierIpcModule, ctx)
   registry.register(jsonRepairIpcModule, ctx)
   registry.register(synapseSkillIpcModule, ctx)
+  registry.register(skillHubIpcModule, ctx)
   registry.register(meetingIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
 
@@ -155,6 +157,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   systemNotifierIpcModule,
   jsonRepairIpcModule,
   synapseSkillIpcModule,
+  skillHubIpcModule,
   meetingIpcModule,
   opsIpcModule,
 ]

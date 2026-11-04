@@ -24,7 +24,7 @@ export class SkillEnvSourceService {
       this.reader.readMainContent(source),
       this.reader.readTextAttachment(source, SKILL_ENV_EXAMPLE_PATH),
     ])
-    const legacyPlaceholders = detectPlaceholders(mainContent, { includeCodeBlocks: true })
+    const legacyPlaceholders = source.origin === "skill-hub" ? [] : detectPlaceholders(mainContent, { includeCodeBlocks: true })
     if (example !== null) assertSkillRuntimeEnvBytes(example)
     const entries = example === null ? [] : parseDotenvDocument(example).entries
     if (entries.length > SKILL_ENV_MAX_VARIABLES) {

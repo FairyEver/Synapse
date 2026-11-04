@@ -86,6 +86,7 @@ export type SynapsePromptMeta = SynapseContentMeta<"prompt">
 
 type SynapseContentDetailBase = SynapseContentSummaryBase & {
   content: string
+  hubPackage?: { versionNumber: number; sourceFingerprint: string }
   attachments: SynapseContentAttachmentRecord[]
 }
 

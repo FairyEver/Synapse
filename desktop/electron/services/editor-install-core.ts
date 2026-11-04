@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+import { HUB_INSTALL_SOURCE_PREFIX, HUB_SOURCE_IDENTITY_PREFIX, isHubSourceIdentity } from "../../app-capabilities/skill-hub/shared/install-source"
 import { app } from "electron"
 import { cp, lstat, mkdir, opendir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -30,6 +32,7 @@ import { contentService } from "./content-service"
 import {
   findSkillDirectoryByContentId,
   isSkillDirectoryOwnedByContentId,
+  readHubInstallationVersion,
 } from "./editor-adapters/skill-identity"
 import {
   createEditorWriteErrorLogMeta,
@@ -57,6 +60,8 @@ import {
 } from "./editor-install-target-security"
 
 const logger = createMainLogger("service.editor-install-core")
+
+const activeHubRoots = new Set<string>()
 
 const MAX_SKILL_BACKUP_PATH_ATTEMPTS = 1000
 const MAX_SKILL_CLONE_ENTRIES = 10_000
@@ -473,6 +478,9 @@ export class EditorInstallCore {
     payload: SynapseInstallToEditorPayload,
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
+    if (payload.contentId.startsWith(HUB_SOURCE_IDENTITY_PREFIX) || payload.preparedSourceId?.startsWith(HUB_INSTALL_SOURCE_PREFIX)) {
+      throw new Error("Skill Hub 安装必须使用已验证的来源。")
+    }
     return this.runInstallToEditor(payload, security)
   }
 
@@ -480,6 +488,31 @@ export class EditorInstallCore {
     payload: SynapseInstallSourceToEditorPayload,
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
+    const source = payload.source
+    if (source.origin === "skill-hub" || source.sourceIdentity.startsWith(HUB_SOURCE_IDENTITY_PREFIX)
+      || source.preparedSourceId?.startsWith(HUB_INSTALL_SOURCE_PREFIX)) {
+      if (source.kind !== "skill" || source.origin !== "skill-hub" || !isHubSourceIdentity(source.sourceIdentity)
+        || !source.preparedSourceId?.startsWith(HUB_INSTALL_SOURCE_PREFIX)
+        || payload.installFormValues || payload.replaceConfirmed || payload.replacedSourceIdentity
+        || source.localSourceId || source.repositoryContentId || source.mainContent !== undefined) {
+        throw new Error("Skill Hub 安装来源无效，不能覆盖包内资料或其他来源。")
+      }
+      const detail = await this.deps.preparedSourceProvider.readPreparedSkill(source.preparedSourceId, source.sourceIdentity)
+      if (!detail.hubPackage || !detail.name || detail.name !== source.name || detail.description !== source.description) {
+        throw new Error("Skill Hub 包内名称和介绍不可修改。")
+      }
+      const input = { ...toInstallToEditorPayload(payload), skillName: detail.name, skillTitle: detail.title }
+      const target = await this.deps.resolveEditorInstallTarget(input)
+      if (target.status !== "ready") throw new Error(target.message ?? "安装位置不可用。")
+      const root = path.resolve(path.dirname(target.targetPath))
+      if (activeHubRoots.has(root)) throw new Error("该位置正在安装 Skill，请稍后重试。")
+      activeHubRoots.add(root)
+      try {
+        return await this.runInstallToEditor(input, security, undefined, payload.mode ?? "install", target)
+      } finally {
+        activeHubRoots.delete(root)
+      }
+    }
     return this.runInstallToEditor(
       toInstallToEditorPayload(payload),
       security,
@@ -632,6 +665,12 @@ export class EditorInstallCore {
             previousSkillDirectoryPath && isSameEditorPath(previousSkillDirectoryPath, target.targetPath),
           )
 
+          const hubInstall = Boolean(detail?.hubPackage)
+          if (hubInstall && await pathEntryExists(target.targetPath)
+            && !await isSkillDirectoryOwnedByContentId(target.targetPath, payload.contentId)) {
+            throw new Error("此位置已有同名 Skill，来源不同或无法确认。")
+          }
+
           if (
             target.status === "ready"
             && target.targetExists
@@ -667,7 +706,7 @@ export class EditorInstallCore {
             }
           }
 
-          const detailWithSubstitutions = detail && payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0
+          const detailWithSubstitutions = detail && !hubInstall && payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0
             ? {
                 ...detail,
                 content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions, { includeCodeBlocks: true }),
@@ -680,6 +719,20 @@ export class EditorInstallCore {
           const existingSkillDirectoryPath = renamedSkillDirectoryPath
             ?? backupPathForRestore
             ?? target.targetPath
+
+          if (hubInstall && previousSkillDirectoryPath && !payload.overwriteConfirmed) {
+            const installed = await readHubInstallationVersion(previousSkillDirectoryPath, payload.contentId)
+            if (renamedSkillDirectoryPath || installed?.fingerprint !== detail?.hubPackage?.sourceFingerprint) {
+              throw new Error("更换现有 Skill 前需要用户确认。")
+            }
+          }
+          const hubRenameBackup = hubInstall && renamedSkillDirectoryPath
+            ? path.join(parentDirectoryPath, `.synapse-install-backup-${randomUUID()}`, "payload")
+            : null
+          if (hubRenameBackup && renamedSkillDirectoryPath) {
+            await checkEditorWritePermission(security, renamedSkillDirectoryPath, auditMetadata)
+            await checkEditorWritePermission(security, hubRenameBackup, auditMetadata)
+          }
 
           try {
             let skillEnvGuard: SkillEnvMaterializationGuard | null = null
@@ -701,7 +754,7 @@ export class EditorInstallCore {
                 detail: detailWithSubstitutions,
                 repositoryRootPath: repositoryRootPath ?? "",
                 writeTextFile: async (filePath, content) => {
-                  await writeFile(filePath, content.endsWith("\n") ? content : `${content}\n`, "utf8")
+                  await writeFile(filePath, hubInstall || content.endsWith("\n") ? content : `${content}\n`, "utf8")
                   logger.info("Staged skill file.", { filePath: path.basename(filePath) })
                 },
                 copyAttachment: async (attachment, attachmentTargetPath) => {
@@ -742,6 +795,7 @@ export class EditorInstallCore {
                 stagingDirectoryPath,
                 existingTargetDirectoryPath: existingSkillDirectoryPath,
                 inheritExistingEnv,
+                retainedBackupPath: hubRenameBackup ?? undefined,
                 replacementValues: payload.skillEnvReplacementValues ?? {},
                 values: payload.skillEnvValues ?? {},
                 registerPrecondition(guard) {
@@ -749,12 +803,22 @@ export class EditorInstallCore {
                 },
               })
             }, {
+              ...(hubRenameBackup && renamedSkillDirectoryPath
+                ? { retainedRename: { previousPath: renamedSkillDirectoryPath, backupPath: hubRenameBackup } }
+                : {}),
               beforeSwap: async () => {
                 if (cloneSkillDirectory) return
                 if (!skillEnvGuard) {
                   throw new Error("Skill .env 更新前置校验未注册。")
                 }
                 await skillEnvGuard.validate()
+                if (hubInstall && payload.preparedSourceId) {
+                  const oldPath = renamedSkillDirectoryPath ?? target.targetPath
+                  if (await pathEntryExists(oldPath) && !await isSkillDirectoryOwnedByContentId(oldPath, payload.contentId)) {
+                    throw new Error("现有 Skill 来源已变化，请重新检查。")
+                  }
+                  await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
+                }
               },
               afterMoveExistingTarget: async (movedTargetPath) => {
                 if (cloneSkillDirectory) return
@@ -762,6 +826,9 @@ export class EditorInstallCore {
                   throw new Error("Skill .env 更新前置校验未注册。")
                 }
                 await skillEnvGuard.validateMovedTarget(movedTargetPath)
+                if (hubInstall && payload.preparedSourceId) {
+                  await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
+                }
               },
               beforeRestoreMovedTarget: async (movedTargetPath) => {
                 if (cloneSkillDirectory) return
@@ -781,7 +848,13 @@ export class EditorInstallCore {
                 installWarning = "旧 Skill 备份发生变化，已保留，请手动检查。"
               },
             })
+            if (hubRenameBackup && renamedSkillDirectoryPath) {
+              recordEditorWriteAudit(security, hubRenameBackup, "allowed", auditMetadata)
+              recordEditorWriteAudit(security, renamedSkillDirectoryPath, "allowed", auditMetadata)
+              installWarning = `已切换到新名称，旧目录备份：${hubRenameBackup}`
+            }
           } catch (error) {
+            if (hubRenameBackup) recordEditorWriteAudit(security, hubRenameBackup, "failed", auditMetadata)
             if (backupPathForRestore && await pathEntryExists(backupPathForRestore)) {
               const restoreAuditMetadata = {
                 ...auditMetadata,
@@ -809,7 +882,7 @@ export class EditorInstallCore {
           }
 
           if (
-            previousSkillDirectoryPath
+            !hubInstall && previousSkillDirectoryPath
             && !isSameEditorPath(previousSkillDirectoryPath, target.targetPath)
           ) {
             let previousBackupPath: string | null = null

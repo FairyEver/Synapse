@@ -346,8 +346,9 @@ export function SharedInstallerFlow({
     if (
       activeTarget.status === "ready"
       && activeTarget.targetKind === "directory"
-      && activeTarget.targetExists
-      && !activeTarget.ownedTargetExists
+      && ((activeTarget.targetExists && !activeTarget.ownedTargetExists) || activeTarget.previousSkillPath
+        || (flow.source.origin === "skill-hub" && activeTarget.hubInstallation !== undefined
+          && activeTarget.hubInstallation?.fingerprint !== flow.source.sourceFingerprint))
       && flow.source.kind === "skill"
       && !overwriteConfirmed
     ) {
@@ -553,13 +554,16 @@ export function SharedInstallerFlow({
       <AlertDialog open={isOverwriteConfirmOpen} onOpenChange={setIsOverwriteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认覆盖目标目录？</AlertDialogTitle>
+            <AlertDialogTitle>{activeTarget?.status === "ready" && activeTarget.previousSkillPath ? "确认更换 Skill 目录？" : "确认覆盖目标目录？"}</AlertDialogTitle>
             <AlertDialogDescription>
-              Skill 安装会整体替换目标目录中的现有内容。
+              {activeTarget?.status === "ready" && activeTarget.previousSkillPath
+                ? "安装会保留旧目录备份，并切换到新名称。"
+                : "Skill 安装会整体替换目标目录中的现有内容。"}
             </AlertDialogDescription>
             {activeTarget?.status === "ready" ? (
               <div className="mt-1 rounded-md bg-muted/40 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
-                {activeTarget.targetPath}
+                {activeTarget.previousSkillPath ? <div>原目录：{activeTarget.previousSkillPath}</div> : null}
+                <div>目标：{activeTarget.targetPath}</div>
               </div>
             ) : null}
           </AlertDialogHeader>
@@ -629,6 +633,14 @@ export function SharedInstallerFlow({
         </div>
       ) : null}
 
+      {flow.source?.kind === "skill" && flow.source.origin === "skill-hub" && flow.step !== "success" ? (
+        <dl className="grid gap-2 border-b pb-4 text-sm break-words">
+          <div><dt className="text-muted-foreground">包内名称</dt><dd>{flow.source.name}</dd></div>
+          <div><dt className="text-muted-foreground">包内介绍</dt><dd className="whitespace-pre-wrap">{flow.source.description}</dd></div>
+          <div><dt className="text-muted-foreground">本次安装</dt><dd>v{flow.source.hubVersionNumber}</dd></div>
+        </dl>
+      ) : null}
+
       {flow.step === "editor" ? (
         <div className="flex flex-col gap-3">
           <h2 className="text-balance font-heading text-base font-medium">选择编辑器</h2>
@@ -682,6 +694,17 @@ export function SharedInstallerFlow({
                 setIsCompletionRetryPending(false)
               }}
             />
+          ) : null}
+          {flow.source?.kind === "skill" && flow.source.origin === "skill-hub" && activeTarget?.status === "ready" ? (
+            <div className="space-y-1 break-all text-sm text-muted-foreground">
+              {activeTarget.previousSkillPath ? <p>原目录：{activeTarget.previousSkillPath}</p> : null}
+              {activeTarget.hubInstallation === null ? <p>已安装版本无法确定</p> : activeTarget.hubInstallation ? (
+                <p>已安装 v{activeTarget.hubInstallation.number}，本次 v{flow.source.hubVersionNumber}
+                  {activeTarget.hubInstallation.id !== flow.source.repositoryVersion
+                    && activeTarget.hubInstallation.fingerprint === flow.source.sourceFingerprint ? " · 包内容一致" : ""}
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <div className="flex justify-end gap-2">

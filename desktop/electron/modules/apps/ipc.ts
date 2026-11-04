@@ -1,3 +1,4 @@
+import { hubInstallOpenRequestSchema } from "../../../app-capabilities/skill-hub/shared/install-source"
 import { mailOpenRequestSchema } from "../../../app-capabilities/mail/shared/private-schema"
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
@@ -125,6 +126,7 @@ export const appsIpcModule: IpcModule = {
   events: {
     mailOpenRequest: { operationId: "app.apps.operation.mail_open_request", kind: "event", payload: mailOpenRequestSchema },
     viewOpenRequest:{operationId:"app.apps.operation.view_open_request",kind:"event",payload:viewOpenRequestSchema},
+    skillHubInstallOpenRequest: { operationId: "app.apps.operation.skill_hub_install_open_request", kind: "event", payload: hubInstallOpenRequestSchema },
     todoOpenRequest: { operationId: "app.apps.operation.todo_open_request", kind: "event", payload: todoOpenRequestSchema },
   },
 }

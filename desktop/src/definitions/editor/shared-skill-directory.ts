@@ -23,7 +23,7 @@ async function writeSynapseSkillDirectory({
   }))
   assertUniqueContentAttachmentPaths(attachments.map((attachment) => attachment.originalName))
 
-  const skillMainContent = serializeSkillFrontmatter({
+  const skillMainContent = detail.hubPackage ? detail.content : serializeSkillFrontmatter({
     description: detail.description,
     name: path.basename(targetPath),
   }) + detail.content
@@ -31,13 +31,15 @@ async function writeSynapseSkillDirectory({
 
   await writeTextFile(
     path.join(stagingDirectoryPath, INSTALLED_SKILL_MAIN_FILE_NAME),
-    normalizeMarkdownContent(skillMainContent),
+    detail.hubPackage ? skillMainContent : normalizeMarkdownContent(skillMainContent),
   )
 
   await writeTextFile(
     path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME),
     JSON.stringify({
       id: detail.id,
+      ...(detail.hubPackage ? { kind: "skill-hub", versionNumber: detail.hubPackage.versionNumber,
+        sourceFingerprint: detail.hubPackage.sourceFingerprint } : {}),
       repositoryVersion: detail.latestHistoryDirname,
       ...(detailWithFingerprint.sourceFingerprint ? { sourceFingerprint: detailWithFingerprint.sourceFingerprint } : {}),
     }, null, 2),

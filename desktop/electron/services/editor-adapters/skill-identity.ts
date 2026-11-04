@@ -1,3 +1,4 @@
+import { HUB_SOURCE_IDENTITY_PREFIX, isHubSourceIdentity } from "../../../app-capabilities/skill-hub/shared/install-source"
 import { constants, type BigIntStats } from "node:fs"
 import { lstat, open, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
@@ -16,6 +17,9 @@ const LEGACY_BUILTIN_SYNAPSE_SKILL_CONTENT_ID = "builtin__skill__synapse-skill"
 interface SynapseSkillMeta {
   id?: unknown
   kind?: unknown
+  versionNumber?: unknown
+  repositoryVersion?: unknown
+  sourceFingerprint?: unknown
 }
 const UNIQUE_SUFFIX_LIMIT = 999
 
@@ -34,6 +38,8 @@ function parseSkillIdFile(raw: string): string | null {
   try {
     const meta = JSON.parse(raw) as SynapseSkillMeta
     if (meta.kind === "cloud-skill-repository") return null
+    if (typeof meta.id === "string" && (meta.kind === "skill-hub" || meta.id.startsWith(HUB_SOURCE_IDENTITY_PREFIX))
+      && (meta.kind !== "skill-hub" || !isHubSourceIdentity(meta.id))) return null
     return typeof meta.id === "string" && meta.id.trim().length > 0 ? meta.id : null
   } catch {
     return null
@@ -51,7 +57,7 @@ function areSkillContentIdsEquivalent(left: string | null, right: string): boole
   return normalizeSkillContentIdForCompare(left) === normalizeSkillContentIdForCompare(right)
 }
 
-async function readSkillIdFile(skillDirectoryPath: string): Promise<string | null> {
+async function readVerifiedSkillMetaRaw(skillDirectoryPath: string): Promise<string | null> {
   try {
     const identityPath = path.join(skillDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME)
     const [directoryEntry, identityEntry] = await Promise.all([
@@ -67,11 +73,26 @@ async function readSkillIdFile(skillDirectoryPath: string): Promise<string | nul
       return null
     }
 
-    const raw = await readVerifiedSkillIdFile(skillDirectoryPath, identityPath, identityEntry)
-    return parseSkillIdFile(raw)
+    if (identityEntry.size > 64_000n) return null
+    return await readVerifiedSkillIdFile(skillDirectoryPath, identityPath, identityEntry)
   } catch {
     return null
   }
+}
+
+async function readSkillIdFile(skillDirectoryPath: string): Promise<string | null> {
+  const raw = await readVerifiedSkillMetaRaw(skillDirectoryPath)
+  return raw ? parseSkillIdFile(raw) : null
+}
+
+export async function readHubInstallationVersion(directory: string, contentId: string) {
+  const raw = await readVerifiedSkillMetaRaw(directory)
+  if (!raw || parseSkillIdFile(raw) !== contentId) return null
+  const meta = JSON.parse(raw) as SynapseSkillMeta
+  if (typeof meta.versionNumber !== "number" || !Number.isSafeInteger(meta.versionNumber) || meta.versionNumber < 1
+    || typeof meta.repositoryVersion !== "string" || !meta.repositoryVersion
+    || typeof meta.sourceFingerprint !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(meta.sourceFingerprint)) return null
+  return { number: meta.versionNumber, id: meta.repositoryVersion, fingerprint: meta.sourceFingerprint }
 }
 
 async function readVerifiedSkillIdFile(
@@ -152,6 +173,7 @@ async function findSkillDirectoryByContentId(
     throw error
   }
 
+  let matched: string | null = null
   for (const entry of entries) {
     if (!entry.isDirectory() || isTransientSkillInstallDirectoryName(entry.name)) {
       continue
@@ -161,11 +183,13 @@ async function findSkillDirectoryByContentId(
     const storedId = await readSkillIdFile(candidatePath)
 
     if (areSkillContentIdsEquivalent(storedId, contentId)) {
-      return candidatePath
+      if (!isHubSourceIdentity(contentId)) return candidatePath
+      if (matched) throw new Error("在此位置找到多份同来源的 Skill，请先处理重复安装。")
+      matched = candidatePath
     }
   }
 
-  return null
+  return matched
 }
 
 async function resolveUniqueSkillDirectoryPath(idealPath: string): Promise<string> {

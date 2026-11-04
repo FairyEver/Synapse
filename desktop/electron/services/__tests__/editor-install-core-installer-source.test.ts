@@ -201,3 +201,77 @@ describe("EditorInstallCore installer source", () => {
       .resolves.toContain("Use ${{ TOKEN }} at runtime.")
   })
 })
+
+describe("Hub package installation", () => {
+  const id = `skill-hub:${"a".repeat(64)}:skill_a`
+  const source = { kind: "skill", origin: "skill-hub", name: "new-name", title: "商店名称", description: "Package description",
+    sourceIdentity: id, preparedSourceId: "skill-hub-install:fixture", repositoryVersion: "ver_2", hubVersionNumber: 2 } as const
+  const raw = "---\nname: new-name\ndescription: Package description\n---\nFull package."
+  async function fixture() {
+    const root = await createTempRoot()
+    const oldPath = path.join(root, "old-name")
+    const targetPath = path.join(root, "new-name")
+    await mkdir(oldPath)
+    await writeFile(path.join(oldPath, "SKILL.md"), "original")
+    await writeFile(path.join(oldPath, ".synapse.json"), JSON.stringify({ kind: "skill-hub", id }))
+    const anotherPath = path.join(root, "another-editor", "old-name")
+    await mkdir(anotherPath, { recursive: true })
+    await writeFile(path.join(anotherPath, "SKILL.md"), "untouched")
+    mocks.resolveTarget.mockResolvedValue({
+      editorId: "test-editor", label: "Test Editor", scope: "global", contentType: "skill",
+      message: null, status: "ready", targetKind: "directory", targetPath, targetExists: false,
+    })
+    const { writeSynapseSkillDirectory } = await import("../../../src/definitions/editor/shared-skill-directory")
+    mocks.prepareSkillDirectory.mockImplementation(writeSynapseSkillDirectory)
+    const { EditorInstallCore } = await import("../editor-install-core")
+    const detail = {
+      id, name: source.name, title: source.title, description: source.description, content: raw,
+      latestHistoryDirname: "ver_2", hubPackage: { versionNumber: 2, sourceFingerprint: `sha256:${"b".repeat(64)}` },
+      type: "skill", attachments: [], attachmentCount: 0, category: "", icon: "", iconBg: "", createdBy: "", createdAt: "",
+      createdByDisplayName: "", modifiedBy: "", modifiedByDisplayName: "", modifiedAt: "", deleted: false,
+    } as const
+    const readPreparedSkill = vi.fn(async () => ({ ...detail, attachments: [] }))
+    const core = new EditorInstallCore({
+      resolveEditorInstallTarget: mocks.resolveTarget,
+      preparedSourceProvider: {
+        readPreparedSkill, async readPreparedRule() { throw new Error("not a rule") },
+        async beginPreparedInstall() {}, async endPreparedInstall() {}, async copyPreparedSkillAttachment() {},
+        async markPreparedInstalled() {},
+      },
+    })
+    return { root, oldPath, targetPath, anotherPath, readPreparedSkill, core,
+      payload: { editorId: "test-editor" as never, scope: "global" as const, source, overwriteConfirmed: true } }
+  }
+
+  it("moves only the selected same-identity installation and preserves the original package fields", async () => {
+    const f = await fixture()
+    const installed = await f.core.installSourceToEditor(f.payload)
+    await expect(readFile(path.join(f.oldPath, "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(f.targetPath, "SKILL.md"), "utf8")).resolves.toBe(raw)
+    await expect(readFile(path.join(f.anotherPath, "SKILL.md"), "utf8")).resolves.toBe("untouched")
+    const backupPath = installed.warning?.split("备份：")[1]
+    expect(backupPath).toBeTruthy()
+    await expect(readFile(path.join(backupPath!, "SKILL.md"), "utf8")).resolves.toBe("original")
+  })
+
+  it("restores the old directory if the new destination appears during the switch", async () => {
+    const f = await fixture()
+    const original = await f.readPreparedSkill()
+    f.readPreparedSkill.mockResolvedValueOnce(original).mockResolvedValueOnce(original).mockResolvedValueOnce(original)
+      .mockImplementationOnce(async () => {
+        await mkdir(f.targetPath)
+        await writeFile(path.join(f.targetPath, "SKILL.md"), "other source")
+        return original
+      })
+    await expect(f.core.installSourceToEditor(f.payload)).rejects.toThrow()
+    await expect(readFile(path.join(f.oldPath, "SKILL.md"), "utf8")).resolves.toBe("original")
+    await expect(readFile(path.join(f.targetPath, "SKILL.md"), "utf8")).resolves.toBe("other source")
+  })
+
+  it("rejects forged package fields before any editor strategy runs", async () => {
+    const f = await fixture()
+    await expect(f.core.installSourceToEditor({ ...f.payload, source: { ...source, description: "forged" } })).rejects.toThrow("不可修改")
+    await expect(f.core.installSourceToEditor({ ...f.payload, installFormValues: { name: "forged" } })).rejects.toThrow("来源无效")
+    expect(mocks.prepareSkillDirectory).not.toHaveBeenCalled()
+  })
+})

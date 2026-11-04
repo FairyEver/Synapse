@@ -9,6 +9,7 @@ import type {
 export type SynapseInstallerOrigin =
   | "repository"
   | "prepared"
+  | "skill-hub"
   | "local-directory"
   | "inline"
 
@@ -26,6 +27,8 @@ export type SynapseInstallerSourceBase = {
 
 export type SynapseSkillInstallerSource = SynapseInstallerSourceBase & {
   kind: "skill"
+  repositoryVersion?: string
+  hubVersionNumber?: number
   localSourceId?: string
   mainContent?: string
   preparedSourceId?: string

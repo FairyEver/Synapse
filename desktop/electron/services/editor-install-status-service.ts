@@ -1,3 +1,4 @@
+import { isHubSourceIdentity } from "../../app-capabilities/skill-hub/shared/install-source"
 import type {
   SynapseEditorInstallStatusEntry,
   SynapseEditorInstallStatusResult,
@@ -75,6 +76,11 @@ function statusFromSkill(
 ): SynapseEditorInstallStatusValue | null {
   if (!item) return null
   if (!areSkillContentIdsEquivalent(item.synapseContentId, payload.contentId)) return "external_same_name"
+
+  if (isHubSourceIdentity(payload.contentId)) {
+    if (!payload.sourceFingerprint || !item.sourceFingerprint || !item.repositoryVersion) return "needs_update"
+    return payload.sourceFingerprint === item.sourceFingerprint ? "installed" : "needs_update"
+  }
 
   if (
     payload.sourceFingerprint

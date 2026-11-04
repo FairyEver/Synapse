@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { lstat, mkdir, rmdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { errorLogCode, errorLogName } from "./error-sanitize"
 import { isFileNotFoundError, isPermissionError } from "./fs-utils"
@@ -30,6 +30,7 @@ function isRawEditorWriteError(error: unknown, targetPath: string): boolean {
 }
 
 type AtomicSwapOptions = {
+  readonly retainedRename?: { previousPath: string; backupPath: string }
   readonly beforeSwap?: () => Promise<void>
   readonly afterMoveExistingTarget?: (movedTargetPath: string) => Promise<void>
   readonly beforeRestoreMovedTarget?: (movedTargetPath: string) => Promise<void>
@@ -58,6 +59,43 @@ async function swapPathAtomically(
   targetPath: string,
   options: AtomicSwapOptions = {},
 ): Promise<void> {
+  if (options.retainedRename) {
+    const { previousPath, backupPath } = options.retainedRename
+    const backupContainer = path.dirname(backupPath)
+    if (path.dirname(previousPath) !== path.dirname(targetPath) || previousPath === targetPath
+      || path.dirname(backupContainer) !== path.dirname(targetPath)) throw new Error("Skill 备份位置无效。")
+    if (await pathEntryExists(targetPath)) throw new Error("新名称的 Skill 目录已存在。")
+    await options.beforeSwap?.()
+    await mkdir(backupContainer, { mode: 0o700 })
+    let moved = false
+    let keep = false
+    try {
+      await rename(previousPath, backupPath)
+      moved = true
+      await options.afterMoveExistingTarget?.(backupPath)
+      if (await pathEntryExists(targetPath)) throw new Error("新名称的 Skill 目录已存在。")
+      await rename(replacementPath, targetPath)
+      keep = true
+    } catch (error) {
+      if (moved) {
+        try {
+          await options.beforeRestoreMovedTarget?.(backupPath)
+          if (await pathEntryExists(previousPath)) throw new Error("原目录已重新出现。")
+          await rename(backupPath, previousPath)
+        } catch (restoreError) {
+          keep = true
+          logger.warn("Failed to restore renamed Skill directory.", createEditorWriteErrorLogMeta(restoreError))
+          throw new Error(`无法自动恢复旧 Skill，备份保存在：${backupPath}`)
+        }
+      }
+      throw error
+    } finally {
+      if (!keep) await rmdir(backupContainer).catch((error) =>
+        logger.warn("Failed to remove empty backup directory.", createEditorWriteErrorLogMeta(error)))
+    }
+    return
+  }
+
   const parentDirectoryPath = path.dirname(targetPath)
   const targetName = path.basename(targetPath)
 

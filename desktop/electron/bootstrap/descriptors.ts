@@ -1,3 +1,4 @@
+import { HUB_INSTALL_PROVIDER_ID, HubPreparedSourceProvider } from "../../app-capabilities/skill-hub/main/prepared-source-provider"
 import {GameHallService} from "../../app-capabilities/game-hall/main/service"
 import {createGameDispatcher} from "../../app-capabilities/game-hall/main/dispatcher"
 import {GAME_SERVICE_ID} from "../../app-capabilities/game-hall/shared/capability"
@@ -3684,4 +3685,9 @@ export const coreSkillHubBackgroundDescriptor: ServiceDescriptor<DesktopSkillHub
   create(ctx) { return ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID) },
   start: (service) => service.startBackground(),
   stop: (service) => service.stopBackground(),
+}
+
+export const coreSkillHubInstallProviderDescriptor: ServiceDescriptor<HubPreparedSourceProvider> = {
+  id: HUB_INSTALL_PROVIDER_ID, criticality: "degraded", dependsOn: [SKILL_HUB_SERVICE_ID],
+  create(ctx) { return new HubPreparedSourceProvider(ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID)) },
 }

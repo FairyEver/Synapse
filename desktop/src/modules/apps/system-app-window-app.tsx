@@ -1,3 +1,5 @@
+import { HUB_INSTALLER_VIEW, HUB_INSTALL_REQUEST_PARAM, hubInstallOpenRequestSchema, type HubInstallOpenRequest } from "../../../app-capabilities/skill-hub/shared/install-source"
+import { SkillInstallerModule } from "../../../app-capabilities/skill-installer/renderer"
 import { MailComposeWindow } from "../mail/compose-window"
 import { mailOpenRequestSchema } from "../../../app-capabilities/mail/shared/private-schema"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -109,7 +111,32 @@ function replaceOpenRequestInUrl(name: string, request: unknown): void {
   )
 }
 
+function readHubRequest(): HubInstallOpenRequest | null {
+  const raw = new URLSearchParams(window.location.search).get(HUB_INSTALL_REQUEST_PARAM)
+  if (!raw) return null
+  try {
+    const result = hubInstallOpenRequestSchema.safeParse(JSON.parse(raw))
+    return result.success ? result.data : null
+  } catch { return null }
+}
+
+function SkillInstallerWindow() {
+  const [request, setRequest] = useState(readHubRequest)
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete(HUB_INSTALL_REQUEST_PARAM)
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+    return getSynapseBridge()?.apps.onSkillHubInstallOpenRequest(setRequest)
+  }, [])
+  return request ? <SkillInstallerModule hubRequest={request} key={request.requestId} /> : <SystemAppWindowError />
+}
+
 export function SystemAppWindowApp() {
+  return new URLSearchParams(window.location.search).get("appId") === HUB_INSTALLER_VIEW
+    ? <SkillInstallerWindow /> : <RegisteredSystemAppWindow />
+}
+
+function RegisteredSystemAppWindow() {
   const appId = useMemo(
     () => parseSystemAppId(new URLSearchParams(window.location.search).get("appId")),
     [],

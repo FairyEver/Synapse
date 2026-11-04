@@ -1,3 +1,6 @@
+import path from "node:path"
+import { isHubSourceIdentity } from "../../app-capabilities/skill-hub/shared/install-source"
+import { findSkillDirectoryByContentId, readHubInstallationVersion } from "./editor-adapters/skill-identity"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type {
   SynapseContentInstallResult,
@@ -225,7 +228,16 @@ export class EditorInstallService {
     payload: SynapseResolveEditorTargetPayload,
   ): Promise<SynapseEditorResolvedTarget> {
     await assertConfiguredProjectPath(payload)
-    return editorAdapterService.resolveTarget(payload)
+    const target = await editorAdapterService.resolveTarget(payload)
+    if (payload.contentType !== "skill" || !isHubSourceIdentity(payload.contentId)) return target
+    if (target.status === "conflict" || (target.status === "ready" && target.targetExists && !target.ownedTargetExists)) {
+      return { ...target, status: "unavailable", targetKind: null, targetPath: null, message: "此位置已有同名 Skill，来源不同或无法确认。" }
+    }
+    if (target.status !== "ready") return target
+    const previous = await findSkillDirectoryByContentId(path.dirname(target.targetPath), payload.contentId)
+    if (!previous) return target
+    return { ...target, ...(!isSameEditorPath(previous, target.targetPath) ? { previousSkillPath: previous } : {}),
+      hubInstallation: await readHubInstallationVersion(previous, payload.contentId) }
   }
 
   async resolveSkillCloneTarget(
@@ -307,6 +319,7 @@ export class EditorInstallService {
       contentType: "skill",
       projects: [],
       sourceFingerprint: source.sourceFingerprint,
+      repositoryVersion: source.repositoryVersion,
       title: source.title,
     })
   }
@@ -321,7 +334,7 @@ export class EditorInstallService {
     if (source.origin === "local-directory") {
       return (await installerSourceService.readLocalSkill(source)).content
     }
-    if (source.origin === "prepared") {
+    if ((source.origin === "prepared" || source.origin === "skill-hub")) {
       if (!source.preparedSourceId) throw new Error("Skill 安装源不可用。")
       return (await this.preparedSourceProvider.readPreparedSkill(
         source.preparedSourceId,
@@ -342,7 +355,7 @@ export class EditorInstallService {
     if (source.origin === "local-directory") {
       return installerSourceService.readLocalSkillAttachmentText(source, relativePath)
     }
-    if (source.origin === "prepared") {
+    if ((source.origin === "prepared" || source.origin === "skill-hub")) {
       if (!source.preparedSourceId) throw new Error("Skill 安装源不可用。")
       return this.preparedSourceProvider.readPreparedSkillAttachmentText(
         source.preparedSourceId,

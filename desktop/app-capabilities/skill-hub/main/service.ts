@@ -128,6 +128,8 @@ export class DesktopSkillHubService {
     this.deps.cloud.dispose()
   }
 
+  assertInstallAccount(op: HubAccountOperation) { this.deps.cloud.assertActive(op) }
+
   /** Internal latest-only package entry for the existing installer. */
   async readLatest(op: HubAccountOperation, skillId: string, expectedVersionId?: string) {
     const skill = await this.deps.cloud.get(op, skillId)

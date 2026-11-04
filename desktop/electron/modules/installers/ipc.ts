@@ -42,7 +42,9 @@ const skillInstallerSourceSchema = installerSourceBaseSchema.extend({
   kind: z.literal("skill"),
   localSourceId: z.string().optional(),
   mainContent: z.string().optional(),
-  origin: z.enum(["repository", "prepared", "local-directory", "inline"]),
+  origin: z.enum(["repository", "prepared", "local-directory", "inline", "skill-hub"]),
+  repositoryVersion: z.string().optional(),
+  hubVersionNumber: z.number().int().positive().optional(),
   preparedSourceId: z.string().optional(),
   repositoryContentId: z.string().optional(),
 }).strict()

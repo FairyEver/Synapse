@@ -1,3 +1,4 @@
+import { HUB_INSTALLER_VIEW, HUB_INSTALL_REQUEST_PARAM, type HubInstallOpenRequest } from "../../app-capabilities/skill-hub/shared/install-source"
 import { BrowserWindow } from "electron"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -88,7 +89,38 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
 
   const composeWindows = new Map<number, { key: string; scope: string; draftKey?: string }>()
   const composeAliases = new Map<string, string>()
+  let installerOpening: Promise<unknown> | undefined
   return {
+    isSkillInstallerSender(id: number) { return detachedWindows.get(HUB_INSTALLER_VIEW)?.webContents.id === id },
+    async openSkillInstaller(request: HubInstallOpenRequest) {
+      const existing = detachedWindows.get(HUB_INSTALLER_VIEW)
+      if (existing) {
+        await installerOpening
+        if (existing.isDestroyed()) return
+        focusDetachedViewWindow(existing)
+        sendToSystemAppWindow(deps.windowManager, existing, "synapse:app:apps:operation:skill_hub_install_open_request", request)
+        return
+      }
+      const windowId = systemAppWindowManagerId(HUB_INSTALLER_VIEW)
+      const params = new URLSearchParams({ window: "system-app", appId: HUB_INSTALLER_VIEW,
+        [HUB_INSTALL_REQUEST_PARAM]: JSON.stringify(request) })
+      installerOpening = detachedWindows.open({
+        key: HUB_INSTALLER_VIEW,
+        payload: buildDetachedViewWindowUrl(deps.baseUrl(), params),
+        options: {
+          ...SYSTEM_APP_WINDOW_BOUNDS,
+          title: "Skill 安装",
+          webPreferences: {
+            preload: deps.getPreloadPath?.() ?? resolveSystemAppWindowPreloadPath(__dirname),
+            contextIsolation: true, nodeIntegration: false, sandbox: true,
+          },
+        },
+        load: (window, url) => window.loadURL(url),
+        onCreated: ({ window }) => deps.windowManager?.attach({ id: windowId, role: "detail" }, managedBrowserWindow(window, "detail")),
+        onRemoved: () => deps.windowManager?.detach(windowId),
+      })
+      try { await installerOpening } finally { installerOpening = undefined }
+    },
     bindMailComposeDraft(senderId: number, draftId: string): void {
       const entry = composeWindows.get(senderId)
       if (!entry || !detachedWindows.get(entry.key)) return

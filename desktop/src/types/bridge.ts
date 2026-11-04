@@ -1,3 +1,5 @@
+import type { HubInstallOpenRequest } from "../../app-capabilities/skill-hub/shared/install-source"
+import type { HubInstallPrepareResult } from "../../app-capabilities/skill-hub/shared/ipc-result"
 import type { DriveFileReplaceInput, DriveFileReplaceApplyInput, DriveFileReplacePreviewDto, DriveFileReplaceResultDto, DriveSyncRemovalInput, DriveSyncRemovalPreviewDto, DriveSyncRemovalResultDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   DatabaseChangeEvent,
@@ -1029,7 +1031,12 @@ export type SynapseBridge = {
     node: string
   }
   isPackaged: boolean
+  skillHub: {
+    prepareInstall: (input: { skillId: string }) => Promise<HubInstallPrepareResult>
+    releaseInstall: (input: { preparedSourceId: string }) => Promise<void>
+  }
   apps: {
+    onSkillHubInstallOpenRequest: (listener: (request: HubInstallOpenRequest) => void) => () => void
     openSystemApp: (
       appId: SynapseSystemAppId,
       options?: SynapseSystemAppOpenOptions,

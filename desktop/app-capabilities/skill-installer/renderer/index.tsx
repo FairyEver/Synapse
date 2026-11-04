@@ -1,3 +1,5 @@
+import type { HubInstallOpenRequest } from "../../skill-hub/shared/install-source"
+import { HubSourceInput } from "./hub-source-input"
 import { useEffect, useState } from "react"
 import { FolderOpen } from "lucide-react"
 import { toast } from "sonner"
@@ -26,7 +28,7 @@ import { startTrackedOperation } from "../../../src/lib/ui-tracking"
 
 const logger = createRendererLogger("skill-installer.app")
 
-export function SkillInstallerModule() {
+export function SkillInstallerModule({ hubRequest }: { hubRequest?: HubInstallOpenRequest }) {
   const { config } = useAppConfig()
   const { error, filteredAdapters, isLoading, load } = useEditorAdaptersForContentType({
     contentType: "skill",
@@ -51,7 +53,15 @@ export function SkillInstallerModule() {
                 </div>
               ) : null}
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              <SharedInstallerFlow
+              {hubRequest ? (
+                <HubSourceInput request={hubRequest}>
+                  {(source) => (
+                    <SharedInstallerFlow editors={filteredAdapters} kind="skill" mode="page"
+                      projects={config.global.projects} source={source} onCancel={() => window.close()}
+                      onInstalled={() => { toast.success("安装完成") }} />
+                  )}
+                </HubSourceInput>
+              ) : <SharedInstallerFlow
                 editors={filteredAdapters}
                 kind="skill"
                 mode="page"
@@ -63,7 +73,7 @@ export function SkillInstallerModule() {
                 renderSourceInput={({ onSourceReady }) => (
                   <SkillSourceInput onSourceReady={onSourceReady} />
                 )}
-              />
+              />}
             </CardContent>
           </Card>
         </div>
