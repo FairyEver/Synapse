@@ -17,6 +17,7 @@ import { RelativeTime } from '@/components/relative-time'
 import { AddMembersDialog } from './add-members-dialog'
 import { TeamNameDialog } from './team-dialogs'
 import { Organizations } from './organizations'
+import { TeamSkills } from './team-skills'
 
 export default function TeamDetailPage() {
   const { teamId } = useParams({ from: '/_authenticated/teams/$teamId' })
@@ -226,6 +227,7 @@ export default function TeamDetailPage() {
           }
         />
         <Organizations teamId={teamId} />
+        {team ? <TeamSkills teamId={teamId} /> : null}
         <AddMembersDialog
           open={addMembersOpen}
           teamId={teamId}

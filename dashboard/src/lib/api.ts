@@ -1,3 +1,8 @@
+import {
+  skillHubAdminListInputSchema, skillHubAdminPageSchema, skillHubAdminRowSchema, skillHubAssignMaintainerInputSchema,
+  skillHubIdSchema, skillHubRevisionInputSchema, type SkillHubAdminListInput, type SkillHubAssignMaintainerInput,
+  type SkillHubRevisionInput,
+} from '@synapse/shared/skill-hub-contracts'
 import type {
   DashboardWebhookDto,
   DriveDiscussionNotificationDto,
@@ -760,6 +765,8 @@ function paginationSuffix(options: PaginationOptions) {
   return value ? `?${value}` : ''
 }
 
+const adminSkillHubPath = `${adminApiBasePath}/skill-hub/skills`
+const adminSkillHubItem = (id: string) => `${adminSkillHubPath}/${encodeURIComponent(skillHubIdSchema.parse(id))}`
 const adminTeamBasePath = `${adminApiBasePath}/teams`
 
 function adminTeamQuerySuffix(options: AdminTeamListQuery = {}) {
@@ -1577,9 +1584,25 @@ export const adminApi = {
     request<{ ok: true }>(`${adminTeamBasePath}/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
-  listTeamMembers: (id: string, options: PaginationOptions = {}) =>
+  async listTeamSkills(teamId: string, options: Omit<SkillHubAdminListInput, 'teamId'> = {}, signal?: AbortSignal) {
+    const input = skillHubAdminListInputSchema.parse({ teamId, ...options })
+    const params = new URLSearchParams()
+    for (const [name, value] of Object.entries(input)) if (value !== undefined) params.set(name, String(value))
+    return skillHubAdminPageSchema.parse(await request(`${adminSkillHubPath}?${params}`, { signal, cache: 'no-store' }))
+  },
+  async assignSkillMaintainer(id: string, input: SkillHubAssignMaintainerInput) {
+    return skillHubAdminRowSchema.parse(await request(`${adminSkillHubItem(id)}/maintainer`, {
+      method: 'POST', body: JSON.stringify(skillHubAssignMaintainerInputSchema.parse(input)), signal: AbortSignal.timeout(45_000),
+    }))
+  },
+  async restoreSkill(id: string, input: SkillHubRevisionInput) {
+    return skillHubAdminRowSchema.parse(await request(`${adminSkillHubItem(id)}/restore`, {
+      method: 'POST', body: JSON.stringify(skillHubRevisionInputSchema.parse(input)), signal: AbortSignal.timeout(60_000),
+    }))
+  },
+  listTeamMembers: (id: string, options: PaginationOptions = {}, signal?: AbortSignal) =>
     request<PaginatedResponse<AdminTeamMemberRow>>(
-      `${adminTeamBasePath}/${encodeURIComponent(id)}/members${paginationSuffix(options)}`
+      `${adminTeamBasePath}/${encodeURIComponent(id)}/members${paginationSuffix(options)}`, signal ? { signal } : undefined
     ),
   listTeamMemberCandidates: (
     id: string,

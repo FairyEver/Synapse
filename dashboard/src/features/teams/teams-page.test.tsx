@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { toast } from '@heroui/react'
+import { ApiError } from '@/lib/api-client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act } from 'react'
 import type { ReactNode } from 'react'
@@ -98,6 +100,17 @@ describe('TeamsPage', () => {
     await click(dialogButtonByText('删除'))
 
     expect(mockedAdminApi.deleteTeam).toHaveBeenCalledWith('team-1')
+  })
+
+  it('keeps a team with Skill Hub assets and displays the server reason', async () => {
+    mockedAdminApi.listTeams.mockResolvedValue({ data: [teamRow({ id: 'hub-team', name: '保留的团队' })], total: 1 })
+    mockedAdminApi.deleteTeam.mockRejectedValue(new ApiError('此团队有 Skill Hub 资产，不能删除团队。', 409, 'HUB_TEAM_HAS_ASSETS'))
+    render(<TeamsPage />)
+    await openMenu(await waitFor(() => teamActionsButton('保留的团队')))
+    await click(menuItemByText('删除团队'))
+    await click(dialogButtonByText('删除'))
+    await waitFor(() => expect(toast.danger).toHaveBeenCalledWith('此团队有 Skill Hub 资产，不能删除团队。'))
+    expect(document.body.textContent).toContain('保留的团队')
   })
 
   it('rejects a duplicate team name with the server message', async () => {

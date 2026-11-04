@@ -67,8 +67,9 @@ export class SkillHubAdminService {
         throw error
       }
       await lockHubSkill(tx, teamId, skillId)
-      const current = await tx.skillHubSkill.findUniqueOrThrow({ where: { id: skillId }, select: { revision: true } })
+      const current = await tx.skillHubSkill.findUniqueOrThrow({ where: { id: skillId }, select: { revision: true, maintainerUserId: true } })
       checkHubRevision(input.expectedRevision, current.revision)
+      if (current.maintainerUserId === member.id) throw hubError(400, "HUB_MAINTAINER_UNCHANGED", "请选择另一名有效成员。")
       return { maintainerUserId: member.id, maintainerName: member.nickname, revision: { increment: 1 } }
     })
   }
