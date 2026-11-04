@@ -33,7 +33,6 @@ const notificationSourceLabels: Record<NotificationSource, string> = {
   "meeting-transcription": "录音转写",
   "todo-reminder": "待办提醒",
   external: "外部通知",
-  "game-poker":"德州扑克",
   "drive-discussion": "文档互动",
 }
 

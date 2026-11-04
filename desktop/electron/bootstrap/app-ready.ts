@@ -1,7 +1,6 @@
 import { HUB_INSTALL_PROVIDER_ID, type HubPreparedSourceProvider } from "../../app-capabilities/skill-hub/main/prepared-source-provider"
 import { createSkillHubProtocolHandlers } from "./skill-hub-protocol-handlers"
 import { SYSTEM_APP_WINDOW_SERVICE_ID, type createSystemAppWindowService } from "../services/system-app-window-service"
-import {createGameProtocolHandlers} from "../../app-capabilities/game-hall/main/protocol-handler"
 import { createConnectorProtocolHandlers } from "./connector-protocol-handlers"
 import { createMailProtocolHandlers } from "../../app-capabilities/mail/main/protocol-handler"
 import { createMailInternalProtocolHandlers } from "./mail-internal-protocol-handlers"
@@ -153,7 +152,7 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
 
   deps.setPrivateProtocolHandlers?.({ ...createSkillHubProtocolHandlers(
     (request) => registry.get<ReturnType<typeof createSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).openSkillInstaller(request),
-  ), ...createConnectorProtocolHandlers(registry), ...createMailInternalProtocolHandlers(registry), ...createMailProtocolHandlers(registry), ...createTodosProtocolHandlers(registry), ...createGameProtocolHandlers(registry) })
+  ), ...createConnectorProtocolHandlers(registry), ...createMailInternalProtocolHandlers(registry), ...createMailProtocolHandlers(registry), ...createTodosProtocolHandlers(registry) })
 
   const eventBus = registry.get<EventBus>("core.event-bus")
   accountService.setEventBus(eventBus)

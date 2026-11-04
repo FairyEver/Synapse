@@ -1,5 +1,4 @@
 import { skillHubCapabilityManifest } from "./skill-hub/shared/manifest"
-import {gameHallCapabilityManifest} from "./game-hall/shared/manifest"
 import { connectorsCapabilityManifest } from "./connectors/shared/manifest"
 import type {
   AppDeepLinkDeclaration,
@@ -34,7 +33,6 @@ const appDeepLinkManifests = [
   mailCapabilityManifest,
   todosCapabilityManifest,
   skillHubCapabilityManifest,
-  gameHallCapabilityManifest,
   fileOpenerCapabilityManifest,
   textFileWriterCapabilityManifest,
   htmlGeneratorCapabilityManifest,

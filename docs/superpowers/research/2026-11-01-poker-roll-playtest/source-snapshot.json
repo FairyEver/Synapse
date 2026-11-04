@@ -1,5 +1,0 @@
-{
-  "reason": "Preserve executed version before adding price-scale comparison. Original outputs unchanged.",
-  "file": "runner-source.cjs.txt",
-  "sha256": "f853b7b01c97062823ca9ce78e01d0b0a1e3ed3820ef500611a335d108cc04b7"
-}

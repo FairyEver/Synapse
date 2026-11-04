@@ -1,7 +1,4 @@
 import { HUB_INSTALL_PROVIDER_ID, HubPreparedSourceProvider } from "../../app-capabilities/skill-hub/main/prepared-source-provider"
-import {GameHallService} from "../../app-capabilities/game-hall/main/service"
-import {createGameDispatcher} from "../../app-capabilities/game-hall/main/dispatcher"
-import {GAME_SERVICE_ID} from "../../app-capabilities/game-hall/shared/capability"
 import { AGENT_SHARE_SERVICE_ID } from "../../app-capabilities/agent/shared/share"
 import type { AgentShareService } from "../../app-capabilities/agent/main/share-service"
 import { readClipboardRawFormat } from "../runtime/clipboard/native-reader"
@@ -856,9 +853,6 @@ export const coreSecretsDescriptor: ServiceDescriptor<SecretsService> = {
   },
 }
 
-export const coreGameHallDescriptor:ServiceDescriptor<GameHallService>={
-  id:GAME_SERVICE_ID,criticality:"degraded",create(){return new GameHallService(accountService)},stop(instance){instance.dispose()},
-}
 export const coreTodosDescriptor: ServiceDescriptor<TodoCloudService> = {
   id: TODOS_SERVICE_ID,
   criticality: "degraded",
@@ -1659,7 +1653,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
     MAIL_SERVICE_ID,
     TODOS_SERVICE_ID,
     SKILL_HUB_SERVICE_ID,
-    GAME_SERVICE_ID,
     WECOM_CONNECTION_SERVICE_ID,
     "core.config",
     "core.connectors",
@@ -1827,7 +1820,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       permissionGuard,
       auditSink,
     })
-    const gameDispatcher=createGameDispatcher({service:ctx.registry.get<GameHallService>(GAME_SERVICE_ID),permissionGuard,auditSink})
     const skillHubDispatcher = createSkillHubCapabilityDispatcher({ service: ctx.registry.get<DesktopSkillHubService>(SKILL_HUB_SERVICE_ID) })
     const todosDispatcher = createTodoCapabilityDispatcher({ service: ctx.registry.get<TodoCloudService>(TODOS_SERVICE_ID), permissionGuard, auditSink })
     const documentTemplateDispatcher = createDocumentTemplateCapabilityDispatcher({
@@ -1927,7 +1919,6 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       mailDispatch: (action, params, context) => mailDispatcher.dispatch(action, params, context),
       mailInternalDispatch: (action, params, context) => mailInternalDispatcher.dispatch(action, params, context),
       wecomDispatch: (action, params, context) => wecomDispatcher.dispatch(action, params, context),
-      gameDispatch:(action,params,context)=>gameDispatcher.dispatch(action,params,context),
       todosDispatch: (action, params, context) => todosDispatcher.dispatch(action, params, context),
       skillHubDispatch: skillHubDispatcher.dispatch,
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),

@@ -19,10 +19,7 @@ describe('navigation selection', () => {
     expect(getActiveNavigationPath(adminNavigation, '/teams/team-1')).toBe('/teams')
   })
   it('does not select external or similarly prefixed routes', () => {
-    expect(getActiveNavigationPath(userNavigation, '/game/')).toBeUndefined()
+    expect(getActiveNavigationPath(userNavigation, '/unrecognized/')).toBeUndefined()
     expect(getActiveNavigationPath(userNavigation, '/webhooks-other')).toBeUndefined()
-  })
-  it('keeps the game page available without a Console navigation entry', () => {
-    expect(userNavigation.some((item) => item.path === '/game/')).toBe(false)
   })
 })

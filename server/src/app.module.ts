@@ -1,4 +1,3 @@
-import { GameModule } from "./game/game.module"
 import { CloudTableModule } from "./cloud-tables/cloud-table.module"
 import { cloudTableLogRequest } from "./cloud-tables/cloud-table-log"
 import { TodosModule } from "./todos/todos.module"
@@ -52,9 +51,7 @@ type RequestLogObject = {
  */
 function hasSensitiveRequestUrl(url: string): boolean {
   const pathname = url.split("?")[0] ?? ""
-  return pathname === "/api/game"
-    || /^\/api\/(?:open\/v1|console)\/tables(?:\/|$)/iu.test(pathname)
-    || pathname.startsWith("/api/game/")
+  return /^\/api\/(?:open\/v1|console)\/tables(?:\/|$)/iu.test(pathname)
     || pathname === "/api/todos"
     || pathname.startsWith("/api/todos/")
     || pathname === "/api/problem-feedback"
@@ -115,7 +112,6 @@ function hasSensitiveRequestUrl(url: string): boolean {
     MobileLiveModule,
     NotificationModule,
     TodosModule,
-    GameModule,
     WebhookModule,
     AdminAuthModule,
     DashboardModule,

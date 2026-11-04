@@ -1,6 +1,6 @@
 # Dashboard
 
-React + TypeScript + Vite + HeroUI v3 子包，包名为 `@synapse/dashboard`，提供普通用户控制台、管理员后台及独立阅读、分享和游戏入口。
+React + TypeScript + Vite + HeroUI v3 子包，包名为 `@synapse/dashboard`，提供普通用户控制台、管理员后台及独立阅读与分享入口。
 
 - 根目录 `pnpm dev` 或 `pnpm dev:prod` 自动启动。
 - 开发地址：`http://localhost:19700/`，端口被占用时直接失败。

@@ -2,85 +2,11 @@
 
 - 2026-11-04 Synapse Skill Hub：新增独立 `skill_hub` domain，共 10 项 capability / MCP 索引；实测全局 374 项 capability、370 项索引及工具定义，公开入口仍为 `search` / `invoke`。复用账号状态与登录能力。无 System App、默认 Dock、Workflow 或 Automation 入口；管理员治理仅 Web/API。旧 Skill Repository 工具和协议保持退役。另有 1 条严格声明式桌面深链 `synapse://skill-hub/install?skillId=<id>`、2 个仅限安装器窗口的私有 IPC（prepare_install / release_install）和 1 个定向窗口事件（skill_hub_install_open_request），均不进入 MCP 索引。
 
-- 卡牌房既有 `table.state` / `room.get` 的公开 `handLog.entries` 可追加类型化 `effects`。热手按已读取的最多 1000 条动作序号取结算帧，归档读同一审计数据。仅返回实际可公开的效果和参赛快照名。响应 schema、MCP 描述与系统 Skill 同步，现有注册数、路由、权限和表结构保持原样。
-
-- 新建卡牌房要求 `cards-v3,chips-v2`，旧卡牌房继续按房间快照校验版本。既有真人私有 `card.play` / `card.choose` 支持新版五选一，公开建房参数停用 Roll 及钻石额度。旧 Roll 路由仍可操作已有 Roll 房。保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0，其他注册数量与例外无变化。
-
-- 2026-11-03 卡牌验收同步：保留游戏公共 capability/MCP 30、Web 30、桌面游戏 IPC 0。网页 `invoke` 的既有建房入口仅对创建操作传递已认证 Cookie 真人来源和规则支持信息，卡牌创建在 REST/invoke 两条入口均拒绝 Bearer 和缺版本请求；其他公开 invoke 行为与私有用牌边界不扩大。生成的系统 API 参考仍只包含原 30 个 MCP 工具。
-
-- 2026-11-03 卡牌真人入口：Web新增私有 `app.game.poker.card.play` / `app.game.poker.card.choose`，对应 POST `/api/game/poker/rooms/:code/card/play`、`/card/choose`，游戏 Web 28→30。两项不进入公共 capability/MCP；game 30、全局 capability 364 / MCP 索引360、System App22、默认Dock9、游戏桌面IPC0及兼容深链不变。卡牌写入要求受信同源 Cookie 会话、账号头与 cards-v1/chips-v2 版本头；Bearer/MCP 不得参赛或接入AI，读取强制公开投影。Poker guide 的 `cards.available` 返回 true，创建卡牌房无环境开关；无卡旧房兼容行为保留。私有响应禁止缓存，公开 search/invoke 仍仅2项。
-
 - 2026-11-02 云端 Skills 下线：移除 `skill_repository` domain 的全部 9 项 capability/MCP 索引工具、桌面上传与安装 IPC、安装窗口和 `synapse://skill-install` 专用协议处理；旧链接按未知协议处理。Console/Admin 列表、探索、详情及公开路径同时删除，权威系统 Skill 不再分发该领域指南。全局 capability 373→364、MCP 索引 369→360，公开路由工具仍为 search/invoke 两个；System App 22、默认 Dock 9、Workflow/Automation 与其他 Deep Link 不变。资源仓库仅保留 `content` 领域。历史条目计数保留为当时基线，当前计数以下表为准。
 
 - 2026-11-02 macOS 开发协议回跳：开发启动改用独立 bundle ID、内置当前仓库入口并声明 `synapse://` 的开发应用，修复网页登录唤起 Electron 默认窗口。既有 `synapse://auth/desktop/callback`、PKCE、IPC、MCP schema 和系统 Skill 不变；没有新增 Deep Link、System App、Dock、capability、MCP、Workflow 或 Automation，现有表格数量和例外均不变。
 
-- 2026-11-02 对局信息：既有table.state/room.get增加可选公开handLog（本手、完整标记、有界顺序流水、实际盲注、Roll支付与完成状态），仅白名单字段；总览继续使用potContributions/rollLedger，AI隐私不变。共享schema、MCP描述、系统Skill/API/协议、Agent和游戏规则同步。无新增注册、工具、输入、路由、权限或迁移；game30、全局373 capability/369 MCP、游戏Web28、桌面游戏IPC0及既有例外数量不变。
-
-- 2026-11-02 底池来源：既有 `table.state`/`room.get` 追加可选公开只读 `potContributions`（本手handId、pending/settled/cancelled、累计total和原参赛身份players/amount），包含实际盲注及完整普通下注，排除Roll；弃牌、退款和边池仍保留累计投入，同座新账号不继承。缺源/损坏省略，不公开账号/入座标识、牌面或note；共享schema、MCP描述、系统Skill/API/协议及Agent指南同步。没有新增查询、路由、输入参数、迁移、工具或权限；game30、全局373 capability/369 MCP、游戏Web28、桌面游戏IPC0及所有既有例外不变。
-
-- 2026-11-02 Roll费用明细：既有 `table.state`/`room.get` 追加可选公开只读 `rollLedger`，包含本手handId、pending/released/cancelled状态、参赛身份快照players和按成功start排序去重的全部entries及原补偿分配。保留弃牌/离桌者归属，不按当前占座者重写；不暴露账号/入座标识、旧牌或候选，缺失不当作零。共享schema、MCP描述及系统Skill/API/协议同步；不新增查询、数据库字段、输入参数、工具或权限，注册表数量及所有既有例外不变。
-
-- 2026-11-02 建房金额档位：既有 `app.game.poker.room.create` 的 buyIn 枚举及 poker.guide 同步为1000/5000/10000/50000，两类房间一致；Web与系统Skill同步，旧房间金额不变。未新增能力、MCP、Web/IPC路由，表格数量与既有例外保持不变。
-
-- 2026-11-02 房主手动开局：首局房主免准备，其他可参与者准备后由房主开始；后续房主也须准备，结算准备成功返回牌桌，全员准备后从牌桌显式开始，结算无开始入口；新增 `app.game.poker.room.start`（MCP `app_game_poker_room_start`）及受身份/同源保护的 Web POST `/game/poker/rooms/:code/start`。game 29→30（大厅3、扑克27），全局 capability 372→373、MCP索引368→369，游戏Web27→28，桌面游戏IPC仍0；System App22、默认Dock9、Workflow/Automation/Deep Link及既有UI私有例外不变。seat.ready输入/响应及wait的ready_required允许首局handId=null；table增加可选isRoomOwner/canStart，公开视角不授予开局操作。无数据库迁移，Skill与Agent指南同步；以下既有计数为历史基线。
-
-- 2026-11-02 每手钻石配置：既有room.create输入ruleOptions追加可选rollCoins（正整数，默认12），房规响应同步该字段；每手coinPolicy冻结额度，normal/super消耗仍固定1/3，拒绝费率注入。仅扩展既有schema、描述和系统Skill；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变，无数据库迁移。
-
-- 2026-11-02 Roll 钻石：既有本人 `table.state` / `table.wait` 报价追加可选 `coins={balance,limit}`，各档追加可选 `coinCost`；待选 wait 同时提供 `roll` 报价。启用Roll的新手每人12钻石，normal/super扣1/3，choose不重复扣费，仍另付筹码；旧手无钻石快照沿原规则完成。同步schema、工具描述、系统Skill与Agent指南，无新增输入、数据库字段或注册项；game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0不变。
-
-- 2026-11-02 连续 Roll：既有 `app.game.poker.roll.start` 允许超级待选时在原 cardIndex 按当前报价再次付费，成功放回旧候选且不退旧费用；输入/响应 schema 不变。MCP 描述、系统 Skill、生成 API 参考与 Agent 指南同步；无新增注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
-
-- 2026-11-02 筹码呈现：既有牌桌Web响应追加可选公开 `chipState`（普通/ Roll逐笔面额计数及最近32笔资金动作），仅desktop展示投影提供，decision/MCP不提供。共享响应schema、系统Skill及Agent指南同步，动作输入和工具描述的操作语义不变；无新注册项、权限或数据库字段，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
-
-- 2026-11-02 扑克房间上限：既有 `app.game.poker.room.create` 的 `maxSeats` 改为2–6，Web、服务端入座和陪练容量同步；MCP描述、schema、Skill规则及API参考同步。未新增或删除注册项，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0及现有例外不变。
-
-- 2026-11-02 Roll 统计：既有 `table.state`/`room.get` 追加可选公开 rollStats（本手/房间总量，以及最多10个当前/历史回显座位对应账号的本手/房间汇总）。不增加输入参数、capability、MCP、Web 操作、System App、Dock、Workflow、Automation 或 Deep Link，game29、全局372 capability/368 MCP、Web27、游戏桌面IPC0均不变。统计在点击玩家区域后的系统信息弹窗内展示，不常驻牌桌；按身份和 Roll ID 去重，候选/旧槽不公开，schema、描述、系统 Skill 与生成参考同步。
-
-- 2026-11-01 Roll 完整接入：新增 `app.game.poker.roll.start` / `app.game.poker.roll.choose`（MCP `app_game_poker_roll_start` / `app_game_poker_roll_choose`），game 27→29（大厅3、扑克26），全局 capability 370→372、MCP索引366→368；当前实际注册为372/368。Web增加两个身份/同源保护的POST `/game/poker/rooms/:code/roll/start`、`/roll/choose`，游戏UI可调用27项，桌面游戏IPC为0。无新System App、Dock、Workflow、Automation或Deep Link；System App22、默认Dock9及两条兼容游戏路径保留。room.close/control.set仍UI私有，table.wait/control.claim/checkpoint仅Agent可用。建房ruleOptions.roll缺省false，服务端roll-v1固定；候选仅原手本人可见，超级待选与控制释放优先于普通行动，幂等永久回执匹配全部参数，Skill和生成API参考同步。下面日期相同的27/370/366及更早计数均为当次历史基线。
-
 - 2026-11-01 云端数据表：新增服务端REST及Console，API文档可整页复制为Markdown供AI调用；按用户后续决定不提供独立Skill。不注册桌面System App、Dock、capability、MCP、Workflow、Automation或Deep Link，各注册数量不因云表变化。
-
-- 2026-11-01 点数与 AI 接入：既有 lobby.list 增加可选本人 myControl 响应投影及说明，房间列表与牌桌共用 Web 接入面板；不新增权限、输入参数、注册能力或数据库字段。game 仍为 27 项 capability/MCP（大厅3、扑克24），游戏 IPC 为0；全局370 capability/366 MCP、System App22、默认Dock9及现有路径/例外不变。schema、工具描述和系统 Skill 同步，控制/资金/逐手准备协议不变。
-
-- 2026-11-01 每手结算与准备：新增 `app.game.poker.seat.ready`，game 26→27（大厅3、扑克24），全局 capability 369→370、MCP索引365→366。新增Web POST `/game/poker/rooms/:code/ready`，无桌面IPC/preload增量；System App 22、默认Dock9、Workflow/Automation及两条兼容游戏路径不变。wait新增ready_required，结算增加bestFive/分池reason及准备投影；本人控制版本与结算handId共同约束逐手确认。系统Skill、生成参考与Agent指南同步，旧条目为历史基线。
-
-- 2026-11-01 牌桌响应座位增加可选 `isHistorical` / `inCurrentHand`，分别标识结算历史回显和实际本手参与；同步 shared 响应校验与游戏系统 Skill。仅补充响应信息，不修改动作输入、权限或数据库，不新增工具。当前 game 26 项 capability/MCP、全局 369 capability / 365 MCP 索引、22 个 System App、默认 9 项 Dock 及两条兼容游戏深链均不变；底部操作条与按需信息面板仅属于 Web UI。
-
-- 2026-10-31 游戏完整迁移 Web：System App 23→22，游戏启动台/Dock/UI 及 24 项 IPC/preload 移除；默认 Dock 仍为 9 项。本机 game 26 项 capability/MCP 保留，全局仍 369 capability/365 MCP 索引。`control.set`/`room.close` 仍仅 Web UI 私有操作，无 MCP 索引；历史两条游戏声明式深链保留但受控打开浏览器。UI 类型、操作和校验归入 shared 双入口契约，Web Cookie 绑定预期账号，Bearer 兼容。以下历史条目保持当次基线，当前游戏 UI 边界以本条为准。
-
-- 2026-10-31 建房默认名称使用当前昵称和实际房间号，桌面五项选项通过既有 config IPC 按账号保存在本机。room.create 描述与系统 Skill 同步，输入 schema 不变；game 仍为26项能力/24项IPC，全局369 capability/365 MCP索引，System App、Dock、Workflow、Automation、Deep Link及权限无增量。
-
-- 2026-10-31 单人陪练解散：私有 `app.game.poker.room.close` 在现有座位及未结算当前手均无房主以外真人账号时立即关闭陪练房，取消当前手且不计战绩；多人或点数房仍手后解散。更新私有操作描述、桌面提示、Agent指南与系统Skill；输入/响应schema、game 26项能力/24项IPC、全局369 capability/365 MCP索引及其余表格数量不变。room.close仍仅UI私有，不新增公开MCP权限。
-
-- 2026-10-31 游戏应用名称与窗口标题统一为“游戏”，App ID 仍为 `game-hall`、namespace 仍为 `game`。仅调整显示文案，23 个 System App、369 个 capability、365 个 MCP 索引及既有 Dock、深链数量不变，MCP schema 和系统 Skill 无需调整。
-
-- 2026-10-31 游戏大厅使用模块 `assets/icon.png` 中的用户指定图标，启动台与 Dock 共用 manifest 资源。仅替换图标，23 个 System App、369 个 capability、365 个 MCP 索引及既有路由数量不变，MCP schema 和系统 Skill 无需调整。
-
-- 2026-10-31 扑克房间列表合并：既有lobby.list的mode新增all，按统一顺序分页查询点数与陪练房；省略仍默认points。桌面不再提供类型切换，每间房显式标记类型；建房、历史、统计仍只接受points/practice。game保持26项能力/24项IPC，全局369 capability/365 MCP索引，其他注册表面与权限无增量；schema、bridge和系统Skill同步。上线时先更新服务端API再更新桌面，无数据库迁移。
-
-- 2026-10-30 离桌控制边界审阅：seat.join增加可选controlVersion，私有control.set在无座位时支持request_ai/cancel_ai重新入座授权；服务端永久控制历史阻止旧AI在接管后裸join重新扣点。无座位先读取table.state/room.get的requiresJoinApproval核对是否需要授权，false按用户原入座授权首次join，true必须handoffPending及匹配版本，不按版本0猜测；首次无控制历史旧MCP保持兼容。table.events同步可选owner/public视角（MCP默认owner、decision投影；UI默认public，玩家显式owner），不允许日志混入教学牌。仅扩展既有schema与私有语义，game26项能力/24项IPC、全局369 capability/365 MCP索引不变，Skill和指南同步。
-
-- 2026-10-30 真人扑克与短牌：新增game公共control.claim、checkpoint.get/save、table.events四项，game为26 capability/MCP索引（大厅3、扑克23），全局369 capability/365 MCP索引。游戏IPC为24项，新增join/act/control.set/events；control.set与room.close仅UI私有，不注册capability/MCP。table.wait、control.claim、checkpoint.get/save不开放Renderer bridge。公开仍仅search/invoke；System App 23、Dock、Workflow、Automation、Deep Link数量不变。共享命名白名单加入已批准claim/save/events，建房牌组与盲注、控制epoch、事件/结算及恢复契约同步schema/Skill。扑克房间获批沉浸顶栏例外，大厅维持统一壳；服务端区分human与MCP动作，教学明牌不进入AI决策。下方较早条目数量为各轮历史基线。
-
-- 2026-10-30 程序机器人陪练房：新增app.game.poker.bot.add/remove两项房主管理能力（仅practice）及2项UI IPC；game索引22项（大厅3、扑克19），游戏IPC20项，全局365个capability/361个MCP索引。公开仍仅search/invoke；System App 23项，Dock、Workflow、Automation与Deep Link无增量。未增加真人act/join/wait桥接；共享命名新增设计已批准的add动作，模式筛选和机器人类型/来源同步schema与Skill。
-
-- 2026-10-30 游戏大厅第九轮审核：客户端按既有响应契约验证20个MCP操作及私有解散操作的数据，异常返回GAME_INVALID_RESPONSE并支持恢复；校验器属于内部协议边界，不新增能力。公开工具描述、输入schema、20个游戏MCP索引及18个IPC数量不变，正常附加响应字段继续保留。
-
-- 2026-10-30 游戏大厅第八轮审核：服务端新增可空内部startCursor确定入座事件边界，避免排队请求时间乱序串旧超时或漏结算。20个游戏MCP索引、18个IPC、所有输入/输出schema及权限数量不变，不返回或接受该字段作座位凭证；上线API前须完成新增会话游标迁移。
-
-- 2026-10-30 游戏大厅第五轮审核：room.create与agent.upsert新增可选creationId(UUID)输入，客户端同一新建意图重试复用，仍按当前账号与roomCode重连；点数账户首次创建使用数据库原子插入。20个游戏MCP索引、18个IPC及权限数量不变，无新工具或座位凭证；先更新服务端再发布携带该字段的桌面。
-
-- 2026-10-30 游戏大厅第四轮审核：当前行动增加可选公开姓名快照字段displayName，座位复用时日志仍归属原行动人；交叉房间资金死锁只对已回滚事务有限重试。仍为20个游戏MCP索引与18个IPC，无新入口、参数或权限。
-
-- 2026-10-30 游戏大厅第三轮审核：wait描述同步离桌及归档后的终局补发和cursor边界，取消/超时覆盖认证与读取；仍为20个游戏MCP索引、18个IPC，所有注册数量不变，没有新增人类出牌入口。
-
-- 2026-10-30 游戏大厅第二轮审核：游戏请求在权限检查之前绑定发起账号，身份切换拒绝旧请求；seat_sit保留请求确认并返回pending/status，overview同步实际暂离状态。20个游戏MCP索引、18个IPC及所有注册数量保持不变，不新增入口或权限。
-
-- 2026-10-30 游戏中心内容区重设计：大厅与扑克房间继续使用现有入口和统一 App 顶栏，新增的 `Artwork` 仅为 renderer 注册项的展示插槽；房间网格不新增业务能力。System App、Dock、capability、MCP、IPC、Workflow、Automation 与 Deep Link 数量均不变，MCP/Skill 操作契约不变。
-
-- 2026-10-30 游戏界面顶栏调整：继续使用统一 `SystemAppWindowShell` 和内嵌 header slot，德州扑克补充独立窗口标题，内嵌与独立窗口均只保留一个返回大厅操作；预览测试工具栏不属于产品导航。内容区允许独立视觉语言，应用顶栏仍遵守 Synapse 规范。System App、Dock、capability、MCP、IPC、Workflow、Automation 与 Deep Link 数量均不变。
-
-- 2026-10-30 游戏大厅接入：新增 `game` domain，20个capability/MCP索引（大厅3、德州扑克17），全局363个capability、359个MCP索引。公开工具仍仅search/invoke。System App现为23项，默认Dock仍为9项。新增18项游戏IPC（含不进入MCP目录的房主解散操作）与1项通用view_open_request事件、2条声明式路径；服务端裁决，桌面不注册act/seat_join/table_wait的IPC；提示词、版本、note仅本人可读；模型声明仅展示。
 
 - 2026-10-29 OpenUI 报告展示：系统 Skill 增加聊天内第三方分析报告入口，宿主完整/按需提示同步区分网页生成与聊天 UI，由 AI 决定展示形式。仅调整指引，不新增注册表面；343 项全局 capability、339 项 MCP 索引、22 个 System App 及 Dock、Workflow、Automation、Deep Link、IPC 数量不变。
 
@@ -133,7 +59,6 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 | 能力包 | 应用页 | 默认 Dock | Workflow | Automation | MCP | Deep Link |
 |---|---:|---:|---:|---:|---:|---:|
-| 游戏（独立 Web，本机仅后台能力） | 否 | 否 | — | — | 30 | 大厅根、扑克房间（2条兼容路径，打开浏览器） |
 | Agent Conversation | 是（既有） | 是（既有） | — | — | 14 | `open` |
 | Agent Personas | 是 | 否 | — | — | — | — |
 | Account Message Center | 否 | 否 | — | — | 7 | — |
@@ -269,7 +194,6 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Connectors | 是 | 否 | — |
 | Mail Internal | 是 | 是（邮箱左侧） | `mail_internal` |
 | Todos | 是 | 否 | `todos` |
-| Game Hall（Web，桌面无应用页） | 否 | 否 | `game`（仅后台 MCP） |
 | Meeting | 是 | 否 | — |
 
 Settings 的基础设置增加设备名称，通过 `app.live.device.get_settings` / `app.live.device.set_name` 两个 UI 私有 IPC 读写。机器绑定在 Live 主进程与握手中处理，名称不参与身份判断。System App、Dock 与上表 MCP 数量不变，新增公开 capability/tool、Workflow、Automation、Deep Link 数量均为 0。
@@ -304,15 +228,14 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `mail` | 44 | 44 |
 | `todos` | 6 | 6 |
 | `wecom` | 2 | 2 |
-| `game` | 30 | 30 |
 | `skill_hub` | 10 | 10 |
-| 合计 | 374 | 370 |
+| 合计 | 344 | 340 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 370 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 340 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

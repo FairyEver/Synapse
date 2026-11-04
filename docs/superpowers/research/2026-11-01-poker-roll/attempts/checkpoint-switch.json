@@ -1,8 +1,0 @@
-{
-  "at": "2026-11-01T07:51:56.594Z",
-  "pid": 65657,
-  "signal": "SIGTERM",
-  "rows": 442368,
-  "reason": "Switch only after full raw index and summary checkpoint, exact memoization parity passed",
-  "originalCommand": "node server/test/poker-roll-research/run.cjs all --samples 2048 --max-samples 32768 --calibration-samples 32 --history-samples 512 --workers 8 --out docs/superpowers/research/2026-11-01-poker-roll"
-}

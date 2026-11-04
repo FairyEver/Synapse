@@ -1,4 +1,3 @@
-import type { GameFunding, PokerBlindPreset, PokerVariant } from "@synapse/shared/game-contracts"
 import type { TerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
 import type { SynapseContentType } from "./content"
 import type { SynapseAgentPermissionMode } from "./agent"
@@ -74,16 +73,7 @@ export type SynapseKnowledgeBaseStorageConfig =
   | { mode: "default" }
   | { mode: "custom"; rootPath: string }
 
-export type PokerRoomPreferences = {
-  mode: GameFunding
-  variant: PokerVariant
-  blindPreset: PokerBlindPreset
-  maxSeats: number
-  buyIn: number
-}
-
 export type SynapseGlobalConfig = {
-  pokerRoomPreferences?: Record<string, PokerRoomPreferences>
   themeMode: SynapseThemeMode
   terminalTheme?: TerminalThemeId
   projects: SynapseProjectConfig[]

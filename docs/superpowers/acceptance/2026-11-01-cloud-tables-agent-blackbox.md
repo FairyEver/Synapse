@@ -61,6 +61,6 @@ Agent共63次API请求：33次200、14次201、12次预期403、3次预期404、
 - 运行器最终删除本次容器及数据库，检查未留下同名测试容器；账号、表和密钥仅存在于临时库，未产生生产测试垃圾数据。
 - 首次运行在客户端启动前因测试脚本正则的Unicode转义语法错误失败，未发出业务请求；修正测试脚本后完整重跑通过。这是验收脚本问题，未发现本轮产品缺陷，未改云表生产业务逻辑。
 - `node --check server/test/fixtures/cloud-tables-agent-client.mjs`、`git diff --check`通过。
-- 服务端完整类型检查本次未通过：运行期间其他任务新增/修改 `src/game/hall/__tests__/pending-transfers.spec.ts` 等文件，尚未对齐 `freezeTransfers`、`releaseTransfers`、`voidTransfers`、`JoinSession.admissionId` 等类型。错误文件不在本任务改动范围，未擅自修改，也不将此次全量类型检查报告为通过。
+- 服务端完整类型检查本次未通过：运行期间其他任务的变更存在尚未对齐的类型。错误文件不在本任务改动范围，未擅自修改，也不将此次全量类型检查报告为通过。
 - 新增 `server/test/cloud-tables-agent.e2e.spec.ts`、`server/test/fixtures/cloud-tables-agent-client.mjs`；为现有运行器增加显式 `--agent` 模式，并同步包命令及服务端README。纯验收代码，无产品行为变更，不新增发布说明。
 - 原始证据目录：`/Users/liyang/Documents/code/github/Synapse/.superpowers/cloud-tables/agent-blackbox/`，尚无在线报告链接。`result.json`记录逐次operationId、调用身份类别、方法、路径、HTTP状态、错误code、请求ID，以及0 Console/Cookie请求和Bob回读不变的结论；不记录密钥或Cookie。其余证据：`test.log`、`typecheck.log`、`first-harness-failure.log`。

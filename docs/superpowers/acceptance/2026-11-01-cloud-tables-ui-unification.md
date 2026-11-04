@@ -21,7 +21,7 @@
 - `pnpm --filter @synapse/dashboard-v2 test:browser src/features/cloud-tables/cloud-tables.browser.tsx src/components/data-table/server-data-table.browser.tsx`：25项通过。
 - Chromium 实际渲染覆盖320px、390px及1280px：统一页面几何、导航抽屉、120字符无空格表名、标签单行与滚动、筛选输入与展开的选择菜单、列菜单、排序请求、所有管理页签、必填校验、禁用标识、焦点及弹窗正文/底部操作区间距。保留原有记录写入、字段标识、权限保存、恢复、账号切换和幂等重试回归。
 - `pnpm --filter @synapse/dashboard-v2 exec vite build`：前端生产资源打包通过。此命令不替代完整 build 的类型检查。
-- 完整 Dashboard V2 `tsc` / `build` 未通过：当前另一个任务的 `src/game-center/lib/api.ts:20` 缺少新协议要求的 `roll`。完整build首次执行时，另一任务正在创建的协作者搜索组件还曾短暂出现泛型错误，后续typecheck已不再报告该错误。没有通过排除文件或放宽类型规则掩盖阻塞，也没有修改其他任务源码。
+- 完整 Dashboard V2 `tsc` / `build` 未通过：当前另一个任务的 API 契约存在类型错误。完整build首次执行时，另一任务正在创建的协作者搜索组件还曾短暂出现泛型错误，后续typecheck已不再报告该错误。没有通过排除文件或放宽类型规则掩盖阻塞，也没有修改其他任务源码。
 - `git diff --check`：通过。
 
 ## 证据与交付边界

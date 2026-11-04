@@ -31,13 +31,9 @@ export const EXEMPT_SEGMENTS: Readonly<Record<string, string>> = {
  * 所以排定后不要随手重排。
  */
 export const LEXICON: readonly (readonly [term: string, token: string])[] = [
-  ["手牌", "hand"], ["房间", "room"], ["座位", "seat"], ["动作", "action"],
-  ["游戏", "game"], ["大厅", "hall"], ["德州扑克", "poker"], ["德州", "poker"], ["德扑", "poker"], ["打牌", "poker"], ["打扑克", "poker"],
-  ["机器人", "bot"], ["陪练", "bot"], ["添加", "add"],
-  ["换牌", "roll"], ["选择", "choose"], ["准备", "ready"],
-  ["检查点", "checkpoint"], ["牌桌", "table"], ["认领", "claim"], ["保存", "save"], ["事件", "events"],
-  ["房间列表", "lobby"], ["入座", "join"], ["离桌", "leave"], ["暂离", "sit"], ["催促", "nudge"], ["提醒玩家", "nudge"],
-  ["等待牌况", "wait"], ["出牌", "act"], ["重连", "overview"], ["游戏指南", "guide"], ["版本历史", "versions"], ["手牌历史", "history"], ["牌况", "state"], ["手牌详情", "detail"], ["战绩", "stats"],
+  ["房间", "room"], ["动作", "action"], ["机器人", "bot"], ["添加", "add"],
+  ["选择", "choose"], ["准备", "ready"], ["保存", "save"], ["事件", "events"],
+  ["版本历史", "versions"],
 
   // ---------------- 名词：domain 与实体 ----------------
   ["云盘", "drive"],

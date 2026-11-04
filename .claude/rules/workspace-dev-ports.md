@@ -34,12 +34,12 @@ paths:
 
 Server 入口等待 API 的 `/readyz` 返回成功后才启动 Dashboard，由 Vite 在网页监听后使用系统默认浏览器打开控制台。就绪探测覆盖数据库、PDF renderer 和已配置的对象存储；总等待上限 180 秒，单次请求上限 10 秒，重试间隔与请求超时独立。失败或超时时不打开 Web 端。
 
-隔离页面验收可同时指定 `SYNAPSE_DASHBOARD_PORT`、`SYNAPSE_SERVER_API_PORT`、`APP_PUBLIC_URL` 和专用 `GAME_E2E_DATABASE_URL`，并用 `SYNAPSE_DASHBOARD_OPEN=false` 禁止自动打开默认浏览器。HTTP 端口仍在本项目保留范围内。已有同仓库开发服务运行时，不得调用会匹配全部服务的停止入口；只停止本次启动并记录的进程组及专用 Compose project。
+隔离页面验收可同时指定 `SYNAPSE_DASHBOARD_PORT`、`SYNAPSE_SERVER_API_PORT`和 `APP_PUBLIC_URL`，并用 `SYNAPSE_DASHBOARD_OPEN=false` 禁止自动打开默认浏览器。HTTP 端口仍在本项目保留范围内。已有同仓库开发服务运行时，不得调用会匹配全部服务的停止入口；只停止本次启动并记录的进程组及专用 Compose project。
 
 ## 地址与边界
 
 - 浏览器入口使用 `http://localhost:19700/console/`；Dashboard 使用 `::` 双栈监听和 `strictPort`，避免只在 IPv4 上响应。桌面登录、服务端公开链接与文档开发链接同步使用该应用根地址。
-- Dashboard 的用户控制台使用 `http://localhost:19700/console/`，管理后台使用同端口 `/admin/`，独立阅读、分享和游戏沿用原 URL；生产镜像直接构建当前 Dashboard。
+- Dashboard 的用户控制台使用 `http://localhost:19700/console/`，管理后台使用同端口 `/admin/`，独立阅读和分享沿用原 URL；生产镜像直接构建当前 Dashboard。
 - Electron renderer 与 Docker 宿主机映射保留现有回环地址限制；这属于访问边界，不用来区分项目。
 - 数据库端口与连接保持原样：本机 PostgreSQL `5433`、容器内部 `5432`。不要为了统一 HTTP 端口号改数据库或迁移数据。
 - 生产端口保持原样：宿主机 Synapse `3000`，容器内 Nginx `3000` → API `3001`，PDF renderer `3010`；生产 Compose、Nginx、Caddy 与部署脚本不跟随开发端口修改。

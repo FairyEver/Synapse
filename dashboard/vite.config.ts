@@ -42,6 +42,6 @@ export default defineConfig({
   preview: { host: '::', port: 19700, strictPort: true },
   build: { target: 'chrome80', rollupOptions: { input: {
     dashboard: path.resolve(__dirname, 'index.html'), admin: path.resolve(__dirname, 'admin.html'),
-    desktopUpdate: path.resolve(__dirname, 'desktop-update.html'), game: path.resolve(__dirname, 'game.html'),
+    desktopUpdate: path.resolve(__dirname, 'desktop-update.html'),
   } } },
 })

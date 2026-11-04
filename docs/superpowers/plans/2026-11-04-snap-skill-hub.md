@@ -82,7 +82,7 @@
   expect(skillHubCreateInputSchema.safeParse({...validCreate, visibility:'public'}).success).toBe(false)
   ```
 - [ ] **Step 2 — 运行红灯。** `pnpm --filter @synapse/shared test src/skill-hub-contracts.test.ts src/skill-hub-package-node.test.ts`；预期新契约/函数尚未存在导致失败。
-- [ ] **Step 3 — 实现接口。** 显示名称 1–100 个 Unicode 码点、商店介绍 1–2000，按现有 Skill 名称规则校验包名（1–64、小写字母/数字/连字符、拒绝 Windows 保留名），不静默 slugify。主文件只解析顶层 name/description，支持现有单/双引号及折叠/字面多行形式，其他 frontmatter 原字节保留；重复关键字段或无法可靠读取的关键类型明确拒绝。仅将 install-package-utils 的通用解析函数移到独立 archive-package-node 入口并在旧文件重导出，旧 materializeEntries 及调用签名/调用者 budgets 保留；工作流不能依赖 Hub 业务校验。Hub wrapper 识别目录条目但不物化，使用 2000 条目/200 目录/8 层/10 秒解析预算。CJS 构建沿用现有 build-game-contracts 的相对 import 重写模式，覆盖 contracts、frontmatter、archive、Hub codec 四个节点，新入口与 d.cts 均实际生成；不得让服务端 require ESM，也不得将整个旧安装工具链重构。
+- [ ] **Step 3 — 实现接口。** 显示名称 1–100 个 Unicode 码点、商店介绍 1–2000，按现有 Skill 名称规则校验包名（1–64、小写字母/数字/连字符、拒绝 Windows 保留名），不静默 slugify。主文件只解析顶层 name/description，支持现有单/双引号及折叠/字面多行形式，其他 frontmatter 原字节保留；重复关键字段或无法可靠读取的关键类型明确拒绝。仅将 install-package-utils 的通用解析函数移到独立 archive-package-node 入口并在旧文件重导出，旧 materializeEntries 及调用签名/调用者 budgets 保留；工作流不能依赖 Hub 业务校验。Hub wrapper 识别目录条目但不物化，使用 2000 条目/200 目录/8 层/10 秒解析预算。CJS 构建沿用共享包既有的相对 import 重写模式，覆盖 contracts、frontmatter、archive、Hub codec 四个节点，新入口与 d.cts 均实际生成；不得让服务端 require ESM，也不得将整个旧安装工具链重构。
 - [ ] **Step 4 — 运行绿灯。** 上述共享测试、`pnpm --filter @synapse/shared typecheck`；另跑 `pnpm --filter @synapse/desktop test electron/services/__tests__/workflow-package-service.test.ts`，确认提取通用 ZIP 代码没有改变旧调用行为。entrypoint 测试分别 import/require 新入口，纯契约不含 node: 导入。
 - [ ] **Step 5 — 提交。** 只暂存本任务文件，中文摘要 `feat: 定义团队 Skill Hub 契约和安全包校验`。
 

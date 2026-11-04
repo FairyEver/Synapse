@@ -17,7 +17,6 @@
     }
   },
   "include": [
-    "app-capabilities/game-hall/**/__tests__/**/*.ts",
     "app-capabilities/mail/**/__tests__/**/*.ts",
     "app-capabilities/mail/**/__tests__/**/*.tsx",
     "extensions/**/__tests__/**/*.ts",

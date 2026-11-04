@@ -72,28 +72,6 @@
       },
       "default": "./dist/todos.js"
     },
-    "./game-contracts": {
-      "import": {
-        "types": "./dist/game.d.ts",
-        "default": "./dist/game.js"
-      },
-      "require": {
-        "types": "./dist/game-contracts.d.cts",
-        "default": "./dist/game-contracts.cjs"
-      },
-      "default": "./dist/game.js"
-    },
-    "./game-ui": {
-      "import": {
-        "types": "./dist/game-ui.d.ts",
-        "default": "./dist/game-ui.js"
-      },
-      "require": {
-        "types": "./dist/game-ui.d.cts",
-        "default": "./dist/game-ui.cjs"
-      },
-      "default": "./dist/game-ui.js"
-    },
     "./skill-hub-contracts": {
       "import": {
         "types": "./dist/skill-hub-contracts.d.ts",
@@ -129,7 +107,7 @@
     }
   },
   "scripts": {
-    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs && node scripts/build-drive-search.mjs && node scripts/build-versioned-data-migrator.mjs && node scripts/build-game-contracts.mjs && node scripts/build-skill-hub-contracts.mjs",
+    "build": "node scripts/build-mobile-workspace-files-constants.mjs && tsc -p tsconfig.json && node scripts/build-notification-constants.mjs && node scripts/build-todo-contracts.mjs && node scripts/build-drive-sync-constants.mjs && node scripts/build-drive-search.mjs && node scripts/build-versioned-data-migrator.mjs && node scripts/build-skill-hub-contracts.mjs",
     "test": "pnpm run build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

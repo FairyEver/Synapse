@@ -24,7 +24,6 @@ import { normalizeDisabledMcpServers } from "./agent-mcp-policy"
 import type { ModelTier } from "../types/provider-model"
 import type { SynapseContentType } from "../types/content"
 import type {
-  PokerRoomPreferences,
   SynapseAgentGlobalConfig,
   SynapseConfig,
   SynapseConfigPatch,
@@ -619,22 +618,6 @@ function normalizeKnowledgeBaseStorage(value: unknown): SynapseKnowledgeBaseStor
   return DEFAULT_GLOBAL_CONFIG.knowledgeBaseStorage
 }
 
-function normalizePokerRoomPreferences(value: unknown): Record<string, PokerRoomPreferences> {
-  if (!isRecord(value)) return {}
-  return Object.fromEntries(Object.entries(value).flatMap(([userId, entry]) => {
-    if (!userId || !isRecord(entry)
-      || (entry.mode !== "points" && entry.mode !== "practice")
-      || (entry.variant !== "standard52" && entry.variant !== "short32")
-      || typeof entry.blindPreset !== "string" || !["1/2", "2/4", "5/10", "10/20"].includes(entry.blindPreset)
-      || typeof entry.maxSeats !== "number" || !Number.isInteger(entry.maxSeats) || entry.maxSeats < 2 || entry.maxSeats > 10
-      || typeof entry.buyIn !== "number" || ![500, 1000, 2000, 5000].includes(entry.buyIn)) return []
-    return [[userId, {
-      mode: entry.mode, variant: entry.variant, blindPreset: entry.blindPreset as PokerRoomPreferences["blindPreset"],
-      maxSeats: entry.maxSeats, buyIn: entry.buyIn,
-    }]]
-  }))
-}
-
 function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   if (!isRecord(value)) {
     return { ...structuredClone(DEFAULT_GLOBAL_CONFIG), dockMigrationIds: [] }
@@ -650,8 +633,6 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
     ...(isTerminalThemeId(value.terminalTheme) ? { terminalTheme: value.terminalTheme } : {}),
     projects,
-    ...(value.pokerRoomPreferences !== undefined
-      ? { pokerRoomPreferences: normalizePokerRoomPreferences(value.pokerRoomPreferences) } : {}),
     quickInputs: seeded.quickInputs,
     defaultQuickInputsSeededVersion: seeded.seededVersion,
     favorites: normalizeFavorites(value.favorites),

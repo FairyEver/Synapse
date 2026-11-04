@@ -257,7 +257,7 @@ function writeRendererIpcFailureLog(channel: string, args: unknown, error: unkno
       operationId: operationIdForChannel(channel),
       durationMs,
       error: describeIpcError(error),
-      request: (channel.startsWith("synapse:app:game:") || channel.startsWith("synapse:app:todos:") || channel.startsWith("synapse:app:mail:"))
+      request: (channel.startsWith("synapse:app:todos:") || channel.startsWith("synapse:app:mail:"))
         ? { inputType: typeof args }
         : sanitizeIpcPayload("request", args),
     },

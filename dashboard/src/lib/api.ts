@@ -645,7 +645,6 @@ export function shouldNotifyAuthExpired(path: string, status: number, errorCode?
     !path.startsWith(consoleApiBasePath) &&
     !path.startsWith(legacyDashboardApiBasePath) &&
     !path.startsWith('/api/notifications/') &&
-    !path.startsWith('/api/game/') &&
     !isProtectedDriveApiPath(path)
   ) {
     return false

@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { useAuthStore } from '@/stores/auth-store';
 import { dashboardApi } from '@/lib/api';
-import { isRootPublicDashboardRedirect, isRootNotificationDashboardRedirect, isRootGameDashboardRedirect } from '@/lib/dashboard-redirect';
+import { isRootPublicDashboardRedirect, isRootNotificationDashboardRedirect } from '@/lib/dashboard-redirect';
 import { cn } from '@/lib/utils';
 import { PasswordInput } from '@/components/password-input';
 import { TextField, Label, FieldError } from '@heroui/react';
@@ -32,7 +32,7 @@ export function UserAuthForm({ className, redirectTo, ...props }: UserAuthFormPr
             auth.setUser(session);
             toast.success(`欢迎回来，${session.email}`);
             const nextPath = redirectTo || '/settings';
-            if (isRootPublicDashboardRedirect(nextPath) || isRootNotificationDashboardRedirect(nextPath) || isRootGameDashboardRedirect(nextPath)) {
+            if (isRootPublicDashboardRedirect(nextPath) || isRootNotificationDashboardRedirect(nextPath)) {
                 window.location.assign(nextPath);
                 return;
             }

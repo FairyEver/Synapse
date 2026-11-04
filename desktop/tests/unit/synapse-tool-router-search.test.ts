@@ -19,12 +19,6 @@ import { buildAllMcpTools } from "../../synapse-capabilities/shared/registry"
  * 所以第 6 名和没返回等价。
  */
 export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect: string }[] = [
-  { intent: "德州扑克陪练添加机器人", expect: "app_game_poker_bot_add" },
-  { intent: "德州扑克移除机器人", expect: "app_game_poker_bot_remove" },
-  { intent: "认领德州扑克控制权", expect: "app_game_poker_control_claim" },
-  { intent: "查询德州扑克上下文检查点", expect: "app_game_poker_checkpoint_get" },
-  { intent: "保存德州扑克上下文检查点", expect: "app_game_poker_checkpoint_save" },
-  { intent: "读取德州牌桌事件", expect: "app_game_poker_table_events" },
   // ---- drive (16)：同前缀家族互相挤占的重灾区 ----
   { intent: "云盘里有哪些文件", expect: "app_drive_item_list" },
   { intent: "看下这个文件夹的目录树", expect: "app_drive_item_tree_list" },
@@ -308,7 +302,7 @@ describe("synapse tool router search", () => {
     }
 
     expect(misses.join("\n")).toBe("")
-    // 368 次真实检索在本机约 35 秒，完整测试并行运行时更慢。
+    // 完整目录的真实检索在本机约 35 秒，完整测试并行运行时更慢。
   }, 120_000)
 
   it("routes by domain when the caller already narrowed it", async () => {

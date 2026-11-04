@@ -19,9 +19,8 @@ describe('Dashboard web entrypoints', () => {
   it.each(['/drive/items/doc?surface=standalone', '/share/token', '/share/token/items/child', '/notifications/notice/open'])('retains independent readers and notification links: %s', (url) => {
     expect(resolveWebEntrypoint(url)).toEqual({ kind: 'html', filename: 'index.html' })
   })
-  it('keeps admin and game documents separate from the user console', () => {
+  it('keeps the admin document separate from the user console', () => {
     expect(resolveWebEntrypoint('/admin/users')).toEqual({ kind: 'html', filename: 'admin.html' })
-    expect(resolveWebEntrypoint('/game/poker/rooms')).toEqual({ kind: 'html', filename: 'game.html' })
     expect(resolveWebEntrypoint('/console/settings')).toEqual({ kind: 'html', filename: 'index.html' })
     expect(resolveWebEntrypoint('/desktop/update')).toEqual({ kind: 'html', filename: 'desktop-update.html' })
     expect(resolveWebEntrypoint('/desktop/update?token=x')).toEqual({ kind: 'not-found' })

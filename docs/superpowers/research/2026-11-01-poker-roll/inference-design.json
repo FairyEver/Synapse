@@ -1,9 +1,0 @@
-{
-  "fixedPerGroup": 2048,
-  "fixedRows": 110592,
-  "groups": 54,
-  "plannedLooks": 5,
-  "diagnosticZ": 2.807033770114134,
-  "formal": "Fixed equal-group holdout only; adaptive additions excluded",
-  "adaptive": "Approximate normal Bonferroni intervals over two tiers and planned looks per cell; not joint over all cells"
-}

@@ -2,7 +2,7 @@ type WebEntrypoint =
   | { kind: 'not-found' }
   | { kind: 'pass' }
   | { kind: 'redirect'; location: string }
-  | { kind: 'html'; filename: 'index.html' | 'admin.html' | 'game.html' | 'desktop-update.html' }
+  | { kind: 'html'; filename: 'index.html' | 'admin.html' | 'desktop-update.html' }
 
 /** Keep API downloads and zero-script readers outside the SPA fallback. */
 export function resolveWebEntrypoint(href: string): WebEntrypoint {
@@ -16,7 +16,6 @@ export function resolveWebEntrypoint(href: string): WebEntrypoint {
   if (/^\/(?:console|dashboard)\/drive(?:\/.*)?$/u.test(path) || path === '/drive' || /^\/admin\/drive(?:\/.*)?$/u.test(path)) return { kind: 'not-found' }
   if (/^(?:\/(?:admin|console|dashboard))?\/(?:team-invite|invitations)(?:\/.*)?$/u.test(path) || /^\/(?:console|dashboard)\/teams(?:\/.*)?$/u.test(path)) return { kind: 'not-found' }
   if (path === '/desktop/update') return url.search ? { kind: 'not-found' } : { kind: 'html', filename: 'desktop-update.html' }
-  if (path === '/game' || path.startsWith('/game/')) return { kind: 'html', filename: 'game.html' }
   if (path === '/admin' || path.startsWith('/admin/')) return { kind: 'html', filename: 'admin.html' }
   if (path === '/dashboard' || path.startsWith('/dashboard/')) return { kind: 'redirect', location: `/console${path.slice('/dashboard'.length) || '/'}${url.search}` }
   if (/^\/drive\/items\/[^/]+$/u.test(path) || /^\/share\/[^/]+(?:\/items\/[^/]+)?$/u.test(path) || /^\/notifications\/[^/]+\/open$/u.test(path)) return { kind: 'html', filename: 'index.html' }

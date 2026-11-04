@@ -77,7 +77,7 @@
 - 入口：[云表Console](https://synapse.d2.pub/console/tables)、[API文档](https://synapse.d2.pub/document/open-api/api/cloud-tables)、[OpenAPI](https://synapse.d2.pub/api/open/openapi.json)。
 - 回滚镜像：`synapse-server:rollback-20261101_180756`、`synapse-pdf-renderer:rollback-20261101_180756`；切换前备份 `/www/wwwroot/synapse/backups/synapse-final-before-switch-20261101_180756.sql`，PDF回滚状态 `/www/wwwroot/synapse/backups/pdf-renderer-rollback-20261101_180756.state`。本次无数据库结构修改，应用回滚会重新引入上述两个已修复问题。
 - 原始证据增加 `deploy.log`、`candidate-runtime.log`、`production-runtime.log`、`production-routes.json`、`production-smoke-final.json`；本地证据目录同上，尚无在线报告链接。
-- 交付检查时出现其他任务未提交改动（研究文档及 `server/test/poker-roll-research/`），本次未修改或提交。部署继续按原有白名单并明确排除此测试研究目录，未将这些改动混入部署内容。
+- 交付检查时出现其他任务未提交改动，本次未修改或提交。部署继续按原有白名单并明确排除此测试研究目录，未将这些改动混入部署内容。
 
 ## 通知模块类型检查补验（2026-11-01 18:22）
 
