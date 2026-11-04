@@ -255,19 +255,20 @@ Web 继续复用集中 API 客户端和路由守卫。桌面只复用安装器�
 
 以下为**拟新增**契约，当前仓库并不存在这些工具或路由；实施时按同一语义生成 schema、索引和参考文档。
 
-本地新增 `skill_hub` domain，通过现有仅有的 `search / invoke` 暴露。建议 9 项 capability；MCP 名称由 action 将点转换为下划线生成，例如 `app.skill_hub.package.prepare` 对应 `app_skill_hub_package_prepare`。普通 MCP 不包含管理员恢复或维护者指派。
+本地新增 `skill_hub` domain，通过现有仅有的 `search / invoke` 暴露。建议 10 项 capability；MCP 名称由 action 将点转换为下划线生成，例如 `app.skill_hub.package.prepare` 对应 `app_skill_hub_package_prepare`。普通 MCP 不包含管理员恢复或维护者指派。
 
 | capability action | 主要输入 | 作用 |
 | --- | --- | --- |
 | `app.skill_hub.skill.list` | 可选 teamId、createdByMe、query、cursor、limit | 只在本人当前团队中分页查询；可按创建者过滤 |
 | `app.skill_hub.skill.get` | skillId 或详情引用 | 商店资料、包内名称/介绍、归属团队、当前版本及维护权限 |
-| `app.skill_hub.team.list` | cursor、limit | 只列本人团队的 ID 和名称，不返回成员信息 |
+| `app.skill_hub.team.list` | cursor、limit | 只列本人团队的 ID 和名称，另给零/单/多团队状态及唯一默认目标，不返回成员信息 |
 | `app.skill_hub.package.download` | skillId、destinationDirectory、可选 expectedVersionId | 只导出最新版到新目录，返回本地路径、实际版本和摘要 |
 | `app.skill_hub.package.prepare` | sourcePath、可选 teamId | 唯一团队时自动确定，多团队未选时返回需选择；绑定目标后检查、快照和打包 |
 | `app.skill_hub.skill.create` | teamId、preparedSourceId、商店资料、requestId | 向准备结果绑定的团队首次发布，上传者成为初始维护者 |
 | `app.skill_hub.version.create` | skillId、preparedSourceId、expectedVersionId、requestId | 当前维护者向原团队发布完整新版本 |
 | `app.skill_hub.skill.update` | skillId、expectedRevision、requestId、变化的商店资料字段 | 只改图标、显示名称及商店介绍 |
 | `app.skill_hub.skill.delete` | skillId、expectedRevision、requestId | 当前维护者软删除条目 |
+| `app.skill_hub.receipt.get` | 原写入 action、requestId | 查询当前账号的原写入回执，确认发布结果；不是异步任务或历史版本入口 |
 
 图标更新输入使用可选本地图片路径，由客户端通过上传通道处理，不能把任意图片 URL 交给服务端抓取。复用项目现有图片解码/尺寸限制，只接收经实际解码确认的 PNG/JPEG/WebP，不保存主动脚本格式；无图标时使用 Hub 默认图标。初始资料 create 和后续 update 均走同一图片规则。
 
@@ -282,6 +283,7 @@ MCP 不接收 userId、个人 ownerId、visibility、teamIds、token、服务端
 | `GET /api/skill-hub/skills` | 本人团队内的列表及搜索 |
 | `GET /api/skill-hub/skills/:id` | 商店和包内资料、固定归属、维护权限及当前版本 |
 | `GET /api/skill-hub/teams` | 本人可选择的团队 |
+| `GET /api/skill-hub/receipts/:requestId` | 按 action 查询本账号的写入回执，处理结果未知及客户端准备句柄已过期的情况 |
 | `POST /api/skill-hub/uploads` | 对指定 teamId 接收 Markdown/ZIP 或图标，校验后生成账号/团队绑定 uploadId |
 | `POST /api/skill-hub/skills` | 向指定 teamId 使用包 uploadId 与可选图标 uploadId 原子发布 v1 |
 | `PATCH /api/skill-hub/skills/:id` | 当前维护者修改商店资料及可选图标引用 |
@@ -306,6 +308,56 @@ uploadId 只代表当前账号、目标团队、指定用途和已校验内容�
 分页统一建议 cursor，默认 20、最大 100，固定排序键和 ID 次序；游标绑定筛选、身份及 scope。每个工具按仓库要求声明分页续页字段。删除/撤权后即使旧 cursor 仍有效，也重新过滤权限。
 
 结构化错误至少区分未登录、没有团队、多团队需要选择、团队资格或维护权变化、目标不可用、包无效、来源过期、文件预算超限、资料冲突、包版本冲突、最新版变化、请求键冲突、恢复对象缺失、存储失败及客户端/服务端版本不支持。错误提供下一步操作，不输出原始文件内容、凭据或请求体。
+
+### 9.1 已有能力与新接口的核对
+
+以下状态已通过当前仓库源码核对，不代表曾调用线上或已开发拟新增接口。不能只因底层已有团队表，就将“用户可查询本人团队”写成已有能力。
+
+| 链路需要的数据或操作 | 当前实现 | 本次方案 |
+| --- | --- | --- |
+| 当前账号、登录/联网状态 | 已有 `app_account_state_get` 及 AccountService；账号资料来自 `GET /api/auth/me`，其中不含团队列表 | 复用，不增加 Hub 专属账号查询或返回凭据 |
+| 发起客户端登录 | 已有 `app_account_login_start`，登录在浏览器完成 | 复用；不能把发起成功当成登录完成，按现有状态工具确认 |
+| 发现和调用工具 | 已有 Synapse MCP search/invoke，系统 Skill 可路由到领域指南 | 复用，在索引、schema 和系统 Skill 中新增 Hub 领域 |
+| 团队和用户所属关系 | 已有 Team / TeamMembership；管理员有 `/api/admin/teams` 及成员接口 | 复用数据模型与查询约定；新增普通用户的 `/api/skill-hub/teams` 和 team.list MCP，不扩大管理员接口权限 |
+| 按组织或共同团队寻找人 | 站内信领域已有联系人/组织接口，但不是完整的本人团队目录 | 不让 Hub 借用或反推，避免没有组织的团队漏失及跨领域耦合 |
+| Skill 列表、准确身份、归属、维护权、当前版本 | 当前没有新 Hub 实现 | 新增 skill.list/get API、共享 DTO、客户端适配与 MCP |
+| 本地预检查、快照、打包 | 已有 Skill 读取、约束、安全 ZIP 与安装来源基础能力，无 Hub 准备协议 | 复用可用部分，新增绑定账号、目标团队的 package.prepare 能力 |
+| 二进制上传、完整发布、更新、改资料与软删除 | 当前没有新 Hub 实现 | 新增 uploads/skills API 和服务；客户端封装文件传输，AI 不传 ZIP/Base64 正文 |
+| 查验未知写入结果 | Hub 写入回执及查询均未实现 | 新增持久化回执和 receipt.get，重试保持原 requestId |
+| 最新包/正文/图标读取 | 当前没有新 Hub 实现 | 新增鉴权 API；下载由本地 package.download 或安装来源服务处理 |
+| 安装到编辑器 | 已有 Skill 安装器、prepared provider、版本/指纹基础比较 | 新增 Hub 下载来源、声明式深链及必要的兼容适配，复用安装流程 |
+| 管理员指派目标成员 | 已有管理员团队成员查询 | 复用并筛选有效成员；新增 Hub 治理列表、指派和恢复 API |
+
+源码依据：[账号 API](../../../server/src/auth/user-auth.controller.ts)、[账号资料查询](../../../server/src/auth/user-auth.service.ts)、[账号 MCP](../../../desktop/app-capabilities/account/main/dispatcher.ts)、[管理员团队接口](../../../server/src/team/team.controller.ts)、[站内信接口](../../../server/src/mail/mail.controller.ts)。
+
+### 9.2 本人团队查询的返回契约
+
+`GET /api/skill-hub/teams` 仅以认证账号决定查询用户，不接收外部 userId；MCP 也不让 AI 自填用户身份。查询直接以 TeamMembership.userId 为条件，不调用管理员全站团队列表后在客户端过滤，也不新建一套 Hub 团队/成员系统。返回字段建议为：
+
+- `items: [{ id, name }]`：当前页本人团队，稳定排序且有界。
+- `nextCursor`：后续页，查找明确目标时按游标续查。
+- `selectionState: none | single | multiple`：服务端对当前全部成员关系做零/单/多分类，不是对当前页长度分类。
+- `defaultTeamId: string | null`：仅 single 时返回唯一团队，none/multiple 时为 null。
+
+分页和选择状态来自一次一致性读取，符合 cursor 不提供总数的既有约定。不能看到当前页只有一个条目就自动认定只有一个团队；AI/网页依 selectionState 做上传分支，多团队用完整候选完成用户选择。成员关系随后仍可能变化，准备、临时上传和最终发布都要重新检查，不把这份响应当作永久授权。
+
+### 9.3 AI 端到端调用与结果查验
+
+Synapse Skill 新增 Hub 指南和端到端示例，每一步说明工具、必要参数、返回字段和失败分支；MCP 描述/schema 与指南保持同步，不要求 AI 猜工具名或读取本机账号数据库。
+
+1. 通过现有 search 发现账号工具与 Hub 领域。用 `app_account_state_get` 确认登录和在线状态；确需登录时用已有登录入口，再确认状态。
+2. 调拟新增的 `app_skill_hub_team_list`，依 selectionState 处理零/单/多团队。零团队停止；单团队用 defaultTeamId；多团队在用户明确选择后取得真实 teamId。
+3. 调 `app_skill_hub_package_prepare`，传本地来源和已确定目标，取得团队绑定句柄、包内名称/介绍、文件清单、指纹及检查结果。
+4. 首次发布调 `app_skill_hub_skill_create`。客户端读取准备快照，调用 uploads API 传包/可选图标，再使用 uploadId 调发布 API；AI 不自行获取认证 token 或拼二进制请求。
+5. 发布返回真实 skillId、teamId/团队名称、当前 versionId/编号、revision、商店资料、包内信息和详情链接，作为完成证据；需要时用 skill.get 复核。
+6. 更新前先 skill.get，核对当前团队、`permissions.canPublishVersion` 和 expectedVersionId；改资料/删除分别依据 canEditMetadata/canDelete 和 revision。权限字段帮助 AI 判断下一步，不能替代服务端写入校验。
+7. 发布超时或客户端重启导致结果未知时，使用原 action/requestId 调 `app_skill_hub_receipt_get`；已提交则复用原结果，不能新建请求键再发一份。
+
+回执查询返回 action、requestId、`status: committed | not_found`、`resultAccessible` 及有权读取时的安全结果（skillId、teamId、版本/修订号、操作 outcome）。action 仅允许本领域的创建、完整发布、改资料和软删除，不查询管理员动作或任意其他域回执。当前无资源读取权时只报告本人操作是否已提交及结果不可展开，不绕过团队权限返回包或资料。
+
+not_found 不表示写入必然失败，可能还在执行或回执已过保留期；继续使用原键重试或核对条目状态，不能据此换键重复发布。先核对原操作账号，切换账号后不能用新账号的“未找到”判断原请求失败。
+
+新客户端遇到旧服务端缺少这些接口，或 AI 发现当前客户端没有 Hub 索引时，明确报告需要升级相应一端；禁止回退管理员接口、站内信联系人推断、私有数据库读取或让 AI 手动提取登录凭据。实施验收要逐步走通以上正常路径和失败分支，不能只测单独的上传接口。
 
 ## 10. 数据、存储与删除
 
@@ -336,7 +388,7 @@ uploadId 只代表当前账号、目标团队、指定用途和已校验内容�
 
 本地能力包无桌面商店 UI，systemApp 为 null；通过 ServiceRegistry 组装，不导出服务单例。MCP、IPC、HTTP 调度同一 service；权限、受控进程、网络和本地文件 IO 经过 PermissionGuard/AuditSink。保持调用者身份和现有审批语义，不绕过 Action Router。
 
-实施时同步更新能力注册表、模块边界、团队资源/删除约束、存储配置、部署/备份规则、Synapse Skill 的 Hub 指南、根 SKILL 路由和生成 API 参考。新增预计 9 项 capability/MCP 索引、1 条声明式协议；管理员治理是独立 Web/API，不注册普通 MCP，System App/Dock/Workflow/Automation 无新增。最终数量必须实测注册表，不从历史计数机械相加。
+实施时同步更新能力注册表、模块边界、团队资源/删除约束、存储配置、部署/备份规则、Synapse Skill 的 Hub 指南、根 SKILL 路由和生成 API 参考。新增预计 10 项 capability/MCP 索引、1 条声明式协议；已有账号/登录工具复用，不重复计为 Hub 新增。管理员治理是独立 Web/API，不注册普通 MCP，System App/Dock/Workflow/Automation 无新增。最终数量必须实测注册表，不从历史计数机械相加。
 
 旧退役脚本继续只清理旧桶的 `skill-repositories/`，新增对 Hub 桶的排除保护；新表不复用旧表名，不改写旧迁移，不恢复旧路由、工具别名和旧身份关联。部署预演不能访问或删除新旧生产桶。新域启用先完成配置、存储/备份验证和服务端迁移，再发布网页及桌面；旧客户端明确提示升级，不以未知协议或下载失败冒充可安装。
 
@@ -357,9 +409,10 @@ uploadId 只代表当前账号、目标团队、指定用途和已校验内容�
 9. 现有编辑器全局/项目安装、同版本重装、版本区别、同名冲突、多安装位置、包内 name 变化后的目录处理、安装中失败与恢复；macOS/Windows 实际适用边界。
 10. MCP search/invoke 发现、顶层普通对象 schema、分页、调用者权限、账号切换/认证刷新、错误脱敏；旧云端路由和身份不重新生效，管理接口不能由普通用户身份访问。
 11. Web 左侧仅新增一个 Skill Hub 菜单，直达、登录回跳、详情高亮及返回筛选一致；商店目录与详情在宽屏、平板宽度及至少 320px 窄屏覆盖团队选择、列数、长名称、长介绍、操作可达与加载/空/错状态。实际展开上传、资料编辑、团队选择、更新、操作菜单及删除浮层；管理端覆盖指派和恢复的冲突/失败。核对焦点、文本、几何对齐与视口边界，不能只以源码或构建代替美观和交互验收。运行浏览器/应用测试仍需用户在实施阶段授权。
+12. AI 从账号状态、本人团队分页/零单多分类、明确目标、准备包、发布、回执、结果读取到后续更新的完整链路；准备句柄过期/客户端重启仍能查验已提交回执。当前页一个团队但实际多个时不自动选，站内信无组织的团队仍应被正常列出；新旧客户端/服务端组合明确区分不支持与无权限。
 
 实现者可以决定内部文件拆分、索引具体写法、有界 worker 的调度参数、DTO/schema 命名和组件组合；不得自行增加功能、依赖、分支/worktree、启动服务、运行远端 CI 或部署。具体图片尺寸、字段长度及原有解析器可复用范围在实施计划中给出一致且可测试的值；若现有依赖无法满足安全 ZIP 处理，先说明缺口，再取得新增依赖授权。
 
 本轮产品边界已明确为纯团队资产。管理员采用现有平台管理身份、治理入口复用团队详情、含资产团队禁止删除，是本设计对现有实现的具体建议；实现者不得据此扩展团队角色、跨团队迁移、个人空间或历史版本产品功能。
 
-此次团队资产、最新版和软删除模型已由新的独立实施者重新审阅，结果为 `nothing important left`，没有影响规划的遗漏。已确认的产品边界和本稿的具体建议仍须区分；文档待用户审阅，不代表功能已经实现或已进入实施阶段。
+此次团队资产、最新版和软删除模型，以及后续补充的已有/新增接口核对、本人团队分页分类和 AI 端到端结果查验，已完成独立实施者审阅及复审，均返回 `nothing important left`，没有影响规划的遗漏。已确认的产品边界和本稿的具体建议仍须区分；文档待用户审阅，不代表功能已经实现或已进入实施阶段。
