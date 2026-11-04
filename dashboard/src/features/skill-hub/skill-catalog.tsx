@@ -1,5 +1,5 @@
-import { Button, Checkbox, Label, SearchField, Skeleton } from '@heroui/react'
-import { useEffect, useState } from 'react'
+import { Button, Checkbox, Label, SearchField, Skeleton, Spinner } from '@heroui/react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { HubTeamSelect } from './hub-team-select'
 import { SkillUploadDialog } from './skill-upload-dialog'
@@ -20,14 +20,38 @@ export function SkillHubCatalog(props: Props) {
 function Catalog({ session, search, onSearch }: Props & { session: string }) {
   const teams = useSkillHubTeams(session)
   const catalog = useSkillHubCatalog(session, { teamId: search.team, createdByMe: search.mine, query: search.q })
+  const { data, fetchNextPage, isFetchNextPageError } = catalog
   const [uploadOpen, setUploadOpen] = useState(false)
   const [draft, setDraft] = useState(search.q ?? '')
+  const nextPageRef = useRef<HTMLDivElement>(null)
   useEffect(() => { setDraft(search.q ?? '') }, [search.q])
-  const skills = [...new Map(catalog.data?.pages.flatMap((page) => page.items.map((skill) => [skill.id, skill] as const))).values()]
+  const skills = [...new Map(data?.pages.flatMap((page) => page.items.map((skill) => [skill.id, skill] as const))).values()]
   const noTeam = teams.data?.selectionState === 'none'
   const single = teams.data?.selectionState === 'single' ? teams.data.items[0] : undefined
-  const error = teams.error ?? catalog.error
+  const error = teams.error ?? (isFetchNextPageError ? null : catalog.error)
   const loading = teams.isPending || catalog.isPending
+  const hasMore = !error && !loading && !noTeam && catalog.hasNextPage
+  const canLoadMore = hasMore && !isFetchNextPageError && catalog.fetchStatus === 'idle'
+
+  useEffect(() => {
+    const marker = nextPageRef.current
+    if (!canLoadMore || !marker) return
+
+    let active = true
+    const observer = new IntersectionObserver((entries) => {
+      if (!active || !entries.some((entry) => entry.isIntersecting)) return
+      active = false
+      observer.disconnect()
+      void fetchNextPage({ cancelRefetch: false })
+    }, { root: marker.closest('#main-content'), rootMargin: '0px 0px 320px 0px' })
+    // Re-observe after each page in case the marker is still near the viewport.
+    observer.observe(marker)
+    return () => {
+      active = false
+      observer.disconnect()
+    }
+  }, [canLoadMore, data, fetchNextPage])
+
   function submitSearch(text: string) {
     onSearch({ ...search, q: text.trim() || undefined })
   }
@@ -68,8 +92,18 @@ function Catalog({ session, search, onSearch }: Props & { session: string }) {
           : <ul className="grid min-w-0 gap-x-8 @2xl/content:grid-cols-2 @6xl/content:grid-cols-3" aria-label="团队 Skill">
             {skills.map((skill) => <SkillCatalogItem key={skill.id} skill={skill} session={session} search={search} showTeam={!single} />)}
           </ul>}
-      {!error && catalog.hasNextPage ? <Button variant="secondary" isPending={catalog.isFetchingNextPage}
-        onPress={() => void catalog.fetchNextPage()}>加载更多</Button> : null}
+      {hasMore ? <div ref={nextPageRef} className="min-h-px shrink-0">
+        <div role="status">
+          {catalog.isFetchingNextPage ? <div className="flex items-center justify-center gap-2 text-sm text-muted">
+            <Spinner size="sm" aria-hidden="true" />正在加载更多 Skill…
+          </div> : null}
+        </div>
+        {isFetchNextPageError && !catalog.isFetchingNextPage ? <div className="flex flex-wrap items-center justify-center gap-3">
+          <p role="alert" className="text-sm text-danger">{catalog.error?.message || '无法加载后续 Skill。'}</p>
+          <Button variant="secondary" isDisabled={catalog.fetchStatus !== 'idle'}
+            onPress={() => void fetchNextPage({ cancelRefetch: false })}>重试</Button>
+        </div> : null}
+      </div> : null}
     </Main>
     {uploadOpen ? <SkillUploadDialog session={session} teams={teams.data} onClose={() => setUploadOpen(false)} /> : null}
   </>
