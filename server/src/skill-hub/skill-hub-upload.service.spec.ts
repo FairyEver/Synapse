@@ -50,7 +50,7 @@ describe("Skill Hub raw upload", () => {
   it("tracks both keys before writing and never marks a partial package ready", async () => {
     const resolveUploadTeam = vi.fn().mockResolvedValue({ id: "team", name: "团队" })
     const create = vi.fn().mockImplementation(async ({ data }) => data)
-    const prisma = { skillHubUpload: { findUnique: vi.fn().mockResolvedValue(null), create }, $transaction: vi.fn() }
+    const prisma = { skillHubUpload: { findUnique: vi.fn().mockResolvedValue(null), create, updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, $transaction: vi.fn() }
     const put = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("object write failed"))
     const service = new SkillHubUploadService({ prisma } as unknown as SkillHubRepository,
       { resolveUploadTeam } as unknown as SkillHubTeamService, { put, open: vi.fn(), head: vi.fn(), remove: vi.fn() })
@@ -99,4 +99,46 @@ describe("Skill Hub raw upload", () => {
     image[0] = 9
     expect(() => assertSkillHubIcon(png(image))).toThrow()
   })
+})
+
+it("retires a failed staged upload and preserves its objects until cleanup, allowing a fresh upload attempt", async () => {
+  const signal = new AbortController().signal
+  const rows = new Map<string, { id: string; state: string; requestId: string; inputSha256: string; expiresAt: Date }>()
+  const findUnique = vi.fn(async ({ where }) => rows.get(where.actorKey_teamId_purpose_requestId.requestId) ?? null)
+  const create = vi.fn(async ({ data }) => {
+    const row = { ...data, state: "staging", createdAt: new Date() }
+    rows.set(row.requestId, row)
+    return row
+  })
+  const updateMany = vi.fn(async ({ where, data }) => {
+    const row = [...rows.values()].find((item) => item.id === where.id && item.state === where.state)
+    if (row) row.state = data.state
+    return { count: row ? 1 : 0 }
+  })
+  const objectUpdates = vi.fn()
+  const prisma = { skillHubUpload: { findUnique, create, updateMany },
+    $transaction: vi.fn(async (job) => job({
+      skillHubObject: { updateMany: objectUpdates },
+      skillHubUpload: { update: async ({ where, data }: { where: { id: string; state: string }; data: { state: string } }) => updateMany({ where, data }) },
+    })),
+  }
+  const put = vi.fn().mockRejectedValueOnce(new Error("one failed object request")).mockResolvedValue(undefined)
+  const remove = vi.fn()
+  const team = { id: "team", name: "Team" }
+  const service = new SkillHubUploadService({ prisma, lockActiveTeamMember: vi.fn() } as unknown as SkillHubRepository,
+    { resolveUploadTeam: vi.fn().mockResolvedValue(team) } as unknown as SkillHubTeamService, { put, remove, open: vi.fn(), head: vi.fn() })
+  const codecMock = vi.spyOn(codec, "runHubUploadCodec").mockResolvedValue({
+    files: [{ kind: "icon", bytes: Buffer.of(1), contentType: "image/png" }],
+  })
+  const upload = (requestId: string) => service.stage("owner", { teamId: team.id, requestId, purpose: "icon" },
+    Readable.from([Buffer.of(1)]), signal)
+  try {
+    await expect(upload("initial")).rejects.toMatchObject({ response: { code: "HUB_STORAGE_UNAVAILABLE" } })
+    expect(rows.get("initial")?.state).toBe("cleanup")
+    expect(remove).not.toHaveBeenCalled()
+    expect(objectUpdates).not.toHaveBeenCalled()
+    await expect(upload("initial")).rejects.toMatchObject({ response: { code: "HUB_UPLOAD_EXPIRED" } })
+    await expect(upload("second")).resolves.toHaveProperty("uploadId")
+    expect(rows.get("second")?.id).not.toBe(rows.get("initial")?.id)
+  } finally { codecMock.mockRestore() }
 })

@@ -5,6 +5,7 @@ import type {
 } from '@synapse/shared/skill-hub-contracts'
 import { skillHubIdSchema, skillHubReceiptInputSchema } from '@synapse/shared/skill-hub-contracts'
 import { ApiError } from '@/lib/api-client'
+import { useAuthStore } from '@/stores/auth-store'
 import { assertHubSession, skillHubApi, type HubTeams } from './skill-hub-api'
 import { hubScope } from './use-skill-hub'
 
@@ -58,29 +59,44 @@ const listeners = new Set<() => void>()
 let intentRevision = 0
 export const subscribeHubIntents = (listener: () => void) => {
   listeners.add(listener)
-  return () => { listeners.delete(listener) }
+  const onStorage = (event: StorageEvent) => {
+    if (!event.key || event.key.startsWith(intentRoot)) { intentRevision++; listener() }
+  }
+  window.addEventListener('storage', onStorage)
+  return () => { listeners.delete(listener); window.removeEventListener('storage', onStorage) }
 }
 export const getHubIntentRevision = () => intentRevision
-const intentKey = (session: string, action: SkillHubWriteAction, target: string) => `synapse.hub.write:${session}:${action}:${target}`
+const intentRoot = 'synapse.hub.write:'
+const intentKey = (accountId: string, action: SkillHubWriteAction, target: string) => `${intentRoot}${accountId}:${action}:${target}`
+
+function accountForSession(session: string) {
+  const user = useAuthStore.getState().auth.user
+  return user?.sessionId === session ? skillHubIdSchema.safeParse(user.userId).data : undefined
+}
+
 function readIntent(key: string) {
-  try { return skillHubIdSchema.safeParse(sessionStorage.getItem(key) ?? memory.get(key)).data }
+  try { return skillHubIdSchema.safeParse(localStorage.getItem(key)).data ?? memory.get(key) }
   catch { return memory.get(key) }
 }
 function setIntent(key: string, value: string | undefined) {
-  if (value) memory.set(key, value)
-  else memory.delete(key)
-  try { if (value) sessionStorage.setItem(key, value); else sessionStorage.removeItem(key) }
-  catch { /* Keep the in-memory entry if storage is disabled. */ }
+  memory.delete(key)
+  try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key) }
+  catch { if (value) memory.set(key, value) }
   intentRevision++
   for (const listener of listeners) listener()
 }
 
+function clearIntent(key: string, requestId: string) {
+  if (readIntent(key) === requestId) setIntent(key, undefined)
+}
+
 export function listHubIntents(session: string) {
-  if (!session) return []
-  const prefix = `synapse.hub.write:${session}:`
+  const accountId = accountForSession(session)
+  if (!accountId) return []
+  const prefix = `${intentRoot}${accountId}:`
   const keys = new Set(memory.keys())
-  try { for (let i = 0; i < sessionStorage.length; i++) { const key = sessionStorage.key(i); if (key) keys.add(key) } }
-  catch { /* sessionStorage is optional */ }
+  try { for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key) keys.add(key) } }
+  catch { /* localStorage is optional */ }
   return [...keys].flatMap((key) => {
     if (!key.startsWith(prefix)) return []
     const [action] = key.slice(prefix.length).split(":")
@@ -90,14 +106,18 @@ export function listHubIntents(session: string) {
 }
 
 export function checkHubIntent(session: string, item: ReturnType<typeof listHubIntents>[number]) {
-  return readHubReceipt(session, item.request, { clear: () => setIntent(item.key, undefined), remember() { return undefined } })
+  if (!listHubIntents(session).some((candidate) => candidate.key === item.key && candidate.request.requestId === item.request.requestId)) {
+    return Promise.resolve({ state: "unknown", request: item.request } as const)
+  }
+  return readHubReceipt(session, item.request, { clear: () => clearIntent(item.key, item.request.requestId), remember() { return undefined } })
 }
 
 export function useSkillPublish({ session, action, target, onCommitted }: {
   session: string; action: SkillHubWriteAction; target: string; onCommitted: (outcome?: WriteOutcome) => void
 }) {
   const cache = useQueryClient()
-  const key = intentKey(session, action, target)
+  const accountId = accountForSession(session)
+  const key = accountId ? intentKey(accountId, action, target) : ""
   const [pendingId, setPendingId] = useState(() => readIntent(key))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -105,16 +125,16 @@ export function useSkillPublish({ session, action, target, onCommitted }: {
   const [canRetry, setCanRetry] = useState(false)
   const working = useRef(false)
   const writeId = useRef<string>(pendingId ?? '')
-  const originalSend = useRef<Send | null>(null)
-  const tracker = {
-    remember(request: SkillHubReceiptInput) { setIntent(key, request.requestId); setPendingId(request.requestId) },
-    clear() { setIntent(key, undefined); setPendingId(undefined) },
-  }
+  const originalSend = useRef<{ requestId: string; send: Send } | null>(null)
+  const tracker = (requestId: string): Tracker => ({
+    remember(request) { setIntent(key, request.requestId); setPendingId(request.requestId) },
+    clear() { clearIntent(key, requestId); setPendingId(readIntent(key)) },
+  })
 
   function apply(result: Result) {
     if (result.state === 'unknown') {
       setError('尚未确认写入结果。请查询原请求回执。')
-      setCanRetry(Boolean(originalSend.current))
+      setCanRetry(originalSend.current?.requestId === result.request.requestId)
       return
     }
     if (result.state === 'rejected') {
@@ -146,25 +166,32 @@ export function useSkillPublish({ session, action, target, onCommitted }: {
   function check() {
     const requestId = readIntent(key)
     if (!requestId) return
-    return work(() => readHubReceipt(session, { action, requestId }, tracker))
+    setPendingId(requestId)
+    return work(() => readHubReceipt(session, { action, requestId }, tracker(requestId)))
   }
 
   function submit(prepare: () => Promise<Send>) {
+    if (!accountId) { setError("无法确认当前账号，请刷新页面。"); return }
     if (readIntent(key)) return check()
     writeId.current ||= crypto.randomUUID()
     return work(async () => {
       const send = await prepare()
       assertHubSession(session)
-      originalSend.current = send
+      const existing = readIntent(key)
+      if (existing) {
+        setPendingId(existing)
+        return readHubReceipt(session, { action, requestId: existing }, tracker(existing))
+      }
       const requestId = writeId.current
-      return submitHubWrite(session, { action, requestId }, () => send(requestId), tracker)
+      originalSend.current = { requestId, send }
+      return submitHubWrite(session, { action, requestId }, () => send(requestId), tracker(requestId))
     })
   }
 
   function retryOriginal() {
-    const requestId = readIntent(key), send = originalSend.current
-    if (!requestId || !send) return
-    return work(() => submitHubWrite(session, { action, requestId }, () => send(requestId), tracker, true))
+    const requestId = readIntent(key), attempt = originalSend.current
+    if (!requestId || attempt?.requestId !== requestId) return
+    return work(() => submitHubWrite(session, { action, requestId }, () => attempt.send(requestId), tracker(requestId), true))
   }
 
   return { busy, pendingId, error, setError, conflict, setConflict, submit, check, retryOriginal, canRetry }

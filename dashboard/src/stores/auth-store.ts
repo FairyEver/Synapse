@@ -2,6 +2,7 @@ import { broadcastUserSessionChange } from '@/lib/user-session-events'
 import { create } from 'zustand'
 
 export interface AuthUser {
+  userId?: string
   email: string
   handle: string | null
   nickname?: string

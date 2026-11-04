@@ -140,8 +140,11 @@ export class SkillHubUploadService {
           await tx.skillHubUpload.update({ where: { id, state: "staging" }, data: { state: "ready" } })
         })
       } catch (error) {
-        // The preregistered object keys stay tracked for cleanup even if storage wrote
-        // bytes before rejecting the request. Never expose a partially written upload.
+        // Retire only an incomplete attempt: if the transaction committed but
+        // the reply was lost, its ready row remains reusable. Keep object keys
+        // for the full lease so physical GC cannot race a late remote write.
+        await db.skillHubUpload.updateMany({ where: { id, state: "staging" }, data: { state: "cleanup" } })
+          .catch(() => this.logger.warn("Skill Hub staging retirement could not be recorded"))
         this.logger.warn("Skill Hub staging did not finish")
         if (error instanceof HttpException) throw error
         throw hubError(503, "HUB_STORAGE_UNAVAILABLE", "Skill 文件暂未保存，请稍后重试。")
@@ -157,10 +160,12 @@ export class SkillHubUploadService {
 
   private replay(upload: SkillHubUpload, digest: string): SkillHubUploadResult {
     if (upload.inputSha256 !== digest) throw hubError(409, "HUB_REQUEST_CONFLICT", "此请求标识已用于不同的文件。")
-    if (upload.state === "staging") throw busy()
-    if (upload.state === "cleanup" || (upload.state !== "bound" && upload.expiresAt.getTime() <= Date.now())) {
+    const now = Date.now()
+    const staleStaging = upload.state === "staging" && upload.createdAt.getTime() + 5 * 60_000 <= now
+    if (upload.state === "cleanup" || staleStaging || (upload.state !== "bound" && upload.expiresAt.getTime() <= now)) {
       throw hubError(409, "HUB_UPLOAD_EXPIRED", "此上传已过期，请重新上传文件。")
     }
+    if (upload.state === "staging") throw busy()
     return this.result(upload)
   }
 

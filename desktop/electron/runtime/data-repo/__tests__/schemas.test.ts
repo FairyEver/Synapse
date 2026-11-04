@@ -52,7 +52,8 @@ import {
 describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
   it("keeps every registered bounded SQLite schema valid for repository construction", () => {
     for (const schema of allSchemas) {
-      if (schema.sqlite) expect(() => validateSqliteSchema(schema.name, schema.sqlite)).not.toThrow()
+      const sqlite = schema.sqlite
+      if (sqlite) expect(() => validateSqliteSchema(schema.name, sqlite)).not.toThrow()
     }
   })
   it("rejects malformed persisted sync cleanup before any file processing", () => {

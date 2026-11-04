@@ -17,7 +17,7 @@ describe("DashboardAuthController", () => {
         token: "opaque-token",
         sessionId: "session-1",
         expiresAt: new Date("2026-08-17T00:00:00.000Z"),
-        user: { email: "user@example.com", handle: "user" },
+        user: { id: "user-1", email: "user@example.com", handle: "user" },
       }),
     }
     const controller = new DashboardAuthController(auth as never)
@@ -29,6 +29,7 @@ describe("DashboardAuthController", () => {
       response as never,
     )
 
+    expect(result).toMatchObject({ userId: "user-1", sessionId: "session-1" })
     expect(result).not.toHaveProperty("token")
     expect(response.cookie).toHaveBeenNthCalledWith(1, userSessionCookieName, "opaque-token", expect.objectContaining({
       httpOnly: true,

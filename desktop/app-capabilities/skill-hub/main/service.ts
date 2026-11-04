@@ -1,7 +1,7 @@
 import {
   type SkillHubDetail, type SkillHubListInput, type SkillHubMcpCreateInput, type SkillHubMcpDeleteInput,
   type SkillHubMcpDownloadInput, type SkillHubMcpPrepareInput, type SkillHubMcpPublishInput,
-  type SkillHubMcpUpdateInput, type SkillHubReceiptInput, type SkillHubTeamQuery, type SkillHubWriteAction,
+  type SkillHubMcpUpdateInput, type SkillHubReceiptInput, type SkillHubTeamQuery, type SkillHubUploadInput, type SkillHubWriteAction,
 } from "@synapse/shared/skill-hub-contracts"
 import type { DataRepository } from "../../../electron/runtime/data-repo"
 import { skillHubWriteIntentsSchema, type HubWriteIntent } from "../../../electron/runtime/data-repo/schemas/skill-hub"
@@ -173,7 +173,7 @@ export class DesktopSkillHubService {
   }
 
   private uploadPrepared(op: HubAccountOperation, key: SkillHubReceiptInput, teamId: string, bytes: Buffer) {
-    return this.deps.cloud.upload(op, { teamId, purpose: "package", format: "zip", requestId: hubKey([key.action, key.requestId, "package"]) }, bytes)
+    return this.stageUpload(op, { teamId, purpose: "package", format: "zip", requestId: hubKey([key.action, key.requestId, "package"]) }, bytes)
   }
 
   private async uploadIcon(op: HubAccountOperation, caller: SkillHubCaller, key: SkillHubReceiptInput, teamId: string, iconPath: string) {
@@ -181,9 +181,22 @@ export class DesktopSkillHubService {
     this.iconsInFlight++
     try {
       const bytes = await prepareHubIcon(iconPath, this.deps, caller, op.signal)
-      return (await this.deps.cloud.upload(op, { teamId, purpose: "icon", requestId: hubKey([key.action, key.requestId, "icon"]) }, bytes)).uploadId
+      return (await this.stageUpload(op, { teamId, purpose: "icon", requestId: hubKey([key.action, key.requestId, "icon"]) }, bytes)).uploadId
     } finally {
       this.iconsInFlight--
+    }
+  }
+
+  private async stageUpload(op: HubAccountOperation, input: SkillHubUploadInput, bytes: Buffer) {
+    // Only an explicitly retired staging key can advance. The final write
+    // action/requestId stays unchanged; a live or uncertain upload reuses its key.
+    for (let attempt = 0; ; attempt++) {
+      const requestId = attempt ? hubKey([input.requestId, "retired-upload", attempt]) : input.requestId
+      try {
+        return await this.deps.cloud.upload(op, { ...input, requestId }, bytes)
+      } catch (error) {
+        if (!(error instanceof SkillHubDesktopError) || error.code !== "HUB_UPLOAD_EXPIRED" || attempt >= 7) throw error
+      }
     }
   }
 

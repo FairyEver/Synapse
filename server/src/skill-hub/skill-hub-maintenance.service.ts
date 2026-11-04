@@ -57,7 +57,7 @@ export class SkillHubMaintenanceService {
     const collect = {
       ...skillHubCollectableObject,
       AND: [
-        { OR: [{ upload: { state: "cleanup" } }, { kind: "icon", state: "deletePending" }] },
+        { OR: [{ upload: { state: "cleanup", expiresAt: { lte: now } } }, { kind: "icon", state: "deletePending" }] },
         { OR: [{ nextCleanupAt: null }, { nextCleanupAt: { lte: now } }] },
       ],
     } satisfies Prisma.SkillHubObjectWhereInput

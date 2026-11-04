@@ -61,6 +61,7 @@ export class DashboardAuthController {
     response.cookie(userSessionCookieName, session.token, userCookieOptions("/drive", session.expiresAt))
     clearLegacyDashboardCookie(response)
     return {
+      userId: session.user.id,
       email: session.user.email,
       handle: session.user.handle,
       nickname: session.user.nickname,

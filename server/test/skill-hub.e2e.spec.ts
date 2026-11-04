@@ -12,7 +12,7 @@ import cookieParser from "cookie-parser"
 import type { NextFunction, Request, Response } from "express"
 import { LoggerModule, PinoLogger } from "nestjs-pino"
 import supertest from "supertest"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   skillHubAdminRowSchema, skillHubDetailSchema, skillHubReceiptSchema, skillHubTeamPageSchema,
   skillHubUploadResultSchema, skillHubWriteResultSchema,
@@ -99,6 +99,7 @@ describe("Skill Hub with real authenticated HTTP, PostgreSQL, worker and local o
     ownerAuth = await login(owner)
     peerAuth = await login(peer)
     const web = await http.post("/api/console/login").send({ email: `${peer}@example.test`, password }).expect(201)
+    expect(web.body.userId).toBe(peer)
     peerSession = web.body.sessionId
     peerCookie = ((web.headers["set-cookie"] as unknown as string[]).find((cookie) => cookie.startsWith("synapse_user_session=")) ?? "").split(";")[0]
     const platform = await http.post("/api/admin/session").set("Origin", origin)
@@ -347,8 +348,26 @@ describe("Skill Hub with real authenticated HTTP, PostgreSQL, worker and local o
       const prepared = await invoke("app_skill_hub_package_prepare", { sourcePath: source, teamId: team })
       expect(prepared.manifest.map((file: { path: string }) => file.path)).toEqual(["SKILL.md", "readme.md"])
       const requestId = randomUUID()
-      const created = await invoke("app_skill_hub_skill_create", { teamId: team, preparedSourceId: prepared.preparedSourceId, requestId,
-        displayName: "MCP 测试", displayDescription: "通过真实 HTTP 发布的合成包" })
+      const createInput = { teamId: team, preparedSourceId: prepared.preparedSourceId, requestId,
+        displayName: "MCP 测试", displayDescription: "通过真实 HTTP 发布的合成包" }
+      const { SKILL_HUB_STORAGE } = built("../dist/skill-hub/skill-hub-storage.js")
+      const storage = app.get<typeof import("../src/skill-hub/skill-hub-storage").SkillHubStoragePort>(SKILL_HUB_STORAGE)
+      const put = storage.put.bind(storage)
+      const outage = vi.spyOn(storage, "put").mockImplementationOnce(async (key, bytes, type) => {
+        await put(key, bytes, type)
+        throw new Error("Temporary test storage failure after writing bytes")
+      })
+      try {
+        const interrupted = await router.callTool("invoke", { toolName: "app_skill_hub_skill_create", arguments: createInput })
+        expect(interrupted.isError).toBe(true)
+        expect(parse(interrupted).code).toBe("HUB_STORAGE_UNAVAILABLE")
+      } finally { outage.mockRestore() }
+      const retired = await db.skillHubUpload.findFirstOrThrow({ where: { actorKey: owner, state: "cleanup", packageName: "mcp-original" }, include: { objects: true } })
+      expect(retired.objects).toHaveLength(2)
+      const retainedPath = join(scratch, retired.objects.find((object) => object.kind === "archive")!.storageKey)
+      await gc.pruneUnboundUploads(new Date())
+      expect((await readFile(retainedPath)).length).toBeGreaterThan(0)
+      const created = await invoke("app_skill_hub_skill_create", createInput)
       const id = created.skill.id as string
       expect(await invoke("app_skill_hub_receipt_get", { action: "app.skill_hub.skill.create", requestId }))
         .toMatchObject({ status: "committed", result: { skillId: id, teamId: team, versionNumber: 1 } })

@@ -40,7 +40,7 @@ const assets: SkillHubAdminRow = {
 
 function queryClient() { return new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } }) }
 function useFixtureAccount() {
-  useAuthStore.getState().auth.setUser({ email: 'hub-fixture@example.test', handle: 'fixture', sessionId: 'hub-browser-fixture' })
+  useAuthStore.getState().auth.setUser({ email: 'hub-fixture@example.test', handle: 'fixture', userId: 'hub-browser-account', sessionId: 'hub-browser-fixture' })
 }
 function screenshot(name: string, width: number) {
   return page.screenshot({ path: `/tmp/synapse-skill-hub-${name}-${width}.png`, animations: 'disabled' })
@@ -94,7 +94,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   useAuthStore.getState().auth.reset()
   useAdminAuthStore.getState().auth.reset()
-  for (const key of Object.keys(sessionStorage)) if (key.startsWith('synapse.hub.write:hub-browser-fixture:')) sessionStorage.removeItem(key)
+  for (const key of Object.keys(localStorage)) if (key.startsWith('synapse.hub.write:hub-browser-account:')) localStorage.removeItem(key)
 })
 
 for (const width of [320, 768, 1280]) describe(`Skill Hub browser fixture ${width}px`, () => {
