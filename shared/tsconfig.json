@@ -28,6 +28,9 @@
     "src/problem-feedback.ts",
     "src/problem-feedback-fixtures.ts",
     "src/game.ts",
-    "src/game-ui.ts"
+    "src/game-ui.ts",
+    "src/skill-hub-contracts.ts",
+    "src/skill-hub-package-node.ts",
+    "src/archive-package-node.ts"
   ]
 }

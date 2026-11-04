@@ -136,4 +136,32 @@ describe("package entrypoint", () => {
     expect(rootValues).toEqual(cjsValues)
     expect(esmValues).toMatchObject({ DRIVE_ITEM_BATCH_LIMIT: 100, DRIVE_CHANGE_BATCH_LIMIT: 20, DRIVE_CHANGE_BATCH_PAGE_LIMIT: 100 })
   })
+  it("loads Skill Hub contracts and the Node codec through native ESM and CommonJS", async () => {
+    const result = execFileSync(process.execPath, ["--no-experimental-require-module", "--input-type=module", "--eval", `
+      import { createRequire } from "node:module"
+      import * as root from "@synapse/shared"
+      import { SKILL_HUB_LIMITS } from "@synapse/shared/skill-hub-contracts"
+      import { inspectHubSkillPackage } from "@synapse/shared/skill-hub-package-node"
+      const require = createRequire(import.meta.url)
+      const contracts = require("@synapse/shared/skill-hub-contracts")
+      const codec = require("@synapse/shared/skill-hub-package-node")
+      const input = { format: "markdown", bytes: Buffer.from("---\\nname: demo\\ndescription: Example\\n---\\nBody") }
+      process.stdout.write(JSON.stringify({
+        esm: inspectHubSkillPackage(input).contentFingerprint,
+        cjs: codec.inspectHubSkillPackage(input).contentFingerprint,
+        sameLimits: JSON.stringify(SKILL_HUB_LIMITS) === JSON.stringify(contracts.SKILL_HUB_LIMITS),
+        rootHasCodec: "inspectHubSkillPackage" in root,
+      }))
+    `], { cwd: packageDirectory, encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] })
+    const parsed = JSON.parse(result)
+    expect(parsed).toEqual({
+      esm: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      cjs: parsed.esm,
+      sameLimits: true,
+      rootHasCodec: false,
+    })
+    const contracts = await readFile(new URL("../dist/skill-hub-contracts.js", import.meta.url), "utf8")
+    expect(contracts).not.toMatch(/node:|archive-package-node|skill-hub-package-node/)
+  })
+
 })
