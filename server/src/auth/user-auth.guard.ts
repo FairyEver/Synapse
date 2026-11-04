@@ -1,4 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
+import { SKILL_HUB_WEB_SESSION_HEADER } from "@synapse/shared/skill-hub-contracts"
 import type { Request } from "express"
 import type { Prisma } from "@prisma/client"
 import { PinoLogger } from "nestjs-pino"
@@ -48,6 +49,12 @@ export class UserAuthGuard implements CanActivate {
         client,
       })
       throw new UnauthorizedException("未登录或登录已过期。")
+    }
+    // A Console tab may still hold the previous session while its shared cookie has changed.
+    const expectedHubSession = request.headers[SKILL_HUB_WEB_SESSION_HEADER.toLowerCase()]
+    if (hubLogPath(request.path)?.startsWith("/api/skill-hub") && expectedHubSession !== undefined
+      && expectedHubSession !== session.sessionId) {
+      throw new UnauthorizedException({ code: "HUB_ACCOUNT_CHANGED", message: "登录会话已变化，请刷新页面。" })
     }
     request.user = { id: session.userId }
     request.userAuthMethod = "cookie"

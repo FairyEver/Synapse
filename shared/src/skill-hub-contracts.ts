@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+export const SKILL_HUB_WEB_SESSION_HEADER = "X-Skill-Hub-Session"
+
 const MiB = 1024 * 1024
 export const SKILL_HUB_LIMITS = {
   mainBytes: MiB,

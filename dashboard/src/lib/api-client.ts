@@ -50,10 +50,14 @@ export async function requestJson<T>(path: string, options: RequestInit = {}) {
           ...options.headers,
         }
 
+  const response = await requestResponse(path, { ...options, headers })
+  return (await response.json()) as T
+}
+
+export async function requestResponse(path: string, options: RequestInit = {}): Promise<Response> {
   const response = await fetch(path, {
     ...options,
     credentials: options.credentials ?? 'include',
-    headers,
   })
 
   if (!response.ok) {
@@ -61,7 +65,7 @@ export async function requestJson<T>(path: string, options: RequestInit = {}) {
     throw new ApiError(error.message, response.status, error.code, error.details)
   }
 
-  return (await response.json()) as T
+  return response
 }
 
 export async function sendClientTelemetryBatch(body: unknown): Promise<void> {

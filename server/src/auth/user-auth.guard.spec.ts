@@ -37,6 +37,18 @@ describe("UserAuthGuard", () => {
     expect(auth.verifyWebSession).toHaveBeenCalledWith("user-token")
   })
 
+  it("binds a stale Hub Console request to the session that started it", async () => {
+    const auth = { verifyWebSession: vi.fn().mockResolvedValue({ userId: "user-2", sessionId: "session-2" }) }
+    const guard = new UserAuthGuard(auth as never)
+    const request = { headers: { "x-skill-hub-session": "session-1" }, cookies: { synapse_user_session: "user-token" },
+      path: "/api/skill-hub/skills" }
+    await expect(guard.canActivate(context(request))).rejects.toMatchObject({ response: { code: "HUB_ACCOUNT_CHANGED" } })
+    expect(request).not.toHaveProperty("user")
+    request.headers["x-skill-hub-session"] = "session-2"
+    await expect(guard.canActivate(context(request))).resolves.toBe(true)
+    expect(request).toHaveProperty("user.id", "user-2")
+  })
+
   it("does not accept admin or legacy dashboard cookies", async () => {
     const auth = { verifyWebSession: vi.fn() }
     const guard = new UserAuthGuard(auth as never)

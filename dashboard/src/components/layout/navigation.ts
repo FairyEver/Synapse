@@ -1,7 +1,8 @@
-import { Activity, Archive, ChartNoAxesCombined, FileText, History, KeyRound, LayoutDashboard, Mail, MessageSquareWarning, MonitorSmartphone, ScrollText, Settings, Users, UsersRound, Webhook, type LucideIcon } from 'lucide-react'
+import { Activity, Archive, ChartNoAxesCombined, FileText, History, KeyRound, LayoutDashboard, Mail, MessageSquareWarning, MonitorSmartphone, Package, ScrollText, Settings, Users, UsersRound, Webhook, type LucideIcon } from 'lucide-react'
 export type NavigationItem = { title: string; path: string; icon: LucideIcon; external?: boolean }
 export const userNavigation: NavigationItem[] = [
   { title: '云端数据表', path: '/tables', icon: ScrollText },
+  { title: 'Skill Hub', path: '/skill-hub', icon: Package },
   { title: 'Webhook', path: '/webhooks', icon: Webhook },
   { title: '我的设备', path: '/my-devices', icon: MonitorSmartphone },
   { title: '设置', path: '/settings', icon: Settings },

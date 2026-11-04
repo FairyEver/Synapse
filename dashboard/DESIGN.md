@@ -178,3 +178,8 @@ Use the scale consistently. Inner media and nested surfaces should have a visibl
 - Design principles: https://heroui.com/docs/react/getting-started/design-principles
 
 When this file and the current package disagree, follow the installed HeroUI version and its theme CSS.
+
+## Skill Hub
+
+- The catalog uses a content-width grid of icon, store name, two-line description, team, version and an independent install action. Use whitespace and a quiet separator between entries; the catalog is not a management table.
+- The detail page places store metadata and actions first, then read-only package metadata and the two package tabs. Only the latest version appears. On narrow screens stack the filter controls, let actions wrap and keep the grid to one column.

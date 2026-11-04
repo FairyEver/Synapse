@@ -20,10 +20,12 @@ import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authen
 import { Route as AuthenticatedWebhooksIndexRouteImport } from './routes/_authenticated/webhooks/index'
 import { Route as AuthenticatedWebhookDeliveriesIndexRouteImport } from './routes/_authenticated/webhook-deliveries/index'
 import { Route as AuthenticatedTablesIndexRouteImport } from './routes/_authenticated/tables/index'
+import { Route as AuthenticatedSkillHubIndexRouteImport } from './routes/_authenticated/skill-hub/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
 import { Route as AuthenticatedMyDevicesIndexRouteImport } from './routes/_authenticated/my-devices/index'
 import { Route as NotificationsNotificationIdOpenRouteImport } from './routes/notifications/$notificationId/open'
 import { Route as AuthenticatedWebhooksWebhookIdRouteImport } from './routes/_authenticated/webhooks/$webhookId'
+import { Route as AuthenticatedSkillHubSkillIdRouteImport } from './routes/_authenticated/skill-hub/$skillId'
 import { Route as AuthenticatedSettingsApiKeysRouteImport } from './routes/_authenticated/settings/api-keys'
 import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 import { Route as ShareShareIdItemsBrowserItemIdRouteImport } from './routes/share/$shareId_/items/$browserItemId'
@@ -87,6 +89,12 @@ const AuthenticatedTablesIndexRoute =
     path: '/tables/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSkillHubIndexRoute =
+  AuthenticatedSkillHubIndexRouteImport.update({
+    id: '/skill-hub/',
+    path: '/skill-hub/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
     id: '/',
@@ -109,6 +117,12 @@ const AuthenticatedWebhooksWebhookIdRoute =
   AuthenticatedWebhooksWebhookIdRouteImport.update({
     id: '/webhooks/$webhookId',
     path: '/webhooks/$webhookId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSkillHubSkillIdRoute =
+  AuthenticatedSkillHubSkillIdRouteImport.update({
+    id: '/skill-hub/$skillId',
+    path: '/skill-hub/$skillId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSettingsApiKeysRoute =
@@ -145,10 +159,12 @@ export interface FileRoutesByFullPath {
   '/share/$shareId': typeof ShareShareIdRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
+  '/skill-hub/$skillId': typeof AuthenticatedSkillHubSkillIdRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/skill-hub/': typeof AuthenticatedSkillHubIndexRoute
   '/tables/': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks/': typeof AuthenticatedWebhooksIndexRoute
@@ -164,10 +180,12 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
+  '/skill-hub/$skillId': typeof AuthenticatedSkillHubSkillIdRoute
   '/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/my-devices': typeof AuthenticatedMyDevicesIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
+  '/skill-hub': typeof AuthenticatedSkillHubIndexRoute
   '/tables': typeof AuthenticatedTablesIndexRoute
   '/webhook-deliveries': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/webhooks': typeof AuthenticatedWebhooksIndexRoute
@@ -186,10 +204,12 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/settings/api-keys': typeof AuthenticatedSettingsApiKeysRoute
+  '/_authenticated/skill-hub/$skillId': typeof AuthenticatedSkillHubSkillIdRoute
   '/_authenticated/webhooks/$webhookId': typeof AuthenticatedWebhooksWebhookIdRoute
   '/notifications/$notificationId/open': typeof NotificationsNotificationIdOpenRoute
   '/_authenticated/my-devices/': typeof AuthenticatedMyDevicesIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
+  '/_authenticated/skill-hub/': typeof AuthenticatedSkillHubIndexRoute
   '/_authenticated/tables/': typeof AuthenticatedTablesIndexRoute
   '/_authenticated/webhook-deliveries/': typeof AuthenticatedWebhookDeliveriesIndexRoute
   '/_authenticated/webhooks/': typeof AuthenticatedWebhooksIndexRoute
@@ -208,10 +228,12 @@ export interface FileRouteTypes {
     | '/share/$shareId'
     | '/auth/desktop'
     | '/settings/api-keys'
+    | '/skill-hub/$skillId'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
     | '/my-devices/'
     | '/settings/'
+    | '/skill-hub/'
     | '/tables/'
     | '/webhook-deliveries/'
     | '/webhooks/'
@@ -227,10 +249,12 @@ export interface FileRouteTypes {
     | '/'
     | '/auth/desktop'
     | '/settings/api-keys'
+    | '/skill-hub/$skillId'
     | '/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
     | '/my-devices'
     | '/settings'
+    | '/skill-hub'
     | '/tables'
     | '/webhook-deliveries'
     | '/webhooks'
@@ -248,10 +272,12 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
     | '/_authenticated/settings/api-keys'
+    | '/_authenticated/skill-hub/$skillId'
     | '/_authenticated/webhooks/$webhookId'
     | '/notifications/$notificationId/open'
     | '/_authenticated/my-devices/'
     | '/_authenticated/settings/'
+    | '/_authenticated/skill-hub/'
     | '/_authenticated/tables/'
     | '/_authenticated/webhook-deliveries/'
     | '/_authenticated/webhooks/'
@@ -350,6 +376,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTablesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/skill-hub/': {
+      id: '/_authenticated/skill-hub/'
+      path: '/skill-hub'
+      fullPath: '/skill-hub/'
+      preLoaderRoute: typeof AuthenticatedSkillHubIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
       path: '/'
@@ -376,6 +409,13 @@ declare module '@tanstack/react-router' {
       path: '/webhooks/$webhookId'
       fullPath: '/webhooks/$webhookId'
       preLoaderRoute: typeof AuthenticatedWebhooksWebhookIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/skill-hub/$skillId': {
+      id: '/_authenticated/skill-hub/$skillId'
+      path: '/skill-hub/$skillId'
+      fullPath: '/skill-hub/$skillId'
+      preLoaderRoute: typeof AuthenticatedSkillHubSkillIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/settings/api-keys': {
@@ -428,8 +468,10 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedSkillHubSkillIdRoute: typeof AuthenticatedSkillHubSkillIdRoute
   AuthenticatedWebhooksWebhookIdRoute: typeof AuthenticatedWebhooksWebhookIdRoute
   AuthenticatedMyDevicesIndexRoute: typeof AuthenticatedMyDevicesIndexRoute
+  AuthenticatedSkillHubIndexRoute: typeof AuthenticatedSkillHubIndexRoute
   AuthenticatedTablesIndexRoute: typeof AuthenticatedTablesIndexRoute
   AuthenticatedWebhookDeliveriesIndexRoute: typeof AuthenticatedWebhookDeliveriesIndexRoute
   AuthenticatedWebhooksIndexRoute: typeof AuthenticatedWebhooksIndexRoute
@@ -439,8 +481,10 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedSkillHubSkillIdRoute: AuthenticatedSkillHubSkillIdRoute,
   AuthenticatedWebhooksWebhookIdRoute: AuthenticatedWebhooksWebhookIdRoute,
   AuthenticatedMyDevicesIndexRoute: AuthenticatedMyDevicesIndexRoute,
+  AuthenticatedSkillHubIndexRoute: AuthenticatedSkillHubIndexRoute,
   AuthenticatedTablesIndexRoute: AuthenticatedTablesIndexRoute,
   AuthenticatedWebhookDeliveriesIndexRoute:
     AuthenticatedWebhookDeliveriesIndexRoute,
