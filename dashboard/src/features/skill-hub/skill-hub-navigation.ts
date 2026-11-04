@@ -8,7 +8,7 @@ export function parseSkillHubSearch(input: Record<string, unknown>): SkillHubSea
   return { ...(q ? { q } : {}), ...(team.success ? { team: team.data } : {}), ...(input.mine === true ? { mine: true } : {}) }
 }
 
-export function openSkillInSnap(id: string, open: (url: string) => void = (url) => window.location.assign(url)) {
+export function openSkillInSynapse(id: string, open: (url: string) => void = (url) => window.location.assign(url)) {
   open(`synapse://skill-hub/install?skillId=${encodeURIComponent(skillHubIdSchema.parse(id))}`)
-  return '已尝试打开 Snap'
+  return '已尝试打开 Synapse'
 }

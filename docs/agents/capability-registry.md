@@ -1,6 +1,6 @@
 # 能力注册清单
 
-- 2026-11-04 Snap Skill Hub：新增独立 `skill_hub` domain，共 10 项 capability / MCP 索引；实测全局 374 项 capability、370 项索引及工具定义，公开入口仍为 `search` / `invoke`。复用账号状态与登录能力。无 System App、默认 Dock、Workflow 或 Automation 入口；管理员治理仅 Web/API。旧 Skill Repository 工具和协议保持退役。另有 1 条严格声明式桌面深链 `synapse://skill-hub/install?skillId=<id>`、2 个仅限安装器窗口的私有 IPC（prepare_install / release_install）和 1 个定向窗口事件（skill_hub_install_open_request），均不进入 MCP 索引。
+- 2026-11-04 Synapse Skill Hub：新增独立 `skill_hub` domain，共 10 项 capability / MCP 索引；实测全局 374 项 capability、370 项索引及工具定义，公开入口仍为 `search` / `invoke`。复用账号状态与登录能力。无 System App、默认 Dock、Workflow 或 Automation 入口；管理员治理仅 Web/API。旧 Skill Repository 工具和协议保持退役。另有 1 条严格声明式桌面深链 `synapse://skill-hub/install?skillId=<id>`、2 个仅限安装器窗口的私有 IPC（prepare_install / release_install）和 1 个定向窗口事件（skill_hub_install_open_request），均不进入 MCP 索引。
 
 - 卡牌房既有 `table.state` / `room.get` 的公开 `handLog.entries` 可追加类型化 `effects`。热手按已读取的最多 1000 条动作序号取结算帧，归档读同一审计数据。仅返回实际可公开的效果和参赛快照名。响应 schema、MCP 描述与系统 Skill 同步，现有注册数、路由、权限和表结构保持原样。
 

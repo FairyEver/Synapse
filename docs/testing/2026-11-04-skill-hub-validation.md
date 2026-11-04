@@ -1,4 +1,4 @@
-# Snap Skill Hub 实施与验收记录
+# Synapse Skill Hub 实施与验收记录
 
 起点：`main`，`9b589ec97`。实现与验证均在原仓库进行。本轮授权仅覆盖本机专用 PostgreSQL 与隔离 Chromium；没有启动 Synapse 桌面、接触用户真实编辑器目录、推送、部署或发版。
 

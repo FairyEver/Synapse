@@ -1,4 +1,4 @@
-# Snap Skill Hub Implementation Plan
+# Synapse Skill Hub Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm 12.16.1、TypeScript 6、NestJS 11、Prisma 6/PostgreSQL、Electron 44、React 19、HeroUI 3.2.7、Tailwind 4、Vitest/Supertest。复用现有 PizZip、archiver、cos-nodejs-sdk-v5、pg、zod，不新增依赖。
 
-**Spec:** [Snap Skill Hub 首版设计](../specs/2026-11-04-snap-skill-hub-design.md)。用户已要求进入下一步；本轮编制计划，不执行下列实现任务。
+**Spec:** [Synapse Skill Hub 首版设计](../specs/2026-11-04-snap-skill-hub-design.md)。用户已要求进入下一步；本轮编制计划，不执行下列实现任务。
 
 ## Global Constraints
 
@@ -204,7 +204,7 @@ openIcon(userId:string, skillId:string):Promise<{stream:NodeJS.ReadableStream;si
 
 **Interfaces:** `skillHubApi` 通过唯一 api-client.requestJson 调 teams/list/get/main/download/receipt；HTTP 文件请求同样复用集中客户端认证和错误，不在组件散落 fetch。`useSkillHubCatalog({teamId?,createdByMe?,query,cursor?})`、`useSkillHubDetail(skillId)` 的缓存键包含登录会话和团队/筛选，返回只读 DTO 及必要状态。
 
-- [ ] **Step 1 — 写失败断言。** 沿现有 cloud-table-dialogs.test.tsx 的 jsdom/React act 测试方式，不增加测试库。左侧只有一个 Skill Hub、详情路径选中、登录回跳和返回保留筛选；多团队聚合只显示本人团队、离队/换号晚响应不回填。详情分别展示商店资料与只读包内信息，无版本管理/私有公开控件；发出协议请求只能显示“已尝试打开 Snap”，不能显示安装成功。测试 `keeps_latest_only_detail` 断言 `expect(root.textContent).not.toContain('历史版本')` 并检查只有说明/文件两个页签。
+- [ ] **Step 1 — 写失败断言。** 沿现有 cloud-table-dialogs.test.tsx 的 jsdom/React act 测试方式，不增加测试库。左侧只有一个 Skill Hub、详情路径选中、登录回跳和返回保留筛选；多团队聚合只显示本人团队、离队/换号晚响应不回填。详情分别展示商店资料与只读包内信息，无版本管理/私有公开控件；发出协议请求只能显示“已尝试打开 Synapse”，不能显示安装成功。测试 `keeps_latest_only_detail` 断言 `expect(root.textContent).not.toContain('历史版本')` 并检查只有说明/文件两个页签。
 - [ ] **Step 2 — 运行红灯。** `pnpm --filter @synapse/dashboard test src/components/layout/navigation.test.ts src/features/skill-hub/skill-catalog.test.tsx src/features/skill-hub/skill-detail.test.tsx`。
 - [ ] **Step 3 — 实现接口。** 先读取 heroui-react 组件文档并核对本地 3.2.7；保持现有浅色主题、Inter、标准组件尺寸和语义 token。目录为轻分隔图文条目、宽屏两至三列/中屏减列/窄屏单列，独立名称链接与安装按钮。页首为标题/团队筛选/搜索/上传，“我上传的”只过滤创建者。详情为商店头部、当前版本/团队/贡献及维护信息、说明/文件；安全只读 Markdown 不启动 MDX 或外部图片请求。加载 Skeleton、无团队/空/错状态各自准确，不加入营销、榜单或装饰色。
 - [ ] **Step 4 — 运行绿灯。** 上述测试、`pnpm --filter @synapse/dashboard run check:ui`；先以 `pnpm --filter @synapse/dashboard exec vite build` 运行现有 Router 插件生成新 routeTree，再运行 `pnpm --filter @synapse/dashboard run tsc`，避免先 tsc 时新路径尚未生成。运行 `pnpm --filter @synapse/dashboard test src/routes/-retired-content-routes.test.ts` 确认旧云路径仍退役。此步只断言交互和结构，不声称视觉验收已完成。

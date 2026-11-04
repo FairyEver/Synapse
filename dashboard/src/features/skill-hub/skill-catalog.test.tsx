@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/stores/auth-store'
 import { loadHubTeams, skillHubApi } from './skill-hub-api'
-import { openSkillInSnap, parseSkillHubSearch } from './skill-hub-navigation'
+import { openSkillInSynapse, parseSkillHubSearch } from './skill-hub-navigation'
 
 const user = (sessionId: string) => ({ email: 'user@example.test', handle: null, sessionId })
 const teamPage = (id: string, nextCursor: string | null) => ({
@@ -34,8 +34,8 @@ describe('Skill Hub catalog scope', () => {
   it('keeps allowed return filters and only reports the protocol attempt', () => {
     expect(parseSkillHubSearch({ q: ' query ', team: 'team_1', mine: true, version: 4 })).toEqual({ q: 'query', team: 'team_1', mine: true })
     const open = vi.fn()
-    expect(openSkillInSnap('skill_1', open)).toBe('已尝试打开 Snap')
+    expect(openSkillInSynapse('skill_1', open)).toBe('已尝试打开 Synapse')
     expect(open).toHaveBeenCalledWith('synapse://skill-hub/install?skillId=skill_1')
-    expect(() => openSkillInSnap('skill_1&version=2', open)).toThrow()
+    expect(() => openSkillInSynapse('skill_1&version=2', open)).toThrow()
   })
 })

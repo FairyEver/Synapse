@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import type { SkillHubSummary } from '@synapse/shared/skill-hub-contracts'
 import { skillHubApi } from './skill-hub-api'
-import { openSkillInSnap, type SkillHubSearch } from './skill-hub-navigation'
+import { openSkillInSynapse, type SkillHubSearch } from './skill-hub-navigation'
 
 function SkillImage({ session, id, revision }: { session: string; id: string; revision: number }) {
   const [url, setUrl] = useState('')
@@ -32,10 +32,10 @@ export function SkillHubIcon({ session, skill, large = false }: {
 
 export function SkillInstallButton({ id, variant = 'secondary' }: { id: string; variant?: 'primary' | 'secondary' }) {
   function install() {
-    try { toast.info(openSkillInSnap(id)) }
-    catch { toast.danger('无法打开 Snap，请重试。') }
+    try { toast.info(openSkillInSynapse(id)) }
+    catch { toast.danger('无法打开 Synapse，请重试。') }
   }
-  return <Button variant={variant} onPress={install}><Download aria-hidden="true" />安装到 Snap</Button>
+  return <Button variant={variant} onPress={install}><Download aria-hidden="true" />安装到 Synapse</Button>
 }
 
 export function SkillCatalogItem({ skill, search, session }: { skill: SkillHubSummary; search: SkillHubSearch; session: string }) {

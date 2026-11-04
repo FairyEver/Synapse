@@ -4,7 +4,7 @@
 
 ## app_skill_hub_skill_list
 
-List current team Skills in Snap Skill Hub (团队 Skill 目录、搜索), optionally filtered by team, creator and store text. Pagination: cursor-based. Continue with nextCursor until null; restart after filters or account change. Permissions: network.connect; current account only.
+List current team Skills in Synapse Skill Hub (团队 Skill 目录、搜索), optionally filtered by team, creator and store text. Pagination: cursor-based. Continue with nextCursor until null; restart after filters or account change. Permissions: network.connect; current account only.
 
 ```json
 {
@@ -39,7 +39,7 @@ List current team Skills in Snap Skill Hub (团队 Skill 目录、搜索), optio
 
 ## app_skill_hub_skill_get
 
-Read one team Skill from Snap Skill Hub using exactly one skillId or trusted Console detail reference. Returns package name, package description, current version, revision and maintenance permissions; no package bytes. Permissions: network.connect; current account only.
+Read one team Skill from Synapse Skill Hub using exactly one skillId or trusted Console detail reference. Returns package name, package description, current version, revision and maintenance permissions; no package bytes. Permissions: network.connect; current account only.
 
 ```json
 {
@@ -62,7 +62,7 @@ Read one team Skill from Snap Skill Hub using exactly one skillId or trusted Con
 
 ## app_skill_hub_team_list
 
-List only my active teams for Snap Skill Hub upload (本人团队、选择上传团队). Use selectionState none/single/multiple across all memberships; only single has defaultTeamId. Pagination: cursor-based. Continue with nextCursor until null; do not infer team count from the current page. Permissions: network.connect; current account only.
+List only my active teams for Synapse Skill Hub upload (本人团队、选择上传团队). Use selectionState none/single/multiple across all memberships; only single has defaultTeamId. Pagination: cursor-based. Continue with nextCursor until null; do not infer team count from the current page. Permissions: network.connect; current account only.
 
 ```json
 {

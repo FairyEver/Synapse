@@ -441,7 +441,7 @@ RollQuote/PokerRollView增加可选coins={balance,limit}，RollOffer增加可选
 - 部署须保留部署前数据库备份并完成既有迁移预演；风险扫描会识别本迁移的删除与唯一索引，按既有 `ALLOW_RISKY_MIGRATIONS=1` 流程审查放行，不修改风险检测策略。代码回退不能恢复已清空数据，恢复旧数据必须使用部署前备份。
 
 
-## Snap Skill Hub 团队归属
+## Synapse Skill Hub 团队归属
 
 Skill Hub 的每个条目固定属于一个团队。团队是资产持有者；原贡献者和当前维护者分别记录，账号失效不删除团队资产。团队成员资格由现有 TeamMembership 与活跃账号状态共同决定，普通用户只可查询本人的团队。团队删除检查包含软删除的全部 Hub 条目，有资产时拒绝删除；团队删除、成员移除与 Hub 写入使用同一团队行锁。
 

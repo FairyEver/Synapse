@@ -13,7 +13,7 @@ import { prepareHubIcon } from "./icon-source"
 import { HubPackageService, selectHubUploadTeam } from "./package-service"
 
 export const SKILL_HUB_SERVICE_ID = "core.skill-hub"
-const networkResource = "snap-skill-hub"
+const networkResource = "skill-hub"
 const ambiguous = new Set([
   "HUB_ACCOUNT_CHANGED", "HUB_ACCOUNT_REQUIRED", "HUB_CANCELLED", "HUB_CONNECTION_ERROR", "HUB_RESPONSE_INVALID",
   "HUB_RESPONSE_BUDGET", "HUB_UNSUPPORTED_SERVER",

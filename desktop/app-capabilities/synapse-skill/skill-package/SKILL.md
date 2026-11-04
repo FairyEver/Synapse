@@ -30,7 +30,7 @@ Before routing business operations, apply [Presenting Data](#presenting-data) to
 First classify the user's intent, then read the matching domain file before using tools:
 
 - Copied `synapse://mail-internal/<id>` -> `mail-internal/index.md`; copied `synapse:notification:<id>` -> `notifications/index.md`. The reference identifies the type even when the user says only “看这个” or “读一下”. Pass the complete reference unchanged to that domain's read tool. If the user gives only an untyped raw ID and context does not identify its source, ask which type it is.
-- Snap Skill Hub / 团队 Skill Hub, a `/console/skill-hub/<id>` detail link, team Skill listing, publishing, full package updates or write receipts -> `skill-hub/index.md`. This is a separate team asset domain; no legacy cloud repository fallback.
+- Synapse Skill Hub / 团队 Skill Hub, a `/console/skill-hub/<id>` detail link, team Skill listing, publishing, full package updates or write receipts -> `skill-hub/index.md`. This is a separate team asset domain; no legacy cloud repository fallback.
 - Creating, developing, modifying, migrating, or improving an Agent Skill in the current or local directory -> `skill-authoring/index.md`
 - Database, tables, rows, columns, choices, SQL, table folders, mutation logs -> `database/index.md`
 - Drive file search by name/extension and metadata, search refinements and numbered result follow-ups; files, folders, one-time upload, persistent local file or folder sync, download, preview, local Markdown document publishing with linked images or HTML, HTML page sharing, static site publishing or republishing, public assets, trash, versions; 云文档、在线文档、云盘、云存储、云空间、网盘 and equivalent terms when no other platform is explicitly named -> `drive/index.md`
