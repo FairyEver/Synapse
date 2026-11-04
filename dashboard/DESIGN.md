@@ -171,5 +171,6 @@ When this file and the current package disagree, follow the installed HeroUI ver
 
 ## Skill Hub
 
-- The catalog uses a content-width grid of icon, store name, two-line description, team, version and an independent install action. Use whitespace and a quiet separator between entries; the catalog is not a management table.
+- The catalog uses a content-width grid of icon, store name, two-line description, version and an independent ghost install button. Show the team once in the page header for single-team accounts. For multiple teams, show the team filter and each entry's team. Use whitespace and a quiet separator between entries; the catalog is not a management table.
+- Place search first in the filter bar and provide a visible submit button alongside Enter support.
 - The detail page places store metadata and actions first, then read-only package metadata and the two package tabs. Only the latest version appears. On narrow screens stack the filter controls, let actions wrap and keep the grid to one column.

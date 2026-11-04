@@ -28,24 +28,34 @@ function Catalog({ session, search, onSearch }: Props & { session: string }) {
   const single = teams.data?.selectionState === 'single' ? teams.data.items[0] : undefined
   const error = teams.error ?? catalog.error
   const loading = teams.isPending || catalog.isPending
+  function submitSearch(text: string) {
+    onSearch({ ...search, q: text.trim() || undefined })
+  }
   return <>
-    <Header className="flex-wrap"><h1 className="min-w-0 flex-1">Skill Hub</h1>
+    <Header className="flex-wrap">
+      <div className="min-w-0 flex-1 @lg/content:flex @lg/content:items-baseline @lg/content:gap-3">
+        <h1 className="shrink-0">Skill Hub</h1>
+        {single ? <p className="truncate text-sm text-muted" title={single.name}>{single.name}</p> : null}
+      </div>
       <Button isDisabled={!teams.data || noTeam || !!teams.error} onPress={() => setUploadOpen(true)}><Plus aria-hidden="true" />上传 Skill</Button>
     </Header>
     <Main className="min-w-0 gap-5">
       <HubPendingWrites session={session} />
-      <div className="grid min-w-0 items-end gap-3 @lg/content:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
-        {single ? <div className="min-w-0"><p className="text-sm font-medium">团队</p><p className="mt-1 truncate" title={single.name}>{single.name}</p></div>
-          : <HubTeamSelect all teams={teams.data?.items ?? []} value={search.team}
-            disabled={!teams.data || noTeam} onChange={(team) => onSearch({ ...search, team })} />}
-        <SearchField value={draft} onChange={(text) => { setDraft(text); if (!text && search.q) onSearch({ ...search, q: undefined }) }}
-          onSubmit={(text) => onSearch({ ...search, q: text.trim() || undefined })}>
-          <Label>搜索 Skill</Label>
-          <SearchField.Group><SearchField.SearchIcon /><SearchField.Input maxLength={200} placeholder="名称或介绍" /><SearchField.ClearButton /></SearchField.Group>
-        </SearchField>
-        <Checkbox isSelected={Boolean(search.mine)} onChange={(selected) => onSearch({ ...search, mine: selected || undefined })}
-          className="self-end pb-2">
-          <Checkbox.Content><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>我上传的</Checkbox.Content>
+      <div className="flex min-w-0 flex-wrap items-end gap-x-4 gap-y-2">
+        <div className="flex w-full min-w-0 items-center gap-2 @2xl/content:w-auto @2xl/content:max-w-md @2xl/content:flex-1">
+          <SearchField className="min-w-0 flex-1" value={draft}
+            onChange={(text) => { setDraft(text); if (!text && search.q) submitSearch(text) }}
+            onSubmit={submitSearch}>
+            <Label className="sr-only">搜索 Skill</Label>
+            <SearchField.Group><SearchField.SearchIcon /><SearchField.Input maxLength={200} placeholder="搜索名称或介绍" /><SearchField.ClearButton /></SearchField.Group>
+          </SearchField>
+          <Button variant="secondary" onPress={() => submitSearch(draft)}>搜索</Button>
+        </div>
+        {teams.data?.selectionState === 'multiple' ? <div className="w-full min-w-0 @2xl/content:w-56">
+          <HubTeamSelect all teams={teams.data.items} value={search.team} onChange={(team) => onSearch({ ...search, team })} />
+        </div> : null}
+        <Checkbox isSelected={Boolean(search.mine)} onChange={(selected) => onSearch({ ...search, mine: selected || undefined })}>
+          <Checkbox.Content className="min-h-10"><Checkbox.Control><Checkbox.Indicator /></Checkbox.Control>我上传的</Checkbox.Content>
         </Checkbox>
       </div>
       {error ? <div role="alert" className="flex flex-wrap items-center gap-3">
@@ -56,7 +66,7 @@ function Catalog({ session, search, onSearch }: Props & { session: string }) {
       </div> : noTeam ? <p className="py-8 text-muted">你还没有加入任何团队。</p>
         : !skills.length ? <p className="py-8 text-muted">{search.q || search.mine || search.team ? '没有符合条件的 Skill。' : '团队还没有 Skill。'}</p>
           : <ul className="grid min-w-0 gap-x-8 @2xl/content:grid-cols-2 @6xl/content:grid-cols-3" aria-label="团队 Skill">
-            {skills.map((skill) => <SkillCatalogItem key={skill.id} skill={skill} session={session} search={search} />)}
+            {skills.map((skill) => <SkillCatalogItem key={skill.id} skill={skill} session={session} search={search} showTeam={!single} />)}
           </ul>}
       {!error && catalog.hasNextPage ? <Button variant="secondary" isPending={catalog.isFetchingNextPage}
         onPress={() => void catalog.fetchNextPage()}>加载更多</Button> : null}
