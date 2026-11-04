@@ -28,6 +28,7 @@ import { NotificationModule } from "./notifications/notification.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { ProblemFeedbackModule } from "./problem-feedback/problem-feedback.module"
 import { ProfileAvatarModule } from "./profile-avatar/profile-avatar.module"
+import { hubLogPath, skillHubLogRequest } from "./skill-hub/skill-hub-log"
 import { SkillHubModule } from "./skill-hub/skill-hub.module"
 import { TeamModule } from "./team/team.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
@@ -76,13 +77,13 @@ function hasSensitiveRequestUrl(url: string): boolean {
             const url = typeof candidate.path === "string" ? candidate.path : typeof candidate.originalUrl === "string"
               ? candidate.originalUrl
               : typeof candidate.url === "string" ? candidate.url : ""
-            return hasSensitiveRequestUrl(url)
+            return Boolean(hubLogPath(url)) || hasSensitiveRequestUrl(url)
           },
         },
         redact: ["req.headers.cookie", "req.headers.authorization", "req.body.accessSecret"],
         serializers: {
           req(request: RequestLogObject) {
-            return cloudTableLogRequest(request) ?? todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
+            return skillHubLogRequest(request) ?? cloudTableLogRequest(request) ?? todoLogRequest(request) ?? sanitizeWebhookLogRequest(request)
           },
         },
         transport: {

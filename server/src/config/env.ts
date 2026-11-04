@@ -79,6 +79,10 @@ const cosConfigGroups = [
     name: "BACKUP_COS",
     fields: ["BACKUP_COS_SECRET_ID", "BACKUP_COS_SECRET_KEY", "BACKUP_COS_BUCKET", "BACKUP_COS_REGION"],
   },
+  {
+    name: "SKILL_HUB_COS",
+    fields: ["SKILL_HUB_COS_SECRET_ID", "SKILL_HUB_COS_SECRET_KEY", "SKILL_HUB_COS_BUCKET", "SKILL_HUB_COS_REGION"],
+  },
 ] as const
 
 const envSchema = z
@@ -128,6 +132,12 @@ const envSchema = z
     BACKUP_COS_SECRET_KEY: optionalEnvString,
     BACKUP_COS_BUCKET: optionalEnvString,
     BACKUP_COS_REGION: optionalEnvString,
+    SKILL_HUB_COS_SECRET_ID: optionalEnvString,
+    SKILL_HUB_COS_SECRET_KEY: optionalEnvString,
+    SKILL_HUB_COS_BUCKET: optionalEnvString,
+    SKILL_HUB_COS_REGION: optionalEnvString,
+    SKILL_REPOSITORY_COS_BUCKET: optionalEnvString,
+    SYNAPSE_SKILL_HUB_LOCAL_ROOT: optionalEnvString,
     // 语音识别：平台统一提供的能力，一把密钥一份配额给所有用户共用。三项齐了
     // 才算配好，缺一项就当没配（客户端隐藏麦克风入口），不做部分启用。
     TENCENT_ASR_APP_ID: optionalEnvString,
@@ -228,6 +238,21 @@ const envSchema = z
     path: ["PLATFORM_MEDIA_COS_SECRET_ID"],
     message: "PLATFORM_MEDIA_COS_* is required in production",
   })
+  .refine((env) => env.NODE_ENV !== "production"
+    || !!(env.SKILL_HUB_COS_SECRET_ID && env.SKILL_HUB_COS_SECRET_KEY && env.SKILL_HUB_COS_BUCKET && env.SKILL_HUB_COS_REGION), {
+    path: ["SKILL_HUB_COS_SECRET_ID"],
+    message: "SKILL_HUB_COS_* is required in production",
+  })
+  .refine((env) => {
+    const hubBucket = env.SKILL_HUB_COS_BUCKET?.trim().toLowerCase()
+    return !hubBucket || ![
+      env.DRIVE_COS_BUCKET, env.PLATFORM_MEDIA_COS_BUCKET, env.MAIL_COS_BUCKET,
+      env.BACKUP_COS_BUCKET, env.SKILL_REPOSITORY_COS_BUCKET,
+    ].some((bucket) => bucket?.trim().toLowerCase() === hubBucket)
+  }, {
+    path: ["SKILL_HUB_COS_BUCKET"],
+    message: "Skill Hub COS bucket must be separate from every other storage domain",
+  })
   .refine((env) => !env.APP_PUBLIC_URL || new URL(env.APP_PUBLIC_URL).pathname.replace(/\/+$/u, "") !== "/api", {
     path: ["APP_PUBLIC_URL"],
     message: "APP_PUBLIC_URL must be the public app root, not the /api URL",
@@ -274,6 +299,11 @@ export interface ServerEnv {
   readonly backupCosSecretKey?: string
   readonly backupCosBucket?: string
   readonly backupCosRegion?: string
+  readonly skillHubCosSecretId?: string
+  readonly skillHubCosSecretKey?: string
+  readonly skillHubCosBucket?: string
+  readonly skillHubCosRegion?: string
+  readonly skillHubLocalRoot?: string
   /** 语音识别。三项齐了才 enabled，见 `isTencentAsrConfigured`。 */
   readonly tencentAsrAppId?: string
   readonly tencentAsrSecretId?: string
@@ -332,6 +362,11 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     backupCosSecretKey: result.data.BACKUP_COS_SECRET_KEY,
     backupCosBucket: result.data.BACKUP_COS_BUCKET,
     backupCosRegion: result.data.BACKUP_COS_REGION,
+    skillHubCosSecretId: result.data.SKILL_HUB_COS_SECRET_ID,
+    skillHubCosSecretKey: result.data.SKILL_HUB_COS_SECRET_KEY,
+    skillHubCosBucket: result.data.SKILL_HUB_COS_BUCKET,
+    skillHubCosRegion: result.data.SKILL_HUB_COS_REGION,
+    skillHubLocalRoot: result.data.SYNAPSE_SKILL_HUB_LOCAL_ROOT,
     tencentAsrAppId: result.data.TENCENT_ASR_APP_ID,
     tencentAsrSecretId: result.data.TENCENT_ASR_SECRET_ID,
     tencentAsrSecretKey: result.data.TENCENT_ASR_SECRET_KEY,

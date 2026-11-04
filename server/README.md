@@ -582,3 +582,12 @@ server/               # NestJS API、Prisma、Docker 和 Nginx 配置
 
 dashboard/            # React + Vite + HeroUI 网页控制台，生产构建后由 server 容器的 Nginx 服务
 ```
+
+
+### Skill Hub 对象存储
+
+生产服务必须完整配置 `SKILL_HUB_COS_SECRET_ID`、`SKILL_HUB_COS_SECRET_KEY`、
+`SKILL_HUB_COS_BUCKET` 和 `SKILL_HUB_COS_REGION`。使用独立私有桶及
+`skill-hub/` 前缀，与旧 Skill Repository、Drive、平台媒体、站内信和备份桶分离。
+非生产环境可使用独立的 `SYNAPSE_SKILL_HUB_LOCAL_ROOT`。上传使用二进制请求体，
+只有上传路由支持至多 50 MiB；未绑定上传在 24 小时后进入回收。

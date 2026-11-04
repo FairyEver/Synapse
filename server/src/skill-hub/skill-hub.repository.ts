@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { SKILL_HUB_LIMITS, type SkillHubTeam } from "@synapse/shared/skill-hub-contracts"
 import { PrismaService } from "../prisma/prisma.service"
+import { withTeamResourceLock } from "../team/team-resource-lock"
+import { hubError } from "./skill-hub-error"
 
 function activeMember(userId: string): Prisma.TeamMembershipWhereInput {
   return { userId, user: { status: "active" } }
@@ -28,6 +30,18 @@ export class SkillHubRepository {
         : first
       return { first: first.slice(0, 2).map(({ team }) => team), page: page.slice(0, limit + 1).map(({ team }) => team) }
     }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
+  }
+
+  async lockActiveTeamMember(tx: Prisma.TransactionClient, teamId: string, userId: string) {
+    if (await withTeamResourceLock(tx, teamId)) {
+      const users = await tx.$queryRaw<{ id: string; nickname: string }[]>`
+        SELECT "id", "nickname" FROM "User" WHERE "id" = ${userId} AND "status" = 'active' FOR UPDATE
+      `
+      if (users[0] && await tx.teamMembership.findUnique({ where: { teamId_userId: { teamId, userId } }, select: { id: true } })) {
+        return users[0]
+      }
+    }
+    throw hubError(403, "HUB_TEAM_UNAVAILABLE", "你已无法向该团队上传或维护 Skill。")
   }
 
   async findUploadTeams(userId: string, requestedTeamId?: string): Promise<SkillHubTeam[]> {

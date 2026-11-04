@@ -10,6 +10,7 @@ import type { Response } from "express"
 import { PinoLogger } from "nestjs-pino"
 import { randomUUID } from "node:crypto"
 import { formatAuditError } from "./audit-error"
+import { hubLogPath } from "../skill-hub/skill-hub-log"
 import { RequestValidationException } from "./request-validation.exception"
 
 @Catch()
@@ -26,10 +27,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { statusCode, error, message, code } = this.resolve(exception)
     const problemFeedbackPath = isProblemFeedbackPath(request.originalUrl ?? request.url ?? "")
     const openApiPath = isOpenApiPath(request.originalUrl ?? request.url ?? "")
+    const hubPath = hubLogPath(request.originalUrl ?? request.url ?? "")
 
-    if (problemFeedbackPath || openApiPath) response.setHeader("Cache-Control", "no-store")
+    if (problemFeedbackPath || openApiPath || hubPath) response.setHeader("Cache-Control", "no-store")
     if (statusCode >= 500 && !problemFeedbackPath) {
-      this.logger.error(createExceptionLogMetadata(exception), "Unhandled server exception")
+      this.logger.error(hubPath ? { path: hubPath, statusCode, code } : createExceptionLogMetadata(exception), "Unhandled server exception")
     }
 
     if (openApiPath) {
@@ -48,7 +50,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(statusCode).json({
       error,
-      message,
+      message: hubPath && statusCode >= 500 && !code ? "服务器内部错误。" : message,
       statusCode,
       ...(code ? { code } : {}),
       ...(exception instanceof RequestValidationException ? { fields: exception.fields } : {}),

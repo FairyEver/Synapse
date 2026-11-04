@@ -12,6 +12,12 @@ const productionPdfEnv = {
   PDF_RENDERER_URL: "http://pdf-renderer:3010",
   PDF_RENDERER_INTERNAL_SECRET: "Py7mR2vK9sF4xD8qW1cN6hJ3uB0eG5iL7oA2tZ9pM4_r",
 }
+const skillHubCosEnv = {
+  SKILL_HUB_COS_SECRET_ID: "fixture-hub-id",
+  SKILL_HUB_COS_SECRET_KEY: "fixture-hub-key",
+  SKILL_HUB_COS_BUCKET: "fixture-hub-bucket",
+  SKILL_HUB_COS_REGION: "ap-beijing",
+}
 const platformMediaCosEnv = {
   PLATFORM_MEDIA_COS_SECRET_ID: "platform-media-secret-id",
   PLATFORM_MEDIA_COS_SECRET_KEY: "platform-media-secret-key",
@@ -24,6 +30,7 @@ describe("loadEnv", () => {
     const env = loadEnv({
       NODE_ENV: "production",
       ...productionPdfEnv,
+      ...skillHubCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -39,6 +46,7 @@ describe("loadEnv", () => {
     })
 
     expect(env.port).toBe(3000)
+    expect(env.skillHubCosBucket).toBe(skillHubCosEnv.SKILL_HUB_COS_BUCKET)
     expect(env.databasePoolSize).toBe(10)
     expect(env.adminAccessSecret).toHaveLength(43)
     expect(env.appPublicUrl).toBe("https://synapse.test")
@@ -48,6 +56,19 @@ describe("loadEnv", () => {
     expect(env.driveLocalRoot).toBe("/app/data/drive")
     expect(env.driveCollaborationEnabled).toBe(false)
     expect(env.trustProxy).toBe("loopback")
+  })
+
+  it("rejects incomplete or shared Skill Hub COS configuration", () => {
+    expect(() => loadEnv({ ...baseEnv, SKILL_HUB_COS_BUCKET: "partial" })).toThrow("SKILL_HUB_COS_SECRET_ID")
+    for (const domain of ["DRIVE", "PLATFORM_MEDIA", "MAIL", "BACKUP", "SKILL_REPOSITORY"]) {
+      const collision = {
+        [`${domain}_COS_BUCKET`]: skillHubCosEnv.SKILL_HUB_COS_BUCKET,
+        [`${domain}_COS_SECRET_ID`]: "fixture-id",
+        [`${domain}_COS_SECRET_KEY`]: "fixture-key",
+        [`${domain}_COS_REGION`]: "ap-beijing",
+      }
+      expect(() => loadEnv({ ...baseEnv, ...skillHubCosEnv, ...collision })).toThrow("SKILL_HUB_COS_BUCKET")
+    }
   })
 
   it("parses the Drive collaboration feature flag", () => {
@@ -104,6 +125,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         ...productionPdfEnv,
+        ...skillHubCosEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -116,6 +138,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         ...productionPdfEnv,
+        ...skillHubCosEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -129,6 +152,7 @@ describe("loadEnv", () => {
     const productionEnv = {
       NODE_ENV: "production",
       ...productionPdfEnv,
+      ...skillHubCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -154,6 +178,7 @@ describe("loadEnv", () => {
     const productionEnv = {
       NODE_ENV: "production",
       ...productionPdfEnv,
+      ...skillHubCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -185,6 +210,7 @@ describe("loadEnv", () => {
         NODE_ENV: "production",
         TRUST_PROXY: "loopback",
         ...productionPdfEnv,
+        ...skillHubCosEnv,
         ...platformMediaCosEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
@@ -201,6 +227,7 @@ describe("loadEnv", () => {
       loadEnv({
         NODE_ENV: "production",
         ...productionPdfEnv,
+        ...skillHubCosEnv,
         DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
         USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -215,6 +242,7 @@ describe("loadEnv", () => {
       NODE_ENV: "production",
       TRUST_PROXY: "loopback",
       ...productionPdfEnv,
+      ...skillHubCosEnv,
       ...platformMediaCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
@@ -251,6 +279,7 @@ describe("loadEnv", () => {
     const productionEnv = {
       NODE_ENV: "production",
       ...productionPdfEnv,
+      ...skillHubCosEnv,
       DATABASE_URL: "postgresql://synapse:synapse@localhost:5432/synapse",
       ADMIN_ACCESS_SECRET: "Qv2jY7mD9kL4sN8pR3tW6xZ1cF5hJ0uB7eG2iM9oK4A",
       USER_ACCESS_JWT_SECRET: "user-secret-with-enough-length-32chars",
@@ -339,6 +368,7 @@ describe("loadEnv", () => {
       NODE_ENV: "production",
       TRUST_PROXY: "loopback",
       ...productionPdfEnv,
+      ...skillHubCosEnv,
       DATABASE_URL: baseEnv.DATABASE_URL,
       ADMIN_ACCESS_SECRET: baseEnv.ADMIN_ACCESS_SECRET,
       USER_ACCESS_JWT_SECRET: baseEnv.USER_ACCESS_JWT_SECRET,

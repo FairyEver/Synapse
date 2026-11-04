@@ -5,10 +5,12 @@ import { PinoLogger } from "nestjs-pino"
 import { AuditLogService } from "../common/audit-log.service"
 import { recordAuthGuardFailure } from "../common/auth-guard-audit"
 import { UserAuthService } from "./user-auth.service"
+import { hubLogPath } from "../skill-hub/skill-hub-log"
 import { userSessionCookieName } from "./user-web-session"
 
 export interface AuthenticatedUserRequest extends Request {
   user?: { id: string }
+  userAuthMethod?: "bearer" | "cookie"
 }
 
 @Injectable()
@@ -21,13 +23,14 @@ export class UserAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext, client?: Prisma.TransactionClient, auditPath?: string): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedUserRequest>()
-    const auditRequest = { ip: request.ip, method: request.method, path: auditPath ?? request.path }
+    const auditRequest = { ip: request.ip, method: request.method, path: auditPath ?? hubLogPath(request.path) ?? request.path }
     const header = request.headers.authorization
     const bearerToken = readBearerToken(header)
     if (bearerToken) {
       const token = bearerToken
       const result = await this.verifyAccessToken(auditRequest, token, client)
       request.user = { id: result.userId }
+      request.userAuthMethod = "bearer"
       return true
     }
 
@@ -47,6 +50,7 @@ export class UserAuthGuard implements CanActivate {
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     request.user = { id: session.userId }
+    request.userAuthMethod = "cookie"
     return true
   }
 

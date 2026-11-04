@@ -9,6 +9,18 @@ function readRepoFile(path: string): string {
 }
 
 describe("server deployment configuration", () => {
+  it("scopes the Hub proxy budget and suppresses sensitive URLs across case variants", () => {
+    const nginx = readRepoFile("server/nginx.conf")
+    const upload = nginx.split("location ~* ^/api/skill-hub/uploads/?$ {")[1]?.split("}")[0]
+    const ordinary = nginx.split("location ~* ^/api/(?:admin/)?skill-hub(?:/|$) {")[1]?.split("}")[0]
+    expect(upload).toContain("client_max_body_size 50m")
+    expect(upload).toContain("proxy_request_buffering off")
+    expect(upload).toContain("access_log off")
+    expect(ordinary).toContain("client_max_body_size 1m")
+    expect(ordinary).toContain("access_log off")
+    expect(readRepoFile("server/compose.yml")).toContain("SKILL_HUB_COS_BUCKET: ${SKILL_HUB_COS_BUCKET:-}")
+  })
+
   it("excludes problem feedback data from every first-party database dump", () => {
     const shellSurfaces = [
       "server/README.md",

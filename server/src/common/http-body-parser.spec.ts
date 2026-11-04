@@ -1,4 +1,5 @@
-import { Body, Controller, Module, Patch, Post } from "@nestjs/common"
+import { Body, Controller, Module, Patch, Post, Req } from "@nestjs/common"
+import type { Request } from "express"
 import { Test } from "@nestjs/testing"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
@@ -28,6 +29,13 @@ class BodyParserTestController {
   receiveAuthLogin(@Body() body: { readonly value?: string }) {
     authLoginCalls++
     return { size: body.value?.length ?? 0 }
+  }
+
+  @Post("/api/skill-hub/uploads")
+  async receiveHubUpload(@Req() request: Request) {
+    let size = 0
+    for await (const chunk of request) size += chunk.length
+    return { parsed: request.body !== undefined, size }
   }
 
   @Post("/api/skill-repositories/import")
@@ -92,6 +100,16 @@ describe("HTTP body parser configuration", () => {
       .expect(413)
 
     expect(authLoginCalls).toBe(0)
+  })
+
+  it("leaves Hub upload bodies unread for authentication and route-local limits", async () => {
+    const raw = JSON.stringify({ value: "x".repeat(2 * 1024 * 1024) })
+    const response = await request(app.getHttpServer())
+      .post("/API/SKILL-HUB/UPLOADS/")
+      .set("content-type", "application/json")
+      .send(raw)
+      .expect(201)
+    expect(response.body).toEqual({ parsed: false, size: Buffer.byteLength(raw) })
   })
 
   it.each([
