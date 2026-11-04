@@ -515,12 +515,12 @@ function ProjectListEditor({ projects, onSave, onAddProject, onRefresh }: Projec
       <SettingsSectionHeading>项目和知识库</SettingsSectionHeading>
       <SettingsGroup sectionClassName="p-0">
         {projects.length > 0 ? (
-          <Table className="min-w-[760px] table-fixed">
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[15rem] px-4">名称</TableHead>
                 <TableHead>位置</TableHead>
-                <TableHead className="w-[15rem] px-4 text-right">操作</TableHead>
+                <TableHead className="w-68 px-4 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

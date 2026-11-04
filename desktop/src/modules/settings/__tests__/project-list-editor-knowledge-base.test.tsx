@@ -274,7 +274,10 @@ describe("ProjectListEditor knowledge base actions", () => {
       },
     ])
 
-    expect(document.querySelector("table")).toBeTruthy()
+    const table = document.querySelector("table")
+    expect(table).toBeTruthy()
+    expect(table?.className).toContain("table-fixed")
+    expect(table?.className).not.toMatch(/\bmin-w-/)
     expect(document.body.textContent).toContain("名称")
     expect(document.body.textContent).toContain("位置")
     expect(document.body.textContent).toContain("/Users/example/projects/app")
