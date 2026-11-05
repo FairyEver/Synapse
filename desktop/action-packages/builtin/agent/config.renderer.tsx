@@ -36,6 +36,7 @@ export function AgentConfigForm({
   onChange,
   projects = [],
   triggerVariables = [],
+  triggerTitle,
   fieldErrors,
   onAddProject,
 }: {
@@ -45,6 +46,7 @@ export function AgentConfigForm({
   readonly fieldErrors?: ConfigurationFieldErrors
   readonly onAddProject?: () => void
   readonly triggerVariables?: readonly AutomationTriggerVariableDescriptor[]
+  readonly triggerTitle?: string
 }) {
   const providerErrors = fieldErrors?.modelTier && !fieldErrors.providerId ? { ...fieldErrors, providerId: fieldErrors.modelTier } : fieldErrors
   const advancedExpanded = Boolean(fieldErrors?.timeoutMins || fieldErrors?.sessionPolicy)
@@ -144,7 +146,7 @@ export function AgentConfigForm({
         </Field>
       </div>
 
-      <ActionPromptField fieldErrors={fieldErrors} id="task-action-agent-prompt" value={value.prompt} variables={triggerVariables}
+      <ActionPromptField fieldErrors={fieldErrors} id="task-action-agent-prompt" value={value.prompt} variables={triggerVariables} triggerTitle={triggerTitle}
         onChange={(prompt) => onChange({ ...value, prompt })} />
 
       <Collapsible open={advancedOpen || advancedExpanded} onOpenChange={setAdvancedOpen} className="border-t pt-4">

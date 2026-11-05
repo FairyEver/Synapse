@@ -235,7 +235,7 @@ describe("AutomationEditorApp", () => {
       .toContain("Agent")
   })
 
-  it("expands trigger variables inline and copies a static template", async () => {
+  it("opens trigger variables in a dialog and copies a static template", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
@@ -250,12 +250,12 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("Cron")?.click()
     })
     await act(async () => {
-      findButtonContaining("变量")?.click()
+      document.querySelector<HTMLButtonElement>('[aria-label="查看触发变量"]')?.click()
     })
 
-    const dialog = document.querySelector('[aria-label="Cron 变量"]')
-    expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(dialog?.textContent).toContain("Cron 变量")
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog).not.toBeNull()
+    expect(dialog?.textContent).toContain("来自「Cron」")
     expect(dialog?.textContent).toContain("触发信息")
     expect(dialog?.textContent).toContain("触发时间")
     expect(dialog?.textContent).toContain("{{trigger.triggeredAt}}")
@@ -284,17 +284,18 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("Cron")?.click()
     })
     await act(async () => {
-      findButtonContaining("变量")?.click()
+      document.querySelector<HTMLButtonElement>('[aria-label="查看触发变量"]')?.click()
     })
 
+    await act(async () => { findButtonContaining("全部")?.click() })
     const searchInput = document.querySelector<HTMLInputElement>('input[aria-label="搜索变量"]')
     await act(async () => {
       if (!searchInput) return
       changeInput(searchInput, "timezone")
     })
 
-    const dialog = document.querySelector('[aria-label="Cron 变量"]')
-    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog).not.toBeNull()
     expect(dialog?.textContent).toContain("{{trigger.timezone}}")
     expect(dialog?.textContent).toContain("时区")
     expect(dialog?.textContent).not.toContain("{{trigger.automationName}}")
@@ -315,21 +316,17 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("Webhook")?.click()
     })
     await act(async () => {
-      findButtonContaining("变量")?.click()
+      document.querySelector<HTMLButtonElement>('[aria-label="查看触发变量"]')?.click()
     })
 
-    const dialog = document.querySelector('[aria-label="Webhook 变量"]')
-    expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(dialog?.textContent).toContain("Webhook 变量")
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog).not.toBeNull()
+    expect(dialog?.textContent).toContain("来自「Webhook」")
     expect(dialog?.textContent).toContain("事件内容")
     expect(dialog?.textContent).toContain("完整 Webhook")
     expect(dialog?.textContent).toContain("{{trigger.payload}}")
-    expect(dialog?.textContent).toContain("动态路径")
-    expect(dialog?.textContent).toContain("{{trigger.request.body.<path>}}")
-    expect(Array.from(dialog?.querySelectorAll('[data-slot="badge"]') ?? [])
-      .filter((badge) => badge.textContent === "6")).toHaveLength(1)
-    expect(Array.from(dialog?.querySelectorAll('[data-slot="badge"]') ?? [])
-      .filter((badge) => badge.textContent === "17")).toHaveLength(1)
+    expect(dialog?.textContent).toContain("可指定路径")
+    expect(dialog?.textContent).toContain("{{trigger.request.body}}")
 
     await act(async () => {
       findButtonContaining("{{trigger.payload}}")?.click()
@@ -337,8 +334,11 @@ describe("AutomationEditorApp", () => {
 
     expect(writeText).toHaveBeenCalledWith("{{trigger.payload}}")
 
-    const bodyPathInput = document.querySelector<HTMLInputElement>('input[aria-label="请求 Body 路径"]')
-    expect(bodyPathInput?.placeholder).toBe("字段路径")
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[aria-label="设置 请求 Body"]')?.click()
+    })
+    const bodyPathInput = document.querySelector<HTMLInputElement>('input[aria-label="请求 Body 字段路径"]')
+    expect(bodyPathInput).not.toBeNull()
     await act(async () => {
       if (!bodyPathInput) return
       changeInput(bodyPathInput, "repository.full_name")
@@ -362,7 +362,7 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("Cron")?.click()
     })
     await act(async () => {
-      findButtonContaining("变量")?.click()
+      document.querySelector<HTMLButtonElement>('[aria-label="查看触发变量"]')?.click()
     })
     await act(async () => {
       findButtonContaining("{{trigger.triggeredAt}}")?.click()

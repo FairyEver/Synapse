@@ -16,6 +16,7 @@ export type ActionConfigFormComponent<TConfig extends ActionConfig = ActionConfi
   readonly fieldErrors?: Readonly<Record<string, string>>
   readonly onAddProject?: () => void
   readonly triggerVariables?: readonly AutomationTriggerVariableDescriptor[]
+  readonly triggerTitle?: string
 }) => ReactElement
 
 export type ActionResultViewComponent = (props: {

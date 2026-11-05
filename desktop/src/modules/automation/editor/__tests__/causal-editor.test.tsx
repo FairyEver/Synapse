@@ -83,6 +83,26 @@ describe("causal automation configuration", () => {
     await act(async () => button("展开执行配置").click())
     expect(document.querySelector<HTMLTextAreaElement>("#task-action-agent-prompt")?.value).toBe("保留修改后的任务")
   })
+  it("keeps the trigger variable entry in its heading when the configuration is collapsed", async () => {
+    await renderEditor()
+    const entry = button("查看触发变量")
+    expect(entry.closest('[data-layout="automation-editor-trigger-summary"]')).not.toBeNull()
+    await act(async () => button("收起触发配置").click())
+    await act(async () => entry.click())
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect(dialog.textContent).toContain("来自「Cron」")
+    expect(dialog.textContent).toContain("{{trigger.triggeredAt}}")
+    expect(document.querySelector('[data-layout="automation-editor-trigger-panel"]')!.contains(dialog)).toBe(false)
+  })
+  it("offers variable inspection for a trigger that has no configuration form", async () => {
+    api.get.mockResolvedValue({ ...item, trigger: { type: "builtin.mail-internal-received", config: {} } })
+    await renderEditor()
+    expect(button("收起触发配置")).toBeUndefined()
+    await act(async () => button("查看触发变量").click())
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect(dialog.textContent).toContain("来自「收到站内信」")
+    expect(dialog.textContent).toContain("{{trigger.payload.body}}")
+  })
   it("uses the saved item for history while keeping the draft in the configuration tab", async () => {
     await renderEditor()
     await act(async () => changePrompt("未保存的任务"))

@@ -109,16 +109,19 @@ export function TriggerExecutorBuilder({ step, conditions, fieldErrors, onAddPro
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          <div className="flex shrink-0 items-center gap-1">
+          {isTrigger && trigger ? <TriggerVariablesDialog key={trigger.manifest.id} triggerTitle={trigger.manifest.title} variables={trigger.manifest.variables ?? []} /> : null}
           {TriggerForm || ConfigForm ? <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" size="icon" aria-label={`${expanded ? "收起" : "展开"}${isTrigger ? "触发配置" : "执行配置"}`}>
               {expanded ? <ChevronUp /> : <ChevronDown />}
             </Button>
           </CollapsibleTrigger> : null}
+          </div>
         </div> : null}
         {selected && (TriggerForm || ConfigForm) ? <CollapsibleContent forceMount hidden={!expanded}>
           <div data-layout={`automation-editor-${step}-config`} className="grid min-w-0 gap-6 border-t p-6 [&_[data-slot=field]]:min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full">
             {TriggerForm ? <TriggerForm conditions={conditions} fieldErrors={fieldErrors} value={parseConfig(trigger!.manifest.id, config, true)} onChange={value => onTriggerChange(trigger!.manifest.id, value)} /> : null}
-            {ConfigForm ? <ConfigForm fieldErrors={fieldErrors} onAddProject={onAddProject} value={parseConfig(executor!.manifest.id, config, false)} projects={projects} triggerVariables={trigger?.manifest.variables ?? []}
+            {ConfigForm ? <ConfigForm fieldErrors={fieldErrors} onAddProject={onAddProject} value={parseConfig(executor!.manifest.id, config, false)} projects={projects} triggerVariables={trigger?.manifest.variables ?? []} triggerTitle={trigger?.manifest.title}
               onChange={value => onExecutorChange(executor!.manifest.id, value)} /> : null}
           </div>
         </CollapsibleContent> : !selected ? <div className="grid min-w-0 gap-6 p-6">
@@ -136,7 +139,6 @@ export function TriggerExecutorBuilder({ step, conditions, fieldErrors, onAddPro
           </div>)}
           {!isTrigger && !trigger ? <p className="border-t px-2.5 pt-4 text-xs text-muted-foreground">先选择触发条件</p> : null}
         </div> : null}
-        {isTrigger && trigger ? <div className="px-6 pb-4"><TriggerVariablesDialog key={trigger.manifest.id} triggerTitle={trigger.manifest.title} variables={trigger.manifest.variables ?? []} /></div> : null}
       </Collapsible>
       <AlertDialog open={pendingChoice !== null} onOpenChange={open => { if (!open) setPendingChoice(null) }}>
         <AlertDialogContent>

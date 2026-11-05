@@ -8,7 +8,7 @@ import { Checkbox } from "../../../src/components/ui/checkbox"
 import type { ActionConfigFormComponent } from "../../../src/action-runtime/action-registry"
 import type { ClaudeCodeActionConfig } from "./schema"
 
-export const ClaudeCodeConfigForm: ActionConfigFormComponent<ClaudeCodeActionConfig> = ({ value, onChange, projects = [], triggerVariables = [], fieldErrors, onAddProject }) => (
+export const ClaudeCodeConfigForm: ActionConfigFormComponent<ClaudeCodeActionConfig> = ({ value, onChange, projects = [], triggerVariables = [], triggerTitle, fieldErrors, onAddProject }) => (
   <FieldGroup>
     <Field>
       <FieldLabel htmlFor="task-action-claude-code-project">项目</FieldLabel>
@@ -27,7 +27,7 @@ export const ClaudeCodeConfigForm: ActionConfigFormComponent<ClaudeCodeActionCon
         {!projects.length ? <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-muted-foreground">尚无项目</span><Button type="button" variant="outline" onClick={onAddProject ?? requestOpenSettingsTab}>{onAddProject ? "添加项目" : "打开设置"}</Button></div> : null}
       </FieldContent>
     </Field>
-    <ActionPromptField fieldErrors={fieldErrors} id="task-action-claude-code-prompt" value={value.prompt} variables={triggerVariables}
+    <ActionPromptField fieldErrors={fieldErrors} id="task-action-claude-code-prompt" value={value.prompt} variables={triggerVariables} triggerTitle={triggerTitle}
       placeholder="输入提示词" onChange={prompt => onChange({ ...value, prompt })} />
     <Field orientation="horizontal">
       <Checkbox id="task-action-claude-code-single-run" checked={value.singleRun ?? false}
