@@ -8,6 +8,7 @@ import type { ClaudeCodeActionConfig } from "./schema"
 export type LaunchAutomationClaudeCode = (input: {
   readonly projectId: string
   readonly initialPrompt: string
+  readonly singleRun?: boolean
   readonly abortSignal: AbortSignal
   readonly actor: ActionRuntimeContext["actor"]
   readonly onCreated: (sessionId: string) => Promise<void>
@@ -31,7 +32,7 @@ export function createClaudeCodeAction(deps: { readonly launch: LaunchAutomation
         const prompt = renderActionTemplate(config.prompt, context.templateVariables)
         if (!prompt.trim()) throw new Error("empty_prompt")
         await deps.launch({
-          projectId: config.projectId, initialPrompt: prompt, abortSignal: signal, actor: context.actor,
+          projectId: config.projectId, initialPrompt: prompt, singleRun: config.singleRun, abortSignal: signal, actor: context.actor,
           onCreated: async sessionId => {
             outputs = { projectId: config.projectId, sessionId }
             if (!context.persistOutputs) throw new Error("run_persistence_unavailable")

@@ -130,6 +130,61 @@ function launchDirectories(): readonly string[] {
 }
 
 describe("Claude Code terminal launch", () => {
+  it.each([true, false, undefined])("runs singleRun=%s until the process exits and only then removes its terminal", async singleRun => {
+    const prompt = "Review one task"
+    let state = terminalStoreStateSchema.parse({ groups: [], sessions: [], output: [] })
+    const exits: Array<(event: { exitCode: number; signal?: number }) => void> = []
+    const kill = vi.fn()
+    const spawnPty = vi.fn(options => {
+      if (options.shellArgs.includes("--settings")) {
+        const settingsPath = options.shellArgs[options.shellArgs.indexOf("--settings") + 1]
+        const hook = spawnSync(process.execPath, [path.join(path.dirname(settingsPath), "prompt-submitted.cjs")], {
+          env: options.env, input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), timeout: 5000,
+        })
+        if (hook.error || hook.status !== 0) throw hook.error ?? new Error("Hook failed")
+      }
+      return {
+        onData: () => ({ dispose() {} }),
+        onExit: (callback: (event: { exitCode: number; signal?: number }) => void) => { exits.push(callback); return { dispose() {} } },
+        write() {}, resize() {}, kill,
+      }
+    })
+    const terminal = createTerminalService({
+      store: { loadState: async () => state, saveState: async next => { state = terminalStoreStateSchema.parse(next) } },
+      spawnPty, resolveDefaultShell: () => process.execPath, resolveDefaultCwd: () => process.cwd(),
+    })
+    await terminal.start()
+    const h = harness({ providers: [configured], projectPath: process.cwd() })
+    runtimeBinaryMock.resolveBundledClaudeExecutable.mockReturnValue(process.execPath)
+    const resolve = <T,>(id: string): T => id === "core.terminal" ? terminal as T : h.resolve<T>(id)
+    try {
+      const other = await terminal.createSession({})
+      const session = await createClaudeCodeTerminalSession(resolve, { projectId: "project-1", initialPrompt: prompt, singleRun })
+      const args = spawnPty.mock.calls[1]![0].shellArgs
+      expect(args.includes("--print")).toBe(singleRun === true)
+      expect(args.slice(-2)).toEqual(["--", prompt])
+      const settingsPath = args[args.indexOf("--settings") + 1]
+      expect(existsSync(settingsPath)).toBe(true)
+      expect(terminal.listSessions().map(item => item.id)).toContain(session.id)
+      expect(kill).not.toHaveBeenCalled()
+      exits[1]!({ exitCode: 0 })
+      await vi.waitFor(() => expect(existsSync(settingsPath)).toBe(false))
+      expect(terminal.listSessions().map(item => item.id)).toEqual([other.id])
+      expect(JSON.stringify(terminal.listWorkspaces())).not.toContain(session.id)
+      expect(kill).not.toHaveBeenCalled()
+    } finally { await terminal.stop() }
+  })
+
+  it("rejects single-run mode without an initial prompt or when resuming a conversation", async () => {
+    const { resolve, createSession } = harness({ providers: [configured] })
+    await expect(createClaudeCodeTerminalSession(resolve, { projectId: "project-1", singleRun: true })).rejects.toMatchObject({ code: "invalid_input" })
+    await expect(createClaudeCodeTerminalSession(resolve, {
+      projectId: "project-1", singleRun: true,
+      continuation: { phase: "launching", createdAt: "2026-11-05T00:00:00Z", sdkSessionId: "sdk-original", cwd: "/repo", providerId: "preferred", model: "env-default", permissionMode: "default" },
+    })).rejects.toMatchObject({ code: "invalid_input" })
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
   it("submits through the real terminal environment validator without persisting internal receipt values", async () => {
     const prompt = "Review through the real TerminalService"
     let state = terminalStoreStateSchema.parse({ groups: [], sessions: [], output: [] })

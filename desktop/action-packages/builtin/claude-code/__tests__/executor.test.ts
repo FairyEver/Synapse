@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 import { createClaudeCodeAction } from "../executor.main"
 import type { ActionExecutionInput } from "../../../../electron/action-runtime/action-registry"
+import { claudeCodeActionConfigSchema } from "../schema"
+import { claudeCodeActionManifest } from "../manifest"
 vi.mock("../../../../electron/services/log-store", () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
 
 function input(signal = new AbortController().signal): ActionExecutionInput<{ projectId: string; prompt: string }> {
@@ -12,6 +14,23 @@ function input(signal = new AbortController().signal): ActionExecutionInput<{ pr
 }
 
 describe("Claude Code automation action", () => {
+  it("keeps legacy tasks interactive and accepts only a boolean single-run option", () => {
+    expect(claudeCodeActionConfigSchema.parse({ projectId: "p1", prompt: "Review" })).toEqual({ projectId: "p1", prompt: "Review" })
+    expect(claudeCodeActionManifest.defaultConfig).toMatchObject({ singleRun: false })
+    expect(claudeCodeActionConfigSchema.parse({ projectId: "p1", prompt: "Review", singleRun: true }).singleRun).toBe(true)
+    expect(() => claudeCodeActionConfigSchema.parse({ projectId: "p1", prompt: "Review", singleRun: "true" })).toThrow()
+  })
+
+  it.each([true, false, undefined])("passes singleRun=%s without changing submission-based completion", async singleRun => {
+    const request = { ...input(), config: { ...input().config, singleRun } }
+    const launch = vi.fn(async options => {
+      expect(options.singleRun).toBe(singleRun)
+      await options.onCreated("s1")
+      return { id: "s1" }
+    })
+    const result = await createClaudeCodeAction({ launch }).execute(request)
+    expect(result).toMatchObject({ status: "success", summary: "已启动 Claude Code 并提交提示词" })
+  })
   it("saves the association before launch and succeeds only after submission confirmation", async () => {
     let confirm!: () => void
     const confirmation = new Promise<void>(resolve => { confirm = resolve })

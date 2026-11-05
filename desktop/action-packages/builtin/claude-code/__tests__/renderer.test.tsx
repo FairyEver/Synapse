@@ -23,11 +23,32 @@ describe("Claude Code automation renderer", () => {
     expect(html).toContain("打开终端")
   })
 
-  it("configures only the target project and initial prompt", () => {
+  it("leaves legacy tasks unchecked and lets the user enable and disable single-run mode", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    root = createRoot(container)
+    const change = vi.fn()
+    const render = async (singleRun?: boolean) => {
+      await act(async () => root!.render(<ClaudeCodeConfigForm value={{ projectId: "p1", prompt: "Review", singleRun }} onChange={change} />))
+    }
+    await render()
+    const checkbox = container.querySelector<HTMLButtonElement>('[role="checkbox"]')!
+    expect(checkbox).not.toBeNull()
+    expect(container.querySelector(`label[for="${checkbox.id}"]`)?.textContent).toBe("单次模式")
+    expect(checkbox.getAttribute("aria-checked")).toBe("false")
+    await act(async () => checkbox.click())
+    expect(change).toHaveBeenLastCalledWith({ projectId: "p1", prompt: "Review", singleRun: true })
+    await render(true)
+    expect(checkbox.getAttribute("aria-checked")).toBe("true")
+    await act(async () => checkbox.click())
+    expect(change).toHaveBeenLastCalledWith({ projectId: "p1", prompt: "Review", singleRun: false })
+  })
+  it("configures the target project, prompt and single-run mode without provider overrides", () => {
     const html = renderToStaticMarkup(<ClaudeCodeConfigForm value={{ projectId: "", prompt: "Review" }} onChange={() => undefined} projects={[]}
       triggerVariables={[{ key: "trigger.payload.subject", label: "主题" }]} />)
     expect(html).toContain("项目")
     expect(html).toContain("提示词")
+    expect(html).toContain("单次模式")
     expect(html).not.toContain("供应商")
     expect(html).not.toContain("权限模式")
     expect(html).not.toContain("会话策略")

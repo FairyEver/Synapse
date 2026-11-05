@@ -337,12 +337,12 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-24：邮箱地址弹层新增「写邮件」，通过私有 `MailOpenRequest.compose.recipient` 预填新信收件人，并按账号及收件地址复用窗口。复用现有 draft.prepare/commit，无新增公开工具、App、Dock、Workflow、Automation 或 Deep Link；mail 44 项公开动作及全局数量不变，MCP schema 和系统 Skill 的新信创建契约不变。
 
-2026-11-05 自动化注销命令、Shell 脚本、HTTP、工作流、JavaScript、Node.js 六个 Automation Action，随后按用户确认新增独立 Claude Code 执行器。当前 Automation Action 共 2 个：`builtin.agent`（Agent Runtime 执行并等待结果）、`builtin.claude-code`（仅项目/提示词，沿用触发时默认设置，后台创建交互式终端，确认首条提交即结束自动化）。主进程、Renderer 与 MCP 发现一致；JS/Node 能力包仍仅保留原 capability 和 Workflow Node，Automation surface 为空。后台 Worker、变更监听和仓库写队列共用支持清单，删除退役配置并保留两个受支持类型（含待修复配置）及运行历史；恢复后继续清理。运行记录按原执行器类型提供精确终端入口，失效不重建。不新增 IPC、MCP 工具、System App、Dock、Workflow Node 或 Deep Link；Automation 仍为 14 / 14。
+2026-11-05 自动化注销命令、Shell 脚本、HTTP、工作流、JavaScript、Node.js 六个 Automation Action，随后按用户确认新增独立 Claude Code 执行器。当前 Automation Action 共 2 个：`builtin.agent`（Agent Runtime 执行并等待结果）、`builtin.claude-code`（项目/提示词及可选 `singleRun`，沿用触发时默认设置，默认交互式，勾选单次模式使用原生 `--print` 并在进程退出后清理终端；确认首条提交即结束自动化）。主进程、Renderer 与 MCP 发现一致；JS/Node 能力包仍仅保留原 capability 和 Workflow Node，Automation surface 为空。后台 Worker、变更监听和仓库写队列共用支持清单，删除退役配置并保留两个受支持类型（含待修复配置）及运行历史；恢复后继续清理。运行记录按原执行器类型提供精确终端入口，失效不重建。不新增 IPC、MCP 工具、System App、Dock、Workflow Node 或 Deep Link；Automation 仍为 14 / 14。
 
 | Automation Action | 配置 | 完成条件 |
 | --- | --- | --- |
 | `builtin.agent` | 项目、供应商/模型、权限、提示词和会话策略等 | Agent Runtime 运行结束 |
-| `builtin.claude-code` | 项目、提示词 | 初始提示词提交回执；CLI 会话继续运行 |
+| `builtin.claude-code` | 项目、提示词、单次模式（可选，默认关闭） | 初始提示词提交回执；默认保留交互式 CLI，单次模式在 CLI 自然退出后清理终端 |
 
 
 ## 自动化收信触发器（2026-11-05）

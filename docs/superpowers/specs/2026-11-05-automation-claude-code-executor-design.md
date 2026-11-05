@@ -1,5 +1,7 @@
 # 自动化 Claude Code 执行器设计
 
+2026-11-05 单次模式补充：用户已确认增加可选 `singleRun`，默认仍为下述交互式行为；启用时改用原生 `--print`，CLI 退出后复用现有终端清理。该补充覆盖本文「配置仅包含项目和提示词」「不用 --print」和「终端持续保留」在启用单次模式时的限制；首条提交即结束自动化等其余边界不变。详见 [单次模式设计](2026-11-05-automation-claude-code-single-run-design.md)。
+
 日期：2026-11-05。状态：用户已确认并完成源码实现；自动验证与实机验收边界见 `docs/agent-guides/automation-claude-code-acceptance.md`。
 
 已完成独立实施可行性审阅，未发现必须补充的产品决策；该审阅不等于真实 CLI 或界面验收。

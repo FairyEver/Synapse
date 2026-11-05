@@ -81,6 +81,8 @@ export interface CreateClaudeCodeTerminalSessionInput {
   readonly continuation?: SynapseAgentClaudeCodeContinuation
   readonly onCreated?: (sessionId: string) => Promise<void>
   readonly initialPrompt?: string
+  /** Automation-only native print mode; the terminal's existing process-exit cleanup closes it. */
+  readonly singleRun?: boolean
   readonly abortSignal?: AbortSignal
   readonly actor?: ActorIdentity
   /**
@@ -124,6 +126,9 @@ export async function createClaudeCodeTerminalSession(
   input: CreateClaudeCodeTerminalSessionInput,
 ): Promise<TerminalSession> {
   input.abortSignal?.throwIfAborted()
+  if (input.singleRun && (input.initialPrompt === undefined || input.continuation)) {
+    throw new ClaudeCodeTerminalError("invalid_input", "单次模式需要新会话的初始提示词。")
+  }
   if (input.initialPrompt !== undefined && (!input.initialPrompt.trim() || input.continuation)) {
     throw new ClaudeCodeTerminalError("invalid_input", "请为新会话填写提示词。")
   }
@@ -204,6 +209,7 @@ export async function createClaudeCodeTerminalSession(
       cwd: input.continuation?.cwd ?? project.localPath,
       shell: executablePath,
       args: [
+        ...(input.singleRun ? ["--print"] : []),
         ...(input.continuation ? ["--resume", input.continuation.sdkSessionId] : []),
         "--settings", settingsPath,
         ...(tierModel ? ["--model", tierModel] : []),
