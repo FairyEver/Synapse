@@ -1,3 +1,4 @@
+import { CalendarClock } from "lucide-react"
 import type { RendererAutomationTriggerDefinition } from "../../types.shared"
 import { CronTriggerConfigForm } from "./config.renderer"
 import { validateCronExpression } from "../../../src/automation-triggers/cron-utils"
@@ -9,6 +10,7 @@ import {
 
 export const cronRendererTriggerDefinition = {
   manifest: cronTriggerManifest,
+  icon: CalendarClock,
   summarizeConfig: summarizeCronTriggerConfig,
   validateConfig(config: CronTriggerConfig) {
     const result = validateCronExpression(config.expr)

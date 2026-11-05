@@ -1,3 +1,4 @@
+import { Webhook } from "lucide-react"
 import type { RendererAutomationTriggerDefinition } from "../../types.shared"
 import { WebhookTriggerConfigForm } from "./config.renderer"
 import {
@@ -8,6 +9,7 @@ import {
 
 export const webhookRendererTriggerDefinition = {
   manifest: webhookTriggerManifest,
+  icon: Webhook,
   summarizeConfig: summarizeWebhookTriggerConfig,
   ConfigForm: WebhookTriggerConfigForm,
 } satisfies RendererAutomationTriggerDefinition<WebhookTriggerConfig>

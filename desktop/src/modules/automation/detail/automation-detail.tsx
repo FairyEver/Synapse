@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, Pencil, Play, Power, RefreshCw, Zap } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
+import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
 import { sanitizeUrl } from "@/lib/url-sanitize"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,11 +34,12 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus() }, [item.id])
   const projects = config.global.projects
+  const TriggerIcon = rendererAutomationTriggerRegistry.list().find(trigger => trigger.manifest.id === item.trigger.type)?.icon ?? Zap
   const displayItem = typeof item.executor.config.url === "string"
     ? { ...item, executor: { ...item.executor, config: { ...item.executor.config, url: sanitizeUrl(item.executor.config.url) } } }
     : item
   const sections = [
-    { key: "trigger", title: "触发条件", type: formatAutomationTriggerType(item), summary: formatAutomationTrigger(item), fields: buildAutomationConfigurationFields(item.trigger.config, projects), icon: <Zap /> },
+    { key: "trigger", title: "触发条件", type: formatAutomationTriggerType(item), summary: formatAutomationTrigger(item), fields: buildAutomationConfigurationFields(item.trigger.config, projects), icon: <TriggerIcon /> },
     { key: "executor", title: "执行操作", type: formatAutomationExecutorType(item), summary: formatAutomationExecutor(displayItem), fields: buildAutomationConfigurationFields(item.executor.config, projects), icon: <Play /> },
   ] as const
   const backAction = <SystemAppTopBarActionButton iconOnly aria-label="返回自动化列表" tooltip="返回列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>

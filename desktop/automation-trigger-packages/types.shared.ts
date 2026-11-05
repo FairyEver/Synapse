@@ -1,4 +1,5 @@
 import type { ReactElement } from "react"
+import type { LucideIcon } from "lucide-react"
 import type { z } from "zod"
 
 import type { ActionStoredConfigValidation } from "../action-packages/types"
@@ -86,6 +87,7 @@ export type RendererAutomationTriggerDefinition<
   TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
 > = {
   readonly manifest: AutomationTriggerManifest<TConfig>
+  readonly icon?: LucideIcon
   summarizeConfig(config: TConfig): string
   validateConfig?(config: TConfig): void
   ConfigForm?: AutomationTriggerConfigFormComponent<TConfig>

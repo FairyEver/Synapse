@@ -87,7 +87,10 @@ export function TriggerExecutorBuilder({ step, choosing, onChoosingChange, trigg
         <>
           {type && selected ? <div className="mb-3 flex justify-end"><Button variant="ghost" onClick={() => onChoosingChange(false)}>取消更换</Button></div> : null}
           <GuidedChoices title={title} value={type ?? ""} onSelect={choose}
-            options={options.map(item => ({ value: item.manifest.id, title: item.manifest.title, icon: isTrigger ? <Zap /> : <Play /> }))} />
+            options={options.map(item => {
+              const Icon = isTrigger ? rendererAutomationTriggerRegistry.get(item.manifest.id).icon ?? Zap : Play
+              return { value: item.manifest.id, title: item.manifest.title, icon: <Icon /> }
+            })} />
           {type && !selected ? <p role="alert" className="mt-3 text-sm text-destructive">原{kind}不可用，请重新选择</p> : null}
         </>
       ) : (
