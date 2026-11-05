@@ -24,7 +24,7 @@ import type { AutomationTriggerVariableDescriptor } from "../../../automation-tr
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../src/components/ui/collapsible"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { ProviderModelSelectDialog } from "../../../src/components/provider-model-select-dialog"
-import { formatProviderModelLabel } from "../../../src/lib/provider-model"
+import { useProviderModelLabel } from "../../../src/lib/provider-model"
 import { AgentPermissionModeMenu } from "../../../src/modules/agent/components/permission-mode-menu"
 import { permissionModeLabels } from "../../../src/modules/agent/permission-mode-options"
 import type { SynapseAgentPermissionMode } from "../../../src/types/agent"
@@ -52,6 +52,12 @@ export function AgentConfigForm({
   const advancedExpanded = Boolean(fieldErrors?.timeoutMins || fieldErrors?.sessionPolicy)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const providerModelLabel = useProviderModelLabel(value.providerId ? {
+    providerId: value.providerId,
+    providerName: value.providerName,
+    modelName: value.modelName,
+    modelTier: value.modelTier,
+  } : null)
 
   return (
     <FieldGroup className="@container/config">
@@ -99,12 +105,7 @@ export function AgentConfigForm({
             >
               <span className="truncate">
                 {value.providerId
-                  ? formatProviderModelLabel(
-                    value.providerName ?? value.providerId,
-                    value.modelName,
-                    value.modelTier,
-                    { id: value.providerId },
-                  )
+                  ? providerModelLabel || "读取供应商 + 模型..."
                   : "选择供应商 + 模型"}
               </span>
               <ChevronDown className="size-4 text-muted-foreground" />

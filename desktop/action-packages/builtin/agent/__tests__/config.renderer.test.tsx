@@ -7,9 +7,34 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { AgentConfigForm } from "../config.renderer"
 import type { AgentActionConfig } from "../schema"
 
+const bridgeMocks = vi.hoisted(() => ({ listProviders: vi.fn().mockResolvedValue([]) }))
+vi.mock("../../../../src/lib/electron-bridge", () => ({
+  requireSynapseBridge: () => ({ agent: { listProviders: bridgeMocks.listProviders } }),
+}))
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 describe("AgentConfigForm", () => {
+  it("resolves provider and model labels for MCP configurations without display snapshots", async () => {
+    bridgeMocks.listProviders.mockResolvedValue([{
+      id: "provider-1", name: "测试供应商", category: "custom", source: "user", active: true,
+      archived: false, apiKeyField: "ANTHROPIC_AUTH_TOKEN", createdAt: "2026-11-06T00:00:00Z", updatedAt: "2026-11-06T00:00:00Z",
+      model: "test-model", haikuModel: "test-haiku", sonnetModel: "test-sonnet", opusModel: "test-opus",
+    }])
+    const value: AgentActionConfig = {
+      projectId: "project-1", agentType: "claude-code", providerId: "provider-1", modelTier: "haiku",
+      mode: "dontAsk", prompt: "Reply OK", sessionPolicy: "fresh",
+    }
+    const onChange = vi.fn()
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<AgentConfigForm value={value} onChange={onChange} />) })
+
+    expect(document.querySelector("#task-action-agent-provider")?.textContent).toBe("测试供应商 test-haiku")
+    expect(onChange).not.toHaveBeenCalled()
+    await act(async () => { root.unmount() })
+  })
+
   afterEach(() => {
     document.body.innerHTML = ""
     vi.clearAllMocks()
