@@ -33,7 +33,19 @@
 | 新增独立「Claude Code」执行器 | 配置只有项目与提示词，完成条件和终端入口明确；可复用手动启动路径 | 增加执行器注册、表单和结果视图 | 用户已选择 |
 | 现有「Agent」增加终端模式 | 共用部分配置和注册 | 同一执行器内有不同配置、完成条件、结果入口与生命周期 | 不采用 |
 
-首条提示词优先通过 CLI 原生交互式启动参数传入，沿用统一内置 CLI 启动入口；不用后台 SDK 的单次查询替代交互式终端，也不通过固定延迟后模拟键入与回车投递。
+首条提示词采用 CLI 原生交互式启动参数传入，沿用统一内置 CLI 启动入口；不用后台 SDK 的单次查询替代交互式终端，也不通过固定延迟后模拟键入与回车投递。
+
+### 启动就绪与首条提示词
+
+2026-11-05 补充核对：仓库当前安装的 SDK 为 `0.3.278`，其内置 Claude Code 为 `2.1.278`。已仅执行该内置二进制的 `--version` 和 `--help`，帮助明确声明 `claude [options] [command] [prompt]`、默认启动交互式会话，`prompt` 为首条提示词；与官方 CLI reference 一致。尚未启动真实交互会话或发送模型请求。
+
+本次无需由 Synapse 先等待终端输入框就绪，再把提示词写入 PTY。启动时将整段提示词作为一个独立 argv 参数交给 CLI，初始化和首条提示词处理的顺序由 Claude Code 自己管理。示意命令为 `claude "提示词"`；实际实现继续使用现有内置可执行文件、settings、模型和权限参数，以 argv 数组启动，不拼 shell 命令。
+
+启动流程为：准备关联与回执观察 → 携带首条提示词启动交互式 CLI → CLI 自行初始化 → 收到对应首条 `UserPromptSubmit` 回执 → 自动化成功，CLI 保持运行。
+
+`SessionStart` 只作为启动阶段的可选诊断，不能把该 Hook 的触发当成完整初始化结束、所有启动 Hook 完成或终端输入框可用的保证；不在收到它后模拟回车或重复发送启动参数里已有的提示词。SDK 的程序化查询与 CLI 的 `--print` / streaming JSON 不作为本次交互终端的输入协议。
+
+首次使用、登录、项目信任确认或用户自定义启动 Hook 可能阻碍 CLI 继续启动；携带初始参数不代表能绕过这些阶段。没有首条提交回执就不得成功，按本设计的确认超时处理并保留终端供接手。
 
 ## 配置与注册
 
@@ -128,5 +140,6 @@
 - 现行边界：`docs/superpowers/specs/2026-11-05-automation-agent-only-design.md` 与 `docs/agents/module-boundaries.md`。
 - [Claude Code 官方 CLI reference](https://code.claude.com/docs/en/cli-reference)：交互式启动可携带初始提示词，与一次性查询后退出模式不同。
 - [Claude Code 官方 Hooks reference](https://code.claude.com/docs/en/hooks#userpromptsubmit)：`UserPromptSubmit` 在模型处理前触发，可观察提交生命周期；不代表模型处理成功或其他 Hook 不阻断。
+- [Claude Agent SDK 官方 overview](https://code.claude.com/docs/en/agent-sdk/overview)：SDK 面向程序化嵌入；CLI 提供终端交互界面。本次复用交互式 CLI 启动参数，不新增 SDK 查询。
 
 以上 CLI 能力已对照官方说明；实现前仍须核对仓库内置版本的实际能力，不能默认最新版文档中的新增字段已被内置版本支持。
