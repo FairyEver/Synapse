@@ -163,7 +163,12 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
   async function save(enable: boolean, leaveAfterSave = false) {
     if (savingRef.current || choosingType || loadState.status !== "ready") return
     const { draft, item } = loadState
-    const errors = validateAutomationDraftFields(draft)
+    const errors = { ...validateAutomationDraftFields(draft) }
+    try {
+      validateChangedTriggerVariables(draft, previousTriggerTypes)
+    } catch (variableError) {
+      errors["executor.prompt"] = saveErrorMessage(variableError)
+    }
     setFieldErrors(errors)
     if (Object.keys(errors).length) { setError("请检查标出的配置"); return }
     const pendingLeave = leaveAfterSave ? leaveKind : null
@@ -176,7 +181,6 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
     setSaving(true)
     setError(null)
     try {
-      validateChangedTriggerVariables(draft, previousTriggerTypes)
       const saved = item
         ? await bridge.item.update({ id: item.id, patch: buildAutomationUpdateInputFromDraft(draft, enable ? true : undefined) })
         : await bridge.item.create(buildAutomationCreateInputFromDraft(draft, enable))

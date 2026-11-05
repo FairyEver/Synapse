@@ -139,6 +139,30 @@ describe("inline automation editing", () => {
     expect(document.querySelector('[role="alert"]')?.textContent).toContain("trigger.request.body.id")
     expect(api.update).not.toHaveBeenCalled()
   })
+  it.each([
+    ["builtin.agent", "task-action-agent-prompt"],
+    ["builtin.claude-code", "task-action-claude-code-prompt"],
+  ])("expands and focuses the %s prompt containing a replaced trigger variable", async (executorType, promptId) => {
+    const value = item()
+    value.trigger = { type: "builtin.webhook", config: { webhookPublicId: "hook-1" } }
+    value.executor = { type: executorType, config: executorType === "builtin.agent"
+      ? { ...value.executor.config, prompt: "source={{trigger.request.body.订单.项目.0.编号}}" }
+      : { projectId: "project-1", prompt: "source={{trigger.request.body.订单.项目.0.编号}}", singleRun: true } }
+    api.get.mockResolvedValueOnce(value)
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })) })
+    await act(async () => { button("Cron").click() })
+    await act(async () => { button("确认更换").click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="收起执行配置"]')!.click() })
+    await act(async () => { button("仅保存").click() })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+    const prompt = document.getElementById(promptId)!
+    expect(prompt.getAttribute("aria-invalid")).toBe("true")
+    expect(document.activeElement).toBe(prompt)
+    expect(document.getElementById(prompt.getAttribute("aria-describedby")!)?.textContent).toContain("trigger.request.body.订单.项目.0.编号")
+    expect(api.update).not.toHaveBeenCalled()
+  })
+
   it.each(["window", "dock", "launcher"] as const)("uses one shared header in the %s host", async (host) => {
     const onBack = vi.fn()
     const form = <AutomationEditorForm mode={{ mode: "create" }} onBack={onBack} />
