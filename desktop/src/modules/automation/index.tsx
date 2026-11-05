@@ -103,16 +103,19 @@ function AutomationModule() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [filter, setFilter] = useState("all")
   const returnTarget = useRef<string | null>(null)
-  const mutationReturnFocusRef = useRef<{ itemId: string; element: HTMLElement; fallback: "search" | "create" } | null>(null)
+  const mutationReturnFocusRef = useRef<{ itemId: string; element: HTMLElement; fallback: "search" | "create" | "item" } | null>(null)
 
   useEffect(() => {
     const target = mutationReturnFocusRef.current
     if (!target || pendingItemIds.has(target.itemId)) return
     mutationReturnFocusRef.current = null
     if (document.activeElement !== document.body && document.activeElement !== target.element) return
+    const rowButton = target.fallback === "item"
+      ? Array.from(document.querySelectorAll<HTMLElement>("[data-automation-id]")).find(row => row.dataset.automationId === target.itemId)?.querySelector<HTMLButtonElement>("button")
+      : null
     const element = target.element.isConnected && !target.element.matches(":disabled")
       ? target.element
-      : target.fallback === "create" ? deleteFallbackFocusRef.current : searchInputRef.current
+      : target.fallback === "create" ? deleteFallbackFocusRef.current : rowButton ?? searchInputRef.current
     element?.focus()
   }, [pendingItemIds])
 
@@ -292,6 +295,9 @@ function AutomationModule() {
     if (pendingItemIds.has(item.id)) return
     const runId = item.activeRun?.id
     if (!runId) return
+    if (document.activeElement instanceof HTMLElement) {
+      mutationReturnFocusRef.current = { itemId: item.id, element: document.activeElement, fallback: "item" }
+    }
     setPendingItemIds(current => new Set([...current, item.id]))
     try {
       await promise(

@@ -844,6 +844,34 @@ describe("AutomationModule", () => {
     )
   })
 
+  it.each(["stopped", "requested", "failed", "moved"] as const)("restores focus after a %s stop without stealing a moved focus", async scenario => {
+    let current = createItem({ activeRun: { status: "running", id: "run-1" } })
+    mocks.useAutomationItems.mockImplementation(() => ({ items: [current], loading: false, error: null, refresh: vi.fn() }))
+    let settle!: () => void
+    mocks.stopAutomationRun.mockImplementation(() => new Promise((resolve, reject) => {
+      settle = () => {
+        if (scenario === "failed") reject(new Error("test offline"))
+        else {
+          if (scenario !== "requested") current = { ...current, activeRun: undefined }
+          resolve(scenario === "requested" ? { stopped: false, stopRequested: true } : { stopped: true })
+        }
+      }
+    }))
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => root.render(<AutomationModule />))
+    const stop = document.querySelector<HTMLButtonElement>('button[aria-label="停止运行"]')!
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索自动化"]')!
+    stop.focus()
+    await act(async () => stop.click())
+    container.tabIndex = -1
+    container.focus(); container.blur()
+    if (scenario === "moved") search.focus()
+    await act(async () => settle())
+    const rowName = document.querySelector<HTMLButtonElement>("[data-automation-id] button")
+    expect(document.activeElement).toBe(scenario === "moved" ? search : scenario === "stopped" ? rowName : stop)
+  })
+
   it("allows stopping a running automation without opening the editor", async () => {
     const refresh = vi.fn()
     mocks.useAutomationItems.mockReturnValue({
