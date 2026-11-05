@@ -1283,6 +1283,10 @@ function TerminalPane({
     const writePendingChunksThrough = async (throughOutputSeq: number, generation: number) => {
       pendingChunks.sort((left, right) => left.seq - right.seq)
       while (!disposed && generation === projectionGeneration && pendingChunks.length > 0) {
+        // xterm parsing is asynchronous. A resize can be announced while the
+        // previous write is pending; return to the barrier loop before consuming
+        // any output for the new grid, even if its barrier has not arrived yet.
+        if (throughOutputSeq === Number.POSITIVE_INFINITY && announcedSizeRevision > appliedSizeRevision) return
         const chunk = pendingChunks[0]!
         if (chunk.seq > throughOutputSeq) break
         pendingChunks.shift()

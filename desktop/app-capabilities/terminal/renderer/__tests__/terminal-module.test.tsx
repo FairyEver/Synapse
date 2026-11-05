@@ -5107,6 +5107,56 @@ describe("TerminalModule", () => {
     expect(xtermState.instances).toHaveLength(1)
   })
 
+  it.each([false, true])("orders a resize arriving during an unfinished xterm write (barrier delivered: %s)", async (barrierDelivered) => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    const session = createSession({ id: "session-1", groupId: "group-1", lastOutputSeq: 1 })
+    bridgeState.sessions = [session]
+    bridgeState.chunks = [createChunk({ sessionId: session.id, seq: 1, data: "snapshot" })]
+    await renderModule()
+    const xterm = xtermState.instances[0]!
+    const operations: string[] = []
+    let finishPreviousOutput: (() => void) | undefined
+    xterm.write.mockImplementation((data: string, callback?: () => void) => {
+      operations.push(data)
+      if (data === "old-geometry") finishPreviousOutput = callback
+      else callback?.()
+    })
+    xterm.resize.mockImplementation(() => operations.push("resize"))
+
+    await act(async () => {
+      bridgeState.dataListener?.({
+        sessionId: session.id,
+        chunk: createChunk({ sessionId: session.id, seq: 2, data: "old-geometry" }),
+      })
+    })
+    expect(finishPreviousOutput).toEqual(expect.any(Function))
+
+    await act(async () => {
+      bridgeState.sessionChangedListener?.({ ...session, cols: 120, rows: 40, sizeRevision: 2 })
+      if (barrierDelivered) {
+        bridgeState.resizedListener?.({
+          sessionId: session.id, cols: 120, rows: 40, sizeRevision: 2, throughOutputSeq: 2,
+        })
+      }
+      bridgeState.dataListener?.({
+        sessionId: session.id,
+        chunk: createChunk({ sessionId: session.id, seq: 3, data: "new-geometry" }),
+      })
+      finishPreviousOutput?.()
+    })
+    if (!barrierDelivered) {
+      // New output must wait if the core emulator's barrier is still in flight.
+      expect(operations).toEqual(["old-geometry"])
+
+      await act(async () => {
+        bridgeState.resizedListener?.({
+          sessionId: session.id, cols: 120, rows: 40, sizeRevision: 2, throughOutputSeq: 2,
+        })
+      })
+    }
+    expect(operations).toEqual(["old-geometry", "resize", "new-geometry"])
+  })
+
   it("does not request startup commands from terminal output", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
