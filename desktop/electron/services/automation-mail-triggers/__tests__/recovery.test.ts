@@ -20,8 +20,10 @@ it("records an unknown result after the dispatch marker commits but creating its
   const row = (await rig.repo.rowsInState(rig.item.id, rig.ctx.identity, "unknown"))[0]
   expect(row).toBeDefined()
   expect((await rig.runs.get(row!.runId!))?.error).toContain("未自动重试")
+  expect(await rig.items.get(rig.item.id)).toMatchObject({ runCount: 1, lastStatus: "failed" })
   await rig.worker.reconcile("restart")
   expect(rig.bodies).toEqual([])
+  expect((await rig.items.get(rig.item.id))?.runCount).toBe(1)
 })
 it("retains preparation failures before dispatch and processes them after the connection recovers", async () => {
   const rig = await fixture(), hydrate = rig.source.hydrate
@@ -35,13 +37,20 @@ it("retains preparation failures before dispatch and processes them after the co
   expect(rig.bodies).toEqual(["body"])
 })
 it("does not invoke an executor for a permanent unavailable body", async () => {
-  const rig = await fixture()
+  const rig = await fixture(), hydrate = rig.source.hydrate
   rig.source.hydrate = async () => { throw Object.assign(new Error("removed"), { code: "UNAVAILABLE" }) }
   await rig.worker.reconcile("removed")
   expect(rig.bodies).toEqual([])
   expect((await rig.runs.listByAutomation(rig.item.id))[0]?.status).toBe("failed")
+  expect(await rig.items.get(rig.item.id)).toMatchObject({ runCount: 1, lastStatus: "failed" })
   await rig.worker.reconcile("duplicate")
   expect(rig.bodies).toEqual([])
+  expect((await rig.items.get(rig.item.id))?.runCount).toBe(1)
+  rig.source.hydrate = hydrate
+  rig.source.scan = async (_ctx, boundary) => ({ receipts: [{ sourceKey: boundary.sourceKey, receiptKey: "two", messageId: "next-letter", receivedAt: "2026-11-05T02:00:00Z" }], nextCursor: "22", complete: true })
+  await rig.worker.reconcile("next letter")
+  expect(rig.bodies).toEqual(["body"])
+  expect(await rig.items.get(rig.item.id)).toMatchObject({ runCount: 2, lastStatus: "success" })
 })
 it("labels a committed run as unknown after generic startup recovery has already finished it", async () => {
   const rig = await fixture(), source = (await rig.repo.sourcesFor(rig.item.mailSubscription!.id))[0]!

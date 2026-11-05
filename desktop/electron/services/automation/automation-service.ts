@@ -766,6 +766,15 @@ export class AutomationService {
     return runPromise
   }
 
+  async finishUnexecutedTriggerRun(runId: string, error: string): Promise<void> {
+    const previous = await this.deps.runs.get(runId)
+    const finished = await this.deps.runs.finish(runId, { status: "failed", error })
+    if (previous?.status === "running") {
+      await this.deps.items.markRunResult(finished.automationId, { status: "failed" })
+    }
+    this.emitAutomationChanged({ automationId: finished.automationId, runId, reason: "run-finished" })
+  }
+
   async runDurableEvent(input: { automationId: string; subscriptionId: string; runId: string; event: AutomationTriggerEvent; identitySignal: AbortSignal; commitStart(): Promise<boolean> }): Promise<{ kind: "busy" | "obsolete" } | { kind: "skipped"; reason: "legacy" | "outside-conditions" } | { kind: "settled"; run: AutomationRun }> {
     if (this.runningItemIds.has(input.automationId)) return { kind: "busy" }
     this.runningItemIds.add(input.automationId)

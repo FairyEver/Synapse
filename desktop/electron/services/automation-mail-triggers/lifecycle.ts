@@ -7,7 +7,7 @@ import type { MailReceiptSource, MailTriggerContext } from "./types"
 
 export interface MailTriggerLifecycleDeps extends Omit<AutomationMailTriggerDeps, "activation" | "context" | "sourceFor" | "automation"> {
   sources: ReadonlyMap<string, MailReceiptSource>
-  automation: Pick<AutomationService, "runDurableEvent" | "attachTriggerLifecycle">
+  automation: Pick<AutomationService, "runDurableEvent" | "finishUnexecutedTriggerRun" | "attachTriggerLifecycle">
   account: Pick<AccountService, "getState" | "getApiBaseUrlForLive" | "onBeforeIdentityChange" | "onStateChanged">
   events: Pick<EventBus, "onType">
   power: { on(event: "suspend" | "resume", listener: () => void): unknown; removeListener(event: "suspend" | "resume", listener: () => void): unknown }

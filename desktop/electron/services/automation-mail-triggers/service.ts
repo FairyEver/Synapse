@@ -12,7 +12,7 @@ import type { DeliveryRow, MailReceiptSource, MailTriggerContext } from "./types
 export interface AutomationMailTriggerDeps {
   repository: MailTriggerRepository; activation: MailTriggerActivation; context(): MailTriggerContext
   sourceFor(type: string): MailReceiptSource | undefined
-  items: Pick<AutomationItemRepository, "list" | "get">; automation: Pick<AutomationService, "runDurableEvent">
+  items: Pick<AutomationItemRepository, "list" | "get">; automation: Pick<AutomationService, "runDurableEvent" | "finishUnexecutedTriggerRun">
   runs: Pick<AutomationRunRepository, "get" | "start" | "finish">
   logger: { warn(message: string, metadata: Record<string, unknown>): void }
 }
@@ -118,7 +118,7 @@ export class AutomationMailTriggerService {
         await this.deps.repository.finishDispatch(row.id, { state: run.status === "success" ? "success" : "failed" }); continue
       }
       if (!run) await this.deps.runs.start(item.id, "trigger", { triggerType: item.trigger.type, executorType: item.executor.type, reservedRunId: row.runId })
-      await this.deps.runs.finish(row.runId, { status: "failed", error: "执行结果不明，未自动重试" })
+      await this.deps.automation.finishUnexecutedTriggerRun(row.runId, "执行结果不明，未自动重试")
       await this.deps.repository.finishDispatch(row.id, { state: "unknown", errorCode: "EXECUTION_UNKNOWN" })
     }
   }
@@ -194,7 +194,7 @@ export class AutomationMailTriggerService {
       if (permanent.has(code)) {
         if (!await this.deps.repository.commitDispatch(row.id, row.revision, runId, row.state as "pending" | "awaiting_metadata")) return false
         await this.deps.runs.start(item.id, "trigger", { triggerType: item.trigger.type, executorType: item.executor.type, reservedRunId: runId })
-        await this.deps.runs.finish(runId, { status: "failed", error: `信件准备失败：${code}` })
+        await this.deps.automation.finishUnexecutedTriggerRun(runId, `信件准备失败：${code}`)
         await this.deps.repository.finishDispatch(row.id, { state: "failed", errorCode: code }); return true
       }
       const delay = [1000, 5000, 30_000, 60_000][Math.min(row.revision, 3)]!
