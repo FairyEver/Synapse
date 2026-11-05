@@ -138,9 +138,9 @@ export function AppLauncherList({
           ))}
         </nav>
 
-        <ScrollArea viewportRef={viewportRef} viewportClassName="scroll-pt-10" className="min-w-0 flex-1">
+        <ScrollArea viewportRef={viewportRef} className="min-w-0 flex-1">
           <div className="mx-auto max-w-4xl px-4 pb-6 @xl/launcher:px-6">
-            <p role="status" className="sticky top-0 z-10 border-b border-border bg-background py-3 text-right text-xs text-muted-foreground">
+            <p role="status" className="sr-only">
               {resultCount} 个应用
             </p>
             {resultCount === 0 && (
