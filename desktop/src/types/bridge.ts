@@ -1717,6 +1717,7 @@ export type SynapseBridge = {
     filePathForDroppedFile: (file: File) => string | null
   }
   shell: {
+    openSkillDirectory: (directoryPath: string) => Promise<void>
     openExternal: (url: string) => Promise<void>
     showItemInFolder: (filePath: string) => Promise<void>
     filePathForDroppedFile: (file: File) => string | null

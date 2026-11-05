@@ -33,6 +33,7 @@ import {
   findSkillDirectoryByContentId,
   isSkillDirectoryOwnedByContentId,
   readHubInstallationVersion,
+  readHubReplacementToken,
 } from "./editor-adapters/skill-identity"
 import {
   createEditorWriteErrorLogMeta,
@@ -493,9 +494,9 @@ export class EditorInstallCore {
       || source.preparedSourceId?.startsWith(HUB_INSTALL_SOURCE_PREFIX)) {
       if (source.kind !== "skill" || source.origin !== "skill-hub" || !isHubSourceIdentity(source.sourceIdentity)
         || !source.preparedSourceId?.startsWith(HUB_INSTALL_SOURCE_PREFIX)
-        || payload.installFormValues || payload.replaceConfirmed || payload.replacedSourceIdentity
+        || payload.installFormValues || payload.replacedSourceIdentity
         || source.localSourceId || source.repositoryContentId || source.mainContent !== undefined) {
-        throw new Error("Skill Hub 安装来源无效，不能覆盖包内资料或其他来源。")
+        throw new Error("Skill Hub 安装来源无效，不能覆盖包内资料。")
       }
       const detail = await this.deps.preparedSourceProvider.readPreparedSkill(source.preparedSourceId, source.sourceIdentity)
       if (!detail.hubPackage || !detail.name || detail.name !== source.name || detail.description !== source.description) {
@@ -503,7 +504,14 @@ export class EditorInstallCore {
       }
       const input = { ...toInstallToEditorPayload(payload), skillName: detail.name, skillTitle: detail.title }
       const target = await this.deps.resolveEditorInstallTarget(input)
-      if (target.status !== "ready") throw new Error(target.message ?? "安装位置不可用。")
+      if (target.status === "conflict") {
+        if (!payload.replaceConfirmed || !payload.hubReplacementToken
+          || payload.hubReplacementToken !== target.hubReplacementToken) {
+          throw new Error("请重新确认要替换的同名 Skill。")
+        }
+      } else if (target.status !== "ready" || payload.replaceConfirmed || payload.hubReplacementToken) {
+        throw new Error(target.message ?? "安装位置已变化，请重新选择。")
+      }
       const root = path.resolve(path.dirname(target.targetPath))
       if (activeHubRoots.has(root)) throw new Error("该位置正在安装 Skill，请稍后重试。")
       activeHubRoots.add(root)
@@ -666,7 +674,11 @@ export class EditorInstallCore {
           )
 
           const hubInstall = Boolean(detail?.hubPackage)
-          if (hubInstall && await pathEntryExists(target.targetPath)
+          const hubReplacementToken = hubInstall && target.status === "conflict" ? target.hubReplacementToken : undefined
+          if (hubReplacementToken && previousSkillDirectoryPath) {
+            throw new Error("此位置已安装同一 Hub Skill 的旧名称版本，请先处理旧安装。")
+          }
+          if (hubInstall && !hubReplacementToken && await pathEntryExists(target.targetPath)
             && !await isSkillDirectoryOwnedByContentId(target.targetPath, payload.contentId)) {
             throw new Error("此位置已有同名 Skill，来源不同或无法确认。")
           }
@@ -680,7 +692,7 @@ export class EditorInstallCore {
             throw new Error("覆盖目标目录前需要用户确认。")
           }
 
-          if (payload.contentType === "skill" && payload.replaceConfirmed) {
+          if (!hubInstall && payload.contentType === "skill" && payload.replaceConfirmed) {
             const targetExists = await pathExists(target.targetPath)
             if (targetExists && !isOwnExistingSkillDirectory) {
               const backupPath = await getAvailableDesktopSkillBackupPath(target.targetPath)
@@ -787,7 +799,7 @@ export class EditorInstallCore {
                   })
                 },
               })
-              const inheritExistingEnv = await isSkillDirectoryOwnedByContentId(
+              const inheritExistingEnv = !hubReplacementToken && await isSkillDirectoryOwnedByContentId(
                 existingSkillDirectoryPath,
                 payload.contentId,
               )
@@ -813,11 +825,17 @@ export class EditorInstallCore {
                 }
                 await skillEnvGuard.validate()
                 if (hubInstall && payload.preparedSourceId) {
+                  await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
+                  if (hubReplacementToken) {
+                    if (await readHubReplacementToken(target.targetPath, payload.contentId) !== hubReplacementToken) {
+                      throw new Error("目标目录已变化，请重新确认要替换的 Skill。")
+                    }
+                    return
+                  }
                   const oldPath = renamedSkillDirectoryPath ?? target.targetPath
                   if (await pathEntryExists(oldPath) && !await isSkillDirectoryOwnedByContentId(oldPath, payload.contentId)) {
                     throw new Error("现有 Skill 来源已变化，请重新检查。")
                   }
-                  await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
                 }
               },
               afterMoveExistingTarget: async (movedTargetPath) => {
@@ -828,6 +846,9 @@ export class EditorInstallCore {
                 await skillEnvGuard.validateMovedTarget(movedTargetPath)
                 if (hubInstall && payload.preparedSourceId) {
                   await this.deps.preparedSourceProvider.readPreparedSkill(payload.preparedSourceId, payload.contentId)
+                  if (hubReplacementToken && await pathEntryExists(target.targetPath)) {
+                    throw new Error("目标位置已出现新目录，请重新选择。")
+                  }
                 }
               },
               beforeRestoreMovedTarget: async (movedTargetPath) => {

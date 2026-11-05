@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 
 import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
@@ -7,6 +10,7 @@ import { shellIpcModule } from "../ipc"
 const electronMock = vi.hoisted(() => ({
   shell: {
     openExternal: vi.fn(),
+    openPath: vi.fn(),
     showItemInFolder: vi.fn(),
   },
 }))
@@ -18,6 +22,28 @@ vi.mock("electron", () => ({
 describe("shellIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it("opens a folder through the guarded shell and rejects ordinary files", async () => {
+    const { harness, auditSink, permissionGuard } = createHarness()
+    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-shell-open-"))
+    const directoryPath = path.join(root, "test-skill")
+    try {
+      await mkdir(directoryPath)
+      const filePath = path.join(directoryPath, "SKILL.md")
+      await writeFile(filePath, "test")
+      electronMock.shell.openPath.mockResolvedValue("")
+      await harness.invoke("synapse:app:shell:skill_directory:open", { directoryPath })
+      expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+        action: "shell.exec", resource: directoryPath,
+      }))
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({ outcome: "allowed" }))
+      expect(electronMock.shell.openPath).toHaveBeenCalledWith(directoryPath)
+      await expect(harness.invoke("synapse:app:shell:skill_directory:open", { directoryPath: filePath })).rejects.toThrow("文件夹")
+      expect(electronMock.shell.openPath).toHaveBeenCalledTimes(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   it("opens http links through the system shell", async () => {

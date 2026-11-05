@@ -65,6 +65,7 @@ const installerSourceSchema = z.discriminatedUnion("kind", [
 
 const installSourceToEditorSchema = z.object({
   editorId: z.string().min(1),
+  hubReplacementToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   installFormValues: z.record(z.string(), z.unknown()).optional(),
   overwriteConfirmed: z.boolean().optional(),
   projectPath: z.string().optional(),

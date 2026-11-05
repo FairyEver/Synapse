@@ -1,5 +1,6 @@
 import { HUB_SOURCE_IDENTITY_PREFIX, isHubSourceIdentity } from "../../../app-capabilities/skill-hub/shared/install-source"
 import { constants, type BigIntStats } from "node:fs"
+import { createHash } from "node:crypto"
 import { lstat, open, readdir, realpath } from "node:fs/promises"
 import path from "node:path"
 import { arePathsEqualForCompare } from "../../../src/lib/path-compare"
@@ -214,6 +215,23 @@ async function resolveUniqueSkillDirectoryPath(idealPath: string): Promise<strin
 type SkillConflictCheckResult =
   | { hasConflict: false; ownedTargetExists?: boolean; targetExists: boolean }
   | { hasConflict: true; existingContentId: string; existingPath: string }
+
+export async function readHubReplacementToken(targetPath: string, sourceId: string): Promise<string | null> {
+  try {
+    const entry = await lstat(targetPath, { bigint: true })
+    if (!entry.isDirectory() || entry.ino === 0n) return null
+    const mainFile = await lstat(path.join(targetPath, "SKILL.md"), { bigint: true })
+    if (!mainFile.isFile()) return null
+    const resolvedPath = await realpath(targetPath)
+    return createHash("sha256").update(JSON.stringify([
+      sourceId, targetPath, resolvedPath, String(entry.dev), String(entry.ino), String(entry.ctimeNs),
+      String(mainFile.dev), String(mainFile.ino), String(mainFile.ctimeNs),
+    ])).digest("hex")
+  } catch (error) {
+    if (isFileNotFoundError(error)) return null
+    throw error
+  }
+}
 
 async function checkSkillNameConflict(
   parentDirectoryPath: string,

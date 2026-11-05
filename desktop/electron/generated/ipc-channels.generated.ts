@@ -228,6 +228,7 @@ export const IPC_CHANNELS = {
   "shell": {
     "openExternal": "synapse:app:shell:external:open",
     "showItemInFolder": "synapse:app:shell:item:show_in_folder",
+    "openSkillDirectory": "synapse:app:shell:skill_directory:open",
   },
   "repository": {
     "getStates": "synapse:app:settings:repository:get_states",

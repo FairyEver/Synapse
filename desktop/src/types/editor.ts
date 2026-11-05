@@ -105,6 +105,7 @@ export type SynapseEditorResolvedTarget =
       targetKind: SynapseEditorInstallTargetKind
       targetPath: string
       conflictContentId: string
+      hubReplacementToken?: string
     })
 
 export type SynapseContentInstallResult = {

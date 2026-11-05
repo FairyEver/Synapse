@@ -1,6 +1,6 @@
 import path from "node:path"
 import { isHubSourceIdentity } from "../../app-capabilities/skill-hub/shared/install-source"
-import { findSkillDirectoryByContentId, readHubInstallationVersion } from "./editor-adapters/skill-identity"
+import { findSkillDirectoryByContentId, readHubInstallationVersion, readHubReplacementToken } from "./editor-adapters/skill-identity"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type {
   SynapseContentInstallResult,
@@ -231,7 +231,24 @@ export class EditorInstallService {
     const target = await editorAdapterService.resolveTarget(payload)
     if (payload.contentType !== "skill" || !isHubSourceIdentity(payload.contentId)) return target
     if (target.status === "conflict" || (target.status === "ready" && target.targetExists && !target.ownedTargetExists)) {
-      return { ...target, status: "unavailable", targetKind: null, targetPath: null, message: "此位置已有同名 Skill，来源不同或无法确认。" }
+      const token = target.targetKind === "directory"
+        ? await readHubReplacementToken(target.targetPath, payload.contentId)
+        : null
+      if (!token) {
+        return { ...target, status: "unavailable", targetKind: null, targetPath: null, message: "同名位置不是可替换的 Skill 文件夹。" }
+      }
+      return {
+        editorId: target.editorId,
+        label: target.label,
+        scope: target.scope,
+        contentType: target.contentType,
+        message: "该位置已存在同名 Skill。",
+        status: "conflict",
+        targetKind: "directory",
+        targetPath: target.targetPath,
+        conflictContentId: target.status === "conflict" ? target.conflictContentId : "unknown",
+        hubReplacementToken: token,
+      }
     }
     if (target.status !== "ready") return target
     const previous = await findSkillDirectoryByContentId(path.dirname(target.targetPath), payload.contentId)

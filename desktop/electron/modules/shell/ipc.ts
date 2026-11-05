@@ -7,8 +7,11 @@
 
 import { z } from "zod"
 import { shell } from "electron"
+import { lstat } from "node:fs/promises"
+import path from "node:path"
 import type { IpcModule } from "../../runtime/ipc/types"
 import { runGuardedShellOperation } from "./guarded-shell"
+import { SKILL_NAME_PATTERN } from "../../../src/lib/skill-name-input"
 import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 export const shellIpcModule: IpcModule = {
@@ -45,6 +48,29 @@ export const shellIpcModule: IpcModule = {
           resource: request.fullPath,
           source: "shell.showItemInFolder",
           run: () => shell.showItemInFolder(request.fullPath),
+        })
+      },
+    },
+    openSkillDirectory: {
+      kind: "invoke",
+      operationId: "app.shell.skill_directory.open",
+      request: z.object({ directoryPath: z.string().refine((value) => path.isAbsolute(value) && !value.includes("\0")) }).strict(),
+      response: z.void(),
+      handler: async (ctx, request: { directoryPath: string }) => {
+        const directoryPath = path.resolve(request.directoryPath)
+        await runGuardedShellOperation({
+          ctx,
+          resource: directoryPath,
+          source: "shell.openSkillDirectory",
+          run: async () => {
+            const entry = await lstat(directoryPath)
+            if (!entry.isDirectory() || !SKILL_NAME_PATTERN.test(path.basename(directoryPath))) {
+              throw new Error("目标不是可打开的 Skill 文件夹。")
+            }
+            const mainFile = await lstat(path.join(directoryPath, "SKILL.md"))
+            if (!mainFile.isFile()) throw new Error("目标不是可打开的 Skill 文件夹。")
+            if (await shell.openPath(directoryPath)) throw new Error("无法打开文件夹。")
+          },
         })
       },
     },

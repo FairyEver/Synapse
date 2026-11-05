@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -75,6 +75,8 @@ vi.mock("../config-store", () => ({
 }))
 
 import { EditorInstallService } from "../editor-install-service"
+import { configStore } from "../config-store"
+import type { SynapseContentDetail } from "../../../src/types/content"
 import type { ContentSkillSourceSecurityDeps } from "../content-skill-source-service"
 import { installerSourceService } from "../installer-source-service"
 
@@ -230,7 +232,7 @@ describe("Hub package installation", () => {
       type: "skill", attachments: [], attachmentCount: 0, category: "", icon: "", iconBg: "", createdBy: "", createdAt: "",
       createdByDisplayName: "", modifiedBy: "", modifiedByDisplayName: "", modifiedAt: "", deleted: false,
     } as const
-    const readPreparedSkill = vi.fn(async () => ({ ...detail, attachments: [] }))
+    const readPreparedSkill = vi.fn(async (): Promise<SynapseContentDetail<"skill">> => ({ ...detail, attachments: [] }))
     const core = new EditorInstallCore({
       resolveEditorInstallTarget: mocks.resolveTarget,
       preparedSourceProvider: {
@@ -273,5 +275,94 @@ describe("Hub package installation", () => {
     await expect(f.core.installSourceToEditor({ ...f.payload, source: { ...source, description: "forged" } })).rejects.toThrow("不可修改")
     await expect(f.core.installSourceToEditor({ ...f.payload, installFormValues: { name: "forged" } })).rejects.toThrow("来源无效")
     expect(mocks.prepareSkillDirectory).not.toHaveBeenCalled()
+  })
+
+  async function conflictFixture(scope: "global" | "project" = "global") {
+    const f = await fixture()
+    await rm(f.oldPath, { recursive: true })
+    await mkdir(f.targetPath)
+    await writeFile(path.join(f.targetPath, "SKILL.md"), "old Skill")
+    await writeFile(path.join(f.targetPath, "old-only.md"), "old attachment")
+    await writeFile(path.join(f.targetPath, ".env"), "TOKEN=old-value\n")
+    mocks.resolveTarget.mockResolvedValue({
+      editorId: "test-editor", label: "Test Editor", scope, contentType: "skill",
+      message: null, status: "conflict", targetKind: "directory",
+      targetPath: f.targetPath, conflictContentId: "unknown",
+    })
+    const projectPath = scope === "project" ? f.root : undefined
+    if (projectPath) {
+      const config = await configStore.load()
+      vi.mocked(configStore.load).mockResolvedValue({
+        ...config, global: { ...config.global, projects: [{ id: "project", name: "Project", path: projectPath }] },
+      })
+    }
+    const service = new EditorInstallService()
+    const target = await service.resolveEditorInstallTarget({
+      editorId: f.payload.editorId, scope, projectPath, contentType: "skill", contentId: id,
+    })
+    expect(target.status).toBe("conflict")
+    if (target.status !== "conflict") throw new Error("expected replaceable conflict")
+    service.setPreparedSourceProvider({
+      readPreparedSkill: f.readPreparedSkill,
+      async readPreparedRule() { throw new Error("not a rule") },
+      async readPreparedSkillAttachmentText() { return null },
+      async beginPreparedInstall() {},
+      async endPreparedInstall() {},
+      async copyPreparedSkillAttachment(_sourceId, _contentId, filename, destination) {
+        expect(filename).toBe(".env.example")
+        await writeFile(destination, "TOKEN=fresh-default\n")
+      },
+      async markPreparedInstalled() {},
+    })
+    return { ...f, core: service, payload: {
+      ...f.payload, scope, projectPath, replaceConfirmed: true, hubReplacementToken: target.hubReplacementToken,
+    } }
+  }
+
+  it("replaces the entire conflicting directory only after confirmation", async () => {
+    const f = await conflictFixture()
+    await expect(f.core.installSourceToEditor({ ...f.payload, replaceConfirmed: false })).rejects.toThrow()
+    await expect(readFile(path.join(f.targetPath, "SKILL.md"), "utf8")).resolves.toBe("old Skill")
+    await f.core.installSourceToEditor(f.payload)
+    await expect(readFile(path.join(f.targetPath, "SKILL.md"), "utf8")).resolves.toBe(raw)
+    for (const filename of ["old-only.md", ".env"]) {
+      await expect(readFile(path.join(f.targetPath, filename))).rejects.toMatchObject({ code: "ENOENT" })
+    }
+  })
+
+  it("restores the old Skill and env when validation fails after moving the directory", async () => {
+    const f = await conflictFixture()
+    const detail = await f.readPreparedSkill()
+    f.readPreparedSkill.mockResolvedValueOnce(detail).mockResolvedValueOnce(detail).mockResolvedValueOnce(detail)
+      .mockImplementationOnce(async () => {
+        await expect(readFile(path.join(f.targetPath, "SKILL.md"))).rejects.toMatchObject({ code: "ENOENT" })
+        throw new Error("package became unavailable")
+      })
+    await expect(f.core.installSourceToEditor(f.payload)).rejects.toThrow("package became unavailable")
+    await expect(readFile(path.join(f.targetPath, "SKILL.md"), "utf8")).resolves.toBe("old Skill")
+    await expect(readFile(path.join(f.targetPath, ".env"), "utf8")).resolves.toBe("TOKEN=old-value\n")
+    await expect(readFile(path.join(f.targetPath, "old-only.md"), "utf8")).resolves.toBe("old attachment")
+  })
+
+  it("creates a fresh project env from the new package even when the old env has the same key", async () => {
+    const f = await conflictFixture("project")
+    const detail = await f.readPreparedSkill()
+    f.readPreparedSkill.mockResolvedValue({
+      ...detail,
+      attachmentCount: 1,
+      attachments: [{ originalName: ".env.example", sha256: "a".repeat(64), size: 20 }],
+    })
+    await f.core.installSourceToEditor(f.payload)
+    await expect(readFile(path.join(f.targetPath, ".env"), "utf8")).resolves.toBe("TOKEN=fresh-default\n")
+    await expect(readFile(path.join(f.targetPath, "old-only.md"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("requires a new confirmation if a different directory takes the selected path", async () => {
+    const f = await conflictFixture()
+    await rename(f.targetPath, path.join(f.root, "original"))
+    await mkdir(f.targetPath)
+    await writeFile(path.join(f.targetPath, "SKILL.md"), "different Skill")
+    await expect(f.core.installSourceToEditor(f.payload)).rejects.toThrow("重新确认")
+    await expect(readFile(path.join(f.targetPath, "SKILL.md"), "utf8")).resolves.toBe("different Skill")
   })
 })

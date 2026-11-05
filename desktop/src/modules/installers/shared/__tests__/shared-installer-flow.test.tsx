@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   installSourceToEditor: vi.fn(),
   inspectSkillEnvSource: vi.fn(),
   readContent: vi.fn(),
+  openSkillDirectory: vi.fn(async () => undefined),
   resolveEditorInstallTarget: vi.fn(),
   readyTargetOverrides: {} as Record<string, unknown>,
   secrets: {
@@ -68,6 +69,7 @@ vi.mock("@/app-shell/notifications", () => ({
 vi.mock("@/lib/electron-bridge", () => ({
   requireBridgeDomain: (domain: string) => {
     if (domain === "secrets") return mocks.secrets
+    if (domain === "shell") return { openSkillDirectory: mocks.openSkillDirectory }
     throw new Error(`Unexpected bridge domain: ${domain}`)
   },
 }))
@@ -258,6 +260,7 @@ async function renderFlow(
   source: SynapseInstallerSource = ruleSource,
   projects: SynapseProjectConfig[] = mocks.config.global.projects,
   onInstalled: () => Promise<void> | void = vi.fn(),
+  initialSelection?: EditorWriteTargetSelection["scope"],
 ) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -270,6 +273,8 @@ async function renderFlow(
         mode="modal"
         source={source}
         editors={[editor]}
+        initialEditor={initialSelection ? editor : undefined}
+        initialSelection={initialSelection ? { scope: initialSelection, projectPath: projects[0]?.path } : undefined}
         projects={projects}
         onCancel={vi.fn()}
         onInstalled={onInstalled}
@@ -381,6 +386,32 @@ afterEach(() => {
 })
 
 describe("SharedInstallerFlow", () => {
+  it.each(["global", "project"] as const)("opens the %s conflict folder and replaces only after confirmation", async (scope) => {
+    const projects = scope === "project" ? [{ id: "p", name: "Project", path: "/tmp/project" }] : []
+    const targetPath = scope === "project" ? "/tmp/project/.agents/skills/demo" : "/tmp/skills/demo"
+    const hubReplacementToken = "a".repeat(64)
+    mocks.readyTargetOverrides = { status: "conflict", targetPath, conflictContentId: "unknown", hubReplacementToken }
+    mocks.installSourceToEditor.mockResolvedValue({ targetPath })
+    const source = { ...repositorySkillSource, origin: "skill-hub" as const, hubVersionNumber: 1 }
+    await renderFlow(source, projects, vi.fn(), scope)
+    await act(async () => clickButton("选择目标"))
+    await act(async () => clickButton("打开文件夹"))
+    expect(mocks.openSkillDirectory).toHaveBeenCalledWith(targetPath)
+    await act(async () => clickButton("替换安装"))
+    expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
+    expect(mocks.inspectSkillEnvSource).not.toHaveBeenCalled()
+    const confirmation = document.querySelector("section")
+    expect(confirmation?.textContent).toContain("旧文件、本地修改和 .env 将被移除")
+    expect(confirmation?.textContent).toContain(targetPath)
+    await act(async () => {
+      Array.from(confirmation?.querySelectorAll("button") ?? [])
+        .find((button) => button.textContent === "替换安装")?.click()
+    })
+    expect(mocks.installSourceToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      source, scope, projectPath: projects[0]?.path, replaceConfirmed: true, hubReplacementToken,
+    }))
+  })
+
   it("starts embedded sources at editor selection", async () => {
     mocks.resolveEditorInstallTarget.mockResolvedValue({
       editorId: "codex",

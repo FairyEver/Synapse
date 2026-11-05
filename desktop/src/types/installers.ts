@@ -70,6 +70,7 @@ export type SynapseInstallSourceMode = "install" | "reinstall" | "update"
 
 export type SynapseInstallSourceToEditorPayload = {
   editorId: SynapseEditorId
+  hubReplacementToken?: string
   installFormValues?: SynapseEditorInstallFormValues
   mode?: SynapseInstallSourceMode
   overwriteConfirmed?: boolean

@@ -78,6 +78,7 @@ export type SharedInstallerFlowProps = {
 }
 
 type InstallFlowOptions = {
+  hubReplacementToken?: string
   overwriteConfirmed?: boolean
   replaceConfirmed?: boolean
 }
@@ -157,6 +158,8 @@ export function SharedInstallerFlow({
   const pendingLegacySecretNamesRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingLegacySubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
   const pendingInstallWarningRef = useRef<string | undefined>(undefined)
+  const [hubConfirmationToken, setHubConfirmationToken] = useState<string>()
+  const [targetRefresh, setTargetRefresh] = useState(0)
   const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
   const [installing, setInstalling] = useState(false)
   const [error, setError] = useState("")
@@ -178,6 +181,12 @@ export function SharedInstallerFlow({
 
   const scope = selection?.scope ?? "global"
   const activeTarget = selection?.activeTarget ?? null
+  const hubConflict = flow.source?.origin === "skill-hub"
+    && activeTarget?.status === "conflict" && activeTarget.hubReplacementToken
+    ? activeTarget : null
+  const targetScopeLabel = scope === "global"
+    ? "全局"
+    : projects.find((project) => project.path === selection?.projectPath)?.name ?? "项目"
   const installFormDefinition = flow.selectedEditor ? installFormDefinitionByEditorId.get(flow.selectedEditor.id) : undefined
   const RuleProjectInstallForm = installFormDefinition?.RuleProjectInstallForm
   const RuleGlobalInstallForm = installFormDefinition?.RuleGlobalInstallForm
@@ -197,7 +206,16 @@ export function SharedInstallerFlow({
       skillTitle: flow.source.kind === "skill" ? flow.source.title : undefined,
       ruleName: flow.source.kind === "rule" ? flow.source.name : undefined,
     })
-  }, [flow.source])
+  }, [flow.source, targetRefresh])
+
+  const openConflictDirectory = async (directoryPath: string) => {
+    try {
+      await requireBridgeDomain("shell").openSkillDirectory(directoryPath)
+    } catch (err) {
+      logger.warn("Failed to open conflicting Skill directory.", { error: err })
+      setError("无法打开旧 Skill 文件夹。")
+    }
+  }
 
   const resetVariableInstallAttempt = useCallback(() => {
     pendingSkillEnvReplacementValuesRef.current = undefined
@@ -228,6 +246,7 @@ export function SharedInstallerFlow({
 
     setInstalling(true)
     setError("")
+    let installed = isCompletionRetryPending
     try {
       if (!isCompletionRetryPending) {
         pendingInstallWarningRef.current = undefined
@@ -235,10 +254,12 @@ export function SharedInstallerFlow({
         if (!onInstall) {
           const result = await installSourceToEditor({
             editorId: flow.selectedEditor.id,
+            hubReplacementToken: options.hubReplacementToken,
             overwriteConfirmed,
             projectPath: selection.scope === "project" ? selection.projectPath : undefined,
             replaceConfirmed,
-            replacedSourceIdentity: activeTarget.status === "conflict" ? activeTarget.conflictContentId : undefined,
+            replacedSourceIdentity: activeTarget.status === "conflict" && !hubConflict
+              ? activeTarget.conflictContentId : undefined,
             scope: selection.scope,
             source: flow.source,
             installFormValues,
@@ -250,6 +271,7 @@ export function SharedInstallerFlow({
           })
           pendingInstallWarningRef.current = result.warning
         }
+        installed = true
         setIsCompletionRetryPending(true)
       }
       await onInstalled()
@@ -260,6 +282,10 @@ export function SharedInstallerFlow({
       flow.markInstalled()
     } catch (err) {
       setError(err instanceof Error ? err.message : "安装失败")
+      if (options.hubReplacementToken && !installed) {
+        resetVariableInstallAttempt()
+        setTargetRefresh((value) => value + 1)
+      }
     } finally {
       setInstalling(false)
     }
@@ -275,6 +301,16 @@ export function SharedInstallerFlow({
       || !selection
       || (activeTarget?.status !== "ready" && activeTarget?.status !== "conflict")
     ) {
+      return
+    }
+
+    if (hubConflict && !isCompletionRetryPending && !replaceConfirmed) {
+      setHubConfirmationToken(hubConflict.hubReplacementToken)
+      setIsConflictConfirmOpen(true)
+      return
+    }
+    if (options.hubReplacementToken && options.hubReplacementToken !== hubConflict?.hubReplacementToken) {
+      setError("目标位置已变化，请重新确认替换。")
       return
     }
 
@@ -338,7 +374,8 @@ export function SharedInstallerFlow({
       }
     }
 
-    if (activeTarget.status === "conflict" && flow.source.kind === "skill" && !replaceConfirmed) {
+    if (activeTarget.status === "conflict" && flow.source.kind === "skill" && !replaceConfirmed && !isCompletionRetryPending) {
+      setHubConfirmationToken(undefined)
       setIsConflictConfirmOpen(true)
       return
     }
@@ -376,7 +413,7 @@ export function SharedInstallerFlow({
       return
     }
 
-    await runInstall(undefined, { replaceConfirmed, overwriteConfirmed })
+    await runInstall(undefined, { ...options, replaceConfirmed, overwriteConfirmed })
   }
 
   const continueInstallAfterValueConfirmation = async () => {
@@ -590,37 +627,53 @@ export function SharedInstallerFlow({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={isConflictConfirmOpen} onOpenChange={setIsConflictConfirmOpen}>
+      <AlertDialog
+        open={isConflictConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) setHubConfirmationToken(undefined)
+          setIsConflictConfirmOpen(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认替换 Skill？</AlertDialogTitle>
+            <AlertDialogTitle>{hubConflict ? "替换此位置的 Skill？" : "确认替换 Skill？"}</AlertDialogTitle>
             <AlertDialogDescription>
-              该位置已存在同名 Skill，替换后旧 Skill 将移到桌面备份。
+              {hubConflict && flow.source?.kind === "skill"
+                ? `将安装 Skill Hub v${flow.source.hubVersionNumber}。旧文件、本地修改和 .env 将被移除。`
+                : "该位置已存在同名 Skill，替换后旧 Skill 将移到桌面备份。"}
             </AlertDialogDescription>
             {activeTarget?.status === "conflict" ? (
               <div className="mt-1 rounded-md bg-muted/40 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
+                {hubConflict ? <div>{targetScopeLabel}</div> : null}
                 {activeTarget.targetPath}
               </div>
             ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
+            {hubConflict ? (
+              <Button type="button" variant="outline" onClick={() => void openConflictDirectory(hubConflict.targetPath)}>
+                打开文件夹
+              </Button>
+            ) : null}
             <AlertDialogCancel
               disabled={installing}
               onClick={() => {
                 resetVariableInstallAttempt()
+                setHubConfirmationToken(undefined)
                 setIsConflictConfirmOpen(false)
               }}
             >
               取消
             </AlertDialogCancel>
             <AlertDialogAction
-              disabled={installing}
+              disabled={installing || Boolean(hubConfirmationToken && hubConfirmationToken !== hubConflict?.hubReplacementToken)}
               onClick={() => {
                 setIsConflictConfirmOpen(false)
-                void handleInstall({ replaceConfirmed: true })
+                setHubConfirmationToken(undefined)
+                void handleInstall({ replaceConfirmed: true, hubReplacementToken: hubConfirmationToken })
               }}
             >
-              替换
+              {hubConflict ? "替换安装" : "替换"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -707,7 +760,7 @@ export function SharedInstallerFlow({
             </div>
           ) : null}
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
               type="button"
               variant="outline"
@@ -716,6 +769,11 @@ export function SharedInstallerFlow({
             >
               {initialEditor ? "取消" : "上一步"}
             </Button>
+            {hubConflict && !isCompletionRetryPending ? (
+              <Button type="button" variant="outline" disabled={installing} onClick={() => void openConflictDirectory(hubConflict.targetPath)}>
+                打开文件夹
+              </Button>
+            ) : null}
             <Button
               type="button"
               onClick={() => {
@@ -726,7 +784,7 @@ export function SharedInstallerFlow({
                 || (selection?.activeTarget?.status !== "ready" && selection?.activeTarget?.status !== "conflict")
               }
             >
-              {installing ? "安装中" : isCompletionRetryPending ? "重试完成记录" : "安装"}
+              {installing ? "安装中" : isCompletionRetryPending ? "重试完成记录" : hubConflict ? "替换安装" : "安装"}
             </Button>
           </div>
         </div>

@@ -1123,6 +1123,9 @@ const synapseBridge: SynapseBridge = {
     filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
   },
   shell: {
+    openSkillDirectory: (directoryPath: string) => {
+      return invoke(IPC_CHANNELS.shell.openSkillDirectory)({ directoryPath })
+    },
     openExternal: (url: string) => {
       return invoke(IPC_CHANNELS.shell.openExternal)({ url })
     },

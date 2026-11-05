@@ -83,6 +83,7 @@ function createTargetSelectionKey(selection: EditorWriteTargetSelection): string
         target.targetPath ?? "",
         target.status === "ready" ? String(target.targetExists) : "",
         target.status === "conflict" ? target.conflictContentId : "",
+        target.status === "conflict" ? target.hubReplacementToken ?? "" : "",
       ].join("\u0000")
     : "none"
 
@@ -447,7 +448,9 @@ function EditorWriteTargetSelector({
             <>
               <p className="break-all text-muted-foreground">{activeTarget.targetPath}</p>
               <p className="text-xs text-destructive">
-                {copy
+                {activeTarget.hubReplacementToken
+                  ? activeTarget.message
+                  : copy
                   ? "该位置已存在同名 Skill，复制后会替换旧 Skill。"
                   : "该位置已存在同名 Skill，安装将替换旧 Skill（旧 Skill 会被备份）。"}
               </p>
