@@ -267,9 +267,10 @@ function redactText(value: string): string {
 }
 
 function preview(value: string): string {
-  return value.length > maxPreviewChars
-    ? `${value.slice(0, maxPreviewChars)}[truncated]`
-    : value
+  if (value.length <= maxPreviewChars) return value
+  const lastCodeUnit = value.charCodeAt(maxPreviewChars - 1)
+  const end = lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff ? maxPreviewChars - 1 : maxPreviewChars
+  return `${value.slice(0, end)}[truncated]`
 }
 
 function isSensitiveKey(key: string): boolean {

@@ -234,6 +234,17 @@ describe("webhook sanitize", () => {
     expect(summary.bodyPreview).toContain("[truncated]")
   })
 
+  it.each([
+    ["text/plain", "a".repeat(1999) + "🙂TAIL"],
+    ["application/json", JSON.stringify({ text: "a".repeat(1990) + "🙂TAIL" })],
+    ["application/x-www-form-urlencoded", "text=" + "a".repeat(1990) + encodeURIComponent("🙂TAIL")],
+  ])("keeps %s previews valid UTF-8 when truncation meets a surrogate pair", (contentType, body) => {
+    const summary = summarizeWebhookBody(Buffer.from(body), contentType)
+    expect(summary.bodyPreview).toContain("[truncated]")
+    expect(summary.bodyPreview).toBe(Buffer.from(summary.bodyPreview!, "utf8").toString("utf8"))
+    expect(JSON.stringify(summary.body)).toContain("🙂TAIL")
+  })
+
   it("summarizes text bodies with practical token line redaction and truncation", () => {
     const summary = summarizeWebhookBody(
       Buffer.from(`token=plain-secret\n${"a".repeat(2100)}`),
@@ -244,6 +255,12 @@ describe("webhook sanitize", () => {
     expect(summary.bodyText).not.toContain("plain-secret")
     expect(summary.bodyPreview).toContain("[truncated]")
     expect(summary.bodyPreview?.length).toBeLessThan(2050)
+  })
+
+  it("retains a complete emoji pair that fits at the preview boundary", () => {
+    const prefix = "a".repeat(1998) + "🙂"
+    expect(summarizeWebhookBody(Buffer.from(prefix), "text/plain").bodyPreview).toBe(prefix)
+    expect(summarizeWebhookBody(Buffer.from(prefix + "TAIL"), "text/plain").bodyPreview).toBe(prefix + "[truncated]")
   })
 
   it("redacts inline text bearer, cookie, and token fragments", () => {
