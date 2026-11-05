@@ -502,10 +502,11 @@ describe("builtin agent action executor", () => {
     expect(result.error).not.toContain("/Users/liyang/private")
   })
 
-  it("returns failed status when provider is not available", async () => {
+  it.each(["throw", "return"])("returns a recoverable provider error when the runtime reports failure by %s", async (failurePath) => {
     const runtime = {
       sendScheduled: vi.fn(async () => {
-        throw new Error("Provider not found: deleted-provider")
+        if (failurePath === "throw") throw new Error("Provider not found: deleted-provider")
+        return { status: "error", error: "Provider not found: deleted-provider", conversationId: "conversation-1", durationMs: 1 }
       }),
     }
     const action = createAgentAction({
@@ -533,7 +534,22 @@ describe("builtin agent action executor", () => {
     })
 
     expect(result.status).toBe("failed")
-    expect(result.error).toContain("供应商")
+    expect(result.error).toBe("供应商已删除或不可用，请重新配置")
+  })
+
+  it("explains that the project must be reselected when its runtime is unavailable", async () => {
+    const action = createAgentAction({ getAgentRuntime: async () => undefined })
+    const result = await action.execute({
+      config: {
+        projectId: "missing-project", agentType: "claude-code", providerId: "provider-1", modelTier: "haiku",
+        mode: "dontAsk", prompt: "Reply OK", sessionPolicy: "fresh",
+      },
+      context: {
+        taskId: "task-1", runId: "run-1", triggeredBy: "manual", cwd: "/repo",
+        actor: { kind: "user", id: "automation" }, abortSignal: new AbortController().signal,
+      },
+    })
+    expect(result).toMatchObject({ status: "failed", error: "项目不可用，请重新选择项目", metrics: { durationMs: 0 } })
   })
 
   it("renders prompt templates from action context variables", async () => {

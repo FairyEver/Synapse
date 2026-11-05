@@ -35,7 +35,7 @@ export function createAgentAction(deps: {
       if (!runtime) {
         return {
           status: "failed",
-          error: `No agent runtime found for project "${input.config.projectId}"`,
+          error: "项目不可用，请重新选择项目",
           metrics: { durationMs: 0 },
         }
       }
@@ -102,14 +102,9 @@ export function createAgentAction(deps: {
           agentType: input.config.agentType,
           error: sanitizeError(message),
         })
-        const isProviderError = message.includes("Provider not found")
-        const sanitized = sanitizeError(message)
-        const truncated = sanitized.length > 120 ? sanitized.slice(0, 120) + "…" : sanitized
         return {
           status: "failed",
-          error: isProviderError
-            ? "供应商已删除或不可用，请重新配置"
-            : `Agent runtime error: ${truncated}`,
+          error: persistableAgentError("failed", message),
           metrics: { durationMs: Date.now() - startMs },
         }
       }
@@ -123,6 +118,7 @@ function persistableAgentError(
 ): string | undefined {
   if (!error) return undefined
   if (status !== "failed") return error
+  if (error.includes("Provider not found")) return "供应商已删除或不可用，请重新配置"
   const sanitized = sanitizeError(error)
   const truncated = sanitized.length > 120 ? sanitized.slice(0, 120) + "…" : sanitized
   return `Agent runtime error: ${truncated}`
