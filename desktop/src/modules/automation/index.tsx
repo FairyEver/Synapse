@@ -100,8 +100,21 @@ function AutomationModule() {
   const [editor, setEditor] = useState<{ mode: AutomationEditorMode; step?: AutomationEditorStep } | null>(null)
   const [detail, setDetail] = useState<{ item: AutomationItem; tab: "config" | "history"; missing?: boolean } | null>(null)
   const [search, setSearch] = useState("")
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [filter, setFilter] = useState("all")
   const returnTarget = useRef<string | null>(null)
+  const toggleReturnFocusRef = useRef<{ itemId: string; element: HTMLElement } | null>(null)
+
+  useEffect(() => {
+    const target = toggleReturnFocusRef.current
+    if (!target || pendingItemIds.has(target.itemId)) return
+    toggleReturnFocusRef.current = null
+    if (document.activeElement !== document.body && document.activeElement !== target.element) return
+    const element = target.element.isConnected && !target.element.matches(":disabled")
+      ? target.element
+      : searchInputRef.current
+    element?.focus()
+  }, [pendingItemIds])
 
   useEffect(() => {
     if (editor || detail || !returnTarget.current) return
@@ -193,6 +206,10 @@ function AutomationModule() {
 
   async function handleToggleEnabled(item: AutomationItem, enabled: boolean) {
     if (item.schemaVersion === 1) return
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement && focused.getAttribute("role") === "switch") {
+      toggleReturnFocusRef.current = { itemId: item.id, element: focused }
+    }
     await runItemMutation(
       item.id,
       async () => {
@@ -321,6 +338,12 @@ function AutomationModule() {
     setDetail({ item, tab })
   }
 
+  function handleClearFilter() {
+    setSearch("")
+    setFilter("all")
+    searchInputRef.current?.focus()
+  }
+
   const content = (() => {
     if (loading) {
       return (
@@ -387,7 +410,7 @@ function AutomationModule() {
         onToggleEnabled={(item, enabled) => { void handleToggleEnabled(item, enabled) }}
         onHistory={(item) => handleDetailOpen(item, "history")}
         filtered={Boolean(search.trim() || filter !== "all")}
-        onClearFilter={() => { setSearch(""); setFilter("all") }}
+        onClearFilter={handleClearFilter}
         onDelete={handleDeleteStart}
         onCreateNew={() => { void handleCreateEditorOpen() }}
       />
@@ -496,7 +519,7 @@ function AutomationModule() {
               <TabsTrigger value="disabled">已停用</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Input aria-label="搜索自动化" placeholder="搜索自动化" value={search} className="w-full sm:w-60" onChange={(event) => setSearch(event.target.value)} />
+          <Input ref={searchInputRef} aria-label="搜索自动化" placeholder="搜索自动化" value={search} className="w-full sm:w-60" onChange={(event) => setSearch(event.target.value)} />
         </div>
         {error && items.length > 0 ? <div className="mb-3 flex flex-wrap items-center gap-2"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={() => { void refresh() }}>重试</Button></div> : null}
         {content}

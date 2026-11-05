@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   deleteAutomation: vi.fn(),
   runAutomation: vi.fn(),
   stopAutomationRun: vi.fn(),
+  setAutomationEnabled: vi.fn(),
   listAutomationRuns: vi.fn(),
 }))
 
@@ -129,6 +130,7 @@ vi.mock("../hooks/use-automation", async () => {
       listAutomationRuns: mocks.listAutomationRuns,
       runAutomation: mocks.runAutomation,
       stopAutomationRun: mocks.stopAutomationRun,
+      setAutomationEnabled: mocks.setAutomationEnabled,
     }
   })
 
@@ -142,6 +144,62 @@ afterEach(async () => {
 })
 
 describe("AutomationModule", () => {
+  it("returns focus to search when clearing filters", async () => {
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem({ enabled: false })], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => root.render(<AutomationModule />))
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索自动化"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "no-match")
+      search.dispatchEvent(new Event("input", { bubbles: true }))
+      const enabledTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(tab => tab.textContent === "已启用")!
+      enabledTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }))
+    })
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("已启用")
+    const clear = [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "清除筛选")!
+    clear.focus()
+    await act(async () => clear.click())
+    expect(search.value).toBe("")
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("全部")
+    expect(document.body.textContent).toContain("Daily report")
+    expect(document.activeElement).toBe(search)
+  })
+
+  it.each(["visible", "filtered", "failed", "moved"] as const)("restores toggle focus after %s completion without stealing a moved focus", async (scenario) => {
+    let current = createItem({ enabled: scenario === "filtered" })
+    mocks.useAutomationItems.mockImplementation(() => ({ items: [current], loading: false, error: null, refresh: vi.fn() }))
+    let settle!: () => void
+    mocks.setAutomationEnabled.mockImplementation(() => new Promise<AutomationItem>((resolve, reject) => {
+      settle = () => {
+        if (scenario === "failed") reject(new Error("test offline"))
+        else { current = { ...current, enabled: !current.enabled }; resolve(current) }
+      }
+    }))
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => root.render(<AutomationModule />))
+    if (scenario === "filtered") {
+      const enabledTab = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(tab => tab.textContent === "已启用")!
+      await act(async () => { enabledTab.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 })) })
+      expect(enabledTab.getAttribute("aria-selected")).toBe("true")
+    }
+    const toggle = document.querySelector<HTMLButtonElement>('[role="switch"]')!
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索自动化"]')!
+    toggle.focus()
+    await act(async () => toggle.click())
+    expect(toggle.disabled).toBe(true)
+    // Model browser focus fixup; jsdom otherwise leaves the disabled switch focused.
+    container.tabIndex = -1
+    container.focus()
+    container.blur()
+    expect(document.activeElement).toBe(document.body)
+    if (scenario === "moved") search.focus()
+    await act(async () => settle())
+    expect(document.activeElement).toBe(scenario === "filtered" || scenario === "moved" ? search : toggle)
+    if (scenario === "filtered") expect(document.body.textContent).toContain("没有匹配的自动化")
+  })
+
   it.each(["builtin.mail-internal-received", "builtin.mail-received"])("prevents context-free manual runs of %s in the list and card", async (type) => {
     const item = createItem({ trigger: { type, config: {} } })
     mocks.useAutomationItems.mockReturnValue({ items: [item], loading: false, error: null, refresh: vi.fn() })
