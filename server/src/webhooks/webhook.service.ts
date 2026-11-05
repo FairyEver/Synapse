@@ -127,6 +127,7 @@ const supportedWebhookMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"
 @Injectable()
 export class WebhookService implements OnModuleInit {
   private readonly logger = new Logger(WebhookService.name)
+  private readonly pendingReceiptWrites = new Map<string, Promise<void>>()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -380,6 +381,7 @@ export class WebhookService implements OnModuleInit {
     readonly appVersion: string
     readonly acknowledgedAt: Date
   }): Promise<void> {
+    await this.pendingReceiptWrites.get(input.deliveryId)
     const result = await this.prisma.webhookDeliveryReceipt.updateMany({
       where: {
         deliveryId: input.deliveryId,
@@ -479,10 +481,19 @@ export class WebhookService implements OnModuleInit {
       sentAt: receivedAtIso,
     }) satisfies LiveDesktopServerMessage
 
+    // A local desktop can acknowledge before the asynchronous receipt insert finishes.
+    // Wait for that insert before matching the ack against the exact sent client.
+    let finishReceiptWrite!: () => void
+    this.pendingReceiptWrites.set(delivery.id, new Promise<void>((resolve) => { finishReceiptWrite = resolve }))
     const broadcastResult = this.broadcastDelivery(webhook.userId, delivery.id, webhook.publicId, message)
     const status = resolveBroadcastDeliveryStatus(broadcastResult)
 
-    await this.createDeliveryReceipts(delivery.id, broadcastResult.clientResults)
+    try {
+      await this.createDeliveryReceipts(delivery.id, broadcastResult.clientResults)
+    } finally {
+      this.pendingReceiptWrites.delete(delivery.id)
+      finishReceiptWrite()
+    }
     await this.updateDeliveryBroadcastStatus({
       deliveryId: delivery.id,
       webhookId: webhook.id,

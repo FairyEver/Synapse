@@ -1134,6 +1134,54 @@ describe("WebhookService", () => {
     ])
   })
 
+  it("retains an acknowledgement received before the sent receipt is inserted", async () => {
+    const harness = createWebhookReceiveHarness({
+      broadcastResult: {
+        onlineClientCount: 1, sentClientCount: 1, failedClientCount: 0,
+        clientResults: [{
+          clientInstanceId: "client-a", deviceName: "MacBook", platform: "darwin-arm64",
+          appVersion: "0.2.253", sentAt: "2026-06-06T12:00:00.000Z", status: "sent",
+        }],
+      },
+    })
+    const broadcast = harness.live.broadcastToUser.getMockImplementation()!
+    const insertReceipts = harness.prisma.webhookDeliveryReceipt.createMany.getMockImplementation()!
+    let releaseInsert!: () => void
+    let markInsertStarted!: () => void
+    const insertGate = new Promise<void>((resolve) => { releaseInsert = resolve })
+    const insertStarted = new Promise<void>((resolve) => { markInsertStarted = resolve })
+    harness.prisma.webhookDeliveryReceipt.createMany.mockImplementation(async (...args) => {
+      markInsertStarted()
+      await insertGate
+      return insertReceipts(...args)
+    })
+    let acknowledgement: Promise<void> | undefined
+    let acknowledgementFinished = false
+    harness.live.broadcastToUser.mockImplementation((...args) => {
+      acknowledgement = harness.service.recordDeliveryAck({
+        userId: "user-1", deliveryId: "delivery-1", clientInstanceId: "client-a",
+        deviceName: "MacBook", platform: "darwin-arm64", appVersion: "0.2.253",
+        acknowledgedAt: new Date("2026-06-06T12:00:00.001Z"),
+      }).then(() => { acknowledgementFinished = true })
+      return broadcast(...args)
+    })
+
+    const receive = harness.receive()
+    await insertStarted
+    await new Promise<void>((resolve) => { setImmediate(resolve) })
+    expect(acknowledgementFinished).toBe(false)
+    releaseInsert()
+    await receive
+    await acknowledgement
+
+    expect(harness.receipts).toEqual([expect.objectContaining({
+      deliveryId: "delivery-1", clientInstanceId: "client-a", status: "acknowledged",
+    })])
+    expect(harness.deliveries).toEqual([expect.objectContaining({
+      id: "delivery-1", status: WEBHOOK_DELIVERY_STATUS.delivered,
+    })])
+  })
+
   it("rejects oversized webhook bodies before broadcasting", async () => {
     const harness = createWebhookReceiveHarness()
 
