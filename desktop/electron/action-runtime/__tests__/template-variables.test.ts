@@ -8,6 +8,63 @@ import {
 } from "../template-variables"
 
 describe("action template variables", () => {
+  it.each([
+    { query: { tag: ["a", "b"] }, headers: { "x-test": "value" }, body: { order: { id: 12 }, items: [{ name: "中文" }] } },
+    { query: {}, headers: {}, body: {} },
+    {},
+  ])("renders every declared whole Webhook value, including empty or missing fields", (request) => {
+    const variables = webhookVariables(request)
+    for (const field of ["body", "query", "headers"] as const) {
+      const expected = request[field] === undefined ? "" : JSON.stringify(request[field])
+      for (const prefix of ["trigger.request", "trigger.payload.request"]) {
+        expect(renderActionTemplate(`{{${prefix}.${field}}}`, variables)).toBe(expected)
+      }
+    }
+  })
+
+  it("renders selected nested Webhook objects and arrays as JSON on both paths", () => {
+    const variables = webhookVariables({
+      body: { order: { id: 12, optional: null }, items: [{ name: "中文" }], empty: [], nil: null },
+      query: { tag: ["a", "b"] }, headers: {},
+    })
+    for (const prefix of ["trigger.request", "trigger.payload.request"]) {
+      expect(renderActionTemplate(`{{${prefix}.body.order}}`, variables)).toBe('{"id":12,"optional":null}')
+      expect(renderActionTemplate(`{{${prefix}.body.items}}`, variables)).toBe('[{"name":"中文"}]')
+      expect(renderActionTemplate(`{{${prefix}.body.empty}}`, variables)).toBe("[]")
+      expect(renderActionTemplate(`{{${prefix}.body.nil}}`, variables)).toBe("")
+      expect(renderActionTemplate(`{{${prefix}.query.tag}}`, variables)).toBe('["a","b"]')
+    }
+  })
+
+  it("keeps declared whole values available when a wide body exhausts the flatten budget", () => {
+    const body = Object.fromEntries(Array.from({ length: 500 }, (_, index) => [`key${index}`, index]))
+    const variables = webhookVariables({ body, query: { marker: "query" }, headers: { marker: "header" } })
+    for (const prefix of ["trigger.request", "trigger.payload.request"]) {
+      expect(renderActionTemplate(`{{${prefix}.body}}`, variables)).toBe(JSON.stringify(body))
+      expect(renderActionTemplate(`{{${prefix}.query}}`, variables)).toBe('{"marker":"query"}')
+      expect(renderActionTemplate(`{{${prefix}.headers}}`, variables)).toBe('{"marker":"header"}')
+    }
+    expect(Object.keys(variables).length).toBeLessThanOrEqual(200)
+    expect(renderActionTemplate("{{trigger.request.body.key499}}", variables)).toBe("")
+  })
+
+  it("uses the same depth boundary for short and original request paths", () => {
+    const body = { a: { b: { c: { d: { e: { f: { g: { h: "depth-eight" } } } } } } } }
+    const variables = webhookVariables({ body, query: {}, headers: {} })
+    for (const prefix of ["trigger.request", "trigger.payload.request"]) {
+      expect(renderActionTemplate(`{{${prefix}.body.a.b.c.d.e.f.g.h}}`, variables)).toBe("depth-eight")
+    }
+  })
+
+  it.each([
+    { body: null, expected: "" }, { body: false, expected: "false" },
+    { body: 0, expected: "0" }, { body: "中文文本", expected: "中文文本" },
+  ])("preserves scalar and null body semantics on both paths", ({ body, expected }) => {
+    const variables = webhookVariables({ body, query: {}, headers: {} })
+    expect(renderActionTemplate("{{trigger.request.body}}", variables)).toBe(expected)
+    expect(renderActionTemplate("{{trigger.payload.request.body}}", variables)).toBe(expected)
+  })
+
   it("renders braced variables and supports optional dollar prefix", () => {
     expect(renderActionTemplate(
       "run {{trigger.automationName}} at {{$trigger.triggeredAt}}",
@@ -202,3 +259,13 @@ describe("action template variables", () => {
     )).toBe("nested= source= header=")
   })
 })
+
+function webhookVariables(request: Record<string, unknown>) {
+  return buildAutomationTemplateVariables({
+    triggerType: "builtin.webhook", triggerConfig: {}, triggeredBy: "trigger",
+    triggeredAt: "2026-11-06T00:00:00.000Z", scheduledAt: "2026-11-06T00:00:00.000Z",
+    automationId: "automation:fixture", automationName: "Webhook",
+    event: { source: "webhook", type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
+      receivedAt: "2026-11-06T00:00:00.000Z", payload: { request } },
+  })
+}

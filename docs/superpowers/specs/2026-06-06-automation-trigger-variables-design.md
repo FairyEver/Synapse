@@ -92,6 +92,8 @@ Interval 可额外声明：
 
 payload flatten 只输出 string/number/boolean/null 等简单叶子值。对象和数组继续向下展开，数组下标使用点路径，例如 `trigger.payload.items.0.title`。`null` 转为空字符串。
 
+2026-11-06 Webhook 变量修正：与变量选择器的“留空引用整个值”保持一致，Webhook 的动态路径也提供对象和数组的 JSON 文本，具体路径与 `trigger.payload.request.*` 别名一致。`body`、`query`、`headers` 六个已声明整值在展平前提供，空对象/数组分别为 `{}`/`[]`，缺失或 null 仍为空字符串。保留深度 8 与最多 200 个展平变量的限制；超限叶子仍按既有可选字段语义返回空字符串，非 Webhook 事件保持原叶子展平行为。
+
 ## 运行时数据流
 
 1. 自动化触发器命中后，`AutomationService` 构造 `AutomationTriggerRuntimeContext`。

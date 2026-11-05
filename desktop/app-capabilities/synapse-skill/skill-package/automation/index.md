@@ -99,6 +99,8 @@ Local Webhook events run serially per Automation. Successfully disabling an item
 
 Public Webhook request bodies are limited to 256KB. JSON allows up to 100 nested object/array containers, counting the root container as one; excessive depth returns HTTP 400 without creating a delivery or triggering Automation. Special own keys are preserved as data, and sensitive fields remain redacted.
 
+Webhook dynamic variables accept whole `trigger.request.body`, `.query`, and `.headers` values and their `trigger.payload.request.*` aliases. Objects/arrays render as JSON, including selected nested containers; missing/null values render empty. Whole declared values remain available when a wide body fills the flatten budget. Flattened paths retain the depth-8 and 200-variable limits; do not assume every leaf of a large payload is exposed.
+
 If a read result only shows `{ type, summary }`, that is expected. It is not enough to reconstruct private configs. Ask the user for the new desired config or use discovery defaults.
 
 ## Run Rules

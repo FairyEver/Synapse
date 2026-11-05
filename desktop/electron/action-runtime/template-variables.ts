@@ -112,17 +112,17 @@ function appendWebhookEventVariables(
   variables["trigger.request.contentType"] = typeof request.contentType === "string" ? request.contentType : ""
   variables["trigger.request.bodyText"] = typeof request.bodyText === "string" ? request.bodyText : ""
   variables["trigger.request.remoteAddress"] = typeof request.remoteAddress === "string" ? request.remoteAddress : ""
-  if ("body" in request) {
-    variables["trigger.request.body"] = stringifyTemplateValue(request.body)
-    flattenValue("trigger.request.body", request.body, variables)
-  } else {
-    variables["trigger.request.body"] = ""
+  const fields = ["body", "query", "headers"] as const
+  // Declared whole values must remain available even if body leaves fill the budget.
+  for (const field of fields) {
+    const value = stringifyTemplateValue(request[field])
+    variables[`trigger.request.${field}`] = value
+    variables[`trigger.payload.request.${field}`] = value
   }
-  if ("query" in request) {
-    flattenValue("trigger.request.query", request.query, variables)
-  }
-  if ("headers" in request) {
-    flattenValue("trigger.request.headers", request.headers, variables)
+  for (const field of fields) {
+    if (!(field in request)) continue
+    flattenValue(`trigger.request.${field}`, request[field], variables, 0, true)
+    flattenValue(`trigger.payload.request.${field}`, request[field], variables, 0, true)
   }
 }
 
@@ -159,6 +159,7 @@ function flattenValue(
   value: unknown,
   output: Record<string, string>,
   depth = 0,
+  includeContainers = false,
 ): void {
   if (Object.keys(output).length >= MAX_FLATTEN_KEYS || depth > MAX_FLATTEN_DEPTH) return
   if (value === null || value === undefined) {
@@ -169,13 +170,14 @@ function flattenValue(
     output[prefix] = String(value)
     return
   }
+  if (includeContainers) output[prefix] = stringifyTemplateValue(value)
   if (Array.isArray(value)) {
-    value.forEach((item, index) => flattenValue(`${prefix}.${String(index)}`, item, output, depth + 1))
+    value.forEach((item, index) => flattenValue(`${prefix}.${String(index)}`, item, output, depth + 1, includeContainers))
     return
   }
   if (typeof value === "object") {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      flattenValue(`${prefix}.${key}`, child, output, depth + 1)
+      flattenValue(`${prefix}.${key}`, child, output, depth + 1, includeContainers)
     }
   }
 }
