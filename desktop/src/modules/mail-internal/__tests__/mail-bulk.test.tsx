@@ -136,6 +136,14 @@ describe("mail bulk controls", () => {
     expect(openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/desktop/update")
   })
 
+  it("shows inline quick reply for user mail in the detail view", () => {
+    mocks.messages = [message("mail-1")]
+    mocks.selectedId = "mail-1"
+    mocks.detail = { ...mocks.messages[0], viewerId: "reader", body: "正文", team: null, conversationId: "mail-1", replyToId: null, relation: null, quote: null, attachments: [] }
+    render()
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="快速回复内容"]')).not.toBeNull()
+  })
+
   it("shows platform announcements without reply or forward actions", () => {
     mocks.messages = [{ ...message("broadcast-1"), kind: "platform_broadcast", sender: { userId: "platform", nickname: "Synapse", handle: null } }]
     mocks.selectedId = "broadcast-1"
@@ -145,6 +153,7 @@ describe("mail bulk controls", () => {
     }
     render()
     expect(document.body.textContent).toContain("Synapse")
+    expect(document.querySelector('input[aria-label="快速回复内容"]')).toBeNull()
     const trigger = document.querySelector<HTMLButtonElement>('button[aria-label="信件操作"]')
     expect(trigger).not.toBeNull()
     act(() => trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })))

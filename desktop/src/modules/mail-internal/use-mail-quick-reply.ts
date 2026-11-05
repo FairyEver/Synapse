@@ -24,7 +24,7 @@ export function useMailQuickReply(source: MailMessage | null) {
     setBody("")
     setBusy(false)
     setError(null)
-  }, [source])
+  }, [source?.messageId])
 
   const send = useCallback(async (): Promise<MailOperationResult["send"] | null> => {
     if (!source || busyRef.current) return null

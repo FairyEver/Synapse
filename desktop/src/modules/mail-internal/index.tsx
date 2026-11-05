@@ -19,6 +19,7 @@ import { canQuickReplyToMail } from "@/lib/mail-reply"
 import { buildMailMessageReference } from "../../../synapse-capabilities/shared/message-reference"
 import type { MailAddress, MailContact, MailMessage, MailPerson, MailSummary } from "@/types/mail"
 import { MailCompose, type ComposeStart } from "./compose"
+import { InlineMailQuickReply } from "./inline-quick-reply"
 import { MailLayout } from "./layout"
 import { MailNavigation } from "./navigation"
 import { useMail, type MailBox } from "./use-mail"
@@ -240,6 +241,7 @@ function MailModuleContent({ openRequest, onOpenRequestConsumed, myId }: MailMod
               <p className="mt-1 text-sm">收件人：{addressNames(mail.detail.toAddresses, mail.detail.toRecipients)}</p>
               {!!(mail.detail.ccAddresses?.length ?? mail.detail.ccRecipients.length) && <p className="mt-1 text-sm">抄送：{addressNames(mail.detail.ccAddresses, mail.detail.ccRecipients)}</p>}
               <p className="mt-1 text-xs text-muted-foreground">{new Date(mail.detail.sentAt).toLocaleString()}</p>
+              {canQuickReplyToMail(mail.detail) && <InlineMailQuickReply key={mail.detail.messageId} source={mail.detail} onSent={() => mail.refresh()} />}
               <div className="mt-6 border-t pt-6"><MarkdownViewer content={mail.detail.body} showTabs={false} surface="plain" /></div>
               {mail.detail.quote && <details className="mt-6 text-sm"><summary className="cursor-pointer font-medium">{mail.detail.relationKind === "forward" ? "转发原文" : "回复原文"}</summary><div className="mt-2 space-y-1 text-muted-foreground"><p>发件人：{personName(mail.detail.quote.sender)}</p><p>收件人：{addressNames(mail.detail.quote.toAddresses, mail.detail.quote.toRecipients)}</p>{!!(mail.detail.quote.ccAddresses?.length ?? mail.detail.quote.ccRecipients.length) && <p>抄送：{addressNames(mail.detail.quote.ccAddresses, mail.detail.quote.ccRecipients)}</p>}<p>时间：{new Date(mail.detail.quote.sentAt).toLocaleString()}</p><p>主题：{mail.detail.quote.subject}</p><MarkdownViewer content={mail.detail.quote.body} showTabs={false} surface="plain" /></div></details>}
               {!!mail.detail.attachments.length && <div className="mt-8 border-t pt-4"><h4 className="text-sm font-medium">附件</h4>{mail.detail.attachments.map((attachment) => <Button key={attachment.attachmentId} variant="ghost" className="mt-2 max-w-full" title={attachment.fileName} onClick={() => void download(mail.detail!, attachment.attachmentId)}><Paperclip /><span className="min-w-0 truncate">{attachment.fileName}</span></Button>)}</div>}
