@@ -1,6 +1,7 @@
 import { skillHubPreparedSourcesSchema, skillHubWriteIntentsSchema } from "./skill-hub"
 import { agentShareImagesSchema } from "./agent-share"
 import { mailSchemas } from "./mail"
+import { automationMailSchemas } from "./automation-mail-triggers"
 export { mailSchemas, type MailRecord, type MailEntity } from "./mail"
 import { agentGeneratedUiStateSchema } from "./agent-generated-ui"
 export { agentTaskProgressSchema, type AgentTaskProgressEntryV1 } from "./agent-task-progress"
@@ -303,6 +304,7 @@ import type { NamespaceSchema } from "../types"
 
 /** Stable iteration order: framework reads/writes namespaces in this order. */
 export const allSchemas: readonly NamespaceSchema<unknown>[] = [
+  ...automationMailSchemas,
   ...mailSchemas,
   skillHubPreparedSourcesSchema,
   skillHubWriteIntentsSchema,

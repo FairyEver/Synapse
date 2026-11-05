@@ -133,7 +133,10 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(names).toEqual(
       [
         "audit",
-        "app.agent.share-images",
+      "app.agent.share-images",
+      "app.automation-mail.deliveries",
+      "app.automation-mail.sources",
+      "app.automation-mail.subscriptions",
         "app.mail.accounts",
         "app.mail.credentials",
         "app.mail.folders",
