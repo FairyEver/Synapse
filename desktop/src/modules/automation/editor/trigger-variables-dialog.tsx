@@ -1,16 +1,8 @@
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { Copy } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogFrame,
-  DialogFrameBody,
-  DialogFrameHeader,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -62,6 +54,7 @@ export function TriggerVariablesDialog({
   variables,
 }: TriggerVariablesDialogProps) {
   const [open, setOpen] = useState(false)
+  const panelId = useId()
   const [search, setSearch] = useState("")
   const [groupFilter, setGroupFilter] = useState<GroupFilter>("all")
   const [dynamicPaths, setDynamicPaths] = useState<Record<string, string>>({})
@@ -106,17 +99,11 @@ export function TriggerVariablesDialog({
   }
 
   return (
-    <Dialog data-track="automation-trigger-variables-dialog" open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="default">
-          变量
-        </Button>
-      </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-4xl" showCloseButton={false}>
-        <DialogFrame className="max-h-[calc(100vh-4rem)]">
-          <DialogFrameHeader title={`${triggerTitle} 变量`} />
-          <DialogFrameBody className="px-5 py-4">
-            <div className="grid min-h-0 gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+    <section className="min-w-0 border-t pt-3">
+      <Button type="button" variant="outline" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>变量</Button>
+      {open ? <div id={panelId} className="mt-4 min-w-0" aria-label={`${triggerTitle} 变量`}>
+        <h3 className="mb-3 text-sm font-medium">{triggerTitle} 变量</h3>
+            <div className="grid min-h-0 gap-4 xl:grid-cols-[120px_minmax(0,1fr)]">
               <div className="flex min-h-0 flex-col gap-2">
                 <Button
                   type="button"
@@ -187,10 +174,8 @@ export function TriggerVariablesDialog({
                 </ScrollArea>
               </div>
             </div>
-          </DialogFrameBody>
-        </DialogFrame>
-      </DialogContent>
-    </Dialog>
+      </div> : null}
+    </section>
   )
 }
 

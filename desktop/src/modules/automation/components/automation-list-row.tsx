@@ -64,6 +64,7 @@ function AutomationListRow({
 
   return (
     <TableRow
+      data-automation-id={item.id}
       className="cursor-pointer"
       onClick={onOpen}
     >

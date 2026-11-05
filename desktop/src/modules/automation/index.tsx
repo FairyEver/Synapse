@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { AlertCircle, Plus, RefreshCw } from "lucide-react"
-import { toast } from "sonner"
 
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -20,14 +19,16 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { requireBridgeDomain } from "@/lib/electron-bridge"
-import { runTrackedOperation } from "@/lib/ui-tracking"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { errorLogMeta } from "@/lib/error-sanitize"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
 import { AutomationList } from "./components/automation-list"
-import { AutomationRunsDialog } from "./components/automation-runs-dialog"
+import { AutomationEditorForm } from "./editor/editor-form"
+import type { AutomationEditorMode, AutomationEditorSession } from "./types"
+import { useAutomationDraftGuard } from "./hooks/use-automation-draft-guard"
+import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   deleteAutomation,
   runAutomation,
@@ -89,15 +90,26 @@ function AutomationModule() {
   const projects = config.global.projects
   const { items, loading, error, refresh } = useAutomationItems()
   const { promise } = useAppNotifications()
-  const [historyItem, setHistoryItem] = useState<AutomationItem | null>(null)
-  const historyReturnFocusRef = useRef<HTMLElement | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AutomationItem | null>(null)
   const deleteReturnFocusRef = useRef<HTMLElement | null>(null)
   const deleteSucceededRef = useRef(false)
   const deleteFallbackFocusRef = useRef<HTMLButtonElement | null>(null)
   const wasDeleteOpenRef = useRef(false)
   const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(() => new Set())
-  const [openingEditor, setOpeningEditor] = useState(false)
+  const [editor, setEditor] = useState<{ mode: AutomationEditorMode; tab: "config" | "history"; session?: AutomationEditorSession } | null>(null)
+  const [draftSessions, setDraftSessions] = useState<Record<string, AutomationEditorSession>>({})
+  const draftGuard = useAutomationDraftGuard(Object.keys(draftSessions).length > 0, () => setDraftSessions({}))
+  const [search, setSearch] = useState("")
+  const [filter, setFilter] = useState("all")
+  const returnTarget = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (editor || !returnTarget.current) return
+    const target = returnTarget.current
+    returnTarget.current = null
+    if (target === "create") deleteFallbackFocusRef.current?.focus()
+    else Array.from(document.querySelectorAll<HTMLElement>("[data-automation-id]")).find(row => row.dataset.automationId === target)?.querySelector<HTMLButtonElement>("button")?.focus()
+  }, [editor])
   const [runningItemIds, setRunningItemIds] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
@@ -276,39 +288,20 @@ function AutomationModule() {
     return result
   }
 
-  async function handleCreateEditorOpen() {
-    if (openingEditor) return
-    setOpeningEditor(true)
-    try {
-      await runTrackedOperation(
-        { component: "automation", eventKey: "automation.editor.create-open" },
-        () => requireBridgeDomain("automation").editor.openCreate(),
-      )
-    } catch (openError) {
-      logger.warn("Automation create editor open failed.", {
-        boundary: "renderer.automation.open-create-editor",
-        ...errorLogMeta(openError),
-      })
-      toast.error("打开自动化失败，请重试")
-    } finally {
-      setOpeningEditor(false)
-    }
+  function resumeSession(key: string) {
+    const session = draftSessions[key]
+    if (session) setDraftSessions(current => { const next = { ...current }; delete next[key]; return next })
+    return session
   }
 
-  async function handleEditorOpen(item: AutomationItem) {
-    try {
-      await runTrackedOperation(
-        { component: "automation", eventKey: "automation.editor.edit-open" },
-        () => requireBridgeDomain("automation").editor.openEdit(item.id),
-      )
-    } catch (openError) {
-      logger.warn("Automation editor open failed.", {
-        boundary: "renderer.automation.open-editor",
-        automationId: item.id,
-        ...errorLogMeta(openError),
-      })
-      toast.error("打开自动化失败，请重试")
-    }
+  function handleCreateEditorOpen() {
+    returnTarget.current = "create"
+    setEditor({ mode: { mode: "create" }, tab: "config", session: resumeSession("create") })
+  }
+
+  function handleEditorOpen(item: AutomationItem, tab: "config" | "history" = "config") {
+    returnTarget.current = item.id
+    setEditor({ mode: { mode: "edit", automationId: item.id }, tab, session: resumeSession(item.id) })
   }
 
   const content = (() => {
@@ -362,24 +355,58 @@ function AutomationModule() {
     }
     return (
       <AutomationList
-        items={items}
+        items={items.filter((item) => (
+          (filter === "all" || (filter === "enabled" ? item.enabled : !item.enabled)) &&
+          item.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())
+        ))}
         projects={projects}
-        createDisabled={openingEditor}
+        createDisabled={false}
         pendingItemIds={pendingItemIds}
         runningItemIds={runningItemIds}
         onOpen={(item) => { void handleEditorOpen(item) }}
         onRun={(item) => { void handleRun(item) }}
         onStop={(item) => { void handleStop(item) }}
         onToggleEnabled={(item, enabled) => { void handleToggleEnabled(item, enabled) }}
-        onHistory={(item, event) => {
-          historyReturnFocusRef.current = event.currentTarget
-          setHistoryItem(item)
-        }}
+        onHistory={(item) => handleEditorOpen(item, "history")}
+        filtered={Boolean(search.trim() || filter !== "all")}
+        onClearFilter={() => { setSearch(""); setFilter("all") }}
         onDelete={handleDeleteStart}
         onCreateNew={() => { void handleCreateEditorOpen() }}
       />
     )
   })()
+
+  const draftLeavePrompt = draftGuard.leaving ? (
+    <div role="region" aria-label="未保存的草稿" className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-muted px-5 py-3">
+      <p className="text-sm">还有未保存的草稿</p>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={draftGuard.keepDrafts}>保留草稿</Button>
+        <Button variant="ghost" className="text-destructive" onClick={draftGuard.discardDrafts}>放弃草稿并离开</Button>
+      </div>
+    </div>
+  ) : null
+
+  if (editor) {
+    return (
+      <TooltipProvider>
+        <div className="flex h-full min-h-0 flex-col">
+          {draftLeavePrompt}
+          <div className="min-h-0 flex-1">
+        <AutomationEditorForm
+          mode={editor.mode}
+          initialSession={editor.session}
+          initialTab={editor.tab}
+          onBack={(session) => {
+            if (session) setDraftSessions(current => ({ ...current, [session.item?.id ?? "create"]: session }))
+            setEditor(null)
+          }}
+          onSaved={() => { void refresh() }}
+        />
+          </div>
+        </div>
+      </TooltipProvider>
+    )
+  }
 
   return (
     <TooltipProvider>
@@ -400,7 +427,7 @@ function AutomationModule() {
             <SystemAppTopBarActionButton
               ref={deleteFallbackFocusRef}
               type="button"
-              disabled={openingEditor}
+              disabled={loading}
               onClick={() => { void handleCreateEditorOpen() }}
             >
               <Plus />
@@ -410,19 +437,6 @@ function AutomationModule() {
         )}
         afterContent={(
           <>
-            <AutomationRunsDialog
-              open={Boolean(historyItem)}
-              item={historyItem}
-              busy={Boolean(historyItem && pendingItemIds.has(historyItem.id))}
-              returnFocusRef={historyReturnFocusRef}
-              onOpenChange={(open) => {
-                if (!open) setHistoryItem(null)
-              }}
-              onStopRun={async (runId) => {
-                await stopRunOrThrow(runId)
-              }}
-            />
-
             <AlertDialog
               open={Boolean(deleteTarget)}
               onOpenChange={(open) => {
@@ -463,6 +477,27 @@ function AutomationModule() {
           </>
         )}
       >
+        {draftLeavePrompt}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <Tabs value={filter} onValueChange={setFilter}>
+            <TabsList aria-label="自动化状态筛选">
+              <TabsTrigger value="all">全部</TabsTrigger>
+              <TabsTrigger value="enabled">已启用</TabsTrigger>
+              <TabsTrigger value="disabled">已停用</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Input aria-label="搜索自动化" placeholder="搜索自动化" value={search} className="w-full sm:w-60" onChange={(event) => setSearch(event.target.value)} />
+        </div>
+        {Object.entries(draftSessions).map(([key, draftSession]) => (
+          <div key={key} className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-dashed bg-background px-4 py-3">
+            <div className="min-w-0"><p className="truncate text-sm font-medium">{draftSession.draft.name}</p><p className="text-xs text-muted-foreground">未保存草稿 · 本次会话</p></div>
+            <Button variant="outline" onClick={() => {
+              returnTarget.current = draftSession.item?.id ?? "create"
+              setEditor({ mode: draftSession.item ? { mode: "edit", automationId: draftSession.item.id } : { mode: "create" }, tab: "config", session: draftSession })
+              resumeSession(key)
+            }}>继续编辑</Button>
+          </div>
+        ))}
         {content}
       </ModulePage>
     </TooltipProvider>

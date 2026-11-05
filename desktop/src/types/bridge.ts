@@ -1837,10 +1837,6 @@ export type SynapseBridge = {
     }
   }
   automation: {
-    editor: {
-      openCreate: () => Promise<void>
-      openEdit: (id: string) => Promise<void>
-    }
     item: {
       list: () => Promise<AutomationItem[]>
       get: (id: string) => Promise<AutomationItem | null>

@@ -1,5 +1,7 @@
 # Automation Editor Redesign
 
+> 2026-11-05：用户确认页面内编辑方案。本文有关独立编辑窗口、禁止内嵌编辑和窗口关闭行为的 UI 要求已被 `2026-11-05-automation-inline-editor-design.md` 替代；数据与执行器边界继续有效。
+
 Date: 2026-06-03
 
 ## Context

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -41,6 +41,22 @@ afterEach(() => {
 })
 
 describe("CronInput", () => {
+  it("keeps manually entered hours when a common template field is changed", async () => {
+    function Harness() { const [value, setValue] = useState("0 9 * * *"); return <CronInput id="manual-cron" value={value} onChange={setValue} /> }
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container); roots.push(root)
+    await act(async () => { root.render(<Harness />) })
+    const change = (id: string, value: string) => {
+      const input = document.getElementById(id) as HTMLInputElement
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value)
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await act(async () => { change("manual-cron", "0 15 * * *") })
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(b => b.textContent === "编辑")!.click() })
+    expect((document.getElementById("cron-editor-hour") as HTMLInputElement).value).toBe("15")
+    await act(async () => { change("cron-editor-minute", "1") })
+    expect((document.getElementById("manual-cron") as HTMLInputElement).value).toBe("1 15 * * *")
+  })
   it("renders as an input group with an embedded edit button", () => {
     const html = renderToStaticMarkup(
       <CronInput
@@ -56,7 +72,7 @@ describe("CronInput", () => {
     expect(html).toContain(">编辑</button>")
   })
 
-  it("restores focus to the edit button after cancelling", async () => {
+  it("expands and collapses the cron editor inline without a dialog", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -79,15 +95,12 @@ describe("CronInput", () => {
     await act(async () => {
       editButton?.click()
     })
-    const cancelButton = Array.from(document.querySelectorAll("button"))
-      .find((button) => button.textContent === "取消")
-    expect(cancelButton).toBeInstanceOf(HTMLButtonElement)
-
-    await act(async () => {
-      cancelButton?.click()
-    })
-
-    expect(document.activeElement).toBe(editButton)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(document.body.textContent).toContain("常用")
+    const collapseButton = Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "收起")
+    expect(collapseButton).toBeInstanceOf(HTMLButtonElement)
+    await act(async () => { collapseButton?.click() })
+    expect(document.body.textContent).not.toContain("未来 5 次")
   })
 })
 

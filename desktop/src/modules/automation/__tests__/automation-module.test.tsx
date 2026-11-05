@@ -7,9 +7,10 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AutomationModule } from "../index"
+import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { AutomationList } from "../components/automation-list"
 import { AutomationListRow } from "../components/automation-list-row"
-import { AutomationRunsDialog } from "../components/automation-runs-dialog"
+import { AutomationRunsPanel } from "../components/automation-runs-dialog"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { AutomationItem } from "@/types/automation"
 
@@ -56,9 +57,9 @@ vi.mock("@/lib/electron-bridge", async () => {
   return {
     ...actual,
     requireBridgeDomain: () => ({
-      editor: {
-        openCreate: mocks.openCreateEditorWindow,
-        openEdit: mocks.openEditorWindow,
+      item: {
+        list: async () => [],
+        get: async () => createItem(),
       },
     }),
   }
@@ -251,11 +252,9 @@ describe("AutomationModule", () => {
 
     await act(async () => {
       root.render(
-        <AutomationRunsDialog
+        <AutomationRunsPanel
           busy={false}
           item={createItem()}
-          open
-          onOpenChange={vi.fn()}
           onStopRun={vi.fn()}
         />,
       )
@@ -278,7 +277,7 @@ describe("AutomationModule", () => {
     expect(document.body.textContent).toContain("暂无运行记录")
   })
 
-  it("restores focus after closing run history", async () => {
+  it("returns from inline run history to the automation list", async () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],
       loading: false,
@@ -300,13 +299,14 @@ describe("AutomationModule", () => {
     await flushPromises()
     await act(async () => {
       Array.from(document.querySelectorAll("button"))
-        .find((button) => button.textContent === "关闭")?.click()
+        .find((button) => button.getAttribute("aria-label") === "返回自动化列表")?.click()
     })
 
-    expect(document.activeElement).toBe(historyButton)
+    expect(document.querySelector('[aria-label="查看运行历史"]')).not.toBeNull()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  it("opens the create editor window from the header action", async () => {
+  it("opens the create editor in the current page from the header action", async () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],
       loading: false,
@@ -325,7 +325,75 @@ describe("AutomationModule", () => {
       Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "新建")?.click()
     })
 
-    expect(mocks.openCreateEditorWindow).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+    expect(document.body.textContent).toContain("当以下情况发生时")
+    expect(mocks.openCreateEditorWindow).not.toHaveBeenCalled()
+  })
+
+  it("preserves a stashed draft when another automation is inspected and closed", async () => {
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem({ name: "已有任务" })], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationModule />) })
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(b => b.textContent === "新建")!.click() })
+    await act(async () => {
+      const name = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')!
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(name, "我的草稿")
+      name.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="返回自动化列表"]')!.click() })
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(b => b.textContent === "暂存草稿并返回")!.click() })
+    expect(document.body.textContent).toContain("我的草稿")
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(b => b.textContent === "已有任务")!.click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="返回自动化列表"]')!.click() })
+    expect(document.body.textContent).toContain("我的草稿")
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(b => b.textContent === "继续编辑")!.click() })
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')!.value).toBe("我的草稿")
+  })
+
+  it.each([false, true])("protects stashed drafts on app navigation while inspecting another task: %s", async (inspectOther) => {
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem({ name: "已有任务" })], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationModule />) })
+    const click = (text: string) => Array.from(document.querySelectorAll("button")).find(b => b.textContent === text)!.click()
+    await act(async () => { click("新建") })
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')!
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "暂存内容")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="返回自动化列表"]')!.click() })
+    await act(async () => { click("暂存草稿并返回") })
+    if (inspectOther) await act(async () => { click("已有任务") })
+    const closeEvent = new Event("beforeunload", { cancelable: true })
+    await act(async () => { window.dispatchEvent(closeEvent) })
+    expect(closeEvent.defaultPrevented).toBe(true)
+    expect(document.body.textContent).toContain("还有未保存的草稿")
+    await act(async () => { click("保留草稿") })
+    const navigate = vi.fn()
+    let pending!: Promise<boolean>
+    await act(async () => { pending = runAppNavigation(navigate) })
+    expect(navigate).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("还有未保存的草稿")
+    await act(async () => { click("保留草稿"); await pending })
+    expect(navigate).not.toHaveBeenCalled()
+    await act(async () => { pending = runAppNavigation(navigate) })
+    await act(async () => { click("放弃草稿并离开"); await pending })
+    expect(navigate).toHaveBeenCalledOnce()
+  })
+
+  it("does not let a late history retry replace newer history results", async () => {
+    let finishRetry!: (runs: unknown[]) => void
+    mocks.listAutomationRuns.mockRejectedValueOnce(new Error("first load failed"))
+      .mockReturnValueOnce(new Promise(resolve => { finishRetry = resolve }))
+      .mockResolvedValueOnce([])
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<AutomationRunsPanel busy={false} item={createItem()} onStopRun={vi.fn()} />) })
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(b => b.textContent === "重试")!.click() })
+    await act(async () => { root.render(<AutomationRunsPanel busy={false} item={createItem({ name: "新快照" })} onStopRun={vi.fn()} />) })
+    await act(async () => { finishRetry([{ id: "old-run", schemaVersion: 1, automationId: "automation:1", status: "failed", error: "过期运行结果", startedAt: "2026-11-05T00:00:00Z", triggeredBy: "manual", triggerType: "builtin.cron", executorType: "builtin.command" }]) })
+    expect(document.body.textContent).toContain("暂无运行记录")
+    expect(document.body.textContent).not.toContain("过期运行结果")
   })
 
   it("does not render the legacy automation form dialog", async () => {
@@ -346,7 +414,7 @@ describe("AutomationModule", () => {
     expect(document.querySelector('[data-track="automation-form-dialog"]')).toBeNull()
   })
 
-  it("opens the editor window from a list row", async () => {
+  it("opens the editor in the current page from a list row", async () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],
       loading: false,
@@ -365,7 +433,8 @@ describe("AutomationModule", () => {
       document.querySelector<HTMLElement>('tbody tr[data-slot="table-row"]')?.click()
     })
 
-    expect(mocks.openEditorWindow).toHaveBeenCalledWith("automation:1")
+    expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+    expect(mocks.openEditorWindow).not.toHaveBeenCalled()
   })
 
   it("opens the editor window from the explicit row edit action", async () => {
@@ -391,8 +460,9 @@ describe("AutomationModule", () => {
       editButton?.click()
     })
 
-    expect(mocks.openEditorWindow).toHaveBeenCalledTimes(1)
-    expect(mocks.openEditorWindow).toHaveBeenCalledWith("automation:1")
+    expect(mocks.openEditorWindow).not.toHaveBeenCalled()
+    expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+    expect(mocks.openEditorWindow).not.toHaveBeenCalled()
   })
 
   it("opens delete confirmation normally and deletes immediately on Alt-click", async () => {

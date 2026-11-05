@@ -340,8 +340,6 @@ export const IPC_CHANNELS = {
     "workspaceTreeChanged": "synapse:app:agent:workspace_tree:changed",
   },
   "automation": {
-    "openCreateEditorWindow": "synapse:app:automation:editor:open_create",
-    "openEditorWindow": "synapse:app:automation:editor:open_edit",
     "listItems": "synapse:app:automation:item:list",
     "getItem": "synapse:app:automation:item:get",
     "createItem": "synapse:app:automation:item:create",

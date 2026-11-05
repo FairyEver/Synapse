@@ -1278,10 +1278,6 @@ const synapseBridge: SynapseBridge = {
     },
   },
   automation: {
-    editor: {
-      openCreate: () => invoke(IPC_CHANNELS.automation.openCreateEditorWindow)(),
-      openEdit: (id) => invoke(IPC_CHANNELS.automation.openEditorWindow)({ automationId: id }),
-    },
     item: {
       list: invoke(IPC_CHANNELS.automation.listItems),
       get: (id) => invoke(IPC_CHANNELS.automation.getItem)({ automationId: id }),

@@ -91,3 +91,7 @@ If a read result only shows `{ type, summary }`, that is expected. It is not eno
 ## API Reference
 
 See the attached `api-reference.md` for complete tool signatures and public result shapes.
+
+## Desktop editing
+
+The desktop Automation page creates and edits items in the current content area and shows run history inline. It has no dedicated editor-window API. These UI changes do not change the tool schemas or the create/update/enable/disable contracts above.

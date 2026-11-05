@@ -15,6 +15,8 @@ import type { SynapseProjectConfig } from "@/types/config"
 import { AutomationListRow } from "./automation-list-row"
 
 type AutomationListProps = {
+  readonly filtered?: boolean
+  readonly onClearFilter?: () => void
   readonly items: AutomationItem[]
   readonly projects: readonly SynapseProjectConfig[]
   readonly createDisabled: boolean
@@ -31,6 +33,8 @@ type AutomationListProps = {
 
 function AutomationList({
   items,
+  filtered,
+  onClearFilter,
   projects,
   createDisabled,
   pendingItemIds,
@@ -47,13 +51,14 @@ function AutomationList({
     return (
       <Empty className="min-h-64 border">
         <EmptyHeader>
-          <EmptyTitle>暂无自动化</EmptyTitle>
+          <EmptyTitle>{filtered ? "没有匹配的自动化" : "暂无自动化"}</EmptyTitle>
         </EmptyHeader>
         <EmptyContent>
-          <Button size="default" variant="outline" disabled={createDisabled} onClick={onCreateNew}>
-            <Plus data-icon="inline-start" />
-            新建
-          </Button>
+          {filtered ? <Button variant="outline" onClick={onClearFilter}>清除筛选</Button> : (
+            <Button size="default" variant="outline" disabled={createDisabled} onClick={onCreateNew}>
+              <Plus data-icon="inline-start" />新建
+            </Button>
+          )}
         </EmptyContent>
       </Empty>
     )

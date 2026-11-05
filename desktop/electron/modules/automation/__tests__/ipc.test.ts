@@ -7,11 +7,6 @@ const logStoreMock = vi.hoisted(() => ({
   },
 }))
 
-const automationWindowServiceMock = vi.hoisted(() => ({
-  openCreate: vi.fn(async () => ({ id: "window-create" })),
-  openEdit: vi.fn(async () => ({ id: "window-edit" })),
-}))
-
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import { automationIpcModule } from "../ipc"
 
@@ -19,42 +14,14 @@ vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
 
-vi.mock("../../../services/automation-window-service", () => ({
-  automationWindowService: automationWindowServiceMock,
-}))
-
 describe("automationIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it("declares automation editor window methods", () => {
-    expect(automationIpcModule.methods.openCreateEditorWindow.operationId).toBe("app.automation.editor.open_create")
-    expect(automationIpcModule.methods.openCreateEditorWindow.request?.safeParse(undefined).success).toBe(true)
-    expect(automationIpcModule.methods.openEditorWindow.operationId).toBe("app.automation.editor.open_edit")
-    expect(automationIpcModule.methods.openEditorWindow.request?.parse({ automationId: "automation:1" })).toEqual({
-      automationId: "automation:1",
-    })
-  })
-
-  it("logs automation editor window IPC requests", async () => {
-    const harness = createInMemoryHarness()
-    harness.registry.register(automationIpcModule, { moduleId: "automation", resolve: (() => undefined) as IpcHandlerContext["resolve"] })
-
-    await expect(harness.invoke("synapse:app:automation:editor:open_create", undefined)).resolves.toBeUndefined()
-    await expect(harness.invoke("synapse:app:automation:editor:open_edit", { automationId: "automation:1" })).resolves.toBeUndefined()
-
-    expect(automationWindowServiceMock.openCreate).toHaveBeenCalledTimes(1)
-    expect(automationWindowServiceMock.openEdit).toHaveBeenCalledWith("automation:1")
-    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Automation IPC request.", expect.objectContaining({
-      boundary: "automation.ipc.open-create-editor-window",
-      operationId: "app.automation.editor.open_create",
-    }))
-    expect(logStoreMock.logger.info).toHaveBeenCalledWith("Automation IPC request.", expect.objectContaining({
-      automationId: "automation:1",
-      boundary: "automation.ipc.open-editor-window",
-      operationId: "app.automation.editor.open_edit",
-    }))
+  it("does not expose dedicated automation editor window methods", () => {
+    expect(automationIpcModule.methods).not.toHaveProperty("openCreateEditorWindow")
+    expect(automationIpcModule.methods).not.toHaveProperty("openEditorWindow")
   })
 
   it("declares an automation changed event", () => {

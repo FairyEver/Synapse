@@ -105,23 +105,6 @@ async function bootstrapRenderer(): Promise<void> {
         </AppErrorBoundary>
       </StrictMode>,
     )
-  } else if (windowType === "automation-editor") {
-    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
-    const { AppConfigProvider } = await import("@/app-shell/config")
-    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
-    updateTrackingContext({ moduleId: "automation", windowType })
-    const { AutomationEditorApp } = await import("@/modules/automation/editor/editor-app")
-    createRoot(document.getElementById("root")!).render(
-      <StrictMode>
-        <AppErrorBoundary>
-          <AppConfigProvider>
-            <AppNotificationsProvider>
-              <AutomationEditorApp />
-            </AppNotificationsProvider>
-          </AppConfigProvider>
-        </AppErrorBoundary>
-      </StrictMode>,
-    )
   } else if (windowType === "system-app") {
     const { AppErrorBoundary } = await import("@/components/app-error-boundary")
     const { AppConfigProvider } = await import("@/app-shell/config")

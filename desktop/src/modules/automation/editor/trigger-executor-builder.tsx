@@ -11,7 +11,6 @@ import {
   ItemDescription,
   ItemTitle,
 } from "@/components/ui/item"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { createPlatformActionDefaultConfig } from "../../../../action-packages/builtin/shell-defaults"
 import { listDiscoverableBuiltinAutomationActionTypes } from "../../../../app-capabilities/surface-discovery"
@@ -177,11 +176,10 @@ export function TriggerExecutorBuilder({
   return (
     <div
       data-layout="automation-editor-builder"
-      className="grid h-full min-h-0 w-full max-w-full grid-cols-[400px_1px_minmax(0,1fr)] gap-5 overflow-hidden"
+      className="grid min-w-0 w-full grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.85fr)_1px_minmax(0,1.15fr)]"
     >
-      <section data-layout="automation-editor-trigger-panel" className="min-h-0 min-w-0 overflow-hidden">
-        <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
-          <div className="p-5">
+      <section data-layout="automation-editor-trigger-panel" className="min-w-0">
+        <div className="min-w-0">
             <BuilderHeader
               actionAriaLabel={selectedTrigger ? "更换触发条件" : undefined}
               actionLabel={selectedTrigger ? "更换" : undefined}
@@ -195,12 +193,7 @@ export function TriggerExecutorBuilder({
                   layout="automation-editor-trigger-summary"
                   title={selectedTrigger.manifest.title}
                   summary={safeTriggerSummary(selectedTrigger.manifest.id, triggerConfig)}
-                  extraAction={(
-                    <TriggerVariablesDialog
-                      triggerTitle={selectedTrigger.manifest.title}
-                      variables={selectedTrigger.manifest.variables ?? []}
-                    />
-                  )}
+
                 />
                 {TriggerConfigForm ? (
                   <div
@@ -213,6 +206,7 @@ export function TriggerExecutorBuilder({
                     />
                   </div>
                 ) : null}
+                <TriggerVariablesDialog triggerTitle={selectedTrigger.manifest.title} variables={selectedTrigger.manifest.variables ?? []} />
               </div>
             ) : (
               <ChoiceList
@@ -223,15 +217,13 @@ export function TriggerExecutorBuilder({
                 onSelect={(id) => onTriggerChange(id, { ...rendererAutomationTriggerRegistry.getDefaultConfig(id) })}
               />
             )}
-          </div>
-        </ScrollArea>
+        </div>
       </section>
 
-      <Separator data-layout="automation-editor-divider" orientation="vertical" />
+      <Separator data-layout="automation-editor-divider" orientation="vertical" className="hidden lg:block" />
 
-      <section data-layout="automation-editor-executor-panel" className="min-h-0 min-w-0 overflow-hidden">
-        <ScrollArea className="h-full" viewportClassName="overflow-x-hidden">
-          <div className="p-5">
+      <section data-layout="automation-editor-executor-panel" className="min-w-0">
+        <div className="min-w-0">
             <BuilderHeader
               actionAriaLabel={selectedExecutor ? "更换执行操作" : undefined}
               actionLabel={selectedExecutor ? "更换" : undefined}
@@ -273,8 +265,7 @@ export function TriggerExecutorBuilder({
                 )}
               />
             )}
-          </div>
-        </ScrollArea>
+        </div>
       </section>
     </div>
   )

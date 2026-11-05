@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Clock, Play, RefreshCw, RotateCcw, Square } from "lucide-react"
 
 import { ActionResultView } from "@/action-runtime/action-result-view"
@@ -7,14 +7,6 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { runTrackedOperation } from "@/lib/ui-tracking"
-import {
-  Dialog,
-  DialogContent,
-  DialogFrame,
-  DialogFrameBody,
-  DialogFrameFooter,
-  DialogFrameHeader,
-} from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import type { AutomationItem, AutomationRun } from "@/types/automation"
@@ -23,41 +15,45 @@ import { formatAutomationDate, formatAutomationRunStatus } from "../utils"
 
 const logger = createRendererLogger("automation.runs")
 
-type AutomationRunsDialogProps = {
-  open: boolean
+type AutomationRunsPanelProps = {
   item: AutomationItem | null
   busy: boolean
-  returnFocusRef?: RefObject<HTMLElement | null>
-  onOpenChange: (open: boolean) => void
   onStopRun: (runId: string) => Promise<void>
 }
 
-function AutomationRunsDialog({
-  open,
+function AutomationRunsPanel({
   item,
   busy,
-  returnFocusRef,
-  onOpenChange,
   onStopRun,
-}: AutomationRunsDialogProps) {
-  const wasOpenRef = useRef(open)
+}: AutomationRunsPanelProps) {
   const [runs, setRuns] = useState<AutomationRun[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestId = useRef(0)
+  const mounted = useRef(true)
+  const currentItem = useRef(item)
+  currentItem.current = item
 
-  const loadRuns = useCallback(async (options?: { readonly isCancelled?: () => boolean }) => {
-    if (!item) return
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; requestId.current += 1 }
+  }, [])
+
+  const loadRuns = useCallback(async () => {
+    if (!item || currentItem.current !== item) return
+    const request = ++requestId.current
+    const isCurrent = () => mounted.current && request === requestId.current && currentItem.current === item
     setLoading(true)
     setRuns([])
     setError(null)
     try {
       const nextRuns = await listAutomationRuns(item.id)
-      if (!options?.isCancelled?.()) {
+      if (isCurrent()) {
         setRuns(nextRuns)
         setError(null)
       }
     } catch (loadError) {
-      if (!options?.isCancelled?.()) {
+      if (isCurrent()) {
         logger.warn("Automation run history load failed.", {
           automationId: item.id,
           executorType: item.executor.type,
@@ -67,30 +63,17 @@ function AutomationRunsDialog({
         setError("读取历史失败")
       }
     } finally {
-      if (!options?.isCancelled?.()) {
+      if (isCurrent()) {
         setLoading(false)
       }
     }
   }, [item])
 
   useEffect(() => {
-    if (!open || !item) return
-    let cancelled = false
-    void loadRuns({
-      isCancelled: () => cancelled,
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [open, item, loadRuns])
-
-  useEffect(() => {
-    if (wasOpenRef.current && !open) {
-      returnFocusRef?.current?.focus()
-    }
-    wasOpenRef.current = open
-  }, [open, returnFocusRef])
+    if (!item) return
+    void loadRuns()
+    return () => { requestId.current += 1 }
+  }, [item, loadRuns])
 
   function handleRetry() {
     void runTrackedOperation(
@@ -106,8 +89,7 @@ function AutomationRunsDialog({
         { component: "automation", eventKey: "automation.history.stop" },
         () => onStopRun(run.id),
       )
-      setError(null)
-      setRuns(await listAutomationRuns(item.id))
+      if (mounted.current && currentItem.current === item) await loadRuns()
     } catch (stopError) {
       logger.warn("Automation run stop failed.", {
         automationId: item.id,
@@ -116,22 +98,13 @@ function AutomationRunsDialog({
         boundary: "renderer.automation.runs.stop",
         ...errorDiagnostic(stopError),
       })
-      setError("停止失败")
+      if (mounted.current && currentItem.current === item) setError("停止失败")
     }
   }
 
   return (
-    <Dialog data-track="automation-runs-dialog" open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-h-[calc(100vh-4rem)] overflow-hidden p-0 sm:max-w-2xl"
-        showCloseButton={false}
-      >
-        <DialogFrame className="max-h-[calc(100vh-4rem)]">
-          <DialogFrameHeader title={item?.name ?? "运行历史"} description="最近 100 次运行记录" />
-
-          <DialogFrameBody>
-            <ScrollArea className="h-full min-h-0">
-              <div className="flex max-h-[calc(100vh-14rem)] flex-col gap-2 px-5 py-4">
+    <section aria-label="运行记录" className="min-w-0">
+              <div className="flex min-w-0 flex-col gap-2">
                 {error ? (
                   <div className="flex items-center gap-2 text-sm">
                     <p className="text-destructive">{error}</p>
@@ -155,13 +128,7 @@ function AutomationRunsDialog({
                   />
                 ))}
               </div>
-            </ScrollArea>
-          </DialogFrameBody>
-
-          <DialogFrameFooter showCloseButton />
-        </DialogFrame>
-      </DialogContent>
-    </Dialog>
+    </section>
   )
 }
 
@@ -277,5 +244,5 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
   }
 }
 
-export { AutomationRunsDialog }
-export type { AutomationRunsDialogProps }
+export { AutomationRunsPanel }
+export type { AutomationRunsPanelProps }

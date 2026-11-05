@@ -60,6 +60,13 @@ describe("system app header architecture", () => {
     expect(source).not.toMatch(/<Sheet(?:\s|>)/)
   })
 
+  it("keeps the inline automation editor on the shared host header", async () => {
+    const source = await readFile(new FileURL("../../automation/editor/editor-form.tsx", import.meta.url), "utf8")
+    expect(source).toContain("<SystemAppWindowShell")
+    expect(source).toContain("embeddedLeftAddon={navigation}")
+    expect(source).not.toMatch(/<SystemAppTopBar(?:\s|>)/)
+  })
+
   it("keeps terminal header controls on the shared action button", async () => {
     const source = await readFile(new FileURL(appEntrypoints.terminal.path, import.meta.url), "utf8")
 

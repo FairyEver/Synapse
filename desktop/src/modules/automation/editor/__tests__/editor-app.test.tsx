@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { act } from "react"
-import { createRoot } from "react-dom/client"
+import { act, useMemo } from "react"
+import { createRoot as createReactRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { AutomationEditorApp } from "../editor-app"
+import { AutomationEditorForm } from "../editor-form"
+import type { AutomationEditorMode } from "../../types"
 import type { AutomationItem } from "@/types/automation"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -13,6 +14,16 @@ globalThis.ResizeObserver = class {
   unobserve() {}
   disconnect() {}
 } as typeof ResizeObserver
+
+const roots = new Set<Root>()
+function createRoot(container: Element) { const root = createReactRoot(container); roots.add(root); return root }
+function AutomationEditorApp() {
+  const mode = useMemo<AutomationEditorMode>(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get("mode") === "edit" ? { mode: "edit", automationId: params.get("automationId")! } : { mode: "create" }
+  }, [])
+  return <AutomationEditorForm mode={mode} onBack={() => undefined} />
+}
 
 const createItem = vi.fn()
 const updateItem = vi.fn()
@@ -67,7 +78,8 @@ describe("AutomationEditorApp", () => {
     ])
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    await act(async () => { roots.forEach(root => root.unmount()) }); roots.clear()
     document.body.innerHTML = ""
     Reflect.deleteProperty(window, "synapse")
     vi.clearAllMocks()
@@ -188,7 +200,7 @@ describe("AutomationEditorApp", () => {
       .toContain("GET · 未设置 URL")
   })
 
-  it("opens trigger variables in a dialog and copies a static template", async () => {
+  it("expands trigger variables inline and copies a static template", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
@@ -206,7 +218,8 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("变量")?.click()
     })
 
-    const dialog = document.querySelector('[role="dialog"]')
+    const dialog = document.querySelector('[aria-label="Cron 变量"]')
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(dialog?.textContent).toContain("Cron 变量")
     expect(dialog?.textContent).toContain("触发信息")
     expect(dialog?.textContent).toContain("触发时间")
@@ -245,7 +258,8 @@ describe("AutomationEditorApp", () => {
       changeInput(searchInput, "timezone")
     })
 
-    const dialog = document.querySelector('[role="dialog"]')
+    const dialog = document.querySelector('[aria-label="Cron 变量"]')
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(dialog?.textContent).toContain("{{trigger.timezone}}")
     expect(dialog?.textContent).toContain("时区")
     expect(dialog?.textContent).not.toContain("{{trigger.automationName}}")
@@ -269,7 +283,8 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("变量")?.click()
     })
 
-    const dialog = document.querySelector('[role="dialog"]')
+    const dialog = document.querySelector('[aria-label="Webhook 变量"]')
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(dialog?.textContent).toContain("Webhook 变量")
     expect(dialog?.textContent).toContain("事件内容")
     expect(dialog?.textContent).toContain("完整 Webhook")
@@ -297,7 +312,7 @@ describe("AutomationEditorApp", () => {
     expect(dialog?.textContent).toContain("{{trigger.request.body.repository.full_name}}")
   })
 
-  it("shows copy failure feedback in the variable dialog", async () => {
+  it("shows copy failure feedback in the variable panel", async () => {
     const writeText = vi.fn().mockRejectedValue(new Error("denied"))
     Object.assign(navigator, { clipboard: { writeText } })
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
@@ -333,12 +348,11 @@ describe("AutomationEditorApp", () => {
       root.render(<AutomationEditorApp />)
     })
 
-    expect(document.body.textContent).toContain("自动化 #0000")
-    expect(document.body.textContent).not.toContain("新建")
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')?.value).toBe("自动化 #0000")
     expect(document.querySelector('input[aria-label="自动化标题"]')).toBeNull()
   })
 
-  it("reloads edit data when the editor window is focused again", async () => {
+  it("reloads edit data when the page is focused again", async () => {
     getItem.mockReset()
     getItem
       .mockResolvedValueOnce(buildAutomationItem({ name: "旧配置" }))
@@ -351,14 +365,14 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       root.render(<AutomationEditorApp />)
     })
-    expect(document.body.textContent).toContain("旧配置")
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')?.value).toBe("旧配置")
 
     await act(async () => {
       window.dispatchEvent(new Event("focus"))
     })
 
     expect(getItem).toHaveBeenCalledTimes(2)
-    expect(document.body.textContent).toContain("新配置")
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')?.value).toBe("新配置")
     expect(document.body.textContent).not.toContain("旧配置")
   })
 
@@ -378,7 +392,7 @@ describe("AutomationEditorApp", () => {
       Array.from(document.querySelectorAll("button")).find((button) =>
         button.textContent?.includes("旧名称"))?.click()
     })
-    const nameInput = document.querySelector<HTMLInputElement>("#automation-editor-rename-name")
+    const nameInput = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')
     await act(async () => {
       if (!nameInput) return
       changeInput(nameInput, "新名称")
@@ -424,87 +438,18 @@ describe("AutomationEditorApp", () => {
       root.render(<AutomationEditorApp />)
     })
 
-    expect(document.body.textContent).toContain("自动化 #1111")
+    expect(document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')?.value).toBe("自动化 #1111")
     expect(document.body.textContent).not.toContain("自动化 #0000")
   })
 
-  it("renames the automation from the compact title dialog", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0)
-    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
-    const rootElement = document.createElement("div")
-    document.body.appendChild(rootElement)
-    const root = createRoot(rootElement)
-
-    await act(async () => {
-      root.render(<AutomationEditorApp />)
-    })
-    await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("自动化 #0000"))?.click()
-    })
-
-    expect(document.body.textContent).toContain("重命名自动化")
-
-    const nameInput = document.querySelector<HTMLInputElement>("#automation-editor-rename-name")
-    expect(nameInput).not.toBeNull()
-    expect(nameInput?.selectionStart).toBe(0)
-    expect(nameInput?.selectionEnd).toBe("自动化 #0000".length)
-
-    await act(async () => {
-      if (!nameInput) return
-      changeInput(nameInput, "每日总结")
-    })
-    await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "确认")?.click()
-    })
-
-    expect(document.body.textContent).toContain("每日总结")
-    expect(document.body.textContent).not.toContain("自动化 #0000")
-  })
-
-  it("keeps rename confirmation disabled for blank names", async () => {
-    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
-    const rootElement = document.createElement("div")
-    document.body.appendChild(rootElement)
-    const root = createRoot(rootElement)
-
-    await act(async () => {
-      root.render(<AutomationEditorApp />)
-    })
-    await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) =>
-        button.textContent?.includes("自动化 #"))?.click()
-    })
-
-    const nameInput = document.querySelector<HTMLInputElement>("#automation-editor-rename-name")
-    await act(async () => {
-      if (!nameInput) return
-      changeInput(nameInput, "   ")
-    })
-
-    expect(Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent === "确认")?.disabled).toBe(true)
-  })
-
-  it("restores focus to the title after cancelling rename", async () => {
-    window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
-    const rootElement = document.createElement("div")
-    document.body.appendChild(rootElement)
-    const root = createRoot(rootElement)
-
-    await act(async () => {
-      root.render(<AutomationEditorApp />)
-    })
-    const titleButton = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("自动化 #"))
-    await act(async () => {
-      titleButton?.click()
-    })
-    await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "取消")?.click()
-    })
-
-    expect(document.activeElement).toBe(titleButton)
+  it("edits the automation name inline without a dialog", async () => {
+    window.history.replaceState(null, "", "/?mode=create")
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
+    const name = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')!
+    await act(async () => { changeInput(name, "每日总结") })
+    expect(name.value).toBe("每日总结")
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
   it("switches selected trigger back to list from the panel header change action", async () => {
@@ -556,15 +501,8 @@ describe("AutomationEditorApp", () => {
       root.render(<AutomationEditorApp />)
     })
 
-    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
-      .toContain("grid-cols-[400px_1px_minmax(0,1fr)]")
-    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
-      .toContain("h-full")
-    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
-      .toContain("min-h-0")
-    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className)
-      .not.toContain("py-5")
-    expect(document.querySelector('[data-layout="automation-editor-divider"]')).not.toBeNull()
+    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className).toContain("grid-cols-1")
+    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className).toContain("lg:grid-cols-")
   })
 
   it("keeps automation choice rows auto-height with compact padding", async () => {
@@ -604,16 +542,10 @@ describe("AutomationEditorApp", () => {
     const executorPanel = document.querySelector('[data-layout="automation-editor-executor-panel"]')
     const executorConfig = document.querySelector('[data-layout="automation-editor-executor-config"]')
 
-    expect(body?.className).toContain("overflow-hidden")
-    expect(body?.className).not.toContain("overflow-y-auto")
-    expect(body?.className).not.toContain("px-5")
-    expect(triggerPanel?.className).toContain("overflow-hidden")
-    expect(triggerPanel?.querySelector('[data-scrollbars="vertical"]')).not.toBeNull()
-    expect(triggerPanel?.querySelector(".p-5")).not.toBeNull()
-    expect(executorPanel?.className).toContain("overflow-hidden")
-    expect(executorPanel?.querySelector('[data-scrollbars="vertical"]')).not.toBeNull()
-    expect(executorPanel?.querySelector(".p-5")).not.toBeNull()
-    expect(executorConfig?.className).toContain("[&_[data-slot=field-content]]:min-w-0")
+    expect(body?.closest('[data-slot="scroll-area"]')).not.toBeNull()
+    expect(triggerPanel?.className).toContain("min-w-0")
+    expect(executorPanel?.className).toContain("min-w-0")
+    expect(executorConfig?.className).toContain("min-w-0")
   })
 
   it("separates selected summaries from configuration panels", async () => {
@@ -719,10 +651,10 @@ describe("AutomationEditorApp", () => {
       window.dispatchEvent(new Event("beforeunload", { cancelable: true }))
     })
 
-    expect(document.body.textContent).toContain("未保存的更改")
+    expect(document.body.textContent).toContain("更改尚未保存")
 
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "放弃")?.click()
+      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "放弃修改")?.click()
     })
 
     expect(closeSpy).toHaveBeenCalledTimes(1)

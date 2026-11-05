@@ -1,5 +1,7 @@
 # Automation Trigger Variables Design
 
+> 2026-11-05：变量查看改为编辑页内展开，本文涉及变量 Dialog 的 UI 要求由 `2026-11-05-automation-inline-editor-design.md` 替代。变量发现、模板、复制和运行时替换协议保持不变。
+
 为自动化触发器提供可发现、可复制、可在四类执行器中运行时替换的变量能力。
 
 ## 背景

@@ -22,8 +22,15 @@ type AutomationEditorLoadState =
   | { status: "ready"; draft: AutomationEditorDraft; item?: AutomationItem }
   | { status: "error"; message: string }
 
+type AutomationEditorSession = {
+  readonly draft: AutomationEditorDraft
+  readonly item?: AutomationItem
+  readonly savedDraft: AutomationEditorDraft
+}
+
 export type {
   AutomationEditorDraft,
   AutomationEditorLoadState,
   AutomationEditorMode,
+  AutomationEditorSession,
 }
