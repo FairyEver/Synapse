@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from "react"
 
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ChevronDown } from "lucide-react"
 import { FormDialog } from "@/components/form-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
@@ -43,6 +45,8 @@ type CronEditorDialogProps = {
 }
 
 type CronEditorFieldsProps = {
+  expressionId?: string
+  collapsePreview?: boolean
   activeTab: CronEditorTab
   draft: string
   previewRuns: Date[]
@@ -169,6 +173,8 @@ function CronEditorDialog({
 }
 
 function CronEditorFields({
+  expressionId = "cron-editor-expression",
+  collapsePreview = false,
   activeTab,
   draft,
   previewRuns,
@@ -197,10 +203,10 @@ function CronEditorFields({
         </TabsContent>
         <TabsContent forceMount value="advanced" className="data-[state=inactive]:hidden">
           <Field data-invalid={validation.ok ? undefined : true}>
-            <FieldLabel htmlFor="cron-editor-expression">表达式</FieldLabel>
+            <FieldLabel htmlFor={expressionId}>表达式</FieldLabel>
             <FieldContent>
               <Input
-                id="cron-editor-expression"
+                id={expressionId}
                 value={draft}
                 aria-invalid={validation.ok ? undefined : true}
                 onChange={(event) => onDraftChange(event.target.value)}
@@ -211,7 +217,10 @@ function CronEditorFields({
         </TabsContent>
       </Tabs>
 
-      {validation.ok ? <PreviewField validation={validation} runs={previewRuns} /> : null}
+      {validation.ok ? collapsePreview ? <Collapsible>
+        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown />未来 5 次</Button></CollapsibleTrigger>
+        <CollapsibleContent className="pt-3"><PreviewField validation={validation} runs={previewRuns} hideLabel /></CollapsibleContent>
+      </Collapsible> : <PreviewField validation={validation} runs={previewRuns} /> : null}
     </FieldGroup>
   )
 }
@@ -366,15 +375,17 @@ function WeekdayField({
 }
 
 function PreviewField({
+  hideLabel = false,
   validation,
   runs,
 }: {
   validation: ReturnType<typeof validateCronExpression>
   runs: Date[]
+  hideLabel?: boolean
 }) {
   return (
     <Field data-invalid={validation.ok ? undefined : true}>
-      <FieldLabel>未来 5 次</FieldLabel>
+      <FieldLabel className={hideLabel ? "sr-only" : undefined}>未来 5 次</FieldLabel>
       <FieldContent>
         {validation.ok ? (
           <div className="grid gap-1 text-sm text-muted-foreground">

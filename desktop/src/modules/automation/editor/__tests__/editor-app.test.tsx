@@ -107,14 +107,12 @@ describe("AutomationEditorApp", () => {
       await act(async () => { rangeTrigger?.click() })
       await selectTimePart("结束小时", "24")
       await act(async () => { findButtonContaining("确定")?.click() })
-      await goToExecutor()
-      await act(async () => { saveButton()?.click() })
+        await act(async () => { saveButton()?.click() })
       expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
         patch: expect.objectContaining({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }),
       }))
       // Reopen the returned config, then remove both fields to restore unrestricted scheduling.
       updateItem.mockClear()
-      await act(async () => { findButtonContaining("上一步")?.click() })
       getItem.mockResolvedValue(buildAutomationItem({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }))
       await act(async () => { window.dispatchEvent(new Event("focus")) })
       const reloadedRangeTrigger = document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')
@@ -122,8 +120,7 @@ describe("AutomationEditorApp", () => {
       expect(reloadedRangeTrigger?.textContent).toContain("24:00")
       await act(async () => { reloadedRangeTrigger?.click() })
       await act(async () => { findButtonContaining("不限时间")?.click() })
-      await goToExecutor()
-      await act(async () => { saveButton()?.click() })
+        await act(async () => { saveButton()?.click() })
       expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
         patch: expect.objectContaining({ trigger: { type, config } }),
       }))
@@ -149,8 +146,7 @@ describe("AutomationEditorApp", () => {
       await act(async () => {
         document.querySelector('[role="combobox"][aria-label="开始小时"]')?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
       })
-      await goToExecutor()
-      await act(async () => { saveButton()?.click() })
+        await act(async () => { saveButton()?.click() })
       expect(updateItem).toHaveBeenCalledWith(expect.objectContaining({
         patch: expect.objectContaining({ trigger: item.trigger }),
       }))
@@ -167,13 +163,12 @@ describe("AutomationEditorApp", () => {
       root.render(<AutomationEditorApp />)
     })
 
-    expect(document.body.textContent).toContain("何时触发？")
+    expect(document.body.textContent).toContain("当以下情况发生时")
     expect(document.body.textContent).toContain("Cron")
     expect(document.body.textContent).toContain("固定间隔")
-    expect(document.body.textContent).not.toContain("执行什么操作？")
+    expect(document.body.textContent).toContain("执行以下操作")
     await act(async () => { findButtonContaining("Cron")!.click() })
-    await goToExecutor()
-    expect(document.body.textContent).toContain("执行什么操作？")
+    expect(document.body.textContent).toContain("执行以下操作")
     expect(document.body.textContent).not.toContain("命令")
     expect(document.body.textContent).toContain("Agent")
     expect(document.body.textContent).not.toContain("工作流")
@@ -193,17 +188,16 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).not.toContain("HTTP 请求")
     expect(document.body.textContent).not.toContain("Cron · 0 9 * * *")
     expect(document.body.textContent).not.toContain("命令 · 未设置")
-    expect(document.body.textContent).not.toContain("Agent")
+    expect(findButtonContaining("Agent")?.disabled).toBe(true)
 
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
-    await goToExecutor()
     await act(async () => {
       findButtonContaining("Agent")?.click()
     })
 
-    expect(document.body.textContent).toContain("触发条件 · Cron · 0 9 * * *")
+    expect(document.querySelector('[aria-label="流程摘要"]')?.textContent).toContain("Cron")
     expect(document.querySelector('[data-layout="automation-editor-executor-summary"]')?.textContent)
       .toContain("Agent")
   })
@@ -399,17 +393,16 @@ describe("AutomationEditorApp", () => {
       root.render(<AutomationEditorApp />)
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) =>
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) =>
         button.textContent?.includes("旧名称"))?.click()
     })
-    await goToExecutor()
     const nameInput = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')
     await act(async () => {
       if (!nameInput) return
       changeInput(nameInput, "新名称")
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "确认")?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "确认")?.click()
     })
     await act(async () => {
       saveButton()?.click()
@@ -469,30 +462,29 @@ describe("AutomationEditorApp", () => {
     const container = document.createElement("div"); document.body.appendChild(container)
     await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
     await act(async () => { findButtonContaining("Cron")!.click() })
-    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })) })
     await act(async () => { findButtonContaining("固定间隔")!.click() })
     expect(document.querySelector('[role="alertdialog"]')).not.toBeNull()
     await act(async () => { Array.from(document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')).find(button => button.textContent === "取消")!.click() })
     expect(findButtonContaining("取消更换")).toBeUndefined()
-    await act(async () => { findButtonContaining("Cron")!.click() })
     expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
   })
 
-  it("uses a single form step with actions inside the scrolling content", async () => {
+  it("shows both nodes with actions inside the scrolling content", async () => {
     const container = document.createElement("div"); document.body.appendChild(container)
     await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
-    expect(document.querySelector('[data-layout="automation-editor-executor-panel"]')).toBeNull()
-    expect(findButtonContaining("下一步")?.closest('[data-slot="scroll-area-viewport"]')).not.toBeNull()
-    expect(document.querySelector('[data-layout="automation-editor-divider"]')).toBeNull()
+    expect(document.querySelector('[data-layout="automation-editor-executor-panel"]')).not.toBeNull()
+    expect(saveButton()?.closest('[data-slot="scroll-area-viewport"]')).not.toBeNull()
+    expect(document.querySelector('[data-layout="automation-editor-divider"]')).not.toBeNull()
   })
 
-  it("opens trigger configuration without automatically leaving the first step", async () => {
+  it("opens trigger configuration alongside the executor choices", async () => {
     const container = document.createElement("div"); document.body.appendChild(container)
     await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
     await act(async () => { findButtonContaining("Cron")!.click() })
     expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
-    expect(document.querySelector('[data-layout="automation-editor-executor-panel"]')).toBeNull()
-    expect(findButtonContaining("下一步")?.disabled).toBe(false)
+    expect(document.querySelector('[data-layout="automation-editor-executor-panel"]')).not.toBeNull()
+    expect(findButtonContaining("Agent")?.disabled).toBe(false)
   })
 
   it("constrains long executor content inside the editor viewport", async () => {
@@ -507,7 +499,6 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
-    await goToExecutor()
     await act(async () => {
       findButtonContaining("Agent")?.click()
     })
@@ -533,7 +524,6 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
-    await goToExecutor()
     await act(async () => {
       findButtonContaining("Agent")?.click()
     })
@@ -574,7 +564,6 @@ describe("AutomationEditorApp", () => {
       await act(async () => { findButtonContaining("确定")?.click() })
     }
 
-    await goToExecutor()
     await act(async () => {
       findButtonContaining("Agent")?.click()
     })
@@ -586,7 +575,7 @@ describe("AutomationEditorApp", () => {
       changeTextarea(prompt, "echo ok")
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "保存并启用")?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "保存并启用")?.click()
     })
 
     expect(createItem).toHaveBeenCalledWith(expect.objectContaining({
@@ -615,7 +604,7 @@ describe("AutomationEditorApp", () => {
       root.render(<AutomationEditorApp />)
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent?.includes("Cron"))?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent?.includes("Cron"))?.click()
     })
     await act(async () => {
       window.dispatchEvent(new Event("beforeunload", { cancelable: true }))
@@ -624,7 +613,7 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).toContain("更改尚未保存")
 
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "放弃修改")?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "放弃修改")?.click()
     })
 
     expect(closeSpy).toHaveBeenCalledTimes(1)
@@ -642,15 +631,15 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
-    const triggerButton = Array.from(document.querySelectorAll("button"))
-      .find((button) => button.textContent === "更换")
+    const triggerButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]'))
+      .find((button) => button.getAttribute("aria-label") === "更换触发条件")
     triggerButton?.focus()
 
     await act(async () => {
       window.dispatchEvent(new Event("beforeunload", { cancelable: true }))
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button"))
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]'))
         .find((button) => button.textContent === "继续编辑")?.click()
     })
 
@@ -669,7 +658,6 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
-    await goToExecutor()
     await act(async () => {
       findButtonContaining("Agent")?.click()
     })
@@ -725,7 +713,6 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
-    await goToExecutor()
     await act(async () => {
       findButtonContaining("Agent")?.click()
     })
@@ -741,7 +728,7 @@ describe("AutomationEditorApp", () => {
       await Promise.resolve()
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "确认")?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "确认")?.click()
     })
     const prompt = document.querySelector<HTMLTextAreaElement>("#task-action-agent-prompt")
     await act(async () => {
@@ -754,7 +741,7 @@ describe("AutomationEditorApp", () => {
       changeInput(timeout, "5")
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "保存并启用")?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "保存并启用")?.click()
     })
 
     expect(createItem).toHaveBeenCalledWith(expect.objectContaining({
@@ -785,12 +772,11 @@ describe("AutomationEditorApp", () => {
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
-    await goToExecutor()
     await act(async () => {
       findButtonContaining("Agent")?.click()
     })
     await act(async () => {
-      Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "保存并启用")?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "保存并启用")?.click()
     })
 
     expect(document.body.textContent).toContain("请选择项目")
@@ -816,7 +802,7 @@ function changeTextarea(textarea: HTMLTextAreaElement, value: string): void {
 }
 
 function findButtonContaining(text: string): HTMLButtonElement | undefined {
-  return Array.from(document.querySelectorAll("button"))
+  return Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]'))
     .find((button) => button.textContent?.includes(text))
 }
 
@@ -854,19 +840,12 @@ async function selectTimePart(label: string, value: string): Promise<void> {
   await act(async () => { option!.click() })
 }
 
-async function goToExecutor() {
-  const next = Array.from(document.querySelectorAll("button")).find(button => button.textContent === "下一步")
-  expect(next).toBeDefined()
-  await act(async () => { next!.click() })
-}
-
 async function openNamingStep() {
   if (!document.querySelector('[data-layout="automation-editor-trigger-config"]')) {
     await act(async () => { findButtonContaining("Cron")!.click() })
   }
-  await goToExecutor()
 }
 
 function saveButton() {
-  return Array.from(document.querySelectorAll("button")).find(button => button.textContent === "仅保存" || button.textContent === "保存更改")
+  return Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find(button => button.textContent === "仅保存" || button.textContent === "保存更改")
 }

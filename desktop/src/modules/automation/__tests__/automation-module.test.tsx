@@ -372,8 +372,8 @@ describe("AutomationModule", () => {
       Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "新建")?.click()
     })
 
-    expect(document.querySelector('input[aria-label="自动化名称"]')).toBeNull()
-    expect(document.querySelector('[aria-current="step"]')?.textContent).toContain("触发条件")
+    expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+    expect(document.querySelector('[data-layout="automation-editor-trigger-panel"]')).not.toBeNull()
     expect(mocks.openCreateEditorWindow).not.toHaveBeenCalled()
   })
 
@@ -388,7 +388,7 @@ describe("AutomationModule", () => {
       expect(header().querySelectorAll("button")).toHaveLength(1)
       expect(header().querySelector('[aria-label="返回自动化列表"]')).not.toBeNull()
       expect(header().textContent).toBe("")
-      expect(document.querySelector('[aria-current="step"]')?.textContent).toContain("触发条件")
+      expect(document.querySelector('[data-layout="automation-editor-trigger-panel"]')).not.toBeNull()
     }
     const checkList = () => {
       expect(header().textContent).toContain("新建")
@@ -979,5 +979,4 @@ async function flushPromises() {
 
 async function goToNamingStep() {
   await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Cron")!.click() })
-  await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "下一步")!.click() })
 }

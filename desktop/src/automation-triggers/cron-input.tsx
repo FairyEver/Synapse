@@ -5,12 +5,13 @@ import { buildCronExpression, createDefaultCronTemplateDraft, getCronEditorIniti
 
 type CronInputProps = {
   disabled?: boolean
+  layout?: "compact" | "inline"
   id: string
   value: string
   onChange: (value: string) => void
 }
 
-function CronInput({ disabled, id, value, onChange }: CronInputProps) {
+function CronInput({ disabled, id, value, onChange, layout = "compact" }: CronInputProps) {
   const [expanded, setExpanded] = useState(false)
   const [tab, setTab] = useState<CronEditorTab>(() => getCronEditorInitialTab(value))
   const [template, setTemplate] = useState(() => inferCronTemplate(value) ?? createDefaultCronTemplateDraft())
@@ -37,6 +38,8 @@ function CronInput({ disabled, id, value, onChange }: CronInputProps) {
     setTemplate(next)
     emit(buildCronExpression(next))
   }
+  if (layout === "inline") return <CronEditorFields expressionId={id} collapsePreview activeTab={tab} draft={value} previewRuns={previewRuns} template={template} validation={validation}
+    onDraftChange={change} onTabChange={setTab} onTemplateChange={changeTemplate} />
   return (
     <div className="grid min-w-0 gap-3">
       <InputGroup>

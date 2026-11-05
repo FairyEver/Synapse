@@ -35,7 +35,7 @@ describe("rendererAutomationTriggerRegistry", () => {
     expect(rendererAutomationTriggerRegistry.summarize("builtin.cron", parsed)).toBe("Cron · 0 9 * * *")
   })
 
-  it("renders cron trigger config with the advanced cron input", () => {
+  it("renders common and advanced Cron configuration inline", () => {
     const trigger = rendererAutomationTriggerRegistry.get("builtin.cron")
     const ConfigForm = trigger.ConfigForm
 
@@ -48,9 +48,10 @@ describe("rendererAutomationTriggerRegistry", () => {
       )
       : ""
 
-    expect(html).toContain('data-slot="input-group"')
+    expect(html).toContain('data-slot="tabs"')
     expect(html).toContain('id="automation-trigger-cron-expr"')
-    expect(html).toContain(">编辑</button>")
+    expect(html).toContain("常用")
+    expect(html).toContain("高级")
   })
 
   it("parses and summarizes interval config", () => {

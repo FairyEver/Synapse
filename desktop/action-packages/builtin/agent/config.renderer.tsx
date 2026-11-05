@@ -17,7 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../src/components/ui/select"
-import { Textarea } from "../../../src/components/ui/textarea"
+import { ActionPromptField } from "../../../src/action-runtime/action-prompt-field"
+import type { AutomationTriggerVariableDescriptor } from "../../../automation-trigger-packages/types.shared"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../src/components/ui/collapsible"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { ProviderModelSelectDialog } from "../../../src/components/provider-model-select-dialog"
 import { formatProviderModelLabel } from "../../../src/lib/provider-model"
@@ -31,17 +33,19 @@ export function AgentConfigForm({
   value,
   onChange,
   projects = [],
+  triggerVariables = [],
 }: {
   readonly value: AgentActionConfig
   readonly onChange: (value: AgentActionConfig) => void
   readonly projects?: readonly SynapseProjectConfig[]
+  readonly triggerVariables?: readonly AutomationTriggerVariableDescriptor[]
 }) {
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
 
   return (
     <FieldGroup>
-      <div className="grid gap-2 md:grid-cols-2">
-        <Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field className="sm:col-span-2">
           <FieldLabel htmlFor="task-action-agent-project">项目</FieldLabel>
           <FieldContent>
             <Select
@@ -125,62 +129,57 @@ export function AgentConfigForm({
         </Field>
       </div>
 
-      <Field>
-        <FieldLabel htmlFor="task-action-agent-prompt">提示词</FieldLabel>
-        <FieldContent>
-          <Textarea
-            id="task-action-agent-prompt"
-            rows={5}
-            placeholder="输入要发送给 Agent 的提示词..."
-            value={value.prompt}
-            onChange={(e) => onChange({ ...value, prompt: e.target.value })}
-          />
-        </FieldContent>
-      </Field>
+      <ActionPromptField id="task-action-agent-prompt" value={value.prompt} variables={triggerVariables}
+        onChange={(prompt) => onChange({ ...value, prompt })} />
 
-      <div className="grid grid-cols-2 gap-2">
-        <Field>
-          <FieldLabel htmlFor="task-action-agent-session-policy">会话策略</FieldLabel>
-          <FieldContent>
-            <ToggleGroup
-              aria-label="Session policy"
-              className="w-full"
-              type="single"
-              value={value.sessionPolicy}
-              variant="outline"
-              onValueChange={(policy) => {
-                if (policy) onChange({ ...value, sessionPolicy: policy as "fresh" | "resume" })
-              }}
-            >
-              <ToggleGroupItem className="flex-1" value="fresh">
-                每次新建
-              </ToggleGroupItem>
-              <ToggleGroupItem className="flex-1" value="resume">
-                复用上次
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </FieldContent>
-        </Field>
+      <Collapsible className="border-t pt-4">
+        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown />会话与超时</Button></CollapsibleTrigger>
+        <CollapsibleContent forceMount className="mt-4 data-[state=closed]:hidden">
+          <div className="grid grid-cols-2 gap-2">
+            <Field>
+              <FieldLabel htmlFor="task-action-agent-session-policy">会话策略</FieldLabel>
+              <FieldContent>
+                <ToggleGroup
+                  aria-label="Session policy"
+                  className="w-full"
+                  type="single"
+                  value={value.sessionPolicy}
+                  variant="outline"
+                  onValueChange={(policy) => {
+                    if (policy) onChange({ ...value, sessionPolicy: policy as "fresh" | "resume" })
+                  }}
+                >
+                  <ToggleGroupItem className="flex-1" value="fresh">
+                    每次新建
+                  </ToggleGroupItem>
+                  <ToggleGroupItem className="flex-1" value="resume">
+                    复用上次
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </FieldContent>
+            </Field>
 
-        <Field>
-          <FieldLabel htmlFor="task-action-agent-timeout">超时分钟</FieldLabel>
-          <FieldContent>
-            <Input
-              id="task-action-agent-timeout"
-              type="number"
-              min={1}
-              max={120}
-              value={value.timeoutMins ?? ""}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  timeoutMins: e.target.value ? Number(e.target.value) : null,
-                })
-              }
-            />
-          </FieldContent>
-        </Field>
-      </div>
+            <Field>
+              <FieldLabel htmlFor="task-action-agent-timeout">超时分钟</FieldLabel>
+              <FieldContent>
+                <Input
+                  id="task-action-agent-timeout"
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={value.timeoutMins ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      timeoutMins: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                />
+              </FieldContent>
+            </Field>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </FieldGroup>
   )
 }

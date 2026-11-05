@@ -148,6 +148,21 @@ export function validateChangedTriggerVariables(draft: AutomationEditorDraft, pr
   if (unknown.size) throw new Error(`当前触发条件不提供变量：${[...unknown].join("、")}`)
 }
 
+export function summarizeAutomationDraft(draft: AutomationEditorDraft, projects: readonly SynapseProjectConfig[]): string {
+  if (!draft.triggerType) return "选择触发条件与执行操作。"
+  let trigger: string
+  try {
+    trigger = rendererAutomationTriggerRegistry.summarize(draft.triggerType, draft.triggerConfig)
+  } catch {
+    trigger = "触发条件尚未配置完成"
+  }
+  if (!draft.executorType) return `当 ${trigger} 时，选择要执行的操作。`
+  const executor = rendererActionRegistry.list().find(action => action.manifest.id === draft.executorType)
+  const projectId = draft.executorConfig.projectId
+  const project = projects.find(project => project.id === projectId)?.name
+  return `当 ${trigger} 时，${project ? `在「${project}」` : ""}运行 ${executor?.manifest.title ?? "待更新的操作"}。`
+}
+
 function formatAutomationScope(item: AutomationItem, projects: readonly SynapseProjectConfig[]): string {
   const projectId = item.scope.type === "project"
     ? item.scope.projectId

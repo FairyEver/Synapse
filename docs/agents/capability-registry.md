@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-05 自动化配置改为同页触发/执行节点，支持标题菜单、折叠配置、提示词变量插入、流程摘要及编辑内运行记录；复用现有注册表、表单、IPC 和运行面板，不新增 System App、Dock、Workflow、Automation Action、MCP capability/tool、IPC 或 Deep Link。下列表格数量与既有例外不变。
+
 - 2026-11-05 用量监控下线：移除 `usage-monitor` System App、CC/Codex 日志扫描与报表、独立对话窗口、22 个用量分析 IPC 和 `usage.db`；旧库中的价格规则迁移到 `model-price.db` 后清除旧用量数据库。价格管理保留价格规则与预设，移除依赖用量事件的“模型覆盖”及 `app.model_price.used_model.list`。System App 22→21；`model_price` 11→10；全局 capability 365→364、MCP 索引与工具定义 361→360；默认 Dock 9、Workflow、Automation、Deep Link 和公开 `search` / `invoke` 不变。
 
 - 2026-11-05 网页交付发现修正：区分静态发布、云表存储、组件开发与仅本地保存，补齐多文件站点与显式图床先上传再改写流程。仅调整既有 `search` 的推荐与系统 Skill，不增删 capability、MCP 索引、公开工具、System App、Dock、Workflow、Automation、IPC 或 Deep Link；下列表格数量和例外不变。
@@ -191,7 +193,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Agent | 是 | 是 | `app` |
 | Workflow | 条件显示 | 条件显示 | `workflow` |
 | Drive | 是 | 是 | `drive` |
-| Automation（独立详情、两步新建/编辑） | 是 | 是 | `automation` |
+| Automation（独立详情、同页节点配置） | 是 | 是 | `automation` |
 | Launcher | 自身即应用页 | 是且不可移除 | — |
 | Settings（含设备命名） | 是 | 是 | `repository` |
 | Resource Repository | 是 | 否 | `content` |
@@ -275,7 +277,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 同步硬规则
 
-2026-11-05 自动化按已确认原型拆为独立只读详情和两步新建/编辑，页面无底栏，操作跟随表单内容滚动；列表查看、编辑与运行记录入口仍属于同一个 Automation System App。编辑主体使用紧凑步骤条，不显示大标题、重复步骤问题标题或“取消更换”入口。仅调整 Renderer 页面与触发配置校验，不新增或移除 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP。Automation 仍为 14 / 14，全局 364 capability / 360 MCP 索引；公开 schema 与系统 Skill 的业务调用契约不变。
+2026-11-05 自动化按已确认原型采用独立只读详情与同页触发/执行节点配置，宽容器双栏、窄容器纵向排列，操作跟随内容滚动且无底栏。编辑内可切换真实运行记录并保留草稿，节点标题菜单、更换确认、折叠及变量插入均属于既有 Automation System App。仅调整 Renderer 界面，不增删 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP；Automation 仍为 14 / 14，全局数量及其他表面以当前汇总表为准，公开 schema 与系统 Skill 的业务调用契约不变。
 
 2026-11-05 自动化新建、编辑、变量与运行记录改为页内交互。移除 UI 私有的 `app.automation.editor.open_create`、`app.automation.editor.open_edit` IPC 和专用编辑窗口；它们原本不在 capability / MCP 目录中。Automation domain 仍为 14 / 14，全局 364 capability / 360 MCP 索引、两个公开路由工具及 System App、Dock、Workflow、Automation Action、Deep Link 数量均不变。System App 列表页的显式新窗口入口继续存在；新建和编辑子页面通过共享壳层替换顶栏，仅保留返回列表按钮，不追加新窗口入口，仍在原宿主页面完成。公开 schema 和系统 Skill 业务调用方式保持兼容。
 

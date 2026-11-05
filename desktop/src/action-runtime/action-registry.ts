@@ -1,4 +1,5 @@
 import type { ReactElement } from "react"
+import type { AutomationTriggerVariableDescriptor } from "../../automation-trigger-packages/types.shared"
 
 import type {
   ActionConfig,
@@ -11,6 +12,7 @@ export type ActionConfigFormComponent<TConfig extends ActionConfig = ActionConfi
   readonly value: TConfig
   readonly onChange: (value: TConfig) => void
   readonly projects?: readonly SynapseProjectConfig[]
+  readonly triggerVariables?: readonly AutomationTriggerVariableDescriptor[]
 }) => ReactElement
 
 export type ActionResultViewComponent = (props: {

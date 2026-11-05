@@ -1,3 +1,6 @@
+import { ChevronDown } from "lucide-react"
+import { Button } from "../../../src/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../src/components/ui/collapsible"
 import {
   Field,
   FieldContent,
@@ -48,27 +51,32 @@ export function IntervalTriggerConfigForm({
           </ToggleGroup>
         </FieldContent>
       </Field>
-      <Field>
-        <FieldLabel id="automation-trigger-interval-active-days-label">活跃日</FieldLabel>
-        <FieldContent>
-          <WeekdaySelector
-            id="automation-trigger-interval-active-days"
-            aria-labelledby="automation-trigger-interval-active-days-label"
-            value={value.activeDays}
-            onValueChange={(activeDays) => onChange({ ...value, activeDays })}
+      <Collapsible className="border-t pt-4">
+        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown />生效日期与时段</Button></CollapsibleTrigger>
+        <CollapsibleContent forceMount className="mt-4 grid gap-4 data-[state=closed]:hidden">
+          <Field>
+            <FieldLabel id="automation-trigger-interval-active-days-label">活跃日</FieldLabel>
+            <FieldContent>
+              <WeekdaySelector
+                id="automation-trigger-interval-active-days"
+                aria-labelledby="automation-trigger-interval-active-days-label"
+                value={value.activeDays}
+                onValueChange={(activeDays) => onChange({ ...value, activeDays })}
+              />
+            </FieldContent>
+          </Field>
+          <TimeRangeField
+            id="automation-trigger-interval-time-range"
+            value={value.timeRange}
+            onValueChange={(timeRange) => {
+              const next = { ...value }
+              if (timeRange) next.timeRange = timeRange
+              else delete next.timeRange
+              onChange(next)
+            }}
           />
-        </FieldContent>
-      </Field>
-      <TimeRangeField
-        id="automation-trigger-interval-time-range"
-        value={value.timeRange}
-        onValueChange={(timeRange) => {
-          const next = { ...value }
-          if (timeRange) next.timeRange = timeRange
-          else delete next.timeRange
-          onChange(next)
-        }}
-      />
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   )
 }
