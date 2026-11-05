@@ -303,6 +303,18 @@ export function formatAutomationSkipReason(reason: string): string {
   return delivery ? `${label}\n投递 ID：${delivery[2]}` : label
 }
 
+const AUTOMATION_MAIL_FAILURE_LABELS = new Map([
+  ["信件准备失败：UNAVAILABLE", "信件准备失败：信件已删除或不可访问"],
+  ["信件准备失败：STALE_TARGET", "信件准备失败：邮箱身份或收件箱已变化"],
+  ["信件准备失败：LIMIT_EXCEEDED", "信件准备失败：信件内容超过读取上限"],
+  ["信件准备失败：METADATA_INVALID", "信件准备失败：信件内容或元数据不完整"],
+  ["信件准备失败：MIME_INVALID", "信件准备失败：信件格式无法解析"],
+])
+
+export function formatAutomationFailureReason(reason: string): string {
+  return AUTOMATION_MAIL_FAILURE_LABELS.get(reason) ?? reason
+}
+
 function isCompletionAnchoredInterval(item: Pick<AutomationItem, "trigger">): boolean {
   return item.trigger.type === "builtin.interval" &&
     item.trigger.config.anchor === "last_completed_at"

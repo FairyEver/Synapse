@@ -11,7 +11,7 @@ import { runTrackedOperation } from "@/lib/ui-tracking"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { AutomationItem, AutomationRun } from "@/types/automation"
 import { useAutomationRuns } from "../hooks/use-automation-runs"
-import { formatAutomationDate, formatAutomationRunStatus, formatAutomationSkipReason } from "../utils"
+import { formatAutomationDate, formatAutomationFailureReason, formatAutomationRunStatus, formatAutomationSkipReason } from "../utils"
 
 const logger = createRendererLogger("automation.runs")
 
@@ -93,7 +93,7 @@ function RunItem({
         <CollapsibleTrigger asChild><Button variant="ghost"><ChevronDown data-icon="inline-start" className={expanded ? "rotate-180" : undefined} />{expanded ? "收起结果" : "查看结果"}</Button></CollapsibleTrigger>
         <CollapsibleContent className="mt-3 grid min-w-0 gap-3 overflow-hidden">
         {run.result ? <RunResult run={run} item={item} /> : null}
-        {run.error && !run.result?.error ? <div className="grid min-w-0 gap-1"><p className="text-xs font-medium">{run.status === "skipped" ? "跳过原因" : "错误"}</p><OutputBlock value={run.status === "skipped" ? formatAutomationSkipReason(run.error) : run.error} /></div> : null}
+        {run.error && !run.result?.error ? <div className="grid min-w-0 gap-1"><p className="text-xs font-medium">{run.status === "skipped" ? "跳过原因" : "错误"}</p><OutputBlock value={run.status === "skipped" ? formatAutomationSkipReason(run.error) : formatAutomationFailureReason(run.error)} /></div> : null}
       </CollapsibleContent></Collapsible> : null}
     </li>
   )
