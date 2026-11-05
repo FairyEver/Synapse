@@ -18,7 +18,7 @@ function ActionResultView({ result, showDuration = true }: { readonly result: Ac
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      {result.summary ? <p className="text-sm text-muted-foreground break-words">{redactSensitiveText(result.summary)}</p> : null}
+      {result.summary ? <p className="text-sm text-muted-foreground whitespace-pre-wrap wrap-anywhere">{redactSensitiveText(result.summary)}</p> : null}
       {result.metrics ? <MetricsView metrics={result.metrics} showDuration={showDuration} /> : null}
       <TokenUsageSummary usage={result.usage} />
       {result.error ? <OutputBlock label="错误" value={result.error} /> : null}
