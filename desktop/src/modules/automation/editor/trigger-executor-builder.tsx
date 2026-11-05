@@ -1,25 +1,24 @@
-import { type ReactNode } from "react"
-import { RefreshCw } from "lucide-react"
+import { useState } from "react"
+import { Play, RefreshCw, Zap } from "lucide-react"
 
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
+import { GuidedChoices } from "@/components/guided-flow"
 import { Button } from "@/components/ui/button"
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemTitle,
-} from "@/components/ui/item"
-import { Separator } from "@/components/ui/separator"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
 import { createPlatformActionDefaultConfig } from "../../../../action-packages/builtin/shell-defaults"
 import { listDiscoverableBuiltinAutomationActionTypes } from "../../../../app-capabilities/surface-discovery"
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
 import type { SynapseProjectConfig } from "@/types/config"
+import type { AutomationEditorStep } from "../types"
 import { TriggerVariablesDialog } from "./trigger-variables-dialog"
 
 type TriggerExecutorBuilderProps = {
+  step: AutomationEditorStep
+  choosing: boolean
+  onChoosingChange: (choosing: boolean) => void
   triggerType: string | null
   triggerConfig: AutomationTriggerConfig
   executorType: string | null
@@ -30,243 +29,95 @@ type TriggerExecutorBuilderProps = {
   onExecutorChange: (type: string | null, config: ActionConfig) => void
 }
 
-function safeTriggerSummary(type: string, config: AutomationTriggerConfig): string {
+function parseConfig(type: string, config: ActionConfig, trigger: boolean): ActionConfig {
+  const registry = trigger ? rendererAutomationTriggerRegistry : rendererActionRegistry
+  const merged = { ...registry.getDefaultConfig(type), ...config }
   try {
-    return rendererAutomationTriggerRegistry.summarize(type, config)
+    return registry.parseConfig(type, merged)
   } catch {
-    return rendererAutomationTriggerRegistry.get(type).manifest.title
+    return merged
   }
 }
 
-function safeExecutorSummary(type: string, config: ActionConfig): string {
+function summarize(type: string, config: ActionConfig, trigger: boolean): string {
   try {
-    return rendererActionRegistry.summarize(type, config)
+    return (trigger ? rendererAutomationTriggerRegistry : rendererActionRegistry).summarize(type, config)
   } catch {
-    return rendererActionRegistry.get(type).manifest.title
+    return "配置尚未完成"
   }
 }
 
-function BuilderHeader({
-  actionAriaLabel,
-  actionLabel,
-  layout,
-  onAction,
-  title,
-}: {
-  readonly actionAriaLabel?: string
-  readonly actionLabel?: string
-  readonly layout: string
-  readonly onAction?: () => void
-  readonly title: string
-}) {
-  return (
-    <div data-layout={layout} className="mb-5 flex min-w-0 items-center justify-between gap-3">
-      <h2 className="text-base font-semibold">{title}</h2>
-      {onAction && actionLabel ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="default"
-          className="-mr-2 shrink-0"
-          aria-label={actionAriaLabel}
-          onClick={onAction}
-        >
-          <RefreshCw />
-          {actionLabel}
-        </Button>
-      ) : null}
-    </div>
-  )
-}
+export function TriggerExecutorBuilder({ step, choosing, onChoosingChange, triggerType, triggerConfig, executorType, executorConfig,
+  projects = [], platform, onTriggerChange, onExecutorChange }: TriggerExecutorBuilderProps) {
+  const [pendingChoice, setPendingChoice] = useState<string | null>(null)
+  const isTrigger = step === "trigger"
+  const type = isTrigger ? triggerType : executorType
+  const config = isTrigger ? triggerConfig : executorConfig
+  const trigger = rendererAutomationTriggerRegistry.list().find(item => item.manifest.id === triggerType)
+  const executor = rendererActionRegistry.list().find(item => item.manifest.id === executorType)
+  const selected = isTrigger ? trigger : executor
+  const ConfigForm = selected?.ConfigForm
+  const title = isTrigger ? "何时触发？" : "执行什么操作？"
+  const kind = isTrigger ? "触发条件" : "执行操作"
+  const layout = isTrigger ? "trigger" : "executor"
+  const discoverable = new Set(listDiscoverableBuiltinAutomationActionTypes(rendererActionRegistry.list().map(item => item.manifest.id)))
+  const options = isTrigger ? rendererAutomationTriggerRegistry.list() : rendererActionRegistry.list().filter(item => discoverable.has(item.manifest.id))
 
-function SelectedSummary({
-  layout,
-  title,
-  summary,
-  extraAction,
-}: {
-  readonly layout: string
-  readonly title: string
-  readonly summary: string
-  readonly extraAction?: ReactNode
-}) {
-  return (
-    <Item data-layout={layout} variant="muted" size="sm" className="min-w-0 flex-nowrap">
-      <ItemContent className="min-w-0">
-        <ItemTitle className="w-full min-w-0">
-          <span className="min-w-0 truncate">{title}</span>
-        </ItemTitle>
-        <ItemDescription className="truncate">{summary}</ItemDescription>
-      </ItemContent>
-      <ItemActions className="shrink-0">
-        {extraAction}
-      </ItemActions>
-    </Item>
-  )
-}
-
-function ChoiceList({
-  items,
-  onSelect,
-}: {
-  readonly items: Array<{ readonly id: string; readonly title: string; readonly summary?: string }>
-  readonly onSelect: (id: string) => void
-}) {
-  return (
-    <div className="grid gap-1">
-      {items.map((item) => (
-        <button
-          data-track="automation.executor.select"
-          data-track-native="true"
-          key={item.id}
-          type="button"
-          className="flex w-full items-center justify-between gap-4 rounded-lg bg-transparent px-3 py-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => onSelect(item.id)}
-        >
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold">{item.title}</span>
-            {item.summary ? (
-              <span className="mt-1 block truncate text-xs text-muted-foreground">{item.summary}</span>
-            ) : null}
-          </span>
-          <span className="shrink-0 text-xs text-muted-foreground">选择</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function parseTriggerValue(type: string, config: AutomationTriggerConfig): AutomationTriggerConfig {
-  try {
-    return rendererAutomationTriggerRegistry.parseConfig(type, config)
-  } catch {
-    return { ...rendererAutomationTriggerRegistry.getDefaultConfig(type), ...config }
+  function installChoice(id: string) {
+    if (isTrigger) onTriggerChange(id, { ...rendererAutomationTriggerRegistry.getDefaultConfig(id) })
+    else onExecutorChange(id, createPlatformActionDefaultConfig(id, rendererActionRegistry.getDefaultConfig(id), platform))
+    onChoosingChange(false)
+    setPendingChoice(null)
   }
-}
 
-function parseExecutorValue(type: string, config: ActionConfig): ActionConfig {
-  const mergedConfig = { ...rendererActionRegistry.getDefaultConfig(type), ...config }
-  try {
-    return rendererActionRegistry.parseConfig(type, mergedConfig)
-  } catch {
-    return mergedConfig
+  function choose(id: string) {
+    if (type && type !== id) setPendingChoice(id)
+    else if (type === id) onChoosingChange(false)
+    else installChoice(id)
   }
-}
-
-export function TriggerExecutorBuilder({
-  triggerType,
-  triggerConfig,
-  executorType,
-  executorConfig,
-  projects = [],
-  platform,
-  onTriggerChange,
-  onExecutorChange,
-}: TriggerExecutorBuilderProps) {
-  const selectedTrigger = triggerType ? rendererAutomationTriggerRegistry.get(triggerType) : null
-  const selectedExecutor = executorType ? rendererActionRegistry.get(executorType) : null
-  const TriggerConfigForm = selectedTrigger?.ConfigForm
-  const ExecutorConfigForm = selectedExecutor?.ConfigForm
-  const discoverableExecutorTypes = new Set(
-    listDiscoverableBuiltinAutomationActionTypes(
-      rendererActionRegistry.list().map((executor) => executor.manifest.id),
-    ),
-  )
 
   return (
-    <div
-      data-layout="automation-editor-builder"
-      className="grid min-w-0 w-full grid-cols-1 gap-6 @min-[40rem]/automation-editor:grid-cols-[minmax(0,0.85fr)_1px_minmax(0,1.15fr)]"
-    >
-      <section data-layout="automation-editor-trigger-panel" className="min-w-0">
-        <div className="min-w-0">
-            <BuilderHeader
-              actionAriaLabel={selectedTrigger ? "更换触发条件" : undefined}
-              actionLabel={selectedTrigger ? "更换" : undefined}
-              layout="automation-editor-trigger-header"
-              onAction={selectedTrigger ? () => onTriggerChange(null, {}) : undefined}
-              title="当以下情况发生时"
-            />
-            {selectedTrigger ? (
-              <div className="grid min-w-0 gap-4">
-                <SelectedSummary
-                  layout="automation-editor-trigger-summary"
-                  title={selectedTrigger.manifest.title}
-                  summary={safeTriggerSummary(selectedTrigger.manifest.id, triggerConfig)}
-
-                />
-                {TriggerConfigForm ? (
-                  <div
-                    data-layout="automation-editor-trigger-config"
-                    className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
-                  >
-                    <TriggerConfigForm
-                      value={parseTriggerValue(selectedTrigger.manifest.id, triggerConfig)}
-                      onChange={(config) => onTriggerChange(selectedTrigger.manifest.id, config)}
-                    />
-                  </div>
-                ) : null}
-                <TriggerVariablesDialog triggerTitle={selectedTrigger.manifest.title} variables={selectedTrigger.manifest.variables ?? []} />
-              </div>
-            ) : (
-              <ChoiceList
-                items={rendererAutomationTriggerRegistry.list().map((trigger) => ({
-                  id: trigger.manifest.id,
-                  title: trigger.manifest.title,
-                }))}
-                onSelect={(id) => onTriggerChange(id, { ...rendererAutomationTriggerRegistry.getDefaultConfig(id) })}
-              />
-            )}
+    <section data-layout={`automation-editor-${layout}-panel`} className="min-w-0">
+      {isTrigger || !trigger ? null : (
+        <div className="mb-6 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b pb-4 text-sm">
+          <span className="min-w-0 wrap-anywhere text-muted-foreground">触发条件 · {summarize(trigger.manifest.id, triggerConfig, true)}</span>
         </div>
-      </section>
-
-      <Separator data-layout="automation-editor-divider" orientation="vertical" className="hidden @min-[40rem]/automation-editor:block" />
-
-      <section data-layout="automation-editor-executor-panel" className="min-w-0">
-        <div className="min-w-0">
-            <BuilderHeader
-              actionAriaLabel={selectedExecutor ? "更换执行操作" : undefined}
-              actionLabel={selectedExecutor ? "更换" : undefined}
-              layout="automation-editor-executor-header"
-              onAction={selectedExecutor ? () => onExecutorChange(null, {}) : undefined}
-              title="就执行以下操作"
-            />
-            {selectedExecutor ? (
-              <div className="grid min-w-0 gap-4">
-                <SelectedSummary
-                  layout="automation-editor-executor-summary"
-                  title={selectedExecutor.manifest.title}
-                  summary={safeExecutorSummary(selectedExecutor.manifest.id, executorConfig)}
-                />
-                {ExecutorConfigForm ? (
-                  <div
-                    data-layout="automation-editor-executor-config"
-                    className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0"
-                  >
-                    <ExecutorConfigForm
-                      value={parseExecutorValue(selectedExecutor.manifest.id, executorConfig)}
-                      projects={projects}
-                      onChange={(config) => onExecutorChange(selectedExecutor.manifest.id, config)}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <ChoiceList
-                items={rendererActionRegistry.list()
-                  .filter((executor) => discoverableExecutorTypes.has(executor.manifest.id))
-                  .map((executor) => ({
-                    id: executor.manifest.id,
-                    title: executor.manifest.title,
-                  }))}
-                onSelect={(id) => onExecutorChange(
-                  id,
-                  createPlatformActionDefaultConfig(id, rendererActionRegistry.getDefaultConfig(id), platform),
-                )}
-              />
-            )}
-        </div>
-      </section>
-    </div>
+      )}
+      {choosing || !selected ? (
+        <>
+          {type && selected ? <div className="mb-3 flex justify-end"><Button variant="ghost" onClick={() => onChoosingChange(false)}>取消更换</Button></div> : null}
+          <GuidedChoices title={title} value={type ?? ""} onSelect={choose}
+            options={options.map(item => ({ value: item.manifest.id, title: item.manifest.title, icon: isTrigger ? <Zap /> : <Play /> }))} />
+          {type && !selected ? <p role="alert" className="mt-3 text-sm text-destructive">原{kind}不可用，请重新选择</p> : null}
+        </>
+      ) : (
+        <>
+          <div data-layout={`automation-editor-${layout}-header`} className="mb-5 flex min-w-0 items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">{title}</h2>
+            <Button type="button" variant="ghost" aria-label={`更换${kind}`} onClick={() => onChoosingChange(true)}><RefreshCw />更换</Button>
+          </div>
+          <div className="grid min-w-0 gap-5">
+            <Item data-layout={`automation-editor-${layout}-summary`} variant="muted" size="sm" className="min-w-0">
+              <ItemContent className="min-w-0"><ItemTitle>{selected.manifest.title}</ItemTitle>
+                <ItemDescription className="wrap-anywhere">{summarize(selected.manifest.id, config, isTrigger)}</ItemDescription>
+              </ItemContent>
+            </Item>
+            {ConfigForm ? <div data-layout={`automation-editor-${layout}-config`} className="min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=field-group]]:min-w-0 [&_[data-slot=field]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full [&_[data-slot=toggle-group]]:min-w-0">
+              <ConfigForm value={parseConfig(selected.manifest.id, config, isTrigger)} projects={projects}
+                onChange={value => isTrigger ? onTriggerChange(selected.manifest.id, value) : onExecutorChange(selected.manifest.id, value)} />
+            </div> : null}
+          </div>
+        </>
+      )}
+      {trigger ? <div className="mt-5"><TriggerVariablesDialog key={trigger.manifest.id} triggerTitle={trigger.manifest.title} variables={trigger.manifest.variables ?? []} /></div> : null}
+      <AlertDialog open={pendingChoice !== null} onOpenChange={open => { if (!open) setPendingChoice(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>更换{kind}？</AlertDialogTitle>
+            <AlertDialogDescription>{isTrigger ? "当前触发配置将被替换。执行操作保留，请检查使用的触发变量。" : "当前执行配置将被替换。触发条件保持不变。"}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => { if (pendingChoice) installChoice(pendingChoice) }}>确认更换</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
   )
 }

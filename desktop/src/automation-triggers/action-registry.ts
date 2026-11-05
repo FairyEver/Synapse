@@ -35,7 +35,10 @@ export class RendererAutomationTriggerRegistry {
   }
 
   parseConfig(id: string, config: AutomationTriggerConfig): AutomationTriggerConfig {
-    return this.get(id).manifest.configSchema.parse(config)
+    const trigger = this.get(id)
+    const parsed = trigger.manifest.configSchema.parse(config)
+    trigger.validateConfig?.(parsed)
+    return parsed
   }
 
   summarize(id: string, config: AutomationTriggerConfig): string {

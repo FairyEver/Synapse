@@ -60,8 +60,8 @@ describe("system app header architecture", () => {
     expect(source).not.toMatch(/<Sheet(?:\s|>)/)
   })
 
-  it("keeps the inline automation editor on the shared host header", async () => {
-    const source = await readFile(new FileURL("../../automation/editor/editor-form.tsx", import.meta.url), "utf8")
+  it.each(["editor/editor-form.tsx", "detail/automation-detail.tsx"])("keeps automation %s on the shared host header", async (path) => {
+    const source = await readFile(new FileURL(`../../automation/${path}`, import.meta.url), "utf8")
     expect(source).toContain("<SystemAppWindowShell")
     expect(source).toContain('headerMode="replace"')
     expect(source).toContain("left={backAction}")

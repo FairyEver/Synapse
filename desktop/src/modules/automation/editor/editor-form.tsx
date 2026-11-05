@@ -1,44 +1,37 @@
-import { useState } from "react"
 import { ArrowLeft, LoaderCircle, RefreshCw } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
-import { Badge } from "@/components/ui/badge"
+import { GuidedFlow } from "@/components/guided-flow"
 import { Button } from "@/components/ui/button"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { AutomationItem } from "@/types/automation"
-import { AutomationRunsPanel } from "../components/automation-runs-dialog"
-import { stopAutomationRun } from "../hooks/use-automation"
 import { useAutomationEditor } from "../hooks/use-automation-editor"
-import type { AutomationEditorMode, AutomationEditorSession } from "../types"
-import { formatAutomationTrigger } from "../utils"
+import type { AutomationEditorMode, AutomationEditorSession, AutomationEditorStep } from "../types"
 import { TriggerExecutorBuilder } from "./trigger-executor-builder"
 
 type AutomationEditorFormProps = {
   readonly mode: AutomationEditorMode
   readonly initialSession?: AutomationEditorSession
-  readonly initialTab?: "config" | "history"
+  readonly initialStep?: AutomationEditorStep
   readonly onBack: (session?: AutomationEditorSession) => void
   readonly onSaved?: (item: AutomationItem) => void
 }
 
-export function AutomationEditorForm({ initialTab = "config", ...props }: AutomationEditorFormProps) {
+const steps = [{ id: "trigger", title: "触发条件" }, { id: "executor", title: "执行操作" }]
+
+export function AutomationEditorForm(props: AutomationEditorFormProps) {
   const { config } = useAppConfig()
   const editor = useAutomationEditor(props)
-  const [tab, setTab] = useState(initialTab)
-  const { loadState, saving, error, leaveKind } = editor
+  const { loadState, saving, error, leaveKind, step } = editor
   const draft = loadState.status === "ready" ? loadState.draft : null
   const item = loadState.status === "ready" ? loadState.item : undefined
-  const canSave = Boolean(draft?.name.trim() && draft.triggerType && draft.executorType && !saving)
-  const summary = draft?.triggerType
-    ? formatAutomationTrigger({ trigger: { type: draft.triggerType, config: draft.triggerConfig } })
-    : "选择触发条件和执行操作"
-
+  const canSave = Boolean(draft?.name.trim() && draft.triggerType && draft.executorType && !saving && !editor.choosingType)
   const backAction = (
-    <SystemAppTopBarActionButton iconOnly aria-label="返回自动化列表" tooltip="返回列表" disabled={saving} onClick={editor.back}>
+    <SystemAppTopBarActionButton iconOnly aria-label="返回自动化列表" tooltip="返回" disabled={saving} onClick={editor.back}>
       <ArrowLeft />
     </SystemAppTopBarActionButton>
   )
@@ -63,51 +56,32 @@ export function AutomationEditorForm({ initialTab = "config", ...props }: Automa
             <p role="alert">{loadState.message}</p><Button variant="outline" onClick={editor.retry}><RefreshCw />重试</Button>
           </div>
         ) : (
-          <Tabs value={tab} onValueChange={(value) => setTab(value as "config" | "history")} className="min-h-0 flex-1 gap-0">
-            <ScrollArea className="min-h-0 flex-1" viewportClassName="overflow-x-hidden">
-              <div className="mx-auto w-full max-w-6xl px-5 py-6 sm:px-8">
-                <div className="mb-5 flex min-w-0 items-center gap-3">
-                  <Input aria-label="自动化名称" value={loadState.draft.name} disabled={saving} maxLength={200}
-                    className="min-w-0 flex-1 border-transparent font-semibold md:text-lg"
-                    onChange={(event) => editor.updateDraft((current) => ({ ...current, name: event.target.value }))} />
-                  <Badge variant="outline">{item?.enabled ? "已启用" : "未启用"}</Badge>
-                </div>
-                <div className="mb-6 border-b pb-1">
-                  <TabsList variant="line" aria-label="自动化详情">
-                    <TabsTrigger value="config">配置</TabsTrigger>
-                    <TabsTrigger value="history">运行记录</TabsTrigger>
-                  </TabsList>
-                </div>
-                <TabsContent forceMount value="config" className="data-[state=inactive]:hidden">
-                  <fieldset disabled={saving} className="min-w-0 border-0 p-0">
-                    <div data-layout="automation-editor-body" className="@container/automation-editor min-w-0">
-                      <TriggerExecutorBuilder triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
-                        executorType={loadState.draft.executorType} executorConfig={loadState.draft.executorConfig}
-                        projects={config.global.projects} platform={getRendererPlatform()}
-                        onTriggerChange={(triggerType, triggerConfig) => editor.updateDraft((current) => ({ ...current, triggerType, triggerConfig }))}
-                        onExecutorChange={(executorType, executorConfig) => editor.updateDraft((current) => ({ ...current, executorType, executorConfig }))} />
-                    </div>
-                  </fieldset>
-                </TabsContent>
-                <TabsContent value="history">
-                  {item ? <AutomationRunsPanel item={item} busy={saving} onStopRun={async (runId) => {
-                    const result = await stopAutomationRun(runId)
-                    if (!result.stopped && !result.alreadyFinished && !result.stopRequested) throw new Error("运行已结束")
-                  }} /> : <p className="py-16 text-center text-sm text-muted-foreground">保存后即可查看运行记录</p>}
-                </TabsContent>
-              </div>
-            </ScrollArea>
-          </Tabs>
+          <ScrollArea className="min-h-0 flex-1" viewportClassName="overflow-x-hidden">
+            <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8" data-layout="automation-editor-body">
+              <GuidedFlow title={item ? "编辑自动化" : "新建自动化"} layout="page" step={step} steps={steps} busy={saving}
+                canNext={Boolean(draft?.triggerType && !editor.choosingType)} onNext={editor.next} onBack={step === "executor" ? editor.previous : undefined} onCancel={editor.back}
+                actions={step === "executor" ? <>
+                  <Button variant={item?.enabled ? "default" : "outline"} disabled={!canSave} onClick={() => { void editor.save(false) }}>{item?.enabled ? "保存更改" : "仅保存"}</Button>
+                  {!item?.enabled ? <Button disabled={!canSave} onClick={() => { void editor.save(true) }}>保存并启用</Button> : null}
+                </> : undefined}>
+                <fieldset disabled={saving} className="min-w-0 border-0 p-0">
+                  <TriggerExecutorBuilder key={step} step={step} choosing={editor.choosingType} onChoosingChange={editor.setChoosingType} triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
+                    executorType={loadState.draft.executorType} executorConfig={loadState.draft.executorConfig}
+                    projects={config.global.projects} platform={getRendererPlatform()}
+                    onTriggerChange={editor.changeTrigger}
+                    onExecutorChange={(executorType, executorConfig) => editor.updateDraft(current => ({ ...current, executorType, executorConfig }))} />
+                  {step === "executor" ? <Field className="mt-7 border-t pt-6">
+                    <FieldLabel htmlFor="automation-name">自动化名称</FieldLabel>
+                    <Input id="automation-name" aria-label="自动化名称" value={loadState.draft.name} maxLength={200}
+                      onChange={event => editor.updateDraft(current => ({ ...current, name: event.target.value }))} />
+                  </Field> : null}
+                </fieldset>
+                {error ? <p role="alert" className="mt-4 text-sm text-destructive">{error}</p> : null}
+                {saving ? <p role="status" className="mt-4 text-sm text-muted-foreground">保存中</p> : null}
+              </GuidedFlow>
+            </div>
+          </ScrollArea>
         )}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
-          <div className="min-w-0 flex-1 text-xs text-muted-foreground">
-            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : saving ? <p role="status">保存中</p> : <p className="truncate">{summary}</p>}
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <Button variant="outline" disabled={!canSave} onClick={() => { void editor.save(false) }}>仅保存</Button>
-            <Button disabled={!canSave} onClick={() => { void editor.save(true) }}>保存并启用</Button>
-          </div>
-        </div>
       </div>
     </SystemAppWindowShell>
   )

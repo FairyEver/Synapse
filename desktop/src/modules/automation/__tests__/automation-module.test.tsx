@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   openCreateEditorWindow: vi.fn(),
   openEditorWindow: vi.fn(),
   notificationError: vi.fn(),
+  itemCreate: vi.fn(),
   deleteAutomation: vi.fn(),
   runAutomation: vi.fn(),
   stopAutomationRun: vi.fn(),
@@ -61,6 +62,7 @@ vi.mock("@/lib/electron-bridge", async () => {
       item: {
         list: async () => [],
         get: async () => createItem(),
+        create: mocks.itemCreate,
       },
     }),
   }
@@ -138,6 +140,48 @@ afterEach(async () => {
 })
 
 describe("AutomationModule", () => {
+  it("opens the saved automation's read-only details after creating it", async () => {
+    mocks.useAutomationItems.mockReturnValue({ items: [], loading: false, error: null, refresh: vi.fn() })
+    mocks.itemCreate.mockResolvedValue(createItem({ name: "已保存的自动化", enabled: false }))
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationModule />) })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[data-system-app-top-bar] button:last-child')!.click() })
+    await goToNamingStep()
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "命令")!.click() })
+    await act(async () => {
+      const input = document.querySelector<HTMLInputElement>('#task-action-command-content')!
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "echo ok")
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "仅保存")!.click() })
+    expect(document.querySelector('[data-layout="automation-detail"] h1')?.textContent).toBe("已保存的自动化")
+    expect(document.querySelector('input[aria-label="自动化名称"]')).toBeNull()
+    expect(mocks.itemCreate.mock.calls[0][0].enabled).toBe(false)
+  })
+  it("keeps URL credentials out of both the detail summary and configuration fields", async () => {
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem({ executor: { type: "builtin.http-request", config: { method: "GET", url: "https://user:private-password@example.com/api?token=private-token" } } })], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationModule />) })
+    await act(async () => { document.querySelector<HTMLElement>('tbody tr')!.click() })
+    const text = document.querySelector('[data-layout="automation-detail"]')!.textContent
+    expect(text).toContain("example.com")
+    expect(text).not.toContain("private-token")
+    expect(text).not.toContain("private-password")
+  })
+  it("updates open details from item changes and prevents actions after deletion", async () => {
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem()], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<AutomationModule />) })
+    await act(async () => { document.querySelector<HTMLElement>('tbody tr')!.click() })
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem({ name: "更新后的配置", enabled: false })], loading: false, error: null, refresh: vi.fn() })
+    await act(async () => { root.render(<AutomationModule />) })
+    expect(document.querySelector('[data-layout="automation-detail"] h1')!.textContent).toBe("更新后的配置")
+    mocks.useAutomationItems.mockReturnValue({ items: [], loading: false, error: null, refresh: vi.fn() })
+    await act(async () => { root.render(<AutomationModule />) })
+    expect(document.querySelector('[role="alert"]')!.textContent).toBe("自动化不存在")
+    expect(Array.from(document.querySelectorAll('button')).some(button => button.textContent === "编辑")).toBe(false)
+  })
   it("renders empty state when there are no automations", () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [],
@@ -326,8 +370,8 @@ describe("AutomationModule", () => {
       Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "新建")?.click()
     })
 
-    expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
-    expect(document.body.textContent).toContain("当以下情况发生时")
+    expect(document.querySelector('input[aria-label="自动化名称"]')).toBeNull()
+    expect(document.body.textContent).toContain("何时触发？")
     expect(mocks.openCreateEditorWindow).not.toHaveBeenCalled()
   })
 
@@ -342,7 +386,7 @@ describe("AutomationModule", () => {
       expect(header().querySelectorAll("button")).toHaveLength(1)
       expect(header().querySelector('[aria-label="返回自动化列表"]')).not.toBeNull()
       expect(header().textContent).toBe("")
-      expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+      expect(document.body.textContent).toContain("何时触发？")
     }
     const checkList = () => {
       expect(header().textContent).toContain("新建")
@@ -355,7 +399,12 @@ describe("AutomationModule", () => {
     await act(async () => { (header().querySelector('[aria-label="返回自动化列表"]') as HTMLButtonElement).click() })
     checkList()
     await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "已有任务")!.click() })
+    expect(document.querySelector('input[aria-label="自动化名称"]')).toBeNull()
+    expect(document.body.textContent).toContain("概览")
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "编辑")!.click() })
     checkEditor()
+    await act(async () => { (header().querySelector('[aria-label="返回自动化列表"]') as HTMLButtonElement).click() })
+    expect(document.body.textContent).toContain("概览")
     await act(async () => { (header().querySelector('[aria-label="返回自动化列表"]') as HTMLButtonElement).click() })
     checkList()
   })
@@ -365,6 +414,7 @@ describe("AutomationModule", () => {
     const container = document.createElement("div"); document.body.appendChild(container)
     await act(async () => { createRoot(container).render(<AutomationModule />) })
     await act(async () => { Array.from(document.querySelectorAll("button")).find(b => b.textContent === "新建")!.click() })
+    await goToNamingStep()
     await act(async () => {
       const name = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')!
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(name, "我的草稿")
@@ -386,6 +436,7 @@ describe("AutomationModule", () => {
     await act(async () => { createRoot(container).render(<AutomationModule />) })
     const click = (text: string) => Array.from(document.querySelectorAll("button")).find(b => b.textContent === text)!.click()
     await act(async () => { click("新建") })
+    await goToNamingStep()
     await act(async () => {
       const input = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')!
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "暂存内容")
@@ -444,7 +495,7 @@ describe("AutomationModule", () => {
     expect(document.querySelector('[data-track="automation-form-dialog"]')).toBeNull()
   })
 
-  it("opens the editor in the current page from a list row", async () => {
+  it("opens read-only details from a list row and enters a separate edit form explicitly", async () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],
       loading: false,
@@ -463,7 +514,12 @@ describe("AutomationModule", () => {
       document.querySelector<HTMLElement>('tbody tr[data-slot="table-row"]')?.click()
     })
 
-    expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+    expect(document.querySelector('input[aria-label="自动化名称"]')).toBeNull()
+    expect(document.querySelector('[role="tablist"]')?.textContent).toContain("概览")
+    expect(document.body.textContent).toContain("echo ok")
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "编辑")!.click() })
+    expect(document.body.textContent).toContain("编辑自动化")
+    expect(document.querySelector('#automation-trigger-interval-minutes')).not.toBeNull()
     expect(mocks.openEditorWindow).not.toHaveBeenCalled()
   })
 
@@ -491,7 +547,8 @@ describe("AutomationModule", () => {
     })
 
     expect(mocks.openEditorWindow).not.toHaveBeenCalled()
-    expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+    expect(document.body.textContent).toContain("编辑自动化")
+    expect(document.querySelector('#automation-trigger-interval-minutes')).not.toBeNull()
     expect(mocks.openEditorWindow).not.toHaveBeenCalled()
   })
 
@@ -916,4 +973,9 @@ async function flushPromises() {
     await Promise.resolve()
     await Promise.resolve()
   })
+}
+
+async function goToNamingStep() {
+  await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Cron")!.click() })
+  await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "下一步")!.click() })
 }

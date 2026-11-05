@@ -87,5 +87,6 @@ export type RendererAutomationTriggerDefinition<
 > = {
   readonly manifest: AutomationTriggerManifest<TConfig>
   summarizeConfig(config: TConfig): string
+  validateConfig?(config: TConfig): void
   ConfigForm?: AutomationTriggerConfigFormComponent<TConfig>
 }

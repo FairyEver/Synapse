@@ -28,8 +28,9 @@ async function renderEditor(props: Record<string, unknown> = {}) {
   await act(async () => { root.render(<AutomationEditorForm {...{ mode: { mode: "create" as const }, onBack: vi.fn(), ...props }} />) })
 }
 async function configure() {
-  await act(async () => { button("Cron选择").click() })
-  await act(async () => { button("命令选择").click() })
+  await act(async () => { button("Cron").click() })
+  await act(async () => { button("下一步").click() })
+  await act(async () => { button("命令").click() })
   await act(async () => { change(document.querySelector<HTMLInputElement>("#task-action-command-content")!, "echo ok") })
 }
 beforeEach(() => {
@@ -40,6 +41,92 @@ beforeEach(() => {
 })
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ""; vi.clearAllMocks(); vi.restoreAllMocks() })
 describe("inline automation editing", () => {
+  it("configures the trigger before the executor and keeps navigation below the scrolling form", async () => {
+    await renderEditor()
+    expect(document.body.textContent).toContain("何时触发")
+    expect(document.querySelector('#task-action-command-content')).toBeNull()
+    expect(button("下一步").disabled).toBe(true)
+    await act(async () => { button("Cron").click() })
+    const next = button("下一步")
+    expect(next.closest('[data-slot="scroll-area-viewport"]')).not.toBeNull()
+    await act(async () => { next.click() })
+    expect(document.body.textContent).toContain("执行什么操作")
+    expect(document.querySelector('#automation-trigger-cron-expr')).toBeNull()
+    await act(async () => { button("命令").click() })
+    await act(async () => { change(document.querySelector<HTMLInputElement>('#task-action-command-content')!, "echo retained") })
+    await act(async () => { button("上一步").click() })
+    expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
+    await act(async () => { button("下一步").click() })
+    expect(document.querySelector<HTMLInputElement>('#task-action-command-content')!.value).toBe("echo retained")
+    expect(button("仅保存").closest('[data-slot="scroll-area-viewport"]')).not.toBeNull()
+    expect(document.querySelector('footer')).toBeNull()
+  })
+  it("blocks an invalid trigger before entering executor configuration", async () => {
+    await renderEditor()
+    await act(async () => { button("固定间隔").click() })
+    await act(async () => { change(document.querySelector<HTMLInputElement>('#automation-trigger-interval-minutes')!, "0") })
+    await act(async () => { button("下一步").click() })
+    expect(document.querySelector('#automation-trigger-interval-minutes')).not.toBeNull()
+    expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy()
+    expect(api.create).not.toHaveBeenCalled()
+  })
+  it("checks Cron syntax before advancing", async () => {
+    await renderEditor()
+    await act(async () => { button("Cron").click() })
+    await act(async () => { change(document.querySelector<HTMLInputElement>('#automation-trigger-cron-expr')!, "70 9 * * *") })
+    await act(async () => { button("下一步").click() })
+    expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
+    expect(document.querySelector('[role="alert"]')?.textContent).toBeTruthy()
+  })
+  it("waits for type replacement or cancellation before advancing or saving", async () => {
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.click() })
+    expect(button("下一步").disabled).toBe(true)
+    await act(async () => { button("取消更换").click() })
+    await act(async () => { button("下一步").click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换执行操作"]')!.click() })
+    expect(button("仅保存").disabled).toBe(true)
+    await act(async () => { button("取消更换").click() })
+    expect(button("仅保存").disabled).toBe(false)
+  })
+  it("requires replacing variables that belong to the previous trigger", async () => {
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { button("下一步").click() })
+    await act(async () => { change(document.querySelector<HTMLInputElement>('#task-action-command-content')!, "echo {{trigger.cron}}") })
+    await act(async () => { button("上一步").click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.click() })
+    await act(async () => { button("固定间隔").click() })
+    await act(async () => { button("确认更换").click() })
+    await act(async () => { button("下一步").click() })
+    expect(document.querySelector<HTMLInputElement>('#task-action-command-content')!.value).toBe("echo {{trigger.cron}}")
+    await act(async () => { button("仅保存").click() })
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("trigger.cron")
+    expect(api.update).not.toHaveBeenCalled()
+  })
+  it("preserves existing runtime variables that are not listed in the trigger picker", async () => {
+    const value = item()
+    value.trigger = { type: "builtin.webhook", config: { webhookPublicId: "hook-1" } }
+    value.executor.config.command = "echo {{trigger.request.remoteAddress}}"
+    api.get.mockResolvedValueOnce(value)
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { button("下一步").click() })
+    await act(async () => { button("仅保存").click() })
+    expect(api.update).toHaveBeenCalledOnce()
+  })
+  it("checks a user parameter named source when its trigger was replaced", async () => {
+    const value = item()
+    value.trigger = { type: "builtin.webhook", config: { webhookPublicId: "hook-1" } }
+    value.executor = { type: "builtin.http-request", config: { method: "GET", url: "https://example.com", query: { source: "{{trigger.request.body.id}}" } } }
+    api.get.mockResolvedValueOnce(value)
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.click() })
+    await act(async () => { button("Cron").click() })
+    await act(async () => { button("确认更换").click() })
+    await act(async () => { button("下一步").click() })
+    await act(async () => { button("仅保存").click() })
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("trigger.request.body.id")
+    expect(api.update).not.toHaveBeenCalled()
+  })
   it.each(["window", "dock", "launcher"] as const)("uses one shared header in the %s host", async (host) => {
     const onBack = vi.fn()
     const form = <AutomationEditorForm mode={{ mode: "create" }} onBack={onBack} />
@@ -66,6 +153,7 @@ describe("inline automation editing", () => {
   })
   it("renames directly and keeps an existing item's enabled state out of a save-only patch", async () => {
     await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { button("下一步").click() })
     const name = document.querySelector<HTMLInputElement>('input[aria-label="自动化名称"]')
     expect(name).not.toBeNull()
     await act(async () => { change(name!, "新的名称") })
@@ -115,6 +203,7 @@ describe("inline automation editing", () => {
   })
   it("ignores a stale focus reload that completes after saving newer changes", async () => {
     await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { button("下一步").click() })
     let finishReload!: (item: AutomationItem) => void
     api.get.mockReturnValueOnce(new Promise<AutomationItem>(resolve => { finishReload = resolve }))
     await act(async () => { window.dispatchEvent(new Event("focus")) })

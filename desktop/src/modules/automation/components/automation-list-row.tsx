@@ -21,6 +21,7 @@ type AutomationListRowProps = {
   readonly pending: boolean
   readonly running: boolean
   readonly onOpen: () => void
+  readonly onEdit?: () => void
   readonly onRun: () => void
   readonly onStop: () => void
   readonly onToggleEnabled: (enabled: boolean) => void
@@ -46,6 +47,7 @@ function AutomationListRow({
   pending,
   running,
   onOpen,
+  onEdit,
   onRun,
   onStop,
   onToggleEnabled,
@@ -125,7 +127,8 @@ function AutomationListRow({
                 variant="ghost"
                 aria-label={`编辑自动化 ${item.name}`}
                 onClick={() => {
-                  onOpen()
+                  if (onEdit) onEdit()
+                  else onOpen()
                 }}
               >
                 <Pencil />

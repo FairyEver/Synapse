@@ -5,6 +5,8 @@ type AutomationEditorMode =
   | { mode: "create" }
   | { mode: "edit"; automationId: string }
 
+type AutomationEditorStep = "trigger" | "executor"
+
 type AutomationEditorDraft = {
   name: string
   description: string
@@ -23,12 +25,15 @@ type AutomationEditorLoadState =
   | { status: "error"; message: string }
 
 type AutomationEditorSession = {
+  readonly step?: AutomationEditorStep
+  readonly previousTriggerTypes?: readonly string[]
   readonly draft: AutomationEditorDraft
   readonly item?: AutomationItem
   readonly savedDraft: AutomationEditorDraft
 }
 
 export type {
+  AutomationEditorStep,
   AutomationEditorDraft,
   AutomationEditorLoadState,
   AutomationEditorMode,

@@ -1,37 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
+import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
 import { registerNavigationGuard } from "@/app-shell/navigation-guard"
 import { holdBeforeUnloadForCustomDialog } from "@/lib/before-unload"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { sanitizeError } from "@/lib/error-sanitize"
 import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { AutomationItem } from "@/types/automation"
-import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode, AutomationEditorSession } from "../types"
-import { buildAutomationCreateInputFromDraft, buildAutomationUpdateInputFromDraft, createAutomationDraftFromItem, createDefaultAutomationDraft, generateAutomationDraftName } from "../utils"
+import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode, AutomationEditorSession, AutomationEditorStep } from "../types"
+import { buildAutomationCreateInputFromDraft, buildAutomationUpdateInputFromDraft, createAutomationDraftFromItem, createDefaultAutomationDraft, generateAutomationDraftName, validateChangedTriggerVariables } from "../utils"
 
 const logger = createRendererLogger("automation.editor")
 type LeaveKind = "back" | "navigation" | "close"
 type EditorOptions = {
   readonly mode: AutomationEditorMode
   readonly initialSession?: AutomationEditorSession
+  readonly initialStep?: AutomationEditorStep
   readonly onBack: (session?: AutomationEditorSession) => void
   readonly onSaved?: (item: AutomationItem) => void
 }
 
 function saveErrorMessage(error: unknown): string {
-  const fieldLabels: Record<string, string> = { projectId: "请选择项目", providerId: "请选择供应商 + 模型", modelTier: "请选择模型", prompt: "请填写提示词", command: "请填写命令", script: "请填写脚本", url: "请填写 URL", expr: "请填写 Cron 表达式" }
+  const fieldLabels: Record<string, string> = { projectId: "请选择项目", providerId: "请选择供应商 + 模型", modelTier: "请选择模型", prompt: "请填写提示词", command: "请填写命令", script: "请填写脚本", url: "请填写 URL", expr: "请填写 Cron 表达式", everyMinutes: "请填写大于 0 的间隔分钟", activeDays: "请至少选择一个活跃日", webhookPublicId: "请选择 Webhook" }
   const issues = (error as { issues?: { path?: unknown[]; message?: string }[] } | null)?.issues
   if (Array.isArray(issues)) return [...new Set(issues.map(issue => fieldLabels[String(issue.path?.at(-1))] ?? issue.message).filter(Boolean))].join("、") || "请检查配置"
   return sanitizeError(error instanceof Error ? error.message : String(error)) || "保存失败"
 }
 
-export function useAutomationEditor({ mode, initialSession, onBack, onSaved }: EditorOptions) {
+export function useAutomationEditor({ mode, initialSession, initialStep, onBack, onSaved }: EditorOptions) {
   const bridge = useMemo(() => requireBridgeDomain("automation"), [])
   const [loadState, setLoadState] = useState<AutomationEditorLoadState>(() => initialSession
     ? { status: "ready", draft: initialSession.draft, item: initialSession.item }
     : mode.mode === "create" ? { status: "ready", draft: createDefaultAutomationDraft(generateAutomationDraftName([])) } : { status: "loading" })
   const baseline = useRef(JSON.stringify(initialSession?.savedDraft ?? (loadState.status === "ready" ? loadState.draft : null)))
   const [saving, setSaving] = useState(false)
+  const [step, setStep] = useState<AutomationEditorStep>(initialSession?.step ?? initialStep ?? "trigger")
+  const [choosingType, setChoosingType] = useState(false)
+  const [previousTriggerTypes, setPreviousTriggerTypes] = useState<readonly string[]>(initialSession?.previousTriggerTypes ?? [])
   const savingRef = useRef(false)
   const dirtyRef = useRef(false)
   const revision = useRef(0)
@@ -50,6 +55,7 @@ export function useAutomationEditor({ mode, initialSession, onBack, onSaved }: E
     const draft = createAutomationDraftFromItem(item)
     baseline.current = JSON.stringify(draft)
     dirtyRef.current = false
+    setPreviousTriggerTypes([])
     setLoadState({ status: "ready", item, draft })
   }, [])
 
@@ -136,8 +142,35 @@ export function useAutomationEditor({ mode, initialSession, onBack, onSaved }: E
     setError(null)
   }
 
-  async function save(enable: boolean) {
+  function next() {
+    if (savingRef.current || choosingType || loadState.status !== "ready") return
+    const { triggerType, triggerConfig } = loadState.draft
+    try {
+      if (!triggerType) throw new Error("请选择触发条件")
+      rendererAutomationTriggerRegistry.parseConfig(triggerType, triggerConfig)
+      setError(null)
+      setStep("executor")
+    } catch (validationError) {
+      setError(saveErrorMessage(validationError))
+    }
+  }
+
+  function previous() {
+    if (savingRef.current) return
+    setError(null)
+    setChoosingType(false)
+    setStep("trigger")
+  }
+
+  function changeTrigger(triggerType: string | null, triggerConfig: Record<string, unknown>) {
     if (savingRef.current || loadState.status !== "ready") return
+    const previousType = loadState.draft.triggerType
+    if (previousType && previousType !== triggerType) setPreviousTriggerTypes(current => [...new Set([...current, previousType])])
+    updateDraft(current => ({ ...current, triggerType, triggerConfig }))
+  }
+
+  async function save(enable: boolean) {
+    if (savingRef.current || choosingType || loadState.status !== "ready") return
     const { draft, item } = loadState
     revision.current += 1
     const finish = startTrackedOperation({ component: "automation", eventKey: item ? "automation.editor.save" : "automation.editor.create" })
@@ -145,6 +178,7 @@ export function useAutomationEditor({ mode, initialSession, onBack, onSaved }: E
     setSaving(true)
     setError(null)
     try {
+      validateChangedTriggerVariables(draft, previousTriggerTypes)
       const saved = item
         ? await bridge.item.update({ id: item.id, patch: buildAutomationUpdateInputFromDraft(draft, enable ? true : undefined) })
         : await bridge.item.create(buildAutomationCreateInputFromDraft(draft, enable))
@@ -183,7 +217,7 @@ export function useAutomationEditor({ mode, initialSession, onBack, onSaved }: E
       return
     }
     if (action === "stash" && kind === "back" && loadState.status === "ready") {
-      onBack({ draft: loadState.draft, item: loadState.item, savedDraft: JSON.parse(baseline.current) as AutomationEditorDraft })
+      onBack({ step, previousTriggerTypes, draft: loadState.draft, item: loadState.item, savedDraft: JSON.parse(baseline.current) as AutomationEditorDraft })
       return
     }
     dirtyRef.current = false
@@ -195,5 +229,5 @@ export function useAutomationEditor({ mode, initialSession, onBack, onSaved }: E
     else onBack()
   }
 
-  return { loadState, dirty, saving, error, leaveKind, updateDraft, save, back, resolveLeave, retry: () => setReloadKey(key => key + 1) }
+  return { loadState, dirty, saving, error, leaveKind, step, next, previous, choosingType, setChoosingType, changeTrigger, updateDraft, save, back, resolveLeave, retry: () => setReloadKey(key => key + 1) }
 }

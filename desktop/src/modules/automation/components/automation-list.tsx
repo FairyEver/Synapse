@@ -23,6 +23,7 @@ type AutomationListProps = {
   readonly pendingItemIds: ReadonlySet<string>
   readonly runningItemIds: ReadonlySet<string>
   readonly onOpen: (item: AutomationItem) => void
+  readonly onEdit?: (item: AutomationItem) => void
   readonly onRun: (item: AutomationItem) => void
   readonly onStop: (item: AutomationItem) => void
   readonly onToggleEnabled: (item: AutomationItem, enabled: boolean) => void
@@ -40,6 +41,7 @@ function AutomationList({
   pendingItemIds,
   runningItemIds,
   onOpen,
+  onEdit,
   onRun,
   onStop,
   onToggleEnabled,
@@ -94,6 +96,7 @@ function AutomationList({
               pending={pendingItemIds.has(item.id)}
               running={runningItemIds.has(item.id)}
               onOpen={() => onOpen(item)}
+              onEdit={() => (onEdit ?? onOpen)(item)}
               onRun={() => onRun(item)}
               onStop={() => onStop(item)}
               onToggleEnabled={(enabled) => onToggleEnabled(item, enabled)}

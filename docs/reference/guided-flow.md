@@ -7,6 +7,7 @@
 公共入口：`desktop/src/components/guided-flow/index.tsx`。
 
 - `GuidedFlow` 组合现有 DialogFrameHeader/Body/Footer 和 Button，负责进度、步骤焦点、返回、取消和继续。
+- `layout="page"` 用于自动化等页面式表单：进度、内容和操作均位于宿主的同一滚动内容中，操作在表单下方，不渲染 DialogFrame 或页面底栏。可通过 `actions` 传入最终保存操作；默认弹窗布局和行为不变。
 - `GuidedChoices` 组合 shadcn FieldSet/FieldLegend、RadioGroup、FieldLabel、FieldContent、FieldTitle、FieldDescription。
 - 默认带说明的互斥决策使用 RadioGroup；点击即确认的决策使用 Button，支持 Tab、Enter 和空格激活；简短的工具栏显示切换才用 ToggleGroup。长说明不得塞入横排 ToggleGroup。
 - 选项整行可点；标题是可访问名称，说明通过 aria-describedby 关联。保留 Radix 的方向键、空格键和焦点行为。

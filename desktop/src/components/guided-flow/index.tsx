@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from "react"
+import { Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DialogFrameBody, DialogFrameFooter, DialogFrameHeader } from "@/components/ui/dialog"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field"
@@ -60,7 +61,7 @@ export function GuidedChoices({ title, value, options, onChange, onSelect, disab
 
 /** 壳仅负责进度、焦点和动作；分支、校验、异步请求由业务 hook 管理。 */
 export function GuidedFlow({ title, step, steps, children, busy, nextLabel = "下一步", canNext = true, destructive,
-  onBack, onNext, onCancel, hideNext = false }: {
+  onBack, onNext, onCancel, hideNext = false, layout = "dialog", actions }: {
   readonly title: string
   readonly step: string
   readonly steps: readonly { readonly id: string; readonly title: string }[]
@@ -71,12 +72,45 @@ export function GuidedFlow({ title, step, steps, children, busy, nextLabel = "�
   readonly destructive?: boolean
   readonly onBack?: () => void
   readonly hideNext?: boolean
+  readonly layout?: "dialog" | "page"
+  readonly actions?: ReactNode
   readonly onNext: () => void
   readonly onCancel: () => void
 }) {
   const heading = useRef<HTMLParagraphElement>(null)
   const index = steps.findIndex((entry) => entry.id === step)
   useEffect(() => { heading.current?.focus() }, [step])
+  if (layout === "page") {
+    return (
+      <div className="min-w-0" data-layout="guided-flow-page">
+        <h1 className="mb-7 text-2xl font-semibold">{title}</h1>
+        <p ref={heading} tabIndex={-1} className="sr-only" aria-live="polite">
+          第 {index + 1} 步 / 共 {steps.length} 步 · {steps[index]?.title}
+        </p>
+        <ol className="mb-8 flex items-center gap-4" aria-label="配置步骤">
+          {steps.map((entry, entryIndex) => (
+            <li key={entry.id} aria-current={entry.id === step ? "step" : undefined}
+              className="flex min-w-0 flex-1 items-center gap-3 last:flex-none">
+              <span className={entryIndex <= index
+                ? "flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground"
+                : "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs text-muted-foreground"}>
+                {entryIndex < index ? <Check className="size-3.5" /> : entryIndex + 1}
+              </span>
+              <span className={entryIndex <= index ? "text-sm font-medium" : "text-sm text-muted-foreground"}>{entry.title}</span>
+              {entryIndex < steps.length - 1 ? <span className="h-px min-w-2 flex-1 bg-border" /> : null}
+            </li>
+          ))}
+        </ol>
+        <div className="min-w-0" aria-busy={busy}>{children}</div>
+        <div role="group" aria-label="表单操作" className="mt-8 flex flex-wrap items-center justify-between gap-3">
+          <Button variant="ghost" disabled={busy} onClick={onBack ?? onCancel}>{onBack ? "上一步" : "取消"}</Button>
+          <div className="ml-auto flex flex-wrap gap-2">
+            {actions ?? (!hideNext && <Button disabled={busy || !canNext} onClick={onNext}>{busy ? "正在处理…" : nextLabel}</Button>)}
+          </div>
+        </div>
+      </div>
+    )
+  }
   return (
     <>
       <DialogFrameHeader title={title} bordered>

@@ -25,7 +25,8 @@ import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-ap
 import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
 import { AutomationList } from "./components/automation-list"
 import { AutomationEditorForm } from "./editor/editor-form"
-import type { AutomationEditorMode, AutomationEditorSession } from "./types"
+import { AutomationDetail } from "./detail/automation-detail"
+import type { AutomationEditorMode, AutomationEditorSession, AutomationEditorStep } from "./types"
 import { useAutomationDraftGuard } from "./hooks/use-automation-draft-guard"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -96,7 +97,8 @@ function AutomationModule() {
   const deleteFallbackFocusRef = useRef<HTMLButtonElement | null>(null)
   const wasDeleteOpenRef = useRef(false)
   const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(() => new Set())
-  const [editor, setEditor] = useState<{ mode: AutomationEditorMode; tab: "config" | "history"; session?: AutomationEditorSession } | null>(null)
+  const [editor, setEditor] = useState<{ mode: AutomationEditorMode; step?: AutomationEditorStep; session?: AutomationEditorSession } | null>(null)
+  const [detail, setDetail] = useState<{ item: AutomationItem; tab: "config" | "history"; missing?: boolean } | null>(null)
   const [draftSessions, setDraftSessions] = useState<Record<string, AutomationEditorSession>>({})
   const draftGuard = useAutomationDraftGuard(Object.keys(draftSessions).length > 0, () => setDraftSessions({}))
   const [search, setSearch] = useState("")
@@ -104,12 +106,20 @@ function AutomationModule() {
   const returnTarget = useRef<string | null>(null)
 
   useEffect(() => {
-    if (editor || !returnTarget.current) return
+    if (editor || detail || !returnTarget.current) return
     const target = returnTarget.current
     returnTarget.current = null
     if (target === "create") deleteFallbackFocusRef.current?.focus()
     else Array.from(document.querySelectorAll<HTMLElement>("[data-automation-id]")).find(row => row.dataset.automationId === target)?.querySelector<HTMLButtonElement>("button")?.focus()
-  }, [editor])
+  }, [editor, detail])
+
+  useEffect(() => {
+    setDetail(current => {
+      if (!current) return current
+      const item = items.find(candidate => candidate.id === current.item.id)
+      return item ? { ...current, item, missing: false } : { ...current, missing: true }
+    })
+  }, [items])
   const [runningItemIds, setRunningItemIds] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
@@ -296,12 +306,17 @@ function AutomationModule() {
 
   function handleCreateEditorOpen() {
     returnTarget.current = "create"
-    setEditor({ mode: { mode: "create" }, tab: "config", session: resumeSession("create") })
+    setEditor({ mode: { mode: "create" }, session: resumeSession("create") })
   }
 
-  function handleEditorOpen(item: AutomationItem, tab: "config" | "history" = "config") {
+  function handleEditorOpen(item: AutomationItem, step?: AutomationEditorStep) {
     returnTarget.current = item.id
-    setEditor({ mode: { mode: "edit", automationId: item.id }, tab, session: resumeSession(item.id) })
+    setEditor({ mode: { mode: "edit", automationId: item.id }, step, session: resumeSession(item.id) })
+  }
+
+  function handleDetailOpen(item: AutomationItem, tab: "config" | "history" = "config") {
+    returnTarget.current = item.id
+    setDetail({ item, tab })
   }
 
   const content = (() => {
@@ -363,11 +378,12 @@ function AutomationModule() {
         createDisabled={false}
         pendingItemIds={pendingItemIds}
         runningItemIds={runningItemIds}
-        onOpen={(item) => { void handleEditorOpen(item) }}
+        onOpen={handleDetailOpen}
+        onEdit={handleEditorOpen}
         onRun={(item) => { void handleRun(item) }}
         onStop={(item) => { void handleStop(item) }}
         onToggleEnabled={(item, enabled) => { void handleToggleEnabled(item, enabled) }}
-        onHistory={(item) => handleEditorOpen(item, "history")}
+        onHistory={(item) => handleDetailOpen(item, "history")}
         filtered={Boolean(search.trim() || filter !== "all")}
         onClearFilter={() => { setSearch(""); setFilter("all") }}
         onDelete={handleDeleteStart}
@@ -395,17 +411,35 @@ function AutomationModule() {
         <AutomationEditorForm
           mode={editor.mode}
           initialSession={editor.session}
-          initialTab={editor.tab}
+          initialStep={editor.step}
           onBack={(session) => {
-            if (session) setDraftSessions(current => ({ ...current, [session.item?.id ?? "create"]: session }))
+            if (session) {
+              setDraftSessions(current => ({ ...current, [session.item?.id ?? "create"]: session }))
+              setDetail(null)
+            }
             setEditor(null)
           }}
-          onSaved={() => { void refresh() }}
+          onSaved={item => {
+            returnTarget.current = item.id
+            setDetail({ item, tab: "config" })
+            setEditor(null)
+            void refresh()
+          }}
         />
           </div>
         </div>
       </TooltipProvider>
     )
+  }
+
+  if (detail) {
+    return <TooltipProvider><div className="flex h-full min-h-0 flex-col">
+      {draftLeavePrompt}
+      <div className="min-h-0 flex-1"><AutomationDetail key={`${detail.item.id}:${detail.tab}`} item={detail.item} initialTab={detail.tab}
+        missing={detail.missing} error={error} busy={pendingItemIds.has(detail.item.id)} onBack={() => setDetail(null)}
+        onEdit={step => handleEditorOpen(detail.item, step)} onToggleEnabled={enabled => { void handleToggleEnabled(detail.item, enabled) }}
+        onRefresh={() => { void refresh() }} onStopRun={async runId => { await stopRunOrThrow(runId) }} /></div>
+    </div></TooltipProvider>
   }
 
   return (
@@ -493,7 +527,7 @@ function AutomationModule() {
             <div className="min-w-0"><p className="truncate text-sm font-medium">{draftSession.draft.name}</p><p className="text-xs text-muted-foreground">未保存草稿 · 本次会话</p></div>
             <Button variant="outline" onClick={() => {
               returnTarget.current = draftSession.item?.id ?? "create"
-              setEditor({ mode: draftSession.item ? { mode: "edit", automationId: draftSession.item.id } : { mode: "create" }, tab: "config", session: draftSession })
+              setEditor({ mode: draftSession.item ? { mode: "edit", automationId: draftSession.item.id } : { mode: "create" }, session: draftSession })
               resumeSession(key)
             }}>继续编辑</Button>
           </div>
