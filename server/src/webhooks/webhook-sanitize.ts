@@ -8,6 +8,7 @@ const cookieFragmentPattern = /\bcookie\s*[:=]\s*.+?(?=(?:\s+(?:and|plus|with)\s
 const sensitiveAssignmentPattern = /\b(authorization|token|secret|password|credential|api[-_]?key)\s*[:=]\s*[^,\s;]+/giu
 const quotedJsonStringAssignmentPattern = /(["'])([^"'\\]*(?:\\.[^"'\\]*)*)\1(\s*:\s*)(["'])([^"'\\]*(?:\\.[^"'\\]*)*)\4/gu
 const maxPreviewChars = 2_000
+const maxJsonDepth = 100
 
 export interface WebhookBodySummary {
   readonly bodyKind: string
@@ -31,7 +32,7 @@ type WebhookLogRequestLike = {
 }
 
 export function sanitizeWebhookHeaders(headers: Record<string, unknown>): Record<string, string> {
-  const result: Record<string, string> = {}
+  const result: Record<string, string> = Object.create(null)
   for (const [rawKey, rawValue] of Object.entries(headers)) {
     const key = rawKey.toLowerCase()
     result[key] = isSensitiveKey(key) ? "[redacted]" : stringifyHeader(rawValue)
@@ -42,7 +43,7 @@ export function sanitizeWebhookHeaders(headers: Record<string, unknown>): Record
 export function sanitizeWebhookQuery(
   query: Record<string, string | readonly string[]>,
 ): Record<string, string | readonly string[]> {
-  const result: Record<string, string | readonly string[]> = {}
+  const result: Record<string, string | readonly string[]> = Object.create(null)
   for (const [key, value] of Object.entries(query)) {
     result[key] = isSensitiveKey(key)
       ? "[redacted]"
@@ -94,6 +95,7 @@ export function summarizeWebhookBody(body: Buffer, contentType = ""): WebhookBod
 
   if (normalizedContentType === "application/json" || normalizedContentType.endsWith("+json")) {
     const parsed = parseJsonBody(body)
+    validateJsonDepth(parsed)
     const redacted = redactValue(parsed)
     return {
       bodyKind: "json",
@@ -105,7 +107,7 @@ export function summarizeWebhookBody(body: Buffer, contentType = ""): WebhookBod
 
   if (normalizedContentType === "application/x-www-form-urlencoded") {
     const params = new URLSearchParams(body.toString("utf8"))
-    const parsed: Record<string, string | readonly string[]> = {}
+    const parsed: Record<string, string | readonly string[]> = Object.create(null)
     for (const [key, value] of params.entries()) {
       const existing = parsed[key]
       if (existing === undefined) {
@@ -156,7 +158,7 @@ function sanitizeWebhookLogParams(params: unknown): unknown {
   if (Array.isArray(params)) return params.map(sanitizeWebhookLogParams)
   if (!params || typeof params !== "object") return params
 
-  const result: Record<string, unknown> = {}
+  const result: Record<string, unknown> = Object.create(null)
   for (const [key, value] of Object.entries(params)) {
     if (isSensitiveKey(key)) {
       result[key] = "[redacted]"
@@ -176,7 +178,7 @@ function sanitizeWebhookLogParams(params: unknown): unknown {
 function sanitizeWebhookLogHeaders(headers: unknown): Record<string, string> | undefined {
   const value = recordValue(headers)
   if (!value) return undefined
-  const result: Record<string, string> = {}
+  const result: Record<string, string> = Object.create(null)
   for (const [rawKey, rawValue] of Object.entries(value)) {
     const key = rawKey.toLowerCase()
     result[key] = isSensitiveKey(key) || requestLogEnvironmentKeyPattern.test(key)
@@ -222,11 +224,25 @@ function stringifyHeader(value: unknown): string {
 function redactValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactValue)
   if (!value || typeof value !== "object") return value
-  const result: Record<string, unknown> = {}
+  const result: Record<string, unknown> = Object.create(null)
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     result[key] = isSensitiveKey(key) ? "[redacted]" : redactValue(child)
   }
   return result
+}
+
+function validateJsonDepth(value: unknown): void {
+  const pending = [{ value, depth: 1 }]
+  while (pending.length > 0) {
+    const current = pending.pop()!
+    if (!current.value || typeof current.value !== "object") continue
+    if (current.depth > maxJsonDepth) {
+      throw new BadRequestException(`Webhook JSON body exceeds maximum depth of ${maxJsonDepth}`)
+    }
+    for (const child of Object.values(current.value)) {
+      if (child && typeof child === "object") pending.push({ value: child, depth: current.depth + 1 })
+    }
+  }
 }
 
 function redactText(value: string): string {

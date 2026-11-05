@@ -444,8 +444,10 @@ export class WebhookService implements OnModuleInit {
         webhookName: webhook.name,
         method,
         path: maskedPath,
-        query: sanitizedQuery,
-        headers: sanitizedHeaders,
+        // Prisma's generic object serializer assigns into {}, which drops __proto__.
+        // Its supported JSON conversion hook keeps request dictionaries intact.
+        query: { toJSON: () => sanitizedQuery },
+        headers: { toJSON: () => sanitizedHeaders },
         bodyKind: bodySummary.bodyKind,
         bodySize: bodySummary.bodySize,
         bodyPreview: bodySummary.bodyPreview,

@@ -147,7 +147,7 @@ function toRequestBodyBuffer(body: unknown): Buffer {
 }
 
 function normalizeRequestQuery(query: Request["query"]): Record<string, string | readonly string[]> {
-  const result: Record<string, string | readonly string[]> = {}
+  const result: Record<string, string | readonly string[]> = Object.create(null)
   for (const [key, value] of Object.entries(query)) {
     if (Array.isArray(value)) {
       result[key] = value.map(String)

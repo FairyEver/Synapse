@@ -1,5 +1,6 @@
 import { BadRequestException, Logger, NotFoundException, PayloadTooLargeException } from "@nestjs/common"
 import { LIVE_MESSAGE_TYPES, WEBHOOK_DELIVERY_STATUS } from "@synapse/shared"
+import { PrismaClient, type Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
 import { hashWebhookSecret, verifyWebhookSecret } from "./webhook-token"
 import { WebhookService } from "./webhook.service"
@@ -827,6 +828,24 @@ describe("WebhookService", () => {
     expect(serializedPayload).not.toContain("body-secret")
   })
 
+  it("preserves special request keys through Prisma's real JSON serializer without connecting to a database", async () => {
+    const harness = createWebhookReceiveHarness()
+    const fields = JSON.parse('{"__proto__":"visible","constructor":"ctor","toJSON":"plain-data","token":"hidden"}')
+    await harness.receive({ query: fields, headers: fields })
+    const client = new PrismaClient({ datasources: { db: { url: "postgresql://unused:unused@127.0.0.1:1/unused" } } })
+    const engine = (client as unknown as { _engine: { request: (query: unknown) => Promise<unknown> } })._engine
+    const request = vi.spyOn(engine, "request").mockResolvedValue({ data: { createOneWebhookDelivery: { id: "fixture" } } })
+    try {
+      const data = harness.prisma.webhookDelivery.create.mock.calls[0]?.[0].data as Prisma.WebhookDeliveryCreateArgs["data"]
+      await client.webhookDelivery.create({ data })
+      const serialized = JSON.parse(JSON.stringify(request.mock.calls[0]?.[0]))
+      expect(serialized.query.arguments.data.query).toEqual(JSON.parse('{"__proto__":"visible","constructor":"ctor","toJSON":"plain-data","token":"[redacted]"}'))
+      expect(serialized.query.arguments.data.headers).toEqual(JSON.parse('{"__proto__":"visible","constructor":"ctor","tojson":"plain-data","token":"[redacted]"}'))
+    } finally {
+      await client.$disconnect()
+    }
+  })
+
   it("records no_online_clients when no live clients are online", async () => {
     const harness = createWebhookReceiveHarness()
 
@@ -1195,6 +1214,14 @@ describe("WebhookService", () => {
     const harness = createWebhookReceiveHarness()
 
     await expect(harness.receive({ body: Buffer.from("{\"broken\"") }))
+      .rejects.toThrow(BadRequestException)
+    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it("rejects deeply nested JSON without broadcasting or accepting delivery", async () => {
+    const harness = createWebhookReceiveHarness()
+    await expect(harness.receive({ body: Buffer.from(`${"[".repeat(20_000)}0${"]".repeat(20_000)}`) }))
       .rejects.toThrow(BadRequestException)
     expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
     expect(harness.deliveries).toHaveLength(0)

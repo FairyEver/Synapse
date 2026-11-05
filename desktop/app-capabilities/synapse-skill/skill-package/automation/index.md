@@ -97,6 +97,8 @@ If you only need to enable or disable an Automation, use `app_automation_item_en
 
 Local Webhook events run serially per Automation. Successfully disabling an item, changing its trigger configuration, or stopping the service discards its pending events; reenabling does not replay them. Already-started runs continue unless explicitly stopped. Renaming an item or a failed disable write does not discard its queue. Webhook acknowledgement still means reception only, not execution success.
 
+Public Webhook request bodies are limited to 256KB. JSON allows up to 100 nested object/array containers, counting the root container as one; excessive depth returns HTTP 400 without creating a delivery or triggering Automation. Special own keys are preserved as data, and sensitive fields remain redacted.
+
 If a read result only shows `{ type, summary }`, that is expected. It is not enough to reconstruct private configs. Ask the user for the new desired config or use discovery defaults.
 
 ## Run Rules

@@ -1,13 +1,39 @@
-import { UnsupportedMediaTypeException } from "@nestjs/common"
+import { BadRequestException, UnsupportedMediaTypeException } from "@nestjs/common"
 import { describe, expect, it } from "vitest"
 import {
   sanitizeWebhookHeaders,
+  sanitizeWebhookQuery,
   sanitizeWebhookLogRequest,
   sanitizeWebhookLogUrl,
   summarizeWebhookBody,
 } from "./webhook-sanitize"
 
 describe("webhook sanitize", () => {
+  it("preserves special own property names in JSON, headers, and query", () => {
+    const fields = JSON.parse('{"__proto__":{"visible":"kept","token":"hidden"},"constructor":"ctor","toString":"string"}')
+    const summary = summarizeWebhookBody(Buffer.from(JSON.stringify(fields)), "application/json")
+    expect(JSON.parse(JSON.stringify(summary.body))).toEqual(JSON.parse('{"__proto__":{"visible":"kept","token":"[redacted]"},"constructor":"ctor","toString":"string"}'))
+    expect(Object.hasOwn(summary.body as object, "__proto__")).toBe(true)
+    const scalarFields = JSON.parse('{"__proto__":"visible","constructor":"ctor","toString":"string"}')
+    expect(JSON.parse(JSON.stringify(sanitizeWebhookHeaders(scalarFields)))).toEqual(JSON.parse('{"__proto__":"visible","constructor":"ctor","tostring":"string"}'))
+    expect(JSON.parse(JSON.stringify(sanitizeWebhookQuery(scalarFields)))).toEqual(scalarFields)
+  })
+
+  it("preserves repeated special form keys without inherited values", () => {
+    const summary = summarizeWebhookBody(Buffer.from("constructor=one&constructor=two&toString=visible&__proto__=first&__proto__=second&api_key=hidden"), "application/x-www-form-urlencoded")
+    expect(JSON.parse(JSON.stringify(summary.body))).toEqual(JSON.parse('{"constructor":["one","two"],"toString":"visible","__proto__":["first","second"],"api_key":"[redacted]"}'))
+  })
+
+  it("accepts JSON up to 100 container levels and rejects deeper input with a client error", () => {
+    const nested = (depth: number) => Buffer.from(`${"[".repeat(depth)}0${"]".repeat(depth)}`)
+    expect(() => summarizeWebhookBody(nested(100), "application/json")).not.toThrow()
+    for (const depth of [101, 20_000]) {
+      expect(() => summarizeWebhookBody(nested(depth), "application/json")).toThrow(BadRequestException)
+      expect(() => summarizeWebhookBody(nested(depth), "application/json")).toThrow("Webhook JSON body exceeds maximum depth of 100")
+    }
+    expect(() => summarizeWebhookBody(Buffer.from(JSON.stringify(Array(20_000).fill(0))), "application/json")).not.toThrow()
+  })
+
   it("normalizes headers and redacts sensitive values", () => {
     expect(sanitizeWebhookHeaders({
       "X-GitHub-Event": "push",

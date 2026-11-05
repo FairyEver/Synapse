@@ -68,6 +68,17 @@ describe("WebhookPublicController HTTP route", () => {
     expect(receivePublicWebhook).not.toHaveBeenCalled()
   })
 
+  it("preserves special query keys through the real HTTP parser", async () => {
+    receivePublicWebhook.mockResolvedValue({ response: { ok: true } })
+    await request(app.getHttpServer())
+      .post("/webhooks/whsec_secret?__proto__=visible&constructor=one&constructor=two&toString=string")
+      .set("content-type", "application/json")
+      .send("{}")
+      .expect(202)
+    const query = receivePublicWebhook.mock.calls[0]?.[0].query
+    expect(JSON.parse(JSON.stringify(query))).toEqual(JSON.parse('{"__proto__":"visible","constructor":["one","two"],"toString":"string"}'))
+  })
+
   it("returns 413 before receive service for public webhook bodies over 256KB", async () => {
     await request(app.getHttpServer())
       .post("/webhooks/whsec_secret")

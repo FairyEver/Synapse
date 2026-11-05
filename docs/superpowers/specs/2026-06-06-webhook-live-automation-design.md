@@ -228,6 +228,7 @@ Behavior:
 - Request body limit: `256KB`.
 - Oversized body returns `413` and is not broadcast.
 - JSON body is parsed to `body`.
+- JSON objects and arrays allow at most 100 container levels, counting the root container as one. Deeper JSON returns `400` before delivery persistence or broadcast, independently of the byte limit. Parsing, redaction, and request dictionaries preserve own keys such as `__proto__`, `constructor`, and `toString` as data without inheriting or modifying prototypes.
 - Text body sets `bodyText` and `body: { text: bodyText }`.
 - URL-encoded form body is parsed to an object.
 - Binary or unsafe content types are rejected in this version.
