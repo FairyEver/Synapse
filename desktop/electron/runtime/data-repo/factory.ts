@@ -20,6 +20,7 @@ import { createDataMaintenanceExecutor } from "./maintenance/runner"
 export interface FileBackedDataRepositoryOptions {
   readonly rootDir: string
   readonly safeStorage: SafeStorage
+  readonly importTransforms?: Readonly<Record<string, (value: unknown) => unknown>>
 }
 
 type RecordValue = Record<string, unknown>
@@ -32,6 +33,7 @@ export function createFileBackedDataRepository(
 
   const sqlitePath = path.join(options.rootDir, "runtime.sqlite")
   const repo = new DataRepositoryImpl({
+    importTransforms: options.importTransforms,
     maintenance: createDataMaintenanceExecutor({ databasePath: sqlitePath }),
   })
   let sqliteDb: ReturnType<typeof openSqliteDatabase> | null = null

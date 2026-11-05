@@ -55,6 +55,7 @@ export class AutomationMailTriggerService {
   }
   private async run(): Promise<void> {
     const context = this.deps.context(); this.assert(context)
+    await this.deps.repository.resumeDeletes(context.identity)
     await this.deps.activation.recoverBindings()
     for (const item of await this.deps.items.list()) {
       this.assert(context)

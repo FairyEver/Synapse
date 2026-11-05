@@ -40,9 +40,11 @@ interface RegistrationEntry<T> {
 export class DataRepositoryImpl implements DataRepository {
   private readonly entries = new Map<string, RegistrationEntry<unknown>>()
   readonly maintenance?: DataMaintenanceExecutor
+  private readonly importTransforms: Readonly<Record<string, (value: unknown) => unknown>>
 
-  constructor(options: { readonly maintenance?: DataMaintenanceExecutor } = {}) {
+  constructor(options: { readonly maintenance?: DataMaintenanceExecutor; readonly importTransforms?: Readonly<Record<string, (value: unknown) => unknown>> } = {}) {
     this.maintenance = options.maintenance
+    this.importTransforms = options.importTransforms ?? {}
   }
 
   register<T>(schema: NamespaceSchema<T>, handle: DataNamespace<T>): void {
@@ -213,13 +215,16 @@ export class DataRepositoryImpl implements DataRepository {
     entry: RegistrationEntry<unknown>,
     data: { singleton?: unknown; items?: unknown[] },
   ): Promise<void> {
+    const transform = this.importTransforms[entry.schema.name] ?? ((value: unknown) => value)
     if (data.singleton !== undefined && data.singleton !== null) {
-      if (entry.schema.validate(data.singleton)) {
-        await entry.handle.setSingleton(data.singleton as never)
+      const singleton = transform(data.singleton)
+      if (entry.schema.validate(singleton)) {
+        await entry.handle.setSingleton(singleton as never)
       }
     }
     if (Array.isArray(data.items)) {
-      for (const item of data.items) {
+      for (const raw of data.items) {
+        const item = transform(raw)
         if (
           item
           && typeof item === "object"

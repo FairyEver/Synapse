@@ -58,7 +58,8 @@ export class AutomationMailTriggerLifecycle {
       this.deps.events.onType("account", "mail.changed", () => this.worker.wake("mail-sync")),
       this.deps.events.onType("live", "live.stateChanged", () => this.worker.wake("reconnected")),
       this.deps.events.onType("automation", "automation.itemChanged", event => {
-        const reason = (event.payload as { reason?: string })?.reason
+        const { reason, automationId } = (event.payload as { reason?: string; automationId?: string }) ?? {}
+        if (reason === "deleted" && automationId) void this.deps.repository.deleteAutomationState(automationId).catch(() => report("DELETE_CLEANUP_PENDING"))
         if (reason && !reason.startsWith("run-")) this.worker.wake("configuration")
       }))
     if (this.scope) await this.worker.start()

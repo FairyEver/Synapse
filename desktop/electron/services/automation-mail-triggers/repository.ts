@@ -104,4 +104,23 @@ export class MailTriggerRepository {
       operations: [{ kind: "patch", namespace: this.deliveries.name, id, patch: { ...result, revision: row.revision + 1 } }] })
     if (!committed.committed) throw new Error("收信投递状态已变化")
   }
+  async deleteAutomationState(automationId: string): Promise<void> {
+    let after: string | undefined
+    do {
+      const roots = await this.subscriptions.queryRange!({ index: "automation_id", equal: { automationId }, ...(after ? { range: { field: "id", gt: after } } : {}), direction: "asc", limit: 50 })
+      for (const row of roots) await this.subscriptions.upsert({ ...row, state: "retired", errorCode: "DELETE_PENDING", revision: row.revision + 1 })
+      after = roots.length === 50 ? roots.at(-1)!.id : undefined
+    } while (after)
+    for (const namespace of [this.deliveries, this.sources, this.subscriptions]) {
+      while (true) {
+        const page = await namespace.queryRange!({ index: "automation_id", equal: { automationId }, direction: "asc", limit: 50 })
+        if (!page.length) break
+        for (const row of page) await namespace.remove(row.id)
+      }
+    }
+  }
+  async resumeDeletes(identity: MailTriggerIdentity): Promise<void> {
+    const roots = await this.subscriptions.queryRange!({ index: "identity_error", equal: { ...identity, errorCode: "DELETE_PENDING" }, direction: "asc", limit: 50 })
+    for (const automationId of new Set(roots.map(row => row.automationId))) await this.deleteAutomationState(automationId)
+  }
 }

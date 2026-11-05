@@ -1,4 +1,5 @@
 import { RetiredExecutorCleanup } from "../services/automation/retired-executor-cleanup"
+import { sanitizeImportedMailAutomation } from "../services/automation-mail-triggers/transfer"
 import { showSenderOpenDialog, showSenderSaveDialog } from "../runtime/ipc/sender-dialog"
 import { HUB_INSTALL_PROVIDER_ID, HubPreparedSourceProvider } from "../../app-capabilities/skill-hub/main/prepared-source-provider"
 import { AGENT_SHARE_SERVICE_ID } from "../../app-capabilities/agent/shared/share"
@@ -2322,6 +2323,7 @@ export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
     const dataRepository = createFileBackedDataRepository({
       rootDir: path.join(app.getPath("userData"), "data-v1"),
       safeStorage,
+      importTransforms: { "automation.items": sanitizeImportedMailAutomation },
     })
     setConfigBackupDataRepository(dataRepository)
     return dataRepository

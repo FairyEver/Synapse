@@ -35,5 +35,6 @@ export const automationMailSchemas: readonly NamespaceSchema<MailTriggerRecord>[
     { name: "identity_automation_state", fields: ["ownerId", "apiOrigin", "automationId", "state", "orderKey"] },
     { name: "identity_automation", fields: ["ownerId", "apiOrigin", "automationId", "id"] },
     { name: "automation_id", fields: ["automationId", "id"] },
+    { name: "identity_error", fields: ["ownerId", "apiOrigin", "errorCode", "id"] },
   ] },
 }))
