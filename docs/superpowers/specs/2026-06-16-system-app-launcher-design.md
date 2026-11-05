@@ -2,6 +2,8 @@
 
 Date: 2026-06-16
 
+> 2026-11-05 更新：本文记录首版。应用中心现使用可搜索的分组列表，与 Dock 共用 Lucide 图标。现行入口和 Dock 规则见[能力注册清单](../../agents/capability-registry.md#普通业务模块-system-app)。
+
 ## Summary
 
 Add a first-class `应用` top-level module to Synapse. It is a Launchpad-style launcher for low-frequency system modules. The moved modules remain normal Synapse modules, but their entry point moves from the main header into the launcher. Clicking an app opens it inside the main window by default; the embedded app host keeps an explicit action for opening the same app in its existing single-instance child window mode.

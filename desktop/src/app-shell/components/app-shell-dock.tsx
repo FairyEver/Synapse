@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from "react"
+import { Fragment, useRef, type RefObject } from "react"
 import { Button } from "@/components/ui/button"
 import {
   ContextMenu,
@@ -12,11 +12,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { systemAppPresentation } from "@/modules/apps/app-presentation"
 import { REQUIRED_DOCK_APP_ID } from "@/modules/apps/dock"
 import { DockAppMenuItems } from "@/modules/apps/components/dock-app-menu-items"
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
 
-type AppShellDockApp = Pick<SynapseSystemAppManifest, "id" | "name" | "icon">
+type AppShellDockApp = Pick<SynapseSystemAppManifest, "id" | "name">
 const ignoreDockPin = () => undefined
 const dockContextMenuCollisionPadding = 12
 
@@ -44,26 +45,26 @@ export function AppShellDock({
       <nav
         aria-label="Dock"
         data-track="app-shell-dock"
-        className="flex min-h-0 flex-col"
+        className="flex w-full min-h-0 flex-col"
       >
         <ScrollArea scrollbars="vertical">
-          <div className="flex flex-col items-center gap-0">
-            {apps.map((app) => {
-              const active = app.id === value
-
-              return (
+          <div className="flex flex-col items-center gap-1 px-1.5 py-1">
+            {apps.map((app, index) => (
+              <Fragment key={app.id}>
+                {app.id === REQUIRED_DOCK_APP_ID && index > 0 && (
+                  <div aria-hidden="true" className="my-1 w-6 border-t border-sidebar-border" />
+                )}
                 <DockButton
-                  key={app.id}
                   app={app}
-                  active={active}
+                  active={app.id === value}
                   disabled={disabled}
                   onManageDock={onManageDock}
                   onRemoveApp={onRemoveApp}
                   onValueChange={onValueChange}
                   launcherButtonRef={launcherButtonRef}
                 />
-              )
-            })}
+              </Fragment>
+            ))}
           </div>
         </ScrollArea>
       </nav>
@@ -88,25 +89,19 @@ function DockButton({
   readonly onValueChange: (value: SynapseSystemAppId) => void
   readonly launcherButtonRef: RefObject<HTMLButtonElement | null>
 }) {
+  const Icon = systemAppPresentation[app.id].icon
   const button = (
     <Button
       ref={app.id === REQUIRED_DOCK_APP_ID ? launcherButtonRef : undefined}
       type="button"
       variant="ghost"
-      size="icon"
-      className="relative size-12 shrink-0 hover:bg-transparent active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:text-foreground dark:hover:bg-transparent"
+      size="icon-lg"
+      className="size-10 text-muted-foreground aria-[current=page]:bg-selected aria-[current=page]:text-foreground aria-[current=page]:hover:bg-selected"
       aria-label={app.name}
       aria-current={active ? "page" : undefined}
       onClick={() => onValueChange(app.id)}
     >
-      <img src={app.icon} alt="" className="size-10 object-contain" draggable={false} />
-      {active ? (
-        <span
-          data-slot="app-shell-dock-active-indicator"
-          aria-hidden="true"
-          className="absolute top-1/2 left-0 size-1 -translate-y-1/2 rounded-full bg-blue-500"
-        />
-      ) : null}
+      <Icon aria-hidden="true" className="size-5" strokeWidth={active ? 2.25 : 1.75} />
     </Button>
   )
 

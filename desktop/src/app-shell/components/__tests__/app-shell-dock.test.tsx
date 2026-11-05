@@ -49,14 +49,11 @@ describe("AppShellDock", () => {
     expect(activeButton.closest("[data-slot='scroll-area']")?.getAttribute("data-scrollbars")).toBe("vertical")
     expect(Array.from(dockItems?.querySelectorAll("button") ?? [], (button) => button.getAttribute("aria-label")))
       .toEqual(["对话", "云盘", "应用"])
-    expect(dockItems?.className).toContain("gap-0")
     expect(activeButton.getAttribute("aria-current")).toBe("page")
-    expect(activeButton.className).toContain("size-12")
-    const activeIndicator = activeButton.querySelector("[data-slot='app-shell-dock-active-indicator']")
-    expect(activeIndicator?.getAttribute("aria-hidden")).toBe("true")
-    expect(activeIndicator?.className).toContain("size-1")
-    expect(activeIndicator?.className).toContain("left-0")
-    expect(findButtonByLabel("应用").querySelector("[data-slot='app-shell-dock-active-indicator']")).toBeNull()
+    expect(activeButton.querySelector("svg.lucide-message-circle")).toBeTruthy()
+    expect(findButtonByLabel("云盘").querySelector("svg.lucide-cloud")).toBeTruthy()
+    expect(findButtonByLabel("应用").querySelector("svg.lucide-layout-grid")).toBeTruthy()
+    expect(dockItems?.querySelector("img")).toBeNull()
 
     await act(async () => {
       findButtonByLabel("应用").click()

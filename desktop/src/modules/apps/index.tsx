@@ -3,10 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { requestOpenSettingsDock } from "@/app-shell/navigation"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
-import { AppLauncherGrid } from "./components/app-launcher-grid"
+import { AppLauncherList } from "./components/app-launcher-list"
 import { AppSwitchTransition } from "./components/app-switch-transition"
 import { EmbeddedSystemAppShell } from "./components/embedded-system-app-shell"
 import { SystemAppContent } from "./components/system-app-content"
@@ -120,23 +119,16 @@ export function AppsModule({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface">
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="min-h-full px-6 py-6">
-          <div className="mx-auto max-w-4xl">
-            <AppLauncherGrid
-              apps={listLaunchableSystemApps({ workflowEntryVisible })}
-              focusAppId={launcherFocusAppId}
-              pinnedAppIds={dock.dockAppIds}
-              disabled={dock.saving}
-              onOpenApp={openApp}
-              onPinApp={(appId) => void dock.addDockApp(appId)}
-              onUnpinApp={(appId) => void dock.removeDockApp(appId)}
-              onManageDock={requestOpenSettingsDock}
-            />
-          </div>
-        </div>
-      </ScrollArea>
-    </div>
+    <AppLauncherList
+      key={resetKey}
+      apps={listLaunchableSystemApps({ workflowEntryVisible })}
+      focusAppId={launcherFocusAppId}
+      pinnedAppIds={dock.dockAppIds}
+      disabled={dock.saving}
+      onOpenApp={openApp}
+      onPinApp={(appId) => void dock.addDockApp(appId)}
+      onUnpinApp={(appId) => void dock.removeDockApp(appId)}
+      onManageDock={requestOpenSettingsDock}
+    />
   )
 }

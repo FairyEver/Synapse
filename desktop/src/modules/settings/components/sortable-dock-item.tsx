@@ -3,6 +3,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { useSortable } from "@dnd-kit/sortable"
 import { ArrowDown, ArrowUp, GripVertical, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { systemAppPresentation } from "@/modules/apps/app-presentation"
 import { REQUIRED_DOCK_APP_ID, type DockMoveDirection } from "@/modules/apps/dock"
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
 
@@ -27,6 +28,7 @@ function SortableDockItem({
     id: app.id,
     disabled,
   })
+  const Icon = systemAppPresentation[app.id].icon
   const removable = app.id !== REQUIRED_DOCK_APP_ID
   const moveUpRef = useRef<HTMLButtonElement>(null)
   const moveDownRef = useRef<HTMLButtonElement>(null)
@@ -58,7 +60,7 @@ function SortableDockItem({
       >
         <GripVertical className="size-4" />
       </button>
-      <img src={app.icon} alt="" className="size-8 shrink-0 object-contain" draggable={false} />
+      <Icon aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{app.name}</span>
       <Button
         ref={moveUpRef}

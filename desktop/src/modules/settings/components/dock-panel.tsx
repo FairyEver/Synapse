@@ -3,6 +3,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { Plus, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { systemAppPresentation } from "@/modules/apps/app-presentation"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
@@ -63,22 +64,25 @@ function DockPanel({ workflowEntryVisible }: DockPanelProps) {
             <div className="px-4 py-4 text-sm text-muted-foreground">已全部固定</div>
           ) : (
             <div className="divide-y divide-border">
-              {dock.addableApps.map((app) => (
-                <div key={app.id} className="flex min-h-12 items-center gap-3 px-3 py-2">
-                  <img src={app.icon} alt="" className="size-8 shrink-0 object-contain" draggable={false} />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{app.name}</span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="default"
-                    disabled={dock.saving}
-                    onClick={() => void dock.addDockApp(app.id)}
-                  >
-                    <Plus data-icon="inline-start" />
-                    添加
-                  </Button>
-                </div>
-              ))}
+              {dock.addableApps.map((app) => {
+                const Icon = systemAppPresentation[app.id].icon
+                return (
+                  <div key={app.id} className="flex min-h-12 items-center gap-3 px-3 py-2">
+                    <Icon aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{app.name}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      disabled={dock.saving}
+                      onClick={() => void dock.addDockApp(app.id)}
+                    >
+                      <Plus data-icon="inline-start" />
+                      添加
+                    </Button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

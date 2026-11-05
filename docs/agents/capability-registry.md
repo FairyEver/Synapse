@@ -73,8 +73,8 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | JavaScript Run | 否 | 否 | 1 | 1 | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧，刷新/索引进度与刷新按钮原位互斥，列表工具栏常驻；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
-| Mail Internal | 是（含复制全文，独立黑色 PNG 图标） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
-| Todos | 是（内置 PNG 图标） | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
+| Mail Internal | 是（含复制全文） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
+| Todos | 是 | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
 | Node.js Run | 否 | 否 | 1 | 1 | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
@@ -121,7 +121,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 
 - Todos 的中文 MCP 检索覆盖「待办」「事项」「完成」及六类常用操作；仅补齐既有检索词表，仍为 6 个 capability / MCP 索引，公开工具保持 `search` 与 `invoke`，参数、系统 Skill 指南和其它注册表面不变。
 
-- Todos 的启动台与 Dock 共用内置 PNG 图标，深浅外观均保持原图配色，不再对图标反色。此资源替换不改变 System App、Dock、Workflow、Automation、MCP 或 Deep Link 注册数量；Todos 仍提供 6 个 MCP 能力，参数与系统 Skill 指南不变。
+- Todos 在应用中心和 Dock 共用 Lucide 的清单图标，随深浅外观使用主题前景色。Todos 仍提供 6 个 MCP 能力，参数与系统 Skill 指南不变。
 
 - Agent 顶部的「在 Claude Code 中继续」及转交后历史末尾的「打开 Claude Code」复用 UI 专用 `app.agent.operation.resume_claude_code_terminal` IPC 接续原生会话。转交后原对话永久只读，MCP inspect 返回 `controllable=false`，消息及其它控制请求拒绝；CLI 新消息不回流。终端内部新增 PTY 启动前保存关联的回调，不新增公开 capability。Agent 保持 11 个 MCP 工具，Terminal 保持 49 个；System App、Dock、Workflow、Automation 和 Deep Link 数量均不变。
 
@@ -206,6 +206,8 @@ Settings 已移除空置的“实验功能”分类及占位内容。此调整�
 默认 Dock 从 app definition 的 `dock.pinnedByDefault` 与 `dock.order` 派生，共 9 项，顺序为：`agent`、`drive`、`automation`、`workflow`、`terminal`、`settings`、`mail-internal`、`mail`、`launcher`。Workflow 由统一 System App `visibility` 与 `workflowEntryVisible` 控制。
 
 桌面主窗口的 Dock 位于左侧。固定应用按现有配置从上到下排列，空间不足时仅应用列表纵向滚动，通知和账号固定在栏底；沉浸模式隐藏整条栏。Dock 默认数量、应用注册和 MCP、Workflow、Automation、Deep Link 入口不变。
+
+应用中心按用途分组，支持按应用名称搜索和按 Dock 固定状态筛选。应用中心、Dock 与 Dock 设置页共用同一套 Lucide 图标映射，站内信与邮箱分别使用收件托盘和信封。固定、取消固定和排序继续使用现有 Dock 偏好；22 个 System App、9 个默认 Dock 项及其顺序保持原注册，Workflow 仍按既有条件显示。MCP schema 和系统 Skill 操作契约一致。
 
 Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。历史 `dock.mail-introduction.v1` 中的 `mail` 仍表示站内信；改名迁移先将其归入 `mail-internal`。新增 `dock.mail-apps-introduction.v1`，将末尾一次性排为 `mail-internal` → `mail` → `launcher`（「应用」），已有图标只移动且不重复，其它应用相对顺序不变，即使此前移除过站内信也会执行这次独立迁移。新安装默认包含两款邮件应用并预先记录当前迁移；用户之后移除任一邮件图标、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。
 

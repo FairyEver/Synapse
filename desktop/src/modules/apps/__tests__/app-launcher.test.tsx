@@ -106,7 +106,6 @@ describe("AppsModule", () => {
   it("renders the fixed system apps without management controls", async () => {
     await renderAppsModule(roots)
 
-    expect(document.querySelector("h2")).toBeNull()
     expect(findButton("对话")).toBeTruthy()
     expect(document.body.textContent).not.toContain("工作流")
     expect(findButton("云盘")).toBeTruthy()
@@ -141,7 +140,6 @@ describe("AppsModule", () => {
     expect(document.body.textContent).not.toContain("文件与分享")
     expect(document.body.textContent).not.toContain("触发器与运行")
 
-    expect(document.querySelector("input[type='search']")).toBeNull()
     expect(document.body.textContent).not.toContain("删除")
     expect(document.body.textContent).not.toContain("重命名")
     expect(document.body.textContent).not.toContain("更换图标")
@@ -153,73 +151,45 @@ describe("AppsModule", () => {
     expect(findButton("工作流")).toBeTruthy()
   })
 
-  it("renders app launch actions as a grid without list arrows", async () => {
+  it("searches visible apps within the selected category", async () => {
     await renderAppsModule(roots)
 
-    expect(document.querySelector("[data-app-launcher-grid]")).toBeTruthy()
-    const gridClasses = Array.from(document.querySelector("[data-app-launcher-grid]")?.classList ?? [])
-    expect(gridClasses).toContain("grid")
-    expect(gridClasses).toContain("w-fit")
-    expect(gridClasses).toContain("grid-cols-5")
-    expect(gridClasses).toContain("gap-x-5")
-    expect(gridClasses).toContain("gap-y-4")
-    expect(gridClasses).not.toContain("lg:grid-cols-5")
-    expect(findButton("资源仓库").classList.contains("size-31")).toBe(true)
-    expect(document.querySelectorAll(".lucide-chevron-right")).toHaveLength(0)
-    expect(document.querySelector(".lucide-external-link")).toBeNull()
-    expect(findButton("资源仓库")).toBeInstanceOf(HTMLButtonElement)
+    const search = document.querySelector<HTMLInputElement>('input[aria-label="搜索应用"]')
+    expect(search).toBeInstanceOf(HTMLInputElement)
+    if (!search) return
+    expect(findButton("站内信").closest("section")?.querySelector("h2")?.textContent).toBe("协作与沟通")
+
+    await act(async () => {
+      findButtonByLabel("开发与自动化").click()
+    })
+    expect(findButton("终端")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("工作流")
+    expect(document.body.textContent).not.toContain("站内信")
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(search, "  iDe ")
+      search.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    expect(findButton("IDE 管理")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("终端")
+
+    await act(async () => { findButtonByLabel("清除搜索").click() })
+    expect(findButton("终端")).toBeTruthy()
+    expect(document.activeElement).toBe(search)
   })
 
-  it("reveals launcher icons with compositor-only native animations", async () => {
-    const cancelAnimation = vi.fn()
-    const animationCalls: Array<[
-      Keyframe[] | PropertyIndexedKeyframes,
-      KeyframeAnimationOptions,
-    ]> = []
-    const animateElement = vi.fn((
-      keyframes: Keyframe[] | PropertyIndexedKeyframes,
-      options?: number | KeyframeAnimationOptions,
-    ) => {
-      animationCalls.push([keyframes, options as KeyframeAnimationOptions])
-      return { cancel: cancelAnimation } as unknown as Animation
-    })
-    Object.defineProperty(HTMLElement.prototype, "animate", {
-      configurable: true,
-      value: animateElement,
-    })
+  it("can pin from an app row and unpin from the pinned filter without opening the app", async () => {
+    await renderAppsModule(roots)
 
-    try {
-      await renderAppsModule(roots)
+    await act(async () => { findButtonByLabel("固定本地数据库到 Dock").click() })
+    expect(mocks.addDockApp).toHaveBeenCalledWith("database")
 
-      const launcherItems = document.querySelectorAll("[data-app-launcher-item]")
-      const firstAnimation = animationCalls[0]
-      const centerAnimation = animationCalls[8]
-
-      expect(launcherItems.length).toBeGreaterThan(0)
-      expect(animateElement).toHaveBeenCalledTimes(launcherItems.length)
-      expect(firstAnimation).toBeTruthy()
-      expect(centerAnimation).toBeTruthy()
-      if (!firstAnimation || !centerAnimation) return
-      expect(firstAnimation[0]).toEqual([
-        {
-          opacity: 0,
-          transform: "translate3d(16px, 12px, 0) scale(0.75)",
-        },
-        {
-          opacity: 1,
-          transform: "translate3d(0, 0, 0) scale(1)",
-        },
-      ])
-      expect(centerAnimation[1]).toMatchObject({
-        duration: 400,
-        easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-        fill: "backwards",
-      })
-      expect(Number(centerAnimation[1].delay))
-        .toBeLessThan(Number(firstAnimation[1].delay))
-    } finally {
-      Reflect.deleteProperty(HTMLElement.prototype, "animate")
-    }
+    await act(async () => { findButtonByLabel("已固定").click() })
+    expect(findButton("对话")).toBeTruthy()
+    expect(document.body.textContent).not.toContain("云盘")
+    await act(async () => { findButtonByLabel("从 Dock 移除对话").click() })
+    expect(mocks.removeDockApp).toHaveBeenCalledWith("agent")
+    expect(document.querySelector('[data-testid="system-app-content"]')).toBeNull()
   })
 
   it("opens the clicked app in the current window", async () => {
@@ -287,7 +257,7 @@ describe("AppsModule", () => {
     expect(mocks.requestOpenSettingsDock).toHaveBeenCalledTimes(1)
   })
 
-  it("does not render hover more buttons in the launcher grid", async () => {
+  it("does not render hover more buttons in the launcher", async () => {
     await renderAppsModule(roots)
 
     expect(document.querySelector("button[aria-label='本地数据库 更多操作']")).toBeNull()
@@ -415,7 +385,7 @@ async function renderAppsModule(
 
 function findButton(label: string): HTMLButtonElement {
   const button = Array.from(document.querySelectorAll("button"))
-    .find((item) => item.textContent?.includes(label))
+    .find((item) => item.textContent?.trim() === label)
 
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`Button not found: ${label}`)

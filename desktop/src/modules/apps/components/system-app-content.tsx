@@ -6,7 +6,6 @@ import {
   subscribeContentOpenRequest,
   type ContentOpenRequest,
 } from "@/app-shell/content-navigation"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { AgentModule } from "@/modules/agent"
 import { AutomationModule } from "@/modules/automation"
 import { DatabaseModule } from "@/modules/database"
@@ -30,7 +29,7 @@ import { QuickInputModule } from "../../../../app-capabilities/quick-input/rende
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
 import { ConnectorsModule } from "../../../../app-capabilities/connectors/renderer"
 import { MeetingModule } from "@/modules/meeting"
-import { AppLauncherGrid } from "./app-launcher-grid"
+import { AppLauncherList } from "./app-launcher-list"
 import { AppSwitchTransition } from "./app-switch-transition"
 import { EmbeddedSystemAppShell } from "./embedded-system-app-shell"
 import { getSystemAppManifest, listLaunchableSystemApps } from "../registry"
@@ -263,24 +262,17 @@ function LauncherContent({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface">
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="min-h-full px-6 py-6">
-          <div className="mx-auto max-w-4xl">
-            <AppLauncherGrid
-              apps={listLaunchableSystemApps({ workflowEntryVisible })}
-              focusAppId={launcherFocusAppId}
-              pinnedAppIds={dock.dockAppIds}
-              disabled={dock.saving}
-              onOpenApp={openApp}
-              onPinApp={(appId) => void dock.addDockApp(appId)}
-              onUnpinApp={(appId) => void dock.removeDockApp(appId)}
-              onManageDock={requestOpenSettingsDock}
-            />
-          </div>
-        </div>
-      </ScrollArea>
-    </div>
+    <AppLauncherList
+      key={resetKey}
+      apps={listLaunchableSystemApps({ workflowEntryVisible })}
+      focusAppId={launcherFocusAppId}
+      pinnedAppIds={dock.dockAppIds}
+      disabled={dock.saving}
+      onOpenApp={openApp}
+      onPinApp={(appId) => void dock.addDockApp(appId)}
+      onUnpinApp={(appId) => void dock.removeDockApp(appId)}
+      onManageDock={requestOpenSettingsDock}
+    />
   )
 }
 
