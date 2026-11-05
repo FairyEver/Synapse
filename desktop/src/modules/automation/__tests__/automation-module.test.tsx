@@ -958,6 +958,22 @@ describe("AutomationModule", () => {
     expect(mocks.rendererLogger.warn).not.toHaveBeenCalled()
   })
 
+  it.each([false, true])("keeps keyboard focus on natural completion without stealing a moved focus (%s)", async moved => {
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    let current = createItem({ activeRun: { status: "running", id: "run-1" } })
+    const renderRow = () => <TooltipProvider><table><tbody><AutomationListRow item={current} projects={[]} pending={false} running={false}
+      onOpen={vi.fn()} onRun={vi.fn()} onStop={vi.fn()} onToggleEnabled={vi.fn()} onHistory={vi.fn()} onDelete={vi.fn()} /></tbody></table></TooltipProvider>
+    await act(async () => root.render(renderRow()))
+    const stop = document.querySelector<HTMLButtonElement>('button[aria-label="停止运行"]')!
+    const history = document.querySelector<HTMLButtonElement>('button[aria-label="查看运行历史"]')!
+    stop.focus()
+    if (moved) history.focus()
+    current = { ...current, activeRun: undefined, lastStatus: "success" }
+    await act(async () => root.render(renderRow()))
+    expect(document.activeElement).toBe(moved ? history : document.querySelector<HTMLButtonElement>("[data-automation-id] button"))
+  })
+
   it("keeps the stop action enabled for a running row while other mutations are busy", async () => {
     const rootElement = document.createElement("div")
     document.body.appendChild(rootElement)

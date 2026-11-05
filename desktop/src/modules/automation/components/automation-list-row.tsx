@@ -1,5 +1,5 @@
 import { History, Loader2, Pencil, Play, Square, Trash2 } from "lucide-react"
-import type { MouseEvent } from "react"
+import { useEffect, useRef, type MouseEvent } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -58,6 +58,13 @@ function AutomationListRow({
   onDelete,
 }: AutomationListRowProps) {
   const activeRunning = item.activeRun?.status === "running"
+  const nameButtonRef = useRef<HTMLButtonElement>(null)
+  const stopFocusedRef = useRef(false)
+  useEffect(() => {
+    if (activeRunning || !stopFocusedRef.current) return
+    stopFocusedRef.current = false
+    if (document.activeElement === document.body) nameButtonRef.current?.focus()
+  }, [activeRunning])
   const legacy = item.schemaVersion === 1
   const needsUpdate = legacy || item.validation?.status === "needs_update"
   const disabled = !item.enabled
@@ -77,6 +84,7 @@ function AutomationListRow({
       <TableCell className="min-w-0">
         <div className="min-w-0">
           <Button
+            ref={nameButtonRef}
             type="button"
             variant="ghost"
             className="h-auto min-w-0 max-w-full justify-start px-0 py-0 font-medium hover:bg-transparent"
@@ -153,6 +161,8 @@ function AutomationListRow({
                   variant="ghost"
                   disabled={stopDisabled}
                   aria-label="停止运行"
+                  onFocus={() => { stopFocusedRef.current = true }}
+                  onBlur={() => { stopFocusedRef.current = false }}
                   onClick={() => {
                     onStop()
                   }}
