@@ -4,6 +4,8 @@
 
 以下是参数概览。调用前仍须用 MCP `search` 读取工具 schema。
 
+本地附件必须是非空文件，单个不超过 20 MiB；零字节文件会明确拒绝，不上传。
+
 | 工具 | 必填参数 | 返回或作用 |
 |---|---|---|
 | `app_mail_internal_recipient_list` | `query`（可传空字符串浏览），可选 `cursor` | `userId`、昵称、handle、`contactEmail`（可空，用户自填，非登录邮箱）、匹配类型、共同团队、`nextCursor` |

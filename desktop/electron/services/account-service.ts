@@ -584,7 +584,8 @@ export class AccountService {
       case "messageDelete": return await json("DELETE", `/messages/${id(operation.messageId)}${operation.box ? `?box=${operation.box}` : ""}`)
       case "attachmentLocal": {
         const info = await stat(operation.filePath)
-        if (!info.isFile() || info.size > 20 * 1024 * 1024 || !info.size) throw new Error("附件必须是 20 MB 以内的文件。")
+        if (!info.isFile() || info.size > 20 * 1024 * 1024) throw new Error("附件必须是 20 MB 以内的文件。")
+        if (!info.size) throw new Error("附件不能为空。")
         const response = await this.fetchAuthenticated(`${base}/attachments/local?fileName=${id(path.basename(operation.filePath))}`, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: await readFile(operation.filePath) }, "附件上传失败。")
         return await response.json()
       }

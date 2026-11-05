@@ -150,6 +150,24 @@ async function createTestAccountService(input: {
 }
 
 describe("AccountService", () => {
+  it.each([
+    { name: "empty", size: 0, message: "附件不能为空。" },
+    { name: "oversized", size: 20 * 1024 * 1024 + 1, message: "20 MB" },
+  ])("explains why a local $name mail attachment is rejected without uploading it", async ({ name, size, message }) => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-mail-attachment-test-"))
+    const filePath = path.join(dir, `${name}.bin`)
+    try {
+      await writeFile(filePath, Buffer.alloc(0))
+      if (size) await truncate(filePath, size)
+      const fetch = vi.fn()
+      const { service } = await createTestAccountService({ fetch })
+      await expect(service.executeMailOperation({ kind: "attachmentLocal", filePath })).rejects.toThrow(message)
+      expect(fetch).not.toHaveBeenCalled()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it.each(["list", "clear"] as const)("does not retry history %s with a different account or a new login session", async (operation) => {
     for (const nextId of ["u2", "u1"]) {
       let finish!: (response: Response) => void
