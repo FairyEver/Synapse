@@ -16,6 +16,8 @@ import { MailRepository } from "./repository"
 import { MailAssets } from "./assets"
 import { MailAccounts, type StoredAccount } from "./accounts"
 import { MailSync, resolveMessage } from "./sync"
+import { MailAutomationReceipts } from "./automation-receipts"
+import type { MailTriggerContext, MailSourceBoundary } from "../../../electron/services/automation-mail-triggers/types"
 import { MailContent } from "./mime"
 import { MailSearch } from "./search"
 import { MailMutations } from "./mutations"
@@ -60,6 +62,7 @@ export class MailService {
   private readonly accounts: MailAccounts
   private readonly content: MailContent
   private readonly sync: MailSync
+  private readonly automationReceipts: MailAutomationReceipts
   private readonly search: MailSearch
   private readonly mutations: MailMutations
   private readonly drafts: MailDrafts
@@ -93,6 +96,19 @@ export class MailService {
     this.send = new MailSend(this.repo, this.accounts, this.assets, this.drafts, this.operations)
     this.notifications = new MailNotifications(this.repo, this.accounts, deps.notifications, (ctx, target) => this.open(ctx, { accountId: target.accountId, messageId: target.messageId ?? undefined }), (code, id) => { this.notificationError = code; deps.diagnostic(code, id) }, access)
     this.sync = new MailSync(this.repo, this.accounts, { changed: e => this.changed(e), inbox: (ctx, delta) => this.notifications.accept(ctx, delta), error: deps.diagnostic, draft: async (ctx, id) => { await this.drafts.indexRemote(ctx, id) } })
+    this.automationReceipts = new MailAutomationReceipts(this.repo, this.accounts, this.sync)
+  }
+  private automationContext(context: MailTriggerContext): MailContext {
+    context.signal.throwIfAborted()
+    const ctx = this.context("sync")
+    if (ctx.ownerId !== context.identity.ownerId) throw new MailError("UNAVAILABLE", "邮箱身份已变化")
+    return { ...ctx, signal: AbortSignal.any([ctx.signal, context.signal]) }
+  }
+  prepareAutomationReceipts(context: MailTriggerContext, accountId?: string) {
+    return this.automationReceipts.prepare(this.automationContext(context), accountId)
+  }
+  scanAutomationReceipts(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number) {
+    return this.automationReceipts.scan(this.automationContext(context), boundary, cursor, limit)
   }
   context(actor: MailContext["actor"]): MailContext { return this.contexts.current(actor) }
   scope(sender?: IpcInvocationSender): MailScope {

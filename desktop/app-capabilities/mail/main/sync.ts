@@ -9,6 +9,7 @@ import { normalizeProtocolError, type MailBodyStructure, type MailImapSession, t
 
 export interface StoredFolder extends Record<string, unknown> { folder: Folder; delimiter: string; flags: string[] }
 export interface StoredMessage extends Record<string, unknown> {
+  originReceiptKey?: string
   summary: Omit<MailSummary, "revision">; headers: MailDetail["headers"]; structure: MailBodyStructure | null; bodyRef: string | null; searchTextRef?: string; originalFolderId?: string
 }
 interface FolderCheckpoint extends Record<string, unknown> {
@@ -103,7 +104,7 @@ export class MailSync {
     }
     return rows.filter(f => paths.has(f.data.folder.path))
   }
-  private async syncFolder(ctx: MailContext, accountId: string, initialFolder: MailRecord<StoredFolder>, session: MailImapSession, newMailOnly = false): Promise<Coverage> {
+  private async syncFolder(ctx: MailContext, accountId: string, initialFolder: MailRecord<StoredFolder>, session: MailImapSession, newMailOnly = false, receiptRange?: { min: number; max: number }): Promise<Coverage> {
     let folder = initialFolder
     const selected = await session.select(folder.data.folder.path, ctx.signal)
     const uids = await session.searchUids(folder.data.folder.path, { all: true }, ctx.signal)
@@ -128,13 +129,14 @@ export class MailSync {
         if (locator.folderId !== folder.id) continue
         if (locator.uidValidity !== selected.uidValidity) {
           if (!row.data.summary.stale) await this.repo.save(ctx, "messages", row.id, accountId, { ...row.data, summary: { ...row.data.summary, stale: true } }, row.revision, row.sortKey)
-        } else if (!row.data.summary.stale) existing.set(locator.uid, { id: row.id, stale: false, needsMetadata: row.data.summary.receivedAt === undefined || row.data.headers.sender === undefined })
+        } else if (!row.data.summary.stale) existing.set(locator.uid, { id: row.id, stale: false, needsMetadata: row.data.summary.receivedAt === undefined || row.data.headers.sender === undefined || !row.receiptSource || Boolean(receiptRange && row.data.summary.receivedAt === null) })
       }
       cursor = page.nextCursor ?? undefined
     } while (cursor)
     const allMissing = uids.filter(uid => !existing.has(uid) || existing.get(uid)?.needsMetadata)
     const baselineUid = checkpoint.data.baselineUid
-    const missing = allMissing.filter(uid => !newMailOnly || uid > baselineUid)
+    const missing = allMissing.filter(uid => (!newMailOnly || uid > baselineUid) && (!receiptRange || uid >= receiptRange.min && uid <= receiptRange.max))
+    if (receiptRange) missing.sort((a, b) => a - b)
     let indexed = 0
     if (missing.length) {
       checkpoint = await this.repo.save(ctx, "sync-state", checkpointId, accountId, {
@@ -159,7 +161,7 @@ export class MailSync {
           // Upgrade metadata in the same bounded header batches; preserve identity,
           // cached assets, flags and old-mail notification baseline.
           const row = await this.repo.get<StoredMessage>(ctx, "messages", prior.id)
-          const upgraded = { ...row.data, headers: { ...row.data.headers, sender }, summary: { ...row.data.summary, receivedAt: row.data.summary.receivedAt === undefined ? receivedAt : row.data.summary.receivedAt } }
+          const upgraded = { ...row.data, headers: { ...row.data.headers, sender }, summary: { ...row.data.summary, receivedAt: row.data.summary.receivedAt ?? receivedAt } }
           if (Buffer.byteLength(JSON.stringify(upgraded)) > 48 * 1024) upgraded.headers.sender = []
           const saved = await this.repo.save<StoredMessage>(ctx, "messages", row.id, accountId,
             upgraded, row.revision,
@@ -226,7 +228,7 @@ export class MailSync {
     this.emit(ctx, accountId, [folder.id])
     return { ...emptyCoverage(), metadataComplete, indexedCount: existing.size, reason: metadataComplete ? "server_visible_history_only" : "metadata_indexing" }
   }
-  async runOnce(ctx: MailContext, accountId: string, folderId?: string, refreshFolders = true, newMailOnly = false): Promise<Coverage> {
+  async runOnce(ctx: MailContext, accountId: string, folderId?: string, refreshFolders = true, newMailOnly = false, receiptRange?: { min: number; max: number }): Promise<Coverage> {
     return this.slots.run(ctx.signal, () => this.accounts.exclusive(ctx, accountId, async () => {
       if ((await this.accounts.get(ctx, accountId)).paused) throw new MailError("ACCOUNT_PAUSED", "邮箱已暂停，请先恢复同步")
       const { config, credential } = await this.accounts.credential(ctx, accountId)
@@ -245,7 +247,7 @@ export class MailSync {
         // turn still releases the work connection and account queue after one batch.
         if (!newMailOnly && targetId) { const index = queue.indexOf(targetId); if (index >= 0) queue.splice(index, 1) }
         this.folderQueues.set(key, queue)
-        if (target) await this.syncFolder(ctx, accountId, target, session, newMailOnly)
+        if (target) await this.syncFolder(ctx, accountId, target, session, newMailOnly, receiptRange)
         for (const folder of folders) {
           const checkpoint = await this.repo.find<FolderCheckpoint>(ctx, "sync-state", `folder:${folder.id}`)
           coverage.indexedCount += checkpoint?.data.indexedCount ?? 0

@@ -31,6 +31,13 @@ export class MailRepository {
     if (current && current.ownerId !== ctx.ownerId) throw new MailError("UNAVAILABLE", "目标不存在或无法访问")
     if ((current?.revision ?? 0) !== expectedRevision) throw new MailError("VERSION_CONFLICT", "内容已被修改，请重新读取")
     const row: MailRecord<T> = { id, schemaVersion: 1, ownerId: ctx.ownerId, accountId, revision: expectedRevision + 1, sortKey: sortKey.endsWith(id) ? sortKey : `${sortKey}:${id}`, data }
+    if (entity === "messages" && data.summary) {
+      const locator = (data.summary as { locator: { folderId: string; uidValidity: string; uid: number } }).locator
+      if (locator) {
+        row.receiptSource = JSON.stringify([locator.folderId, locator.uidValidity]); row.receiptUid = locator.uid
+        row.data = { ...data, originReceiptKey: current?.data.originReceiptKey ?? data.originReceiptKey ?? createHash("sha256").update(JSON.stringify([ctx.ownerId, accountId, locator.folderId, locator.uidValidity, locator.uid])).digest("hex") }
+      }
+    }
     if (entity === "credentials") {
       // Account lifecycle serializes encrypted credential writes; no database transaction crosses secret IO.
       await this.namespace(entity).upsert(row)
@@ -76,5 +83,11 @@ export class MailRepository {
     const rows = await query.call(this.namespace(entity), { index: input.accountId ? "owner_account_sort" : "owner_sort", equal: { ownerId: ctx.ownerId, ...(input.accountId ? { accountId: input.accountId } : {}) }, ...(after ? { range: { field: "sortKey", gt: after } } : {}), direction: "asc", limit })
     this.current(ctx)
     return { items: rows as MailRecord<T>[], nextCursor: rows.length === limit ? Buffer.from(JSON.stringify({ scope, after: rows.at(-1)!.sortKey, expiresAt })).toString("base64url") : null }
+  }
+
+  async receiptPage(ctx: MailContext, accountId: string, folderId: string, uidValidity: string, after: number, through: number, limit: number) {
+    this.current(ctx)
+    const rows = await this.namespace("messages").queryRange!({ index: "receipt_uid", equal: { ownerId: ctx.ownerId, accountId, receiptSource: JSON.stringify([folderId, uidValidity]) }, range: { field: "receiptUid", gt: after, lte: through }, direction: "asc", limit })
+    this.current(ctx); return rows
   }
 }

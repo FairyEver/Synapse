@@ -9,6 +9,8 @@ export interface MailRecord<T = Record<string, unknown>> extends Record<string, 
   sortKey: string
   revision: number
   data: T
+  receiptSource?: string
+  receiptUid?: number
 }
 export const MAIL_ENTITIES = ["accounts", "credentials", "folders", "messages", "drafts", "operations", "sync-state", "assets", "search-tasks", "search-results", "previews"] as const
 export type MailEntity = typeof MAIL_ENTITIES[number]
@@ -16,9 +18,9 @@ export const mailSchemas: readonly NamespaceSchema<MailRecord>[] = MAIL_ENTITIES
   name: `app.mail.${entity}`, backend: entity === "credentials" ? "encrypted-json" : "sqlite",
   currentVersion: 1, migrations: [], transferPolicy: "local-only", encrypted: entity === "credentials",
   ...(entity === "credentials" ? {} : { sqlite: {
-    fields: ["id", "schemaVersion", "ownerId", "accountId", "sortKey", "revision", "data"] as const,
+    fields: ["id", "schemaVersion", "ownerId", "accountId", "sortKey", "revision", "data", ...(entity === "messages" ? ["receiptSource", "receiptUid"] as const : [])] as const,
     maxRecordBytes: 64 * 1024, atomic: true,
-    indexes: [{ name: "owner_sort", fields: ["ownerId", "sortKey"] as const }, { name: "owner_account_sort", fields: ["ownerId", "accountId", "sortKey"] as const }],
+    indexes: [{ name: "owner_sort", fields: ["ownerId", "sortKey"] as const }, { name: "owner_account_sort", fields: ["ownerId", "accountId", "sortKey"] as const }, ...(entity === "messages" ? [{ name: "receipt_uid", fields: ["ownerId", "accountId", "receiptSource", "receiptUid"] as const }] : [])],
   } }),
   validate(value): value is MailRecord {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false
