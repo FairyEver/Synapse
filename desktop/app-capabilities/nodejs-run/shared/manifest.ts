@@ -1,6 +1,5 @@
 import type { BuiltinCapabilityPackageManifestV1 } from "../../manifest"
 import {
-  NODEJS_RUN_AUTOMATION_ACTION_TYPE,
   NODEJS_RUN_CAPABILITY_ID,
   NODEJS_RUN_CAPABILITY_VERSION,
   NODEJS_RUN_PACKAGE_ID,
@@ -23,11 +22,7 @@ export const nodejsRunPackageManifest = {
     capabilityId: NODEJS_RUN_CAPABILITY_ID,
     discovery: "visible",
   }],
-  automationActions: [{
-    type: NODEJS_RUN_AUTOMATION_ACTION_TYPE,
-    capabilityId: NODEJS_RUN_CAPABILITY_ID,
-    discovery: "visible",
-  }],
+  automationActions: [],
   mcpTools: [],
   systemApp: null,
   deepLinks: [],

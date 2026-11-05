@@ -104,6 +104,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.app-icon",
         "core.agent-personas",
         "core.automation",
+        "core.automation-cleanup",
         "core.automation-ingress",
         "core.bridge-adapter",
         "core.cheat-code-state",
@@ -206,6 +207,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
     ])
     expect(byId.get("core.data-maintenance")?.startupPhase).toBe("background")
+    expect(byId.get("core.automation-cleanup")?.startupPhase).toBe("background")
     expect(byId.get("core.connectors")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",

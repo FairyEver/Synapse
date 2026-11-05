@@ -2,6 +2,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { AutomationEditorForm } from "../editor-form"
@@ -16,12 +17,12 @@ let root: Root
 function item(): AutomationItem {
   return { schemaVersion: 1, runCount: 0, configVersion: 1, id: "automation:1", name: "每日构建", enabled: false, scope: { type: "global" },
     trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] } },
-    executor: { type: "builtin.command", config: { command: "echo ok", shell: "cmd", timeoutMins: 30 } },
+    executor: { type: "builtin.agent", config: { projectId: "project-1", agentType: "claude-code", providerId: "provider-1", modelTier: "default", mode: "default", prompt: "echo ok", sessionPolicy: "fresh", timeoutMins: 30 } },
     policy: { missedRunPolicy: "skip", overlapPolicy: "skip" }, createdAt: "2026-11-05T00:00:00Z", updatedAt: "2026-11-05T00:00:00Z" }
 }
 const button = (text: string) => Array.from(document.querySelectorAll("button")).find(b => b.textContent === text)!
-function change(input: HTMLInputElement, value: string) {
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value)
+function change(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  Object.getOwnPropertyDescriptor(input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value")!.set!.call(input, value)
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 async function renderEditor(props: Record<string, unknown> = {}) {
@@ -30,10 +31,11 @@ async function renderEditor(props: Record<string, unknown> = {}) {
 async function configure() {
   await act(async () => { button("Cron").click() })
   await act(async () => { button("下一步").click() })
-  await act(async () => { button("命令").click() })
-  await act(async () => { change(document.querySelector<HTMLInputElement>("#task-action-command-content")!, "echo ok") })
+  await act(async () => { button("Agent").click() })
+  await act(async () => { change(document.querySelector<HTMLTextAreaElement>("#task-action-agent-prompt")!, "echo ok") })
 }
 beforeEach(() => {
+  vi.spyOn(rendererActionRegistry, "getDefaultConfig").mockImplementation(() => item().executor.config)
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container)
   api.list.mockResolvedValue([]); api.get.mockResolvedValue(item()); api.create.mockResolvedValue(item()); api.update.mockResolvedValue(item())
   Element.prototype.scrollIntoView = vi.fn()
@@ -44,7 +46,7 @@ describe("inline automation editing", () => {
   it("configures the trigger before the executor and keeps navigation below the scrolling form", async () => {
     await renderEditor()
     expect(document.body.textContent).toContain("何时触发")
-    expect(document.querySelector('#task-action-command-content')).toBeNull()
+    expect(document.querySelector('#task-action-agent-prompt')).toBeNull()
     expect(button("下一步").disabled).toBe(true)
     await act(async () => { button("Cron").click() })
     const next = button("下一步")
@@ -52,12 +54,12 @@ describe("inline automation editing", () => {
     await act(async () => { next.click() })
     expect(document.body.textContent).toContain("执行什么操作")
     expect(document.querySelector('#automation-trigger-cron-expr')).toBeNull()
-    await act(async () => { button("命令").click() })
-    await act(async () => { change(document.querySelector<HTMLInputElement>('#task-action-command-content')!, "echo retained") })
+    await act(async () => { button("Agent").click() })
+    await act(async () => { change(document.querySelector<HTMLTextAreaElement>('#task-action-agent-prompt')!, "echo retained") })
     await act(async () => { button("上一步").click() })
     expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
     await act(async () => { button("下一步").click() })
-    expect(document.querySelector<HTMLInputElement>('#task-action-command-content')!.value).toBe("echo retained")
+    expect(document.querySelector<HTMLTextAreaElement>('#task-action-agent-prompt')!.value).toBe("echo retained")
     expect(button("仅保存").closest('[data-slot="scroll-area-viewport"]')).not.toBeNull()
     expect(document.querySelector('footer')).toBeNull()
   })
@@ -92,13 +94,13 @@ describe("inline automation editing", () => {
   it("requires replacing variables that belong to the previous trigger", async () => {
     await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
     await act(async () => { button("下一步").click() })
-    await act(async () => { change(document.querySelector<HTMLInputElement>('#task-action-command-content')!, "echo {{trigger.cron}}") })
+    await act(async () => { change(document.querySelector<HTMLTextAreaElement>('#task-action-agent-prompt')!, "echo {{trigger.cron}}") })
     await act(async () => { button("上一步").click() })
     await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.click() })
     await act(async () => { button("固定间隔").click() })
     await act(async () => { button("确认更换").click() })
     await act(async () => { button("下一步").click() })
-    expect(document.querySelector<HTMLInputElement>('#task-action-command-content')!.value).toBe("echo {{trigger.cron}}")
+    expect(document.querySelector<HTMLTextAreaElement>('#task-action-agent-prompt')!.value).toBe("echo {{trigger.cron}}")
     await act(async () => { button("仅保存").click() })
     expect(document.querySelector('[role="alert"]')?.textContent).toContain("trigger.cron")
     expect(api.update).not.toHaveBeenCalled()
@@ -106,17 +108,17 @@ describe("inline automation editing", () => {
   it("preserves existing runtime variables that are not listed in the trigger picker", async () => {
     const value = item()
     value.trigger = { type: "builtin.webhook", config: { webhookPublicId: "hook-1" } }
-    value.executor.config.command = "echo {{trigger.request.remoteAddress}}"
+    value.executor.config.prompt = "echo {{trigger.request.remoteAddress}}"
     api.get.mockResolvedValueOnce(value)
     await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
     await act(async () => { button("下一步").click() })
     await act(async () => { button("仅保存").click() })
     expect(api.update).toHaveBeenCalledOnce()
   })
-  it("checks a user parameter named source when its trigger was replaced", async () => {
+  it("checks an Agent prompt variable when its trigger was replaced", async () => {
     const value = item()
     value.trigger = { type: "builtin.webhook", config: { webhookPublicId: "hook-1" } }
-    value.executor = { type: "builtin.http-request", config: { method: "GET", url: "https://example.com", query: { source: "{{trigger.request.body.id}}" } } }
+    value.executor.config.prompt = "source={{trigger.request.body.id}}"
     api.get.mockResolvedValueOnce(value)
     await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
     await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.click() })
@@ -170,7 +172,7 @@ describe("inline automation editing", () => {
     expect(document.querySelector('[role="alertdialog"]')).toBeNull()
     expect(document.body.textContent).toContain("更改尚未保存")
     await act(async () => { button("暂存草稿并返回").click() })
-    expect(onBack).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ executorType: "builtin.command" }) }))
+    expect(onBack).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ executorType: "builtin.agent" }) }))
   })
   it("blocks app navigation until the user explicitly discards changes", async () => {
     await renderEditor(); await configure()

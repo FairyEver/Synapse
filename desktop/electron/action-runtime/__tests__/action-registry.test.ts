@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import {
   MainActionRegistry,
@@ -63,85 +63,13 @@ describe("MainActionRegistry", () => {
     expect(() => registry.parseConfig("builtin.test", { message: "" })).toThrow()
   })
 
-  it("built-in action manifests expose public config fields", () => {
+  it("registers only Agent and rejects every retired executor type", () => {
     const registry = createBuiltinMainActionRegistry({
-      processRunner: {
-        run: async () => ({
-          exitCode: 0,
-          signal: null,
-          stdout: "",
-          stderr: "",
-          timedOut: false,
-          durationMs: 0,
-        }),
-      },
+      getAgentRuntime: async () => undefined,
     })
-
-    const summaries = registry.list().map((item) => ({
-      id: item.manifest.id,
-      fields: item.manifest.configFields.map((field) => field.name),
-    }))
-
-    expect(summaries).toEqual(expect.arrayContaining([
-      { id: "builtin.command", fields: ["command", "shell", "env", "pathStrategy", "posixLogin", "timeoutMins"] },
-      { id: "builtin.script", fields: ["script", "shell", "env", "pathStrategy", "posixLogin", "timeoutMins"] },
-      {
-        id: "builtin.http-request",
-        fields: ["method", "url", "headers", "query", "bodyType", "body", "timeoutMins", "auth"],
-      },
-    ]))
-  })
-
-  it("marks built-in timeout configs above 120 minutes as needing updates", () => {
-    const registry = createBuiltinMainActionRegistry({
-      processRunner: {
-        run: async () => ({
-          exitCode: 0,
-          signal: null,
-          stdout: "",
-          stderr: "",
-          timedOut: false,
-          durationMs: 0,
-        }),
-      },
-    })
-
-    expect(registry.validateStoredConfig("builtin.command", {
-      command: "echo ok",
-      shell: "posix",
-      timeoutMins: 121,
-    })).toEqual({
-      status: "needs_update",
-      issues: [{ field: "action.config", message: "检查执行内容" }],
-    })
-    expect(registry.validateStoredConfig("builtin.script", {
-      script: "echo ok",
-      shell: "posix",
-      timeoutMins: 121,
-    })).toEqual({
-      status: "needs_update",
-      issues: [{ field: "action.config", message: "检查执行内容" }],
-    })
-    expect(registry.validateStoredConfig("builtin.http-request", {
-      method: "GET",
-      url: "https://example.com",
-      bodyType: "none",
-      timeoutMins: 121,
-    })).toEqual({
-      status: "needs_update",
-      issues: [{ field: "action.config", message: "检查执行内容" }],
-    })
-  })
-
-  it("registers workflow action when workflow runtime is supplied", () => {
-    const registry = createBuiltinMainActionRegistry({
-      processRunner: { run: vi.fn() },
-      workflowRuntime: {
-        getWorkflowDefinition: vi.fn(),
-        runWorkflowAndWait: vi.fn(),
-      },
-    })
-
-    expect(registry.list().map((action) => action.manifest.id)).toContain("builtin.workflow")
+    expect(registry.list().map(action => action.manifest.id)).toEqual(["builtin.agent"])
+    for (const type of ["command", "script", "http-request", "workflow", "javascript-run", "nodejs-run"]) {
+      expect(() => registry.parseConfig(`builtin.${type}`, {})).toThrow(/not registered/)
+    }
   })
 })

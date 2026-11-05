@@ -89,7 +89,7 @@ const automationCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.automation.runtime.inspect" as CapabilityId, title: "Inspect automation runtime", description: "Inspect Automation timers, running item ids, and compact runtime state.", mutates: false },
   { id: "app.automation.webhook.list" as CapabilityId, title: "List Automation Webhooks", description: "List account Webhooks that can be used by builtin.webhook triggers.", mutates: false },
   { id: "app.automation.trigger_type.list" as CapabilityId, title: "List automation trigger types", description: "List registered Automation trigger type descriptors.", mutates: false },
-  { id: "app.automation.executor_type.list" as CapabilityId, title: "List automation executor types", description: "List registered Automation executor type descriptors.", mutates: false },
+  { id: "app.automation.executor_type.list" as CapabilityId, title: "List automation executor types", description: "List the Agent-only Automation executor type descriptor.", mutates: false },
 ]
 
 export const AUTOMATION_DOMAIN: CapabilityDomainDefinition = {
@@ -165,7 +165,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_create",
-      description: "Create one Synapse Automation. Call automation_trigger_type_list and automation_executor_type_list before building trigger/executor configs.",
+      description: "Create one Synapse Automation with the builtin.agent executor. Call automation_trigger_type_list and automation_executor_type_list before building configs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -183,7 +183,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_update",
-      description: "Update one Synapse Automation. The patch may replace trigger or executor refs; use discovery tools before changing configs.",
+      description: "Update one Synapse Automation. Executor refs must use builtin.agent; use discovery tools before changing configs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -263,7 +263,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_executor_type_list",
-      description: "List registered Automation executor types from Action Runtime, including public config fields and platform-aware defaults.",
+      description: "List the only Automation executor, builtin.agent, including public config fields and defaults.",
       inputSchema: { type: "object", properties: {} },
     },
   ], { sourcePrefix: "automation", primaryPrefix: "app_automation" })

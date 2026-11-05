@@ -43,9 +43,10 @@ describe("script capability packages", () => {
     expect(result.outputFiles.map((file) => file.text).join("\n")).not.toContain("node:path")
   })
 
-  it("declares exactly Workflow and Automation surfaces", async () => {
+  it("keeps script capabilities available only as Workflow surfaces", async () => {
     const packages = listBuiltinCapabilityPackages()
     expect(packages).toHaveLength(3)
+    expect(packages.every(pkg => pkg.automationActions.length === 0)).toBe(true)
     expect(packages.every((pkg) =>
       pkg.systemApp === null
       && pkg.mcpTools.length === 0

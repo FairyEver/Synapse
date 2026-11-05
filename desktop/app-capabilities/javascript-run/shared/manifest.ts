@@ -1,6 +1,5 @@
 import type { BuiltinCapabilityPackageManifestV1 } from "../../manifest"
 import {
-  JAVASCRIPT_RUN_AUTOMATION_ACTION_TYPE,
   JAVASCRIPT_RUN_CAPABILITY_ID,
   JAVASCRIPT_RUN_CAPABILITY_VERSION,
   JAVASCRIPT_RUN_PACKAGE_ID,
@@ -23,11 +22,7 @@ export const javascriptRunPackageManifest = {
     capabilityId: JAVASCRIPT_RUN_CAPABILITY_ID,
     discovery: "visible",
   }],
-  automationActions: [{
-    type: JAVASCRIPT_RUN_AUTOMATION_ACTION_TYPE,
-    capabilityId: JAVASCRIPT_RUN_CAPABILITY_ID,
-    discovery: "visible",
-  }],
+  automationActions: [],
   mcpTools: [],
   systemApp: null,
   deepLinks: [],

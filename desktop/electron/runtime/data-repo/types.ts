@@ -102,6 +102,8 @@ export interface DataNamespace<T> {
   get(id: string): Promise<T | null>
   upsert(item: T & { id: string }): Promise<void>
   remove(id: string): Promise<void>
+  /** JSON collections can conditionally remove a snapshot within their write queue. */
+  removeIfUnchanged?(id: string, expected: T): Promise<boolean>
   /** Subscribe to change events on this namespace. Returns an unsubscribe fn. */
   onChange(listener: DataChangeListener<T>): () => void
 }

@@ -1,3 +1,4 @@
+import { RetiredExecutorCleanup } from "../services/automation/retired-executor-cleanup"
 import { showSenderOpenDialog, showSenderSaveDialog } from "../runtime/ipc/sender-dialog"
 import { HUB_INSTALL_PROVIDER_ID, HubPreparedSourceProvider } from "../../app-capabilities/skill-hub/main/prepared-source-provider"
 import { AGENT_SHARE_SERVICE_ID } from "../../app-capabilities/agent/shared/share"
@@ -1305,34 +1306,10 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       actor: { kind: "system", id: "repository-git" },
     })
-    const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
-    const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
-    const snapshotService = ctx.registry.get<RunSnapshotService>("core.workflow.snapshots")
-    const runAborts = ctx.registry.get<Map<string, AbortController>>("core.workflow.run-aborts")
-    const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
-    const runCompletions = new Map<string, Promise<unknown>>()
-    const capabilityLogger = createMainLogger("bootstrap.workflow-action")
     return createBuiltinMainActionRegistry({
-      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-      scriptRuntime: ctx.registry.get<ScriptRuntimeService>(SCRIPT_RUNTIME_SERVICE_ID),
-      secrets: ctx.registry.get<SecretsService>("core.secrets"),
       builtinCapabilityRegistrations: {
         workflowNodeTypes: nodeTypeRegistry.listTypes(),
         capabilityIds: APP_DOMAIN.capabilities.map((capability) => capability.id),
-      },
-      workflowRuntime: {
-        getWorkflowDefinition: (workflowId) => workflowService.get(workflowId),
-        runWorkflowAndWait: createRunWorkflowAndWait({
-          workflowService,
-          workflowEngine,
-          snapshotService,
-          eventBus: ctx.registry.get<EventBus>("core.event-bus"),
-          runAborts,
-          runStatuses,
-          runCompletions,
-          capabilityLogger,
-          loadValidationOptions: (snapshot) => loadWorkflowValidationOptions(workflowService, snapshot),
-        }),
       },
       getAgentRuntime: async (projectId) => {
         const containers = ctx.registry.get<ProjectContainerRegistry>("core.project-containers")
@@ -2800,6 +2777,24 @@ export const coreAutomationIngressDescriptor: ServiceDescriptor<AutomationIngres
 function timeoutMinsToMs(value: number | undefined): number | undefined {
   if (value === undefined) return undefined
   return value * 60_000
+}
+
+export const coreAutomationCleanupDescriptor: ServiceDescriptor<RetiredExecutorCleanup> = {
+  id: "core.automation-cleanup",
+  startupPhase: "background",
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.automation"],
+  create(ctx) {
+    const changes = ctx.registry.get<DataRepository>("core.data-repository").namespace<import("../services/automation/types").AutomationItem>("automation.items")
+    const automation = ctx.registry.get<AutomationService>("core.automation")
+    return new RetiredExecutorCleanup({
+      changes,
+      items: { list: () => changes.list(), deleteNonAgent: id => automation.deleteNonAgentConfiguration(id) },
+      logger: ctx.logger.child("automation-cleanup"),
+    })
+  },
+  start: service => service.start(),
+  stop: service => service.stop(),
 }
 
 export const coreAutomationDescriptor: ServiceDescriptor<AutomationService> = {

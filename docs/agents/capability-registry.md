@@ -72,12 +72,12 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Document Template | 否 | 否 | 1 | — | 1 | — |
 | File Opener | 否 | 否 | 1 | — | 1 | `open` |
 | HTML Generator | 否 | 否 | 2 | — | 2 | — |
-| JavaScript Run | 否 | 否 | 1 | 1 | — | — |
+| JavaScript Run | 否 | 否 | 1 | — | — | — |
 | JSON Repair | 否 | 否 | 1 | — | 1 | — |
 | Mail（邮箱） | 是（含 800×640 独立写信窗口、地址弹层预填收件人写信、草稿批选删除及实时进度、真实同步状态和索引进度、已发送只读状态和 Sent 副本核验；账号切换统一在顶栏左侧，刷新与写邮件在右侧，刷新/索引进度与刷新按钮原位互斥，列表工具栏常驻；写信统一输入组、字段错误就近提示及紧凑分组格式栏；设置集中左下角；写信仅收件人/抄送，关闭使用系统窗口按钮） | 是（紧邻「应用」左侧，升级一次性加入） | — | — | 44 | `synapse://mail/em_<uuid>` |
 | Mail Internal | 是（含复制全文） | 是（紧邻邮箱左侧，升级一次性加入） | — | — | 17 | `synapse://mail-internal/<id>` |
 | Todos | 是 | 否（可手动固定） | — | — | 6 | `synapse://todos/<id>` |
-| Node.js Run | 否 | 否 | 1 | 1 | — | — |
+| Node.js Run | 否 | 否 | 1 | — | — | — |
 | Problem Feedback | 否 | 否 | — | — | 1 | — |
 | Quick Input | 是 | 否 | — | — | — | — |
 | Rule Installer | 否 | 否 | — | — | — | — |
@@ -145,7 +145,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 - Agent SDK 原生 compact 与私有文件检查点是既有执行器内部行为，不新增 capability、MCP、Workflow、Automation 或 Deep Link；compact 后继续使用同一 conversation/turn，Provider 或 SDK 异常沿用普通失败投影，公开 Agent Conversation 工具仍为 11 个。
 
 - Agent Conversation 能力包扩展既有 Agent System App，注册 11 个 capability/MCP tool（含供应商模型查询、分组查询与可指定模型的新建对话）；唯一 Deep Link action `open` 只注册 `synapse://threads/<thread-id>`，不注册旧 `synapse://app/agent/open` 入口，也不重复注册应用页、Dock 项或 Workflow/Automation 节点。路径 id 是本机短校验 `conversationRef` 的主体，由主进程跨项目解析唯一目标；复制链接对点号、下划线和连字符做百分号编码，解析只兼容这三个字符的 Markdown 转义，仍校验完整格式与校验和；MCP 首次读取可把完整链接交给主进程解析，后续读取和控制使用返回的 `projectId + conversationRef`，并继续经过权限、来源、回合与请求校验。
-- JavaScript Run、Node.js Run 是能力包，不是隐藏的 System App；它们只注册 Workflow Node 和 Automation Action。它们的 capability ID 进入 catalog，但不映射为 MCP tool。
+- JavaScript Run、Node.js Run 是能力包，不是隐藏的 System App；它们只注册 Workflow Node，不注册 Automation Action。它们的 capability ID 进入 catalog，但不映射为 MCP tool。
 - Script Runtime 是两者共用的内部执行基础设施，不注册用户产品表面。
 - Screenshot 当前是空目录占位。
 - `figma-skill` 是随桌面端打包的 Agent SDK Skill 插件，不注册独立 System App、MCP domain 或 MCP tool；由 Figma 内置连接器定义声明，并仅在该连接器启用后创建的新对话中按会话快照加载。
@@ -331,3 +331,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 2026-10-24：邮箱写信新增按部门选择实际 To/Cc，复用 `app_mail_internal_organization_list` / `app_mail_internal_organization_members_list`（成员返回可空 contactEmail）作外部邮件只读地址解析。无新增工具、App、深链或注册项，mail 44 / mail_internal 17 数量不变。缺失联系邮箱必须提示并由用户明确排除，组织 ID 不进入外部发送 payload。
 
 2026-10-24：邮箱地址弹层新增「写邮件」，通过私有 `MailOpenRequest.compose.recipient` 预填新信收件人，并按账号及收件地址复用窗口。复用现有 draft.prepare/commit，无新增公开工具、App、Dock、Workflow、Automation 或 Deep Link；mail 44 项公开动作及全局数量不变，MCP schema 和系统 Skill 的新信创建契约不变。
+
+2026-11-05 自动化执行器由 7 个收敛为 1 个，仅保留 `builtin.agent`。注销命令、Shell 脚本、HTTP、工作流、JavaScript、Node.js 六个 Automation Action；主进程与 Renderer 注册一致，MCP 发现仅返回 Agent。JS/Node 能力包保留原 capability 和 Workflow Node，Automation surface 为空。新增内部后台配置清理服务及轻量元数据 Worker：主窗口后分批删除非 Agent 配置，恢复后继续清理；Agent 配置及运行历史保留。不增加 IPC、MCP 工具、System App、Dock 或 Deep Link；Automation 仍为 14 / 14，Workflow 节点数量与行为不变。

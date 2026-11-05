@@ -26,7 +26,7 @@ Input:
 
 Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig`, and `configFields`.
 
-`defaultConfig` is platform-aware. On Windows, `builtin.command` and `builtin.script` return `shell: "cmd"` by default. Explicit saved or user-provided `shell` values are still honored.
+Only `builtin.agent` is registered. Retired executor types are rejected on create/update; existing non-Agent configurations are automatically removed in the background, including after backup restore.
 
 ## Items
 
@@ -56,47 +56,35 @@ Returns one public item summary or `null`.
 
 ### app_automation_item_create
 
-For command or script executors, the dispatcher applies the `defaultConfig` returned by `app_automation_executor_type_list` before validation. Provide the user-requested command, script, timeout, or environment fields, and include `shell` only when the user explicitly requests a non-default shell.
+Use Agent/provider/project discovery to obtain real configuration identifiers before creating an Automation.
 
 Input:
 
 ```json
 {
   "name": "Daily summary",
-  "description": "Optional description",
   "enabled": true,
-  "scope": { "type": "global" },
-  "cwd": "/Users/example/project",
+  "scope": { "type": "project", "projectId": "project-id" },
   "trigger": {
     "type": "builtin.interval",
-    "config": { "everyMinutes": 60, "anchor": "created_at", "activeDays": [1, 2, 3, 4, 5], "timeRange": { "start": "08:00", "end": "17:00" } }
+    "config": { "everyMinutes": 60, "anchor": "created_at", "activeDays": [1, 2, 3, 4, 5] }
   },
   "executor": {
-    "type": "builtin.command",
-    "config": { "command": "date", "timeoutMins": 30 }
+    "type": "builtin.agent",
+    "config": {
+      "projectId": "project-id",
+      "agentType": "claude-code",
+      "providerId": "provider-id",
+      "modelTier": "default",
+      "mode": "default",
+      "prompt": "Summarize the project at {{trigger.triggeredAt}}",
+      "sessionPolicy": "fresh",
+      "timeoutMins": 30
+    }
   },
   "policy": { "missedRunPolicy": "skip", "overlapPolicy": "skip" }
 }
 ```
-
-Workflow executor example:
-
-```json
-{
-  "executor": {
-    "type": "builtin.workflow",
-    "config": {
-      "workflowId": "workflow-id",
-      "paramTemplates": {
-        "title": "{{trigger.request.body.title}}",
-        "triggeredAt": "{{trigger.triggeredAt}}"
-      }
-    }
-  }
-}
-```
-
-`builtin.workflow` config fields are `workflowId` and `paramTemplates`. `paramTemplates` values may use Automation template variables returned by trigger discovery.
 
 Returns a public item summary.
 

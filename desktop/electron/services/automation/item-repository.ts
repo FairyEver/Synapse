@@ -141,6 +141,16 @@ export class AutomationItemRepository {
     return true
   }
 
+  async deleteNonAgent(id: string): Promise<boolean> {
+    let deleted = false
+    const result = await this.mutateItem(id, existing => {
+      if (existing.executor.type === "builtin.agent") return existing
+      deleted = true
+      return null
+    })
+    return deleted && result === null
+  }
+
   get(id: string): Promise<AutomationItem | null> {
     return this.items.get(id)
   }
@@ -217,7 +227,7 @@ export class AutomationItemRepository {
 
   private async mutateItem(
     id: string,
-    updater: (existing: AutomationItem) => AutomationItem,
+    updater: (existing: AutomationItem) => AutomationItem | null,
   ): Promise<AutomationItem | null> {
     const previous = this.itemQueues.get(id) ?? Promise.resolve()
     let release: () => void = () => {}
@@ -231,7 +241,16 @@ export class AutomationItemRepository {
     try {
       const existing = await this.items.get(id)
       if (!existing) return null
-      const next = await this.prepareCommit(existing, updater(existing))
+      const candidate = updater(existing)
+      if (candidate === existing) return existing
+      if (!candidate) {
+        if (this.items.removeIfUnchanged) {
+          return await this.items.removeIfUnchanged(id, existing) ? null : this.items.get(id)
+        }
+        await this.items.remove(id)
+        return null
+      }
+      const next = await this.prepareCommit(existing, candidate)
       await this.items.upsert(next)
       await this.finishCommit(existing, next)
       return next

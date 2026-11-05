@@ -284,6 +284,23 @@ export class JsonNamespace<T extends Record<string, unknown>>
     })
   }
 
+  async removeIfUnchanged(id: string, expected: T): Promise<boolean> {
+    let removed = false
+    await this.enqueueWrite(async () => {
+      const env = await this.loadEnvelope()
+      const previous = env.items[id]
+      if (!previous || JSON.stringify(previous) !== JSON.stringify(expected)) return
+      const { [id]: _removed, ...items } = env.items
+      void _removed
+      const next = { ...env, items }
+      await this.persist(next)
+      this.cache = next
+      this.emit({ kind: "remove", id, previous })
+      removed = true
+    })
+    return removed
+  }
+
   rowCount(): number {
     if (!this.cache) return 0
     return Object.keys(this.cache.items).length + (this.cache.singleton ? 1 : 0)

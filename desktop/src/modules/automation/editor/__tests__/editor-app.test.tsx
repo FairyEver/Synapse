@@ -4,6 +4,7 @@ import { act, useMemo } from "react"
 import { createRoot as createReactRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { AutomationEditorForm } from "../editor-form"
 import type { AutomationEditorMode } from "../../types"
 import type { AutomationItem } from "@/types/automation"
@@ -173,9 +174,9 @@ describe("AutomationEditorApp", () => {
     await act(async () => { findButtonContaining("Cron")!.click() })
     await goToExecutor()
     expect(document.body.textContent).toContain("执行什么操作？")
-    expect(document.body.textContent).toContain("命令")
+    expect(document.body.textContent).not.toContain("命令")
     expect(document.body.textContent).toContain("Agent")
-    expect(document.body.textContent).toContain("工作流")
+    expect(document.body.textContent).not.toContain("工作流")
   })
 
   it("does not show default config summaries before trigger and executor are selected", async () => {
@@ -192,19 +193,19 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).not.toContain("HTTP 请求")
     expect(document.body.textContent).not.toContain("Cron · 0 9 * * *")
     expect(document.body.textContent).not.toContain("命令 · 未设置")
-    expect(document.body.textContent).not.toContain("GET · 未设置 URL")
+    expect(document.body.textContent).not.toContain("Agent")
 
     await act(async () => {
       findButtonContaining("Cron")?.click()
     })
     await goToExecutor()
     await act(async () => {
-      findButtonContaining("HTTP 请求")?.click()
+      findButtonContaining("Agent")?.click()
     })
 
     expect(document.body.textContent).toContain("触发条件 · Cron · 0 9 * * *")
     expect(document.querySelector('[data-layout="automation-editor-executor-summary"]')?.textContent)
-      .toContain("GET · 未设置 URL")
+      .toContain("Agent")
   })
 
   it("expands trigger variables inline and copies a static template", async () => {
@@ -507,7 +508,7 @@ describe("AutomationEditorApp", () => {
     })
     await goToExecutor()
     await act(async () => {
-      findButtonContaining("命令")?.click()
+      findButtonContaining("Agent")?.click()
     })
 
     const body = document.querySelector('[data-layout="automation-editor-body"]')
@@ -533,13 +534,13 @@ describe("AutomationEditorApp", () => {
     })
     await goToExecutor()
     await act(async () => {
-      findButtonContaining("命令")?.click()
+      findButtonContaining("Agent")?.click()
     })
 
     const executorSummary = document.querySelector('[data-layout="automation-editor-executor-summary"]')
     const executorConfig = document.querySelector('[data-layout="automation-editor-executor-config"]')
 
-    expect(executorSummary?.textContent).toContain("命令")
+    expect(executorSummary?.textContent).toContain("Agent")
     expect(executorSummary?.textContent).not.toContain("Shell")
     expect(document.body.textContent).not.toContain("触发器")
     expect(document.body.textContent).not.toContain("执行器")
@@ -551,7 +552,8 @@ describe("AutomationEditorApp", () => {
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
   })
 
-  it.each([undefined, { start: "08:00", end: "17:00" }])("saves new Windows commands and the selected daily range %j", async (timeRange) => {
+  it.each([undefined, { start: "08:00", end: "17:00" }])("saves Agent automation on Windows with the selected daily range %j", async (timeRange) => {
+    vi.spyOn(rendererActionRegistry, "getDefaultConfig").mockReturnValue(buildAutomationItem().executor.config)
     window.synapse = { platform: "win32" } as typeof window.synapse
     createItem.mockResolvedValue(buildAutomationItem())
     vi.spyOn(window, "close").mockImplementation(() => undefined)
@@ -573,14 +575,14 @@ describe("AutomationEditorApp", () => {
 
     await goToExecutor()
     await act(async () => {
-      findButtonContaining("命令")?.click()
+      findButtonContaining("Agent")?.click()
     })
 
 
-    const command = document.querySelector<HTMLInputElement>("#task-action-command-content")
+    const prompt = document.querySelector<HTMLTextAreaElement>("#task-action-agent-prompt")
     await act(async () => {
-      if (!command) return
-      changeInput(command, "echo ok")
+      if (!prompt) return
+      changeTextarea(prompt, "echo ok")
     })
     await act(async () => {
       Array.from(document.querySelectorAll("button")).find((button) => button.textContent === "保存并启用")?.click()
@@ -592,10 +594,9 @@ describe("AutomationEditorApp", () => {
         expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6], ...(timeRange ? { timeRange } : {}),
       } },
       executor: {
-        type: "builtin.command",
+        type: "builtin.agent",
         config: expect.objectContaining({
-          command: "echo ok",
-          shell: "cmd",
+          prompt: "echo ok",
           timeoutMins: 30,
         }),
       },
@@ -831,8 +832,8 @@ function buildAutomationItem(overrides: Partial<AutomationItem> = {}): Automatio
       config: { everyMinutes: 10, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
     },
     executor: {
-      type: "builtin.command",
-      config: { command: "echo ok", shell: "posix", timeoutMins: 30 },
+      type: "builtin.agent",
+      config: { projectId: "project-1", agentType: "claude-code", providerId: "provider-1", modelTier: "default", mode: "default", prompt: "echo ok", sessionPolicy: "fresh", timeoutMins: 30 },
     },
     policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
     createdAt: "2026-06-03T00:00:00.000Z",

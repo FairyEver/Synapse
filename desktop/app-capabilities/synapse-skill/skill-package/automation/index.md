@@ -23,7 +23,7 @@ Automation MCP exposes these operations:
 - list registered trigger types
 - list registered executor types
 
-Read responses intentionally omit raw `trigger.config` and `executor.config`. Do not ask MCP to reveal hidden command text, scripts, Agent prompts, HTTP bodies, tokens, cookies, Authorization values, or environment secrets.
+Read responses intentionally omit raw `trigger.config` and `executor.config`. Do not ask MCP to reveal Agent prompts or credentials.
 
 ## Default Flow
 
@@ -60,17 +60,9 @@ For `builtin.webhook`, call `app_automation_webhook_list` and set `trigger.confi
 
 Always use executor type discovery unless the exact config is already known from this conversation.
 
-Known built-in executor types include:
+The only Automation executor is `builtin.agent`. Use `app_automation_executor_type_list` for public config fields, defaults, and permissions. Do not guess provider ids, model tiers, project ids, or Agent settings. Trigger variables can be referenced in the Agent prompt.
 
-- `builtin.command` - runs one shell command.
-- `builtin.script` - runs shell script content.
-- `builtin.http-request` - sends one HTTP request.
-- `builtin.agent` - sends work to an Agent.
-- `builtin.workflow` - runs a saved Workflow.
-
-Use `app_automation_executor_type_list` for public config fields, platform-aware defaults, and permissions. On Windows, `builtin.command` and `builtin.script` defaults use `cmd`; do not force `posix` unless the user explicitly asks for a POSIX shell. Do not guess provider ids, model tiers, project ids, or Agent settings.
-
-For `builtin.workflow`, set `executor.config.workflowId` to the saved Workflow id. Set `executor.config.paramTemplates` to an object whose keys are Workflow parameter names and whose values may use Automation template variables such as `{{trigger.triggeredAt}}` or Webhook variables from `app_automation_trigger_type_list`.
+Command, Shell script, HTTP, Workflow, JavaScript, and Node.js Automation executors are retired. Existing non-Agent configurations are automatically deleted in the background, including configurations restored from a backup. Agent configurations and run history are preserved. Workflow nodes and Workflow execution remain available through the Workflow domain.
 
 ## Update Rules
 

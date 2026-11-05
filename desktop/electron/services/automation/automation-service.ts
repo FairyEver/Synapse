@@ -230,6 +230,15 @@ export class AutomationService {
     }
   }
 
+  async deleteNonAgentConfiguration(id: string): Promise<boolean> {
+    const deleted = await this.deps.items.deleteNonAgent(id)
+    if (deleted) {
+      this.cancel(id)
+      this.emitAutomationChanged({ automationId: id, reason: "deleted" })
+    }
+    return deleted
+  }
+
   async automationDelete(id: string): Promise<{ readonly deleted: boolean }> {
     const startedAt = Date.now()
     if (this.runningItemIds.has(id) || this.deps.execution.getActiveRunIdForItem(id)) {

@@ -6,6 +6,7 @@ import { createRoot as createReactRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { AutomationModule } from "../index"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
@@ -141,16 +142,17 @@ afterEach(async () => {
 
 describe("AutomationModule", () => {
   it("opens the saved automation's read-only details after creating it", async () => {
+    vi.spyOn(rendererActionRegistry, "getDefaultConfig").mockReturnValue(createItem().executor.config)
     mocks.useAutomationItems.mockReturnValue({ items: [], loading: false, error: null, refresh: vi.fn() })
     mocks.itemCreate.mockResolvedValue(createItem({ name: "已保存的自动化", enabled: false }))
     const container = document.createElement("div"); document.body.appendChild(container)
     await act(async () => { createRoot(container).render(<AutomationModule />) })
     await act(async () => { document.querySelector<HTMLButtonElement>('[data-system-app-top-bar] button:last-child')!.click() })
     await goToNamingStep()
-    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "命令")!.click() })
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Agent")!.click() })
     await act(async () => {
-      const input = document.querySelector<HTMLInputElement>('#task-action-command-content')!
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "echo ok")
+      const input = document.querySelector<HTMLTextAreaElement>('#task-action-agent-prompt')!
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(input, "echo ok")
       input.dispatchEvent(new Event("input", { bubbles: true }))
     })
     await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "仅保存")!.click() })
@@ -225,7 +227,7 @@ describe("AutomationModule", () => {
 
     expect(html).toContain("日报自动化")
     expect(html).toContain("触发器 固定间隔")
-    expect(html).toContain("执行器 命令")
+    expect(html).toContain("执行器 Agent")
     expect(html).not.toContain("每 10 分钟")
     expect(html).not.toContain("echo ok")
     expect(html).toContain('data-slot="table"')
@@ -956,8 +958,8 @@ function createItem(overrides: Partial<AutomationItem> = {}): AutomationItem {
       config: { everyMinutes: 10, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
     },
     executor: {
-      type: "builtin.command",
-      config: { command: "echo ok", shell: "posix", timeoutMins: 30 },
+      type: "builtin.agent",
+      config: { projectId: "project-1", agentType: "claude-code", providerId: "provider-1", modelTier: "default", mode: "default", prompt: "echo ok", sessionPolicy: "fresh", timeoutMins: 30 },
     },
     policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
     createdAt: "2026-06-03T00:00:00.000Z",
