@@ -26,6 +26,47 @@ const testActionSchema = z.object({ message: z.string().min(1) })
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationService", () => {
+  it.each([
+    ["cron", () => ({ ...createCronAutomationInput(), trigger: { type: "builtin.cron", config: { expr: "* * * * *", timezone: "UTC" } } }), 60_000],
+    ["interval", createCompletionAnchoredIntervalInput, 600_000],
+  ] as const)("preserves the planned %s time when its timer fires late", async (_name, input, delay) => {
+    vi.useFakeTimers()
+    const clock = { now: new Date("2026-06-03T00:00:00.000Z") }
+    const execute = vi.fn(testAction.execute)
+    const harness = createHarness({ now: () => clock.now, action: { ...testAction, execute } })
+    try {
+      const item = await harness.service.automationCreate(input())
+      await harness.service.start()
+      clock.now = new Date(Date.parse(item.nextRunAt!) + 90_000)
+      await vi.advanceTimersByTimeAsync(delay)
+      expect(execute).toHaveBeenCalledOnce()
+      const variables = execute.mock.calls[0]![0].context.templateVariables
+      expect(variables?.["trigger.scheduledAt"]).toBe(item.nextRunAt)
+      expect(variables?.["trigger.triggeredAt"]).toBe(clock.now.toISOString())
+      expect((await harness.items.get(item.id))?.nextRunAt).not.toBe(item.nextRunAt)
+    } finally { await harness.service.stop(); vi.useRealTimers() }
+  })
+
+  it("preserves the missed plan time during startup catchup", async () => {
+    const now = new Date("2026-06-03T00:15:00.000Z")
+    const execute = vi.fn(testAction.execute)
+    const harness = createHarness({ now: () => now, action: { ...testAction, execute } })
+    const item = createStoredAutomation({
+      nextRunAt: "2026-06-03T00:10:00.000Z",
+      policy: { missedRunPolicy: "run_once", overlapPolicy: "skip" },
+    })
+    await harness.itemStore.upsert(item)
+    await harness.service.start()
+    try {
+      await waitFor(async () => (await harness.runs.listByAutomation(item.id)).some(run => run.status === "success"))
+      expect(execute.mock.calls[0]![0].context.templateVariables).toEqual(expect.objectContaining({
+        "trigger.scheduledAt": item.nextRunAt,
+        "trigger.triggeredAt": now.toISOString(),
+        "trigger.triggeredBy": "missed_run",
+      }))
+    } finally { await harness.service.stop() }
+  })
+
   it("enables an out-of-range interval without an invalid timer or unintended run", async () => {
     const harness = createHarness()
     await harness.service.start()

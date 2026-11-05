@@ -669,9 +669,17 @@ export class AutomationService {
     const reschedulePolicy = trigger.runtime.getReschedulePolicy?.(parsedTriggerConfig) ??
       { mode: "before_run" as const }
     const deferSchedule = reschedulePolicy.mode === "after_completion"
+    const triggeredAt = this.now().toISOString()
+    const triggerContext: AutomationTriggerRuntimeContext = {
+      triggeredBy,
+      triggeredAt,
+      scheduledAt: item.nextRunAt && !Number.isNaN(Date.parse(item.nextRunAt))
+        ? item.nextRunAt
+        : triggeredAt,
+    }
     if (triggeredBy === "trigger" && reschedulePolicy.mode === "before_run") await this.schedule(id)
     try {
-      return await this.executeOrSkip(item, triggeredBy)
+      return await this.executeOrSkip(item, triggeredBy, triggerContext)
     } finally {
       if (
         (triggeredBy === "trigger" && deferSchedule) ||
