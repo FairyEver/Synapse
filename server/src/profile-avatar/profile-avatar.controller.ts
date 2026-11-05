@@ -11,15 +11,15 @@ import {
   Res,
   UseGuards,
 } from "@nestjs/common"
-import { Throttle } from "@nestjs/throttler"
+import { SkipThrottle, Throttle } from "@nestjs/throttler"
 import type { Request, Response } from "express"
 import { pipeline } from "node:stream/promises"
 import { UserAuthGuard, type AuthenticatedUserRequest } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
 import { RATE_LIMIT_TTL_MS } from "../common/rate-limits"
 import { ProfileAvatarService, type ResolvedProfileAvatar } from "./profile-avatar.service"
+import { ProfileAvatarRandomThrottleGuard } from "./profile-avatar-random-throttle.guard"
 
-const AVATAR_RANDOMIZE_RATE_LIMIT = 60
 const AVATAR_UPLOAD_RATE_LIMIT = 10
 
 @UseGuards(UserAuthGuard)
@@ -30,7 +30,8 @@ export class ProfileAvatarController {
     private readonly auth: UserAuthService,
   ) {}
 
-  @Throttle({ default: { ttl: RATE_LIMIT_TTL_MS, limit: AVATAR_RANDOMIZE_RATE_LIMIT } })
+  @SkipThrottle()
+  @UseGuards(ProfileAvatarRandomThrottleGuard)
   @Post("/random")
   async random(@Req() request: AuthenticatedUserRequest) {
     await this.avatars.randomize(request.user!.id, request.ip)

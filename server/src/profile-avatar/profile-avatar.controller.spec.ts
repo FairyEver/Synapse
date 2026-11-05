@@ -5,9 +5,7 @@ const throttleLimitMetadata = "THROTTLER:LIMITdefault"
 const throttleTtlMetadata = "THROTTLER:TTLdefault"
 
 describe("ProfileAvatarController", () => {
-  it("allows 60 random avatar changes per minute while retaining the stricter upload limit", () => {
-    expect(Reflect.getMetadata(throttleLimitMetadata, ProfileAvatarController.prototype.random)).toBe(60)
-    expect(Reflect.getMetadata(throttleTtlMetadata, ProfileAvatarController.prototype.random)).toBe(60_000)
+  it("retains the stricter upload limit", () => {
     expect(Reflect.getMetadata(throttleLimitMetadata, ProfileAvatarController.prototype.upload)).toBe(10)
     expect(Reflect.getMetadata(throttleTtlMetadata, ProfileAvatarController.prototype.upload)).toBe(60_000)
   })
