@@ -73,6 +73,7 @@ export type SharedInstallerFlowProps = {
   }) => Promise<void> | void
   onInstalled: () => Promise<void> | void
   projects: SynapseProjectConfig[]
+  renderPageFrame?: (content: ReactNode, splitEditorStep: boolean) => ReactNode
   renderSourceInput?: (args: SharedInstallerFlowRenderSourceInputArgs) => ReactNode
   source?: SynapseInstallerSource
 }
@@ -144,6 +145,7 @@ export function SharedInstallerFlow({
   onInstall,
   onInstalled,
   projects,
+  renderPageFrame,
   renderSourceInput,
   source: initialSource,
 }: SharedInstallerFlowProps) {
@@ -503,11 +505,16 @@ export function SharedInstallerFlow({
 
   const sourceDescription = flow.source?.description ?? ""
 
-  const containerClassName = mode === "page"
-    ? "mx-auto flex w-full max-w-2xl flex-col gap-4 p-6"
-    : "flex w-full flex-col gap-4"
+  const editorStepSkill = mode === "page" && renderPageFrame && flow.step === "editor" && flow.source?.kind === "skill"
+    ? flow.source
+    : null
+  const containerClassName = editorStepSkill
+    ? "@container/skill-editor flex min-h-full w-full flex-col"
+    : mode === "page"
+      ? "mx-auto flex w-full max-w-2xl flex-col gap-4 p-6"
+      : "flex w-full flex-col gap-4"
 
-  return (
+  const content = (
     <section className={containerClassName}>
       <SkillEnvValuesDialog
         declarations={skillEnvDeclarations}
@@ -686,7 +693,7 @@ export function SharedInstallerFlow({
         </div>
       ) : null}
 
-      {flow.source?.kind === "skill" && flow.source.origin === "skill-hub" && flow.step !== "success" ? (
+      {!editorStepSkill && flow.source?.kind === "skill" && flow.source.origin === "skill-hub" && flow.step !== "success" ? (
         <dl className="grid gap-2 border-b pb-4 text-sm break-words">
           <div><dt className="text-muted-foreground">包内名称</dt><dd>{flow.source.name}</dd></div>
           <div><dt className="text-muted-foreground">包内介绍</dt><dd className="whitespace-pre-wrap">{flow.source.description}</dd></div>
@@ -695,34 +702,46 @@ export function SharedInstallerFlow({
       ) : null}
 
       {flow.step === "editor" ? (
-        <div className="flex flex-col gap-3">
-          <h2 className="text-balance font-heading text-base font-medium">选择编辑器</h2>
-          <div className="grid gap-1.5">
-            {flow.availableEditors.length > 0 ? (
-              flow.availableEditors.map((editor) => (
-                <Button
-                  key={editor.id}
-                  type="button"
-                  variant="ghost"
-                  className="h-auto w-full justify-start gap-2.5 whitespace-normal bg-muted/30 p-2.5 text-left hover:bg-muted/60"
-                  onClick={() => {
-                    setSelection(null)
-                    setError("")
-                    pendingInstallWarningRef.current = undefined
-                    setIsCompletionRetryPending(false)
-                    flow.selectEditor(editor)
-                  }}
-                >
-                  <EditorIcon editorId={editor.id} className="size-8" />
-                  <span className="min-w-0 truncate font-medium">{editor.label}</span>
-                </Button>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">当前没有可用编辑器。</p>
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onCancel}>取消</Button>
+        <div className={editorStepSkill ? "grid flex-1 @xl/skill-editor:grid-cols-[minmax(0,11fr)_minmax(0,14fr)]" : undefined}>
+          {editorStepSkill ? (
+            <div className="min-w-0 border-b bg-muted/50 p-6 @xl/skill-editor:border-r @xl/skill-editor:border-b-0 @xl/skill-editor:p-8">
+              <h2 className="font-heading text-xl font-medium wrap-anywhere">{editorStepSkill.name}</h2>
+              {editorStepSkill.description ? (
+                <p className="mt-3 text-sm leading-relaxed wrap-anywhere whitespace-pre-wrap text-muted-foreground">
+                  {editorStepSkill.description}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <div className={editorStepSkill ? "flex min-w-0 flex-col gap-3 p-6 @xl/skill-editor:p-8" : "flex flex-col gap-3"}>
+            <h2 className="text-balance font-heading text-base font-medium">选择编辑器</h2>
+            <div className="grid gap-1.5">
+              {flow.availableEditors.length > 0 ? (
+                flow.availableEditors.map((editor) => (
+                  <Button
+                    key={editor.id}
+                    type="button"
+                    variant="ghost"
+                    className="h-auto w-full justify-start gap-2.5 whitespace-normal bg-muted/30 p-2.5 text-left hover:bg-muted/60"
+                    onClick={() => {
+                      setSelection(null)
+                      setError("")
+                      pendingInstallWarningRef.current = undefined
+                      setIsCompletionRetryPending(false)
+                      flow.selectEditor(editor)
+                    }}
+                  >
+                    <EditorIcon editorId={editor.id} className="size-8" />
+                    <span className="min-w-0 truncate font-medium">{editor.label}</span>
+                  </Button>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">当前没有可用编辑器。</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onCancel}>取消</Button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -800,4 +819,6 @@ export function SharedInstallerFlow({
       ) : null}
     </section>
   )
+
+  return renderPageFrame ? renderPageFrame(content, editorStepSkill !== null) : content
 }

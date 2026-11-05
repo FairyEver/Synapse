@@ -261,6 +261,7 @@ async function renderFlow(
   projects: SynapseProjectConfig[] = mocks.config.global.projects,
   onInstalled: () => Promise<void> | void = vi.fn(),
   initialSelection?: EditorWriteTargetSelection["scope"],
+  mode: "modal" | "page" = "modal",
 ) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -270,7 +271,8 @@ async function renderFlow(
   await act(async () => {
     root.render(
       <SharedInstallerFlow
-        mode="modal"
+        mode={mode}
+        renderPageFrame={mode === "page" ? (content) => content : undefined}
         source={source}
         editors={[editor]}
         initialEditor={initialSelection ? editor : undefined}
@@ -434,6 +436,28 @@ describe("SharedInstallerFlow", () => {
       await Promise.resolve()
     })
     expect(document.body.textContent).toContain("目标位置")
+  })
+
+  it("shows the Hub Skill introduction during editor selection and its version at the install target", async () => {
+    const source = {
+      ...repositorySkillSource,
+      origin: "skill-hub" as const,
+      description: "Send group notifications.",
+      hubVersionNumber: 3,
+    }
+    await renderFlow(source, [], vi.fn(), undefined, "page")
+
+    expect(document.querySelector("h2")?.textContent).toBe("demo")
+    expect(document.body.textContent).toContain("Send group notifications.")
+    expect(document.body.textContent).not.toContain("本次安装")
+
+    await act(async () => clickButton("Codex"))
+    expect(document.body.textContent).toContain("目标位置")
+    expect(document.body.textContent).toContain("本次安装v3")
+
+    await act(async () => clickButton("上一步"))
+    expect(document.body.textContent).toContain("选择编辑器")
+    expect(document.body.textContent).not.toContain("本次安装")
   })
 
   it("starts at the original target when an initial editor is provided", async () => {

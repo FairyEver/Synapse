@@ -1,6 +1,6 @@
 import type { HubInstallOpenRequest } from "../../skill-hub/shared/install-source"
 import { HubSourceInput } from "./hub-source-input"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { FolderOpen } from "lucide-react"
 import { toast } from "sonner"
 
@@ -40,43 +40,59 @@ export function SkillInstallerModule({ hubRequest }: { hubRequest?: HubInstallOp
     void load()
   }, [load])
 
+  const editorStatus = (
+    <>
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          加载中
+        </div>
+      ) : null}
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+    </>
+  )
+
+  const renderPageFrame = (content: ReactNode, splitEditorStep: boolean) => splitEditorStep ? (
+    <>
+      {isLoading || error ? <div className="px-6 pt-4">{editorStatus}</div> : null}
+      {content}
+    </>
+  ) : (
+    <div className="mx-auto w-full max-w-2xl p-3 sm:p-5">
+      <Card className="py-0">
+        <CardContent className="p-4 sm:p-5">
+          {editorStatus}
+          {content}
+        </CardContent>
+      </Card>
+    </div>
+  )
+
   return (
     <SystemAppWindowShell>
-      <ScrollArea className="h-full min-h-0">
-        <div className="mx-auto w-full max-w-2xl p-3 sm:p-5">
-          <Card className="py-0">
-            <CardContent className="p-4 sm:p-5">
-              {isLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Spinner />
-                  加载中
-                </div>
-              ) : null}
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              {hubRequest ? (
-                <HubSourceInput request={hubRequest}>
-                  {(source) => (
-                    <SharedInstallerFlow editors={filteredAdapters} kind="skill" mode="page"
-                      projects={config.global.projects} source={source} onCancel={() => window.close()}
-                      onInstalled={() => { toast.success("安装完成") }} />
-                  )}
-                </HubSourceInput>
-              ) : <SharedInstallerFlow
-                editors={filteredAdapters}
-                kind="skill"
-                mode="page"
-                projects={config.global.projects}
-                onCancel={() => window.close()}
-                onInstalled={() => {
-                  toast.success("安装完成")
-                }}
-                renderSourceInput={({ onSourceReady }) => (
-                  <SkillSourceInput onSourceReady={onSourceReady} />
-                )}
-              />}
-            </CardContent>
-          </Card>
-        </div>
+      <ScrollArea className="h-full min-h-0" viewportClassName="[&>div]:h-full">
+        {hubRequest ? (
+          <HubSourceInput request={hubRequest} renderStatus={(content) => renderPageFrame(content, false)}>
+            {(source) => (
+              <SharedInstallerFlow editors={filteredAdapters} kind="skill" mode="page"
+                projects={config.global.projects} source={source} onCancel={() => window.close()}
+                onInstalled={() => { toast.success("安装完成") }} renderPageFrame={renderPageFrame} />
+            )}
+          </HubSourceInput>
+        ) : <SharedInstallerFlow
+          editors={filteredAdapters}
+          kind="skill"
+          mode="page"
+          projects={config.global.projects}
+          onCancel={() => window.close()}
+          onInstalled={() => {
+            toast.success("安装完成")
+          }}
+          renderPageFrame={renderPageFrame}
+          renderSourceInput={({ onSourceReady }) => (
+            <SkillSourceInput onSourceReady={onSourceReady} />
+          )}
+        />}
       </ScrollArea>
     </SystemAppWindowShell>
   )

@@ -8,12 +8,16 @@ import type { SynapseSkillInstallerSource } from "../../../src/types/installers"
 import type { HubInstallOpenRequest } from "../../skill-hub/shared/install-source"
 
 const logger = createRendererLogger("skill-installer.hub")
-type Props = { request: HubInstallOpenRequest; children: (source: SynapseSkillInstallerSource) => ReactNode }
+type Props = {
+  request: HubInstallOpenRequest
+  children: (source: SynapseSkillInstallerSource) => ReactNode
+  renderStatus: (content: ReactNode) => ReactNode
+}
 
 export function HubSourceInput(props: Props) {
   const { state, isLoading, pendingAction, startLogin, refresh } = useAccount()
-  if (isLoading) return <p role="status"><Spinner /> 正在读取账号</p>
-  if (state.status !== "authenticated") return (
+  if (isLoading) return props.renderStatus(<p role="status"><Spinner /> 正在读取账号</p>)
+  if (state.status !== "authenticated") return props.renderStatus(
     <div className="flex items-center gap-3">
       <p>登录 Synapse 后安装团队 Skill。</p>
       <Button disabled={pendingAction === "login" || state.status === "authenticating"} onClick={() => void startLogin()}>
@@ -21,13 +25,13 @@ export function HubSourceInput(props: Props) {
       </Button>
     </div>
   )
-  if (state.connectivity !== "online") return (
+  if (state.connectivity !== "online") return props.renderStatus(
     <div className="flex items-center gap-3"><p>账号离线，请重新连接。</p><Button onClick={() => void refresh()}>重试</Button></div>
   )
   return <HubSourceLoader key={state.profile.user.id} {...props} />
 }
 
-function HubSourceLoader({ request, children }: Props) {
+function HubSourceLoader({ request, children, renderStatus }: Props) {
   const [source, setSource] = useState<SynapseSkillInstallerSource | null>(null)
   const [error, setError] = useState("")
   const [attempt, setAttempt] = useState(0)
@@ -54,8 +58,8 @@ function HubSourceLoader({ request, children }: Props) {
     return () => { live = false; if (id) release(id) }
   }, [request.skillId, attempt])
 
-  if (error) return <div className="flex flex-wrap items-center gap-3"><p role="alert">{error}</p>
-    <Button onClick={() => { setError(""); setAttempt((n) => n + 1) }}>重新读取最新版</Button></div>
-  if (!source) return <p role="status" className="flex items-center gap-2"><Spinner /> 正在读取最新版</p>
+  if (error) return renderStatus(<div className="flex flex-wrap items-center gap-3"><p role="alert">{error}</p>
+    <Button onClick={() => { setError(""); setAttempt((n) => n + 1) }}>重新读取最新版</Button></div>)
+  if (!source) return renderStatus(<p role="status" className="flex items-center gap-2"><Spinner /> 正在读取最新版</p>)
   return children(source)
 }
