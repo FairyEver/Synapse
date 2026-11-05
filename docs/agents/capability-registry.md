@@ -344,8 +344,8 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 | `builtin.cron` | Cron | 保持现有配置 |
 | `builtin.interval` | 固定间隔 | 保持现有配置 |
 | `builtin.webhook` | Webhook | 保持现有配置 |
-| `builtin.mail-internal-received` | 收到新的站内信 | 严格空对象 |
-| `builtin.mail-received` | 收到新的邮件 | 可选 accountId；缺省全部邮箱账号 |
+| `builtin.mail-internal-received` | 收到站内信 | 严格空对象 |
+| `builtin.mail-received` | 收到邮件 | 可选 accountId；缺省全部邮箱账号 |
 
 Automation Trigger 从 3 项增至 5 项；复用既有 14 项 Automation capability / MCP 索引，执行器沿用当前唯一 Agent。公开 MCP 仍仅 search / invoke；本次全局 capability / MCP 数量无增量，System App、Dock、Workflow Node、Automation Action、Deep Link 均不新增。现有触发器发现返回两种新 schema 与正文等变量。
 
