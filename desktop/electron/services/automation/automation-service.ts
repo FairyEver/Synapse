@@ -296,6 +296,7 @@ export class AutomationService {
   async runNow(id: string): Promise<AutomationRun | null> {
     const startedAt = Date.now()
     const item = await this.deps.items.get(id)
+    if (item && this.deps.triggers.get(item.trigger.type).activationRequired) throw new Error("此触发器需要信件上下文，不能直接手动运行")
     if (!item) {
       this.deps.logger?.info("Automation manual run skipped because item was not found.", {
         boundary: "automation.run-now",

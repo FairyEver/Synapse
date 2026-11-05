@@ -5,6 +5,8 @@ import { intervalTriggerDefinition } from "../../../automation-trigger-packages/
 import { webhookTriggerConfigSchema } from "../../../automation-trigger-packages/builtin/webhook/index.shared"
 import { webhookTriggerDefinition } from "../../../automation-trigger-packages/builtin/webhook/index.main"
 import { AutomationTriggerRegistry } from "./trigger-registry"
+import { mailInternalReceivedDefinition } from "../../../automation-trigger-packages/builtin/mail-internal-received/index.main"
+import { mailReceivedDefinition } from "../../../automation-trigger-packages/builtin/mail-received/index.main"
 
 const cronTriggerSchema = cronTriggerConfigSchema
 const intervalTriggerSchema = intervalTriggerConfigSchema
@@ -24,5 +26,7 @@ export function createBuiltinAutomationTriggerRegistry(): AutomationTriggerRegis
   registry.register(cronTriggerDefinition)
   registry.register(intervalTriggerDefinition)
   registry.register(webhookTriggerDefinition)
+  registry.register(mailInternalReceivedDefinition)
+  registry.register(mailReceivedDefinition)
   return registry
 }

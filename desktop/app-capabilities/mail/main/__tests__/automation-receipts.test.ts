@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest"
 import { syncRig, remoteHeader } from "./sync-fixtures"
 import { MailAutomationReceipts } from "../automation-receipts"
+import type { StoredMessage } from "../sync"
 
 const close: (() => Promise<void>)[] = []
 afterEach(async () => { for (const dispose of close.splice(0)) await dispose() })
@@ -46,9 +47,9 @@ it("requires every selected account to confirm a live connection and rejects UID
 it("keeps the original receipt identity when a proven move changes its current locator", async () => {
   const rig = await fixture()
   await rig.sync.runOnce(rig.ctx, rig.account.id)
-  const row = (await rig.repo.page(rig.ctx, "messages", { accountId: rig.account.id, limit: 1 })).items[0]!
+  const row = (await rig.repo.page<StoredMessage>(rig.ctx, "messages", { accountId: rig.account.id, limit: 1 })).items[0]!
   const original = row.data.originReceiptKey
-  const summary = row.data.summary as { locator: { uid: number } }
+  const summary = row.data.summary
   const moved = await rig.repo.save(rig.ctx, "messages", row.id, row.accountId, { ...row.data, summary: { ...summary, locator: { ...summary.locator, uid: 999 } } }, row.revision)
   expect(original).toEqual(expect.any(String))
   expect(moved.data.originReceiptKey).toBe(original)

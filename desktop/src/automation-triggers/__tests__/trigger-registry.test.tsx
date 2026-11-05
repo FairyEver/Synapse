@@ -15,6 +15,8 @@ describe("rendererAutomationTriggerRegistry", () => {
       { id: "builtin.cron", kind: "schedule" },
       { id: "builtin.interval", kind: "schedule" },
       { id: "builtin.webhook", kind: "event" },
+      { id: "builtin.mail-internal-received", kind: "event" },
+      { id: "builtin.mail-received", kind: "event" },
     ])
   })
 
