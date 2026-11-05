@@ -132,13 +132,13 @@ describe("main window development shortcuts", () => {
 })
 
 describe("createMainWindow close behavior", () => {
-  it("uses 1200×1000 as the default size and 1000×800 as the minimum size", () => {
+  it("uses 1200×800 as the default size and 1000×800 as the minimum size", () => {
     const state = { current: null }
     createMainWindow({ state, isAppQuitting: () => false })
 
     expect(mocks.BrowserWindow).toHaveBeenLastCalledWith(expect.objectContaining({
       width: 1200,
-      height: 1000,
+      height: 800,
       minWidth: 1000,
       minHeight: 800,
     }))
