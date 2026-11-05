@@ -297,6 +297,83 @@ describe("synapse tool router search", () => {
     }
   })
 
+  it.each([
+    "做个网站，用户填写后保存数据，给别人用",
+    "做一个网页，填完能保存数据，并分享给别人",
+    "Build a website that stores form submissions in a database",
+  ])("discovers the cloud backend for %s", async query => {
+    const result = await searchSynapseTools({ query })
+    expect(result.tools[0]?.name).toBe("app_cloud_tables_publish_preflight_get")
+    expect(result.tools.some(tool => tool.domain === "database")).toBe(false)
+  })
+
+  it.each([
+    "帮我做一个表单校验组件，不需要云存储",
+    "写一个报名表单校验函数",
+    "只做表单校验组件，不要发布网站",
+    "Build a form validation component without a backend",
+  ])("does not propose remote writes for %s", async query => {
+    const result = await searchSynapseTools({ query })
+    expect(result.tools).toEqual([])
+    expect(result.mode === "search" && result.guidance).toContain("组件")
+  })
+
+  it.each([
+    "不要做报名页，帮我发布已有静态网站",
+    "发布一个表单演示网页，不需要云存储",
+    "做一个只在本地保存数据的网页并分享",
+  ])("keeps static or local-only websites out of cloud tables: %s", async query => {
+    const result = await searchSynapseTools({ query })
+    expect(result.tools.some(tool => tool.domain === "cloud_tables" || tool.domain === "database")).toBe(false)
+    expect(result.tools.some(tool => tool.name === "app_drive_share_create")).toBe(true)
+    expect(result.tools.some(tool => tool.name === "app_drive_site_create")).toBe(true)
+  })
+
+  it.each([
+    "做一个有本地图片和独立脚本的报名页，发布给别人",
+    "做一个有多个文件和多个资源的报名网站，让大家填写并保存数据",
+  ])("discovers folder publication for %s", async query => {
+    const result = await searchSynapseTools({ query })
+    expect(result.tools.map(tool => tool.name)).toEqual([
+      "app_cloud_tables_publish_preflight_get", "app_cloud_tables_table_create", "app_cloud_tables_permissions_update",
+      "app_drive_folder_upload", "app_drive_site_create",
+    ])
+  })
+
+  it("discovers explicit image hosting before either publication route", async () => {
+    const result = await searchSynapseTools({ query: "上传这个网站，先把图片传到图床，改写链接后发布" })
+    expect(result.tools.map(tool => tool.name)).toEqual([
+      "app_drive_direct_link_upload", "app_drive_file_upload", "app_drive_share_create",
+      "app_drive_folder_upload", "app_drive_site_create",
+    ])
+    expect(result.mode === "search" && result.guidance).toContain("改写")
+    const ordinary = await searchSynapseTools({ query: "上传这个多文件站点，里面有图片和脚本" })
+    expect(ordinary.tools.map(tool => tool.name)).toEqual(["app_drive_folder_upload", "app_drive_site_create"])
+    const single = await searchSynapseTools({ query: "发布这个独立单文件网页" })
+    expect(single.tools.map(tool => tool.name)).toEqual(["app_drive_file_upload", "app_drive_share_create"])
+  })
+
+  it("does not mistake image-reference rewriting for updating an existing form", async () => {
+    const result = await searchSynapseTools({ query: "做一个报名页，支持选择人数，图片上传图床后改写链接" })
+    expect(result.tools.map(tool => tool.name)).toEqual([
+      "app_cloud_tables_publish_preflight_get", "app_cloud_tables_table_create", "app_cloud_tables_permissions_update",
+      "app_drive_direct_link_upload", "app_drive_file_upload",
+    ])
+    const noHosting = await searchSynapseTools({ query: "发布这个网站，不要把图片传到图床" })
+    expect(noHosting.tools.some(tool => tool.name === "app_drive_direct_link_upload")).toBe(false)
+  })
+
+  it("preserves explicit tool and domain searches and site republishing", async () => {
+    const scoped = await searchSynapseTools({ query: "做个网站，用户填写后保存数据，给别人用", domain: "cloud_tables" })
+    expect(scoped.tools.map(tool => tool.name)).toEqual([
+      "app_cloud_tables_publish_preflight_get", "app_cloud_tables_table_create", "app_cloud_tables_permissions_update",
+    ])
+    const exact = await searchSynapseTools({ query: "app_drive_site_create" })
+    expect(exact.tools[0]?.name).toBe("app_drive_site_create")
+    const update = await searchSynapseTools({ query: "把发布的网站重新发布一次" })
+    expect(update.tools.some(tool => tool.name === "app_drive_site_republish")).toBe(true)
+  })
+
   it("reaches every tool through a chinese query built from its own name segments", async () => {
     // 段 -> 中文词的反查表，取表中第一条命中的
     const chineseFor = new Map<string, string>()

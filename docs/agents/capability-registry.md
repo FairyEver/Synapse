@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-05 网页交付发现修正：区分静态发布、云表存储、组件开发与仅本地保存，补齐多文件站点与显式图床先上传再改写流程。仅调整既有 `search` 的推荐与系统 Skill，不增删 capability、MCP 索引、公开工具、System App、Dock、Workflow、Automation、IPC 或 Deep Link；下列表格数量和例外不变。
+
 - 桌面通知和应用链接按目标决定窗口。终端、邮箱、站内信、待办、录音、连接器和应用内定位进入主窗口，Skill Hub 安装保留独立窗口。显式新窗口及独立写信保留。新增 3 项桌面私有 IPC（`app.apps.main_navigation.open`、`get_pending`、`acknowledge`）和 1 个只发给主窗口的事件（`app.apps.operation.main_navigation_requested`），移除旧的更新页打开广播，更新通知复用已有手动导航请求。Deep Link、System App、Dock、Workflow、Automation、公开 capability 和 MCP 数量不变。
 
 - 2026-11-04 云端数据表接入独立 `cloud_tables` domain，共 21 项 capability / MCP 索引，包含发布前检查。使用当前登录桌面账号，沿用表主与协作者权限。只供现有 MCP `search` / `invoke`，无通用本机 HTTP、System App、Dock、IPC、Workflow、Automation 或 Deep Link 入口。指引随既有 Synapse 系统 Skill 分发。表主可分别配置今日汇总和公开总数，网页通过开放 REST 读取。MCP 的自然语言报名、征集和榜单发现可联动 Drive。

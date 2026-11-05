@@ -344,7 +344,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
   }
   const cloudAppTools = cloudTableAppSearchIntent(query, input.domain?.trim())
   if (cloudAppTools) {
-    const entries = cloudAppTools.flatMap(name => {
+    const entries = cloudAppTools.toolNames.flatMap(name => {
       const entry = catalogByName.get(name)
       return entry && (!input.domain?.trim() || matchesScope(entry)) ? [entry] : []
     }).slice(0, limit)
@@ -352,7 +352,7 @@ export async function searchSynapseTools(input: SynapseToolSearchInput): Promise
       mode: "search",
       tools: entries.map(({ name, domain: entryDomain, description, inputSchema }) => ({ name, domain: entryDomain, description, inputSchema })),
       domains: availableDomains,
-      guidance: "先读 Synapse Skill 的 cloud-tables/index.md 中文报名页流程，并调用发布前检查。使用当前桌面登录账号。公开人数用独立计数权限，名单仍关闭匿名读取。更新用原云盘文件和分享链接。",
+      guidance: cloudAppTools.guidance,
     }
   }
   const exact = catalogByName.get(query)

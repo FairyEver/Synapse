@@ -4,6 +4,8 @@
 
 Use this guide for 云端数据表 / 云表, including using one as the data source for a public form. This is the server-backed `cloud_tables` MCP domain. Desktop Database / Data Store has a separate catalog and local storage.
 
+完整的网页制作、数据存储和分享需求先读 [网页制作与发布](../web-publishing/index.md)。云表不是桌面本地 Database，不提供任意后端代码或附件上传；前端逻辑不能代替服务端业务约束。
+
 「做一个报名页」「收集大家的意见」「给原链接加公开人数」等自然语言需求，先读[用一句话做一个云表报名页](public-apps.md)。在建表或更新分享之前调用 `app_cloud_tables_publish_preflight_get`。表主可单独启用 `publicCount`，让网页读取报名总数并继续关闭匿名名单读取。
 
 ## 身份和工具发现

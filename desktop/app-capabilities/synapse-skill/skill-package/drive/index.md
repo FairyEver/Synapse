@@ -287,11 +287,21 @@ Use this flow when the user asks to upload or share a local Markdown document. T
 7. Pass only share settings the user explicitly requested, and apply them to every file share in this transaction unless the user scopes them to one artifact. When the user did not specify password enablement, expiry, access mode, or editor emails, omit `passwordEnabled`, `expiresIn`, `accessMode`, and `editorEmails` so the current Synapse version supplies its defaults. Do not hardcode those defaults in this skill. For `app_drive_site_create`, also omit `accessMode` and `expiresIn` when the user did not specify them.
 8. Do not upload the Markdown when a required dependency upload, HTML share/site publication, rewrite, or verification fails. A folder upload may have completed some remote writes before reporting failures; do not delete them without explicit authorization, and report the completed writes and the blocking failure.
 
+## HTML Image Hosting
+
+When publishing or updating a webpage, upload its images to Drive 公开素材 only when the user explicitly asks for 图床, 公开素材, or image direct links. A webpage containing images does not by itself request image hosting. Without that instruction, preserve local relative assets and use the folder-backed site route when needed.
+
+1. Inventory the referenced images before uploading any webpage files. Resolve HTML `src` / `srcset` against the document base and CSS `url()` against its stylesheet (or the document for inline styles). For script references, inspect the actual URL construction: DOM image URLs normally use the document base, while `new URL(..., import.meta.url)` uses the module URL. Include repeated references only once per resolved image. Preserve fragments, responsive candidates and unrelated references; never apply a blind global basename replacement.
+2. Discover `app_drive_direct_link_upload` and upload each supported image using its absolute `filePath`. Save every returned asset id and stable `/files/<assetId>` URL. This uses user-owned public assets and Drive quota, not browser-only `/object/` uploads. SVG is unsupported; if a required image is missing or unsupported, stop the affected publication and explain rather than silently converting or omitting it.
+3. Only after every required upload succeeds, rewrite the corresponding references in the publishable HTML, CSS and scripts using the returned URLs. Do not invent URLs or embed credentials. For already hosted remote images, reuse their URLs unless the user explicitly requests migration. If a dynamic script reference cannot be resolved safely, clarify it before publishing.
+4. Reinspect the rewritten files for missing resources and remaining local dependencies. Then apply **HTML Sharing Route** to the final artifact: a standalone HTML with only remote images can use file sharing; remaining local CSS, scripts or other resources require a site. An image-hosting request alone does not authorize publishing unrelated files or changing an existing public link's identity.
+5. If an image upload or reference rewrite fails, do not upload or republish the affected webpage. Report successful asset receipts and the blocker; do not silently fall back to local image hosting or delete successful uploads. Reuse confirmed asset receipts after interruption instead of uploading duplicates. Verify the published page actually loads every rewritten image.
+
 ## HTML Sharing Route
 
 Choose the public route from both the final publishable artifact and the user's explicit intent. A standalone HTML file defaults to a Drive file share and never receives sibling relative-resource access. Casual words such as "page", "website", or "site" do not by themselves request a folder-backed webpage share.
 
-1. Inspect the generated files immediately before uploading.
+1. Inspect the generated files immediately before uploading. If the user requested image hosting, complete **HTML Image Hosting** first and inspect the rewritten artifact.
 2. If the user explicitly asks to publish the whole folder or directory as a website or site, upload the local folder with `app_drive_folder_upload` when needed, then call `app_drive_site_create` for the Drive folder.
    - A folder containing only one `index.html` file is a valid site source. File count does not determine whether explicit whole-folder publishing is allowed.
    - Merely naming a Drive destination folder for an uploaded HTML file does not mean the user wants that folder published.

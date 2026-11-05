@@ -263,7 +263,7 @@ describe("API and MCP capability surface", () => {
       && !file.path.startsWith("skill-authoring/")
     ))
 
-    expect(routingDocs).toHaveLength(31)
+    expect(routingDocs).toHaveLength(32)
     for (const doc of routingDocs) {
       expect(doc.content, doc.path).toContain("Reaching Synapse tools")
       expect(doc.content, doc.path).toContain("publishes only two tools")

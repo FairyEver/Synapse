@@ -2,6 +2,8 @@
 
 示例：「做一个活动报名页，任何人打开都能填，只有我能看名单。」追问示例：「在原链接加一个公开报名人数，别公开名单。」
 
+「做个网站，用户填写后保存数据，给别人用」等完整网页需求先读[网页制作与发布](../web-publishing/index.md)，区分静态展示、表单存储、业务约束与图片上传；只做组件或明确不要后端时不建表。
+
 ## 1. 先检查发布环境
 
 用 MCP `search` 搜用户原话，读取实际返回的工具契约。调用 `app_cloud_tables_publish_preflight_get`（参数 `{}`），核对 `accountId`、`publicAppUrl`、`audience` 和 `capabilities`。使用当前 Synapse 桌面登录账号。不要请求 API Key，不从网页获取凭据。
@@ -47,12 +49,12 @@
 
 用随 Skill 分发的 [单文件报名页模板](public-signup.html)，复制到本次任务的工作区后修改活动名称和 `synapse-table`。首次发布将 `synapse-public-count` 保持为 `false`。模板从同一个部署读取 schema，用 `credentials: "omit"` 提交记录，并用相同幂等键重试同一份回答。模板支持必填的 `name` 和可选的 `note`。若用户明确要求其他字段，按实际 schema 调整模板。
 
-按 [Drive HTML 分享流程](../drive/index.md#html-sharing-route)，上传唯一命名的 HTML 到用户的云盘，使用 `app_drive_share_create` 返回免密码、只读的文件分享。保存 `tableId`、云盘 `itemId`、`parentId`、文件名和分享 URL。操作中断后从这些回执恢复，先核对已经创建的资源。
+按 [Drive HTML 分享流程](../drive/index.md#html-sharing-route)检查最终产物：独立单文件 HTML 使用 `app_drive_file_upload` 和 `app_drive_share_create`；多文件或依赖本地图片、CSS、脚本时，使用 `app_drive_folder_upload` 和 `app_drive_site_create`。用户明确要求图床时，必须先按 [图片图床流程](../drive/index.md#html-image-hosting)上传图片、拿齐链接并改写引用，再选择发布路线；未要求时不创建公开素材。保存 `tableId`、云盘 `itemId` / `sourceFolderItemId`、`parentId`、文件名、分享 URL / `siteId` 及图床对照（如有）。操作中断后从回执恢复，先核对已创建资源。
 
-匿名验收分三项：
+先在浏览器验证图片、样式、脚本、表单逻辑及窄屏。匿名验收分三项：
 
 1. 打开分享资源的 HTTP 渲染入口并检查公开 schema。用无 Cookie 和授权头的请求，提交可明确识别的测试姓名，拿到记录 ID。
-2. 匿名 `GET /records/{recordId}` 和 `POST /records/query`、`/records/count`、`/records/exists` 都应拒绝。初次发布时 `GET /public-count` 也应拒绝。
+2. 匿名 `GET /records/{recordId}` 和 `POST /records/query`、`/records/count`、`/records/exists` 都应拒绝，未开放的修改和删除也应拒绝。初次发布未启用公开计数时 `GET /public-count` 也应拒绝。验证必填、类型及选项，并绕过前端核实人数、名额等业务约束；云表 integer 类型不包含最小值限制，不能宣称页面校验就是服务端保证。
 3. 用表主 MCP `app_cloud_tables_record_get` 读回本次验收记录，核对其 ID 和姓名。验收获授权时，仅将自己的测试记录移入回收站，复验数值归回验收前。也可先用独立测试表验证写入。
 
 所有路径相对 `/api/open/v1/tables/{tableId}`。独立网络无法访问或未验收时，按实报告。只把链接返回给当前用户，除非用户明确让你发给具体对象。
@@ -61,6 +63,6 @@
 
 先重新运行预检，解析原链接，确认原 `itemId` 和绑定的表。读回表权限。调用原表的 `app_cloud_tables_permissions_update`，保留 `anonymous: { create: true }` 和已有无关配置，另加顶层 `publicCount: true`。该开关只公开无筛选的 `{ count }`，关闭用 `publicCount: false`。原始名单权限独立。
 
-把同一份 HTML 的 `synapse-public-count` 改为 `true`，同目录同名上传覆盖，复用原 `itemId` 和分享 URL。模板会在打开和提交后读取 `GET /public-count`，页面可见时每 15 秒刷新。检查匿名只能看到数字，并重新验证匿名名单、通用查询和计数仍被拒绝。表主仍通过 MCP 查看名单。
+把同一份 HTML 的 `synapse-public-count` 改为 `true`。原链接为文件分享时同目录同名上传覆盖，复用原 `itemId` 和分享 URL；原链接为站点时更新原源目录，再用原 `siteId` 调用 `app_drive_site_republish`。不要为更新新建链接。模板会在打开和提交后读取 `GET /public-count`，页面可见时每 15 秒刷新。检查匿名只能看到数字，并重新验证匿名名单、通用查询和计数仍被拒绝。表主仍通过 MCP 查看名单。
 
 公开数字是有效报名记录份数。匿名填表无法凭姓名确认唯一身份。有「每人只能报名一次」或「达到名额就停止」要求时，先核对身份和服务端规则，不能用客户端校验或幂等键承诺这类约束。

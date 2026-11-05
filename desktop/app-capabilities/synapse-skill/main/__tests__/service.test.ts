@@ -265,6 +265,7 @@ describe("SynapseSkillService", () => {
       "drive/index.md",
       "skill-authoring/index.md",
       "todos/index.md",
+      "web-publishing/index.md",
       "wecom/LICENSE",
       "wecom/UPSTREAM.md",
       "wecom/wecomcli-shared/SKILL.md",
