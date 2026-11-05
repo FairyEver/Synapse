@@ -53,6 +53,9 @@ type AutomationChangedPayload = {
 }
 
 export class AutomationService {
+  attachTriggerLifecycle(type: string, provider: import("./types").AutomationTriggerLifecycle): () => void {
+    return this.deps.items.attachTriggerLifecycle(type, provider)
+  }
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly runningItemIds = new Set<string>()
   private readonly eventRunChains = new Map<string, Promise<void>>()
@@ -798,10 +801,11 @@ export class AutomationService {
   }
 
   private async withRuntimeState(item: AutomationItem): Promise<AutomationItem> {
+    const { mailSubscription: _binding, ...publicItem } = item
     const validation = this.validateItem(item)
     const baseItem = validation.status === "valid"
-      ? item
-      : { ...item, enabled: false, validation }
+      ? publicItem
+      : { ...publicItem, enabled: false, validation }
     if (!this.runningItemIds.has(item.id)) return baseItem
     const runId = this.deps.execution.getActiveRunIdForItem(item.id)
     return {

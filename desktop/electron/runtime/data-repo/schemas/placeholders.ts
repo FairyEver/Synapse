@@ -872,6 +872,7 @@ export const automationItemsSchema: NamespaceSchema<AutomationItemEntryV1> = {
     && typeof (v as AutomationItemEntryV1).name === "string"
     && isOptionalString((v as AutomationItemEntryV1).description)
     && typeof (v as AutomationItemEntryV1).enabled === "boolean"
+    && isMailSubscriptionReference((v as AutomationItemEntryV1).mailSubscription)
     && isAutomationScope((v as AutomationItemEntryV1).scope)
     && isOptionalString((v as AutomationItemEntryV1).cwd)
     && isAutomationRef((v as AutomationItemEntryV1).trigger)
@@ -887,6 +888,15 @@ export const automationItemsSchema: NamespaceSchema<AutomationItemEntryV1> = {
     )
     && typeof (v as AutomationItemEntryV1).runCount === "number"
     && typeof (v as AutomationItemEntryV1).configVersion === "number",
+}
+
+function isMailSubscriptionReference(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false
+  const ref = value as Record<string, unknown>
+  return typeof ref.id === "string" && ref.id.length > 0
+    && [ref.stoppedAt, ref.previousId, ref.previousEndedAt].every(item => item === undefined || typeof item === "string" && item.length > 0)
+    && [ref.retired, ref.previousRetired].every(item => item === undefined || typeof item === "boolean")
 }
 
 export const automationRunsSchema: NamespaceSchema<AutomationRunEntryV1> = {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import type { ActionManifest } from "../../../action-packages/types"
 import type { DataChangeEvent, DataNamespace } from "../../runtime/data-repo"
 import type { AutomationTriggerRegistry } from "./trigger-registry"
+import type { AutomationTriggerLifecycle } from "./types"
 import type {
   AutomationCreateInput,
   AutomationItem,
@@ -35,6 +36,26 @@ export class AutomationItemRepository {
   private readonly itemCache = new Map<string, AutomationItem>()
   private readonly webhookTriggerIndex = new Map<string, Set<string>>()
   private indexHydrated = false
+  private readonly lifecycles = new Map<string, AutomationTriggerLifecycle>()
+
+  attachTriggerLifecycle(type: string, provider: AutomationTriggerLifecycle): () => void {
+    if (this.lifecycles.has(type)) throw new Error("触发器生命周期已注册")
+    this.lifecycles.set(type, provider)
+    return () => { if (this.lifecycles.get(type) === provider) this.lifecycles.delete(type) }
+  }
+  private async prepareCommit(previous: AutomationItem | null, next: AutomationItem): Promise<AutomationItem> {
+    const provider = this.lifecycles.get(next.trigger.type) ?? (previous ? this.lifecycles.get(previous.trigger.type) : undefined)
+    if (next.enabled && this.triggers.get(next.trigger.type).activationRequired && !provider) throw new Error("收信触发服务尚未就绪，无法启用")
+    return provider ? provider.beforeSave(previous, next) : next
+  }
+  private async finishCommit(previous: AutomationItem | null, next: AutomationItem): Promise<void> {
+    const provider = this.lifecycles.get(next.trigger.type) ?? (previous ? this.lifecycles.get(previous.trigger.type) : undefined)
+    if (!provider) return
+    try { await provider.afterSave(previous, next) } catch (error) {
+      const { createMainLogger } = await import("../log-store.js")
+      createMainLogger("automation.activation").warn("收信订阅关闭状态等待后台恢复", { automationId: next.id, errorName: error instanceof Error ? error.name : typeof error })
+    }
+  }
 
   constructor(deps: AutomationItemRepositoryDeps) {
     this.items = deps.items
@@ -71,8 +92,10 @@ export class AutomationItemRepository {
       ...item,
       nextRunAt: enabled ? this.computeNextRunAtIso(item, this.now()) : undefined,
     }
-    await this.items.upsert(next)
-    return next
+    const committed = await this.prepareCommit(null, next)
+    await this.items.upsert(committed)
+    await this.finishCommit(null, committed)
+    return committed
   }
 
   async update(id: string, patch: AutomationUpdateInput): Promise<AutomationItem> {
@@ -208,8 +231,9 @@ export class AutomationItemRepository {
     try {
       const existing = await this.items.get(id)
       if (!existing) return null
-      const next = updater(existing)
+      const next = await this.prepareCommit(existing, updater(existing))
       await this.items.upsert(next)
+      await this.finishCommit(existing, next)
       return next
     } finally {
       release()

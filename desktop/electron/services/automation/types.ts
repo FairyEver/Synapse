@@ -48,6 +48,7 @@ export type AutomationPolicy = {
 }
 
 export interface AutomationItem extends Record<string, unknown> {
+  readonly mailSubscription?: { readonly id: string; readonly stoppedAt?: string; readonly retired?: boolean; readonly previousId?: string; readonly previousEndedAt?: string; readonly previousRetired?: boolean }
   readonly id: string
   readonly schemaVersion: 1
   readonly name: string
@@ -67,6 +68,11 @@ export interface AutomationItem extends Record<string, unknown> {
   readonly validation?: AutomationValidation
   readonly runCount: number
   readonly configVersion: number
+}
+
+export interface AutomationTriggerLifecycle {
+  beforeSave(previous: AutomationItem | null, candidate: AutomationItem): Promise<AutomationItem>
+  afterSave(previous: AutomationItem | null, item: AutomationItem): Promise<void>
 }
 
 export interface AutomationCreateInput {

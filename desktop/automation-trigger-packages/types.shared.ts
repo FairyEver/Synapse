@@ -68,6 +68,7 @@ export type AutomationTriggerRuntime<
 export type AutomationTriggerDefinition<
   TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
 > = {
+  readonly activationRequired?: true
   readonly manifest: AutomationTriggerManifest<TConfig>
   summarize(config: TConfig): string
   validateStoredConfig?(config: unknown): ActionStoredConfigValidation
