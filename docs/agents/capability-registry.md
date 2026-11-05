@@ -277,7 +277,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 同步硬规则
 
-2026-11-05 自动化按已确认原型采用独立只读详情与同页触发/执行节点配置，宽容器双栏、窄容器纵向排列，操作跟随内容滚动且无底栏。编辑内可切换真实运行记录并保留草稿，节点标题菜单、更换确认、折叠及变量插入均属于既有 Automation System App。仅调整 Renderer 界面，不增删 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP；Automation 仍为 14 / 14，全局数量及其他表面以当前汇总表为准，公开 schema 与系统 Skill 的业务调用契约不变。
+2026-11-05 自动化按已确认原型采用独立只读详情与同页触发/执行节点配置，宽容器双栏、窄容器纵向排列。视觉重构使用浅灰工作区和左右白色配置面板，移除中间箭头，名称与标签集中在顶部，摘要与保存动作合并为随内容滚动的白色操作区，无固定或 sticky 底栏。只读详情沿用同一层次，运行策略独立分组，历史采用统一白色列表并去重耗时，保留既有停止、重试、诊断和原执行器终端入口。编辑内可切换真实运行记录并保留草稿，节点标题菜单、更换确认、折叠及变量插入均属于既有 Automation System App。仅调整 Renderer 界面，不增删 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP；Automation 仍为 14 / 14，全局数量及其他表面以当前汇总表为准，公开 schema 与系统 Skill 的业务调用契约不变。
 
 2026-11-05 自动化新建、编辑、变量与运行记录改为页内交互。移除 UI 私有的 `app.automation.editor.open_create`、`app.automation.editor.open_edit` IPC 和专用编辑窗口；它们原本不在 capability / MCP 目录中。Automation domain 仍为 14 / 14，全局 364 capability / 360 MCP 索引、两个公开路由工具及 System App、Dock、Workflow、Automation Action、Deep Link 数量均不变。System App 列表页的显式新窗口入口继续存在；新建和编辑子页面通过共享壳层替换顶栏，仅保留返回列表按钮，不追加新窗口入口，仍在原宿主页面完成。公开 schema 和系统 Skill 业务调用方式保持兼容。
 

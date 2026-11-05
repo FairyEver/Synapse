@@ -470,12 +470,12 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
   })
 
-  it("shows both nodes with actions inside the scrolling content", async () => {
+  it("shows both nodes without a connecting arrow and keeps actions inside the scrolling content", async () => {
     const container = document.createElement("div"); document.body.appendChild(container)
     await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
     expect(document.querySelector('[data-layout="automation-editor-executor-panel"]')).not.toBeNull()
     expect(saveButton()?.closest('[data-slot="scroll-area-viewport"]')).not.toBeNull()
-    expect(document.querySelector('[data-layout="automation-editor-divider"]')).not.toBeNull()
+    expect(document.querySelector('[data-layout="automation-editor-divider"]')).toBeNull()
   })
 
   it("opens trigger configuration alongside the executor choices", async () => {

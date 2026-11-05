@@ -11,7 +11,7 @@ interface DiagnosticsData {
   readonly args?: readonly string[]
 }
 
-function ActionResultView({ result }: { readonly result: ActionRunResult }) {
+function ActionResultView({ result, showDuration = true }: { readonly result: ActionRunResult; readonly showDuration?: boolean }) {
   const diagnostics = result.status !== "success"
     ? (result.outputs?.diagnostics as DiagnosticsData | undefined)
     : undefined
@@ -19,7 +19,7 @@ function ActionResultView({ result }: { readonly result: ActionRunResult }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
       {result.summary ? <p className="text-sm text-muted-foreground break-words">{redactSensitiveText(result.summary)}</p> : null}
-      {result.metrics ? <MetricsView metrics={result.metrics} /> : null}
+      {result.metrics ? <MetricsView metrics={result.metrics} showDuration={showDuration} /> : null}
       <TokenUsageSummary usage={result.usage} />
       {result.error ? <OutputBlock label="错误" value={result.error} /> : null}
       {result.logs?.map((log) => (
@@ -30,11 +30,11 @@ function ActionResultView({ result }: { readonly result: ActionRunResult }) {
   )
 }
 
-function MetricsView({ metrics }: { readonly metrics: NonNullable<ActionRunResult["metrics"]> }) {
+function MetricsView({ metrics, showDuration }: { readonly metrics: NonNullable<ActionRunResult["metrics"]>; readonly showDuration: boolean }) {
   const items = [
     metrics.httpStatus !== undefined ? `HTTP ${String(metrics.httpStatus)}` : undefined,
     metrics.exitCode !== undefined ? `退出码 ${String(metrics.exitCode)}` : undefined,
-    metrics.durationMs !== undefined ? `${String(metrics.durationMs)} ms` : undefined,
+    showDuration && metrics.durationMs !== undefined ? `${String(metrics.durationMs)} ms` : undefined,
   ].filter((item): item is string => item !== undefined)
 
   if (items.length === 0) return null

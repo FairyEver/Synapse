@@ -6,7 +6,7 @@ import { openTerminalSession } from "../../../src/lib/open-terminal-session"
 import { runTrackedOperation } from "../../../src/lib/ui-tracking"
 import type { ActionRunResult } from "../../types"
 
-export function ClaudeCodeResultView({ result }: { readonly result: ActionRunResult }) {
+export function ClaudeCodeResultView({ result, showDuration = true }: { readonly result: ActionRunResult; readonly showDuration?: boolean }) {
   const [opening, setOpening] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { projectId, sessionId } = result.outputs ?? {}
@@ -25,7 +25,7 @@ export function ClaudeCodeResultView({ result }: { readonly result: ActionRunRes
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <ActionResultView result={result} />
+      <ActionResultView result={result} showDuration={showDuration} />
       {target ? <Button variant="outline" className="self-start" disabled={opening} onClick={() => { void handleOpen() }}><Terminal />打开终端</Button> : null}
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
     </div>

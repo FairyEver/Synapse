@@ -14,6 +14,15 @@ let root: Root | undefined
 afterEach(async () => { await act(async () => root?.unmount()); document.body.innerHTML = ""; vi.clearAllMocks() })
 
 describe("Claude Code automation renderer", () => {
+  it("omits repeated duration while keeping the terminal entry", () => {
+    const html = renderToStaticMarkup(<ClaudeCodeResultView showDuration={false} result={{
+      status: "success", summary: "提示词已提交", metrics: { durationMs: 1355 }, outputs: { projectId: "p1", sessionId: "s1" },
+    }} />)
+    expect(html).not.toContain("1355 ms")
+    expect(html).toContain("提示词已提交")
+    expect(html).toContain("打开终端")
+  })
+
   it("configures only the target project and initial prompt", () => {
     const html = renderToStaticMarkup(<ClaudeCodeConfigForm value={{ projectId: "", prompt: "Review" }} onChange={() => undefined} projects={[]}
       triggerVariables={[{ key: "trigger.payload.subject", label: "主题" }]} />)

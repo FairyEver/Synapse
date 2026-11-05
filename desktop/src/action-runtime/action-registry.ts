@@ -18,6 +18,7 @@ export type ActionConfigFormComponent<TConfig extends ActionConfig = ActionConfi
 
 export type ActionResultViewComponent = (props: {
   readonly result: ActionRunResult
+  readonly showDuration?: boolean
 }) => ReactElement
 
 export type RendererActionDefinition<TConfig extends ActionConfig = ActionConfig> = {

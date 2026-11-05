@@ -22,6 +22,17 @@ afterEach(() => {
 })
 
 describe("ActionResultView", () => {
+  it("can leave duration to the run heading while preserving other metrics and output", () => {
+    const html = renderToStaticMarkup(<ActionResultView showDuration={false} result={{
+      status: "success", summary: "检查完成", metrics: { durationMs: 1355, exitCode: 0, httpStatus: 200 },
+      logs: [{ label: "结果", value: "保留输出" }],
+    }} />)
+    expect(html).not.toContain("1355 ms")
+    expect(html).toContain("HTTP 200")
+    expect(html).toContain("退出码 0")
+    expect(html).toContain("保留输出")
+  })
+
   it("renders summary, metrics, and logs", () => {
     const html = renderToStaticMarkup(
       <ActionResultView

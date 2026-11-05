@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react"
-import { ArrowRight, ChevronDown, ChevronUp, Play, Zap } from "lucide-react"
+import { ChevronDown, ChevronRight, ChevronUp, Play, Zap } from "lucide-react"
 
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
@@ -76,12 +76,12 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
 
   return (
     <section aria-labelledby={headingId} data-layout={`automation-editor-${step}-panel`} className="min-w-0">
-      <h2 id={headingId} className="mb-4 flex items-center gap-3 text-lg font-semibold">
-        <span className="flex size-6 items-center justify-center rounded-full border text-xs font-medium">{isTrigger ? 1 : 2}</span>
+      <h2 id={headingId} className="mb-4 flex items-center gap-2 text-base font-medium">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full border bg-card text-xs text-muted-foreground">{isTrigger ? 1 : 2}</span>
         {isTrigger ? "当以下情况发生时" : "执行以下操作"}
       </h2>
-      <Collapsible open={expanded} onOpenChange={setExpanded} data-track={`automation.editor.${step}.expand`} className="min-w-0 rounded-lg border bg-background">
-        {selected ? <div data-layout={`automation-editor-${step}-summary`} className="flex min-w-0 items-center justify-between gap-2 px-4 py-3">
+      <Collapsible open={expanded} onOpenChange={setExpanded} data-track={`automation.editor.${step}.expand`} className="min-w-0 rounded-xl border bg-card text-card-foreground">
+        {selected ? <div data-layout={`automation-editor-${step}-summary`} className="flex min-w-0 items-center justify-between gap-2 px-4 py-4">
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} data-track={`automation.editor.${step}.type`}>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="ghost" aria-label={`更换${kind}`} className="min-w-0 justify-start">
@@ -109,25 +109,27 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
           </CollapsibleTrigger>
         </div> : null}
         {selected ? <CollapsibleContent forceMount hidden={!expanded}>
-          <div data-layout={`automation-editor-${step}-config`} className="grid min-w-0 gap-5 border-t p-5 [&_[data-slot=field]]:min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full">
+          <div data-layout={`automation-editor-${step}-config`} className="grid min-w-0 gap-6 border-t p-6 [&_[data-slot=field]]:min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full">
             {TriggerForm ? <TriggerForm value={parseConfig(trigger!.manifest.id, config, true)} onChange={value => onTriggerChange(trigger!.manifest.id, value)} /> : null}
             {ConfigForm ? <ConfigForm value={parseConfig(executor!.manifest.id, config, false)} projects={projects} triggerVariables={trigger?.manifest.variables ?? []}
               onChange={value => onExecutorChange(executor!.manifest.id, value)} /> : null}
           </div>
-        </CollapsibleContent> : <div className="min-w-0 p-3">
+        </CollapsibleContent> : <div className="grid min-w-0 gap-6 p-6">
           {type ? <p role="alert" className="px-2 py-2 text-sm text-destructive">原{kind}不可用，请重新选择</p> : null}
-          {groups.filter(group => group.options.length).map(group => <div key={group.title}>
-            <p className="px-2 py-2 text-xs text-muted-foreground">{group.title}</p>
-            {group.options.map(option => {
-              const OptionIcon = option.icon ?? (isTrigger ? Zap : Play)
-              return <Button key={option.manifest.id} type="button" variant="ghost" disabled={!isTrigger && !trigger} onClick={() => choose(option.manifest.id)} className="w-full justify-start">
-                <OptionIcon /><span className="min-w-0 flex-1 truncate text-left">{option.manifest.title}</span><ArrowRight className="text-muted-foreground" />
-              </Button>
-            })}
+          {groups.filter(group => group.options.length).map(group => <div key={group.title} className="grid gap-2">
+            <p className="px-2.5 text-xs font-medium text-muted-foreground">{group.title}</p>
+            <div className="grid gap-1">
+              {group.options.map(option => {
+                const OptionIcon = option.icon ?? (isTrigger ? Zap : Play)
+                return <Button key={option.manifest.id} type="button" variant="ghost" disabled={!isTrigger && !trigger} onClick={() => choose(option.manifest.id)} className="w-full justify-start">
+                  <OptionIcon className="text-muted-foreground" /><span className="min-w-0 flex-1 truncate text-left">{option.manifest.title}</span><ChevronRight className="text-muted-foreground" />
+                </Button>
+              })}
+            </div>
           </div>)}
-          {!isTrigger && !trigger ? <p className="px-2 pt-3 text-xs text-muted-foreground">先选择触发条件</p> : null}
+          {!isTrigger && !trigger ? <p className="border-t px-2.5 pt-4 text-xs text-muted-foreground">先选择触发条件</p> : null}
         </div>}
-        {isTrigger && trigger ? <div className="border-t bg-muted/30 px-5 py-3"><TriggerVariablesDialog key={trigger.manifest.id} triggerTitle={trigger.manifest.title} variables={trigger.manifest.variables ?? []} /></div> : null}
+        {isTrigger && trigger ? <div className="px-6 pb-4"><TriggerVariablesDialog key={trigger.manifest.id} triggerTitle={trigger.manifest.title} variables={trigger.manifest.variables ?? []} /></div> : null}
       </Collapsible>
       <AlertDialog open={pendingChoice !== null} onOpenChange={open => { if (!open) setPendingChoice(null) }}>
         <AlertDialogContent>

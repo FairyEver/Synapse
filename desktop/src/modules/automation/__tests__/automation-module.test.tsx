@@ -328,7 +328,7 @@ describe("AutomationModule", () => {
     mocks.listAutomationRuns.mockResolvedValueOnce([{
       id: "r1", schemaVersion: 1, automationId: "automation-1", status: "success", triggeredBy: "trigger",
       startedAt: "2026-11-05T00:00:00Z", triggerType: "builtin.cron", executorType: "builtin.claude-code",
-      result: { status: "success", outputs: { projectId: "p1", sessionId: "s1" } },
+      result: { status: "success", metrics: { durationMs: 1355 }, outputs: { projectId: "p1", sessionId: "s1" } },
     }])
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -336,6 +336,8 @@ describe("AutomationModule", () => {
     await act(async () => root.render(<AutomationRunsPanel item={createItem()} busy={false} onStopRun={vi.fn()} />))
     await flushPromises()
     expect(document.body.textContent).toContain("打开终端")
+    expect(document.body.textContent).toContain("1.4s")
+    expect(document.body.textContent).not.toContain("1355 ms")
   })
 
   it("returns from inline run history to the automation list", async () => {

@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { runTrackedOperation } from "@/lib/ui-tracking"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import type { AutomationItem, AutomationRun } from "@/types/automation"
 import { listAutomationRuns } from "../hooks/use-automation"
 import { formatAutomationDate, formatAutomationRunStatus } from "../utils"
@@ -103,31 +102,18 @@ function AutomationRunsPanel({
   }
 
   return (
-    <section aria-label="运行记录" className="min-w-0">
-              <div className="flex min-w-0 flex-col gap-2">
-                {error ? (
-                  <div className="flex items-center gap-2 text-sm">
-                    <p className="text-destructive">{error}</p>
-                    <Button size="default" variant="outline" onClick={handleRetry}>
-                      <RefreshCw />
-                      重试
-                    </Button>
-                  </div>
-                ) : null}
-                {loading ? <p className="text-sm text-muted-foreground">加载中</p> : null}
-                {!loading && !error && runs.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">暂无运行记录</p>
-                ) : null}
-                {!loading && runs.map((run) => (
-                  <RunItem
-                    key={run.id}
-                    run={run}
-                    item={item}
-                    busy={busy}
-                    onStop={(targetRun) => { void handleStop(targetRun) }}
-                  />
-                ))}
-              </div>
+    <section aria-label="运行记录" className="min-w-0 overflow-hidden rounded-xl border bg-card text-card-foreground" aria-busy={loading}>
+      {error ? (
+        <div className="flex flex-wrap items-center gap-3 px-6 py-5 text-sm">
+          <p role="alert" className="text-destructive">{error}</p>
+          <Button variant="outline" onClick={handleRetry}><RefreshCw />重试</Button>
+        </div>
+      ) : null}
+      {loading ? <p role="status" className="px-6 py-8 text-sm text-muted-foreground">加载中</p> : null}
+      {!loading && !error && runs.length === 0 ? <p className="px-6 py-8 text-sm text-muted-foreground">暂无运行记录</p> : null}
+      {!loading && runs.length > 0 ? <ol className="min-w-0">
+        {runs.map(run => <RunItem key={run.id} run={run} item={item} busy={busy} onStop={targetRun => { void handleStop(targetRun) }} />)}
+      </ol> : null}
     </section>
   )
 }
@@ -153,45 +139,24 @@ function RunItem({
   const triggerLabel = run.triggeredBy === "manual" ? "手动" : run.triggeredBy === "missed_run" ? "补跑" : "触发"
 
   return (
-    <div className="min-w-0 rounded-lg border border-border p-3">
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+    <li className="min-w-0 border-b px-6 py-5 last:border-b-0">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <p className="text-sm font-medium tabular-nums">{formatAutomationDate(run.startedAt, "未开始")}</p>
           <Badge variant={statusVariant}>{formatAutomationRunStatus(run)}</Badge>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            {triggerIcon}
-            {triggerLabel}
-          </span>
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">{triggerIcon}{triggerLabel}</span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {run.result?.metrics?.durationMs !== undefined ? (
-            <span className="text-xs text-muted-foreground">
-              {formatDuration(run.result.metrics.durationMs)}
-            </span>
-          ) : null}
-          {run.status === "running" ? (
-            <Button disabled={busy} size="icon-sm" variant="outline" onClick={() => onStop(run)}>
-              <Square />
-              <span className="sr-only">停止</span>
-            </Button>
-          ) : null}
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          {run.result?.metrics?.durationMs !== undefined ? <span className="text-sm tabular-nums text-muted-foreground">{formatDuration(run.result.metrics.durationMs)}</span> : null}
+          {run.status === "running" ? <Button disabled={busy} size="icon-sm" variant="outline" onClick={() => onStop(run)}><Square /><span className="sr-only">停止</span></Button> : null}
         </div>
       </div>
-
-      <p className="mt-1 text-xs text-muted-foreground">
-        {formatAutomationDate(run.startedAt, "未开始")}
-        {run.finishedAt ? ` -> ${formatAutomationDate(run.finishedAt, "")}` : ""}
-      </p>
-
-      {hasOutput ? (
-        <>
-          <Separator className="my-2" />
-          <div className="min-w-0 overflow-hidden">
-            {run.result ? <RunResult run={run} item={item} /> : null}
-            {run.error && !run.result?.error ? <OutputBlock value={run.error} /> : null}
-          </div>
-        </>
-      ) : null}
-    </div>
+      {run.finishedAt ? <p className="mt-2 text-xs tabular-nums text-muted-foreground">结束于 {formatAutomationDate(run.finishedAt, "")}</p> : null}
+      {hasOutput ? <div className="mt-4 grid min-w-0 gap-3 overflow-hidden">
+        {run.result ? <RunResult run={run} item={item} /> : null}
+        {run.error && !run.result?.error ? <div className="grid min-w-0 gap-1"><p className="text-xs font-medium">错误</p><OutputBlock value={run.error} /></div> : null}
+      </div> : null}
+    </li>
   )
 }
 
@@ -206,7 +171,7 @@ function RunResult({
   if (run.executorType) {
     try {
       const ResultView = rendererActionRegistry.get(run.executorType).ResultView
-      if (ResultView) return <ResultView result={run.result} />
+      if (ResultView) return <ResultView result={run.result} showDuration={false} />
     } catch (renderError) {
       logger.warn("Automation run result renderer fallback.", {
         automationId: item?.id ?? run.automationId,
@@ -217,7 +182,7 @@ function RunResult({
       })
     }
   }
-  return <ActionResultView result={run.result} />
+  return <ActionResultView result={run.result} showDuration={false} />
 }
 
 function OutputBlock({ value }: { readonly value: string }) {
