@@ -185,9 +185,8 @@
     overscroll-behavior: none;
   }
 
-  #root,
-  #root * {
-    @apply select-none;
+  #root {
+    @apply select-text;
   }
 
   input,

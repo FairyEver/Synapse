@@ -16,4 +16,8 @@ describe("global app layout styles", () => {
     expect(globalsCss).toContain("overflow: hidden;")
     expect(globalsCss).toContain("overscroll-behavior: none;")
   })
+
+  it("allows user-facing content text selection by default", () => {
+    expect(globalsCss).toContain("#root {\n    @apply select-text;")
+  })
 })
