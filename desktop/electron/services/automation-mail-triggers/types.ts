@@ -13,6 +13,7 @@ export type PreparedMailPayload = {
   accountId?: string; accountName?: string; accountAddress?: string;
 }
 export interface MailReceiptSource {
+  discover?(context: MailTriggerContext): Promise<string[]>
   prepare(context: MailTriggerContext, accountId?: string): Promise<MailSourceBoundary[]>
   scan(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number): Promise<MailReceiptPage>
   hydrate(context: MailTriggerContext, receipt: MailReceiptRef): Promise<PreparedMailPayload>

@@ -64,6 +64,15 @@ export class AutomationMailTriggerService {
       if (!root || root.ownerId !== context.identity.ownerId || root.apiOrigin !== context.identity.apiOrigin) continue
       await this.recover(context, item)
       if (!item.enabled || binding.stoppedAt || root.state !== "ready") continue
+      if (source.discover && !item.trigger.config.accountId) {
+        const known = new Set((await this.deps.repository.sourcesFor(root.id)).flatMap(row => row.boundary.kind === "mail" ? [row.boundary.accountId] : []))
+        try {
+          for (const accountId of await source.discover(context)) if (!known.has(accountId)) {
+            try { const boundaries = await source.prepare(context, accountId); this.assert(context); await this.deps.repository.addSources(root.id, boundaries) }
+            catch (error) { this.assert(context); this.deps.logger.warn("新邮箱来源等待接入", { automationId: item.id, code: codeOf(error) }) }
+          }
+        } catch (error) { this.assert(context); this.deps.logger.warn("邮箱来源列表暂不可用", { automationId: item.id, code: codeOf(error) }) }
+      }
       for (const origin of await this.deps.repository.sourcesFor(root.id)) {
         this.assert(context)
         if (origin.state !== "ready" || origin.retryAt > Date.now()) continue

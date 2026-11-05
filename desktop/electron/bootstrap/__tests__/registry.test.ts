@@ -106,6 +106,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.automation",
         "core.automation-cleanup",
         "core.automation-ingress",
+        "core.automation-mail-triggers",
         "core.bridge-adapter",
         "core.cheat-code-state",
         "core.client-telemetry",
@@ -208,6 +209,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     ])
     expect(byId.get("core.data-maintenance")?.startupPhase).toBe("background")
     expect(byId.get("core.automation-cleanup")?.startupPhase).toBe("background")
+    expect(byId.get("core.automation-mail-triggers")?.startupPhase).toBe("background")
     expect(byId.get("core.connectors")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",

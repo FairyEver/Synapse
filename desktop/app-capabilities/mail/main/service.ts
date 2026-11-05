@@ -109,6 +109,13 @@ export class MailService {
   prepareAutomationReceipts(context: MailTriggerContext, accountId?: string) {
     return this.automationReceipts.prepare(this.automationContext(context), accountId)
   }
+  async automationAccountIds(context: MailTriggerContext): Promise<string[]> {
+    const ctx = this.automationContext(context), ids: string[] = []; let cursor: string | undefined
+    do {
+      const page = await this.execute(ctx, "account.list", { limit: 100, cursor }); ids.push(...page.items.map(account => account.id)); cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return ids
+  }
   scanAutomationReceipts(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number) {
     return this.automationReceipts.scan(this.automationContext(context), boundary, cursor, limit)
   }

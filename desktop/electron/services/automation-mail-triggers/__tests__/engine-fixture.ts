@@ -17,6 +17,6 @@ export async function engineRig() {
   const execution = new AutomationExecutionService({ items: rig.items, runs, actions, permissionGuard: { registerPolicy: () => () => undefined, check: async () => ({ allowed: true }) }, auditSink: new InMemoryAuditSink(), defaultCwd: rig.root, logger: { warn: () => undefined } })
   const automation = new AutomationService({ items: rig.items, runs, actions, triggers: rig.triggers, execution, defaultCwd: rig.root })
   const activation = new MailTriggerActivation({ repository: rig.repo, context: rig.context, sourceFor: type => type === "test.mail" ? rig.source : undefined, listItems: () => rig.items.list() })
-  automation.attachTriggerLifecycle("test.mail", activation)
-  return { ...rig, runs, automation, activation, execution, bodies }
+  const detachActivation = automation.attachTriggerLifecycle("test.mail", activation)
+  return { ...rig, runs, automation, activation, execution, bodies, detachActivation }
 }

@@ -45,3 +45,17 @@ it("recovers an ambiguous committed dispatch without invoking the executor", asy
   await rig.worker.reconcile("again")
   expect(rig.bodies).toEqual([])
 })
+it("adds a newly configured account only after confirming its own receipt boundary", async () => {
+  const rig = await fixture(), item = await rig.items.create({ ...rig.input, enabled: true })
+  rig.source.discover = async () => ["new-account"]
+  rig.source.scan = async (_ctx, _boundary, cursor) => ({ receipts: [], nextCursor: cursor, complete: true })
+  const prepared: string[] = []
+  rig.source.prepare = async (_ctx, accountId) => {
+    prepared.push(accountId!)
+    return [{ kind: "mail", sourceKey: "new-source", accountId: "new-account", folderId: "folder", endpointEpoch: "epoch", uidValidity: "1", uidNext: 100, confirmedAt: "2026-11-05T00:00:00Z" }]
+  }
+  await rig.worker.reconcile("added account")
+  await rig.worker.reconcile("unchanged")
+  expect(prepared).toEqual(["new-account"])
+  expect((await rig.repo.sourcesFor(item.mailSubscription!.id)).map(source => source.cursor)).toContain("99")
+})

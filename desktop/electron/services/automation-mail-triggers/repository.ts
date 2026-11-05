@@ -32,6 +32,20 @@ export class MailTriggerRepository {
     return id
   }
   async getSubscription(id: string): Promise<SubscriptionRow | null> { return await this.subscriptions.get(id) as SubscriptionRow | null }
+  async addSources(subscriptionId: string, boundaries: import("./types").MailSourceBoundary[]): Promise<void> {
+    for (const boundary of boundaries) {
+      const root = await this.getSubscription(subscriptionId)
+      if (!root || root.state !== "ready") throw new Error("收信订阅不可用")
+      const id = hash([subscriptionId, boundary.sourceKey])
+      if (await this.sources.get(id)) continue
+      const value: SourceRow = { ...root, id, kind: "source", sourceKey: boundary.sourceKey, boundary, revision: 0,
+        cursor: boundary.kind === "mail-internal" ? boundary.receiptSequence : String(boundary.uidNext - 1) }
+      const result = await this.batch({ guards: [{ namespace: this.subscriptions.name, id: root.id, expected: { revision: root.revision, state: "ready" } }], operations: [
+        { kind: "insert", namespace: this.sources.name, id, value }, { kind: "patch", namespace: this.subscriptions.name, id: root.id, patch: { revision: root.revision + 1 } },
+      ] })
+      if (!result.committed) throw new Error("收信来源接入状态已变化")
+    }
+  }
   async sourcesFor(subscriptionId: string): Promise<SourceRow[]> {
     const rows: SourceRow[] = []; let after: string | undefined
     do {

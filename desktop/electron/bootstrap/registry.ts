@@ -1,4 +1,5 @@
 import { coreAgentShareDescriptor, coreAgentShareMaintenanceDescriptor } from "./agent-share"
+import { coreAutomationMailTriggersDescriptor } from "./automation-mail-triggers"
 /**
  * Phase 0.1 — Build the global ServiceRegistry by registering all bootstrap
  * descriptors in dependency order.
@@ -195,6 +196,7 @@ export function buildServiceRegistry(
   registry.register(coreAutomationIngressDescriptor)
   registry.register(coreActionRuntimeDescriptor)
   registry.register(coreAutomationDescriptor)
+  registry.register(coreAutomationMailTriggersDescriptor)
   registry.register(coreAutomationCleanupDescriptor)
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDatabaseDescriptor)
