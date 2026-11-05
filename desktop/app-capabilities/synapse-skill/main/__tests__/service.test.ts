@@ -369,14 +369,13 @@ describe("SynapseSkillService", () => {
     expect(contentApiText).toContain("exact lowercase root filename `.env.example`")
     expect(contentApiText).toContain("case variants such as `.ENV.EXAMPLE`, are never read")
     expect(`${contentIndex}\n${contentApiText}`).not.toContain("High-confidence secrets")
-    expect(modelPriceIndex).toContain("app_model_price_used_model_list")
+    expect(modelPriceIndex).not.toContain("app_model_price_used_model_list")
     expect(modelPriceIndex).toContain("ruleId")
     expect(modelPriceIndex).toContain("RMB per 1M tokens")
-    expect(modelPriceIndex).toContain("Usage Analysis refresh")
-    expect(modelPriceIndex).toContain("price-rule hash changes")
+    expect(modelPriceIndex).toContain("subsequent local cost estimates")
     expect(modelPriceApiText).toContain("app_model_price_rule_update")
     expect(modelPriceApiText).toContain("ruleId")
-    expect(modelPriceApiText).toContain("already indexed usage totals")
+    expect(modelPriceApiText).toContain("do not rewrite historical records")
   })
 
   it("documents grouped upload destinations and local Markdown publishing", async () => {

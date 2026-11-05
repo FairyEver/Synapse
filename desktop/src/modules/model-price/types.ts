@@ -1,8 +1,4 @@
 import type {
-  ModelPriceCoverageInput,
-  ModelPriceCoverageRange,
-  ModelPriceCoverageRow,
-  ModelPriceCoverageSource,
   ModelPricePresetId,
   ModelPricePresetSummary,
   ModelPriceRule,
@@ -10,17 +6,11 @@ import type {
 } from "@/types/bridge"
 
 export type {
-  ModelPriceCoverageInput,
-  ModelPriceCoverageRange,
-  ModelPriceCoverageRow,
-  ModelPriceCoverageSource,
   ModelPricePresetId,
   ModelPricePresetSummary,
   ModelPriceRule,
   ModelPriceRuleInput,
 }
-
-export type ModelPriceViewId = "coverage" | "rules"
 
 export type ModelPriceState<T> = {
   readonly data: T | null

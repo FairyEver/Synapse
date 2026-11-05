@@ -1,14 +1,10 @@
-import { app } from "electron"
 import { MODEL_PRICE_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
 import { createMainLogger } from "../services/log-store"
-import { getUsageAnalysisDb } from "../services/usage-analysis"
 import {
+  getModelPriceDb,
   isModelPricePresetId,
-  MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
-  MODEL_PRICE_COVERAGE_MAX_LIMIT,
   ModelPriceService,
-  type ModelPriceCoverageInput,
   type ModelPricePresetId,
   type ModelPriceRuleInput,
 } from "../services/model-price"
@@ -26,33 +22,15 @@ type MutableModelPriceRuleInput = {
   -readonly [Key in keyof ModelPriceRuleInput]: ModelPriceRuleInput[Key]
 }
 
-export function normalizeModelPriceCoverageInput(input: ModelPriceCoverageInput | undefined): ModelPriceCoverageInput {
-  const source = input?.source
-  const range = input?.range
-  const limit = Number(input?.limit)
-  return {
-    source: source === "cc" || source === "codex" || source === "all" ? source : "all",
-    range: range === "today" || range === "7d" || range === "30d" || range === "90d" || range === "all" ? range : "30d",
-    limit: Number.isFinite(limit) && limit > 0
-      ? Math.min(Math.floor(limit), MODEL_PRICE_COVERAGE_MAX_LIMIT)
-      : MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
-  }
-}
-
 export function registerModelPriceHandlers(): void {
   if (registered) return
   const logger = createMainLogger("model-price.ipc")
   let modelPrice: ModelPriceService | null = null
   const getModelPrice = () => {
-    modelPrice ??= new ModelPriceService(getUsageAnalysisDb(app.getPath("userData")))
+    modelPrice ??= new ModelPriceService(getModelPriceDb())
     return modelPrice
   }
 
-  handleValidatedIpc(MODEL_PRICE_CHANNELS.coverageList, async (_event, input?: ModelPriceCoverageInput) => {
-    const normalized = normalizeModelPriceCoverageInput(input)
-    logger.info("Model price coverage requested.", normalized)
-    return getModelPrice().listCoverage(normalized)
-  })
   handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsList, async () => getModelPrice().listPresets())
   handleValidatedIpc(MODEL_PRICE_CHANNELS.presetsImport, async (_event, input?: unknown) => {
     const presetIds = validateModelPricePresetImportInput(input)

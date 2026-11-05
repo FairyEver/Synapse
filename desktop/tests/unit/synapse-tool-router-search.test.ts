@@ -92,7 +92,6 @@ export const INTENT_CORPUS: readonly { readonly intent: string; readonly expect:
   { intent: "资源仓库里有哪些规则", expect: "app_resource_repository_rule_list" },
   { intent: "在资源仓库新建一条 Prompt", expect: "app_resource_repository_prompt_create" },
   { intent: "模型价格规则有哪些", expect: "app_model_price_rule_list" },
-  { intent: "最近用过哪些模型", expect: "app_model_price_used_model_list" },
   { intent: "设置仓库里有什么", expect: "app_settings_repository_item_list" },
   { intent: "站内信未读数", expect: "app_mail_internal_message_count" },
   { intent: "收件箱站内信全部设已读", expect: "app_mail_internal_message_read_all" },

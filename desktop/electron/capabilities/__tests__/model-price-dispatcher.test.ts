@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { DatabaseSync } from "node:sqlite"
-import { initUsageAnalysisSchema } from "../../services/usage-analysis/db-schema"
+import { initModelPriceSchema } from "../../services/model-price"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createModelPriceCapabilityDispatcher } from "../model-price-dispatcher"
 import { mcpClientActorForSource } from "../../../synapse-capabilities/shared/types"
@@ -8,45 +8,8 @@ import { MODEL_PRICE_MCP_TOOL_ACTIONS, buildModelPriceTools } from "../../../syn
 
 function createTestDb(): DatabaseSync {
   const db = new DatabaseSync(":memory:")
-  initUsageAnalysisSchema(db)
+  initModelPriceSchema(db)
   return db
-}
-
-function insertUsageEvent(db: DatabaseSync, prefix: "cc" | "cx", input: {
-  id: string
-  model: string
-  inputTokens: number
-  outputTokens?: number
-  priceKnown?: boolean
-  totalCost?: number
-  timestamp?: string
-}): void {
-  const timestamp = input.timestamp ?? "2026-05-19T01:00:00.000Z"
-  const timestampMs = new Date(timestamp).getTime()
-  const date = timestamp.slice(0, 10)
-  const hour = `${date} ${timestamp.slice(11, 13)}`
-  const outputTokens = input.outputTokens ?? 0
-  const tokens = input.inputTokens + outputTokens
-  db.prepare(`
-    INSERT INTO ${prefix}_usage_events (
-      id, session_id, timestamp_ms, date, hour, model, input_tokens, output_tokens,
-      priced_tokens, unpriced_tokens, total_cost, price_known, cost_currency
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    input.id,
-    `${prefix}-session-${input.id}`,
-    timestampMs,
-    date,
-    hour,
-    input.model,
-    input.inputTokens,
-    outputTokens,
-    input.priceKnown === true ? tokens : 0,
-    input.priceKnown === true ? 0 : tokens,
-    input.totalCost ?? 0,
-    input.priceKnown === true ? 1 : 0,
-    "CNY",
-  )
 }
 
 describe("model price capability dispatcher", () => {
@@ -67,7 +30,6 @@ describe("model price capability dispatcher", () => {
   it("checks permission and audits model price read actions", async () => {
     const db = createTestDb()
     const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
-    insertUsageEvent(db, "cc", { id: "cc-1", model: "local-model", inputTokens: 100 })
     const dispatcher = createModelPriceCapabilityDispatcher({
       db,
       permissionGuard,
@@ -81,27 +43,12 @@ describe("model price capability dispatcher", () => {
     auditEvents.length = 0
     const ruleId = (created.data as { id: string }).id
 
-    await dispatcher.dispatch("app.model_price.used_model.list", {}, { source: "mcp-http", actor: mcpClientActorForSource("mcp-http") })
     await dispatcher.dispatch("app.model_price.preset.list", {}, { source: "mcp-http" })
     await dispatcher.dispatch("app.model_price.rule.list", {}, { source: "mcp-http" })
     await dispatcher.dispatch("app.model_price.rule.get", { ruleId }, { source: "mcp-http" })
 
-    expect(permissionGuard.check).toHaveBeenCalledTimes(4)
-    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      action: "database.read",
-      actor: { kind: "user", id: "mcp-client:synapse-mcp/http", display: "Synapse MCP HTTP" },
-      resource: "model-price:used-models",
-      context: expect.objectContaining({
-        source: "mcp-http",
-        modelPriceAction: "app.model_price.used_model.list",
-      }),
-    }))
-    expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(4)
-    expect(auditEvents).toContainEqual(expect.objectContaining({
-      action: "database.read",
-      outcome: "allowed",
-      resource: "model-price:used-models",
-    }))
+    expect(permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(3)
     expect(auditEvents).toContainEqual(expect.objectContaining({
       action: "database.read",
       outcome: "allowed",
@@ -429,101 +376,6 @@ describe("model price capability dispatcher", () => {
     db.close()
   })
 
-  it("lists used models merged across CC and Codex with current enabled rule matching", async () => {
-    const db = createTestDb()
-    insertUsageEvent(db, "cc", { id: "cc-1", model: "local-model", inputTokens: 100 })
-    insertUsageEvent(db, "cx", { id: "cx-1", model: "local-model", inputTokens: 50 })
-    insertUsageEvent(db, "cx", { id: "cx-2", model: "other-model", inputTokens: 25 })
-    const dispatcher = createModelPriceCapabilityDispatcher({ db })
-    const created = await dispatcher.dispatch("app.model_price.rule.create", {
-      modelPattern: "local-model",
-      inputPer1M: 1,
-    }, { source: "api" })
-    const ruleId = (created.data as { id: string }).id
-
-    const all = await dispatcher.dispatch("app.model_price.used_model.list", {}, { source: "api" })
-    expect(all.data).toEqual([
-      expect.objectContaining({
-        model: "local-model",
-        sources: ["cc", "codex"],
-        tokens: 150,
-        requests: 2,
-        priceKnown: true,
-        matchedRuleId: ruleId,
-        matchedRulePattern: "local-model",
-      }),
-      expect.objectContaining({
-        model: "other-model",
-        sources: ["codex"],
-        tokens: 25,
-        priceKnown: false,
-      }),
-    ])
-
-    const ccOnly = await dispatcher.dispatch("app.model_price.used_model.list", { source: "cc" }, { source: "api" })
-    expect(ccOnly.data).toEqual([
-      expect.objectContaining({ model: "local-model", sources: ["cc"], tokens: 100 }),
-    ])
-
-    await dispatcher.dispatch("app.model_price.rule.disable", { ruleId }, { source: "api" })
-    const afterDisable = await dispatcher.dispatch("app.model_price.used_model.list", { source: "cc" }, { source: "api" })
-    expect(afterDisable.data).toEqual([
-      expect.objectContaining({ model: "local-model", priceKnown: false }),
-    ])
-    db.close()
-  })
-
-  it("caps oversized used-model list limits before dispatching coverage", async () => {
-    const db = createTestDb()
-    for (let index = 0; index < 505; index += 1) {
-      insertUsageEvent(db, "cc", {
-        id: `cc-${index}`,
-        model: `model-${String(index).padStart(3, "0")}`,
-        inputTokens: index + 1,
-      })
-    }
-    const dispatcher = createModelPriceCapabilityDispatcher({ db })
-
-    const result = await dispatcher.dispatch("app.model_price.used_model.list", {
-      source: "cc",
-      range: "all",
-      limit: 10_000,
-    }, { source: "api" })
-
-    expect(result.ok).toBe(true)
-    expect(result.data).toHaveLength(500)
-    expect(result.data).toEqual(expect.arrayContaining([
-      expect.objectContaining({ model: "model-504", tokens: 505 }),
-    ]))
-    db.close()
-  })
-
-  it("does not change historical usage event costs when rules change", async () => {
-    const db = createTestDb()
-    insertUsageEvent(db, "cc", {
-      id: "cc-priced",
-      model: "priced-model",
-      inputTokens: 1_000_000,
-      priceKnown: true,
-      totalCost: 12,
-    })
-    const dispatcher = createModelPriceCapabilityDispatcher({ db })
-
-    const created = await dispatcher.dispatch("app.model_price.rule.create", {
-      modelPattern: "priced-model",
-      inputPer1M: 99,
-    }, { source: "api" })
-    await dispatcher.dispatch("app.model_price.rule.update", {
-      ruleId: (created.data as { id: string }).id,
-      inputPer1M: 111,
-    }, { source: "api" })
-
-    expect(db.prepare("SELECT total_cost, price_known FROM cc_usage_events WHERE id = ?").get("cc-priced")).toEqual({
-      total_cost: 12,
-      price_known: 1,
-    })
-    db.close()
-  })
 })
 
 function createSecurityHarness() {

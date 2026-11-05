@@ -48,10 +48,6 @@ vi.mock("@/modules/git", () => ({
   ),
 }))
 
-vi.mock("@/modules/usage-analysis", () => ({
-  UsageMonitorModule: () => <div>用量窗口</div>,
-}))
-
 vi.mock("@/modules/model-price", () => ({
   ModelPriceModule: () => <div>价格窗口</div>,
 }))

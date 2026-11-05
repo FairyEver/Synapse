@@ -5,12 +5,7 @@ import { createMainLogger } from "../services/log-store"
 import { sanitizeError } from "../services/error-sanitize"
 import {
   ModelPriceService,
-  MODEL_PRICE_COVERAGE_DEFAULT_LIMIT,
-  MODEL_PRICE_COVERAGE_MAX_LIMIT,
   isModelPricePresetId,
-  type ModelPriceCoverageInput,
-  type ModelPriceCoverageRange,
-  type ModelPriceCoverageSource,
   type ModelPricePresetId,
   type ModelPriceRuleInput,
   type ModelPriceRulePatch,
@@ -33,7 +28,6 @@ type MutableModelPriceRulePatch = {
   -readonly [Key in keyof ModelPriceRulePatch]: ModelPriceRulePatch[Key]
 }
 
-const RANGE_PRESETS: readonly ModelPriceCoverageRange[] = ["today", "7d", "30d", "90d", "all"]
 const PRICE_FIELDS = ["inputPer1M", "outputPer1M", "cacheReadPer1M", "cacheWritePer1M", "reasoningPer1M"] as const
 const MODEL_PRICE_MUTATION_ACTIONS = new Set([
   "app.model_price.preset.import",
@@ -45,7 +39,6 @@ const MODEL_PRICE_MUTATION_ACTIONS = new Set([
   "app.model_price.rule.disable",
 ])
 const MODEL_PRICE_READ_ACTIONS = new Set([
-  "app.model_price.used_model.list",
   "app.model_price.preset.list",
   "app.model_price.rule.list",
   "app.model_price.rule.get",
@@ -148,8 +141,6 @@ function dispatchModelPriceAction(
 ): DispatchResult {
   const service = new ModelPriceService(db)
   switch (action) {
-    case "app.model_price.used_model.list":
-      return { ok: true, data: service.listCoverage(readCoverageParams(params)) }
     case "app.model_price.preset.list":
       return { ok: true, data: service.listPresets() }
     case "app.model_price.preset.import":
@@ -216,13 +207,11 @@ function modelPriceReadSecurity(
 ): ModelPriceDispatchSecurity {
   const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : undefined
   const auditRuleId = ruleId ? sanitizeError(ruleId) : undefined
-  const resource = action === "app.model_price.used_model.list"
-    ? "model-price:used-models"
-    : action === "app.model_price.preset.list"
-      ? "model-price-presets"
-      : action === "app.model_price.rule.list"
-        ? "model-price-rules"
-        : `model-price-rule:${auditRuleId ?? action}`
+  const resource = action === "app.model_price.preset.list"
+    ? "model-price-presets"
+    : action === "app.model_price.rule.list"
+      ? "model-price-rules"
+      : `model-price-rule:${auditRuleId ?? action}`
   return {
     action: "database.read",
     actor: context.actor ?? deps.actor ?? DEFAULT_ACTOR,
@@ -340,32 +329,4 @@ function requireRule(service: ModelPriceService, ruleId: string) {
   const rule = service.getRule(ruleId)
   if (!rule) throw new Error(`Model price rule not found: ${ruleId}`)
   return rule
-}
-
-function readCoverageParams(params: Record<string, unknown>): ModelPriceCoverageInput {
-  return {
-    source: normalizeSource(params.source),
-    range: normalizeRange(params.range),
-    limit: normalizeLimit(params.limit),
-  }
-}
-
-function normalizeSource(value: unknown): ModelPriceCoverageSource {
-  if (value === undefined) return "all"
-  if (value === "all" || value === "cc" || value === "codex") return value
-  throw new Error("Invalid 'source': expected all, cc, or codex")
-}
-
-function normalizeRange(value: unknown): ModelPriceCoverageRange {
-  if (value === undefined) return "all"
-  if (typeof value === "string" && RANGE_PRESETS.includes(value as ModelPriceCoverageRange)) return value as ModelPriceCoverageRange
-  throw new Error("Invalid 'range': expected today, 7d, 30d, 90d, or all")
-}
-
-function normalizeLimit(value: unknown): number {
-  if (value === undefined) return MODEL_PRICE_COVERAGE_DEFAULT_LIMIT
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
-    throw new Error("Invalid 'limit': expected positive number")
-  }
-  return Math.min(Math.floor(value), MODEL_PRICE_COVERAGE_MAX_LIMIT)
 }

@@ -378,19 +378,6 @@ import type {
   WorkflowShareDeletePlan,
 } from "./workflow-package"
 import type {
-  CcConversationChunk,
-  CcConversationChunkInput,
-  CcConversationDetail,
-  CcConversationFocus,
-  CcConversationListInput,
-  CcConversationListResult,
-  CcConversationWindowRequest,
-  CcRecordDetailsInput,
-  CcRecordDetailsResult,
-  CcRecordListInput,
-  CcRecordListResult,
-} from "./usage-analysis-conversations"
-import type {
   SynapseContentDownloadResult,
   SynapseContentChangedEvent,
   SynapseContentDetail,
@@ -809,30 +796,7 @@ export type SynapseAgentAttachmentSelectionResult = {
   readonly rejectedCount: number
 }
 
-export type UsageAnalysisRangePreset = "today" | "7d" | "30d" | "90d" | "all"
-export type UsageAnalysisTimeBucketGranularity = "day" | "hour"
-
-export type UsageAnalysisRangeInput = {
-  readonly preset: UsageAnalysisRangePreset
-  readonly bucket?: UsageAnalysisTimeBucketGranularity
-}
-
-export type UsageAnalysisDetailInput = UsageAnalysisRangeInput & {
-  readonly limit?: number
-  readonly offset?: number
-}
-
-export type UsageAnalysisTokenBreakdown = {
-  readonly input: number
-  readonly output: number
-  readonly cacheRead: number
-  readonly cacheWrite: number
-  readonly reasoning: number
-}
-
-export type UsageAnalysisCostBreakdown = UsageAnalysisTokenBreakdown
-
-export type UsageAnalysisModelPriceRule = {
+export type ModelPriceRule = {
   readonly id: string
   readonly modelPattern: string
   readonly inputPer1M: number
@@ -847,7 +811,7 @@ export type UsageAnalysisModelPriceRule = {
   readonly updatedAt: string
 }
 
-export type UsageAnalysisModelPriceRuleInput = {
+export type ModelPriceRuleInput = {
   readonly id?: string
   readonly modelPattern: string
   readonly inputPer1M?: number
@@ -859,170 +823,12 @@ export type UsageAnalysisModelPriceRuleInput = {
   readonly enabled?: boolean
 }
 
-export type ModelPriceRule = UsageAnalysisModelPriceRule
-export type ModelPriceRuleInput = UsageAnalysisModelPriceRuleInput
 export type ModelPricePresetId = "openai" | "anthropic" | "deepseek-official" | "aliyun-bailian" | "other"
 export type ModelPricePresetSummary = {
   readonly id: ModelPricePresetId
   readonly label: string
   readonly ruleCount: number
 }
-export type ModelPriceCoverageSource = "all" | "cc" | "codex"
-export type ModelPriceCoverageRange = UsageAnalysisRangePreset
-export type ModelPriceUsageSourceName = "cc" | "codex"
-
-export type ModelPriceCoverageInput = {
-  readonly source?: ModelPriceCoverageSource
-  readonly range?: ModelPriceCoverageRange
-  readonly limit?: number
-}
-
-export type ModelPriceCoverageRow = {
-  readonly model: string
-  readonly sources: ModelPriceUsageSourceName[]
-  readonly tokens: number
-  readonly requests: number
-  readonly pricedTokens: number
-  readonly unpricedTokens: number
-  readonly estimatedCost: number
-  readonly input: number
-  readonly output: number
-  readonly cacheRead: number
-  readonly cacheWrite: number
-  readonly reasoning: number
-  readonly priceKnown: boolean
-  readonly matchedRuleId?: string
-  readonly matchedRulePattern?: string
-}
-
-export type UsageAnalysisRefreshResult = {
-  readonly scannedFiles: number
-  readonly parsedFiles: number
-  readonly skippedFiles: number
-  readonly failedFiles: number
-  readonly usageEvents: number
-  readonly toolEvents: number
-  readonly elapsedMs: number
-}
-
-export type UsageAnalysisTimeBucket = {
-  readonly bucket: string
-  readonly tokens: number
-  readonly pricedTokens: number
-  readonly unpricedTokens: number
-  readonly estimatedCost: number
-  readonly requests: number
-  readonly conversations: number
-  readonly toolCalls: number
-  readonly dominantModel: string
-  readonly modelBreakdown: UsageAnalysisTimeModelBucket[]
-}
-
-export type UsageAnalysisTimeModelBucket = UsageAnalysisTokenBreakdown & {
-  readonly model: string
-  readonly tokens: number
-}
-
-export type UsageAnalysisModelRow = {
-  readonly model: string
-  readonly provider?: string
-  readonly tokens: number
-  readonly pricedTokens: number
-  readonly unpricedTokens: number
-  readonly estimatedCost: number
-  readonly input: number
-  readonly output: number
-  readonly cacheRead: number
-  readonly cacheWrite: number
-  readonly reasoning: number
-  readonly requests: number
-  readonly averageTokensPerRequest: number
-}
-
-export type UsageAnalysisProjectRow = {
-  readonly workspaceKey: string
-  readonly workspaceLabel: string
-  readonly sessions: number
-  readonly requests: number
-  readonly tokens: number
-  readonly pricedTokens: number
-  readonly unpricedTokens: number
-  readonly estimatedCost: number
-  readonly toolCalls: number
-  readonly lastUsedAt: string
-}
-
-export type UsageAnalysisToolRow = {
-  readonly toolName: string
-  readonly category: string
-  readonly calls: number
-  readonly failures: number
-  readonly failureRate: number
-  readonly averageDurationMs: number
-}
-
-export type UsageAnalysisDetailRow = {
-  readonly id: string
-  readonly usageEventId?: string
-  readonly timestamp: string
-  readonly timestampMs?: number
-  readonly sessionId: string
-  readonly workspaceLabel: string
-  readonly model: string
-  readonly tokens: number
-  readonly pricedTokens: number
-  readonly unpricedTokens: number
-  readonly estimatedCost: number
-  readonly tokenBreakdown: UsageAnalysisTokenBreakdown
-  readonly toolCalls: number
-  readonly durationMs?: number
-}
-
-export type UsageAnalysisOverviewReport = {
-  readonly generatedAt: string
-  readonly totals: {
-    readonly tokens: number
-    readonly pricedTokens: number
-    readonly unpricedTokens: number
-    readonly estimatedCost: number
-    readonly requests: number
-    readonly conversations: number
-    readonly toolCalls: number
-    readonly activeDays: number
-  }
-  readonly tokenBreakdown: UsageAnalysisTokenBreakdown
-  readonly costBreakdown: UsageAnalysisCostBreakdown
-  readonly topModels: UsageAnalysisModelRow[]
-  readonly topProjects: UsageAnalysisProjectRow[]
-  readonly topTools: UsageAnalysisToolRow[]
-  readonly trend: UsageAnalysisTimeBucket[]
-}
-
-export type UsageAnalysisBridgeDomain = {
-  refresh: (input?: UsageAnalysisRefreshInput) => Promise<UsageAnalysisRefreshResult>
-  getOverview: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisOverviewReport>
-  getTime: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisTimeBucket[]>
-  getModels: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisModelRow[]>
-  getProjects: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisProjectRow[]>
-  getTools: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisToolRow[]>
-  getDetails: (range: UsageAnalysisDetailInput) => Promise<UsageAnalysisDetailRow[]>
-}
-
-export type UsageAnalysisRefreshInput = {
-  readonly preset: "today"
-}
-
-export type ClaudeCodeUsageAnalysisBridgeDomain = UsageAnalysisBridgeDomain & {
-  listRecords: (input: CcRecordListInput) => Promise<CcRecordListResult>
-  listRecordDetails: (input: CcRecordDetailsInput) => Promise<CcRecordDetailsResult>
-  listConversations: (input: CcConversationListInput) => Promise<CcConversationListResult>
-  getConversation: (sessionId: string, focus?: CcConversationFocus) => Promise<CcConversationDetail>
-  getConversationChunk: (input: CcConversationChunkInput) => Promise<CcConversationChunk>
-  searchRecordsText: (input: CcRecordListInput) => Promise<CcRecordListResult>
-  searchConversationText: (input: CcConversationListInput) => Promise<CcConversationListResult>
-  openConversationWindow: (request: CcConversationWindowRequest) => Promise<void>
-}
-
 export type SynapseBridge = {
   platform: string
   versions: {
@@ -2183,14 +1989,7 @@ export type SynapseBridge = {
       onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
     }
   }
-  usageAnalysis: {
-    cc: ClaudeCodeUsageAnalysisBridgeDomain
-    codex: UsageAnalysisBridgeDomain
-  }
   modelPrice: {
-    usedModel: {
-      list: (input?: ModelPriceCoverageInput) => Promise<ModelPriceCoverageRow[]>
-    }
     preset: {
       list: () => Promise<ModelPricePresetSummary[]>
       import: (presetIds: ModelPricePresetId | ModelPricePresetId[]) => Promise<ModelPriceRule[]>

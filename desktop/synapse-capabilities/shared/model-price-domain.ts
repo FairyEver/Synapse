@@ -5,7 +5,6 @@ import {
 } from "./mcp-tool-names"
 import type { CapabilityDefinition, CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
-const MODEL_PRICE_COVERAGE_MAX_LIMIT = 500
 const MODEL_PRICE_PRESET_IDS = ["openai", "anthropic", "deepseek-official", "aliyun-bailian", "other"] as const
 
 const ruleIdProperty = {
@@ -26,7 +25,6 @@ const priceProperty = (label: string) => ({
 })
 
 const modelPriceCapabilities: readonly CapabilityDefinition[] = [
-  { id: "app.model_price.used_model.list" as CapabilityId, title: "List used models", description: "List models seen in CC and Codex usage data with current price-rule match status.", mutates: false },
   { id: "app.model_price.preset.list" as CapabilityId, title: "List price presets", description: "List built-in model price presets that can be imported.", mutates: false },
   { id: "app.model_price.preset.import" as CapabilityId, title: "Import price preset", description: "Import or refresh rules from one built-in model price preset.", mutates: true },
   { id: "app.model_price.rule.list" as CapabilityId, title: "List price rules", description: "List model price rules, including disabled rules. The id field is the opaque rule ID, not a rule name.", mutates: false },
@@ -58,18 +56,6 @@ export function buildModelPriceTools(): McpToolDefinition[] {
   }
 
   return withPrimaryMcpTools([
-    {
-      name: "model_price_used_model_list",
-      description: "List models used by CC and Codex with current enabled price-rule match status. matchedRuleId is a rule ID, not a model name. This reads indexed usage data and does not refresh usage logs.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          source: { type: "string", enum: ["all", "cc", "codex"], description: "Usage source filter. Defaults to all." },
-          range: { type: "string", enum: ["today", "7d", "30d", "90d", "all"], description: "Usage date range. Defaults to all." },
-          limit: { type: "number", minimum: 1, maximum: MODEL_PRICE_COVERAGE_MAX_LIMIT, description: "Maximum number of model rows to return. Defaults to 200 and is capped at 500." },
-        },
-      },
-    },
     {
       name: "model_price_rule_list",
       description: "List all model price rules, including disabled rules. Each rule's id is an opaque rule ID, not a model name. Call this before update, delete, enable, or disable when only a model name is known.",

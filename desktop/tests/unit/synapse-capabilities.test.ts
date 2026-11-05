@@ -148,10 +148,9 @@ describe("App capability domain", () => {
 })
 
 describe("Model price capability domain", () => {
-  it("registers model price actions separately from usage analysis internals", () => {
+  it("registers model price rule actions", () => {
     expect(MODEL_PRICE_DOMAIN.id).toBe("model_price")
     expect(MODEL_PRICE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
-      "app.model_price.used_model.list",
       "app.model_price.preset.list",
       "app.model_price.preset.import",
       "app.model_price.rule.list",
@@ -166,7 +165,6 @@ describe("Model price capability domain", () => {
   })
 
   it("maps model price MCP tools to canonical actions", () => {
-    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_used_model_list).toBe("app.model_price.used_model.list")
     expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_preset_import).toBe("app.model_price.preset.import")
     expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_rule_update).toBe("app.model_price.rule.update")
     expect(MODEL_PRICE_MCP_TOOL_ACTIONS.app_model_price_rule_clear).toBe("app.model_price.rule.clear")
@@ -183,7 +181,7 @@ describe("Model price capability domain", () => {
 
   it("combines model price tools with all MCP tools", () => {
     const toolNames = buildAllMcpTools().map((tool) => tool.name)
-    expect(toolNames).toContain("app_model_price_used_model_list")
+    expect(toolNames).not.toContain("app_model_price_used_model_list")
     expect(toolNames).toContain("app_model_price_rule_create")
     expect(toolNames).toContain("app_model_price_rule_delete")
     expect(MCP_TOOL_ACTIONS.app_model_price_rule_enable).toBe("app.model_price.rule.enable")

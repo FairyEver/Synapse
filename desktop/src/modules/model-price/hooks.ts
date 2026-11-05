@@ -2,21 +2,12 @@ import { useCallback, useEffect, useRef, useState, type DependencyList } from "r
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
-  ModelPriceCoverageInput,
-  ModelPriceCoverageRow,
   ModelPricePresetSummary,
   ModelPriceRule,
   ModelPriceState,
 } from "./types"
 
 const logger = createRendererLogger("model-price")
-
-export function useModelPriceCoverage(input: ModelPriceCoverageInput, refreshKey: number): ModelPriceState<ModelPriceCoverageRow[]> {
-  return useModelPriceLoader(
-    () => requireSynapseBridge().modelPrice.usedModel.list(input),
-    [input.source, input.range, input.limit, refreshKey],
-  )
-}
 
 export function useModelPriceRules(refreshKey: number): ModelPriceState<ModelPriceRule[]> {
   return useModelPriceLoader(

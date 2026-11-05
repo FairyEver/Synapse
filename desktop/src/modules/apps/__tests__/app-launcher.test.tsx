@@ -118,7 +118,8 @@ describe("AppsModule", () => {
     expect(findButton("本地数据库")).toBeTruthy()
     expect(findButton("终端")).toBeTruthy()
     expect(findButton("IDE 管理")).toBeTruthy()
-    expect(findButton("用量监控")).toBeTruthy()
+    expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "用量监控"))
+      .toBe(false)
     expect(findButton("价格管理")).toBeTruthy()
     for (const removedCapabilityName of [
       "模板生成文档",
@@ -196,13 +197,13 @@ describe("AppsModule", () => {
     await renderAppsModule(roots)
 
     await act(async () => {
-      findButton("用量监控").click()
+      findButton("价格管理").click()
       await Promise.resolve()
     })
 
     expect(mocks.openSystemApp).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("用量监控")
-    expect(document.body.textContent).toContain("usage-monitor 内容")
+    expect(document.body.textContent).toContain("价格管理")
+    expect(document.body.textContent).toContain("model-price 内容")
     expect(document.querySelector("[data-embedded-system-app-tabs]")?.textContent).toContain("主视图")
     expect(document.querySelector("[data-embedded-system-app-actions]")?.textContent).toContain("App 操作")
     expect(document.querySelector("[data-system-app-window-toolbar]")).toBeNull()
@@ -273,7 +274,7 @@ describe("AppsModule", () => {
     await renderAppsModule(roots)
 
     await act(async () => {
-      findButton("用量监控").click()
+      findButton("价格管理").click()
       await Promise.resolve()
     })
 
@@ -282,9 +283,9 @@ describe("AppsModule", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.openSystemApp).toHaveBeenCalledWith("usage-monitor")
+    expect(mocks.openSystemApp).toHaveBeenCalledWith("model-price")
     expect(document.body.textContent).toContain("资源仓库")
-    expect(document.body.textContent).not.toContain("usage-monitor 内容")
+    expect(document.body.textContent).not.toContain("model-price 内容")
   })
 
   it("restores launcher focus to the app opened in a new window", async () => {
@@ -309,7 +310,7 @@ describe("AppsModule", () => {
     await renderAppsModule(roots)
 
     await act(async () => {
-      findButton("用量监控").click()
+      findButton("价格管理").click()
       await Promise.resolve()
     })
 
@@ -319,7 +320,7 @@ describe("AppsModule", () => {
     })
 
     expect(document.body.textContent).toContain("资源仓库")
-    expect(document.body.textContent).not.toContain("usage-monitor 内容")
+    expect(document.body.textContent).not.toContain("model-price 内容")
     expect(document.querySelector("[data-embedded-system-app-tabs]")).toBeNull()
     expect(document.body.textContent).not.toContain("App 操作")
   })
@@ -342,11 +343,11 @@ describe("AppsModule", () => {
   })
   it("keeps an embedded editor mounted when leaving is blocked", async () => {
     await renderAppsModule(roots)
-    await act(async () => { findButton("用量监控").click() })
+    await act(async () => { findButton("价格管理").click() })
     const off = registerNavigationGuard(() => false)
     try {
       await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="返回应用列表"]')!.click() })
-      expect(document.body.textContent).toContain("usage-monitor 内容")
+      expect(document.body.textContent).toContain("model-price 内容")
       await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')!.click() })
       expect(mocks.openSystemApp).not.toHaveBeenCalled()
     } finally { off() }
@@ -354,7 +355,7 @@ describe("AppsModule", () => {
 
   it("rechecks saved content after the asynchronous new-window request", async () => {
     await renderAppsModule(roots)
-    await act(async () => { findButton("用量监控").click() })
+    await act(async () => { findButton("价格管理").click() })
     let release!: () => void, allowed = true
     mocks.openSystemApp.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve }))
     const off = registerNavigationGuard(() => allowed)
@@ -362,7 +363,7 @@ describe("AppsModule", () => {
       await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')!.click() })
       allowed = false
       await act(async () => { release(); await Promise.resolve(); await Promise.resolve() })
-      expect(document.body.textContent).toContain("usage-monitor 内容")
+      expect(document.body.textContent).toContain("model-price 内容")
     } finally { off() }
   })
 

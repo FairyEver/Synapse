@@ -17,7 +17,6 @@ export const SYSTEM_APP_IDS = [
   "quick-input",
   "terminal",
   "editor-scan",
-  "usage-monitor",
   "model-price",
   "connectors",
   "meeting",
@@ -44,14 +43,12 @@ export type SynapseSystemAppNamespace =
   | "quick_input"
   | "terminal"
   | "editor_scan"
-  | "usage_monitor"
   | "model_price"
   | "connectors"
   | "meeting"
 export type ResourceRepositoryViewId = "skill" | "rule" | "prompt"
-export type UsageMonitorViewId = "cc" | "codex"
 export type DatabaseAppViewId = "tables" | "status" | "management"
-export type SynapseSystemAppDefaultView = ResourceRepositoryViewId | UsageMonitorViewId
+export type SynapseSystemAppDefaultView = ResourceRepositoryViewId
 export type SynapseSystemAppDockVisibility = "always" | "workflow-entry-enabled"
 
 export type SynapseSystemAppDockMetadata = {

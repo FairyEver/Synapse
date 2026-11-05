@@ -31,7 +31,6 @@ describe("system app registry", () => {
       "quick-input",
       "terminal",
       "editor-scan",
-      "usage-monitor",
       "model-price",
       "connectors",
       "meeting",
@@ -125,7 +124,7 @@ describe("system app registry", () => {
     expect(getSystemAppManifest("system-notifier")).toBeNull()
     expect(getSystemAppManifest("unknown")).toBeNull()
     expect(parseSystemAppId("launcher")).toBe("launcher")
-    expect(parseSystemAppId("usage-monitor")).toBe("usage-monitor")
+    expect(parseSystemAppId("usage-monitor")).toBeNull()
     expect(parseSystemAppId("file-opener")).toBeNull()
     expect(parseSystemAppId("unknown")).toBeNull()
   })

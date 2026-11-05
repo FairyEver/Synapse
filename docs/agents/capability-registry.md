@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-05 用量监控下线：移除 `usage-monitor` System App、CC/Codex 日志扫描与报表、独立对话窗口、22 个用量分析 IPC 和 `usage.db`；旧库中的价格规则迁移到 `model-price.db` 后清除旧用量数据库。价格管理保留价格规则与预设，移除依赖用量事件的“模型覆盖”及 `app.model_price.used_model.list`。System App 22→21；`model_price` 11→10；全局 capability 365→364、MCP 索引与工具定义 361→360；默认 Dock 9、Workflow、Automation、Deep Link 和公开 `search` / `invoke` 不变。
+
 - 2026-11-05 网页交付发现修正：区分静态发布、云表存储、组件开发与仅本地保存，补齐多文件站点与显式图床先上传再改写流程。仅调整既有 `search` 的推荐与系统 Skill，不增删 capability、MCP 索引、公开工具、System App、Dock、Workflow、Automation、IPC 或 Deep Link；下列表格数量和例外不变。
 
 - 桌面通知和应用链接按目标决定窗口。终端、邮箱、站内信、待办、录音、连接器和应用内定位进入主窗口，Skill Hub 安装保留独立窗口。显式新窗口及独立写信保留。新增 3 项桌面私有 IPC（`app.apps.main_navigation.open`、`get_pending`、`acknowledge`）和 1 个只发给主窗口的事件（`app.apps.operation.main_navigation_requested`），移除旧的更新页打开广播，更新通知复用已有手动导航请求。Deep Link、System App、Dock、Workflow、Automation、公开 capability 和 MCP 数量不变。
@@ -196,7 +198,6 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Git | 是 | 否 | — |
 | Database | 是 | 否 | `database` |
 | Editor Scan | 是 | 否 | — |
-| Usage Monitor | 是 | 否 | — |
 | Model Price | 是 | 否 | `model_price` |
 | Connectors | 是 | 否 | — |
 | Mail Internal | 是 | 是（邮箱左侧） | `mail_internal` |
@@ -211,7 +212,7 @@ Settings 已移除空置的“实验功能”分类及占位内容。此调整�
 
 桌面主窗口的 Dock 位于左侧。固定应用按现有配置从上到下排列，空间不足时仅应用列表纵向滚动，通知和账号固定在栏底；沉浸模式隐藏整条栏。Dock 默认数量、应用注册和 MCP、Workflow、Automation、Deep Link 入口不变。
 
-应用中心按用途分组，支持按应用名称搜索和按 Dock 固定状态筛选。应用中心、Dock 与 Dock 设置页共用同一套 Lucide 图标映射，站内信与邮箱分别使用收件托盘和信封。固定、取消固定和排序继续使用现有 Dock 偏好；22 个 System App、9 个默认 Dock 项及其顺序保持原注册，Workflow 仍按既有条件显示。MCP schema 和系统 Skill 操作契约一致。
+应用中心按用途分组，支持按应用名称搜索和按 Dock 固定状态筛选。应用中心、Dock 与 Dock 设置页共用同一套 Lucide 图标映射，站内信与邮箱分别使用收件托盘和信封。固定、取消固定和排序继续使用现有 Dock 偏好；21 个 System App、9 个默认 Dock 项及其顺序保持原注册，Workflow 仍按既有条件显示。MCP schema 和系统 Skill 操作契约一致。
 
 Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。历史 `dock.mail-introduction.v1` 中的 `mail` 仍表示站内信；改名迁移先将其归入 `mail-internal`。新增 `dock.mail-apps-introduction.v1`，将末尾一次性排为 `mail-internal` → `mail` → `launcher`（「应用」），已有图标只移动且不重复，其它应用相对顺序不变，即使此前移除过站内信也会执行这次独立迁移。新安装默认包含两款邮件应用并预先记录当前迁移；用户之后移除任一邮件图标、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。
 
@@ -229,7 +230,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 |---|---:|---:|
 | `app` | 98 | 94 |
 | `database` | 30 | 30 |
-| `model_price` | 11 | 11 |
+| `model_price` | 10 | 10 |
 | `repository` | 1 | 1 |
 | `automation` | 14 | 14 |
 | `workflow` | 19 | 19 |
@@ -241,13 +242,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `wecom` | 2 | 2 |
 | `skill_hub` | 10 | 10 |
 | `cloud_tables` | 21 | 21 |
-| 合计 | 365 | 361 |
+| 合计 | 364 | 360 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 361 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 360 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 
@@ -274,9 +275,9 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 同步硬规则
 
-2026-11-05 自动化按已确认原型拆为独立只读详情和两步新建/编辑，页面无底栏，操作跟随表单内容滚动；列表查看、编辑与运行记录入口仍属于同一个 Automation System App。仅调整 Renderer 页面与触发配置校验，不新增或移除 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP。Automation 仍为 14 / 14，全局 365 capability / 361 MCP 索引；公开 schema 与系统 Skill 的业务调用契约不变。
+2026-11-05 自动化按已确认原型拆为独立只读详情和两步新建/编辑，页面无底栏，操作跟随表单内容滚动；列表查看、编辑与运行记录入口仍属于同一个 Automation System App。仅调整 Renderer 页面与触发配置校验，不新增或移除 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP。Automation 仍为 14 / 14，全局 364 capability / 360 MCP 索引；公开 schema 与系统 Skill 的业务调用契约不变。
 
-2026-11-05 自动化新建、编辑、变量与运行记录改为页内交互。移除 UI 私有的 `app.automation.editor.open_create`、`app.automation.editor.open_edit` IPC 和专用编辑窗口；它们原本不在 capability / MCP 目录中。Automation domain 仍为 14 / 14，全局 365 capability / 361 MCP 索引、两个公开路由工具及 System App、Dock、Workflow、Automation Action、Deep Link 数量均不变。System App 列表页的显式新窗口入口继续存在；新建和编辑子页面通过共享壳层替换顶栏，仅保留返回列表按钮，不追加新窗口入口，仍在原宿主页面完成。公开 schema 和系统 Skill 业务调用方式保持兼容。
+2026-11-05 自动化新建、编辑、变量与运行记录改为页内交互。移除 UI 私有的 `app.automation.editor.open_create`、`app.automation.editor.open_edit` IPC 和专用编辑窗口；它们原本不在 capability / MCP 目录中。Automation domain 仍为 14 / 14，全局 364 capability / 360 MCP 索引、两个公开路由工具及 System App、Dock、Workflow、Automation Action、Deep Link 数量均不变。System App 列表页的显式新窗口入口继续存在；新建和编辑子页面通过共享壳层替换顶栏，仅保留返回列表按钮，不追加新窗口入口，仍在原宿主页面完成。公开 schema 和系统 Skill 业务调用方式保持兼容。
 
 2026-10-25 第二轮审查修复：自动分享在内容图片挂载前完成原调用者校验，手动分享保留图片附件；邮箱正确展开 MIME 组地址，暂停账号拒绝刷新触发的持续同步，恢复复用显式 account.resume。sync.start 描述与生成的系统 Skill 参考已同步；44 项邮箱工具、343 项全局 capability / 339 项 MCP 索引和其余注册表面均不变。
 

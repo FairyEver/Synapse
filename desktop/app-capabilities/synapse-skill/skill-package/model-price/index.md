@@ -2,13 +2,12 @@
 
 > **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
 
-You have access to Synapse Model Price MCP tools for listing used models and managing model price rules.
+You have access to Synapse Model Price MCP tools for managing model price rules.
 
 ## Scope Boundary
 
 Use this skill only for Synapse model price rules:
 
-- list used CC/Codex models;
 - list built-in price presets;
 - import a built-in price preset;
 - list or inspect price rules;
@@ -16,20 +15,19 @@ Use this skill only for Synapse model price rules:
 - partially update or clear price rules;
 - enable, disable, or delete price rules.
 
-Do not use this skill for Database tables, Automation schedules/items, Workflow definitions, Resource Repository publishing, provider settings, editor installation, or running Usage Analysis refresh jobs.
+Do not use this skill for Database tables, Automation schedules/items, Workflow definitions, Resource Repository publishing, provider settings, editor installation, or usage analysis.
 
 ## Default Flow
 
-1. If the user asks which models need prices, call `app_model_price_used_model_list`.
-2. If the user asks to import built-in prices, call `app_model_price_preset_list` unless the `presetId` is already known, then call `app_model_price_preset_import`.
-3. If the user asks to change, delete, enable, or disable an existing rule, call `app_model_price_rule_list` first and use the returned `id` as `ruleId`.
-4. Use `app_model_price_rule_get` when the user names a specific rule id or when you need to inspect one rule before changing it.
-5. Use `app_model_price_rule_create` only when no existing rule should be changed.
-6. Use `app_model_price_rule_update` for partial price or pattern edits. Pass only fields that should change.
-7. Use `app_model_price_rule_enable` when the user wants a disabled rule to match again.
-8. Use `app_model_price_rule_disable` to keep a rule but stop matching it.
-9. Use `app_model_price_rule_delete` only when the user wants one rule removed.
-10. Use `app_model_price_rule_clear` only when the user explicitly asks to remove every price rule.
+1. If the user asks to import built-in prices, call `app_model_price_preset_list` unless the `presetId` is already known, then call `app_model_price_preset_import`.
+2. If the user asks to change, delete, enable, or disable an existing rule, call `app_model_price_rule_list` first and use the returned `id` as `ruleId`.
+3. Use `app_model_price_rule_get` when the user names a specific rule id or when you need to inspect one rule before changing it.
+4. Use `app_model_price_rule_create` only when no existing rule should be changed.
+5. Use `app_model_price_rule_update` for partial price or pattern edits. Pass only fields that should change.
+6. Use `app_model_price_rule_enable` when the user wants a disabled rule to match again.
+7. Use `app_model_price_rule_disable` to keep a rule but stop matching it.
+8. Use `app_model_price_rule_delete` only when the user wants one rule removed.
+9. Use `app_model_price_rule_clear` only when the user explicitly asks to remove every price rule.
 
 ## Safety Rules
 
@@ -40,13 +38,7 @@ Do not use this skill for Database tables, Automation schedules/items, Workflow 
 - Do not clear all rules unless the user explicitly asked for that full reset.
 - Prices are RMB per 1M tokens.
 - `0` is valid for a token type that is not charged.
-- Do not claim that price edits immediately changed already indexed usage costs.
-- Do not trigger or simulate Usage Analysis refreshes from this skill.
-- If asked about historical totals, explain that a later Usage Analysis refresh can reprocess unchanged CC/Codex usage files when the price-rule hash changes.
-
-## Matching Notes
-
-`app_model_price_used_model_list` returns `priceKnown`, `matchedRuleId`, and `matchedRulePattern` based on currently enabled rules. This indicates current rule coverage only. It does not prove that older usage events have already been refreshed with the current rules.
+- Do not claim that price edits rewrite historical costs. They affect subsequent local cost estimates that use the current rules.
 
 ## API Reference
 

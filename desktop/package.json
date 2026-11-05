@@ -230,8 +230,6 @@
       "dist-electron/app-capabilities/text-extractor/**",
       "dist-electron/app-capabilities/skill-hub/main/package-worker.js*",
       "node_modules/ejs/**",
-      "dist-electron/electron/services/usage-analysis/**",
-      "dist-electron/electron/services/model-price/**",
       "dist-electron/electron/runtime/data-repo/maintenance/**",
       "dist-electron/src/**"
     ],

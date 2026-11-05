@@ -40,7 +40,7 @@ First classify the user's intent, then read the matching domain file before usin
 - Workflow definitions, nodes, edges, DAG validation, layout, variables, providers, workflow runs -> `workflow/index.md`
 - Automation items, schedules, cron/interval triggers, executors, enablement, manual runs, active runs, run history -> `automation/index.md`
 - Rule, Skill, Prompt publishing and Synapse Resource Repository management, but not local Skill file authoring -> `content/index.md`
-- Model price rules and used-model pricing -> `model-price/index.md`
+- Model price rules and cost estimates -> `model-price/index.md`
 - Local secrets and placeholder secret values -> `secrets/index.md`
 - Settings repositories -> `repository/index.md`
 - Synapse-managed Terminal launch settings, groups, tab layout, saved commands, sessions, opening a session by its immutable id, retained output, observation, leases, semantic input, resize, stop, and deletion -> `terminal/index.md`. These tools are `app_terminal_*` under the `app` domain; the catalog's `domains` list is top-level namespaces only, so it has no `terminal` entry. A process running inside a Synapse terminal addresses its own session through `SYNAPSE_SESSION_ID` and its tab through `SYNAPSE_WORKSPACE_ID`.

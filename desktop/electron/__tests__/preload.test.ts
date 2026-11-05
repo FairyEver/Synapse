@@ -1062,56 +1062,9 @@ describe("preload bridge", () => {
     }))
   })
 
-  it("maps Claude Code conversation and record methods to usage analysis IPC channels", async () => {
-    const bridge = await loadPreloadBridge()
-
-    await bridge.usageAnalysis.cc.listRecords({ preset: "all", limit: 50 })
-    await bridge.usageAnalysis.cc.listRecordDetails({ sessionId: "session-1", limit: 200 })
-    await bridge.usageAnalysis.cc.listConversations({ preset: "all", limit: 5 })
-    await bridge.usageAnalysis.cc.getConversation("session-1", { eventId: "event-1" })
-    await bridge.usageAnalysis.cc.getConversationChunk({ sessionId: "session-1", cursor: "128:1" })
-    await bridge.usageAnalysis.cc.searchRecordsText({ preset: "all", query: "登录", rawText: true })
-    await bridge.usageAnalysis.cc.searchConversationText({ preset: "all", query: "登录", rawText: true })
-    await bridge.usageAnalysis.cc.openConversationWindow({ sessionId: "session-1", title: "对话" })
-
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:records:list",
-      { preset: "all", limit: 50 },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:record_details:list",
-      { sessionId: "session-1", limit: 200 },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:conversations:list",
-      { preset: "all", limit: 5 },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:conversation:get",
-      { sessionId: "session-1", focus: { eventId: "event-1" } },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:conversation:chunk:get",
-      { sessionId: "session-1", cursor: "128:1" },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:records:search_text",
-      { preset: "all", query: "登录", rawText: true },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:conversation:search_text",
-      { preset: "all", query: "登录", rawText: true },
-    )
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:usage_analysis:cc:conversation_window:open",
-      { sessionId: "session-1", title: "对话" },
-    )
-  })
-
   it("maps model price methods to first-class IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
-    await bridge.modelPrice.usedModel.list({ source: "all", range: "30d", limit: 100 })
     await bridge.modelPrice.rule.list()
     await bridge.modelPrice.preset.list()
     await bridge.modelPrice.preset.import("deepseek-official")
@@ -1119,10 +1072,6 @@ describe("preload bridge", () => {
     await bridge.modelPrice.rule.save([{ modelPattern: "local-model", inputPer1M: 1 }])
     await bridge.modelPrice.rule.clear()
 
-    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
-      "synapse:app:model_price:used_model:list",
-      { source: "all", range: "30d", limit: 100 },
-    )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:app:model_price:rule:list",
       undefined,

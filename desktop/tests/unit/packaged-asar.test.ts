@@ -260,7 +260,6 @@ interface CreateAsarBufferOptions {
   readonly includeWorkspaceFiles?: boolean
   readonly includeWorkspaceFilesGitConfig?: boolean
   readonly includeMobileFileConstants?: boolean
-  readonly includeUsageAnalysisWorkers?: boolean
   readonly includeUnpackedSourceMaps?: boolean
   readonly omitTextExtractionIntegrity?: string
 }
@@ -288,32 +287,6 @@ function createUnpackedJsFiles(includeSourceMaps: boolean) {
   return {
     "agent-redaction.js": createUnpackedFileNode(),
     ...(includeSourceMaps ? { "agent-redaction.js.map": createUnpackedFileNode() } : {}),
-  }
-}
-
-function createUsageAnalysisFiles(includeSourceMaps: boolean) {
-  const files = {
-    "conversation-worker.js": createUnpackedFileNode(),
-    "cc-conversation-service.js": createUnpackedFileNode(),
-    "cc-service.js": createUnpackedFileNode(),
-    "refresh-worker.js": createUnpackedFileNode(),
-    "db-schema.js": createUnpackedFileNode(),
-  }
-  if (!includeSourceMaps) return files
-  return {
-    ...files,
-    "conversation-worker.js.map": createUnpackedFileNode(),
-    "cc-conversation-service.js.map": createUnpackedFileNode(),
-    "cc-service.js.map": createUnpackedFileNode(),
-    "refresh-worker.js.map": createUnpackedFileNode(),
-    "db-schema.js.map": createUnpackedFileNode(),
-  }
-}
-
-function createModelPriceFiles(includeSourceMaps: boolean) {
-  return {
-    "index.js": createUnpackedFileNode(),
-    ...(includeSourceMaps ? { "index.js.map": createUnpackedFileNode() } : {}),
   }
 }
 
@@ -455,7 +428,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includeWorkspaceFiles = true,
     includeWorkspaceFilesGitConfig = true,
     includeMobileFileConstants = true,
-    includeUsageAnalysisWorkers = false,
     includeUnpackedSourceMaps = true,
     omitTextExtractionIntegrity,
   } = options
@@ -630,16 +602,6 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                             "claude-runtime-binary.js": claudeRuntimeBinaryNode,
                             "claude-sdk-session.js": claudeSdkSessionNode,
                           },
-                        },
-                      }
-                    : {}),
-                  ...(includeUsageAnalysisWorkers
-                    ? {
-                        "model-price": {
-                          files: createModelPriceFiles(includeUnpackedSourceMaps),
-                        },
-                        "usage-analysis": {
-                          files: createUsageAnalysisFiles(includeUnpackedSourceMaps),
                         },
                       }
                     : {}),
@@ -1593,47 +1555,10 @@ describe("packaged asar verification", () => {
       const resourcesPath = path.join(root, "resources")
       await mkdir(resourcesPath, { recursive: true })
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({
-        includeUsageAnalysisWorkers: true,
         includeUnpackedSourceMaps: false,
       }))
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments, "module.exports = {}\n", { sourceMap: false })
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
-        "module.exports = {}\n",
-        { sourceMap: false },
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-conversation-service.js"],
-        "module.exports = {}\n",
-        { sourceMap: false },
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-service.js"],
-        "module.exports = {}\n",
-        { sourceMap: false },
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "refresh-worker.js"],
-        "module.exports = {}\n",
-        { sourceMap: false },
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "db-schema.js"],
-        "module.exports = {}\n",
-        { sourceMap: false },
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "model-price", "index.js"],
-        "module.exports = {}\n",
-        { sourceMap: false },
-      )
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
@@ -1646,96 +1571,4 @@ describe("packaged asar verification", () => {
     }
   })
 
-  it("rejects unpacked usage analysis workers with dependencies outside their unpacked closure", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
-    try {
-      const resourcesPath = path.join(root, "resources")
-      await mkdir(resourcesPath, { recursive: true })
-      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
-      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
-      await writeExtraResourceFixtures(resourcesPath)
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
-        "require('./cc-conversation-service')\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-conversation-service.js"],
-        "require('../error-sanitize')\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "refresh-worker.js"],
-        "require('./db-schema')\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "db-schema.js"],
-        "module.exports = {}\n",
-      )
-
-      await expect(execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
-        root,
-      ])).rejects.toMatchObject({
-        stderr: expect.stringContaining("usage analysis worker dependency escapes unpacked closure"),
-      })
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it("accepts unpacked usage analysis workers with model price directory dependencies", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "synapse-packaged-asar-"))
-    try {
-      const resourcesPath = path.join(root, "resources")
-      await mkdir(resourcesPath, { recursive: true })
-      await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer({ includeUsageAnalysisWorkers: true }))
-      await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
-      await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
-      await writeExtraResourceFixtures(resourcesPath)
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "conversation-worker.js"],
-        "module.exports = {}\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-conversation-service.js"],
-        "module.exports = {}\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "refresh-worker.js"],
-        "require('./cc-service')\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "cc-service.js"],
-        "require('../model-price')\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "usage-analysis", "db-schema.js"],
-        "module.exports = {}\n",
-      )
-      await writeUnpackedFixture(
-        resourcesPath,
-        ["app.asar.unpacked", "dist-electron", "electron", "services", "model-price", "index.js"],
-        "module.exports = {}\n",
-      )
-
-      const result = await execFileAsync(process.execPath, [
-        path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
-        root,
-        "--resources-only",
-      ])
-
-      expect(result.stdout).toContain("Verified resources")
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
 })

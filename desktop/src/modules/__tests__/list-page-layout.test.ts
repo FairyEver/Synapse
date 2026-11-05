@@ -21,15 +21,6 @@ describe("list page layout surfaces", () => {
     expect(source).not.toContain("hover:bg-muted/50")
   })
 
-  it("keeps usage analysis pages on the shared list-page rhythm", async () => {
-    const source = await readModuleSource("../usage-analysis/shared/components/usage-analysis-shell.tsx")
-
-    expect(source).toContain('className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-surface"')
-    expect(source).toContain('className="flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5"')
-    expect(source).toContain('className="min-h-full min-w-full w-0 max-w-full overflow-x-hidden px-2 pb-2 pt-0"')
-    expect(source).not.toContain("border-b")
-  })
-
   it("keeps workflow list pages on the shared list-page rhythm", async () => {
     const moduleSource = await readModuleSource("../workflow/index.tsx")
     const modulePageSource = await readModuleSource("../../components/module-page.tsx")
@@ -49,15 +40,12 @@ describe("list page layout surfaces", () => {
 
   it("keeps model price pages aligned with the shared module page shell", async () => {
     const moduleSource = await readModuleSource("../model-price/index.tsx")
-    const coverageSource = await readModuleSource("../model-price/components/model-coverage-view.tsx")
     const rulesSource = await readModuleSource("../model-price/components/price-rules-view.tsx")
 
     expect(moduleSource).toContain("<SystemAppWindowShell")
-    expect(moduleSource).toContain("tabs={MODEL_PRICE_VIEWS.map")
+    expect(moduleSource).not.toContain("tabs={")
+    expect(moduleSource).not.toContain("model-coverage-view")
     expect(moduleSource).not.toContain('title="价格"')
-    expect(coverageSource).toContain('<ModuleContentPanel className="overflow-hidden')
-    expect(coverageSource).toContain('<Table className="table-fixed" containerClassName="overflow-x-hidden" scrollbars="none">')
-    expect(coverageSource).not.toContain("min-w-[72rem]")
     expect(rulesSource).toContain('<ModuleContentPanel className="min-w-0 max-w-full overflow-hidden">')
     expect(rulesSource).toContain('<Table containerClassName="min-w-0 max-w-full" className="min-w-[60rem] table-fixed">')
   })

@@ -50,6 +50,8 @@ describe("app Dock model", () => {
     expect(normalizeDockAppIds([])).toEqual(["launcher"])
     expect(normalizeDockAppIds(["database", "system-notifier", "ghost", "database"]))
       .toEqual(["database", "launcher"])
+    expect(normalizeDockAppIds(["database", "usage-monitor", "launcher"]))
+      .toEqual(["database", "launcher"])
     expect(normalizeDockAppIds(["launcher", "agent"])).toEqual(["launcher", "agent"])
   })
 

@@ -81,7 +81,6 @@ import {
   coreTerminalDescriptor,
   coreTerminalAgentNotificationsDescriptor,
   coreWorkspaceFileTreeDescriptor,
-  coreUsageAnalysisDescriptor,
   coreHttpTestDescriptor,
   coreKnowledgeBaseDescriptor,
   coreKnowledgeBaseStorageMigrationDescriptor,
@@ -200,7 +199,6 @@ export function buildServiceRegistry(
   registry.register(coreAutomationCleanupDescriptor)
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDatabaseDescriptor)
-  registry.register(coreUsageAnalysisDescriptor)
   registry.register(coreModelPriceDescriptor)
   registry.register(coreHttpTestDescriptor)
   registry.register(coreKnowledgeBaseDescriptor)

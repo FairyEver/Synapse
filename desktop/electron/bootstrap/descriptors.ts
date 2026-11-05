@@ -261,7 +261,7 @@ import { contentSubmissionService } from "../services/content-submission-service
 import { contentWriteTransactionService } from "../services/content-write-transaction-service"
 import { prepareContentIconImageBytes } from "../services/content-icon-image-service"
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
-import { getUsageAnalysisDb } from "../services/usage-analysis"
+import { getModelPriceDb } from "../services/model-price"
 import { userIdentityService } from "../services/user-identity-service"
 import { createCloudTableCapabilityDispatcher } from "../../app-capabilities/cloud-tables/main/dispatcher"
 import { createSkillHubCapabilityDispatcher } from "../../app-capabilities/skill-hub/main/dispatcher"
@@ -1767,7 +1767,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       },
     })
     const modelPriceDispatcher = createModelPriceCapabilityDispatcher({
-      getDb: () => getUsageAnalysisDb(app.getPath("userData")),
+      getDb: () => getModelPriceDb(app.getPath("userData")),
       permissionGuard,
       auditSink,
     })
@@ -2862,22 +2862,6 @@ export const coreAutomationDescriptor: ServiceDescriptor<AutomationService> = {
 }
 
 /**
- * core.usage-analysis — registers IPC handlers for CC/Codex usage analysis.
- *
- * Status: degraded — local usage reports are non-critical.
- */
-export const coreUsageAnalysisDescriptor: ServiceDescriptor<{ initialized: true }> = {
-  id: "core.usage-analysis",
-  criticality: "degraded",
-  dependsOn: [],
-  async create() {
-    const { registerUsageAnalysisHandlers } = await import("../usage-analysis/ipc-handlers.js")
-    registerUsageAnalysisHandlers()
-    return { initialized: true }
-  },
-}
-
-/**
  * core.model-price — registers first-class model price IPC handlers.
  *
  * Status: degraded — price management is non-critical at startup.
@@ -2887,6 +2871,7 @@ export const coreModelPriceDescriptor: ServiceDescriptor<{ initialized: true }> 
   criticality: "degraded",
   dependsOn: [],
   async create() {
+    getModelPriceDb()
     const { registerModelPriceHandlers } = await import("../model-price/ipc-handlers.js")
     registerModelPriceHandlers()
     return { initialized: true }

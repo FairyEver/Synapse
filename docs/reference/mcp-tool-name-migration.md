@@ -4,14 +4,14 @@
 
 - 旧名称不再兼容，调用会返回 `Unknown tool`。
 - 名称只更换前缀，后半部分保持不变。
-- 共移除 139 个旧别名；当前 Synapse MCP 注册 174 个唯一工具。
+- 共移除 138 个旧别名；当前 Synapse MCP 注册 174 个唯一工具。
 
 ## 前缀汇总
 
 | 旧前缀 | 新前缀 | 工具数 |
 | --- | --- | ---: |
 | `database_*` | `app_database_*` | 30 |
-| `model_price_*` | `app_model_price_*` | 11 |
+| `model_price_*` | `app_model_price_*` | 10 |
 | `repository_*` | `app_settings_repository_*` | 1 |
 | `automation_*` | `app_automation_*` | 14 |
 | `workflow_*` | `app_workflow_*` | 19 |
@@ -53,11 +53,10 @@
 | `database_folder_reorder` | `app_database_folder_reorder` |
 | `database_table_move` | `app_database_table_move` |
 
-## Model Price（11）
+## Model Price（10）
 
 | 旧名称（已移除） | 新名称（当前可用） |
 | --- | --- |
-| `model_price_used_model_list` | `app_model_price_used_model_list` |
 | `model_price_rule_list` | `app_model_price_rule_list` |
 | `model_price_preset_list` | `app_model_price_preset_list` |
 | `model_price_preset_import` | `app_model_price_preset_import` |

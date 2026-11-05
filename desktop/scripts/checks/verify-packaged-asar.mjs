@@ -231,10 +231,6 @@ function verifyUnpackedSourceMap(
   }
 }
 
-const usageAnalysisWorkerEntries = [
-  "dist-electron/electron/services/usage-analysis/conversation-worker.js",
-  "dist-electron/electron/services/usage-analysis/refresh-worker.js",
-]
 const dataMaintenanceWorkerEntries = [
   "dist-electron/electron/runtime/data-repo/maintenance/runner.js",
   "dist-electron/electron/runtime/data-repo/maintenance/worker.js",
@@ -365,43 +361,12 @@ const forbiddenExtraResourceFiles = [
     label: "retired stdio MCP bridge",
   },
 ]
-const usageAnalysisAllowedUnpackedPrefixes = [
-  "dist-electron/electron/services/usage-analysis/",
-  "dist-electron/electron/services/model-price/",
-  "dist-electron/src/",
-  "dist-electron/action-packages/shared/",
-]
-
-function isAllowedUsageAnalysisUnpackedDependency(relativePath) {
-  return usageAnalysisAllowedUnpackedPrefixes.some((prefix) => relativePath.startsWith(prefix))
-}
-
-function resolveRelativeRequire(header, importerPath, request) {
-  if (!request.startsWith(".")) {
-    return null
-  }
-
-  const normalized = path.posix.normalize(path.posix.join(path.posix.dirname(importerPath), request))
-  if (path.posix.extname(normalized)) {
-    return normalized
-  }
-  const filePath = `${normalized}.js`
-  if (findNode(header, filePath)) {
-    return filePath
-  }
-  const indexPath = `${normalized}/index.js`
-  if (findNode(header, indexPath)) {
-    return indexPath
-  }
-  return filePath
-}
-
 function readUnpackedText(
   header,
   unpackedPath,
   relativePath,
   failures,
-  label = "usage analysis worker dependency",
+  label = "unpacked dependency",
 ) {
   const node = findNode(header, relativePath)
   if (!node) {
@@ -424,41 +389,6 @@ function readUnpackedText(
   } catch (error) {
     failures.push(`${relativePath}: ${error instanceof Error ? error.message : String(error)}`)
     return null
-  }
-}
-
-function verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures) {
-  const visited = new Set()
-  const queue = usageAnalysisWorkerEntries.filter((entry) => findNode(header, entry))
-
-  for (const relativePath of queue) {
-    if (visited.has(relativePath)) {
-      continue
-    }
-    visited.add(relativePath)
-
-    if (!isAllowedUsageAnalysisUnpackedDependency(relativePath)) {
-      failures.push(`usage analysis worker dependency escapes unpacked closure: ${relativePath}`)
-      continue
-    }
-
-    const source = readUnpackedText(header, unpackedPath, relativePath, failures)
-    if (!source) {
-      continue
-    }
-
-    for (const match of source.matchAll(/require\(["']([^"']+)["']\)/g)) {
-      const request = match[1]
-      const dependencyPath = resolveRelativeRequire(header, relativePath, request)
-      if (!dependencyPath) {
-        continue
-      }
-      if (!isAllowedUsageAnalysisUnpackedDependency(dependencyPath)) {
-        failures.push(`usage analysis worker dependency escapes unpacked closure: ${relativePath} -> ${request} (${dependencyPath})`)
-        continue
-      }
-      queue.push(dependencyPath)
-    }
   }
 }
 
@@ -1272,7 +1202,6 @@ async function verifyResources(resourcesPath, label) {
     await runTextExtractionWorkerSmoke(unpackedPath, failures)
     await runHtmlGenerationWorkerSmoke(unpackedPath, failures)
   }
-  verifyUsageAnalysisWorkerClosure(header, unpackedPath, failures)
   verifyDataMaintenanceWorker(header, unpackedPath, failures)
   verifyClaudeRuntime(unpackedPath, failures)
   verifyTerminalRuntime(header, resourcesPath, unpackedPath, failures)

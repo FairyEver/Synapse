@@ -258,10 +258,6 @@ vi.mock("@/modules/workflow", () => ({ WorkflowModule: () => <div>工作流模�
 vi.mock("@/modules/content/components/content-window-page", () => ({
   ContentWindowPage: () => <div>内容窗口</div>,
 }))
-vi.mock("@/modules/usage-analysis/cc/components/conversation-detail-window-page", () => ({
-  CcConversationDetailWindowPage: () => <div>对话窗口</div>,
-}))
-
 import App from "@/App"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true

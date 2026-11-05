@@ -46,7 +46,6 @@ import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { parseAgentConversationWindowRequest } from "@/lib/agent-conversation-window"
-import { parseCcConversationWindowRequest } from "@/lib/cc-conversation-window"
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentWindowPage } from "@/modules/content/components/content-window-page"
 import { AgentConversationWindowPage } from "@/modules/agent/components/agent-conversation-window-page"
@@ -60,7 +59,6 @@ import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-syste
 import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transition"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import type { SynapseSystemAppId } from "@/modules/apps/types"
-import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { SynapseSkillAutoUpdateHost } from "../app-capabilities/synapse-skill/renderer/auto-update"
 
 type ActiveAppId = SynapseSystemAppId
@@ -413,12 +411,10 @@ function App() {
   const { resetKey } = useAppConfig()
   const [agentConversationWindowRequest, setAgentConversationWindowRequest] =
     useState<ReturnType<typeof parseAgentConversationWindowRequest>>(null)
-  const [ccConversationWindowRequest, setCcConversationWindowRequest] = useState<ReturnType<typeof parseCcConversationWindowRequest>>(null)
   const [standaloneContentWindowRequest, setStandaloneContentWindowRequest] = useState<ReturnType<typeof parseContentWindowRequest>>(null)
 
   useEffect(() => {
     setAgentConversationWindowRequest(parseAgentConversationWindowRequest(window.location.search))
-    setCcConversationWindowRequest(parseCcConversationWindowRequest(window.location.search))
     setStandaloneContentWindowRequest(parseContentWindowRequest(window.location.search))
   }, [])
 
@@ -428,16 +424,6 @@ function App() {
         <ErrorBoundary fallbackTitle="对话窗口出现问题">
           <AgentShareRenderHost />
           <AgentConversationWindowPage request={agentConversationWindowRequest} />
-        </ErrorBoundary>
-      </IdentityGate>
-    )
-  }
-
-  if (ccConversationWindowRequest) {
-    return (
-      <IdentityGate>
-        <ErrorBoundary fallbackTitle="对话窗口出现问题">
-          <CcConversationDetailWindowPage request={ccConversationWindowRequest} />
         </ErrorBoundary>
       </IdentityGate>
     )

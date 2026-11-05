@@ -1,5 +1,6 @@
 export { getModelPricePreset, isModelPricePresetId, listModelPricePresetSummaries, MODEL_PRICE_PRESETS } from "./presets"
 export { initModelPriceSchema, ModelPriceService, listModelPriceRules } from "./service"
+export { getModelPriceDb, getModelPriceDbPath } from "./db"
 export {
   estimateModelUsageCost,
   findModelPriceRuleForModel,
@@ -8,13 +9,8 @@ export {
   roundModelUsageCost,
 } from "./matching"
 export { estimateSynapseUsageCostSnapshot, usageTokenBreakdownFromRecord } from "./usage-cost-snapshot"
-export { MODEL_PRICE_COVERAGE_DEFAULT_LIMIT, MODEL_PRICE_COVERAGE_MAX_LIMIT } from "./types"
 export type {
   EstimatedModelUsageCost,
-  ModelPriceCoverageInput,
-  ModelPriceCoverageRange,
-  ModelPriceCoverageRow,
-  ModelPriceCoverageSource,
   ModelPricePreset,
   ModelPricePresetId,
   ModelPricePresetSummary,
@@ -23,6 +19,5 @@ export type {
   ModelPriceRuleInput,
   ModelPriceRulePatch,
   ModelUsageTokenBreakdown,
-  ModelPriceUsageSourceName,
 } from "./types"
 export type { SynapseUsageCostSnapshot } from "./usage-cost-snapshot"

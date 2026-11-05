@@ -1515,43 +1515,7 @@ const synapseBridge: SynapseBridge = {
       ),
     },
   },
-  usageAnalysis: {
-    cc: {
-      refresh: (input) => input
-        ? invoke(IPC_CHANNELS["usage-analysis"].ccRefresh)(input)
-        : invoke(IPC_CHANNELS["usage-analysis"].ccRefresh)(),
-      getOverview: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccOverview)(range),
-      getTime: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccTime)(range),
-      getModels: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccModels)(range),
-      getProjects: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccProjects)(range),
-      getTools: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccTools)(range),
-      getDetails: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccDetails)(range),
-      listRecords: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccRecordsList)(input),
-      listRecordDetails: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccRecordDetailsList)(input),
-      listConversations: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationsList)(input),
-      getConversation: (sessionId, focus) =>
-        invoke(IPC_CHANNELS["usage-analysis"].ccConversationGet)({ sessionId, focus }),
-      getConversationChunk: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationChunkGet)(input),
-      searchRecordsText: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccRecordsSearchText)(input),
-      searchConversationText: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationSearchText)(input),
-      openConversationWindow: (request) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationWindowOpen)(request),
-    },
-    codex: {
-      refresh: (input) => input
-        ? invoke(IPC_CHANNELS["usage-analysis"].codexRefresh)(input)
-        : invoke(IPC_CHANNELS["usage-analysis"].codexRefresh)(),
-      getOverview: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexOverview)(range),
-      getTime: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexTime)(range),
-      getModels: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexModels)(range),
-      getProjects: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexProjects)(range),
-      getTools: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexTools)(range),
-      getDetails: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexDetails)(range),
-    },
-  },
   modelPrice: {
-    usedModel: {
-      list: (input) => invoke(IPC_CHANNELS["model-price"].coverageList)(input),
-    },
     preset: {
       list: invoke(IPC_CHANNELS["model-price"].presetsList),
       import: (presetIds) => invoke(IPC_CHANNELS["model-price"].presetsImport)(presetIds),

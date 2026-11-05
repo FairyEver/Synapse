@@ -38,11 +38,8 @@ vi.mock("../../provider", () => ({
   })),
 }))
 
-vi.mock("../../usage-analysis", () => ({
-  getUsageAnalysisDb: vi.fn(() => ({})),
-}))
-
 vi.mock("../../model-price", () => ({
+  getModelPriceDb: vi.fn(() => ({})),
   listModelPriceRules: vi.fn(() => []),
   estimateSynapseUsageCostSnapshot: vi.fn(() => undefined),
 }))

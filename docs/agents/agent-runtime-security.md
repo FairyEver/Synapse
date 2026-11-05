@@ -12,7 +12,7 @@
 - UI 解析上限只限制展示，不能截断或改写 SDK 原始输出。流式、来源未确认、已转交 CLI 或状态未恢复时禁止交互；导出必须脱敏，日志不得记录表单内容。实现边界见 `docs/superpowers/specs/2026-10-21-agent-openui-design.md`。
 - `Stack` 可选布局参数的 `type-mismatch` 使用官方解析器丢弃参数后的默认布局；另仅在显示副本中兼容 `Text` 前两项不含转义的字符串字面量明确倒置（第一项不是合法 variant、第二项为 `text`/`number`），历史原文及摘要不变。绑定、表达式及其它数据、字段、动作和资源错误不因此放行。解析 AST 与计算后 props 分别限制 131,072 和 10,000 次访问，均检查 32 层深度及循环引用。表单提交包含当前响应式绑定值和操作表单字段，不包含其它表单草稿；不调用云端 Autofix 或创建隐藏修复 query。
 
-本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出、Usage Analysis 和 provider 预览。
+本文件适用于 Claude Agent SDK 参数、Agent event bridge、MCP 注册/诊断、权限事件、timeline、导出和 provider 预览。
 
 Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpowers/specs/2026-09-15-agent-sdk-native-context-lifecycle-design.md)为权威。历史百炼边界实测与预算/交接调查仅用于追溯，不再定义运行时行为。
 
@@ -124,11 +124,10 @@ Agent 上下文生命周期以[SDK 原生上下文生命周期设计](../superpo
 ## 安全诊断与脱敏
 
 - 诊断 Knowledge Base slash 来源时只做只读文件证据检查：backing directory、`.claude-plugin/plugin.json`、`skills/<name>/SKILL.md`、`commands/<name>.md` 和 commands 第一层文件名。不得执行目标 slash，也不得读取 Claude 配置、进程列表或任何 secret。
-- 权限卡片、工具事件、错误日志、timeline、复制、导出和 Usage Analysis 必须同时脱敏 tool input 与 tool result。
+- 权限卡片、工具事件、错误日志、timeline、复制和导出必须同时脱敏 tool input 与 tool result。
 - 规则至少覆盖敏感 key/JSON 字段、shell/env 赋值、Authorization/Bearer、Cookie、`data-server.json` token、`ps aux` 与 `--env KEY=value`；普通路径和 `file_path` 仍保留。
 - JWT 按内容识别，不依赖变量名；shell 的 `SY` / `PT` 等缩写、嵌套工具输入与结果也必须遮盖。仅修改显示/诊断投影，不将脱敏值回传真实执行参数。
-- Electron 与 renderer 复用共享脱敏 helper，不得在主进程、renderer、导出和 Usage Analysis 各写一套正则。
-- Usage Analysis 只对 Synapse 内部展示、详情 JSON、事件预览和搜索 snippet 使用脱敏投影；不得改写用户机器上的外部原始 JSONL/日志，rawText 搜索不得返回真实 secret。
+- Electron 与 renderer 复用共享脱敏 helper，不得在主进程、renderer 和导出各写一套正则。
 - Provider 预览、Agent 环境和 MCP/side-channel 诊断不得展示 `buildEnv`、`getAgentEnv` 或 data-server 配置中的值，只显示 key 是否存在、来源或 `[redacted]`。
 - Agent 对话导出可附带 Claude Agent SDK 暴露的脱敏 API StreamEvent，但不得宣称为线级 HTTP 响应或原始 SSE 文本。高频 delta 只在内存中按轮次缓冲，单轮最多 1000 条、512 KiB，完成或失败时批量持久化；单个导出最多包含 8 MiB，超限必须在导出元数据中标记。旧会话未持久化的 delta 不得伪造或声称可恢复。
 - JSON 诊断导出必须先对结构化值脱敏再序列化，不得对序列化后的 JSON 字符串做路径替换；所有导出的 JSON 文件必须保持可解析。工具结果中的内嵌 Base64 图片只保留省略标记，不得进入 timeline、history 或诊断正文。

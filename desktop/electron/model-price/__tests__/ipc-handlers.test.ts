@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   handleValidatedIpc: vi.fn((channel: string, handler: (event: unknown, params?: unknown) => unknown) => {
     mocks.handlers.set(channel, handler)
   }),
-  getUsageAnalysisDb: vi.fn(() => ({ database: "mock" })),
+  getModelPriceDb: vi.fn(() => ({ database: "mock" })),
   logger: {
     info: vi.fn(),
   },
@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
     clearRules: vi.fn(),
     importPreset: vi.fn(),
     importPresets: vi.fn(),
-    listCoverage: vi.fn(),
     listPresets: vi.fn(),
     listRules: vi.fn(),
     saveRules: vi.fn(),
@@ -35,13 +34,8 @@ vi.mock("../../services/log-store", () => ({
   createMainLogger: () => mocks.logger,
 }))
 
-vi.mock("../../services/usage-analysis", () => ({
-  getUsageAnalysisDb: mocks.getUsageAnalysisDb,
-}))
-
 vi.mock("../../services/model-price", () => ({
-  MODEL_PRICE_COVERAGE_DEFAULT_LIMIT: 200,
-  MODEL_PRICE_COVERAGE_MAX_LIMIT: 500,
+  getModelPriceDb: mocks.getModelPriceDb,
   isModelPricePresetId: (value: unknown) => value === "deepseek-official" || value === "aliyun-bailian",
   ModelPriceService: vi.fn(function ModelPriceService() {
     return mocks.modelPriceService
@@ -53,12 +47,11 @@ describe("model price IPC handlers", () => {
     vi.resetModules()
     mocks.handlers.clear()
     mocks.handleValidatedIpc.mockClear()
-    mocks.getUsageAnalysisDb.mockClear()
+    mocks.getModelPriceDb.mockClear()
     mocks.logger.info.mockClear()
     mocks.modelPriceService.clearRules.mockReset()
     mocks.modelPriceService.importPreset.mockReset()
     mocks.modelPriceService.importPresets.mockReset()
-    mocks.modelPriceService.listCoverage.mockReset()
     mocks.modelPriceService.listPresets.mockReset()
     mocks.modelPriceService.listRules.mockReset()
     mocks.modelPriceService.saveRules.mockReset()
@@ -73,9 +66,9 @@ describe("model price IPC handlers", () => {
     const { registerModelPriceHandlers } = await import("../ipc-handlers")
     registerModelPriceHandlers()
 
-    expect(mocks.getUsageAnalysisDb).not.toHaveBeenCalled()
+    expect(mocks.getModelPriceDb).not.toHaveBeenCalled()
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsList)?.({})).toBe(presetSummaries)
-    expect(mocks.getUsageAnalysisDb).toHaveBeenCalledOnce()
+    expect(mocks.getModelPriceDb).toHaveBeenCalledOnce()
     expect(await mocks.handlers.get(MODEL_PRICE_CHANNELS.presetsImport)?.({}, "deepseek-official")).toBe(importedRules)
     expect(mocks.modelPriceService.importPresets).toHaveBeenCalledWith(["deepseek-official"])
     expect(mocks.logger.info).toHaveBeenCalledWith("Model price preset import completed.", {
@@ -122,29 +115,6 @@ describe("model price IPC handlers", () => {
       operation: "rulesClear",
       previousRuleCount: 2,
       resultingRuleCount: 0,
-    })
-  })
-
-  it("caps oversized coverage limits before calling the service", async () => {
-    mocks.modelPriceService.listCoverage.mockReturnValueOnce([])
-
-    const { registerModelPriceHandlers } = await import("../ipc-handlers")
-    registerModelPriceHandlers()
-
-    await expect(mocks.handlers.get(MODEL_PRICE_CHANNELS.coverageList)?.({}, {
-      source: "cc",
-      range: "all",
-      limit: 10_000,
-    })).resolves.toEqual([])
-    expect(mocks.modelPriceService.listCoverage).toHaveBeenCalledWith({
-      source: "cc",
-      range: "all",
-      limit: 500,
-    })
-    expect(mocks.logger.info).toHaveBeenCalledWith("Model price coverage requested.", {
-      source: "cc",
-      range: "all",
-      limit: 500,
     })
   })
 

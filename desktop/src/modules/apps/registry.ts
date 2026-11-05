@@ -15,7 +15,6 @@ import { gitAppManifest } from "@/modules/git/app-manifest"
 import { modelPriceAppManifest } from "@/modules/model-price/app-manifest"
 import { resourceRepositoryAppManifest } from "@/modules/resource-repository/app-manifest"
 import { settingsAppManifest } from "@/modules/settings/app-manifest"
-import { usageMonitorAppManifest } from "@/modules/usage-analysis/app-manifest"
 import { workflowAppManifest } from "@/modules/workflow/app-manifest"
 import { launcherAppManifest } from "./launcher-app-manifest"
 import { connectorsAppManifest } from "../../../app-capabilities/connectors/renderer/app-manifest"
@@ -43,7 +42,6 @@ const systemApps = [
   quickInputAppManifest,
   terminalAppManifest,
   editorScanAppManifest,
-  usageMonitorAppManifest,
   modelPriceAppManifest,
   connectorsAppManifest,
   meetingAppManifest,

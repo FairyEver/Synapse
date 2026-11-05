@@ -15,12 +15,12 @@
 
 ## HTTP action 完整迁移规则
 
-旧 action 共 139 个，逐项名称与 [MCP 工具名称新旧对照](./mcp-tool-name-migration.md) 完全对应：把该表两列中的下划线改为点号，就是旧、新 HTTP action。没有例外。
+旧 action 共 138 个，逐项名称与 [MCP 工具名称新旧对照](./mcp-tool-name-migration.md) 完全对应：把该表两列中的下划线改为点号，就是旧、新 HTTP action。没有例外。
 
 | 旧 action 前缀 | 新 action 前缀 | 数量 |
 | --- | --- | ---: |
 | `database.*` | `app.database.*` | 30 |
-| `model_price.*` | `app.model_price.*` | 11 |
+| `model_price.*` | `app.model_price.*` | 10 |
 | `repository.*` | `app.settings.repository.*` | 1 |
 | `automation.*` | `app.automation.*` | 14 |
 | `workflow.*` | `app.workflow.*` | 19 |
@@ -54,7 +54,6 @@
 | `synapse:account:drive:public-asset:replace` | `synapse:app:drive:direct_link:update` |
 | `synapse:account:drive:public-asset:trash` | `synapse:app:drive:direct_link:delete` |
 | `synapse:account:drive:site:update-access` | `synapse:app:drive:site:update_access` |
-| `synapse:model-price:coverage:list` | `synapse:app:model_price:used_model:list` |
 
 ## Preload bridge 完整迁移
 
@@ -116,8 +115,5 @@ Drive 从 `account` 根移出后，资源路径为：
 
 | 已删除入口 | 当前入口 |
 | --- | --- |
-| `usageAnalysis.getPricingRules()` | `modelPrice.rule.list()` |
-| `usageAnalysis.savePricingRules()` | `modelPrice.rule.save()` |
-| `usageAnalysis.resetPricingRules()` | `modelPrice.rule.clear()` |
 | `modelPrice.resetRules()` | `modelPrice.rule.clear()` |
 

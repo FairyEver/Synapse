@@ -9,16 +9,11 @@ import { ModelPriceModule } from "../index"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const hooks = vi.hoisted(() => ({
-  useModelPriceCoverage: vi.fn(),
   useModelPriceRules: vi.fn(),
   useModelPricePresets: vi.fn(),
 }))
 
 vi.mock("../hooks", () => hooks)
-
-vi.mock("../components/model-coverage-view", () => ({
-  ModelCoverageView: () => <div data-view="coverage">coverage-view</div>,
-}))
 
 vi.mock("../components/price-rules-view", () => ({
   PriceRulesView: ({ onBusyChange }: { onBusyChange?: (busy: boolean) => void }) => (
@@ -51,7 +46,6 @@ beforeEach(() => {
     error: null,
     reload: vi.fn(),
   }
-  hooks.useModelPriceCoverage.mockReturnValue(emptyState)
   hooks.useModelPriceRules.mockReturnValue(emptyState)
   hooks.useModelPricePresets.mockReturnValue(emptyState)
 })
@@ -67,7 +61,7 @@ afterEach(() => {
 })
 
 describe("ModelPriceModule", () => {
-  it("shows rules view by default and keeps rules tab first", async () => {
+  it("shows only the price rules view", async () => {
     const host = document.createElement("div")
     document.body.appendChild(host)
     const root = createRoot(host)
@@ -77,10 +71,8 @@ describe("ModelPriceModule", () => {
       root.render(<ModelPriceModule />)
     })
 
-    const tabs = [...document.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)
-    expect(tabs).toEqual(["价格规则", "模型覆盖"])
+    expect(document.querySelector('[role="tab"]')).toBeNull()
     expect(document.querySelector('[data-view="rules"]')).toBeTruthy()
-    expect(document.querySelector('[data-view="coverage"]')).toBeNull()
     expect(document.querySelector("h2")?.textContent).not.toBe("价格")
   })
 
@@ -101,14 +93,7 @@ describe("ModelPriceModule", () => {
     })
 
     expect(refreshButton().disabled).toBe(true)
-    expect(tabButton("模型覆盖").disabled).toBe(true)
-
-    await act(async () => {
-      tabButton("模型覆盖").dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    })
-
     expect(document.querySelector('[data-view="rules"]')).toBeTruthy()
-    expect(document.querySelector('[data-view="coverage"]')).toBeNull()
   })
 
   it("keeps module content constrained to the window width", async () => {
@@ -139,12 +124,5 @@ function refreshButton(): HTMLButtonElement {
   const button = [...document.querySelectorAll("button")]
     .find((candidate) => candidate.textContent?.includes("刷新"))
   if (!button) throw new Error("Refresh button not found")
-  return button
-}
-
-function tabButton(label: string): HTMLButtonElement {
-  const button = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')]
-    .find((candidate) => candidate.textContent?.includes(label))
-  if (!button) throw new Error(`Tab not found: ${label}`)
   return button
 }

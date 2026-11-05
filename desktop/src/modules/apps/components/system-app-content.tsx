@@ -18,7 +18,6 @@ import { GitModule } from "@/modules/git"
 import { ModelPriceModule } from "@/modules/model-price"
 import { ResourceRepositoryModule } from "@/modules/resource-repository"
 import { SettingsModule } from "@/modules/settings"
-import { UsageMonitorModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
@@ -152,7 +151,6 @@ function SystemAppContent({
     )
   }
   if (appId === "editor-scan") return <EditorScanModule />
-  if (appId === "usage-monitor") return <UsageMonitorModule />
   if (appId === "model-price") return <ModelPriceModule />
   if (appId === "connectors") return <ConnectorsModule />
   if (appId === "meeting") return <MeetingModule openRequest={meetingOpenRequest} onOpenRequestConsumed={onMeetingOpenRequestConsumed} />

@@ -1,5 +1,5 @@
 import {
-  Bot, Cloud, Database, FolderOpen, Gauge, GitBranch, Inbox, KeyRound, LayoutGrid, LibraryBig,
+  Bot, Cloud, Database, FolderOpen, GitBranch, Inbox, KeyRound, LayoutGrid, LibraryBig,
   ListTodo, Mail, MessageCircle, Mic, PackageCheck, Plug, Settings, SquareCode, SquareTerminal,
   Tag, TextCursorInput, Timer, Workflow, type LucideIcon,
 } from "lucide-react"
@@ -37,7 +37,6 @@ export const systemAppPresentation: Record<SynapseSystemAppId, {
   connectors: { icon: Plug, category: "development" },
   settings: { icon: Settings, category: "system" },
   secrets: { icon: KeyRound, category: "system" },
-  "usage-monitor": { icon: Gauge, category: "system" },
   "model-price": { icon: Tag, category: "system" },
   launcher: { icon: LayoutGrid, category: null },
 }

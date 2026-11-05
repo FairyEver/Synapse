@@ -85,10 +85,6 @@ vi.mock("@/modules/settings", () => ({
   SettingsModule: () => <div>设置内容</div>,
 }))
 
-vi.mock("@/modules/usage-analysis", () => ({
-  UsageMonitorModule: () => <div>用量内容</div>,
-}))
-
 vi.mock("@/modules/workflow", () => ({
   WorkflowModule: () => <div>工作流内容</div>,
 }))

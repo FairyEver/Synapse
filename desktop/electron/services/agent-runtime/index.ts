@@ -25,8 +25,7 @@ import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
   createProviderServiceFromDataRepository,
 } from "../provider"
-import { getUsageAnalysisDb } from "../usage-analysis"
-import { listModelPriceRules } from "../model-price"
+import { getModelPriceDb, listModelPriceRules } from "../model-price"
 import { ReplyOutboxService } from "../reply-target"
 import { KnowledgeBaseIngestCoordinator } from "../knowledge-base/ingest-finalizer"
 import {
@@ -298,7 +297,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         taskProgress: ctx.dataRepo.namespace<AgentTaskProgressEntryV1>("agent.task-progress"),
         agentArtifactStore,
         attachmentStagingService,
-        getUsagePriceRules: () => listModelPriceRules(getUsageAnalysisDb()),
+        getUsagePriceRules: () => listModelPriceRules(getModelPriceDb()),
         executeSynapseTool: async (toolName, args, context) => {
           const action = MCP_TOOL_ACTIONS[toolName]
           const domain = getMcpToolDomainId(toolName)

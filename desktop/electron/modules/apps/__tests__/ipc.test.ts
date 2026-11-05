@@ -52,6 +52,7 @@ describe("appsIpcModule", () => {
       "rule-installer",
       "sound-notifier",
       "system-notifier",
+      "usage-monitor",
     ]) {
       expect(appsIpcModule.methods.openSystemApp.request.safeParse({ appId: removedAppId }).success)
         .toBe(false)

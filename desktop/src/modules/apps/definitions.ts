@@ -15,7 +15,6 @@ import { gitAppDefinition } from "../git/app-definition"
 import { modelPriceAppDefinition } from "../model-price/app-definition"
 import { resourceRepositoryAppDefinition } from "../resource-repository/app-definition"
 import { settingsAppDefinition } from "../settings/app-definition"
-import { usageMonitorAppDefinition } from "../usage-analysis/app-definition"
 import { workflowAppDefinition } from "../workflow/app-definition"
 import { launcherAppDefinition } from "./launcher-app-definition"
 import { connectorsAppDefinition } from "../../../app-capabilities/connectors/renderer/app-definition"
@@ -42,7 +41,6 @@ const systemAppDefinitions = [
   quickInputAppDefinition,
   terminalAppDefinition,
   editorScanAppDefinition,
-  usageMonitorAppDefinition,
   modelPriceAppDefinition,
   connectorsAppDefinition,
   meetingAppDefinition,

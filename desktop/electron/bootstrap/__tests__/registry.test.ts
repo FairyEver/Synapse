@@ -149,7 +149,6 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.terminal",
         "core.terminal-agent-notifications",
         "core.update",
-        "core.usage-analysis",
         "core.voice",
         "core.window-manager",
         "core.workflow",

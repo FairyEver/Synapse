@@ -9,7 +9,7 @@ Portal Link uses `app.connectors.portal_link.credential.get` / `app_connectors_p
 | Retired MCP prefix | Current MCP prefix | Removed tools |
 | --- | --- | ---: |
 | `database_*` | `app_database_*` | 30 |
-| `model_price_*` | `app_model_price_*` | 11 |
+| `model_price_*` | `app_model_price_*` | 10 |
 | `repository_*` | `app_settings_repository_*` | 1 |
 | `automation_*` | `app_automation_*` | 14 |
 | `workflow_*` | `app_workflow_*` | 19 |
@@ -18,7 +18,7 @@ Portal Link uses `app.connectors.portal_link.credential.get` / `app_connectors_p
 
 The suffix after the prefix is unchanged. For example, `database_table_list` became `app_database_table_list`.
 
-For a two-column list of all 139 renamed tools, see [MCP tool name migration](./mcp-tool-name-migration.md).
+For a two-column list of all 138 renamed tools, see [MCP tool name migration](./mcp-tool-name-migration.md).
 For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bridge 名称迁移](./api-ipc-bridge-name-migration.md).
 
 | Capability id | MCP tool | HTTP action | Service method |
@@ -53,7 +53,6 @@ For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bri
 | `app.database.folder.delete` | `app_database_folder_delete` | `app.database.folder.delete` | `databaseFolderDelete` |
 | `app.database.folder.reorder` | `app_database_folder_reorder` | `app.database.folder.reorder` | `databaseFolderReorder` |
 | `app.database.table.move` | `app_database_table_move` | `app.database.table.move` | `databaseTableMove` |
-| `app.model_price.used_model.list` | `app_model_price_used_model_list` | `app.model_price.used_model.list` | `modelPriceUsedModelList` |
 | `app.model_price.rule.list` | `app_model_price_rule_list` | `app.model_price.rule.list` | `modelPriceRuleList` |
 | `app.model_price.rule.get` | `app_model_price_rule_get` | `app.model_price.rule.get` | `modelPriceRuleGet` |
 | `app.model_price.rule.create` | `app_model_price_rule_create` | `app.model_price.rule.create` | `modelPriceRuleCreate` |
