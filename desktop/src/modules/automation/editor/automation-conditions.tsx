@@ -54,7 +54,7 @@ export function AutomationConditions({ value, onChange, disabled = false }: Auto
   return (
     <section aria-labelledby="automation-conditions-heading" className="mt-4 min-w-0">
       <p id="automation-conditions-heading" className="mb-3 text-sm text-muted-foreground">
-        并且符合以下条件
+        {operator === "or" ? "或者符合以下条件" : "并且符合以下条件"}
       </p>
       <div className="rounded-xl border bg-card p-5 text-card-foreground">
         {items.map((condition, index) => (

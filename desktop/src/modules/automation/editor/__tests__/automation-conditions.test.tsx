@@ -53,6 +53,7 @@ describe("AutomationConditions", () => {
     await act(async () => { menuItem("或者").click() })
 
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ operator: "or" }))
+    expect(document.body.textContent).toContain("或者符合以下条件")
   })
 
   it("removes a condition and shows an error when no weekday remains", async () => {
