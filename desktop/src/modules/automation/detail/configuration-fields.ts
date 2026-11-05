@@ -5,7 +5,7 @@ import type { SynapseProjectConfig } from "@/types/config"
 export type AutomationConfigurationField = { key: string; label: string; value: string }
 
 const labels: Record<string, string> = {
-  accountId: "邮箱账号", singleRun: "完成后退出 Claude Code",
+  accountId: "邮箱账号", singleRun: "终端模式",
   expr: "Cron 表达式", timezone: "时区", activeDays: "活跃日", timeRange: "触发时段", start: "开始", end: "结束",
   everyMinutes: "间隔分钟", anchor: "起算方式", webhookName: "Webhook", webhookPublicId: "Webhook ID",
   command: "命令", script: "脚本", source: "代码", shell: "Shell", env: "环境变量", pathStrategy: "PATH 模式", posixLogin: "登录 Shell",
@@ -33,6 +33,7 @@ function formatValue(key: string, value: unknown, projects: readonly SynapseProj
   if (key === "accountId" && typeof value === "string") return value === "__all__" ? "全部邮箱账号" : accounts.find(account => account.id === value)?.name ?? "邮箱账号不可用"
   if (key === "projectId" && typeof value === "string") return projects.find(project => project.id === value)?.name ?? value
   if (key === "activeDays" && Array.isArray(value)) return value.length === 7 ? "每天" : value.map(day => ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][Number(day)] ?? String(day)).join("、")
+  if (key === "singleRun" && typeof value === "boolean") return value ? "完成后退出" : "保持交互"
   if (typeof value === "boolean") return value ? "是" : "否"
   if (typeof value === "string") return values[key]?.[value] ?? value
   if (Array.isArray(value)) return value.map(entry => formatValue("", entry, projects, accounts)).join("\n")

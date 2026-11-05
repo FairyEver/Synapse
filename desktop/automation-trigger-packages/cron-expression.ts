@@ -1,3 +1,6 @@
+import { createScheduleClockReader } from "./schedule-constraints"
+import { offsetsAroundDay, sameWallMinute } from "./schedule-clock"
+
 export interface ParsedCronExpression {
   readonly minute: ReadonlySet<number>
   readonly hour: ReadonlySet<number>
@@ -79,148 +82,31 @@ export function validateCronExpression(expr: string): void {
 
 export function nextCronRun(expr: string, from = new Date(), timezone?: string): Date {
   const parsed = parseCronExpression(expr)
-  if (timezone) {
-    return nextCronRunInTimezone(parsed, timezone, from)
-  }
-  return nextCronRunLocal(parsed, from)
+  return nextCronRunInTimezone(parsed, timezone, from)
 }
 
-function nextCronRunLocal(parsed: ParsedCronExpression, from: Date): Date {
-  const candidate = new Date(from)
-  candidate.setSeconds(0, 0)
-  candidate.setMinutes(candidate.getMinutes() + 1)
-  const end = new Date(from)
-  end.setFullYear(end.getFullYear() + 5)
-
-  while (candidate <= end) {
-    if (matchesLocalCron(parsed, candidate)) return new Date(candidate)
-    if (!parsed.month.has(candidate.getMonth() + 1)) {
-      candidate.setMonth(candidate.getMonth() + 1, 1)
-      candidate.setHours(0, 0, 0, 0)
-    }
-    else if (!matchesDayFields(parsed, candidate.getDate(), candidate.getDay())) {
-      candidate.setDate(candidate.getDate() + 1)
-      candidate.setHours(0, 0, 0, 0)
-    }
-    else if (!parsed.hour.has(candidate.getHours())) candidate.setHours(candidate.getHours() + 1, 0, 0, 0)
-    else candidate.setMinutes(candidate.getMinutes() + 1)
-  }
-  throw new Error("cron expression has no run within 5 years")
-}
-
-function matchesLocalCron(parsed: ParsedCronExpression, date: Date): boolean {
-  return parsed.minute.has(date.getMinutes())
-    && parsed.hour.has(date.getHours())
-    && parsed.month.has(date.getMonth() + 1)
-    && matchesDayFields(parsed, date.getDate(), date.getDay())
-}
-
-interface WallClock {
-  year: number
-  month: number
-  day: number
-  hour: number
-  minute: number
-}
-
-function getWallClock(date: Date, timezone: string): WallClock {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date)
-  const obj: Record<string, string> = {}
-  for (const p of parts) {
-    if (p.type !== "literal") obj[p.type] = p.value
-  }
-  return {
-    year: Number(obj.year),
-    month: Number(obj.month),
-    day: Number(obj.day),
-    hour: Number(obj.hour),
-    minute: Number(obj.minute),
-  }
-}
-
-function wallClockToAbsolute(wc: WallClock, timezone: string): Date {
-  const utcMs = Date.UTC(wc.year, wc.month - 1, wc.day, wc.hour, wc.minute, 0)
-  const probe = new Date(utcMs)
-  const offset = getTimezoneOffsetMs(probe, timezone)
-  return new Date(utcMs - offset)
-}
-
-function getTimezoneOffsetMs(date: Date, timezone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    timeZoneName: "longOffset",
-    hour12: false,
-  }).formatToParts(date)
-  const offsetPart = parts.find((p) => p.type === "timeZoneName")
-  if (offsetPart) {
-    const match = offsetPart.value.match(/GMT([+-]\d{2}):?(\d{2})/)
-    if (match) {
-      const sign = match[1]![0] === "+" ? 1 : -1
-      return sign * (Number(match[1]!.slice(1)) * 60 + Number(match[2]!)) * 60_000
-    }
-  }
-  return 0
-}
-
-function nextCronRunInTimezone(
-  parsed: ParsedCronExpression,
-  timezone: string,
-  from: Date,
-): Date {
-  const wc = getWallClock(from, timezone)
-  wc.minute += 1
-  if (wc.minute >= 60) {
-    wc.minute = 0
-    wc.hour += 1
-  }
-  if (wc.hour >= 24) {
-    wc.hour = 0
-    wc.day += 1
-  }
-  normalizeWallClock(wc)
-
+function nextCronRunInTimezone(parsed: ParsedCronExpression, timezone: string | undefined, from: Date): Date {
+  const readClock = createScheduleClockReader(timezone)
+  const first = readClock(from)
+  const day = new Date(Date.UTC(first.year, first.month - 1, first.day))
   const end = new Date(from)
   end.setFullYear(end.getFullYear() + 5)
   const endMs = end.getTime()
-
-  while (Date.UTC(wc.year, wc.month - 1, wc.day, wc.hour, wc.minute) <= endMs + 86_400_000) {
-    const dow = new Date(Date.UTC(wc.year, wc.month - 1, wc.day)).getUTCDay()
-    if (!parsed.month.has(wc.month)) { wc.month += 1; wc.day = 1; wc.hour = 0; wc.minute = 0 }
-    else if (!matchesDayFields(parsed, wc.day, dow)) { wc.day += 1; wc.hour = 0; wc.minute = 0 }
-    else if (!parsed.hour.has(wc.hour)) { wc.hour += 1; wc.minute = 0 }
-    else if (!parsed.minute.has(wc.minute)) wc.minute += 1
-    else {
-      const candidate = wallClockToAbsolute(wc, timezone)
-      const actual = getWallClock(candidate, timezone)
-      if (candidate.getTime() > from.getTime() && candidate.getTime() <= endMs && actual.year === wc.year && actual.month === wc.month && actual.day === wc.day && actual.hour === wc.hour && actual.minute === wc.minute) return candidate
-      wc.minute += 1
+  const last = readClock(end)
+  const lastDay = Date.UTC(last.year, last.month - 1, last.day)
+  const minutes = [...parsed.hour].flatMap(hour => [...parsed.minute].map(minute => hour * 60 + minute)).sort((a, b) => a - b)
+  for (; day.getTime() <= lastDay; day.setUTCDate(day.getUTCDate() + 1)) {
+    if (!parsed.month.has(day.getUTCMonth() + 1) || !matchesDayFields(parsed, day.getUTCDate(), day.getUTCDay())) continue
+    const offsets = offsetsAroundDay(day, readClock)
+    let earliest = Infinity
+    for (const minute of minutes) for (const offset of offsets) {
+      const instant = day.getTime() + minute * 60_000 - offset
+      if (instant <= from.getTime() || instant > endMs || instant >= earliest) continue
+      if (sameWallMinute(readClock(new Date(instant)), day, minute)) earliest = instant
     }
-    const normalized = new Date(Date.UTC(wc.year, wc.month - 1, wc.day, wc.hour, wc.minute))
-    wc.year = normalized.getUTCFullYear(); wc.month = normalized.getUTCMonth() + 1; wc.day = normalized.getUTCDate(); wc.hour = normalized.getUTCHours(); wc.minute = normalized.getUTCMinutes()
+    if (earliest !== Infinity) return new Date(earliest)
   }
   throw new Error("cron expression has no run within 5 years")
-}
-
-function normalizeWallClock(wc: WallClock): void {
-  while (true) {
-    const daysInMonth = new Date(Date.UTC(wc.year, wc.month, 0)).getUTCDate()
-    if (wc.day <= daysInMonth) break
-    wc.day -= daysInMonth
-    wc.month += 1
-    if (wc.month > 12) {
-      wc.month = 1
-      wc.year += 1
-    }
-  }
 }
 
 export function matchesDayFields(parsed: ParsedCronExpression, day: number, weekday: number): boolean {

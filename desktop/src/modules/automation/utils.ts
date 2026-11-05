@@ -184,7 +184,7 @@ function formatAutomationScope(item: AutomationItem, projects: readonly SynapseP
 
 function formatAutomationTrigger(item: Pick<AutomationItem, "trigger">): string {
   try {
-    return rendererAutomationTriggerRegistry.summarize(item.trigger.type, item.trigger.config)
+    return rendererAutomationTriggerRegistry.summarize(item.trigger.type, item.trigger.config) || formatAutomationTriggerType(item)
   } catch (error) {
     logger.warn("Automation trigger summary render failed.", {
       boundary: "automation.trigger-summary",

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ChevronDown, Clock, LoaderCircle, Play, RefreshCw, RotateCcw, Square } from "lucide-react"
 
 import { ActionResultView } from "@/action-runtime/action-result-view"
@@ -63,6 +63,7 @@ function RunItem({
   readonly onStop: (run: AutomationRun) => void
 }) {
   const [expanded, setExpanded] = useState(run.status === "failed" || run.status === "timeout")
+  useEffect(() => { if (run.status === "failed" || run.status === "timeout") setExpanded(true) }, [run.status])
   const hasOutput = run.result || run.error
   const statusVariant = run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"
   const triggerIcon = run.triggeredBy === "manual"
@@ -81,6 +82,7 @@ function RunItem({
           <span className="flex items-center gap-1 text-xs text-muted-foreground">{triggerIcon}{triggerLabel}</span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-3">
+          {stopping ? <span role="status" className="text-xs text-muted-foreground">正在停止</span> : null}
           {run.result?.metrics?.durationMs !== undefined ? <span className="text-sm tabular-nums text-muted-foreground">{formatDuration(run.result.metrics.durationMs)}</span> : null}
           {run.status === "running" ? <Button disabled={busy} size="icon-sm" variant="outline" onClick={() => onStop(run)}>{stopping ? <LoaderCircle className="animate-spin" /> : <Square />}<span className="sr-only">{stopping ? "正在停止" : "停止"}</span></Button> : null}
         </div>

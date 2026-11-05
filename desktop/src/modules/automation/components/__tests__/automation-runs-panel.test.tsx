@@ -22,6 +22,29 @@ beforeEach(() => { api.list.mockReset(); const container = document.createElemen
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ""; vi.restoreAllMocks() })
 
 describe("automation run history", () => {
+  it("reveals failure output when an existing running record finishes", async () => {
+    api.list.mockResolvedValueOnce([run("running")]).mockResolvedValueOnce([run("failed")])
+    await act(async () => root.render(<AutomationRunsPanel item={item} busy={false} onStopRun={vi.fn()} />))
+    await act(async () => api.listener?.({ automationId: "a1", reason: "run-finished" }))
+    expect(document.body.textContent).toContain("完整执行结果")
+  })
+  it("keeps a requested stop pending until a terminal run state arrives", async () => {
+    api.list.mockResolvedValue([run("running")])
+    await act(async () => root.render(<AutomationRunsPanel item={item} busy={false} onStopRun={vi.fn().mockResolvedValue(undefined)} />))
+    await act(async () => button("停止").click())
+    expect(button("停止").disabled).toBe(true)
+    api.list.mockResolvedValueOnce([run("cancelled")])
+    await act(async () => api.listener?.({ automationId: "a1", reason: "run-stopped" }))
+    expect(document.body.textContent).not.toContain("正在停止")
+  })
+  it("clears a failed stop once the run finishes independently", async () => {
+    api.list.mockResolvedValueOnce([run("running")]).mockResolvedValueOnce([run("success")])
+    await act(async () => root.render(<AutomationRunsPanel item={item} busy={false} onStopRun={vi.fn().mockRejectedValue(new Error("offline"))} />))
+    await act(async () => button("停止").click())
+    expect(document.body.textContent).toContain("停止失败")
+    await act(async () => api.listener?.({ automationId: "a1", reason: "run-finished" }))
+    expect(document.body.textContent).not.toContain("停止失败")
+  })
   it("refreshes the current task on run events and keeps prior results while refreshing or failing", async () => {
     api.list.mockResolvedValueOnce([run()])
     await act(async () => root.render(<AutomationRunsPanel item={item} busy={false} onStopRun={vi.fn()} />))

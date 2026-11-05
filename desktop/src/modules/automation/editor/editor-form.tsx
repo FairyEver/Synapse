@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ArrowLeft, LoaderCircle, RefreshCw } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -41,13 +41,18 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
   const executorPanel = useRef<HTMLDivElement>(null)
   const leaveSaveButton = useRef<HTMLButtonElement>(null)
   const ready = loadState.status === "ready"
+  const focusFirstError = useCallback(() => {
+    const target = Array.from(form.current?.querySelectorAll<HTMLElement>('[aria-invalid="true"]') ?? []).find(element => !element.closest("[hidden]") && !element.parentElement?.closest('[data-slot="collapsible-content"][data-state="closed"], [data-slot="tabs-content"][data-state="inactive"]'))
+    target?.focus()
+    target?.scrollIntoView({ block: "center" })
+    return Boolean(target)
+  }, [])
   useEffect(() => {
-    if (Object.keys(fieldErrors).length && !leaveKind) {
-      setTab("config")
-      const target = form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')
-      target?.focus(); target?.scrollIntoView({ block: "center" })
-    }
-  }, [fieldErrors, leaveKind])
+    if (!Object.keys(fieldErrors).length || leaveKind) return
+    setTab("config")
+    const timer = window.setTimeout(focusFirstError, 0)
+    return () => window.clearTimeout(timer)
+  }, [fieldErrors, leaveKind, focusFirstError])
   useEffect(() => {
     if (ready && (props.initialStep === "executor" || props.initialStep === "conditions")) {
       const panel = props.initialStep === "conditions" ? conditionsPanel.current : executorPanel.current
@@ -72,7 +77,7 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
           <AlertDialogContent
             onOpenAutoFocus={event => { event.preventDefault(); leaveSaveButton.current?.focus() }}
             onEscapeKeyDown={event => { if (saving) event.preventDefault() }}
-            onCloseAutoFocus={event => { event.preventDefault(); editor.restoreFocus() }}
+            onCloseAutoFocus={event => { event.preventDefault(); if (!Object.keys(fieldErrors).length || !focusFirstError()) editor.restoreFocus() }}
           >
             <AlertDialogHeader>
               <AlertDialogTitle>保存更改？</AlertDialogTitle>
@@ -115,7 +120,7 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
                   <fieldset disabled={saving} className="mx-auto w-full min-w-0 max-w-7xl border-0 px-5 py-6 @3xl:px-8 @3xl:py-8">
                     <div className="grid min-w-0 items-start gap-8 @4xl:grid-cols-2" data-layout="automation-editor-flow">
                       <div className="min-w-0">
-                        <TriggerExecutorBuilder fieldErrors={scopedAutomationErrors(fieldErrors, "trigger")} onAddProject={() => setProjectDialogOpen(true)} step="trigger" onChoosingChange={editor.setChoosingType} triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
+                        <TriggerExecutorBuilder conditions={loadState.draft.conditions} fieldErrors={scopedAutomationErrors(fieldErrors, "trigger")} onAddProject={() => setProjectDialogOpen(true)} step="trigger" onChoosingChange={editor.setChoosingType} triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
                           executorType={loadState.draft.executorType} executorConfig={loadState.draft.executorConfig}
                           projects={config.global.projects} platform={getRendererPlatform()} onTriggerChange={editor.changeTrigger}
                           onExecutorChange={editor.changeExecutor} />

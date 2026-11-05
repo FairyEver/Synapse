@@ -54,19 +54,32 @@ export function useAutomationRuns(item: AutomationItem | null, onStopRun: (runId
     })
   }, [id, refresh])
 
+  useEffect(() => {
+    if (snapshot.id !== id) return
+    const active = new Set(snapshot.runs.filter(run => run.status === "running").map(run => run.id))
+    const next = new Set([...stoppingRef.current].filter(runId => active.has(runId)))
+    if (next.size !== stoppingRef.current.size) { stoppingRef.current = next; setStopping(next) }
+    setStopErrors(current => {
+      const entries = Object.entries(current).filter(([runId]) => active.has(runId))
+      return entries.length === Object.keys(current).length ? current : Object.fromEntries(entries)
+    })
+  }, [snapshot, id])
+
   const stop = async (run: AutomationRun) => {
     if (!id || stoppingRef.current.has(run.id)) return
     stoppingRef.current.add(run.id)
     setStopping(new Set(stoppingRef.current))
     setStopErrors(current => { const next = { ...current }; delete next[run.id]; return next })
+    let accepted = false
     try {
       await runTrackedOperation({ component: "automation", eventKey: "automation.history.stop" }, () => onStopRun(run.id))
+      accepted = true
       if (currentId.current === id) await refresh()
     } catch (cause) {
       logger.warn("Automation run stop failed.", { automationId: id, runId: run.id, boundary: "renderer.automation.runs.stop", errorName: cause instanceof Error ? cause.name : typeof cause })
       if (currentId.current === id) setStopErrors(current => ({ ...current, [run.id]: "停止失败" }))
     } finally {
-      if (currentId.current === id) {
+      if (!accepted && currentId.current === id) {
         stoppingRef.current.delete(run.id)
         setStopping(new Set(stoppingRef.current))
       }

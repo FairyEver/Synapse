@@ -4,7 +4,7 @@ import { automationConditionsSchema } from "../../../../automation-trigger-packa
 import type { AutomationEditorDraft } from "../types"
 
 export type AutomationFieldErrors = Readonly<Record<string, string>>
-const messages: Record<string, string> = { projectId: "请选择项目", providerId: "请选择供应商和模型", modelTier: "请选择模型", prompt: "请填写提示词", expr: "请填写有效的 Cron 表达式", timezone: "请填写有效时区", everyMinutes: "请输入大于 0 的间隔分钟", webhookPublicId: "请选择 Webhook", timeoutMins: "请检查超时分钟" }
+const messages: Record<string, string> = { mode: "请选择权限模式", sessionPolicy: "请选择会话策略", projectId: "请选择项目", providerId: "请选择供应商和模型", modelTier: "请选择模型", prompt: "请填写提示词", expr: "请填写有效的 Cron 表达式", timezone: "请填写有效时区", everyMinutes: "请输入大于 0 的间隔分钟", webhookPublicId: "请选择 Webhook", timeoutMins: "请检查超时分钟" }
 
 export function validateAutomationDraftFields(draft: AutomationEditorDraft): AutomationFieldErrors {
   const errors: Record<string, string> = {}

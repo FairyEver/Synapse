@@ -1,3 +1,4 @@
+import type { AutomationConditions } from "@/types/automation"
 import { useEffect, useId, useState } from "react"
 import { ChevronDown, ChevronRight, ChevronUp, Play, Zap } from "lucide-react"
 
@@ -18,6 +19,7 @@ import { TriggerVariablesDialog } from "./trigger-variables-dialog"
 
 type TriggerExecutorBuilderProps = {
   step: Exclude<AutomationEditorStep, "conditions">
+  conditions?: AutomationConditions
   fieldErrors?: ConfigurationFieldErrors
   onAddProject?: () => void
   onChoosingChange: (choosing: boolean) => void
@@ -37,7 +39,7 @@ function parseConfig(type: string, config: ActionConfig, trigger: boolean): Acti
   try { return registry.parseConfig(type, merged) } catch { return merged }
 }
 
-export function TriggerExecutorBuilder({ step, fieldErrors, onAddProject, onChoosingChange, triggerType, triggerConfig, executorType, executorConfig,
+export function TriggerExecutorBuilder({ step, conditions, fieldErrors, onAddProject, onChoosingChange, triggerType, triggerConfig, executorType, executorConfig,
   projects = [], platform, onTriggerChange, onExecutorChange }: TriggerExecutorBuilderProps) {
   const [pendingChoice, setPendingChoice] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -61,7 +63,7 @@ export function TriggerExecutorBuilder({ step, fieldErrors, onAddProject, onChoo
     : [{ title: "执行操作", options }]
   const ConfigForm = isTrigger ? null : executor?.ConfigForm
   const hasErrors = Boolean(fieldErrors && Object.keys(fieldErrors).length)
-  useEffect(() => { if (hasErrors) setExpanded(true) }, [hasErrors])
+  useEffect(() => { if (hasErrors) setExpanded(true) }, [hasErrors, fieldErrors])
   const TriggerForm = isTrigger ? trigger?.ConfigForm : null
 
   useEffect(() => { onChoosingChange(menuOpen || pendingChoice !== null) }, [menuOpen, pendingChoice, onChoosingChange])
@@ -115,7 +117,7 @@ export function TriggerExecutorBuilder({ step, fieldErrors, onAddProject, onChoo
         </div> : null}
         {selected && (TriggerForm || ConfigForm) ? <CollapsibleContent forceMount hidden={!expanded}>
           <div data-layout={`automation-editor-${step}-config`} className="grid min-w-0 gap-6 border-t p-6 [&_[data-slot=field]]:min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full">
-            {TriggerForm ? <TriggerForm fieldErrors={fieldErrors} value={parseConfig(trigger!.manifest.id, config, true)} onChange={value => onTriggerChange(trigger!.manifest.id, value)} /> : null}
+            {TriggerForm ? <TriggerForm conditions={conditions} fieldErrors={fieldErrors} value={parseConfig(trigger!.manifest.id, config, true)} onChange={value => onTriggerChange(trigger!.manifest.id, value)} /> : null}
             {ConfigForm ? <ConfigForm fieldErrors={fieldErrors} onAddProject={onAddProject} value={parseConfig(executor!.manifest.id, config, false)} projects={projects} triggerVariables={trigger?.manifest.variables ?? []}
               onChange={value => onExecutorChange(executor!.manifest.id, value)} /> : null}
           </div>

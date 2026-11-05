@@ -2,6 +2,7 @@
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import * as cronUtils from "@/automation-triggers/cron-utils"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
@@ -43,6 +44,31 @@ beforeEach(() => {
 })
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ""; vi.clearAllMocks(); vi.restoreAllMocks() })
 describe("inline automation editing", () => {
+  it("expands the invalid executor and focuses the prompt after the view settles", async () => {
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { change(document.querySelector<HTMLTextAreaElement>("#task-action-agent-prompt")!, "") })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="收起执行配置"]')!.click() })
+    await act(async () => { button("仅保存").click() })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+    const prompt = document.querySelector<HTMLTextAreaElement>("#task-action-agent-prompt")!
+    expect(prompt.getAttribute("aria-invalid")).toBe("true")
+    expect(document.activeElement).toBe(prompt)
+    expect(document.getElementById(prompt.getAttribute("aria-describedby")!)).not.toBeNull()
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="收起执行配置"]')!.click() })
+    await act(async () => { button("仅保存").click() })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+    expect(document.activeElement).toBe(prompt)
+    expect(prompt.closest('[data-slot="collapsible-content"]')?.getAttribute("data-state")).toBe("open")
+  })
+  it("passes the saved conditions through the editor into the Cron preview", async () => {
+    const value = item()
+    value.conditions = { operator: "and", items: [{ type: "weekdays", days: [1] }] }
+    api.get.mockResolvedValueOnce(value)
+    const compute = vi.spyOn(cronUtils, "listNextCronRuns")
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" } })
+    await act(async () => { button("未来 5 次").click() })
+    expect(compute).toHaveBeenCalledWith("0 9 * * *", expect.any(Date), 5, { timezone: undefined, conditions: value.conditions })
+  })
   it("keeps trigger and executor configurations together with actions in the scrolling form", async () => {
     await renderEditor()
     expect(document.body.textContent).toContain("当以下情况发生时")

@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { CronEditorDialog, CronEditorFields } from "../cron-editor-dialog"
+import * as cronUtils from "../cron-utils"
 import { CronInput } from "../cron-input"
 import {
   createDefaultCronTemplateDraft,
@@ -41,6 +42,29 @@ afterEach(() => {
 })
 
 describe("CronInput", () => {
+  it("does not compute collapsed previews and includes timezone and conditions on expansion", async () => {
+    const compute = vi.spyOn(cronUtils, "listNextCronRuns")
+    const conditions = { operator: "and" as const, items: [{ type: "weekdays" as const, days: [1] }] }
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container); roots.push(root)
+    await act(async () => root.render(<CronInput id="lazy-cron" layout="inline" value="0 9 * * *" timezone="UTC" conditions={conditions} onChange={vi.fn()} />))
+    expect(compute).not.toHaveBeenCalled()
+    await act(async () => [...document.querySelectorAll("button")].find(button => button.textContent === "未来 5 次")!.click())
+    expect(compute).toHaveBeenCalledWith("0 9 * * *", expect.any(Date), 5, { timezone: "UTC", conditions })
+    compute.mockRestore()
+  })
+  it("requires confirmation before replacing an advanced expression with a common template", async () => {
+    function Harness() { const [value, setValue] = useState("0 9,17 * * *"); return <CronInput id="advanced-cron" layout="inline" value={value} onChange={setValue} /> }
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container); roots.push(root)
+    await act(async () => root.render(<Harness />))
+    const common = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(button => button.textContent === "常用")!
+    await act(async () => { common.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })) })
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull()
+    expect((document.getElementById("advanced-cron") as HTMLInputElement).value).toBe("0 9,17 * * *")
+    await act(async () => [...document.querySelectorAll<HTMLButtonElement>("button")].find(button => button.textContent === "确认替换")!.click())
+    expect((document.getElementById("advanced-cron") as HTMLInputElement).value).toBe("0 9 * * *")
+  })
   it("keeps manually entered hours when a common template field is changed", async () => {
     function Harness() { const [value, setValue] = useState("0 9 * * *"); return <CronInput id="manual-cron" value={value} onChange={setValue} /> }
     const container = document.createElement("div"); document.body.appendChild(container)

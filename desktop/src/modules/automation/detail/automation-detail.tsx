@@ -49,7 +49,7 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
     : item
   const sections = [
     { key: "trigger", title: "触发条件", type: formatAutomationTriggerType(item), summary: formatAutomationTrigger(item), fields: buildAutomationConfigurationFields(triggerConfig, projects, accounts), icon: <TriggerIcon /> },
-    { key: "executor", title: "执行操作", type: formatAutomationExecutorType(item), summary: formatAutomationExecutor(displayItem), fields: buildAutomationConfigurationFields(item.executor.config, projects), icon: <ExecutorIcon /> },
+    { key: "executor", title: "执行操作", type: formatAutomationExecutorType(item), summary: item.executor.type === "builtin.claude-code" ? "" : formatAutomationExecutor(displayItem), fields: buildAutomationConfigurationFields(item.executor.config, projects), icon: <ExecutorIcon /> },
   ] as const
   const policyFields = [
     ["范围", formatAutomationScope(item, projects)],

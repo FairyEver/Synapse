@@ -46,6 +46,8 @@ export function AgentConfigForm({
   readonly onAddProject?: () => void
   readonly triggerVariables?: readonly AutomationTriggerVariableDescriptor[]
 }) {
+  const providerErrors = fieldErrors?.modelTier && !fieldErrors.providerId ? { ...fieldErrors, providerId: fieldErrors.modelTier } : fieldErrors
+  const advancedExpanded = Boolean(fieldErrors?.timeoutMins || fieldErrors?.sessionPolicy)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
 
@@ -87,7 +89,7 @@ export function AgentConfigForm({
           <FieldContent>
             <Button
               id="task-action-agent-provider"
-              {...configurationFieldProps(fieldErrors, "providerId", "task-action-agent-provider")}
+              {...configurationFieldProps(providerErrors, "providerId", "task-action-agent-provider")}
               type="button"
               variant="outline"
               className="w-full justify-between"
@@ -105,7 +107,7 @@ export function AgentConfigForm({
               </span>
               <ChevronDown className="size-4 text-muted-foreground" />
             </Button>
-            <ConfigurationFieldError errors={fieldErrors} name="providerId" id="task-action-agent-provider" />
+            <ConfigurationFieldError errors={providerErrors} name="providerId" id="task-action-agent-provider" />
             <ProviderModelSelectDialog
               open={providerDialogOpen}
               onOpenChange={setProviderDialogOpen}
@@ -126,7 +128,7 @@ export function AgentConfigForm({
               }}
               trigger={(
                 <Button
-                  id="task-action-agent-mode"
+                  id="task-action-agent-mode" {...configurationFieldProps(fieldErrors, "mode", "task-action-agent-mode")}
                   type="button"
                   variant="outline"
                   className="w-full justify-between"
@@ -137,6 +139,7 @@ export function AgentConfigForm({
                 </Button>
               )}
             />
+            <ConfigurationFieldError errors={fieldErrors} name="mode" id="task-action-agent-mode" />
           </FieldContent>
         </Field>
       </div>
@@ -144,15 +147,15 @@ export function AgentConfigForm({
       <ActionPromptField fieldErrors={fieldErrors} id="task-action-agent-prompt" value={value.prompt} variables={triggerVariables}
         onChange={(prompt) => onChange({ ...value, prompt })} />
 
-      <Collapsible open={advancedOpen || Boolean(fieldErrors?.timeoutMins || fieldErrors?.sessionPolicy)} onOpenChange={setAdvancedOpen} className="border-t pt-4">
-        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown data-icon="inline-start" className={advancedOpen ? "rotate-180" : undefined} />会话与超时</Button></CollapsibleTrigger>
+      <Collapsible open={advancedOpen || advancedExpanded} onOpenChange={setAdvancedOpen} className="border-t pt-4">
+        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown data-icon="inline-start" className={advancedOpen || advancedExpanded ? "rotate-180" : undefined} />会话与超时</Button></CollapsibleTrigger>
         <CollapsibleContent forceMount className="mt-4 data-[state=closed]:hidden">
           <div className="grid gap-4 @lg/config:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="task-action-agent-session-policy">会话策略</FieldLabel>
               <FieldContent>
                 <ToggleGroup
-                  id="task-action-agent-session-policy" aria-label="会话策略"
+                  id="task-action-agent-session-policy" {...configurationFieldProps(fieldErrors, "sessionPolicy", "task-action-agent-session-policy")} aria-label="会话策略"
                   className="w-full"
                   type="single"
                   value={value.sessionPolicy}
@@ -168,6 +171,7 @@ export function AgentConfigForm({
                     复用上次
                   </ToggleGroupItem>
                 </ToggleGroup>
+                <ConfigurationFieldError errors={fieldErrors} name="sessionPolicy" id="task-action-agent-session-policy" />
               </FieldContent>
             </Field>
 
@@ -187,6 +191,7 @@ export function AgentConfigForm({
                     })
                   }
                 />
+                <ConfigurationFieldError errors={fieldErrors} name="timeoutMins" id="task-action-agent-timeout" />
               </FieldContent>
             </Field>
           </div>

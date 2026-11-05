@@ -34,7 +34,7 @@ function CronInput({ timezone, conditions, disabled, id, value, onChange, layout
     if (next === "common" && !inferCronTemplate(value)) { setConfirmCommon(true); return }
     setTab(next)
   }
-  const conversion = <AlertDialog open={confirmCommon} onOpenChange={setConfirmCommon}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>改用常用计划？</AlertDialogTitle><AlertDialogDescription>当前表达式无法直接转换，将替换为下方常用计划。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => { emit(buildCronExpression(template)); setTab("common") }}>确认替换</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  const conversion = <AlertDialog open={confirmCommon} onOpenChange={setConfirmCommon}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>改用常用计划？</AlertDialogTitle><AlertDialogDescription>当前表达式将替换为 {buildCronExpression(template)}。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => { emit(buildCronExpression(template)); setTab("common") }}>确认替换</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   useEffect(() => {
     if (value === lastValue.current) return
     lastValue.current = value

@@ -363,3 +363,5 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 Automation Trigger 从 3 项增至 5 项；复用既有 14 项 Automation capability / MCP 索引，执行器沿用 Agent 和 Claude Code。公开 MCP 仍仅 search / invoke；本次全局 capability / MCP 数量无增量，System App、Dock、Workflow Node、Automation Action、Deep Link 均不新增。现有触发器发现返回两种新 schema 与正文等变量。
 
 新增两个仅限本人认证的服务端内部 REST 入口 `/api/mail-internal/automation/checkpoint`（POST）和 `/api/mail-internal/automation/changes`（GET），不是 MCP/本机 capability。新后台服务 core.automation-mail-triggers 在主窗口创建后启动；不扩展 renderer/preload 权限。三种 app.automation-mail.* 命名空间为 local-only。启用必须在线确认来源起点，导入强制停用，停用水位不能确认的历史区间保持诊断；队列、去重、正文读取与不自动重放规则见对应设计和 module-boundaries。
+
+- 2026-11-05 自动化界面抛光：共享调度纯函数供预览与实际调度复用；表单校验、空状态导航、启停与历史刷新均复用现有 bridge。未新增或移除 System App、Action、Trigger、IPC 或 MCP 工具，注册数量保持不变。
