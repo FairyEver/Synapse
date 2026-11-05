@@ -13,6 +13,10 @@ const AUTOMATION_DRAFT_NAME_PREFIX = "自动化"
 const AUTOMATION_DRAFT_SUFFIX_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const logger = createRendererLogger("automation.utils")
 
+export function automationManualRunUnavailableReason(item: Pick<AutomationItem, "trigger">): string | undefined {
+  return rendererAutomationTriggerRegistry.list().find(trigger => trigger.manifest.id === item.trigger.type)?.manualRunUnavailableReason
+}
+
 function createDefaultAutomationDraft(name = ""): AutomationEditorDraft {
   return {
     name,

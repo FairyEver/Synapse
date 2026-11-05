@@ -12,6 +12,7 @@ import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { AutomationList } from "../components/automation-list"
 import { AutomationListRow } from "../components/automation-list-row"
+import { AutomationCard } from "../components/automation-card"
 import { AutomationRunsPanel } from "../components/automation-runs-dialog"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import type { AutomationItem } from "@/types/automation"
@@ -141,6 +142,30 @@ afterEach(async () => {
 })
 
 describe("AutomationModule", () => {
+  it.each(["builtin.mail-internal-received", "builtin.mail-received"])("prevents context-free manual runs of %s in the list and card", async (type) => {
+    const item = createItem({ trigger: { type, config: {} } })
+    mocks.useAutomationItems.mockReturnValue({ items: [item], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => { root.render(<AutomationModule />) })
+    const run = document.querySelector<HTMLButtonElement>('button[aria-label="需要信件上下文，无法手动运行"]')
+    expect(run?.disabled).toBe(true)
+    expect(run?.parentElement?.tabIndex).toBe(0)
+    await act(async () => { run?.parentElement?.focus() })
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain("需要信件上下文")
+    await act(async () => { run?.click() })
+    expect(mocks.runAutomation).not.toHaveBeenCalled()
+
+    const onRun = vi.fn()
+    await act(async () => { root.render(<TooltipProvider><AutomationCard item={item} projects={[]} pending={false} running={false}
+      onRun={onRun} onStop={vi.fn()} onToggleEnabled={vi.fn()} onEdit={vi.fn()} onHistory={vi.fn()} onDelete={vi.fn()} /></TooltipProvider>) })
+    const cardRun = document.querySelector<HTMLButtonElement>('button[aria-label="需要信件上下文，无法手动运行"]')
+    expect(cardRun?.disabled).toBe(true)
+    expect(cardRun?.parentElement?.tabIndex).toBe(0)
+    await act(async () => { cardRun?.click() })
+    expect(onRun).not.toHaveBeenCalled()
+  })
+
   it("keeps legacy automations disabled and opens their stored configuration read-only", async () => {
     const legacy = createItem({
       schemaVersion: 1,

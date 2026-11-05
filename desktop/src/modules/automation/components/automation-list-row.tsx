@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { AutomationItem } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
 import {
+  automationManualRunUnavailableReason,
   formatAutomationExecutorType,
   formatAutomationScope,
   formatAutomationTrigger,
@@ -64,7 +65,8 @@ function AutomationListRow({
   const executorType = formatAutomationExecutorType(item)
   const subtitle = `${formatAutomationTrigger(item)} · ${executorType}`
   const stopDisabled = pending || (activeRunning && !item.activeRun?.id)
-  const runDisabled = disabled || pending || running || needsUpdate
+  const manualRunUnavailableReason = automationManualRunUnavailableReason(item)
+  const runDisabled = disabled || pending || running || needsUpdate || Boolean(manualRunUnavailableReason)
 
   return (
     <TableRow
@@ -163,20 +165,22 @@ function AutomationListRow({
           ) : (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={runDisabled}
-                  aria-label={legacy ? "旧版自动化不可运行" : needsUpdate ? "需要更新后才能运行自动化" : "运行自动化"}
-                  onClick={() => {
-                    onRun()
-                  }}
-                >
-                  {running ? <Loader2 className="animate-spin" /> : <Play />}
-                </Button>
+                <span className="inline-flex" tabIndex={manualRunUnavailableReason ? 0 : undefined}>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    disabled={runDisabled}
+                    aria-label={legacy ? "旧版自动化不可运行" : needsUpdate ? "需要更新后才能运行自动化" : manualRunUnavailableReason ?? "运行自动化"}
+                    onClick={() => {
+                      onRun()
+                    }}
+                  >
+                    {running ? <Loader2 className="animate-spin" /> : <Play />}
+                  </Button>
+                </span>
               </TooltipTrigger>
-              <TooltipContent>{legacy ? "旧版不可运行" : needsUpdate ? "需要更新" : "运行"}</TooltipContent>
+              <TooltipContent>{legacy ? "旧版不可运行" : needsUpdate ? "需要更新" : manualRunUnavailableReason ?? "运行"}</TooltipContent>
             </Tooltip>
           )}
           <Tooltip>

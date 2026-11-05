@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { SynapseProjectConfig } from "@/types/config"
 import type { AutomationItem } from "@/types/automation"
 import {
+  automationManualRunUnavailableReason,
   formatAutomationExecutor,
   formatAutomationScope,
   formatAutomationTrigger,
@@ -58,6 +59,7 @@ function AutomationCard({
   const activeRunning = item.activeRun?.status === "running"
   const badge = getStatusBadge(item)
   const deleteDisabled = pending || activeRunning
+  const manualRunUnavailableReason = automationManualRunUnavailableReason(item)
 
   return (
     <div className={`flex h-full flex-col rounded-lg bg-card p-4 text-card-foreground ${disabled ? "opacity-70" : ""}`}>
@@ -90,15 +92,23 @@ function AutomationCard({
               停止
             </Button>
           ) : (
-            <Button
-              variant={item.lastStatus === "failed" || item.lastStatus === "timeout" ? "default" : "secondary"}
-              size="default"
-              disabled={disabled || pending || running || needsUpdate || legacy}
-              onClick={onRun}
-            >
-              <Play />
-              {item.lastStatus === "failed" || item.lastStatus === "timeout" ? "重试" : "运行"}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex" tabIndex={manualRunUnavailableReason ? 0 : undefined}>
+                  <Button
+                    variant={item.lastStatus === "failed" || item.lastStatus === "timeout" ? "default" : "secondary"}
+                    size="default"
+                    disabled={disabled || pending || running || needsUpdate || legacy || Boolean(manualRunUnavailableReason)}
+                    aria-label={manualRunUnavailableReason}
+                    onClick={onRun}
+                  >
+                    <Play />
+                    {item.lastStatus === "failed" || item.lastStatus === "timeout" ? "重试" : "运行"}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{manualRunUnavailableReason ?? "运行"}</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </div>

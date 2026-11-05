@@ -91,6 +91,7 @@ export type RendererAutomationTriggerDefinition<
   TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
 > = {
   readonly manifest: AutomationTriggerManifest<TConfig>
+  readonly manualRunUnavailableReason?: string
   readonly icon?: LucideIcon
   summarizeConfig(config: TConfig): string
   validateConfig?(config: TConfig): void
