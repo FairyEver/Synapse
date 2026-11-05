@@ -33,7 +33,10 @@ export interface StoredSend extends Record<string, unknown> {
 }
 interface SendKey extends Record<string, unknown> { kind: "send-key"; operationId: string; signature: string }
 export async function mimeFingerprint(ctx: MailContext, raw: Buffer): Promise<string> {
-  const parsed = await parseMailStream(Readable.from([raw]), { signal: ctx.signal })
+  // SMTP's final wire line terminator may be absent from a server-saved copy.
+  // Restore only that CRLF before fingerprinting; preserve all body whitespace.
+  const terminated = raw.subarray(-2).equals(Buffer.from("\r\n")) ? raw : Buffer.concat([raw, Buffer.from("\r\n")])
+  const parsed = await parseMailStream(Readable.from([terminated]), { signal: ctx.signal })
   const addresses = (values: typeof parsed.to) => values.map(a => [a.address.toLowerCase(), a.name ?? ""])
   return mailHash(JSON.stringify({ from: addresses(parsed.from), to: addresses(parsed.to), cc: addresses(parsed.cc), subject: parsed.subject, date: parsed.date, html: parsed.html, text: parsed.text, inReplyTo: parsed.inReplyTo, references: parsed.references, attachments: parsed.attachments.map(a => [a.sha256, a.size, a.mime.toLowerCase(), a.filename, a.cid]) }))
 }
