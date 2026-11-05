@@ -13,7 +13,7 @@ export function MailReceivedConfigForm({ value, onChange }: { value: MailReceive
       <SelectTrigger id="automation-mail-account" aria-invalid={missing}><SelectValue placeholder="选择邮箱账号" /></SelectTrigger>
       <SelectContent><SelectGroup>
         <SelectItem value="__all__">全部邮箱账号</SelectItem>
-        {accounts.map(account => <SelectItem key={account.id} value={account.id}>{account.name} · {account.email}</SelectItem>)}
+        {accounts.map(account => <SelectItem key={account.id} value={account.id}>{account.name}{account.name !== account.email && ` · ${account.email}`}</SelectItem>)}
       </SelectGroup></SelectContent>
     </Select>
     {missing ? <FieldError>邮箱账号不可用</FieldError> : null}
