@@ -77,7 +77,18 @@ export function parseCronExpression(expr: string): ParsedCronExpression {
 }
 
 export function validateCronExpression(expr: string): void {
-  parseCronExpression(expr)
+  if (!hasPossibleCalendarDay(parseCronExpression(expr))) {
+    throw new Error("Cron 在 5 年内没有运行时间")
+  }
+}
+
+export function hasPossibleCalendarDay(parsed: ParsedCronExpression): boolean {
+  if (parsed.dayWildcard || !parsed.weekdayWildcard) return true
+  for (const month of parsed.month) {
+    const maxDay = new Date(2024, month, 0).getDate()
+    for (const day of parsed.day) if (day <= maxDay) return true
+  }
+  return false
 }
 
 export function nextCronRun(expr: string, from = new Date(), timezone?: string): Date {

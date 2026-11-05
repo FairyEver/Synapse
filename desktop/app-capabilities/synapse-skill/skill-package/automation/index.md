@@ -53,7 +53,7 @@ Known built-in trigger types include:
 
 Use the returned `configSchema`, `defaultConfig`, and `variables` from `app_automation_trigger_type_list`. Do not guess fields that are not in the schema.
 
-Cron uses five fields with decimal integers, month/weekday aliases, lists, ranges and one optional `/step` per segment. Extra range/step separators, hexadecimal or exponent numbers, and invalid timezones are rejected even when saving disabled items.
+Cron uses five fields with decimal integers, month/weekday aliases, lists, ranges and one optional `/step` per segment. Extra range/step separators, hexadecimal or exponent numbers, impossible calendar dates (for example February 30 with an unrestricted weekday), and invalid timezones are rejected even when saving disabled items. Leap days and the existing day-of-month/weekday OR semantics remain supported.
 
 All automatic trigger types can use the top-level `conditions` object:
 

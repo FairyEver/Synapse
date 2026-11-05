@@ -22,6 +22,13 @@ beforeEach(() => { api.list.mockReset(); const container = document.createElemen
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ""; vi.restoreAllMocks() })
 
 describe("automation run history", () => {
+  it.each([[60_000, "1m"], [119_499, "1m59s"], [119_999, "2m"], [179_999, "3m"]])("carries rounded duration %sms into the next minute", async (durationMs, label) => {
+    api.list.mockResolvedValue([{ ...run(), result: { status: "success", metrics: { durationMs } } }])
+    await act(async () => root.render(<AutomationRunsPanel item={item} busy={false} onStopRun={vi.fn()} />))
+    expect(document.body.textContent).toContain(label)
+    expect(document.body.textContent).not.toContain("m60s")
+  })
+
   it.each([
     ["automation is already running", "自动化正在运行中"],
     ["automation is disabled", "自动化已停用"],

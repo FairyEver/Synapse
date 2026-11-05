@@ -1,4 +1,5 @@
 import { computeNextRunAt } from "../../automation-trigger-packages/schedule-calculator"
+import { hasPossibleCalendarDay } from "../../automation-trigger-packages/cron-expression"
 import type { AutomationConditions } from "../../automation-trigger-packages/schedule-constraints"
 export type CronTemplateKind =
   | "every_minutes"
@@ -180,22 +181,6 @@ function validateCronExpression(expr: string): CronValidationResult {
       message: error instanceof Error ? error.message : "Cron 不合法",
     }
   }
-}
-
-function hasPossibleCalendarDay(parsed: ParsedCronExpression): boolean {
-  if (parsed.dayWildcard || !parsed.weekdayWildcard) return true
-
-  for (const month of parsed.month) {
-    const maxDay = maxDaysInMonth(month)
-    for (const day of parsed.day) {
-      if (day <= maxDay) return true
-    }
-  }
-  return false
-}
-
-function maxDaysInMonth(month: number): number {
-  return new Date(2024, month, 0).getDate()
 }
 
 function listNextCronRuns(expr: string, from = new Date(), count = 5, options: { timezone?: string; conditions?: AutomationConditions } = {}): Date[] {

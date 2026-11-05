@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest"
 
-import { nextCronRun, parseCronExpression } from "../cron-expression"
+import { nextCronRun, parseCronExpression, validateCronExpression } from "../cron-expression"
 
 describe("automation cron expression", () => {
+  it.each(["0 9 30 2 *", "0 9 31 4 *", "0 9 31 2,4,6,9,11 *"])("rejects an impossible calendar date: %s", expr => {
+    expect(() => validateCronExpression(expr)).toThrow("Cron 在 5 年内没有运行时间")
+  })
+  it.each(["0 9 29 2 *", "0 9 30 2 mon", "0 9 31 2,3 *"])("preserves a leap day or another matching calendar alternative: %s", expr => {
+    expect(() => validateCronExpression(expr)).not.toThrow()
+  })
+
   it.each([
     "*/2/3 * * * *",
     "1-2-3 * * * *",

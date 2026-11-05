@@ -2,7 +2,7 @@ import { z } from "zod"
 import { validateCronExpression } from "../../cron-expression"
 
 export const cronTriggerConfigSchema = z.object({
-  expr: z.string().min(1).describe("Five-field Cron using decimal integers, aliases, lists, ranges and one optional /step per segment.").superRefine((expr, ctx) => {
+  expr: z.string().min(1).describe("Five-field Cron using decimal integers, aliases, lists, ranges and one optional /step per segment; impossible calendar dates are rejected.").superRefine((expr, ctx) => {
     try { validateCronExpression(expr) } catch (error) {
       ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : "Cron 不合法" })
     }

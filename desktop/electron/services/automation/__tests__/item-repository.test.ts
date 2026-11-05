@@ -15,6 +15,7 @@ describe("AutomationItemRepository", () => {
     { expr: "1-2-3 * * * *" },
     { expr: "bad" },
     { expr: "0 9 * * *", timezone: "Mars/Olympus" },
+    { expr: "* * 30 2 *", timezone: "Asia/Kathmandu" },
   ])("rejects invalid cron config before saving even when disabled: %j", async (config) => {
     const repo = newRepo()
     await expect(repo.create({
