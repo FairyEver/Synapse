@@ -237,6 +237,26 @@ describe("AutomationModule", () => {
     if (scenario === "filtered") expect(document.body.textContent).toContain("没有匹配的自动化")
   })
 
+  it.each([
+    { enabled: false, error: new Error("邮箱已暂停，请先恢复同步"), expected: "邮箱已暂停，请先恢复同步" },
+    { enabled: false, error: new Error("Error invoking remote method 'synapse:automation:item:setEnabled': Error: 邮箱已暂停，请先恢复同步"), expected: "邮箱已暂停，请先恢复同步" },
+    { enabled: true, error: new Error("无法确认停用边界，请恢复连接后重试"), expected: "无法确认停用边界，请恢复连接后重试" },
+    { enabled: false, error: new Error("  "), expected: "启用自动化失败。" },
+    { enabled: true, error: null, expected: "停用自动化失败。" },
+    { enabled: false, error: new Error("连接失败 token=private-test-value /Users/test/private.txt"), expected: "连接失败 token=[redacted] [path]" },
+  ])("shows the actionable, sanitized toggle failure ($enabled, $expected)", async ({ enabled, error, expected }) => {
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem({ enabled })], loading: false, error: null, refresh: vi.fn() })
+    mocks.setAutomationEnabled.mockRejectedValueOnce(error)
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => root.render(<AutomationModule />))
+    const toggle = document.querySelector<HTMLButtonElement>('[role="switch"]')!
+    await act(async () => toggle.click())
+    expect(mocks.notificationError).toHaveBeenCalledWith(expected)
+    expect(toggle.getAttribute("aria-checked")).toBe(String(enabled))
+    expect(toggle.disabled).toBe(false)
+  })
+
   it.each(["builtin.mail-internal-received", "builtin.mail-received"])("prevents context-free manual runs of %s in the list and card", async (type) => {
     const item = createItem({ trigger: { type, config: {} } })
     mocks.useAutomationItems.mockReturnValue({ items: [item], loading: false, error: null, refresh: vi.fn() })

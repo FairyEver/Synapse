@@ -20,7 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
-import { errorLogMeta } from "@/lib/error-sanitize"
+import { errorLogMeta, sanitizeError } from "@/lib/error-sanitize"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
 import { matchesAutomationSearch } from "./utils"
@@ -148,7 +148,7 @@ function AutomationModule() {
       trackingName: string
       loading: string
       success: string
-      error: string
+      error: string | ((error: unknown) => string)
     },
   ): Promise<T | null> {
     setPendingItemIds((current) => new Set([...current, itemId]))
@@ -222,7 +222,12 @@ function AutomationModule() {
         trackingName: enabled ? "automation.enable" : "automation.disable",
         loading: enabled ? "正在启用自动化..." : "正在停用自动化...",
         success: enabled ? "自动化已启用。" : "自动化已停用。",
-        error: enabled ? "启用自动化失败。" : "停用自动化失败。",
+        error: (error) => {
+          const message = error instanceof Error
+            ? sanitizeError(error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ""))
+            : ""
+          return message || (enabled ? "启用自动化失败。" : "停用自动化失败。")
+        },
       },
     )
   }
