@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { claudeCodeActionManifest } from "../../../action-packages/builtin/claude-code/manifest"
 
 import type { DataNamespace } from "../../runtime/data-repo"
 import type {
@@ -54,16 +55,28 @@ export class AutomationRunRepository {
 
   async finish(id: string, input: AutomationRunFinishInput): Promise<AutomationRun> {
     const existing = await this.require(id)
+    const { pendingOutputs, ...base } = existing
+    // Receipt recovery can refine an already-failed run's diagnostic after generic startup recovery.
+    const terminalOutputs = pendingOutputs ?? (existing.executorType === claudeCodeActionManifest.id ? existing.result?.outputs : undefined)
     const next: AutomationRun = {
-      ...existing,
+      ...base,
       finishedAt: this.isoNow(),
       status: input.status,
-      result: input.result,
+      result: terminalOutputs ? {
+        ...input.result, status: input.result?.status ?? (input.status === "skipped" ? "cancelled" : input.status),
+        outputs: { ...terminalOutputs, ...input.result?.outputs },
+      } : input.result,
       error: input.error,
     }
     await this.runs.upsert(next)
     await this.prune(existing.automationId, id)
     return next
+  }
+
+  async updateOutputs(id: string, outputs: Record<string, unknown>): Promise<void> {
+    const existing = await this.require(id)
+    if (existing.status !== "running") return
+    await this.runs.upsert({ ...existing, pendingOutputs: { ...existing.pendingOutputs, ...outputs } })
   }
 
   listByAutomation(automationId: string, options?: { readonly limit?: number }): Promise<AutomationRun[]> {

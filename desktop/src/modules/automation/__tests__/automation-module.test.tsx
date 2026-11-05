@@ -324,6 +324,20 @@ describe("AutomationModule", () => {
     expect(document.body.textContent).toContain("暂无运行记录")
   })
 
+  it("keeps a Claude Code terminal entry after the automation changes to Agent", async () => {
+    mocks.listAutomationRuns.mockResolvedValueOnce([{
+      id: "r1", schemaVersion: 1, automationId: "automation-1", status: "success", triggeredBy: "trigger",
+      startedAt: "2026-11-05T00:00:00Z", triggerType: "builtin.cron", executorType: "builtin.claude-code",
+      result: { status: "success", outputs: { projectId: "p1", sessionId: "s1" } },
+    }])
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => root.render(<AutomationRunsPanel item={createItem()} busy={false} onStopRun={vi.fn()} />))
+    await flushPromises()
+    expect(document.body.textContent).toContain("打开终端")
+  })
+
   it("returns from inline run history to the automation list", async () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem()],

@@ -32,7 +32,7 @@ Input:
 
 Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig`, and `configFields`.
 
-Only `builtin.agent` is registered. Retired executor types are rejected on create/update; existing non-Agent configurations are automatically removed in the background, including after backup restore.
+`builtin.agent` and `builtin.claude-code` are registered. Claude Code accepts only `{ "projectId": "project-id", "prompt": "Review {{trigger.payload.body}}" }`, reads the current default provider/model/permission mode at execution time, and creates a new interactive terminal without navigating or taking focus. Success confirms the initial prompt submission, not task completion. Confirmation times out after 60 seconds without automatic resend; a created terminal remains available for inspection. Retired types are rejected on create/update and removed in the background, including after backup restore. Both supported types (including invalid configs) and run history are preserved.
 
 ## Items
 

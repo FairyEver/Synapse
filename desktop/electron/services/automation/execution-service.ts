@@ -21,7 +21,7 @@ import type {
 
 export interface AutomationExecutionServiceDeps {
   readonly items: Pick<AutomationItemRepository, "markRunResult">
-  readonly runs: Pick<AutomationRunRepository, "start" | "finish" | "listByAutomation">
+  readonly runs: Pick<AutomationRunRepository, "start" | "finish" | "listByAutomation" | "updateOutputs">
   readonly actions: MainActionRegistry
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
@@ -119,6 +119,11 @@ export class AutomationExecutionService {
           triggeredBy: effectiveTriggerContext.triggeredBy,
           triggeredAt: effectiveTriggerContext.triggeredAt,
           scheduledAt: effectiveTriggerContext.scheduledAt,
+        },
+        persistOutputs: async (outputs: Record<string, unknown>) => {
+          effectiveSignal.throwIfAborted()
+          const sanitized = sanitizePersistableActionRunResult({ status: "success", outputs })
+          await this.deps.runs.updateOutputs(run.id, sanitized.outputs ?? {})
         },
       }
       if (requiresAuthorization(executor)) {

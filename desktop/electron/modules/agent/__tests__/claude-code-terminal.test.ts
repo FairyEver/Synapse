@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import os from "node:os"
+import path from "node:path"
+import { spawnSync } from "node:child_process"
 
 const configStoreMock = vi.hoisted(() => ({ load: vi.fn() }))
 const runtimeBinaryMock = vi.hoisted(() => ({
@@ -75,13 +77,14 @@ function harness(input: {
   readonly createSession?: ReturnType<typeof vi.fn>
   /** Omitted means "no notification service registered", which is its own case. */
   readonly notificationService?: unknown
+  readonly projectPath?: string
 } = {}) {
   const buildEnv = input.buildEnv ?? vi.fn().mockResolvedValue(providerEnv)
   const listAllProviders = vi.fn().mockResolvedValue(input.providers ?? [])
   const createSession = input.createSession ?? vi.fn().mockResolvedValue({ id: "session-1", status: "running" })
   ipcSharedMock.resolveProjectAgent.mockResolvedValue({
     providerService: { buildEnv, listAllProviders },
-    project: { uuid: "project-1", name: "Synapse", localPath: "/repo" },
+    project: { uuid: "project-1", name: "Synapse", localPath: input.projectPath ?? "/repo" },
   })
   configStoreMock.load.mockResolvedValue({
     global: { projects: [] },
@@ -90,6 +93,7 @@ function harness(input: {
       : { defaultProviderModel: input.defaultProviderModel },
   })
   const resolve = <T,>(serviceId: string): T => {
+    if (serviceId === "core.process-environment") return { nodePath: process.execPath } as T
     if (serviceId === "core.terminal") {
       return { createSessionWithEphemeralEnvironment: createSession } as unknown as T
     }
@@ -115,6 +119,64 @@ function launchDirectories(): readonly string[] {
 }
 
 describe("Claude Code terminal launch", () => {
+  it("preserves confirmed submission when the CLI exits before terminal creation returns", async () => {
+    const prompt = "Review before exit"
+    const createSession = vi.fn(async (options: { args: string[]; environment: Record<string, string>; onEnded(): void }) => {
+      const settingsPath = options.args[options.args.indexOf("--settings") + 1]!
+      const hook = spawnSync(process.execPath, [path.join(path.dirname(settingsPath), "prompt-submitted.cjs")], {
+        env: { ...process.env, ...options.environment }, input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), timeout: 5000,
+      })
+      if (hook.error || hook.status !== 0) throw hook.error ?? new Error("Hook failed")
+      options.onEnded()
+      return { id: "session-1", status: "failed" }
+    })
+    const { resolve } = harness({ providers: [configured], createSession, projectPath: process.cwd() })
+    await expect(createClaudeCodeTerminalSession(resolve, { projectId: "project-1", initialPrompt: prompt })).resolves.toMatchObject({ id: "session-1" })
+  })
+  it("confirms the initial prompt independently of notifications and retains live settings", async () => {
+    const prompt = "Review 中文\n\"quoted\" $()"
+    const notifyHook = { matcher: "", hooks: [{ type: "command", command: "notify", async: true }] }
+    const createSession = vi.fn(async (options: { args: string[]; environment: Record<string, string>; onEnded(): void }) => {
+      const settingsPath = options.args[options.args.indexOf("--settings") + 1]!
+      const hook = spawnSync(process.execPath, [path.join(path.dirname(settingsPath), "prompt-submitted.cjs")], {
+        env: { ...process.env, ...options.environment },
+        input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), encoding: "utf8", timeout: 5000,
+      })
+      if (hook.error || hook.status !== 0) throw hook.error ?? new Error("Hook failed")
+      return { id: "session-1", status: "running" }
+    })
+    const { resolve, buildEnv } = harness({ providers: [configured], createSession, projectPath: process.cwd(),
+      notificationService: { buildClaudeCodeHookSettings: () => ({ hooks: { UserPromptSubmit: [notifyHook] } }) },
+    })
+    const session = await createClaudeCodeTerminalSession(resolve, { projectId: "project-1", initialPrompt: prompt, actor: { kind: "user", id: "automation" } })
+    expect(session.id).toBe("session-1")
+    expect(buildEnv).toHaveBeenCalledWith("preferred", { actor: { kind: "user", id: "automation" }, projectId: "project-1" })
+    const options = createSession.mock.calls[0]![0]
+    const settingsPath = options.args[options.args.indexOf("--settings") + 1]!
+    try {
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"))
+      expect(settings.hooks.UserPromptSubmit).toHaveLength(2)
+      expect(settings.hooks.UserPromptSubmit[0]).toEqual(notifyHook)
+      expect(settings.env.SYNAPSE_CLAUDE_PROMPT_DIGEST).toBeUndefined()
+      expect(settings.env.SYNAPSE_CLAUDE_PROMPT_TOKEN).toBeUndefined()
+      expect(JSON.stringify(settings)).not.toContain(prompt)
+    } finally { options.onEnded() }
+  })
+  it("passes an initial prompt as one positional argv and waits for its submission", async () => {
+    const controller = new AbortController()
+    const createSession = vi.fn(async (_input: { args: string[]; onEnded(): void }) => {
+      controller.abort()
+      return { id: "session-1", status: "running" }
+    })
+    const { resolve } = harness({ providers: [configured], createSession, projectPath: process.cwd() })
+    await expect(createClaudeCodeTerminalSession(resolve, {
+      projectId: "project-1", initialPrompt: "--中文\n\"review\" $()", abortSignal: controller.signal,
+    })).rejects.toThrow()
+    expect(createSession).toHaveBeenCalledTimes(1)
+    expect(createSession.mock.calls[0]![0].args.slice(-2)).toEqual(["--", "--中文\n\"review\" $()"])
+    createSession.mock.calls[0]![0].onEnded()
+  })
+
   it("resumes the requested native session with its workspace, exact model and permission mode", async () => {
     const { resolve, createSession } = harness()
     await createClaudeCodeTerminalSession(resolve, {

@@ -1308,6 +1308,7 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
       actor: { kind: "system", id: "repository-git" },
     })
     return createBuiltinMainActionRegistry({
+      launchClaudeCode: input => createClaudeCodeTerminalSession(id => ctx.registry.get(id), input),
       builtinCapabilityRegistrations: {
         workflowNodeTypes: nodeTypeRegistry.listTypes(),
         capabilityIds: APP_DOMAIN.capabilities.map((capability) => capability.id),

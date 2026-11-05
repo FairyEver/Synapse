@@ -203,15 +203,15 @@ function RunResult({
   readonly item: AutomationItem | null
 }) {
   if (!run.result) return null
-  if (item) {
+  if (run.executorType) {
     try {
-      const ResultView = rendererActionRegistry.get(item.executor.type).ResultView
+      const ResultView = rendererActionRegistry.get(run.executorType).ResultView
       if (ResultView) return <ResultView result={run.result} />
     } catch (renderError) {
       logger.warn("Automation run result renderer fallback.", {
-        automationId: item.id,
+        automationId: item?.id ?? run.automationId,
         runId: run.id,
-        executorType: item.executor.type,
+        executorType: run.executorType,
         boundary: "renderer.automation.runs.result-fallback",
         ...errorDiagnostic(renderError),
       })

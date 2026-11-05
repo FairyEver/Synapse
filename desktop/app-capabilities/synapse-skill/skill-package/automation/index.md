@@ -68,9 +68,9 @@ Messages are queued serially. Failed, cancelled or ambiguous already-submitted e
 
 Always use executor type discovery unless the exact config is already known from this conversation.
 
-The only Automation executor is `builtin.agent`. Use `app_automation_executor_type_list` for public config fields, defaults, and permissions. Do not guess provider ids, model tiers, project ids, or Agent settings. Trigger variables can be referenced in the Agent prompt.
+Automation executors are `builtin.agent` and `builtin.claude-code`. Use `app_automation_executor_type_list` for config fields, defaults, and permissions. Do not guess identifiers. Claude Code accepts only `projectId` and `prompt` (including trigger variables), reads the current default provider/model/permission mode, and creates a new interactive terminal in the background. Success means the initial prompt was submitted, not that the task finished. The terminal stays open for the user; do not automatically resend on timeout or ambiguous submission. The desktop run record provides an Open terminal action. This executor does not create an Agent Runtime conversation.
 
-Command, Shell script, HTTP, Workflow, JavaScript, and Node.js Automation executors are retired. Existing non-Agent configurations are automatically deleted in the background, including configurations restored from a backup. Agent configurations and run history are preserved. Workflow nodes and Workflow execution remain available through the Workflow domain.
+Command, Shell script, HTTP, Workflow, JavaScript, and Node.js Automation executors are retired. Existing retired configurations are automatically deleted in the background, including configurations restored from a backup. Agent and Claude Code configurations (including invalid configs) and run history are preserved. Workflow nodes and Workflow execution remain available through the Workflow domain.
 
 ## Update Rules
 

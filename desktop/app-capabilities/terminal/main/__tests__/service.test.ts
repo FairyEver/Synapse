@@ -11,6 +11,26 @@ const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", acto
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
 describe("TerminalService core", () => {
+  it("delivers embedded CLI exit callbacks even when exit happens during creation persistence", async () => {
+    const store = memoryStore()
+    const pty = fakePty()
+    const onEnded = vi.fn()
+    const service = createTerminalService({ store, spawnPty: () => pty, resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir() })
+    await service.start()
+    let exited = false
+    await service.createSessionWithEphemeralEnvironment({
+      shell: "/bin/zsh", cwd: os.tmpdir(), environment: {}, onEnded,
+      onCreated: async () => {
+        store.saveState = async state => {
+          store.state = state
+          if (!exited) { exited = true; pty.emitExit({ exitCode: 1 }) }
+        }
+      },
+    })
+    expect(onEnded).toHaveBeenCalledTimes(1)
+    await service.stop()
+    expect(onEnded).toHaveBeenCalledTimes(1)
+  })
   it("retains an associated live CLI when terminal persistence fails after spawn", async () => {
     const store = memoryStore()
     const pty = fakePty()

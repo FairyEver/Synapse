@@ -18,6 +18,8 @@ import {
 import { resolveTierModelFromEnv } from "../../services/agent-runtime/provider-model-tier"
 import { sweepStaleClaudeCodeLaunchDirectories } from "./claude-code-terminal-launch-dirs"
 import { resolveProjectAgent } from "./ipc-shared"
+import type { ActorIdentity } from "../../runtime/security"
+import { prepareClaudeCodePromptSubmission } from "./claude-code-prompt-submission"
 
 const CLAUDE_CODE_TERMINAL_TITLE = "Claude Code"
 
@@ -78,6 +80,9 @@ export interface CreateClaudeCodeTerminalSessionInput {
   readonly projectId: string
   readonly continuation?: SynapseAgentClaudeCodeContinuation
   readonly onCreated?: (sessionId: string) => Promise<void>
+  readonly initialPrompt?: string
+  readonly abortSignal?: AbortSignal
+  readonly actor?: ActorIdentity
   /**
    * Explicit Provider and tier, or neither.
    *
@@ -118,6 +123,10 @@ export async function createClaudeCodeTerminalSession(
   resolve: <T>(serviceId: string) => T,
   input: CreateClaudeCodeTerminalSessionInput,
 ): Promise<TerminalSession> {
+  input.abortSignal?.throwIfAborted()
+  if (input.initialPrompt !== undefined && (!input.initialPrompt.trim() || input.continuation)) {
+    throw new ClaudeCodeTerminalError("invalid_input", "请为新会话填写提示词。")
+  }
   const explicitProviderId = input.providerId
   const explicitModelTier = input.modelTier
   if ((explicitProviderId === undefined) !== (explicitModelTier === undefined)) {
@@ -125,6 +134,7 @@ export async function createClaudeCodeTerminalSession(
   }
 
   const { providerService, project } = await resolveProjectAgent(resolve, input.projectId)
+  if (input.initialPrompt !== undefined) await validateWorkspaceDirectory(project.localPath)
   const executablePath = resolveBundledClaudeExecutable()
   if (!executablePath) {
     // The desktop's own wording, because this is the desktop's own problem to fix.
@@ -138,7 +148,7 @@ export async function createClaudeCodeTerminalSession(
     : await resolveDefaultProviderModel(providerService)
   const permissionMode = input.continuation?.permissionMode ?? resolveClaudeCodeTerminalPermissionMode(config.agent?.defaultPermissionMode)
   const providerEnv = await providerService.buildEnv(selection.providerId, {
-    actor: { kind: "user", id: "renderer" },
+    actor: input.actor ?? { kind: "user", id: "renderer" },
     projectId: input.projectId,
   })
   const tierModel = input.continuation
@@ -162,16 +172,29 @@ export async function createClaudeCodeTerminalSession(
   await sweepStaleClaudeCodeLaunchDirectories()
   const directory = await mkdtemp(path.join(os.tmpdir(), "synapse-claude-code-"))
   const settingsPath = path.join(directory, "settings.json")
+  let submission: Awaited<ReturnType<typeof prepareClaudeCodePromptSubmission>> | undefined
+  let launched = false
   try {
+    if (input.initialPrompt !== undefined) {
+      const { nodePath } = resolve<{ nodePath?: string }>("core.process-environment")
+      if (!nodePath) throw new ClaudeCodeTerminalError("runtime_missing", "内置 Node runtime 不可用，请重新启动 Synapse。")
+      submission = await prepareClaudeCodePromptSubmission({
+        directory, nodePath, prompt: input.initialPrompt,
+        signal: input.abortSignal ?? AbortSignal.timeout(60_000),
+      })
+    }
+    const hooks = (hookSettings?.hooks ?? {}) as Record<string, unknown[]>
     await writeFile(settingsPath, JSON.stringify({
       env: environment,
       ...(tierModel ? { model: tierModel } : {}),
       ...(hookSettings ?? {}),
+      ...(submission ? { hooks: { ...hooks, UserPromptSubmit: [...(hooks.UserPromptSubmit ?? []), submission.hook] } } : {}),
     }), { mode: 0o600 })
     // Concurrent Claude Code sessions must stay distinguishable in the terminal list.
     const title = project.name
       ? `${CLAUDE_CODE_TERMINAL_TITLE} · ${project.name}`.slice(0, 120)
       : CLAUDE_CODE_TERMINAL_TITLE
+    input.abortSignal?.throwIfAborted()
     const session = await resolve<TerminalService>("core.terminal").createSessionWithEphemeralEnvironment({
       title,
       // The project is where this conversation belongs as much as where it runs, so the
@@ -185,21 +208,36 @@ export async function createClaudeCodeTerminalSession(
         "--settings", settingsPath,
         ...(tierModel ? ["--model", tierModel] : []),
         "--permission-mode", permissionMode,
+        ...(input.initialPrompt === undefined ? [] : ["--", input.initialPrompt]),
       ],
-      environment,
+      environment: { ...environment, ...submission?.environment },
       ...(input.cols === undefined ? {} : { cols: input.cols }),
       ...(input.rows === undefined ? {} : { rows: input.rows }),
       ...(input.createdByClientId === undefined ? {} : { createdByClientId: input.createdByClientId }),
-      ...(input.onCreated ? { onCreated: input.onCreated } : {}),
-      onEnded: () => { void rm(directory, { recursive: true, force: true }).catch(() => undefined) },
+      onCreated: async sessionId => {
+        await input.onCreated?.(sessionId)
+        input.abortSignal?.throwIfAborted()
+      },
+      onEnded: () => {
+        void (async () => {
+          await submission?.ended()
+          await rm(directory, { recursive: true, force: true })
+        })().catch(() => undefined)
+      },
     })
+    launched = session.status === "running"
     if (session.status === "failed" || (input.continuation && session.status !== "running")) {
-      throw new ClaudeCodeTerminalError("launch_failed", "无法在终端中启动 Claude Code，请重试。")
+      if (!submission) throw new ClaudeCodeTerminalError("launch_failed", "无法在终端中启动 Claude Code，请重试。")
+      // Terminal creation can observe an exit after the CLI already submitted its first prompt.
+      await submission.ended()
     }
+    await submission?.wait()
     return session
   } catch (error) {
-    await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+    if (!launched) await rm(directory, { recursive: true, force: true }).catch(() => undefined)
     throw error
+  } finally {
+    submission?.dispose()
   }
 }
 

@@ -12,9 +12,10 @@ type ActionPromptFieldProps = {
   readonly value: string
   readonly onChange: (value: string) => void
   readonly variables?: readonly AutomationTriggerVariableDescriptor[]
+  readonly placeholder?: string
 }
 
-export function ActionPromptField({ id, value, onChange, variables = [] }: ActionPromptFieldProps) {
+export function ActionPromptField({ id, value, onChange, variables = [], placeholder = "输入要发送给 Agent 的提示词..." }: ActionPromptFieldProps) {
   const prompt = useRef<HTMLTextAreaElement>(null)
   const selection = useRef({ start: value.length, end: value.length })
   const [open, setOpen] = useState(false)
@@ -65,6 +66,6 @@ export function ActionPromptField({ id, value, onChange, variables = [] }: Actio
         </PopoverContent>
       </Popover> : null}
     </div>
-    <FieldContent><Textarea ref={prompt} id={id} rows={6} placeholder="输入要发送给 Agent 的提示词..." value={value} onChange={event => onChange(event.target.value)} /></FieldContent>
+    <FieldContent><Textarea ref={prompt} id={id} rows={6} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} /></FieldContent>
   </Field>
 }

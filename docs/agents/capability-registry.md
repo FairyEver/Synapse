@@ -337,7 +337,12 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-24：邮箱地址弹层新增「写邮件」，通过私有 `MailOpenRequest.compose.recipient` 预填新信收件人，并按账号及收件地址复用窗口。复用现有 draft.prepare/commit，无新增公开工具、App、Dock、Workflow、Automation 或 Deep Link；mail 44 项公开动作及全局数量不变，MCP schema 和系统 Skill 的新信创建契约不变。
 
-2026-11-05 自动化执行器由 7 个收敛为 1 个，仅保留 `builtin.agent`。注销命令、Shell 脚本、HTTP、工作流、JavaScript、Node.js 六个 Automation Action；主进程与 Renderer 注册一致，MCP 发现仅返回 Agent。JS/Node 能力包保留原 capability 和 Workflow Node，Automation surface 为空。新增内部后台配置清理服务及轻量元数据 Worker：主窗口后分批删除非 Agent 配置，恢复后继续清理；Agent 配置及运行历史保留。不增加 IPC、MCP 工具、System App、Dock 或 Deep Link；Automation 仍为 14 / 14，Workflow 节点数量与行为不变。
+2026-11-05 自动化注销命令、Shell 脚本、HTTP、工作流、JavaScript、Node.js 六个 Automation Action，随后按用户确认新增独立 Claude Code 执行器。当前 Automation Action 共 2 个：`builtin.agent`（Agent Runtime 执行并等待结果）、`builtin.claude-code`（仅项目/提示词，沿用触发时默认设置，后台创建交互式终端，确认首条提交即结束自动化）。主进程、Renderer 与 MCP 发现一致；JS/Node 能力包仍仅保留原 capability 和 Workflow Node，Automation surface 为空。后台 Worker、变更监听和仓库写队列共用支持清单，删除退役配置并保留两个受支持类型（含待修复配置）及运行历史；恢复后继续清理。运行记录按原执行器类型提供精确终端入口，失效不重建。不新增 IPC、MCP 工具、System App、Dock、Workflow Node 或 Deep Link；Automation 仍为 14 / 14。
+
+| Automation Action | 配置 | 完成条件 |
+| --- | --- | --- |
+| `builtin.agent` | 项目、供应商/模型、权限、提示词和会话策略等 | Agent Runtime 运行结束 |
+| `builtin.claude-code` | 项目、提示词 | 初始提示词提交回执；CLI 会话继续运行 |
 
 
 ## 自动化收信触发器（2026-11-05）
@@ -350,6 +355,6 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 | `builtin.mail-internal-received` | 收到站内信 | 严格空对象 |
 | `builtin.mail-received` | 收到邮件 | 可选 accountId；缺省全部邮箱账号 |
 
-Automation Trigger 从 3 项增至 5 项；复用既有 14 项 Automation capability / MCP 索引，执行器沿用当前唯一 Agent。公开 MCP 仍仅 search / invoke；本次全局 capability / MCP 数量无增量，System App、Dock、Workflow Node、Automation Action、Deep Link 均不新增。现有触发器发现返回两种新 schema 与正文等变量。
+Automation Trigger 从 3 项增至 5 项；复用既有 14 项 Automation capability / MCP 索引，执行器沿用 Agent 和 Claude Code。公开 MCP 仍仅 search / invoke；本次全局 capability / MCP 数量无增量，System App、Dock、Workflow Node、Automation Action、Deep Link 均不新增。现有触发器发现返回两种新 schema 与正文等变量。
 
 新增两个仅限本人认证的服务端内部 REST 入口 `/api/mail-internal/automation/checkpoint`（POST）和 `/api/mail-internal/automation/changes`（GET），不是 MCP/本机 capability。新后台服务 core.automation-mail-triggers 在主窗口创建后启动；不扩展 renderer/preload 权限。三种 app.automation-mail.* 命名空间为 local-only。启用必须在线确认来源起点，导入强制停用，停用水位不能确认的历史区间保持诊断；队列、去重、正文读取与不自动重放规则见对应设计和 module-boundaries。

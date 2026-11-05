@@ -20,6 +20,7 @@ export type ActionRuntimeContext = {
   readonly configVersion?: number
   readonly templateVariables?: Record<string, string>
   readonly triggerInput?: unknown
+  readonly persistOutputs?: (outputs: Record<string, unknown>) => Promise<void>
 }
 
 export type ActionPermissionInput<TConfig extends ActionConfig = ActionConfig> = {

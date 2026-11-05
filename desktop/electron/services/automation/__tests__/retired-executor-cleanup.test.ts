@@ -29,28 +29,30 @@ function item(id: string, type: string): AutomationItem {
     createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z", runCount: 7, configVersion: 3 }
 }
 describe("Agent-only Automation cleanup", () => {
-  it("deletes every non-Agent configuration in batches and preserves invalid Agent configuration exactly", async () => {
+  it("deletes retired types in batches and preserves both supported configurations exactly", async () => {
     const h = await harness()
     const agent = item("agent", "builtin.agent")
     await h.changes.upsert(agent)
+    const claudeCode = item("claude", "builtin.claude-code")
+    await h.changes.upsert(claudeCode)
     for (let i = 0; i < 55; i++) await h.changes.upsert(item(`legacy:${i}`, ["builtin.command", "builtin.script", "builtin.http-request", "builtin.workflow", "builtin.javascript-run", "builtin.nodejs-run", "unknown"][i % 7]!))
     try {
       await h.cleanup.start()
-      expect(await h.items.list()).toEqual([agent])
+      expect(await h.items.list()).toEqual([agent, claudeCode])
       await h.cleanup.run()
       expect(await h.items.get("agent")).toEqual(agent)
       await h.changes.upsert(item("restored", "builtin.command"))
       await h.cleanup.run()
-      expect(await h.items.list()).toEqual([agent])
+      expect(await h.items.list()).toEqual([agent, claudeCode])
     } finally { await h.cleanup.stop() }
   })
   it("rechecks the current type before deleting a stale candidate", async () => {
     const h = await harness()
     const legacy = item("converted", "builtin.command")
     await h.changes.upsert(legacy)
-    await h.items.update(legacy.id, { executor: { type: "builtin.agent", config: legacy.executor.config } })
+    await h.items.update(legacy.id, { executor: { type: "builtin.claude-code", config: legacy.executor.config } })
     expect(await h.items.deleteNonAgent(legacy.id)).toBe(false)
-    expect((await h.items.get(legacy.id))?.executor.type).toBe("builtin.agent")
+    expect((await h.items.get(legacy.id))?.executor.type).toBe("builtin.claude-code")
   })
   it("does not delete an Agent restored while a candidate deletion is waiting", async () => {
     const h = await harness()

@@ -5,6 +5,19 @@ import { AutomationRunRepository } from "../run-repository"
 import type { AutomationRun } from "../types"
 
 describe("AutomationRunRepository", () => {
+  it("keeps a provisional terminal through recovery without reporting success before confirmation", async () => {
+    const repo = new AutomationRunRepository({ runs: new MemoryNamespace<AutomationRun>("automation.runs") })
+    const run = await repo.start("a1", "trigger", { triggerType: "builtin.cron", executorType: "builtin.claude-code" })
+    await repo.updateOutputs(run.id, { projectId: "p1", sessionId: "s1" })
+    expect((await repo.get(run.id))?.result).toBeUndefined()
+    const recovered = await repo.finish(run.id, { status: "failed", error: "interrupted" })
+    expect(recovered.result).toEqual({ status: "failed", outputs: { projectId: "p1", sessionId: "s1" } })
+    expect(recovered.pendingOutputs).toBeUndefined()
+    await repo.updateOutputs(run.id, { sessionId: "wrong-session" })
+    expect((await repo.get(run.id))?.result?.outputs?.sessionId).toBe("s1")
+    const reclassified = await repo.finish(run.id, { status: "failed", result: { status: "failed", error: "结果不明，未自动重试" } })
+    expect(reclassified.result?.outputs).toEqual({ projectId: "p1", sessionId: "s1" })
+  })
   it("starts, finishes, and lists automation runs", async () => {
     const repo = new AutomationRunRepository({
       runs: new MemoryNamespace<AutomationRun>("automation.runs"),

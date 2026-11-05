@@ -23,6 +23,24 @@ const testActionSchema = z.object({ message: z.string().min(1) }).passthrough()
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationExecutionService", () => {
+  it("persists a terminal association before execution and preserves it on cancellation", async () => {
+    let inspect: (() => Promise<AutomationRun | null>) | undefined
+    let stored: AutomationRun | null | undefined
+    const harness = await createExecutionHarness({ action: {
+      ...testAction,
+      execute: async ({ context }) => {
+        await context.persistOutputs!({ projectId: "p1", sessionId: "terminal-1" })
+        stored = await inspect!()
+        throw new Error("interrupted")
+      },
+    } })
+    inspect = () => harness.runs.get("automation-run:1")
+    const run = await harness.service.runItem(harness.item, "trigger")
+    expect(stored?.pendingOutputs).toEqual({ projectId: "p1", sessionId: "terminal-1" })
+    expect(stored?.result).toBeUndefined()
+    expect(run.result?.outputs).toEqual({ projectId: "p1", sessionId: "terminal-1" })
+    expect(run.status).toBe("failed")
+  })
   it("runs an executor, persists output, and records audit metadata", async () => {
     let observedContext: ActionExecutionInput<TestActionConfig>["context"] | undefined
     const harness = await createExecutionHarness({

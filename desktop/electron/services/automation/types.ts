@@ -114,6 +114,7 @@ export interface AutomationRun extends Record<string, unknown> {
   readonly triggerType: string
   readonly executorType: string
   readonly result?: ActionRunResult
+  readonly pendingOutputs?: Record<string, unknown>
   readonly error?: string
 }
 

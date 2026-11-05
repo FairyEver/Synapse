@@ -89,7 +89,7 @@ const automationCapabilities: readonly CapabilityDefinition[] = [
   { id: "app.automation.runtime.inspect" as CapabilityId, title: "Inspect automation runtime", description: "Inspect Automation timers, running item ids, and compact runtime state.", mutates: false },
   { id: "app.automation.webhook.list" as CapabilityId, title: "List Automation Webhooks", description: "List account Webhooks that can be used by builtin.webhook triggers.", mutates: false },
   { id: "app.automation.trigger_type.list" as CapabilityId, title: "List automation trigger types", description: "List registered Automation trigger type descriptors.", mutates: false },
-  { id: "app.automation.executor_type.list" as CapabilityId, title: "List automation executor types", description: "List the Agent-only Automation executor type descriptor.", mutates: false },
+  { id: "app.automation.executor_type.list" as CapabilityId, title: "List automation executor types", description: "List Agent and interactive Claude Code Automation executor descriptors.", mutates: false },
 ]
 
 export const AUTOMATION_DOMAIN: CapabilityDomainDefinition = {
@@ -165,7 +165,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_create",
-      description: "Create one Synapse Automation with the builtin.agent executor. Call automation_trigger_type_list and automation_executor_type_list before building configs.",
+      description: "Create one Synapse Automation with builtin.agent or builtin.claude-code. Call automation_trigger_type_list and automation_executor_type_list before building configs. Claude Code takes only projectId and prompt, uses current defaults, and succeeds after initial prompt submission while its terminal stays open.",
       inputSchema: {
         type: "object",
         properties: {
@@ -183,7 +183,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_update",
-      description: "Update one Synapse Automation. Executor refs must use builtin.agent; use discovery tools before changing configs.",
+      description: "Update one Synapse Automation. Executor refs must use builtin.agent or builtin.claude-code; use discovery tools before changing configs. Claude Code accepts only projectId and prompt and reads current default launch settings at execution time.",
       inputSchema: {
         type: "object",
         properties: {
@@ -263,7 +263,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_executor_type_list",
-      description: "List the only Automation executor, builtin.agent, including public config fields and defaults.",
+      description: "List builtin.agent and builtin.claude-code, including public config fields and defaults. Claude Code creates an interactive terminal in the background and completes after initial prompt submission, without waiting for the task result.",
       inputSchema: { type: "object", properties: {} },
     },
   ], { sourcePrefix: "automation", primaryPrefix: "app_automation" })

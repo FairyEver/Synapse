@@ -63,11 +63,14 @@ describe("MainActionRegistry", () => {
     expect(() => registry.parseConfig("builtin.test", { message: "" })).toThrow()
   })
 
-  it("registers only Agent and rejects every retired executor type", () => {
+  it("registers Agent and Claude Code and rejects every retired executor type", () => {
     const registry = createBuiltinMainActionRegistry({
       getAgentRuntime: async () => undefined,
+      launchClaudeCode: async () => { throw new Error("No terminal in registry discovery test") },
     })
-    expect(registry.list().map(action => action.manifest.id)).toEqual(["builtin.agent"])
+    expect(registry.list().map(action => action.manifest.id)).toEqual(["builtin.agent", "builtin.claude-code"])
+    expect(registry.parseConfig("builtin.claude-code", { projectId: "p1", prompt: "review" })).toEqual({ projectId: "p1", prompt: "review" })
+    expect(() => registry.parseConfig("builtin.claude-code", { projectId: "p1", prompt: "review", providerId: "override" })).toThrow()
     for (const type of ["command", "script", "http-request", "workflow", "javascript-run", "nodejs-run"]) {
       expect(() => registry.parseConfig(`builtin.${type}`, {})).toThrow(/not registered/)
     }

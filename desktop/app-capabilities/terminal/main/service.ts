@@ -1189,6 +1189,7 @@ export function createTerminalService(deps: {
       /** Caller-owned launch environment that must never be written into the session record. */
       readonly persistEnvironment?: boolean
       readonly onCreated?: (sessionId: string) => Promise<void>
+      readonly onEnded?: () => void
     },
     createdByClientId?: string,
     commandLaunch?: TerminalLaunchLayer,
@@ -1283,6 +1284,7 @@ export function createTerminalService(deps: {
     updateGroupMembership(group.id)
     bumpDomain("session.created", session.id, session.metadataRevision)
     unpublishedSessions.set(session.id, terminalDomainRevision)
+    if (launchOverrides?.onEnded) endCallbacks.set(session.id, launchOverrides.onEnded)
     try {
       await launchOverrides?.onCreated?.(session.id)
       const defaultShellArgs = launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
@@ -2356,8 +2358,8 @@ export function createTerminalService(deps: {
       ],
       persistEnvironment: false,
       onCreated: input.onCreated,
+      onEnded: input.onEnded,
     }, input.createdByClientId)
-    if (input.onEnded) endCallbacks.set(session.id, input.onEnded)
     return session
   }
 

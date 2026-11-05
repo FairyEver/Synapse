@@ -2,6 +2,7 @@ import path from "node:path"
 import { Worker } from "node:worker_threads"
 import type { DataNamespace } from "../../runtime/data-repo"
 import type { AutomationItem } from "./types"
+import { isSupportedAutomationExecutor, supportedAutomationExecutorTypes } from "../../../action-packages/automation-executors"
 
 interface CleanupDeps {
   readonly items: {
@@ -26,7 +27,7 @@ export class RetiredExecutorCleanup {
   start(): Promise<void> {
     this.stopped = false
     this.unsubscribe ??= this.deps.changes.onChange(change => {
-      if (change.kind !== "replace" && !(change.kind === "upsert" && change.value?.executor.type !== "builtin.agent")) return
+      if (change.kind !== "replace" && !(change.kind === "upsert" && change.value && !isSupportedAutomationExecutor(change.value.executor.type))) return
       void this.run().catch(error => this.deps.logger.warn("Automation configuration retirement failed.", {
         boundary: "automation.retired-executor-cleanup",
         errorName: error instanceof Error ? error.name : typeof error,
@@ -63,7 +64,10 @@ export class RetiredExecutorCleanup {
       __dirname.replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked"),
       "retired-executor-cleanup-worker.js",
     )
-    const worker = new Worker(workerPath, { workerData: candidates, resourceLimits: { maxOldGenerationSizeMb: 64 } })
+    const worker = new Worker(workerPath, {
+      workerData: { candidates, supportedExecutorTypes: supportedAutomationExecutorTypes },
+      resourceLimits: { maxOldGenerationSizeMb: 64 },
+    })
     this.worker = worker
     return new Promise<void>((resolve, reject) => {
       let settled = false

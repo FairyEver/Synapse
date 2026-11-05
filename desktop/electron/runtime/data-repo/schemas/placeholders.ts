@@ -857,6 +857,7 @@ export interface AutomationRunEntryV1 extends Record<string, unknown> {
   triggerType: string
   executorType: string
   result?: Record<string, unknown>
+  pendingOutputs?: Record<string, unknown>
   error?: string
 }
 
@@ -915,6 +916,7 @@ export const automationRunsSchema: NamespaceSchema<AutomationRunEntryV1> = {
     && isAutomationRunTrigger((v as AutomationRunEntryV1).triggeredBy)
     && typeof (v as AutomationRunEntryV1).triggerType === "string"
     && typeof (v as AutomationRunEntryV1).executorType === "string"
+    && isOptionalRecord((v as AutomationRunEntryV1).pendingOutputs)
     && ((v as AutomationRunEntryV1).result === undefined || isAnyRecord((v as AutomationRunEntryV1).result))
     && isOptionalString((v as AutomationRunEntryV1).error),
 }

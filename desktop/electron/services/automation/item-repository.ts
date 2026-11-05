@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { isSupportedAutomationExecutor } from "../../../action-packages/automation-executors"
 
 import type { ActionManifest } from "../../../action-packages/types"
 import type { DataChangeEvent, DataNamespace } from "../../runtime/data-repo"
@@ -144,7 +145,7 @@ export class AutomationItemRepository {
   async deleteNonAgent(id: string): Promise<boolean> {
     let deleted = false
     const result = await this.mutateItem(id, existing => {
-      if (existing.executor.type === "builtin.agent") return existing
+      if (isSupportedAutomationExecutor(existing.executor.type)) return existing
       deleted = true
       return null
     })
