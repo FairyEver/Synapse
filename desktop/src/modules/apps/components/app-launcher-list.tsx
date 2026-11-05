@@ -82,61 +82,62 @@ export function AppLauncherList({
 
   return (
     <div className="@container/launcher flex h-full min-h-0 flex-col bg-background">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-border px-4 py-4 @xl/launcher:px-6">
-        <h1 className="text-xl font-semibold">应用中心</h1>
-        <InputGroup className="w-full @md/launcher:w-56">
-          <InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon>
-          <InputGroupInput
-            ref={searchRef}
-            type="search"
-            aria-label="搜索应用"
-            placeholder="搜索应用"
-            value={query}
-            className="[&::-webkit-search-cancel-button]:hidden"
-            onChange={(event) => updateQuery(event.target.value)}
-          />
-          {query && (
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton
-                size="icon-xs"
-                aria-label="清除搜索"
+      <h1 className="sr-only">应用中心</h1>
+      <div className="flex min-h-0 flex-1 flex-col @xl/launcher:flex-row">
+        <aside className="flex min-h-0 shrink-0 flex-col border-b border-border bg-sidebar @xl/launcher:w-44 @xl/launcher:border-r @xl/launcher:border-b-0">
+          <div className="shrink-0 px-2 pt-2">
+            <InputGroup>
+              <InputGroupAddon><Search aria-hidden="true" /></InputGroupAddon>
+              <InputGroupInput
+                ref={searchRef}
+                type="search"
+                aria-label="搜索应用"
+                placeholder="搜索应用"
+                value={query}
+                className="[&::-webkit-search-cancel-button]:hidden"
+                onChange={(event) => updateQuery(event.target.value)}
+              />
+              {query && (
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    size="icon-xs"
+                    aria-label="清除搜索"
+                    onClick={() => {
+                      updateQuery("")
+                      searchRef.current?.focus()
+                    }}
+                  >
+                    <X aria-hidden="true" />
+                  </InputGroupButton>
+                </InputGroupAddon>
+              )}
+            </InputGroup>
+          </div>
+          <nav
+            aria-label="应用分类"
+            className="flex min-h-0 gap-1 overflow-x-auto p-2 @xl/launcher:flex-col @xl/launcher:overflow-y-auto"
+          >
+            {filters.map(({ id, name, icon: Icon, count }) => (
+              <Button
+                key={id}
+                ref={id === "pinned" ? pinnedFilterRef : undefined}
+                variant="ghost"
+                type="button"
+                aria-label={name}
+                aria-pressed={filter === id}
+                className="justify-start gap-2 aria-pressed:bg-selected aria-pressed:hover:bg-selected"
                 onClick={() => {
-                  updateQuery("")
-                  searchRef.current?.focus()
+                  setFilter(id)
+                  if (viewportRef.current) viewportRef.current.scrollTop = 0
                 }}
               >
-                <X aria-hidden="true" />
-              </InputGroupButton>
-            </InputGroupAddon>
-          )}
-        </InputGroup>
-      </header>
-
-      <div className="flex min-h-0 flex-1 flex-col @xl/launcher:flex-row">
-        <nav
-          aria-label="应用分类"
-          className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-sidebar p-2 @xl/launcher:w-44 @xl/launcher:flex-col @xl/launcher:overflow-y-auto @xl/launcher:border-r @xl/launcher:border-b-0"
-        >
-          {filters.map(({ id, name, icon: Icon, count }) => (
-            <Button
-              key={id}
-              ref={id === "pinned" ? pinnedFilterRef : undefined}
-              variant="ghost"
-              type="button"
-              aria-label={name}
-              aria-pressed={filter === id}
-              className="justify-start gap-2 aria-pressed:bg-selected aria-pressed:hover:bg-selected"
-              onClick={() => {
-                setFilter(id)
-                if (viewportRef.current) viewportRef.current.scrollTop = 0
-              }}
-            >
-              <Icon aria-hidden="true" className="text-muted-foreground" />
-              {name}
-              <span aria-hidden="true" className="ml-auto hidden text-xs tabular-nums text-muted-foreground @xl/launcher:inline">{count}</span>
-            </Button>
-          ))}
-        </nav>
+                <Icon aria-hidden="true" className="text-muted-foreground" />
+                {name}
+                <span aria-hidden="true" className="ml-auto hidden text-xs tabular-nums text-muted-foreground @xl/launcher:inline">{count}</span>
+              </Button>
+            ))}
+          </nav>
+        </aside>
 
         <ScrollArea viewportRef={viewportRef} className="min-w-0 flex-1">
           <div className="mx-auto max-w-4xl px-4 pb-6 @xl/launcher:px-6">
