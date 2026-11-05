@@ -87,10 +87,10 @@ import {
   useRegisterDriveRendererToolbarItems,
   type DriveRendererToolbarItem,
 } from './drive-renderer-toolbar-context'
-// Pixel bounds keep auxiliary rails readable without consuming ultrawide documents.
+// Keep compact defaults while allowing the outline to expand with the viewport.
 const MARKDOWN_OUTLINE_PANEL_DEFAULT_SIZE = '224px'
 const MARKDOWN_OUTLINE_PANEL_MIN_SIZE = '160px'
-const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = '288px'
+const MARKDOWN_OUTLINE_PANEL_MAX_SIZE = '50%'
 const MARKDOWN_COMMENTS_PANEL_DEFAULT_SIZE = '384px'
 const MARKDOWN_COMMENTS_PANEL_MIN_SIZE = '320px'
 const MARKDOWN_COMMENTS_PANEL_MAX_SIZE = '480px'
