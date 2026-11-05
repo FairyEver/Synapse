@@ -278,6 +278,8 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 同步硬规则
 
+2026-11-05 Automation 新增顶层附加条件 `conditions`，使用统一的 `and/or` 关系承载“星期几”和“每天的时间段”，覆盖 Cron、固定间隔、Webhook、邮件和站内信。触发器发现不再返回 `activeDays/timeRange`；新建条目写 `schemaVersion: 2`。升级后所有 `schemaVersion: 1` 条目自动停用、清空 `nextRunAt`、保留原提示词与配置并只读展示，禁止编辑、启用、手动运行和自动清理。公开 IPC/MCP item 摘要增加 `schemaVersion`、`legacy` 和安全的 `conditions`；Automation 仍为 14 个 capability / 14 个 MCP 索引，全局 364 capability / 360 MCP 索引、System App、Dock、Workflow、Automation Action 和 Deep Link 数量均不变。
+
 2026-11-05 自动化未保存离开统一使用「放弃 / 保存」确认对话框，移除顶部提示条和会话草稿暂存/恢复。保存成功后完成原返回、应用切换或关闭，失败保留输入。仅调整既有 System App 的 Renderer 交互；Automation 仍为 14 / 14，注册数量、公开 MCP schema 与系统 Skill 业务调用契约不变，不新增 IPC 或其他入口。
 
 2026-11-05 自动化按已确认原型采用独立只读详情与同页触发/执行节点配置，宽容器双栏、窄容器纵向排列。视觉重构使用浅灰工作区和左右白色配置面板，移除中间箭头，名称与标签集中在顶部，摘要与保存动作合并为随内容滚动的白色操作区，无固定或 sticky 底栏。只读详情沿用同一层次，运行策略独立分组，历史采用统一白色列表并去重耗时，保留既有停止、重试、诊断和原执行器终端入口。编辑内可切换真实运行记录并保留草稿，节点标题菜单、更换确认、折叠及变量插入均属于既有 Automation System App。仅调整 Renderer 界面，不增删 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP；Automation 仍为 14 / 14，全局数量及其他表面以当前汇总表为准，公开 schema 与系统 Skill 的业务调用契约不变。

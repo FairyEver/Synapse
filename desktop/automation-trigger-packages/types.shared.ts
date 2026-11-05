@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react"
 import type { z } from "zod"
 
 import type { ActionStoredConfigValidation } from "../action-packages/types"
+import type { AutomationConditions } from "./schedule-constraints"
 
 export type AutomationTriggerConfig = Record<string, unknown>
 
@@ -35,6 +36,7 @@ export type AutomationTriggerManifest<
 
 export type AutomationScheduleInput<TConfig extends AutomationTriggerConfig> = {
   readonly config: TConfig
+  readonly conditions?: AutomationConditions
   readonly from: Date
   readonly createdAt: string
   readonly lastRunAt?: string
@@ -81,6 +83,8 @@ export type AutomationTriggerConfigFormComponent<
 > = (props: {
   readonly value: TConfig
   readonly onChange: (value: TConfig) => void
+  readonly fieldErrors?: Readonly<Record<string, string>>
+  readonly conditions?: AutomationConditions
 }) => ReactElement
 
 export type RendererAutomationTriggerDefinition<

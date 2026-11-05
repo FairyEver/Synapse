@@ -73,7 +73,14 @@ Input:
   "scope": { "type": "project", "projectId": "project-id" },
   "trigger": {
     "type": "builtin.interval",
-    "config": { "everyMinutes": 60, "anchor": "created_at", "activeDays": [1, 2, 3, 4, 5] }
+    "config": { "everyMinutes": 60, "anchor": "created_at" }
+  },
+  "conditions": {
+    "operator": "and",
+    "items": [
+      { "type": "weekdays", "days": [1, 2, 3, 4, 5] },
+      { "type": "daily-time-range", "start": "08:00", "end": "17:00" }
+    ]
   },
   "executor": {
     "type": "builtin.agent",
@@ -105,13 +112,20 @@ Input:
     "name": "New name",
     "trigger": {
       "type": "builtin.interval",
-      "config": { "everyMinutes": 30, "anchor": "last_completed_at", "activeDays": [1, 2, 3, 4, 5] }
+      "config": { "everyMinutes": 30, "anchor": "last_completed_at" }
+    },
+    "conditions": {
+      "operator": "or",
+      "items": [
+        { "type": "weekdays", "days": [1, 2, 3, 4, 5] },
+        { "type": "daily-time-range", "start": "09:00", "end": "18:00" }
+      ]
     }
   }
 }
 ```
 
-Returns a public item summary. `trigger` and `executor` patches replace the corresponding stored refs.
+Returns a public item summary. `trigger` and `executor` patches replace the corresponding stored refs. Omit `conditions` to preserve the current set; pass `conditions: null` to clear it.
 
 ### app_automation_item_delete
 
@@ -239,7 +253,7 @@ Input:
 
 ## Public Summary Boundary
 
-Item summaries include trigger type, trigger summary, executor type, executor title, status, timestamps, and validation issues.
+Item summaries include `schemaVersion`, `legacy`, safe top-level `conditions`, trigger type, trigger summary, executor type, executor title, status, timestamps, and validation issues.
 
 Item summaries do not include `trigger.config` or `executor.config`.
 
@@ -247,8 +261,22 @@ Run summaries include id, status, trigger/executor type, timestamps, sanitized r
 
 Run summaries do not include logs, raw outputs, Agent prompts, shell command text, scripts, HTTP bodies, Authorization values, Bearer tokens, Basic passwords, cookies, API keys, environment variable values, or raw event payloads.
 
-### Daily schedule window
+### Automation conditions
 
-Both `builtin.cron` and `builtin.interval` accept optional `trigger.config.timeRange` with `start` and `end` in `HH:mm`. End may be `24:00`; start must be earlier than end. A window applies to each selected `activeDays` date, includes start and excludes end. Cron uses its own timezone or local time; intervals use local time and retain their existing cadence. Automatic triggers and startup catchups must be inside the window; manual runs are unrestricted.
+Automation `schemaVersion: 2` accepts optional top-level `conditions`:
 
-Omit `timeRange` for unrestricted hours. To clear an existing window, replace the trigger ref with the complete desired config omitting `timeRange`; do not send incomplete endpoints or reconstruct a private config from a summary. No migration or schema-version change is required for existing automations.
+```json
+{
+  "operator": "and",
+  "items": [
+    { "type": "weekdays", "days": [1, 2, 3, 4, 5] },
+    { "type": "daily-time-range", "start": "08:00", "end": "17:00" }
+  ]
+}
+```
+
+Each type may occur once. Weekdays use `0=Sunday` through `6=Saturday`. Time ranges use `HH:mm`, allow `24:00` only as the end, and require start earlier than end. Empty or omitted conditions mean unrestricted. The relation applies to the whole set: `and` requires all conditions, `or` requires any one.
+
+All automatic trigger types are gated. Cron uses its configured timezone; other triggers use local time. Start is inclusive and end exclusive. Manual runs remain unrestricted and active runs continue across the end boundary. Cron/interval candidates retain their cadence and search at most five years. Webhook and mail events outside the set are discarded without replay; mail deliveries are marked skipped internally.
+
+Create/update do not accept schedule conditions inside cron or interval `trigger.config`. Older nested fields are not migrated. Existing `schemaVersion: 1` Automations are disabled on upgrade, preserved read-only, and reject enable/update/run operations; create a new v2 Automation to use the new model.

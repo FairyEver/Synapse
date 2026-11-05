@@ -12,11 +12,14 @@ import { listDiscoverableBuiltinAutomationActionTypes } from "../../../../app-ca
 import type { ActionConfig } from "../../../../action-packages/types"
 import type { AutomationTriggerConfig } from "@/automation-triggers/action-registry"
 import type { SynapseProjectConfig } from "@/types/config"
+import type { ConfigurationFieldErrors } from "@/components/configuration-field-error"
 import type { AutomationEditorStep } from "../types"
 import { TriggerVariablesDialog } from "./trigger-variables-dialog"
 
 type TriggerExecutorBuilderProps = {
-  step: AutomationEditorStep
+  step: Exclude<AutomationEditorStep, "conditions">
+  fieldErrors?: ConfigurationFieldErrors
+  onAddProject?: () => void
   onChoosingChange: (choosing: boolean) => void
   triggerType: string | null
   triggerConfig: AutomationTriggerConfig
@@ -34,7 +37,7 @@ function parseConfig(type: string, config: ActionConfig, trigger: boolean): Acti
   try { return registry.parseConfig(type, merged) } catch { return merged }
 }
 
-export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, triggerConfig, executorType, executorConfig,
+export function TriggerExecutorBuilder({ step, fieldErrors, onAddProject, onChoosingChange, triggerType, triggerConfig, executorType, executorConfig,
   projects = [], platform, onTriggerChange, onExecutorChange }: TriggerExecutorBuilderProps) {
   const [pendingChoice, setPendingChoice] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -57,6 +60,8 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
     ]
     : [{ title: "执行操作", options }]
   const ConfigForm = isTrigger ? null : executor?.ConfigForm
+  const hasErrors = Boolean(fieldErrors && Object.keys(fieldErrors).length)
+  useEffect(() => { if (hasErrors) setExpanded(true) }, [hasErrors])
   const TriggerForm = isTrigger ? trigger?.ConfigForm : null
 
   useEffect(() => { onChoosingChange(menuOpen || pendingChoice !== null) }, [menuOpen, pendingChoice, onChoosingChange])
@@ -85,7 +90,7 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} data-track={`automation.editor.${step}.type`}>
             <DropdownMenuTrigger asChild>
               <Button type="button" variant="ghost" aria-label={`更换${kind}`} className="min-w-0 justify-start">
-                <Icon /><span className="truncate">{selected.manifest.title}</span><ChevronDown />
+                <Icon data-icon="inline-start" /><span className="truncate">{selected.manifest.title}</span><ChevronDown data-icon="inline-end" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-64 max-w-[calc(100vw-2rem)]" align="start">
@@ -102,19 +107,19 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <CollapsibleTrigger asChild>
+          {TriggerForm || ConfigForm ? <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" size="icon" aria-label={`${expanded ? "收起" : "展开"}${isTrigger ? "触发配置" : "执行配置"}`}>
               {expanded ? <ChevronUp /> : <ChevronDown />}
             </Button>
-          </CollapsibleTrigger>
+          </CollapsibleTrigger> : null}
         </div> : null}
-        {selected ? <CollapsibleContent forceMount hidden={!expanded}>
+        {selected && (TriggerForm || ConfigForm) ? <CollapsibleContent forceMount hidden={!expanded}>
           <div data-layout={`automation-editor-${step}-config`} className="grid min-w-0 gap-6 border-t p-6 [&_[data-slot=field]]:min-w-0 [&_[data-slot=field-content]]:min-w-0 [&_[data-slot=toggle-group]]:max-w-full">
-            {TriggerForm ? <TriggerForm value={parseConfig(trigger!.manifest.id, config, true)} onChange={value => onTriggerChange(trigger!.manifest.id, value)} /> : null}
-            {ConfigForm ? <ConfigForm value={parseConfig(executor!.manifest.id, config, false)} projects={projects} triggerVariables={trigger?.manifest.variables ?? []}
+            {TriggerForm ? <TriggerForm fieldErrors={fieldErrors} value={parseConfig(trigger!.manifest.id, config, true)} onChange={value => onTriggerChange(trigger!.manifest.id, value)} /> : null}
+            {ConfigForm ? <ConfigForm fieldErrors={fieldErrors} onAddProject={onAddProject} value={parseConfig(executor!.manifest.id, config, false)} projects={projects} triggerVariables={trigger?.manifest.variables ?? []}
               onChange={value => onExecutorChange(executor!.manifest.id, value)} /> : null}
           </div>
-        </CollapsibleContent> : <div className="grid min-w-0 gap-6 p-6">
+        </CollapsibleContent> : !selected ? <div className="grid min-w-0 gap-6 p-6">
           {type ? <p role="alert" className="px-2 py-2 text-sm text-destructive">原{kind}不可用，请重新选择</p> : null}
           {groups.filter(group => group.options.length).map(group => <div key={group.title} className="grid gap-2">
             <p className="px-2.5 text-xs font-medium text-muted-foreground">{group.title}</p>
@@ -128,13 +133,13 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
             </div>
           </div>)}
           {!isTrigger && !trigger ? <p className="border-t px-2.5 pt-4 text-xs text-muted-foreground">先选择触发条件</p> : null}
-        </div>}
+        </div> : null}
         {isTrigger && trigger ? <div className="px-6 pb-4"><TriggerVariablesDialog key={trigger.manifest.id} triggerTitle={trigger.manifest.title} variables={trigger.manifest.variables ?? []} /></div> : null}
       </Collapsible>
       <AlertDialog open={pendingChoice !== null} onOpenChange={open => { if (!open) setPendingChoice(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>更换{kind}？</AlertDialogTitle>
-            <AlertDialogDescription>{isTrigger ? "当前触发配置将被替换。执行操作保留，请检查使用的触发变量。" : "当前执行配置将被替换。触发条件保持不变。"}</AlertDialogDescription>
+            <AlertDialogDescription>{isTrigger ? "当前触发配置将被替换。附加条件和执行操作保留，请检查使用的触发变量。" : "当前执行配置将被替换。触发条件和附加条件保持不变。"}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => { if (pendingChoice) installChoice(pendingChoice) }}>确认更换</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>

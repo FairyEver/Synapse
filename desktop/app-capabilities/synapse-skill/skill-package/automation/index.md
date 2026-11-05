@@ -23,7 +23,7 @@ Automation MCP exposes these operations:
 - list registered trigger types
 - list registered executor types
 
-Read responses intentionally omit raw `trigger.config` and `executor.config`. Do not ask MCP to reveal Agent prompts or credentials.
+Read responses intentionally omit raw `trigger.config` and `executor.config`, but include safe Automation-level `conditions`, `schemaVersion`, and `legacy`. Do not ask MCP to reveal Agent prompts or credentials.
 
 ## Default Flow
 
@@ -31,12 +31,13 @@ Read responses intentionally omit raw `trigger.config` and `executor.config`. Do
 2. Before creating or replacing configs, call `app_automation_trigger_type_list` and `app_automation_executor_type_list`.
 3. Build a full `trigger` ref: `{ "type": "...", "config": { ... } }`.
 4. Build a full `executor` ref: `{ "type": "...", "config": { ... } }`.
-5. Call `app_automation_item_create` or `app_automation_item_update`.
-6. Use `app_automation_item_enable` or `app_automation_item_disable` for enabled state changes.
-7. Use `app_automation_run_execute` for a manual run.
-8. Use `app_automation_webhook_list` before creating a `builtin.webhook` trigger unless the user already gave a Webhook public id.
-9. Use `app_automation_runtime_inspect` and `app_automation_run_list` to troubleshoot execution state.
-10. Use `app_automation_run_disable` only when stopping an active run by run id.
+5. Build optional top-level `conditions` separately from the trigger config.
+6. Call `app_automation_item_create` or `app_automation_item_update`.
+7. Use `app_automation_item_enable` or `app_automation_item_disable` for enabled state changes.
+8. Use `app_automation_run_execute` for a manual run.
+9. Use `app_automation_webhook_list` before creating a `builtin.webhook` trigger unless the user already gave a Webhook public id.
+10. Use `app_automation_runtime_inspect` and `app_automation_run_list` to troubleshoot execution state.
+11. Use `app_automation_run_disable` only when stopping an active run by run id.
 
 ## Trigger Rules
 
@@ -52,9 +53,23 @@ Known built-in trigger types include:
 
 Use the returned `configSchema`, `defaultConfig`, and `variables` from `app_automation_trigger_type_list`. Do not guess fields that are not in the schema.
 
-For `builtin.cron` and `builtin.interval`, optional `trigger.config.timeRange` sets a single same-day window: `{ "start": "08:00", "end": "17:00" }`. Times use `HH:mm`; only the end may be `24:00`. Both values are required when configured, and start must be earlier than end. Omit the entire field for unrestricted hours, including when clearing a previous range. Existing configs without this field remain valid.
+All automatic trigger types can use the top-level `conditions` object:
 
-`activeDays` and `timeRange` are intersected with the trigger schedule. The start is inclusive and the end exclusive. Cron uses its configured timezone (or local time when omitted); interval uses local time. Filtering preserves interval cadence rather than restarting it at the window start. Scheduled and missed-run catchups outside the window are skipped; manual runs remain available, and already-started runs continue past the end. A configured window with no matching occurrence within five years has no next run and no timer.
+```json
+{
+  "operator": "and",
+  "items": [
+    { "type": "weekdays", "days": [1, 2, 3, 4, 5] },
+    { "type": "daily-time-range", "start": "08:00", "end": "17:00" }
+  ]
+}
+```
+
+Each condition type may appear once. Weekdays use `0=Sunday` through `6=Saturday`. Times use `HH:mm`; only the end may be `24:00`, and start must be earlier than end. Omit `conditions` for no restriction. On update, omit it to preserve the current value or pass `null` to clear it. The same relation applies to the whole set: `and` requires every condition, `or` requires any one.
+
+Cron uses its configured timezone; all other triggers use local time. The start is inclusive and the end is exclusive. Scheduled and missed-run catchups outside the condition set are skipped, while manual runs remain available and already-started runs continue. Cron/interval scheduling preserves cadence and searches at most five years. Webhook and mail events outside the condition set are discarded without replay.
+
+New items are `schemaVersion: 2`. Existing `schemaVersion: 1` items are not migrated: they are automatically disabled during upgrade, remain readable with their original prompt and trigger config, and cannot be edited, enabled, or manually run. Create a new v2 Automation instead.
 
 For `builtin.webhook`, call `app_automation_webhook_list` and set `trigger.config.webhookPublicId` from the returned `publicId`. You may also set `trigger.config.webhookName` from the returned name.
 
@@ -70,11 +85,11 @@ Always use executor type discovery unless the exact config is already known from
 
 Automation executors are `builtin.agent` and `builtin.claude-code`. Use `app_automation_executor_type_list` for config fields, defaults, and permissions. Do not guess identifiers. Claude Code accepts `projectId`, `prompt` (including trigger variables), and optional boolean `singleRun` (default `false`). It reads the current default provider/model/permission mode and creates a new terminal in the background. Omitted/false keeps the interactive CLI open after responding. True uses native `--print`; when the CLI exits, the existing terminal lifecycle removes only that session/pane and its empty tab. This does not change trigger frequency. Success still means initial prompt submission, not task completion or business success; print mode may exit with CLI background work still pending. Do not infer final completion from a Stop hook or forcibly close on it; do not automatically resend on timeout or ambiguous submission. The desktop run record provides an Open terminal action. This executor does not create an Agent Runtime conversation.
 
-Command, Shell script, HTTP, Workflow, JavaScript, and Node.js Automation executors are retired. Existing retired configurations are automatically deleted in the background, including configurations restored from a backup. Agent and Claude Code configurations (including invalid configs) and run history are preserved. Workflow nodes and Workflow execution remain available through the Workflow domain.
+Command, Shell script, HTTP, Workflow, JavaScript, and Node.js Automation executors are retired. Existing v2 retired configurations are automatically deleted in the background, including configurations restored from a backup. Legacy v1 configurations are never auto-deleted. Agent and Claude Code configurations (including invalid configs) and run history are preserved. Workflow nodes and Workflow execution remain available through the Workflow domain.
 
 ## Update Rules
 
-Use `app_automation_item_update` with a focused patch. The patch may include `trigger` or `executor`, but those refs replace the corresponding stored config.
+Use `app_automation_item_update` with a focused patch. The patch may include top-level `conditions`, `trigger`, or `executor`; trigger and executor refs replace the corresponding stored config. Legacy v1 items reject updates.
 
 If you only need to enable or disable an Automation, use `app_automation_item_enable` or `app_automation_item_disable` instead of `app_automation_item_update`.
 

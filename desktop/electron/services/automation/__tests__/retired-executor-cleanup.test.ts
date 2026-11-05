@@ -22,8 +22,8 @@ async function harness() {
   return { changes, items, cleanup, logger }
 }
 function item(id: string, type: string): AutomationItem {
-  return { id, schemaVersion: 1, name: id, enabled: true, scope: { type: "global" },
-    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [1] } },
+  return { id, schemaVersion: 2, name: id, enabled: true, scope: { type: "global" },
+    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
     executor: { type, config: { prompt: "原样保留", unknownField: true } },
     policy: { missedRunPolicy: "run_once", overlapPolicy: "skip" },
     createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z", runCount: 7, configVersion: 3 }
@@ -77,6 +77,17 @@ describe("Agent-only Automation cleanup", () => {
       await h.cleanup.run()
       expect(await h.items.get("legacy")).toBeNull()
       expect(remove).toHaveBeenCalledTimes(2)
+    } finally { await h.cleanup.stop() }
+  })
+
+  it("never deletes legacy configurations", async () => {
+    const h = await harness()
+    const legacy = { ...item("legacy", "builtin.command"), schemaVersion: 1 as const }
+    await h.changes.upsert(legacy)
+    try {
+      await h.cleanup.start()
+      expect(await h.items.get(legacy.id)).toEqual(legacy)
+      expect(await h.items.deleteNonAgent(legacy.id)).toBe(false)
     } finally { await h.cleanup.stop() }
   })
 })

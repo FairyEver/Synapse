@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ConfigurationFieldError, configurationFieldProps, type ConfigurationFieldErrors } from "@/components/configuration-field-error"
 import { Textarea } from "@/components/ui/textarea"
 import type { AutomationTriggerVariableDescriptor } from "../../automation-trigger-packages/types.shared"
 
@@ -12,10 +13,11 @@ type ActionPromptFieldProps = {
   readonly value: string
   readonly onChange: (value: string) => void
   readonly variables?: readonly AutomationTriggerVariableDescriptor[]
+  readonly fieldErrors?: ConfigurationFieldErrors
   readonly placeholder?: string
 }
 
-export function ActionPromptField({ id, value, onChange, variables = [], placeholder = "输入要发送给 Agent 的提示词..." }: ActionPromptFieldProps) {
+export function ActionPromptField({ fieldErrors, id, value, onChange, variables = [], placeholder = "输入要发送给 Agent 的提示词..." }: ActionPromptFieldProps) {
   const prompt = useRef<HTMLTextAreaElement>(null)
   const selection = useRef({ start: value.length, end: value.length })
   const [open, setOpen] = useState(false)
@@ -55,7 +57,7 @@ export function ActionPromptField({ id, value, onChange, variables = [], placeho
               const path = (paths[variable.key] ?? "").trim().replace(/^\.+/u, "")
               const key = variable.dynamic && path ? `${variable.key}.${path}` : variable.key
               return <div key={variable.key} className="min-w-0">
-                <Button type="button" variant="ghost" className="h-auto w-full justify-start whitespace-normal text-left" aria-label={`插入 {{${key}}}`} onClick={() => insert(key)}>
+                <Button type="button" variant="ghost" className="h-auto w-full justify-start py-1.5 whitespace-normal text-left" aria-label={`插入 {{${key}}}`} onClick={() => insert(key)}>
                   <Plus /><span className="grid min-w-0 gap-1"><span>{variable.label}</span><code className="break-all text-xs font-normal text-muted-foreground">{`{{${key}}}`}</code></span>
                 </Button>
                 {variable.dynamic ? <Input aria-label={`${variable.label} 字段路径`} placeholder="字段路径（可选）" value={paths[variable.key] ?? ""} className="mb-2" onChange={event => setPaths(current => ({ ...current, [variable.key]: event.target.value }))} /> : null}
@@ -66,6 +68,6 @@ export function ActionPromptField({ id, value, onChange, variables = [], placeho
         </PopoverContent>
       </Popover> : null}
     </div>
-    <FieldContent><Textarea ref={prompt} id={id} rows={6} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} /></FieldContent>
+    <FieldContent><Textarea {...configurationFieldProps(fieldErrors, "prompt", id)} ref={prompt} id={id} rows={6} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)} /><ConfigurationFieldError errors={fieldErrors} name="prompt" id={id} /></FieldContent>
   </Field>
 }

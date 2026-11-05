@@ -22,7 +22,6 @@ export const intervalTriggerManifest = {
   defaultConfig: {
     everyMinutes: 60,
     anchor: "created_at",
-    activeDays: [0, 1, 2, 3, 4, 5, 6],
   },
   configSchema: intervalTriggerConfigSchema,
   variables: intervalTriggerVariables,

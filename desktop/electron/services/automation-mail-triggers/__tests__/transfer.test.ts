@@ -3,7 +3,7 @@ import { DataRepositoryImpl } from "../../../runtime/data-repo/repository"
 import { automationItemsSchema } from "../../../runtime/data-repo/schemas/placeholders"
 import { automationMailSchemas } from "../../../runtime/data-repo/schemas/automation-mail-triggers"
 import { MailTriggerActivation } from "../activation"
-import { sanitizeImportedMailAutomation } from "../transfer"
+import { sanitizeImportedAutomation } from "../transfer"
 import { mailTriggerRig } from "./fixtures"
 const cleanup: (() => Promise<void>)[] = []
 afterEach(async () => { for (const close of cleanup.splice(0)) await close() })
@@ -11,7 +11,7 @@ async function fixture() {
   const rig = await mailTriggerRig(); cleanup.push(rig.close)
   const activation = new MailTriggerActivation({ repository: rig.repo, context: rig.context, sourceFor: () => rig.source, listItems: () => rig.items.list() })
   rig.items.attachTriggerLifecycle("test.mail", activation)
-  const restored = new DataRepositoryImpl({ importTransforms: { "automation.items": value => sanitizeImportedMailAutomation(value, new Set(["test.mail"])) } })
+  const restored = new DataRepositoryImpl({ importTransforms: { "automation.items": value => sanitizeImportedAutomation(value, new Set(["test.mail"])) } })
   restored.register(automationItemsSchema, rig.itemStore)
   for (const schema of automationMailSchemas) restored.register(schema, rig.storage.namespace(schema.name))
   return { ...rig, restored }
@@ -36,6 +36,37 @@ it("rejects local runtime imports before replacing any portable configuration", 
   const malicious = { ...backup, namespaces: [...backup.namespaces, { name: "app.automation-mail.deliveries", schemaVersion: 1, encrypted: false, data: { items: [] } }] }
   await expect(rig.restored.importAll(malicious)).rejects.toThrow("local-only")
   expect((await rig.items.get(item.id))?.enabled).toBe(true)
+})
+it("disables imported legacy automations while preserving their original configuration", async () => {
+  const rig = await fixture()
+  const legacy = {
+    id: "automation:legacy",
+    schemaVersion: 1,
+    name: "Legacy",
+    enabled: true,
+    scope: { type: "global" },
+    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [1], timeRange: { start: "08:00", end: "17:00" } } },
+    executor: { type: "builtin.agent", config: { prompt: "保留旧提示词" } },
+    policy: { missedRunPolicy: "run_once", overlapPolicy: "skip" },
+    createdAt: "2026-06-03T00:00:00.000Z",
+    updatedAt: "2026-06-03T00:00:00.000Z",
+    nextRunAt: "2026-06-04T01:00:00.000Z",
+    runCount: 3,
+    configVersion: 2,
+  }
+  const backup = {
+    format: "synapse-backup-v1",
+    exportedAt: "2026-06-03T00:00:00.000Z",
+    namespaces: [{ name: "automation.items", schemaVersion: 1, encrypted: false, data: { items: [legacy] } }],
+  }
+
+  await rig.restored.importAll(backup as Parameters<typeof rig.restored.importAll>[0])
+
+  expect(await rig.itemStore.get(legacy.id)).toEqual({
+    ...legacy,
+    enabled: false,
+    nextRunAt: undefined,
+  })
 })
 it("preserves an explicit deletion intent if cleanup fails and resumes it without touching source mail", async () => {
   const rig = await fixture(), item = await rig.items.create({ ...rig.input, enabled: true })

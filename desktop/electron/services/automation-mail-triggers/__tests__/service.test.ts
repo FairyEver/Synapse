@@ -33,6 +33,26 @@ it("retains a busy delivery without consuming its dispatch claim", async () => {
   await rig.worker.reconcile("available")
   expect(rig.bodies).toEqual(["body"])
 })
+it("marks receipts outside automation conditions as skipped without running", async () => {
+  const rig = await fixture(), item = await rig.items.create({
+    ...rig.input,
+    enabled: true,
+    conditions: { operator: "and", items: [{ type: "weekdays", days: [1] }] },
+  })
+  const root = item.mailSubscription!.id, source = (await rig.repo.sourcesFor(root))[0]!
+  const receivedAt = "2026-11-05T01:00:00Z"
+  await rig.repo.enqueuePage(root, source.sourceKey, 0, {
+    receipts: [{ sourceKey: source.sourceKey, receiptKey: "outside", messageId: "letter", receivedAt }],
+    nextCursor: "21",
+    complete: true,
+  })
+
+  await rig.worker.reconcile("outside conditions")
+
+  expect(rig.bodies).toEqual([])
+  expect(await rig.repo.nextPending(item.id, rig.ctx.identity)).toBeNull()
+  expect(await rig.runs.listByAutomation(item.id)).toEqual([])
+})
 it("recovers an ambiguous committed dispatch without invoking the executor", async () => {
   const rig = await fixture(), item = await rig.items.create({ ...rig.input, enabled: true })
   const root = item.mailSubscription!.id, source = (await rig.repo.sourcesFor(root))[0]!

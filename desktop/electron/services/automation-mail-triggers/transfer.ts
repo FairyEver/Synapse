@@ -7,6 +7,15 @@ export function sanitizeImportedMailAutomation(value: unknown, types: ReadonlySe
   if (!value || typeof value !== "object" || Array.isArray(value)) return value
   const row = value as Record<string, unknown>
   const trigger = row.trigger as { type?: unknown } | undefined
-  const { mailSubscription: _local, ...portable } = row
+  const portable = { ...row }
+  delete portable.mailSubscription
   return typeof trigger?.type === "string" && types.has(trigger.type) ? { ...portable, enabled: false, nextRunAt: undefined } : portable
+}
+
+/** Legacy Automations stay readable but can never resume automatically after import. */
+export function sanitizeImportedAutomation(value: unknown, types: ReadonlySet<string> = mailTypes): unknown {
+  const portable = sanitizeImportedMailAutomation(value, types)
+  if (!portable || typeof portable !== "object" || Array.isArray(portable)) return portable
+  const row = portable as Record<string, unknown>
+  return row.schemaVersion === 1 ? { ...row, enabled: false, nextRunAt: undefined } : portable
 }

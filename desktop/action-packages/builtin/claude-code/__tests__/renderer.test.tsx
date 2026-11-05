@@ -34,7 +34,7 @@ describe("Claude Code automation renderer", () => {
     await render()
     const checkbox = container.querySelector<HTMLButtonElement>('[role="checkbox"]')!
     expect(checkbox).not.toBeNull()
-    expect(container.querySelector(`label[for="${checkbox.id}"]`)?.textContent).toBe("单次模式")
+    expect(container.querySelector(`label[for="${checkbox.id}"]`)?.textContent).toBe("完成后退出 Claude Code")
     expect(checkbox.getAttribute("aria-checked")).toBe("false")
     await act(async () => checkbox.click())
     expect(change).toHaveBeenLastCalledWith({ projectId: "p1", prompt: "Review", singleRun: true })
@@ -48,7 +48,7 @@ describe("Claude Code automation renderer", () => {
       triggerVariables={[{ key: "trigger.payload.subject", label: "主题" }]} />)
     expect(html).toContain("项目")
     expect(html).toContain("提示词")
-    expect(html).toContain("单次模式")
+    expect(html).toContain("完成后退出 Claude Code")
     expect(html).not.toContain("供应商")
     expect(html).not.toContain("权限模式")
     expect(html).not.toContain("会话策略")

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { isSupportedAutomationExecutor } from "../../../action-packages/automation-executors"
+import { automationConditionsSchema } from "../../../automation-trigger-packages/schedule-constraints"
 
 import type { ActionManifest } from "../../../action-packages/types"
 import type { DataChangeEvent, DataNamespace } from "../../runtime/data-repo"
@@ -72,9 +73,10 @@ export class AutomationItemRepository {
     const actionPolicy = this.resolveActionManifest(input.executor.type)?.automationPolicy
     const enabled = actionPolicy?.initiallyDisabled ? false : input.enabled ?? true
     const trigger = this.normalizeTrigger(input.trigger)
+    const conditions = input.conditions ? automationConditionsSchema.parse(input.conditions) : undefined
     const item: AutomationItem = {
       id: this.idFactory(),
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: input.name,
       description: input.description,
       enabled,
@@ -82,6 +84,7 @@ export class AutomationItemRepository {
       cwd: input.cwd,
       trigger,
       executor: input.executor,
+      conditions,
       policy: normalizePolicy(input.policy),
       createdAt: now,
       updatedAt: now,
@@ -101,7 +104,13 @@ export class AutomationItemRepository {
 
   async update(id: string, patch: AutomationUpdateInput): Promise<AutomationItem> {
     const next = await this.mutateItem(id, (existing) => {
+      if (existing.schemaVersion === 1) throw new Error("旧版自动化不可编辑，请新建自动化")
       const trigger = patch.trigger ? this.normalizeTrigger(patch.trigger) : existing.trigger
+      const conditions = patch.conditions === undefined
+        ? existing.conditions
+        : patch.conditions === null
+          ? undefined
+          : automationConditionsSchema.parse(patch.conditions)
       const candidate: AutomationItem = {
         ...existing,
         ...definedPatch({
@@ -113,6 +122,7 @@ export class AutomationItemRepository {
         }),
         trigger,
         executor: patch.executor ?? existing.executor,
+        conditions,
         policy: normalizePolicy({ ...existing.policy, ...patch.policy }),
         updatedAt: this.isoNow(),
         configVersion: existing.configVersion + 1,
@@ -145,6 +155,7 @@ export class AutomationItemRepository {
   async deleteNonAgent(id: string): Promise<boolean> {
     let deleted = false
     const result = await this.mutateItem(id, existing => {
+      if (existing.schemaVersion === 1) return existing
       if (isSupportedAutomationExecutor(existing.executor.type)) return existing
       deleted = true
       return null
@@ -175,6 +186,7 @@ export class AutomationItemRepository {
 
   async setEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
     const next = await this.mutateItem(id, (existing) => {
+      if (enabled && existing.schemaVersion === 1) throw new Error("旧版自动化不可启用，请新建自动化")
       const candidate: AutomationItem = {
         ...existing,
         enabled,
@@ -182,7 +194,7 @@ export class AutomationItemRepository {
       }
       return {
         ...candidate,
-        nextRunAt: enabled ? this.computeNextRunAtIso(candidate, this.now()) : undefined,
+        nextRunAt: enabled && candidate.schemaVersion === 2 ? this.computeNextRunAtIso(candidate, this.now()) : undefined,
       }
     })
     if (!next) throw new Error(`Automation "${id}" was not found`)
@@ -194,6 +206,17 @@ export class AutomationItemRepository {
       ...existing,
       nextRunAt,
     }))
+  }
+
+  async disableLegacyItems(): Promise<number> {
+    const items = await this.items.list()
+    let disabled = 0
+    for (const item of items) {
+      if (item.schemaVersion !== 1 || (!item.enabled && !item.nextRunAt)) continue
+      await this.setEnabled(item.id, false)
+      disabled += 1
+    }
+    return disabled
   }
 
   async markRunResult(
@@ -326,6 +349,7 @@ export class AutomationItemRepository {
     }
     return trigger.runtime.computeNextRunAt({
       config: item.trigger.config,
+      conditions: item.conditions,
       from,
       createdAt: item.createdAt,
       lastRunAt: item.lastRunAt,
@@ -357,6 +381,7 @@ function actionExecutionChanged(
     scope: previous.scope,
     cwd: previous.cwd,
     trigger: previous.trigger,
+    conditions: previous.conditions,
     executor: {
       type: previous.executor.type,
       config: withoutConfigFields(previous.executor.config, ignoredFields),
@@ -366,6 +391,7 @@ function actionExecutionChanged(
     scope: next.scope,
     cwd: next.cwd,
     trigger: next.trigger,
+    conditions: next.conditions,
     executor: {
       type: next.executor.type,
       config: withoutConfigFields(next.executor.config, ignoredFields),
@@ -408,10 +434,11 @@ function validateItem(item: AutomationItem): void {
   }
   if (!item.trigger.type.trim()) throw new Error("trigger type is required")
   if (!item.executor.type.trim()) throw new Error("executor type is required")
+  if (item.conditions) automationConditionsSchema.parse(item.conditions)
 }
 
 function webhookPublicIdForItem(item: AutomationItem): string | null {
-  if (!item.enabled || item.trigger.type !== "builtin.webhook") return null
+  if (item.schemaVersion !== 2 || !item.enabled || item.trigger.type !== "builtin.webhook") return null
   const config = item.trigger.config
   if (!isRecord(config)) return null
   const webhookPublicId = config.webhookPublicId

@@ -23,6 +23,7 @@ import { shouldBypassDeleteConfirm } from "@/lib/delete-confirm-bypass"
 import { errorLogMeta } from "@/lib/error-sanitize"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/types/automation"
+import { matchesAutomationSearch } from "./utils"
 import { AutomationList } from "./components/automation-list"
 import { AutomationEditorForm } from "./editor/editor-form"
 import { AutomationDetail } from "./detail/automation-detail"
@@ -191,6 +192,7 @@ function AutomationModule() {
   }
 
   async function handleToggleEnabled(item: AutomationItem, enabled: boolean) {
+    if (item.schemaVersion === 1) return
     await runItemMutation(
       item.id,
       async () => {
@@ -208,6 +210,7 @@ function AutomationModule() {
   }
 
   async function handleRun(item: AutomationItem) {
+    if (item.schemaVersion === 1) return
     setRunningItemIds((current) => new Set([...current, item.id]))
     try {
       const result = await promise(
@@ -263,8 +266,10 @@ function AutomationModule() {
   }
 
   async function handleStop(item: AutomationItem) {
+    if (pendingItemIds.has(item.id)) return
     const runId = item.activeRun?.id
     if (!runId) return
+    setPendingItemIds(current => new Set([...current, item.id]))
     try {
       await promise(
         () => stopRunOrThrow(runId),
@@ -284,6 +289,8 @@ function AutomationModule() {
         runId,
         ...errorLogMeta(stopError),
       })
+    } finally {
+      setPendingItemIds(current => { const next = new Set(current); next.delete(item.id); return next })
     }
   }
 
@@ -301,6 +308,10 @@ function AutomationModule() {
   }
 
   function handleEditorOpen(item: AutomationItem, step?: AutomationEditorStep) {
+    if (item.schemaVersion === 1) {
+      handleDetailOpen(item)
+      return
+    }
     returnTarget.current = item.id
     setEditor({ mode: { mode: "edit", automationId: item.id }, step })
   }
@@ -341,7 +352,7 @@ function AutomationModule() {
         </div>
       )
     }
-    if (error) {
+    if (error && items.length === 0) {
       return (
         <Empty className="min-h-64 border">
           <EmptyHeader>
@@ -363,7 +374,7 @@ function AutomationModule() {
       <AutomationList
         items={items.filter((item) => (
           (filter === "all" || (filter === "enabled" ? item.enabled : !item.enabled)) &&
-          item.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())
+          matchesAutomationSearch(item, search, projects)
         ))}
         projects={projects}
         createDisabled={false}
@@ -403,7 +414,7 @@ function AutomationModule() {
 
   if (detail) {
     return <TooltipProvider><AutomationDetail key={`${detail.item.id}:${detail.tab}`} item={detail.item} initialTab={detail.tab}
-        missing={detail.missing} error={error} busy={pendingItemIds.has(detail.item.id)} onBack={() => setDetail(null)}
+        onCreate={() => { setDetail(null); handleCreateEditorOpen() }} missing={detail.missing} error={error} busy={pendingItemIds.has(detail.item.id)} onBack={() => setDetail(null)}
         onEdit={step => handleEditorOpen(detail.item, step)} onToggleEnabled={enabled => { void handleToggleEnabled(detail.item, enabled) }}
         onRefresh={() => { void refresh() }} onStopRun={async runId => { await stopRunOrThrow(runId) }} /></TooltipProvider>
   }
@@ -456,7 +467,7 @@ function AutomationModule() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>删除自动化</AlertDialogTitle>
                   <AlertDialogDescription>
-                    删除后无法恢复。
+                    删除“{deleteTarget?.name}”后无法恢复。
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -487,6 +498,7 @@ function AutomationModule() {
           </Tabs>
           <Input aria-label="搜索自动化" placeholder="搜索自动化" value={search} className="w-full sm:w-60" onChange={(event) => setSearch(event.target.value)} />
         </div>
+        {error && items.length > 0 ? <div className="mb-3 flex flex-wrap items-center gap-2"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={() => { void refresh() }}>重试</Button></div> : null}
         {content}
       </ModulePage>
     </TooltipProvider>

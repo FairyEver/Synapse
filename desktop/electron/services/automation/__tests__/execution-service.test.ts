@@ -24,17 +24,17 @@ type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationExecutionService", () => {
   it("persists a terminal association before execution and preserves it on cancellation", async () => {
-    let inspect: (() => Promise<AutomationRun | null>) | undefined
+    const inspectRef: { current?: () => Promise<AutomationRun | null> } = {}
     let stored: AutomationRun | null | undefined
     const harness = await createExecutionHarness({ action: {
       ...testAction,
       execute: async ({ context }) => {
         await context.persistOutputs!({ projectId: "p1", sessionId: "terminal-1" })
-        stored = await inspect!()
+        stored = await inspectRef.current!()
         throw new Error("interrupted")
       },
     } })
-    inspect = () => harness.runs.get("automation-run:1")
+    inspectRef.current = () => harness.runs.get("automation-run:1")
     const run = await harness.service.runItem(harness.item, "trigger")
     expect(stored?.pendingOutputs).toEqual({ projectId: "p1", sessionId: "terminal-1" })
     expect(stored?.result).toBeUndefined()
@@ -348,7 +348,7 @@ async function createExecutionHarness(options: {
     scope: { type: "global" },
     trigger: {
       type: "builtin.cron",
-      config: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+      config: { expr: "0 9 * * *" },
     },
     executor: { type: "builtin.test", config: { message: "ok" } },
   })

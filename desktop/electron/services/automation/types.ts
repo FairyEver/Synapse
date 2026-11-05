@@ -2,6 +2,9 @@ import type {
   ActionRunResult,
   ActionStoredConfigValidation,
 } from "../../../action-packages/types"
+import type {
+  AutomationConditions,
+} from "../../../automation-trigger-packages/schedule-constraints"
 import type { AutomationTriggerEvent } from "../../../automation-trigger-packages/types.shared"
 
 export type {
@@ -50,7 +53,7 @@ export type AutomationPolicy = {
 export interface AutomationItem extends Record<string, unknown> {
   readonly mailSubscription?: { readonly id: string; readonly stoppedAt?: string; readonly retired?: boolean; readonly previousId?: string; readonly previousEndedAt?: string; readonly previousRetired?: boolean }
   readonly id: string
-  readonly schemaVersion: 1
+  readonly schemaVersion: 1 | 2
   readonly name: string
   readonly description?: string
   readonly enabled: boolean
@@ -58,6 +61,7 @@ export interface AutomationItem extends Record<string, unknown> {
   readonly cwd?: string
   readonly trigger: AutomationTriggerRef
   readonly executor: AutomationExecutorRef
+  readonly conditions?: AutomationConditions
   readonly policy: AutomationPolicy
   readonly createdAt: string
   readonly updatedAt: string
@@ -83,6 +87,7 @@ export interface AutomationCreateInput {
   readonly cwd?: string
   readonly trigger: AutomationTriggerRef
   readonly executor: AutomationExecutorRef
+  readonly conditions?: AutomationConditions
   readonly policy?: Partial<AutomationPolicy>
 }
 
@@ -94,6 +99,7 @@ export interface AutomationUpdateInput {
   readonly cwd?: string
   readonly trigger?: AutomationTriggerRef
   readonly executor?: AutomationExecutorRef
+  readonly conditions?: AutomationConditions | null
   readonly policy?: Partial<AutomationPolicy>
 }
 

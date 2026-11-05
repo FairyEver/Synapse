@@ -36,12 +36,51 @@ describe("AutomationService", () => {
     await harness.service.stop()
   })
 
+  it("disables every legacy automation before scheduling without changing its configuration", async () => {
+    const harness = createHarness()
+    const legacy = createStoredAutomation({
+      id: "automation:legacy",
+      schemaVersion: 1,
+      name: "旧版自动化",
+      trigger: {
+        type: "builtin.cron",
+        config: {
+          expr: "0 9 * * *",
+          timezone: "Asia/Shanghai",
+          activeDays: [1, 2, 3, 4, 5],
+          timeRange: { start: "08:00", end: "17:00" },
+        },
+      },
+      executor: { type: "builtin.agent", config: { prompt: "保留原提示词" } },
+      nextRunAt: "2026-06-03T01:00:00.000Z",
+    })
+    await harness.itemStore.upsert(legacy)
+
+    await harness.service.start()
+    try {
+      const stored = await harness.items.get(legacy.id)
+      expect(stored).toEqual(expect.objectContaining({
+        schemaVersion: 1,
+        enabled: false,
+        trigger: legacy.trigger,
+        executor: legacy.executor,
+        runCount: legacy.runCount,
+      }))
+      expect(stored?.nextRunAt).toBeUndefined()
+      expect(harness.service.automationRuntimeInspect().timers).not.toContain(legacy.id)
+      await expect(harness.service.runNow(legacy.id)).rejects.toThrow("旧版自动化不可运行")
+    } finally { await harness.service.stop() }
+  })
+
   it("leaves an automation without a matching time unscheduled while allowing manual runs", async () => {
     const harness = createHarness({ now: () => new Date("2026-10-23T18:00:00Z") })
     const item = await harness.service.automationCreate({
       ...createCronAutomationInput(), trigger: { type: "builtin.cron", config: {
-        expr: "0 2 * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5], timeRange: { start: "08:00", end: "17:00" },
-      } },
+        expr: "0 2 * * *", timezone: "UTC",
+      } }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1, 2, 3, 4, 5] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] },
     })
     await harness.service.start()
     try {
@@ -59,8 +98,11 @@ describe("AutomationService", () => {
     try {
       const item = await harness.service.automationCreate({
         ...createCronAutomationInput(), trigger: { type: "builtin.cron", config: {
-          expr: "* * * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5], timeRange: { start: "08:00", end: "17:00" },
-        } },
+          expr: "* * * * *", timezone: "UTC",
+        } }, conditions: { operator: "and", items: [
+          { type: "weekdays", days: [1, 2, 3, 4, 5] },
+          { type: "daily-time-range", start: "08:00", end: "17:00" },
+        ] },
       })
       await harness.service.start()
       expect(item.nextRunAt).toBe("2026-10-23T16:59:00.000Z")
@@ -78,8 +120,11 @@ describe("AutomationService", () => {
     const harness = createHarness({ now: () => new Date("2026-10-23T17:00:00Z") })
     const item = createStoredAutomation({
       trigger: { type: "builtin.cron", config: {
-        expr: "* * * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5], timeRange: { start: "08:00", end: "17:00" },
-      } }, policy: { missedRunPolicy: "run_once", overlapPolicy: "skip" }, nextRunAt: "2026-10-23T16:59:00Z",
+        expr: "* * * * *", timezone: "UTC",
+      } }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1, 2, 3, 4, 5] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] }, policy: { missedRunPolicy: "run_once", overlapPolicy: "skip" }, nextRunAt: "2026-10-23T16:59:00Z",
     })
     await harness.itemStore.upsert(item)
     await harness.service.start()
@@ -729,6 +774,32 @@ describe("AutomationService", () => {
     })
   })
 
+  it("drops events outside automation conditions without creating a run", async () => {
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
+    const receivedAt = "2026-06-03T18:00:00.000Z"
+    const blockedDay = (new Date(receivedAt).getDay() + 1) % 7
+    const item = await harness.service.automationCreate({
+      name: "Windowed event",
+      scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+      conditions: {
+        operator: "and",
+        items: [{ type: "weekdays", days: [blockedDay] }],
+      },
+    })
+
+    const runs = await harness.service.acceptEvent({
+      source: "test",
+      type: "demo.created",
+      payload: { id: "outside" },
+      receivedAt,
+    })
+
+    expect(runs).toEqual([])
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+  })
+
   it("prefilters live webhook deliveries to matching webhook automations", async () => {
     const logger = structuredLogger()
     const harness = createHarness({ logger })
@@ -810,7 +881,7 @@ describe("AutomationService", () => {
     const harness = createHarness({ triggers: fakeEventTriggerRegistry(), logger })
     await harness.itemStore.upsert({
       id: "automation:broken",
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "Broken event automation",
       enabled: true,
       scope: { type: "global" },
@@ -1009,7 +1080,6 @@ function createAutomationInput() {
       config: {
         everyMinutes: 10,
         anchor: "created_at",
-        activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },
     executor: { type: "builtin.test", config: { message: "ok" } },
@@ -1024,7 +1094,6 @@ function createCronAutomationInput() {
       type: "builtin.cron",
       config: {
         expr: "* * * * *",
-        activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },
     executor: { type: "builtin.test", config: { message: "ok" } },
@@ -1040,7 +1109,6 @@ function createCompletionAnchoredIntervalInput() {
       config: {
         everyMinutes: 10,
         anchor: "last_completed_at",
-        activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },
     executor: { type: "builtin.test", config: { message: "ok" } },
@@ -1056,7 +1124,6 @@ function createLongIntervalInput() {
       config: {
         everyMinutes: 60 * 24 * 60,
         anchor: "created_at",
-        activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },
     executor: { type: "builtin.test", config: { message: "ok" } },
@@ -1066,7 +1133,7 @@ function createLongIntervalInput() {
 function createStoredAutomation(overrides: Partial<AutomationItem> = {}): AutomationItem {
   return {
     id: "automation:stored",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "Stored automation",
     enabled: true,
     scope: { type: "global" },
@@ -1075,7 +1142,6 @@ function createStoredAutomation(overrides: Partial<AutomationItem> = {}): Automa
       config: {
         everyMinutes: 10,
         anchor: "created_at",
-        activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
     },
     executor: { type: "builtin.test", config: { message: "ok" } },

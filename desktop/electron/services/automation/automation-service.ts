@@ -1,4 +1,8 @@
 import type { AutomationTriggerEvent } from "../../../automation-trigger-packages/types.shared"
+import {
+  automationConditionsSchema,
+  isAutomationConditionsSatisfied,
+} from "../../../automation-trigger-packages/schedule-constraints"
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import type { EventBus } from "../../runtime/event-bus"
 import type { StructuredLogger } from "../../runtime/service-registry"
@@ -66,6 +70,13 @@ export class AutomationService {
   async start(): Promise<void> {
     if (this.started) return
     await this.recoverInterruptedRuns()
+    const disabledLegacyCount = await this.deps.items.disableLegacyItems()
+    if (disabledLegacyCount > 0) {
+      this.deps.logger?.info("Legacy automations disabled at startup.", {
+        boundary: "automation-legacy-disable",
+        disabledCount: disabledLegacyCount,
+      })
+    }
     const items = await this.deps.items.list()
     for (const item of items) {
       try {
@@ -306,6 +317,7 @@ export class AutomationService {
       })
       return null
     }
+    if (item.schemaVersion === 1) throw new Error("旧版自动化不可运行，请新建自动化")
     if (!this.isItemValid(item)) {
       throw new Error(NEEDS_UPDATE_MESSAGE)
     }
@@ -352,7 +364,7 @@ export class AutomationService {
     const acceptedRunPromises: Array<Promise<AutomationRun | null>> = []
     let matchedCount = 0
     for (const item of items) {
-      if (!item.enabled) continue
+      if (!item.enabled || item.schemaVersion !== 2) continue
       if (!this.isItemValid(item)) {
         this.logInvalidEventTriggerConfig(item)
         continue
@@ -369,6 +381,15 @@ export class AutomationService {
       try {
         const accepted = await trigger.runtime.shouldAcceptEvent({ config: parsedConfig.data, event })
         if (!accepted) continue
+        if (!this.isAutomaticRunAllowed(item, new Date(event.receivedAt))) {
+          this.deps.logger?.info("Automation event skipped outside run conditions.", {
+            automationId: item.id,
+            triggerType: item.trigger.type,
+            receivedAt: event.receivedAt,
+            boundary: "automation-event-conditions",
+          })
+          continue
+        }
         matchedCount += 1
       } catch (error) {
         this.deps.logger?.warn("Automation event trigger failed, skipping item.", {
@@ -504,6 +525,7 @@ export class AutomationService {
   private async setAutomationEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
     const startedAt = Date.now()
     const oldItem = await this.deps.items.get(id)
+    if (enabled && oldItem?.schemaVersion === 1) throw new Error("旧版自动化不可启用，请新建自动化")
     if (enabled && oldItem && !this.isItemValid(oldItem)) {
       throw new Error(NEEDS_UPDATE_MESSAGE)
     }
@@ -624,10 +646,17 @@ export class AutomationService {
     if (!item.enabled) {
       return this.recordSkipped(item, triggeredBy, "automation is disabled")
     }
+    if (item.schemaVersion !== 2) {
+      return this.recordSkipped(item, triggeredBy, "legacy automation cannot run")
+    }
     if (!this.isItemValid(item)) {
       return this.recordSkipped(item, triggeredBy, NEEDS_UPDATE_MESSAGE)
     }
     if (options.respectNextRunAt !== false && await this.deferTriggerRunUntilDue(item, triggeredBy)) return null
+    if (!this.isAutomaticRunAllowed(item, this.now())) {
+      await this.schedule(id)
+      return this.recordSkipped(item, triggeredBy, "run conditions not met")
+    }
     const trigger = this.deps.triggers.get(item.trigger.type)
     const parsedTriggerConfig = trigger.manifest.configSchema.parse(item.trigger.config)
     if (trigger.runtime.shouldRunNow && !trigger.runtime.shouldRunNow({
@@ -697,11 +726,16 @@ export class AutomationService {
   private executeQueuedEvent(
     item: AutomationItem,
     triggerContext: AutomationTriggerRuntimeContext,
-  ): Promise<AutomationRun> {
+  ): Promise<AutomationRun | null> {
     const previous = this.eventRunChains.get(item.id) ?? Promise.resolve()
     const runPromise = previous
       .catch(() => undefined)
-      .then(() => this.executeOrSkip(item, "trigger", triggerContext))
+      .then(async () => {
+        const current = await this.deps.items.get(item.id)
+        if (!current?.enabled || current.schemaVersion !== 2 || !this.isItemValid(current)) return null
+        if (!this.isAutomaticRunAllowed(current, this.now())) return null
+        return this.executeOrSkip(current, "trigger", triggerContext)
+      })
     const chain = runPromise.then(() => undefined, () => undefined)
     this.eventRunChains.set(item.id, chain)
     void chain.finally(() => {
@@ -712,18 +746,24 @@ export class AutomationService {
     return runPromise
   }
 
-  async runDurableEvent(input: { automationId: string; subscriptionId: string; runId: string; event: AutomationTriggerEvent; identitySignal: AbortSignal; commitStart(): Promise<boolean> }): Promise<{ kind: "busy" | "obsolete" } | { kind: "settled"; run: AutomationRun }> {
+  async runDurableEvent(input: { automationId: string; subscriptionId: string; runId: string; event: AutomationTriggerEvent; identitySignal: AbortSignal; commitStart(): Promise<boolean> }): Promise<{ kind: "busy" | "obsolete" } | { kind: "skipped"; reason: "legacy" | "outside-conditions" } | { kind: "settled"; run: AutomationRun }> {
     if (this.runningItemIds.has(input.automationId)) return { kind: "busy" }
     this.runningItemIds.add(input.automationId)
     try {
       const item = await this.deps.items.get(input.automationId)
-      if (!item?.enabled || item.mailSubscription?.id !== input.subscriptionId || item.mailSubscription.stoppedAt || input.identitySignal.aborted || !this.isItemValid(item)) return { kind: "obsolete" }
+      if (!item?.enabled || item.mailSubscription?.id !== input.subscriptionId || item.mailSubscription.stoppedAt || input.identitySignal.aborted) return { kind: "obsolete" }
+      if (item.schemaVersion !== 2) return { kind: "skipped", reason: "legacy" }
+      if (!this.isItemValid(item)) return { kind: "obsolete" }
+      if (!this.isAutomaticRunAllowed(item, eventReceivedAt(input.event))) {
+        return { kind: "skipped", reason: "outside-conditions" }
+      }
       if (!await input.commitStart()) return { kind: "obsolete" }
       input.identitySignal.throwIfAborted()
       // The durable claim may yield to a completed disable/source switch. A fresh
       // subscription reference is the version proof; an unstarted claim is releasable.
       const current = await this.deps.items.get(input.automationId)
       if (!current?.enabled || current.mailSubscription?.id !== input.subscriptionId || current.mailSubscription.stoppedAt || !this.isItemValid(current)) return { kind: "obsolete" }
+      if (!this.isAutomaticRunAllowed(current, this.now())) return { kind: "skipped", reason: "outside-conditions" }
       const run = await this.deps.execution.runItem(current, "trigger", { reservedRunId: input.runId, scopeSignal: input.identitySignal,
         onRunStarted: started => this.emitAutomationChanged({ automationId: item.id, runId: started.id, reason: "run-started" }) },
       { triggeredBy: "trigger", triggeredAt: input.event.receivedAt, scheduledAt: input.event.receivedAt, event: input.event })
@@ -814,6 +854,7 @@ export class AutomationService {
     }
     return trigger.runtime.computeNextRunAt({
       config: item.trigger.config,
+      conditions: item.conditions,
       from: this.now(),
       createdAt: item.createdAt,
       lastRunAt: item.lastRunAt,
@@ -832,7 +873,7 @@ export class AutomationService {
   }
 
   private async withRuntimeState(item: AutomationItem): Promise<AutomationItem> {
-    const { mailSubscription: _binding, ...publicItem } = item
+    const publicItem = { ...item, mailSubscription: undefined }
     const validation = this.validateItem(item)
     const baseItem = validation.status === "valid"
       ? publicItem
@@ -850,9 +891,16 @@ export class AutomationService {
   }
 
   private validateItem(item: AutomationItem): AutomationValidation {
+    if (item.schemaVersion === 1) {
+      return {
+        status: "needs_update",
+        issues: [{ field: "schemaVersion", message: "旧版自动化已停用，请新建自动化" }],
+      }
+    }
     const triggerValidation = this.deps.triggers.validateStoredConfig(item.trigger.type, item.trigger.config)
     const executorValidation = this.deps.actions.validateStoredConfig(item.executor.type, item.executor.config)
-    if (triggerValidation.status === "valid" && executorValidation.status === "valid") {
+    const conditionsValidation = item.conditions ? automationConditionsSchema.safeParse(item.conditions) : null
+    if (triggerValidation.status === "valid" && executorValidation.status === "valid" && (!conditionsValidation || conditionsValidation.success)) {
       return { status: "valid", issues: [] }
     }
     return {
@@ -860,8 +908,20 @@ export class AutomationService {
       issues: [
         ...(triggerValidation.status === "needs_update" ? triggerValidation.issues : []),
         ...(executorValidation.status === "needs_update" ? executorValidation.issues : []),
+        ...(conditionsValidation && !conditionsValidation.success
+          ? [{ field: "conditions", message: "检查附加条件" }]
+          : []),
       ],
     }
+  }
+
+  private isAutomaticRunAllowed(item: AutomationItem, date: Date): boolean {
+    if (item.schemaVersion !== 2) return false
+    if (!item.conditions) return true
+    const timezone = item.trigger.type === "builtin.cron" && typeof item.trigger.config.timezone === "string"
+      ? item.trigger.config.timezone
+      : undefined
+    return isAutomationConditionsSatisfied(date, item.conditions, timezone)
   }
 
   private logInvalidEventTriggerConfig(item: AutomationItem): void {
@@ -932,6 +992,11 @@ function skippedReasonWithEventDelivery(reason: string, event: AutomationTrigger
   return typeof deliveryId === "string" && deliveryId.length > 0
     ? `${reason} (deliveryId: ${deliveryId})`
     : reason
+}
+
+function eventReceivedAt(event: AutomationTriggerEvent): Date {
+  const value = event.payload.receivedAt
+  return new Date(typeof value === "string" ? value : event.receivedAt)
 }
 
 function compareAutomationItemsByRecentEdit(left: AutomationItem, right: AutomationItem): number {

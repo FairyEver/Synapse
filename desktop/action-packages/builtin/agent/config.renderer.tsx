@@ -8,6 +8,8 @@ import {
   FieldGroup,
   FieldLabel,
 } from "../../../src/components/ui/field"
+import { ConfigurationFieldError, configurationFieldProps, type ConfigurationFieldErrors } from "../../../src/components/configuration-field-error"
+import { requestOpenSettingsTab } from "../../../src/app-shell/navigation"
 import { Input } from "../../../src/components/ui/input"
 import {
   Select,
@@ -34,18 +36,23 @@ export function AgentConfigForm({
   onChange,
   projects = [],
   triggerVariables = [],
+  fieldErrors,
+  onAddProject,
 }: {
   readonly value: AgentActionConfig
   readonly onChange: (value: AgentActionConfig) => void
   readonly projects?: readonly SynapseProjectConfig[]
+  readonly fieldErrors?: ConfigurationFieldErrors
+  readonly onAddProject?: () => void
   readonly triggerVariables?: readonly AutomationTriggerVariableDescriptor[]
 }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
 
   return (
-    <FieldGroup>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field className="sm:col-span-2">
+    <FieldGroup className="@container/config">
+      <div className="grid gap-4 @lg/config:grid-cols-2">
+        <Field className="@lg/config:col-span-2">
           <FieldLabel htmlFor="task-action-agent-project">项目</FieldLabel>
           <FieldContent>
             <Select
@@ -54,6 +61,7 @@ export function AgentConfigForm({
             >
               <SelectTrigger
                 id="task-action-agent-project"
+                {...configurationFieldProps(fieldErrors, "projectId", "task-action-agent-project")}
                 data-testid="automation-agent-project-select"
                 className="w-full"
               >
@@ -69,6 +77,8 @@ export function AgentConfigForm({
                 </SelectGroup>
               </SelectContent>
             </Select>
+            <ConfigurationFieldError errors={fieldErrors} name="projectId" id="task-action-agent-project" />
+            {!projects.length ? <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-muted-foreground">尚无项目</span><Button type="button" variant="outline" onClick={onAddProject ?? requestOpenSettingsTab}>{onAddProject ? "添加项目" : "打开设置"}</Button></div> : null}
           </FieldContent>
         </Field>
 
@@ -77,6 +87,7 @@ export function AgentConfigForm({
           <FieldContent>
             <Button
               id="task-action-agent-provider"
+              {...configurationFieldProps(fieldErrors, "providerId", "task-action-agent-provider")}
               type="button"
               variant="outline"
               className="w-full justify-between"
@@ -94,6 +105,7 @@ export function AgentConfigForm({
               </span>
               <ChevronDown className="size-4 text-muted-foreground" />
             </Button>
+            <ConfigurationFieldError errors={fieldErrors} name="providerId" id="task-action-agent-provider" />
             <ProviderModelSelectDialog
               open={providerDialogOpen}
               onOpenChange={setProviderDialogOpen}
@@ -129,18 +141,18 @@ export function AgentConfigForm({
         </Field>
       </div>
 
-      <ActionPromptField id="task-action-agent-prompt" value={value.prompt} variables={triggerVariables}
+      <ActionPromptField fieldErrors={fieldErrors} id="task-action-agent-prompt" value={value.prompt} variables={triggerVariables}
         onChange={(prompt) => onChange({ ...value, prompt })} />
 
-      <Collapsible className="border-t pt-4">
-        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown />会话与超时</Button></CollapsibleTrigger>
+      <Collapsible open={advancedOpen || Boolean(fieldErrors?.timeoutMins || fieldErrors?.sessionPolicy)} onOpenChange={setAdvancedOpen} className="border-t pt-4">
+        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown data-icon="inline-start" className={advancedOpen ? "rotate-180" : undefined} />会话与超时</Button></CollapsibleTrigger>
         <CollapsibleContent forceMount className="mt-4 data-[state=closed]:hidden">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-4 @lg/config:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="task-action-agent-session-policy">会话策略</FieldLabel>
               <FieldContent>
                 <ToggleGroup
-                  aria-label="Session policy"
+                  id="task-action-agent-session-policy" aria-label="会话策略"
                   className="w-full"
                   type="single"
                   value={value.sessionPolicy}
@@ -163,7 +175,7 @@ export function AgentConfigForm({
               <FieldLabel htmlFor="task-action-agent-timeout">超时分钟</FieldLabel>
               <FieldContent>
                 <Input
-                  id="task-action-agent-timeout"
+                  id="task-action-agent-timeout" {...configurationFieldProps(fieldErrors, "timeoutMins", "task-action-agent-timeout")}
                   type="number"
                   min={1}
                   max={120}

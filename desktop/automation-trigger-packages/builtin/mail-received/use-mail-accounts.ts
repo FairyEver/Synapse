@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getSynapseBridge, requireBridgeDomain } from "../../../src/lib/electron-bridge"
+import { createRendererLogger } from "../../../src/app-shell/logging"
 import type { AccountSummary } from "../../../app-capabilities/mail/shared/types"
 
-export function useMailTriggerAccounts() {
+export function useMailTriggerAccounts(enabled = true) {
+  const logger = createRendererLogger("automation.mail-config")
+  const [setupError, setSetupError] = useState<string | null>(null)
   const request = useRef(0)
   const [accounts, setAccounts] = useState<AccountSummary[]>([])
   const [status, setStatus] = useState<"loading" | "ready" | "error" | "unauthenticated">("loading")
@@ -24,10 +27,15 @@ export function useMailTriggerAccounts() {
     })().catch(() => { if (request.current === token) { setAccounts([]); setStatus("error") } })
   }, [])
   useEffect(() => {
+    if (!enabled) return
     reload()
     const identity = getSynapseBridge()?.account.state.onChanged(reload)
     const mail = getSynapseBridge()?.mail.onChanged(event => { if (event.ids.includes(event.accountId)) reload() })
     return () => { request.current++; identity?.(); mail?.() }
-  }, [reload])
-  return { accounts, status, reload }
+  }, [enabled, reload])
+  const openAccounts = async () => {
+    setSetupError(null)
+    try { await requireBridgeDomain("mail").accountOpen({}) } catch (cause) { logger.warn("Mail account settings could not open.", { errorName: cause instanceof Error ? cause.name : typeof cause }); setSetupError("无法打开邮箱账号设置") }
+  }
+  return { accounts, status, reload, openAccounts, setupError }
 }

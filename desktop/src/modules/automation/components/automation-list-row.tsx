@@ -11,7 +11,7 @@ import type { SynapseProjectConfig } from "@/types/config"
 import {
   formatAutomationExecutorType,
   formatAutomationScope,
-  formatAutomationTriggerType,
+  formatAutomationTrigger,
 } from "../utils"
 import { AutomationNextRunTime } from "./automation-time"
 
@@ -33,8 +33,10 @@ function getStatusBadge(item: AutomationItem): {
   readonly label: string
   readonly variant: "default" | "secondary" | "destructive" | "outline"
 } {
+  if (item.schemaVersion === 1) return { label: "旧版已停用", variant: "outline" }
   if (item.validation?.status === "needs_update") return { label: "需要更新", variant: "outline" }
   if (!item.enabled) return { label: "已停用", variant: "outline" }
+  if (item.activeRun?.status === "running") return { label: "运行中", variant: "secondary" }
   if (item.lastStatus === "failed" || item.lastStatus === "timeout") {
     return { label: "上次失败", variant: "destructive" }
   }
@@ -55,13 +57,13 @@ function AutomationListRow({
   onDelete,
 }: AutomationListRowProps) {
   const activeRunning = item.activeRun?.status === "running"
-  const needsUpdate = item.validation?.status === "needs_update"
+  const legacy = item.schemaVersion === 1
+  const needsUpdate = legacy || item.validation?.status === "needs_update"
   const disabled = !item.enabled
   const badge = getStatusBadge(item)
-  const triggerType = formatAutomationTriggerType(item)
   const executorType = formatAutomationExecutorType(item)
-  const subtitle = `触发器 ${triggerType} · 执行器 ${executorType}`
-  const stopDisabled = activeRunning && !item.activeRun?.id
+  const subtitle = `${formatAutomationTrigger(item)} · ${executorType}`
+  const stopDisabled = pending || (activeRunning && !item.activeRun?.id)
   const runDisabled = disabled || pending || running || needsUpdate
 
   return (
@@ -87,15 +89,16 @@ function AutomationListRow({
           <div className="truncate text-xs text-muted-foreground" title={subtitle}>
             {subtitle}
           </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 @3xl/list:hidden"><Badge variant={badge.variant}>{badge.label}</Badge><span className="text-xs text-muted-foreground"><AutomationNextRunTime item={item} /></span></div>
         </div>
       </TableCell>
-      <TableCell>
+      <TableCell className="hidden @3xl/list:table-cell">
         <Badge variant={badge.variant}>{badge.label}</Badge>
       </TableCell>
-      <TableCell className="truncate text-right tabular-nums text-muted-foreground">
+      <TableCell className="hidden truncate text-right tabular-nums text-muted-foreground @3xl/list:table-cell">
         <AutomationNextRunTime item={item} />
       </TableCell>
-      <TableCell className="truncate text-right text-muted-foreground">
+      <TableCell className="hidden truncate text-right text-muted-foreground @3xl/list:table-cell">
         {formatAutomationScope(item, projects)}
       </TableCell>
       <TableCell
@@ -106,8 +109,10 @@ function AutomationListRow({
         <Switch
           size="sm"
           checked={item.enabled}
-          disabled={pending || needsUpdate}
-          aria-label={needsUpdate
+          disabled={pending || needsUpdate || legacy}
+          aria-label={legacy
+            ? `旧版自动化 ${item.name} 已停用`
+            : needsUpdate
             ? `需要更新后才能启用自动化 ${item.name}`
             : item.enabled ? `停用自动化 ${item.name}` : `启用自动化 ${item.name}`}
           onCheckedChange={onToggleEnabled}
@@ -125,6 +130,7 @@ function AutomationListRow({
                 type="button"
                 size="icon-sm"
                 variant="ghost"
+                disabled={legacy}
                 aria-label={`编辑自动化 ${item.name}`}
                 onClick={() => {
                   if (onEdit) onEdit()
@@ -134,7 +140,7 @@ function AutomationListRow({
                 <Pencil />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>编辑</TooltipContent>
+            <TooltipContent>{legacy ? "旧版不可编辑" : "编辑"}</TooltipContent>
           </Tooltip>
           {activeRunning ? (
             <Tooltip>
@@ -162,7 +168,7 @@ function AutomationListRow({
                   size="icon-sm"
                   variant="ghost"
                   disabled={runDisabled}
-                  aria-label={needsUpdate ? "需要更新后才能运行自动化" : "运行自动化"}
+                  aria-label={legacy ? "旧版自动化不可运行" : needsUpdate ? "需要更新后才能运行自动化" : "运行自动化"}
                   onClick={() => {
                     onRun()
                   }}
@@ -170,7 +176,7 @@ function AutomationListRow({
                   {running ? <Loader2 className="animate-spin" /> : <Play />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{needsUpdate ? "需要更新" : "运行"}</TooltipContent>
+              <TooltipContent>{legacy ? "旧版不可运行" : needsUpdate ? "需要更新" : "运行"}</TooltipContent>
             </Tooltip>
           )}
           <Tooltip>

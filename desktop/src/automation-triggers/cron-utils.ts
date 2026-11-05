@@ -1,3 +1,5 @@
+import { computeNextRunAt } from "../../automation-trigger-packages/schedule-calculator"
+import type { AutomationConditions } from "../../automation-trigger-packages/schedule-constraints"
 export type CronTemplateKind =
   | "every_minutes"
   | "hourly"
@@ -196,12 +198,13 @@ function maxDaysInMonth(month: number): number {
   return new Date(2024, month, 0).getDate()
 }
 
-function listNextCronRuns(expr: string, from = new Date(), count = 5): Date[] {
+function listNextCronRuns(expr: string, from = new Date(), count = 5, options: { timezone?: string; conditions?: AutomationConditions } = {}): Date[] {
   const runs: Date[] = []
   let cursor = new Date(from)
 
   for (let index = 0; index < count; index += 1) {
-    const next = nextCronRun(expr, cursor)
+    const next = computeNextRunAt({ trigger: { type: "builtin.cron", config: { expr, timezone: options.timezone } }, conditions: options.conditions, from: cursor, createdAt: from.toISOString() })
+    if (!next) break
     runs.push(next)
     cursor = next
   }
@@ -213,36 +216,6 @@ function getCronEditorInitialTab(expr: string): CronEditorTab {
   const validation = validateCronExpression(expr)
   if (!validation.ok) return "advanced"
   return inferCronTemplate(expr) ? "common" : "advanced"
-}
-
-function nextCronRun(expr: string, from = new Date()): Date {
-  const parsed = parseCronExpression(expr)
-  const candidate = new Date(from)
-  candidate.setSeconds(0, 0)
-  candidate.setMinutes(candidate.getMinutes() + 1)
-  const end = new Date(from)
-  end.setFullYear(end.getFullYear() + 5)
-
-  while (candidate <= end) {
-    if (matchesCron(parsed, candidate)) return new Date(candidate)
-    candidate.setMinutes(candidate.getMinutes() + 1)
-  }
-
-  throw new Error("Cron 在 5 年内没有运行时间")
-}
-
-function matchesCron(parsed: ParsedCronExpression, date: Date): boolean {
-  return parsed.minute.has(date.getMinutes())
-    && parsed.hour.has(date.getHours())
-    && parsed.month.has(date.getMonth() + 1)
-    && matchesDayFields(parsed, date.getDate(), date.getDay())
-}
-
-function matchesDayFields(parsed: ParsedCronExpression, day: number, weekday: number): boolean {
-  const dayMatches = parsed.day.has(day)
-  const weekdayMatches = parsed.weekday.has(weekday)
-  if (!parsed.dayWildcard && !parsed.weekdayWildcard) return dayMatches || weekdayMatches
-  return dayMatches && weekdayMatches
 }
 
 function parseField(field: string, spec: FieldSpec): ReadonlySet<number> {

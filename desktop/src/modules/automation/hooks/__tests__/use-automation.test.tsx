@@ -122,13 +122,13 @@ function Probe({ onSnapshot }: { readonly onSnapshot?: (state: ReturnType<typeof
 function createItem(overrides: Partial<AutomationItem> = {}): AutomationItem {
   return {
     id: "automation:1",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "Daily report",
     enabled: true,
     scope: { type: "global" },
     trigger: {
       type: "builtin.interval",
-      config: { everyMinutes: 10, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+      config: { everyMinutes: 10, anchor: "created_at" },
     },
     executor: {
       type: "builtin.command",

@@ -1,21 +1,19 @@
-import { ChevronDown } from "lucide-react"
-import { Button } from "../../../src/components/ui/button"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../src/components/ui/collapsible"
 import {
   Field,
   FieldContent,
   FieldLabel,
 } from "../../../src/components/ui/field"
-import { Input } from "../../../src/components/ui/input"
+import { NumberInput } from "../../../src/components/number-input"
+import { ConfigurationFieldError, configurationFieldProps, type ConfigurationFieldErrors } from "../../../src/components/configuration-field-error"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
-import { WeekdaySelector } from "../../../src/automation-triggers/weekday-selector"
-import { TimeRangeField } from "../../../src/automation-triggers/time-range-field"
 import type { IntervalTriggerConfig } from "./schema"
 
 export function IntervalTriggerConfigForm({
   value,
   onChange,
+  fieldErrors,
 }: {
+  readonly fieldErrors?: ConfigurationFieldErrors
   readonly value: IntervalTriggerConfig
   readonly onChange: (value: IntervalTriggerConfig) => void
 }) {
@@ -24,18 +22,19 @@ export function IntervalTriggerConfigForm({
       <Field>
         <FieldLabel htmlFor="automation-trigger-interval-minutes">间隔分钟</FieldLabel>
         <FieldContent>
-          <Input
+          <NumberInput
             id="automation-trigger-interval-minutes"
             inputMode="numeric"
-            value={String(value.everyMinutes)}
-            onChange={(event) => onChange({ ...value, everyMinutes: Number(event.target.value) })}
+            value={value.everyMinutes}
+            min={1} {...configurationFieldProps(fieldErrors, "everyMinutes", "automation-trigger-interval-minutes")} onValueChange={(everyMinutes) => onChange({ ...value, everyMinutes })}
           />
+          <ConfigurationFieldError errors={fieldErrors} name="everyMinutes" id="automation-trigger-interval-minutes" />
         </FieldContent>
       </Field>
       <Field>
-        <FieldLabel>起算方式</FieldLabel>
+        <FieldLabel id="automation-interval-anchor-label">起算方式</FieldLabel>
         <FieldContent>
-          <ToggleGroup
+          <ToggleGroup aria-labelledby="automation-interval-anchor-label"
             className="w-full"
             type="single"
             value={value.anchor}
@@ -51,32 +50,6 @@ export function IntervalTriggerConfigForm({
           </ToggleGroup>
         </FieldContent>
       </Field>
-      <Collapsible className="border-t pt-4">
-        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown />生效日期与时段</Button></CollapsibleTrigger>
-        <CollapsibleContent forceMount className="mt-4 grid gap-4 data-[state=closed]:hidden">
-          <Field>
-            <FieldLabel id="automation-trigger-interval-active-days-label">活跃日</FieldLabel>
-            <FieldContent>
-              <WeekdaySelector
-                id="automation-trigger-interval-active-days"
-                aria-labelledby="automation-trigger-interval-active-days-label"
-                value={value.activeDays}
-                onValueChange={(activeDays) => onChange({ ...value, activeDays })}
-              />
-            </FieldContent>
-          </Field>
-          <TimeRangeField
-            id="automation-trigger-interval-time-range"
-            value={value.timeRange}
-            onValueChange={(timeRange) => {
-              const next = { ...value }
-              if (timeRange) next.timeRange = timeRange
-              else delete next.timeRange
-              onChange(next)
-            }}
-          />
-        </CollapsibleContent>
-      </Collapsible>
     </div>
   )
 }

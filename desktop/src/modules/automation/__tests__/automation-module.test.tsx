@@ -141,6 +141,59 @@ afterEach(async () => {
 })
 
 describe("AutomationModule", () => {
+  it("keeps legacy automations disabled and opens their stored configuration read-only", async () => {
+    const legacy = createItem({
+      schemaVersion: 1,
+      name: "旧版日报",
+      enabled: false,
+      trigger: {
+        type: "builtin.cron",
+        config: { expr: "0 9 * * *", activeDays: [1, 2, 3, 4, 5], timeRange: { start: "08:00", end: "17:00" } },
+      },
+      executor: {
+        type: "builtin.agent",
+        config: { prompt: "旧版提示词", projectId: "project-1", agentType: "claude-code", providerId: "provider-1", modelTier: "default", mode: "default", sessionPolicy: "fresh" },
+      },
+    })
+    mocks.useAutomationItems.mockReturnValue({ items: [legacy], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationModule />) })
+
+    expect(document.body.textContent).toContain("旧版已停用")
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="旧版自动化 旧版日报 已停用"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="编辑自动化 旧版日报"]')?.disabled).toBe(true)
+
+    await act(async () => { document.querySelector<HTMLElement>('tbody tr')!.click() })
+    const detail = document.querySelector('[data-layout="automation-detail"]')!
+    expect(detail.textContent).toContain("旧版自动化已停用，请新建后重新配置。")
+    expect(detail.textContent).toContain("旧版提示词")
+    expect(Array.from(detail.querySelectorAll("button")).some(button => button.textContent === "编辑")).toBe(false)
+    expect(Array.from(detail.querySelectorAll("button")).some(button => button.textContent === "启用")).toBe(false)
+  })
+
+  it("shows v2 conditions in a separate detail section", async () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem({
+        conditions: {
+          operator: "or",
+          items: [
+            { type: "weekdays", days: [1, 3, 5] },
+            { type: "daily-time-range", start: "08:00", end: "17:00" },
+          ],
+        },
+      })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationModule />) })
+    await act(async () => { document.querySelector<HTMLElement>('tbody tr')!.click() })
+
+    const conditions = document.querySelector('[aria-label="附加条件"]')
+    expect(conditions?.textContent).toContain("周一、周三、周五 或者 08:00–17:00")
+  })
+
   it("opens the saved automation's read-only details after creating it", async () => {
     vi.spyOn(rendererActionRegistry, "getDefaultConfig").mockReturnValue(createItem().executor.config)
     mocks.useAutomationItems.mockReturnValue({ items: [], loading: false, error: null, refresh: vi.fn() })
@@ -200,8 +253,11 @@ describe("AutomationModule", () => {
   it("shows that a configured daily range has no matching next run", () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem({ nextRunAt: undefined, trigger: {
-        type: "builtin.cron", config: { expr: "0 2 * * *", activeDays: [1], timeRange: { start: "08:00", end: "17:00" } },
-      } })], loading: false, error: null, refresh: vi.fn(),
+        type: "builtin.cron", config: { expr: "0 2 * * *" },
+      }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] } })], loading: false, error: null, refresh: vi.fn(),
     })
     expect(renderToStaticMarkup(<AutomationModule />)).toContain("无匹配时间")
   })
@@ -226,9 +282,8 @@ describe("AutomationModule", () => {
     const html = renderToStaticMarkup(<AutomationModule />)
 
     expect(html).toContain("日报自动化")
-    expect(html).toContain("触发器 固定间隔")
-    expect(html).toContain("执行器 Agent")
-    expect(html).not.toContain("每 10 分钟")
+    expect(html).toContain("每 10 分钟")
+    expect(html).toContain("Agent")
     expect(html).not.toContain("echo ok")
     expect(html).toContain('data-slot="table"')
     expect(html).toContain("下次运行")
@@ -335,6 +390,7 @@ describe("AutomationModule", () => {
     const root = createRoot(container)
     await act(async () => root.render(<AutomationRunsPanel item={createItem()} busy={false} onStopRun={vi.fn()} />))
     await flushPromises()
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "查看结果")?.click() })
     expect(document.body.textContent).toContain("打开终端")
     expect(document.body.textContent).toContain("1.4s")
     expect(document.body.textContent).not.toContain("1355 ms")
@@ -959,14 +1015,14 @@ describe("AutomationModule", () => {
 function createItem(overrides: Partial<AutomationItem> = {}): AutomationItem {
   return {
     id: "automation:1",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "Daily report",
     description: "Daily summary",
     enabled: true,
     scope: { type: "global" },
     trigger: {
       type: "builtin.interval",
-      config: { everyMinutes: 10, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+      config: { everyMinutes: 10, anchor: "created_at" },
     },
     executor: {
       type: "builtin.agent",

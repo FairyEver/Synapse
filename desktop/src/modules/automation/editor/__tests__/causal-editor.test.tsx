@@ -6,14 +6,18 @@ import { AutomationEditorForm } from "../editor-form"
 import type { AutomationItem } from "@/types/automation"
 
 const api = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), runs: vi.fn() }))
-vi.mock("@/lib/electron-bridge", () => ({ requireBridgeDomain: () => ({ item: api }), requireSynapseBridge: () => ({ automation: { run: { list: api.runs } } }) }))
+vi.mock("@/lib/electron-bridge", () => ({
+  requireBridgeDomain: () => ({ item: api }),
+  requireSynapseBridge: () => ({ automation: { run: { list: api.runs } } }),
+  getSynapseBridge: () => ({ automation: { item: { onChanged: () => () => undefined } } }),
+}))
 vi.mock("@/app-shell/config", () => ({ useAppConfig: () => ({ config: { global: { projects: [] } } }) }))
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as typeof ResizeObserver
 let root: Root
 const item: AutomationItem = {
-  id: "automation:1", schemaVersion: 1, name: "每日巡检", enabled: false, scope: { type: "global" },
-  trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] } },
+  id: "automation:1", schemaVersion: 2, name: "每日巡检", enabled: false, scope: { type: "global" },
+  trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
   executor: { type: "builtin.agent", config: { projectId: "project-1", agentType: "claude-code", providerId: "provider-1", modelTier: "default", mode: "default", prompt: "检查项目", sessionPolicy: "fresh" } },
   policy: { missedRunPolicy: "skip", overlapPolicy: "skip" }, createdAt: "2026-11-05T00:00:00Z", updatedAt: "2026-11-05T00:00:00Z", runCount: 0, configVersion: 1,
 }

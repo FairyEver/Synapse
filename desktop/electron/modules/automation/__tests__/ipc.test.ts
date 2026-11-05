@@ -51,6 +51,7 @@ describe("automationIpcModule", () => {
       automationUpdate: vi.fn(async (_id, patch) => automationItem({
         ...defaultAutomationInput(),
         ...patch,
+        conditions: patch.conditions === null ? undefined : patch.conditions,
       })),
       automationDelete: vi.fn(async () => ({ deleted: true })),
       automationEnable: vi.fn(async () => automationItem({ ...defaultAutomationInput(), enabled: true })),
@@ -70,7 +71,7 @@ describe("automationIpcModule", () => {
     await harness.invoke("synapse:app:automation:item:create", defaultAutomationInput())
     await harness.invoke("synapse:app:automation:item:update", {
       id: "automation:1",
-      patch: { enabled: false },
+      patch: { enabled: false, conditions: null },
     })
     await harness.invoke("synapse:app:automation:item:set_enabled", {
       automationId: "automation:1",
@@ -86,7 +87,7 @@ describe("automationIpcModule", () => {
     })
 
     expect(service.automationCreate).toHaveBeenCalledWith(defaultAutomationInput())
-    expect(service.automationUpdate).toHaveBeenCalledWith("automation:1", { enabled: false })
+    expect(service.automationUpdate).toHaveBeenCalledWith("automation:1", { enabled: false, conditions: null })
     expect(service.automationDisable).toHaveBeenCalledWith("automation:1")
     expect(service.runAutomationNow).toHaveBeenCalledWith("automation:1")
     expect(service.stopRun).toHaveBeenCalledWith("automation-run:1")
@@ -171,8 +172,11 @@ function defaultAutomationInput() {
       config: {
         everyMinutes: 10,
         anchor: "created_at" as const,
-        activeDays: [0, 1, 2, 3, 4, 5, 6],
       },
+    },
+    conditions: {
+      operator: "and" as const,
+      items: [{ type: "weekdays" as const, days: [1, 2, 3, 4, 5] }],
     },
     executor: {
       type: "builtin.command",
@@ -191,12 +195,13 @@ function automationItem(input: ReturnType<typeof defaultAutomationInput> & {
 }) {
   return {
     id: "automation:1",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: input.name,
     enabled: input.enabled ?? true,
     scope: input.scope,
     trigger: input.trigger,
     executor: input.executor,
+    conditions: input.conditions,
     policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
     createdAt: "2026-06-03T00:00:00.000Z",
     updatedAt: "2026-06-03T00:00:00.000Z",

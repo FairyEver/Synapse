@@ -985,6 +985,26 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       }),
     ).toBe(true)
     expect(
+      automationItemsSchema.validate({
+        id: "automation:2",
+        schemaVersion: 2,
+        name: "Conditioned automation",
+        enabled: false,
+        scope: { type: "global" },
+        trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+        executor: { type: "builtin.agent", config: { prompt: "ok" } },
+        conditions: {
+          operator: "and",
+          items: [{ type: "weekdays", days: [1, 2, 3, 4, 5] }],
+        },
+        policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
+        createdAt: "2026-06-03T00:00:00.000Z",
+        updatedAt: "2026-06-03T00:00:00.000Z",
+        runCount: 0,
+        configVersion: 0,
+      }),
+    ).toBe(true)
+    expect(
       agentCommandsSchema.validate({
         id: "agent-command:1",
         schemaVersion: 1,

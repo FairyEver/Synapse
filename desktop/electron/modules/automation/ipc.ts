@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { automationConditionsSchema } from "../../../automation-trigger-packages/schedule-constraints"
 import type { IpcModule } from "../../runtime/ipc/types"
 import { createMainLogger } from "../../services/log-store"
 import type { AutomationService } from "../../services/automation"
@@ -80,7 +81,7 @@ const automationPolicySchema = z.object({
 
 const automationItemSchema = z.object({
   id: z.string(),
-  schemaVersion: z.literal(1),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   name: z.string(),
   description: z.string().optional(),
   enabled: z.boolean(),
@@ -88,6 +89,7 @@ const automationItemSchema = z.object({
   cwd: z.string().optional(),
   trigger: automationTriggerSchema,
   executor: automationExecutorSchema,
+  conditions: z.record(z.string(), z.unknown()).optional(),
   policy: automationPolicySchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -135,6 +137,7 @@ const createAutomationInputSchema = z.object({
   cwd: z.string().optional(),
   trigger: automationTriggerSchema,
   executor: automationExecutorSchema,
+  conditions: automationConditionsSchema.optional(),
   policy: z.object({
     missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
     overlapPolicy: z.literal("skip").optional(),
@@ -149,6 +152,7 @@ const updateAutomationPatchSchema = z.object({
   cwd: z.string().optional(),
   trigger: automationTriggerSchema.optional(),
   executor: automationExecutorSchema.optional(),
+  conditions: automationConditionsSchema.nullable().optional(),
   policy: z.object({
     missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
     overlapPolicy: z.literal("skip").optional(),

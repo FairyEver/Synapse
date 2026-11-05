@@ -1,6 +1,10 @@
 import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
+import {
+  automationConditionsSchema,
+  summarizeAutomationConditions,
+} from "../../../automation-trigger-packages/schedule-constraints"
 import type { AutomationCreateInput, AutomationItem, AutomationRun, AutomationRunStatus, AutomationUpdateInput } from "@/types/automation"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { AutomationEditorDraft } from "./types"
@@ -17,6 +21,7 @@ function createDefaultAutomationDraft(name = ""): AutomationEditorDraft {
     enabled: false,
     triggerType: null,
     triggerConfig: {},
+    conditions: undefined,
     executorType: null,
     executorConfig: {},
     missedRunPolicy: "skip",
@@ -57,6 +62,7 @@ function createAutomationDraftFromItem(item: AutomationItem): AutomationEditorDr
     enabled: item.enabled,
     triggerType: item.trigger.type,
     triggerConfig: item.trigger.config,
+    conditions: item.conditions,
     executorType: item.executor.type,
     executorConfig: item.executor.config,
     missedRunPolicy: item.policy.missedRunPolicy,
@@ -83,6 +89,7 @@ function buildAutomationUpdateInputFromDraft(
     cwd: payload.cwd,
     trigger: payload.trigger,
     executor: payload.executor,
+    conditions: payload.conditions ?? null,
     policy: payload.policy,
   }
 }
@@ -95,6 +102,7 @@ function buildAutomationPayloadFromDraft(
   if (!draft.triggerType) throw new Error("请选择触发器")
   if (!draft.executorType) throw new Error("请选择执行器")
   const triggerConfig = rendererAutomationTriggerRegistry.parseConfig(draft.triggerType, draft.triggerConfig)
+  const conditions = draft.conditions ? automationConditionsSchema.parse(draft.conditions) : undefined
   const executorConfig = rendererActionRegistry.parseConfig(draft.executorType, draft.executorConfig)
   const projectId = (executorConfig as Record<string, unknown>).projectId
   const scope = typeof projectId === "string" && projectId.trim()
@@ -111,6 +119,7 @@ function buildAutomationPayloadFromDraft(
       type: draft.triggerType,
       config: triggerConfig,
     },
+    ...(conditions ? { conditions } : {}),
     executor: {
       type: draft.executorType,
       config: executorConfig,
@@ -156,11 +165,13 @@ export function summarizeAutomationDraft(draft: AutomationEditorDraft, projects:
   } catch {
     trigger = "触发条件尚未配置完成"
   }
-  if (!draft.executorType) return `当 ${trigger} 时，选择要执行的操作。`
+  const conditionSummary = summarizeAutomationConditions(draft.conditions)
+  const conditionClause = conditionSummary ? `，并且符合条件「${conditionSummary}」` : ""
+  if (!draft.executorType) return `当 ${trigger}${conditionClause} 时，选择要执行的操作。`
   const executor = rendererActionRegistry.list().find(action => action.manifest.id === draft.executorType)
   const projectId = draft.executorConfig.projectId
   const project = projects.find(project => project.id === projectId)?.name
-  return `当 ${trigger} 时，${project ? `在「${project}」` : ""}运行 ${executor?.manifest.title ?? "待更新的操作"}。`
+  return `当 ${trigger}${conditionClause} 时，${project ? `在「${project}」` : ""}运行 ${executor?.manifest.title ?? "待更新的操作"}。`
 }
 
 function formatAutomationScope(item: AutomationItem, projects: readonly SynapseProjectConfig[]): string {
@@ -200,14 +211,15 @@ function formatAutomationTriggerType(item: Pick<AutomationItem, "trigger">): str
   }
 }
 
-function formatAutomationNextRun(item: Pick<AutomationItem, "activeRun" | "enabled" | "nextRunAt" | "trigger">, now = new Date()): string {
+function formatAutomationNextRun(item: Pick<AutomationItem, "activeRun" | "conditions" | "enabled" | "nextRunAt" | "schemaVersion" | "trigger">, now = new Date()): string {
   if (!item.enabled) return "停用中"
-  if (isCompletionAnchoredInterval(item) && item.activeRun?.status === "running") return "未知"
+  if (isCompletionAnchoredInterval(item) && item.activeRun?.status === "running") return "本次完成后计算"
   if (!item.nextRunAt) {
     const isSchedule = rendererAutomationTriggerRegistry.list().some(
       (definition) => definition.manifest.id === item.trigger.type && definition.manifest.kind === "schedule",
     )
-    return isSchedule && item.trigger.config.timeRange
+    if (!isSchedule) return "等待事件"
+    return isSchedule && item.schemaVersion === 2 && item.conditions
       ? "无匹配时间"
       : "未知"
   }
@@ -303,4 +315,9 @@ export {
   formatAutomationStatus,
   formatAutomationTrigger,
   formatAutomationTriggerType,
+}
+
+export function matchesAutomationSearch(item: AutomationItem, search: string, projects: readonly SynapseProjectConfig[]): boolean {
+  const query = search.trim().toLocaleLowerCase()
+  return !query || [item.name, item.description, formatAutomationTrigger(item), formatAutomationExecutorType(item), formatAutomationScope(item, projects)].some(value => value?.toLocaleLowerCase().includes(query))
 }

@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import { Clock, Play, RefreshCw, RotateCcw, Square } from "lucide-react"
+import { useState } from "react"
+import { ChevronDown, Clock, LoaderCircle, Play, RefreshCw, RotateCcw, Square } from "lucide-react"
 
 import { ActionResultView } from "@/action-runtime/action-result-view"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { createRendererLogger } from "@/app-shell/logging"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { runTrackedOperation } from "@/lib/ui-tracking"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { AutomationItem, AutomationRun } from "@/types/automation"
-import { listAutomationRuns } from "../hooks/use-automation"
+import { useAutomationRuns } from "../hooks/use-automation-runs"
 import { formatAutomationDate, formatAutomationRunStatus } from "../utils"
 
 const logger = createRendererLogger("automation.runs")
@@ -25,94 +26,22 @@ function AutomationRunsPanel({
   busy,
   onStopRun,
 }: AutomationRunsPanelProps) {
-  const [runs, setRuns] = useState<AutomationRun[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const requestId = useRef(0)
-  const mounted = useRef(true)
-  const currentItem = useRef(item)
-  currentItem.current = item
-
-  useEffect(() => {
-    mounted.current = true
-    return () => { mounted.current = false; requestId.current += 1 }
-  }, [])
-
-  const loadRuns = useCallback(async () => {
-    if (!item || currentItem.current !== item) return
-    const request = ++requestId.current
-    const isCurrent = () => mounted.current && request === requestId.current && currentItem.current === item
-    setLoading(true)
-    setRuns([])
-    setError(null)
-    try {
-      const nextRuns = await listAutomationRuns(item.id)
-      if (isCurrent()) {
-        setRuns(nextRuns)
-        setError(null)
-      }
-    } catch (loadError) {
-      if (isCurrent()) {
-        logger.warn("Automation run history load failed.", {
-          automationId: item.id,
-          executorType: item.executor.type,
-          boundary: "renderer.automation.runs.list",
-          ...errorDiagnostic(loadError),
-        })
-        setError("读取历史失败")
-      }
-    } finally {
-      if (isCurrent()) {
-        setLoading(false)
-      }
-    }
-  }, [item])
-
-  useEffect(() => {
-    if (!item) return
-    void loadRuns()
-    return () => { requestId.current += 1 }
-  }, [item, loadRuns])
-
-  function handleRetry() {
-    void runTrackedOperation(
-      { component: "automation", eventKey: "automation.history.retry" },
-      () => loadRuns(),
-    )
-  }
-
-  async function handleStop(run: AutomationRun) {
-    if (!item) return
-    try {
-      await runTrackedOperation(
-        { component: "automation", eventKey: "automation.history.stop" },
-        () => onStopRun(run.id),
-      )
-      if (mounted.current && currentItem.current === item) await loadRuns()
-    } catch (stopError) {
-      logger.warn("Automation run stop failed.", {
-        automationId: item.id,
-        runId: run.id,
-        executorType: item.executor.type,
-        boundary: "renderer.automation.runs.stop",
-        ...errorDiagnostic(stopError),
-      })
-      if (mounted.current && currentItem.current === item) setError("停止失败")
-    }
-  }
+  const history = useAutomationRuns(item, onStopRun)
+  const { runs, loading, error } = history
 
   return (
     <section aria-label="运行记录" className="min-w-0 overflow-hidden rounded-xl border bg-card text-card-foreground" aria-busy={loading}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-6 py-3 text-xs text-muted-foreground"><span>最近 100 条运行记录</span>{loading && runs.length > 0 ? <span role="status">刷新中</span> : null}</div>
       {error ? (
         <div className="flex flex-wrap items-center gap-3 px-6 py-5 text-sm">
           <p role="alert" className="text-destructive">{error}</p>
-          <Button variant="outline" onClick={handleRetry}><RefreshCw />重试</Button>
+          <Button variant="outline" onClick={() => { void runTrackedOperation({ component: "automation", eventKey: "automation.history.retry" }, history.refresh) }}><RefreshCw />重试</Button>
         </div>
       ) : null}
-      {loading ? <p role="status" className="px-6 py-8 text-sm text-muted-foreground">加载中</p> : null}
+      {loading && runs.length === 0 ? <p role="status" className="px-6 py-8 text-sm text-muted-foreground">加载中</p> : null}
       {!loading && !error && runs.length === 0 ? <p className="px-6 py-8 text-sm text-muted-foreground">暂无运行记录</p> : null}
-      {!loading && runs.length > 0 ? <ol className="min-w-0">
-        {runs.map(run => <RunItem key={run.id} run={run} item={item} busy={busy} onStop={targetRun => { void handleStop(targetRun) }} />)}
+      {runs.length > 0 ? <ol className="min-w-0">
+        {runs.map(run => <RunItem key={run.id} run={run} item={item} busy={busy || history.stopping.has(run.id)} stopping={history.stopping.has(run.id)} stopError={history.stopErrors[run.id]} onStop={targetRun => { void history.stop(targetRun) }} />)}
       </ol> : null}
     </section>
   )
@@ -123,12 +52,17 @@ function RunItem({
   item,
   busy,
   onStop,
+  stopping,
+  stopError,
 }: {
   readonly run: AutomationRun
   readonly item: AutomationItem | null
   readonly busy: boolean
+  readonly stopping: boolean
+  readonly stopError?: string
   readonly onStop: (run: AutomationRun) => void
 }) {
+  const [expanded, setExpanded] = useState(run.status === "failed" || run.status === "timeout")
   const hasOutput = run.result || run.error
   const statusVariant = run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"
   const triggerIcon = run.triggeredBy === "manual"
@@ -148,14 +82,17 @@ function RunItem({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {run.result?.metrics?.durationMs !== undefined ? <span className="text-sm tabular-nums text-muted-foreground">{formatDuration(run.result.metrics.durationMs)}</span> : null}
-          {run.status === "running" ? <Button disabled={busy} size="icon-sm" variant="outline" onClick={() => onStop(run)}><Square /><span className="sr-only">停止</span></Button> : null}
+          {run.status === "running" ? <Button disabled={busy} size="icon-sm" variant="outline" onClick={() => onStop(run)}>{stopping ? <LoaderCircle className="animate-spin" /> : <Square />}<span className="sr-only">{stopping ? "正在停止" : "停止"}</span></Button> : null}
         </div>
       </div>
       {run.finishedAt ? <p className="mt-2 text-xs tabular-nums text-muted-foreground">结束于 {formatAutomationDate(run.finishedAt, "")}</p> : null}
-      {hasOutput ? <div className="mt-4 grid min-w-0 gap-3 overflow-hidden">
+      {stopError ? <div className="mt-3 flex flex-wrap items-center gap-3"><p role="alert" className="text-sm text-destructive">{stopError}</p><Button variant="outline" disabled={busy} onClick={() => onStop(run)}>重试停止</Button></div> : null}
+      {hasOutput ? <Collapsible open={expanded} onOpenChange={setExpanded} className="mt-3 min-w-0">
+        <CollapsibleTrigger asChild><Button variant="ghost"><ChevronDown data-icon="inline-start" className={expanded ? "rotate-180" : undefined} />{expanded ? "收起结果" : "查看结果"}</Button></CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 grid min-w-0 gap-3 overflow-hidden">
         {run.result ? <RunResult run={run} item={item} /> : null}
         {run.error && !run.result?.error ? <div className="grid min-w-0 gap-1"><p className="text-xs font-medium">错误</p><OutputBlock value={run.error} /></div> : null}
-      </div> : null}
+      </CollapsibleContent></Collapsible> : null}
     </li>
   )
 }

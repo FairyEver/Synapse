@@ -55,7 +55,9 @@ export class RetiredExecutorCleanup {
       this.dirty = false
       const items = await this.deps.items.list()
       if (this.stopped) return
-      await this.scan(items.map(item => ({ id: item.id, executorType: item.executor.type })))
+      await this.scan(items
+        .filter(item => item.schemaVersion === 2)
+        .map(item => ({ id: item.id, executorType: item.executor.type })))
     }
   }
 

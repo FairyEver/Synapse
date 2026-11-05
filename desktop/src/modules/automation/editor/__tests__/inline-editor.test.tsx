@@ -15,8 +15,8 @@ vi.mock("@/app-shell/config", () => ({ useAppConfig: () => ({ config: { global: 
 globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as typeof ResizeObserver
 let root: Root
 function item(): AutomationItem {
-  return { schemaVersion: 1, runCount: 0, configVersion: 1, id: "automation:1", name: "每日构建", enabled: false, scope: { type: "global" },
-    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] } },
+  return { schemaVersion: 2, runCount: 0, configVersion: 1, id: "automation:1", name: "每日构建", enabled: false, scope: { type: "global" },
+    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
     executor: { type: "builtin.agent", config: { projectId: "project-1", agentType: "claude-code", providerId: "provider-1", modelTier: "default", mode: "default", prompt: "echo ok", sessionPolicy: "fresh", timeoutMins: 30 } },
     policy: { missedRunPolicy: "skip", overlapPolicy: "skip" }, createdAt: "2026-11-05T00:00:00Z", updatedAt: "2026-11-05T00:00:00Z" }
 }
@@ -163,7 +163,7 @@ describe("inline automation editing", () => {
     const dialog = document.querySelector('[role="alertdialog"]')!
     expect(dialog).not.toBeNull()
     expect(document.querySelector('[role="region"][aria-label="未保存的更改"]')).toBeNull()
-    expect(Array.from(dialog.querySelectorAll("button")).map(b => b.textContent)).toEqual(["放弃", "保存"])
+    expect(Array.from(dialog.querySelectorAll("button")).map(b => b.textContent)).toEqual(["继续编辑", "放弃", "保存"])
     expect(onBack).not.toHaveBeenCalled()
     await act(async () => { button("放弃").click() })
     expect(onBack.mock.calls).toEqual([[]])

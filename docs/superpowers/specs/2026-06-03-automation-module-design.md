@@ -209,7 +209,7 @@ type IntervalTriggerConfig = {
 }
 ```
 
-`activeDays` belongs to cron and interval because it is meaningful only for time-based triggers. It must not live on the Automation top level.
+Historical `v1` Automation stores `activeDays` inside cron and interval configs. Current `v2` Automation treats weekdays and daily time ranges as Automation-level conditions shared by all automatic triggers. `v1` data is not migrated; it is disabled and preserved read-only after upgrade.
 
 Defaults:
 

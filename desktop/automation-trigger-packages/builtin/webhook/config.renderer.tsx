@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react"
 import { ExternalLink } from "lucide-react"
 import type { DashboardWebhookDto } from "@synapse/shared"
 
+import { requestOpenSettingsAccount } from "@/app-shell/navigation"
+import { ConfigurationFieldError, configurationFieldProps, type ConfigurationFieldErrors } from "../../../src/components/configuration-field-error"
 import { createRendererLogger } from "@/app-shell/logging"
 import { buildAccountWebhookCreationUrl } from "@/lib/account-dashboard-url"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
@@ -41,7 +43,9 @@ function useOpenWebhookCreation() {
 export function WebhookTriggerConfigForm({
   value,
   onChange,
+  fieldErrors,
 }: {
+  readonly fieldErrors?: ConfigurationFieldErrors
   readonly value: WebhookTriggerConfig
   readonly onChange: (value: WebhookTriggerConfig) => void
 }) {
@@ -102,7 +106,7 @@ export function WebhookTriggerConfigForm({
     <div className="grid gap-4">
       <Field>
         <div className="flex items-center justify-between gap-2">
-          <FieldLabel>Webhook</FieldLabel>
+          <FieldLabel htmlFor="automation-webhook-select">Webhook</FieldLabel>
           <Button type="button" variant="ghost" onClick={() => void creation.open()}>
             创建 Webhook
             <ExternalLink data-icon="inline-end" />
@@ -115,7 +119,7 @@ export function WebhookTriggerConfigForm({
           {status === "loading" ? (
             <div className="text-sm text-muted-foreground">加载中...</div>
           ) : status === "logged-out" ? (
-            <div className="text-sm text-muted-foreground">登录后可选择 Webhook</div>
+            <div className="flex flex-wrap items-center gap-2"><span className="text-sm text-muted-foreground">登录后可选择 Webhook</span><Button type="button" variant="outline" onClick={requestOpenSettingsAccount}>登录</Button></div>
           ) : status === "error" ? (
             <div className="grid gap-2">
               {savedWebhookLabel ? (
@@ -141,10 +145,11 @@ export function WebhookTriggerConfigForm({
                 onChange({ webhookPublicId: webhook.publicId, webhookName: webhook.name })
               }}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="automation-webhook-select" {...configurationFieldProps(fieldErrors, "webhookPublicId", "automation-webhook-select")} className="w-full">
                 <SelectValue placeholder="选择 Webhook" />
               </SelectTrigger>
               <SelectContent>
+                {!webhooks.length ? <p className="px-2 py-1 text-sm text-muted-foreground">暂无 Webhook，请先创建</p> : null}
                 {webhooks.map((webhook) => (
                   <SelectItem key={webhook.id} value={webhook.publicId} disabled={!webhook.enabled}>
                     {webhook.enabled ? webhook.name : `${webhook.name}（停用）`}
@@ -153,6 +158,7 @@ export function WebhookTriggerConfigForm({
               </SelectContent>
             </Select>
           )}
+          <ConfigurationFieldError errors={fieldErrors} name="webhookPublicId" id="automation-webhook-select" />
           {isMissing ? (
             <div className="text-sm text-destructive">Webhook 不存在或已删除</div>
           ) : null}

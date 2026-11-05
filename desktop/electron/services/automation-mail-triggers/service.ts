@@ -175,6 +175,13 @@ export class AutomationMailTriggerService {
       const result = await this.deps.automation.runDurableEvent({ automationId: item.id, subscriptionId: item.mailSubscription!.id, runId,
         event: buildMailTriggerEvent(payload, new Date().toISOString()), identitySignal: context.signal,
         commitStart: async () => { claimed = await this.deps.repository.commitDispatch(row.id, row.revision, runId); return claimed } })
+      if (result.kind === "skipped") {
+        await this.deps.repository.finishDispatch(row.id, {
+          state: "skipped",
+          errorCode: result.reason === "legacy" ? "LEGACY_AUTOMATION" : "OUTSIDE_RUN_CONDITIONS",
+        })
+        return true
+      }
       if (result.kind !== "settled") {
         if (claimed) await this.deps.repository.releaseUnstartedDispatch(row.id, runId)
         return false

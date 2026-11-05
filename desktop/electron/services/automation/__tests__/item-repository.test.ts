@@ -23,14 +23,14 @@ describe("AutomationItemRepository", () => {
       scope: { type: "global" },
       trigger: {
         type: "builtin.cron",
-        config: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+        config: { expr: "0 9 * * *" },
       },
       executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
     })
 
     expect(item).toEqual(expect.objectContaining({
       id: "automation:1",
-      schemaVersion: 1,
+      schemaVersion: 2,
       enabled: true,
       policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
       runCount: 0,
@@ -52,8 +52,9 @@ describe("AutomationItemRepository", () => {
       scope: { type: "global" },
       trigger: {
         type: "builtin.cron",
-        config: { expr: "0 9 * * *", timezone: "UTC", activeDays: [1] },
+        config: { expr: "0 9 * * *", timezone: "UTC" },
       },
+      conditions: { operator: "and", items: [{ type: "weekdays", days: [1] }] },
       executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
     })
 
@@ -76,6 +77,87 @@ describe("AutomationItemRepository", () => {
     expect(enabled.enabled).toBe(true)
     expect(enabled.nextRunAt).toBeDefined()
     expect(enabled.configVersion).toBe(1)
+  })
+
+  it("updates and clears top-level conditions", async () => {
+    const repo = newRepo()
+    const item = await repo.create({
+      ...validCreateInput(),
+      conditions: {
+        operator: "and",
+        items: [{ type: "weekdays", days: [5, 1, 5] }],
+      },
+    })
+
+    expect(item.conditions).toEqual({
+      operator: "and",
+      items: [{ type: "weekdays", days: [1, 5] }],
+    })
+
+    const cleared = await repo.update(item.id, { conditions: null })
+    expect(cleared.conditions).toBeUndefined()
+  })
+
+  it("disables legacy items without changing their stored configuration", async () => {
+    const namespace = new MemoryNamespace<AutomationItem>("automation.items")
+    const repo = new AutomationItemRepository({
+      items: namespace,
+      triggers: createBuiltinAutomationTriggerRegistry(),
+      now: () => new Date("2026-06-03T00:00:00.000Z"),
+    })
+    const legacy: AutomationItem = {
+      id: "automation:legacy",
+      schemaVersion: 1,
+      name: "Legacy",
+      enabled: true,
+      scope: { type: "global" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [1], timeRange: { start: "08:00", end: "17:00" } } },
+      executor: { type: "builtin.agent", config: { prompt: "旧提示词" } },
+      policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      nextRunAt: "2026-06-04T09:00:00.000Z",
+      runCount: 3,
+      configVersion: 2,
+    }
+    await namespace.upsert(legacy)
+
+    expect(await repo.disableLegacyItems()).toBe(1)
+    const stored = await repo.get(legacy.id)
+    expect(stored).toEqual({
+      ...legacy,
+      enabled: false,
+      nextRunAt: undefined,
+      updatedAt: "2026-06-03T00:00:00.000Z",
+    })
+    await expect(repo.update(legacy.id, { name: "Renamed" })).rejects.toThrow("旧版自动化不可编辑")
+    await expect(repo.setEnabled(legacy.id, true)).rejects.toThrow("旧版自动化不可启用")
+    expect(await repo.disableLegacyItems()).toBe(0)
+  })
+
+  it("never indexes a legacy Webhook automation as a live candidate", async () => {
+    const namespace = new MemoryNamespace<AutomationItem>("automation.items")
+    const repo = new AutomationItemRepository({
+      items: namespace,
+      triggers: createBuiltinAutomationTriggerRegistry(),
+      now: () => new Date("2026-06-03T00:00:00.000Z"),
+    })
+    await namespace.upsert({
+      id: "automation:legacy-webhook",
+      schemaVersion: 1,
+      name: "Legacy Webhook",
+      enabled: true,
+      scope: { type: "global" },
+      trigger: { type: "builtin.webhook", config: { webhookPublicId: "wh_legacy" } },
+      executor: { type: "builtin.agent", config: { prompt: "旧提示词" } },
+      policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      runCount: 0,
+      configVersion: 0,
+    })
+
+    expect(await repo.listWebhookTriggerCandidates("wh_legacy")).toEqual([])
   })
 
   it("creates script automations disabled and disables them after execution changes", async () => {
@@ -257,7 +339,7 @@ function validCreateInput() {
     scope: { type: "global" as const },
     trigger: {
       type: "builtin.interval",
-      config: { everyMinutes: 30, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+      config: { everyMinutes: 30, anchor: "created_at" },
     },
     executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
   }

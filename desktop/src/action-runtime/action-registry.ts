@@ -13,6 +13,8 @@ export type ActionConfigFormComponent<TConfig extends ActionConfig = ActionConfi
   readonly value: TConfig
   readonly onChange: (value: TConfig) => void
   readonly projects?: readonly SynapseProjectConfig[]
+  readonly fieldErrors?: Readonly<Record<string, string>>
+  readonly onAddProject?: () => void
   readonly triggerVariables?: readonly AutomationTriggerVariableDescriptor[]
 }) => ReactElement
 

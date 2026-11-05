@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { createRendererLogger } from "@/app-shell/logging"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   AutomationCreateInput,
+  AutomationChangedEvent,
   AutomationItem,
   AutomationRun,
   AutomationStopRunResult,
@@ -11,6 +12,10 @@ import type {
 } from "@/types/automation"
 
 const logger = createRendererLogger("automation.hooks")
+
+export function subscribeAutomationChanges(listener: (event: AutomationChangedEvent) => void): () => void {
+  return getSynapseBridge()?.automation.item.onChanged(listener) ?? (() => undefined)
+}
 
 function useAutomationItems() {
   const [items, setItems] = useState<AutomationItem[]>([])

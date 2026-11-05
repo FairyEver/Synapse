@@ -67,6 +67,14 @@ describe("Automation capability domain", () => {
 
   it("declares required input schema fields for mutating tools", () => {
     const tools = buildAutomationTools()
+    const conditions = {
+      type: "object",
+      properties: {
+        operator: expect.objectContaining({ enum: ["and", "or"] }),
+        items: expect.objectContaining({ type: "array", minItems: 1 }),
+      },
+      required: ["operator", "items"],
+    }
     expect(tools.find((tool) => tool.name === "app_automation_item_get")?.inputSchema.required).toEqual(["automationId"])
     expect(tools.find((tool) => tool.name === "app_automation_item_create")?.inputSchema.required).toEqual([
       "name",
@@ -78,6 +86,13 @@ describe("Automation capability domain", () => {
       "automationId",
       "patch",
     ])
+    expect(tools.find((tool) => tool.name === "app_automation_item_create")?.inputSchema.properties?.conditions).toMatchObject(conditions)
+    const updatePatch = tools.find((tool) => tool.name === "app_automation_item_update")?.inputSchema.properties?.patch as {
+      readonly properties?: { readonly conditions?: unknown }
+    } | undefined
+    expect(updatePatch?.properties?.conditions).toMatchObject({
+      anyOf: [expect.objectContaining({ required: ["operator", "items"] }), { type: "null" }],
+    })
     expect(tools.find((tool) => tool.name === "app_automation_run_disable")?.inputSchema.required).toEqual(["runId"])
     expect(tools.find((tool) => tool.name === "app_automation_run_disable")?.description).toContain("stopRequested")
   })

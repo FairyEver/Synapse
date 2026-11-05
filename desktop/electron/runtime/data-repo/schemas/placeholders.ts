@@ -825,7 +825,7 @@ export type AutomationRunTriggerV1 = "trigger" | "manual" | "missed_run"
 
 export interface AutomationItemEntryV1 extends Record<string, unknown> {
   id: string
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   name: string
   description?: string
   enabled: boolean
@@ -833,6 +833,7 @@ export interface AutomationItemEntryV1 extends Record<string, unknown> {
   cwd?: string
   trigger: AutomationRefV1
   executor: AutomationRefV1
+  conditions?: unknown
   policy: {
     missedRunPolicy: "skip" | "run_once"
     overlapPolicy: "skip"
@@ -868,7 +869,10 @@ export const automationItemsSchema: NamespaceSchema<AutomationItemEntryV1> = {
   migrations: noMigrations,
   validate: (v): v is AutomationItemEntryV1 =>
     isAnyRecord<AutomationItemEntryV1>(v)
-    && (v as AutomationItemEntryV1).schemaVersion === 1
+    && (
+      (v as AutomationItemEntryV1).schemaVersion === 1
+      || (v as AutomationItemEntryV1).schemaVersion === 2
+    )
     && typeof (v as AutomationItemEntryV1).id === "string"
     && typeof (v as AutomationItemEntryV1).name === "string"
     && isOptionalString((v as AutomationItemEntryV1).description)

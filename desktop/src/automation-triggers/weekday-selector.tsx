@@ -16,6 +16,8 @@ type WeekdaySelectorProps = {
   readonly value: readonly number[]
   readonly onValueChange: (value: number[]) => void
   readonly disabled?: boolean
+  readonly "aria-describedby"?: string
+  readonly "aria-invalid"?: boolean
   readonly "aria-labelledby"?: string
 }
 
@@ -24,6 +26,8 @@ function WeekdaySelector({
   value,
   onValueChange,
   disabled = false,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
   "aria-labelledby": ariaLabelledBy,
 }: WeekdaySelectorProps) {
   const selectedDays = new Set(value)
@@ -42,6 +46,8 @@ function WeekdaySelector({
     <div
       role="group"
       aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
+      aria-invalid={ariaInvalid || undefined}
       data-slot="weekday-selector"
       className="grid w-full grid-cols-4 gap-x-4 gap-y-2"
     >

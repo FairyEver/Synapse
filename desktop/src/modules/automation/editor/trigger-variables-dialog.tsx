@@ -101,13 +101,13 @@ export function TriggerVariablesDialog({
   return (
     <section className="min-w-0 border-t pt-3">
       <Button type="button" variant="outline" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(!open)}>变量</Button>
-      {open ? <div id={panelId} className="mt-4 min-w-0" aria-label={`${triggerTitle} 变量`}>
+      {open ? <div id={panelId} className="@container/variables mt-4 min-w-0" aria-label={`${triggerTitle} 变量`}>
         <h3 className="mb-3 text-sm font-medium">{triggerTitle} 变量</h3>
-            <div className="grid min-h-0 gap-4 xl:grid-cols-[120px_minmax(0,1fr)]">
+            <div className="grid min-h-0 gap-4 @lg/variables:grid-cols-[120px_minmax(0,1fr)]">
               <div className="flex min-h-0 flex-col gap-2">
                 <Button
                   type="button"
-                  variant={groupFilter === "all" ? "secondary" : "ghost"}
+                  aria-pressed={groupFilter === "all"} variant={groupFilter === "all" ? "secondary" : "ghost"}
                   className="justify-between"
                   onClick={() => setGroupFilter("all")}
                 >
@@ -118,7 +118,7 @@ export function TriggerVariablesDialog({
               <Button
                 key={group.id}
                 type="button"
-                variant={groupFilter === group.id ? "secondary" : "ghost"}
+                aria-pressed={groupFilter === group.id} variant={groupFilter === group.id ? "secondary" : "ghost"}
                 className="justify-between"
                 onClick={() => setGroupFilter(group.id)}
               >
@@ -135,8 +135,8 @@ export function TriggerVariablesDialog({
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
-                <ScrollArea className="min-h-0 flex-1 rounded-lg border border-border">
-                  <div className="flex max-h-[60vh] min-w-0 flex-col gap-4 p-3">
+                <ScrollArea className="h-80 max-h-[60vh] min-h-0 rounded-lg border border-border" viewportClassName="overflow-x-hidden">
+                  <div className="flex min-w-0 flex-col gap-4 p-3">
                     {filteredGroups.length > 0 ? filteredGroups.map((group, groupIndex) => (
                       <section key={group.id} className="min-w-0">
                         {groupIndex > 0 ? <Separator className="mb-3" /> : null}
@@ -278,5 +278,5 @@ function CopyStatusLabel({
   readonly statusLabel: string | null
 }) {
   if (!statusLabel) return null
-  return <span className="shrink-0 text-xs text-muted-foreground">{statusLabel}</span>
+  return <span role="status" className="shrink-0 text-xs text-muted-foreground">{statusLabel}</span>
 }

@@ -67,22 +67,22 @@ function AutomationList({
   }
 
   return (
-    <div className="rounded-lg border bg-background">
+    <div className="@container/list min-w-0 rounded-lg border bg-background">
       <Table className="table-fixed">
         <colgroup>
           <col className="w-auto" />
-          <col className="w-24" />
-          <col className="w-36" />
-          <col className="w-24" />
+          <col className="hidden w-24 @3xl/list:table-column" />
+          <col className="hidden w-36 @3xl/list:table-column" />
+          <col className="hidden w-24 @3xl/list:table-column" />
           <col className="w-16" />
           <col className="w-36" />
         </colgroup>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead>自动化</TableHead>
-            <TableHead>状态</TableHead>
-            <TableHead className="text-right">下次运行</TableHead>
-            <TableHead className="text-right">范围</TableHead>
+            <TableHead className="hidden @3xl/list:table-cell">状态</TableHead>
+            <TableHead className="hidden text-right @3xl/list:table-cell">下次运行</TableHead>
+            <TableHead className="hidden text-right @3xl/list:table-cell">范围</TableHead>
             <TableHead className="text-right">启用</TableHead>
             <TableHead className="text-right">操作</TableHead>
           </TableRow>

@@ -7,6 +7,7 @@ import type { AutomationService } from "../services/automation"
 import type { AutomationTriggerRegistry } from "../services/automation/trigger-registry"
 import { errorLogMeta, sanitizeError } from "../services/error-sanitize"
 import { createPlatformActionDefaultConfig } from "../../action-packages/builtin/shell-defaults"
+import { automationConditionsSchema, type AutomationConditions } from "../../automation-trigger-packages/schedule-constraints"
 import type {
   AutomationCreateInput,
   AutomationItem,
@@ -308,6 +309,8 @@ export function toPublicAutomationItemSummary(
   const validation = toPublicValidation(item.validation)
   return {
     id: item.id,
+    schemaVersion: item.schemaVersion,
+    legacy: item.schemaVersion === 1,
     name: item.name,
     description: item.description,
     enabled: item.enabled,
@@ -315,6 +318,7 @@ export function toPublicAutomationItemSummary(
     cwd: item.cwd,
     trigger: triggerSummary(item, triggers, summaryLogger),
     executor: executorSummary(item, actions, summaryLogger),
+    conditions: item.conditions,
     policy: item.policy,
     nextRunAt: item.nextRunAt,
     lastRunAt: item.lastRunAt,
@@ -431,6 +435,7 @@ function parseCreateParams(
   assignIfDefined(input, "description", optionalString(params.description, "description"))
   assignIfDefined(input, "enabled", optionalBoolean(params.enabled, "enabled"))
   assignIfDefined(input, "cwd", optionalString(params.cwd, "cwd"))
+  assignIfDefined(input, "conditions", parseOptionalConditions(params.conditions))
   assignIfDefined(input, "policy", parseOptionalPolicy(params.policy))
   return input
 }
@@ -443,7 +448,7 @@ function parseUpdateParams(
 ): { automationId: string; patch: AutomationUpdateInput } {
   const { automationId } = parseAutomationIdParams(params)
   const patchRecord = requireRecord(params.patch, "patch")
-  const allowed = new Set(["name", "description", "enabled", "scope", "cwd", "trigger", "executor", "policy"])
+  const allowed = new Set(["name", "description", "enabled", "scope", "cwd", "trigger", "executor", "conditions", "policy"])
   for (const key of Object.keys(patchRecord)) {
     if (!allowed.has(key)) throw new Error(`Forbidden automation update field: ${key}`)
   }
@@ -467,6 +472,13 @@ function parseUpdateParams(
     patch,
     "executor",
     patchRecord.executor === undefined ? undefined : parseExecutorRef(requireRecord(patchRecord.executor, "patch.executor"), actions, platform),
+  )
+  assignIfDefined(
+    patch,
+    "conditions",
+    patchRecord.conditions === null
+      ? null
+      : parseOptionalConditions(patchRecord.conditions),
   )
   assignIfDefined(patch, "policy", parseOptionalPolicy(patchRecord.policy))
   if (Object.keys(patch).length === 0) {
@@ -522,6 +534,13 @@ function parseOptionalPolicy(value: unknown): { missedRunPolicy?: "skip" | "run_
   if (missedRunPolicy !== undefined) policy.missedRunPolicy = missedRunPolicy
   if (overlapPolicy !== undefined) policy.overlapPolicy = overlapPolicy
   return policy
+}
+
+function parseOptionalConditions(value: unknown): AutomationConditions | undefined {
+  if (value === undefined) return undefined
+  const parsed = automationConditionsSchema.safeParse(value)
+  if (!parsed.success) throw new Error("Missing or invalid 'conditions': expected a valid Automation condition set")
+  return parsed.data
 }
 
 function parseRunIdParams(params: Record<string, unknown>): { runId: string } {

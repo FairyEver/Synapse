@@ -12,6 +12,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
+import { NumberInput } from "@/components/number-input"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -45,6 +46,9 @@ type CronEditorDialogProps = {
 }
 
 type CronEditorFieldsProps = {
+  timezone?: string
+  previewError?: string
+  onPreviewOpenChange?: (open: boolean) => void
   expressionId?: string
   collapsePreview?: boolean
   activeTab: CronEditorTab
@@ -173,6 +177,7 @@ function CronEditorDialog({
 }
 
 function CronEditorFields({
+  timezone, previewError, onPreviewOpenChange,
   expressionId = "cron-editor-expression",
   collapsePreview = false,
   activeTab,
@@ -184,6 +189,7 @@ function CronEditorFields({
   onTabChange,
   onTemplateChange,
 }: CronEditorFieldsProps) {
+  const [previewOpen, setPreviewOpen] = useState(false)
   return (
     <FieldGroup className="gap-2">
       <Tabs
@@ -217,10 +223,10 @@ function CronEditorFields({
         </TabsContent>
       </Tabs>
 
-      {validation.ok ? collapsePreview ? <Collapsible>
-        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown />未来 5 次</Button></CollapsibleTrigger>
-        <CollapsibleContent className="pt-3"><PreviewField validation={validation} runs={previewRuns} hideLabel /></CollapsibleContent>
-      </Collapsible> : <PreviewField validation={validation} runs={previewRuns} /> : null}
+      {validation.ok ? collapsePreview ? <Collapsible open={previewOpen} onOpenChange={open => { setPreviewOpen(open); onPreviewOpenChange?.(open) }}>
+        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown data-icon="inline-start" className={previewOpen ? "rotate-180" : undefined} />未来 5 次</Button></CollapsibleTrigger>
+        <CollapsibleContent className="pt-3"><PreviewField timezone={timezone} error={previewError} validation={validation} runs={previewRuns} hideLabel /></CollapsibleContent>
+      </Collapsible> : <PreviewField timezone={timezone} error={previewError} validation={validation} runs={previewRuns} /> : null}
     </FieldGroup>
   )
 }
@@ -328,13 +334,13 @@ function NumberField({
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <FieldContent>
-        <Input
+        <NumberInput
           id={id}
           type="number"
           min={min}
           max={max}
           value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
+          onValueChange={onChange}
         />
       </FieldContent>
     </Field>
@@ -376,9 +382,12 @@ function WeekdayField({
 
 function PreviewField({
   hideLabel = false,
+  timezone, error,
   validation,
   runs,
 }: {
+  timezone?: string
+  error?: string
   validation: ReturnType<typeof validateCronExpression>
   runs: Date[]
   hideLabel?: boolean
@@ -387,10 +396,12 @@ function PreviewField({
     <Field data-invalid={validation.ok ? undefined : true}>
       <FieldLabel className={hideLabel ? "sr-only" : undefined}>未来 5 次</FieldLabel>
       <FieldContent>
-        {validation.ok ? (
+        {error ? <FieldError>{error}</FieldError> : validation.ok ? (
           <div className="grid gap-1 text-sm text-muted-foreground">
+            <span>时区：{timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+            {!runs.length ? <span>无匹配运行时间</span> : null}
             {runs.map((run) => (
-              <span key={run.toISOString()}>{formatDateTime(run.toISOString())}</span>
+              <span key={run.toISOString()}>{timezone ? new Intl.DateTimeFormat("zh-CN", { timeZone: timezone, dateStyle: "short", timeStyle: "medium", hourCycle: "h23" }).format(run) : formatDateTime(run.toISOString())}</span>
             ))}
           </div>
         ) : (

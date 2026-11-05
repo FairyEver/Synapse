@@ -1,6 +1,5 @@
-import { ChevronDown } from "lucide-react"
-import { Button } from "../../../src/components/ui/button"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../../src/components/ui/collapsible"
+import type { AutomationConditions } from "../../schedule-constraints"
+import { ConfigurationFieldError, configurationFieldProps, type ConfigurationFieldErrors } from "../../../src/components/configuration-field-error"
 import {
   Field,
   FieldContent,
@@ -8,14 +7,16 @@ import {
 } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { CronInput } from "../../../src/automation-triggers/cron-input"
-import { WeekdaySelector } from "../../../src/automation-triggers/weekday-selector"
-import { TimeRangeField } from "../../../src/automation-triggers/time-range-field"
 import type { CronTriggerConfig } from "./schema"
 
 export function CronTriggerConfigForm({
   value,
   onChange,
+  conditions,
+  fieldErrors,
 }: {
+  readonly conditions?: AutomationConditions
+  readonly fieldErrors?: ConfigurationFieldErrors
   readonly value: CronTriggerConfig
   readonly onChange: (value: CronTriggerConfig) => void
 }) {
@@ -26,48 +27,24 @@ export function CronTriggerConfigForm({
         <FieldContent>
           <CronInput
             id="automation-trigger-cron-expr"
-            layout="inline"
+            timezone={value.timezone} conditions={conditions} layout="inline"
             value={value.expr}
             onChange={(expr) => onChange({ ...value, expr })}
           />
+          <ConfigurationFieldError errors={fieldErrors} name="expr" id="automation-trigger-cron-expr" />
         </FieldContent>
       </Field>
       <Field>
         <FieldLabel htmlFor="automation-trigger-cron-timezone">时区</FieldLabel>
         <FieldContent>
           <Input
-            id="automation-trigger-cron-timezone"
+            id="automation-trigger-cron-timezone" {...configurationFieldProps(fieldErrors, "timezone", "automation-trigger-cron-timezone")} placeholder={Intl.DateTimeFormat().resolvedOptions().timeZone}
             value={value.timezone ?? ""}
             onChange={(event) => onChange({ ...value, timezone: event.target.value || undefined })}
           />
+          <ConfigurationFieldError errors={fieldErrors} name="timezone" id="automation-trigger-cron-timezone" />
         </FieldContent>
       </Field>
-      <Collapsible className="border-t pt-4">
-        <CollapsibleTrigger asChild><Button type="button" variant="ghost"><ChevronDown />生效日期与时段</Button></CollapsibleTrigger>
-        <CollapsibleContent forceMount className="mt-4 grid gap-4 data-[state=closed]:hidden">
-          <Field>
-            <FieldLabel id="automation-trigger-cron-active-days-label">活跃日</FieldLabel>
-            <FieldContent>
-              <WeekdaySelector
-                id="automation-trigger-cron-active-days"
-                aria-labelledby="automation-trigger-cron-active-days-label"
-                value={value.activeDays}
-                onValueChange={(activeDays) => onChange({ ...value, activeDays })}
-              />
-            </FieldContent>
-          </Field>
-          <TimeRangeField
-            id="automation-trigger-cron-time-range"
-            value={value.timeRange}
-            onValueChange={(timeRange) => {
-              const next = { ...value }
-              if (timeRange) next.timeRange = timeRange
-              else delete next.timeRange
-              onChange(next)
-            }}
-          />
-        </CollapsibleContent>
-      </Collapsible>
     </div>
   )
 }

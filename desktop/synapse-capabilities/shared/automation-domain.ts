@@ -27,6 +27,14 @@ export type AutomationPolicyParams = {
   readonly overlapPolicy?: "skip"
 }
 
+export type AutomationConditionsParams = {
+  readonly operator: "and" | "or"
+  readonly items: readonly (
+    | { readonly type: "weekdays"; readonly days: readonly number[] }
+    | { readonly type: "daily-time-range"; readonly start: string; readonly end: string }
+  )[]
+}
+
 export type AutomationItemCreateParams = {
   readonly name: string
   readonly description?: string
@@ -35,6 +43,7 @@ export type AutomationItemCreateParams = {
   readonly cwd?: string
   readonly trigger: AutomationRefParams
   readonly executor: AutomationRefParams
+  readonly conditions?: AutomationConditionsParams
   readonly policy?: AutomationPolicyParams
 }
 
@@ -48,6 +57,7 @@ export type AutomationItemUpdateParams = {
     readonly cwd?: string
     readonly trigger?: AutomationRefParams
     readonly executor?: AutomationRefParams
+    readonly conditions?: AutomationConditionsParams | null
     readonly policy?: AutomationPolicyParams
   }
 }
@@ -137,11 +147,54 @@ const automationPolicySchema = {
   },
 }
 
+const automationConditionsSchema = {
+  type: "object",
+  properties: {
+    operator: {
+      type: "string",
+      enum: ["and", "or"],
+      description: "Whether all configured conditions must match or any one may match.",
+    },
+    items: {
+      type: "array",
+      minItems: 1,
+      items: {
+        anyOf: [
+          {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["weekdays"] },
+              days: {
+                type: "array",
+                items: { type: "integer", minimum: 0, maximum: 6 },
+                minItems: 1,
+                maxItems: 7,
+                description: "Weekdays using 0=Sunday through 6=Saturday.",
+              },
+            },
+            required: ["type", "days"],
+          },
+          {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["daily-time-range"] },
+              start: { type: "string", description: "Inclusive HH:mm start time." },
+              end: { type: "string", description: "Exclusive HH:mm end time; 24:00 is allowed." },
+            },
+            required: ["type", "start", "end"],
+          },
+        ],
+      },
+    },
+  },
+  required: ["operator", "items"],
+}
+
 export function buildAutomationTools(): McpToolDefinition[] {
   return withPrimaryMcpTools([
     {
       name: "automation_item_list",
-      description: "List Synapse Automation item summaries. Results intentionally omit raw trigger.config and executor.config.",
+      description: "List Synapse Automation item summaries. Results include safe top-level run conditions and intentionally omit raw trigger.config and executor.config.",
       inputSchema: {
         type: "object",
         properties: {
@@ -160,12 +213,12 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_get",
-      description: "Get one Synapse Automation item summary by automationId. The response does not include raw trigger or executor config.",
+      description: "Get one Synapse Automation item summary by automationId. The response includes safe top-level run conditions but does not include raw trigger or executor config.",
       inputSchema: { type: "object", properties: { automationId: automationIdProperty }, required: ["automationId"] },
     },
     {
       name: "automation_item_create",
-      description: "Create one Synapse Automation with builtin.agent or builtin.claude-code. Call automation_trigger_type_list and automation_executor_type_list before building configs. Claude Code takes only projectId and prompt, uses current defaults, and succeeds after initial prompt submission while its terminal stays open.",
+      description: "Create one schema-version-2 Synapse Automation with builtin.agent or builtin.claude-code. Optional top-level conditions apply to every automatic trigger. Call automation_trigger_type_list and automation_executor_type_list before building configs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -176,6 +229,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
           cwd: { type: "string" },
           trigger: automationRefSchema,
           executor: automationRefSchema,
+          conditions: automationConditionsSchema,
           policy: automationPolicySchema,
         },
         required: ["name", "scope", "trigger", "executor"],
@@ -183,7 +237,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_update",
-      description: "Update one Synapse Automation. Executor refs must use builtin.agent or builtin.claude-code; use discovery tools before changing configs. Claude Code accepts only projectId and prompt and reads current default launch settings at execution time.",
+      description: "Update one schema-version-2 Synapse Automation. Optional top-level conditions apply to every automatic trigger; omit conditions to preserve them or pass null to clear them. Legacy schema-version-1 items are read-only.",
       inputSchema: {
         type: "object",
         properties: {
@@ -198,6 +252,10 @@ export function buildAutomationTools(): McpToolDefinition[] {
               cwd: { type: "string" },
               trigger: automationRefSchema,
               executor: automationRefSchema,
+              conditions: {
+                anyOf: [automationConditionsSchema, { type: "null" }],
+                description: "Omit to preserve, null to clear, or replace with the complete condition set.",
+              },
               policy: automationPolicySchema,
             },
           },

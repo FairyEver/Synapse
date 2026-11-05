@@ -91,9 +91,12 @@ describe("AutomationEditorApp", () => {
   it.each(["builtin.cron", "builtin.interval"])("edits and clears the daily range for %s", async (type) => {
     vi.spyOn(window, "close").mockImplementation(() => undefined)
     const config = type === "builtin.cron"
-      ? { expr: "* * * * *", activeDays: [1, 2, 3, 4, 5] }
-      : { everyMinutes: 60, anchor: "created_at", activeDays: [1, 2, 3, 4, 5] }
-    const item = buildAutomationItem({ trigger: { type, config } })
+      ? { expr: "* * * * *" }
+      : { everyMinutes: 60, anchor: "created_at" }
+    const item = buildAutomationItem({
+      trigger: { type, config },
+      conditions: { operator: "and", items: [{ type: "daily-time-range", start: "08:00", end: "17:00" }] },
+    })
     getItem.mockResolvedValue(item)
     updateItem.mockResolvedValue(item)
     window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
@@ -103,32 +106,39 @@ describe("AutomationEditorApp", () => {
     try {
       await act(async () => { root.render(<AutomationEditorApp />) })
       const rangeTrigger = document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')
-      expect(rangeTrigger?.textContent).toContain("不限时间")
+      expect(rangeTrigger?.textContent).toContain("08:00")
       await act(async () => { rangeTrigger?.click() })
       await selectTimePart("结束小时", "24")
       await act(async () => { findButtonContaining("确定")?.click() })
         await act(async () => { saveButton()?.click() })
       expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
-        patch: expect.objectContaining({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }),
+        patch: expect.objectContaining({
+          trigger: { type, config },
+          conditions: { operator: "and", items: [{ type: "daily-time-range", start: "08:00", end: "24:00" }] },
+        }),
       }))
-      // Reopen the returned config, then remove both fields to restore unrestricted scheduling.
+      // Reopen the returned config, then remove the condition.
       updateItem.mockClear()
-      getItem.mockResolvedValue(buildAutomationItem({ trigger: { type, config: { ...config, timeRange: { start: "08:00", end: "24:00" } } } }))
+      getItem.mockResolvedValue(buildAutomationItem({
+        trigger: { type, config },
+        conditions: { operator: "and", items: [{ type: "daily-time-range", start: "08:00", end: "24:00" }] },
+      }))
       await act(async () => { window.dispatchEvent(new Event("focus")) })
       const reloadedRangeTrigger = document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')
       expect(reloadedRangeTrigger?.textContent).toContain("08:00")
       expect(reloadedRangeTrigger?.textContent).toContain("24:00")
-      await act(async () => { reloadedRangeTrigger?.click() })
-      await act(async () => { findButtonContaining("不限时间")?.click() })
+      await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="删除每天的时间段条件"]')?.click() })
         await act(async () => { saveButton()?.click() })
       expect(updateItem).toHaveBeenLastCalledWith(expect.objectContaining({
-        patch: expect.objectContaining({ trigger: { type, config } }),
+        patch: expect.objectContaining({ trigger: { type, config }, conditions: null }),
       }))
     } finally { await act(async () => { root.unmount() }) }
   })
 
   it("keeps an invalid picker draft out of the saved automation config", async () => {
-    const item = buildAutomationItem()
+    const item = buildAutomationItem({
+      conditions: { operator: "and", items: [{ type: "daily-time-range", start: "08:00", end: "17:00" }] },
+    })
     getItem.mockResolvedValue(item)
     updateItem.mockResolvedValue(item)
     vi.spyOn(window, "close").mockImplementation(() => undefined)
@@ -148,9 +158,32 @@ describe("AutomationEditorApp", () => {
       })
         await act(async () => { saveButton()?.click() })
       expect(updateItem).toHaveBeenCalledWith(expect.objectContaining({
-        patch: expect.objectContaining({ trigger: item.trigger }),
+        patch: expect.objectContaining({
+          trigger: item.trigger,
+          conditions: item.conditions,
+        }),
       }))
     } finally { await act(async () => { root.unmount() }) }
+  })
+
+  it("blocks saving when a weekday condition has no selected day", async () => {
+    const item = buildAutomationItem({
+      conditions: { operator: "and", items: [{ type: "weekdays", days: [1] }] },
+    })
+    getItem.mockResolvedValue(item)
+    updateItem.mockResolvedValue(item)
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => { root.render(<AutomationEditorApp />) })
+    await act(async () => { document.querySelector<HTMLElement>('[role="checkbox"][aria-label="周一"]')?.click() })
+    await act(async () => { saveButton()?.click() })
+
+    expect(document.body.textContent).toContain("至少选择一个星期")
+    expect(updateItem).not.toHaveBeenCalled()
+    await act(async () => { root.unmount() })
   })
 
   it("shows trigger and executor lists in create mode", async () => {
@@ -355,6 +388,24 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('input[aria-label="自动化标题"]')).toBeNull()
   })
 
+  it("blocks direct editing of a legacy automation", async () => {
+    getItem.mockResolvedValue(buildAutomationItem({
+      schemaVersion: 1,
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [1] } },
+    }))
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => { root.render(<AutomationEditorApp />) })
+
+    expect(document.body.textContent).toContain("旧版自动化不可编辑")
+    expect(document.querySelector("#automation-trigger-cron-expr")).toBeNull()
+    expect(updateItem).not.toHaveBeenCalled()
+    await act(async () => { root.unmount() })
+  })
+
   it("reloads edit data when the page is focused again", async () => {
     getItem.mockReset()
     getItem
@@ -470,6 +521,30 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
   })
 
+  it("preserves automation conditions when the trigger type changes", async () => {
+    const conditions = { operator: "and" as const, items: [{ type: "weekdays" as const, days: [1, 3, 5] }] }
+    const item = buildAutomationItem({
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      conditions,
+    })
+    getItem.mockResolvedValue(item)
+    updateItem.mockResolvedValue({ ...item, trigger: { type: "builtin.interval", config: { everyMinutes: 10, anchor: "created_at" } } })
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })) })
+    await act(async () => { findButtonContaining("固定间隔")!.click() })
+    await act(async () => { findButtonContaining("确认更换")!.click() })
+    await act(async () => { saveButton()?.click() })
+
+    expect(updateItem).toHaveBeenCalledWith(expect.objectContaining({
+      patch: expect.objectContaining({
+        trigger: { type: "builtin.interval", config: { everyMinutes: 60, anchor: "created_at" } },
+        conditions,
+      }),
+    }))
+  })
+
   it("shows both nodes without a connecting arrow and keeps actions inside the scrolling content", async () => {
     const container = document.createElement("div"); document.body.appendChild(container)
     await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
@@ -545,7 +620,7 @@ describe("AutomationEditorApp", () => {
 
   it.each([undefined, { start: "08:00", end: "17:00" }])("saves Agent automation on Windows with the selected daily range %j", async (timeRange) => {
     vi.spyOn(rendererActionRegistry, "getDefaultConfig").mockReturnValue(buildAutomationItem().executor.config)
-    window.synapse = { platform: "win32" } as typeof window.synapse
+    window.synapse = { platform: "win32", settings: { repository: {} } } as typeof window.synapse
     createItem.mockResolvedValue(buildAutomationItem())
     vi.spyOn(window, "close").mockImplementation(() => undefined)
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
@@ -560,6 +635,9 @@ describe("AutomationEditorApp", () => {
       findButtonContaining("Cron")?.click()
     })
     if (timeRange) {
+      await act(async () => { clickMenuTrigger(findButtonContaining("添加条件")) })
+      await act(async () => { findButtonContaining("每天的时间段")?.click() })
+      await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull())
       await act(async () => { document.querySelector<HTMLButtonElement>('button[id$="-time-range"]')?.click() })
       await act(async () => { findButtonContaining("确定")?.click() })
     }
@@ -581,8 +659,14 @@ describe("AutomationEditorApp", () => {
     expect(createItem).toHaveBeenCalledWith(expect.objectContaining({
       enabled: true,
       trigger: { type: "builtin.cron", config: {
-        expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6], ...(timeRange ? { timeRange } : {}),
+        expr: "0 9 * * *",
       } },
+      ...(timeRange ? {
+        conditions: {
+          operator: "and",
+          items: [{ type: "daily-time-range", ...timeRange }],
+        },
+      } : {}),
       executor: {
         type: "builtin.agent",
         config: expect.objectContaining({
@@ -678,11 +762,11 @@ describe("AutomationEditorApp", () => {
   it("saves Agent executor config with project and provider model selection", async () => {
     createItem.mockResolvedValue({
       id: "automation:agent",
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "Agent automation",
       enabled: true,
       scope: { type: "project", projectId: "project-1" },
-      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] } },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
       executor: {
         type: "builtin.agent",
         config: {
@@ -781,7 +865,7 @@ describe("AutomationEditorApp", () => {
     })
 
     expect(document.body.textContent).toContain("请选择项目")
-    expect(document.body.textContent).toContain("请选择供应商 + 模型")
+    expect(document.body.textContent).toContain("请选择供应商和模型")
     expect(document.body.textContent).toContain("请填写提示词")
     expect(document.body.textContent).not.toContain("\"origin\"")
     expect(document.body.textContent).not.toContain("\"code\"")
@@ -803,21 +887,27 @@ function changeTextarea(textarea: HTMLTextAreaElement, value: string): void {
 }
 
 function findButtonContaining(text: string): HTMLButtonElement | undefined {
-  return Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]'))
+  return Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitem"], [role="menuitemradio"]'))
     .find((button) => button.textContent?.includes(text))
+}
+
+function clickMenuTrigger(element: HTMLButtonElement | undefined): void {
+  if (!element) return
+  element.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+  element.click()
 }
 
 function buildAutomationItem(overrides: Partial<AutomationItem> = {}): AutomationItem {
   return {
     id: "automation:1",
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "自动化",
     description: "",
     enabled: true,
     scope: { type: "global" },
     trigger: {
       type: "builtin.interval",
-      config: { everyMinutes: 10, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+      config: { everyMinutes: 10, anchor: "created_at" },
     },
     executor: {
       type: "builtin.agent",

@@ -16,13 +16,14 @@ import { buildAutomationTools } from "../../../synapse-capabilities/shared/autom
 
 const baseItem: AutomationItem = {
   id: "automation:1",
-  schemaVersion: 1,
+  schemaVersion: 2,
   name: "Daily automation",
   description: "Send summary",
   enabled: true,
   scope: { type: "global" },
   cwd: "/Users/liyang/project",
-  trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1, 2, 3] } },
+  trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at" } },
+  conditions: { operator: "and", items: [{ type: "weekdays", days: [1, 2, 3] }] },
   executor: { type: "builtin.agent", config: { projectId: "project:1", agentType: "claude-code", providerId: "p1", modelTier: "sonnet", prompt: "private prompt" } },
   policy: { missedRunPolicy: "skip", overlapPolicy: "skip" },
   createdAt: "2026-06-07T00:00:00.000Z",
@@ -57,7 +58,6 @@ const baseRun: AutomationRun = {
 const intervalTriggerSchema = z.object({
   everyMinutes: z.number().int().positive(),
   anchor: z.enum(["created_at", "last_completed_at"]),
-  activeDays: z.array(z.number().int().min(0).max(6)).min(1),
 })
 
 function intervalTrigger(): AutomationTriggerDefinition {
@@ -66,7 +66,7 @@ function intervalTrigger(): AutomationTriggerDefinition {
       id: "builtin.interval",
       title: "Fixed interval",
       kind: "schedule",
-      defaultConfig: { everyMinutes: 60, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+      defaultConfig: { everyMinutes: 60, anchor: "created_at" },
       configSchema: intervalTriggerSchema,
       variables: [{ key: "trigger.everyMinutes", label: "Interval minutes", group: "config" }],
     },
@@ -248,7 +248,7 @@ describe("automation capability dispatcher", () => {
       .toContain("stopRequested")
   })
 
-  it("discovers the optional daily range schema for real built-in schedule triggers", async () => {
+  it("keeps automation-level conditions out of trigger discovery", async () => {
     const harness = createHarness()
     const dispatcher = createAutomationCapabilityDispatcher({
       ...harness, triggers: createBuiltinAutomationTriggerRegistry(),
@@ -258,10 +258,10 @@ describe("automation capability dispatcher", () => {
     const descriptors = result.data as Array<{ type: string; configSchema: { properties?: Record<string, unknown>; required?: string[] }; defaultConfig: Record<string, unknown> }>
     for (const type of ["builtin.cron", "builtin.interval"]) {
       const descriptor = descriptors.find((entry) => entry.type === type)!
-      expect(descriptor.configSchema.properties?.timeRange).toMatchObject({
-        type: "object", required: ["start", "end"], properties: { start: { type: "string" }, end: { type: "string" } },
-      })
-      expect(descriptor.configSchema.required).not.toContain("timeRange")
+      expect(descriptor.configSchema.properties).not.toHaveProperty("activeDays")
+      expect(descriptor.configSchema.properties).not.toHaveProperty("timeRange")
+      expect(descriptor.configSchema.required).not.toContain("activeDays")
+      expect(descriptor.defaultConfig).not.toHaveProperty("activeDays")
       expect(descriptor.defaultConfig).not.toHaveProperty("timeRange")
     }
   })
@@ -277,7 +277,7 @@ describe("automation capability dispatcher", () => {
           type: "builtin.interval",
           title: "Fixed interval",
           kind: "schedule",
-          defaultConfig: { everyMinutes: 60, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+          defaultConfig: { everyMinutes: 60, anchor: "created_at" },
           variables: [{ key: "trigger.everyMinutes", label: "Interval minutes", group: "config" }],
         }],
       })
@@ -524,14 +524,18 @@ describe("automation capability dispatcher", () => {
     const createInput = {
       name: "New automation",
       scope: { type: "global" },
-      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at" } },
       executor: { type: "builtin.command", config: { command: "echo ok" } },
+      conditions: {
+        operator: "and",
+        items: [{ type: "weekdays", days: [1, 2, 3, 4, 5] }],
+      },
     }
 
     const created = await dispatcher.dispatch("app.automation.item.create", createInput, { source: "mcp-http" })
     const updated = await dispatcher.dispatch("app.automation.item.update", {
       automationId: "automation:1",
-      patch: { name: "Updated automation" },
+      patch: { name: "Updated automation", conditions: null },
     }, { source: "mcp-http" })
     const enabled = await dispatcher.dispatch("app.automation.item.enable", { automationId: "automation:1" }, { source: "mcp-http" })
     const disabled = await dispatcher.dispatch("app.automation.item.disable", { automationId: "automation:1" }, { source: "mcp-http" })
@@ -539,10 +543,14 @@ describe("automation capability dispatcher", () => {
 
     expect(service.automationCreate).toHaveBeenCalledWith(expect.objectContaining({
       name: "New automation",
-      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at" } },
       executor: { type: "builtin.command", config: { command: "echo ok", shell: "posix" } },
+      conditions: {
+        operator: "and",
+        items: [{ type: "weekdays", days: [1, 2, 3, 4, 5] }],
+      },
     }))
-    expect(service.automationUpdate).toHaveBeenCalledWith("automation:1", { name: "Updated automation" })
+    expect(service.automationUpdate).toHaveBeenCalledWith("automation:1", { name: "Updated automation", conditions: null })
     expect(service.automationEnable).toHaveBeenCalledWith("automation:1")
     expect(service.automationDisable).toHaveBeenCalledWith("automation:1")
     expect(service.automationDelete).toHaveBeenCalledWith("automation:1")

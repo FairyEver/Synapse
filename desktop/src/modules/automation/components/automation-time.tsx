@@ -9,11 +9,11 @@ function AutomationNextRunTime({
   item,
   className,
 }: {
-  readonly item: Pick<AutomationItem, "activeRun" | "enabled" | "nextRunAt" | "trigger">
+  readonly item: Pick<AutomationItem, "activeRun" | "conditions" | "enabled" | "nextRunAt" | "schemaVersion" | "trigger">
   readonly className?: string
 }) {
   const label = formatAutomationNextRun(item)
-  if (label === "停用中" || label === "未知") return <span className={className}>{label}</span>
+  if (!item.nextRunAt || label === "停用中" || label === "未知" || label === "本次完成后计算") return <span className={className}>{label}</span>
   return <RelativeTime value={item.nextRunAt} fallback={label} className={className} />
 }
 

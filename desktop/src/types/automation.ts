@@ -2,6 +2,9 @@ import type {
   ActionRunResult,
   ActionStoredConfigValidation,
 } from "../../action-packages/types"
+import type { AutomationConditions } from "../../automation-trigger-packages/schedule-constraints"
+
+export type { AutomationCondition, AutomationConditions } from "../../automation-trigger-packages/schedule-constraints"
 
 export type AutomationTriggerRef = {
   type: string
@@ -35,7 +38,7 @@ export type AutomationPolicy = {
 
 export type AutomationItem = {
   id: string
-  schemaVersion: 1
+  schemaVersion: 1 | 2
   name: string
   description?: string
   enabled: boolean
@@ -43,6 +46,7 @@ export type AutomationItem = {
   cwd?: string
   trigger: AutomationTriggerRef
   executor: AutomationExecutorRef
+  conditions?: AutomationConditions
   policy: AutomationPolicy
   createdAt: string
   updatedAt: string
@@ -63,6 +67,7 @@ export type AutomationCreateInput = {
   cwd?: string
   trigger: AutomationTriggerRef
   executor: AutomationExecutorRef
+  conditions?: AutomationConditions
   policy?: Partial<AutomationPolicy>
 }
 
@@ -74,6 +79,7 @@ export type AutomationUpdateInput = {
   cwd?: string
   trigger?: AutomationTriggerRef
   executor?: AutomationExecutorRef
+  conditions?: AutomationConditions | null
   policy?: Partial<AutomationPolicy>
 }
 

@@ -3,8 +3,12 @@ import { ArrowLeft, LoaderCircle, RefreshCw } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
+import { ProjectAddDialog } from "@/app-shell/components/project-add-dialog"
+import { useProjectActions } from "@/app-shell/use-project-actions"
+import { ConfigurationFieldError, configurationFieldProps } from "@/components/configuration-field-error"
+import { scopedAutomationErrors } from "./validation"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { getRendererPlatform } from "@/lib/runtime-platform"
@@ -14,6 +18,7 @@ import type { AutomationItem } from "@/types/automation"
 import { useAutomationEditor } from "../hooks/use-automation-editor"
 import type { AutomationEditorMode, AutomationEditorStep } from "../types"
 import { TriggerExecutorBuilder } from "./trigger-executor-builder"
+import { AutomationConditions } from "./automation-conditions"
 import { AutomationRunsPanel } from "../components/automation-runs-dialog"
 import { summarizeAutomationDraft } from "../utils"
 
@@ -27,15 +32,27 @@ type AutomationEditorFormProps = {
 export function AutomationEditorForm(props: AutomationEditorFormProps) {
   const { config } = useAppConfig()
   const editor = useAutomationEditor(props)
-  const { loadState, saving, error, leaveKind } = editor
+  const { loadState, saving, error, fieldErrors, leaveKind } = editor
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false)
+  const { addProject } = useProjectActions()
+  const conditionsPanel = useRef<HTMLDivElement>(null)
+  const form = useRef<HTMLDivElement>(null)
   const [tab, setTab] = useState("config")
   const executorPanel = useRef<HTMLDivElement>(null)
   const leaveSaveButton = useRef<HTMLButtonElement>(null)
   const ready = loadState.status === "ready"
   useEffect(() => {
-    if (ready && props.initialStep === "executor") {
-      executorPanel.current?.focus()
-      executorPanel.current?.scrollIntoView({ block: "nearest" })
+    if (Object.keys(fieldErrors).length && !leaveKind) {
+      setTab("config")
+      const target = form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      target?.focus(); target?.scrollIntoView({ block: "center" })
+    }
+  }, [fieldErrors, leaveKind])
+  useEffect(() => {
+    if (ready && (props.initialStep === "executor" || props.initialStep === "conditions")) {
+      const panel = props.initialStep === "conditions" ? conditionsPanel.current : executorPanel.current
+      panel?.focus()
+      panel?.scrollIntoView({ block: "nearest" })
     }
   }, [ready, props.initialStep])
   const draft = loadState.status === "ready" ? loadState.draft : null
@@ -49,7 +66,8 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
 
   return (
     <SystemAppWindowShell headerMode="replace" left={backAction}>
-      <div className="@container flex h-full min-h-0 min-w-0 flex-col bg-surface">
+      <div ref={form} className="@container flex h-full min-h-0 min-w-0 flex-col bg-surface">
+        <ProjectAddDialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen} onAddProject={addProject} />
         <AlertDialog open={Boolean(leaveKind)} onOpenChange={open => { if (!open) editor.resolveLeave("continue") }}>
           <AlertDialogContent
             onOpenAutoFocus={event => { event.preventDefault(); leaveSaveButton.current?.focus() }}
@@ -62,6 +80,7 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
             </AlertDialogHeader>
             {error ? <p role="alert" className="wrap-anywhere text-sm text-destructive">{error}</p> : null}
             <AlertDialogFooter>
+              <AlertDialogCancel disabled={saving}>继续编辑</AlertDialogCancel>
               <AlertDialogAction variant="outline" disabled={saving} onClick={event => { event.preventDefault(); editor.resolveLeave("discard") }}>放弃</AlertDialogAction>
               <Button ref={leaveSaveButton} disabled={saving || editor.choosingType} onClick={() => editor.resolveLeave("save")}>{saving ? "保存中" : "保存"}</Button>
             </AlertDialogFooter>
@@ -83,7 +102,8 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
                     <Field className="w-full min-w-0 @xl:w-auto @xl:flex-1 @xl:max-w-md">
                       <FieldLabel htmlFor="automation-name" className="sr-only">自动化名称</FieldLabel>
                       <Input id="automation-name" aria-label="自动化名称" value={loadState.draft.name} maxLength={200}
-                        disabled={saving || tab !== "config"} className="font-medium" onChange={event => editor.updateDraft(current => ({ ...current, name: event.target.value }))} />
+                        {...configurationFieldProps(fieldErrors, "name", "automation-name")} disabled={saving || tab !== "config"} className="font-medium" onChange={event => editor.updateDraft(current => ({ ...current, name: event.target.value }))} />
+                      <ConfigurationFieldError errors={fieldErrors} name="name" id="automation-name" />
                     </Field>
                     <TabsList variant="line" aria-label="自动化配置视图">
                       <TabsTrigger value="config">配置</TabsTrigger>
@@ -94,12 +114,21 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
                 <TabsContent value="config" forceMount hidden={tab !== "config"}>
                   <fieldset disabled={saving} className="mx-auto w-full min-w-0 max-w-7xl border-0 px-5 py-6 @3xl:px-8 @3xl:py-8">
                     <div className="grid min-w-0 items-start gap-8 @4xl:grid-cols-2" data-layout="automation-editor-flow">
-                      <TriggerExecutorBuilder step="trigger" onChoosingChange={editor.setChoosingType} triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
-                        executorType={loadState.draft.executorType} executorConfig={loadState.draft.executorConfig}
-                        projects={config.global.projects} platform={getRendererPlatform()} onTriggerChange={editor.changeTrigger}
-                        onExecutorChange={editor.changeExecutor} />
+                      <div className="min-w-0">
+                        <TriggerExecutorBuilder fieldErrors={scopedAutomationErrors(fieldErrors, "trigger")} onAddProject={() => setProjectDialogOpen(true)} step="trigger" onChoosingChange={editor.setChoosingType} triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
+                          executorType={loadState.draft.executorType} executorConfig={loadState.draft.executorConfig}
+                          projects={config.global.projects} platform={getRendererPlatform()} onTriggerChange={editor.changeTrigger}
+                          onExecutorChange={editor.changeExecutor} />
+                        {loadState.draft.triggerType ? (
+                          <div ref={conditionsPanel} aria-invalid={Object.keys(scopedAutomationErrors(fieldErrors, "conditions")).length ? true : undefined} tabIndex={-1} className="outline-none"><AutomationConditions
+                            value={loadState.draft.conditions}
+                            disabled={saving}
+                            onChange={(conditions) => editor.updateDraft(current => ({ ...current, conditions }))}
+                          />{Object.keys(scopedAutomationErrors(fieldErrors, "conditions")).length ? <p role="alert" className="text-sm text-destructive">请检查附加条件</p> : null}</div>
+                        ) : null}
+                      </div>
                       <div ref={executorPanel} tabIndex={-1} className="min-w-0">
-                        <TriggerExecutorBuilder step="executor" onChoosingChange={editor.setChoosingType} triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
+                        <TriggerExecutorBuilder fieldErrors={scopedAutomationErrors(fieldErrors, "executor")} onAddProject={() => setProjectDialogOpen(true)} step="executor" onChoosingChange={editor.setChoosingType} triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
                           executorType={loadState.draft.executorType} executorConfig={loadState.draft.executorConfig}
                           projects={config.global.projects} platform={getRendererPlatform()} onTriggerChange={editor.changeTrigger}
                           onExecutorChange={editor.changeExecutor} />

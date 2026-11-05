@@ -7,6 +7,7 @@ import { sanitizeError } from "@/lib/error-sanitize"
 import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { AutomationItem } from "@/types/automation"
 import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode } from "../types"
+import { validateAutomationDraftFields, type AutomationFieldErrors } from "../editor/validation"
 import { stopAutomationRun } from "./use-automation"
 import { buildAutomationCreateInputFromDraft, buildAutomationUpdateInputFromDraft, createAutomationDraftFromItem, createDefaultAutomationDraft, generateAutomationDraftName, validateChangedTriggerVariables } from "../utils"
 
@@ -19,7 +20,7 @@ type EditorOptions = {
 }
 
 function saveErrorMessage(error: unknown): string {
-  const fieldLabels: Record<string, string> = { projectId: "请选择项目", providerId: "请选择供应商 + 模型", modelTier: "请选择模型", prompt: "请填写提示词", command: "请填写命令", script: "请填写脚本", url: "请填写 URL", expr: "请填写 Cron 表达式", everyMinutes: "请填写大于 0 的间隔分钟", activeDays: "请至少选择一个活跃日", webhookPublicId: "请选择 Webhook" }
+  const fieldLabels: Record<string, string> = { projectId: "请选择项目", providerId: "请选择供应商 + 模型", modelTier: "请选择模型", prompt: "请填写提示词", command: "请填写命令", script: "请填写脚本", url: "请填写 URL", expr: "请填写 Cron 表达式", everyMinutes: "请填写大于 0 的间隔分钟", conditions: "请检查附加条件", webhookPublicId: "请选择 Webhook" }
   const issues = (error as { issues?: { path?: unknown[]; message?: string }[] } | null)?.issues
   if (Array.isArray(issues)) return [...new Set(issues.map(issue => fieldLabels[String(issue.path?.at(-1))] ?? issue.message).filter(Boolean))].join("、") || "请检查配置"
   return sanitizeError(error instanceof Error ? error.message : String(error)) || "保存失败"
@@ -36,6 +37,7 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
   const dirtyRef = useRef(false)
   const revision = useRef(0)
   const mounted = useRef(true)
+  const [fieldErrors, setFieldErrors] = useState<AutomationFieldErrors>({})
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [leaveKind, setLeaveKind] = useState<LeaveKind | null>(null)
@@ -66,7 +68,8 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
       setLoadState({ status: "loading" })
       void bridge.item.get(modeId).then(item => {
         if (cancelled) return
-        if (item) installItem(item)
+        if (item?.schemaVersion === 1) setLoadState({ status: "error", message: "旧版自动化不可编辑" })
+        else if (item) installItem(item)
         else setLoadState({ status: "error", message: "自动化不存在" })
       }).catch(loadError => {
         if (cancelled) return
@@ -138,6 +141,7 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
     dirtyRef.current = true
     setLoadState(current => current.status === "ready" ? { ...current, draft: updater(current.draft) } : current)
     setError(null)
+    setFieldErrors({})
   }
 
   function changeExecutor(executorType: string | null, executorConfig: Record<string, unknown>) {
@@ -159,10 +163,15 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
   async function save(enable: boolean, leaveAfterSave = false) {
     if (savingRef.current || choosingType || loadState.status !== "ready") return
     const { draft, item } = loadState
+    const errors = validateAutomationDraftFields(draft)
+    setFieldErrors(errors)
+    if (Object.keys(errors).length) { setError("请检查标出的配置"); return }
     const pendingLeave = leaveAfterSave ? leaveKind : null
     let savedItem: AutomationItem | undefined
     revision.current += 1
-    const finish = startTrackedOperation({ component: "automation", eventKey: item ? "automation.editor.save" : "automation.editor.create" })
+    const finish = item
+      ? startTrackedOperation({ component: "automation", eventKey: "automation.editor.save" })
+      : startTrackedOperation({ component: "automation", eventKey: "automation.editor.create" })
     savingRef.current = true
     setSaving(true)
     setError(null)
@@ -227,5 +236,5 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
     completeLeave(leaveKind, true)
   }
 
-  return { loadState, dirty, saving, error, leaveKind, choosingType, setChoosingType, changeTrigger, changeExecutor, stopRun, updateDraft, save, back, resolveLeave, restoreFocus: () => returnFocus.current?.focus(), retry: () => setReloadKey(key => key + 1) }
+  return { loadState, dirty, saving, error, fieldErrors, leaveKind, choosingType, setChoosingType, changeTrigger, changeExecutor, stopRun, updateDraft, save, back, resolveLeave, restoreFocus: () => returnFocus.current?.focus(), retry: () => setReloadKey(key => key + 1) }
 }

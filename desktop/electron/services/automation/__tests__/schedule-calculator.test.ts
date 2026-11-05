@@ -7,8 +7,9 @@ describe("automation schedule calculator", () => {
     const next = computeNextRunAt({
       trigger: {
         type: "builtin.cron",
-        config: { expr: "0 9 * * *", activeDays: [1] },
+        config: { expr: "0 9 * * *" },
       },
+      conditions: { operator: "and", items: [{ type: "weekdays", days: [1] }] },
       from: new Date("2026-06-02T10:00:00.000Z"),
       createdAt: "2026-06-01T00:00:00.000Z",
     })
@@ -21,7 +22,7 @@ describe("automation schedule calculator", () => {
     const next = computeNextRunAt({
       trigger: {
         type: "builtin.interval",
-        config: { everyMinutes: 30, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+        config: { everyMinutes: 30, anchor: "created_at" },
       },
       from: new Date("2026-06-03T00:40:00.000Z"),
       createdAt: "2026-06-03T00:00:00.000Z",
@@ -34,13 +35,27 @@ describe("automation schedule calculator", () => {
     const next = computeNextRunAt({
       trigger: {
         type: "builtin.interval",
-        config: { everyMinutes: 30, anchor: "last_completed_at", activeDays: [0, 1, 2, 3, 4, 5, 6] },
+        config: { everyMinutes: 30, anchor: "last_completed_at" },
       },
       from: new Date("2026-06-03T00:40:00.000Z"),
       createdAt: "2026-06-03T00:00:00.000Z",
     })
 
     expect(next?.toISOString()).toBe("2026-06-03T01:10:00.000Z")
+  })
+
+  it("uses the earliest run allowed by or conditions", () => {
+    const next = computeNextRunAt({
+      trigger: { type: "builtin.cron", config: { expr: "0 9,10 * * *", timezone: "UTC" } },
+      conditions: { operator: "or", items: [
+        { type: "weekdays", days: [1] },
+        { type: "daily-time-range", start: "10:00", end: "11:00" },
+      ] },
+      from: new Date("2026-11-01T09:30:00Z"),
+      createdAt: "2026-10-31T00:00:00Z",
+    })
+
+    expect(next?.toISOString()).toBe("2026-11-01T10:00:00.000Z")
   })
 })
 
@@ -55,9 +70,12 @@ describe("automation daily time range", () => {
     process.env.TZ = "UTC"
     const next = computeNextRunAt({
       trigger: { type: "builtin.interval", config: {
-        everyMinutes: 60, anchor, activeDays: [1, 2, 3, 4, 5],
-        timeRange: { start: "08:00", end: "17:00" },
+        everyMinutes: 60, anchor,
       } },
+      conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1, 2, 3, 4, 5] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] },
       from: new Date("2026-10-23T07:30:00Z"),
       createdAt: "2026-10-23T07:30:00Z",
     })
@@ -68,9 +86,11 @@ describe("automation daily time range", () => {
     process.env.TZ = "UTC"
     expect(computeNextRunAt({
       trigger: { type: "builtin.interval", config: {
-        everyMinutes: 60, anchor: "created_at", activeDays: [1, 2, 3, 4, 5],
-        timeRange: { start: "08:30", end: "08:31" },
-      } }, from: new Date("2026-10-23T08:30:00Z"), createdAt: "2026-10-23T07:30:30.500Z",
+        everyMinutes: 60, anchor: "created_at",
+      } }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1, 2, 3, 4, 5] },
+        { type: "daily-time-range", start: "08:30", end: "08:31" },
+      ] }, from: new Date("2026-10-23T08:30:00Z"), createdAt: "2026-10-23T07:30:30.500Z",
     })?.toISOString()).toBe("2026-10-23T08:30:30.500Z")
   })
 
@@ -85,9 +105,10 @@ describe("automation daily time range", () => {
     try {
       expect(computeNextRunAt({
         trigger: { type: "builtin.interval", config: {
-          everyMinutes: 1440, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6],
-          timeRange: { start: "00:01", end: "24:00" },
-        } }, from: new Date("2026-10-23T00:00:00Z"), createdAt: "2026-10-22T00:00:00Z",
+          everyMinutes: 1440, anchor: "created_at",
+        } }, conditions: { operator: "and", items: [
+          { type: "daily-time-range", start: "00:01", end: "24:00" },
+        ] }, from: new Date("2026-10-23T00:00:00Z"), createdAt: "2026-10-22T00:00:00Z",
       })).toBeNull()
       // Budget calendar work by days, avoiding a timing assertion that varies by machine.
       expect(calendarReads).toBeLessThan(50_000)
@@ -98,9 +119,12 @@ describe("automation daily time range", () => {
     process.env.TZ = "UTC"
     const next = computeNextRunAt({
       trigger: { type: "builtin.interval", config: {
-        everyMinutes: 60, anchor, activeDays: [1, 2, 3, 4, 5],
-        timeRange: { start: "08:00", end: "17:00" },
+        everyMinutes: 60, anchor,
       } },
+      conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1, 2, 3, 4, 5] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] },
       from: new Date("2026-10-23T16:00:00Z"),
       createdAt: "2026-10-23T07:00:00Z",
     })
@@ -114,9 +138,11 @@ describe("automation daily time range", () => {
   ])("filters cron boundaries from %s", (from, expected) => {
     const next = computeNextRunAt({
       trigger: { type: "builtin.cron", config: {
-        expr: "* * * * *", timezone: "UTC", activeDays: [1, 2, 3, 4, 5],
-        timeRange: { start: "08:00", end: "17:00" },
-      } }, from: new Date(from), createdAt: "2026-10-01T00:00:00Z",
+        expr: "* * * * *", timezone: "UTC",
+      } }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1, 2, 3, 4, 5] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] }, from: new Date(from), createdAt: "2026-10-01T00:00:00Z",
     })
     expect(next?.toISOString()).toBe(expected)
   })
@@ -124,9 +150,11 @@ describe("automation daily time range", () => {
   it("uses the cron timezone for both the weekday and range", () => {
     const next = computeNextRunAt({
       trigger: { type: "builtin.cron", config: {
-        expr: "0 * * * *", timezone: "Asia/Shanghai", activeDays: [1],
-        timeRange: { start: "08:00", end: "17:00" },
-      } }, from: new Date("2026-10-25T23:30:00Z"), createdAt: "2026-10-01T00:00:00Z",
+        expr: "0 * * * *", timezone: "Asia/Shanghai",
+      } }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] }, from: new Date("2026-10-25T23:30:00Z"), createdAt: "2026-10-01T00:00:00Z",
     })
     expect(next?.toISOString()).toBe("2026-10-26T00:00:00.000Z")
   })
@@ -134,9 +162,10 @@ describe("automation daily time range", () => {
   it("allows midnight through an explicit 00:00–24:00 range", () => {
     const next = computeNextRunAt({
       trigger: { type: "builtin.cron", config: {
-        expr: "0 0 * * *", timezone: "UTC", activeDays: [0, 1, 2, 3, 4, 5, 6],
-        timeRange: { start: "00:00", end: "24:00" },
-      } }, from: new Date("2026-10-23T23:59:00Z"), createdAt: "2026-10-01T00:00:00Z",
+        expr: "0 0 * * *", timezone: "UTC",
+      } }, conditions: { operator: "and", items: [
+        { type: "daily-time-range", start: "00:00", end: "24:00" },
+      ] }, from: new Date("2026-10-23T23:59:00Z"), createdAt: "2026-10-01T00:00:00Z",
     })
     expect(next?.toISOString()).toBe("2026-10-24T00:00:00.000Z")
   })
@@ -144,9 +173,11 @@ describe("automation daily time range", () => {
   it.each(["0 2 * * *", "0 9 * * sun"])("returns no run when cron %s and the window never overlap", (expr) => {
     const next = computeNextRunAt({
       trigger: { type: "builtin.cron", config: {
-        expr, timezone: "UTC", activeDays: [1, 2, 3, 4, 5],
-        timeRange: { start: "08:00", end: "17:00" },
-      } }, from: new Date("2026-10-23T00:00:00Z"), createdAt: "2026-10-01T00:00:00Z",
+        expr, timezone: "UTC",
+      } }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [1, 2, 3, 4, 5] },
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] }, from: new Date("2026-10-23T00:00:00Z"), createdAt: "2026-10-01T00:00:00Z",
     })
     expect(next).toBeNull()
   })
@@ -155,9 +186,10 @@ describe("automation daily time range", () => {
     process.env.TZ = "UTC"
     expect(computeNextRunAt({
       trigger: { type: "builtin.interval", config: {
-        everyMinutes: 1440, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6],
-        timeRange: { start: "08:00", end: "17:00" },
-      } }, from: new Date("2026-10-23T02:00:00Z"), createdAt: "2026-10-01T02:00:00Z",
+        everyMinutes: 1440, anchor: "created_at",
+      } }, conditions: { operator: "and", items: [
+        { type: "daily-time-range", start: "08:00", end: "17:00" },
+      ] }, from: new Date("2026-10-23T02:00:00Z"), createdAt: "2026-10-01T02:00:00Z",
     })).toBeNull()
   })
 
@@ -168,8 +200,10 @@ describe("automation daily time range", () => {
   ])("handles daylight saving transitions from %s", (from, expr, start, end, expected) => {
     expect(computeNextRunAt({
       trigger: { type: "builtin.cron", config: {
-        expr, timezone: "America/New_York", activeDays: [0, 1, 2, 3, 4, 5, 6], timeRange: { start, end },
-      } }, from: new Date(from), createdAt: "2026-01-01T00:00:00Z",
+        expr, timezone: "America/New_York",
+      } }, conditions: { operator: "and", items: [
+        { type: "daily-time-range", start, end },
+      ] }, from: new Date(from), createdAt: "2026-01-01T00:00:00Z",
     })?.toISOString()).toBe(expected)
   })
 
@@ -180,8 +214,10 @@ describe("automation daily time range", () => {
     process.env.TZ = "America/New_York"
     expect(computeNextRunAt({
       trigger: { type: "builtin.interval", config: {
-        everyMinutes, anchor: "created_at", activeDays: [0, 1, 2, 3, 4, 5, 6], timeRange: { start, end },
-      } }, from: new Date(from), createdAt,
+        everyMinutes, anchor: "created_at",
+      } }, conditions: { operator: "and", items: [
+        { type: "daily-time-range", start, end },
+      ] }, from: new Date(from), createdAt,
     })?.toISOString()).toBe(expected)
   })
 
@@ -189,8 +225,11 @@ describe("automation daily time range", () => {
     process.env.TZ = "America/New_York"
     expect(computeNextRunAt({
       trigger: { type: "builtin.interval", config: {
-        everyMinutes: 10, anchor: "created_at", activeDays: [0], timeRange: { start: "01:00", end: "01:15" },
-      } }, from: new Date("2026-11-01T05:40:00Z"), createdAt: "2026-11-01T04:00:00Z",
+        everyMinutes: 10, anchor: "created_at",
+      } }, conditions: { operator: "and", items: [
+        { type: "weekdays", days: [0] },
+        { type: "daily-time-range", start: "01:00", end: "01:15" },
+      ] }, from: new Date("2026-11-01T05:40:00Z"), createdAt: "2026-11-01T04:00:00Z",
     })?.toISOString()).toBe("2026-11-01T06:00:00.000Z")
   })
 })

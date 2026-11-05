@@ -24,13 +24,11 @@ describe("rendererAutomationTriggerRegistry", () => {
     const parsed = rendererAutomationTriggerRegistry.parseConfig("builtin.cron", {
       expr: "0 9 * * *",
       timezone: "Asia/Shanghai",
-      activeDays: [1, 2, 3, 4, 5],
     })
 
     expect(parsed).toEqual({
       expr: "0 9 * * *",
       timezone: "Asia/Shanghai",
-      activeDays: [1, 2, 3, 4, 5],
     })
     expect(rendererAutomationTriggerRegistry.summarize("builtin.cron", parsed)).toBe("Cron · 0 9 * * *")
   })
@@ -42,7 +40,7 @@ describe("rendererAutomationTriggerRegistry", () => {
     const html = ConfigForm
       ? renderToStaticMarkup(
         <ConfigForm
-          value={{ expr: "0 9 * * *", activeDays: [0, 1, 2, 3, 4, 5, 6] }}
+          value={{ expr: "0 9 * * *" }}
           onChange={() => undefined}
         />,
       )
@@ -52,19 +50,18 @@ describe("rendererAutomationTriggerRegistry", () => {
     expect(html).toContain('id="automation-trigger-cron-expr"')
     expect(html).toContain("常用")
     expect(html).toContain("高级")
+    expect(html).not.toContain("生效日期与时段")
   })
 
   it("parses and summarizes interval config", () => {
     const parsed = rendererAutomationTriggerRegistry.parseConfig("builtin.interval", {
       everyMinutes: 60,
       anchor: "last_completed_at",
-      activeDays: [0, 1, 2, 3, 4, 5, 6],
     })
 
     expect(parsed).toEqual({
       everyMinutes: 60,
       anchor: "last_completed_at",
-      activeDays: [0, 1, 2, 3, 4, 5, 6],
     })
     expect(rendererAutomationTriggerRegistry.summarize("builtin.interval", parsed)).toBe("每 60 分钟 · 完成后")
   })
