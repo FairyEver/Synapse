@@ -20,11 +20,11 @@
 - 标准 `pnpm --filter @synapse/desktop run typecheck` 通过；`check:hard-constraints`、`check:ipc-codegen` 通过；本任务暂存差异使用 `git diff --cached --check` 检查。
 - 独立只读审阅检查了生命周期、持久化、白名单、argv、Hook 组合和准确导航；实施后补充的退出与二次恢复回归也已运行通过。
 
-本次使用临时本机数据和受控进程夹具，没有调用真实模型、发送邮件、修改用户自动化配置或查询业务数据库。
+上述自动验证阶段使用临时本机数据和受控进程夹具，没有调用真实模型、发送邮件、修改用户自动化配置或查询业务数据库。19:06 用户授权的真实链路验证见下文。
 
 ## 尚未验证与外部阻塞
 
-- 未启动应用或浏览器，尚未完成真实 CLI 的首条提示词、信任/登录阻塞、焦点保持及 Windows Hook 实机验收；本机 `--help` / `--version` 只证明内置 Claude Code 2.1.278 的参数支持。
+- 真实 CLI 首条提示词已于下述 19:06 实测通过。信任/登录阻塞、用户焦点保持及 Windows Hook 实机验收仍未覆盖；本次未主动启动应用、切换页面或打开终端窗口。
 - `pnpm --filter @synapse/desktop run check:packaged-asar` 已执行，但默认扫描被既有 `desktop/release/review-v1.0.80-acceptance/user-data-before/SingletonCookie` 失效链接阻断（ENOENT）。没有删除或改动该旧验收目录，也没有新建正式候选安装包，不能据此声称本次正式包验收通过。
 - 后续真实验收应使用包含本次改动的候选包：在项目中触发任务，确认当前应用/终端焦点不变、记录在提交后完成、能主动进入准确会话继续交互，并覆盖确认超时和会话失效。
 
@@ -37,4 +37,18 @@
 - 新增真实 TerminalService + 受控 PTY + 实际临时 Hook 的链路测试，先复现 `Protected Terminal environment key`，再通过主进程专用 `internalEnvironment` 层修复。不放宽用户环境校验，不新增公开 IPC/MCP 参数，不保存内部回执键和值。
 - 修复后的 launcher 和 TerminalService 专项共 98 项测试通过；扩展到环境保护、公开 dispatcher、手动 IPC、标签和自动化执行器的 8 文件、162 项回归通过，完整 typecheck、硬约束和 IPC 生成检查通过。
 - 并行测试曾因 launcher 与 IPC 各自的临时目录回收互相影响而失败；两组测试改为各自独立临时根目录后通过，未修改生产回收逻辑。
-- 未重跑用户的收信自动化、未发送测试站内信、未自动重启应用；真实执行仍需加载修复后的主进程代码再验证。
+- 该修复阶段未重跑用户的收信自动化、未发送测试站内信、未自动重启应用；随后的用户授权实测见下文。
+
+
+## 19:06 真实站内信 → Claude Code 验证
+
+用户明确授权给本人发送站内信测试。经当前账号状态与收件人精确查询核实本人，预览确认只有本人一位收件人、无抄送及附件后发送一封测试信；正文仅要求回复确认语，不修改文件、执行命令或发送新消息。
+
+- 信件：`cmw3fwqiz004wz128xdmrit1b`，主题「Claude Code 自动化链路测试（2026-11-05）」，发送时间 2026-11-05 19:06:05.003，最终收件人数 1。
+- 自动化：`automation:f97d3c70-90b9-4c1d-8055-b53ed0a3c8a9`；触发为 `builtin.mail-internal-received`，执行器为 `builtin.claude-code`。
+- 新运行：`automation-mail-run:c98b3a07f28f442bb4342516c2da416eaaad2de3dd1fb46fbfd0101568fde18f`。19:06:05.067 开始，19:06:06.521 成功，执行器耗时 1451 ms，摘要「已启动 Claude Code 并提交提示词」。通过公开 run_list 和本机日志相互核实。
+- 日志：`/Users/liyang/Library/Application Support/Synapse/logs/synapse-20261105-185745911.log` 第 3679 行记录启动、第 3699 行记录成功，随后报告 `agent_userpromptsubmit`，19:06:08.482 报告 `agent_stop` / `idle`。
+- 关联终端：`c9e138a0-edbd-4886-9b04-23438c9bfd3e`；标签：`1c10bf67-cd5b-4b8d-9b2f-9035065e55f4`。公开 session_state_list 验证 lifecycle 为 `running`、agent 为 `idle`、没有输入租约占用。
+- 只读 session_view_get（screen、throughOutputSeq=40、无 degraded）确认 Claude Code 已回复「已收到测试信，Claude Code 自动化链路正常」，并保留空白输入提示符可继续操作。
+
+本次没有调用终端打开/聚焦、输入或停止工具，没有重复发送测试信，也没有修改自动化配置或旧失败记录。真实收信、自动触发、原生参数投递、独立回执与 CLI 回复均已确认；尚未验证的权限阻塞、焦点及平台边界仍按上一节保留。
