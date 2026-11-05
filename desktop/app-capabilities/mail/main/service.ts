@@ -123,6 +123,7 @@ export class MailService {
     const ctx = this.automationContext(context)
     if (!receipt.messageId || !receipt.locator) throw new MailError("UNAVAILABLE", "邮件引用不可用")
     let row = await resolveMessage(this.repo, ctx, receipt.messageId)
+    if ((await this.accounts.get(ctx, row.accountId)).paused) throw new MailError("ACCOUNT_PAUSED", "邮箱已暂停，请恢复后处理新信")
     if (row.data.originReceiptKey !== receipt.receiptKey || row.accountId !== receipt.locator.accountId) throw new MailError("STALE_TARGET", "邮件身份已变化")
     if (!row.data.summary.receivedAt) {
       const locator = row.data.summary.locator

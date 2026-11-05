@@ -1,5 +1,7 @@
 # 外部邮箱
 
+自动化可使用 `builtin.mail-received`，默认监听全部本机邮箱，也可指定通过账号列表发现的一个 accountId；无其他筛选。启用和重新启用须联网确认接收起点，已启用后离线的新信恢复时补处理。新信按自动化分别持久去重，不依赖通知开关或未读状态。正文变量 `{{trigger.payload.body}}` 在执行前按需只读获取，不设已读、不下载附件文件；邮箱暂停后保留进度，恢复后继续。执行结果不明不自动重发或重跑。配置导入后保持停用，须重新在线启用；账号/UID 世代不明时不猜测原信身份。自动化不会把邮箱数据同步到云端或手机。
+
 > **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or exact tool name, then `invoke` with the exact name and arguments from the returned inputSchema. Never guess a name or arguments.
 
 普通“邮件、邮箱、收件箱、给谁发邮件、看我的邮件、回复邮件”都默认使用本章，包括用户只给姓名、使用 SY/Synapse 简称的情况。除下文的联系邮箱查询外，只有明确说“站内信 / internal mail”或给出 `synapse://mail-internal/<id>` 才使用 `../mail-internal/index.md` 和 `app_mail_internal_*`。本章适用 `synapse://mail/em_<uuid>`、阿里邮箱或本机配置的 IMAP/SMTP 邮箱；两类发送工具、账号和收件人 ID 不混用；下文允许只读查询共同团队组织及成员的联系邮箱。

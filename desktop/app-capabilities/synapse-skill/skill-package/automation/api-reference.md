@@ -1,5 +1,11 @@
 # Synapse Automation MCP API Reference
 
+## Receipt trigger fragments
+
+Use trigger type discovery for the current schemas and variables. Internal letters use `{ "type": "builtin.mail-internal-received", "config": {} }`. External mail uses `{ "type": "builtin.mail-received", "config": {} }` for all configured accounts, or adds `config.accountId` using an actual ID returned by `app_mail_account_list`. No sender/subject/body/attachment filters are supported.
+
+Create/update/enable/disable continue using the existing Automation tools; no extra receipt MCP tool is introduced. Enabling confirms the source cursor online and fails without enabling when a source is unavailable. `app_automation_run_execute` rejects these triggers without receipt context. An imported configuration is disabled and must be enabled again online. The existing Agent executor consumes `{{trigger.payload.body}}` and other discovered receipt variables; reading does not mark a letter read. Queue/dedupe records are local-only and are not imported or exported.
+
 > **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
 
 Each tool maps to the same canonical Synapse API action.

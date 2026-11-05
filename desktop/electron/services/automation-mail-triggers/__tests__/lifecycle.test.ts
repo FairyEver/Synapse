@@ -8,7 +8,7 @@ it("starts in the background and invalidates old contexts before identity change
   const rig = await engineRig()
   rig.detachActivation()
   let before!: () => void | Promise<void>, changed!: () => void
-  let state: SynapseAccountState = { status: "authenticated", connectivity: "online", profile: { user: { id: "owner", email: "owner@example.com", status: "active" }, syncedAt: "2026-11-05T00:00:00Z" } }
+  let state: Extract<SynapseAccountState, { status: "authenticated" }> = { status: "authenticated", connectivity: "online", profile: { user: { id: "owner", email: "owner@example.com", handle: "owner", status: "active" }, syncedAt: "2026-11-05T00:00:00Z" } }
   const detach = vi.fn(), power = { on: vi.fn(), removeListener: vi.fn() }
   const runtime = new AutomationMailTriggerLifecycle({ repository: rig.repo, items: rig.items, runs: rig.runs, automation: rig.automation,
     sources: new Map([["test.mail", rig.source]]),

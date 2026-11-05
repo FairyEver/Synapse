@@ -33,8 +33,8 @@ it("imports a mail automation disabled without clearing local dispatch dedupe", 
 it("rejects local runtime imports before replacing any portable configuration", async () => {
   const rig = await fixture(), item = await rig.items.create({ ...rig.input, enabled: true })
   const backup = await rig.restored.exportAll()
-  backup.namespaces.push({ name: "app.automation-mail.deliveries", schemaVersion: 1, encrypted: false, data: { items: [] } })
-  await expect(rig.restored.importAll(backup)).rejects.toThrow("local-only")
+  const malicious = { ...backup, namespaces: [...backup.namespaces, { name: "app.automation-mail.deliveries", schemaVersion: 1, encrypted: false, data: { items: [] } }] }
+  await expect(rig.restored.importAll(malicious)).rejects.toThrow("local-only")
   expect((await rig.items.get(item.id))?.enabled).toBe(true)
 })
 it("preserves an explicit deletion intent if cleanup fails and resumes it without touching source mail", async () => {

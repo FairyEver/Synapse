@@ -32,6 +32,10 @@ export class MailTriggerRepository {
     return id
   }
   async getSubscription(id: string): Promise<SubscriptionRow | null> { return await this.subscriptions.get(id) as SubscriptionRow | null }
+  async getSource(subscriptionId: string, sourceKey: string): Promise<SourceRow | null> { return await this.sources.get(hash([subscriptionId, sourceKey])) as SourceRow | null }
+  async closedSubscriptions(automationId: string, identity: MailTriggerIdentity): Promise<SubscriptionRow[]> {
+    return await this.subscriptions.queryRange!({ index: "identity_automation_state", equal: { ...identity, automationId, state: "closed" }, direction: "asc", limit: 50 }) as SubscriptionRow[]
+  }
   async addSources(subscriptionId: string, boundaries: import("./types").MailSourceBoundary[]): Promise<void> {
     for (const boundary of boundaries) {
       const root = await this.getSubscription(subscriptionId)

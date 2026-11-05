@@ -26,5 +26,8 @@ it("hydrates the complete external body without Seen, attachment, or remote imag
     expect(rig.session.storeFlags).not.toHaveBeenCalled()
     expect(vi.mocked(rig.session.fetchPart).mock.calls.map(args => args[2])).toEqual(["1"])
     expect(((await rig.repo.get(rig.ctx, "messages", row.id)).data.summary as { read: boolean }).read).toBe(false)
+    await rig.accounts.pause(rig.ctx, rig.account.id)
+    await expect(service.readAutomationReceipt({ identity: { ownerId: "test-owner", apiOrigin: "https://synapse.test" }, generation: 1, signal: new AbortController().signal },
+      { sourceKey: "source", receiptKey: row.data.originReceiptKey as string, messageId: row.id, receivedAt: "2026-11-05T00:00:00Z", locator: { ...summary.locator, endpointEpoch: "epoch" } })).rejects.toMatchObject({ code: "ACCOUNT_PAUSED" })
   } finally { await service.dispose(); await rig.close() }
 })

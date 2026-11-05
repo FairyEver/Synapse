@@ -65,6 +65,7 @@ export class AutomationMailTriggerService {
       if (!root || root.ownerId !== context.identity.ownerId || root.apiOrigin !== context.identity.apiOrigin) continue
       await this.recover(context, item)
       if (!item.enabled || binding.stoppedAt || root.state !== "ready") continue
+      for (const historical of await this.deps.repository.closedSubscriptions(item.id, context.identity)) await this.scanClosed(context, source, historical.id)
       if (source.discover && !item.trigger.config.accountId) {
         const known = new Set((await this.deps.repository.sourcesFor(root.id)).flatMap(row => row.boundary.kind === "mail" ? [row.boundary.accountId] : []))
         try {
@@ -115,10 +116,37 @@ export class AutomationMailTriggerService {
       await this.deps.repository.finishDispatch(row.id, { state: "unknown", errorCode: "EXECUTION_UNKNOWN" })
     }
   }
+  private async scanClosed(context: MailTriggerContext, source: MailReceiptSource, subscriptionId: string): Promise<void> {
+    for (const origin of await this.deps.repository.sourcesFor(subscriptionId)) {
+      if (origin.state !== "ready") continue
+      if (!origin.endCursor) { await this.deps.repository.sources.upsert({ ...origin, state: "blocked", errorCode: "STOP_BOUNDARY_UNCONFIRMED", revision: origin.revision + 1 }); continue }
+      const after = origin.cursor.startsWith("{") ? String((JSON.parse(origin.cursor) as { after: string | number }).after) : origin.cursor
+      if (BigInt(after) >= BigInt(origin.endCursor)) { await this.deps.repository.sources.upsert({ ...origin, state: "closed", revision: origin.revision + 1 }); continue }
+      const cursor = JSON.stringify(origin.boundary.kind === "mail" ? { after: Number(after), through: Number(origin.endCursor) } : { after, through: origin.endCursor })
+      try {
+        const page = await source.scan(context, origin.boundary, cursor, 50); this.assert(context)
+        const committed = await this.deps.repository.enqueuePage(subscriptionId, origin.sourceKey, origin.revision, page)
+        if (committed && page.complete) {
+          const fresh = await this.deps.repository.getSource(subscriptionId, origin.sourceKey)
+          if (fresh) await this.deps.repository.sources.upsert({ ...fresh, state: "closed", revision: fresh.revision + 1 })
+        } else this.moreWork = true
+      } catch (error) { this.assert(context); this.deps.logger.warn("历史启用区间补查未完成", { code: codeOf(error) }) }
+    }
+    const origins = await this.deps.repository.sourcesFor(subscriptionId)
+    if (origins.every(origin => origin.state !== "ready")) {
+      const root = await this.deps.repository.getSubscription(subscriptionId)
+      if (root?.state === "closed") await this.deps.repository.subscriptions.upsert({ ...root, state: origins.some(origin => origin.state === "blocked") ? "blocked" : "success", revision: root.revision + 1 })
+    }
+  }
   private async deliver(context: MailTriggerContext, item: AutomationItem, source: MailReceiptSource, row: DeliveryRow): Promise<boolean> {
     const original = await this.deps.repository.getSubscription(row.subscriptionId)
     if (!original || original.state === "retired" || item.mailSubscription?.previousId === row.subscriptionId && item.mailSubscription.previousRetired) {
       await this.deps.repository.finishDispatch(row.id, { state: "skipped", errorCode: "SUBSCRIPTION_CHANGED" }); return true
+    }
+    const origin = await this.deps.repository.getSource(row.subscriptionId, row.sourceKey)
+    const sequence = row.receipt.sequence ?? row.receipt.locator?.uid
+    if (original.endedAt && origin?.endCursor && sequence !== undefined && BigInt(sequence) > BigInt(origin.endCursor)) {
+      await this.deps.repository.finishDispatch(row.id, { state: "skipped", errorCode: "OUTSIDE_ENABLED_PERIOD" }); return true
     }
     let claimed = false
     const runId = `automation-mail-run:${row.id}`
