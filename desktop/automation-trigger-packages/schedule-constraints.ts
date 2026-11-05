@@ -111,6 +111,7 @@ export function summarizeAutomationConditions(conditions: AutomationConditions |
   const labels = conditions.items.map((condition) => {
     if (condition.type === "daily-time-range") return `${condition.start}–${condition.end}`
     const days = [...condition.days].sort((left, right) => left - right)
+    if (days.length === 0) return "未选择星期"
     if (days.length === 7) return "每天"
     if (days.join(",") === "1,2,3,4,5") return "周一至周五"
     if (days.join(",") === "0,6") return "周末"

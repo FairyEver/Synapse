@@ -1,4 +1,4 @@
-import { Fragment } from "react"
+import { Fragment, useEffect, useRef } from "react"
 import { ChevronDown, Plus, X } from "lucide-react"
 
 import { TimeRangeField } from "@/automation-triggers/time-range-field"
@@ -27,16 +27,27 @@ type AutomationConditionsProps = {
 }
 
 export function AutomationConditions({ value, onChange, disabled = false }: AutomationConditionsProps) {
+  const section = useRef<HTMLElement>(null)
+  const addButton = useRef<HTMLButtonElement>(null)
+  const addedCondition = useRef<AutomationCondition["type"] | null>(null)
+  const returnToAdd = useRef(false)
   const items = value?.items ?? []
   const operator = value?.operator ?? "and"
   const availableTypes = (Object.keys(CONDITION_LABELS) as Array<keyof typeof CONDITION_LABELS>)
     .filter((type) => !items.some((condition) => condition.type === type))
+
+  useEffect(() => {
+    if (!returnToAdd.current) return
+    returnToAdd.current = false
+    addButton.current?.focus()
+  }, [items])
 
   function update(nextItems: AutomationCondition[], nextOperator = operator) {
     onChange(nextItems.length ? { operator: nextOperator, items: nextItems } : undefined)
   }
 
   function addCondition(type: AutomationCondition["type"]) {
+    addedCondition.current = type
     const condition: AutomationCondition = type === "weekdays"
       ? { type, days: [0, 1, 2, 3, 4, 5, 6] }
       : { type, start: "08:00", end: "17:00" }
@@ -48,11 +59,12 @@ export function AutomationConditions({ value, onChange, disabled = false }: Auto
   }
 
   function removeCondition(index: number) {
+    returnToAdd.current = true
     update(items.filter((_, itemIndex) => itemIndex !== index))
   }
 
   return (
-    <section aria-labelledby="automation-conditions-heading" className="mt-4 min-w-0">
+    <section ref={section} aria-labelledby="automation-conditions-heading" className="mt-4 min-w-0">
       <p id="automation-conditions-heading" className="mb-3 text-sm text-muted-foreground">
         {operator === "or" ? "或者符合以下条件" : "并且符合以下条件"}
       </p>
@@ -128,12 +140,20 @@ export function AutomationConditions({ value, onChange, disabled = false }: Auto
           <div className={items.length ? "mt-5 border-t pt-4" : undefined}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="ghost" disabled={disabled} data-track="automation.conditions.add">
+                <Button ref={addButton} type="button" variant="ghost" disabled={disabled} data-track="automation.conditions.add">
                   <Plus />
                   添加条件
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
+              <DropdownMenuContent align="start" onCloseAutoFocus={(event) => {
+                const type = addedCondition.current
+                addedCondition.current = null
+                if (!type) return
+                const control = section.current?.querySelector<HTMLElement>(type === "weekdays"
+                  ? '[data-slot="weekday-selector"] [role="checkbox"]'
+                  : '#automation-conditions-time-range')
+                if (control) { event.preventDefault(); control.focus() }
+              }}>
                 {availableTypes.map((type) => (
                   <DropdownMenuItem key={type} onSelect={() => addCondition(type)}>
                     {CONDITION_LABELS[type]}

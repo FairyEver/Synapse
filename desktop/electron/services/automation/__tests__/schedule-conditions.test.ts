@@ -56,6 +56,11 @@ describe("Automation run conditions", () => {
     expect(isAutomationConditionsSatisfied(new Date("2026-11-03T20:00:00Z"), conditions, "UTC")).toBe(false)
   })
 
+  it("names an incomplete weekday selection instead of leaving a blank summary", () => {
+    expect(summarizeAutomationConditions({ operator: "and", items: [{ type: "weekdays", days: [] }] })).toBe("未选择星期")
+    expect(summarizeAutomationConditions({ operator: "or", items: [{ type: "weekdays", days: [] }, { type: "daily-time-range", start: "08:00", end: "17:00" }] })).toBe("未选择星期 或者 08:00–17:00")
+  })
+
   it("uses the supplied timezone and summarizes the condition set", () => {
     const conditions = automationConditionsSchema.parse({
       operator: "and",

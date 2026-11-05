@@ -24,6 +24,38 @@ afterEach(async () => {
 })
 
 describe("AutomationConditions", () => {
+  it.each(["weekdays", "daily-time-range"] as const)("focuses the newly added %s control after the add menu closes", async type => {
+    await renderConditions(type === "daily-time-range" ? { operator: "and", items: [{ type: "weekdays", days: [1] }] } : undefined)
+    await act(async () => { openMenu(button("添加条件")) })
+    await act(async () => { menuItem(type === "weekdays" ? "星期几" : "每天的时间段").click() })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+    const target = document.querySelector(type === "weekdays" ? '[role="checkbox"][aria-label="周一"]' : '#automation-conditions-time-range')
+    expect(document.activeElement).toBe(target)
+  })
+
+  it.each(["delete", "clear"] as const)("returns focus to add after removing the time condition through %s", async method => {
+    await renderConditions({ operator: "and", items: [{ type: "weekdays", days: [1] }, { type: "daily-time-range", start: "08:00", end: "17:00" }] })
+    if (method === "clear") {
+      await act(async () => { document.querySelector<HTMLButtonElement>('#automation-conditions-time-range')!.click() })
+      await act(async () => { button("不限时间").click() })
+    } else {
+      const remove = document.querySelector<HTMLButtonElement>('[aria-label="删除每天的时间段条件"]')!
+      await act(async () => { remove.focus(); remove.click() })
+    }
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+    expect(document.activeElement).toBe(button("添加条件"))
+    expect(document.querySelector('#automation-conditions-time-range')).toBeNull()
+  })
+
+  it("returns focus to add after removing the last condition", async () => {
+    await renderConditions({ operator: "and", items: [{ type: "weekdays", days: [1] }] })
+    await act(async () => {
+      const remove = document.querySelector<HTMLButtonElement>('[aria-label="删除星期几条件"]')!
+      remove.focus(); remove.click()
+    })
+    expect(document.activeElement).toBe(button("添加条件"))
+  })
+
   it("renders an empty condition card and adds available condition types", async () => {
     const onChange = await renderConditions()
     expect(document.body.textContent).toContain("并且符合以下条件")
