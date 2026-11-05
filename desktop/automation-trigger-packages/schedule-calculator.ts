@@ -109,7 +109,9 @@ function computeWindowedNextRunAt(input: {
   if (parsed && minutes.length === 0) return null
 
   // Keep a single interval origin throughout the search, including skipped days.
-  const origin = trigger.type === "builtin.interval" ? computeRawCandidate(input).getTime() : 0
+  const rawCandidate = trigger.type === "builtin.interval" ? computeRawCandidate(input) : null
+  if (trigger.type === "builtin.interval" && !rawCandidate) return null
+  const origin = rawCandidate?.getTime() ?? 0
   const everyMs = trigger.type === "builtin.interval" ? trigger.config.everyMinutes * 60_000 : 0
   if (!parsed) {
     if (origin > endMs) return null
@@ -207,17 +209,19 @@ function computeRawCandidate(input: {
   readonly trigger: AutomationTimeTrigger
   readonly from: Date
   readonly createdAt: string
-}): Date {
+}): Date | null {
   if (input.trigger.type === "builtin.cron") {
     return nextCronRun(input.trigger.config.expr, input.from, input.trigger.config.timezone)
   }
   const everyMs = input.trigger.config.everyMinutes * 60_000
   if (input.trigger.config.anchor === "last_completed_at") {
-    return new Date(input.from.getTime() + everyMs)
+    const candidate = new Date(input.from.getTime() + everyMs)
+    return Number.isFinite(candidate.getTime()) ? candidate : null
   }
   const anchor = new Date(input.createdAt).getTime()
   const from = input.from.getTime()
   const elapsed = Math.max(0, from - anchor)
   const steps = Math.floor(elapsed / everyMs) + 1
-  return new Date(anchor + steps * everyMs)
+  const candidate = new Date(anchor + steps * everyMs)
+  return Number.isFinite(candidate.getTime()) ? candidate : null
 }

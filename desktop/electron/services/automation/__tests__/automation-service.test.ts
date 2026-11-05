@@ -26,6 +26,23 @@ const testActionSchema = z.object({ message: z.string().min(1) })
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationService", () => {
+  it("enables an out-of-range interval without an invalid timer or unintended run", async () => {
+    const harness = createHarness()
+    await harness.service.start()
+    try {
+      const item = await harness.service.automationCreate({
+        ...createAutomationInput(),
+        enabled: false,
+        trigger: { type: "builtin.interval", config: { everyMinutes: Number.MAX_SAFE_INTEGER, anchor: "created_at" } },
+      })
+      const enabled = await harness.service.automationEnable(item.id)
+      expect(enabled.enabled).toBe(true)
+      expect(enabled.nextRunAt).toBeUndefined()
+      expect(harness.service.automationRuntimeInspect().timers).toEqual([])
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+    } finally { await harness.service.stop() }
+  })
+
   it("schedules enabled automations on start", async () => {
     const harness = createHarness()
     await harness.items.create(createAutomationInput())

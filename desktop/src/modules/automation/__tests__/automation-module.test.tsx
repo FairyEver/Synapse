@@ -262,6 +262,15 @@ describe("AutomationModule", () => {
     expect(renderToStaticMarkup(<AutomationModule />)).toContain("无匹配时间")
   })
 
+  it("shows no matching time for an enabled interval beyond the date range", () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem({ nextRunAt: undefined, trigger: {
+        type: "builtin.interval", config: { everyMinutes: Number.MAX_SAFE_INTEGER, anchor: "created_at" },
+      } })], loading: false, error: null, refresh: vi.fn(),
+    })
+    expect(renderToStaticMarkup(<AutomationModule />)).toContain("无匹配时间")
+  })
+
   it("still renders an unavailable trigger with no next run", () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem({ nextRunAt: undefined, trigger: {

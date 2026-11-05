@@ -219,7 +219,7 @@ function formatAutomationNextRun(item: Pick<AutomationItem, "activeRun" | "condi
       (definition) => definition.manifest.id === item.trigger.type && definition.manifest.kind === "schedule",
     )
     if (!isSchedule) return "等待事件"
-    return isSchedule && item.schemaVersion === 2 && item.conditions
+    return isSchedule && item.schemaVersion === 2
       ? "无匹配时间"
       : "未知"
   }

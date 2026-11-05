@@ -3,6 +3,17 @@ import { afterEach, describe, expect, it } from "vitest"
 import { computeNextRunAt } from "../schedule-calculator"
 
 describe("automation schedule calculator", () => {
+  it.each(["created_at", "last_completed_at"] as const)("returns no plan when the %s interval exceeds the date range", (anchor) => {
+    for (const conditions of [undefined, { operator: "and" as const, items: [{ type: "daily-time-range" as const, start: "00:00", end: "24:00" }] }]) {
+      expect(computeNextRunAt({
+        trigger: { type: "builtin.interval", config: { everyMinutes: Number.MAX_SAFE_INTEGER, anchor } },
+        conditions,
+        from: new Date("2026-11-06T00:00:00Z"),
+        createdAt: "2026-11-06T00:00:00Z",
+      })).toBeNull()
+    }
+  })
+
   it("computes the next cron run with active days", () => {
     const next = computeNextRunAt({
       trigger: {
