@@ -33,11 +33,13 @@ export class AutomationRunRepository {
     input: {
       readonly triggerType: string
       readonly executorType: string
+      readonly reservedRunId?: string
     },
   ): Promise<AutomationRun> {
     this.nextIndex += 1
+    if (input.reservedRunId && await this.runs.get(input.reservedRunId)) throw new Error("运行记录已存在，未重复执行")
     const run: AutomationRun = {
-      id: this.idFactory(automationId, this.nextIndex),
+      id: input.reservedRunId ?? this.idFactory(automationId, this.nextIndex),
       schemaVersion: 1,
       automationId,
       startedAt: this.isoNow(),

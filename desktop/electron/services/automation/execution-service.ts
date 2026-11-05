@@ -36,6 +36,8 @@ export interface AutomationExecutionLogger {
 }
 
 export interface AutomationRunItemOptions {
+  readonly reservedRunId?: string
+  readonly scopeSignal?: AbortSignal
   readonly onRunStarted?: (run: AutomationRun) => void
 }
 
@@ -58,8 +60,10 @@ export class AutomationExecutionService {
     const run = await this.deps.runs.start(item.id, triggeredBy, {
       triggerType: item.trigger.type,
       executorType: item.executor.type,
+      reservedRunId: options.reservedRunId,
     })
     const controller = new AbortController()
+    const effectiveSignal = options.scopeSignal ? AbortSignal.any([controller.signal, options.scopeSignal]) : controller.signal
     let completeRun: (() => void) | undefined
     const completion = new Promise<void>((resolve) => {
       completeRun = resolve
@@ -108,7 +112,7 @@ export class AutomationExecutionService {
         triggeredBy: actionTriggeredBy(triggeredBy),
         cwd: await resolveCwd(item, this.deps.defaultCwd, this.deps.resolveProjectWorkspacePath),
         actor: { kind: "user", id: "automation", display: "Automation" } as const,
-        abortSignal: controller.signal,
+        abortSignal: effectiveSignal,
         configVersion: item.configVersion ?? 0,
         templateVariables,
         triggerInput: effectiveTriggerContext.event ?? {
@@ -160,9 +164,10 @@ export class AutomationExecutionService {
       const previousOutputs = executor.manifest.previousOutputs === "none"
         ? undefined
         : await this.getLastSuccessOutputs(item.id)
+      effectiveSignal.throwIfAborted()
       executorPending = true
       const result = await executor.execute({ config, context, previousOutputs })
-      if (controller.signal.aborted) {
+      if (effectiveSignal.aborted) {
         throw new AutomationRunCancelledError()
       }
       executorPending = false
@@ -229,7 +234,7 @@ export class AutomationExecutionService {
       return finished
     } catch (error) {
       const diagnostic = errorDiagnostic(error)
-      const status = controller.signal.aborted ? "cancelled" : "failed"
+      const status = effectiveSignal.aborted ? "cancelled" : "failed"
       if (executorPending && permissionAllowed && permissionRequest) {
         const metadata = {
           source: "automation",

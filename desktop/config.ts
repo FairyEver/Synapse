@@ -296,6 +296,8 @@ export const MAIL_CACHE_BYTES = 1024 ** 3
 export const MAIL_MAX_ATTACHMENT_BYTES = 100 * 1024 ** 2
 export const MAIL_MAX_IMAGE_BYTES = 10 * 1024 ** 2
 export const MAIL_MAX_BODY_BYTES = 5 * 1024 ** 2
+/** 收信自动化在丢失实时提示时每分钟补查一次；不改变邮箱同步频率。 */
+export const AUTOMATION_MAIL_RECONCILE_INTERVAL_MS = 60_000
 export const MAIL_MAX_ATTACHMENTS = 100
 export const MAIL_BODY_CHUNK_BYTES = 64 * 1024
 /** 邮箱同步、草稿保存与预览有效期，均为毫秒。 */

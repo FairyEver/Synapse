@@ -67,6 +67,18 @@ export class MailTriggerRepository {
     const rows = await this.deliveries.queryRange!({ index: "identity_automation_state", equal: { ...identity, automationId, state: "pending" }, direction: "asc", limit: 50 }) as DeliveryRow[]
     return rows.find(row => row.retryAt <= Date.now()) ?? null
   }
+  async rowsInState(automationId: string, identity: MailTriggerIdentity, state: MailTriggerRecord["state"]): Promise<DeliveryRow[]> {
+    return await this.deliveries.queryRange!({ index: "identity_automation_state", equal: { ...identity, automationId, state }, direction: "asc", limit: 50 }) as DeliveryRow[]
+  }
+  async deferDelivery(row: DeliveryRow, retryAt: number, errorCode: string): Promise<void> {
+    const result = await this.batch({ guards: [{ namespace: this.deliveries.name, id: row.id, expected: { revision: row.revision, state: row.state } }],
+      operations: [{ kind: "patch", namespace: this.deliveries.name, id: row.id, patch: { retryAt, errorCode, revision: row.revision + 1 } }] })
+    if (!result.committed) throw new Error("收信投递重试状态已变化")
+  }
+  async refreshMetadata(row: DeliveryRow, receivedAt: string): Promise<boolean> {
+    return (await this.batch({ guards: [{ namespace: this.deliveries.name, id: row.id, expected: { revision: row.revision, state: "awaiting_metadata" } }],
+      operations: [{ kind: "patch", namespace: this.deliveries.name, id: row.id, patch: { receipt: { ...row.receipt, receivedAt }, state: "pending", retryAt: 0, revision: row.revision + 1 } }] })).committed
+  }
   async commitDispatch(id: string, revision: number, runId: string): Promise<boolean> {
     return (await this.batch({ guards: [{ namespace: this.deliveries.name, id, expected: { revision, state: "pending" } }],
       operations: [{ kind: "patch", namespace: this.deliveries.name, id, patch: { state: "submitted", runId, revision: revision + 1 } }] })).committed

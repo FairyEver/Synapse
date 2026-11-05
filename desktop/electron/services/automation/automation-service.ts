@@ -20,7 +20,7 @@ import type {
 const TIMER_MAX_DELAY_MS = 2_147_483_647
 const STOP_SETTLE_WAIT_MS = 3_000
 const NEEDS_UPDATE_MESSAGE = "自动化配置需要更新"
-const INTERRUPTED_RUN_ERROR = "应用异常退出，运行已在启动恢复时标记为失败。"
+export const INTERRUPTED_RUN_ERROR = "应用异常退出，运行已在启动恢复时标记为失败。"
 
 export interface AutomationServiceDeps {
   readonly items: AutomationItemRepository
@@ -348,6 +348,7 @@ export class AutomationService {
         continue
       }
       const trigger = this.deps.triggers.get(item.trigger.type)
+      if (trigger.activationRequired) continue
       if (trigger.manifest.kind !== "event") continue
       if (!trigger.runtime.shouldAcceptEvent) continue
       const parsedConfig = trigger.manifest.configSchema.safeParse(item.trigger.config)
@@ -699,6 +700,22 @@ export class AutomationService {
       }
     })
     return runPromise
+  }
+
+  async runDurableEvent(input: { automationId: string; subscriptionId: string; runId: string; event: AutomationTriggerEvent; identitySignal: AbortSignal; commitStart(): Promise<boolean> }): Promise<{ kind: "busy" | "obsolete" } | { kind: "settled"; run: AutomationRun }> {
+    if (this.runningItemIds.has(input.automationId)) return { kind: "busy" }
+    this.runningItemIds.add(input.automationId)
+    try {
+      const item = await this.deps.items.get(input.automationId)
+      if (!item?.enabled || item.mailSubscription?.id !== input.subscriptionId || item.mailSubscription.stoppedAt || input.identitySignal.aborted || !this.isItemValid(item)) return { kind: "obsolete" }
+      if (!await input.commitStart()) return { kind: "obsolete" }
+      input.identitySignal.throwIfAborted()
+      const run = await this.deps.execution.runItem(item, "trigger", { reservedRunId: input.runId, scopeSignal: input.identitySignal,
+        onRunStarted: started => this.emitAutomationChanged({ automationId: item.id, runId: started.id, reason: "run-started" }) },
+      { triggeredBy: "trigger", triggeredAt: input.event.receivedAt, scheduledAt: input.event.receivedAt, event: input.event })
+      this.emitAutomationChanged({ automationId: item.id, runId: run.id, reason: "run-finished" })
+      return { kind: "settled", run }
+    } finally { this.runningItemIds.delete(input.automationId) }
   }
 
   private async deferTriggerRunUntilDue(
