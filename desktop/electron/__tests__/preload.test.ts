@@ -49,6 +49,11 @@ async function loadPreloadBridge(): Promise<SynapseBridge> {
     throw new Error("preload did not expose the synapse bridge")
   }
 
+  // The preload registers one module-level listener so an early Skill Hub
+  // install event is not lost. Tests below assert listeners added by bridge
+  // methods, so use the completed module load as their clean baseline.
+  electronMock.ipcRenderer.on.mockClear()
+
   return electronMock.state.exposedBridge
 }
 

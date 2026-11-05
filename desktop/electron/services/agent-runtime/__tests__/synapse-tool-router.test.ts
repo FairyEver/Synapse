@@ -59,7 +59,7 @@ describe("Synapse tool router catalog", () => {
 
   it("finds cloud table tools separately from the local Data Store", async () => {
     const index = indexOf(await searchSynapseTools({ domain: "cloud_tables" }))
-    expect(index.total).toBe(20)
+    expect(index.total).toBe(21)
     const found = searchMatches(await searchSynapseTools({ query: "新建云端数据表", limit: 1 }))
     expect(found.tools[0]).toMatchObject({ name: "app_cloud_tables_table_create", domain: "cloud_tables" })
     expect(found.tools[0]?.inputSchema).toHaveProperty("$defs.CloudTableJsonValue")

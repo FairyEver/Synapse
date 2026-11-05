@@ -174,6 +174,28 @@ const SYNTHETIC_DATA_MAINTENANCE_FILES: Readonly<Record<string, string>> = {
     "exports.executeDataMaintenance = () => ({ status: 'completed' })\n",
   [`${DATA_MAINTENANCE_PATH}/engine.js.map`]: "{}",
 }
+const SKILL_HUB_MAIN_PATH =
+  "dist-electron/app-capabilities/skill-hub/main"
+const SYNTHETIC_SKILL_HUB_LAUNCHER = "module.exports = {}\n"
+const SYNTHETIC_SKILL_HUB_WORKER = [
+  "const { parentPort } = require('node:worker_threads')",
+  "parentPort.postMessage({ result: {",
+  "  bytes: new Uint8Array([1]),",
+  "  package: { name: 'hub-smoke' },",
+  "  manifest: [{ path: 'SKILL.md' }],",
+  `  contentFingerprint: 'sha256:${"0".repeat(64)}',`,
+  "} })",
+  "",
+].join("\n")
+const SYNTHETIC_SKILL_HUB_WORKER_MAP = "{}"
+const SKILL_HUB_SHARED_ENTRIES = [
+  "skill-hub-contracts.js",
+  "skill-hub-contracts.cjs",
+  "skill-hub-package-node.js",
+  "skill-hub-package-node.cjs",
+  "archive-package-node.js",
+  "archive-package-node.cjs",
+] as const
 const SYNTHETIC_JSON_REPAIR_FILES = {
   "node_modules/repair-json-stream/package.json": JSON.stringify({
     name: "repair-json-stream",
@@ -230,6 +252,7 @@ interface CreateAsarBufferOptions {
   readonly includeClaudeRuntimeGuard?: boolean
   readonly includeDeploymentConfig?: boolean
   readonly includeTextExtraction?: boolean
+  readonly includeSkillHub?: boolean
   readonly includePreloadBundle?: boolean
   readonly includeScriptRuntime?: boolean
   readonly includeSharedPackage?: boolean
@@ -424,6 +447,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     includeClaudeRuntimeGuard = true,
     includeDeploymentConfig = true,
     includeTextExtraction = true,
+    includeSkillHub = true,
     includePreloadBundle = true,
     includeScriptRuntime = true,
     includeSharedPackage = true,
@@ -451,6 +475,10 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   const scriptRuntimeSmoke = Buffer.from("exports.runScriptRuntimeSmoke = async () => {}\n", "utf8")
   const chromiumWorkerRunner = Buffer.from("exports.runChromiumWorkerScript = async () => ({ status: 'success' })\n", "utf8")
   const nodeCliRunner = Buffer.from("exports.runNodeCliScript = async () => ({ status: 'success' })\n", "utf8")
+  const skillHubLauncher = Buffer.from(SYNTHETIC_SKILL_HUB_LAUNCHER, "utf8")
+  const skillHubSharedBuffers = Object.fromEntries(
+    SKILL_HUB_SHARED_ENTRIES.map((fileName) => [fileName, Buffer.from(`module.exports = {}\n`, "utf8")]),
+  ) as Record<(typeof SKILL_HUB_SHARED_ENTRIES)[number], Buffer>
   let offset = 0
   const packageNode = createPackedFileNode(offset, packageJson)
   offset += packageJson.length
@@ -500,6 +528,18 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
   if (includeScriptRuntime) {
     offset += nodeCliRunner.length
   }
+  const skillHubLauncherNode = createPackedFileNode(offset, skillHubLauncher)
+  if (includeSkillHub) {
+    offset += skillHubLauncher.length
+  }
+  const skillHubSharedNodes = Object.fromEntries(
+    SKILL_HUB_SHARED_ENTRIES.map((fileName) => {
+      const content = skillHubSharedBuffers[fileName]
+      const node = createPackedFileNode(offset, content)
+      if (includeSkillHub) offset += content.length
+      return [fileName, node]
+    }),
+  ) as Record<(typeof SKILL_HUB_SHARED_ENTRIES)[number], ReturnType<typeof createPackedFileNode>>
   const todoBuffers = Object.fromEntries(
     Object.entries(SYNTHETIC_TODO_FILES)
       .map(([name, content]) => [name, Buffer.from(content, "utf8")]),
@@ -607,7 +647,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
               },
             },
           },
-          ...(includeTextExtraction || includeHtmlGeneration || includeScriptRuntime || includeTodos
+          ...(includeTextExtraction || includeHtmlGeneration || includeSkillHub || includeScriptRuntime || includeTodos
             ? {
                 "app-capabilities": {
                   files: {
@@ -641,6 +681,21 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                       ? {
                           "html-generator": {
                             files: createHtmlGenerationFiles(htmlGenerationFiles),
+                          },
+                        }
+                      : {}),
+                    ...(includeSkillHub
+                      ? {
+                          "skill-hub": {
+                            files: {
+                              main: {
+                                files: {
+                                  "package-worker-launch.js": skillHubLauncherNode,
+                                  "package-worker.js": createUnpackedFileNode(SYNTHETIC_SKILL_HUB_WORKER),
+                                  "package-worker.js.map": createUnpackedFileNode(SYNTHETIC_SKILL_HUB_WORKER_MAP),
+                                },
+                              },
+                            },
                           },
                         }
                       : {}),
@@ -688,6 +743,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
                         ? {
                             "index.js": sharedIndexNode,
                             ...(includeMobileFileConstants ? { "mobile-live-constants.cjs": mobileFileConstantsNode } : {}),
+                            ...(includeSkillHub ? skillHubSharedNodes : {}),
                           }
                         : {}),
                     },
@@ -826,6 +882,7 @@ function createAsarBuffer(options: CreateAsarBufferOptions = {}): Buffer {
     ...(includeScriptRuntime
       ? [scriptRuntimeSmoke, scriptRuntimeSmokeBootstrap, chromiumWorkerRunner, nodeCliRunner]
       : []),
+    ...(includeSkillHub ? [skillHubLauncher, ...Object.values(skillHubSharedBuffers)] : []),
     ...(includeTodos ? Object.values(todoBuffers) : []),
     ...(includeJsonRepair ? Object.values(jsonRepairBuffers) : []),
   ])
@@ -910,13 +967,28 @@ describe("packaged asar verification", () => {
     }
   }
 
-  async function writeExtraResourceFixtures(
+  async function writeSkillHubRuntimeFixtures(resourcesPath: string) {
+    await writeUnpackedFixture(
+      resourcesPath,
+      ["app.asar.unpacked", ...SKILL_HUB_MAIN_PATH.split("/"), "package-worker.js"],
+      SYNTHETIC_SKILL_HUB_WORKER,
+      { sourceMap: false },
+    )
+    await writeUnpackedFixture(
+      resourcesPath,
+      ["app.asar.unpacked", ...SKILL_HUB_MAIN_PATH.split("/"), "package-worker.js.map"],
+      SYNTHETIC_SKILL_HUB_WORKER_MAP,
+      { sourceMap: false },
+    )
+  }
+
+  async function writeRuntimeFixtures(
     resourcesPath: string,
     overrides: DocumentExtractionContentOverrides = {},
   ) {
-    await writeRequiredExtraResourceFixtures(resourcesPath)
     await writeTextExtractionRuntimeFixtures(resourcesPath, overrides)
     await writeHtmlGenerationRuntimeFixtures(resourcesPath)
+    await writeSkillHubRuntimeFixtures(resourcesPath)
     for (const [relativePath, content] of Object.entries(SYNTHETIC_DATA_MAINTENANCE_FILES)) {
       await writeUnpackedFixture(
         resourcesPath,
@@ -925,6 +997,14 @@ describe("packaged asar verification", () => {
         { sourceMap: false },
       )
     }
+  }
+
+  async function writeExtraResourceFixtures(
+    resourcesPath: string,
+    overrides: DocumentExtractionContentOverrides = {},
+  ) {
+    await writeRequiredExtraResourceFixtures(resourcesPath)
+    await writeRuntimeFixtures(resourcesPath, overrides)
   }
 
   async function expectJsonRepairExportFailure(
@@ -1095,8 +1175,7 @@ describe("packaged asar verification", () => {
       await writeFile(path.join(resourcesPath, "app.asar"), createAsarBuffer())
       await writeUnpackedFixture(resourcesPath, redactionUnpackedSegments)
       await writeUnpackedFixture(resourcesPath, currentClaudeBinarySegments())
-      await writeTextExtractionRuntimeFixtures(resourcesPath)
-      await writeHtmlGenerationRuntimeFixtures(resourcesPath)
+      await writeRuntimeFixtures(resourcesPath)
 
       await expect(execFileAsync(process.execPath, [
         path.join(process.cwd(), "scripts/checks/verify-packaged-asar.mjs"),
