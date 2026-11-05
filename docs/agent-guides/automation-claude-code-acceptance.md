@@ -29,3 +29,12 @@
 - 后续真实验收应使用包含本次改动的候选包：在项目中触发任务，确认当前应用/终端焦点不变、记录在提交后完成、能主动进入准确会话继续交互，并覆盖确认超时和会话失效。
 
 本地验证日志位于 `.superpowers/sdd/2026-11-05-automation-claude-code-executor/`（Git 忽略）。本文仅有仓库文件，尚无在线分享链接。
+
+## 18:53 启动失败修复
+
+- 只读核对 `/Users/liyang/Library/Application Support/Synapse/logs/synapse-20261105-184419898.log`：2026-11-05 18:53:05.417 启动运行，18:53:05.428 报 `TerminalLaunchValidationError`。目标为 `builtin.mail-internal-received` → `builtin.claude-code`，尚未进入 PTY 创建。
+- 根因为回执的 `SYNAPSE_CLAUDE_PROMPT_*` 变量被放入用户环境 override，触发现有 `SYNAPSE_` 保留前缀保护。先前替换 TerminalService 的 launcher 测试漏掉了这一真实校验边界。
+- 新增真实 TerminalService + 受控 PTY + 实际临时 Hook 的链路测试，先复现 `Protected Terminal environment key`，再通过主进程专用 `internalEnvironment` 层修复。不放宽用户环境校验，不新增公开 IPC/MCP 参数，不保存内部回执键和值。
+- 修复后的 launcher 和 TerminalService 专项共 98 项测试通过；扩展到环境保护、公开 dispatcher、手动 IPC、标签和自动化执行器的 8 文件、162 项回归通过，完整 typecheck、硬约束和 IPC 生成检查通过。
+- 并行测试曾因 launcher 与 IPC 各自的临时目录回收互相影响而失败；两组测试改为各自独立临时根目录后通过，未修改生产回收逻辑。
+- 未重跑用户的收信自动化、未发送测试站内信、未自动重启应用；真实执行仍需加载修复后的主进程代码再验证。

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { existsSync } from "node:fs"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -34,6 +34,14 @@ import { claudeCodeTerminalMethods } from "../ipc-claude-code-terminal"
 import type { ClaudeCodeContinuationLauncher } from "../../../services/agent-runtime/claude-code-continuation"
 
 const method = claudeCodeTerminalMethods.createClaudeCodeTerminal!
+
+const launchTestDirectory = mkdtempSync(path.join(os.tmpdir(), "synapse-cli-ipc-test-"))
+let restoreTmpdir: () => void
+beforeAll(() => {
+  const tmpdir = vi.spyOn(os, "tmpdir").mockReturnValue(launchTestDirectory)
+  restoreTmpdir = () => tmpdir.mockRestore()
+})
+afterAll(() => { restoreTmpdir(); rmSync(launchTestDirectory, { recursive: true, force: true }) })
 
 function createContext(input: {
   readonly buildEnv: ReturnType<typeof vi.fn>

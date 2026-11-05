@@ -11,6 +11,25 @@ const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", acto
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
 describe("TerminalService core", () => {
+  it("injects first-party receipt environment after user validation without exposing it to persistence", async () => {
+    const store = memoryStore()
+    const spawnPty = vi.fn(() => fakePty())
+    const service = createTerminalService({ store, spawnPty, resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir() })
+    await service.start()
+    const internalEnvironment = { SYNAPSE_CLAUDE_PROMPT_TOKEN: "private-receipt-token" }
+    try {
+      const session = await service.createSessionWithEphemeralEnvironment({
+        shell: "/bin/zsh", cwd: os.tmpdir(), environment: {}, internalEnvironment,
+      })
+      expect(spawnPty).toHaveBeenCalledWith(expect.objectContaining({ env: expect.objectContaining(internalEnvironment) }))
+      expect(JSON.stringify(session)).not.toContain("private-receipt-token")
+      expect(JSON.stringify(store.state)).not.toContain("SYNAPSE_CLAUDE_PROMPT_TOKEN")
+      await expect(service.createSessionWithEphemeralEnvironment({
+        shell: "/bin/zsh", cwd: os.tmpdir(), environment: internalEnvironment,
+      })).rejects.toMatchObject({ name: "TerminalLaunchValidationError" })
+      expect(spawnPty).toHaveBeenCalledTimes(1)
+    } finally { await service.stop() }
+  })
   it("delivers embedded CLI exit callbacks even when exit happens during creation persistence", async () => {
     const store = memoryStore()
     const pty = fakePty()

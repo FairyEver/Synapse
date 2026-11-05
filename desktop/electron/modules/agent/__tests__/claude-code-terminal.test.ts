@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { existsSync, readFileSync, readdirSync } from "node:fs"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -22,6 +22,17 @@ vi.mock("../../../services/agent-runtime/claude-runtime-binary", () => ({
 vi.mock("../ipc-shared", () => ({ resolveProjectAgent: ipcSharedMock.resolveProjectAgent }))
 
 import { createClaudeCodeTerminalSession } from "../claude-code-terminal"
+import { createTerminalService, type PtyLike } from "../../../../app-capabilities/terminal/main/service"
+import { terminalStoreStateSchema } from "../../../../app-capabilities/terminal/main/store"
+
+// Each launcher process performs its own stale sweep: isolate it from other tests and live sessions.
+const launchTestDirectory = mkdtempSync(path.join(os.tmpdir(), "synapse-cli-launch-test-"))
+let restoreTmpdir: () => void
+beforeAll(() => {
+  const tmpdir = vi.spyOn(os, "tmpdir").mockReturnValue(launchTestDirectory)
+  restoreTmpdir = () => tmpdir.mockRestore()
+})
+afterAll(() => { restoreTmpdir(); rmSync(launchTestDirectory, { recursive: true, force: true }) })
 
 /** A Provider as `pickInitialProviderModelSelection` reads it: a tier is usable when it names a model. */
 type ProviderFixture = {
@@ -119,12 +130,47 @@ function launchDirectories(): readonly string[] {
 }
 
 describe("Claude Code terminal launch", () => {
+  it("submits through the real terminal environment validator without persisting internal receipt values", async () => {
+    const prompt = "Review through the real TerminalService"
+    let state = terminalStoreStateSchema.parse({ groups: [], sessions: [], output: [] })
+    const pty: PtyLike = {
+      onData: () => ({ dispose() {} }), onExit: () => ({ dispose() {} }),
+      write() {}, resize() {}, kill() {},
+    }
+    const spawnPty = vi.fn((options) => {
+      const settingsPath = options.shellArgs[options.shellArgs.indexOf("--settings") + 1]
+      const hook = spawnSync(process.execPath, [path.join(path.dirname(settingsPath), "prompt-submitted.cjs")], {
+        env: options.env, input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), timeout: 5000,
+      })
+      if (hook.error || hook.status !== 0) throw hook.error ?? new Error("Hook failed")
+      return pty
+    })
+    const terminal = createTerminalService({
+      store: { loadState: async () => state, saveState: async next => { state = terminalStoreStateSchema.parse(next) } },
+      spawnPty, resolveDefaultShell: () => process.execPath, resolveDefaultCwd: () => process.cwd(),
+    })
+    await terminal.start()
+    const h = harness({ providers: [configured], projectPath: process.cwd() })
+    runtimeBinaryMock.resolveBundledClaudeExecutable.mockReturnValue(process.execPath)
+    const resolve = <T,>(id: string): T => id === "core.terminal" ? terminal as T : h.resolve<T>(id)
+    try {
+      const session = await createClaudeCodeTerminalSession(resolve, { projectId: "project-1", initialPrompt: prompt })
+      expect(session.status).toBe("running")
+      expect(spawnPty).toHaveBeenCalledTimes(1)
+      const environment = spawnPty.mock.calls[0]![0].env
+      expect(environment.SYNAPSE_CLAUDE_PROMPT_TOKEN).toBeTypeOf("string")
+      expect(environment.SYNAPSE_SESSION_ID).toBe(session.id)
+      expect(JSON.stringify(state)).not.toContain(environment.SYNAPSE_CLAUDE_PROMPT_TOKEN)
+      expect(JSON.stringify(state)).not.toContain(environment.SYNAPSE_CLAUDE_PROMPT_DIGEST)
+      expect(JSON.stringify(state)).not.toContain("SYNAPSE_CLAUDE_PROMPT_")
+    } finally { await terminal.stop() }
+  })
   it("preserves confirmed submission when the CLI exits before terminal creation returns", async () => {
     const prompt = "Review before exit"
-    const createSession = vi.fn(async (options: { args: string[]; environment: Record<string, string>; onEnded(): void }) => {
+    const createSession = vi.fn(async (options: { args: string[]; environment: Record<string, string>; internalEnvironment?: Record<string, string>; onEnded(): void }) => {
       const settingsPath = options.args[options.args.indexOf("--settings") + 1]!
       const hook = spawnSync(process.execPath, [path.join(path.dirname(settingsPath), "prompt-submitted.cjs")], {
-        env: { ...process.env, ...options.environment }, input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), timeout: 5000,
+        env: { ...process.env, ...options.environment, ...options.internalEnvironment }, input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), timeout: 5000,
       })
       if (hook.error || hook.status !== 0) throw hook.error ?? new Error("Hook failed")
       options.onEnded()
@@ -136,10 +182,10 @@ describe("Claude Code terminal launch", () => {
   it("confirms the initial prompt independently of notifications and retains live settings", async () => {
     const prompt = "Review 中文\n\"quoted\" $()"
     const notifyHook = { matcher: "", hooks: [{ type: "command", command: "notify", async: true }] }
-    const createSession = vi.fn(async (options: { args: string[]; environment: Record<string, string>; onEnded(): void }) => {
+    const createSession = vi.fn(async (options: { args: string[]; environment: Record<string, string>; internalEnvironment?: Record<string, string>; onEnded(): void }) => {
       const settingsPath = options.args[options.args.indexOf("--settings") + 1]!
       const hook = spawnSync(process.execPath, [path.join(path.dirname(settingsPath), "prompt-submitted.cjs")], {
-        env: { ...process.env, ...options.environment },
+        env: { ...process.env, ...options.environment, ...options.internalEnvironment },
         input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), encoding: "utf8", timeout: 5000,
       })
       if (hook.error || hook.status !== 0) throw hook.error ?? new Error("Hook failed")

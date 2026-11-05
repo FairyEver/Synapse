@@ -1185,6 +1185,8 @@ export function createTerminalService(deps: {
       /** Explicit argv for the launched program; defaults to the shell's own arguments. */
       readonly args?: readonly string[]
       readonly environment?: TerminalLaunchLayer["environment"]
+      /** Trusted first-party process variables, injected after user-layer validation; never persisted. */
+      readonly internalEnvironment?: Readonly<Record<string, string>>
       readonly overriddenFields?: readonly ("cwd" | "shell" | "environment" | "cols" | "rows")[]
       /** Caller-owned launch environment that must never be written into the session record. */
       readonly persistEnvironment?: boolean
@@ -1294,7 +1296,7 @@ export function createTerminalService(deps: {
        * workspace。前者的进程拿得到两条身份，后者只拿得到会话身份。
        */
       const sessionWorkspace = getWorkspaceBySessionId(session.id)
-      const launchEnvironment = applyTerminalSessionIdentity(environment.env, {
+      const launchEnvironment = applyTerminalSessionIdentity({ ...environment.env, ...launchOverrides?.internalEnvironment }, {
         sessionId,
         ...(sessionWorkspace ? { workspaceId: sessionWorkspace.id } : {}),
       })
@@ -2319,6 +2321,8 @@ export function createTerminalService(deps: {
      */
     readonly project?: TerminalProjectGroupSource
     readonly environment: Record<string, string>
+    /** Main-process-only variables; not accepted by UI/MCP launch schemas or written into launch facts. */
+    readonly internalEnvironment?: Readonly<Record<string, string>>
     /**
      * The grid the CLI is born into. Omitted, the session takes the default shape.
      *
@@ -2351,6 +2355,7 @@ export function createTerminalService(deps: {
       shell: input.shell,
       args: input.args,
       environment: input.environment,
+      internalEnvironment: input.internalEnvironment,
       overriddenFields: [
         "cwd", "shell", "environment",
         ...(input.cols === undefined ? [] : ["cols" as const]),

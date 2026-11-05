@@ -4,6 +4,7 @@
 
 - 自动化注册 `builtin.agent` 和 `builtin.claude-code`，禁止恢复命令、Shell、HTTP、工作流、JavaScript、Node.js 自动化执行入口。Claude Code 仅配置项目和提示词，复用 Command 点击项目加号的内置启动入口，在触发时读取默认供应商、模型和权限，以原生 argv 携带首条提示词；后台创建，不导航、不切换用户当前终端或焦点。
 - Claude Code 收到匹配首条 `UserPromptSubmit` 回执即完成自动化，不等待任务结束；回执独立于通知开关，确认预算 60 秒，超时/取消不自动重发。启动前持久化终端关联，异常和应用重启恢复也保留入口；后续 CLI 不受已完成自动化的停止/停用控制。运行记录按运行保存的执行器类型渲染，关联会话不可用时不自动重建。
+- 提交回执的 `SYNAPSE_` 进程变量由主进程通过 TerminalService 的专用 `internalEnvironment` 层在用户环境校验后注入，不得混入用户环境、Provider settings、持久化 launch facts 或公开 UI/MCP 参数。该层只接收主进程构造的内部值，禁止转发用户环境映射；用户层保留变量保护不得放宽。
 - 不受支持的配置由主窗口后的后台 Worker 分批筛选，通过仓库写队列复验类型并删除；恢复/写入旧配置会再次清理。Worker、监听和队列复验共用受支持类型清单，两个受支持类型的配置（包括待修复配置）与运行历史原样保留，不自动转换，清理失败可重试。
 - 工作流 HTTP/Shell 共用表单、schema、执行工具、JS/Node 的 capability、节点和 runtime 必须保留；移除自动化入口不得删掉这些共用文件。
 
