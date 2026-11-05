@@ -47,7 +47,7 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
   const executor = rendererActionRegistry.list().find(item => item.manifest.id === executorType)
   const kind = isTrigger ? "触发条件" : "执行操作"
   const selected = isTrigger ? trigger : executor
-  const Icon = isTrigger ? trigger?.icon ?? Zap : Play
+  const Icon = selected?.icon ?? (isTrigger ? Zap : Play)
   const discoverable = new Set(listDiscoverableBuiltinAutomationActionTypes(rendererActionRegistry.list().map(item => item.manifest.id)))
   const options = isTrigger ? rendererAutomationTriggerRegistry.list() : rendererActionRegistry.list().filter(item => discoverable.has(item.manifest.id))
   const groups = isTrigger
@@ -92,7 +92,12 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
               <DropdownMenuRadioGroup value={type ?? ""} onValueChange={choose}>
                 {groups.filter(group => group.options.length).map(group => <div key={group.title}>
                   <DropdownMenuLabel>{group.title}</DropdownMenuLabel>
-                  {group.options.map(option => <DropdownMenuRadioItem key={option.manifest.id} value={option.manifest.id}>{option.manifest.title}</DropdownMenuRadioItem>)}
+                  {group.options.map(option => {
+                    const OptionIcon = option.icon ?? (isTrigger ? Zap : Play)
+                    return <DropdownMenuRadioItem key={option.manifest.id} value={option.manifest.id}>
+                      <OptionIcon aria-hidden="true" className="text-muted-foreground" />{option.manifest.title}
+                    </DropdownMenuRadioItem>
+                  })}
                 </div>)}
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
@@ -114,7 +119,7 @@ export function TriggerExecutorBuilder({ step, onChoosingChange, triggerType, tr
           {groups.filter(group => group.options.length).map(group => <div key={group.title}>
             <p className="px-2 py-2 text-xs text-muted-foreground">{group.title}</p>
             {group.options.map(option => {
-              const OptionIcon = isTrigger ? rendererAutomationTriggerRegistry.get(option.manifest.id).icon ?? Zap : Play
+              const OptionIcon = option.icon ?? (isTrigger ? Zap : Play)
               return <Button key={option.manifest.id} type="button" variant="ghost" disabled={!isTrigger && !trigger} onClick={() => choose(option.manifest.id)} className="w-full justify-start">
                 <OptionIcon /><span className="min-w-0 flex-1 truncate text-left">{option.manifest.title}</span><ArrowRight className="text-muted-foreground" />
               </Button>

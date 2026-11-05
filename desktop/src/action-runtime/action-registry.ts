@@ -1,4 +1,5 @@
 import type { ReactElement } from "react"
+import type { LucideIcon } from "lucide-react"
 import type { AutomationTriggerVariableDescriptor } from "../../automation-trigger-packages/types.shared"
 
 import type {
@@ -21,6 +22,7 @@ export type ActionResultViewComponent = (props: {
 
 export type RendererActionDefinition<TConfig extends ActionConfig = ActionConfig> = {
   readonly manifest: ActionManifest<TConfig>
+  readonly icon?: LucideIcon
   summarizeConfig(config: TConfig): string
   ConfigForm?: ActionConfigFormComponent<TConfig>
   ResultView?: ActionResultViewComponent

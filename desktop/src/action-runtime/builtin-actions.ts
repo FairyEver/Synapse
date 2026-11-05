@@ -1,3 +1,5 @@
+import { Bot, SquareTerminal } from "lucide-react"
+
 import { agentActionManifest, type AgentActionConfig } from "../../action-packages/builtin/agent"
 import { AgentConfigForm } from "../../action-packages/builtin/agent/config.renderer"
 import { claudeCodeActionManifest, type ClaudeCodeActionConfig } from "../../action-packages/builtin/claude-code"
@@ -8,6 +10,7 @@ import { RendererActionRegistry, type RendererActionDefinition } from "./action-
 
 const agentRendererAction: RendererActionDefinition<AgentActionConfig> = {
   manifest: agentActionManifest,
+  icon: Bot,
   summarizeConfig: (config) => {
     const agentLabel = config.agentType === "claude-code" ? "CC/Synapse" : "Codex"
     return `${agentLabel} · ${config.mode}`
@@ -20,6 +23,7 @@ export const rendererActionRegistry = new RendererActionRegistry()
 rendererActionRegistry.register(agentRendererAction)
 rendererActionRegistry.register<ClaudeCodeActionConfig>({
   manifest: claudeCodeActionManifest,
+  icon: SquareTerminal,
   summarizeConfig: () => "默认设置",
   ConfigForm: ClaudeCodeConfigForm,
   ResultView: ClaudeCodeResultView,
