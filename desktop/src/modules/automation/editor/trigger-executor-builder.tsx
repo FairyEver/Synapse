@@ -176,7 +176,7 @@ export function TriggerExecutorBuilder({
   return (
     <div
       data-layout="automation-editor-builder"
-      className="grid min-w-0 w-full grid-cols-1 gap-6 lg:grid-cols-[minmax(0,0.85fr)_1px_minmax(0,1.15fr)]"
+      className="grid min-w-0 w-full grid-cols-1 gap-6 @min-[40rem]/automation-editor:grid-cols-[minmax(0,0.85fr)_1px_minmax(0,1.15fr)]"
     >
       <section data-layout="automation-editor-trigger-panel" className="min-w-0">
         <div className="min-w-0">
@@ -220,7 +220,7 @@ export function TriggerExecutorBuilder({
         </div>
       </section>
 
-      <Separator data-layout="automation-editor-divider" orientation="vertical" className="hidden lg:block" />
+      <Separator data-layout="automation-editor-divider" orientation="vertical" className="hidden @min-[40rem]/automation-editor:block" />
 
       <section data-layout="automation-editor-executor-panel" className="min-w-0">
         <div className="min-w-0">

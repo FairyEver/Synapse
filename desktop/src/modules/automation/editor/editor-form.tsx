@@ -87,7 +87,7 @@ export function AutomationEditorForm({ initialTab = "config", ...props }: Automa
                 </div>
                 <TabsContent forceMount value="config" className="data-[state=inactive]:hidden">
                   <fieldset disabled={saving} className="min-w-0 border-0 p-0">
-                    <div data-layout="automation-editor-body" className="min-w-0">
+                    <div data-layout="automation-editor-body" className="@container/automation-editor min-w-0">
                       <TriggerExecutorBuilder triggerType={loadState.draft.triggerType} triggerConfig={loadState.draft.triggerConfig}
                         executorType={loadState.draft.executorType} executorConfig={loadState.draft.executorConfig}
                         projects={config.global.projects} platform={getRendererPlatform()}

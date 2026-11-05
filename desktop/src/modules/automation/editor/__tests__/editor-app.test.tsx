@@ -502,7 +502,9 @@ describe("AutomationEditorApp", () => {
     })
 
     expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className).toContain("grid-cols-1")
-    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className).toContain("lg:grid-cols-")
+    expect(document.querySelector('[data-layout="automation-editor-body"]')?.className).toContain("@container/automation-editor")
+    expect(document.querySelector('[data-layout="automation-editor-builder"]')?.className).toContain("@min-[40rem]/automation-editor:grid-cols-")
+    expect(document.querySelector('[data-layout="automation-editor-divider"]')?.className).toContain("@min-[40rem]/automation-editor:block")
   })
 
   it("keeps automation choice rows auto-height with compact padding", async () => {
