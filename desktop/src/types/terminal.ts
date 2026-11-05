@@ -112,7 +112,8 @@ export type SynapseTerminalCloseWorkspaceResult = TerminalCloseWorkspaceResult
 
 export type SynapseTerminalDataEvent = {
   readonly sessionId: string
-  readonly chunk: SynapseTerminalOutputChunk
+  readonly chunks: readonly SynapseTerminalOutputChunk[]
+  readonly resyncRequired?: boolean
 }
 
 export type SynapseTerminalSessionDeletedEvent = {

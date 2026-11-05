@@ -159,6 +159,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 - System App 的 `visibility` 控制启动器和 Dock 条件入口。未注册 System App 的能力包不得进入 `SYSTEM_APP_IDS`、definitions/registry、内容宿主或应用窗口 IPC。
 - Terminal 的 49 个 MCP 工具包含 `global_launch.get/update`；环境变量值只存在于加密 body，MCP 只返回键、动作、来源和 revision。
 - Terminal 输出增加单会话 16,384 个块的对象额度，仍按既有输出序号和 gap 报告淘汰；结构元数据与运行时输出分开持久化，注销时释放活动 Agent 档案。仅调整内部资源生命周期，Terminal 仍为 49 个 MCP 工具，现有 schema、权限、System App、Dock、Workflow、Automation 和 Deep Link 数量均不变。
+- Terminal 后台投影增加 2 标签/8 分屏缓存与有界绘制队列；核心解析增加原生读取背压、硬预算及明确降级。既有私有 `report_active_session` IPC 增加可见会话列表，既有 data 事件改为保留独立 seq 的定向有界批次及无正文重附着信号，resize 前先冲刷；未新增 operation。资源计数只供内部诊断和限频本地日志，不扩大公开 MCP diagnostics。Terminal 仍为 49 个 MCP 工具，表格数量、System App、Dock、Workflow、Automation、Deep Link、MCP schema 和权限均不变；系统 Skill 同步解释后台执行及降级边界。
 - 桌面 Terminal 的普通网页链接和 OSC 8 超链接统一复用既有 Shell 外部打开 IPC，由系统默认浏览器打开；OSC 8 保留确认。该修复不新增注册表面，上表数量、Terminal 的 49 个 MCP 工具及 MCP schema／系统 Skill 操作契约均不变。
 - 桌面 Terminal 与 Agent 对话的语音 Enter 在识别收尾后直接执行／发送，对勾仍只填入；完成后恢复焦点，终端不再显示重复的待执行条。仅调整桌面录音交互与提交互斥，复用既有终端输入和 Agent 发送链路；Terminal 仍为 49、Agent 仍为 11 个 MCP 工具，System App、Dock、Workflow、Automation、Deep Link 数量和 MCP schema／系统 Skill 操作契约均不变。
 - Terminal 只向 UI 和 MCP 暴露 `running` / `stopping` 会话；`ended` / `failed` / `lost` 只用于完成已在等待的观察，随后自动删除 session、pane/workspace 和所有会话数据。现有 `session.delete` 仅保留兼容性，MCP 工具数量保持 49。

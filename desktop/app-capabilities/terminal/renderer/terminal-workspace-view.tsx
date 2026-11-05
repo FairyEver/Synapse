@@ -64,6 +64,7 @@ import {
 import { useDismissOnPointerDownOutside } from "../../../src/hooks/use-dismiss-on-pointer-down-outside"
 import type {
   SynapseTerminalLayoutNode,
+  SynapseTerminalDataEvent,
   SynapseTerminalOutputChunk,
   SynapseTerminalPaneDropEdge,
   SynapseTerminalResizedEvent,
@@ -98,6 +99,8 @@ import {
   registerTerminalAtlasRepair,
 } from "./terminal-atlas-repair"
 import { TerminalGitIndicator } from "./terminal-git-indicator"
+import { createTerminalProjectionQueue } from "./terminal-projection-queue"
+import { TERMINAL_PROJECTION_MAX_RESIZE_BARRIERS } from "../../../config"
 
 /**
  * Width the viewport's scrollbar takes over the right edge of the screen.
@@ -1041,8 +1044,12 @@ function TerminalPane({
     let projectionGeneration = 0
     let projectionVisible = visibleRef.current && document.visibilityState !== "hidden"
     let requestedResize = { cols: sessionRef.current.cols, rows: sessionRef.current.rows }
-    const pendingChunks: SynapseTerminalOutputChunk[] = []
+    const pendingChunks = createTerminalProjectionQueue()
     const resizeBarriers = new Map<number, SynapseTerminalResizedEvent>()
+    let attachInFlight: Promise<void> = Promise.resolve()
+    let rebasePending = false
+    let rebaseCount = 0
+    let lastPressureWarningAt = Number.NEGATIVE_INFINITY
     const openWebLink = (_event: MouseEvent, uri: string) => {
       void shellBridge.openExternal(uri).catch((error) => {
         logger.error("Failed to open terminal web link.", error)
@@ -1266,35 +1273,63 @@ function TerminalPane({
 
     const inputDisposable = xterm.onData(writeTerminalInput)
     let terminalWriteChain = Promise.resolve()
-    const writeTerminalData = (data: string) => {
+    const pendingWriteResolves = new Set<() => void>()
+    const writeTerminalData = (data: string, generation = projectionGeneration) => {
       terminalWriteChain = terminalWriteChain.then(() => new Promise<void>((writeResolve) => {
-        if (disposed) return writeResolve()
-        xterm.write(data, writeResolve)
+        if (disposed || generation !== projectionGeneration) return writeResolve()
+        const finish = () => { pendingWriteResolves.delete(finish); writeResolve() }
+        pendingWriteResolves.add(finish)
+        try { xterm.write(data, finish) }
+        catch (error) { pendingWriteResolves.delete(finish); throw error }
       }))
       return terminalWriteChain
     }
     const resetTerminalData = () => {
-      terminalWriteChain = terminalWriteChain.then(() => {
-        if (!disposed) xterm.reset()
+      const generation = projectionGeneration
+      terminalWriteChain = terminalWriteChain.catch(() => undefined).then(() => {
+        if (!disposed && generation === projectionGeneration) xterm.reset()
       })
       return terminalWriteChain
     }
 
     const writePendingChunksThrough = async (throughOutputSeq: number, generation: number) => {
-      pendingChunks.sort((left, right) => left.seq - right.seq)
       while (!disposed && generation === projectionGeneration && pendingChunks.length > 0) {
         // xterm parsing is asynchronous. A resize can be announced while the
         // previous write is pending; return to the barrier loop before consuming
         // any output for the new grid, even if its barrier has not arrived yet.
         if (throughOutputSeq === Number.POSITIVE_INFINITY && announcedSizeRevision > appliedSizeRevision) return
-        const chunk = pendingChunks[0]!
+        const chunk = pendingChunks.peek()!
         if (chunk.seq > throughOutputSeq) break
         pendingChunks.shift()
         if (chunk.seq <= lastSeq) continue
-        await writeTerminalData(chunk.data)
+        await writeTerminalData(chunk.data, generation)
         if (generation !== projectionGeneration) return
         lastSeq = chunk.seq
       }
+    }
+
+    const rebaseProjection = () => {
+      if (rebasePending || disposed || !projectionVisible) return
+      rebasePending = true
+      rebaseCount += 1
+      const generation = ++projectionGeneration
+      attached = false
+      projectionAvailable = false
+      geometrySyncReady = false
+      const pressure = pendingChunks.diagnostics()
+      pendingChunks.clear()
+      resizeBarriers.clear()
+      setProjectionReady(false)
+      if (performance.now() - lastPressureWarningAt >= 30_000) {
+        lastPressureWarningAt = performance.now()
+        logger.warn("Terminal projection queue rebased.", { sessionId: session.id, rebaseCount, ...pressure })
+      }
+      // 合并整个积压期间的重附着；旧 attach 或写入结束后才请求新快照。
+      void Promise.allSettled([attachInFlight, terminalWriteChain]).then(() => {
+        if (disposed || generation !== projectionGeneration || !projectionVisible) return
+        rebasePending = false
+        startProjection(true)
+      })
     }
 
     const drainProjection = async () => {
@@ -1321,6 +1356,16 @@ function TerminalPane({
           if (announcedSizeRevision > appliedSizeRevision || pendingChunks.length === 0) return
           await writePendingChunksThrough(Number.POSITIVE_INFINITY, generation)
         }
+      } catch {
+        if (disposed || generation !== projectionGeneration) return
+        attached = false
+        projectionAvailable = false
+        geometrySyncReady = false
+        pendingChunks.clear()
+        resizeBarriers.clear()
+        setReadError("终端画面无法恢复")
+        setProjectionReady(true)
+        logger.warn("Terminal projection write failed.", { sessionId: session.id })
       } finally {
         drainInFlight = false
         const hasApplicableBarrier = [...resizeBarriers.keys()].some((revision) => revision > appliedSizeRevision)
@@ -1331,16 +1376,20 @@ function TerminalPane({
       }
     }
 
-    const handleData = (event: { readonly sessionId: string; readonly chunk: SynapseTerminalOutputChunk }) => {
-      if (event.sessionId !== session.id || disposed || !projectionVisible) return
-      pendingChunks.push(event.chunk)
+    const handleData = (event: SynapseTerminalDataEvent) => {
+      if (event.sessionId !== session.id || disposed || !projectionVisible || rebasePending) return
+      if (event.resyncRequired) { rebaseProjection(); return }
+      for (const chunk of event.chunks) {
+        if (!pendingChunks.append(chunk)) { rebaseProjection(); return }
+      }
       void drainProjection()
     }
     const handleResized = (event: SynapseTerminalResizedEvent) => {
-      if (event.sessionId !== session.id || disposed || !projectionVisible
+      if (event.sessionId !== session.id || disposed || !projectionVisible || rebasePending
         || event.sizeRevision <= appliedSizeRevision) return
       announcedSizeRevision = Math.max(announcedSizeRevision, event.sizeRevision)
       resizeBarriers.set(event.sizeRevision, event)
+      if (resizeBarriers.size > TERMINAL_PROJECTION_MAX_RESIZE_BARRIERS) { rebaseProjection(); return }
       void drainProjection()
     }
     let unsubscribeData: (() => void) | undefined
@@ -1397,6 +1446,7 @@ function TerminalPane({
       attached = true
       projectionAvailable = true
       await drainProjection()
+      if (disposed || generation !== projectionGeneration || !projectionVisible || !projectionAvailable) return
       geometrySyncReady = true
       syncTerminalGeometry()
       setProjectionReady(true)
@@ -1407,12 +1457,13 @@ function TerminalPane({
       attached = false
       projectionAvailable = false
       geometrySyncReady = false
-      pendingChunks.length = 0
+      pendingChunks.clear()
+      rebasePending = false
       resizeBarriers.clear()
       setReadError(null)
       setProjectionReady(false)
       subscribeProjectionEvents()
-      void attachProjection(generation, reset).catch((error) => {
+      attachInFlight = attachProjection(generation, reset).catch((error) => {
         if (disposed || deleted || generation !== projectionGeneration || !projectionVisible) return
         logger.error("Failed to attach terminal projection.", error)
         setReadError("终端画面无法恢复")
@@ -1432,7 +1483,7 @@ function TerminalPane({
       attached = false
       projectionAvailable = false
       geometrySyncReady = false
-      pendingChunks.length = 0
+      pendingChunks.clear()
       resizeBarriers.clear()
       unsubscribeProjectionEvents()
       setProjectionReady(false)
@@ -1444,6 +1495,9 @@ function TerminalPane({
     return () => {
       disposed = true
       projectionGeneration += 1
+      pendingChunks.clear()
+      resizeBarriers.clear()
+      for (const finish of pendingWriteResolves) finish()
       unsubscribeProjectionEvents()
       unsubscribeSessionChanged()
       unsubscribeSessionDeleted()
@@ -1451,6 +1505,7 @@ function TerminalPane({
       webglRenderer?.dispose()
       resizeObserver.disconnect()
       if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
+      if (remoteCanvasFrame !== undefined) cancelAnimationFrame(remoteCanvasFrame)
       compositionTextarea?.removeEventListener("compositionupdate", constrainComposition)
       registerControls(paneId, null)
       if (syncTerminalGeometryRef.current === syncTerminalGeometry) {

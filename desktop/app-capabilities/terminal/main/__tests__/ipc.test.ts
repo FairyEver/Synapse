@@ -72,6 +72,40 @@ vi.mock("electron-updater", () => ({
 }))
 
 describe("terminalIpcModule", () => {
+  it("batches output only for visible window subscriptions and rebases oversized chunks", async () => {
+    vi.useFakeTimers()
+    const service = createService()
+    const windowManager = createWindowManager()
+    const notifications = { reportActiveSession: vi.fn(), forgetRenderer: vi.fn() }
+    let destroy: (() => void) | undefined
+    const context = createContext(service, windowManager, notifications, { id: 101, isDestroyed: () => false, onDestroyed: (listener) => { destroy = listener; return () => undefined } })
+    try {
+      await terminalIpcModule.methods.listGroups.handler(context, undefined)
+      await terminalIpcModule.methods.reportActiveSession.handler(context, { sessionId: "session-1", visibleSessionIds: ["session-1"] })
+      const emit = (seq: number, data = "x") => (service.events as EventEmitter).emit("data", { sessionId: "session-1", chunk: { sessionId: "session-1", seq, data, createdAt: "now", source: "pty" } })
+      for (let seq = 1; seq <= 2000; seq += 1) emit(seq)
+      await vi.advanceTimersByTimeAsync(20)
+      const batches = vi.mocked(windowManager.broadcast).mock.calls.filter(([channel]) => channel.endsWith(":data"))
+      expect(batches.length).toBeLessThan(100)
+      expect(batches.flatMap(([, payload]) => (payload as { chunks: { seq: number }[] }).chunks).map((chunk) => chunk.seq)).toEqual(Array.from({ length: 2000 }, (_, index) => index + 1))
+      for (const [, , filter] of batches) {
+        expect(filter!({ id: 101 } as never)).toBe(true)
+        expect(filter!({ id: 102 } as never)).toBe(false)
+      }
+      emit(2001, "x".repeat(256 * 1024))
+      await vi.advanceTimersByTimeAsync(20)
+      const oversized = vi.mocked(windowManager.broadcast).mock.calls.at(-1)![1]
+      expect(oversized).toMatchObject({ chunks: [], resyncRequired: true })
+      expect(JSON.stringify(oversized).length).toBeLessThan(1024)
+      await terminalIpcModule.methods.reportActiveSession.handler(context, { sessionId: null, visibleSessionIds: [] })
+      vi.mocked(windowManager.broadcast).mockClear()
+      emit(2002)
+      await vi.advanceTimersByTimeAsync(20)
+      expect(windowManager.broadcast).not.toHaveBeenCalled()
+      destroy?.()
+    } finally { vi.useRealTimers() }
+  })
+
   it("declares stable method and event channels", () => {
     expect(terminalIpcModule.id).toBe("terminal")
     expect(terminalIpcModule.methods.getAgentNotificationSettings.operationId)
@@ -516,17 +550,17 @@ describe("terminalIpcModule", () => {
   it("validates event payloads", () => {
     expect(terminalIpcModule.events.data.payload.safeParse({
       sessionId: "session-1",
-      chunk: {
+      chunks: [{
         sessionId: "session-1",
         seq: 1,
         data: "hello",
         createdAt: "2026-06-24T00:00:00.000Z",
         source: "pty",
-      },
+      }],
     }).success).toBe(true)
     expect(terminalIpcModule.events.data.payload.safeParse({
       sessionId: "session-1",
-      chunk: { data: "missing-seq" },
+      chunks: [{ data: "missing-seq" }],
     }).success).toBe(false)
 
     expect(terminalIpcModule.events.sessionChanged.payload.safeParse({
@@ -595,9 +629,10 @@ describe("terminalIpcModule", () => {
   it("wires terminal event forwarding after a terminal IPC method resolves the service", async () => {
     const service = createService()
     const windowManager = createWindowManager()
-    const ctx = createContext(service, windowManager)
+    const ctx = createContext(service, windowManager, { reportActiveSession: vi.fn(), forgetRenderer: vi.fn() }, { id: 9921, isDestroyed: () => false, onDestroyed: vi.fn() })
 
     await terminalIpcModule.methods.listGroups.handler(ctx, undefined)
+    await terminalIpcModule.methods.reportActiveSession.handler(ctx, { sessionId: "session-1", visibleSessionIds: ["session-1"] })
     ;(service.events as EventEmitter).emit("data", {
       sessionId: "session-1",
       chunk: {
@@ -621,14 +656,14 @@ describe("terminalIpcModule", () => {
 
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:data", {
       sessionId: "session-1",
-      chunk: {
+      chunks: [{
         sessionId: "session-1",
         seq: 1,
         data: "hello",
         createdAt: "2026-06-24T00:00:00.000Z",
         source: "pty",
-      },
-    })
+      }],
+    }, expect.any(Function))
     expect(windowManager.broadcast).toHaveBeenCalledWith("synapse:app:terminal:operation:session_changed", {
       ...createSession(),
       sessionRef: terminalSessionReference("session-1"),

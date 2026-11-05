@@ -13,6 +13,61 @@ const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", acto
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
 describe("TerminalService core", () => {
+  it("samples resource pressure with one timer and stops sampling after the last session closes", async () => {
+    vi.useFakeTimers()
+    const service = createTerminalService({ store: memoryStore(), spawnPty: () => fakePty() })
+    try {
+      await service.start()
+      await service.createSession({})
+      await service.createSession({})
+      vi.advanceTimersByTime(10_000)
+      expect(service.getResourceDiagnostics().resourceSampleCount).toBe(2)
+      await service.stop()
+      const afterStop = service.getResourceDiagnostics()
+      vi.advanceTimersByTime(30_000)
+      expect(service.getResourceDiagnostics().resourceSampleCount).toBe(afterStop.resourceSampleCount)
+      expect(afterStop).toMatchObject({ sessionCount: 0, outputChunks: 0, parserPendingTasks: 0 })
+    } finally { await service.stop(); vi.useRealTimers() }
+  })
+
+  it("backpressures the native PTY while parsing and exposes content-free queue metrics", async () => {
+    const pty = { ...fakePty(), pause: vi.fn(), resume: vi.fn() }
+    const service = createTerminalService({ store: { ...memoryStore(), saveRuntimeState: async () => undefined }, spawnPty: () => pty })
+    try {
+      await service.start()
+      const session = await service.createSession({})
+      for (let index = 0; index < 128; index += 1) pty.emitData("secret-terminal-body")
+      expect(pty.pause).toHaveBeenCalledOnce()
+      const pending = service.getResourceDiagnostics()
+      expect(pending).toMatchObject({ sessionCount: 1, parserPendingTasks: 128 })
+      expect(JSON.stringify(pending)).not.toContain("secret-terminal-body")
+      await service.readLineWindow({ sessionId: session.id, maxLines: 1 })
+      expect(pty.resume).toHaveBeenCalledOnce()
+      await service.flushPersistQueue()
+      expect(service.getResourceDiagnostics()).toMatchObject({ parserPendingTasks: 0, pendingPersistenceBytes: 0 })
+      expect(pty.kill).not.toHaveBeenCalled()
+    } finally { await service.stop() }
+    expect(service.getResourceDiagnostics()).toMatchObject({ sessionCount: 0, parserPendingTasks: 0, outputBytes: 0 })
+  })
+
+  it("continues raw output and explicitly degrades the screen when native backpressure fails", async () => {
+    const pty = { ...fakePty(), pause: vi.fn(() => { throw new Error("native read unavailable") }), resume: vi.fn() }
+    const logger = { warn: vi.fn() }
+    const service = createTerminalService({ store: { ...memoryStore(), saveRuntimeState: async () => undefined }, spawnPty: () => pty, logger })
+    try {
+      await service.start()
+      const session = await service.createSession({})
+      for (let index = 0; index < 1000; index += 1) pty.emitData("x")
+      await Promise.resolve()
+      const view = await service.getView({ sessionId: session.id, kind: "screen", maxBytes: 1024 })
+      expect(view).toMatchObject({ degraded: true, reasons: ["emulator_queue_overflow"], lines: [] })
+      expect((await service.attachSession({ sessionId: session.id })).reasons).toContain("emulator_queue_overflow")
+      expect(service.readSession({ sessionId: session.id, limitBytes: 4096 }).chunks).toHaveLength(1000)
+      expect(service.getSession({ sessionId: session.id }).status).toBe("running")
+      expect(pty.kill).not.toHaveBeenCalled()
+    } finally { await service.stop() }
+  })
+
   it("retries a failed structural save with output that arrived during the write", async () => {
     let failWrite: (() => void) | undefined
     let startedWrite: (() => void) | undefined

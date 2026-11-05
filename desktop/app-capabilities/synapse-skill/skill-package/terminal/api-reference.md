@@ -46,6 +46,8 @@ Permission checks, revisions, resolution, and predictable validation complete be
 - `app_terminal_session_output_observe`: state snapshot plus bounded raw output; requires state and output permissions.
 - `app_terminal_session_view_get`: bounded headless-emulator screen or scrollback view with `throughOutputSeq`, size revision, emulator version, and degradation reasons.
 
+The core parser has a 1 MiB / 256-task processing budget, including in-flight output and resize work. High-water backpressure temporarily pauses native reads and resumes after draining; this is independent of raw-output retention quotas. Hard overflow invalidates the derived view with `emulator_queue_overflow`; parser failure uses `emulator_unavailable`. Subsequent views remain explicitly degraded for that session. Raw output keeps its separate retention/gap contract; never infer a full screen from an incomplete suffix. Background desktop renderer eviction does not stop the session or affect MCP state/output access. These internal budgets add no MCP request fields, tools, or cross-session diagnostics.
+
 Maintain `afterStateRevision` and `afterOutputSeq` independently. A normal timeout returns `changed:false`. A retention gap returns immediately with the current available interval and recovery position.
 
 Raw output retention has per-session limits of 10 MiB and 16,384 chunks and a global 256 MiB byte budget. Chunk-count eviction preserves sequence numbers and loss counters; tiny and empty chunks count toward that bound. These budgets do not include emulator, renderer, or child-process memory. A fully evicted interval still reports a gap and its recovery watermark.

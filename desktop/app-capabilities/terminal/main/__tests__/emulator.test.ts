@@ -11,6 +11,44 @@ import {
 import type { TerminalStyledLine, TerminalStyledRun } from "../emulator"
 
 describe("TerminalCoreEmulator renderer snapshots", () => {
+  it("bounds pending parser work and explicitly degrades views after overflow", async () => {
+    const emulator = createTerminalCoreEmulator({ cols: 80, rows: 24, sizeRevision: 1,
+      queueLimits: { maxBytes: 8, maxTasks: 2, highBytes: 4, lowBytes: 1, highTasks: 2, lowTasks: 0 },
+    })
+    try {
+      await Promise.allSettled([emulator.accept("abcd", 1), emulator.accept("efgh", 2), emulator.accept("overflow", 3)])
+      expect(emulator.getView({ kind: "screen", maxBytes: 1024 })).toMatchObject({ degraded: true, reasons: ["emulator_queue_overflow"], lines: [] })
+      expect(await emulator.captureSnapshot(1024)).toMatchObject({ serialized: null, degradedReason: "emulator_queue_overflow" })
+      expect(emulator.getQueueDiagnostics()).toMatchObject({ pendingBytes: 0, pendingTasks: 0, peakBytes: 8, peakTasks: 2, rejectedTasks: 1 })
+    } finally { emulator.dispose() }
+  })
+
+  it("pauses at high water and resumes after the parser drains to low water", async () => {
+    const onBackpressure = vi.fn()
+    const emulator = createTerminalCoreEmulator({ cols: 80, rows: 24, sizeRevision: 1, onBackpressure,
+      queueLimits: { maxBytes: 1024, maxTasks: 10, highBytes: 8, lowBytes: 2, highTasks: 8, lowTasks: 2 },
+    })
+    try {
+      const writes = [emulator.accept("1234", 1), emulator.accept("5678", 2)]
+      expect(onBackpressure).toHaveBeenCalledWith(true)
+      await Promise.all(writes)
+      expect(onBackpressure.mock.calls.map(([paused]) => paused)).toEqual([true, false])
+      expect(emulator.getView({ kind: "screen", maxBytes: 1024 }).lines.join("")).toContain("12345678")
+    } finally { emulator.dispose() }
+  })
+
+  it("settles a blocked parser write and its waiters when disposed", async () => {
+    const write = vi.spyOn(Terminal.prototype, "write").mockImplementation(() => undefined)
+    const emulator = createTerminalCoreEmulator({ cols: 80, rows: 24, sizeRevision: 1 })
+    try {
+      const pending = emulator.accept("pending", 1)
+      await Promise.resolve()
+      const settled = Promise.allSettled([pending, emulator.ready()])
+      emulator.dispose()
+      expect((await settled).map((result) => result.status)).toEqual(["rejected", "rejected"])
+    } finally { emulator.dispose(); write.mockRestore() }
+  })
+
   it("reports standard terminal notification OSC sequences without exposing their content", async () => {
     const onNotification = vi.fn()
     const emulator = createTerminalCoreEmulator({

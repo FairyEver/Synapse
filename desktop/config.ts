@@ -121,6 +121,57 @@ export const TERMINAL_GLOBAL_OUTPUT_RETENTION_BYTES = 256 * 1024 * 1024
 // 终端渲染快照最大字节数：限制主进程向界面传递 xterm 状态的单次 IPC 负载，超限时优先裁剪最旧回滚历史。
 export const TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES = 1024 * 1024
 
+// 桌面终端最近访问缓存的标签上限：限制后台 xterm/WebGL 实例，重新访问被逐出标签时从核心快照恢复。
+export const TERMINAL_RENDERER_CACHED_WORKSPACES = 2
+
+// 桌面终端缓存中的分屏总上限：当前标签优先，防止多个满分屏标签占满 GPU 上下文。
+export const TERMINAL_RENDERER_CACHED_PANES = 8
+
+// 单个桌面投影待绘制输出的字节预算：超限丢弃派生队列并重新附着权威快照，不改变 PTY。
+export const TERMINAL_PROJECTION_QUEUE_MAX_BYTES = 512 * 1024
+
+// 单个桌面投影待绘制输出块上限：同时限制空块和小块积压的对象开销。
+export const TERMINAL_PROJECTION_QUEUE_MAX_CHUNKS = 256
+
+// 单个投影可等待的尺寸屏障上限：尺寸事件追不上时与输出积压一样从核心快照重建。
+export const TERMINAL_PROJECTION_MAX_RESIZE_BARRIERS = 64
+
+// 核心解析待处理字节硬预算：背压仍失效时明确降级派生画面，原始输出继续滚动保留。
+export const TERMINAL_EMULATOR_QUEUE_MAX_BYTES = 1024 * 1024
+
+// 核心解析任务硬预算：包括空输出和尺寸屏障，避免短块建立无界 Promise 链。
+export const TERMINAL_EMULATOR_QUEUE_MAX_TASKS = 256
+
+// 核心解析字节高水位：暂停原生读取，让解析器追上；不由原始输出保留额度触发。
+export const TERMINAL_EMULATOR_QUEUE_HIGH_BYTES = 512 * 1024
+
+// 核心解析字节低水位：同时满足任务低水位后恢复原生读取。
+export const TERMINAL_EMULATOR_QUEUE_LOW_BYTES = 128 * 1024
+
+// 核心解析任务高水位：保护大量小块/空块的处理开销。
+export const TERMINAL_EMULATOR_QUEUE_HIGH_TASKS = 128
+
+// 核心解析任务低水位：与字节低水位共同避免暂停/恢复频繁振荡。
+export const TERMINAL_EMULATOR_QUEUE_LOW_TASKS = 32
+
+// 终端资源采样间隔：仅有活动会话时采样一次主进程定时器延迟，不逐会话创建定时器。
+export const TERMINAL_RESOURCE_SAMPLE_INTERVAL_MS = 5_000
+
+// 资源压力日志最小间隔：只记录数值与原因，不输出终端正文或制造高频日志。
+export const TERMINAL_RESOURCE_WARNING_INTERVAL_MS = 30_000
+
+// 主进程采样定时器延迟超过此值时记录资源压力；该延迟反映整个主进程，不单独归因终端。
+export const TERMINAL_RESOURCE_EVENT_LOOP_WARNING_MS = 100
+
+// 单个 Renderer 输出批次字节预算：大于此值的单块只通知重附着，不通过事件传递大正文。
+export const TERMINAL_RENDERER_BATCH_MAX_BYTES = 64 * 1024
+
+// 单个 Renderer 输出批次块数预算：保留独立序号，同时减少 IPC 消息数量。
+export const TERMINAL_RENDERER_BATCH_MAX_CHUNKS = 64
+
+// 原始输出事件合批窗口：尺寸屏障、关闭和批次满额时提前冲刷，保持顺序。
+export const TERMINAL_RENDERER_BATCH_INTERVAL_MS = 16
+
 // 终端域同时存活的 PTY 会话硬上限：达到后拒绝新建会话，但不会停止任何已有终端。
 export const TERMINAL_GLOBAL_RUNNING_SESSION_LIMIT = 32
 

@@ -6,6 +6,8 @@ Use Terminal tools to operate Synapse-managed interactive PTY sessions. Terminal
 
 Read `api-reference.md` before constructing requests. Read `examples.md` when translating a user goal into a multi-step Terminal workflow.
 
+Desktop background tabs release old renderer projections under a bounded cache; their PTYs keep running and MCP reads use the independent core. Reopening a tab restores a core snapshot. Parser pressure can temporarily pause native reads, so a busy producer may slow down. On `emulator_queue_overflow` / `emulator_unavailable`, the rendered view is explicitly degraded; retained raw output remains separately readable with its normal gap rules. Do not claim a complete screen, silently recreate the session, or repeatedly poll a degraded view. Resource counters and local pressure logs are internal and are not exposed by MCP diagnostics.
+
 ## Desktop appearance
 
 The desktop Terminal settings include a global theme selector with a local preview. Built-in themes are Default, Nord, Gruvbox Dark, Catppuccin Mocha, Catppuccin Latte, Rosé Pine Dawn, Ayu Light, Solarized Light, and Tokyo Night Day. Saving applies the theme to all desktop Terminal windows; discarding restores the saved theme. This is a UI-only setting, with no Terminal MCP theme tool. Do not send theme changes as shell commands or terminal input. Mobile palettes and application-emitted truecolor are unaffected.

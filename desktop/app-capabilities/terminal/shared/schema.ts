@@ -120,6 +120,7 @@ export const terminalAgentSessionRecordSchema = z.object({
 
 export const terminalReportActiveSessionInputSchema = z.object({
   sessionId: z.string().uuid().nullable(),
+  visibleSessionIds: z.array(z.string().uuid()).max(8).optional(),
 }).strict()
 
 export const TERMINAL_CUSTOM_TOOLBAR_ACTION_LABEL_MAX_LENGTH = 32

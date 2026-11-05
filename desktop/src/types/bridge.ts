@@ -1037,7 +1037,7 @@ export type SynapseBridge = {
     agentNotifications: {
       get: () => Promise<SynapseTerminalAgentNotificationSettings>
       update: (input: SynapseTerminalUpdateAgentNotificationSettingsInput) => Promise<SynapseTerminalAgentNotificationSettings>
-      reportActiveSession: (input: { sessionId: string | null }) => Promise<void>
+      reportActiveSession: (input: { sessionId: string | null; visibleSessionIds?: string[] }) => Promise<void>
     }
     globalLaunch: {
       get: () => Promise<SynapseTerminalGlobalLaunchSettings>

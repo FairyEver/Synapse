@@ -138,6 +138,8 @@ describe("terminal output buffer", () => {
 
     expect(buffer.firstOutputSeq).toBe(1)
     expect(buffer.snapshotAfter(1)).toEqual([second])
+    expect(buffer.byteLengthAfter(1)).toBe(Buffer.byteLength("two", "utf8"))
+    expect(buffer.retainedChunkCount).toBe(2)
 
     buffer.evictOldest()
     expect(buffer.firstOutputSeq).toBe(2)

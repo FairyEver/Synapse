@@ -3,6 +3,12 @@ import { Terminal } from "@xterm/headless"
 import { fileURLToPath } from "node:url"
 
 import { installTerminalUnicodeWidth } from "../shared/terminal-unicode-width"
+import {
+  TERMINAL_EMULATOR_QUEUE_MAX_BYTES, TERMINAL_EMULATOR_QUEUE_MAX_TASKS,
+  TERMINAL_EMULATOR_QUEUE_HIGH_BYTES, TERMINAL_EMULATOR_QUEUE_LOW_BYTES,
+  TERMINAL_EMULATOR_QUEUE_HIGH_TASKS, TERMINAL_EMULATOR_QUEUE_LOW_TASKS,
+} from "../../../config"
+import { createTerminalProcessingQueue, type TerminalProcessingQueueLimits } from "./output-processing-queue"
 
 // xterm does not export IBuffer/IBufferLine/IBufferCell, so they are recovered
 // from the public Terminal surface.
@@ -86,6 +92,7 @@ export type TerminalEmulatorSnapshot = {
   readonly throughOutputSeq: number
   readonly sizeRevision: number
   readonly scrollbackTruncated: boolean
+  readonly degradedReason?: string
 }
 
 type TerminalWithMouseEncoding = Terminal & {
@@ -105,6 +112,8 @@ export function createTerminalCoreEmulator(input: {
   readonly logger?: { warn(message: string, meta?: Record<string, unknown>): void }
   readonly onWorkingDirectoryChanged?: () => void
   readonly onNotification?: (input: { readonly protocol: 9 | 99 | 777; readonly value: string }) => void
+  readonly onBackpressure?: (paused: boolean) => void
+  readonly queueLimits?: TerminalProcessingQueueLimits
 }) {
   const terminal = new Terminal({
     cols: input.cols,
@@ -126,7 +135,18 @@ export function createTerminalCoreEmulator(input: {
   let sizeRevision = input.sizeRevision
   let modeEvidenceFresh = false
   let currentCwd: string | undefined
-  let writeChain = Promise.resolve()
+  const queue = createTerminalProcessingQueue({
+    limits: input.queueLimits ?? {
+      maxBytes: TERMINAL_EMULATOR_QUEUE_MAX_BYTES, maxTasks: TERMINAL_EMULATOR_QUEUE_MAX_TASKS,
+      highBytes: TERMINAL_EMULATOR_QUEUE_HIGH_BYTES, lowBytes: TERMINAL_EMULATOR_QUEUE_LOW_BYTES,
+      highTasks: TERMINAL_EMULATOR_QUEUE_HIGH_TASKS, lowTasks: TERMINAL_EMULATOR_QUEUE_LOW_TASKS,
+    },
+    onBackpressure: (paused) => {
+      try { input.onBackpressure?.(paused) } catch {
+        input.logger?.warn("Terminal output flow control unavailable.", { paused })
+      }
+    },
+  })
 
   terminal.parser.registerOscHandler(7, (value) => {
     try {
@@ -173,30 +193,31 @@ export function createTerminalCoreEmulator(input: {
   }
 
   function accept(data: string, outputSeq: number): Promise<void> {
-    trackCursorVisibility(data)
-    writeChain = writeChain.then(() => new Promise<void>((resolve) => {
+    return queue.enqueue(Buffer.byteLength(data, "utf8"), (signal) => new Promise<void>((resolve) => {
+      const finish = () => { signal.removeEventListener("abort", finish); resolve() }
+      signal.addEventListener("abort", finish, { once: true })
+      trackCursorVisibility(data)
       terminal.write(data, () => {
-        throughOutputSeq = outputSeq
-        modeEvidenceFresh = true
-        resolve()
+        if (!signal.aborted) {
+          throughOutputSeq = outputSeq
+          modeEvidenceFresh = true
+        }
+        finish()
       })
     }))
-    return writeChain
   }
 
   function resize(cols: number, rows: number, revision: number): Promise<{
     readonly throughOutputSeq: number
     readonly sizeRevision: number
   }> {
-    const resizeOperation = writeChain.then(() => {
+    return queue.enqueue(0, () => {
       const resizeAfterOutputSeq = throughOutputSeq
       terminal.resize(cols, rows)
       sizeRevision = revision
       modeEvidenceFresh = false
       return { throughOutputSeq: resizeAfterOutputSeq, sizeRevision }
     })
-    writeChain = resizeOperation.then(() => undefined)
-    return resizeOperation
   }
 
   function getView(input: {
@@ -215,7 +236,7 @@ export function createTerminalCoreEmulator(input: {
     const lines: string[] = []
     let bytes = 0
     let hasMore = false
-    for (let index = sourceStart; index < sourceEnd; index += 1) {
+    for (let index = sourceStart; !queue.failure && index < sourceEnd; index += 1) {
       const line = buffer.getLine(index)?.translateToString(true) ?? ""
       const lineBytes = Buffer.byteLength(line, "utf8")
       if (lines.length > 0 && bytes + lineBytes > input.maxBytes) {
@@ -236,8 +257,8 @@ export function createTerminalCoreEmulator(input: {
       sizeRevision,
       emulatorId: TERMINAL_EMULATOR_ID,
       emulatorVersion: TERMINAL_EMULATOR_VERSION,
-      degraded: false,
-      reasons: [],
+      degraded: Boolean(queue.failure),
+      reasons: queue.failure ? [queue.failure.code] : [],
       hasMore,
     }
   }
@@ -251,6 +272,7 @@ export function createTerminalCoreEmulator(input: {
    * reaches the client.
    */
   function readLineWindow(input: { readonly maxLines: number }): TerminalLineWindow {
+    if (queue.failure) throw queue.failure
     const buffer = terminal.buffer.active
     const totalLines = buffer.length
     const startIndex = Math.max(0, totalLines - Math.max(1, input.maxLines))
@@ -289,6 +311,7 @@ export function createTerminalCoreEmulator(input: {
     readonly from: number
     readonly maxLines: number
   }): { readonly lines: TerminalStyledLine[]; readonly startIndex: number } {
+    if (queue.failure) throw queue.failure
     const buffer = terminal.buffer.active
     const startIndex = Math.max(0, Math.min(input.from, buffer.length))
     const end = Math.min(buffer.length, startIndex + Math.max(0, input.maxLines))
@@ -307,19 +330,21 @@ export function createTerminalCoreEmulator(input: {
     readonly sizeRevision: number
   } {
     return {
-      enabled: terminal.modes.bracketedPasteMode,
-      fresh: modeEvidenceFresh,
+      enabled: !queue.failure && terminal.modes.bracketedPasteMode,
+      fresh: !queue.failure && modeEvidenceFresh,
       throughOutputSeq,
       sizeRevision,
     }
   }
 
   async function ready(): Promise<void> {
-    await writeChain
+    await queue.ready()
   }
 
   async function captureSnapshot(maxBytes: number): Promise<TerminalEmulatorSnapshot> {
-    await ready()
+    try { await ready() } catch {
+      return { serialized: null, throughOutputSeq, sizeRevision, scrollbackTruncated: false, degradedReason: queue.failure?.code ?? "emulator_unavailable" }
+    }
     const fullSnapshot = serializeTerminalState(terminal, serializer)
     if (Buffer.byteLength(fullSnapshot, "utf8") <= maxBytes) {
       return {
@@ -361,8 +386,12 @@ export function createTerminalCoreEmulator(input: {
     bracketedPasteEvidence,
     ready,
     captureSnapshot,
-    serialize: () => serializeTerminalState(terminal, serializer),
-    dispose: () => terminal.dispose(),
+    serialize: () => {
+      if (queue.failure) throw queue.failure
+      return serializeTerminalState(terminal, serializer)
+    },
+    getQueueDiagnostics: () => ({ ...queue.diagnostics(), degradedReason: queue.failure?.code }),
+    dispose: () => { queue.dispose(); terminal.dispose() },
     get throughOutputSeq(): number { return throughOutputSeq },
     get sizeRevision(): number { return sizeRevision },
     get currentCwd(): string | undefined { return currentCwd },

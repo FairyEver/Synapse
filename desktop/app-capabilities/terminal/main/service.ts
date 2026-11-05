@@ -16,6 +16,9 @@ import {
   TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES,
   TERMINAL_SESSION_OBSERVE_LIMIT,
   TERMINAL_SESSION_OUTPUT_RETENTION_BYTES,
+  TERMINAL_RESOURCE_SAMPLE_INTERVAL_MS,
+  TERMINAL_RESOURCE_WARNING_INTERVAL_MS,
+  TERMINAL_RESOURCE_EVENT_LOOP_WARNING_MS,
 } from "../../../config"
 import {
   TERMINAL_AGENT_ATTENTION_DETECTOR_ID,
@@ -130,6 +133,8 @@ export type PtyLike = {
   write(data: string | Buffer): void
   resize(cols: number, rows: number): void
   kill(signal?: string): void
+  pause?(): void
+  resume?(): void
 }
 
 type SpawnPtyInput = {
@@ -412,6 +417,74 @@ export function createTerminalService(deps: {
   let settledPersistRevision = 0
   let persistRevisionWaiters: Array<{ readonly revision: number; readonly resolve: () => void }> = []
   let lastPersistError: unknown
+  let resourceTimer: ReturnType<typeof setInterval> | undefined
+  let resourceExpectedAt = 0
+  let resourceSampleCount = 0
+  let lastEventLoopDelayMs = 0
+  let maxEventLoopDelayMs = 0
+  let lastResourceWarningAt = Number.NEGATIVE_INFINITY
+
+  function getResourceDiagnostics() {
+    let outputBytes = 0
+    let outputChunks = 0
+    let pendingPersistenceBytes = 0
+    let parserPendingBytes = 0
+    let parserPendingTasks = 0
+    let parserPausedSessions = 0
+    let parserDegradedSessions = 0
+    let maxParserWaitMs = 0
+    let maxParserProcessingMs = 0
+    let maxSessionParserPeakBytes = 0
+    let maxSessionParserPeakTasks = 0
+    for (const [sessionId, buffer] of buffers) {
+      outputBytes += buffer.totalBytes
+      outputChunks += buffer.retainedChunkCount
+      pendingPersistenceBytes += buffer.byteLengthAfter(persistedOutputSeqBySession.get(sessionId) ?? 0)
+    }
+    for (const runtime of runtimes.values()) {
+      const queue = runtime.emulator.getQueueDiagnostics()
+      parserPendingBytes += queue.pendingBytes
+      parserPendingTasks += queue.pendingTasks
+      if (queue.paused) parserPausedSessions += 1
+      if (queue.degradedReason) parserDegradedSessions += 1
+      maxParserWaitMs = Math.max(maxParserWaitMs, queue.maxWaitMs)
+      maxParserProcessingMs = Math.max(maxParserProcessingMs, queue.maxProcessingMs)
+      maxSessionParserPeakBytes = Math.max(maxSessionParserPeakBytes, queue.peakBytes)
+      maxSessionParserPeakTasks = Math.max(maxSessionParserPeakTasks, queue.peakTasks)
+    }
+    return {
+      sessionCount: sessions.size, outputBytes, outputChunks, pendingPersistenceBytes,
+      persistenceInFlight: Boolean(persistInFlight), persistenceDegraded: Boolean(lastPersistError),
+      parserPendingBytes, parserPendingTasks, parserPausedSessions, parserDegradedSessions,
+      maxParserWaitMs, maxParserProcessingMs, maxSessionParserPeakBytes, maxSessionParserPeakTasks,
+      resourceSampleCount, lastEventLoopDelayMs, maxEventLoopDelayMs,
+    }
+  }
+
+  function updateResourceMonitor(): void {
+    if (sessions.size === 0) {
+      if (resourceTimer) clearInterval(resourceTimer)
+      resourceTimer = undefined
+      return
+    }
+    if (resourceTimer) return
+    resourceExpectedAt = performance.now() + TERMINAL_RESOURCE_SAMPLE_INTERVAL_MS
+    resourceTimer = setInterval(() => {
+      const current = performance.now()
+      lastEventLoopDelayMs = Math.max(0, current - resourceExpectedAt)
+      resourceExpectedAt = current + TERMINAL_RESOURCE_SAMPLE_INTERVAL_MS
+      maxEventLoopDelayMs = Math.max(maxEventLoopDelayMs, lastEventLoopDelayMs)
+      resourceSampleCount += 1
+      const metrics = getResourceDiagnostics()
+      if ((metrics.parserPausedSessions || metrics.parserDegradedSessions || metrics.persistenceDegraded
+        || lastEventLoopDelayMs >= TERMINAL_RESOURCE_EVENT_LOOP_WARNING_MS)
+        && current - lastResourceWarningAt >= TERMINAL_RESOURCE_WARNING_INTERVAL_MS) {
+        lastResourceWarningAt = current
+        deps.logger?.warn("Terminal resource pressure.", metrics)
+      }
+    }, TERMINAL_RESOURCE_SAMPLE_INTERVAL_MS)
+    resourceTimer.unref?.()
+  }
 
   function now(): string { return new Date().toISOString() }
 
@@ -1028,12 +1101,26 @@ export function createTerminalService(deps: {
   }
 
   function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer): void {
+    let flowWarningLogged = false
+    let parseWarningLogged = false
     const emulator = createTerminalCoreEmulator({
       cols: session.cols,
       rows: session.rows,
       sizeRevision: session.sizeRevision,
       throughOutputSeq: session.lastOutputSeq,
       logger: deps.logger,
+      onBackpressure: (paused) => {
+        try {
+          if (!child.pause || !child.resume) throw new Error("flow_control_unavailable")
+          if (paused) child.pause()
+          else child.resume()
+        } catch {
+          if (!flowWarningLogged) {
+            flowWarningLogged = true
+            deps.logger?.warn("Terminal native output flow control unavailable.", { sessionId: session.id })
+          }
+        }
+      },
       onWorkingDirectoryChanged: () => {
         if (!unpublishedSessions.has(session.id)) {
           events.emit("workingDirectoryChanged", { sessionId: session.id })
@@ -1045,8 +1132,10 @@ export function createTerminalService(deps: {
       const runtime = runtimes.get(session.id)
       if (!current || !runtime || (current.status !== "running" && current.status !== "stopping")) return
       const chunk = runtime.buffer.append(session.id, data)
-      void runtime.emulator.accept(data, chunk.seq).catch((error) => {
-        deps.logger?.warn("Terminal headless emulator rejected output.", { sessionId: session.id, error })
+      void runtime.emulator.accept(data, chunk.seq).catch(() => {
+        if (parseWarningLogged || !runtimes.has(session.id)) return
+        parseWarningLogged = true
+        deps.logger?.warn("Terminal headless emulator rejected output.", { sessionId: session.id, ...runtime.emulator.getQueueDiagnostics() })
       })
       const updated: TerminalSession = {
         ...current,
@@ -1278,6 +1367,7 @@ export function createTerminalService(deps: {
     }
     const buffer = createTerminalOutputBuffer({ maxBytes: outputRetentionBytes })
     sessions.set(session.id, session)
+    updateResourceMonitor()
     buffers.set(session.id, buffer)
     if (createWorkspace) createWorkspaceForSession(session, workspaceTitle)
     updateGroupMembership(group.id)
@@ -1870,6 +1960,7 @@ export function createTerminalService(deps: {
     deps.workingDirectoryProbe?.forget(sessionId)
     cleanupRuntime(sessionId)
     sessions.delete(sessionId)
+    updateResourceMonitor()
     buffers.delete(sessionId)
     checkpoints.delete(sessionId)
     dirtyRuntimeSessionIds.delete(sessionId)
@@ -2415,7 +2506,7 @@ export function createTerminalService(deps: {
           emulatorId: "xterm-headless",
           emulatorVersion: "6.0.0",
           scrollbackTruncated: true,
-          reasons: ["snapshot_too_large"],
+          reasons: [snapshot.degradedReason ?? "snapshot_too_large"],
         }
       }
       const session = getSessionOrThrow(input.sessionId)
@@ -3657,6 +3748,7 @@ export function createTerminalService(deps: {
       pending: persistPending || Boolean(runtimePersistTimer),
       idleWaiterCount: persistIdleWaiters.length,
     }),
+    getResourceDiagnostics,
     get events() { return events },
   }
 }

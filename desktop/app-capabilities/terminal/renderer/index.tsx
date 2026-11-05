@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import { ArrowDown, ArrowUp, Check, Code2, Copy, Folder, FolderOpen, LoaderCircle, Mic, MoreHorizontal, PanelLeft, Pencil, Pin, Plus, RotateCw, Settings, Square, Terminal as TerminalIcon, Trash2, X } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "../../../src/app-shell/config"
 import { isTerminalThemeId, type TerminalThemeId } from "../shared/terminal-themes"
 import { createRendererLogger } from "../../../src/app-shell/logging"
+import { retainedTerminalWorkspaces } from "./terminal-workspace-cache"
 import { useVoiceActionKey } from "../../../src/modules/voice/use-voice-action-key"
 import { useVoiceInput } from "../../../src/modules/voice/use-voice-input"
 import { describeVoiceInput } from "../../../src/modules/voice/voice-input-presentation"
@@ -219,7 +220,7 @@ export function TerminalModule({
   const [claudeLaunchingGroupId, setClaudeLaunchingGroupId] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Record<string, boolean>>({})
-  const [mountedWorkspaceIds, setMountedWorkspaceIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [recentWorkspaceIds, setRecentWorkspaceIds] = useState<readonly string[]>([])
   const workspaceViewRefs = useRef(new Map<string, TerminalWorkspaceViewHandle>())
   const renameReturnFocusRef = useRef<HTMLElement | null>(null)
   const sessionRenameReturnFocusRef = useRef<HTMLElement | null>(null)
@@ -239,12 +240,14 @@ export function TerminalModule({
     return workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? workspaces[0] ?? null
   }, [activeWorkspaceId, workspaces])
   const activeWorkspaceLeaves = activeWorkspace ? collectTerminalPaneLeaves(activeWorkspace.layout) : []
+  const mountedWorkspaceIds = useMemo(() => retainedTerminalWorkspaces(recentWorkspaceIds, activeWorkspace?.id ?? null, workspaces), [recentWorkspaceIds, activeWorkspace?.id, workspaces])
   const activePaneId = activeWorkspace
     ? activePaneIds[activeWorkspace.id] && activeWorkspaceLeaves.some((pane) => pane.paneId === activePaneIds[activeWorkspace.id])
       ? activePaneIds[activeWorkspace.id]!
       : activeWorkspaceLeaves[0]?.paneId ?? null
     : null
   const activePane = activeWorkspaceLeaves.find((pane) => pane.paneId === activePaneId) ?? null
+  const visibleSessionKey = activeWorkspaceLeaves.map((pane) => pane.sessionId).join("|")
   const activeSession = activePane
     ? sessions.find((session) => session.id === activePane.sessionId) ?? null
     : null
@@ -264,16 +267,21 @@ export function TerminalModule({
   const quickInputItems = useQuickInputItems()
   const quickInputDisabled = terminalSessionStatus !== "running" || sessionLockedByMobile
 
-  useEffect(() => {
-    void terminalBridge.agentNotifications.reportActiveSession({
-      sessionId: activeSession?.id ?? null,
-    }).catch((error) => {
-      logger.warn("Failed to report the active Terminal session.", error)
-    })
-  }, [activeSession?.id, terminalBridge])
+  // 可见订阅先于 pane 的 passive attach，避免快照与订阅之间漏掉输出。
+  useLayoutEffect(() => {
+    const report = () => {
+      void terminalBridge.agentNotifications.reportActiveSession({
+        sessionId: activeSession?.id ?? null,
+        visibleSessionIds: document.visibilityState === "hidden" ? [] : visibleSessionKey.split("|").filter(Boolean),
+      }).catch((error) => { logger.warn("Failed to report the active Terminal session.", error) })
+    }
+    report()
+    document.addEventListener("visibilitychange", report)
+    return () => document.removeEventListener("visibilitychange", report)
+  }, [activeSession?.id, visibleSessionKey, terminalBridge])
 
   useEffect(() => () => {
-    void terminalBridge.agentNotifications.reportActiveSession({ sessionId: null }).catch(() => undefined)
+    void terminalBridge.agentNotifications.reportActiveSession({ sessionId: null, visibleSessionIds: [] }).catch(() => undefined)
   }, [terminalBridge])
 
   useEffect(() => {
@@ -284,20 +292,11 @@ export function TerminalModule({
   }, [sessionLockedByMobile, voice.cancel])
 
   useEffect(() => {
-    if (!activeWorkspace) return
-    setMountedWorkspaceIds((current) => {
-      if (current.has(activeWorkspace.id)) return current
-      return new Set(current).add(activeWorkspace.id)
+    setRecentWorkspaceIds((current) => {
+      return current.length === mountedWorkspaceIds.length && current.every((id, index) => id === mountedWorkspaceIds[index])
+        ? current : mountedWorkspaceIds
     })
-  }, [activeWorkspace])
-
-  useEffect(() => {
-    const workspaceIds = new Set(workspaces.map((workspace) => workspace.id))
-    setMountedWorkspaceIds((current) => {
-      const next = new Set([...current].filter((workspaceId) => workspaceIds.has(workspaceId)))
-      return next.size === current.size ? current : next
-    })
-  }, [workspaces])
+  }, [mountedWorkspaceIds])
 
   const workspaceGroups = useMemo(() => groupWorkspaces(groups, workspaces), [groups, workspaces])
   const sortableGroups = useMemo(
@@ -1761,7 +1760,7 @@ export function TerminalModule({
             <div className="dark flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
               <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden">
                 {workspaces.map((workspace) => {
-                  if (workspace.id !== activeWorkspace.id && !mountedWorkspaceIds.has(workspace.id)) return null
+                  if (!mountedWorkspaceIds.includes(workspace.id)) return null
                   const paneLeaves = collectTerminalPaneLeaves(workspace.layout)
                   const workspaceActivePaneId = activePaneIds[workspace.id]
                     && paneLeaves.some((pane) => pane.paneId === activePaneIds[workspace.id])

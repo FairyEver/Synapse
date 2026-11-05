@@ -10,6 +10,8 @@ import { createMainLogger } from "../../../electron/services/log-store"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import { materializeTerminalClipboardImage } from "./clipboard-image"
 import { terminalSessionReference } from "./session-reference"
+import { createTerminalRendererOutputRelay } from "./renderer-output-relay"
+import { TERMINAL_RENDERER_BATCH_MAX_CHUNKS } from "../../../config"
 import { terminalGitMethods } from "./terminal-git-ipc"
 import type { TerminalService } from "./service"
 import {
@@ -78,8 +80,9 @@ import {
 
 const terminalDataEventPayloadSchema = z.object({
   sessionId: z.string().min(1),
-  chunk: terminalOutputChunkSchema,
-})
+  chunks: z.array(terminalOutputChunkSchema).max(TERMINAL_RENDERER_BATCH_MAX_CHUNKS),
+  resyncRequired: z.boolean().optional(),
+}).refine((batch) => batch.chunks.length > 0 || batch.resyncRequired === true)
 
 const terminalSessionDeletedEventPayloadSchema = z.object({
   sessionId: z.string().min(1),
@@ -100,6 +103,7 @@ const terminalDomainChangedEventPayloadSchema = z.object({
 })
 
 const terminalEventWiredServices = new WeakSet<TerminalService>()
+const terminalOutputRelays = new WeakMap<TerminalService, ReturnType<typeof createTerminalRendererOutputRelay>>()
 const terminalNotificationRendererCleanupIds = new Set<number>()
 const logger = createMainLogger("app.terminal.ipc")
 
@@ -122,8 +126,12 @@ function wireTerminalEvents(
   if (terminalEventWiredServices.has(service)) return
 
   const windowManager = ctx.resolve<WindowManager>("core.window-manager")
+  const relay = createTerminalRendererOutputRelay((batch, recipients) => {
+    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.data.operationId), batch, (window) => recipients.has(window.id))
+  })
+  terminalOutputRelays.set(service, relay)
   service.events.on("data", (payload) => {
-    windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.data.operationId), payload)
+    relay.append(payload.chunk)
   })
   service.events.on("sessionChanged", (payload) => {
     windowManager.broadcast(
@@ -132,9 +140,11 @@ function wireTerminalEvents(
     )
   })
   service.events.on("sessionDeleted", (payload) => {
+    relay.deleteSession(payload.sessionId)
     windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.sessionDeleted.operationId), payload)
   })
   service.events.on("resized", (payload) => {
+    relay.flushSession(payload.sessionId)
     windowManager.broadcast(ipcOperationIdToChannel(terminalIpcModule.events.resized.operationId), payload)
   })
   service.events.on("domainChanged", (payload) => {
@@ -174,14 +184,18 @@ export const terminalIpcModule: IpcModule = {
       response: z.void(),
       handler: (ctx, request: z.infer<typeof terminalReportActiveSessionInputSchema>) => {
         const sender = ctx.sender
-        if (!sender) return
+        if (!sender || sender.isDestroyed()) return
         const service = resolveAgentNotificationService(ctx)
+        const terminal = resolveTerminalService(ctx)
+        const relay = terminalOutputRelays.get(terminal)!
+        relay.report(sender.id, request.visibleSessionIds ?? (request.sessionId ? [request.sessionId] : []))
         service.reportActiveSession(sender.id, request.sessionId)
         if (!terminalNotificationRendererCleanupIds.has(sender.id)) {
           terminalNotificationRendererCleanupIds.add(sender.id)
           sender.onDestroyed(() => {
             terminalNotificationRendererCleanupIds.delete(sender.id)
             service.forgetRenderer(sender.id)
+            relay.forget(sender.id)
           })
         }
       },

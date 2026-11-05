@@ -19,9 +19,11 @@ export type TerminalOutputBuffer = {
   read(input: { afterSeq?: number; limitBytes: number }): TerminalOutputBufferReadResult
   snapshot(): TerminalOutputChunk[]
   snapshotAfter(afterSeq: number): TerminalOutputChunk[]
+  byteLengthAfter(afterSeq: number): number
   evictOldest(): { bytes: number; seq: number } | null
   readonly firstOutputSeq: number
   readonly oldestCreatedAt: string | undefined
+  readonly retainedChunkCount: number
   readonly totalBytes: number
   readonly nextOutputSeq: number
   readonly discardedBytes: number
@@ -105,9 +107,15 @@ export function createTerminalOutputBuffer(options: {
       return snapshotAfter(0)
     },
     snapshotAfter,
+    byteLengthAfter(afterSeq) {
+      let bytes = 0
+      for (let index = firstIndexAfter(afterSeq); index < length; index += 1) bytes += at(index)!.byteLength
+      return bytes
+    },
     evictOldest,
     get firstOutputSeq() { return at(0)?.seq ?? nextSeq },
     get oldestCreatedAt() { return at(0)?.createdAt },
+    get retainedChunkCount() { return length },
     get totalBytes() { return totalBytes },
     get nextOutputSeq() { return nextSeq },
     get discardedBytes() { return discardedBytes },

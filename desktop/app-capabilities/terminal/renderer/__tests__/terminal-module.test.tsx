@@ -1538,7 +1538,7 @@ describe("TerminalModule", () => {
     await act(async () => {
       outputListener?.({
         sessionId: "session-2",
-        chunk: createChunk({ sessionId: "session-2", seq: 1, data: "按需构建完成\r\n" }),
+        chunks: [createChunk({ sessionId: "session-2", seq: 1, data: "按需构建完成\r\n" })],
       })
       await Promise.resolve()
     })
@@ -4723,15 +4723,15 @@ describe("TerminalModule", () => {
     await act(async () => {
       bridgeState.dataListener?.({
         sessionId: "session-1",
-        chunk: createChunk({ sessionId: "session-1", seq: 1, data: "old" }),
+        chunks: [createChunk({ sessionId: "session-1", seq: 1, data: "old" })],
       })
       bridgeState.dataListener?.({
         sessionId: "other-session",
-        chunk: createChunk({ sessionId: "other-session", seq: 2, data: "other" }),
+        chunks: [createChunk({ sessionId: "other-session", seq: 2, data: "other" })],
       })
       bridgeState.dataListener?.({
         sessionId: "session-1",
-        chunk: createChunk({ sessionId: "session-1", seq: 2, data: "next\r\n" }),
+        chunks: [createChunk({ sessionId: "session-1", seq: 2, data: "next\r\n" })],
       })
       resizeObservers[0]?.trigger()
       await Promise.resolve()
@@ -5072,11 +5072,11 @@ describe("TerminalModule", () => {
       })
       bridgeState.dataListener?.({
         sessionId: session.id,
-        chunk: createChunk({ sessionId: session.id, seq: 2, data: "old-geometry" }),
+        chunks: [createChunk({ sessionId: session.id, seq: 2, data: "old-geometry" })],
       })
       bridgeState.dataListener?.({
         sessionId: session.id,
-        chunk: createChunk({ sessionId: session.id, seq: 3, data: "new-geometry" }),
+        chunks: [createChunk({ sessionId: session.id, seq: 3, data: "new-geometry" })],
       })
       bridgeState.resizedListener?.({
         sessionId: session.id,
@@ -5126,7 +5126,7 @@ describe("TerminalModule", () => {
     await act(async () => {
       bridgeState.dataListener?.({
         sessionId: session.id,
-        chunk: createChunk({ sessionId: session.id, seq: 2, data: "old-geometry" }),
+        chunks: [createChunk({ sessionId: session.id, seq: 2, data: "old-geometry" })],
       })
     })
     expect(finishPreviousOutput).toEqual(expect.any(Function))
@@ -5140,7 +5140,7 @@ describe("TerminalModule", () => {
       }
       bridgeState.dataListener?.({
         sessionId: session.id,
-        chunk: createChunk({ sessionId: session.id, seq: 3, data: "new-geometry" }),
+        chunks: [createChunk({ sessionId: session.id, seq: 3, data: "new-geometry" })],
       })
       finishPreviousOutput?.()
     })
@@ -5171,7 +5171,7 @@ describe("TerminalModule", () => {
     act(() => {
       bridgeState.dataListener?.({
         sessionId: "session-1",
-        chunk: createChunk({ sessionId: "session-1", seq: 2, data: "(base) $ " }),
+        chunks: [createChunk({ sessionId: "session-1", seq: 2, data: "(base) $ " })],
       })
     })
 
@@ -5191,7 +5191,7 @@ describe("TerminalModule", () => {
     act(() => {
       bridgeState.dataListener?.({
         sessionId: "session-1",
-        chunk: liveChunk,
+        chunks: [liveChunk],
       })
     })
 
@@ -5237,7 +5237,114 @@ describe("TerminalModule", () => {
     expect(toastState.error).not.toHaveBeenCalledWith("终端画面无法恢复")
   })
 
-  it("keeps a switched session mounted and resumes it from an authoritative snapshot", async () => {
+  it("bounds visited terminal renderers and restores an evicted tab from the core snapshot", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    for (let index = 0; index < 32; index += 1) createSession({ id: `session-${index}`, groupId: "group-1", title: `资源终端-${index}` })
+    await renderModule()
+    const original = xtermState.instances[0]!
+    const firstAttachOrder = terminalBridge.attachSession.mock.invocationCallOrder[0]!
+    expect(terminalBridge.reportActiveSession.mock.invocationCallOrder[0]!).toBeLessThan(firstAttachOrder)
+    for (let index = 1; index < 32; index += 1) {
+      await clickSession(`资源终端-${index}`)
+      expect(xtermState.instances.filter((instance) => instance.dispose.mock.calls.length === 0).length).toBeLessThanOrEqual(2)
+    }
+    expect(original.dispose).toHaveBeenCalledOnce()
+    expect(original.inputDispose).toHaveBeenCalledOnce()
+    bridgeState.chunks = [createChunk({ sessionId: "session-0", seq: 9, data: "authoritative-current-screen" })]
+    await clickSession("资源终端-0")
+    const restored = xtermState.instances.at(-1)!
+    expect(restored).not.toBe(original)
+    expect(restored.write.mock.calls.map(([data]) => data)).toContain("authoritative-current-screen")
+    expect(terminalBridge.stopSession).not.toHaveBeenCalled()
+  }, 20_000)
+
+  it("rebases once when output exceeds the projection budget while attach is pending", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "预算终端" })
+    bridgeState.deferredAttach = createDeferredAttach()
+    await renderModule()
+    const firstAttach = bridgeState.deferredAttach
+    await act(async () => {
+      for (let seq = 1; seq <= 400; seq += 1) {
+        bridgeState.dataListener?.({ sessionId: "session-1", chunks: [createChunk({ sessionId: "session-1", seq, data: "x".repeat(4096) })] })
+      }
+      bridgeState.chunks = [createChunk({ sessionId: "session-1", seq: 400, data: "fresh-snapshot" })]
+      bridgeState.deferredAttach = null
+      firstAttach.resolve({ session: getSession("session-1"), degraded: false, serialized: "stale-snapshot", cols: 80, rows: 24, throughOutputSeq: 0, sizeRevision: 1 })
+      await flushPromises()
+    })
+    const writes = xtermState.instances[0]!.write.mock.calls.map(([data]) => data)
+    expect(writes).toHaveLength(1)
+    expect(writes).toEqual(["fresh-snapshot"])
+    expect(terminalBridge.attachSession).toHaveBeenCalledTimes(2)
+    expect(terminalBridge.readSession).not.toHaveBeenCalled()
+  })
+
+  it("subscribes before attach after visibility changes and rebases oversized IPC output", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "可见终端" })
+    await renderModule()
+    await act(async () => { setDocumentVisibility("hidden"); await flushPromises() })
+    expect(terminalBridge.reportActiveSession).toHaveBeenLastCalledWith({ sessionId: "session-1", visibleSessionIds: [] })
+    const before = terminalBridge.attachSession.mock.calls.length
+    await act(async () => { setDocumentVisibility("visible"); await flushPromises() })
+    expect(terminalBridge.attachSession.mock.calls.length).toBe(before + 1)
+    expect(terminalBridge.reportActiveSession.mock.invocationCallOrder.at(-1)!).toBeLessThan(terminalBridge.attachSession.mock.invocationCallOrder.at(-1)!)
+    await act(async () => {
+      bridgeState.chunks = [createChunk({ sessionId: "session-1", seq: 9, data: "large-block-snapshot" })]
+      bridgeState.dataListener?.({ sessionId: "session-1", chunks: [], resyncRequired: true })
+      await flushPromises()
+    })
+    expect(xtermState.instances[0]!.write.mock.calls.map(([data]) => data)).toContain("large-block-snapshot")
+    expect(terminalBridge.attachSession.mock.calls.length).toBe(before + 2)
+  })
+
+  it("stops draining and reports an explicit error if the renderer rejects a write", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "写入终端" })
+    await renderModule()
+    const xterm = xtermState.instances[0]!
+    xterm.write.mockImplementationOnce(() => { throw new Error("write unavailable") })
+    await act(async () => {
+      bridgeState.dataListener?.({ sessionId: "session-1", chunks: [createChunk({ sessionId: "session-1", seq: 1, data: "first" }), createChunk({ sessionId: "session-1", seq: 2, data: "never-drain" })] })
+      await flushPromises()
+    })
+    expect(document.body.textContent).toContain("终端画面无法恢复")
+    expect(xterm.write.mock.calls.map(([data]) => data)).not.toContain("never-drain")
+    expect(terminalBridge.stopSession).not.toHaveBeenCalled()
+  })
+
+  it("does not let an old attach reveal a new projection that is still restoring", async () => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    createSession({ id: "session-1", groupId: "group-1", title: "恢复终端" })
+    const first = createDeferredAttach()
+    bridgeState.deferredAttach = first
+    await renderModule()
+    let finishWrite: (() => void) | undefined
+    xtermState.instances[0]!.write.mockImplementation((data: string, callback?: () => void) => {
+      if (data === "old-delta") finishWrite = callback
+      else callback?.()
+    })
+    await act(async () => {
+      bridgeState.dataListener?.({ sessionId: "session-1", chunks: [createChunk({ sessionId: "session-1", seq: 1, data: "old-delta" })] })
+      first.resolve({ session: getSession("session-1"), degraded: false, serialized: "initial", cols: 80, rows: 24, throughOutputSeq: 0, sizeRevision: 1 })
+      await flushPromises()
+    })
+    expect(finishWrite).toEqual(expect.any(Function))
+    const next = createDeferredAttach()
+    bridgeState.deferredAttach = next
+    await act(async () => { setDocumentVisibility("hidden"); await flushPromises() })
+    await act(async () => { setDocumentVisibility("visible"); await flushPromises() })
+    await act(async () => { finishWrite?.(); await flushPromises() })
+    expect(document.querySelector("[data-terminal-xterm-frame]")?.classList.contains("invisible")).toBe(true)
+    await act(async () => {
+      next.resolve({ session: getSession("session-1"), degraded: false, serialized: "new-screen", cols: 80, rows: 24, throughOutputSeq: 1, sizeRevision: 1 })
+      await flushPromises()
+    })
+    expect(document.querySelector("[data-terminal-xterm-frame]")?.classList.contains("invisible")).toBe(false)
+  })
+
+  it("keeps a recently switched session mounted and resumes it from an authoritative snapshot", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [
       createSession({
@@ -5266,7 +5373,7 @@ describe("TerminalModule", () => {
     originalXterm.write.mockClear()
     const hiddenSessionDataListener = terminalBridge.onData.mock.calls[0]?.[0]
     await act(async () => {
-      for (const chunk of hiddenChunks) hiddenSessionDataListener?.({ sessionId: "session-1", chunk })
+      for (const chunk of hiddenChunks) hiddenSessionDataListener?.({ sessionId: "session-1", chunks: [chunk] })
       await flushPromises()
     })
     bridgeState.chunks = hiddenChunks
@@ -5300,7 +5407,7 @@ describe("TerminalModule", () => {
       setDocumentVisibility("hidden")
       backgroundListener?.({
         sessionId: "session-1",
-        chunk: createChunk({ sessionId: "session-1", seq: 1, data: "while-hidden\r\n" }),
+        chunks: [createChunk({ sessionId: "session-1", seq: 1, data: "while-hidden\r\n" })],
       })
     })
     expect(xterm.write).not.toHaveBeenCalled()
@@ -5311,7 +5418,7 @@ describe("TerminalModule", () => {
     act(() => {
       resumedListener?.({
         sessionId: "session-1",
-        chunk: createChunk({ sessionId: "session-1", seq: 2, data: "after-snapshot\r\n" }),
+        chunks: [createChunk({ sessionId: "session-1", seq: 2, data: "after-snapshot\r\n" })],
       })
     })
 
