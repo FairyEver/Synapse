@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
+import { isAppNavigationBusy } from "@/app-shell/navigation-guard"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import type { MainNavigationInput, MainNavigationRequest } from "@/modules/apps/main-navigation"
 
@@ -35,6 +36,10 @@ export function useMainNavigation(
   }, [complete])
 
   const open = useCallback(async (destination: MainNavigationInput, request?: MainNavigationRequest) => {
+    if (isAppNavigationBusy()) {
+      if (request) acknowledge(request.id)
+      return false
+    }
     const token = ++sequence.current
     if (current.current) complete(current.current.destination)
     const bridge = getSynapseBridge()

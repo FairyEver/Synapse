@@ -6,7 +6,7 @@ import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { sanitizeError } from "@/lib/error-sanitize"
 import { startTrackedOperation } from "@/lib/ui-tracking"
 import type { AutomationItem } from "@/types/automation"
-import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode, AutomationEditorSession, AutomationEditorStep } from "../types"
+import type { AutomationEditorDraft, AutomationEditorLoadState, AutomationEditorMode } from "../types"
 import { stopAutomationRun } from "./use-automation"
 import { buildAutomationCreateInputFromDraft, buildAutomationUpdateInputFromDraft, createAutomationDraftFromItem, createDefaultAutomationDraft, generateAutomationDraftName, validateChangedTriggerVariables } from "../utils"
 
@@ -14,9 +14,7 @@ const logger = createRendererLogger("automation.editor")
 type LeaveKind = "back" | "navigation" | "close"
 type EditorOptions = {
   readonly mode: AutomationEditorMode
-  readonly initialSession?: AutomationEditorSession
-  readonly initialStep?: AutomationEditorStep
-  readonly onBack: (session?: AutomationEditorSession) => void
+  readonly onBack: () => void
   readonly onSaved?: (item: AutomationItem) => void
 }
 
@@ -27,16 +25,13 @@ function saveErrorMessage(error: unknown): string {
   return sanitizeError(error instanceof Error ? error.message : String(error)) || "保存失败"
 }
 
-export function useAutomationEditor({ mode, initialSession, initialStep, onBack, onSaved }: EditorOptions) {
+export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
   const bridge = useMemo(() => requireBridgeDomain("automation"), [])
-  const [loadState, setLoadState] = useState<AutomationEditorLoadState>(() => initialSession
-    ? { status: "ready", draft: initialSession.draft, item: initialSession.item }
-    : mode.mode === "create" ? { status: "ready", draft: createDefaultAutomationDraft(generateAutomationDraftName([])) } : { status: "loading" })
-  const baseline = useRef(JSON.stringify(initialSession?.savedDraft ?? (loadState.status === "ready" ? loadState.draft : null)))
+  const [loadState, setLoadState] = useState<AutomationEditorLoadState>(() => mode.mode === "create" ? { status: "ready", draft: createDefaultAutomationDraft(generateAutomationDraftName([])) } : { status: "loading" })
+  const baseline = useRef(JSON.stringify(loadState.status === "ready" ? loadState.draft : null))
   const [saving, setSaving] = useState(false)
-  const [step] = useState<AutomationEditorStep>(initialSession?.step ?? initialStep ?? "trigger")
   const [choosingType, setChoosingType] = useState(false)
-  const [previousTriggerTypes, setPreviousTriggerTypes] = useState<readonly string[]>(initialSession?.previousTriggerTypes ?? [])
+  const [previousTriggerTypes, setPreviousTriggerTypes] = useState<readonly string[]>([])
   const savingRef = useRef(false)
   const dirtyRef = useRef(false)
   const revision = useRef(0)
@@ -65,7 +60,6 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
   }, [])
 
   useEffect(() => {
-    if (initialSession && reloadKey === 0) return
     let cancelled = false
     const version = revision.current
     if (modeId) {
@@ -90,7 +84,7 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
       })
     }
     return () => { cancelled = true }
-  }, [bridge, initialSession, installItem, modeId, reloadKey])
+  }, [bridge, installItem, modeId, reloadKey])
 
   const itemId = loadState.status === "ready" ? loadState.item?.id : undefined
   useEffect(() => {
@@ -112,7 +106,11 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
   }, [bridge, installItem, itemId])
 
   const requestLeave = useCallback((kind: LeaveKind) => {
-    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    navigationReply.current?.(false)
+    navigationReply.current = null
+    if (!returnFocus.current || !document.querySelector('[role="alertdialog"]')) {
+      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    }
     setLeaveKind(kind)
   }, [])
 
@@ -122,7 +120,7 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
     navigationReply.current?.(false)
     requestLeave("navigation")
     return new Promise<boolean>(resolve => { navigationReply.current = resolve })
-  }), [requestLeave])
+  }, () => savingRef.current), [requestLeave])
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -158,9 +156,11 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
     updateDraft(current => ({ ...current, triggerType, triggerConfig }))
   }
 
-  async function save(enable: boolean) {
+  async function save(enable: boolean, leaveAfterSave = false) {
     if (savingRef.current || choosingType || loadState.status !== "ready") return
     const { draft, item } = loadState
+    const pendingLeave = leaveAfterSave ? leaveKind : null
+    let savedItem: AutomationItem | undefined
     revision.current += 1
     const finish = startTrackedOperation({ component: "automation", eventKey: item ? "automation.editor.save" : "automation.editor.create" })
     savingRef.current = true
@@ -173,10 +173,7 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
         : await bridge.item.create(buildAutomationCreateInputFromDraft(draft, enable))
       if (mounted.current) {
         installItem(saved)
-        setLeaveKind(null)
-        navigationReply.current?.(false)
-        navigationReply.current = null
-        onSaved?.(saved)
+        savedItem = saved
       }
       finish("success")
     } catch (saveError) {
@@ -187,6 +184,15 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
       savingRef.current = false
       if (mounted.current) setSaving(false)
     }
+    if (savedItem && mounted.current) {
+      if (pendingLeave) completeLeave(pendingLeave)
+      else {
+        setLeaveKind(null)
+        navigationReply.current?.(false)
+        navigationReply.current = null
+        onSaved?.(savedItem)
+      }
+    }
   }
 
   function back() {
@@ -195,28 +201,31 @@ export function useAutomationEditor({ mode, initialSession, initialStep, onBack,
     else onBack()
   }
 
-  function resolveLeave(action: "continue" | "stash" | "discard") {
-    if (savingRef.current) return
-    const kind = leaveKind
-    setLeaveKind(null)
-    if (action === "continue") {
-      navigationReply.current?.(false)
-      navigationReply.current = null
-      returnFocus.current?.focus()
-      return
-    }
-    if (action === "stash" && kind === "back" && loadState.status === "ready") {
-      onBack({ step, previousTriggerTypes, draft: loadState.draft, item: loadState.item, savedDraft: JSON.parse(baseline.current) as AutomationEditorDraft })
-      return
-    }
+  function completeLeave(kind: LeaveKind, discard = false) {
     dirtyRef.current = false
-    if (loadState.status === "ready") baseline.current = JSON.stringify(loadState.draft)
-    if (kind === "navigation") {
-      navigationReply.current?.(true)
-      navigationReply.current = null
-    } else if (kind === "close") window.close()
-    else onBack()
+    if (discard && loadState.status === "ready") baseline.current = JSON.stringify(loadState.draft)
+    setLeaveKind(null)
+    const reply = navigationReply.current
+    navigationReply.current = null
+    reply?.(kind === "navigation")
+    if (kind === "close") window.close()
+    else if (kind === "back") onBack()
   }
 
-  return { loadState, dirty, saving, error, leaveKind, step, choosingType, setChoosingType, changeTrigger, changeExecutor, stopRun, updateDraft, save, back, resolveLeave, retry: () => setReloadKey(key => key + 1) }
+  function resolveLeave(action: "continue" | "save" | "discard") {
+    if (savingRef.current || !leaveKind) return
+    if (action === "save") {
+      void save(false, true)
+      return
+    }
+    if (action === "continue") {
+      setLeaveKind(null)
+      navigationReply.current?.(false)
+      navigationReply.current = null
+      return
+    }
+    completeLeave(leaveKind, true)
+  }
+
+  return { loadState, dirty, saving, error, leaveKind, choosingType, setChoosingType, changeTrigger, changeExecutor, stopRun, updateDraft, save, back, resolveLeave, restoreFocus: () => returnFocus.current?.focus(), retry: () => setReloadKey(key => key + 1) }
 }

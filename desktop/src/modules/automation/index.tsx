@@ -26,8 +26,7 @@ import type { AutomationItem, AutomationRun, AutomationStopRunResult } from "@/t
 import { AutomationList } from "./components/automation-list"
 import { AutomationEditorForm } from "./editor/editor-form"
 import { AutomationDetail } from "./detail/automation-detail"
-import type { AutomationEditorMode, AutomationEditorSession, AutomationEditorStep } from "./types"
-import { useAutomationDraftGuard } from "./hooks/use-automation-draft-guard"
+import type { AutomationEditorMode, AutomationEditorStep } from "./types"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -97,10 +96,8 @@ function AutomationModule() {
   const deleteFallbackFocusRef = useRef<HTMLButtonElement | null>(null)
   const wasDeleteOpenRef = useRef(false)
   const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(() => new Set())
-  const [editor, setEditor] = useState<{ mode: AutomationEditorMode; step?: AutomationEditorStep; session?: AutomationEditorSession } | null>(null)
+  const [editor, setEditor] = useState<{ mode: AutomationEditorMode; step?: AutomationEditorStep } | null>(null)
   const [detail, setDetail] = useState<{ item: AutomationItem; tab: "config" | "history"; missing?: boolean } | null>(null)
-  const [draftSessions, setDraftSessions] = useState<Record<string, AutomationEditorSession>>({})
-  const draftGuard = useAutomationDraftGuard(Object.keys(draftSessions).length > 0, () => setDraftSessions({}))
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState("all")
   const returnTarget = useRef<string | null>(null)
@@ -298,20 +295,14 @@ function AutomationModule() {
     return result
   }
 
-  function resumeSession(key: string) {
-    const session = draftSessions[key]
-    if (session) setDraftSessions(current => { const next = { ...current }; delete next[key]; return next })
-    return session
-  }
-
   function handleCreateEditorOpen() {
     returnTarget.current = "create"
-    setEditor({ mode: { mode: "create" }, session: resumeSession("create") })
+    setEditor({ mode: { mode: "create" } })
   }
 
   function handleEditorOpen(item: AutomationItem, step?: AutomationEditorStep) {
     returnTarget.current = item.id
-    setEditor({ mode: { mode: "edit", automationId: item.id }, step, session: resumeSession(item.id) })
+    setEditor({ mode: { mode: "edit", automationId: item.id }, step })
   }
 
   function handleDetailOpen(item: AutomationItem, tab: "config" | "history" = "config") {
@@ -392,33 +383,13 @@ function AutomationModule() {
     )
   })()
 
-  const draftLeavePrompt = draftGuard.leaving ? (
-    <div role="region" aria-label="未保存的草稿" className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-muted px-5 py-3">
-      <p className="text-sm">还有未保存的草稿</p>
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={draftGuard.keepDrafts}>保留草稿</Button>
-        <Button variant="ghost" className="text-destructive" onClick={draftGuard.discardDrafts}>放弃草稿并离开</Button>
-      </div>
-    </div>
-  ) : null
-
   if (editor) {
     return (
       <TooltipProvider>
-        <div className="flex h-full min-h-0 flex-col">
-          {draftLeavePrompt}
-          <div className="min-h-0 flex-1">
         <AutomationEditorForm
           mode={editor.mode}
-          initialSession={editor.session}
           initialStep={editor.step}
-          onBack={(session) => {
-            if (session) {
-              setDraftSessions(current => ({ ...current, [session.item?.id ?? "create"]: session }))
-              setDetail(null)
-            }
-            setEditor(null)
-          }}
+          onBack={() => setEditor(null)}
           onSaved={item => {
             returnTarget.current = item.id
             setDetail({ item, tab: "config" })
@@ -426,20 +397,15 @@ function AutomationModule() {
             void refresh()
           }}
         />
-          </div>
-        </div>
       </TooltipProvider>
     )
   }
 
   if (detail) {
-    return <TooltipProvider><div className="flex h-full min-h-0 flex-col">
-      {draftLeavePrompt}
-      <div className="min-h-0 flex-1"><AutomationDetail key={`${detail.item.id}:${detail.tab}`} item={detail.item} initialTab={detail.tab}
+    return <TooltipProvider><AutomationDetail key={`${detail.item.id}:${detail.tab}`} item={detail.item} initialTab={detail.tab}
         missing={detail.missing} error={error} busy={pendingItemIds.has(detail.item.id)} onBack={() => setDetail(null)}
         onEdit={step => handleEditorOpen(detail.item, step)} onToggleEnabled={enabled => { void handleToggleEnabled(detail.item, enabled) }}
-        onRefresh={() => { void refresh() }} onStopRun={async runId => { await stopRunOrThrow(runId) }} /></div>
-    </div></TooltipProvider>
+        onRefresh={() => { void refresh() }} onStopRun={async runId => { await stopRunOrThrow(runId) }} /></TooltipProvider>
   }
 
   return (
@@ -511,7 +477,6 @@ function AutomationModule() {
           </>
         )}
       >
-        {draftLeavePrompt}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <Tabs value={filter} onValueChange={setFilter}>
             <TabsList aria-label="自动化状态筛选">
@@ -522,16 +487,6 @@ function AutomationModule() {
           </Tabs>
           <Input aria-label="搜索自动化" placeholder="搜索自动化" value={search} className="w-full sm:w-60" onChange={(event) => setSearch(event.target.value)} />
         </div>
-        {Object.entries(draftSessions).map(([key, draftSession]) => (
-          <div key={key} className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-dashed bg-background px-4 py-3">
-            <div className="min-w-0"><p className="truncate text-sm font-medium">{draftSession.draft.name}</p><p className="text-xs text-muted-foreground">未保存草稿 · 本次会话</p></div>
-            <Button variant="outline" onClick={() => {
-              returnTarget.current = draftSession.item?.id ?? "create"
-              setEditor({ mode: draftSession.item ? { mode: "edit", automationId: draftSession.item.id } : { mode: "create" }, session: draftSession })
-              resumeSession(key)
-            }}>继续编辑</Button>
-          </div>
-        ))}
         {content}
       </ModulePage>
     </TooltipProvider>

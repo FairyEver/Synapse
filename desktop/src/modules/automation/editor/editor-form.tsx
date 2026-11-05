@@ -3,6 +3,7 @@ import { ArrowLeft, LoaderCircle, RefreshCw } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -11,16 +12,15 @@ import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-ap
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { AutomationItem } from "@/types/automation"
 import { useAutomationEditor } from "../hooks/use-automation-editor"
-import type { AutomationEditorMode, AutomationEditorSession, AutomationEditorStep } from "../types"
+import type { AutomationEditorMode, AutomationEditorStep } from "../types"
 import { TriggerExecutorBuilder } from "./trigger-executor-builder"
 import { AutomationRunsPanel } from "../components/automation-runs-dialog"
 import { summarizeAutomationDraft } from "../utils"
 
 type AutomationEditorFormProps = {
   readonly mode: AutomationEditorMode
-  readonly initialSession?: AutomationEditorSession
   readonly initialStep?: AutomationEditorStep
-  readonly onBack: (session?: AutomationEditorSession) => void
+  readonly onBack: () => void
   readonly onSaved?: (item: AutomationItem) => void
 }
 
@@ -30,13 +30,14 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
   const { loadState, saving, error, leaveKind } = editor
   const [tab, setTab] = useState("config")
   const executorPanel = useRef<HTMLDivElement>(null)
+  const leaveSaveButton = useRef<HTMLButtonElement>(null)
   const ready = loadState.status === "ready"
   useEffect(() => {
-    if (ready && (props.initialStep ?? props.initialSession?.step) === "executor") {
+    if (ready && props.initialStep === "executor") {
       executorPanel.current?.focus()
       executorPanel.current?.scrollIntoView({ block: "nearest" })
     }
-  }, [ready, props.initialStep, props.initialSession?.step])
+  }, [ready, props.initialStep])
   const draft = loadState.status === "ready" ? loadState.draft : null
   const item = loadState.status === "ready" ? loadState.item : undefined
   const canSave = Boolean(draft?.name.trim() && draft.triggerType && draft.executorType && !saving && !editor.choosingType)
@@ -49,16 +50,23 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
   return (
     <SystemAppWindowShell headerMode="replace" left={backAction}>
       <div className="@container flex h-full min-h-0 min-w-0 flex-col bg-surface">
-        {leaveKind ? (
-          <div role="region" aria-label="未保存的更改" className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-muted px-5 py-3">
-            <p className="text-sm">更改尚未保存</p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" disabled={saving} onClick={() => editor.resolveLeave("continue")}>继续编辑</Button>
-              {leaveKind === "back" ? <Button variant="outline" disabled={saving} onClick={() => editor.resolveLeave("stash")}>暂存草稿并返回</Button> : null}
-              <Button variant="ghost" className="text-destructive" disabled={saving} onClick={() => editor.resolveLeave("discard")}>放弃修改</Button>
-            </div>
-          </div>
-        ) : null}
+        <AlertDialog open={Boolean(leaveKind)} onOpenChange={open => { if (!open) editor.resolveLeave("continue") }}>
+          <AlertDialogContent
+            onOpenAutoFocus={event => { event.preventDefault(); leaveSaveButton.current?.focus() }}
+            onEscapeKeyDown={event => { if (saving) event.preventDefault() }}
+            onCloseAutoFocus={event => { event.preventDefault(); editor.restoreFocus() }}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>保存更改？</AlertDialogTitle>
+              <AlertDialogDescription>更改尚未保存，放弃后无法恢复。</AlertDialogDescription>
+            </AlertDialogHeader>
+            {error ? <p role="alert" className="wrap-anywhere text-sm text-destructive">{error}</p> : null}
+            <AlertDialogFooter>
+              <AlertDialogAction variant="outline" disabled={saving} onClick={event => { event.preventDefault(); editor.resolveLeave("discard") }}>放弃</AlertDialogAction>
+              <Button ref={leaveSaveButton} disabled={saving || editor.choosingType} onClick={() => editor.resolveLeave("save")}>{saving ? "保存中" : "保存"}</Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         {loadState.status === "loading" ? (
           <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />加载中</div>
         ) : loadState.status === "error" ? (

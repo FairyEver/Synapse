@@ -613,13 +613,13 @@ describe("AutomationEditorApp", () => {
     expect(document.body.textContent).toContain("更改尚未保存")
 
     await act(async () => {
-      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "放弃修改")?.click()
+      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]')).find((button) => button.textContent === "放弃")?.click()
     })
 
     expect(closeSpy).toHaveBeenCalledTimes(1)
   })
 
-  it("restores focus after continuing to edit unsaved changes", async () => {
+  it("restores focus after Escape cancels closing with unsaved changes", async () => {
     window.history.replaceState(null, "", "/?window=automation-editor&mode=create")
     const rootElement = document.createElement("div")
     document.body.appendChild(rootElement)
@@ -639,10 +639,11 @@ describe("AutomationEditorApp", () => {
       window.dispatchEvent(new Event("beforeunload", { cancelable: true }))
     })
     await act(async () => {
-      Array.from(document.querySelectorAll<HTMLButtonElement>('button, [role="menuitemradio"]'))
-        .find((button) => button.textContent === "继续编辑")?.click()
+      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
     })
 
+    // Radix restores focus on the next task after unmounting the dialog.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
     expect(document.activeElement).toBe(triggerButton)
   })
 

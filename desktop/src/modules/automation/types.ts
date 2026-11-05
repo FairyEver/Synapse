@@ -24,18 +24,9 @@ type AutomationEditorLoadState =
   | { status: "ready"; draft: AutomationEditorDraft; item?: AutomationItem }
   | { status: "error"; message: string }
 
-type AutomationEditorSession = {
-  readonly step?: AutomationEditorStep
-  readonly previousTriggerTypes?: readonly string[]
-  readonly draft: AutomationEditorDraft
-  readonly item?: AutomationItem
-  readonly savedDraft: AutomationEditorDraft
-}
-
 export type {
   AutomationEditorStep,
   AutomationEditorDraft,
   AutomationEditorLoadState,
   AutomationEditorMode,
-  AutomationEditorSession,
 }

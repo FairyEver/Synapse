@@ -57,3 +57,41 @@ it("ignores a stale pull result, acknowledges blocked navigation, and consumes a
     actEnv.IS_REACT_ACT_ENVIRONMENT = previousActEnv
   }
 })
+
+it("keeps the original notification navigation pending when another arrives during saving", async () => {
+  const host = document.createElement("div")
+  const root = createRoot(host)
+  let receive!: (request: MainNavigationRequest) => void
+  mocks.apps.onMainNavigationRequested.mockImplementation(listener => { receive = listener; return () => undefined })
+  mocks.apps.getPendingMainNavigation.mockResolvedValue(null)
+  mocks.apps.acknowledgeMainNavigation.mockClear()
+  let busy = false
+  let finish!: (allow: boolean) => void
+  const release = registerNavigationGuard(() => busy ? false : new Promise<boolean>(resolve => { finish = resolve }), () => busy)
+  const applied: string[] = []
+  const request = (id: number): MainNavigationRequest => ({ id, ownerId: null, destination: { appId: "todos", target: { id: `todo-${id}`, requestId: String(id) } } })
+  function Harness() {
+    useMainNavigation((destination, apply) => runAppNavigation(() => {
+      if (apply() && destination.appId === "todos") applied.push(destination.target.id)
+    }))
+    return null
+  }
+  const actEnv = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  const previousActEnv = actEnv.IS_REACT_ACT_ENVIRONMENT
+  actEnv.IS_REACT_ACT_ENVIRONMENT = true
+  try {
+    await act(async () => { root.render(<Harness />) })
+    await act(async () => { receive(request(10)) })
+    busy = true
+    await act(async () => { receive(request(11)) })
+    expect(applied).toEqual([])
+    busy = false
+    await act(async () => { finish(true) })
+    expect(applied).toEqual(["todo-10"])
+    expect(mocks.apps.acknowledgeMainNavigation).toHaveBeenCalledWith(11)
+  } finally {
+    release()
+    await act(async () => { root.unmount() })
+    actEnv.IS_REACT_ACT_ENVIRONMENT = previousActEnv
+  }
+})

@@ -34,6 +34,7 @@ async function configure() {
   await act(async () => { change(document.querySelector<HTMLTextAreaElement>("#task-action-agent-prompt")!, "echo ok") })
 }
 beforeEach(() => {
+  Object.values(api).forEach(mock => mock.mockReset())
   vi.spyOn(rendererActionRegistry, "getDefaultConfig").mockImplementation(() => item().executor.config)
   const container = document.createElement("div"); document.body.append(container); root = createRoot(container)
   api.list.mockResolvedValue([]); api.get.mockResolvedValue(item()); api.create.mockResolvedValue(item()); api.update.mockResolvedValue(item())
@@ -146,25 +147,109 @@ describe("inline automation editing", () => {
     expect(api.update.mock.calls[0][0].patch.name).toBe("新的名称")
     expect(api.update.mock.calls[0][0].patch).not.toHaveProperty("enabled")
   })
-  it("keeps an unsaved editor on the page and returns its draft only after explicitly stashing", async () => {
+  async function requestLeave(kind: "back" | "navigation" | "close", navigate = vi.fn()) {
+    let pending: Promise<boolean> | undefined
+    await act(async () => {
+      if (kind === "back") document.querySelector<HTMLButtonElement>('[aria-label="返回自动化列表"]')!.click()
+      else if (kind === "navigation") pending = runAppNavigation(navigate)
+      else window.dispatchEvent(new Event("beforeunload", { cancelable: true }))
+    })
+    return { pending, navigate }
+  }
+  it("asks in a dialog and discards changes without stashing when returning", async () => {
     const onBack = vi.fn()
     await renderEditor({ onBack }); await configure()
-    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="返回自动化列表"]')!.click() })
+    await requestLeave("back")
+    const dialog = document.querySelector('[role="alertdialog"]')!
+    expect(dialog).not.toBeNull()
+    expect(document.querySelector('[role="region"][aria-label="未保存的更改"]')).toBeNull()
+    expect(Array.from(dialog.querySelectorAll("button")).map(b => b.textContent)).toEqual(["放弃", "保存"])
     expect(onBack).not.toHaveBeenCalled()
-    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
-    expect(document.body.textContent).toContain("更改尚未保存")
-    await act(async () => { button("暂存草稿并返回").click() })
-    expect(onBack).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ executorType: "builtin.agent" }) }))
+    await act(async () => { button("放弃").click() })
+    expect(onBack.mock.calls).toEqual([[]])
+    expect(api.create).not.toHaveBeenCalled()
   })
-  it("blocks app navigation until the user explicitly discards changes", async () => {
-    await renderEditor(); await configure()
-    const navigate = vi.fn()
-    let pending!: Promise<boolean>
-    await act(async () => { pending = runAppNavigation(navigate) })
+  it.each(["back", "navigation", "close"] as const)("saves before completing a pending %s", async kind => {
+    let finishSave!: (value: AutomationItem) => void
+    api.create.mockReturnValueOnce(new Promise<AutomationItem>(resolve => { finishSave = resolve }))
+    const onBack = vi.fn(), onSaved = vi.fn()
+    await renderEditor({ onBack, onSaved }); await configure()
+    const { pending, navigate } = await requestLeave(kind)
+    await act(async () => { button("保存").click(); button("保存").click() })
+    expect(api.create).toHaveBeenCalledOnce()
+    expect(api.create.mock.calls[0][0].enabled).toBe(false)
+    expect(onBack).not.toHaveBeenCalled()
     expect(navigate).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("更改尚未保存")
-    await act(async () => { button("放弃修改").click(); await pending })
+    expect(window.close).not.toHaveBeenCalled()
+    expect(button("放弃").disabled).toBe(true)
+    await act(async () => { finishSave(item()); await pending })
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(onBack).toHaveBeenCalledTimes(kind === "back" ? 1 : 0)
+    expect(navigate).toHaveBeenCalledTimes(kind === "navigation" ? 1 : 0)
+    expect(window.close).toHaveBeenCalledTimes(kind === "close" ? 1 : 0)
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+  it("finishes the original navigation after saving even when a second request arrives during the save", async () => {
+    let finishSave!: (value: AutomationItem) => void
+    api.create.mockReturnValueOnce(new Promise<AutomationItem>(resolve => { finishSave = resolve }))
+    await renderEditor(); await configure()
+    const { pending, navigate } = await requestLeave("navigation")
+    await act(async () => { button("保存").click() })
+    const secondNavigate = vi.fn()
+    await act(async () => { expect(await runAppNavigation(secondNavigate)).toBe(false) })
+    await act(async () => { finishSave(item()); await pending })
     expect(navigate).toHaveBeenCalledOnce()
+    expect(secondNavigate).not.toHaveBeenCalled()
+  })
+  it.each(["navigation", "close"] as const)("discards without saving before completing %s", async kind => {
+    await renderEditor(); await configure()
+    const { pending, navigate } = await requestLeave(kind)
+    await act(async () => { button("放弃").click(); await pending })
+    expect(navigate).toHaveBeenCalledTimes(kind === "navigation" ? 1 : 0)
+    expect(window.close).toHaveBeenCalledTimes(kind === "close" ? 1 : 0)
+    expect(api.create).not.toHaveBeenCalled()
+  })
+  it("keeps the dialog and input after a failed save and permits retrying the pending navigation", async () => {
+    api.create.mockRejectedValueOnce(new Error("save unavailable"))
+    await renderEditor(); await configure()
+    const { pending, navigate } = await requestLeave("navigation")
+    await act(async () => { button("保存").click() })
+    expect(document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent).toContain("save unavailable")
+    expect(navigate).not.toHaveBeenCalled()
+    expect(document.querySelector<HTMLTextAreaElement>('#task-action-agent-prompt')!.value).toBe("echo ok")
+    await act(async () => { button("保存").click(); await pending })
+    expect(navigate).toHaveBeenCalledOnce()
+  })
+  it("keeps incomplete configuration on validation failure and lets Escape resume editing", async () => {
+    await renderEditor()
+    await act(async () => { button("Cron").click() })
+    const focusTarget = document.querySelector<HTMLInputElement>('[aria-label="自动化名称"]')!
+    focusTarget.focus()
+    const { pending, navigate } = await requestLeave("navigation")
+    await act(async () => { button("保存").click() })
+    expect(document.querySelector('[role="alertdialog"] [role="alert"]')?.textContent).toBeTruthy()
+    expect(api.create).not.toHaveBeenCalled()
+    await act(async () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      await pending
+    })
+    // Radix restores focus on the next task after unmounting the dialog.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(navigate).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(focusTarget)
+    expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
+  })
+  it("preserves an enabled automation's status when saving before returning", async () => {
+    api.get.mockResolvedValueOnce({ ...item(), enabled: true })
+    const onBack = vi.fn()
+    await renderEditor({ mode: { mode: "edit", automationId: "automation:1" }, onBack })
+    await act(async () => { change(document.querySelector<HTMLInputElement>('[aria-label="自动化名称"]')!, "新名称") })
+    await requestLeave("back")
+    await act(async () => { button("保存").click() })
+    expect(api.update.mock.calls[0][0]).toEqual({ id: "automation:1", patch: expect.objectContaining({ name: "新名称" }) })
+    expect(api.update.mock.calls[0][0].patch).not.toHaveProperty("enabled")
+    expect(onBack).toHaveBeenCalledOnce()
   })
   it("keeps a failed save editable and allows retry without creating a second saved item", async () => {
     api.create.mockRejectedValueOnce(new Error("save unavailable"))
