@@ -222,6 +222,18 @@ describe("webhook sanitize", () => {
     expect(summary.bodyPreview).not.toContain("form-secret")
   })
 
+  it("preserves order and count for a large repeated form field within the public byte limit", () => {
+    const body = Buffer.from(`x=first&${Array(59_998).fill("x=1").join("&")}&x=last`)
+    expect(body.byteLength).toBeLessThan(256 * 1024)
+    const summary = summarizeWebhookBody(body, "application/x-www-form-urlencoded")
+    const values = (summary.body as { x: string[] }).x
+    expect(values).toHaveLength(60_000)
+    expect(values[0]).toBe("first")
+    expect(values.at(-1)).toBe("last")
+    expect(values.slice(1, -1).every(value => value === "1")).toBe(true)
+    expect(summary.bodyPreview).toContain("[truncated]")
+  })
+
   it("summarizes text bodies with practical token line redaction and truncation", () => {
     const summary = summarizeWebhookBody(
       Buffer.from(`token=plain-secret\n${"a".repeat(2100)}`),

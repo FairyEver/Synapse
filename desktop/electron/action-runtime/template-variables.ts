@@ -172,11 +172,15 @@ function flattenValue(
   }
   if (includeContainers) output[prefix] = stringifyTemplateValue(value)
   if (Array.isArray(value)) {
-    value.forEach((item, index) => flattenValue(`${prefix}.${String(index)}`, item, output, depth + 1, includeContainers))
+    for (let index = 0; index < value.length; index += 1) {
+      if (Object.keys(output).length >= MAX_FLATTEN_KEYS) break
+      if (index in value) flattenValue(`${prefix}.${String(index)}`, value[index], output, depth + 1, includeContainers)
+    }
     return
   }
   if (typeof value === "object") {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (Object.keys(output).length >= MAX_FLATTEN_KEYS) break
       flattenValue(`${prefix}.${key}`, child, output, depth + 1, includeContainers)
     }
   }

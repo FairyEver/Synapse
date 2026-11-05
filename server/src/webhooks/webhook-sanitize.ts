@@ -107,13 +107,15 @@ export function summarizeWebhookBody(body: Buffer, contentType = ""): WebhookBod
 
   if (normalizedContentType === "application/x-www-form-urlencoded") {
     const params = new URLSearchParams(body.toString("utf8"))
-    const parsed: Record<string, string | readonly string[]> = Object.create(null)
+    const parsed: Record<string, string | string[]> = Object.create(null)
     for (const [key, value] of params.entries()) {
       const existing = parsed[key]
       if (existing === undefined) {
         parsed[key] = value
+      } else if (Array.isArray(existing)) {
+        existing.push(value)
       } else {
-        parsed[key] = Array.isArray(existing) ? [...existing, value] : [existing, value]
+        parsed[key] = [existing, value]
       }
     }
     const redacted = redactValue(parsed)
