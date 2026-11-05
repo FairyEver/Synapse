@@ -50,18 +50,19 @@ function ScrollArea({
     [dataTrack],
   )
 
+  // Shrink the viewport with the root: percentage height alone cannot honor max-height.
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
       data-track={dataTrack}
       data-scrollbars={scrollbars}
-      className={cn("relative min-h-0 overflow-hidden", className)}
+      className={cn("relative flex min-h-0 flex-col overflow-hidden", className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
         data-slot="scroll-area-viewport"
-        className={cn(baseViewportClassName, viewportClassName)}
+        className={cn(baseViewportClassName, "min-h-0 flex-1", viewportClassName)}
         onScroll={(event) => {
           if (dataTrack && trackScroll) {
             const target = event.currentTarget
