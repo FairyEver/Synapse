@@ -144,6 +144,43 @@ afterEach(async () => {
 })
 
 describe("AutomationModule", () => {
+  it.each(["success", "failed", "moved"] as const)("restores focus after an Alt-delete %s without stealing a moved focus", async (scenario) => {
+    let items = [createItem()]
+    mocks.useAutomationItems.mockImplementation(() => ({ items, loading: false, error: null, refresh: vi.fn() }))
+    let settle!: () => void
+    mocks.deleteAutomation.mockImplementation(() => new Promise((resolve, reject) => {
+      settle = () => {
+        if (scenario === "failed") reject(new Error("test delete failure"))
+        else { items = []; resolve({ deleted: true }) }
+      }
+    }))
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => root.render(<AutomationModule />))
+    const search = document.querySelector<HTMLInputElement>('[aria-label="搜索自动化"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "Daily")
+      search.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    const button = document.querySelector<HTMLButtonElement>('[aria-label="删除自动化"]')!
+    await act(async () => button.focus())
+    await act(async () => { button.dispatchEvent(new MouseEvent("click", { bubbles: true, altKey: true })) })
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull()
+    expect(button.disabled).toBe(true)
+    // Model the browser blurring the pending disabled button.
+    await act(async () => {
+      container.tabIndex = -1
+      container.focus()
+      container.blur()
+      if (scenario === "moved") search.focus()
+    })
+    await act(async () => settle())
+    const create = [...document.querySelectorAll("button")].find(candidate => candidate.textContent === "新建")
+    expect(document.activeElement).toBe(scenario === "moved" ? search : scenario === "failed" ? button : create)
+    if (scenario !== "failed") expect(document.body.textContent).toContain("没有匹配的自动化")
+  })
+
   it("returns focus to search when clearing filters", async () => {
     mocks.useAutomationItems.mockReturnValue({ items: [createItem({ enabled: false })], loading: false, error: null, refresh: vi.fn() })
     const container = document.createElement("div"); document.body.appendChild(container)

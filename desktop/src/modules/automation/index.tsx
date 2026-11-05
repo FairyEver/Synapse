@@ -103,16 +103,16 @@ function AutomationModule() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const [filter, setFilter] = useState("all")
   const returnTarget = useRef<string | null>(null)
-  const toggleReturnFocusRef = useRef<{ itemId: string; element: HTMLElement } | null>(null)
+  const mutationReturnFocusRef = useRef<{ itemId: string; element: HTMLElement; fallback: "search" | "create" } | null>(null)
 
   useEffect(() => {
-    const target = toggleReturnFocusRef.current
+    const target = mutationReturnFocusRef.current
     if (!target || pendingItemIds.has(target.itemId)) return
-    toggleReturnFocusRef.current = null
+    mutationReturnFocusRef.current = null
     if (document.activeElement !== document.body && document.activeElement !== target.element) return
     const element = target.element.isConnected && !target.element.matches(":disabled")
       ? target.element
-      : searchInputRef.current
+      : target.fallback === "create" ? deleteFallbackFocusRef.current : searchInputRef.current
     element?.focus()
   }, [pendingItemIds])
 
@@ -197,6 +197,7 @@ function AutomationModule() {
   function handleDeleteStart(item: AutomationItem, event: MouseEvent<HTMLElement>) {
     if (item.activeRun?.status === "running") return
     if (shouldBypassDeleteConfirm(event)) {
+      mutationReturnFocusRef.current = { itemId: item.id, element: event.currentTarget, fallback: "create" }
       void deleteItem(item)
       return
     }
@@ -208,7 +209,7 @@ function AutomationModule() {
     if (item.schemaVersion === 1) return
     const focused = document.activeElement
     if (focused instanceof HTMLElement && focused.getAttribute("role") === "switch") {
-      toggleReturnFocusRef.current = { itemId: item.id, element: focused }
+      mutationReturnFocusRef.current = { itemId: item.id, element: focused, fallback: "search" }
     }
     await runItemMutation(
       item.id,
