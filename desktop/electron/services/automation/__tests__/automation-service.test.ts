@@ -301,6 +301,58 @@ describe("AutomationService", () => {
     ])
   })
 
+  it.each(["disable-reenable", "update-disable", "source-roundtrip", "stop", "rename", "failed-disable"] as const)("handles pending events across a %s boundary", async boundary => {
+    const started: string[] = []
+    let releaseFirst!: () => void
+    const triggers = fakeEventTriggerRegistry()
+    const matches = vi.spyOn(triggers.get("builtin.fake-event").runtime, "shouldAcceptEvent")
+    const harness = createHarness({ triggers, action: { ...testAction, execute: async ({ context }) => {
+      const deliveryId = context.templateVariables!["trigger.payload.deliveryId"]!
+      started.push(deliveryId)
+      if (deliveryId === "running") await new Promise<void>(resolve => {
+        releaseFirst = resolve
+        context.abortSignal.addEventListener("abort", () => resolve(), { once: true })
+      })
+      return { status: "success", summary: deliveryId }
+    } } })
+    const item = await harness.service.automationCreate({
+      name: "Queued lifecycle", scope: { type: "global" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } },
+      executor: { type: "builtin.test", config: { message: "ok" } },
+    })
+    const event = (deliveryId: string) => ({ source: "webhook", type: "demo.created", payload: { deliveryId }, receivedAt: "2026-06-03T00:00:00.000Z" })
+    const first = harness.service.acceptEvent(event("running"))
+    await waitFor(() => started.length === 1)
+    const pending = harness.service.acceptEvent(event("obsolete"))
+    await waitFor(() => matches.mock.calls.length === 2)
+    if (boundary === "disable-reenable") {
+      await harness.service.automationDisable(item.id)
+      await harness.service.automationEnable(item.id)
+    } else if (boundary === "update-disable") {
+      await harness.service.automationUpdate(item.id, { enabled: false })
+      await harness.service.automationEnable(item.id)
+    } else if (boundary === "source-roundtrip") {
+      await harness.service.automationUpdate(item.id, { trigger: { type: "builtin.fake-event", config: { eventType: "demo.changed" } } })
+      await harness.service.automationUpdate(item.id, { trigger: item.trigger })
+    } else if (boundary === "rename") {
+      await harness.service.automationUpdate(item.id, { name: "Renamed without changing its trigger" })
+    } else if (boundary === "failed-disable") {
+      vi.spyOn(harness.items, "setEnabled").mockRejectedValueOnce(new Error("disk unavailable"))
+      await expect(harness.service.automationDisable(item.id)).rejects.toThrow("disk unavailable")
+    } else {
+      await harness.service.stop()
+    }
+    const fresh = boundary === "stop" ? undefined : harness.service.acceptEvent(event("fresh"))
+    releaseFirst()
+    await first
+    await pending
+    if (fresh) await fresh
+    const preserved = boundary === "rename" || boundary === "failed-disable"
+    expect(started).toEqual(boundary === "stop" ? ["running"] : preserved ? ["running", "obsolete", "fresh"] : ["running", "fresh"])
+    expect(await pending).toHaveLength(preserved ? 1 : 0)
+    await harness.service.stop()
+  })
+
   it("starts different matching event automations without waiting for the first run to finish", async () => {
     const action = controllableEventAction()
     const harness = createHarness({ action: action.definition, triggers: fakeEventTriggerRegistry() })

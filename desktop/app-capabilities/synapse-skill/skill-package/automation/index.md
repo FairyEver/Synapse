@@ -95,6 +95,8 @@ Use `app_automation_item_update` with a focused patch. The patch may include top
 
 If you only need to enable or disable an Automation, use `app_automation_item_enable` or `app_automation_item_disable` instead of `app_automation_item_update`.
 
+Local Webhook events run serially per Automation. Successfully disabling an item, changing its trigger configuration, or stopping the service discards its pending events; reenabling does not replay them. Already-started runs continue unless explicitly stopped. Renaming an item or a failed disable write does not discard its queue. Webhook acknowledgement still means reception only, not execution success.
+
 If a read result only shows `{ type, summary }`, that is expected. It is not enough to reconstruct private configs. Ask the user for the new desired config or use discovery defaults.
 
 ## Run Rules

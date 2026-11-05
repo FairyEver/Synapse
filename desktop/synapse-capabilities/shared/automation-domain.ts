@@ -275,7 +275,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_disable",
-      description: "Disable one Synapse Automation by automationId. This prevents future trigger runs but does not stop an active run.",
+      description: "Disable one Synapse Automation by automationId. This prevents future trigger runs and discards pending local Webhook events, including after reenabling, but does not stop an active run.",
       inputSchema: { type: "object", properties: { automationId: automationIdProperty }, required: ["automationId"] },
     },
     {

@@ -63,6 +63,7 @@ export class AutomationService {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly runningItemIds = new Set<string>()
   private readonly eventRunChains = new Map<string, Promise<void>>()
+  private readonly eventRunScopes = new Map<string, object>()
   private started = false
 
   constructor(private readonly deps: AutomationServiceDeps) {}
@@ -147,6 +148,7 @@ export class AutomationService {
       clearTimeout(timer)
     }
     this.timers.clear()
+    this.eventRunScopes.clear()
     try {
       await this.stopActiveRuns()
     } finally {
@@ -216,6 +218,9 @@ export class AutomationService {
     this.cancel(id)
     try {
       const item = await this.deps.items.update(id, normalizedPatch)
+      if (!item.enabled || (oldItem && JSON.stringify(oldItem.trigger) !== JSON.stringify(item.trigger))) {
+        this.eventRunScopes.delete(id)
+      }
       if (this.started && item.enabled && this.isItemValid(item)) await this.schedule(item.id, item.nextRunAt)
       this.emitAutomationChanged({ automationId: item.id, reason: "updated" })
       this.deps.logger?.info("Automation updated.", {
@@ -245,6 +250,7 @@ export class AutomationService {
     const deleted = await this.deps.items.deleteNonAgent(id)
     if (deleted) {
       this.cancel(id)
+      this.eventRunScopes.delete(id)
       this.emitAutomationChanged({ automationId: id, reason: "deleted" })
     }
     return deleted
@@ -259,6 +265,7 @@ export class AutomationService {
     this.cancel(id)
     try {
       const deleted = await this.deps.items.delete(id)
+      if (deleted) this.eventRunScopes.delete(id)
       const deletedRunCount = deleted ? await this.deleteRunsAfterItemDelete(id) : 0
       if (deleted) this.emitAutomationChanged({ automationId: id, reason: "deleted" })
       this.deps.logger?.info("Automation deleted.", {
@@ -532,6 +539,7 @@ export class AutomationService {
     this.cancel(id)
     try {
       const item = await this.deps.items.setEnabled(id, enabled)
+      if (!item.enabled) this.eventRunScopes.delete(id)
       if (this.started && item.enabled && this.isItemValid(item)) await this.schedule(item.id, item.nextRunAt)
       this.emitAutomationChanged({ automationId: item.id, reason: enabled ? "enabled" : "disabled" })
       this.deps.logger?.info("Automation enabled state changed.", {
@@ -736,10 +744,13 @@ export class AutomationService {
     triggerContext: AutomationTriggerRuntimeContext,
   ): Promise<AutomationRun | null> {
     const previous = this.eventRunChains.get(item.id) ?? Promise.resolve()
+    const scope = this.eventRunScopes.get(item.id) ?? {}
+    this.eventRunScopes.set(item.id, scope)
     const runPromise = previous
       .catch(() => undefined)
       .then(async () => {
         const current = await this.deps.items.get(item.id)
+        if (this.eventRunScopes.get(item.id) !== scope) return null
         if (!current?.enabled || current.schemaVersion !== 2 || !this.isItemValid(current)) return null
         if (!this.isAutomaticRunAllowed(current, this.now())) return null
         return this.executeOrSkip(current, "trigger", triggerContext)
@@ -749,6 +760,7 @@ export class AutomationService {
     void chain.finally(() => {
       if (this.eventRunChains.get(item.id) === chain) {
         this.eventRunChains.delete(item.id)
+        this.eventRunScopes.delete(item.id)
       }
     })
     return runPromise
