@@ -208,7 +208,7 @@ function attachDevelopmentInputShortcuts(window: BrowserWindow): void {
   })
 }
 
-export function showOrCreateMainWindow(deps: MainWindowDeps): void {
+export function showOrCreateMainWindow(deps: MainWindowDeps, create: () => void = () => createMainWindow(deps)): void {
   if (deps.isAppQuitting()) {
     app.relaunch()
     app.exit(0)
@@ -216,9 +216,10 @@ export function showOrCreateMainWindow(deps: MainWindowDeps): void {
   }
   const existing = deps.state.current
   if (existing && !existing.isDestroyed()) {
+    if (existing.isMinimized()) existing.restore()
     existing.show()
     existing.focus()
     return
   }
-  createMainWindow(deps)
+  create()
 }

@@ -153,6 +153,23 @@ describe("createProtocolUrlRouter", () => {
     expect(focusMainWindow).toHaveBeenCalledTimes(2)
   })
 
+  it("leaves window focus with the Skill Hub install handler", async () => {
+    const openInstaller = vi.fn(async () => undefined)
+    const focusMainWindow = vi.fn()
+    const router = createProtocolUrlRouter({
+      ...createUnusedUpdateRouterDeps(),
+      focusMainWindow,
+      handleAuthCallback: vi.fn(),
+      logger: createLogger(),
+      privateProtocolHandlers: { "skill-hub.install": openInstaller },
+    }, ["synapse://skill-hub/install?skillId=fixture"])
+
+    await router.start()
+
+    expect(openInstaller).toHaveBeenCalledOnce()
+    expect(focusMainWindow).not.toHaveBeenCalled()
+  })
+
   it("dispatches app deep links without focusing the main window or asking for confirmation", async () => {
     const dispatchAppAction = vi.fn(async () => ({ ok: true as const, data: { path: "/tmp/report.docx" } }))
     const focusMainWindow = vi.fn()

@@ -105,8 +105,9 @@ function useProjectGitActions(project?: SynapseProjectConfig) {
   const openGit = useCallback(async () => {
     if (!repository) return
     try {
-      await requireSynapseBridge().apps.openSystemApp("git", {
-        gitOpenRequest: {
+      await requireSynapseBridge().apps.navigateMain({
+        appId: "git",
+        target: {
           requestId: createOperationId(),
           repositoryId: repository.id,
         },

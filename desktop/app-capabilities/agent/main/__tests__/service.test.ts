@@ -5,7 +5,7 @@ import { AgentConversationNavigationError } from "../../shared/errors"
 import { AgentConversationNavigationService } from "../service"
 import { agentConversationReference } from "../conversation-reference"
 
-function createService(entries: ConversationEntryV1[]) {
+function createService(entries: ConversationEntryV1[], focusMainWindow?: () => void) {
   const byId = new Map(entries.map((entry) => [entry.id, entry]))
   const windowManager = {
     open: vi.fn(),
@@ -24,7 +24,7 @@ function createService(entries: ConversationEntryV1[]) {
     })),
   } as unknown as DataRepository
   return {
-    service: new AgentConversationNavigationService({ dataRepository, windowManager, logger }),
+    service: new AgentConversationNavigationService({ dataRepository, windowManager, logger, focusMainWindow }),
     windowManager,
     logger,
   }
@@ -49,6 +49,17 @@ function conversation(
 }
 
 describe("AgentConversationNavigationService", () => {
+  it("creates the main window through its bootstrap opener when a cold link arrives", async () => {
+    const entry = conversation("conversation-1")
+    const createMainWindow = vi.fn()
+    const { service, windowManager } = createService([entry], createMainWindow)
+    vi.mocked(windowManager.open).mockImplementation(() => { throw new Error("Unknown window id main") })
+
+    await expect(service.open({ projectId: entry.projectId, conversationId: entry.id })).resolves.toEqual({ opened: true })
+    expect(createMainWindow).toHaveBeenCalledBefore(vi.mocked(windowManager.broadcast))
+    expect(service.getPendingOpenRequest()?.conversationId).toBe(entry.id)
+  })
+
   it.each([
     [undefined, "user"],
     ["local", "user"],

@@ -1,3 +1,4 @@
+import { showSenderOpenDialog } from "../../runtime/ipc/sender-dialog"
 /**
  * Phase 0.3 — Repository IpcModule.
  * SPEC §6 Step 3.
@@ -7,7 +8,7 @@
 
 import { z } from "zod"
 import path from "node:path"
-import { BrowserWindow, dialog, type OpenDialogOptions } from "electron"
+import type { OpenDialogOptions } from "electron"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
@@ -455,19 +456,14 @@ export const repositoryIpcModule: IpcModule = {
       operationId: "app.settings.repository.choose_directory",
       request: z.void(),
       response: z.string().nullable(),
-      handler: async (_ctx) => {
+      handler: async (ctx) => {
         logger.info("Opening native directory picker.")
 
         const options: OpenDialogOptions = {
           properties: ["openDirectory"],
         }
 
-        // Get parent window for modal dialog - try focused first, then any visible window
-        const parentWindow = BrowserWindow.getFocusedWindow()
-          ?? BrowserWindow.getAllWindows().find(w => w.isVisible() && !w.isDestroyed())
-          ?? undefined
-
-        const result = await dialog.showOpenDialog(parentWindow as unknown as Electron.BaseWindow, options)
+        const result = await showSenderOpenDialog(ctx, options)
 
         const selectedPath = result.canceled ? null : result.filePaths[0] ?? null
 

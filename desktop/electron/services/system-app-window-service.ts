@@ -1,12 +1,14 @@
 import { HUB_INSTALLER_VIEW, HUB_INSTALL_REQUEST_PARAM, type HubInstallOpenRequest } from "../../app-capabilities/skill-hub/shared/install-source"
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 
 import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
+import { IPC_CHANNELS } from "../generated/ipc-channels.generated"
 import type { WindowManager } from "../runtime/window"
 import { managedBrowserWindow } from "../runtime/window"
 import { getSystemAppDefinition } from "../../src/modules/apps/definitions"
+import type { MainNavigationInput, MainNavigationRequest } from "../../src/modules/apps/main-navigation"
 import type {
   SynapseSystemAppDefinition,
   SynapseSystemAppId,
@@ -39,6 +41,9 @@ type SystemAppWindowServiceDeps = {
   readonly windowManager?: WindowManager
   readonly getPreloadPath?: () => string
   readonly logger?: SystemAppWindowLogger
+  readonly focusMainWindow?: () => void
+  readonly getOwnerId?: () => string | null
+  readonly activateApp?: () => void
 }
 
 const SYSTEM_APP_WINDOW_BOUNDS = {
@@ -90,14 +95,64 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
   const composeWindows = new Map<number, { key: string; scope: string; draftKey?: string }>()
   const composeAliases = new Map<string, string>()
   let installerOpening: Promise<unknown> | undefined
+  let pendingMainNavigation: MainNavigationRequest | null = null
+  let nextNavigationId = 0
+  const focusMainWindow = () => {
+    deps.activateApp?.()
+    if (deps.focusMainWindow) deps.focusMainWindow()
+    else deps.windowManager?.open("main")
+  }
+  const focusInstaller = (window: BrowserWindow) => {
+    if (window.isDestroyed()) return
+    if (window.isMinimized()) window.restore()
+    if (!window.isVisible()) window.show()
+    deps.activateApp?.()
+    window.focus()
+  }
+  const deliverMainNavigation = (request: MainNavigationRequest) => {
+    focusMainWindow()
+    pendingMainNavigation = request
+    deps.windowManager?.broadcast(IPC_CHANNELS.apps.mainNavigationRequested, request, (window) => window.role === "main")
+  }
+
   return {
+    focusMainWindow,
+    navigateMain(destination: MainNavigationInput): void {
+      const request = { id: ++nextNavigationId, destination, ownerId: deps.getOwnerId?.() ?? null }
+      deliverMainNavigation(request)
+    },
+    async navigateMainAfter(resolve: () => Promise<MainNavigationInput | null>): Promise<void> {
+      const id = ++nextNavigationId
+      pendingMainNavigation = null
+      const ownerId = deps.getOwnerId?.() ?? null
+      const destination = await resolve()
+      if (destination && id === nextNavigationId && ownerId === (deps.getOwnerId?.() ?? null)) {
+        deliverMainNavigation({ id, ownerId, destination })
+      }
+    },
+    isMainNavigationSender(id: number): boolean {
+      return deps.windowManager?.list().some((window) => window.role === "main" && window.webContentsId === id) ?? false
+    },
+    getPendingMainNavigation(): MainNavigationRequest | null {
+      if (pendingMainNavigation?.ownerId && pendingMainNavigation.ownerId !== deps.getOwnerId?.()) {
+        pendingMainNavigation = null
+      }
+      return pendingMainNavigation
+    },
+    invalidateAccountNavigation(): void {
+      if (pendingMainNavigation?.ownerId) pendingMainNavigation = null
+      nextNavigationId += 1
+    },
+    acknowledgeMainNavigation(id: number): void {
+      if (pendingMainNavigation?.id === id) pendingMainNavigation = null
+    },
     isSkillInstallerSender(id: number) { return detachedWindows.get(HUB_INSTALLER_VIEW)?.webContents.id === id },
     async openSkillInstaller(request: HubInstallOpenRequest) {
       const existing = detachedWindows.get(HUB_INSTALLER_VIEW)
       if (existing) {
         await installerOpening
         if (existing.isDestroyed()) return
-        focusDetachedViewWindow(existing)
+        focusInstaller(existing)
         sendToSystemAppWindow(deps.windowManager, existing, "synapse:app:apps:operation:skill_hub_install_open_request", request)
         return
       }
@@ -110,12 +165,14 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         options: {
           ...SYSTEM_APP_WINDOW_BOUNDS,
           title: "Skill 安装",
+          show: false,
           webPreferences: {
             preload: deps.getPreloadPath?.() ?? resolveSystemAppWindowPreloadPath(__dirname),
             contextIsolation: true, nodeIntegration: false, sandbox: true,
           },
         },
         load: (window, url) => window.loadURL(url),
+        onReadyToShow: focusInstaller,
         onCreated: ({ window }) => deps.windowManager?.attach({ id: windowId, role: "detail" }, managedBrowserWindow(window, "detail")),
         onRemoved: () => deps.windowManager?.detach(windowId),
       })
@@ -268,11 +325,18 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
   }
 }
 
-export function createDefaultSystemAppWindowService(windowManager: WindowManager) {
+export function createDefaultSystemAppWindowService(
+  windowManager: WindowManager,
+  focusMainWindow?: () => void,
+  getOwnerId?: () => string | null,
+) {
   return createSystemAppWindowService({
     createWindow: (options) => new BrowserWindow(options),
     baseUrl: rendererBaseUrl,
     windowManager,
+    focusMainWindow,
+    getOwnerId,
+    activateApp: () => { if (process.platform === "darwin") app.focus({ steal: true }) },
     getPreloadPath: () => resolveSystemAppWindowPreloadPath(__dirname),
   })
 }

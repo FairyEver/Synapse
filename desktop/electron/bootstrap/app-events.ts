@@ -119,8 +119,8 @@ export function attachSecondInstanceProtocolHandler(handleUrl: (url: string) => 
   })
 }
 
-export function attachActivateHandler(showOrCreate: () => void): void {
-  app.on("activate", () => {
-    showOrCreate()
+export function attachActivateHandler(onActivate: (hasVisibleWindows: boolean) => void): void {
+  app.on("activate", (_event, hasVisibleWindows) => {
+    onActivate(hasVisibleWindows)
   })
 }

@@ -12,12 +12,13 @@ export type SystemNotifierFailureReason =
 
 export type SystemNotificationAdapter = {
   readonly kind: "electron" | "noop"
-  show(input: SystemNotificationInput & { readonly silent: boolean }): void
+  show(input: SystemNotificationInput & { readonly silent: boolean; readonly onClick?: () => void }): void
 }
 
 type ElectronNotificationConstructor = {
   new(options: { title: string; body: string; silent: boolean }): {
     show(): void
+    on?(event: "click" | "close" | "failed", listener: () => void): void
   }
   isSupported(): boolean
 }
@@ -36,6 +37,7 @@ export function createElectronSystemNotificationAdapter(
     return createNoopSystemNotificationAdapter()
   }
 
+  const clickable = new Set<InstanceType<ElectronNotificationConstructor>>()
   return {
     kind: "electron",
     show(input) {
@@ -51,8 +53,17 @@ export function createElectronSystemNotificationAdapter(
         return
       }
       try {
+        if (input.onClick && notification.on) {
+          const onClick = input.onClick
+          const release = () => clickable.delete(notification)
+          clickable.add(notification)
+          notification.on("click", () => { if (release()) onClick() })
+          notification.on("close", release)
+          notification.on("failed", release)
+        }
         notification.show()
       } catch {
+        clickable.delete(notification)
         onFailure("notification_show", "synchronous_exception")
       }
     },

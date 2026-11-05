@@ -261,10 +261,10 @@ export class SystemNotifierService {
    * 本机通知关着、或设置读不出来时都不弹：`localEnabled` / `silent` 描述的就是这台电脑的
    * 呈现，这是触发之后这台电脑唯一会弹原生通知的地方。
    */
-  presentAccountNotification(input: SystemNotificationInput): void {
+  presentAccountNotification(input: SystemNotificationInput, onClick?: () => void): void {
     const settings = this.snapshot
     if (settings?.localEnabled !== true) return
-    this.show({ ...input, silent: settings.silent })
+    this.show({ ...input, silent: settings.silent, ...(onClick ? { onClick } : {}) })
   }
 
   /**
@@ -288,7 +288,7 @@ export class SystemNotifierService {
     return { success: true }
   }
 
-  private show(input: SystemNotificationInput & { readonly silent: boolean }): void {
+  private show(input: Parameters<SystemNotificationAdapter["show"]>[0]): void {
     try {
       this.adapter.show(input)
     } catch {

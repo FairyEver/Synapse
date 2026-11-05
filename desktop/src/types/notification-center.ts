@@ -1,3 +1,4 @@
+import { z } from "zod"
 import type { DriveDiscussionNotificationMetadata } from "@synapse/shared" with { "resolution-mode": "import" }
 
 export type SynapseNotification = {
@@ -23,3 +24,23 @@ export type NotificationPage = {
   readonly items: SynapseNotification[]
   readonly nextCursor: string | null
 }
+
+export const notificationSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  title: z.string(),
+  body: z.string(),
+  group: z.string().nullable(),
+  url: z.string().nullable(),
+  level: z.enum(["active", "passive", "timeSensitive"]),
+  targetId: z.string().nullable(),
+  deviceId: z.string().nullable(),
+  readAt: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  createdAt: z.string(),
+  image: z.object({ id: z.string(), mimeType: z.string(), byteSize: z.number().int().nonnegative() }).nullable().optional(),
+})
+
+export const notificationOpenSchema = notificationSchema.extend({
+  copyOnTap: z.boolean().default(false),
+}).passthrough()

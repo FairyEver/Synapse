@@ -1,3 +1,4 @@
+import { createRendererLogger } from "@/app-shell/logging"
 import { HUB_INSTALLER_VIEW, HUB_INSTALL_REQUEST_PARAM, hubInstallOpenRequestSchema, type HubInstallOpenRequest } from "../../../app-capabilities/skill-hub/shared/install-source"
 import { SkillInstallerModule } from "../../../app-capabilities/skill-installer/renderer"
 import { MailComposeWindow } from "../mail/compose-window"
@@ -14,14 +15,12 @@ import type {
   SynapseSystemAppGitOpenRequest,
   SynapseSystemAppMailInternalOpenRequest,
   TodoOpenRequest,
-  SynapseSystemAppId,
-  SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
 } from "./types"
 import { parseSystemAppId } from "./definitions"
 
 type AppsBridge = {
-  readonly openSystemApp: (appId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions) => Promise<void>
+  readonly navigateMain: import("../../types/bridge").SynapseBridge["apps"]["navigateMain"]
   readonly onContentOpenRequest: (listener: (request: ContentOpenRequest) => void) => () => void
   readonly onGitOpenRequest: (listener: (request: SynapseSystemAppGitOpenRequest) => void) => () => void
   readonly onTerminalOpenRequest: (listener: (request: SynapseSystemAppTerminalOpenRequest) => void) => () => void
@@ -209,8 +208,8 @@ function RegisteredSystemAppWindow() {
   }, [])
 
   const forwardContentOpenRequest = useCallback((request: ContentOpenRequest) => {
-    void getAppsBridge()?.openSystemApp("resource-repository", {
-      contentOpenRequest: request,
+    void getAppsBridge()?.navigateMain({ appId: "resource-repository", target: request }).catch((error) => {
+      createRendererLogger("system-app.navigation").warn("Could not open resource in the main window.", { error })
     })
   }, [])
 

@@ -1,8 +1,9 @@
+import type { MainNavigationTarget } from "@/modules/apps/main-navigation"
 import { useEffect, useRef, useState, type RefObject } from "react"
 import { getDriveDiscussionActionLabel, type NotificationSource } from "@synapse/shared"
 import { ArrowLeft, ArrowRight, Bell, MoreHorizontal, X } from "lucide-react"
 import { toast } from "sonner"
-import { useMessageCenter, type MessageFilter, type MessageSourceFilter } from "@/app-shell/hooks/use-message-center"
+import { useMessageCenter, type MessageFilter, type MessageSourceFilter, type MessageCenterOpenRequest } from "@/app-shell/hooks/use-message-center"
 import { discussionContentLabel, notificationDetailText } from "@/app-shell/notification-detail-text"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
@@ -185,8 +186,12 @@ function MessageDetail({ center, quickReply, imageTrigger }: { center: Center; q
   </article>
 }
 
-function MessageCenter({ onOpenMeeting }: { onOpenMeeting?: (meetingId: string) => void }) {
-  const center = useMessageCenter(onOpenMeeting)
+function MessageCenter({ onOpenTarget, openRequest, onOpenRequestConsumed }: {
+  onOpenTarget?: (target: MainNavigationTarget) => Promise<boolean>
+  openRequest?: MessageCenterOpenRequest | null
+  onOpenRequestConsumed?: () => void
+}) {
+  const center = useMessageCenter(onOpenTarget, openRequest, onOpenRequestConsumed)
   const [clearScope, setClearScope] = useState<"all" | "pending" | null>(null)
   const [quickReply, setQuickReply] = useState<MailMessage | null>(null)
   const imageTrigger = useRef<HTMLButtonElement | null>(null)

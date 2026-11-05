@@ -431,6 +431,7 @@ describe("UpdateService", () => {
     expect(windowManager.broadcast).toHaveBeenCalledWith(
       "synapse:app:update:operation:open_request",
       request,
+      expect.any(Function),
     )
     expect(updateService.getPendingOpenRequest()).toEqual(request)
   })
@@ -734,11 +735,12 @@ describe("UpdateService", () => {
     expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
-  it("opens a main window before broadcasting the update page from notification clicks with no live windows", async () => {
+  it("opens only the main window and queues manual navigation when the system notification is clicked", async () => {
     vi.useFakeTimers()
     updaterMock.notificationSupported = true
     const { updateService } = await importUpdateService()
     const calls: string[] = []
+    const detailWindow = { focus: vi.fn(), show: vi.fn(), restore: vi.fn() }
     const windowManager = {
       attach: vi.fn(),
       broadcast: vi.fn((channel: string) => {
@@ -747,7 +749,7 @@ describe("UpdateService", () => {
       }),
       close: vi.fn(),
       detach: vi.fn(),
-      getAllWindows: vi.fn(() => []),
+      getAllWindows: vi.fn(() => [detailWindow as never]),
       list: vi.fn(() => []),
       open: vi.fn(() => {
         calls.push("open:main")
@@ -775,14 +777,18 @@ describe("UpdateService", () => {
     updaterMock.notificationInstances[0]?.click()
 
     expect(windowManager.open).toHaveBeenCalledWith("main")
+    expect(detailWindow.focus).not.toHaveBeenCalled()
+    expect(detailWindow.show).not.toHaveBeenCalled()
     expect(windowManager.broadcast).toHaveBeenCalledWith(
-      "synapse:app:update:operation:open_update_page",
-      {},
+      "synapse:app:update:operation:open_request",
+      { id: 1, automatic: false },
+      expect.any(Function),
     )
+    expect(updateService.getPendingOpenRequest()).toEqual({ id: 1, automatic: false })
     expect(calls).toEqual([
       "broadcast:synapse:app:update:operation:state_changed",
       "open:main",
-      "broadcast:synapse:app:update:operation:open_update_page",
+      "broadcast:synapse:app:update:operation:open_request",
     ])
   })
 

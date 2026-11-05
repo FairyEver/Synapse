@@ -451,6 +451,8 @@ export function TerminalModule({
     const pane = collectTerminalPaneLeaves(workspace.layout).find((item) => item.sessionId === session.id)
     if (pane) setActivePaneIds((current) => ({ ...current, [workspace.id]: pane.paneId }))
     setOpenGroupIds((current) => ({ ...current, [session.groupId]: true }))
+    if (session.status === "ended") toast.info("此终端会话已结束。")
+    if (session.status === "failed" || session.status === "lost") toast.error("此终端会话已停止。")
   }, [terminalBridge])
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog } from "electron"
+import { showSenderSaveDialog } from "../../../electron/runtime/ipc/sender-dialog"
 import type { IpcModule } from "../../../electron/runtime/ipc/types"
 import type { TextFileWriterService } from "./service"
 import {
@@ -20,15 +20,12 @@ export const textFileWriterIpcModule: IpcModule = {
       kind: "invoke",
       request: textFileOutputChooseRequestSchema,
       response: textFileWriteResultSchema.shape.path.nullable(),
-      handler: async (_ctx, request: TextFileOutputChooseRequest) => {
+      handler: async (ctx, request: TextFileOutputChooseRequest) => {
         const options = {
           title: "选择输出文件",
           defaultPath: request?.defaultPath ?? "output.md",
         }
-        const parent = focusedWindow()
-        const result = parent
-          ? await dialog.showSaveDialog(parent, options)
-          : await dialog.showSaveDialog(options)
+        const result = await showSenderSaveDialog(ctx, options)
         return result.canceled || !result.filePath ? null : result.filePath
       },
     },
@@ -52,10 +49,4 @@ export const textFileWriterIpcModule: IpcModule = {
     },
   },
   events: {},
-}
-
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
 }

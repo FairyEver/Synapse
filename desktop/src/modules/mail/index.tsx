@@ -27,6 +27,7 @@ export function ExternalMailModule({ openRequest, onOpenRequestConsumed }: { ope
     handled.current = openRequest.requestId
     if (openRequest.configure) settings()
     if (openRequest.messageId) void mail.selectMessage(openRequest.messageId)
+    else if (!openRequest.configure) mail.clearDetail()
     onOpenRequestConsumed?.(openRequest.requestId)
   }, [openRequest, mail.accountId, mail.owner, mail.scope, mail.authenticated, onOpenRequestConsumed])
   return <SystemAppWindowShell left={accountSelector} embeddedLeftAddon={accountSelector} actions={<><MailRefreshControl key={`${identity}:${mail.accountId}`} disabled={!mail.accountId} loading={mail.loading} syncStatus={mail.syncStatus} onRefresh={mail.sync} /><SystemAppTopBarActionButton disabled={!mail.accountId} onClick={() => compose({ accountId: mail.accountId! })}><PenSquare />写邮件</SystemAppTopBarActionButton></>}>

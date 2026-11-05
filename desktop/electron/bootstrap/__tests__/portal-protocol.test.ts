@@ -7,16 +7,19 @@ const raw = `synapse://portal-headless-test/callback?status=success&state=${"s".
 const prodRaw = raw.replace("portal-headless-test", "portal-headless")
 function harness(error?: Error) {
   const handleCallback = vi.fn(async () => { if (error) throw error })
-  const registry = { get: vi.fn(() => ({ handleCallback })) }
+  const navigateMain = vi.fn()
+  const registry = { get: vi.fn((id) => id === "core.connectors" ? { handleCallback } : { navigateMain }) }
   const deps = { focusMainWindow: vi.fn(), handleAuthCallback: vi.fn(), logger: { warn: vi.fn() },
     publishUpdateOpenRequest: vi.fn(), verifyUpdateIntent: vi.fn(async () => false),
     dispatchAppAction: vi.fn(), showAppDeepLinkError: vi.fn(), privateProtocolHandlers: createConnectorProtocolHandlers(registry as never) }
-  return { deps, handleCallback }
+  return { deps, handleCallback, navigateMain }
 }
 describe("private Portal protocol dispatch", () => {
   it("routes only to the connector, never account auth or public capability dispatch", async () => {
     const h = harness(); await createProtocolUrlRouter(h.deps, [raw]).start()
     expect(h.handleCallback).toHaveBeenCalledWith("portal-headless-test", raw)
+    expect(h.navigateMain).toHaveBeenCalledWith({ appId: "connectors" })
+    expect(h.deps.focusMainWindow).not.toHaveBeenCalled()
     expect(h.deps.dispatchAppAction).not.toHaveBeenCalled()
     expect(h.deps.handleAuthCallback).not.toHaveBeenCalled()
     expect(parseDeclaredAppDeepLink(raw)).not.toHaveProperty("capabilityId")

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
   const permissionGuard = {}
   const synapseSkillService = {}
   const windowManager = {}
+  const systemAppWindow = { navigateMainAfter: vi.fn(), invalidateAccountNavigation: vi.fn() }
   const systemNotifierService = {
     presentAccountNotification: vi.fn(),
   }
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => {
       if (id === "core.synapse-skill") return synapseSkillService
       if (id === "core.system-notifier") return systemNotifierService
       if (id === "core.window-manager") return windowManager
+      if (id === "core.system-app-window") return systemAppWindow
       if (id === "knowledge-base.storage-migration-service") return {}
       throw new Error(`Unknown service: ${id}`)
     }),
@@ -35,6 +37,9 @@ const mocks = vi.hoisted(() => {
   return {
     accountService: {
       onStateChanged: vi.fn(),
+      getState: vi.fn(),
+      getNotification: vi.fn(),
+      markNotificationRead: vi.fn(async () => ({ ok: true })),
       refreshFromStorage: vi.fn(async () => ({ status: "anonymous" })),
       retryOfflineNow: vi.fn(),
       setEventBus: vi.fn(),
@@ -71,6 +76,7 @@ const mocks = vi.hoisted(() => {
     registry,
     synapseSkillService,
     systemNotifierService,
+    systemAppWindow,
     windowManager,
   }
 })
@@ -191,6 +197,41 @@ describe("initializeReadyApp", () => {
     wired.present({ title: "标题", body: "正文" })
     expect(mocks.systemNotifierService.presentAccountNotification)
       .toHaveBeenCalledWith({ title: "标题", body: "正文" })
+  })
+
+  it("reloads a clicked account notification and routes it in the main window for its original account", async () => {
+    await initializeReadyApp({
+      focusOrCreateMainWindow: vi.fn(),
+      isAppQuitting: () => false,
+      mainWindowState: { current: null },
+      setAllowAppQuit: vi.fn(),
+      setWindowManager: vi.fn(),
+      startProtocolHandling: vi.fn(async () => 0),
+    })
+    const presenter = mocks.liveConnectionService.setNotificationPresenter.mock.calls[0]?.[0]
+    const onAccountChanged = mocks.accountService.onStateChanged.mock.calls[0]?.[0]
+    const owner = { status: "authenticated", profile: { user: { id: "owner" } } }
+    mocks.accountService.getState.mockReturnValue(owner)
+    onAccountChanged(owner)
+    mocks.accountService.getNotification.mockResolvedValue({
+      id: "notice", source: "mail-internal", targetId: "current-letter", deviceId: null, readAt: null,
+    })
+    mocks.systemAppWindow.navigateMainAfter.mockImplementation(async (resolve) => resolve())
+    presenter.present({ title: "标题", body: "正文" }, {
+      notificationId: "notice", ownerId: "owner", localDeviceId: "device",
+    })
+    const click = mocks.systemNotifierService.presentAccountNotification.mock.calls[0]?.[1]
+    click()
+    expect(mocks.accountService.getNotification).toHaveBeenCalledWith("notice")
+    await expect(mocks.systemAppWindow.navigateMainAfter.mock.results[0]?.value).resolves.toMatchObject({
+      appId: "mail-internal", target: { messageId: "current-letter" },
+    })
+
+    const signedOut = { status: "unauthenticated" }
+    onAccountChanged(signedOut)
+    onAccountChanged(owner)
+    click()
+    expect(mocks.accountService.getNotification).toHaveBeenCalledOnce()
   })
 
   it("skips the normal main window before routing a cold-start install protocol URL", async () => {

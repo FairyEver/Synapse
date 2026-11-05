@@ -73,7 +73,7 @@ import {
   coreSystemNotifierIntegrationDescriptor,
   coreMobileGatewayDescriptor,
   coreMobileWorkspaceFilesDescriptor,
-  coreSystemAppWindowDescriptor,
+  createCoreSystemAppWindowDescriptor,
   coreSynapseSkillDescriptor,
   coreEditorInstallRecoveryDescriptor,
   coreTerminalDescriptor,
@@ -146,7 +146,7 @@ export function buildServiceRegistry(
   registry.register(coreNetworkRegistryDescriptor)
   registry.register(coreAppIconDescriptor)
   registry.register(coreWindowManagerDescriptor)
-  registry.register(coreSystemAppWindowDescriptor)
+  registry.register(createCoreSystemAppWindowDescriptor(options.trayShowOrCreate))
   registry.register(coreAgentConversationWindowDescriptor)
   registry.register(coreAgentConversationNavigationDescriptor)
   registry.register(coreEventBusDescriptor)

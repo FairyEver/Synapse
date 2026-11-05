@@ -1036,6 +1036,10 @@ export type SynapseBridge = {
     releaseInstall: (input: { preparedSourceId: string }) => Promise<void>
   }
   apps: {
+    navigateMain: (target: import("../modules/apps/main-navigation").MainNavigationTarget) => Promise<void>
+    getPendingMainNavigation: () => Promise<import("../modules/apps/main-navigation").MainNavigationRequest | null>
+    acknowledgeMainNavigation: (id: number) => Promise<void>
+    onMainNavigationRequested: (listener: (request: import("../modules/apps/main-navigation").MainNavigationRequest) => void) => () => void
     onSkillHubInstallOpenRequest: (listener: (request: HubInstallOpenRequest) => void) => () => void
     openSystemApp: (
       appId: SynapseSystemAppId,
@@ -1761,7 +1765,6 @@ export type SynapseBridge = {
     installUpdate: () => Promise<void>
     onOpenRequest: (listener: (payload: SynapseAppUpdateOpenRequest) => void) => () => void
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
-    onOpenUpdatePage: (listener: () => void) => () => void
   }
   cheatCodes: {
     getStates: (names?: readonly string[]) => Promise<SynapseCheatCodeStateMap>

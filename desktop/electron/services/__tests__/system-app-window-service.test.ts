@@ -16,6 +16,77 @@ vi.mock("../log-store", () => ({
 }))
 
 describe("createSystemAppWindowService", () => {
+  it("keeps the latest main navigation available after a missed event and leaves a detached app alone", async () => {
+    const detached = createWindowMock()
+    const createWindow = vi.fn(() => detached as never)
+    const manager = createWindowManagerMock()
+    const focusMainWindow = vi.fn()
+    const service = createSystemAppWindowService({
+      createWindow,
+      baseUrl: () => "app://index.html",
+      windowManager: manager,
+      focusMainWindow,
+      getOwnerId: () => "owner",
+    })
+    await service.open("terminal")
+    service.navigateMain({ appId: "terminal", target: { requestId: "first", sessionId: "one" } })
+    service.navigateMain({ appId: "terminal", target: { requestId: "second", sessionId: "two" } })
+    service.acknowledgeMainNavigation(1)
+
+    expect(focusMainWindow).toHaveBeenCalledTimes(2)
+    expect(createWindow).toHaveBeenCalledOnce()
+    expect(detached.focus).not.toHaveBeenCalled()
+    expect(service.getPendingMainNavigation()).toEqual({
+      id: 2, ownerId: "owner", destination: { appId: "terminal", target: { requestId: "second", sessionId: "two" } },
+    })
+    const filter = manager.broadcast.mock.lastCall?.[2] as unknown as (window: { role: string }) => boolean
+    expect(filter({ role: "main" })).toBe(true)
+    expect(filter({ role: "detail" })).toBe(false)
+    service.acknowledgeMainNavigation(2)
+    expect(service.getPendingMainNavigation()).toBeNull()
+  })
+
+  it("does not let a slow notification open over a newer user navigation", async () => {
+    const service = createSystemAppWindowService({ createWindow: vi.fn(), baseUrl: () => "", focusMainWindow: vi.fn() })
+    let finish!: () => void
+    const wait = new Promise<void>((resolve) => { finish = resolve })
+    const oldClick = service.navigateMainAfter(async () => {
+      await wait
+      return { appId: "mail-internal", target: { requestId: "old", messageId: "old-message" } }
+    })
+    service.navigateMain({ appId: "connectors" })
+    finish()
+    await oldClick
+
+    expect(service.getPendingMainNavigation()?.destination).toEqual({ appId: "connectors" })
+  })
+
+  it("shows the Skill installer when ready and restores it for a new request", async () => {
+    const window = createWindowMock()
+    window.isVisible.mockReturnValue(false)
+    const createWindow = vi.fn(() => window as never)
+    const focusMainWindow = vi.fn()
+    const manager = createWindowManagerMock()
+    const service = createSystemAppWindowService({
+      createWindow, baseUrl: () => "app://index.html", windowManager: manager, focusMainWindow,
+    })
+    await service.openSkillInstaller({ requestId: "one", skillId: "first" })
+    expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({ show: false }))
+    expect(window.show).not.toHaveBeenCalled()
+    window.emitReady()
+    expect(window.show).toHaveBeenCalledOnce()
+    expect(window.focus).toHaveBeenCalledOnce()
+
+    window.isMinimized.mockReturnValue(true)
+    await service.openSkillInstaller({ requestId: "two", skillId: "second" })
+    expect(window.restore).toHaveBeenCalledOnce()
+    expect(window.focus).toHaveBeenCalledTimes(2)
+    expect(createWindow).toHaveBeenCalledOnce()
+    expect(focusMainWindow).not.toHaveBeenCalled()
+    expect(manager.broadcast).toHaveBeenCalledWith("synapse:app:apps:operation:skill_hub_install_open_request",
+      { requestId: "two", skillId: "second" }, expect.any(Function))
+  })
+
   it("opens and retargets a Todo window without sending its target to other windows", async () => {
     const window = createWindowMock(), manager = createWindowManagerMock()
     const createWindow = vi.fn(() => window as never)
@@ -291,9 +362,12 @@ describe("createSystemAppWindowService", () => {
 function createWindowMock() {
   const webContentsId = Math.floor(Math.random() * 10_000) + 1
   let closedHandler: (() => void) | null = null
+  let readyHandler: (() => void) | null = null
   return {
     isDestroyed: vi.fn(() => false),
     isMinimized: vi.fn(() => false),
+    isVisible: vi.fn(() => true),
+    show: vi.fn(),
     restore: vi.fn(),
     focus: vi.fn(),
     loadURL: vi.fn(async (_url: string) => undefined),
@@ -306,6 +380,8 @@ function createWindowMock() {
     on: vi.fn((event: string, handler: () => void) => {
       if (event === "closed") closedHandler = handler
     }),
+    once: vi.fn((event: string, handler: () => void) => { if (event === "ready-to-show") readyHandler = handler }),
+    emitReady: () => readyHandler?.(),
     emitClosed: () => closedHandler?.(),
   }
 }

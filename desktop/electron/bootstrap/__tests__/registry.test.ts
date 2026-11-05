@@ -226,6 +226,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.agent-conversation-navigation")?.dependsOn).toEqual([
       "core.data-repository",
       "core.window-manager",
+      "core.system-app-window",
     ])
     expect(byId.get("core.agent-conversation-control")?.dependsOn).toEqual([
       "core.config",
@@ -448,6 +449,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.update")?.dependsOn).toEqual([
       "core.config",
       "core.window-manager",
+      "core.system-app-window",
       "core.permission-guard",
       "core.audit-sink",
       "core.data-repository",

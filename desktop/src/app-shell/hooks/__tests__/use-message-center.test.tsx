@@ -10,7 +10,7 @@ import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "@/generated/deployment-config
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), count: vi.fn(), read: vi.fn(), delete: vi.fn(), deleteAll: vi.fn(), readAll: vi.fn(),
   mailRequest: vi.fn(), info: vi.fn(), warn: vi.fn(),
-  openSystemApp: vi.fn(),
+  openMainTarget: vi.fn(),
   openExternal: vi.fn(),
   accountState: { status: "authenticated", profile: { user: { id: "reader" } } },
 }))
@@ -23,7 +23,6 @@ vi.mock("@/lib/mail-api", () => ({ mailRequest: mocks.mailRequest }))
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => null,
   requireBridgeDomain: (domain: string) => {
-    if (domain === "apps") return { openSystemApp: mocks.openSystemApp }
     if (domain === "shell") return { openExternal: mocks.openExternal }
     if (domain !== "account") throw new Error(`Unexpected domain: ${domain}`)
     return { notifications: { list: mocks.list, count: mocks.count, read: mocks.read, delete: mocks.delete, deleteAll: mocks.deleteAll, readAll: mocks.readAll } }
@@ -41,7 +40,7 @@ const notice: SynapseNotification = {
 let root: Root | null = null
 let current: ReturnType<typeof useMessageCenter>
 
-function Harness() { current = useMessageCenter(); return null }
+function Harness() { current = useMessageCenter(mocks.openMainTarget); return null }
 async function flush() { await Promise.resolve(); await Promise.resolve() }
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -114,10 +113,10 @@ describe("useMessageCenter", () => {
   })
   it("marks a Todo notice read and opens its read-only target", async () => {
     const reminder: SynapseNotification = { ...notice, source: "todo-reminder", targetId: "todo-1" }
-    mocks.openSystemApp.mockClear().mockResolvedValue(undefined)
+    mocks.openMainTarget.mockClear().mockResolvedValue(true)
     await act(async () => { await current.openItem(reminder); await current.navigate(reminder) })
     expect(mocks.read).toHaveBeenCalledWith({ id: "n1" })
-    expect(mocks.openSystemApp).toHaveBeenCalledWith("todos", { todoOpenRequest: { id: "todo-1", requestId: expect.any(String) } })
+    expect(mocks.openMainTarget).toHaveBeenCalledWith({ appId: "todos", target: { id: "todo-1", requestId: expect.any(String) } })
     expect(mocks.mailRequest).not.toHaveBeenCalled()
   })
   it("defaults to all categories without sending a source restriction", () => {

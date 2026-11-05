@@ -87,16 +87,17 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
   const pendingUrls = [...initialUrls]
   let started = false
   let activeDrain: Promise<number> | null = null
+  let handlingAppDeepLink = false
 
   async function routeUrl(url: string): Promise<number> {
     if (isAppDeepLinkCandidate(url)) {
+      handlingAppDeepLink = true
       try {
         const request = parseDeclaredAppDeepLink(url)
         if ("mainHandlerId" in request) {
           const handler = deps.privateProtocolHandlers?.[request.mainHandlerId]
           if (!handler) throw new Error("连接服务暂不可用，请重新连接。")
           await handler(request.params)
-          deps.focusMainWindow()
           return 0
         }
         if (!deps.dispatchAppAction) throw new Error("应用能力暂不可用")
@@ -111,6 +112,8 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
             : undefined,
         })
         deps.showAppDeepLinkError?.(message)
+      } finally {
+        handlingAppDeepLink = false
       }
       return 0
     }
@@ -189,6 +192,7 @@ function createProtocolUrlRouter(deps: ProtocolUrlRouterDeps, initialUrls: strin
 
   return {
     drain,
+    hasPendingAppDeepLink: () => handlingAppDeepLink || pendingUrls.some(isAppDeepLinkCandidate),
     enqueue(url: string): void {
       pendingUrls.push(url)
       if (started) void drain()

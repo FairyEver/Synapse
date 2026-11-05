@@ -38,8 +38,8 @@ export interface MailServiceDeps {
   notifications: MailNotificationAdapter; notificationsSupported?: () => boolean
   diagnostic(code: string, accountId: string): void
   protocols?: MailProtocols
-  pickFiles?: () => Promise<string[]>
-  saveFile?: (name: string) => Promise<string | null>
+  pickFiles?: (sender?: IpcInvocationSender) => Promise<string[]>
+  saveFile?: (name: string, sender?: IpcInvocationSender) => Promise<string | null>
 }
 export class MailService {
   private identityChanging = false
@@ -239,15 +239,15 @@ export class MailService {
     if (!mime) throw new MailError("IMAGE_BLOCKED", "图片格式不可显示")
     return { mime, base64: bytes.toString("base64") }
   }
-  async pickAttachments(accountId: string) {
+  async pickAttachments(accountId: string, sender?: IpcInvocationSender) {
     const ctx = this.scoped(this.context("ui"), accountId); await this.accounts.get(ctx, accountId)
-    const paths = await this.deps.pickFiles?.() ?? [], results = []
+    const paths = await this.deps.pickFiles?.(sender) ?? [], results = []
     for (const filePath of paths) results.push(await this.execute(ctx, "attachment.import_local", { accountId, filePath }))
     return results
   }
-  async saveAttachment(assetId: string) {
+  async saveAttachment(assetId: string, sender?: IpcInvocationSender) {
     const ctx = await this.actionContext(this.context("ui"), { assetId }), asset = await this.assets.info(ctx, assetId)
-    const outputPath = await this.deps.saveFile?.(asset.name)
+    const outputPath = await this.deps.saveFile?.(asset.name, sender)
     return outputPath ? this.execute(ctx, "attachment.download_file", { assetId, outputPath }) : null
   }
   async execute<K extends MailAction>(context: MailContext, action: K, input: MailInputs[K]): Promise<MailResults[K]> {

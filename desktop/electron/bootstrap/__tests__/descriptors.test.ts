@@ -2313,6 +2313,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreUpdateDescriptor.dependsOn).toEqual([
       "core.config",
       "core.window-manager",
+      "core.system-app-window",
       "core.permission-guard",
       "core.audit-sink",
       "core.data-repository",
@@ -2339,6 +2340,7 @@ describe("bootstrap descriptors (T1.5)", () => {
             })),
           }
         }
+        if (id === "core.system-app-window") return { focusMainWindow: vi.fn() }
         throw new Error(`unexpected service ${id}`)
       }),
     }

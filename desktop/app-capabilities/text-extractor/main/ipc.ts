@@ -1,6 +1,6 @@
-import { BrowserWindow, dialog } from "electron"
+import { showSenderOpenDialog, showSenderSaveDialog } from "../../../electron/runtime/ipc/sender-dialog"
 import { z } from "zod"
-import type { IpcModule } from "../../../electron/runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../../electron/runtime/ipc/types"
 import type { WindowManager } from "../../../electron/runtime/window"
 import { ipcOperationIdToChannel } from "../../../synapse-capabilities/shared/naming"
 import {
@@ -47,7 +47,7 @@ export function createTextExtractorIpcModule(deps: {
         kind: "invoke",
         request: z.void().optional(),
         response: z.string().nullable(),
-        handler: async () => chooseDocument(),
+        handler: async (ctx) => chooseDocument(ctx),
       },
       extractDocument: {
         operationId: "app.text_extractor.document.extract",
@@ -120,7 +120,7 @@ export function createTextExtractorIpcModule(deps: {
         kind: "invoke",
         request: textOutputChooseRequestSchema,
         response: z.string().nullable(),
-        handler: async (_ctx, request: TextOutputChooseRequest) => chooseOutput(request),
+        handler: async (ctx, request: TextOutputChooseRequest) => chooseOutput(ctx, request),
       },
       saveText: {
         operationId: "app.text_extractor.text.save",
@@ -157,34 +157,22 @@ export function createTextExtractorIpcModule(deps: {
 
 export const textExtractorIpcModule = createTextExtractorIpcModule()
 
-async function chooseDocument(): Promise<string | null> {
+async function chooseDocument(ctx: IpcHandlerContext): Promise<string | null> {
   const options: Electron.OpenDialogOptions = {
     title: "选择文档",
     filters: [{ name: "PDF 或 Word 文档", extensions: ["pdf", "docx"] }],
     properties: ["openFile"],
   }
-  const parent = focusedWindow()
-  const result = parent
-    ? await dialog.showOpenDialog(parent, options)
-    : await dialog.showOpenDialog(options)
+  const result = await showSenderOpenDialog(ctx, options)
   return result.canceled ? null : result.filePaths[0] ?? null
 }
 
-async function chooseOutput(request: TextOutputChooseRequest): Promise<string | null> {
+async function chooseOutput(ctx: IpcHandlerContext, request: TextOutputChooseRequest): Promise<string | null> {
   const options: Electron.SaveDialogOptions = {
     title: "保存文本",
     defaultPath: request.defaultPath,
     filters: [{ name: "文本文件", extensions: ["txt"] }],
   }
-  const parent = focusedWindow()
-  const result = parent
-    ? await dialog.showSaveDialog(parent, options)
-    : await dialog.showSaveDialog(options)
+  const result = await showSenderSaveDialog(ctx, options)
   return result.canceled || !result.filePath ? null : result.filePath
-}
-
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
 }

@@ -81,6 +81,6 @@ export const mailIpcModule: IpcModule = { id: "mail", methods: {
   imageRead: { ...privateMethod(z.object({ messageId: messageIdSchema, token: z.uuid() }).strict(), (s, i) => s.imageRead(i.messageId, i.token)), operationId: "app.mail.image.read" },
   imageRemote: { ...privateMethod(z.object({ messageId: messageIdSchema, url: z.string().max(8192), allowed: z.literal(true) }).strict(), (s, i) => s.imageRemote(i.messageId, i.url, i.allowed)), operationId: "app.mail.image.remote" },
   imageImport: { ...privateMethod(z.object({ accountId: accountIdSchema, base64: z.string().max(Math.ceil(MAIL_MAX_IMAGE_BYTES / 3) * 4) }).strict(), (s, i) => s.importImage(i.accountId, i.base64)), operationId: "app.mail.image.import" },
-  pickAttachments: { ...privateMethod(z.object({ accountId: accountIdSchema }).strict(), (s, i) => s.pickAttachments(i.accountId)), operationId: "app.mail.attachment.pick" },
-  saveAttachment: { ...privateMethod(z.object({ assetId: assetIdSchema }).strict(), (s, i) => s.saveAttachment(i.assetId)), operationId: "app.mail.attachment.save" },
+  pickAttachments: { ...privateMethod(z.object({ accountId: accountIdSchema }).strict(), (s, i, c) => s.pickAttachments(i.accountId, c.sender)), operationId: "app.mail.attachment.pick" },
+  saveAttachment: { ...privateMethod(z.object({ assetId: assetIdSchema }).strict(), (s, i, c) => s.saveAttachment(i.assetId, c.sender)), operationId: "app.mail.attachment.save" },
 }, events: {} }

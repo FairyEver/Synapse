@@ -12,6 +12,7 @@ import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "../../../src/lib/cheat-codes/nam
 import { getSystemAppDefinition } from "../../../src/modules/apps/definitions"
 import { SYSTEM_APP_IDS } from "../../../src/modules/apps/types"
 import { isSystemAppEntryVisible } from "../../../src/modules/apps/visibility"
+import { mainNavigationTargetSchema, mainNavigationRequestSchema } from "../../../src/modules/apps/main-navigation"
 
 const systemAppIdSchema = z.enum(SYSTEM_APP_IDS)
 
@@ -88,6 +89,14 @@ const openSystemAppRequestSchema = z.object({
 type OpenSystemAppRequest = z.infer<typeof openSystemAppRequestSchema>
 type SystemAppWindowService = ReturnType<typeof createDefaultSystemAppWindowService>
 
+function mainNavigationForSender(ctx: IpcHandlerContext): SystemAppWindowService {
+  const service = ctx.resolve<SystemAppWindowService>(SYSTEM_APP_WINDOW_SERVICE_ID)
+  if (!ctx.sender || !service.isMainNavigationSender(ctx.sender.id)) {
+    throw new Error("主窗口导航请求仅供主窗口读取。")
+  }
+  return service
+}
+
 async function assertSystemAppVisible(ctx: IpcHandlerContext, appId: OpenSystemAppRequest["appId"]): Promise<void> {
   const definition = getSystemAppDefinition(appId)
   if (!definition) {
@@ -111,6 +120,29 @@ async function assertSystemAppVisible(ctx: IpcHandlerContext, appId: OpenSystemA
 export const appsIpcModule: IpcModule = {
   id: "apps",
   methods: {
+    navigateMain: {
+      operationId: "app.apps.main_navigation.open",
+      kind: "invoke",
+      request: mainNavigationTargetSchema,
+      response: z.void(),
+      handler: (ctx, request: import("../../../src/modules/apps/main-navigation").MainNavigationTarget) => {
+        ctx.resolve<SystemAppWindowService>(SYSTEM_APP_WINDOW_SERVICE_ID).navigateMain(request)
+      },
+    },
+    getPendingMainNavigation: {
+      operationId: "app.apps.main_navigation.get_pending",
+      kind: "invoke",
+      request: z.void(),
+      response: mainNavigationRequestSchema.nullable(),
+      handler: (ctx) => mainNavigationForSender(ctx).getPendingMainNavigation(),
+    },
+    acknowledgeMainNavigation: {
+      operationId: "app.apps.main_navigation.acknowledge",
+      kind: "invoke",
+      request: z.number().int().positive(),
+      response: z.void(),
+      handler: (ctx, id: number) => mainNavigationForSender(ctx).acknowledgeMainNavigation(id),
+    },
     openSystemApp: {
       operationId: "app.apps.system_app.open",
       kind: "invoke",
@@ -124,6 +156,7 @@ export const appsIpcModule: IpcModule = {
     },
   },
   events: {
+    mainNavigationRequested: { operationId: "app.apps.operation.main_navigation_requested", kind: "event", payload: mainNavigationRequestSchema },
     mailOpenRequest: { operationId: "app.apps.operation.mail_open_request", kind: "event", payload: mailOpenRequestSchema },
     viewOpenRequest:{operationId:"app.apps.operation.view_open_request",kind:"event",payload:viewOpenRequestSchema},
     skillHubInstallOpenRequest: { operationId: "app.apps.operation.skill_hub_install_open_request", kind: "event", payload: hubInstallOpenRequestSchema },

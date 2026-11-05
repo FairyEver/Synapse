@@ -8,7 +8,7 @@ import type { AgentShareService } from "../../../app-capabilities/agent/main/sha
  */
 
 import { z } from "zod"
-import { app, BrowserWindow } from "electron"
+import { app } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
@@ -33,12 +33,6 @@ const PRESERVED_FILE_PREFIXES = ["synapse-database.db", "synapse-data.db"]
 
 function shouldPreserveOnReset(entryName: string): boolean {
   return PRESERVED_FILE_PREFIXES.some((prefix) => entryName.startsWith(prefix))
-}
-
-function getParentWindow(): Electron.BrowserWindow | null {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? null
 }
 
 // Schemas
@@ -170,9 +164,7 @@ export const configIpcModule: IpcModule = {
       handler: async (ctx) => {
         logger.info("Handling config.exportBackup request.")
 
-        const filePath = await configBackupService.selectExportTarget({
-          getParentWindow,
-        })
+        const filePath = await configBackupService.selectExportTarget(ctx)
         if (!filePath) {
           return null
         }
@@ -241,9 +233,7 @@ export const configIpcModule: IpcModule = {
         isConfigImportRunning = true
 
         try {
-          const filePath = await configBackupService.selectImportSource({
-            getParentWindow,
-          })
+          const filePath = await configBackupService.selectImportSource(ctx)
           if (!filePath) {
             return null
           }

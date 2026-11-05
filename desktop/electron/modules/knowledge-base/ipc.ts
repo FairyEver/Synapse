@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog } from "electron"
+import { showSenderOpenDialog } from "../../runtime/ipc/sender-dialog"
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
@@ -344,19 +344,6 @@ function rawMutationAuditMetadata(options: {
   }
 }
 
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
-}
-
-async function showOpenDialog(options: Electron.OpenDialogOptions): Promise<Electron.OpenDialogReturnValue> {
-  const parentWindow = focusedWindow()
-  return parentWindow
-    ? dialog.showOpenDialog(parentWindow, options)
-    : dialog.showOpenDialog(options)
-}
-
 async function runGuardedKnowledgeBaseOperation<T>(options: {
   ctx: IpcHandlerContext
   action: PermissionAction
@@ -617,7 +604,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       response: importPreviewSchema.nullable(),
       handler: async (ctx) => {
         assertStorageMigrationInactive(ctx)
-        const result = await showOpenDialog({ properties: ["openDirectory"] })
+        const result = await showSenderOpenDialog(ctx, { properties: ["openDirectory"] })
         const sourcePath = result.filePaths[0]
         if (result.canceled || !sourcePath) return null
         return runGuardedKnowledgeBaseOperation({
@@ -649,7 +636,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       response: exportManagedResultSchema.nullable(),
       handler: async (ctx, request: { projectId: string }) => {
         assertStorageMigrationInactive(ctx)
-        const result = await showOpenDialog({ properties: ["openDirectory", "createDirectory"] })
+        const result = await showSenderOpenDialog(ctx, { properties: ["openDirectory", "createDirectory"] })
         const targetPath = result.filePaths[0]
         if (result.canceled || !targetPath) return null
         return runGuardedKnowledgeBaseOperation({
@@ -824,7 +811,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
         assertStorageMigrationInactive(ctx)
         await assertKnowledgeBaseStorageAvailable(ctx)
-        const result = await showOpenDialog({
+        const result = await showSenderOpenDialog(ctx, {
           properties: ["openFile", "multiSelections"],
         })
         if (result.canceled || result.filePaths.length === 0) {
@@ -852,7 +839,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
         assertStorageMigrationInactive(ctx)
         await assertKnowledgeBaseStorageAvailable(ctx)
-        const result = await dialog.showOpenDialog({
+        const result = await showSenderOpenDialog(ctx, {
           properties: ["openDirectory"],
         })
         if (result.canceled || result.filePaths.length === 0) {
@@ -880,7 +867,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       response: rawMutationResultSchema,
       handler: (ctx, request: { projectId: string; relativePaths: string[] }) => trackRawMutation(async () => {
         await assertKnowledgeBaseStorageAvailable(ctx)
-        const result = await dialog.showOpenDialog({
+        const result = await showSenderOpenDialog(ctx, {
           properties: ["openDirectory", "createDirectory"],
         })
         if (result.canceled || result.filePaths.length === 0) {

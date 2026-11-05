@@ -39,6 +39,7 @@ const mainWindowState = createMainWindowState()
 let allowAppQuit = false
 let processLevelCleanup: (() => Promise<void>) | undefined
 let windowManager: WindowManager | undefined
+let createMainWindowForNavigation: (() => void) | undefined
 let protocolActionRouter: SynapseActionRouter | undefined
 const privateProtocolHandlers: Record<string, (params: Record<string, unknown>) => Promise<void>> = {}
 const scriptRuntimeSmokeConfig = resolveScriptRuntimeSmokeBootstrap(process.env)
@@ -48,7 +49,7 @@ function focusOrCreateMainWindow(): void {
     state: mainWindowState,
     windowManager,
     isAppQuitting: () => allowAppQuit,
-  })
+  }, createMainWindowForNavigation)
 }
 
 if (scriptRuntimeSmokeConfig) {
@@ -127,6 +128,8 @@ function startSynapse(): void {
           protocolActionRouter = router
         },
         shouldCreateMainWindowBeforeProtocolHandling: protocolRouter.shouldCreateMainWindowBeforeStart,
+        hasPendingAppDeepLink: protocolRouter.hasPendingAppDeepLink,
+        setMainWindowFactory: (create) => { createMainWindowForNavigation = create },
         startProtocolHandling: protocolRouter.start,
       }))
       .catch((error) => {

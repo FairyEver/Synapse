@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog } from "electron"
+import { showSenderSaveDialog } from "../../../electron/runtime/ipc/sender-dialog"
 import type { IpcHandlerContext, IpcModule } from "../../../electron/runtime/ipc/types"
 import { isTextFileWriteError, serializeTextFileWriteError } from "../../text-file-writer/shared/errors"
 import {
@@ -27,16 +27,13 @@ export const htmlGeneratorIpcModule: IpcModule = {
       kind: "invoke",
       request: htmlGeneratorOutputChooseRequestSchema,
       response: htmlGenerationFileInputSchema.shape.outputPath.nullable(),
-      handler: async (_ctx, request: HtmlGeneratorOutputChooseRequest) => {
+      handler: async (ctx, request: HtmlGeneratorOutputChooseRequest) => {
         const options = {
           title: "选择输出文件",
           defaultPath: request?.defaultPath ?? "output.html",
           filters: [{ name: "HTML 文件", extensions: ["html", "htm"] }],
         }
-        const parent = focusedWindow()
-        const result = parent
-          ? await dialog.showSaveDialog(parent, options)
-          : await dialog.showSaveDialog(options)
+        const result = await showSenderSaveDialog(ctx, options)
         return result.canceled || !result.filePath ? null : result.filePath
       },
     },
@@ -99,10 +96,4 @@ async function withSenderAbort<T>(
   } finally {
     detach()
   }
-}
-
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
 }

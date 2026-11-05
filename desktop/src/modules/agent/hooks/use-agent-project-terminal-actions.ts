@@ -45,8 +45,9 @@ function useAgentProjectTerminalActions() {
     }
 
     try {
-      await bridge.apps.openSystemApp("terminal", {
-        terminalOpenRequest: {
+      await bridge.apps.navigateMain({
+        appId: "terminal",
+        target: {
           requestId: createRequestId(),
           sessionId,
         },
@@ -71,9 +72,7 @@ function useAgentProjectTerminalActions() {
         requestOpenTerminalSession(openRequest)
         return
       }
-      await bridge.apps.openSystemApp("terminal", {
-        terminalOpenRequest: openRequest,
-      })
+      await bridge.apps.navigateMain({ appId: "terminal", target: openRequest })
     } catch (rawError) {
       logger.warn("Claude Code terminal window open failed.", {
         boundary: "renderer.agent.claude-code-terminal.window",

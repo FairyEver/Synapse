@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 桌面通知和应用链接按目标决定窗口。终端、邮箱、站内信、待办、录音、连接器和应用内定位进入主窗口，Skill Hub 安装保留独立窗口。显式新窗口及独立写信保留。新增 3 项桌面私有 IPC（`app.apps.main_navigation.open`、`get_pending`、`acknowledge`）和 1 个只发给主窗口的事件（`app.apps.operation.main_navigation_requested`），移除旧的更新页打开广播，更新通知复用已有手动导航请求。Deep Link、System App、Dock、Workflow、Automation、公开 capability 和 MCP 数量不变。
+
 - 2026-11-04 云端数据表接入独立 `cloud_tables` domain，共 21 项 capability / MCP 索引，包含发布前检查。使用当前登录桌面账号，沿用表主与协作者权限。只供现有 MCP `search` / `invoke`，无通用本机 HTTP、System App、Dock、IPC、Workflow、Automation 或 Deep Link 入口。指引随既有 Synapse 系统 Skill 分发。表主可分别配置今日汇总和公开总数，网页通过开放 REST 读取。MCP 的自然语言报名、征集和榜单发现可联动 Drive。
 
 - 2026-11-04 Synapse Skill Hub：新增独立 `skill_hub` domain，共 10 项 capability / MCP 索引；当前全局 365 项 capability、361 项索引及工具定义，公开入口仍为 `search` / `invoke`。复用账号状态与登录能力。无 System App、默认 Dock、Workflow 或 Automation 入口；管理员治理仅 Web/API。旧 Skill Repository 工具和协议保持退役。另有 1 条严格声明式桌面深链 `synapse://skill-hub/install?skillId=<id>`、2 个仅限安装器窗口的私有 IPC（prepare_install / release_install）和 1 个定向窗口事件（skill_hub_install_open_request），均不进入 MCP 索引。安装冲突的「打开文件夹」使用受权限与审计保护的桌面 Shell 私有 IPC `app.shell.skill_directory.open`，不增加 Hub capability、MCP 工具或深链。

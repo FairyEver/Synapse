@@ -32,6 +32,7 @@ export class AgentConversationNavigationService {
     readonly dataRepository: DataRepository
     readonly windowManager: WindowManager
     readonly logger: AgentConversationNavigationLogger
+    readonly focusMainWindow?: () => void
   }) {}
 
   async open(
@@ -84,7 +85,8 @@ export class AgentConversationNavigationService {
     }
     this.nextOpenRequestId = request.requestId
     this.pendingOpenRequest = request
-    this.deps.windowManager.open("main")
+    if (this.deps.focusMainWindow) this.deps.focusMainWindow()
+    else this.deps.windowManager.open("main")
     this.deps.windowManager.broadcast(
       OPEN_AGENT_SESSION_EVENT,
       request,

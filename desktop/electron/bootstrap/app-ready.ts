@@ -6,6 +6,8 @@ import { createMailProtocolHandlers } from "../../app-capabilities/mail/main/pro
 import { createMailInternalProtocolHandlers } from "./mail-internal-protocol-handlers"
 import { createTodosProtocolHandlers } from "./todos-protocol-handlers"
 import { dialog } from "electron"
+import { randomUUID } from "node:crypto"
+import { resolveNotificationDestination } from "../../src/app-shell/notification-navigation"
 
 import type { AutomationService } from "../services/automation"
 import type { MobileGatewayService } from "../services/mobile-gateway-service"
@@ -70,6 +72,8 @@ type InitializeReadyAppDeps = {
   setProtocolActionRouter?: (router: CoreDatabaseService["actionRouter"] | undefined) => void
   setPrivateProtocolHandlers?: (handlers: Record<string, (params: Record<string, unknown>) => Promise<void>>) => void
   shouldCreateMainWindowBeforeProtocolHandling?: () => boolean
+  hasPendingAppDeepLink?: () => boolean
+  setMainWindowFactory?: (create: () => void) => void
   startProtocolHandling: (
     prepareBeforeNonAuthRoutes: (handledAuthCallbacks: number) => Promise<void>,
   ) => Promise<number>
@@ -177,12 +181,64 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       errorName: error instanceof Error ? error.name : typeof error,
     })
   }
+  let lastLiveAccountState: unknown
+  let notificationOwner: string | null = null
+  let notificationIdentityVersion = 0
+  accountService.onStateChanged((state) => {
+    const owner = state.status === "authenticated" ? state.profile.user.id : null
+    if (owner !== notificationOwner) {
+      notificationIdentityVersion += 1
+      if (notificationOwner) {
+        try {
+          registry.get<ReturnType<typeof createSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).invalidateAccountNavigation()
+        } catch (error) {
+          logger.warn("Could not invalidate account navigation.", { error })
+        }
+      }
+      notificationOwner = owner
+    }
+    lastLiveAccountState = state
+    liveConnectionService.handleAccountState(state)
+  })
+
   try {
     // 账号消息到了之后怎么呈现给这台电脑，归 System Notifier：它持有「本机通知 / 静音」
     // 设置和 Electron adapter，实时连接只负责在收到消息时喊一声。
     const systemNotifier = registry.get<SystemNotifierService>(SYSTEM_NOTIFIER_SERVICE_ID)
     liveConnectionService.setNotificationPresenter({
-      present: (input) => systemNotifier.presentAccountNotification(input),
+      present: (input, reference) => {
+        if (!reference) return systemNotifier.presentAccountNotification(input)
+        const identityVersion = notificationIdentityVersion
+        systemNotifier.presentAccountNotification(input, () => {
+          const isCurrentOwner = () => {
+            const state = accountService.getState()
+            return notificationIdentityVersion === identityVersion
+              && state.status === "authenticated" && state.profile.user.id === reference.ownerId
+          }
+          if (!isCurrentOwner()) return
+          const open = async () => {
+            const windows = registry.get<ReturnType<typeof createSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID)
+            await windows.navigateMainAfter(async () => {
+              try {
+                const item = await accountService.getNotification(reference.notificationId)
+                if (!isCurrentOwner()) return null
+                const target = resolveNotificationDestination(item, randomUUID(), reference.localDeviceId)
+                if (target && target !== "other-device") {
+                  if (!item.readAt) void accountService.markNotificationRead(item.id).catch((error) => {
+                    logger.warn("Could not mark clicked account notification read.", { error })
+                  })
+                  return target
+                }
+                return { appId: "message-center", target: item, otherDevice: target === "other-device" }
+              } catch (error) {
+                logger.warn("Could not load clicked account notification.", { errorName: error instanceof Error ? error.name : typeof error })
+                return isCurrentOwner() ? { appId: "message-center", target: null } : null
+              }
+            })
+          }
+          void open().catch((error) => logger.warn("Could not open clicked account notification.", { error }))
+        })
+      },
     })
   } catch (error) {
     logger.warn("Account notification presenter not installed.", {
@@ -274,11 +330,6 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
     })
   }
 
-  let lastLiveAccountState: unknown
-  accountService.onStateChanged((state) => {
-    lastLiveAccountState = state
-    liveConnectionService.handleAccountState(state)
-  })
   accountService.setExternalUrlOpener(createAccountExternalUrlOpener({
     auditSink: registry.get<AuditSink>("core.audit-sink"),
     permissionGuard: registry.get<PermissionGuard>("core.permission-guard"),
@@ -296,22 +347,24 @@ async function initializeReadyApp(deps: InitializeReadyAppDeps): Promise<void> {
       await action(container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID))
     }))
   }
+  const createWindow = () => createMainWindow({
+    state: deps.mainWindowState,
+    windowManager,
+    isAppQuitting: deps.isAppQuitting,
+    onRendererUnavailable: (rendererId) => forEachAgentRuntime(async (runtime) => {
+      await runtime.interruptRendererTurns(rendererId)
+    }),
+    onRendererUnresponsive: (rendererId) => forEachAgentRuntime((runtime) =>
+      runtime.pauseRendererDelivery(rendererId)),
+    onRendererResponsive: (rendererId) => forEachAgentRuntime((runtime) =>
+      runtime.resumeRendererDelivery(rendererId)),
+  })
+  deps.setMainWindowFactory?.(createWindow)
   if (deps.shouldCreateMainWindowBeforeProtocolHandling?.() !== false) {
-    createMainWindow({
-      state: deps.mainWindowState,
-      windowManager,
-      isAppQuitting: deps.isAppQuitting,
-      onRendererUnavailable: (rendererId) => forEachAgentRuntime(async (runtime) => {
-        await runtime.interruptRendererTurns(rendererId)
-      }),
-      onRendererUnresponsive: (rendererId) => forEachAgentRuntime((runtime) =>
-        runtime.pauseRendererDelivery(rendererId)),
-      onRendererResponsive: (rendererId) => forEachAgentRuntime((runtime) =>
-        runtime.resumeRendererDelivery(rendererId)),
-    })
+    createWindow()
   }
-  attachActivateHandler(() => {
-    deps.focusOrCreateMainWindow()
+  attachActivateHandler((hasVisibleWindows) => {
+    if (!hasVisibleWindows && !deps.hasPendingAppDeepLink?.()) deps.focusOrCreateMainWindow()
     void accountService.retryOfflineNow()
   })
 

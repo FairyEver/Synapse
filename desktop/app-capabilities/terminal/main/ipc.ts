@@ -1,5 +1,6 @@
+import { showSenderOpenDialog } from "../../../electron/runtime/ipc/sender-dialog"
 import { readClipboardPng } from "../../../electron/runtime/clipboard/native-reader"
-import { app, BrowserWindow, clipboard, dialog, nativeImage } from "electron"
+import { app, clipboard, nativeImage } from "electron"
 import path from "node:path"
 import { z } from "zod"
 
@@ -323,15 +324,12 @@ export const terminalIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.string().nullable(),
-      handler: async () => {
-        const parentWindow = focusedWindow()
+      handler: async (ctx) => {
         const options = {
           title: "选择工作目录",
           properties: ["openDirectory"] as Electron.OpenDialogOptions["properties"],
         }
-        const result = parentWindow
-          ? await dialog.showOpenDialog(parentWindow, options)
-          : await dialog.showOpenDialog(options)
+        const result = await showSenderOpenDialog(ctx, options)
         return result.canceled ? null : result.filePaths[0] ?? null
       },
     },
@@ -686,10 +684,4 @@ function requireGroupId(input: z.infer<typeof terminalEnvironmentValueInputSchem
 function requireCommandId(input: z.infer<typeof terminalEnvironmentValueInputSchema>): string {
   if (!input.commandId) throw new Error("Terminal command environment scope requires commandId.")
   return input.commandId
-}
-
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
 }

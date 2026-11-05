@@ -1,8 +1,9 @@
+import type { IpcHandlerContext } from "../../runtime/ipc/types"
+import { showSenderOpenDialog, showSenderSaveDialog } from "../../runtime/ipc/sender-dialog"
 import { createHash, randomUUID } from "node:crypto"
 import { constants } from "node:fs"
 import { lstat, open } from "node:fs/promises"
 import path from "node:path"
-import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
@@ -230,12 +231,6 @@ function compareRunListItems(a: WorkflowRunListItem, b: WorkflowRunListItem): nu
   if (a.status === "running" && b.status !== "running") return -1
   if (a.status !== "running" && b.status === "running") return 1
   return b.startedAt - a.startedAt
-}
-
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
 }
 
 async function checkFilePermission(options: {
@@ -1115,27 +1110,24 @@ async function waitForRunCompletion(runId: string): Promise<RunCompletionWaitRes
   return result
 }
 
-async function chooseWorkflowParamPaths(options: {
+async function chooseWorkflowParamPaths(ctx: IpcHandlerContext, options: {
   readonly title: string
   readonly properties: Electron.OpenDialogOptions["properties"]
 }): Promise<string[]> {
-  const parentWindow = focusedWindow()
   const dialogOptions: Electron.OpenDialogOptions = {
     title: options.title,
     properties: options.properties,
   }
-  const result = parentWindow
-    ? await dialog.showOpenDialog(parentWindow, dialogOptions)
-    : await dialog.showOpenDialog(dialogOptions)
+  const result = await showSenderOpenDialog(ctx, dialogOptions)
   if (result.canceled) return []
   return result.filePaths
 }
 
-async function chooseWorkflowParamPath(options: {
+async function chooseWorkflowParamPath(ctx: IpcHandlerContext, options: {
   readonly title: string
   readonly properties: Electron.OpenDialogOptions["properties"]
 }): Promise<string | null> {
-  const [selectedPath] = await chooseWorkflowParamPaths(options)
+  const [selectedPath] = await chooseWorkflowParamPaths(ctx, options)
   return selectedPath ?? null
 }
 
@@ -1215,7 +1207,6 @@ export const workflowIpcModule: IpcModule = {
           shareNote,
           expectedDigestSeed,
           chooseDestination: async ({ title, defaultPath }) => {
-            const parentWindow = focusedWindow()
             const dialogOptions: Electron.SaveDialogOptions = {
               title,
               defaultPath,
@@ -1224,9 +1215,7 @@ export const workflowIpcModule: IpcModule = {
                 extensions: defaultPath.endsWith(".json") ? ["json"] : ["synapse-workflow"],
               }],
             }
-            const result = parentWindow
-              ? await dialog.showSaveDialog(parentWindow, dialogOptions)
-              : await dialog.showSaveDialog(dialogOptions)
+            const result = await showSenderSaveDialog(ctx, dialogOptions)
             return result.canceled || !result.filePath ? null : result.filePath
           },
         })
@@ -1237,18 +1226,11 @@ export const workflowIpcModule: IpcModule = {
       request: z.void().optional(),
       response: z.union([workflowImportPreviewSchema, workflowShareImportPreviewSchema]).nullable(),
       handler: async (ctx) => {
-        const parentWindow = focusedWindow()
-        const result = parentWindow
-          ? await dialog.showOpenDialog(parentWindow, {
-            title: "导入工作流",
-            filters: [{ name: "Synapse Workflow", extensions: ["synapse-workflow", "json"] }],
-            properties: ["openFile"],
-          })
-          : await dialog.showOpenDialog({
-            title: "导入工作流",
-            filters: [{ name: "Synapse Workflow", extensions: ["synapse-workflow", "json"] }],
-            properties: ["openFile"],
-          })
+        const result = await showSenderOpenDialog(ctx, {
+          title: "导入工作流",
+          filters: [{ name: "Synapse Workflow", extensions: ["synapse-workflow", "json"] }],
+          properties: ["openFile"],
+        })
         if (result.canceled || result.filePaths.length === 0) return null
         const packagePath = result.filePaths[0]
         const action: PermissionAction = "fs.read.outside-userdata"
@@ -1425,19 +1407,19 @@ export const workflowIpcModule: IpcModule = {
     },
     chooseParamFile: {
       operationId: "app.workflow.param_file.choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
-      handler: async () => chooseWorkflowParamPath({ title: "选择文件", properties: ["openFile"] }),
+      handler: async (ctx) => chooseWorkflowParamPath(ctx, { title: "选择文件", properties: ["openFile"] }),
     },
     chooseParamDirectory: {
       operationId: "app.workflow.param_directory.choose", kind: "invoke", request: z.void().optional(), response: z.string().nullable(),
-      handler: async () => chooseWorkflowParamPath({ title: "选择文件夹", properties: ["openDirectory"] }),
+      handler: async (ctx) => chooseWorkflowParamPath(ctx, { title: "选择文件夹", properties: ["openDirectory"] }),
     },
     chooseParamFiles: {
       operationId: "app.workflow.param_files.choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
-      handler: async () => chooseWorkflowParamPaths({ title: "选择文件", properties: ["openFile", "multiSelections"] }),
+      handler: async (ctx) => chooseWorkflowParamPaths(ctx, { title: "选择文件", properties: ["openFile", "multiSelections"] }),
     },
     chooseParamDirectories: {
       operationId: "app.workflow.param_directories.choose", kind: "invoke", request: z.void().optional(), response: z.array(z.string()),
-      handler: async () => chooseWorkflowParamPaths({ title: "选择文件夹", properties: ["openDirectory", "multiSelections"] }),
+      handler: async (ctx) => chooseWorkflowParamPaths(ctx, { title: "选择文件夹", properties: ["openDirectory", "multiSelections"] }),
     },
     paramPresetsList: {
       operationId: "app.workflow.param_preset.list", kind: "invoke",

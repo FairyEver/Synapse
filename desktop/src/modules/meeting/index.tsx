@@ -36,6 +36,7 @@ export function MeetingModule({ openRequest, onOpenRequestConsumed }: { openRequ
   const notifications = useAppNotifications()
   const [view, setView] = useState<MeetingView>({ kind: "list" })
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [notificationTarget, setNotificationTarget] = useState<string | null>(null)
   const [detailMode, setDetailMode] = useState<MeetingDetailMode>("voice")
   /** 正在就地改标题的是哪一条。行内「⋯」的重命名会先把这条选中再进编辑态。 */
   const [titleEditingId, setTitleEditingId] = useState<string | null>(null)
@@ -49,18 +50,19 @@ export function MeetingModule({ openRequest, onOpenRequestConsumed }: { openRequ
   // 打开模块默认选中第一条，不留一个「什么都没选」的空右栏；选中的那条被删掉之后落到
   // 剩下的第一条，一条都不剩就回到空态。
   useEffect(() => {
-    if (meetings.loading) return
+    if (meetings.loading || openRequest || (notificationTarget && selectedId === notificationTarget)) return
     if (meetings.data.length === 0) {
       setSelectedId(null)
       return
     }
     if (selectedId && meetings.data.some((meeting) => meeting.id === selectedId)) return
     setSelectedId(meetings.data[0]?.id ?? null)
-  }, [meetings.data, meetings.loading, selectedId])
+  }, [meetings.data, meetings.loading, notificationTarget, openRequest, selectedId])
 
   useEffect(() => {
     if (!openRequest) return
     setView({ kind: "list" })
+    setNotificationTarget(openRequest)
     setSelectedId(openRequest)
     setDetailMode("text")
     setListRefreshKey((key) => key + 1)
@@ -126,6 +128,7 @@ export function MeetingModule({ openRequest, onOpenRequestConsumed }: { openRequ
   async function removeMeeting(meetingId: string): Promise<void> {
     try {
       await actions.removeMeeting(meetingId)
+      if (notificationTarget === meetingId) setNotificationTarget(null)
       notifications.success("已删除")
     } catch (error) {
       notifications.error(error instanceof Error ? error.message : "删除失败。")
@@ -166,11 +169,13 @@ export function MeetingModule({ openRequest, onOpenRequestConsumed }: { openRequ
             error={meetings.error}
             selectedId={selectedId}
             onSelect={(meetingId) => {
+              setNotificationTarget(null)
               setSelectedId(meetingId)
               setTitleEditingId(null)
             }}
             onStartRecording={() => void startRecording()}
             onRename={(meetingId) => {
+              setNotificationTarget(null)
               setSelectedId(meetingId)
               setTitleEditingId(meetingId)
             }}
@@ -197,7 +202,9 @@ export function MeetingModule({ openRequest, onOpenRequestConsumed }: { openRequ
                 setDetailRefreshKey((key) => key + 1)
               }}
             />
-          ) : detail.loading || meetings.loading ? null : (
+          ) : detail.loading || meetings.loading ? null : notificationTarget && detail.error ? (
+            <p className="m-auto text-sm text-muted-foreground" role="status">{detail.error}</p>
+          ) : (
             <MeetingDetailEmpty />
           )}
         </main>

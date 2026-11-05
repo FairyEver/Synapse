@@ -1,6 +1,6 @@
-import { BrowserWindow, dialog } from "electron"
+import { showSenderOpenDialog, showSenderSaveDialog } from "../../../electron/runtime/ipc/sender-dialog"
 import { z } from "zod"
-import type { IpcModule } from "../../../electron/runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../../electron/runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../../electron/runtime/security"
 import { generateDocxInputSchema, generateDocxResultSchema } from "../shared/schema"
 import { createDocumentTemplateService } from "./service"
@@ -19,7 +19,7 @@ export const documentTemplateIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.string().nullable(),
-      handler: async () => chooseOpenFile({
+      handler: async (ctx) => chooseOpenFile(ctx, {
         title: "选择 Word 模板",
         filters: [{ name: "Word 文档", extensions: ["docx"] }],
       }),
@@ -29,7 +29,7 @@ export const documentTemplateIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.string().nullable(),
-      handler: async () => chooseOpenFile({
+      handler: async (ctx) => chooseOpenFile(ctx, {
         title: "选择 JSON 文件",
         filters: [{ name: "JSON", extensions: ["json"] }],
       }),
@@ -39,16 +39,13 @@ export const documentTemplateIpcModule: IpcModule = {
       kind: "invoke",
       request: chooseOutputDocxRequestSchema,
       response: z.string().nullable(),
-      handler: async (_ctx, request: ChooseOutputDocxRequest) => {
-        const parentWindow = focusedWindow()
+      handler: async (ctx, request: ChooseOutputDocxRequest) => {
         const options = {
           title: "选择输出文件",
           defaultPath: request?.defaultPath ?? "output.docx",
           filters: [{ name: "Word 文档", extensions: ["docx"] }],
         }
-        const result = parentWindow
-          ? await dialog.showSaveDialog(parentWindow, options)
-          : await dialog.showSaveDialog(options)
+        const result = await showSenderSaveDialog(ctx, options)
         return result.canceled || !result.filePath ? null : result.filePath
       },
     },
@@ -70,18 +67,9 @@ export const documentTemplateIpcModule: IpcModule = {
   events: {},
 }
 
-async function chooseOpenFile(options: Electron.OpenDialogOptions): Promise<string | null> {
-  const parentWindow = focusedWindow()
-  const result = parentWindow
-    ? await dialog.showOpenDialog(parentWindow, { ...options, properties: ["openFile"] })
-    : await dialog.showOpenDialog({ ...options, properties: ["openFile"] })
+async function chooseOpenFile(ctx: IpcHandlerContext, options: Electron.OpenDialogOptions): Promise<string | null> {
+  const result = await showSenderOpenDialog(ctx, { ...options, properties: ["openFile"] })
   return result.canceled ? null : result.filePaths[0] ?? null
-}
-
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
 }
 
 async function authorizeFileAccess(

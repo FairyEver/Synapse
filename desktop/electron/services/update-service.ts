@@ -31,7 +31,6 @@ import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-confi
 // Update event channels for broadcasting state changes
 const UPDATE_CHANNELS = {
   stateChanged: "synapse:app:update:operation:state_changed",
-  openUpdatePage: "synapse:app:update:operation:open_update_page",
   openRequest: "synapse:app:update:operation:open_request",
 } as const
 import { createMainLogger } from "./log-store"
@@ -156,6 +155,7 @@ class UpdateService {
   private autoCheckPromise: Promise<unknown> | null = null
   private autoCheckTimer: ReturnType<typeof setInterval> | null = null
   private windowManager: WindowManager | null = null
+  private focusMainForNotification: (() => void) | undefined
   private installQuitHandlers: InstallQuitHandlers | null = null
   private installRecoveryService: InstallRecoveryController | null = null
   private macInstallHandoffTimedOut = false
@@ -164,8 +164,9 @@ class UpdateService {
   private pendingOpenRequest: SynapseAppUpdateOpenRequest | null = null
   private nextOpenRequestId = 0
 
-  setWindowManager(windowManager: WindowManager): void {
+  setWindowManager(windowManager: WindowManager, focusMainForNotification?: () => void): void {
     this.windowManager = windowManager
+    this.focusMainForNotification = focusMainForNotification
   }
 
   setInstallQuitHandlers(handlers: InstallQuitHandlers | null): void {
@@ -191,7 +192,7 @@ class UpdateService {
     }
     this.nextOpenRequestId = request.id
     this.pendingOpenRequest = request
-    this.windowManager?.broadcast(UPDATE_CHANNELS.openRequest, request)
+    this.windowManager?.broadcast(UPDATE_CHANNELS.openRequest, request, (window) => window.role === "main")
     return { ...request }
   }
 
@@ -1214,37 +1215,13 @@ class UpdateService {
     })
 
     notification.on("click", () => {
-      if (!this.windowManager) {
-        app.emit("activate")
-        return
+      try {
+        if (this.focusMainForNotification) this.focusMainForNotification()
+        else this.windowManager?.open("main")
+        if (this.pendingOpenRequest?.automatic !== true) this.publishUpdateOpenRequest(false)
+      } catch (error) {
+        logger.warn("Could not open the update page from a notification.", { error })
       }
-
-      const windows = this.windowManager.getAllWindows()
-      let hasVisibleWindow = false
-
-      for (const window of windows) {
-        if (window.isDestroyed()) {
-          continue
-        }
-
-        hasVisibleWindow = true
-        if (window.isMinimized()) {
-          window.restore()
-        }
-        if (!window.isVisible()) {
-          window.show()
-        }
-        window.focus()
-      }
-
-      if (!hasVisibleWindow) {
-        this.windowManager.open("main")
-      }
-
-      this.windowManager.broadcast(
-        UPDATE_CHANNELS.openUpdatePage,
-        {},
-      )
     })
 
     notification.show()

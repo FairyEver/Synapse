@@ -71,7 +71,6 @@ type IpcErrorEnvelope = {
 const EVENT_CHANNELS = {
   update: {
     stateChanged: "synapse:app:update:operation:state_changed",
-    openUpdatePage: "synapse:app:update:operation:open_update_page",
   },
   agent: {
     detachedConversationsChanged: "synapse:app:agent:operation:detached_conversations_changed",
@@ -407,6 +406,10 @@ const synapseBridge: SynapseBridge = {
       return () => { if (hubOpenListener === listener) hubOpenListener = undefined }
     },
     openSystemApp: (appId, options) => invoke(IPC_CHANNELS.apps.openSystemApp)({ appId, options }),
+    navigateMain: invoke(IPC_CHANNELS.apps.navigateMain),
+    getPendingMainNavigation: invoke(IPC_CHANNELS.apps.getPendingMainNavigation),
+    acknowledgeMainNavigation: invoke(IPC_CHANNELS.apps.acknowledgeMainNavigation),
+    onMainNavigationRequested: createRawPayloadSubscription(subscribe, IPC_CHANNELS.apps.mainNavigationRequested),
     onContentOpenRequest: createRawPayloadSubscription(
       subscribe,
       EVENT_CHANNELS.apps.contentOpenRequest,
@@ -1193,10 +1196,6 @@ const synapseBridge: SynapseBridge = {
     onStateChanged: createRawPayloadSubscription<SynapseAppUpdateState>(
       subscribe,
       EVENT_CHANNELS.update.stateChanged,
-    ),
-    onOpenUpdatePage: createRawPayloadSubscription<void>(
-      subscribe,
-      EVENT_CHANNELS.update.openUpdatePage,
     ),
   },
   cheatCodes: {

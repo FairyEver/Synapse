@@ -1,3 +1,5 @@
+import { useMainNavigation } from "@/app-shell/hooks/use-main-navigation"
+import type { MainNavigationInput } from "@/modules/apps/main-navigation"
 import { AgentShareRenderHost } from "@/modules/agent/share/render-host"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -27,7 +29,7 @@ import {
   subscribeOpenSettingsTab,
 } from "@/app-shell/navigation"
 import { useWatchNextAgentSession } from "@/app-shell/use-watch-next-agent-session"
-import { useUpdateOpenRequest } from "@/hooks/use-update-open-request"
+import { useUpdateOpenRequest, type UpdateOpenRequestControls } from "@/hooks/use-update-open-request"
 import {
   useAgentConversationOpenRequest,
   type AgentConversationOpenRequestControls,
@@ -57,7 +59,7 @@ import { isSystemAppEntryVisible } from "@/modules/apps/visibility"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transition"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
-import type { SynapseSystemAppId, SynapseSystemAppTerminalOpenRequest } from "@/modules/apps/types"
+import type { SynapseSystemAppId } from "@/modules/apps/types"
 import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { SynapseSkillAutoUpdateHost } from "../app-capabilities/synapse-skill/renderer/auto-update"
 
@@ -85,9 +87,6 @@ function MainApp() {
   } | null>(null)
   const [pendingAppContentOpenRequest, setPendingAppContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
-  const [pendingTerminalOpenRequest, setPendingTerminalOpenRequest] =
-    useState<SynapseSystemAppTerminalOpenRequest | null>(null)
-  const [pendingMeetingId, setPendingMeetingId] = useState<string | null>(null)
   const [launcherResetKey, setLauncherResetKey] = useState(0)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(initialWorkflowEntryVisible)
   const dock = useDockPreferences({ workflowEntryVisible })
@@ -116,31 +115,55 @@ function MainApp() {
     updateTrackingContext({ moduleId: activeAppId, windowType: "main" })
   }, [activeAppId, activeRepository?.uuid])
 
-  const setActiveAppId = useCallback(
+  const selectApp = useCallback(
     (nextAppId: ActiveAppId, source: ActiveAppChangeSource) => {
-      void runAppNavigation(() => {
-        const previousAppId = activeAppIdRef.current
-        if (previousAppId !== nextAppId) {
-          logger.info("Active system app changed.", {
-            from: previousAppId,
-            to: nextAppId,
-            source,
-          })
-          track({
-            component: "app-navigation",
-            name: "active-system-app-changed",
-            action: "select",
-            eventKey: `navigation.${nextAppId}`,
-            category: "navigation",
-            value: nextAppId,
-            metadata: { source },
-          })
-        }
-        setActiveAppIdRaw(nextAppId)
-      })
+      const previousAppId = activeAppIdRef.current
+      if (previousAppId !== nextAppId) {
+        logger.info("Active system app changed.", {
+          from: previousAppId,
+          to: nextAppId,
+          source,
+        })
+        track({
+          component: "app-navigation",
+          name: "active-system-app-changed",
+          action: "select",
+          eventKey: `navigation.${nextAppId}`,
+          category: "navigation",
+          value: nextAppId,
+          metadata: { source },
+        })
+      }
+      setActiveAppIdRaw(nextAppId)
     },
     [],
   )
+
+  const navigateMain = useCallback((destination: MainNavigationInput, apply: () => boolean) =>
+    runAppNavigation(() => {
+      if (!apply()) return
+      if (destination.appId !== "message-center") {
+        ensureBodyInteractable()
+        selectApp(destination.appId, "notification")
+      }
+    }), [selectApp])
+  const mainNavigation = useMainNavigation(navigateMain)
+  const { pending, open: openMainTarget, complete: completeMainTarget, discard: discardMainTarget } = mainNavigation
+  const setActiveAppId = useCallback((id: ActiveAppId, source: ActiveAppChangeSource) => {
+    void runAppNavigation(() => {
+      if (activeAppIdRef.current !== id) discardMainTarget()
+      selectApp(id, source)
+    })
+  }, [discardMainTarget, selectApp])
+  const completeTargetById = useCallback((requestId: string) => {
+    if (pending && "target" in pending && typeof pending.target === "object"
+      && pending.target && "requestId" in pending.target && pending.target.requestId === requestId) {
+      completeMainTarget(pending)
+    }
+  }, [pending, completeMainTarget])
+  const completeMainTargetWithoutId = useCallback(() => {
+    if (pending) completeMainTarget(pending)
+  }, [pending, completeMainTarget])
 
   useEffect(() => {
     if (!hasRepositories && activeAppIdRef.current === initialDockAppId) {
@@ -236,21 +259,25 @@ function MainApp() {
     })
   }, [setActiveAppId])
 
-  const handleOpenAgentSession = useCallback((payload: OpenAgentSessionPayload) => {
-    setActiveAppId("agent", "notification")
-    setPendingAgentSession(payload)
-  }, [setActiveAppId])
+  const handleOpenAgentSession = useCallback((payload: OpenAgentSessionPayload) =>
+    runAppNavigation(() => {
+      discardMainTarget()
+      selectApp("agent", "notification")
+      setPendingAgentSession(payload)
+    }), [discardMainTarget, selectApp])
 
   useEffect(() => {
-    return subscribeOpenAgentSession(handleOpenAgentSession)
+    return subscribeOpenAgentSession((payload) => { void handleOpenAgentSession(payload) })
   }, [handleOpenAgentSession])
 
   useAgentConversationOpenRequest((request, controls) => {
-    pendingAgentOpenControlsRef.current = {
-      requestId: request.requestId,
-      controls,
-    }
-    handleOpenAgentSession(request)
+    const pendingControls = { requestId: request.requestId, controls }
+    pendingAgentOpenControlsRef.current = pendingControls
+    void handleOpenAgentSession(request).then(async (accepted) => {
+      if (accepted) return
+      if (pendingAgentOpenControlsRef.current === pendingControls) pendingAgentOpenControlsRef.current = null
+      await controls.acknowledge()
+    }).catch((error) => logger.warn("Could not settle Agent navigation.", { error }))
   })
 
   const handlePendingAgentSessionConsumed = useCallback(() => {
@@ -272,42 +299,35 @@ function MainApp() {
 
   useEffect(() => {
     return subscribeContentOpenRequest((request) => {
-      ensureBodyInteractable()
-      setActiveAppId("launcher", "notification")
-      setPendingAppContentOpenRequest(request)
+      void runAppNavigation(() => {
+        discardMainTarget()
+        ensureBodyInteractable()
+        selectApp("launcher", "notification")
+        setPendingAppContentOpenRequest(request)
+      })
     })
-  }, [setActiveAppId])
+  }, [discardMainTarget, selectApp])
 
   useEffect(() => {
     return subscribeOpenTerminalSession((request) => {
-      ensureBodyInteractable()
-      setActiveAppId("terminal", "notification")
-      setPendingTerminalOpenRequest(request)
+      void openMainTarget({ appId: "terminal", target: request })
     })
-  }, [setActiveAppId])
+  }, [openMainTarget])
 
-  const handleUpdateOpenRequest = useCallback((request: SynapseAppUpdateOpenRequest) => {
-    setActiveAppId("settings", "notification")
-    requestOpenSettingsAbout()
-    logger.info("Update open request navigated to About Synapse.", {
-      automatic: request.automatic,
-      requestId: request.id,
+  const handleUpdateOpenRequest = useCallback(async (request: SynapseAppUpdateOpenRequest, controls: UpdateOpenRequestControls) => {
+    const accepted = await runAppNavigation(() => {
+      discardMainTarget()
+      selectApp("settings", "notification")
+      requestOpenSettingsAbout()
+      logger.info("Update open request navigated to About Synapse.", {
+        automatic: request.automatic,
+        requestId: request.id,
+      })
     })
-  }, [setActiveAppId])
+    if (!accepted) await controls.acknowledge()
+  }, [discardMainTarget, selectApp])
 
   useUpdateOpenRequest(handleUpdateOpenRequest)
-
-  useEffect(() => {
-    const bridge = getSynapseBridge()
-    if (!bridge) {
-      return
-    }
-
-    return bridge.updater.onOpenUpdatePage(() => {
-      setActiveAppId("settings", "notification")
-      requestOpenSettingsAbout()
-    })
-  }, [setActiveAppId])
 
   const accountUiVisible = isAccountUiVisible()
 
@@ -339,10 +359,9 @@ function MainApp() {
         actions={accountUiVisible ? (
           <AppShellActions
             onOpenAccountSettings={requestOpenSettingsAccount}
-            onOpenMeeting={(meetingId) => {
-              setPendingMeetingId(meetingId)
-              setActiveAppId("meeting", "notification")
-            }}
+            onOpenTarget={openMainTarget}
+            notificationOpenRequest={pending?.appId === "message-center" ? pending : null}
+            onNotificationOpenRequestConsumed={completeMainTargetWithoutId}
           />
         ) : null}
       >
@@ -354,18 +373,25 @@ function MainApp() {
                   appId={activeAppId}
                   launcherResetKey={launcherResetKey}
                   workflowEntryVisible={workflowEntryVisible}
-                  resourceContentOpenRequest={pendingAppContentOpenRequest}
+                  resourceContentOpenRequest={pending?.appId === "resource-repository" ? pending.target as ContentOpenRequest : pendingAppContentOpenRequest}
                   onResourceContentOpenRequestConsumed={(requestId) => {
+                    completeTargetById(requestId)
                     setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
                   }}
                   pendingAgentSession={pendingAgentSession}
                   onPendingAgentSessionConsumed={handlePendingAgentSessionConsumed}
-                  terminalOpenRequest={pendingTerminalOpenRequest}
-                  meetingOpenRequest={pendingMeetingId}
-                  onMeetingOpenRequestConsumed={() => setPendingMeetingId(null)}
-                  onTerminalOpenRequestConsumed={(requestId) => {
-                    setPendingTerminalOpenRequest((current) => current?.requestId === requestId ? null : current)
-                  }}
+                  terminalOpenRequest={pending?.appId === "terminal" ? pending.target : null}
+                  onTerminalOpenRequestConsumed={completeTargetById}
+                  meetingOpenRequest={pending?.appId === "meeting" ? pending.target : null}
+                  onMeetingOpenRequestConsumed={completeMainTargetWithoutId}
+                  gitOpenRequest={pending?.appId === "git" ? pending.target : null}
+                  onGitOpenRequestConsumed={completeTargetById}
+                  mailOpenRequest={pending?.appId === "mail" ? pending.target : null}
+                  onMailOpenRequestConsumed={completeTargetById}
+                  mailInternalOpenRequest={pending?.appId === "mail-internal" ? pending.target : null}
+                  onMailInternalOpenRequestConsumed={completeTargetById}
+                  todoOpenRequest={pending?.appId === "todos" ? pending.target : null}
+                  onTodoOpenRequestConsumed={completeTargetById}
                 />
               </EmbeddedSystemAppShell>
             </AppSwitchTransition>

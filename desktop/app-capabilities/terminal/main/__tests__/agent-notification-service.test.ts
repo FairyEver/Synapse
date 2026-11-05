@@ -75,7 +75,6 @@ describe("TerminalAgentNotificationService", () => {
     })
 
     fixture.notifications[0]?.emit("click")
-    expect(fixture.focusApp).toHaveBeenCalledOnce()
     expect(fixture.openTerminalSession).toHaveBeenCalledWith("7a5f83f3-9782-4cb0-a268-1ee7ad0b740f")
     await fixture.service.stop()
   })
@@ -821,7 +820,6 @@ async function createFixture(options: { platform?: NodeJS.Platform; now?: () => 
   temporaryDirectories.push(runtimeDir)
   const notifications: TestNotification[] = []
   const focusedWebContentsId = vi.fn<() => number | null>(() => null)
-  const focusApp = vi.fn()
   const openTerminalSession = vi.fn(async () => undefined)
   const attention: TerminalAgentAttentionUpdate[] = []
   const isProcessAlive = vi.fn<(pid: number) => boolean>(() => true)
@@ -837,7 +835,6 @@ async function createFixture(options: { platform?: NodeJS.Platform; now?: () => 
     nodePath: process.execPath,
     ...(options.platform ? { platform: options.platform } : {}),
     focusedWebContentsId,
-    focusApp,
     openTerminalSession,
     isProcessAlive,
     readTranscriptMtimeMs,
@@ -855,7 +852,6 @@ async function createFixture(options: { platform?: NodeJS.Platform; now?: () => 
     notifications,
     attention,
     focusedWebContentsId,
-    focusApp,
     openTerminalSession,
     isProcessAlive,
     readTranscriptMtimeMs,

@@ -354,7 +354,11 @@ export const IPC_CHANNELS = {
     "changed": "synapse:app:automation:item:changed",
   },
   "apps": {
+    "navigateMain": "synapse:app:apps:main_navigation:open",
+    "getPendingMainNavigation": "synapse:app:apps:main_navigation:get_pending",
+    "acknowledgeMainNavigation": "synapse:app:apps:main_navigation:acknowledge",
     "openSystemApp": "synapse:app:apps:system_app:open",
+    "mainNavigationRequested": "synapse:app:apps:operation:main_navigation_requested",
     "mailOpenRequest": "synapse:app:apps:operation:mail_open_request",
     "viewOpenRequest": "synapse:app:apps:operation:view_open_request",
     "skillHubInstallOpenRequest": "synapse:app:apps:operation:skill_hub_install_open_request",

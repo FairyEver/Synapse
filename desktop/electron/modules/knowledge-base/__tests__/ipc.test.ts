@@ -954,7 +954,7 @@ describe("knowledgeBaseIpcModule", () => {
       targetDirectoryPath: "client-a",
     })
 
-    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(electronMock.focusedWindow, expect.objectContaining({
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
       properties: ["openFile", "multiSelections"],
     }))
     expect(uploadRawFiles).toHaveBeenCalledWith({

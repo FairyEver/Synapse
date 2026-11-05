@@ -1,3 +1,4 @@
+import { showSenderOpenDialog, showSenderSaveDialog } from "../runtime/ipc/sender-dialog"
 import { HUB_INSTALL_PROVIDER_ID, HubPreparedSourceProvider } from "../../app-capabilities/skill-hub/main/prepared-source-provider"
 import { AGENT_SHARE_SERVICE_ID } from "../../app-capabilities/agent/shared/share"
 import type { AgentShareService } from "../../app-capabilities/agent/main/share-service"
@@ -35,7 +36,6 @@ import { createMailCapabilityDispatcher } from "../../app-capabilities/mail/main
 import { createMailNotificationAdapter } from "../../app-capabilities/mail/main/notification-adapter"
 import { mailBackgroundPolicy } from "../../app-capabilities/mail/main/context"
 import { ManagedAssetStore } from "../runtime/data-repo/assets"
-import { isSystemAppId } from "../../src/modules/apps/types"
 import { createPortalCredentialDispatcher } from "../../app-capabilities/connectors/main/credential-dispatcher"
 import { app, BrowserWindow, clipboard, dialog, Notification, powerMonitor, safeStorage, shell } from "electron"
 import os from "node:os"
@@ -1856,7 +1856,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<CoreDatabaseService> = {
       openSession: async (sessionId) => {
         await ctx.registry
           .get<ReturnType<typeof createDefaultSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID)
-          .open("terminal", { terminalOpenRequest: { requestId: randomUUID(), sessionId } })
+          .navigateMain({ appId: "terminal", target: { requestId: randomUUID(), sessionId } })
       },
     })
     const systemNotifierDispatcher = createSystemNotifierCapabilityDispatcher({
@@ -1960,6 +1960,7 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
   dependsOn: [
     "core.config",
     "core.window-manager",
+    SYSTEM_APP_WINDOW_SERVICE_ID,
     "core.permission-guard",
     "core.audit-sink",
     "core.data-repository",
@@ -1968,7 +1969,10 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
     const windowManager = ctx.registry.get<WindowManager>("core.window-manager")
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
-    updateService.setWindowManager(windowManager)
+    updateService.setWindowManager(
+      windowManager,
+      ctx.registry.get<ReturnType<typeof createDefaultSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).focusMainWindow,
+    )
     updateService.setUpdateIntentVerificationSecurity({
       permissionGuard,
       auditSink,
@@ -2156,15 +2160,22 @@ export const coreWindowManagerDescriptor: ServiceDescriptor<WindowManager> = {
   },
 }
 
-export const coreSystemAppWindowDescriptor: ServiceDescriptor<ReturnType<typeof createDefaultSystemAppWindowService>> = {
-  id: SYSTEM_APP_WINDOW_SERVICE_ID,
-  criticality: "degraded",
-  dependsOn: ["core.window-manager"],
-  create(ctx) {
-    return createDefaultSystemAppWindowService(
-      ctx.registry.get<WindowManager>("core.window-manager"),
-    )
-  },
+export function createCoreSystemAppWindowDescriptor(focusMainWindow: () => void): ServiceDescriptor<ReturnType<typeof createDefaultSystemAppWindowService>> {
+  return {
+    id: SYSTEM_APP_WINDOW_SERVICE_ID,
+    criticality: "degraded",
+    dependsOn: ["core.window-manager"],
+    create(ctx) {
+      return createDefaultSystemAppWindowService(
+        ctx.registry.get<WindowManager>("core.window-manager"),
+        focusMainWindow,
+        () => {
+          const state = accountService.getState()
+          return state.status === "authenticated" ? state.profile.user.id : null
+        },
+      )
+    },
+  }
 }
 
 export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<TerminalAgentNotificationService> = {
@@ -2199,9 +2210,8 @@ export const coreTerminalAgentNotificationsDescriptor: ServiceDescriptor<Termina
         return new Notification(input)
       },
       focusedWebContentsId: () => BrowserWindow.getFocusedWindow()?.webContents.id ?? null,
-      focusApp: () => app.focus({ steal: true }),
-      openTerminalSession: (sessionId) => systemAppWindows.open("terminal", {
-        terminalOpenRequest: { requestId: randomUUID(), sessionId },
+      openTerminalSession: async (sessionId) => systemAppWindows.navigateMain({
+        appId: "terminal", target: { requestId: randomUUID(), sessionId },
       }),
       // 终端完成事件不看发送结果：它自己的本机通知已经弹过了，这条只负责让账号里留下记录。
       syncCompletion: async (input) => {
@@ -2257,12 +2267,13 @@ export const coreAgentConversationWindowDescriptor: ServiceDescriptor<AgentConve
 export const coreAgentConversationNavigationDescriptor: ServiceDescriptor<AgentConversationNavigationService> = {
   id: AGENT_CONVERSATION_NAVIGATION_SERVICE_ID,
   criticality: "degraded",
-  dependsOn: ["core.data-repository", "core.window-manager"],
+  dependsOn: ["core.data-repository", "core.window-manager", SYSTEM_APP_WINDOW_SERVICE_ID],
   create(ctx) {
     return new AgentConversationNavigationService({
       dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
       windowManager: ctx.registry.get<WindowManager>("core.window-manager"),
       logger: createMainLogger("agent.conversation-navigation"),
+      focusMainWindow: ctx.registry.get<ReturnType<typeof createDefaultSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).focusMainWindow,
     })
   },
 }
@@ -3632,10 +3643,19 @@ export const coreMailDescriptor: ServiceDescriptor<MailService> = {
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"), auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       resolveOwner: () => { const state = accountService.getState(); return state.status === "authenticated" ? state.profile.user.id : null },
       events: (payload, rendererIds) => ctx.registry.get<EventBus>("core.event-bus").emit({ domain: "account", type: "mail.changed", payload, timestamp: new Date().toISOString(), scope: { rendererIds } }),
-      open: async request => { const id: string = "mail"; if (!isSystemAppId(id)) throw new Error("邮箱界面尚不可用"); await ctx.registry.get<ReturnType<typeof createDefaultSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID).open(id, { mailOpenRequest: request }) },
+      open: async (request) => {
+        ctx.registry.get<ReturnType<typeof createDefaultSystemAppWindowService>>(SYSTEM_APP_WINDOW_SERVICE_ID)
+          .navigateMain({ appId: "mail", target: request })
+      },
       notifications: createMailNotificationAdapter({ isSupported: () => Notification.isSupported(), create: options => new Notification(options) }, diagnostic), notificationsSupported: () => Notification.isSupported(), diagnostic,
-      pickFiles: async () => { const result = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"] }); return result.canceled ? [] : result.filePaths },
-      saveFile: async name => { const result = await dialog.showSaveDialog({ defaultPath: path.basename(name) }); return result.canceled ? null : result.filePath ?? null },
+      pickFiles: async (sender) => {
+        const result = await showSenderOpenDialog({ sender }, { properties: ["openFile", "multiSelections"] })
+        return result.canceled ? [] : result.filePaths
+      },
+      saveFile: async (name, sender) => {
+        const result = await showSenderSaveDialog({ sender }, { defaultPath: path.basename(name) })
+        return result.canceled ? null : result.filePath ?? null
+      },
     })
   },
   stop: service => service.dispose(),

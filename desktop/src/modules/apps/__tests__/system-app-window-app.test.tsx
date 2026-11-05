@@ -10,7 +10,7 @@ import { SystemAppWindowApp } from "../system-app-window-app"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const mocks = vi.hoisted(() => ({
-  openSystemApp: vi.fn(),
+  navigateMain: vi.fn(),
   gitOpenRequestListener: null as null | ((request: { requestId: string; repositoryId: string }) => void),
   terminalOpenRequestListener: null as null | ((request: { requestId: string; sessionId: string }) => void),
   todoOpenRequestListener: null as null | ((request: { requestId: string; id: string }) => void),
@@ -104,7 +104,7 @@ vi.mock("@/lib/electron-bridge", () => ({
           mocks.terminalOpenRequestListener = null
         }
       },
-      openSystemApp: mocks.openSystemApp,
+      navigateMain: mocks.navigateMain,
     },
   }),
 }))
@@ -115,7 +115,7 @@ describe("SystemAppWindowApp", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "/")
     document.body.innerHTML = ""
-    mocks.openSystemApp.mockReset()
+    mocks.navigateMain.mockReset().mockResolvedValue(undefined)
     mocks.gitOpenRequestListener = null
     mocks.terminalOpenRequestListener = null
   })
@@ -237,8 +237,9 @@ describe("SystemAppWindowApp", () => {
       contentId: "skill-1",
     })
 
-    expect(mocks.openSystemApp).toHaveBeenCalledWith("resource-repository", {
-      contentOpenRequest: {
+    expect(mocks.navigateMain).toHaveBeenCalledWith({
+      appId: "resource-repository",
+      target: {
         kind: "detail",
         requestId: "request-1",
         contentType: "skill",

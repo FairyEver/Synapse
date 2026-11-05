@@ -1,9 +1,11 @@
+import { showSenderSaveDialog } from "../../runtime/ipc/sender-dialog"
+import { notificationSchema } from "../../../src/types/notification-center"
 import { mailAttachmentSourceSchema } from "../../../synapse-capabilities/shared/mail-internal-input"
 import { AGENT_SHARE_SERVICE_ID } from "../../../app-capabilities/agent/shared/share"
 import type { AgentShareService } from "../../../app-capabilities/agent/main/share-service"
 import type { DriveSyncService } from "../../services/drive-sync-service"
 import path from "node:path"
-import { app, BrowserWindow, dialog } from "electron"
+import { app } from "electron"
 import { z } from "zod"
 import { DRIVE_SEARCH_FILE_TYPES, DRIVE_SEARCH_SORTS, DRIVE_SEARCH_SHARE_STATUSES } from "@synapse/shared/drive-search"
 import { NOTIFICATION_SOURCES } from "@synapse/shared/notification-constants"
@@ -66,22 +68,6 @@ const dashboardWebhookSchema = z.object({
     "rejected",
     "broadcast_failed",
   ]).optional(),
-})
-
-const notificationSchema = z.object({
-  id: z.string(),
-  source: z.string(),
-  title: z.string(),
-  body: z.string(),
-  group: z.string().nullable(),
-  url: z.string().nullable(),
-  level: z.enum(["active", "passive", "timeSensitive"]),
-  targetId: z.string().nullable(),
-  deviceId: z.string().nullable(),
-  readAt: z.string().nullable(),
-  resolvedAt: z.string().nullable(),
-  createdAt: z.string(),
-  image: z.object({ id: z.string(), mimeType: z.string(), byteSize: z.number().int().nonnegative() }).nullable().optional(),
 })
 
 const notificationListRequestSchema = z.object({
@@ -889,23 +875,14 @@ async function runGuardedDriveFileVersionDownload<T>(options: {
   }
 }
 
-function focusedWindow(): Electron.BrowserWindow | undefined {
-  return BrowserWindow.getFocusedWindow()
-    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
-    ?? undefined
-}
-
-async function chooseDriveItemDownloadPath(item: { readonly name: string; readonly type: "file" | "folder" }): Promise<string | null> {
+async function chooseDriveItemDownloadPath(ctx: IpcHandlerContext, item: { readonly name: string; readonly type: "file" | "folder" }): Promise<string | null> {
   const defaultName = item.type === "folder" ? `${item.name}.zip` : item.name
   const options: Electron.SaveDialogOptions = {
     title: "下载",
     defaultPath: path.join(app.getPath("downloads"), defaultName),
     ...(item.type === "folder" ? { filters: [{ name: "ZIP", extensions: ["zip"] }] } : {}),
   }
-  const parentWindow = focusedWindow()
-  const result = parentWindow
-    ? await dialog.showSaveDialog(parentWindow, options)
-    : await dialog.showSaveDialog(options)
+  const result = await showSenderSaveDialog(ctx, options)
   return result.canceled || !result.filePath ? null : result.filePath
 }
 
@@ -1264,7 +1241,7 @@ export const accountIpcModule: IpcModule = {
         const message = await accountService.executeMailOperation({ kind: "messageGet", messageId: parsed.messageId })
         const attachment = message.attachments.find((item) => item.attachmentId === parsed.attachmentId)
         if (!attachment) throw new Error("附件不存在。")
-        const destination = parsed.outputPath ?? (await dialog.showSaveDialog({ defaultPath: attachment.fileName })).filePath
+        const destination = parsed.outputPath ?? (await showSenderSaveDialog(ctx, { defaultPath: attachment.fileName })).filePath
         if (!destination) return null
         await checkAccountPermission({ ctx, action: "fs.write", resource: destination, source: "account.mail.attachmentDownload", context: { kind: "attachmentDownload", messageId: parsed.messageId, attachmentId: parsed.attachmentId } })
         return accountService.executeMailOperation({ kind: "attachmentDownload", ...parsed, outputPath: destination })
@@ -1334,7 +1311,7 @@ export const accountIpcModule: IpcModule = {
       handler: async (ctx, input) => {
         const parsed = driveItemIdSchema.parse(input)
         const item = await accountService.getDriveItem(parsed.itemId)
-        const outputPath = await chooseDriveItemDownloadPath(item)
+        const outputPath = await chooseDriveItemDownloadPath(ctx, item)
         if (!outputPath) return null
         return runGuardedDriveItemDownload({
           ctx,

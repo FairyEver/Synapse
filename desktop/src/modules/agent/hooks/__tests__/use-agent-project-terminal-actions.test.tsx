@@ -9,7 +9,7 @@ import { useAgentProjectTerminalActions } from "../use-agent-project-terminal-ac
 
 const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
-  openSystemApp: vi.fn(),
+  navigateMain: vi.fn(),
   toastError: vi.fn(),
   loggerWarn: vi.fn(),
 }))
@@ -28,14 +28,14 @@ let root: Root | null = null
 
 beforeEach(() => {
   mocks.createSession.mockReset().mockResolvedValue({ id: "session-1" })
-  mocks.openSystemApp.mockReset().mockResolvedValue(undefined)
+  mocks.navigateMain.mockReset().mockResolvedValue(undefined)
   mocks.toastError.mockReset()
   mocks.loggerWarn.mockReset()
   Object.defineProperty(window, "synapse", {
     configurable: true,
     value: {
       terminal: { session: { create: mocks.createSession } },
-      apps: { openSystemApp: mocks.openSystemApp },
+      apps: { navigateMain: mocks.navigateMain },
     },
   })
   const container = document.createElement("div")
@@ -59,8 +59,8 @@ describe("useAgentProjectTerminalActions", () => {
       projectId: "project-1",
       cwd: "/work/project-one",
     })
-    expect(mocks.openSystemApp).toHaveBeenCalledWith("terminal", {
-      terminalOpenRequest: {
+    expect(mocks.navigateMain).toHaveBeenCalledWith({ appId: "terminal",
+      target: {
         requestId: expect.any(String),
         sessionId: "session-1",
       },
@@ -74,13 +74,13 @@ describe("useAgentProjectTerminalActions", () => {
 
     await clickOpenTerminal()
 
-    expect(mocks.openSystemApp).not.toHaveBeenCalled()
+    expect(mocks.navigateMain).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith("无法在终端中打开项目。")
     expect(JSON.stringify(mocks.loggerWarn.mock.calls)).not.toContain(rawError.message)
   })
 
   it("reports when the session exists but the Terminal window cannot open", async () => {
-    mocks.openSystemApp.mockRejectedValueOnce(new Error("window failed"))
+    mocks.navigateMain.mockRejectedValueOnce(new Error("window failed"))
 
     await clickOpenTerminal()
 

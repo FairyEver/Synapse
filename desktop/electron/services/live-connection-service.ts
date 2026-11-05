@@ -83,7 +83,11 @@ type LiveConnectionServiceDeps = {
 
 /** 收到一条账号消息时，把它的原生呈现交给谁。 */
 export type AccountNotificationPresenter = {
-  present(input: { readonly title: string; readonly body: string }): void
+  present(input: { readonly title: string; readonly body: string }, reference?: {
+    readonly notificationId: string
+    readonly ownerId: string
+    readonly localDeviceId: string
+  }): void
 }
 
 export class LiveConnectionService {
@@ -447,7 +451,10 @@ export class LiveConnectionService {
           if (Date.now() - new Date(item.createdAt).getTime() > 30_000) return
           // 呈现归 System Notifier：它持有这台电脑的「本机通知 / 静音」设置与 Electron adapter。
           // 端口没接上时这里安静跳过，不再自己 new 一个 Notification。
-          this.notificationPresenter?.present({ title: item.title, body: item.body })
+          if (generation !== this.connectionGeneration) return
+          this.notificationPresenter?.present({ title: item.title, body: item.body }, socketAccountUserId
+            ? { notificationId, ownerId: socketAccountUserId, localDeviceId: clientInstanceId }
+            : undefined)
         }).catch((error: unknown) => {
           logger.warn("Notification could not be loaded after live event.", this.liveErrorMetadata(error))
         })

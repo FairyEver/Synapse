@@ -98,7 +98,6 @@ export type TerminalAgentNotificationServiceDeps = {
     readonly body: string
   }) => TerminalAgentNotificationHandle | null
   readonly focusedWebContentsId: () => number | null
-  readonly focusApp: () => void
   readonly openTerminalSession: (sessionId: string) => Promise<void>
   readonly syncCompletion?: (input: { sessionId: string; title: string; body: string; sourceKey: string }) => Promise<void>
   readonly setSessionAttention?: (update: TerminalAgentAttentionUpdate) => void
@@ -843,7 +842,6 @@ export class TerminalAgentNotificationService {
       notification.on("close", release)
       notification.on("click", () => {
         release()
-        this.deps.focusApp()
         void this.deps.openTerminalSession(session.sessionId).catch((error) => {
           this.deps.logger.warn("Failed to open Terminal session from notification.", {
             sessionId: session.sessionId,

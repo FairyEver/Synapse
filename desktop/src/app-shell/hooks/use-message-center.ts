@@ -3,7 +3,8 @@ import { buildDriveDiscussionNotificationOpenUrl, type NotificationSource } from
 import { useAccount } from "@/app-shell/account"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { requestOpenTerminalSession } from "@/app-shell/terminal-navigation"
+import { resolveNotificationDestination } from "@/app-shell/notification-navigation"
+import type { MainNavigationInput, MainNavigationTarget } from "@/modules/apps/main-navigation"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "@/generated/deployment-config.generated"
 import { getSynapseBridge, requireBridgeDomain } from "@/lib/electron-bridge"
 import { mailRequest } from "@/lib/mail-api"
@@ -14,7 +15,13 @@ const logger = createRendererLogger("message-center")
 export type MessageFilter = "pending" | "all" | "unread"
 export type MessageSourceFilter = "all" | NotificationSource
 
-export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
+export type MessageCenterOpenRequest = Extract<MainNavigationInput, { appId: "message-center" }>
+
+export function useMessageCenter(
+  onOpenTarget?: (target: MainNavigationTarget) => Promise<boolean>,
+  openRequest?: MessageCenterOpenRequest | null,
+  onOpenRequestConsumed?: () => void,
+) {
   const { state } = useAccount()
   const notifications = useAppNotifications()
   const userId = state.status === "authenticated" ? state.profile.user.id : null
@@ -231,18 +238,31 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
     setSelected(null)
   }
 
-  const openItem = async (item: SynapseNotification) => {
-    navigationId.current += 1
+  const openItem = useCallback(async (item: SynapseNotification) => {
+    const requestId = ++navigationId.current
+    const expectedIdentity = identityRef.current
     setSelected(item)
     try {
       if (!item.readAt) await requireBridgeDomain("account").notifications.read({ id: item.id })
+      if (requestId !== navigationId.current || identityRef.current !== expectedIdentity) return
       setSelected((current) => current?.id === item.id ? { ...current, readAt: current.readAt ?? new Date().toISOString() } : current)
       await latestRefresh.current()
     } catch (cause) {
+      if (requestId !== navigationId.current || identityRef.current !== expectedIdentity) return
       logger.warn("Message could not be marked read.", { cause })
       setError("操作失败")
     }
-  }
+  }, [])
+
+  const consumedOpenRequest = useRef<MessageCenterOpenRequest | null>(null)
+  useEffect(() => {
+    if (!openRequest || !userId || consumedOpenRequest.current === openRequest) return
+    consumedOpenRequest.current = openRequest
+    setOpen(true)
+    if (openRequest.target) void openItem(openRequest.target)
+    setError(openRequest.otherDevice ? "此终端会话在另一台电脑上。" : openRequest.target ? null : "无法打开消息目标")
+    onOpenRequestConsumed?.()
+  }, [openRequest, userId, openItem, onOpenRequestConsumed])
 
   const navigate = async (item: SynapseNotification) => {
     const requestId = ++navigationId.current
@@ -254,23 +274,21 @@ export function useMessageCenter(onOpenMeeting?: (meetingId: string) => void) {
         await requireBridgeDomain("account").notifications.read({ id: item.id })
         if (requestId !== navigationId.current || identityRef.current !== expectedIdentity) return
         await requireBridgeDomain("shell").openExternal(url)
-      } else if (item.source.startsWith("terminal-") && item.targetId) {
-        requestOpenTerminalSession({ requestId: crypto.randomUUID(), sessionId: item.targetId })
-        setOpen(false)
-      } else if (item.source === "meeting-transcription" && item.targetId) {
-        onOpenMeeting?.(item.targetId)
-        setOpen(false)
-      } else if (item.source === "todo-reminder" && item.targetId) {
-        await requireBridgeDomain("apps").openSystemApp("todos", { todoOpenRequest: { requestId: crypto.randomUUID(), id: item.targetId } })
-        setOpen(false)
-      } else if (item.source === "mail-internal" && item.targetId) {
-        await requireBridgeDomain("apps").openSystemApp("mail-internal", {
-          mailInternalOpenRequest: { requestId: crypto.randomUUID(), messageId: item.targetId },
-        })
-        setOpen(false)
-      } else if (item.url) {
-        const url = new URL(item.url)
-        if (url.protocol === "https:") await requireBridgeDomain("shell").openExternal(url.toString())
+      } else {
+        const localDeviceId = item.source.startsWith("terminal-") && item.deviceId
+          ? (await requireBridgeDomain("live").getState()).clientInstanceId
+          : null
+        if (requestId !== navigationId.current || identityRef.current !== expectedIdentity) return
+        const target = resolveNotificationDestination(item, crypto.randomUUID(), localDeviceId)
+        if (target === "other-device") {
+          setError("此终端会话在另一台电脑上。")
+        } else if (target) {
+          const accepted = await onOpenTarget?.(target)
+          if (accepted && requestId === navigationId.current && identityRef.current === expectedIdentity) setOpen(false)
+        } else if (item.url) {
+          const url = new URL(item.url)
+          if (url.protocol === "https:") await requireBridgeDomain("shell").openExternal(url.toString())
+        }
       }
     } catch (cause) {
       if (item.source === "drive-discussion") {

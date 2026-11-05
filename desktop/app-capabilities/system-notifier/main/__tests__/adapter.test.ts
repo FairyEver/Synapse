@@ -24,6 +24,26 @@ describe("system notification adapter", () => {
     expect(onFailure).not.toHaveBeenCalled()
   })
 
+  it("runs the account click action once and ignores a dismissed notification", () => {
+    const listeners = new Map<string, () => void>()
+    class Notification {
+      static isSupported() { return true }
+      on(event: string, listener: () => void) { listeners.set(event, listener) }
+      show() {}
+    }
+    const onClick = vi.fn()
+    const adapter = createElectronSystemNotificationAdapter(Notification, vi.fn())
+    adapter.show({ title: "Title", body: "Body", silent: false, onClick })
+    listeners.get("click")?.()
+    listeners.get("click")?.()
+    expect(onClick).toHaveBeenCalledOnce()
+
+    adapter.show({ title: "Title", body: "Body", silent: false, onClick })
+    listeners.get("close")?.()
+    listeners.get("click")?.()
+    expect(onClick).toHaveBeenCalledOnce()
+  })
+
   it("degrades safely when unsupported", () => {
     class Notification {
       static isSupported() { return false }

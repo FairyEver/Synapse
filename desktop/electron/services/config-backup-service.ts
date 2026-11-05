@@ -1,6 +1,8 @@
+import { showSenderOpenDialog, showSenderSaveDialog } from "../runtime/ipc/sender-dialog"
+import type { IpcInvocationContext } from "../runtime/ipc/types"
 import { migrateInternalMailConfig } from "../../src/modules/apps/mail-internal-migration"
 import { isTerminalThemeId } from "../../app-capabilities/terminal/shared/terminal-themes"
-import { app, dialog } from "electron"
+import { app } from "electron"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { CONFIG_BACKUP_IMPORT_MAX_BYTES } from "../../config"
@@ -1182,10 +1184,7 @@ function filterBackupItems(
   }
 }
 
-export interface ConfigBackupContext {
-  /** Optional browser window for dialog parenting. If not provided, dialog may not be modal. */
-  getParentWindow?: () => Electron.BrowserWindow | null
-}
+type ConfigBackupContext = IpcInvocationContext
 
 class ConfigBackupService {
   /**
@@ -1193,16 +1192,10 @@ class ConfigBackupService {
    */
   async selectExportTarget(ctx?: ConfigBackupContext): Promise<string | null> {
     const defaultPath = path.join(app.getPath("downloads"), createBackupFileName())
-    const parentWindow = ctx?.getParentWindow?.()
-    const result = parentWindow
-      ? await dialog.showSaveDialog(parentWindow, {
-          defaultPath,
-          filters: [{ name: "JSON", extensions: ["json"] }],
-        })
-      : await dialog.showSaveDialog({
-          defaultPath,
-          filters: [{ name: "JSON", extensions: ["json"] }],
-        })
+    const result = await showSenderSaveDialog(ctx ?? {}, {
+      defaultPath,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    })
 
     if (result.canceled || !result.filePath) {
       return null
@@ -1240,14 +1233,7 @@ class ConfigBackupService {
    * Show open dialog and return chosen file path, or null if cancelled.
    */
   async selectImportSource(ctx?: ConfigBackupContext): Promise<string | null> {
-    const parentWindow = ctx?.getParentWindow?.()
-    const result = parentWindow
-      ? await dialog.showOpenDialog(parentWindow, {
-          properties: ["openFile"],
-        })
-      : await dialog.showOpenDialog({
-          properties: ["openFile"],
-        })
+    const result = await showSenderOpenDialog(ctx ?? {}, { properties: ["openFile"] })
 
     if (result.canceled) {
       return null

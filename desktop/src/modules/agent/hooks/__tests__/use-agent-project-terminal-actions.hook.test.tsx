@@ -67,13 +67,13 @@ describe("useAgentProjectTerminalActions", () => {
   it.each([false, true])("opens the resumed conversation in the correct window (detached=%s)", async (detached) => {
     if (detached) detachSidebarWindow()
     const resumeClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "resumed-terminal" }))
-    const openSystemApp = vi.fn(async () => undefined)
-    bridgeMock.requireSynapseBridge.mockReturnValue({ agent: { resumeClaudeCodeTerminal }, apps: { openSystemApp } })
+    const navigateMain = vi.fn(async () => undefined)
+    bridgeMock.requireSynapseBridge.mockReturnValue({ agent: { resumeClaudeCodeTerminal }, apps: { navigateMain } })
     const requests = collectTerminalOpenRequests()
     const hook = await renderHook()
     await expect(hook.current.resumeClaudeCodeTerminal({ projectId: "project-1", conversationId: "conversation-1" })).resolves.toBe(true)
     expect(resumeClaudeCodeTerminal).toHaveBeenCalledWith({ projectId: "project-1", conversationId: "conversation-1" })
-    if (detached) expect(openSystemApp).toHaveBeenCalledWith("terminal", { terminalOpenRequest: { requestId: expect.any(String), sessionId: "resumed-terminal" } })
+    if (detached) expect(navigateMain).toHaveBeenCalledWith({ appId: "terminal", target: { requestId: expect.any(String), sessionId: "resumed-terminal" } })
     else expect(requests).toEqual([{ requestId: expect.any(String), sessionId: "resumed-terminal" }])
   })
 
@@ -81,7 +81,7 @@ describe("useAgentProjectTerminalActions", () => {
     detachSidebarWindow()
     bridgeMock.requireSynapseBridge.mockReturnValue({
       agent: { resumeClaudeCodeTerminal: async () => ({ sessionId: "resumed-terminal" }) },
-      apps: { openSystemApp: async () => { throw new Error("window unavailable") } },
+      apps: { navigateMain: async () => { throw new Error("window unavailable") } },
     })
     const hook = await renderHook()
     await expect(hook.current.resumeClaudeCodeTerminal({ projectId: "project-1", conversationId: "conversation-1" })).resolves.toBe(true)
@@ -90,10 +90,10 @@ describe("useAgentProjectTerminalActions", () => {
 
   it("creates a Claude Code terminal with the selected provider and opens it inside the app", async () => {
     const createClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "session-1" }))
-    const openSystemApp = vi.fn(async () => undefined)
+    const navigateMain = vi.fn(async () => undefined)
     bridgeMock.requireSynapseBridge.mockReturnValue({
       agent: { createClaudeCodeTerminal },
-      apps: { openSystemApp },
+      apps: { navigateMain },
     })
     const requests = collectTerminalOpenRequests()
     const hook = await renderHook()
@@ -110,17 +110,17 @@ describe("useAgentProjectTerminalActions", () => {
       modelTier: "default",
     })
     expect(requests).toEqual([{ requestId: expect.any(String), sessionId: "session-1" }])
-    expect(openSystemApp).not.toHaveBeenCalled()
+    expect(navigateMain).not.toHaveBeenCalled()
     expect(toastMock.error).not.toHaveBeenCalled()
   })
 
-  it("opens a Terminal window when the sidebar runs in a detached app window", async () => {
+  it("navigates to Terminal in the main window from a detached sidebar", async () => {
     detachSidebarWindow()
     const createClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "session-3" }))
-    const openSystemApp = vi.fn(async () => undefined)
+    const navigateMain = vi.fn(async () => undefined)
     bridgeMock.requireSynapseBridge.mockReturnValue({
       agent: { createClaudeCodeTerminal },
-      apps: { openSystemApp },
+      apps: { navigateMain },
     })
     const requests = collectTerminalOpenRequests()
     const hook = await renderHook()
@@ -129,8 +129,8 @@ describe("useAgentProjectTerminalActions", () => {
       await hook.current.startClaudeCodeTerminal({ id: "project-1", selection })
     })
 
-    expect(openSystemApp).toHaveBeenCalledWith("terminal", {
-      terminalOpenRequest: { requestId: expect.any(String), sessionId: "session-3" },
+    expect(navigateMain).toHaveBeenCalledWith({ appId: "terminal",
+      target: { requestId: expect.any(String), sessionId: "session-3" },
     })
     expect(requests).toEqual([])
   })
@@ -139,10 +139,10 @@ describe("useAgentProjectTerminalActions", () => {
     const createClaudeCodeTerminal = vi.fn(async () => {
       throw new Error("boom")
     })
-    const openSystemApp = vi.fn(async () => undefined)
+    const navigateMain = vi.fn(async () => undefined)
     bridgeMock.requireSynapseBridge.mockReturnValue({
       agent: { createClaudeCodeTerminal },
-      apps: { openSystemApp },
+      apps: { navigateMain },
     })
     const requests = collectTerminalOpenRequests()
     const hook = await renderHook()
@@ -153,7 +153,7 @@ describe("useAgentProjectTerminalActions", () => {
     })
 
     expect(created).toBe(false)
-    expect(openSystemApp).not.toHaveBeenCalled()
+    expect(navigateMain).not.toHaveBeenCalled()
     expect(requests).toEqual([])
     expect(toastMock.error).toHaveBeenCalledWith("无法在终端中启动 Claude Code。")
   })
@@ -164,7 +164,7 @@ describe("useAgentProjectTerminalActions", () => {
     })
     bridgeMock.requireSynapseBridge.mockReturnValue({
       agent: { createClaudeCodeTerminal },
-      apps: { openSystemApp: vi.fn() },
+      apps: { navigateMain: vi.fn() },
     })
     const hook = await renderHook()
 
@@ -178,12 +178,12 @@ describe("useAgentProjectTerminalActions", () => {
   it("keeps the created session when the terminal window fails to open", async () => {
     detachSidebarWindow()
     const createClaudeCodeTerminal = vi.fn(async () => ({ sessionId: "session-2" }))
-    const openSystemApp = vi.fn(async () => {
+    const navigateMain = vi.fn(async () => {
       throw new Error("window failed")
     })
     bridgeMock.requireSynapseBridge.mockReturnValue({
       agent: { createClaudeCodeTerminal },
-      apps: { openSystemApp },
+      apps: { navigateMain },
     })
     const hook = await renderHook()
 
