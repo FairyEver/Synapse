@@ -22,6 +22,23 @@ beforeEach(() => { api.list.mockReset(); const container = document.createElemen
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ""; vi.restoreAllMocks() })
 
 describe("automation run history", () => {
+  it.each([
+    ["automation is already running", "自动化正在运行中"],
+    ["automation is disabled", "自动化已停用"],
+    ["legacy automation cannot run", "旧版自动化不可运行"],
+    ["run conditions not met", "不满足运行条件"],
+    ["trigger runtime guard skipped run", "当前触发条件未满足"],
+    ["automation is already running (deliveryId: test-delivery)", "自动化正在运行中\n投递 ID：test-delivery"],
+    ["历史自定义跳过原因", "历史自定义跳过原因"],
+  ])("presents the skipped reason %s without calling it an error", async (error, label) => {
+    api.list.mockResolvedValue([{ ...run("skipped"), result: undefined, error }])
+    await act(async () => root.render(<AutomationRunsPanel item={item} busy={false} onStopRun={vi.fn()} />))
+    await act(async () => button("查看结果").click())
+    expect(document.body.textContent).toContain("跳过原因")
+    expect(document.body.textContent).toContain(label)
+    expect(document.body.textContent).not.toContain("错误")
+  })
+
   it("reveals failure output when an existing running record finishes", async () => {
     api.list.mockResolvedValueOnce([run("running")]).mockResolvedValueOnce([run("failed")])
     await act(async () => root.render(<AutomationRunsPanel item={item} busy={false} onStopRun={vi.fn()} />))

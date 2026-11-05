@@ -288,6 +288,21 @@ function formatAutomationRunStatus(run: AutomationRun): string {
   return formatAutomationStatus(run.status)
 }
 
+const AUTOMATION_SKIP_REASON_LABELS = new Map([
+  ["automation is already running", "自动化正在运行中"],
+  ["automation is disabled", "自动化已停用"],
+  ["legacy automation cannot run", "旧版自动化不可运行"],
+  ["run conditions not met", "不满足运行条件"],
+  ["trigger runtime guard skipped run", "当前触发条件未满足"],
+])
+
+export function formatAutomationSkipReason(reason: string): string {
+  const delivery = /^(.*) \(deliveryId: (.+)\)$/.exec(reason)
+  const label = AUTOMATION_SKIP_REASON_LABELS.get(delivery?.[1] ?? reason)
+  if (!label) return reason
+  return delivery ? `${label}\n投递 ID：${delivery[2]}` : label
+}
+
 function isCompletionAnchoredInterval(item: Pick<AutomationItem, "trigger">): boolean {
   return item.trigger.type === "builtin.interval" &&
     item.trigger.config.anchor === "last_completed_at"
