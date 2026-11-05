@@ -28,6 +28,7 @@ type SystemAppWindowShellProps<T extends string = string> = (SystemAppWindowShel
   readonly children: ReactNode
   readonly embeddedLeftAddon?: ReactNode
   readonly left?: ReactNode
+  readonly headerMode?: SystemAppHeaderSlotState["headerMode"]
   readonly immersive?: boolean
 }
 
@@ -39,18 +40,21 @@ function SystemAppWindowShell<T extends string>({
   children,
   embeddedLeftAddon,
   left,
+  headerMode = "default",
   immersive = false,
 }: SystemAppWindowShellProps<T>) {
   const hasTabs = tabs !== undefined
   const embeddedHeaderSlot = useOptionalSystemAppHeaderSlot()
   const setEmbeddedHeaderSlot = embeddedHeaderSlot?.setSlot
   const slotState = useMemo<SystemAppHeaderSlotState>(() => immersive ? { immersive: true } : ({
+    headerMode,
+    left: headerMode === "replace" ? left : undefined,
     leftAddon: embeddedLeftAddon,
     tabs: hasTabs ? tabs : undefined,
     value: hasTabs ? value : undefined,
     onValueChange: hasTabs ? (nextValue: string) => onValueChange(nextValue as T) : undefined,
     actions,
-  }), [actions, embeddedLeftAddon, hasTabs, immersive, onValueChange, tabs, value])
+  }), [actions, embeddedLeftAddon, hasTabs, headerMode, immersive, left, onValueChange, tabs, value])
 
   useEffect(() => {
     if (!setEmbeddedHeaderSlot) return undefined
@@ -68,7 +72,7 @@ function SystemAppWindowShell<T extends string>({
     )
   }
 
-  if (immersive || (!hasTabs && !actions && !left)) {
+  if (immersive || (!hasTabs && !actions && !left && headerMode !== "replace")) {
     return (
       <div data-system-app-immersive={immersive || undefined} className="h-full min-h-0 min-w-0 bg-surface">
         {children}

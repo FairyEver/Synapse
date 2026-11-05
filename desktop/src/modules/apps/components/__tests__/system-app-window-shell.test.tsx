@@ -1,11 +1,13 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, useState } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { EmbeddedSystemAppShell } from "../embedded-system-app-shell"
 import { SystemAppWindowShell } from "../system-app-window-shell"
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const tabs = [
   { id: "one", label: "一" },
@@ -150,6 +152,38 @@ describe("SystemAppWindowShell", () => {
 
     expect(document.querySelector("[data-embedded-system-app-tabs]")).toBeNull()
     expect(document.body.textContent).toContain("应用列表")
+  })
+
+  it.each(["launcher", "dock"] as const)("replaces the entire %s header for a subpage and restores it on return", async (mode) => {
+    function Pages() {
+      const [editing, setEditing] = useState(false)
+      return editing ? (
+        <SystemAppWindowShell
+          {...{ headerMode: "replace" as const }}
+          left={<button aria-label="返回列表" onClick={() => setEditing(false)}>返回</button>}
+        >
+          <div>新建表单</div>
+        </SystemAppWindowShell>
+      ) : (
+        <SystemAppWindowShell actions={<><button onClick={() => setEditing(true)}>新建</button><button>刷新</button></>}>
+          <div>列表内容</div>
+        </SystemAppWindowShell>
+      )
+    }
+    await renderShell(roots, <EmbeddedSystemAppShell appName="自动化" mode={mode} onBack={vi.fn()} onOpenWindow={vi.fn()}><Pages /></EmbeddedSystemAppShell>)
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "新建")!.click() })
+    const header = document.querySelector("[data-embedded-system-app-header]")!
+    expect(document.querySelectorAll("[data-system-app-top-bar]")).toHaveLength(1)
+    expect(header.textContent).toBe("返回")
+    expect(header.querySelectorAll("button")).toHaveLength(1)
+    expect(header.querySelector('[aria-label="新窗口打开"]')).toBeNull()
+    expect(document.body.textContent).toContain("新建表单")
+    await act(async () => { (header.querySelector('[aria-label="返回列表"]') as HTMLButtonElement).click() })
+    const restoredHeader = document.querySelector("[data-embedded-system-app-header]")!
+    expect(restoredHeader.textContent).toContain("新建")
+    expect(restoredHeader.textContent).toContain("刷新")
+    expect(Boolean(restoredHeader.querySelector('[aria-label="新窗口打开"]'))).toBe(mode === "launcher")
+    expect(document.body.textContent).toContain("列表内容")
   })
 })
 

@@ -272,7 +272,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 同步硬规则
 
-2026-11-05 自动化新建、编辑、变量与运行记录改为页内交互。移除 UI 私有的 `app.automation.editor.open_create`、`app.automation.editor.open_edit` IPC 和专用编辑窗口；它们原本不在 capability / MCP 目录中。Automation domain 仍为 14 / 14，全局 365 capability / 361 MCP 索引、两个公开路由工具及 System App、Dock、Workflow、Automation Action、Deep Link 数量均不变。System App 自身的显式新窗口入口继续存在，其内部新建和编辑仍在该宿主页面中完成。公开 schema 和系统 Skill 业务调用方式保持兼容。
+2026-11-05 自动化新建、编辑、变量与运行记录改为页内交互。移除 UI 私有的 `app.automation.editor.open_create`、`app.automation.editor.open_edit` IPC 和专用编辑窗口；它们原本不在 capability / MCP 目录中。Automation domain 仍为 14 / 14，全局 365 capability / 361 MCP 索引、两个公开路由工具及 System App、Dock、Workflow、Automation Action、Deep Link 数量均不变。System App 列表页的显式新窗口入口继续存在；新建和编辑子页面通过共享壳层替换顶栏，仅保留返回列表按钮，不追加新窗口入口，仍在原宿主页面完成。公开 schema 和系统 Skill 业务调用方式保持兼容。
 
 2026-10-25 第二轮审查修复：自动分享在内容图片挂载前完成原调用者校验，手动分享保留图片附件；邮箱正确展开 MIME 组地址，暂停账号拒绝刷新触发的持续同步，恢复复用显式 account.resume。sync.start 描述与生成的系统 Skill 参考已同步；44 项邮箱工具、343 项全局 capability / 339 项 MCP 索引和其余注册表面均不变。
 

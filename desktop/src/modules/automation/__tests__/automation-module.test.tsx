@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AutomationModule } from "../index"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
+import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { AutomationList } from "../components/automation-list"
 import { AutomationListRow } from "../components/automation-list-row"
 import { AutomationRunsPanel } from "../components/automation-runs-dialog"
@@ -328,6 +329,35 @@ describe("AutomationModule", () => {
     expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
     expect(document.body.textContent).toContain("当以下情况发生时")
     expect(mocks.openCreateEditorWindow).not.toHaveBeenCalled()
+  })
+
+  it.each(["window", "dock", "launcher"] as const)("replaces and restores the automation header for create and edit in the %s host", async (host) => {
+    mocks.useAutomationItems.mockReturnValue({ items: [createItem({ name: "已有任务" })], loading: false, error: null, refresh: vi.fn() })
+    const container = document.createElement("div"); document.body.appendChild(container)
+    const app = <AutomationModule />
+    await act(async () => { createRoot(container).render(host === "window" ? app : <EmbeddedSystemAppShell appName="自动化" mode={host} onBack={vi.fn()} onOpenWindow={vi.fn()}>{app}</EmbeddedSystemAppShell>) })
+    const header = () => document.querySelector("[data-system-app-window-toolbar], [data-embedded-system-app-header]")!
+    const checkEditor = () => {
+      expect(document.querySelectorAll("[data-system-app-top-bar]")).toHaveLength(1)
+      expect(header().querySelectorAll("button")).toHaveLength(1)
+      expect(header().querySelector('[aria-label="返回自动化列表"]')).not.toBeNull()
+      expect(header().textContent).toBe("")
+      expect(document.querySelector('input[aria-label="自动化名称"]')).not.toBeNull()
+    }
+    const checkList = () => {
+      expect(header().textContent).toContain("新建")
+      expect(header().querySelector('[aria-label="刷新"]')).not.toBeNull()
+      expect(Boolean(header().querySelector('[aria-label="新窗口打开"]'))).toBe(host === "launcher")
+    }
+    checkList()
+    await act(async () => { Array.from(header().querySelectorAll("button")).find(button => button.textContent === "新建")!.click() })
+    checkEditor()
+    await act(async () => { (header().querySelector('[aria-label="返回自动化列表"]') as HTMLButtonElement).click() })
+    checkList()
+    await act(async () => { Array.from(document.querySelectorAll("button")).find(button => button.textContent === "已有任务")!.click() })
+    checkEditor()
+    await act(async () => { (header().querySelector('[aria-label="返回自动化列表"]') as HTMLButtonElement).click() })
+    checkList()
   })
 
   it("preserves a stashed draft when another automation is inspected and closed", async () => {

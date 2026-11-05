@@ -2,6 +2,8 @@
 
 > Follow-up (2026-08-10): the original rollout excluded top-level Drive, Automation, and Workflow modules. That scope limit is now superseded. Every built-in System App must declare app-level header content through `SystemAppWindowShell` or the slot-aware `ModulePage`; an embedded app may render only the `EmbeddedSystemAppShell` header. The slot also supports `leftAddon` for compact information beside the embedded app name while standalone titles remain local to the window shell.
 
+> Follow-up (2026-11-05): app subpages may opt into `SystemAppWindowShell headerMode="replace"`. The existing host header then uses the page's `left`, tabs and actions directly, without adding launcher back, app name or open-window controls. Default pages retain the behavior below. Automation create/edit opts into this mode with only its own back-to-list button; returning to the list restores its normal header.
+
 ## Goal
 
 Move system app-owned header controls into the embedded app shell header when a system app is opened inside the Apps module.

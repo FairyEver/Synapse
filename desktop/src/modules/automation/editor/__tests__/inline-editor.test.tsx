@@ -41,11 +41,17 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ""; vi.clearAllMocks(); vi.restoreAllMocks() })
 describe("inline automation editing", () => {
   it.each(["window", "dock", "launcher"] as const)("uses one shared header in the %s host", async (host) => {
-    const form = <AutomationEditorForm mode={{ mode: "create" }} onBack={vi.fn()} />
-    await act(async () => { root.render(host === "window" ? form : <EmbeddedSystemAppShell appName="自动化" mode={host}>{form}</EmbeddedSystemAppShell>) })
+    const onBack = vi.fn()
+    const form = <AutomationEditorForm mode={{ mode: "create" }} onBack={onBack} />
+    await act(async () => { root.render(host === "window" ? form : <EmbeddedSystemAppShell appName="自动化" mode={host} onOpenWindow={vi.fn()}>{form}</EmbeddedSystemAppShell>) })
     const headers = document.querySelectorAll("[data-system-app-window-toolbar], [data-embedded-system-app-header]")
     expect(headers).toHaveLength(1)
     expect(headers[0].querySelector('[aria-label="返回自动化列表"]')).not.toBeNull()
+    expect(headers[0].querySelectorAll("button")).toHaveLength(1)
+    expect(headers[0].textContent).toBe("")
+    expect(headers[0].querySelector('[role="status"]')).toBeNull()
+    await act(async () => { (headers[0].querySelector('button[aria-label="返回自动化列表"]') as HTMLButtonElement).click() })
+    expect(onBack).toHaveBeenCalledOnce()
   })
   it("saves a new automation once and updates that same item on the next save without closing", async () => {
     const close = vi.spyOn(window, "close").mockImplementation(() => undefined)

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowLeft, Check, ChevronRight, LoaderCircle, RefreshCw } from "lucide-react"
+import { ArrowLeft, LoaderCircle, RefreshCw } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,7 +29,7 @@ export function AutomationEditorForm({ initialTab = "config", ...props }: Automa
   const { config } = useAppConfig()
   const editor = useAutomationEditor(props)
   const [tab, setTab] = useState(initialTab)
-  const { loadState, saving, dirty, error, leaveKind } = editor
+  const { loadState, saving, error, leaveKind } = editor
   const draft = loadState.status === "ready" ? loadState.draft : null
   const item = loadState.status === "ready" ? loadState.item : undefined
   const canSave = Boolean(draft?.name.trim() && draft.triggerType && draft.executorType && !saving)
@@ -37,21 +37,14 @@ export function AutomationEditorForm({ initialTab = "config", ...props }: Automa
     ? formatAutomationTrigger({ trigger: { type: draft.triggerType, config: draft.triggerConfig } })
     : "选择触发条件和执行操作"
 
-  const navigation = (
-    <>
-      <SystemAppTopBarActionButton iconOnly aria-label="返回自动化列表" tooltip="返回列表" disabled={saving} onClick={editor.back}><ArrowLeft /></SystemAppTopBarActionButton>
-      <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-      <span className="truncate text-sm">{item || props.mode.mode === "edit" ? "编辑自动化" : "新建自动化"}</span>
-    </>
-  )
-  const saveState = (
-    <span role="status" className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-      {saving ? <><LoaderCircle className="size-3 animate-spin" />保存中</> : dirty ? "未保存" : item ? <><Check className="size-3" />已保存</> : "草稿"}
-    </span>
+  const backAction = (
+    <SystemAppTopBarActionButton iconOnly aria-label="返回自动化列表" tooltip="返回列表" disabled={saving} onClick={editor.back}>
+      <ArrowLeft />
+    </SystemAppTopBarActionButton>
   )
 
   return (
-    <SystemAppWindowShell left={<><span className="text-sm font-semibold">自动化</span>{navigation}</>} embeddedLeftAddon={navigation} actions={saveState}>
+    <SystemAppWindowShell headerMode="replace" left={backAction}>
       <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
         {leaveKind ? (
           <div role="region" aria-label="未保存的更改" className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-muted px-5 py-3">
@@ -108,7 +101,7 @@ export function AutomationEditorForm({ initialTab = "config", ...props }: Automa
         )}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
           <div className="min-w-0 flex-1 text-xs text-muted-foreground">
-            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : <p className="truncate">{summary}</p>}
+            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : saving ? <p role="status">保存中</p> : <p className="truncate">{summary}</p>}
           </div>
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" disabled={!canSave} onClick={() => { void editor.save(false) }}>仅保存</Button>

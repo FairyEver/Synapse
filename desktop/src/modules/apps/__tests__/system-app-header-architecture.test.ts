@@ -63,7 +63,8 @@ describe("system app header architecture", () => {
   it("keeps the inline automation editor on the shared host header", async () => {
     const source = await readFile(new FileURL("../../automation/editor/editor-form.tsx", import.meta.url), "utf8")
     expect(source).toContain("<SystemAppWindowShell")
-    expect(source).toContain("embeddedLeftAddon={navigation}")
+    expect(source).toContain('headerMode="replace"')
+    expect(source).toContain("left={backAction}")
     expect(source).not.toMatch(/<SystemAppTopBar(?:\s|>)/)
   })
 

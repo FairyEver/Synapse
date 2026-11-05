@@ -15,6 +15,8 @@ type SystemAppHeaderSlotTab = {
 
 type SystemAppHeaderSlotState = {
   readonly immersive?: boolean
+  readonly headerMode?: "default" | "replace"
+  readonly left?: ReactNode
   readonly leftAddon?: ReactNode
   readonly tabs?: readonly SystemAppHeaderSlotTab[]
   readonly value?: string

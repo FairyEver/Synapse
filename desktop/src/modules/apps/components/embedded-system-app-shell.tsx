@@ -36,14 +36,15 @@ function EmbeddedSystemAppShellInner({
   const hasTabs = Boolean(slot?.tabs?.length && slot.value && slot.onValueChange)
   const hasActions = Boolean(slot?.actions)
   const launcherMode = mode === "launcher"
-  const showHeader = !slot?.immersive && (launcherMode || hasLeftAddon || hasTabs || hasActions)
+  const replacingHeader = slot?.headerMode === "replace"
+  const showHeader = !slot?.immersive && (replacingHeader || launcherMode || hasLeftAddon || hasTabs || hasActions)
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       {showHeader && <SystemAppTopBar
         data-embedded-system-app-header
         leftSlotProps={{ "data-embedded-system-app-left": true }}
-        left={launcherMode ? (
+        left={replacingHeader ? slot.left : launcherMode ? (
             <>
               <Button
                 type="button"
@@ -75,7 +76,7 @@ function EmbeddedSystemAppShellInner({
         actions={(
           <>
             {slot?.actions}
-            {launcherMode && onOpenWindow ? (
+            {!replacingHeader && launcherMode && onOpenWindow ? (
               <SystemAppTopBarActionButton
                 iconOnly
                 type="button"
