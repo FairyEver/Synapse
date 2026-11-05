@@ -7,13 +7,14 @@ import { ClaudeCodeConfigForm } from "../../action-packages/builtin/claude-code/
 import { ClaudeCodeResultView } from "../../action-packages/builtin/claude-code/result.renderer"
 import { ActionResultView } from "./action-result-view"
 import { RendererActionRegistry, type RendererActionDefinition } from "./action-registry"
+import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
 
 const agentRendererAction: RendererActionDefinition<AgentActionConfig> = {
   manifest: agentActionManifest,
   icon: Bot,
   summarizeConfig: (config) => {
     const agentLabel = config.agentType === "claude-code" ? "CC/Synapse" : "Codex"
-    return `${agentLabel} · ${config.mode}`
+    return `${agentLabel} · ${permissionModeLabels[config.mode]}`
   },
   ConfigForm: AgentConfigForm,
   ResultView: ActionResultView,
