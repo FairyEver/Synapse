@@ -135,8 +135,8 @@ function isFullField(values: ReadonlySet<number>, spec: FieldSpec): boolean {
 }
 
 function addSegment(values: Set<number>, segment: string, spec: FieldSpec): void {
-  const [rangePart, stepPart] = segment.split("/")
-  if (segment.includes("/") && (rangePart === undefined || stepPart === undefined || stepPart === "")) {
+  const [rangePart, stepPart, extraStep] = segment.split("/")
+  if (extraStep !== undefined || (segment.includes("/") && (rangePart === undefined || stepPart === undefined || !/^\d+$/.test(stepPart)))) {
     throw new Error(`${spec.name} field has an invalid step`)
   }
   const step = stepPart === undefined ? 1 : Number(stepPart)
@@ -152,8 +152,8 @@ function addSegment(values: Set<number>, segment: string, spec: FieldSpec): void
 
 function parseRange(value: string, spec: FieldSpec): { readonly start: number; readonly end: number } {
   if (value === "*") return { start: spec.min, end: spec.max }
-  const [startRaw, endRaw] = value.split("-")
-  if (value.includes("-") && (!startRaw || !endRaw)) {
+  const [startRaw, endRaw, extraEnd] = value.split("-")
+  if (extraEnd !== undefined || (value.includes("-") && (!startRaw || !endRaw))) {
     throw new Error(`${spec.name} range is invalid`)
   }
   const start = parseValue(startRaw ?? "", spec)
@@ -164,6 +164,9 @@ function parseRange(value: string, spec: FieldSpec): { readonly start: number; r
 
 function parseValue(value: string, spec: FieldSpec): number {
   const aliased = spec.aliases?.[value]
+  if (aliased === undefined && !/^\d+$/.test(value)) {
+    throw new Error(`${spec.name} value ${value} must be an integer`)
+  }
   const number = aliased ?? Number(value)
   if (!Number.isInteger(number) || number < spec.min || number > spec.max) {
     throw new Error(`${spec.name} value ${value} is out of range`)

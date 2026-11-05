@@ -1,5 +1,7 @@
 # 能力注册清单
 
+- 2026-11-06 夜测修复：Cron 的发现 schema 说明五段与十进制语法，创建/更新在停用时同样拒绝非法表达式和时区；执行器、触发器及公开工具不增减。Automation 仍为 14 项 capability / MCP 索引、5 类触发器、2 类执行器，其他表格数量和例外不变。
+
 - 2026-11-05 自动化配置改为同页触发/执行节点，支持标题菜单、折叠配置、提示词变量插入、流程摘要及编辑内运行记录；复用现有注册表、表单、IPC 和运行面板，不新增 System App、Dock、Workflow、Automation Action、MCP capability/tool、IPC 或 Deep Link。下列表格数量与既有例外不变。
 
 - 2026-11-05 用量监控下线：移除 `usage-monitor` System App、CC/Codex 日志扫描与报表、独立对话窗口、22 个用量分析 IPC 和 `usage.db`；旧库中的价格规则迁移到 `model-price.db` 后清除旧用量数据库。价格管理保留价格规则与预设，移除依赖用量事件的“模型覆盖”及 `app.model_price.used_model.list`。System App 22→21；`model_price` 11→10；全局 capability 365→364、MCP 索引与工具定义 361→360；默认 Dock 9、Workflow、Automation、Deep Link 和公开 `search` / `invoke` 不变。

@@ -10,6 +10,19 @@ import { nodejsRunActionManifest } from "../../../../app-capabilities/nodejs-run
 import type { ActionManifest } from "../../../../action-packages/types"
 
 describe("AutomationItemRepository", () => {
+  it.each([
+    { expr: "*/2/3 * * * *" },
+    { expr: "1-2-3 * * * *" },
+    { expr: "bad" },
+    { expr: "0 9 * * *", timezone: "Mars/Olympus" },
+  ])("rejects invalid cron config before saving even when disabled: %j", async (config) => {
+    const repo = newRepo()
+    await expect(repo.create({
+      ...validCreateInput(), enabled: false, trigger: { type: "builtin.cron", config },
+    })).rejects.toThrow()
+    expect(await repo.list()).toEqual([])
+  })
+
   it("creates automation items with defaults", async () => {
     const repo = new AutomationItemRepository({
       items: new MemoryNamespace<AutomationItem>("automation.items"),

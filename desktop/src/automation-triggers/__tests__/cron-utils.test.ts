@@ -11,6 +11,19 @@ import {
 } from "../cron-utils"
 
 describe("cron-utils", () => {
+  it.each([
+    "*/2/3 * * * *",
+    "1-2-3 * * * *",
+    "0xA * * * *",
+    "1e1 * * * *",
+    "+1 * * * *",
+    "1.0 * * * *",
+    "*/0xA * * * *",
+    "*/1e1 * * * *",
+  ])("rejects malformed syntax in the editor: %s", (expr) => {
+    expect(validateCronExpression(expr).ok).toBe(false)
+  })
+
   it("builds expressions from common templates", () => {
     const cases: Array<[CronTemplateDraft, string]> = [
       [{ kind: "every_minutes", everyMinutes: 15, minute: 0, hour: 9, dayOfMonth: 1, weekday: 1 }, "*/15 * * * *"],
