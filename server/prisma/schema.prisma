@@ -1440,6 +1440,7 @@ model MailMessage {
 
 model MailRecipient {
   id        String       @id @default(cuid())
+  deliverySequence BigInt @unique @default(autoincrement())
   messageId String
   message   MailMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
   userId    String
@@ -1450,6 +1451,7 @@ model MailRecipient {
 
   @@unique([messageId, userId])
   @@index([userId, deletedAt, messageId])
+  @@index([userId, deletedAt, deliverySequence])
 }
 
 model MailNotificationOutbox {

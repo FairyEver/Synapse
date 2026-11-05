@@ -15,6 +15,7 @@ function fixture() {
     },
     mailRecipient: { createMany: vi.fn(async () => ({ count: users.length })) },
     mailNotificationOutbox: { createMany: vi.fn(async () => ({ count: users.length })) },
+    $executeRaw: vi.fn(async () => 1),
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   }
   const mail = { queueNotificationDelivery: vi.fn() }

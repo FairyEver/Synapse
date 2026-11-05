@@ -18,6 +18,8 @@ const authenticated: CanActivate = {
 
 async function fixture() {
   const mail = {
+    automationCheckpoint: vi.fn(async () => ({ receiptSequence: "20", serverTime: "2026-11-05T00:00:00Z" })),
+    automationChanges: vi.fn(async () => ({ items: [], nextAfter: "20", through: "20", complete: true })),
     searchRecipients: vi.fn(async () => ({ items: [] })),
     createPreview: vi.fn(async () => ({ previewId: "preview-1", recipients: [], subject: "报告", body: "完整正文", attachments: [] })),
     listContext: vi.fn(async () => ({ items: [], nextCursor: null })),
@@ -41,6 +43,17 @@ async function fixture() {
 }
 
 describe("internal mail HTTP routes", () => {
+  it("scopes automation cursors to the authenticated account and rejects arbitrary query fields", async () => {
+    const { app, mail } = await fixture()
+    try {
+      await request(app.getHttpServer()).post("/api/mail-internal/automation/checkpoint").expect(201)
+      expect(mail.automationCheckpoint).toHaveBeenCalledWith("sender")
+      await request(app.getHttpServer()).get("/api/mail-internal/automation/changes?after=20&limit=50").expect(200)
+      expect(mail.automationChanges).toHaveBeenCalledWith("sender", { after: "20", limit: 50 })
+      await request(app.getHttpServer()).get("/api/mail-internal/automation/changes?after=20&userId=other").expect(400)
+      await request(app.getHttpServer()).get("/api/mail-internal/automation/changes?after=20&limit=51").expect(400)
+    } finally { await app.close() }
+  })
   it("does not expose the former mail API as a compatibility alias", async () => {
     const { app, mail } = await fixture()
     try {

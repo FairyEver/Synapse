@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { MailService } from "../mail/mail.service"
 import { auditActors, AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
+import { withMailReceiptFence } from "../mail/mail-receipt-feed"
 
 export type BroadcastInput = {
   readonly requestId: string
@@ -30,6 +31,7 @@ export class AdminMailBroadcastService {
     let result: { messageId: string; recipientCount: number; sentAt: Date }
     try {
       result = await this.prisma.$transaction(async (tx) => {
+        await withMailReceiptFence(tx)
         const users = await tx.user.findMany({ where: { status: "active" }, select: { id: true }, orderBy: { id: "asc" } })
         if (!users.length) throw new BadRequestException("当前没有可投递的用户。")
         const message = await tx.mailMessage.create({

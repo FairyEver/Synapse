@@ -39,6 +39,7 @@ function harness() {
       count: vi.fn(async () => 0),
       updateMany: vi.fn(async () => ({ count: 0 })),
     },
+    $executeRaw: vi.fn(async () => 1),
     $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   }
   const notifications = { create: vi.fn(async () => ({ id: "notice-1" })) }

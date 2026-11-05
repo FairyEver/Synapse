@@ -531,6 +531,25 @@ export class AccountService {
     return await response.json() as MailOperationResult["attachmentLocal"]
   }
 
+  private async mailAutomationRequest<T>(path: string, method: "GET" | "POST", signal?: AbortSignal): Promise<T> {
+    const scope = this.captureAccountRequestScope()
+    if (!scope) throw new AccountAuthenticationRequiredError()
+    const response = await this.fetchAuthenticated(`/mail-internal/automation/${path}`, { method, signal }, "无法确认站内信接收起点。", scope)
+    const result = await response.json() as T
+    signal?.throwIfAborted()
+    const current = this.captureAccountRequestScope()
+    if (current?.accountId !== scope.accountId || current.authRevision !== scope.authRevision) throw new AccountAuthenticationRequiredError()
+    return result
+  }
+  mailAutomationCheckpoint(signal?: AbortSignal) {
+    return this.mailAutomationRequest<import("./automation-mail-triggers/internal-source").InternalReceiptCheckpoint>("checkpoint", "POST", signal)
+  }
+  mailAutomationChanges(input: import("./automation-mail-triggers/internal-source").InternalReceiptQuery, signal?: AbortSignal) {
+    const query = new URLSearchParams({ after: input.after, limit: String(input.limit) })
+    if (input.through) query.set("through", input.through)
+    return this.mailAutomationRequest<import("./automation-mail-triggers/internal-source").InternalReceiptChanges>(`changes?${query}`, "GET", signal)
+  }
+
   async executeMailOperation<K extends MailOperation["kind"]>(operation: Extract<MailOperation, { kind: K }>): Promise<MailOperationResult[K]>
   async executeMailOperation(operation: MailOperation): Promise<unknown> {
     const base = `${apiBaseUrl()}/mail-internal`

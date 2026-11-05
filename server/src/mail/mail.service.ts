@@ -9,6 +9,7 @@ import { recipientMatch } from "./mail-recipient-match"
 import { resolveMailAddresses, type MailAddressSnapshot } from "./mail-addresses"
 import { descendantIds } from "../team/organization-tree"
 import { mailContactFilter, mailContactsQuery, type MailContactRow } from "./mail-contacts"
+import { MailReceiptFeed, withMailReceiptFence } from "./mail-receipt-feed"
 
 export const MAIL_MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const MAX_ATTACHMENTS = 10
@@ -230,6 +231,7 @@ export class MailService {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         result = await this.prisma.$transaction(async (tx) => {
+          await withMailReceiptFence(tx)
           const resolved = await resolveMailAddresses(tx, userId, toIds, ccIds, toOrganizationIds, ccOrganizationIds, preview.teamIdSnapshot)
           const recipientIds = [...resolved.toIds, ...resolved.ccIds]
           const sourceId = preview.replyToId ?? preview.forwardOfId
@@ -273,6 +275,9 @@ export class MailService {
   queueNotificationDelivery(messageId: string): void {
     void this.deliverPendingNotifications(messageId).catch((error: unknown) => this.logger.warn({ messageId, reason: error instanceof Error ? error.name : typeof error }, "Mail notification delivery failed"))
   }
+
+  automationCheckpoint(userId: string) { return new MailReceiptFeed(this.prisma).checkpoint(userId) }
+  automationChanges(userId: string, input: { after: string; through?: string; limit?: number }) { return new MailReceiptFeed(this.prisma).changes(userId, input) }
 
   @Cron("*/5 * * * *")
   async retryPendingNotifications(): Promise<void> {

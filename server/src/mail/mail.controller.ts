@@ -25,6 +25,17 @@ function userId(request: AuthenticatedUserRequest): string {
 export class MailController {
   constructor(private readonly mail: MailService) {}
 
+  @Post("automation/checkpoint")
+  automationCheckpoint(@Req() request: AuthenticatedUserRequest) {
+    return this.mail.automationCheckpoint(userId(request))
+  }
+
+  @Get("automation/changes")
+  automationChanges(@Req() request: AuthenticatedUserRequest, @Query() raw: unknown) {
+    const input = parse(z.object({ after: z.string().min(1), through: z.string().min(1).optional(), limit: z.coerce.number().int().min(1).max(50).optional() }).strict(), raw)
+    return this.mail.automationChanges(userId(request), input)
+  }
+
   @Get("recipients")
   searchRecipients(@Req() request: AuthenticatedUserRequest, @Query("query") query?: string, @Query("cursor") cursor?: string) {
     return this.mail.searchRecipients(userId(request), query ?? "", cursor)
