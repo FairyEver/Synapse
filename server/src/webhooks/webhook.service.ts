@@ -326,7 +326,7 @@ export class WebhookService implements OnModuleInit {
     const [deliveries, total] = await this.prisma.$transaction([
       this.prisma.webhookDelivery.findMany({
         where,
-        ...toPrismaArgs(options.pagination),
+        ...deliveryHistoryPagination(options.pagination),
         include: deliveryHistoryInclude(),
       }),
       this.prisma.webhookDelivery.count({ where }),
@@ -346,7 +346,7 @@ export class WebhookService implements OnModuleInit {
     const [deliveries, total] = await this.prisma.$transaction([
       this.prisma.webhookDelivery.findMany({
         where,
-        ...toPrismaArgs(options.pagination),
+        ...deliveryHistoryPagination(options.pagination),
         include: deliveryHistoryInclude(),
       }),
       this.prisma.webhookDelivery.count({ where }),
@@ -813,6 +813,11 @@ function buildDeliveryHistoryWhere(
     }
   }
   return where
+}
+
+function deliveryHistoryPagination(pagination: PaginationQuery) {
+  const args = toPrismaArgs(pagination)
+  return { ...args, orderBy: [args.orderBy, { id: pagination.sortOrder }] }
 }
 
 function deliveryHistoryInclude() {

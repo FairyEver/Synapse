@@ -608,6 +608,27 @@ describe("WebhookService", () => {
     ])
   })
 
+  it.each(["receivedAt", "status", "method"])("keeps tied %s history rows in a deterministic order for user and admin pagination", async sortBy => {
+    const prisma = createPrismaMock()
+    prisma.webhookDelivery.findMany.mockResolvedValue([])
+    prisma.webhookDelivery.count.mockResolvedValue(183)
+    prisma.$transaction.mockImplementation((input) => Array.isArray(input) ? Promise.all(input) : input({}))
+    const service = new WebhookService(prisma as never)
+    for (const sortOrder of ["asc", "desc"] as const) {
+      const input = { pagination: { page: 2, pageSize: 50, sortBy, sortOrder }, filters: { webhookId: "webhook-1" } }
+      await service.listDeliveryHistoryForUser("user-1", input)
+      expect(prisma.webhookDelivery.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ userId: "user-1", webhookId: "webhook-1" }),
+        skip: 50, take: 50, orderBy: [{ [sortBy]: sortOrder }, { id: sortOrder }],
+      }))
+      await service.listDeliveryHistoryForAdmin(input)
+      expect(prisma.webhookDelivery.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ webhookId: "webhook-1" }),
+        skip: 50, take: 50, orderBy: [{ [sortBy]: sortOrder }, { id: sortOrder }],
+      }))
+    }
+  })
+
   it("lists current-user delivery history with filters and webhook metadata", async () => {
     const prisma = createPrismaMock()
     const deliveries = [{
@@ -671,7 +692,7 @@ describe("WebhookService", () => {
         receipts: { orderBy: { sentAt: "asc" } },
         webhook: expect.any(Object),
       }),
-      orderBy: { receivedAt: "desc" },
+      orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
       skip: 0,
       take: 20,
     }))
