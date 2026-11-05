@@ -11,7 +11,8 @@ import { sanitizeMailHtml, type MailHtmlResources } from "../../../app-capabilit
 import type { MailBody } from "./use-mail-body"
 import { MailAddresses, mailDelegates } from "./mail-addresses"
 import { MailHtmlBody } from "./mail-html-body"
-export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, onCompose, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(target: "id" | "body"): void; onCompose(recipient: Address): void }) {
+import { InlineMailQuickReply } from "./inline-quick-reply"
+export function MailDetail({ detail, body, resources, onBack, onResource, onDownload, onLink, onReply, onCopy, onCompose, onQuickReplySent = () => undefined, loading = false }: { detail: Detail; body: MailBody | null; resources: MailHtmlResources; loading?: boolean; onBack(): void; onResource(urls: string[]): void; onDownload(assetId: string): void; onLink(url: string): void; onReply(mode: "reply" | "reply_all" | "forward"): void; onCopy(target: "id" | "body"): void; onCompose(recipient: Address): void; onQuickReplySent?(): void }) {
   const projection = useMemo(() => body?.complete && body.html ? sanitizeMailHtml(body.html, resources) : null, [body, resources])
   const delegates = mailDelegates(detail.from, detail.headers.sender)
   return <article aria-label="邮件详情" className="flex h-full min-h-0 min-w-0 flex-col bg-background" key={detail.id}>
@@ -58,6 +59,7 @@ export function MailDetail({ detail, body, resources, onBack, onResource, onDown
           </dl>
           {projection?.remoteImages.length ? <Button variant="outline" onClick={() => onResource(projection.remoteImages)} disabled={loading}>加载远程图片</Button> : null}
           {detail.attachments.length > 0 && <div className="flex flex-wrap gap-2">{detail.attachments.map(asset => <Button key={asset.id} data-track="mail.attachment.download" variant="outline" size="sm" className="max-w-full" onClick={() => onDownload(asset.id)}><Download /><span className="truncate">{asset.name}</span><span className="shrink-0 text-muted-foreground">{Math.ceil(asset.size / 1024)} KB</span></Button>)}</div>}
+          {!detail.metadataTruncated && <InlineMailQuickReply key={detail.id} source={detail} onSent={() => onQuickReplySent()} />}
         </header>
         <Separator className="my-6" />
         <div className="space-y-3">

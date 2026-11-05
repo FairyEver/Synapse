@@ -71,6 +71,13 @@ it("opens a body link through the controlled handler without duplicating it abov
   expect(onLink).toHaveBeenCalledTimes(2)
 })
 
+it("shows inline quick reply only when the message metadata is complete", () => {
+  renderDetail("<p>正文</p>")
+  expect(document.querySelector('input[aria-label="快速回复内容"]')).not.toBeNull()
+  renderDetail("<p>正文</p>", vi.fn(), { ...detail, metadataTruncated: true })
+  expect(document.querySelector('input[aria-label="快速回复内容"]')).toBeNull()
+})
+
 it("keeps the isolated reading colors in sync with the app theme and stops syncing after unmount", async () => {
   const root = document.documentElement
   const originalStyle = root.getAttribute("style")
