@@ -8,7 +8,7 @@ import type { IpcInvocationSender } from "../../../electron/runtime/ipc/types"
 import { MAIL_INPUT_SCHEMAS, MAIL_RESULT_SCHEMAS } from "../shared/schema"
 import { MAIL_DEFINITIONS } from "../shared/capability"
 import { parseMailReference } from "../shared/manifest"
-import { MAIL_MAX_IMAGE_BYTES, MAIL_POLL_INTERVAL_MS } from "../shared/limits"
+import { MAIL_MAX_IMAGE_BYTES, MAIL_POLL_INTERVAL_MS, MAIL_MAX_BODY_BYTES } from "../shared/limits"
 import { configureAccountSchema, type ConfigureAccount, type MailChanged, type MailOpenRequest, type MailScope } from "../shared/private-schema"
 import { MailError, type MailAction, type MailContext, type MailInputs, type MailResults } from "../shared/types"
 import { MailContextProvider, createMailAccess } from "./context"
@@ -18,6 +18,8 @@ import { MailAccounts, type StoredAccount } from "./accounts"
 import { MailSync, resolveMessage } from "./sync"
 import { MailAutomationReceipts } from "./automation-receipts"
 import type { MailTriggerContext, MailSourceBoundary } from "../../../electron/services/automation-mail-triggers/types"
+import type { MailReceiptRef } from "../../../electron/services/automation-mail-triggers/types"
+import { buildExternalMailPayload } from "../../../electron/services/automation-mail-triggers/payload"
 import { MailContent } from "./mime"
 import { MailSearch } from "./search"
 import { MailMutations } from "./mutations"
@@ -109,6 +111,32 @@ export class MailService {
   }
   scanAutomationReceipts(context: MailTriggerContext, boundary: MailSourceBoundary, cursor: string, limit: number) {
     return this.automationReceipts.scan(this.automationContext(context), boundary, cursor, limit)
+  }
+  async readAutomationReceipt(context: MailTriggerContext, receipt: MailReceiptRef) {
+    const ctx = this.automationContext(context)
+    if (!receipt.messageId || !receipt.locator) throw new MailError("UNAVAILABLE", "邮件引用不可用")
+    let row = await resolveMessage(this.repo, ctx, receipt.messageId)
+    if (row.data.originReceiptKey !== receipt.receiptKey || row.accountId !== receipt.locator.accountId) throw new MailError("STALE_TARGET", "邮件身份已变化")
+    if (!row.data.summary.receivedAt) {
+      const locator = row.data.summary.locator
+      await this.sync.runOnce(ctx, row.accountId, locator.folderId, false, false, { min: locator.uid, max: locator.uid })
+      row = await resolveMessage(this.repo, ctx, receipt.messageId)
+      if (!row.data.summary.receivedAt) throw new MailError("RECEIPT_TIME_UNAVAILABLE", "邮件收件时间尚不可确认")
+    }
+    const detail = await this.execute(ctx, "message.get", { messageId: row.id })
+    let cursor: string | undefined, bodyRef: string | undefined, body = "", complete = false
+    do {
+      const chunk = await this.execute(ctx, "body.read_chunk", { messageId: row.id, cursor, bodyRef })
+      if (chunk.truncated) throw new MailError("LIMIT_EXCEEDED", "邮件正文不完整")
+      body += chunk.text
+      if (Buffer.byteLength(body) > MAIL_MAX_BODY_BYTES) throw new MailError("LIMIT_EXCEEDED", "邮件正文超过大小上限")
+      complete = chunk.complete
+      if (!complete && (!chunk.nextCursor || chunk.nextCursor === cursor)) throw new MailError("BODY_UNAVAILABLE", "邮件正文读取未完成")
+      cursor = chunk.nextCursor ?? undefined; bodyRef = chunk.bodyRef
+    } while (!complete)
+    const account = await this.execute(ctx, "account.get", { accountId: row.accountId })
+    this.contexts.assertCurrent(ctx)
+    return buildExternalMailPayload(detail, body, account)
   }
   context(actor: MailContext["actor"]): MailContext { return this.contexts.current(actor) }
   scope(sender?: IpcInvocationSender): MailScope {
