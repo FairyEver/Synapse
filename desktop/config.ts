@@ -112,6 +112,9 @@ export const CONFIG_BACKUP_IMPORT_MAX_BYTES = 2 * 1024 * 1024
 // 终端会话单个 session 的输出保留上限：限制后台任务长时间输出占用内存和磁盘，超出后按最旧输出滚动清理。
 export const TERMINAL_SESSION_OUTPUT_RETENTION_BYTES = 10 * 1024 * 1024
 
+// 单个终端保留的输出块数量上限：字节额度之外约束碎片与空块的对象开销，不改变输出序号。
+export const TERMINAL_SESSION_OUTPUT_RETENTION_CHUNKS = 16_384
+
 // 终端域全部会话的输出保留总上限：全局超限时优先淘汰终态会话的最早输出，最后才影响运行中会话且不会自动停止终端。
 export const TERMINAL_GLOBAL_OUTPUT_RETENTION_BYTES = 256 * 1024 * 1024
 

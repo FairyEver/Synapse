@@ -8,8 +8,130 @@ import { createFileBackedDataRepository } from "../../../../electron/runtime/dat
 import { createTerminalDataRepositoryStore } from "../data-repository-store"
 import { createTerminalEncryptedBlockStore } from "../encrypted-block-store"
 import { createTerminalRepository } from "../repository"
+import { createTerminalService } from "../service"
 
 describe("Terminal DataRepository store", () => {
+  it("finishes deletion when the process exits during an in-flight structural write", async () => {
+    const { repository, blocks, store } = await structuralFixture()
+    let exit: ((event: { exitCode: number }) => void) | undefined
+    let data: ((text: string) => void) | undefined
+    const service = createTerminalService({ store, resolveDefaultShell: () => "/bin/sh", spawnPty: () => ({
+      write() {}, resize() {}, kill() {},
+      onData(listener) { data = listener; return { dispose() { data = undefined } } },
+      onExit(listener) { exit = listener; return { dispose() { exit = undefined } } },
+    }) })
+    try {
+      await service.start()
+      const session = await service.createSession({})
+      data!("pending output")
+      let entered: (() => void) | undefined
+      let release: (() => void) | undefined
+      const started = new Promise<void>((resolve) => { entered = resolve })
+      const blocked = new Promise<void>((resolve) => { release = resolve })
+      const save = store.saveStructuralState!.bind(store)
+      vi.spyOn(store, "saveStructuralState").mockImplementationOnce(async (update) => {
+        entered!()
+        await blocked
+        await save(update)
+      })
+      const rename = service.renameSession({ sessionId: session.id, title: "renamed" })
+      await started
+      exit!({ exitCode: 0 })
+      release!()
+      await rename
+      await service.flushPersistQueue()
+      expect(service.listSessions()).toEqual([])
+      expect(await repository.sessions.list()).toEqual([])
+      expect(await repository.blocks.list()).toEqual([])
+      expect(await blocks.listBlockIds()).toEqual([])
+      expect(await repository.deleteIntents.list()).toEqual([])
+      expect(service.getLastPersistError()).toBeUndefined()
+    } finally { await service.stop() }
+  })
+
+  it("removes every session resource after repeated create-output-exit cycles", async () => {
+    const { repository, blocks, store } = await structuralFixture()
+    const children: Array<{ data?: (text: string) => void; exit?: (event: { exitCode: number }) => void }> = []
+    const service = createTerminalService({ store, resolveDefaultShell: () => "/bin/sh", spawnPty: () => {
+      const child: (typeof children)[number] = {}
+      children.push(child)
+      return {
+        write() {}, resize() {}, kill() {},
+        onData(listener) { child.data = listener; return { dispose() { child.data = undefined } } },
+        onExit(listener) { child.exit = listener; return { dispose() { child.exit = undefined } } },
+      }
+    } })
+    try {
+      await service.start()
+      for (let index = 0; index < 25; index += 1) {
+        const session = await service.createSession({})
+        const child = children.at(-1)!
+        child.data!("output\r\n")
+        await service.renameSession({ sessionId: session.id, title: `cycle-${index}` })
+        child.exit!({ exitCode: 0 })
+        await service.flushPersistQueue()
+        expect(service.listSessions()).toEqual([])
+        expect(await repository.sessions.list()).toEqual([])
+        expect(await repository.workspaces.list()).toEqual([])
+        expect(await repository.blocks.list()).toEqual([])
+        expect(await blocks.listBlockIds()).toEqual([])
+        expect(child.data).toBeUndefined()
+        expect(child.exit).toBeUndefined()
+      }
+      expect(await repository.deleteIntents.list()).toEqual([])
+      expect(service.getLastPersistError()).toBeUndefined()
+    } finally { await service.stop() }
+  })
+
+  it("preserves unrelated output and checkpoints during structural saves and target deletion", async () => {
+    const { repository, blocks, store, state } = await structuralFixture()
+    expect(store.saveStructuralState).toBeTypeOf("function")
+    const [left, right] = state.sessions
+    const readBlock = vi.spyOn(blocks, "readBlock")
+    const writeBlock = vi.spyOn(blocks, "writeBlock")
+    const { output: _output, checkpoints: _checkpoints, ...structure } = state
+    await store.saveStructuralState!({
+      state: { ...structure, sessions: [{ ...left!, title: "renamed", metadataRevision: 2 }, right!] },
+      runtime: { sessions: [] },
+    })
+    expect(readBlock).not.toHaveBeenCalled()
+    expect(writeBlock).not.toHaveBeenCalled()
+    expect((await repository.sessions.get(left!.id))?.firstRetainedOutputSeq).toBe(1)
+    let loaded = await store.loadState()
+    expect(loaded.output).toHaveLength(state.output.length)
+    expect(loaded.output).toEqual(expect.arrayContaining(state.output))
+    expect(loaded.checkpoints).toHaveLength(state.checkpoints.length)
+    expect(loaded.checkpoints).toEqual(expect.arrayContaining(state.checkpoints))
+    expect(loaded.sessions.find((session) => session.id === left!.id)?.title).toBe("renamed")
+
+    await store.saveStructuralState!({ state: { ...structure, sessions: [right!] }, runtime: { sessions: [] } })
+    loaded = await store.loadState()
+    expect(loaded.sessions.map((session) => session.id)).toEqual([right!.id])
+    expect(loaded.output).toEqual(state.output.filter((chunk) => chunk.sessionId === right!.id))
+    expect(loaded.checkpoints).toEqual(state.checkpoints.filter((checkpoint) => checkpoint.sessionId === right!.id))
+    expect(await repository.deleteIntents.list()).toEqual([])
+  })
+
+  it("stores new output before publishing structural output watermarks and can retry a block failure", async () => {
+    const { repository, blocks, store, state } = await structuralFixture()
+    expect(store.saveStructuralState).toBeTypeOf("function")
+    const left = state.sessions[0]!
+    const { output: _output, checkpoints: _checkpoints, ...structure } = state
+    const changed = { ...left, title: "changed", lastOutputSeq: 2, stateRevision: left.stateRevision + 1 }
+    const update = {
+      state: { ...structure, sessions: [changed, state.sessions[1]!] },
+      runtime: { sessions: [{ session: changed, output: [{ sessionId: left.id, seq: 2, data: "new", createdAt: timestamp(), source: "pty" as const }], firstRetainedOutputSeq: 1 }] },
+    }
+    const writeBlock = vi.spyOn(blocks, "writeBlock").mockRejectedValueOnce(new Error("disk unavailable"))
+    await expect(store.saveStructuralState!(update)).rejects.toThrow("disk unavailable")
+    expect(await repository.sessions.get(left.id)).toMatchObject({ title: left.title, nextOutputSeq: 2 })
+    await store.saveStructuralState!(update)
+    expect(writeBlock).toHaveBeenCalledTimes(2)
+    const loaded = await store.loadState()
+    expect(loaded.sessions.find((session) => session.id === left.id)).toMatchObject({ title: "changed", lastOutputSeq: 2 })
+    expect(loaded.output.filter((chunk) => chunk.sessionId === left.id).map((chunk) => chunk.seq)).toEqual([1, 2])
+  })
+
   it("round-trips structural data while encrypting command and output bodies", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-data-repo-"))
     const groupId = randomUUID()
@@ -402,13 +524,32 @@ describe("Terminal DataRepository store", () => {
   })
 })
 
+async function structuralFixture() {
+  const root = mkdtempSync(path.join(os.tmpdir(), "synapse-terminal-structure-"))
+  const safeStorage = reversibleSafeStorage()
+  const repository = createTerminalRepository(createFileBackedDataRepository({ rootDir: path.join(root, "data-v1"), safeStorage }))
+  const blocks = createTerminalEncryptedBlockStore({ baseDir: path.join(root, "terminal"), safeStorage })
+  const store = createTerminalDataRepositoryStore({ repository, blocks })
+  const groupId = randomUUID()
+  const sessions = [randomUUID(), randomUUID()].map((id) => ({ ...terminalSession(groupId, id), lastOutputSeq: 1 }))
+  const state = {
+    globalLaunch: { revision: 1, updatedAt: timestamp() }, toolbarActions: [], terminalDomainRevision: 1,
+    groups: [{ id: groupId, name: "Main", createdAt: timestamp(), updatedAt: timestamp(), sortOrder: 0, groupRevision: 1, launchRevision: 1, membershipRevision: 1, commandCollectionRevision: 1 }],
+    sessions, workspaces: [], operations: [], idempotency: [],
+    output: sessions.map((session) => ({ sessionId: session.id, seq: 1, data: session.id, createdAt: timestamp(), source: "pty" as const })),
+    checkpoints: sessions.map((session) => ({ sessionId: session.id, throughOutputSeq: 1, sizeRevision: 1, emulatorId: "xterm-headless" as const, emulatorVersion: "6.0.0" as const, serialized: "checkpoint" })),
+  }
+  await store.saveState(state)
+  return { repository, blocks, store, state }
+}
+
 function terminalSession(groupId: string, sessionId: string) {
   return {
     id: sessionId, groupId, title: "Shell", cwd: "/tmp", shell: "/bin/sh", status: "running" as const,
     createdAt: timestamp(), updatedAt: timestamp(), startedAt: timestamp(), cols: 80, rows: 24,
     lastOutputSeq: 0, metadataRevision: 1, stateRevision: 2, inputRevision: 0, sizeRevision: 1,
     creationSource: "ui" as const, endTimeUnknown: false, inputHistoryBeforeBaselineUnknown: false,
-    launchRevisionApplied: 1, discardedOutputBytes: 0, discardedOutputChunks: 0,
+    launchRevisionApplied: 1, globalLaunchRevisionApplied: 1, discardedOutputBytes: 0, discardedOutputChunks: 0,
     attention: {
       state: "unknown" as const, kind: "unknown" as const, reason: "output_changed" as const,
       confidence: 0, detectedAt: timestamp(), throughOutputSeq: 0, sizeRevision: 1,

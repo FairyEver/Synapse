@@ -60,6 +60,13 @@ export type TerminalRuntimeStoreUpdate = {
   readonly sessions: TerminalRuntimeStoreSessionUpdate[]
 }
 
+export type TerminalStructuralStoreState = Omit<TerminalStoreState, "output" | "checkpoints">
+
+export type TerminalStructuralStoreUpdate = {
+  readonly state: TerminalStructuralStoreState
+  readonly runtime: TerminalRuntimeStoreUpdate
+}
+
 export type TerminalStore = {
   loadState(): Promise<TerminalStoreState>
   saveState(state: {
@@ -75,6 +82,7 @@ export type TerminalStore = {
     checkpoints?: TerminalStoreState["checkpoints"]
   }): Promise<void>
   saveRuntimeState?(update: TerminalRuntimeStoreUpdate): Promise<void>
+  saveStructuralState?(update: TerminalStructuralStoreUpdate): Promise<void>
   readonly persistenceProtection?: "available" | "unavailable" | "degraded"
 }
 

@@ -4,13 +4,124 @@ import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import { createTerminalService, ensureExecutableIfPresent, type PtyLike } from "../service"
-import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState } from "../store"
+import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState, TerminalStructuralStoreUpdate } from "../store"
 import { collectTerminalPaneLeaves } from "../../shared/workspace"
+import * as emulatorModule from "../emulator"
+import * as outputModule from "../output-buffer"
 
 const controllerA = { clientId: "client-a", controllerInstanceId: "task-a", actorKind: "connector" as const }
 const controllerB = { clientId: "client-a", controllerInstanceId: "task-b", actorKind: "connector" as const }
 
 describe("TerminalService core", () => {
+  it("retries a failed structural save with output that arrived during the write", async () => {
+    let failWrite: (() => void) | undefined
+    let startedWrite: (() => void) | undefined
+    const entered = new Promise<void>((resolve) => { startedWrite = resolve })
+    const saved: TerminalStructuralStoreUpdate[] = []
+    let failNext = false
+    const structuralSave = vi.fn(async (update: TerminalStructuralStoreUpdate) => {
+      if (failNext) {
+        failNext = false
+        startedWrite!()
+        await new Promise<void>((_resolve, reject) => { failWrite = () => reject(new Error("disk unavailable")) })
+      }
+      saved.push(structuredClone(update))
+    })
+    const runtimeSave = vi.fn(async (_update: TerminalRuntimeStoreUpdate) => undefined)
+    const store: TerminalStore = { ...memoryStore(), saveStructuralState: structuralSave, saveRuntimeState: runtimeSave }
+    const pty = fakePty()
+    const service = createTerminalService({ store, spawnPty: () => pty })
+    try {
+      await service.start()
+      const session = await service.createSession({})
+      pty.emitData("one")
+      failNext = true
+      const rename = service.renameSession({ sessionId: session.id, title: "renamed" })
+      await entered
+      pty.emitData("two")
+      failWrite!()
+      await rename
+      expect(service.getLastPersistError()).toBeInstanceOf(Error)
+      await service.flushPersistQueue()
+      expect(service.getLastPersistError()).toBeUndefined()
+      const retried = saved.at(-1)!
+      expect(retried.state.sessions[0]).toMatchObject({ title: "renamed", lastOutputSeq: 2 })
+      expect(retried.runtime.sessions[0]?.output.map((chunk) => chunk.data)).toEqual(["one", "two"])
+      expect(runtimeSave).not.toHaveBeenCalled()
+    } finally { await service.stop() }
+  })
+
+  it("evicts global output from queue heads without copying retained histories", async () => {
+    const snapshots: ReturnType<typeof vi.spyOn>[] = []
+    const createBuffer = outputModule.createTerminalOutputBuffer
+    const factory = vi.spyOn(outputModule, "createTerminalOutputBuffer").mockImplementation((options) => {
+      const buffer = createBuffer(options)
+      snapshots.push(vi.spyOn(buffer, "snapshot"))
+      return buffer
+    })
+    const children: ReturnType<typeof fakePty>[] = []
+    const service = createTerminalService({ store: { ...memoryStore(), saveRuntimeState: async () => undefined }, spawnPty: () => {
+      const child = fakePty(); children.push(child); return child
+    }, outputRetentionBytes: 1024, globalOutputRetentionBytes: 4096 })
+    try {
+      await service.start()
+      const sessions = []
+      for (let index = 0; index < 8; index += 1) sessions.push(await service.createSession({}))
+      for (const snapshot of snapshots) snapshot.mockClear()
+      for (let index = 0; index < 100; index += 1) for (const child of children) child.emitData("12345678")
+      expect(snapshots.reduce((sum, snapshot) => sum + snapshot.mock.calls.length, 0)).toBe(0)
+      const reads = sessions.map((session) => service.readSession({ sessionId: session.id, afterSeq: 0, limitBytes: 10_000 }))
+      expect(reads.flatMap((read) => read.chunks).reduce((sum, chunk) => sum + Buffer.byteLength(chunk.data), 0)).toBe(4096)
+      expect(reads.some((read) => read.gap)).toBe(true)
+    } finally { await service.stop(); factory.mockRestore() }
+  })
+
+  it("saves structural changes without serializing terminal screens or scanning their output", async () => {
+    const emulators: ReturnType<typeof emulatorModule.createTerminalCoreEmulator>[] = []
+    const serializeSpies: ReturnType<typeof vi.spyOn>[] = []
+    const createEmulator = emulatorModule.createTerminalCoreEmulator
+    const outputSpies: ReturnType<typeof vi.spyOn>[] = []
+    const createBuffer = outputModule.createTerminalOutputBuffer
+    const bufferFactory = vi.spyOn(outputModule, "createTerminalOutputBuffer").mockImplementation((options) => {
+      const buffer = createBuffer(options)
+      outputSpies.push(vi.spyOn(buffer, "snapshot"), vi.spyOn(buffer, "snapshotAfter"))
+      return buffer
+    })
+    const factory = vi.spyOn(emulatorModule, "createTerminalCoreEmulator").mockImplementation((input) => {
+      const emulator = createEmulator(input)
+      emulators.push(emulator)
+      serializeSpies.push(vi.spyOn(emulator, "serialize"))
+      return emulator
+    })
+    const structuralSave = vi.fn(async () => undefined)
+    const store: TerminalStore = { ...memoryStore(), saveStructuralState: structuralSave, saveRuntimeState: async () => undefined }
+    const children: ReturnType<typeof fakePty>[] = []
+    const service = createTerminalService({ store, spawnPty: () => {
+      const child = fakePty(); children.push(child); return child
+    } })
+    try {
+      await service.start()
+      const sessions = []
+      for (let index = 0; index < 4; index += 1) sessions.push(await service.createSession({}))
+      for (const child of children) child.emitData("history\r\n".repeat(5000))
+      await Promise.all(emulators.map((emulator) => emulator.ready()))
+      await service.flushPersistQueue()
+      for (const spy of serializeSpies) spy.mockClear()
+      for (const spy of outputSpies) spy.mockClear()
+      structuralSave.mockClear()
+      await service.renameSession({ sessionId: sessions[0]!.id, title: "renamed" })
+      expect(serializeSpies.reduce((sum, spy) => sum + spy.mock.calls.length, 0)).toBe(0)
+      expect(outputSpies.reduce((sum, spy) => sum + spy.mock.calls.length, 0)).toBe(0)
+      expect(structuralSave).toHaveBeenCalledWith(expect.objectContaining({
+        state: expect.objectContaining({ sessions: expect.arrayContaining([expect.objectContaining({ title: "renamed" })]) }),
+      }))
+      for (const spy of serializeSpies) spy.mockClear()
+      children[0]!.emitExit({ exitCode: 0 })
+      await service.flushPersistQueue()
+      expect(serializeSpies.reduce((sum, spy) => sum + spy.mock.calls.length, 0)).toBe(0)
+    } finally { await service.stop(); factory.mockRestore(); bufferFactory.mockRestore() }
+  })
+
   it("injects first-party receipt environment after user validation without exposing it to persistence", async () => {
     const store = memoryStore()
     const spawnPty = vi.fn(() => fakePty())

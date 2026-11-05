@@ -113,7 +113,7 @@ export class TerminalAgentNotificationService {
   private readonly now: () => number
   private readonly isProcessAlive: (pid: number) => boolean
   private readonly readTranscriptMtimeMs: (path: string) => Promise<number | null>
-  /** 权威副本。查询读它，写入经 {@link commitAgentSessionUpdate} 之后才追上磁盘。 */
+  /** 活动终端的权威副本；注销后只保留数据库中的真实历史。 */
   private readonly agentSessions = new Map<string, TerminalAgentSession>()
   private readonly sessionsByToken = new Map<string, SessionBinding>()
   private readonly sessionTokens = new Map<string, string>()
@@ -137,7 +137,7 @@ export class TerminalAgentNotificationService {
 
   async start(): Promise<void> {
     this.settings = await this.deps.settings.getSingleton() ?? defaultSettings()
-    await this.hydrateAgentSessions()
+    // PTY 不跨进程恢复；历史档案留在数据库，不全量装入活动会话缓存。
     // shell 集成不再由 Agent 原生通知的开关门控：先无条件把 runtime 文件准备好，
     // 否则关掉通知的终端连 OSC 7 上报都没有，`getCurrentWorkingDirectory` 会一直
     // 停在会话创建时的目录。
@@ -179,7 +179,7 @@ export class TerminalAgentNotificationService {
   }
 
   /**
-   * 所有真的跑过 agent 的会话档案。
+   * 仍存活的终端中，所有真的跑过 agent 的会话档案。
    *
    * 停在 `launching` 的不在其中：那是「这个终端开过、但没有任何 agent 进来过」，
    * 它只在内存里活着，不该被当成一条 agent 记录读出去。
@@ -208,6 +208,7 @@ export class TerminalAgentNotificationService {
   async sweepAgentSessions(): Promise<void> {
     const at = new Date(this.now()).toISOString()
     for (const session of [...this.agentSessions.values()]) {
+      if (this.agentSessions.get(session.sessionId) !== session) continue
       if (session.state === "ended" || session.state === "launching") continue
       if (session.pid !== undefined && !this.isProcessAlive(session.pid)) {
         this.commitAgentSessionUpdate(
@@ -231,6 +232,7 @@ export class TerminalAgentNotificationService {
     const stalled = terminalAgentStalledUpdate(session, { at, staleMs: AGENT_TRANSCRIPT_STALE_MS })
     if (!stalled) return
     const mtimeMs = await this.readTranscriptMtimeMs(session.transcriptPath)
+    if (this.agentSessions.get(session.sessionId) !== session) return
     if (mtimeMs === null) return
     if (mtimeMs > Date.parse(session.stateChangedAt)) return
     this.commitAgentSessionUpdate(session.sessionId, stalled)
@@ -291,16 +293,6 @@ export class TerminalAgentNotificationService {
       }
     }
     this.stateQueue = this.stateQueue.then(write, write)
-  }
-
-  private async hydrateAgentSessions(): Promise<void> {
-    try {
-      for (const session of await this.deps.agentSessions.list()) {
-        this.agentSessions.set(session.sessionId, session)
-      }
-    } catch (error) {
-      this.deps.logger.warn("Terminal agent sessions could not be read back.", { error })
-    }
   }
 
   private startSweep(): void {
@@ -514,7 +506,7 @@ export class TerminalAgentNotificationService {
     // 终端会话本身没了，跑在里面的 agent 自然也没了。这不是「某个 pid 死了」的判断，
     // 所以不带 aboutPid——它是本机的直接事实，不需要再等存活探测确认一次。
     const current = this.agentSessions.get(sessionId)
-    if (current && current.state !== "ended") {
+    if (current && !isTerminalAgentSessionUnstarted(current) && current.state !== "ended") {
       this.commitAgentSessionUpdate(sessionId, {
         id: current.id,
         schemaVersion: 1,
@@ -526,6 +518,7 @@ export class TerminalAgentNotificationService {
         reason: "terminal_session_unregistered",
       })
     }
+    this.agentSessions.delete(sessionId)
   }
 
   reportActiveSession(webContentsId: number, sessionId: string | null): void {

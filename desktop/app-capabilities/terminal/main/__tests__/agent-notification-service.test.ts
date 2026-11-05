@@ -48,6 +48,78 @@ afterEach(async () => {
 })
 
 describe("TerminalAgentNotificationService", () => {
+  it.each(["probing", "next"] as const)("does not resurrect an unregistered %s session during an asynchronous sweep", async (target) => {
+    let clock = Date.parse("2026-09-19T10:00:00.000Z")
+    const archive = memoryAgentSessionsNamespace()
+    const fixture = await createFixture({ archive, now: () => clock })
+    const ids = ["7a5f83f3-9782-4cb0-a268-1ee7ad0b740f", "92654f7a-2e77-4cb4-96cb-fb82583f167a"]
+    try {
+      await fixture.service.start()
+      await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+      for (const [index, sessionId] of ids.entries()) {
+        const launch = fixture.service.prepareSession({ sessionId, title: "test", shell: "/bin/zsh", env: { PATH: "/usr/bin" }, defaultShellArgs: ["-l"] })!
+        await postEvent(launch.env, { source: "claude", event: "AgentProcessStart", agentPid: index + 100 })
+        if (index === 0) await postEvent(launch.env, { source: "claude", event: "PreToolUse", transcriptPath: "/tmp/terminal-resource-test.jsonl" })
+      }
+      clock += 20 * 60_000
+      fixture.isProcessAlive.mockImplementation((pid) => pid !== 101)
+      let release: ((value: number) => void) | undefined
+      fixture.readTranscriptMtimeMs.mockImplementation(() => new Promise((resolve) => { release = resolve }))
+      const sweep = fixture.service.sweepAgentSessions()
+      const removed = ids[target === "probing" ? 0 : 1]!
+      fixture.service.unregisterSession(removed)
+      release!(Date.parse("2026-09-19T09:00:00.000Z"))
+      await sweep
+      expect(fixture.service.getAgentSession(removed)).toBeNull()
+      await vi.waitFor(async () => expect(await archive.get(removed)).toMatchObject({ state: "ended" }))
+    } finally { await fixture.service.stop() }
+  })
+
+  it("does not load historical agent sessions into the active cache at startup", async () => {
+    const archive = memoryAgentSessionsNamespace()
+    const list = vi.spyOn(archive, "list")
+    const fixture = await createFixture({ archive })
+    try {
+      await fixture.service.start()
+      expect(list).not.toHaveBeenCalled()
+      expect(fixture.service.listAgentSessions()).toEqual([])
+    } finally { await fixture.service.stop() }
+  })
+
+  it("forgets unstarted sessions instead of persisting fake agent history", async () => {
+    const archive = memoryAgentSessionsNamespace()
+    const fixture = await createFixture({ archive })
+    try {
+      await fixture.service.start()
+      await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+      for (let index = 0; index < 100; index += 1) {
+        const sessionId = `unstarted-${index}`
+        fixture.service.prepareSession({ sessionId, title: "test", shell: "/bin/zsh", env: { PATH: "/usr/bin" }, defaultShellArgs: ["-l"] })
+        fixture.service.unregisterSession(sessionId)
+        expect(fixture.service.getAgentSession(sessionId)).toBeNull()
+      }
+      await fixture.service.sweepAgentSessions()
+      expect(fixture.service.listAgentSessions()).toEqual([])
+      expect(await archive.list()).toEqual([])
+    } finally { await fixture.service.stop() }
+  })
+
+  it("releases an unregistered agent while retaining its real history on disk", async () => {
+    const archive = memoryAgentSessionsNamespace()
+    const fixture = await createFixture({ archive })
+    const sessionId = "7a5f83f3-9782-4cb0-a268-1ee7ad0b740f"
+    try {
+      await fixture.service.start()
+      await fixture.service.updateSettings({ enabled: true, expectedRevision: 1 })
+      const launch = fixture.service.prepareSession({ sessionId, title: "test", shell: "/bin/zsh", env: { PATH: "/usr/bin" }, defaultShellArgs: ["-l"] })!
+      await postEvent(launch.env, { source: "claude", event: "AgentProcessStart", agentPid: 4242 })
+      fixture.service.unregisterSession(sessionId)
+      expect(fixture.service.getAgentStateView(sessionId)).toBeNull()
+      expect(fixture.service.listAgentSessions()).toEqual([])
+      await vi.waitFor(async () => expect(await archive.get(sessionId)).toMatchObject({ state: "ended", agentKind: "claude" }))
+    } finally { await fixture.service.stop() }
+  })
+
   it("authenticates a hook event, notifies only when another pane is active, and opens the exact session", async () => {
     const fixture = await createFixture()
     await fixture.service.start()
@@ -815,7 +887,7 @@ describe("TerminalAgentNotificationService shell integration", () => {
   })
 })
 
-async function createFixture(options: { platform?: NodeJS.Platform; now?: () => number } = {}) {
+async function createFixture(options: { platform?: NodeJS.Platform; now?: () => number; archive?: DataNamespace<TerminalAgentSession> } = {}) {
   const runtimeDir = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-runtime-"))
   temporaryDirectories.push(runtimeDir)
   const notifications: TestNotification[] = []
@@ -826,7 +898,7 @@ async function createFixture(options: { platform?: NodeJS.Platform; now?: () => 
   const readTranscriptMtimeMs = vi.fn<(path: string) => Promise<number | null>>(async () => null)
   const service = new TerminalAgentNotificationService({
     settings: memorySettingsNamespace(),
-    agentSessions: memoryAgentSessionsNamespace(),
+    agentSessions: options.archive ?? memoryAgentSessionsNamespace(),
     networkRegistry: createNetworkServiceRegistry(),
     permissionGuard: { check: vi.fn(async () => ({ allowed: true })), registerPolicy: vi.fn(() => () => {}) } as unknown as PermissionGuard,
     auditSink: { record: vi.fn() } as unknown as AuditSink,

@@ -23,6 +23,7 @@ import {
   parseTerminalStoreStateForSave,
   terminalStoreStateSchema,
   type TerminalRuntimeStoreUpdate,
+  type TerminalStructuralStoreUpdate,
   type TerminalStore,
   type TerminalStoreState,
 } from "./store"
@@ -198,8 +199,16 @@ export function createTerminalDataRepositoryStore(options: {
   }
 
   async function saveState(source: Parameters<TerminalStore["saveState"]>[0]): Promise<void> {
+    await saveParsedState(parseTerminalStoreStateForSave(source))
+  }
+
+  async function saveStructuralState(source: TerminalStructuralStoreUpdate): Promise<void> {
+    const state = parseTerminalStoreStateForSave({ ...source.state, output: [], checkpoints: [] })
+    await saveParsedState(state, { sessions: parseRuntimeUpdates(source.runtime) })
+  }
+
+  async function saveParsedState(state: TerminalStoreState, runtime?: TerminalRuntimeStoreUpdate): Promise<void> {
     await initialize()
-    const state = parseTerminalStoreStateForSave(source)
     const hasSensitiveConfiguration = state.groups.some((group) =>
       Boolean(group.settings?.commands?.length || hasSetEnvironmentValue(group.settings?.environment)))
       || hasSetEnvironmentValue(state.globalLaunch.settings?.environment)
@@ -209,15 +218,30 @@ export function createTerminalDataRepositoryStore(options: {
       throw new Error("Terminal persistence protection unavailable for sensitive configuration")
     }
     const deleteIntent = await createDeleteIntent(state)
+    // 先提交增量正文，再发布元数据中的输出水位；失败时旧水位仍可重试。
+    if (runtime) await syncRuntimeOutput(runtime.sessions)
     await syncGlobalLaunch(state)
     await syncToolbarActions(state)
     await syncGroups(state)
     await syncWorkspaces(state)
-    await syncSessions(state)
+    await syncSessions(state, runtime ? new Map(runtime.sessions.map((update) => [update.session.id, update.firstRetainedOutputSeq])) : undefined)
     await syncOperations(state)
     await syncIdempotency(state)
-    await syncOutput(state)
-    await syncCheckpoints(state)
+    if (runtime) {
+      const retained = new Set(state.sessions.map((session) => session.id))
+      await ensureBlockManifestIndex()
+      for (const [sessionId, manifests] of outputManifestsBySession!) {
+        if (retained.has(sessionId)) continue
+        for (const manifest of [...manifests.values()]) await removeManifest(manifest)
+      }
+      for (const manifest of [...checkpointManifestsBySession!.values()]) {
+        if (!retained.has(manifest.sessionId)) await removeManifest(manifest)
+      }
+      for (const update of runtime.sessions) if (update.checkpoint) await syncCheckpoint(update.checkpoint)
+    } else {
+      await syncOutput(state)
+      await syncCheckpoints(state)
+    }
     const persistedDomain = await options.repository.domain.getSingleton()
     if (persistedDomain?.terminalDomainRevision !== state.terminalDomainRevision) {
       await options.repository.domain.setSingleton({
@@ -231,20 +255,7 @@ export function createTerminalDataRepositoryStore(options: {
 
   async function saveRuntimeState(source: TerminalRuntimeStoreUpdate): Promise<void> {
     await initialize()
-    const updates = source.sessions.map((item) => ({
-      session: terminalSessionSchema.parse(item.session),
-      output: item.output.map((chunk) => terminalOutputChunkSchema.parse(chunk)),
-      firstRetainedOutputSeq: item.firstRetainedOutputSeq,
-      ...(item.checkpoint ? { checkpoint: parseCheckpoint(item.checkpoint) } : {}),
-    }))
-    for (const update of updates) {
-      if (!Number.isSafeInteger(update.firstRetainedOutputSeq) || update.firstRetainedOutputSeq < 1) {
-        throw new Error("Invalid Terminal retained output sequence")
-      }
-      if (update.output.some((chunk) => chunk.sessionId !== update.session.id)) {
-        throw new Error("Terminal runtime output belongs to another session")
-      }
-    }
+    const updates = parseRuntimeUpdates(source)
     await syncRuntimeOutput(updates)
     for (const update of updates) {
       const launchBodyRef = Object.keys(update.session.launchEnvironment ?? {}).length
@@ -260,6 +271,24 @@ export function createTerminalDataRepositoryStore(options: {
     for (const update of updates) {
       if (update.checkpoint) await syncCheckpoint(update.checkpoint)
     }
+  }
+
+  function parseRuntimeUpdates(source: TerminalRuntimeStoreUpdate): TerminalRuntimeStoreUpdate["sessions"] {
+    const updates = source.sessions.map((item) => ({
+      session: terminalSessionSchema.parse(item.session),
+      output: item.output.map((chunk) => terminalOutputChunkSchema.parse(chunk)),
+      firstRetainedOutputSeq: item.firstRetainedOutputSeq,
+      ...(item.checkpoint ? { checkpoint: parseCheckpoint(item.checkpoint) } : {}),
+    }))
+    for (const update of updates) {
+      if (!Number.isSafeInteger(update.firstRetainedOutputSeq) || update.firstRetainedOutputSeq < 1) {
+        throw new Error("Invalid Terminal retained output sequence")
+      }
+      if (update.output.some((chunk) => chunk.sessionId !== update.session.id)) {
+        throw new Error("Terminal runtime output belongs to another session")
+      }
+    }
+    return updates
   }
 
   async function syncGlobalLaunch(state: TerminalStoreState): Promise<void> {
@@ -472,7 +501,7 @@ export function createTerminalDataRepositoryStore(options: {
     }
   }
 
-  async function syncSessions(state: TerminalStoreState): Promise<void> {
+  async function syncSessions(state: TerminalStoreState, retainedFirstSeqs?: ReadonlyMap<string, number>): Promise<void> {
     const existing = await options.repository.sessions.list()
     const existingLaunchBodies = await options.repository.launchBodies.list()
     const existingById = new Map(existing.map((session) => [session.sessionId, session]))
@@ -488,7 +517,10 @@ export function createTerminalDataRepositoryStore(options: {
       const output = outputBySession.get(session.id) ?? []
       const environment = session.launchEnvironment ?? {}
       const launchBodyRef = Object.keys(environment).length ? session.id : undefined
-      const record = toSessionRecord(session, output, launchBodyRef)
+      const firstSeq = retainedFirstSeqs
+        ? retainedFirstSeqs.get(session.id) ?? existingById.get(session.id)?.firstRetainedOutputSeq ?? session.lastOutputSeq + 1
+        : undefined
+      const record = toSessionRecord(session, output, launchBodyRef, firstSeq)
       if (!sameRecord(existingById.get(session.id), record)) {
         await options.repository.sessions.upsert(record)
       }
@@ -683,13 +715,19 @@ export function createTerminalDataRepositoryStore(options: {
       }
       return
     }
-    outputManifestsBySession!.get(manifest.sessionId)?.delete(manifest.firstOutputSeq)
+    const manifests = outputManifestsBySession!.get(manifest.sessionId)
+    manifests?.delete(manifest.firstOutputSeq)
+    if (manifests?.size === 0) {
+      outputManifestsBySession!.delete(manifest.sessionId)
+      persistedFirstOutputSeqBySession!.delete(manifest.sessionId)
+    }
   }
 
   return {
     loadState,
     saveState,
     saveRuntimeState,
+    saveStructuralState,
     get persistenceProtection() { return options.blocks.persistenceProtection },
   }
 }

@@ -3,6 +3,49 @@ import { createTerminalOutputBuffer } from "../output-buffer"
 import type { TerminalOutputChunk } from "../../shared/schema"
 
 describe("terminal output buffer", () => {
+  it("bounds tiny and empty chunks while keeping sequence and loss accounting", () => {
+    const buffer = createTerminalOutputBuffer({ maxBytes: 100, maxChunks: 3 })
+    for (const text of ["a", "", "b", "", "c"]) buffer.append("s1", text)
+
+    expect(buffer.snapshot().map((chunk) => chunk.seq)).toEqual([3, 4, 5])
+    expect(buffer.read({ afterSeq: 0, limitBytes: 100 })).toMatchObject({
+      firstSeq: 3, nextSeq: 5, gap: true, discardedBytes: 1, discardedChunks: 2,
+    })
+    expect(buffer.oldestCreatedAt).toBe(buffer.snapshot()[0]?.createdAt)
+  })
+
+  it("keeps the newest chunks through repeated ring wraparounds and incremental reads", () => {
+    const buffer = createTerminalOutputBuffer({ maxBytes: 100, maxChunks: 3 })
+    for (let index = 1; index <= 100; index += 1) buffer.append("s1", String(index))
+    expect(buffer.snapshot().map((chunk) => chunk.seq)).toEqual([98, 99, 100])
+    expect(buffer.snapshotAfter(99).map((chunk) => chunk.seq)).toEqual([100])
+    expect(buffer.read({ afterSeq: 97, limitBytes: 2 })).toMatchObject({ nextSeq: 98, hasMore: true })
+    expect(buffer.evictOldest()?.seq).toBe(98)
+    buffer.append("s1", "101")
+    expect(buffer.snapshot().map((chunk) => chunk.seq)).toEqual([99, 100, 101])
+  })
+
+  it("reports a gap after all output is evicted and resumes at the same sequence", () => {
+    const buffer = createTerminalOutputBuffer({ maxBytes: 100, maxChunks: 2 })
+    buffer.append("s1", "one")
+    buffer.evictOldest()
+    expect(buffer.read({ afterSeq: 0, limitBytes: 100 })).toMatchObject({
+      firstSeq: 2, nextSeq: 1, gap: true, truncated: true, hasMore: false, chunks: [],
+    })
+    expect(buffer.oldestCreatedAt).toBeUndefined()
+    expect(buffer.append("s1", "two").seq).toBe(2)
+  })
+
+  it("applies the chunk limit to restored history without resetting the sequence", () => {
+    const initialChunks: TerminalOutputChunk[] = Array.from({ length: 5 }, (_, index) => ({
+      sessionId: "s1", seq: index + 1, data: "x", createdAt: `t${index}`, source: "pty",
+    }))
+    const buffer = createTerminalOutputBuffer({ maxBytes: 100, maxChunks: 2, initialChunks })
+    expect(buffer.snapshot().map((chunk) => chunk.seq)).toEqual([4, 5])
+    expect(buffer.discardedChunks).toBe(3)
+    expect(buffer.append("s1", "next").seq).toBe(6)
+  })
+
   it("keeps chunks in sequence order", () => {
     const buffer = createTerminalOutputBuffer({ maxBytes: 100 })
 

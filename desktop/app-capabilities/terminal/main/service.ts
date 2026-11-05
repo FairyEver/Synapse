@@ -112,7 +112,7 @@ import {
   resolveTerminalShellArgs,
 } from "./environment"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
-import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState } from "./store"
+import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState, TerminalStructuralStoreState } from "./store"
 
 export type PtyDisposable = { dispose(): void }
 export type PtyLike = {
@@ -416,28 +416,21 @@ export function createTerminalService(deps: {
   function now(): string { return new Date().toISOString() }
 
   function snapshotState(): TerminalStoreState {
+    return {
+      ...snapshotStructuralState(),
+      output: [...buffers.values()].flatMap((buffer) => buffer.snapshot()),
+      checkpoints: [...checkpoints.values()],
+    }
+  }
+
+  function snapshotStructuralState(): TerminalStructuralStoreState {
     pruneOperationTombstones()
-    const runtimeCheckpoints = [...runtimes.entries()].flatMap(([sessionId, runtime]) => {
-      const session = sessions.get(sessionId)
-      if (!session || runtime.emulator.sizeRevision !== session.sizeRevision) return []
-      const serialized = runtime.emulator.serialize()
-      if (Buffer.byteLength(serialized, "utf8") > 1024 * 1024) return []
-      return [{
-        sessionId,
-        throughOutputSeq: runtime.emulator.throughOutputSeq,
-        sizeRevision: session.sizeRevision,
-        emulatorId: "xterm-headless" as const,
-        emulatorVersion: "6.0.0" as const,
-        serialized,
-      }]
-    })
     return {
       globalLaunch,
       toolbarActions: [...toolbarActions.values()],
       groups: [...groups.values()],
       workspaces: [...workspaces.values()],
       sessions: [...sessions.values()],
-      output: [...buffers.values()].flatMap((buffer) => buffer.snapshot()),
       terminalDomainRevision,
       operations: [...operations.values()].map((operation) => ({
         schemaVersion: 2 as const,
@@ -459,8 +452,6 @@ export function createTerminalService(deps: {
         ...(operation.failedActionIndex !== undefined ? { failedActionIndex: operation.failedActionIndex } : {}),
       })),
       idempotency: [...idempotency.entries()].map(([scope, entry]) => ({ scope, ...entry })),
-      checkpoints: [...checkpoints.values(), ...runtimeCheckpoints]
-        .filter((checkpoint, index, items) => items.findLastIndex((item) => item.sessionId === checkpoint.sessionId) === index),
     }
   }
 
@@ -502,7 +493,14 @@ export function createTerminalService(deps: {
         const saveFullState = fullPersistPending || !deps.store.saveRuntimeState
         fullPersistPending = false
         try {
-          if (saveFullState) {
+          if (saveFullState && deps.store.saveStructuralState) {
+            const structure = snapshotStructuralState()
+            const runtime = await snapshotRuntimeState(false)
+            await deps.store.saveStructuralState({ state: structure, runtime: runtime.update })
+            commitRuntimePersist(runtime)
+            commitStructuralPersist(structure)
+            publishPersistedDomainEvents(structure.terminalDomainRevision)
+          } else if (saveFullState) {
             const snapshot = snapshotState()
             await deps.store.saveState(snapshot)
             commitFullPersist(snapshot)
@@ -516,6 +514,7 @@ export function createTerminalService(deps: {
           }
           lastPersistError = undefined
         } catch (error) {
+          if (saveFullState) fullPersistPending = true
           lastPersistError = error
           deps.logger?.warn("Terminal service failed to persist state.", { error })
         }
@@ -549,12 +548,12 @@ export function createTerminalService(deps: {
     await waitForPersistRevision(revision)
   }
 
-  async function snapshotRuntimeState(): Promise<{
+  async function snapshotRuntimeState(includeCheckpoint = true): Promise<{
     readonly update: TerminalRuntimeStoreUpdate
     readonly stateRevisionBySession: ReadonlyMap<string, number>
     readonly attemptedCheckpoint: boolean
   }> {
-    const captureCheckpoint = Date.now() - lastRuntimeCheckpointAt >= RUNTIME_CHECKPOINT_INTERVAL_MS
+    const captureCheckpoint = includeCheckpoint && Date.now() - lastRuntimeCheckpointAt >= RUNTIME_CHECKPOINT_INTERVAL_MS
     const updates: TerminalRuntimeStoreUpdate["sessions"][number][] = []
     const stateRevisionBySession = new Map<string, number>()
     let attemptedCheckpoint = false
@@ -630,6 +629,16 @@ export function createTerminalService(deps: {
       if (sessions.has(checkpoint.sessionId)) checkpoints.set(checkpoint.sessionId, checkpoint)
     }
     lastRuntimeCheckpointAt = Date.now()
+  }
+
+  function commitStructuralPersist(snapshot: TerminalStructuralStoreState): void {
+    const retained = new Set(snapshot.sessions.map((session) => session.id))
+    for (const sessionId of persistedOutputSeqBySession.keys()) {
+      if (!retained.has(sessionId)) persistedOutputSeqBySession.delete(sessionId)
+    }
+    for (const sessionId of checkpoints.keys()) {
+      if (!retained.has(sessionId)) checkpoints.delete(sessionId)
+    }
   }
 
   function publishPersistedDomainEvents(throughDomainRevision: number): void {
@@ -951,20 +960,6 @@ export function createTerminalService(deps: {
   function cleanupRuntime(sessionId: string): void {
     const runtime = runtimes.get(sessionId)
     if (!runtime) return
-    const session = sessions.get(sessionId)
-    if (session && runtime.emulator.sizeRevision === session.sizeRevision) {
-      const serialized = runtime.emulator.serialize()
-      if (Buffer.byteLength(serialized, "utf8") <= 1024 * 1024) {
-        checkpoints.set(sessionId, {
-          sessionId,
-          throughOutputSeq: runtime.emulator.throughOutputSeq,
-          sizeRevision: session.sizeRevision,
-          emulatorId: "xterm-headless",
-          emulatorVersion: "6.0.0",
-          serialized,
-        })
-      }
-    }
     runtimes.delete(sessionId)
     runtime.emulator.dispose()
     for (const disposable of runtime.disposables) disposable.dispose()
@@ -1140,15 +1135,17 @@ export function createTerminalService(deps: {
   function enforceGlobalOutputQuota(): void {
     let total = [...buffers.values()].reduce((sum, buffer) => sum + buffer.totalBytes, 0)
     while (total > globalOutputRetentionBytes) {
-      const candidates = [...buffers.entries()]
-        .filter(([, buffer]) => buffer.totalBytes > 0)
-        .sort(([leftId, left], [rightId, right]) => {
-          const leftEnded = sessions.get(leftId)?.status === "running" || sessions.get(leftId)?.status === "stopping" ? 1 : 0
-          const rightEnded = sessions.get(rightId)?.status === "running" || sessions.get(rightId)?.status === "stopping" ? 1 : 0
-          if (leftEnded !== rightEnded) return leftEnded - rightEnded
-          return (left.snapshot()[0]?.createdAt ?? "").localeCompare(right.snapshot()[0]?.createdAt ?? "")
-        })
-      const candidate = candidates[0]
+      let candidate: [string, TerminalOutputBuffer] | undefined
+      let candidateActive = true
+      for (const [sessionId, buffer] of buffers) {
+        if (buffer.totalBytes === 0 || buffer.oldestCreatedAt === undefined) continue
+        const active = isActiveSession(sessions.get(sessionId))
+        if (!candidate || (candidateActive && !active)
+          || (candidateActive === active && buffer.oldestCreatedAt < candidate[1].oldestCreatedAt!)) {
+          candidate = [sessionId, buffer]
+          candidateActive = active
+        }
+      }
       if (!candidate) break
       const removed = candidate[1].evictOldest()
       if (!removed) break
