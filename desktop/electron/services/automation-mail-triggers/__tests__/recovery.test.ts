@@ -55,6 +55,31 @@ it("labels a committed run as unknown after generic startup recovery has already
   expect(rig.bodies).toEqual([])
   await rig.automation.stop()
 })
+
+it("counts startup recovery before mail activation attaches, then counts the next letter once", async () => {
+  const rig = await fixture(), source = (await rig.repo.sourcesFor(rig.item.mailSubscription!.id))[0]!
+  await rig.repo.enqueuePage(rig.item.mailSubscription!.id, source.sourceKey, 0, { receipts: [{ sourceKey: source.sourceKey, receiptKey: "one", messageId: "letter", receivedAt: "2026-11-05T01:00:00Z" }], nextCursor: "21", complete: true })
+  const row = (await rig.repo.nextPending(rig.item.id, rig.ctx.identity))!
+  await rig.repo.commitDispatch(row.id, row.revision, "interrupted-before-mail-start")
+  await rig.runs.start(rig.item.id, "trigger", { triggerType: rig.item.trigger.type, executorType: rig.item.executor.type, reservedRunId: "interrupted-before-mail-start" })
+  rig.detachActivation()
+  await rig.automation.start()
+  expect(await rig.items.get(rig.item.id)).toMatchObject({ enabled: true, runCount: 1, lastStatus: "failed", mailSubscription: rig.item.mailSubscription, configVersion: rig.item.configVersion })
+  await expect(rig.items.setEnabled(rig.item.id, true)).rejects.toThrow("收信触发服务尚未就绪")
+  const detach = rig.automation.attachTriggerLifecycle("test.mail", rig.activation)
+  try {
+    await rig.worker.reconcile("mail starts after automation")
+    expect((await rig.items.get(rig.item.id))?.runCount).toBe(1)
+    expect((await rig.runs.get("interrupted-before-mail-start"))?.error).toContain("未自动重试")
+    expect(rig.bodies).toEqual([])
+    rig.source.scan = async (_ctx, boundary) => ({ receipts: [{ sourceKey: boundary.sourceKey, receiptKey: "two", messageId: "next-letter", receivedAt: "2026-11-05T02:00:00Z" }], nextCursor: "22", complete: true })
+    await rig.worker.reconcile("next letter")
+    await rig.worker.reconcile("duplicate")
+    expect(rig.bodies).toEqual(["body"])
+    expect((await rig.items.get(rig.item.id))?.runCount).toBe(2)
+  } finally { detach(); await rig.automation.stop() }
+})
+
 it("does not invoke the executor if identity expires while previous outputs are loading", async () => {
   const rig = await fixture(), controller = new AbortController()
   rig.setContext({ ...rig.ctx, signal: controller.signal })

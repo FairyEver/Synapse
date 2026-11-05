@@ -246,12 +246,13 @@ export class AutomationItemRepository {
         ...next,
         ...(recalcNextRunAt ? { nextRunAt } : {}),
       }
-    })
+    }, { applyTriggerLifecycle: false })
   }
 
   private async mutateItem(
     id: string,
     updater: (existing: AutomationItem) => AutomationItem | null,
+    options: { readonly applyTriggerLifecycle?: boolean } = {},
   ): Promise<AutomationItem | null> {
     const previous = this.itemQueues.get(id) ?? Promise.resolve()
     let release: () => void = () => {}
@@ -274,9 +275,11 @@ export class AutomationItemRepository {
         await this.items.remove(id)
         return null
       }
-      const next = await this.prepareCommit(existing, candidate)
+      // Runtime result metadata preserves the trigger binding; startup recovery
+      // can run before its activation provider has attached.
+      const next = options.applyTriggerLifecycle === false ? candidate : await this.prepareCommit(existing, candidate)
       await this.items.upsert(next)
-      await this.finishCommit(existing, next)
+      if (options.applyTriggerLifecycle !== false) await this.finishCommit(existing, next)
       return next
     } finally {
       release()
