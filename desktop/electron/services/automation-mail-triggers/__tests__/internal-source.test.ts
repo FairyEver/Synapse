@@ -23,3 +23,12 @@ it("rejects a stale identity after a late checkpoint response", async () => {
     changes: async () => { throw new Error("not requested") }, read: async () => { throw new Error("not requested") } })
   await expect(source.prepare(ctx)).rejects.toThrow("身份已变化")
 })
+it.each([[404, "UNAVAILABLE"], [403, undefined], [429, undefined], [503, undefined]] as const)("classifies real HTTP %s detail failures without making transient errors permanent", async (status, code) => {
+  const error = Object.assign(new Error(`HTTP ${status}`), { status })
+  const source = new InternalMailReceiptSource({ assertCurrent: () => undefined,
+    checkpoint: async () => ({ receiptSequence: "20", serverTime: "2026-11-05T00:00:00Z" }),
+    changes: async () => ({ items: [], nextAfter: "20", through: "20", complete: true }), read: async () => { throw error } })
+  const result = await source.hydrate(ctx, { sourceKey: "inbox", receiptKey: "letter", messageId: "letter", receivedAt: "2026-11-05T00:00:00Z" }).catch(value => value)
+  expect(result.status).toBe(status)
+  expect(result.code).toBe(code)
+})

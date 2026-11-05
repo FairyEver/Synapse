@@ -5,7 +5,7 @@ import type { MailSourceBoundary, MailReceiptRef } from "../../runtime/data-repo
 export type MailTriggerIdentity = { ownerId: string; apiOrigin: string }
 export type MailTriggerContext = { identity: MailTriggerIdentity; generation: number; signal: AbortSignal }
 export type MailReceiptPage = { receipts: MailReceiptRef[]; nextCursor: string; complete: boolean }
-export type PrepareSubscriptionInput = { identity: MailTriggerIdentity; automationId: string; boundaries: MailSourceBoundary[] }
+export type PrepareSubscriptionInput = { identity: MailTriggerIdentity; automationId: string; boundaries: MailSourceBoundary[]; configurationGeneration?: string }
 export type DeliveryOutcome = { state: "success" | "failed" | "unknown" | "skipped"; errorCode?: string }
 export type PreparedMailPayload = {
   messageId: string; subject: string; body: string; sender: string; to: string; cc: string; receivedAt: string;

@@ -720,7 +720,11 @@ export class AutomationService {
       if (!item?.enabled || item.mailSubscription?.id !== input.subscriptionId || item.mailSubscription.stoppedAt || input.identitySignal.aborted || !this.isItemValid(item)) return { kind: "obsolete" }
       if (!await input.commitStart()) return { kind: "obsolete" }
       input.identitySignal.throwIfAborted()
-      const run = await this.deps.execution.runItem(item, "trigger", { reservedRunId: input.runId, scopeSignal: input.identitySignal,
+      // The durable claim may yield to a completed disable/source switch. A fresh
+      // subscription reference is the version proof; an unstarted claim is releasable.
+      const current = await this.deps.items.get(input.automationId)
+      if (!current?.enabled || current.mailSubscription?.id !== input.subscriptionId || current.mailSubscription.stoppedAt || !this.isItemValid(current)) return { kind: "obsolete" }
+      const run = await this.deps.execution.runItem(current, "trigger", { reservedRunId: input.runId, scopeSignal: input.identitySignal,
         onRunStarted: started => this.emitAutomationChanged({ automationId: item.id, runId: started.id, reason: "run-started" }) },
       { triggeredBy: "trigger", triggeredAt: input.event.receivedAt, scheduledAt: input.event.receivedAt, event: input.event })
       this.emitAutomationChanged({ automationId: item.id, runId: run.id, reason: "run-finished" })

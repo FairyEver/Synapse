@@ -16,6 +16,7 @@ const row = z.object({ id, schemaVersion: z.literal(1), kind: z.enum(["subscript
   createdAt: z.iso.datetime(), orderKey: z.string().max(4096), retryAt: z.number().nonnegative(),
   boundary: boundary.optional(), cursor: z.string().max(8192).optional(), endedAt: z.iso.datetime().optional(),
   endCursor: z.string().max(100).optional(), stopConfirmed: z.boolean().optional(),
+  configurationGeneration: id.optional(),
   receipt: receipt.optional(), runId: id.optional(), errorCode: z.string().max(200).optional(),
 }).strict().superRefine((value, ctx) => {
   if (value.kind === "source" && (!value.boundary || value.cursor === undefined)) ctx.addIssue({ code: "custom", message: "来源缺少接收边界" })

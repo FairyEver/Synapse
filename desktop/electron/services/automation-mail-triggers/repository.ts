@@ -22,6 +22,7 @@ export class MailTriggerRepository {
     if (!input.boundaries.length || new Set(input.boundaries.map(b => b.sourceKey)).size !== input.boundaries.length) throw new Error("收信来源为空或重复")
     const id = `mail-subscription:${randomUUID()}`
     const base = { id, schemaVersion: 1 as const, ...input.identity, automationId: input.automationId, subscriptionId: id, sourceKey: "", revision: 0,
+      configurationGeneration: input.configurationGeneration ?? id,
       state: "ready" as const, createdAt: new Date().toISOString(), orderKey: id, retryAt: 0 }
     for (const boundary of input.boundaries) {
       const value: SourceRow = { ...base, id: hash([id, boundary.sourceKey]), kind: "source", sourceKey: boundary.sourceKey, boundary,
@@ -32,6 +33,30 @@ export class MailTriggerRepository {
     return id
   }
   async getSubscription(id: string): Promise<SubscriptionRow | null> { return await this.subscriptions.get(id) as SubscriptionRow | null }
+  private async updateRecord(namespace: DataNamespace<MailTriggerRecord>, id: string, update: (row: MailTriggerRecord) => Partial<MailTriggerRecord> | null): Promise<boolean> {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const row = await namespace.get(id)
+      if (!row) return false
+      const patch = update(row)
+      if (!patch) return false
+      if ((await this.batch({ guards: [{ namespace: namespace.name, id, expected: { revision: row.revision, state: row.state } }],
+        operations: [{ kind: "patch", namespace: namespace.name, id, patch: { ...patch, revision: row.revision + 1 } }] })).committed) return true
+    }
+    throw new Error("收信来源状态持续变化，请稍后重试")
+  }
+  updateSource(id: string, update: (row: SourceRow) => Partial<SourceRow> | null): Promise<boolean> { return this.updateRecord(this.sources, id, row => update(row as SourceRow)) }
+  updateSubscription(id: string, update: (row: SubscriptionRow) => Partial<SubscriptionRow> | null): Promise<boolean> { return this.updateRecord(this.subscriptions, id, row => update(row as SubscriptionRow)) }
+  async retireGeneration(root: SubscriptionRow): Promise<void> {
+    let after: string | undefined
+    do {
+      const page = await this.subscriptions.queryRange!({ index: "identity_automation", equal: { ownerId: root.ownerId, apiOrigin: root.apiOrigin, automationId: root.automationId },
+        ...(after ? { range: { field: "id", gt: after } } : {}), direction: "asc", limit: 50 }) as SubscriptionRow[]
+      for (const row of page) if ((row.configurationGeneration ?? row.id) === (root.configurationGeneration ?? root.id)) {
+        await this.updateSubscription(row.id, fresh => fresh.state === "retired" ? null : { state: "retired", errorCode: "SUBSCRIPTION_CHANGED" })
+      }
+      after = page.length === 50 ? page.at(-1)!.id : undefined
+    } while (after)
+  }
   async getSource(subscriptionId: string, sourceKey: string): Promise<SourceRow | null> { return await this.sources.get(hash([subscriptionId, sourceKey])) as SourceRow | null }
   async closedSubscriptions(automationId: string, identity: MailTriggerIdentity): Promise<SubscriptionRow[]> {
     return await this.subscriptions.queryRange!({ index: "identity_automation_state", equal: { ...identity, automationId, state: "closed" }, direction: "asc", limit: 50 }) as SubscriptionRow[]
@@ -97,9 +122,12 @@ export class MailTriggerRepository {
     return (await this.batch({ guards: [{ namespace: this.deliveries.name, id: row.id, expected: { revision: row.revision, state: "awaiting_metadata" } }],
       operations: [{ kind: "patch", namespace: this.deliveries.name, id: row.id, patch: { receipt: { ...row.receipt, receivedAt }, state: "pending", retryAt: 0, revision: row.revision + 1 } }] })).committed
   }
-  async commitDispatch(id: string, revision: number, runId: string): Promise<boolean> {
-    return (await this.batch({ guards: [{ namespace: this.deliveries.name, id, expected: { revision, state: "pending" } }],
+  async commitDispatch(id: string, revision: number, runId: string, state: "pending" | "awaiting_metadata" = "pending"): Promise<boolean> {
+    return (await this.batch({ guards: [{ namespace: this.deliveries.name, id, expected: { revision, state } }],
       operations: [{ kind: "patch", namespace: this.deliveries.name, id, patch: { state: "submitted", runId, revision: revision + 1 } }] })).committed
+  }
+  async releaseUnstartedDispatch(id: string, runId: string): Promise<void> {
+    await this.updateRecord(this.deliveries, id, row => row.state === "submitted" && row.runId === runId ? { state: "pending", runId: undefined, retryAt: 0 } : null)
   }
   async finishDispatch(id: string, result: DeliveryOutcome): Promise<void> {
     const row = await this.deliveries.get(id)

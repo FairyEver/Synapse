@@ -36,7 +36,13 @@ export class InternalMailReceiptSource implements MailReceiptSource {
   async hydrate(context: MailTriggerContext, receipt: MailReceiptRef): Promise<PreparedMailPayload> {
     this.assert(context)
     if (!receipt.messageId) throw new Error("站内信引用无效")
-    const payload = await this.deps.read(context, receipt.messageId); this.assert(context)
-    return payload
+    try {
+      const payload = await this.deps.read(context, receipt.messageId); this.assert(context)
+      return payload
+    } catch (error) {
+      this.assert(context)
+      if ((error as { status?: unknown })?.status === 404) throw Object.assign(new Error("站内信已删除或不可访问", { cause: error }), { code: "UNAVAILABLE", status: 404 })
+      throw error
+    }
   }
 }
