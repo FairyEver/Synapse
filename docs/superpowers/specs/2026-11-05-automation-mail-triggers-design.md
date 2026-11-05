@@ -125,8 +125,7 @@
 
 | 模板 | 值 |
 | --- | --- |
-| `{{trigger.payload.id}}` | 站内信显示「站内信ID」，值为 `synapse://mail-internal/<id>`；邮件显示「邮件ID」，值为本机 `em_...` ID。与对应信件“复制 ID”的内容一致 |
-| `{{trigger.payload.messageId}}` | 当前来源的信件 ID |
+| `{{trigger.payload.id}}` | 站内信显示「站内信ID」，值为 `synapse://mail-internal/<id>`；邮件显示「邮件ID」，值为 `synapse://mail/em_...`，不暴露原始 ID 变量 |
 | `{{trigger.payload.subject}}` | 主题，可为空 |
 | `{{trigger.payload.body}}` | 正文；站内信保留原正文文本格式，外部邮件为纯文本正文 |
 | `{{trigger.payload.sender}}` | 可显示的发件人；站内信使用既有用户/系统发件人快照，外部邮件为姓名与地址 |
@@ -138,6 +137,8 @@
 | `{{trigger.payload.url}}` | 既有 `synapse://mail-internal/<id>` 或 `synapse://mail/em_<uuid>` 定位链接 |
 
 外部邮件另提供 `accountId`、`accountName`、`accountAddress`（同为 `trigger.payload.*`）。沿用通用触发时间、自动化 ID/名称等变量。`trigger.receivedAt` 表示本机事件接收时间，不能覆盖信件自身的 `trigger.payload.receivedAt`。
+
+2026-11-06 按用户要求移除 `trigger.payload.messageId` 的发现及运行时支持，不保留兼容别名；既有提示词需改用 `trigger.payload.id`。原始信件标识仅供内部收信准备、定位与去重使用，不进入执行器事件 payload。
 
 站内信不将登录邮箱猜作联系邮箱，不展开仅显示组织名或「所有用户」的隐藏实际收件名单。空正文是合法值，读取失败不能伪装为空正文。附件元数据不可确认时同样给出准备错误，不能把未知当作零附件。
 

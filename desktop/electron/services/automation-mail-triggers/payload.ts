@@ -34,7 +34,7 @@ export function buildExternalMailPayload(detail: MailDetail, body: string, accou
     url: `synapse://mail/${detail.id}`, accountId: account.id, accountName: account.name, accountAddress: account.email })
 }
 export function buildMailTriggerEvent(payload: PreparedMailPayload, discoveredAt: string): AutomationTriggerEvent {
-  const validated = validateMailPayload(payload)
+  const { messageId, ...validated } = validateMailPayload(payload)
   return { source: validated.accountId ? "mail" : "mail-internal", type: "message.received", receivedAt: discoveredAt,
-    payload: { ...validated, id: validated.accountId ? validated.messageId : buildMailMessageReference(validated.messageId) } }
+    payload: { ...validated, id: validated.accountId ? `synapse://mail/${messageId}` : buildMailMessageReference(messageId) } }
 }

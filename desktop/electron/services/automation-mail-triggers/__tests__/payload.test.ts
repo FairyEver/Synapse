@@ -26,13 +26,17 @@ it("accepts an empty body but never treats missing or oversized content as a com
 
 it.each([
   { manifest: mailInternalReceivedManifest, label: "站内信ID", messageId: "letter", accountId: undefined, expected: "synapse://mail-internal/letter" },
-  { manifest: mailReceivedManifest, label: "邮件ID", messageId: "em_one", accountId: "account", expected: "em_one" },
-])("renders $label exactly as Copy ID while preserving the raw messageId", ({ manifest, label, messageId, accountId, expected }) => {
-  const payload = { ...buildInternalMailPayload(message), messageId, accountId }
+  { manifest: mailReceivedManifest, label: "邮件ID", messageId: "em_one", accountId: "account", expected: "synapse://mail/em_one" },
+])("renders $label as a typed reference without exposing the retired messageId variable", ({ manifest, label, messageId, accountId, expected }) => {
+  const payload = { ...buildInternalMailPayload(message), messageId, accountId, url: expected }
   const event = buildMailTriggerEvent(payload, "2026-11-06T02:00:00.000Z")
   const variables = buildAutomationTemplateVariables({ triggerType: manifest.id, triggerConfig: {}, automationId: "auto", automationName: "auto", triggeredBy: "trigger", triggeredAt: event.receivedAt, scheduledAt: event.receivedAt, event })
   const descriptor = manifest.variables.find(variable => variable.label === label)
   expect(descriptor).toBeDefined()
   expect(renderActionTemplate(`{{${descriptor!.key}}}`, variables)).toBe(expected)
-  expect(variables["trigger.payload.messageId"]).toBe(messageId)
+  expect(manifest.variables.some(variable => variable.key === "trigger.payload.messageId")).toBe(false)
+  expect(event.payload).not.toHaveProperty("messageId")
+  expect(variables["trigger.payload.messageId"]).toBeUndefined()
+  expect(JSON.parse(variables["trigger.payload"]!)).not.toHaveProperty("messageId")
+  expect(() => renderActionTemplate("{{trigger.payload.messageId}}", variables)).toThrow("未知变量：trigger.payload.messageId")
 })
