@@ -13,6 +13,8 @@ import type {
   MdastInlineHTMLNode,
 } from '@mdxeditor/editor'
 
+type HtmlBreak = { readonly type: 'html'; readonly value: string }
+
 type LexicalEditor = ReturnType<typeof lexical.createEditor>
 
 export const tableCellLineBreakPlugin = realmPlugin({
@@ -34,13 +36,16 @@ export class TableCellLineBreakNode extends lexical.LineBreakNode {
   }
 }
 
-export const tableCellLineBreakImportVisitor: MdastImportVisitor<MdastInlineHTMLNode> = {
+export const tableCellLineBreakImportVisitor: MdastImportVisitor<MdastInlineHTMLNode | HtmlBreak> = {
   testNode: (node) => (
-    node.type === 'mdxJsxTextElement' && node.name === 'br'
+    (node.type === 'mdxJsxTextElement' && node.name === 'br')
+    || (node.type === 'html' && /^<br\s*\/?\s*>$/iu.test(node.value.trim()))
   ),
   visitNode({ lexicalParent }) {
     if (!lexical.$isElementNode(lexicalParent)) return
-    lexicalParent.append($createTableCellLineBreakNode())
+    const lineBreak = $createTableCellLineBreakNode()
+    if (lexicalParent.getType() === 'root') lexicalParent.append(lexical.$createParagraphNode().append(lineBreak))
+    else lexicalParent.append(lineBreak)
   },
   priority: 100,
 }

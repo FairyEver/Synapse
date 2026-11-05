@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { commonMarkEditorProps } from './mdxeditor-commonmark-config'
+
 import { act, createRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -174,7 +176,7 @@ describe('MDXEditor comment text integration', () => {
 
     await act(async () => {
       root?.render(
-        <MDXEditor
+        <MDXEditor {...commonMarkEditorProps}
           ref={editorRef}
           markdown={prepared.markdown}
           toMarkdownOptions={commonMarkToMarkdownOptions}
@@ -210,7 +212,7 @@ describe('MDXEditor comment text integration', () => {
     expect(roundTripped).toMatch(
       /[*-](?: \[[ xX]\])? loose first\n\s*\n\s+loose second/u
     )
-    expect(roundTripped).toMatch(/<div>\n\s+raw block html\n<\/div>/u)
+    expect(roundTripped).toContain('<div>\nraw block html\n</div>')
     expect(roundTripped).toContain('Before break\\\nAfter break')
   })
 })

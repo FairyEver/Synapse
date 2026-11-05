@@ -86,10 +86,9 @@ import {
 } from './drive-document-editor-comments'
 import type { DriveRendererEditContext } from './drive-renderer-shell'
 import {
-  commonMarkTextCompatibilityPlugin,
-  commonMarkToMarkdownOptions,
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
+import { commonMarkEditorPlugins, commonMarkEditorProps } from './mdxeditor-commonmark-config'
 import { mdxEditorCommentObserverPlugin } from './mdxeditor-comment-observer-plugin'
 import { useDriveMdxEditorOutline } from './mdxeditor-outline'
 import { orderedListStartPlugin } from './mdxeditor-ordered-list-start-plugin'
@@ -423,7 +422,7 @@ export function DriveMDXeditorRenderer({
       }),
       headingsPlugin(),
       listsPlugin(),
-      orderedListStartPlugin(),
+      ...(usesMdxSyntax ? [orderedListStartPlugin()] : []),
       quotePlugin(),
       thematicBreakPlugin(),
       linkPlugin({ disableAutoLink: true }),
@@ -432,9 +431,9 @@ export function DriveMDXeditorRenderer({
         imageUploadHandler: handleDocumentImageUpload,
         imagePreviewHandler: resolveImagePreview,
       }),
-      trailingImageParagraphPlugin(),
+      ...(usesMdxSyntax ? [trailingImageParagraphPlugin()] : []),
       tablePlugin(),
-      tableCellLineBreakPlugin(),
+      ...(usesMdxSyntax ? [tableCellLineBreakPlugin()] : []),
       codeBlockPlugin(),
       codeMirrorPlugin(),
       ...(usesMdxSyntax
@@ -444,7 +443,7 @@ export function DriveMDXeditorRenderer({
             }),
           ]
         : []),
-      ...(!usesMdxSyntax ? [commonMarkTextCompatibilityPlugin()] : []),
+      ...(!usesMdxSyntax ? commonMarkEditorPlugins() : []),
       diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
       mdxEditorCommentObserverPlugin({
         onEditorUpdate: handleEditorUpdate,
@@ -479,7 +478,9 @@ export function DriveMDXeditorRenderer({
     await lifecycle.save({
       blocked: uploadingImage,
       prepare: (submittedValue) => {
-        const normalizedValue = normalizeMdxEditorImageMarkdown(submittedValue)
+        const normalizedValue = usesMdxSyntax
+          ? normalizeMdxEditorImageMarkdown(submittedValue)
+          : submittedValue
         return {
           text: normalizedValue,
           savedValue: normalizedValue,
@@ -677,13 +678,11 @@ export function DriveMDXeditorRenderer({
       </div>
     ) : (
       <MDXEditor
+        {...(!usesMdxSyntax ? commonMarkEditorProps : {})}
         ref={editorRef}
         markdown={value}
         readOnly={!canEdit}
         onError={handleEditorError}
-        toMarkdownOptions={
-          usesMdxSyntax ? undefined : commonMarkToMarkdownOptions
-        }
         onChange={(nextValue, initialMarkdownNormalize) => {
           if (!canEdit) return
           const matchesExternalMarkdownTarget =

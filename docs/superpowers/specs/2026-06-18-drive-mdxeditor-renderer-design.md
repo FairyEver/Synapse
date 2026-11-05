@@ -33,6 +33,12 @@ This is an adapter for the current Drive render pipeline. It is not a new deskto
 - Ordered lists must use structure-derived hierarchical decimal markers in both rich editing and rendered preview: top-level items render as `1.`, `2.`, while nested ordered items render as `2.1`, `2.2`, `2.2.1`. Unordered ancestors do not add a numbering level, explicit `start` values remain authoritative, and generated markers must never enter Markdown serialization.
 - In MDXEditor tables, `Enter` keeps the existing next-row cell navigation and `Shift + Enter` inserts an inline `<br />` break in the current cell.
 
+## Ordinary Markdown parsing update (2026-11-05)
+
+This section supersedes the ordinary Markdown JSX workarounds above. Ordinary `.md`, `.markdown`, Markdown MIME documents and message bodies share `suppressHtmlProcessing: true`, CommonMark serialization and compatibility plugins. Comparisons, generics and autolinks are no longer rewritten for JSX parsing. HTML comments are preserved invisibly; unsupported HTML is retained as inert source, not executed, and excluded from precise comment mapping. Simple images retain relative source URLs and supported breaks remain editable. Ordinary Markdown saves preserve HTML source rather than normalizing it with the MDX image regular expression. Mixed plain/task lists retain source fallback. `.mdx` continues using the existing JSX/expressions and top-level ESM fallback.
+
+Regression coverage uses real MDXEditor import, edit, export and reopen cycles, plus the actual message composer. See [CommonMark editor design](2026-11-05-drive-commonmark-editor-design.md).
+
 ## Non-Goals
 
 - Do not build a separate desktop Markdown editor.

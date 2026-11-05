@@ -45,13 +45,9 @@ import {
   useDriveDocumentImageUpload,
 } from './renderers/drive-document-image-upload'
 import {
-  commonMarkTextCompatibilityPlugin,
-  commonMarkToMarkdownOptions,
   prepareCommonMarkForMdxEditor,
 } from './renderers/mdxeditor-commonmark-compatibility-plugin'
-import { orderedListStartPlugin } from './renderers/mdxeditor-ordered-list-start-plugin'
-import { tableCellLineBreakPlugin } from './renderers/mdxeditor-table-cell-line-break-plugin'
-import { trailingImageParagraphPlugin } from './renderers/mdxeditor-trailing-image-plugin'
+import { commonMarkEditorPlugins, commonMarkEditorProps } from './renderers/mdxeditor-commonmark-config'
 import { mdxEditorZhCnTranslation } from './renderers/mdxeditor-zh-cn'
 const observeViewMode = realmPlugin<{
   readonly onChange: (mode: ViewMode) => void
@@ -219,7 +215,6 @@ export function DriveMessageRichComposer({
       }),
       headingsPlugin(),
       listsPlugin(),
-      orderedListStartPlugin(),
       quotePlugin(),
       thematicBreakPlugin(),
       linkPlugin({ disableAutoLink: true }),
@@ -228,12 +223,10 @@ export function DriveMessageRichComposer({
         disableImageResize: true,
         disableImageSettingsButton: true,
       }),
-      trailingImageParagraphPlugin(),
       tablePlugin(),
-      tableCellLineBreakPlugin(),
       codeBlockPlugin(),
       codeMirrorPlugin(),
-      commonMarkTextCompatibilityPlugin(),
+      ...commonMarkEditorPlugins(),
       diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
       observeViewMode({ onChange: handleModeChange }),
       markdownShortcutPlugin(),
@@ -283,6 +276,7 @@ export function DriveMessageRichComposer({
           ) : (
             <div className='rounded-md border'>
               <MDXEditor
+                {...commonMarkEditorProps}
                 ref={editorRef}
                 autoFocus
                 placeholder='写下留言…'
@@ -290,7 +284,6 @@ export function DriveMessageRichComposer({
                 plugins={plugins}
                 readOnly={busy}
                 translation={mdxEditorZhCnTranslation}
-                toMarkdownOptions={commonMarkToMarkdownOptions}
                 contentEditableClassName='drive-mdxeditor-content min-h-24 max-h-72 overflow-y-auto px-3 py-2'
                 onChange={(markdown, initialNormalize) => {
                   if (!initialNormalize) onChange(markdown)

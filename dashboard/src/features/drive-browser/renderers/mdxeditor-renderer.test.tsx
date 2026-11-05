@@ -802,9 +802,18 @@ describe('DriveMDXeditorRenderer', () => {
     expect(document.body.textContent).toContain('已同步')
   })
 
-  it('normalizes mdxeditor html image output before saving', async () => {
+  it('saves ordinary Markdown HTML source without dropping image attributes or following content', async () => {
     const editContext = createEditContext()
     renderRenderer({ edit: editable(), editContext })
+    const markdown = '<img src="./chart.png" data-caption="原始属性">\n\n<!-- 保留注释 -->\n\n尾部内容'
+    await inputValue(editor(), markdown)
+    await click(buttonWithText('保存'))
+    expect(editContext.saveText).toHaveBeenCalledWith({ text: markdown, baseVersionId: 'version-1' })
+  })
+
+  it('normalizes MDX html image output before saving', async () => {
+    const editContext = createEditContext()
+    renderRenderer({ current: { ...baseCurrent(), name: 'notes.mdx' }, edit: editable(), editContext })
 
     await inputValue(
       editor(),
@@ -824,7 +833,7 @@ describe('DriveMDXeditorRenderer', () => {
 
   it('does not normalize html image examples inside inline or fenced code', async () => {
     const editContext = createEditContext()
-    renderRenderer({ edit: editable(), editContext })
+    renderRenderer({ current: { ...baseCurrent(), name: 'notes.mdx' }, edit: editable(), editContext })
     const markdown = [
       '# Notes',
       '',
@@ -1440,7 +1449,7 @@ describe('DriveMDXeditorRenderer', () => {
     expect(editor().value).toBe('![diagram](./images/diagram.png)')
   })
 
-  it('normalizes bare break tags for MDX without changing code examples', () => {
+  it('keeps CommonMark break tags and code examples unchanged', () => {
     renderRenderer({
       preview: {
         ...basePreview(),
@@ -1462,7 +1471,7 @@ describe('DriveMDXeditorRenderer', () => {
       [
         '| 写法 | 表格内容 |',
         '| --- | --- |',
-        '| `<br>` | 借：管理费用<br />贷：应付职工薪酬 |',
+        '| `<br>` | 借：管理费用<br>贷：应付职工薪酬 |',
         '| `<br/>` | 借：应付职工薪酬<br/>贷：银行存款 |',
         '| `<br />` | 第一行<br />第二行 |',
         '',
@@ -1479,7 +1488,7 @@ describe('DriveMDXeditorRenderer', () => {
       preview: { ...basePreview(), text: '金额 <= 1000' },
     })
 
-    expect(editor().value).toBe('金额 \\<= 1000')
+    expect(editor().value).toBe('金额 <= 1000')
     expect(editor().dataset.commonmarkOptions).toBe('commonmark')
     expect(document.body.textContent).not.toContain('解析失败')
   })
@@ -1494,9 +1503,9 @@ describe('DriveMDXeditorRenderer', () => {
 
     expect(editor().value).toBe(
       [
-        '[https://example.com/path?q=1](<https://example.com/path?q=1>)',
+        '<https://example.com/path?q=1>',
         '',
-        '[user@example.com](<mailto:user@example.com>)',
+        '<user@example.com>',
       ].join('\n')
     )
     expect(document.body.textContent).not.toContain('解析失败')

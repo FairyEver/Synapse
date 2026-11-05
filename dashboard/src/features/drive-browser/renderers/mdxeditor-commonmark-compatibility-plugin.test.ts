@@ -1,68 +1,15 @@
 import {
-  addExportVisitor$,
-  addImportVisitor$,
-  addLexicalNode$,
-  addMdastExtension$,
-  addSyntaxExtension$,
   lexical,
 } from '@mdxeditor/editor'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  commonMarkLessThanOrEqualSyntaxExtension,
-  commonMarkHtmlCommentFromMarkdownExtension,
-  commonMarkTextCompatibilityPlugin,
   commonMarkToMarkdownOptions,
-  htmlCommentExportVisitor,
-  htmlCommentImportVisitor,
-  HtmlCommentNode,
-  CommentExcludedHtmlBlockNode,
-  commentExcludedHtmlBlockImportVisitor,
-  commonMarkHardBreakExportVisitor,
   CommentExcludedParagraphBreakNode,
   commentAwareParagraphImportVisitor,
-  commentExcludedParagraphBreakExportVisitor,
   prepareCommonMarkForMdxEditor,
 } from './mdxeditor-commonmark-compatibility-plugin'
 
 describe('MDXEditor CommonMark compatibility', () => {
-  it('registers the text syntax extension with MDXEditor', () => {
-    const pub = vi.fn()
-    const plugin = commonMarkTextCompatibilityPlugin()
-
-    plugin.init?.({ pub } as never)
-
-    expect(pub).toHaveBeenCalledWith(addSyntaxExtension$, commonMarkLessThanOrEqualSyntaxExtension)
-    expect(pub).toHaveBeenCalledWith(addMdastExtension$, commonMarkHtmlCommentFromMarkdownExtension)
-    expect(pub).toHaveBeenCalledWith(addLexicalNode$, HtmlCommentNode)
-    expect(pub).toHaveBeenCalledWith(addLexicalNode$, CommentExcludedHtmlBlockNode)
-    expect(pub).toHaveBeenCalledWith(addLexicalNode$, CommentExcludedParagraphBreakNode)
-    expect(pub).toHaveBeenCalledWith(addImportVisitor$, htmlCommentImportVisitor)
-    expect(pub).toHaveBeenCalledWith(addImportVisitor$, commentExcludedHtmlBlockImportVisitor)
-    expect(pub).toHaveBeenCalledWith(addImportVisitor$, commentAwareParagraphImportVisitor)
-    expect(pub).toHaveBeenCalledWith(addExportVisitor$, htmlCommentExportVisitor)
-    expect(pub).toHaveBeenCalledWith(addExportVisitor$, commonMarkHardBreakExportVisitor)
-    expect(pub).toHaveBeenCalledWith(addExportVisitor$, commentExcludedParagraphBreakExportVisitor)
-  })
-
-  it('claims a less-than sign only when it starts a less-than-or-equal operator', () => {
-    const tokenize = syntaxTokenizer()
-    const effects = {
-      enter: vi.fn(),
-      consume: vi.fn(),
-      exit: vi.fn(),
-    }
-    const ok = vi.fn()
-    const nok = vi.fn()
-    const afterLessThan = tokenize(effects as never, ok as never, nok as never)(60)
-
-    expect(effects.enter).toHaveBeenCalledWith('data')
-    expect(effects.consume).toHaveBeenCalledWith(60)
-    afterLessThan(61)
-    expect(effects.exit).toHaveBeenCalledWith('data')
-    expect(ok).toHaveBeenCalledWith(61)
-    expect(nok).not.toHaveBeenCalled()
-  })
-
   it('keeps less-than-or-equal text unescaped when exporting ordinary Markdown', () => {
     const handler = commonMarkToMarkdownOptions.handlers?.text
     if (!handler) throw new Error('text handler not found')
@@ -76,7 +23,7 @@ describe('MDXEditor CommonMark compatibility', () => {
     )).toBe('金额 <= 1000')
   })
 
-  it('normalizes CommonMark autolinks and comparisons only outside code', () => {
+  it('keeps CommonMark autolinks, comparisons, and code unchanged', () => {
     const source = [
       '<https://example.com/a?q=1>',
       '联系 <user@example.com>，金额 <= 1000。',
@@ -91,23 +38,12 @@ describe('MDXEditor CommonMark compatibility', () => {
     ].join('\n')
 
     expect(prepareCommonMarkForMdxEditor(source)).toEqual({
-      markdown: [
-        '[https://example.com/a?q=1](<https://example.com/a?q=1>)',
-        '联系 [user@example.com](<mailto:user@example.com>)，金额 \\<= 1000。',
-        '[现有链接](<https://example.com/existing>)',
-        '',
-        '`<https://example.com/code> <=`',
-        '',
-        '```md',
-        '<https://example.com/fenced>',
-        '<= 2000',
-        '```',
-      ].join('\n'),
+      markdown: source,
       requiresSourceMode: false,
     })
   })
 
-  it('escapes programming-language generics only for rich-text parsing', () => {
+  it('does not rewrite generics or HTML for JSX parsing', () => {
     const source = [
       'Controller 返回 CommonResult<PageResult<VehicleCallOrderRespVO>>。',
       '字段为 List<OrderDTO> orderList 和 Map<String, List<OrderDTO>>。',
@@ -122,18 +58,7 @@ describe('MDXEditor CommonMark compatibility', () => {
     ].join('\n')
 
     expect(prepareCommonMarkForMdxEditor(source)).toEqual({
-      markdown: [
-        'Controller 返回 CommonResult\\<PageResult\\<VehicleCallOrderRespVO>>。',
-        '字段为 List\\<OrderDTO> orderList 和 Map\\<String, List\\<OrderDTO>>。',
-        '普通比较 a<b 保持不变。',
-        '<span>raw html</span>',
-        '',
-        '`CommonResult<PageResult<VehicleCallOrderRespVO>>`',
-        '',
-        '```java',
-        'CommonResult<PageResult<VehicleCallOrderRespVO>> result;',
-        '```',
-      ].join('\n'),
+      markdown: source,
       requiresSourceMode: false,
     })
   })
@@ -198,15 +123,7 @@ describe('MDXEditor CommonMark compatibility', () => {
     ].join('\n')
 
     expect(prepareCommonMarkForMdxEditor(markdown)).toEqual({
-      markdown: [
-        '第一行<br />第二行',
-        '',
-        '`<br>`',
-        '',
-        '```html',
-        '<br>',
-        '```',
-      ].join('\n'),
+      markdown,
       requiresSourceMode: false,
     })
   })
@@ -264,10 +181,3 @@ describe('MDXEditor CommonMark compatibility', () => {
     }, { discrete: true })
   })
 })
-
-function syntaxTokenizer() {
-  const construct = commonMarkLessThanOrEqualSyntaxExtension.text?.[60]
-  const tokenizer = Array.isArray(construct) ? construct[0]?.tokenize : construct?.tokenize
-  if (!tokenizer) throw new Error('less-than-or-equal tokenizer not found')
-  return tokenizer
-}

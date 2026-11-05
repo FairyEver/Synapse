@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { commonMarkEditorProps } from './mdxeditor-commonmark-config'
+
 import { act, createRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -99,7 +101,7 @@ describe('MDXEditor list integration', () => {
 
     await act(async () => {
       root?.render(
-        <MDXEditor
+        <MDXEditor {...commonMarkEditorProps}
           ref={editorRef}
           markdown={markdown}
           onError={onError}
@@ -139,7 +141,7 @@ describe('MDXEditor list integration', () => {
 
     await act(async () => {
       root?.render(
-        <MDXEditor
+        <MDXEditor {...commonMarkEditorProps}
           ref={editorRef}
           markdown={prepared.markdown}
           onError={onError}
@@ -176,7 +178,7 @@ describe('MDXEditor list integration', () => {
 
     await act(async () => {
       root?.render(
-        <MDXEditor
+        <MDXEditor {...commonMarkEditorProps}
           ref={editorRef}
           markdown={markdown}
           onChange={onChange}
@@ -213,7 +215,7 @@ describe('MDXEditor list integration', () => {
 
     await act(async () => {
       root?.render(
-        <MDXEditor
+        <MDXEditor {...commonMarkEditorProps}
           ref={editorRef}
           markdown={prepared.markdown}
           onError={onError}
@@ -256,7 +258,7 @@ describe('MDXEditor list integration', () => {
 
     await act(async () => {
       root?.render(
-        <MDXEditor
+        <MDXEditor {...commonMarkEditorProps}
           ref={editorRef}
           markdown={markdown}
           onError={onError}
@@ -306,7 +308,7 @@ describe('MDXEditor list integration', () => {
 
     await act(async () => {
       root?.render(
-        <MDXEditor
+        <MDXEditor {...commonMarkEditorProps}
           ref={editorRef}
           markdown={prepared.markdown}
           onError={onError}

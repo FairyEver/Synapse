@@ -262,6 +262,8 @@ export function createDriveEditorTextModel(
 function isEditorPlaceholderBreak(node: HTMLElement): boolean {
   const parent = node.parentElement
   if (!parent || parent.tagName !== 'P') return false
+  if (!node.nextSibling && node.previousSibling instanceof HTMLElement
+    && node.previousSibling.dataset.driveMarkdownHtmlSource === 'true') return true
   const siblings = Array.from(parent.childNodes).filter((sibling) => sibling !== node)
   if (siblings.length === 0) return true
   return siblings.every((sibling) => (
