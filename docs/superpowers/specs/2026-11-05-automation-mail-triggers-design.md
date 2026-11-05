@@ -125,6 +125,7 @@
 
 | 模板 | 值 |
 | --- | --- |
+| `{{trigger.payload.id}}` | 站内信显示「站内信ID」，值为 `synapse://mail-internal/<id>`；邮件显示「邮件ID」，值为本机 `em_...` ID。与对应信件“复制 ID”的内容一致 |
 | `{{trigger.payload.messageId}}` | 当前来源的信件 ID |
 | `{{trigger.payload.subject}}` | 主题，可为空 |
 | `{{trigger.payload.body}}` | 正文；站内信保留原正文文本格式，外部邮件为纯文本正文 |

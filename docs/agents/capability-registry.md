@@ -379,13 +379,15 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 自动化收信触发器（2026-11-05）
 
-| Trigger ID | 名称 | 配置 |
-| --- | --- | --- |
-| `builtin.cron` | Cron | 保持现有配置 |
-| `builtin.interval` | 固定间隔 | 保持现有配置 |
-| `builtin.webhook` | Webhook | 保持现有配置 |
-| `builtin.mail-internal-received` | 收到站内信 | 严格空对象 |
-| `builtin.mail-received` | 收到邮件 | 可选 accountId；缺省全部邮箱账号 |
+| Trigger ID | 名称 | 配置 | 信件 ID 变量 |
+| --- | --- | --- | --- |
+| `builtin.cron` | Cron | 保持现有配置 | — |
+| `builtin.interval` | 固定间隔 | 保持现有配置 | — |
+| `builtin.webhook` | Webhook | 保持现有配置 | — |
+| `builtin.mail-internal-received` | 收到站内信 | 严格空对象 | `trigger.payload.id`，站内信ID，与复制 ID 的类型引用一致 |
+| `builtin.mail-received` | 收到邮件 | 可选 accountId；缺省全部邮箱账号 | `trigger.payload.id`，邮件ID，与复制 ID 的本机标识一致 |
+
+2026-11-06 新增上述 ID 变量，由既有触发器发现同时提供给界面和 MCP；保留原始 `trigger.payload.messageId` 和链接变量。触发器仍为 5 项，Automation 仍为 14 项 capability / MCP 索引，其余注册数量与例外不变；不新增权限、存储字段或迁移。
 
 Automation Trigger 从 3 项增至 5 项；复用既有 14 项 Automation capability / MCP 索引，执行器沿用 Agent 和 Claude Code。公开 MCP 仍仅 search / invoke；本次全局 capability / MCP 数量无增量，System App、Dock、Workflow Node、Automation Action、Deep Link 均不新增。现有触发器发现返回两种新 schema 与正文等变量。
 

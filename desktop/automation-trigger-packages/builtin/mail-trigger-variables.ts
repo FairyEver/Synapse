@@ -2,6 +2,7 @@ import type { AutomationTriggerVariableDescriptor } from "../types.shared"
 
 export function mailTriggerVariables(external: boolean): AutomationTriggerVariableDescriptor[] {
   const common = [
+    ["id", external ? "邮件ID" : "站内信ID"],
     ["messageId", "信件 ID"], ["subject", "主题"], ["body", "正文"], ["sender", "发件人"], ["to", "收件人"], ["cc", "抄送人"],
     ["receivedAt", "收信时间"], ["attachmentCount", "附件数量"], ["attachments", "附件信息"], ["url", "信件链接"],
   ]
