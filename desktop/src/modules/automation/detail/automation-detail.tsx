@@ -4,6 +4,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
 import { sanitizeUrl } from "@/lib/url-sanitize"
+import { useProviderModelLabel } from "@/lib/provider-model"
 import { Switch } from "@/components/ui/switch"
 import { useMailTriggerAccounts } from "../../../../automation-trigger-packages/builtin/mail-received/use-mail-accounts"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +18,7 @@ import type { AutomationItem } from "@/types/automation"
 import { AutomationRunsPanel } from "../components/automation-runs-dialog"
 import type { AutomationEditorStep } from "../types"
 import { formatAutomationExecutor, formatAutomationExecutorType, formatAutomationNextRun, formatAutomationScope, formatAutomationTrigger, formatAutomationTriggerType } from "../utils"
-import { buildAutomationConfigurationFields } from "./configuration-fields"
+import { buildAutomationConfigurationFields, getAutomationProviderModelSelection } from "./configuration-fields"
 
 type AutomationDetailProps = {
   readonly item: AutomationItem
@@ -41,6 +42,8 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
   const { accounts } = useMailTriggerAccounts(item.trigger.type === "builtin.mail-received")
   const triggerConfig = item.trigger.type === "builtin.mail-received" ? { ...item.trigger.config, accountId: item.trigger.config.accountId ?? "__all__" } : item.trigger.config
   const projects = config.global.projects
+  const providerSelection = getAutomationProviderModelSelection(item.executor.config)
+  const providerModelLabel = useProviderModelLabel(providerSelection)
   const legacy = item.schemaVersion === 1
   const TriggerIcon = rendererAutomationTriggerRegistry.list().find(trigger => trigger.manifest.id === item.trigger.type)?.icon ?? Zap
   const ExecutorIcon = rendererActionRegistry.list().find(action => action.manifest.id === item.executor.type)?.icon ?? Play
@@ -49,7 +52,7 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
     : item
   const sections = [
     { key: "trigger", title: "触发条件", type: formatAutomationTriggerType(item), summary: formatAutomationTrigger(item), fields: buildAutomationConfigurationFields(triggerConfig, projects, accounts), icon: <TriggerIcon /> },
-    { key: "executor", title: "执行操作", type: formatAutomationExecutorType(item), summary: item.executor.type === "builtin.claude-code" ? "" : formatAutomationExecutor(displayItem), fields: buildAutomationConfigurationFields(item.executor.config, projects), icon: <ExecutorIcon /> },
+    { key: "executor", title: "执行操作", type: formatAutomationExecutorType(item), summary: item.executor.type === "builtin.claude-code" ? "" : formatAutomationExecutor(displayItem), fields: buildAutomationConfigurationFields(item.executor.config, projects, [], providerSelection ? providerModelLabel || "加载中…" : undefined), icon: <ExecutorIcon /> },
   ] as const
   const policyFields = [
     ["范围", formatAutomationScope(item, projects)],

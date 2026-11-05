@@ -1,6 +1,7 @@
 import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
 import { sanitizeUrl } from "@/lib/url-sanitize"
 import type { SynapseProjectConfig } from "@/types/config"
+import { MODEL_TIERS, type ProviderModelSelection } from "@/types/provider-model"
 
 export type AutomationConfigurationField = { key: string; label: string; value: string }
 
@@ -42,8 +43,23 @@ function formatValue(key: string, value: unknown, projects: readonly SynapseProj
 }
 
 /** Read-only projection of registry-owned config; no form rendering or runtime type dispatch. */
-export function buildAutomationConfigurationFields(config: Record<string, unknown>, projects: readonly SynapseProjectConfig[], accounts: readonly { id: string; name: string }[] = []): AutomationConfigurationField[] {
+export function buildAutomationConfigurationFields(config: Record<string, unknown>, projects: readonly SynapseProjectConfig[], accounts: readonly { id: string; name: string }[] = [], providerModelLabel?: string): AutomationConfigurationField[] {
   return Object.entries(config)
-    .filter(([key, value]) => value !== undefined && value !== "" && !(key === "providerId" && config.providerName))
-    .map(([key, value]) => ({ key, label: labels[key] ?? key, value: formatValue(key, value, projects, accounts) }))
+    .filter(([key, value]) => value !== undefined && value !== "" && (providerModelLabel
+      ? !["providerName", "modelName", "modelTier"].includes(key)
+      : !(key === "providerId" && config.providerName)))
+    .map(([key, value]) => key === "providerId" && providerModelLabel
+      ? { key, label: "供应商和模型", value: providerModelLabel }
+      : { key, label: labels[key] ?? key, value: formatValue(key, value, projects, accounts) })
+}
+
+export function getAutomationProviderModelSelection(config: Record<string, unknown>): ProviderModelSelection | null {
+  const modelTier = MODEL_TIERS.find(tier => tier === config.modelTier)
+  if (typeof config.providerId !== "string" || !config.providerId || !modelTier) return null
+  return {
+    providerId: config.providerId,
+    modelTier,
+    ...(typeof config.providerName === "string" ? { providerName: config.providerName } : {}),
+    ...(typeof config.modelName === "string" ? { modelName: config.modelName } : {}),
+  }
 }

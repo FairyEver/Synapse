@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest"
-import { buildAutomationConfigurationFields } from "../configuration-fields"
+import { buildAutomationConfigurationFields, getAutomationProviderModelSelection } from "../configuration-fields"
 import { validateChangedTriggerVariables } from "../../utils"
 import type { AutomationEditorDraft } from "../../types"
 
 describe("automation read-only configuration", () => {
+  it.each([
+    { providerId: "provider-1" },
+    { modelTier: "haiku" },
+    { providerId: "provider-1", modelTier: "unknown-tier" },
+  ])("preserves incomplete or unknown provider fields without resolving a selection: %j", (config) => {
+    expect(getAutomationProviderModelSelection(config)).toBeNull()
+    expect(buildAutomationConfigurationFields(config, []).map(field => field.key)).toEqual(Object.keys(config))
+  })
+
   it("shows readable project, schedule and session values without rendering form controls", () => {
     const fields = buildAutomationConfigurationFields({ projectId: "project-1", activeDays: [1, 3, 5], timeRange: { start: "08:00", end: "17:00" }, sessionPolicy: "resume", prompt: "first line\nsecond line" }, [{ id: "project-1", name: "项目一", path: "/example/project" }])
     expect(fields).toEqual([
