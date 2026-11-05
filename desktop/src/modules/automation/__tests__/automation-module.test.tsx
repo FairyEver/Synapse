@@ -373,7 +373,7 @@ describe("AutomationModule", () => {
     })
 
     expect(document.querySelector('input[aria-label="自动化名称"]')).toBeNull()
-    expect(document.body.textContent).toContain("何时触发？")
+    expect(document.querySelector('[aria-current="step"]')?.textContent).toContain("触发条件")
     expect(mocks.openCreateEditorWindow).not.toHaveBeenCalled()
   })
 
@@ -388,7 +388,7 @@ describe("AutomationModule", () => {
       expect(header().querySelectorAll("button")).toHaveLength(1)
       expect(header().querySelector('[aria-label="返回自动化列表"]')).not.toBeNull()
       expect(header().textContent).toBe("")
-      expect(document.body.textContent).toContain("何时触发？")
+      expect(document.querySelector('[aria-current="step"]')?.textContent).toContain("触发条件")
     }
     const checkList = () => {
       expect(header().textContent).toContain("新建")

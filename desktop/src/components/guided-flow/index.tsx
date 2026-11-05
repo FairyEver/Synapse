@@ -14,8 +14,9 @@ export interface GuidedChoice {
 }
 
 /** 单选决策：默认更新草稿；onSelect 使用按钮立即确认选择，由业务 hook 推进。 */
-export function GuidedChoices({ title, value, options, onChange, onSelect, disabled = false }: {
+export function GuidedChoices({ title, value, options, onChange, onSelect, disabled = false, hideTitle = false }: {
   readonly title: string
+  readonly hideTitle?: boolean
   readonly value: string
   readonly options: readonly GuidedChoice[]
   readonly onSelect?: (value: string) => void
@@ -25,7 +26,7 @@ export function GuidedChoices({ title, value, options, onChange, onSelect, disab
   const id = useId()
   return (
     <FieldSet disabled={disabled}>
-      <FieldLegend id={`${id}-title`}>{title}</FieldLegend>
+      <FieldLegend id={`${id}-title`} className={hideTitle ? "sr-only" : undefined}>{title}</FieldLegend>
       {onSelect ? <div className="grid gap-3" role="group" aria-labelledby={`${id}-title`}>
         {options.map((option, index) => <Button key={option.value} type="button" variant="outline"
           className="h-auto w-full justify-start gap-3 whitespace-normal px-4 py-4 text-left"
@@ -83,21 +84,21 @@ export function GuidedFlow({ title, step, steps, children, busy, nextLabel = "�
   if (layout === "page") {
     return (
       <div className="min-w-0" data-layout="guided-flow-page">
-        <h1 className="mb-7 text-2xl font-semibold">{title}</h1>
+        <h1 className="sr-only">{title}</h1>
         <p ref={heading} tabIndex={-1} className="sr-only" aria-live="polite">
           第 {index + 1} 步 / 共 {steps.length} 步 · {steps[index]?.title}
         </p>
-        <ol className="mb-8 flex items-center gap-4" aria-label="配置步骤">
+        <ol className="mb-5 flex w-fit max-w-full items-center gap-3" aria-label="配置步骤">
           {steps.map((entry, entryIndex) => (
             <li key={entry.id} aria-current={entry.id === step ? "step" : undefined}
-              className="flex min-w-0 flex-1 items-center gap-3 last:flex-none">
+              className="flex min-w-0 items-center gap-2">
               <span className={entryIndex <= index
-                ? "flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground"
-                : "flex size-7 shrink-0 items-center justify-center rounded-full border text-xs text-muted-foreground"}>
+                ? "flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground"
+                : "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs text-muted-foreground"}>
                 {entryIndex < index ? <Check className="size-3.5" /> : entryIndex + 1}
               </span>
               <span className={entryIndex <= index ? "text-sm font-medium" : "text-sm text-muted-foreground"}>{entry.title}</span>
-              {entryIndex < steps.length - 1 ? <span className="h-px min-w-2 flex-1 bg-border" /> : null}
+              {entryIndex < steps.length - 1 ? <span aria-hidden="true" className="h-px w-8 shrink-0 bg-border" /> : null}
             </li>
           ))}
         </ol>

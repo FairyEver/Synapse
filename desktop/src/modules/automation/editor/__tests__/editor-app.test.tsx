@@ -473,7 +473,8 @@ describe("AutomationEditorApp", () => {
     await act(async () => { findButtonContaining("固定间隔")!.click() })
     expect(document.querySelector('[role="alertdialog"]')).not.toBeNull()
     await act(async () => { Array.from(document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')).find(button => button.textContent === "取消")!.click() })
-    await act(async () => { findButtonContaining("取消更换")!.click() })
+    expect(findButtonContaining("取消更换")).toBeUndefined()
+    await act(async () => { findButtonContaining("Cron")!.click() })
     expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
   })
 

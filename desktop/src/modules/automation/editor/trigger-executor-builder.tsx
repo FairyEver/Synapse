@@ -85,8 +85,7 @@ export function TriggerExecutorBuilder({ step, choosing, onChoosingChange, trigg
       )}
       {choosing || !selected ? (
         <>
-          {type && selected ? <div className="mb-3 flex justify-end"><Button variant="ghost" onClick={() => onChoosingChange(false)}>取消更换</Button></div> : null}
-          <GuidedChoices title={title} value={type ?? ""} onSelect={choose}
+          <GuidedChoices title={title} hideTitle value={type ?? ""} onSelect={choose}
             options={options.map(item => {
               const Icon = isTrigger ? rendererAutomationTriggerRegistry.get(item.manifest.id).icon ?? Zap : Play
               return { value: item.manifest.id, title: item.manifest.title, icon: <Icon /> }
@@ -95,8 +94,7 @@ export function TriggerExecutorBuilder({ step, choosing, onChoosingChange, trigg
         </>
       ) : (
         <>
-          <div data-layout={`automation-editor-${layout}-header`} className="mb-5 flex min-w-0 items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">{title}</h2>
+          <div data-layout={`automation-editor-${layout}-header`} className="mb-3 flex min-w-0 justify-end">
             <Button type="button" variant="ghost" aria-label={`更换${kind}`} onClick={() => onChoosingChange(true)}><RefreshCw />更换</Button>
           </div>
           <div className="grid min-w-0 gap-5">

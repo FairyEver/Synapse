@@ -57,7 +57,7 @@ export function AutomationEditorForm(props: AutomationEditorFormProps) {
           </div>
         ) : (
           <ScrollArea className="min-h-0 flex-1" viewportClassName="overflow-x-hidden">
-            <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-8" data-layout="automation-editor-body">
+            <div className="mx-auto w-full max-w-3xl px-5 py-5 sm:px-8" data-layout="automation-editor-body">
               <GuidedFlow title={item ? "编辑自动化" : "新建自动化"} layout="page" step={step} steps={steps} busy={saving}
                 canNext={Boolean(draft?.triggerType && !editor.choosingType)} onNext={editor.next} onBack={step === "executor" ? editor.previous : undefined} onCancel={editor.back}
                 actions={step === "executor" ? <>

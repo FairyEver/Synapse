@@ -275,7 +275,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 同步硬规则
 
-2026-11-05 自动化按已确认原型拆为独立只读详情和两步新建/编辑，页面无底栏，操作跟随表单内容滚动；列表查看、编辑与运行记录入口仍属于同一个 Automation System App。仅调整 Renderer 页面与触发配置校验，不新增或移除 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP。Automation 仍为 14 / 14，全局 364 capability / 360 MCP 索引；公开 schema 与系统 Skill 的业务调用契约不变。
+2026-11-05 自动化按已确认原型拆为独立只读详情和两步新建/编辑，页面无底栏，操作跟随表单内容滚动；列表查看、编辑与运行记录入口仍属于同一个 Automation System App。编辑主体使用紧凑步骤条，不显示大标题、重复步骤问题标题或“取消更换”入口。仅调整 Renderer 页面与触发配置校验，不新增或移除 System App、Dock、Workflow、Automation Action、Deep Link、IPC 或 capability/MCP。Automation 仍为 14 / 14，全局 364 capability / 360 MCP 索引；公开 schema 与系统 Skill 的业务调用契约不变。
 
 2026-11-05 自动化新建、编辑、变量与运行记录改为页内交互。移除 UI 私有的 `app.automation.editor.open_create`、`app.automation.editor.open_edit` IPC 和专用编辑窗口；它们原本不在 capability / MCP 目录中。Automation domain 仍为 14 / 14，全局 364 capability / 360 MCP 索引、两个公开路由工具及 System App、Dock、Workflow、Automation Action、Deep Link 数量均不变。System App 列表页的显式新窗口入口继续存在；新建和编辑子页面通过共享壳层替换顶栏，仅保留返回列表按钮，不追加新窗口入口，仍在原宿主页面完成。公开 schema 和系统 Skill 业务调用方式保持兼容。
 
