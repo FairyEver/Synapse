@@ -39,13 +39,13 @@ export interface MainWindowDeps {
 }
 
 export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
-  const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
+  const { width, height } = DEFAULT_WINDOW_BOUNDS
   const icon = getWindowIconPath()
   const window = new BrowserWindow({
     width,
     height,
-    minWidth,
-    minHeight,
+    minWidth: 1000,
+    minHeight: 800,
     show: false,
     // Reads the configuration the app actually connects with, so the suffix
     // cannot disagree with where the traffic goes.
