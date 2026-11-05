@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import type { SkillHubDetail } from "@synapse/shared/skill-hub-contracts"
 import { encodeHubSnapshot } from "../package-worker"
 import { HubPreparedSourceProvider } from "../prepared-source-provider"
@@ -6,13 +9,17 @@ import { SkillHubDesktopError } from "../error"
 import type { HubAccountOperation } from "../cloud-client"
 import type { SkillHubCaller } from "../access"
 
-function fixture() {
+function fixture(attachments: { path: string; bytes: Uint8Array }[] = []) {
   const lifetime = new AbortController()
   let authenticated = true
   const op: HubAccountOperation = { scope: { accountId: "account-1", authRevision: 1 }, signal: lifetime.signal }
   const assertInstallAccount = vi.fn((request: HubAccountOperation) => request.signal.throwIfAborted())
   const raw = "---\nname: package-name\ndescription: Package description\n---\nUse the package."
-  const encoded = encodeHubSnapshot({ format: "markdown", bytes: Buffer.from(raw) })
+  const encoded = encodeHubSnapshot({
+    format: "directory",
+    files: [{ path: "SKILL.md", bytes: Buffer.from(raw) }, ...attachments],
+    excludedPaths: [],
+  })
   const person = { id: "account-1", displayName: "Member" }
   const skill: SkillHubDetail = {
     id: "skill_1", team: { id: "team_1", name: "Team" }, package: encoded.package,
@@ -35,6 +42,27 @@ function fixture() {
 }
 
 describe("Skill Hub prepared installer source", () => {
+  it("copies nested attachments into a fresh installation directory", async () => {
+    const files = [
+      { path: "agents/openai.yaml", bytes: Buffer.from("interface: test\n") },
+      { path: "scripts/lib/tool.js", bytes: Buffer.from("export {}\n") },
+    ]
+    const f = fixture(files)
+    const staging = await mkdtemp(path.join(os.tmpdir(), "synapse-hub-attachments-"))
+    try {
+      const source = await f.provider.prepare(f.skill.id, f.caller)
+      await f.provider.beginPreparedInstall(source.preparedSourceId!, source.sourceIdentity)
+      for (const file of files) {
+        const target = path.join(staging, file.path)
+        await f.provider.copyPreparedSkillAttachment(source.preparedSourceId!, source.sourceIdentity, file.path, target)
+        await expect(readFile(target)).resolves.toEqual(file.bytes)
+      }
+    } finally {
+      f.lifetime.abort()
+      await rm(staging, { recursive: true, force: true })
+    }
+  })
+
   it("reads only a signed-in account and uses package fields", async () => {
     const f = fixture()
     const source = await f.provider.prepare(f.skill.id, f.caller)

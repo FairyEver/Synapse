@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { writeFile } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
+import path from "node:path"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../../../electron/generated/deployment-config.generated"
 import type { PreparedContentInstallSourceProvider } from "../../../electron/services/editor-install-service"
 import type { SynapseContentDetail } from "../../../src/types/content"
@@ -134,11 +135,13 @@ export class HubPreparedSourceProvider implements PreparedContentInstallSourcePr
     const entry = this.entries.get(id)
     if (entry?.detail.id === contentId) entry.busy = false
   }
-  async copyPreparedSkillAttachment(id: string, contentId: string, path: string, target: string) {
+  async copyPreparedSkillAttachment(id: string, contentId: string, relativePath: string, target: string) {
     const entry = this.require(id, contentId)
-    const bytes = entry.files.get(path)
+    const bytes = entry.files.get(relativePath)
     if (!entry.busy || !bytes) throw new Error("Skill Hub 安装附件不可用。")
     // EditorInstallCore already authorized the target; only its staging paths reach this provider.
+    await mkdir(path.dirname(target), { recursive: true })
+    this.require(id, contentId)
     await writeFile(target, bytes, { flag: "wx" })
   }
   async markPreparedInstalled() { /* The same current source may be installed into another selected editor. */ }
