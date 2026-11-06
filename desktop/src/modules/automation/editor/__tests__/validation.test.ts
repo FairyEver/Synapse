@@ -12,3 +12,15 @@ describe("automation field validation", () => {
     expect(validateAutomationDraftFields(draft)).toEqual({})
   })
 })
+
+
+it.each(["{{trigger.typo}}", "{{trigger.payload.messageId}}", "{{trigger.request.body.order..id}}", "{{trigger.triggeredAt}", "{{trigger.request.body#/a{b}}"])("rejects an invalid reference before save: %s", prompt => {
+  const draft = { ...createDefaultAutomationDraft("测试"), triggerType: "builtin.webhook", triggerConfig: { webhookPublicId: "wh_public" }, executorType: "builtin.claude-code", executorConfig: { projectId: "p1", prompt } }
+  expect(validateAutomationDraftFields(draft)["executor.prompt"]).toBeTruthy()
+})
+
+
+it.each(["{{trigger.payload.request.body#/order.id}}", "{{trigger.request.remoteAddress}}"])("accepts explicit compatibility references and pointer paths: %s", prompt => {
+  const draft = { ...createDefaultAutomationDraft("测试"), triggerType: "builtin.webhook", triggerConfig: { webhookPublicId: "wh_public" }, executorType: "builtin.claude-code", executorConfig: { projectId: "p1", prompt } }
+  expect(validateAutomationDraftFields(draft)).toEqual({})
+})

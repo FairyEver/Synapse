@@ -440,3 +440,17 @@ class Deferred<T> {
     this.resolvePromise?.(value)
   }
 }
+
+
+it("rejects invalid prompt variables on create, update and enable without overwriting stored configuration", async () => {
+  const items = new MemoryNamespace<AutomationItem>("automation.items")
+  const repo = new AutomationItemRepository({ items, triggers: createBuiltinAutomationTriggerRegistry() })
+  const input = { ...validCreateInput(), enabled: false, executor: { type: "builtin.claude-code", config: { projectId: "p1", prompt: "{{trigger.typo}}" } } }
+  await expect(repo.create(input)).rejects.toThrow("未知变量")
+  const item = await repo.create({ ...input, executor: { ...input.executor, config: { projectId: "p1", prompt: "{{trigger.automationName}}" } } })
+  await expect(repo.update(item.id, { executor: input.executor })).rejects.toThrow("未知变量")
+  expect((await repo.get(item.id))?.executor.config.prompt).toBe("{{trigger.automationName}}")
+  await items.upsert({ ...item, executor: input.executor })
+  await expect(repo.setEnabled(item.id, true)).rejects.toThrow("未知变量")
+  expect((await repo.get(item.id))?.enabled).toBe(false)
+})

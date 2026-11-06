@@ -1,3 +1,4 @@
+import { commonTriggerVariables } from "../common-variables"
 import type { AutomationTriggerManifest } from "../../types.shared"
 import {
   cronTriggerConfigSchema,
@@ -5,14 +6,8 @@ import {
 } from "./schema"
 
 const cronTriggerVariables = [
-  { key: "trigger.type", label: "触发器类型", group: "trigger" },
-  { key: "trigger.triggeredBy", label: "运行来源", group: "trigger" },
-  { key: "trigger.triggeredAt", label: "触发时间", group: "trigger" },
-  { key: "trigger.scheduledAt", label: "计划时间", group: "trigger" },
-  { key: "trigger.automationId", label: "自动化 ID", group: "trigger" },
-  { key: "trigger.automationName", label: "自动化名称", group: "trigger" },
-  { key: "trigger.cron", label: "Cron 表达式", group: "config" },
-  { key: "trigger.timezone", label: "时区", group: "config" },
+  ...commonTriggerVariables(true),
+  { key: "trigger.cron", label: "Cron 表达式", group: "config", example: "0 9 * * *" },
 ] as const
 
 export const cronTriggerManifest = {

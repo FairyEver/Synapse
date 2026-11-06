@@ -257,24 +257,25 @@ describe("AutomationModule", () => {
     expect(toggle.disabled).toBe(false)
   })
 
-  it.each(["builtin.mail-internal-received", "builtin.mail-received"])("prevents context-free manual runs of %s in the list and card", async (type) => {
+  it.each(["builtin.mail-internal-received", "builtin.mail-received", "builtin.webhook"])("prevents context-free manual runs of %s in the list and card", async (type) => {
+    const reason = type === "builtin.webhook" ? "请发送 Webhook 请求触发，不能无事件手动运行" : "需要信件上下文，无法手动运行"
     const item = createItem({ trigger: { type, config: {} } })
     mocks.useAutomationItems.mockReturnValue({ items: [item], loading: false, error: null, refresh: vi.fn() })
     const container = document.createElement("div"); document.body.appendChild(container)
     const root = createRoot(container)
     await act(async () => { root.render(<AutomationModule />) })
-    const run = document.querySelector<HTMLButtonElement>('button[aria-label="需要信件上下文，无法手动运行"]')
+    const run = document.querySelector<HTMLButtonElement>(`button[aria-label="${reason}"]`)
     expect(run?.disabled).toBe(true)
     expect(run?.parentElement?.tabIndex).toBe(0)
     await act(async () => { run?.parentElement?.focus() })
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain("需要信件上下文")
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toContain(reason)
     await act(async () => { run?.click() })
     expect(mocks.runAutomation).not.toHaveBeenCalled()
 
     const onRun = vi.fn()
     await act(async () => { root.render(<TooltipProvider><AutomationCard item={item} projects={[]} pending={false} running={false}
       onRun={onRun} onStop={vi.fn()} onToggleEnabled={vi.fn()} onEdit={vi.fn()} onHistory={vi.fn()} onDelete={vi.fn()} /></TooltipProvider>) })
-    const cardRun = document.querySelector<HTMLButtonElement>('button[aria-label="需要信件上下文，无法手动运行"]')
+    const cardRun = document.querySelector<HTMLButtonElement>(`button[aria-label="${reason}"]`)
     expect(cardRun?.disabled).toBe(true)
     expect(cardRun?.parentElement?.tabIndex).toBe(0)
     await act(async () => { cardRun?.click() })

@@ -6,11 +6,19 @@ Use trigger type discovery for the current schemas and variables. Internal lette
 
 `{{trigger.payload.id}}` is the only letter ID variable: `站内信ID` is the typed `synapse://mail-internal/<id>` reference; `邮件ID` is the typed `synapse://mail/em_...` reference. `{{trigger.payload.messageId}}` is no longer discovered or supported at runtime, without a compatibility alias; replace it with `{{trigger.payload.id}}` in existing prompts. Discovery returns these labels and keys through the shared trigger manifests; no new tool or configuration field is required.
 
-Create/update/enable/disable continue using the existing Automation tools; no extra receipt MCP tool is introduced. Enabling confirms the source cursor online and fails without enabling when a source is unavailable. `app_automation_run_execute` rejects these triggers without receipt context. An imported configuration is disabled and must be enabled again online. The existing Agent executor consumes `{{trigger.payload.body}}` and other discovered receipt variables; reading does not mark a letter read. Queue/dedupe records are local-only and are not imported or exported.
+Create/update/enable/disable continue using the existing Automation tools; no extra receipt MCP tool is introduced. Enabling confirms the source cursor online and fails without enabling when a source is unavailable. `app_automation_run_execute` rejects receipt triggers and Webhook without event context. An imported configuration is disabled and must be enabled again online. The existing Agent executor consumes `{{trigger.payload.body}}` and other discovered receipt variables; reading does not mark a letter read. Queue/dedupe records are local-only and are not imported or exported.
 
 > **Reaching Synapse tools.** The Synapse MCP server publishes only two tools, `search` and `invoke`. Call `search` first with the user's intent or the exact `app_*` name, then call `invoke` with the exact name and the `arguments` described by the `inputSchema` that `search` returned. Never guess a name or arguments. In Synapse Agent conversations the same two tools appear as `mcp__synapse-tool-router__search` and `mcp__synapse-tool-router__invoke`.
 
 Each tool maps to the same canonical Synapse API action.
+
+## Variable contract
+
+Use only canonical keys or aliases returned by discovery. Save/update/enable and automatic execution validate prompts; `trigger.payload.messageId` is retired without alias. `trigger.payload.url` is an explicit mail-id alias, not another picker entry. External mail adds senderAddresses/replyToAddresses JSON arrays and sentAt; internal mail adds senderId/senderKind, with empty senderId for system broadcasts. Attachments carry attachmentId and external assetId; no automatic downloads or hidden-recipient expansion.
+
+`trigger.triggeredAt` is source occurrence/activation, `trigger.receivedAt` is local event receipt/enqueue, `trigger.executedAt` is run start, and `trigger.runId` is the actual run. Schedules show scheduledAt and derive date from the original plan (catch-up included); manual date uses execution time, event date uses occurrence. date is YYYY-MM-DD in the effective timezone: configured Cron zone or system zone, other triggers use system zone. All timestamps are ISO UTC; unavailable external sentAt is empty.
+
+Webhook dynamic values use original data on demand, not the bounded compatibility flatten directory. Dot paths select nested properties; #/ JSON Pointer selects literal keys (use ~0/~1 and URI encoding for braces/spaces). Paths access only own properties and have explicit 64-segment/2048-character limits. Missing fields fail, null/empty remain empty, 0/false are preserved. Old payload.request paths remain declared aliases. Local JSON sample preview never runs Automation or uploads/stores samples. Webhook has no context-free manual run; use a real incoming request.
 
 ## Discovery
 
@@ -22,7 +30,7 @@ Input:
 {}
 ```
 
-Returns trigger descriptors with `type`, `title`, `kind`, `defaultConfig`, `configSchema`, and optional `variables`.
+Returns trigger descriptors with `type`, `title`, `kind`, `defaultConfig`, `configSchema`, optional `variables` (canonical key, label, description/example, dynamic paths and explicit aliases), and optional `manualRunUnavailableReason` for event triggers.
 
 ### app_automation_executor_type_list
 

@@ -1,3 +1,4 @@
+import { validateAutomationPrompt } from "../../../automation-trigger-packages/variable-contract"
 import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
@@ -135,30 +136,11 @@ function buildAutomationPayloadFromDraft(
   }
 }
 
-export function validateChangedTriggerVariables(draft: AutomationEditorDraft, previousTypes: readonly string[]) {
-  if (!previousTypes.length || !draft.triggerType) return
-  const triggers = rendererAutomationTriggerRegistry.list()
-  const variables = triggers.find(trigger => trigger.manifest.id === draft.triggerType)?.manifest.variables ?? []
-  const previousVariables = previousTypes.flatMap(type => triggers.find(trigger => trigger.manifest.id === type)?.manifest.variables ?? [])
-  const unknown = new Set<string>()
-  const matches = (variable: { key: string; dynamic?: boolean }, key: string) => variable.key === key || (variable.dynamic && key.startsWith(`${variable.key}.`))
-  function inspect(value: unknown) {
-    if (typeof value === "string") {
-      for (const match of value.matchAll(/\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu)) {
-        const key = match[1]!
-        // Discovery metadata is not a full runtime whitelist. Only invalidate declared variables from replaced triggers.
-        if (previousVariables.some(variable => matches(variable, key)) && !variables.some(variable => matches(variable, key))) unknown.add(key)
-      }
-    } else if (value && typeof value === "object") {
-      for (const [key, entry] of Object.entries(value)) { inspect(key); inspect(entry) }
-    }
-  }
-  for (const [key, value] of Object.entries(draft.executorConfig)) {
-    // JavaScript/Node code and structured bindings are not interpolated templates; nested user keys named source remain inspectable.
-    if (typeof draft.executorConfig.source === "string" && (key === "source" || key === "inputs")) continue
-    inspect(value)
-  }
-  if (unknown.size) throw new Error(`当前触发条件不提供变量：${[...unknown].join("、")}`)
+export function validateChangedTriggerVariables(draft: AutomationEditorDraft, _previousTypes: readonly string[]) {
+  if (!draft.triggerType) return
+  const variables = rendererAutomationTriggerRegistry.list().find(trigger => trigger.manifest.id === draft.triggerType)?.manifest.variables
+  const error = validateAutomationPrompt(draft.executorConfig.prompt, variables)
+  if (error) throw new Error(error)
 }
 
 export function summarizeAutomationDraft(draft: AutomationEditorDraft, projects: readonly SynapseProjectConfig[]): string {

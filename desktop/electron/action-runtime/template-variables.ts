@@ -1,16 +1,13 @@
-const TEMPLATE_VARIABLE_RE = /\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu
+import { TEMPLATE_VARIABLE_RE, readVariablePath } from "../../automation-trigger-packages/variable-contract"
+
 const MAX_FLATTEN_DEPTH = 8
 const MAX_FLATTEN_KEYS = 200
-const OPTIONAL_WEBHOOK_REQUEST_VARIABLE_PREFIXES = [
-  "trigger.request.body.",
-  "trigger.request.query.",
-  "trigger.request.headers.",
-  "trigger.payload.request.body.",
-  "trigger.payload.request.query.",
-  "trigger.payload.request.headers.",
-]
+// Raw roots live only for this in-memory execution, never in persisted variables.
+const requestRoots = new WeakMap<Record<string, string>, Record<string, unknown>>()
 
 export type AutomationTemplateVariableInput = {
+  readonly executedAt?: string
+  readonly runId?: string
   readonly triggerType: string
   readonly triggerConfig: Record<string, unknown>
   readonly triggeredBy: "trigger" | "manual" | "missed_run"
@@ -19,6 +16,7 @@ export type AutomationTemplateVariableInput = {
   readonly automationId: string
   readonly automationName: string
   readonly event?: {
+    readonly occurredAt?: string
     readonly source: string
     readonly type: string
     readonly payload: Record<string, unknown>
@@ -31,11 +29,16 @@ export function renderActionTemplate(
   variables: Record<string, string> | undefined,
 ): string {
   const source = variables ?? {}
-  return template.replace(TEMPLATE_VARIABLE_RE, (_match, name: string) => {
-    if (!(name in source)) {
-      if (isOptionalWebhookRequestVariable(name)) return ""
-      throw new Error(`未知变量：${name}`)
+  return template.replace(TEMPLATE_VARIABLE_RE, (_match, rawName: string) => {
+    const name = rawName.trim()
+    const roots = requestRoots.get(source)
+    if (roots) for (const [prefix, value] of Object.entries(roots)) {
+      if (!name.startsWith(`${prefix}.`) && !name.startsWith(`${prefix}#/`)) continue
+      const result = readVariablePath(value, name.slice(prefix.length))
+      if (!result.found) throw new Error(`字段不存在：${name}，请检查事件数据或字段路径`)
+      return stringifyTemplateValue(result.value)
     }
+    if (!Object.hasOwn(source, name)) throw new Error(`未知变量：${name}`)
     return source[name]
   })
 }
@@ -55,22 +58,27 @@ export function renderStringRecordTemplates(
 export function buildAutomationTemplateVariables(
   input: AutomationTemplateVariableInput,
 ): Record<string, string> {
+  const executedAt = input.executedAt ?? input.triggeredAt
+  const occurredAt = input.event?.occurredAt ?? input.event?.receivedAt ?? input.triggeredAt
+  const timezone = typeof input.triggerConfig.timezone === "string" ? input.triggerConfig.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone
+  const businessTime = input.triggeredBy === "manual" ? executedAt : input.event ? occurredAt : input.scheduledAt
+  const dateParts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(businessTime))
+  const datePart = (type: string) => dateParts.find(part => part.type === type)!.value
   const variables: Record<string, string> = {
     "trigger.type": input.triggerType,
     "trigger.triggeredBy": input.triggeredBy,
-    "trigger.triggeredAt": input.triggeredAt,
-    "trigger.scheduledAt": input.scheduledAt,
+    "trigger.triggeredAt": occurredAt,
+    "trigger.executedAt": executedAt,
+    "trigger.runId": input.runId ?? "",
+    "trigger.timezone": timezone,
+    "trigger.date": `${datePart("year")}-${datePart("month")}-${datePart("day")}`,
+    "trigger.scheduledAt": input.event ? occurredAt : input.scheduledAt,
     "trigger.automationId": input.automationId,
     "trigger.automationName": input.automationName,
   }
 
   if (typeof input.triggerConfig.expr === "string") {
     variables["trigger.cron"] = input.triggerConfig.expr
-  }
-  if (typeof input.triggerConfig.timezone === "string") {
-    variables["trigger.timezone"] = input.triggerConfig.timezone
-  } else if ("expr" in input.triggerConfig) {
-    variables["trigger.timezone"] = ""
   }
   if (typeof input.triggerConfig.everyMinutes === "number") {
     variables["trigger.everyMinutes"] = String(input.triggerConfig.everyMinutes)
@@ -84,6 +92,12 @@ export function buildAutomationTemplateVariables(
     variables["trigger.eventType"] = input.event.type
     variables["trigger.receivedAt"] = input.event.receivedAt
     variables["trigger.payload"] = stringifyTemplateValue(input.event.payload)
+    const request = asRecord(input.event.payload.request)
+    if (request) {
+      requestRoots.set(variables, Object.fromEntries(["body", "query", "headers"].flatMap(field => [
+        [`trigger.request.${field}`, request[field]], [`trigger.payload.request.${field}`, request[field]],
+      ])))
+    }
     appendWebhookEventVariables(input.event.payload, variables)
     flattenValue("trigger.payload", input.event.payload, variables)
   }
@@ -101,6 +115,9 @@ function appendWebhookEventVariables(
     assignStringVariable(variables, "trigger.webhook.id", webhook.id)
     assignStringVariable(variables, "trigger.webhook.publicId", webhook.publicId)
     assignStringVariable(variables, "trigger.webhook.name", webhook.name)
+    for (const field of ["id", "publicId", "name"]) {
+      if (Object.hasOwn(variables, `trigger.webhook.${field}`)) variables[`trigger.payload.webhook.${field}`] = variables[`trigger.webhook.${field}`]!
+    }
   }
 
   assignStringVariable(variables, "trigger.deliveryId", payload.deliveryId)
@@ -112,6 +129,10 @@ function appendWebhookEventVariables(
   variables["trigger.request.contentType"] = typeof request.contentType === "string" ? request.contentType : ""
   variables["trigger.request.bodyText"] = typeof request.bodyText === "string" ? request.bodyText : ""
   variables["trigger.request.remoteAddress"] = typeof request.remoteAddress === "string" ? request.remoteAddress : ""
+  for (const field of ["method", "contentType", "bodyText", "remoteAddress"]) {
+    if (Object.hasOwn(variables, `trigger.request.${field}`)) variables[`trigger.payload.request.${field}`] = variables[`trigger.request.${field}`]!
+  }
+  assignStringVariable(variables, "trigger.payload.request.receivedAt", request.receivedAt)
   const fields = ["body", "query", "headers"] as const
   // Declared whole values must remain available even if body leaves fill the budget.
   for (const field of fields) {
@@ -124,10 +145,6 @@ function appendWebhookEventVariables(
     flattenValue(`trigger.request.${field}`, request[field], variables, 0, true)
     flattenValue(`trigger.payload.request.${field}`, request[field], variables, 0, true)
   }
-}
-
-function isOptionalWebhookRequestVariable(name: string): boolean {
-  return OPTIONAL_WEBHOOK_REQUEST_VARIABLE_PREFIXES.some((prefix) => name.startsWith(prefix))
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

@@ -9,6 +9,7 @@ import {
 
 export const webhookRendererTriggerDefinition = {
   manifest: webhookTriggerManifest,
+  manualRunUnavailableReason: "请发送 Webhook 请求触发，不能无事件手动运行",
   icon: Webhook,
   summarizeConfig: summarizeWebhookTriggerConfig,
   ConfigForm: WebhookTriggerConfigForm,

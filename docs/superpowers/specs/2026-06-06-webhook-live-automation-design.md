@@ -475,6 +475,8 @@ Dynamic variables continue to be available through flattened payload paths:
 
 Extend `buildAutomationTemplateVariables` to map common Webhook fields to the short paths above while preserving the existing `trigger.payload.*` flattening behavior.
 
+2026-11-06 variable contract revision (user-approved product review): the picker exposes only canonical short request paths; payload.request aliases remain declared compatibility paths. Selected fields resolve from the original event on demand, independent of flatten budgets. Dot paths select nested objects, while `#/` JSON Pointer selects literal keys with ~0/~1 escapes. Only own properties are traversed, with explicit 64-segment / 2048-character limits. Missing fields and exceeded limits fail; null/empty render empty, 0/false remain intact. Entire absent optional body remains empty. Context-free manual runs are rejected before creating a run, and discovery reports the reason. Local JSON sample preview does not execute or upload a test event. Metadata for canonical variables and aliases is the save/enable/runtime prompt validation contract. scheduledAt is not shown as a duplicate Webhook time; receivedAt is the local arrival timestamp, occurredAt retains gateway receive time and is used for triggeredAt and initial condition evaluation. executedAt and runId refer to actual execution, date follows event time in the effective system timezone.
+
 Header handling:
 
 - Normalize header keys to lower case for stable variable names.

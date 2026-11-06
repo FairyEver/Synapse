@@ -20,7 +20,7 @@
 
 - 2026-11-06 夜测修复：自动化列表和详情启停完成后恢复键盘焦点，筛选移除任务或清除筛选时回到搜索框，用户主动移焦时不抢回。只修复Renderer交互，不改变启停MCP契约、队列边界或系统Skill；14项Automation capability / MCP索引、5类触发器、2类执行器及其他表格数量不变。
 
-- 2026-11-06 夜测修复：Webhook 已声明的整值变量与嵌套对象/数组按 JSON 替换，短路径和原始路径别名一致；保留展平深度及数量限制。只修正既有变量契约，不增加注册表面；Automation 仍为14项 capability / MCP索引、5类触发器和2类执行器，其他表格数量及例外不变。
+- 2026-11-06 变量审查修复：Webhook 字段改为从原始数据按需读取，64 段/2048 字符路径显式限制，缺失报错、null 为空；旧展平预算只影响兼容目录，不影响字段引用。发现返回 canonical variables、aliases 和 manualRunUnavailableReason；共享时间语义、业务日期、runId、邮件发件/回复地址及附件定位字段同步 UI/MCP/Skill。保存/启用/执行前统一校验。Automation 仍为14项 capability / MCP索引、5类触发器和2类执行器，其他表格数量及例外不变。
 
 - 2026-11-06 夜测修复：收信触发器通过Renderer注册声明缺少原信时不能手动运行；列表与卡片禁用相应入口，鼠标/键盘可查看原因。主进程与MCP继续拒绝无信件上下文的运行，5类触发器、2类执行器、14项Automation capability / MCP索引及其他表格数量不变。
 
@@ -381,13 +381,13 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 | Trigger ID | 名称 | 配置 | 信件 ID 变量 |
 | --- | --- | --- | --- |
-| `builtin.cron` | Cron | 保持现有配置 | — |
-| `builtin.interval` | 固定间隔 | 保持现有配置 | — |
-| `builtin.webhook` | Webhook | 保持现有配置 | — |
+| `builtin.cron` | Cron | 保持现有配置 | 共用业务日期、有效时区、运行 ID；另有计划时间 |
+| `builtin.interval` | 固定间隔 | 保持现有配置 | 同上；间隔计算方式附枚举说明 |
+| `builtin.webhook` | Webhook | 保持现有配置 | 共用时间/运行 ID，短请求路径，aliases 兼容；禁止无事件手动运行 |
 | `builtin.mail-internal-received` | 收到站内信 | 严格空对象 | `trigger.payload.id`，站内信ID，`synapse://mail-internal/<id>` |
 | `builtin.mail-received` | 收到邮件 | 可选 accountId；缺省全部邮箱账号 | `trigger.payload.id`，邮件ID，`synapse://mail/em_...` |
 
-2026-11-06 两类触发器各只提供一个信件 ID 变量，统一使用带类型的 synapse:// 引用，由既有触发器发现同时提供给界面和 MCP；旧 `trigger.payload.messageId` 不再出现在发现和运行时事件中，也不保留兼容别名，链接变量保留。触发器仍为 5 项，Automation 仍为 14 项 capability / MCP 索引，其余注册数量与例外不变；不新增权限、存储字段或迁移。
+2026-11-06 两类触发器各只提供一个信件 ID 变量，统一使用带类型的 synapse:// 引用，由既有触发器发现同时提供给界面和 MCP；旧 `trigger.payload.messageId` 不再出现在发现和运行时事件中，也不保留兼容别名，链接变量只作为显式兼容别名，不重复展示。触发器仍为 5 项，Automation 仍为 14 项 capability / MCP 索引，其余注册数量与例外不变；不新增权限、存储字段或迁移。
 
 Automation Trigger 从 3 项增至 5 项；复用既有 14 项 Automation capability / MCP 索引，执行器沿用 Agent 和 Claude Code。公开 MCP 仍仅 search / invoke；本次全局 capability / MCP 数量无增量，System App、Dock、Workflow Node、Automation Action、Deep Link 均不新增。现有触发器发现返回两种新 schema 与正文等变量。
 

@@ -266,6 +266,16 @@ describe("automation capability dispatcher", () => {
     }
   })
 
+  it("discovers the event context required by Webhook and receipt manual runs", async () => {
+    const harness = createHarness()
+    const dispatcher = createAutomationCapabilityDispatcher({ ...harness, triggers: createBuiltinAutomationTriggerRegistry() })
+    const result = await dispatcher.dispatch("app.automation.trigger_type.list", {}, { source: "api" })
+    const entries = result.data as { type: string; manualRunUnavailableReason?: string }[]
+    expect(entries.find(entry => entry.type === "builtin.webhook")?.manualRunUnavailableReason).toContain("Webhook 请求")
+    expect(entries.find(entry => entry.type === "builtin.mail-received")?.manualRunUnavailableReason).toContain("信件上下文")
+    expect(entries.find(entry => entry.type === "builtin.cron")?.manualRunUnavailableReason).toBeUndefined()
+  })
+
   it("lists trigger and executor descriptors from registries", async () => {
     const { auditSink, dispatcher, permissionGuard } = createHarness()
 

@@ -21,6 +21,7 @@ export type AutomationTriggerVariableDescriptor = {
   readonly example?: string
   readonly group?: "trigger" | "config" | "event"
   readonly dynamic?: boolean
+  readonly aliases?: readonly string[]
 }
 
 export type AutomationTriggerManifest<
@@ -48,6 +49,7 @@ export type AutomationScheduleGuardInput<TConfig extends AutomationTriggerConfig
 }
 
 export type AutomationTriggerEvent = {
+  readonly occurredAt?: string
   readonly source: string
   readonly type: string
   readonly payload: Record<string, unknown>
@@ -71,6 +73,7 @@ export type AutomationTriggerRuntime<
 export type AutomationTriggerDefinition<
   TConfig extends AutomationTriggerConfig = AutomationTriggerConfig,
 > = {
+  readonly manualRunUnavailableReason?: string
   readonly activationRequired?: true
   readonly manifest: AutomationTriggerManifest<TConfig>
   summarize(config: TConfig): string

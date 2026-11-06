@@ -1,3 +1,4 @@
+import { validateAutomationPrompt } from "../../../../automation-trigger-packages/variable-contract"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
 import { automationConditionsSchema } from "../../../../automation-trigger-packages/schedule-constraints"
@@ -27,6 +28,11 @@ export function validateAutomationDraftFields(draft: AutomationEditorDraft): Aut
   if (draft.conditions) check("conditions", () => automationConditionsSchema.parse(draft.conditions))
   if (!draft.executorType) errors["executor.type"] = "请选择执行操作"
   else check("executor", () => rendererActionRegistry.parseConfig(draft.executorType!, draft.executorConfig))
+  if (draft.triggerType) {
+    const trigger = rendererAutomationTriggerRegistry.list().find(item => item.manifest.id === draft.triggerType)
+    const variableError = validateAutomationPrompt(draft.executorConfig.prompt, trigger?.manifest.variables)
+    if (variableError) errors["executor.prompt"] = variableError
+  }
   return errors
 }
 

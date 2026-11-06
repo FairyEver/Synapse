@@ -1,3 +1,5 @@
+import { validateAutomationPrompt } from "../../../automation-trigger-packages/variable-contract"
+import { isSupportedAutomationExecutor } from "../../../action-packages/automation-executors"
 import type { AutomationTriggerEvent } from "../../../automation-trigger-packages/types.shared"
 import {
   automationConditionsSchema,
@@ -314,6 +316,8 @@ export class AutomationService {
   async runNow(id: string): Promise<AutomationRun | null> {
     const startedAt = Date.now()
     const item = await this.deps.items.get(id)
+    const manualRunReason = item ? this.deps.triggers.get(item.trigger.type).manualRunUnavailableReason : undefined
+    if (manualRunReason) throw new Error(manualRunReason)
     if (item && this.deps.triggers.get(item.trigger.type).activationRequired) throw new Error("此触发器需要信件上下文，不能直接手动运行")
     if (!item) {
       this.deps.logger?.info("Automation manual run skipped because item was not found.", {
@@ -326,7 +330,8 @@ export class AutomationService {
     }
     if (item.schemaVersion === 1) throw new Error("旧版自动化不可运行，请新建自动化")
     if (!this.isItemValid(item)) {
-      throw new Error(NEEDS_UPDATE_MESSAGE)
+      const variableIssue = this.validateItem(item).issues.find(issue => issue.field === "executor.prompt")
+      throw new Error(variableIssue?.message ?? NEEDS_UPDATE_MESSAGE)
     }
     this.cancel(id)
     try {
@@ -388,7 +393,7 @@ export class AutomationService {
       try {
         const accepted = await trigger.runtime.shouldAcceptEvent({ config: parsedConfig.data, event })
         if (!accepted) continue
-        if (!this.isAutomaticRunAllowed(item, new Date(event.receivedAt))) {
+        if (!this.isAutomaticRunAllowed(item, eventReceivedAt(event))) {
           this.deps.logger?.info("Automation event skipped outside run conditions.", {
             automationId: item.id,
             triggerType: item.trigger.type,
@@ -534,7 +539,8 @@ export class AutomationService {
     const oldItem = await this.deps.items.get(id)
     if (enabled && oldItem?.schemaVersion === 1) throw new Error("旧版自动化不可启用，请新建自动化")
     if (enabled && oldItem && !this.isItemValid(oldItem)) {
-      throw new Error(NEEDS_UPDATE_MESSAGE)
+      const variableIssue = this.validateItem(oldItem).issues.find(issue => issue.field === "executor.prompt")
+      throw new Error(variableIssue?.message ?? NEEDS_UPDATE_MESSAGE)
     }
     this.cancel(id)
     try {
@@ -929,12 +935,14 @@ export class AutomationService {
     const triggerValidation = this.deps.triggers.validateStoredConfig(item.trigger.type, item.trigger.config)
     const executorValidation = this.deps.actions.validateStoredConfig(item.executor.type, item.executor.config)
     const conditionsValidation = item.conditions ? automationConditionsSchema.safeParse(item.conditions) : null
-    if (triggerValidation.status === "valid" && executorValidation.status === "valid" && (!conditionsValidation || conditionsValidation.success)) {
+    const variableError = isSupportedAutomationExecutor(item.executor.type) ? validateAutomationPrompt(item.executor.config.prompt, this.deps.triggers.list().find(trigger => trigger.manifest.id === item.trigger.type)?.manifest.variables) : null
+    if (!variableError && triggerValidation.status === "valid" && executorValidation.status === "valid" && (!conditionsValidation || conditionsValidation.success)) {
       return { status: "valid", issues: [] }
     }
     return {
       status: "needs_update",
       issues: [
+        ...(variableError ? [{ field: "executor.prompt", message: variableError }] : []),
         ...(triggerValidation.status === "needs_update" ? triggerValidation.issues : []),
         ...(executorValidation.status === "needs_update" ? executorValidation.issues : []),
         ...(conditionsValidation && !conditionsValidation.success
@@ -1024,7 +1032,7 @@ function skippedReasonWithEventDelivery(reason: string, event: AutomationTrigger
 }
 
 function eventReceivedAt(event: AutomationTriggerEvent): Date {
-  const value = event.payload.receivedAt
+  const value = event.occurredAt ?? event.payload.receivedAt
   return new Date(typeof value === "string" ? value : event.receivedAt)
 }
 

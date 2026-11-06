@@ -173,7 +173,7 @@ export class AutomationMailTriggerService {
       const latest = await this.deps.items.get(item.id)
       if (!latest?.enabled || latest.mailSubscription?.id !== item.mailSubscription!.id) return false
       const result = await this.deps.automation.runDurableEvent({ automationId: item.id, subscriptionId: item.mailSubscription!.id, runId,
-        event: buildMailTriggerEvent(payload, new Date().toISOString()), identitySignal: context.signal,
+        event: buildMailTriggerEvent(payload, row.createdAt), identitySignal: context.signal,
         commitStart: async () => { claimed = await this.deps.repository.commitDispatch(row.id, row.revision, runId); return claimed } })
       if (result.kind === "skipped") {
         await this.deps.repository.finishDispatch(row.id, {

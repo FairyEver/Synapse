@@ -280,7 +280,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_run_execute",
-      description: "Manually run one Synapse Automation by automationId. Receipt triggers require letter context and reject this action. Fails if the Automation is missing or no run starts. Use automation_run_list or automation_runtime_inspect for follow-up.",
+      description: "Manually run one Synapse Automation by automationId. Webhook and receipt triggers require event context and reject this action; send a real Webhook request or wait for a new letter. Fails if the Automation is missing or no run starts. Use automation_run_list or automation_runtime_inspect for follow-up.",
       inputSchema: { type: "object", properties: { automationId: automationIdProperty }, required: ["automationId"] },
     },
     {
@@ -316,7 +316,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_trigger_type_list",
-      description: "List registered Automation trigger types, default configs, JSON Schemas, and trigger variables.",
+      description: "List registered Automation trigger types, default configs, JSON Schemas, canonical trigger variables with compatibility aliases, and manual-run context restrictions. Prompt variables are validated on save and enable; use only discovered keys or declared aliases.",
       inputSchema: { type: "object", properties: {} },
     },
     {

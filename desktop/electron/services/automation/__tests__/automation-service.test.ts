@@ -193,6 +193,13 @@ describe("AutomationService", () => {
     } finally { await harness.service.stop() }
   })
 
+  it("rejects a context-free Webhook manual run before creating a run", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate({ ...createAutomationInput(), trigger: { type: "builtin.webhook", config: { webhookPublicId: "wh_public" } } })
+    await expect(harness.service.runNow(item.id)).rejects.toThrow("Webhook 请求")
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+  })
+
   it("runs an automation manually", async () => {
     const harness = createHarness()
     const item = await harness.service.automationCreate(createAutomationInput())

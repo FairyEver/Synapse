@@ -1,3 +1,4 @@
+import { validateAutomationPrompt } from "../../../automation-trigger-packages/variable-contract"
 import { randomUUID } from "node:crypto"
 import { isSupportedAutomationExecutor } from "../../../action-packages/automation-executors"
 import { automationConditionsSchema } from "../../../automation-trigger-packages/schedule-constraints"
@@ -92,6 +93,7 @@ export class AutomationItemRepository {
       configVersion: 0,
     }
     validateItem(item)
+    this.validatePrompt(item)
     const next: AutomationItem = {
       ...item,
       nextRunAt: enabled ? this.computeNextRunAtIso(item, this.now()) : undefined,
@@ -128,6 +130,7 @@ export class AutomationItemRepository {
         configVersion: existing.configVersion + 1,
       }
       validateItem(candidate)
+      this.validatePrompt(candidate)
       const executionChanged = actionExecutionChanged(
         existing,
         candidate,
@@ -187,6 +190,7 @@ export class AutomationItemRepository {
   async setEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
     const next = await this.mutateItem(id, (existing) => {
       if (enabled && existing.schemaVersion === 1) throw new Error("旧版自动化不可启用，请新建自动化")
+      if (enabled) this.validatePrompt(existing)
       const candidate: AutomationItem = {
         ...existing,
         enabled,
@@ -338,6 +342,12 @@ export class AutomationItemRepository {
     if (ids.size === 0) {
       this.webhookTriggerIndex.delete(webhookPublicId)
     }
+  }
+
+  private validatePrompt(item: AutomationItem): void {
+    if (!isSupportedAutomationExecutor(item.executor.type)) return
+    const error = validateAutomationPrompt(item.executor.config.prompt, this.triggers.get(item.trigger.type).manifest.variables)
+    if (error) throw new Error(error)
   }
 
   private normalizeTrigger(trigger: AutomationTriggerRef): AutomationTriggerRef {

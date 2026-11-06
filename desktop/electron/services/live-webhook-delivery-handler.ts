@@ -48,12 +48,14 @@ export class LiveWebhookDeliveryHandler {
 
 export async function createWebhookAutomationEvent(
   payload: WebhookDeliveryReceivedPayload,
+  receivedAt = new Date().toISOString(),
 ): Promise<AutomationTriggerEvent> {
   const { LIVE_MESSAGE_TYPES } = await liveProtocolPromise
   return {
     source: "webhook",
     type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
-    receivedAt: payload.request.receivedAt,
+    occurredAt: payload.request.receivedAt,
+    receivedAt,
     payload: {
       deliveryId: payload.deliveryId,
       webhook: payload.webhook,

@@ -134,9 +134,10 @@
 | `{{trigger.payload.receivedAt}}` | 来源收件时间，ISO UTC；与本机发现时间分开 |
 | `{{trigger.payload.attachmentCount}}` | 附件数量，数字字符串 |
 | `{{trigger.payload.attachments}}` | 可访问附件元数据的 JSON 文本，含名称、大小、MIME；不含附件字节、本地路径或存储密钥 |
-| `{{trigger.payload.url}}` | 既有 `synapse://mail-internal/<id>` 或 `synapse://mail/em_<uuid>` 定位链接 |
+| `{{trigger.payload.sentAt}}` | 来源发送时间，外部邮件未知时为空 |
+| `{{trigger.payload.url}}` | id 的旧运行时别名，不再发现展示 |
 
-外部邮件另提供 `accountId`、`accountName`、`accountAddress`（同为 `trigger.payload.*`）。沿用通用触发时间、自动化 ID/名称等变量。`trigger.receivedAt` 表示本机事件接收时间，不能覆盖信件自身的 `trigger.payload.receivedAt`。
+外部邮件另提供 JSON 数组 `senderAddresses`、`replyToAddresses`（Reply-To 优先，无值用 From）以及 `accountId`、`accountName`、`accountAddress`（同为 `trigger.payload.*`）。沿用通用触发时间、自动化 ID/名称等变量。`trigger.receivedAt` 来自本机待处理记录的 createdAt；trigger.triggeredAt 来自信件来源时间，trigger.executedAt 来自本次 run.startedAt。业务日期按来源事件和系统时区计算；不能使用开始执行时的当前时间冒充接收时间。站内信另提供 senderId/senderKind，平台公告 senderId 为空；附件 JSON 包含 attachmentId，外部邮件另含 assetId，不包含存储密钥。
 
 2026-11-06 按用户要求移除 `trigger.payload.messageId` 的发现及运行时支持，不保留兼容别名；既有提示词需改用 `trigger.payload.id`。原始信件标识仅供内部收信准备、定位与去重使用，不进入执行器事件 payload。
 

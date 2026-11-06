@@ -135,6 +135,27 @@ describe("shared automation variable window", () => {
     expect(prompt.value).toBe("{{trigger.request.body.order.id}}")
   })
 
+  it("previews sample values and distinguishes null, missing and invalid JSON for a literal key", async () => {
+    await render("Webhook")
+    const dialog = await open("view")
+    await act(async () => button("设置 请求 Body", dialog).click())
+    const path = dialog.querySelector<HTMLInputElement>('[aria-label="请求 Body 字段路径"]')!
+    const sample = dialog.querySelector<HTMLTextAreaElement>('[aria-label="请求 Body 测试数据"]')!
+    expect(sample).not.toBeNull()
+    function setSample(value: string) {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(sample, value)
+      sample.dispatchEvent(new Event("input", { bubbles: true }))
+    }
+    await act(async () => { inputValue(path, "#/order.id"); setSample('{"order.id":0}') })
+    expect(dialog.querySelector('[aria-label="预览值"]')?.textContent).toBe("0")
+    await act(async () => setSample('{"order.id":null}'))
+    expect(dialog.querySelector('[aria-label="预览值"]')?.textContent).toContain("null")
+    await act(async () => setSample('{}'))
+    expect(dialog.textContent).toContain("字段不存在")
+    await act(async () => setSample('{broken'))
+    expect(dialog.textContent).toContain("JSON 格式无效")
+  })
+
   it("provides a selectable template when clipboard writing fails", async () => {
     writeText.mockRejectedValue(new Error("denied"))
     await render()

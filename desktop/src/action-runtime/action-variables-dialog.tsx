@@ -1,6 +1,9 @@
 import { useId, useRef, useState, type ComponentProps, type ReactElement } from "react"
 import { ChevronDown, ChevronUp, Copy, Plus, Search, X } from "lucide-react"
 
+import { readVariablePath } from "../../automation-trigger-packages/variable-contract"
+import { previewVariableSample, variablePathSuffix } from "./variable-sample"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFrameFooter, DialogFrameHeader, DialogTrigger } from "@/components/ui/dialog"
@@ -145,11 +148,15 @@ function VariableRow({ variable, action, expanded, onExpand, onChoose }: {
   readonly onChoose: (template: string) => void
 }) {
   const [path, setPath] = useState("")
+  const [sample, setSample] = useState("")
   const pathId = useId()
-  const suffix = path.trim().replace(/^\.+/u, "")
-  const key = suffix ? `${variable.key}.${suffix}` : variable.key
+  const suffix = variablePathSuffix(path)
+  const key = `${variable.key}${suffix}`
   const template = `{{${key}}}`
-  const valid = /^[\p{L}\p{N}_.-]+$/u.test(key)
+  let pathError: string | null = null
+  try { readVariablePath({}, suffix) } catch (error) { pathError = error instanceof Error ? error.message : "字段路径无效" }
+  const valid = !pathError
+  const preview = previewVariableSample(sample, suffix)
   const ActionIcon = action === "复制" ? Copy : Plus
   return <div className="min-w-0">
     <Button type="button" variant="ghost" className="h-auto w-full justify-between gap-3 px-2 py-1.5 text-left whitespace-normal"
@@ -172,8 +179,14 @@ function VariableRow({ variable, action, expanded, onExpand, onChoose }: {
           className="min-w-0 basis-48 font-mono sm:flex-1" onChange={event => setPath(event.target.value)} />
         <Button type="button" variant="outline" disabled={!valid} onClick={() => onChoose(template)}><ActionIcon />{action}</Button>
       </div>
-      <p id={`${pathId}-hint`} className="text-xs text-muted-foreground">留空引用整个值；数组下标写作 items.0.id。</p>
-      {!valid ? <p id={`${pathId}-error`} role="alert" className="text-xs text-destructive">路径只能包含字母、数字、中文、下划线、短横线和点。</p> : null}
+      <p id={`${pathId}-hint`} className="text-xs text-muted-foreground">留空引用整个值；数组使用 items.0.id；含点的字段名使用 #/order.id；花括号和空格使用 %7B、%7D、%20 编码。</p>
+      {!valid ? <p id={`${pathId}-error`} role="alert" className="text-xs text-destructive">{pathError}</p> : null}
+      <label htmlFor={`${pathId}-sample`} className="text-xs text-muted-foreground">测试数据（JSON）</label>
+      <Textarea id={`${pathId}-sample`} aria-label={`${variable.label} 测试数据`} value={sample}
+        placeholder={variable.example ?? '{"order":{"id":"ORDER-1"}}'} onChange={event => setSample(event.target.value)} />
+      {preview ? <div role="status" aria-live="polite" className="text-xs">
+        {preview.error ? <p className="text-destructive">{preview.error}</p> : <pre aria-label="预览值" className="whitespace-pre-wrap break-all">{preview.text}</pre>}
+      </div> : null}
       <code className="break-all rounded-md bg-muted px-3 py-2 text-xs">{template}</code>
     </div> : null}
   </div>

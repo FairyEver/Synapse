@@ -27,10 +27,11 @@ const payload = {
 
 describe("LiveWebhookDeliveryHandler", () => {
   it("maps shared webhook payloads to automation trigger events", async () => {
-    await expect(createWebhookAutomationEvent(payload)).resolves.toEqual({
+    await expect(createWebhookAutomationEvent(payload, "2026-06-06T10:00:01.000Z")).resolves.toEqual({
       source: "webhook",
       type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
-      receivedAt: "2026-06-06T10:00:00.000Z",
+      occurredAt: "2026-06-06T10:00:00.000Z",
+      receivedAt: "2026-06-06T10:00:01.000Z",
       payload: {
         deliveryId: "delivery-1",
         webhook: { id: "webhook-1", publicId: "wh_public", name: "GitHub" },
@@ -61,7 +62,8 @@ describe("LiveWebhookDeliveryHandler", () => {
 
     await handler.handle(payload)
 
-    await expect(createWebhookAutomationEvent(payload)).resolves.toEqual(automation.acceptEvent.mock.calls[0]?.[0])
+    const received = automation.acceptEvent.mock.calls[0]![0]
+    await expect(createWebhookAutomationEvent(payload, received.receivedAt)).resolves.toEqual(received)
     expect(logger.info).toHaveBeenCalledWith("Live webhook delivery accepted.", {
       source: "live-webhook",
       deliveryId: "delivery-1",
@@ -98,4 +100,11 @@ describe("LiveWebhookDeliveryHandler", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("FairyEver/Synapse")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("body payload")
   })
+})
+
+
+it("separates gateway occurrence from local receipt for a delayed Webhook", async () => {
+  const event = await createWebhookAutomationEvent(payload, "2026-11-06T01:00:00.000Z")
+  expect(event.occurredAt).toBe(payload.request.receivedAt)
+  expect(event.receivedAt).toBe("2026-11-06T01:00:00.000Z")
 })

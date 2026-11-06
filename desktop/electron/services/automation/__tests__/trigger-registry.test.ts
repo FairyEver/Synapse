@@ -159,7 +159,7 @@ describe("AutomationTriggerRegistry", () => {
     const interval = registry.get("builtin.interval")
     const webhook = registry.get("builtin.webhook")
 
-    expect(cron.manifest.variables?.map((variable) => variable.key)).toEqual([
+    expect(cron.manifest.variables?.map((variable) => variable.key)).toEqual(expect.arrayContaining([
       "trigger.type",
       "trigger.triggeredBy",
       "trigger.triggeredAt",
@@ -168,8 +168,9 @@ describe("AutomationTriggerRegistry", () => {
       "trigger.automationName",
       "trigger.cron",
       "trigger.timezone",
-    ])
-    expect(interval.manifest.variables?.map((variable) => variable.key)).toEqual([
+      "trigger.date", "trigger.executedAt", "trigger.runId",
+    ]))
+    expect(interval.manifest.variables?.map((variable) => variable.key)).toEqual(expect.arrayContaining([
       "trigger.type",
       "trigger.triggeredBy",
       "trigger.triggeredAt",
@@ -178,7 +179,8 @@ describe("AutomationTriggerRegistry", () => {
       "trigger.automationName",
       "trigger.everyMinutes",
       "trigger.anchor",
-    ])
+      "trigger.date", "trigger.executedAt", "trigger.runId",
+    ]))
     expect(webhook.manifest.variables?.map((variable) => variable.key)).toEqual(expect.arrayContaining([
       "trigger.deliveryId",
       "trigger.webhook.publicId",

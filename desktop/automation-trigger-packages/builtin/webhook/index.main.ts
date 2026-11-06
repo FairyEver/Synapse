@@ -12,6 +12,7 @@ import { webhookTriggerRuntime } from "./runtime.main"
 
 export const webhookTriggerDefinition = {
   manifest: webhookTriggerManifest,
+  manualRunUnavailableReason: "请发送 Webhook 请求触发，不能无事件手动运行",
   summarize: summarizeWebhookTriggerConfig,
   validateStoredConfig(config: unknown): ActionStoredConfigValidation {
     const parsed = webhookTriggerConfigSchema.safeParse(config)

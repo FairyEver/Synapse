@@ -10,6 +10,7 @@ export type DeliveryOutcome = { state: "success" | "failed" | "unknown" | "skipp
 export type PreparedMailPayload = {
   messageId: string; subject: string; body: string; sender: string; to: string; cc: string; receivedAt: string;
   attachmentCount: number; attachments: string; url: string;
+  sentAt?: string; senderId?: string; senderKind?: "user" | "system"; senderAddresses?: string; replyToAddresses?: string;
   accountId?: string; accountName?: string; accountAddress?: string;
 }
 export interface MailReceiptSource {

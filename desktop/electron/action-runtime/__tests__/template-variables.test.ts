@@ -1,3 +1,4 @@
+import { readVariablePath } from "../../../automation-trigger-packages/variable-contract"
 import { describe, expect, it } from "vitest"
 import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 
@@ -45,7 +46,8 @@ describe("action template variables", () => {
       expect(renderActionTemplate(`{{${prefix}.headers}}`, variables)).toBe('{"marker":"header"}')
     }
     expect(Object.keys(variables).length).toBeLessThanOrEqual(200)
-    expect(renderActionTemplate("{{trigger.request.body.key499}}", variables)).toBe("")
+    expect(renderActionTemplate("{{trigger.request.body.key499}}", variables)).toBe("499")
+    expect(renderActionTemplate("{{trigger.request.query.marker}}", variables)).toBe("query")
   })
 
   it("uses the same depth boundary for short and original request paths", () => {
@@ -219,13 +221,10 @@ describe("action template variables", () => {
       "trigger.request.query.run": "e2e",
       "trigger.request.headers.x-codex-e2e": "marker",
     }))
-    expect(renderActionTemplate(
-      "nested={{trigger.payload.request.body.nested.hello}}",
-      variables,
-    )).toBe("nested=")
+    expect(() => renderActionTemplate("{{trigger.payload.request.body.nested.hello}}", variables)).toThrow("字段不存在")
   })
 
-  it("renders missing webhook dynamic request fields as empty strings", () => {
+  it("reports missing webhook dynamic fields instead of silently rendering empty strings", () => {
     const variables = buildAutomationTemplateVariables({
       triggerType: "builtin.webhook",
       triggerConfig: { webhookPublicId: "wh_public", webhookName: "Plain Text" },
@@ -253,10 +252,9 @@ describe("action template variables", () => {
       },
     })
 
-    expect(renderActionTemplate(
-      "nested={{trigger.request.body.nested.hello}} source={{trigger.request.query.source}} header={{trigger.request.headers.x-codex-e2e}}",
-      variables,
-    )).toBe("nested= source= header=")
+    for (const key of ["trigger.request.body.nested.hello", "trigger.request.query.source", "trigger.request.headers.x-codex-e2e"]) {
+      expect(() => renderActionTemplate(`{{${key}}}`, variables)).toThrow("字段不存在")
+    }
   })
 })
 
@@ -269,3 +267,56 @@ function webhookVariables(request: Record<string, unknown>) {
       receivedAt: "2026-11-06T00:00:00.000Z", payload: { request } },
   })
 }
+
+
+describe("variable product contract", () => {
+  it("resolves deep paths and literal dotted/slashed keys without collisions or prototype traversal", () => {
+    const variables = webhookVariables({ body: { "order.id": "literal", order: { id: "nested" }, "a/b": 0, nil: null } })
+    expect(renderActionTemplate("{{trigger.request.body.order.id}}", variables)).toBe("nested")
+    expect(renderActionTemplate("{{trigger.request.body#/order.id}}", variables)).toBe("literal")
+    expect(renderActionTemplate("{{trigger.request.body#/a~1b}}", variables)).toBe("0")
+    expect(renderActionTemplate("{{trigger.request.body.nil}}", variables)).toBe("")
+    expect(() => renderActionTemplate("{{trigger.request.body.toString}}", variables)).toThrow("字段不存在")
+    let body: unknown = "deep"
+    for (let i = 0; i < 20; i++) body = { a: body }
+    expect(renderActionTemplate("{{trigger.request.body." + Array(20).fill("a").join(".") + "}}", webhookVariables({ body }))).toBe("deep")
+    expect(() => renderActionTemplate("{{trigger.request.body." + Array(65).fill("a").join(".") + "}}", webhookVariables({ body }))).toThrow("路径")
+  })
+  it("rejects an event-free Webhook even for a nested optional field", () => {
+    expect(() => renderActionTemplate("{{trigger.request.body.order.id}}", {})).toThrow("未知变量")
+  })
+  it("separates execution time and schedule business date across midnight with an effective timezone", () => {
+    const variables = buildAutomationTemplateVariables({ triggerType: "builtin.cron", triggerConfig: { expr: "0 23 * * *", timezone: "Asia/Shanghai" }, triggeredBy: "missed_run", triggeredAt: "2026-11-06T18:00:00.000Z", executedAt: "2026-11-06T18:01:00.000Z", scheduledAt: "2026-11-06T15:00:00.000Z", runId: "run-1", automationId: "auto", automationName: "report" })
+    expect(variables["trigger.date"]).toBe("2026-11-06")
+    expect(variables["trigger.executedAt"]).toBe("2026-11-06T18:01:00.000Z")
+    expect(variables["trigger.runId"]).toBe("run-1")
+    expect(variables["trigger.timezone"]).toBe("Asia/Shanghai")
+    const local = buildAutomationTemplateVariables({ triggerType: "builtin.cron", triggerConfig: { expr: "0 9 * * *" }, triggeredBy: "manual", triggeredAt: "2026-11-06T00:00:00.000Z", scheduledAt: "2026-11-06T00:00:00.000Z", automationId: "auto", automationName: "report" })
+    expect(local["trigger.timezone"]).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  })
+})
+
+
+it("preserves event occurrence and receipt times while execution starts on another day", () => {
+  const variables = buildAutomationTemplateVariables({ triggerType: "builtin.mail-internal-received", triggerConfig: { timezone: "UTC" }, triggeredBy: "trigger", triggeredAt: "2026-11-06T00:30:00.000Z", executedAt: "2026-11-06T01:00:00.000Z", scheduledAt: "2026-11-06T00:30:00.000Z", automationId: "a", automationName: "mail", event: { source: "mail-internal", type: "message.received", occurredAt: "2026-11-05T23:00:00.000Z", receivedAt: "2026-11-06T00:30:00.000Z", payload: {} } })
+  expect(variables["trigger.triggeredAt"]).toBe("2026-11-05T23:00:00.000Z")
+  expect(variables["trigger.receivedAt"]).toBe("2026-11-06T00:30:00.000Z")
+  expect(variables["trigger.executedAt"]).toBe("2026-11-06T01:00:00.000Z")
+  expect(variables["trigger.date"]).toBe("2026-11-05")
+})
+
+
+it("keeps every declared static Webhook alias usable after a wide body", () => {
+  const body = Object.fromEntries(Array.from({ length: 500 }, (_, index) => [`key${index}`, index]))
+  const variables = buildAutomationTemplateVariables({ triggerType: "builtin.webhook", triggerConfig: {}, triggeredBy: "trigger", triggeredAt: "2026-11-06T00:00:00.000Z", scheduledAt: "2026-11-06T00:00:00.000Z", automationId: "a", automationName: "webhook", event: { source: "webhook", type: "received", receivedAt: "2026-11-06T01:00:00.000Z", occurredAt: "2026-11-06T00:00:00.000Z", payload: { deliveryId: "d", webhook: { id: "w", publicId: "public", name: "ERP" }, request: { body, method: "POST", receivedAt: "2026-11-06T00:00:00.000Z" } } } })
+  for (const [key, expected] of Object.entries({ "trigger.payload.request.method": "POST", "trigger.payload.request.contentType": "", "trigger.payload.request.bodyText": "", "trigger.payload.request.remoteAddress": "", "trigger.payload.webhook.id": "w", "trigger.payload.webhook.publicId": "public", "trigger.payload.webhook.name": "ERP", "trigger.payload.request.receivedAt": "2026-11-06T00:00:00.000Z" })) {
+    expect(renderActionTemplate(`{{${key}}}`, variables)).toBe(expected)
+  }
+})
+
+it("rejects template delimiters in a raw pointer and supports encoded braces and trailing spaces", () => {
+  expect(() => readVariablePath({}, "#/a{b")).toThrow("编码")
+  const variables = webhookVariables({ body: { "a{b": "brace", "tail ": "space" } })
+  expect(renderActionTemplate("{{trigger.request.body#/a%7Bb}}", variables)).toBe("brace")
+  expect(renderActionTemplate("{{trigger.request.body#/tail%20}}", variables)).toBe("space")
+})

@@ -1,3 +1,4 @@
+import { commonTriggerVariables } from "../common-variables"
 import type { AutomationTriggerManifest } from "../../types.shared"
 import {
   intervalTriggerConfigSchema,
@@ -5,14 +6,9 @@ import {
 } from "./schema"
 
 const intervalTriggerVariables = [
-  { key: "trigger.type", label: "触发器类型", group: "trigger" },
-  { key: "trigger.triggeredBy", label: "运行来源", group: "trigger" },
-  { key: "trigger.triggeredAt", label: "触发时间", group: "trigger" },
-  { key: "trigger.scheduledAt", label: "计划时间", group: "trigger" },
-  { key: "trigger.automationId", label: "自动化 ID", group: "trigger" },
-  { key: "trigger.automationName", label: "自动化名称", group: "trigger" },
-  { key: "trigger.everyMinutes", label: "间隔分钟", group: "config" },
-  { key: "trigger.anchor", label: "间隔锚点", group: "config" },
+  ...commonTriggerVariables(true),
+  { key: "trigger.everyMinutes", label: "间隔分钟", group: "config", example: "60" },
+  { key: "trigger.anchor", label: "间隔计算方式", group: "config", description: "created_at 按创建时间计算；last_completed_at 按上次完成时间计算。" },
 ] as const
 
 export const intervalTriggerManifest = {

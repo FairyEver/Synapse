@@ -96,6 +96,8 @@ export class AutomationExecutionService {
         scheduledAt: nowIso,
       }
       const templateVariables = buildAutomationTemplateVariables({
+        runId: run.id,
+        executedAt: run.startedAt,
         triggerType: item.trigger.type,
         triggerConfig: item.trigger.config,
         triggeredBy: effectiveTriggerContext.triggeredBy,

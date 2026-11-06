@@ -106,6 +106,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
               kind: definition.manifest.kind,
               defaultConfig: definition.manifest.defaultConfig,
               configSchema: z.toJSONSchema(definition.manifest.configSchema),
+              ...((definition.manualRunUnavailableReason || definition.activationRequired) ? { manualRunUnavailableReason: definition.manualRunUnavailableReason ?? "需要信件上下文，无法手动运行" } : {}),
               ...(definition.manifest.variables ? { variables: definition.manifest.variables } : {}),
             }))
             result = { ok: true, data: descriptors, total: descriptors.length }
