@@ -24,7 +24,7 @@ function SkillImage({ session, id, revision }: { session: string; id: string; re
 export function SkillHubIcon({ session, skill, large = false }: {
   session: string; skill: Pick<SkillHubSummary, 'id' | 'iconUrl' | 'revision'>; large?: boolean
 }) {
-  return <div aria-hidden="true" className={`grid shrink-0 place-items-center overflow-hidden bg-surface-secondary text-muted ${large ? 'size-13 rounded-xl sm:size-17' : 'size-8 rounded-lg'}`}>
+  return <div aria-hidden="true" className={`grid shrink-0 place-items-center overflow-hidden bg-surface-secondary text-muted ${large ? 'size-13 rounded-xl sm:size-17' : 'size-10 rounded-lg'}`}>
     {skill.iconUrl ? <SkillImage key={`${session}:${skill.id}:${skill.revision}`} session={session} id={skill.id} revision={skill.revision} />
       : <Package className="size-1/2" />}
   </div>
