@@ -23,6 +23,11 @@ const testActionSchema = z.object({ message: z.string().min(1) }).passthrough()
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationExecutionService", () => {
+  it.each([1, 3])("rejects schema version %s before creating an execution", async schemaVersion => {
+    const harness = await createExecutionHarness()
+    await expect(harness.service.runItem({ ...harness.item, schemaVersion }, "manual")).rejects.toThrow("配置需要更新")
+    expect(await harness.runs.listByAutomation(harness.item.id)).toEqual([])
+  })
   it("persists a terminal association before execution and preserves it on cancellation", async () => {
     const inspectRef: { current?: () => Promise<AutomationRun | null> } = {}
     let stored: AutomationRun | null | undefined

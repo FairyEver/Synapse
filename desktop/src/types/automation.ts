@@ -38,7 +38,9 @@ export type AutomationPolicy = {
 
 export type AutomationItem = {
   id: string
-  schemaVersion: 1 | 2
+  schemaVersion: number
+  formatRevision?: unknown
+  readOnly?: boolean
   name: string
   description?: string
   enabled: boolean

@@ -53,7 +53,9 @@ export type AutomationPolicy = {
 export interface AutomationItem extends Record<string, unknown> {
   readonly mailSubscription?: { readonly id: string; readonly stoppedAt?: string; readonly retired?: boolean; readonly previousId?: string; readonly previousEndedAt?: string; readonly previousRetired?: boolean }
   readonly id: string
-  readonly schemaVersion: 1 | 2
+  readonly schemaVersion: number
+  readonly formatRevision?: unknown
+  readonly readOnly?: boolean
   readonly name: string
   readonly description?: string
   readonly enabled: boolean

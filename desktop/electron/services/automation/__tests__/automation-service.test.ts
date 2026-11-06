@@ -26,6 +26,90 @@ const testActionSchema = z.object({ message: z.string().min(1) })
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationService", () => {
+  it("keeps known invalid scope editable and validates it before scheduling", async () => {
+    const harness = createHarness()
+    const item = createStoredAutomation({ scope: { type: "project", projectId: "" } })
+    await harness.itemStore.upsert(item)
+    expect(await harness.service.automationGet(item.id)).toMatchObject({ readOnly: false, enabled: false, validation: { status: "needs_update" } })
+    const repaired = await harness.service.automationUpdate(item.id, { scope: { type: "global" } })
+    expect(repaired.readOnly).toBe(false)
+    expect(repaired.validation?.status).not.toBe("needs_update")
+  })
+  it("keeps unknown top-level metadata when renaming a historical V2 task", async () => {
+    const harness = createHarness()
+    const item = { ...createStoredAutomation(), metadata: { futureLabel: "保留" } }
+    await harness.itemStore.upsert(item)
+    await harness.service.automationUpdate(item.id, { name: "Renamed" })
+    expect(await harness.items.get(item.id)).toMatchObject({ metadata: item.metadata, name: "Renamed", configVersion: 1 })
+  })
+
+  it("does not accept an event or commit a durable claim for future revisions", async () => {
+    const harness = createHarness({ triggers: fakeEventTriggerRegistry() })
+    const item = { ...createStoredAutomation(), formatRevision: 2, mailSubscription: { id: "sub" },
+      trigger: { type: "builtin.fake-event", config: { eventType: "demo.created" } } }
+    await harness.itemStore.upsert(item)
+    const event = { source: "test", type: "demo.created", payload: {}, receivedAt: "2026-06-03T00:00:00Z" }
+    const commitStart = vi.fn(async () => true)
+    expect(await harness.service.acceptEvent(event)).toEqual([])
+    expect(await harness.service.runDurableEvent({ automationId: item.id, subscriptionId: "sub", runId: "reserved", event, identitySignal: new AbortController().signal, commitStart })).toEqual({ kind: "obsolete" })
+    expect(commitStart).not.toHaveBeenCalled()
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+    expect(await harness.items.get(item.id)).toEqual(item)
+  })
+
+  it("rejects unknown root input through the service boundary used by MCP", async () => {
+    const harness = createHarness()
+    await expect(harness.service.automationCreate({ ...createAutomationInput(), futureOption: true } as Parameters<AutomationService["automationCreate"]>[0])).rejects.toThrow()
+    expect(await harness.items.list()).toEqual([])
+  })
+  it.each([
+    ["future revision", { formatRevision: 2 }],
+    ["null revision", { formatRevision: null }],
+    ["zero revision", { formatRevision: 0 }],
+    ["invalid trigger with unknown config", { trigger: { type: "builtin.interval", config: { everyMinutes: 0, anchor: "created_at", futureLimit: 3 } } }],
+    ["invalid executor with unknown config", { executor: { type: "builtin.test", config: { message: "", futureLimit: 3 } } }],
+    ["unknown trigger config", { trigger: { type: "builtin.interval", config: { everyMinutes: 10, anchor: "created_at", futureLimit: 3 } } }],
+    ["unknown executor config", { executor: { type: "builtin.test", config: { message: "ok", futureLimit: 3 } } }],
+    ["unknown policy", { policy: { missedRunPolicy: "skip", overlapPolicy: "queue" } }],
+    ["unknown condition", { conditions: { operator: "and", items: [{ type: "future-condition" }] } }],
+  ])("isolates %s without executing, overwriting or blocking a compatible task", async (_label, patch) => {
+    const harness = createHarness()
+    const incompatible = Object.assign(createStoredAutomation(), patch) as AutomationItem
+    await harness.itemStore.upsert(incompatible)
+    const compatible = await harness.service.automationCreate(createAutomationInput())
+    await harness.service.start()
+    try {
+      expect(harness.service.automationRuntimeInspect().timers).toEqual([compatible.id])
+      const listed = await harness.service.automationList()
+      expect(listed.find(item => item.id === incompatible.id)).toMatchObject({
+        enabled: false, readOnly: true, nextRunAt: undefined,
+        validation: { status: "needs_update" },
+      })
+      await expect(harness.service.runNow(incompatible.id)).rejects.toThrow("配置需要更新")
+      await expect(harness.service.automationEnable(incompatible.id)).rejects.toThrow("配置需要更新")
+      await expect(harness.service.automationUpdate(incompatible.id, { name: "do not overwrite" })).rejects.toThrow()
+      expect(await harness.items.get(incompatible.id)).toEqual(incompatible)
+      expect(await harness.runs.listByAutomation(incompatible.id)).toEqual([])
+    } finally { await harness.service.stop() }
+  })
+
+  it("rejects unknown execution fields on create rather than silently stripping them", async () => {
+    const harness = createHarness()
+    await expect(harness.service.automationCreate({
+      ...createAutomationInput(),
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10, anchor: "created_at", futureLimit: 3 } },
+    })).rejects.toThrow()
+    expect(await harness.items.list()).toEqual([])
+  })
+
+  it("writes the current format revision without changing V2 or the edit counter", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate(createAutomationInput())
+    expect(item).toMatchObject({ schemaVersion: 2, formatRevision: 1, configVersion: 0 })
+    const updated = await harness.service.automationUpdate(item.id, { name: "Renamed" })
+    expect(updated).toMatchObject({ schemaVersion: 2, formatRevision: 1, configVersion: 1 })
+  })
+
   it.each([
     ["cron", () => ({ ...createCronAutomationInput(), trigger: { type: "builtin.cron", config: { expr: "* * * * *", timezone: "UTC" } } }), 60_000],
     ["interval", createCompletionAnchoredIntervalInput, 600_000],
@@ -127,6 +211,7 @@ describe("AutomationService", () => {
       expect(stored?.nextRunAt).toBeUndefined()
       expect(harness.service.automationRuntimeInspect().timers).not.toContain(legacy.id)
       await expect(harness.service.runNow(legacy.id)).rejects.toThrow("旧版自动化不可运行")
+      await expect(harness.service.automationUpdate(legacy.id, { name: "Renamed" })).rejects.toThrow("旧版自动化不可编辑")
     } finally { await harness.service.stop() }
   })
 

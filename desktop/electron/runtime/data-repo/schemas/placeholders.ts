@@ -825,19 +825,17 @@ export type AutomationRunTriggerV1 = "trigger" | "manual" | "missed_run"
 
 export interface AutomationItemEntryV1 extends Record<string, unknown> {
   id: string
-  schemaVersion: 1 | 2
+  schemaVersion: number
+  formatRevision?: unknown
   name: string
   description?: string
   enabled: boolean
-  scope: AutomationScopeV1
+  scope: { type: string } & Record<string, unknown>
   cwd?: string
   trigger: AutomationRefV1
   executor: AutomationRefV1
   conditions?: unknown
-  policy: {
-    missedRunPolicy: "skip" | "run_once"
-    overlapPolicy: "skip"
-  }
+  policy: Record<string, unknown>
   createdAt: string
   updatedAt: string
   nextRunAt?: string
@@ -869,20 +867,19 @@ export const automationItemsSchema: NamespaceSchema<AutomationItemEntryV1> = {
   migrations: noMigrations,
   validate: (v): v is AutomationItemEntryV1 =>
     isAnyRecord<AutomationItemEntryV1>(v)
-    && (
-      (v as AutomationItemEntryV1).schemaVersion === 1
-      || (v as AutomationItemEntryV1).schemaVersion === 2
-    )
+    && Number.isSafeInteger((v as AutomationItemEntryV1).schemaVersion)
+    && (v as AutomationItemEntryV1).schemaVersion > 0
     && typeof (v as AutomationItemEntryV1).id === "string"
     && typeof (v as AutomationItemEntryV1).name === "string"
     && isOptionalString((v as AutomationItemEntryV1).description)
     && typeof (v as AutomationItemEntryV1).enabled === "boolean"
     && isMailSubscriptionReference((v as AutomationItemEntryV1).mailSubscription)
-    && isAutomationScope((v as AutomationItemEntryV1).scope)
+    && isPlainRecord((v as AutomationItemEntryV1).scope)
+    && typeof (v as AutomationItemEntryV1).scope.type === "string"
     && isOptionalString((v as AutomationItemEntryV1).cwd)
     && isAutomationRef((v as AutomationItemEntryV1).trigger)
     && isAutomationRef((v as AutomationItemEntryV1).executor)
-    && isAutomationPolicy((v as AutomationItemEntryV1).policy)
+    && isPlainRecord((v as AutomationItemEntryV1).policy)
     && typeof (v as AutomationItemEntryV1).createdAt === "string"
     && typeof (v as AutomationItemEntryV1).updatedAt === "string"
     && isOptionalString((v as AutomationItemEntryV1).nextRunAt)
@@ -1612,14 +1609,6 @@ function isOutboxPayload(value: unknown): value is OutboxPayloadV1 {
     && isOptionalRecord(value.metadata)
 }
 
-function isAutomationScope(value: unknown): value is AutomationScopeV1 {
-  return isAnyRecord<AutomationScopeV1>(value)
-    && (
-      value.type === "global"
-      || (value.type === "project" && typeof value.projectId === "string")
-    )
-}
-
 function isAutomationRef(value: unknown): value is AutomationRefV1 {
   return isAnyRecord<AutomationRefV1>(value)
     && typeof value.type === "string"
@@ -1636,10 +1625,4 @@ function isAutomationActiveRunStatus(value: unknown): value is AutomationActiveR
 
 function isAutomationRunTrigger(value: unknown): value is AutomationRunTriggerV1 {
   return ["trigger", "manual", "missed_run"].includes(String(value))
-}
-
-function isAutomationPolicy(value: unknown): value is AutomationItemEntryV1["policy"] {
-  return isAnyRecord<AutomationItemEntryV1["policy"]>(value)
-    && value.overlapPolicy === "skip"
-    && (value.missedRunPolicy === "skip" || value.missedRunPolicy === "run_once")
 }

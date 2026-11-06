@@ -66,6 +66,7 @@ function AutomationListRow({
     if (document.activeElement === document.body) nameButtonRef.current?.focus()
   }, [activeRunning])
   const legacy = item.schemaVersion === 1
+  const readOnly = item.schemaVersion !== 2 || item.readOnly
   const needsUpdate = legacy || item.validation?.status === "needs_update"
   const disabled = !item.enabled
   const badge = getStatusBadge(item)
@@ -140,7 +141,7 @@ function AutomationListRow({
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                disabled={legacy}
+                disabled={readOnly}
                 aria-label={`编辑自动化 ${item.name}`}
                 onClick={() => {
                   if (onEdit) onEdit()
@@ -150,7 +151,7 @@ function AutomationListRow({
                 <Pencil />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{legacy ? "旧版不可编辑" : "编辑"}</TooltipContent>
+            <TooltipContent>{readOnly ? "当前客户端不可编辑" : "编辑"}</TooltipContent>
           </Tooltip>
           {activeRunning ? (
             <Tooltip>

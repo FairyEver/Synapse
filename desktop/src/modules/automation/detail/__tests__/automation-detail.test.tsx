@@ -24,6 +24,21 @@ afterEach(async () => {
 })
 
 describe("automation detail provider display", () => {
+  it("shows an unsupported task read-only while preserving its configuration", async () => {
+    const item = { ...createItem({ type: "builtin.claude-code", config: { projectId: "p", prompt: "保留提示词" } }),
+      formatRevision: 2, readOnly: true,
+      conditions: { operator: "and", items: [{ type: "future-condition", value: "保留条件" }] },
+      validation: { status: "needs_update", issues: [{ field: "formatRevision", message: "请升级客户端后操作" }] },
+    } as unknown as AutomationItem
+    const onEdit = vi.fn()
+    const before = JSON.stringify(item)
+    await renderDetail(item, onEdit)
+    expect(document.body.textContent).toContain("请升级客户端后操作")
+    expect(document.body.textContent).toContain("保留提示词")
+    expect([...document.querySelectorAll("button")].some(button => button.textContent === "编辑" || button.textContent?.startsWith("修改"))).toBe(false)
+    expect(JSON.stringify(item)).toBe(before)
+    expect(onEdit).not.toHaveBeenCalled()
+  })
   it.each([false, true])("resolves a readable provider and model without mutating config (snapshots: %s)", async (snapshots) => {
     bridge.listProviders.mockResolvedValue([{ id: "provider-1", name: "当前供应商", haikuModel: "current-haiku" }])
     const config = Object.freeze({

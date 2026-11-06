@@ -54,6 +54,7 @@ function AutomationCard({
   onDelete,
 }: AutomationCardProps) {
   const legacy = item.schemaVersion === 1
+  const readOnly = item.schemaVersion !== 2 || item.readOnly
   const needsUpdate = legacy || item.validation?.status === "needs_update"
   const disabled = !item.enabled
   const activeRunning = item.activeRun?.status === "running"
@@ -144,11 +145,11 @@ function AutomationCard({
       <div className="mt-auto flex items-center justify-end gap-1 pt-4">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" disabled={pending || legacy} aria-label="编辑" onClick={onEdit}>
+            <Button variant="ghost" size="icon" disabled={pending || readOnly} aria-label="编辑" onClick={onEdit}>
               <Pencil />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{legacy ? "旧版不可编辑" : "编辑"}</TooltipContent>
+          <TooltipContent>{readOnly ? "当前客户端不可编辑" : "编辑"}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>

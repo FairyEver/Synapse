@@ -1,8 +1,9 @@
+import { automationFormatIssue } from "../../../automation-trigger-packages/compatibility"
 import path from "node:path"
 import { Worker } from "node:worker_threads"
 import type { DataNamespace } from "../../runtime/data-repo"
 import type { AutomationItem } from "./types"
-import { isSupportedAutomationExecutor, supportedAutomationExecutorTypes } from "../../../action-packages/automation-executors"
+import { isRetiredAutomationExecutor, retiredAutomationExecutorTypes } from "../../../action-packages/automation-executors"
 
 interface CleanupDeps {
   readonly items: {
@@ -27,7 +28,7 @@ export class RetiredExecutorCleanup {
   start(): Promise<void> {
     this.stopped = false
     this.unsubscribe ??= this.deps.changes.onChange(change => {
-      if (change.kind !== "replace" && !(change.kind === "upsert" && change.value && !isSupportedAutomationExecutor(change.value.executor.type))) return
+      if (change.kind !== "replace" && !(change.kind === "upsert" && change.value && isRetiredAutomationExecutor(change.value.executor.type))) return
       void this.run().catch(error => this.deps.logger.warn("Automation configuration retirement failed.", {
         boundary: "automation.retired-executor-cleanup",
         errorName: error instanceof Error ? error.name : typeof error,
@@ -56,7 +57,7 @@ export class RetiredExecutorCleanup {
       const items = await this.deps.items.list()
       if (this.stopped) return
       await this.scan(items
-        .filter(item => item.schemaVersion === 2)
+        .filter(item => !automationFormatIssue(item))
         .map(item => ({ id: item.id, executorType: item.executor.type })))
     }
   }
@@ -67,7 +68,7 @@ export class RetiredExecutorCleanup {
       "retired-executor-cleanup-worker.js",
     )
     const worker = new Worker(workerPath, {
-      workerData: { candidates, supportedExecutorTypes: supportedAutomationExecutorTypes },
+      workerData: { candidates, retiredExecutorTypes: retiredAutomationExecutorTypes },
       resourceLimits: { maxOldGenerationSizeMb: 64 },
     })
     this.worker = worker

@@ -1,4 +1,5 @@
 import { validateAutomationPrompt } from "../../../automation-trigger-packages/variable-contract"
+import { AUTOMATION_UPGRADE_MESSAGE, automationConfigIssue, automationCreateInputSchema, automationFormatIssue, automationScopeSchema, automationUpdateInputSchema, parseAutomationConfig } from "../../../automation-trigger-packages/compatibility"
 import { isSupportedAutomationExecutor } from "../../../action-packages/automation-executors"
 import type { AutomationTriggerEvent } from "../../../automation-trigger-packages/types.shared"
 import {
@@ -215,8 +216,10 @@ export class AutomationService {
 
   async automationUpdate(id: string, patch: AutomationUpdateInput): Promise<AutomationItem> {
     const startedAt = Date.now()
-    const normalizedPatch = this.normalizeUpdateInput(patch)
     const oldItem = await this.deps.items.get(id)
+    if (oldItem?.schemaVersion === 1) throw new Error("旧版自动化不可编辑，请新建自动化")
+    if (oldItem && this.compatibilityIssue(oldItem)) throw new Error(AUTOMATION_UPGRADE_MESSAGE)
+    const normalizedPatch = this.normalizeUpdateInput(patch)
     this.cancel(id)
     try {
       const item = await this.deps.items.update(id, normalizedPatch)
@@ -316,9 +319,6 @@ export class AutomationService {
   async runNow(id: string): Promise<AutomationRun | null> {
     const startedAt = Date.now()
     const item = await this.deps.items.get(id)
-    const manualRunReason = item ? this.deps.triggers.get(item.trigger.type).manualRunUnavailableReason : undefined
-    if (manualRunReason) throw new Error(manualRunReason)
-    if (item && this.deps.triggers.get(item.trigger.type).activationRequired) throw new Error("此触发器需要信件上下文，不能直接手动运行")
     if (!item) {
       this.deps.logger?.info("Automation manual run skipped because item was not found.", {
         boundary: "automation.run-now",
@@ -333,6 +333,9 @@ export class AutomationService {
       const variableIssue = this.validateItem(item).issues.find(issue => issue.field === "executor.prompt")
       throw new Error(variableIssue?.message ?? NEEDS_UPDATE_MESSAGE)
     }
+    const trigger = this.deps.triggers.get(item.trigger.type)
+    if (trigger.manualRunUnavailableReason) throw new Error(trigger.manualRunUnavailableReason)
+    if (trigger.activationRequired) throw new Error("此触发器需要信件上下文，不能直接手动运行")
     this.cancel(id)
     try {
       const run = await this.executeOrSkip(item, "manual")
@@ -908,11 +911,12 @@ export class AutomationService {
   }
 
   private async withRuntimeState(item: AutomationItem): Promise<AutomationItem> {
-    const publicItem = { ...item, mailSubscription: undefined }
+    const readOnly = item.schemaVersion === 1 || Boolean(this.compatibilityIssue(item))
+    const publicItem = { ...item, mailSubscription: undefined, readOnly }
     const validation = this.validateItem(item)
     const baseItem = validation.status === "valid"
       ? publicItem
-      : { ...publicItem, enabled: false, validation }
+      : { ...publicItem, enabled: false, nextRunAt: undefined, validation }
     if (!this.runningItemIds.has(item.id)) return baseItem
     const runId = this.deps.execution.getActiveRunIdForItem(item.id)
     return {
@@ -932,16 +936,20 @@ export class AutomationService {
         issues: [{ field: "schemaVersion", message: "旧版自动化已停用，请新建自动化" }],
       }
     }
+    const compatibility = this.compatibilityIssue(item)
+    if (compatibility) return { status: "needs_update", issues: [compatibility] }
     const triggerValidation = this.deps.triggers.validateStoredConfig(item.trigger.type, item.trigger.config)
     const executorValidation = this.deps.actions.validateStoredConfig(item.executor.type, item.executor.config)
+    const scopeValidation = automationScopeSchema.safeParse(item.scope)
     const conditionsValidation = item.conditions ? automationConditionsSchema.safeParse(item.conditions) : null
     const variableError = isSupportedAutomationExecutor(item.executor.type) ? validateAutomationPrompt(item.executor.config.prompt, this.deps.triggers.list().find(trigger => trigger.manifest.id === item.trigger.type)?.manifest.variables) : null
-    if (!variableError && triggerValidation.status === "valid" && executorValidation.status === "valid" && (!conditionsValidation || conditionsValidation.success)) {
+    if (scopeValidation.success && !variableError && triggerValidation.status === "valid" && executorValidation.status === "valid" && (!conditionsValidation || conditionsValidation.success)) {
       return { status: "valid", issues: [] }
     }
     return {
       status: "needs_update",
       issues: [
+        ...(!scopeValidation.success ? [{ field: "scope", message: "选择有效的自动化范围" }] : []),
         ...(variableError ? [{ field: "executor.prompt", message: variableError }] : []),
         ...(triggerValidation.status === "needs_update" ? triggerValidation.issues : []),
         ...(executorValidation.status === "needs_update" ? executorValidation.issues : []),
@@ -950,6 +958,20 @@ export class AutomationService {
           : []),
       ],
     }
+  }
+
+  private compatibilityIssue(item: AutomationItem): { field: string; message: string } | undefined {
+    const formatIssue = automationFormatIssue(item)
+    if (formatIssue) return formatIssue
+    const trigger = this.deps.triggers.list().find(definition => definition.manifest.id === item.trigger.type)
+    const executor = this.deps.actions.list().find(definition => definition.manifest.id === item.executor.type)
+    if (!trigger || automationConfigIssue(trigger.manifest.configSchema, item.trigger.config)) {
+      return { field: "trigger", message: AUTOMATION_UPGRADE_MESSAGE }
+    }
+    if (!executor || automationConfigIssue(executor.manifest.configSchema, item.executor.config)) {
+      return { field: "executor", message: AUTOMATION_UPGRADE_MESSAGE }
+    }
+    return undefined
   }
 
   private isAutomaticRunAllowed(item: AutomationItem, date: Date): boolean {
@@ -989,6 +1011,7 @@ export class AutomationService {
   }
 
   private normalizeCreateInput(input: AutomationCreateInput): AutomationCreateInput {
+    automationCreateInputSchema.parse(input)
     return {
       ...input,
       trigger: this.deps.triggers.normalize(input.trigger),
@@ -997,6 +1020,7 @@ export class AutomationService {
   }
 
   private normalizeUpdateInput(patch: AutomationUpdateInput): AutomationUpdateInput {
+    automationUpdateInputSchema.parse(patch)
     return {
       ...patch,
       ...(patch.trigger ? { trigger: this.deps.triggers.normalize(patch.trigger) } : {}),
@@ -1007,7 +1031,7 @@ export class AutomationService {
   private normalizeExecutor(executor: AutomationCreateInput["executor"]): AutomationCreateInput["executor"] {
     return {
       type: executor.type,
-      config: this.deps.actions.parseConfig(executor.type, executor.config),
+      config: parseAutomationConfig(this.deps.actions.get(executor.type).manifest.configSchema, executor.config),
     }
   }
 }

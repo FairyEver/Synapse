@@ -209,7 +209,7 @@ function AutomationModule() {
   }
 
   async function handleToggleEnabled(item: AutomationItem, enabled: boolean) {
-    if (item.schemaVersion === 1) return
+    if (item.schemaVersion !== 2 || item.readOnly) return
     const focused = document.activeElement
     if (focused instanceof HTMLElement && focused.getAttribute("role") === "switch") {
       mutationReturnFocusRef.current = { itemId: item.id, element: focused, fallback: "search" }
@@ -236,7 +236,7 @@ function AutomationModule() {
   }
 
   async function handleRun(item: AutomationItem) {
-    if (item.schemaVersion === 1) return
+    if (item.schemaVersion !== 2 || item.readOnly) return
     setRunningItemIds((current) => new Set([...current, item.id]))
     try {
       const result = await promise(
@@ -337,7 +337,7 @@ function AutomationModule() {
   }
 
   function handleEditorOpen(item: AutomationItem, step?: AutomationEditorStep) {
-    if (item.schemaVersion === 1) {
+    if (item.schemaVersion !== 2 || item.readOnly) {
       handleDetailOpen(item)
       return
     }

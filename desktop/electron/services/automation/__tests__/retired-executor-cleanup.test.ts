@@ -29,13 +29,25 @@ function item(id: string, type: string): AutomationItem {
     createdAt: "2026-11-01T00:00:00Z", updatedAt: "2026-11-01T00:00:00Z", runCount: 7, configVersion: 3 }
 }
 describe("Agent-only Automation cleanup", () => {
+  it("preserves unknown executors and future formats during retirement", async () => {
+    const h = await harness()
+    const unknown = item("future-executor", "builtin.future")
+    const revision = { ...item("future-revision", "builtin.command"), formatRevision: 2 }
+    const version = { ...item("future-version", "builtin.command"), schemaVersion: 3 }
+    for (const value of [unknown, revision, version]) await h.changes.upsert(value)
+    try {
+      await h.cleanup.start()
+      expect(await h.items.list()).toEqual([unknown, revision, version])
+      for (const value of [unknown, revision, version]) expect(await h.items.deleteNonAgent(value.id)).toBe(false)
+    } finally { await h.cleanup.stop() }
+  })
   it("deletes retired types in batches and preserves both supported configurations exactly", async () => {
     const h = await harness()
     const agent = item("agent", "builtin.agent")
     await h.changes.upsert(agent)
     const claudeCode = item("claude", "builtin.claude-code")
     await h.changes.upsert(claudeCode)
-    for (let i = 0; i < 55; i++) await h.changes.upsert(item(`legacy:${i}`, ["builtin.command", "builtin.script", "builtin.http-request", "builtin.workflow", "builtin.javascript-run", "builtin.nodejs-run", "unknown"][i % 7]!))
+    for (let i = 0; i < 55; i++) await h.changes.upsert(item(`legacy:${i}`, ["builtin.command", "builtin.script", "builtin.http-request", "builtin.workflow", "builtin.javascript-run", "builtin.nodejs-run"][i % 6]!))
     try {
       await h.cleanup.start()
       expect(await h.items.list()).toEqual([agent, claudeCode])

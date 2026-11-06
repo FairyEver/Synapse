@@ -1,3 +1,5 @@
+import { parseAutomationConfig } from "../../../automation-trigger-packages/compatibility"
+
 import type {
   ActionStoredConfigValidation,
 } from "../../../action-packages/types"
@@ -31,7 +33,7 @@ export class AutomationTriggerRegistry {
   }
 
   parseConfig(id: string, config: Record<string, unknown>): Record<string, unknown> {
-    return this.get(id).manifest.configSchema.parse(config)
+    return parseAutomationConfig(this.get(id).manifest.configSchema, config)
   }
 
   normalize(ref: AutomationTriggerRef): AutomationTriggerRef {

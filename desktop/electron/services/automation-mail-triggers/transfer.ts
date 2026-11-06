@@ -1,3 +1,5 @@
+import { automationFormatIssue } from "../../../automation-trigger-packages/compatibility"
+import type { AutomationItem } from "../automation/types"
 import { mailInternalReceivedManifest } from "../../../automation-trigger-packages/builtin/mail-internal-received/manifest"
 import { mailReceivedManifest } from "../../../automation-trigger-packages/builtin/mail-received/manifest"
 
@@ -12,10 +14,10 @@ export function sanitizeImportedMailAutomation(value: unknown, types: ReadonlySe
   return typeof trigger?.type === "string" && types.has(trigger.type) ? { ...portable, enabled: false, nextRunAt: undefined } : portable
 }
 
-/** Legacy Automations stay readable but can never resume automatically after import. */
+/** 不支持的格式只读保留，导入不得恢复其自动执行。 */
 export function sanitizeImportedAutomation(value: unknown, types: ReadonlySet<string> = mailTypes): unknown {
   const portable = sanitizeImportedMailAutomation(value, types)
   if (!portable || typeof portable !== "object" || Array.isArray(portable)) return portable
   const row = portable as Record<string, unknown>
-  return row.schemaVersion === 1 ? { ...row, enabled: false, nextRunAt: undefined } : portable
+  return automationFormatIssue(row as unknown as AutomationItem) ? { ...row, enabled: false, nextRunAt: undefined } : portable
 }

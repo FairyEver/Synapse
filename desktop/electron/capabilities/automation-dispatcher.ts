@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { automationCreateInputSchema, automationUpdateInputSchema, automationPolicySchema, parseAutomationConfig } from "../../automation-trigger-packages/compatibility"
 import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { MainActionRegistry } from "../action-runtime/action-registry"
@@ -308,19 +309,24 @@ export function toPublicAutomationItemSummary(
   summaryLogger: AutomationSummaryLogger = noopSummaryLogger,
 ) {
   const validation = toPublicValidation(item.validation)
+  const conditions = automationConditionsSchema.safeParse(item.conditions)
+  const policy = automationPolicySchema.safeParse(item.policy)
+  const scope = automationCreateInputSchema.shape.scope.safeParse(item.scope)
   return {
     id: item.id,
     schemaVersion: item.schemaVersion,
+    formatRevision: Number.isSafeInteger(item.formatRevision) ? item.formatRevision : undefined,
+    readOnly: item.readOnly,
     legacy: item.schemaVersion === 1,
     name: item.name,
     description: item.description,
     enabled: item.enabled,
-    scope: item.scope,
+    scope: scope.success ? scope.data : undefined,
     cwd: item.cwd,
     trigger: triggerSummary(item, triggers, summaryLogger),
     executor: executorSummary(item, actions, summaryLogger),
-    conditions: item.conditions,
-    policy: item.policy,
+    conditions: conditions.success ? conditions.data : undefined,
+    policy: policy.success ? policy.data : undefined,
     nextRunAt: item.nextRunAt,
     lastRunAt: item.lastRunAt,
     lastStatus: item.lastStatus,
@@ -419,6 +425,7 @@ function parseCreateParams(
   actions: MainActionRegistry,
   platform: string,
 ): AutomationCreateInput {
+  automationCreateInputSchema.parse(params)
   const name = params.name
   const scope = params.scope
   const trigger = params.trigger
@@ -449,6 +456,7 @@ function parseUpdateParams(
 ): { automationId: string; patch: AutomationUpdateInput } {
   const { automationId } = parseAutomationIdParams(params)
   const patchRecord = requireRecord(params.patch, "patch")
+  automationUpdateInputSchema.parse(patchRecord)
   const allowed = new Set(["name", "description", "enabled", "scope", "cwd", "trigger", "executor", "conditions", "policy"])
   for (const key of Object.keys(patchRecord)) {
     if (!allowed.has(key)) throw new Error(`Forbidden automation update field: ${key}`)
@@ -504,7 +512,7 @@ function parseExecutorRef(value: Record<string, unknown>, actions: MainActionReg
   const defaultConfig = createPlatformActionDefaultConfig(type, action.manifest.defaultConfig, platform)
   return {
     type,
-    config: action.manifest.configSchema.parse({ ...defaultConfig, ...config }),
+    config: parseAutomationConfig(action.manifest.configSchema, { ...defaultConfig, ...config }),
   }
 }
 

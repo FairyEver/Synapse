@@ -1,3 +1,5 @@
+import { parseAutomationConfig } from "../../automation-trigger-packages/compatibility"
+
 import type {
   AutomationTriggerConfig,
   AutomationTriggerConfigFormComponent,
@@ -36,7 +38,7 @@ export class RendererAutomationTriggerRegistry {
 
   parseConfig(id: string, config: AutomationTriggerConfig): AutomationTriggerConfig {
     const trigger = this.get(id)
-    const parsed = trigger.manifest.configSchema.parse(config)
+    const parsed = parseAutomationConfig(trigger.manifest.configSchema, config)
     trigger.validateConfig?.(parsed)
     return parsed
   }

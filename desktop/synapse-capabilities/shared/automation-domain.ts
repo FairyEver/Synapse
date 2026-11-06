@@ -132,6 +132,7 @@ const automationScopeSchema = {
 
 const automationRefSchema = {
   type: "object",
+  additionalProperties: false,
   properties: {
     type: { type: "string", description: "Registered trigger or executor type id." },
     config: { type: "object", description: "Config validated by the matching registry. Use discovery tools first." },
@@ -141,6 +142,7 @@ const automationRefSchema = {
 
 const automationPolicySchema = {
   type: "object",
+  additionalProperties: false,
   properties: {
     missedRunPolicy: { type: "string", enum: ["skip", "run_once"] },
     overlapPolicy: { type: "string", enum: ["skip"], description: "Automation currently supports skip only." },
@@ -213,7 +215,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_get",
-      description: "Get one Synapse Automation item summary by automationId. The response includes safe top-level run conditions but does not include raw trigger or executor config.",
+      description: "Get one Synapse Automation item summary by automationId, including formatRevision, readOnly and validation. Upgrade the client before editing or executing readOnly items. Only recognized safe scope/conditions/policy are returned; no raw trigger or executor config.",
       inputSchema: { type: "object", properties: { automationId: automationIdProperty }, required: ["automationId"] },
     },
     {
@@ -237,7 +239,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_update",
-      description: "Update one schema-version-2 Synapse Automation. Optional top-level conditions apply to every automatic trigger; omit conditions to preserve them or pass null to clear them. Legacy schema-version-1 items are read-only.",
+      description: "Update one schema-version-2 Synapse Automation. Optional top-level conditions apply to every automatic trigger; omit conditions to preserve them or pass null to clear them. Legacy schema-version-1 and unsupported V2 formats are read-only. Upgrade the client before changing readOnly items; unknown config fields are rejected, not silently discarded.",
       inputSchema: {
         type: "object",
         properties: {

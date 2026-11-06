@@ -1,16 +1,11 @@
 import { z } from "zod"
 
-import { automationConditionsSchema } from "../../../automation-trigger-packages/schedule-constraints"
+import { automationCreateInputSchema as createAutomationInputSchema, automationUpdateInputSchema as updateAutomationPatchSchema } from "../../../automation-trigger-packages/compatibility"
 import type { IpcModule } from "../../runtime/ipc/types"
 import { createMainLogger } from "../../services/log-store"
 import type { AutomationService } from "../../services/automation"
 
 const logger = createMainLogger("automation.ipc")
-
-const automationScopeSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("global") }),
-  z.object({ type: z.literal("project"), projectId: z.string().min(1) }),
-])
 
 const automationTriggerSchema = z.object({
   type: z.string().min(1),
@@ -74,23 +69,20 @@ const actionRunResultSchema = z.object({
   }).optional(),
 })
 
-const automationPolicySchema = z.object({
-  missedRunPolicy: z.enum(["skip", "run_once"]),
-  overlapPolicy: z.literal("skip"),
-})
-
 const automationItemSchema = z.object({
   id: z.string(),
-  schemaVersion: z.union([z.literal(1), z.literal(2)]),
+  schemaVersion: z.number().int().positive(),
+  formatRevision: z.unknown().optional(),
+  readOnly: z.boolean().optional(),
   name: z.string(),
   description: z.string().optional(),
   enabled: z.boolean(),
-  scope: automationScopeSchema,
+  scope: z.object({ type: z.string() }).passthrough(),
   cwd: z.string().optional(),
   trigger: automationTriggerSchema,
   executor: automationExecutorSchema,
-  conditions: z.record(z.string(), z.unknown()).optional(),
-  policy: automationPolicySchema,
+  conditions: z.unknown().optional(),
+  policy: z.record(z.string(), z.unknown()),
   createdAt: z.string(),
   updatedAt: z.string(),
   nextRunAt: z.string().optional(),
@@ -127,36 +119,6 @@ const automationChangedDomainEventSchema = z.object({
   type: z.literal("automation.itemChanged"),
   payload: automationChangedEventPayloadSchema,
   timestamp: z.string(),
-})
-
-const createAutomationInputSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  enabled: z.boolean().optional(),
-  scope: automationScopeSchema,
-  cwd: z.string().optional(),
-  trigger: automationTriggerSchema,
-  executor: automationExecutorSchema,
-  conditions: automationConditionsSchema.optional(),
-  policy: z.object({
-    missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
-    overlapPolicy: z.literal("skip").optional(),
-  }).optional(),
-})
-
-const updateAutomationPatchSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().optional(),
-  enabled: z.boolean().optional(),
-  scope: automationScopeSchema.optional(),
-  cwd: z.string().optional(),
-  trigger: automationTriggerSchema.optional(),
-  executor: automationExecutorSchema.optional(),
-  conditions: automationConditionsSchema.nullable().optional(),
-  policy: z.object({
-    missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
-    overlapPolicy: z.literal("skip").optional(),
-  }).optional(),
 })
 
 const automationIdRequestSchema = z.object({

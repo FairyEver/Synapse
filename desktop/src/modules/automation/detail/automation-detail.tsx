@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { summarizeAutomationConditions } from "../../../../automation-trigger-packages/schedule-constraints"
+import { automationConditionsSchema, summarizeAutomationConditions } from "../../../../automation-trigger-packages/schedule-constraints"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import type { AutomationItem } from "@/types/automation"
@@ -45,6 +45,9 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
   const providerSelection = getAutomationProviderModelSelection(item.executor.config)
   const providerModelLabel = useProviderModelLabel(providerSelection)
   const legacy = item.schemaVersion === 1
+  const readOnly = item.schemaVersion !== 2 || item.readOnly
+  const parsedConditions = automationConditionsSchema.safeParse(item.conditions)
+  const conditionsSummary = parsedConditions.success ? summarizeAutomationConditions(parsedConditions.data) : "附加条件需要更新"
   const TriggerIcon = rendererAutomationTriggerRegistry.list().find(trigger => trigger.manifest.id === item.trigger.type)?.icon ?? Zap
   const ExecutorIcon = rendererActionRegistry.list().find(action => action.manifest.id === item.executor.type)?.icon ?? Play
   const displayItem = typeof item.executor.config.url === "string"
@@ -57,8 +60,8 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
   const policyFields = [
     ["范围", formatAutomationScope(item, projects)],
     ["下次运行", formatAutomationNextRun(item)],
-    ["错过计划时", item.policy.missedRunPolicy === "run_once" ? "补跑一次" : "跳过"],
-    ["运行重叠时", "跳过本次执行"],
+    ["错过计划时", item.policy.missedRunPolicy === "run_once" ? "补跑一次" : item.policy.missedRunPolicy === "skip" ? "跳过" : "当前客户端不支持"],
+    ["运行重叠时", item.policy.overlapPolicy === "skip" ? "跳过本次执行" : "当前客户端不支持"],
   ] as const
   const backAction = <SystemAppTopBarActionButton iconOnly aria-label="返回自动化列表" tooltip="返回列表" onClick={onBack}><ArrowLeft /></SystemAppTopBarActionButton>
   return (
@@ -71,7 +74,7 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
                 <div className="mb-5 flex min-w-0 flex-wrap items-center justify-between gap-4">
                   <h1 ref={heading} tabIndex={-1} className="min-w-0 flex-1 basis-64 wrap-anywhere text-xl font-semibold outline-none">{item.name}</h1>
                   {!missing ? <div className="flex flex-wrap items-center gap-2">
-                    {legacy ? <Badge variant="outline">旧版已停用</Badge> : <>
+                    {readOnly ? <Badge variant="outline">{legacy ? "旧版已停用" : "需要升级客户端"}</Badge> : <>
                       <div className="flex items-center gap-2">
                         <label htmlFor={`automation-enabled-${item.id}`} className="text-sm text-muted-foreground">{item.enabled ? "已启用" : "已停用"}</label>
                         <Switch id={`automation-enabled-${item.id}`} aria-label={item.enabled ? "停用自动化" : "启用自动化"} checked={item.enabled} disabled={busy || item.validation?.status === "needs_update"} onCheckedChange={onToggleEnabled} />
@@ -87,7 +90,7 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
               {missing ? <p role="alert" className="text-sm text-muted-foreground">自动化不存在</p> : <>
                 {error ? <div className="mb-6 flex flex-wrap items-center gap-3"><p role="alert" className="text-sm text-destructive">{error}</p><Button variant="outline" onClick={onRefresh}><RefreshCw />重试</Button></div> : null}
                 {legacy ? <div className="mb-6 flex flex-wrap items-center gap-3"><p role="alert" className="text-sm text-muted-foreground">旧版自动化已停用，请新建后重新配置。</p>{onCreate ? <Button onClick={onCreate}>新建自动化</Button> : null}</div> : null}
-                {!legacy && item.validation?.status === "needs_update" ? <p role="alert" className="mb-6 text-sm text-destructive">配置需要更新，请编辑后保存。</p> : null}
+                {!legacy && item.validation?.status === "needs_update" ? <p role="alert" className="mb-6 text-sm text-destructive">{readOnly ? "自动化配置需要更新，请升级客户端后操作" : "配置需要更新，请编辑后保存。"}</p> : null}
                 <TabsContent value="config">
                   <div className="grid min-w-0 gap-8">
                     <div className="grid min-w-0 items-start gap-8 @4xl:grid-cols-2">
@@ -96,7 +99,7 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
                         <div className="min-w-0 rounded-xl border bg-card text-card-foreground">
                           <div className="flex items-center justify-between gap-3 px-6 py-4">
                             <h3 className="flex min-w-0 items-center gap-2 text-sm font-medium [&_svg]:size-4 [&_svg]:shrink-0"><span className="text-muted-foreground">{section.icon}</span>{section.type}</h3>
-                            {!legacy ? <Button variant="ghost" disabled={busy} onClick={() => onEdit(section.key)}>修改<span className="sr-only">{section.title}</span></Button> : null}
+                            {!readOnly ? <Button variant="ghost" disabled={busy} onClick={() => onEdit(section.key)}>修改<span className="sr-only">{section.title}</span></Button> : null}
                           </div>
                           {section.fields.length > 0 || (section.summary && section.summary !== section.type) ? <div className="grid min-w-0 gap-5 border-t p-6">
                             {section.summary && section.summary !== section.type ? <p className="wrap-anywhere text-sm text-muted-foreground">{section.summary}</p> : null}
@@ -108,8 +111,8 @@ export function AutomationDetail({ item, initialTab = "config", busy, missing, e
                       </section>)}
                     </div>
                     {!legacy && item.conditions ? <section aria-label="附加条件" className="min-w-0 rounded-xl border bg-card p-6 text-card-foreground">
-                      <div className="mb-5 flex items-center justify-between gap-3"><h2 className="text-base font-medium">附加条件</h2><Button variant="ghost" disabled={busy} onClick={() => onEdit("conditions")}>修改<span className="sr-only">附加条件</span></Button></div>
-                      <p className="text-sm">{summarizeAutomationConditions(item.conditions)}</p>
+                      <div className="mb-5 flex items-center justify-between gap-3"><h2 className="text-base font-medium">附加条件</h2>{!readOnly ? <Button variant="ghost" disabled={busy} onClick={() => onEdit("conditions")}>修改<span className="sr-only">附加条件</span></Button> : null}</div>
+                      <p className="text-sm">{conditionsSummary}</p>
                     </section> : null}
                     <section aria-label="运行策略" className="min-w-0 rounded-xl border bg-card p-6 text-card-foreground">
                       <h2 className="mb-5 text-base font-medium">运行策略</h2>

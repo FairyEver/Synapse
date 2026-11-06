@@ -124,3 +124,11 @@ See the attached `api-reference.md` for complete tool signatures and public resu
 ## Desktop editing
 
 The desktop Automation page creates and edits items in the current content area and shows run history inline. It has no dedicated editor-window API. These UI changes do not change the tool schemas or the create/update/enable/disable contracts above.
+
+## V2 configuration compatibility
+
+The current format is `schemaVersion: 2`, `formatRevision: 1`; historical V2 records without `formatRevision` mean revision 1. `configVersion` counts edits and is not a format version. Format metadata is managed by Synapse, not a create/update parameter.
+
+Read summaries can include `formatRevision`, `readOnly` and validation issues. If `readOnly` is true, preserve the task and upgrade the client before editing, enabling or running it; do not strip unknown fields or recreate the task automatically. Known invalid configurations can still be repaired when `readOnly` is false. V1 stays disabled and read-only.
+
+Unknown execution options are rejected instead of silently discarded. Trigger/executor updates replace their complete refs; omit untouched refs. Omit conditions to preserve them or pass null to clear them. Public summaries omit unrecognized scope/conditions/policy contents. Future formats survive backup/import as disabled data; unknown executors are preserved rather than treated as retired types.

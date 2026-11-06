@@ -1,6 +1,7 @@
 import { validateAutomationPrompt } from "../../../automation-trigger-packages/variable-contract"
+import { AUTOMATION_FORMAT_REVISION, AUTOMATION_UPGRADE_MESSAGE, automationFormatIssue, automationPolicySchema } from "../../../automation-trigger-packages/compatibility"
 import { randomUUID } from "node:crypto"
-import { isSupportedAutomationExecutor } from "../../../action-packages/automation-executors"
+import { isRetiredAutomationExecutor, isSupportedAutomationExecutor } from "../../../action-packages/automation-executors"
 import { automationConditionsSchema } from "../../../automation-trigger-packages/schedule-constraints"
 
 import type { ActionManifest } from "../../../action-packages/types"
@@ -78,6 +79,7 @@ export class AutomationItemRepository {
     const item: AutomationItem = {
       id: this.idFactory(),
       schemaVersion: 2,
+      formatRevision: AUTOMATION_FORMAT_REVISION,
       name: input.name,
       description: input.description,
       enabled,
@@ -107,6 +109,7 @@ export class AutomationItemRepository {
   async update(id: string, patch: AutomationUpdateInput): Promise<AutomationItem> {
     const next = await this.mutateItem(id, (existing) => {
       if (existing.schemaVersion === 1) throw new Error("旧版自动化不可编辑，请新建自动化")
+      if (automationFormatIssue(existing)) throw new Error(AUTOMATION_UPGRADE_MESSAGE)
       const trigger = patch.trigger ? this.normalizeTrigger(patch.trigger) : existing.trigger
       const conditions = patch.conditions === undefined
         ? existing.conditions
@@ -158,8 +161,8 @@ export class AutomationItemRepository {
   async deleteNonAgent(id: string): Promise<boolean> {
     let deleted = false
     const result = await this.mutateItem(id, existing => {
-      if (existing.schemaVersion === 1) return existing
-      if (isSupportedAutomationExecutor(existing.executor.type)) return existing
+      if (automationFormatIssue(existing)) return existing
+      if (!isRetiredAutomationExecutor(existing.executor.type)) return existing
       deleted = true
       return null
     })
@@ -190,6 +193,7 @@ export class AutomationItemRepository {
   async setEnabled(id: string, enabled: boolean): Promise<AutomationItem> {
     const next = await this.mutateItem(id, (existing) => {
       if (enabled && existing.schemaVersion === 1) throw new Error("旧版自动化不可启用，请新建自动化")
+      if (enabled && automationFormatIssue(existing)) throw new Error(AUTOMATION_UPGRADE_MESSAGE)
       if (enabled) this.validatePrompt(existing)
       const candidate: AutomationItem = {
         ...existing,
@@ -229,8 +233,8 @@ export class AutomationItemRepository {
   ): Promise<AutomationItem | null> {
     return this.mutateItem(id, (existing) => {
       const now = this.isoNow()
-      const trigger = this.triggers.get(existing.trigger.type)
-      const reschedulePolicy = existing.enabled
+      const trigger = automationFormatIssue(existing) ? undefined : this.triggers.list().find(trigger => trigger.manifest.id === existing.trigger.type)
+      const reschedulePolicy = existing.enabled && trigger
         ? trigger.runtime.getReschedulePolicy?.(
           trigger.manifest.configSchema.parse(existing.trigger.config),
         )
@@ -434,10 +438,7 @@ function canonicalExecutionValue(value: unknown): string {
 }
 
 function normalizePolicy(policy: Partial<AutomationPolicy> | undefined): AutomationPolicy {
-  return {
-    missedRunPolicy: policy?.missedRunPolicy ?? DEFAULT_POLICY.missedRunPolicy,
-    overlapPolicy: "skip",
-  }
+  return automationPolicySchema.parse({ ...DEFAULT_POLICY, ...policy })
 }
 
 function validateItem(item: AutomationItem): void {

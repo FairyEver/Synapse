@@ -15,6 +15,18 @@ vi.mock("../../../services/log-store", () => ({
 }))
 
 describe("automationIpcModule", () => {
+  it("carries future format diagnostics without rejecting the item list", () => {
+    const future = {
+      ...automationItem(defaultAutomationInput()), schemaVersion: 3, formatRevision: 2, readOnly: true,
+      scope: { type: "future-scope", projectId: ["a", "b"] }, policy: { overlapPolicy: "queue", futureOption: true },
+    }
+    expect(automationIpcModule.methods.listItems.response!.parse([future])).toEqual([future])
+  })
+
+  it("rejects unknown write fields instead of silently discarding them", () => {
+    expect(automationIpcModule.methods.createItem.request.safeParse({ ...defaultAutomationInput(), futureOption: true }).success).toBe(false)
+    expect(automationIpcModule.methods.updateItem.request.safeParse({ id: "automation:1", patch: { futureOption: true } }).success).toBe(false)
+  })
   beforeEach(() => {
     vi.clearAllMocks()
   })

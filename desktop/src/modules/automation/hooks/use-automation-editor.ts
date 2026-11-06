@@ -69,6 +69,7 @@ export function useAutomationEditor({ mode, onBack, onSaved }: EditorOptions) {
       void bridge.item.get(modeId).then(item => {
         if (cancelled) return
         if (item?.schemaVersion === 1) setLoadState({ status: "error", message: "旧版自动化不可编辑" })
+        else if (item && (item.readOnly || item.schemaVersion !== 2)) setLoadState({ status: "error", message: "自动化配置需要更新，请升级客户端后操作" })
         else if (item) installItem(item)
         else setLoadState({ status: "error", message: "自动化不存在" })
       }).catch(loadError => {

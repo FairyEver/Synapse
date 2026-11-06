@@ -1,4 +1,5 @@
 import { validateAutomationPrompt } from "../../../automation-trigger-packages/variable-contract"
+import { parseAutomationConfig } from "../../../automation-trigger-packages/compatibility"
 import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import { rendererAutomationTriggerRegistry } from "@/automation-triggers/builtin-triggers"
@@ -108,7 +109,7 @@ function buildAutomationPayloadFromDraft(
   if (!draft.executorType) throw new Error("请选择执行器")
   const triggerConfig = rendererAutomationTriggerRegistry.parseConfig(draft.triggerType, draft.triggerConfig)
   const conditions = draft.conditions ? automationConditionsSchema.parse(draft.conditions) : undefined
-  const executorConfig = rendererActionRegistry.parseConfig(draft.executorType, draft.executorConfig)
+  const executorConfig = parseAutomationConfig(rendererActionRegistry.get(draft.executorType).manifest.configSchema, draft.executorConfig)
   const projectId = (executorConfig as Record<string, unknown>).projectId
   const scope = typeof projectId === "string" && projectId.trim()
     ? { type: "project" as const, projectId: projectId.trim() }
@@ -161,10 +162,11 @@ export function summarizeAutomationDraft(draft: AutomationEditorDraft, projects:
 }
 
 function formatAutomationScope(item: AutomationItem, projects: readonly SynapseProjectConfig[]): string {
+  if (item.scope.type !== "global" && item.scope.type !== "project") return "当前客户端不支持"
   const projectId = item.scope.type === "project"
     ? item.scope.projectId
     : (item.executor.config as Record<string, unknown>).projectId as string | undefined
-  if (!projectId) return "全局"
+  if (typeof projectId !== "string" || !projectId) return item.scope.type === "global" ? "全局" : "当前客户端不支持"
   return projects.find((project) => project.id === projectId)?.name ?? projectId
 }
 

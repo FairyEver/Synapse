@@ -290,3 +290,11 @@ Each type may occur once. Weekdays use `0=Sunday` through `6=Saturday`. Time ran
 All automatic trigger types are gated. Cron uses its configured timezone; other triggers use local time. Start is inclusive and end exclusive. Manual runs remain unrestricted and active runs continue across the end boundary. Cron/interval candidates retain their cadence and search at most five years. Webhook and mail events outside the set are discarded without replay; mail deliveries are marked skipped internally.
 
 Create/update do not accept schedule conditions inside cron or interval `trigger.config`. Older nested fields are not migrated. Existing `schemaVersion: 1` Automations are disabled on upgrade, preserved read-only, and reject enable/update/run operations; create a new v2 Automation to use the new model.
+
+## V2 configuration compatibility
+
+The current format is `schemaVersion: 2`, `formatRevision: 1`; historical V2 records without `formatRevision` mean revision 1. `configVersion` counts edits and is not a format version. Format metadata is managed by Synapse, not a create/update parameter.
+
+Read summaries can include `formatRevision`, `readOnly` and validation issues. If `readOnly` is true, preserve the task and upgrade the client before editing, enabling or running it; do not strip unknown fields or recreate the task automatically. Known invalid configurations can still be repaired when `readOnly` is false. V1 stays disabled and read-only.
+
+Unknown execution options are rejected instead of silently discarded. Trigger/executor updates replace their complete refs; omit untouched refs. Omit conditions to preserve them or pass null to clear them. Public summaries omit unrecognized scope/conditions/policy contents. Future formats survive backup/import as disabled data; unknown executors are preserved rather than treated as retired types.

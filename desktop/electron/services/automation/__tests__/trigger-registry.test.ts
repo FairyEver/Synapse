@@ -198,12 +198,12 @@ describe("automation trigger config ownership", () => {
     ["builtin.cron", { expr: "* * * * *", timezone: "UTC" }],
     ["builtin.interval", { everyMinutes: 60, anchor: "created_at" }],
   ] as const) {
-    it(`${type} keeps schedule conditions outside trigger config`, () => {
-      expect(registry.parseConfig(type, {
+    it(`${type} rejects obsolete nested conditions rather than discarding them`, () => {
+      expect(() => registry.parseConfig(type, {
         ...config,
         activeDays: [1, 2, 3, 4, 5],
         timeRange: { start: "08:00", end: "17:00" },
-      })).toEqual(config)
+      })).toThrow("配置需要更新")
     })
   }
 })

@@ -1,3 +1,5 @@
+import { AUTOMATION_UPGRADE_MESSAGE, automationFormatIssue, parseAutomationConfig } from "../../../automation-trigger-packages/compatibility"
+
 import type {
   MainActionDefinition,
   MainActionRegistry,
@@ -57,6 +59,7 @@ export class AutomationExecutionService {
     options: AutomationRunItemOptions = {},
     triggerContext?: AutomationTriggerRuntimeContext,
   ): Promise<AutomationRun> {
+    if (automationFormatIssue(item)) throw new Error(AUTOMATION_UPGRADE_MESSAGE)
     const run = await this.deps.runs.start(item.id, triggeredBy, {
       triggerType: item.trigger.type,
       executorType: item.executor.type,
@@ -88,7 +91,7 @@ export class AutomationExecutionService {
     try {
       options.onRunStarted?.(run)
       const executor = this.deps.actions.get(item.executor.type)
-      const config = executor.manifest.configSchema.parse(item.executor.config)
+      const config = parseAutomationConfig(executor.manifest.configSchema, item.executor.config)
       const nowIso = new Date().toISOString()
       const effectiveTriggerContext = triggerContext ?? {
         triggeredBy,

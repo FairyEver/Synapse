@@ -236,6 +236,28 @@ function createHarness(options: {
 }
 
 describe("automation capability dispatcher", () => {
+  it("keeps unknown future configuration out of public MCP summaries", () => {
+    const { triggers, actions } = registries()
+    const future = Object.assign({}, baseItem, {
+      formatRevision: 2, readOnly: true,
+      scope: { type: "future-scope", secret: "future-secret" },
+      policy: { overlapPolicy: "queue", secret: "future-secret" },
+      conditions: { operator: "and", items: [{ type: "future-condition", secret: "future-secret" }] },
+    }) as AutomationItem
+    const result = toPublicAutomationItemSummary(future, triggers, actions)
+    expect(result).toMatchObject({ formatRevision: 2, readOnly: true })
+    expect(JSON.stringify(result)).not.toContain("future-secret")
+  })
+
+  it("rejects unknown execution options before the MCP adapter can strip them", async () => {
+    const { dispatcher, service } = createHarness()
+    vi.mocked(service.automationCreate).mockResolvedValue(baseItem)
+    await expect(dispatcher.dispatch("app.automation.item.create", {
+      name: "New automation", scope: { type: "global" }, trigger: baseItem.trigger,
+      executor: { type: "builtin.command", config: { command: "echo ok", futureOption: true } },
+    }, { source: "mcp-http" })).rejects.toThrow("配置需要更新")
+    expect(service.automationCreate).not.toHaveBeenCalled()
+  })
   it("exposes webhook discovery in Automation MCP tools", () => {
     const tools = buildAutomationTools()
 
@@ -415,7 +437,7 @@ describe("automation capability dispatcher", () => {
     await dispatcher.dispatch("app.automation.item.create", {
       name: "Windows command",
       scope: { type: "global" },
-      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at" } },
       executor: { type: "builtin.command", config: { command: "echo ok" } },
     }, { source: "mcp-http" })
     await dispatcher.dispatch("app.automation.item.update", {
@@ -427,7 +449,7 @@ describe("automation capability dispatcher", () => {
     await dispatcher.dispatch("app.automation.item.create", {
       name: "PowerShell command",
       scope: { type: "global" },
-      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at" } },
       executor: { type: "builtin.command", config: { command: "Get-Date", shell: "powershell" } },
     }, { source: "mcp-http" })
 
@@ -580,7 +602,7 @@ describe("automation capability dispatcher", () => {
     await expect(dispatcher.dispatch("app.automation.item.create", {
       name: "Broken executor",
       scope: { type: "global" },
-      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at", activeDays: [1] } },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 30, anchor: "created_at" } },
       executor: { type: "builtin.missing-executor", config: {} },
     }, { source: "mcp-http" })).rejects.toThrow('Task action "builtin.missing-executor" is not registered')
 
