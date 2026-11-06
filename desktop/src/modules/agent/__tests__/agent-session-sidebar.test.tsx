@@ -477,10 +477,9 @@ describe("AgentSessionSidebar", () => {
     expect(title?.className).toContain("min-w-0")
     expect(title?.parentElement?.className).toContain("min-w-0")
 
-    const list = [...wrapper.querySelectorAll("div")]
-      .find((element) => element.className.includes("flex-col") && element.textContent?.includes(longTitle))
     const sidebarList = wrapper.querySelector('[data-track="agent-session-list"]')
     const sidebarViewport = sidebarList?.querySelector("[data-radix-scroll-area-viewport]")
+    const list = sidebarViewport?.querySelector("div.flex-col")
     expect(sidebarList?.getAttribute("data-scrollbars")).toBe("vertical")
     expect(sidebarList?.className).toContain("min-w-0")
     expect(sidebarViewport?.className).toContain("overflow-x-hidden")
