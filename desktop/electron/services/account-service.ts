@@ -30,6 +30,7 @@ import type {
 } from "../../src/types/bridge"
 import type {
   DashboardWebhookDto,
+  WebhookDeliveryBodyDto,
   DesktopNotificationOutcome,
   DesktopNotificationSource,
   NotificationSource,
@@ -511,6 +512,18 @@ export class AccountService {
         return webhooks
       }
     }
+  }
+
+  async getWebhookDeliveryBody(deliveryId: string): Promise<WebhookDeliveryBodyDto> {
+    if (!/^[A-Za-z0-9:_-]{1,200}$/.test(deliveryId)) throw new Error("投递 ID 无效。")
+    const scope = this.captureAccountRequestScope()
+    if (!scope) throw new AccountAuthenticationRequiredError()
+    const result = await this.requestAuthenticatedJson<WebhookDeliveryBodyDto>("GET",
+      `${apiBaseUrl()}/console/webhook-deliveries/${encodeURIComponent(deliveryId)}/body`, undefined,
+      "投递正文读取失败，请确认服务端已升级且该投递保存了完整快照。", { accountScope: scope })
+    const current = this.captureAccountRequestScope()
+    if (current?.accountId !== scope.accountId || current.authRevision !== scope.authRevision) throw new AccountAuthenticationRequiredError()
+    return result
   }
 
   async listNotifications(input: { cursor?: string; filter?: "all" | "unread" | "pending"; source?: NotificationSource }) {

@@ -60,10 +60,17 @@ export class AutomationExecutionService {
     triggerContext?: AutomationTriggerRuntimeContext,
   ): Promise<AutomationRun> {
     if (automationFormatIssue(item)) throw new Error(AUTOMATION_UPGRADE_MESSAGE)
+    const event = triggerContext?.event
+    const webhook = event?.payload.webhook as { publicId?: unknown } | undefined
+    const deliveryId = event?.payload.deliveryId
+    const webhookDelivery = item.trigger.type === "builtin.webhook" && event?.source === "webhook"
+      && typeof deliveryId === "string" && typeof webhook?.publicId === "string"
+      ? { deliveryId, webhookPublicId: webhook.publicId, triggeredAt: event.occurredAt ?? event.receivedAt } : undefined
     const run = await this.deps.runs.start(item.id, triggeredBy, {
       triggerType: item.trigger.type,
       executorType: item.executor.type,
       reservedRunId: options.reservedRunId,
+      ...(webhookDelivery ? { webhookDelivery } : {}),
     })
     const controller = new AbortController()
     const effectiveSignal = options.scopeSignal ? AbortSignal.any([controller.signal, options.scopeSignal]) : controller.signal

@@ -26,6 +26,14 @@ const testActionSchema = z.object({ message: z.string().min(1) })
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationService", () => {
+  it("requires the saved webhook run binding instead of trusting caller identifiers", async () => {
+    const h = createHarness()
+    const run = await h.runs.start("automation:1", "trigger", { triggerType: "builtin.webhook", executorType: "builtin.claude-code",
+      webhookDelivery: { deliveryId: "delivery-1", webhookPublicId: "wh_public", triggeredAt: "2026-11-06T12:00:00Z" } })
+    await expect(h.service.automationWebhookRunContext(run.id, "delivery-1")).resolves.toMatchObject({ runId: run.id, deliveryId: "delivery-1" })
+    await expect(h.service.automationWebhookRunContext(run.id, "other")).rejects.toThrow("不匹配")
+    await expect(h.service.automationWebhookRunContext("missing", "delivery-1")).rejects.toThrow("不匹配")
+  })
   it("keeps known invalid scope editable and validates it before scheduling", async () => {
     const harness = createHarness()
     const item = createStoredAutomation({ scope: { type: "project", projectId: "" } })

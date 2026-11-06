@@ -1,4 +1,5 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnModuleInit, Optional, PayloadTooLargeException } from "@nestjs/common"
+import { BadRequestException, GoneException, Inject, Injectable, Logger, NotFoundException, OnModuleInit, Optional, PayloadTooLargeException, ServiceUnavailableException } from "@nestjs/common"
+import { createHash } from "node:crypto"
 import { Prisma } from "@prisma/client"
 import {
   LIVE_MESSAGE_TYPES,
@@ -12,9 +13,11 @@ import {
   type WebhookDeliveryDto,
   type WebhookDeliveryReceivedPayload,
   type WebhookDeliveryStatus,
+  type WebhookDeliveryBodyDto,
   type WebhookDeliveryClientReceiptDto,
 } from "@synapse/shared"
-import { AuditLogService } from "../common/audit-log.service"
+import { AuditLogService, auditActors } from "../common/audit-log.service"
+import { createWebhookBodySnapshot } from "./webhook-body-snapshot"
 import { toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { LiveDesktopGateway } from "../live/live-desktop.gateway"
 import { PrismaService } from "../prisma/prisma.service"
@@ -431,6 +434,7 @@ export class WebhookService implements OnModuleInit {
     const sanitizedHeaders = sanitizeWebhookHeaders(input.headers)
     const sanitizedQuery = sanitizeWebhookQuery(input.query)
     const bodySummary = summarizeWebhookBody(input.body, contentType)
+    const bodySnapshot = createWebhookBodySnapshot(bodySummary, contentType)
     const receivedAt = new Date()
     const receivedAtIso = receivedAt.toISOString()
     const maskedPath = maskWebhookUrl(input.path)
@@ -451,6 +455,7 @@ export class WebhookService implements OnModuleInit {
         bodyKind: bodySummary.bodyKind,
         bodySize: bodySummary.bodySize,
         bodyPreview: bodySummary.bodyPreview,
+        ...bodySnapshot,
         receivedAt,
         onlineClientCount: 0,
         sentClientCount: 0,
@@ -701,6 +706,28 @@ export class WebhookService implements OnModuleInit {
       select: { id: true },
     })
     if (!webhook) throw new NotFoundException("Webhook not found")
+  }
+
+  async getDeliveryBodyForUser(userId: string, deliveryId: string, ipAddress = "system"): Promise<WebhookDeliveryBodyDto> {
+    const row = await this.prisma.webhookDelivery.findFirst({
+      where: { id: deliveryId, userId },
+      select: { id: true, webhookPublicId: true, receivedAt: true, bodyKind: true, bodyText: true,
+        bodySha256: true, bodyBytes: true, bodyContentType: true, payloadVersion: true },
+    })
+    if (!row) throw new NotFoundException("Webhook delivery not found")
+    if (row.payloadVersion !== 1 || row.bodyText === null || row.bodySha256 === null || row.bodyBytes === null) {
+      throw new GoneException({ code: "WEBHOOK_PAYLOAD_UNAVAILABLE", message: "This delivery has no complete payload snapshot." })
+    }
+    if (Buffer.byteLength(row.bodyText, "utf8") !== row.bodyBytes || createHash("sha256").update(row.bodyText, "utf8").digest("hex") !== row.bodySha256) {
+      throw new ServiceUnavailableException("Webhook payload integrity check failed")
+    }
+    await this.auditLog?.record({ actor: auditActors.user(userId, "Webhook owner"), action: "webhook.delivery.body.read",
+      targetType: "webhook-delivery", targetId: row.id, ipAddress,
+      detail: { bodyBytes: row.bodyBytes, bodySha256: row.bodySha256 } })
+    return { schemaVersion: 1, payloadVersion: 1, deliveryId: row.id, webhookPublicId: row.webhookPublicId,
+      receivedAt: row.receivedAt.toISOString(), bodyKind: row.bodyKind, contentType: row.bodyContentType,
+      bodyText: row.bodyText, bodyBytes: row.bodyBytes, bodySha256: row.bodySha256,
+      complete: true, redactionPolicy: "webhook-v1", retention: "latest-100-per-webhook", expiresAt: null }
   }
 
   private toDashboardWebhookDto(webhook: WebhookRecord, publicAppUrl: string): DashboardWebhookDto {

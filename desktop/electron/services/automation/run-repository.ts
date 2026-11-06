@@ -35,6 +35,7 @@ export class AutomationRunRepository {
       readonly triggerType: string
       readonly executorType: string
       readonly reservedRunId?: string
+      readonly webhookDelivery?: AutomationRun["webhookDelivery"]
     },
   ): Promise<AutomationRun> {
     this.nextIndex += 1
@@ -48,6 +49,7 @@ export class AutomationRunRepository {
       triggeredBy,
       triggerType: input.triggerType,
       executorType: input.executorType,
+      ...(input.webhookDelivery ? { webhookDelivery: input.webhookDelivery } : {}),
     }
     await this.runs.upsert(run)
     return run

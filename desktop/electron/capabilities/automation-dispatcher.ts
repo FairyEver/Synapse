@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { automationCreateInputSchema, automationUpdateInputSchema, automationPolicySchema, parseAutomationConfig } from "../../automation-trigger-packages/compatibility"
-import type { DashboardWebhookDto } from "@synapse/shared" with { "resolution-mode": "import" }
+import type { DashboardWebhookDto, WebhookDeliveryBodyDto } from "@synapse/shared" with { "resolution-mode": "import" }
 
 import type { MainActionRegistry } from "../action-runtime/action-registry"
 import type { ActorIdentity, AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
@@ -33,10 +33,12 @@ type AutomationServicePort = Pick<
   | "stopRun"
   | "automationRunList"
   | "automationRuntimeInspect"
+  | "automationWebhookRunContext"
 >
 
 type AutomationAccountServicePort = {
   readonly listWebhooks: () => Promise<DashboardWebhookDto[]>
+  readonly getWebhookDeliveryBody: (deliveryId: string) => Promise<WebhookDeliveryBodyDto>
 }
 
 type AutomationSummaryLogger = {
@@ -65,7 +67,7 @@ export type AutomationCapabilityDispatcherDeps = {
 type AutomationItemListParams = AutomationListOptions
 
 type AutomationDispatchSecurity = {
-  readonly action: Extract<PermissionAction, "automation.read" | "automation.mutate">
+  readonly action: Extract<PermissionAction, "automation.read" | "automation.mutate" | "automation.webhook.body.read">
   readonly actor: ActorIdentity
   readonly resource: string
   readonly metadata: Record<string, unknown>
@@ -223,6 +225,19 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
           case "app.automation.webhook.list": {
             const webhooks = await deps.accountService.listWebhooks()
             result = { ok: true, data: webhooks.map(toPublicAutomationWebhookSummary), total: webhooks.length }
+            break
+          }
+
+          case "app.automation.webhook_delivery.get": {
+            if (context.source !== "mcp-http" && context.source !== "mcp-stdio") throw new Error("Webhook 正文读取仅支持 MCP。")
+            const id = z.string().regex(/^[A-Za-z0-9:_-]{1,200}$/)
+            const input = z.object({ deliveryId: id, runId: id.optional() }).strict().parse(params)
+            const runContext = input.runId ? await deps.service.automationWebhookRunContext(input.runId, input.deliveryId) : undefined
+            const body = await deps.accountService.getWebhookDeliveryBody(input.deliveryId)
+            if (body.deliveryId !== input.deliveryId || (runContext && runContext.webhookPublicId !== body.webhookPublicId)) {
+              throw new Error("Webhook 投递身份不匹配。")
+            }
+            result = { ok: true, data: { externalData: true, value: { ...body, ...(runContext ? { runContext } : {}) } } }
             break
           }
 
@@ -637,7 +652,7 @@ function automationDispatchSecurity(
   params: Record<string, unknown>,
   context: DispatchContext,
 ): AutomationDispatchSecurity | null {
-  const permissionAction = MUTATING_AUTOMATION_ACTIONS.has(action)
+  const permissionAction = action === "app.automation.webhook_delivery.get" ? "automation.webhook.body.read" : MUTATING_AUTOMATION_ACTIONS.has(action)
     ? "automation.mutate"
     : READING_AUTOMATION_ACTIONS.has(action)
       ? "automation.read"
@@ -655,6 +670,7 @@ function automationDispatchSecurity(
       automationAction: action,
       ...(automationId ? { automationId } : {}),
       ...(runId ? { runId } : {}),
+      ...(safeAuditIdentifier(params.deliveryId) ? { deliveryId: safeAuditIdentifier(params.deliveryId) } : {}),
       ...(isRecord(params.patch) ? { patchKeys: Object.keys(params.patch) } : {}),
       ...(isRecord(params.trigger) && typeof params.trigger.type === "string" ? { triggerType: params.trigger.type } : {}),
       ...(isRecord(params.executor) && typeof params.executor.type === "string" ? { executorType: params.executor.type } : {}),

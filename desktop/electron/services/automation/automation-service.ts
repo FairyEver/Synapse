@@ -520,6 +520,14 @@ export class AutomationService {
     }
   }
 
+  async automationWebhookRunContext(runId: string, deliveryId: string) {
+    const run = await this.deps.runs.get(runId)
+    if (!run || run.triggerType !== "builtin.webhook" || run.webhookDelivery?.deliveryId !== deliveryId) {
+      throw new Error("Webhook 运行与投递不匹配，或旧运行未保存关联。")
+    }
+    return { runId: run.id, automationId: run.automationId, ...run.webhookDelivery }
+  }
+
   async triggerForTest(
     id: string,
     triggeredBy: AutomationRunTrigger,

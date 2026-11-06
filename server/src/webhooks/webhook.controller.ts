@@ -1,4 +1,4 @@
-import { All, Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common"
+import { All, Body, Controller, Delete, Get, Header, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common"
 import type { Request } from "express"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
@@ -79,6 +79,13 @@ export class WebhookDashboardController {
 @Controller(["/api/console", "/api/dashboard"])
 export class WebhookDeliveryDashboardController {
   constructor(private readonly webhooks: WebhookService) {}
+
+  @Get("/webhook-deliveries/:id/body")
+  @Header("Cache-Control", "no-store")
+  getBody(@Param("id") id: string, @Req() request: AuthenticatedUserRequest) {
+    const deliveryId = parseBody(z.string().regex(/^[A-Za-z0-9:_-]{1,200}$/), id, "Invalid delivery ID")
+    return this.webhooks.getDeliveryBodyForUser(request.user!.id, deliveryId, request.ip)
+  }
 
   @Get("/webhook-deliveries")
   list(@Query() query: Record<string, unknown>, @Req() request: AuthenticatedUserRequest) {

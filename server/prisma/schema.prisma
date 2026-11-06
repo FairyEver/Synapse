@@ -546,6 +546,11 @@ model WebhookDelivery {
   bodyKind          String
   bodySize          Int
   bodyPreview       String?
+  bodyText          String?
+  bodySha256        String?
+  bodyBytes         Int?
+  bodyContentType   String?
+  payloadVersion    Int?
   receivedAt        DateTime                 @default(now())
   onlineClientCount Int
   sentClientCount   Int

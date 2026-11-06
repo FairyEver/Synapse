@@ -2983,6 +2983,29 @@ describe("AccountService", () => {
     ])
   })
 
+  it("reads a delivery using the account session and refuses a response after logout", async () => {
+    let duringRead: (() => Promise<void>) | undefined
+    const snapshot = { deliveryId: "delivery-1", bodyText: "{}" }
+    const { namespace, service } = await createTestAccountService({ fetch: (async (url, init) => {
+      if (String(url).endsWith("/auth/desktop/token")) return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+      if (String(url).endsWith("/auth/me")) return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" } })
+      if (String(url).endsWith("/console/webhook-deliveries/delivery-1/body")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+        await duringRead?.()
+        return jsonResponse(snapshot)
+      }
+      if (String(url).endsWith("/auth/logout")) return jsonResponse({ ok: true })
+      throw new Error("unexpected request")
+    }) as typeof fetch })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())!.activeAttempt!
+    await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt.state}`)
+    await expect(service.getWebhookDeliveryBody("delivery-1")).resolves.toEqual(snapshot)
+    await expect(service.getWebhookDeliveryBody("../escape")).rejects.toThrow("ID")
+    duringRead = async () => { await service.logout() }
+    await expect(service.getWebhookDeliveryBody("delivery-1")).rejects.toThrow()
+  })
+
   it("loads every account webhook page for the desktop selector", async () => {
     const calls: string[] = []
     const firstPage = Array.from({ length: 100 }, (_, index) => webhookFixture(String(index + 1)))

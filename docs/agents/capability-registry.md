@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-06 新增完整 Webhook 正文只读 MCP：Automation 14→15，全局 capability 364→365、MCP 索引 360→361；公开仍仅 search/invoke 两项。新增独立 automation.webhook.body.read 权限与本人认证的内部正文 REST，不新增 System App、Dock、IPC、Workflow、Automation Action 或 Deep Link。快照、运行绑定及升级边界见 docs/agent-guides/webhook-delivery-body.md。
+
 - 2026-11-06 夜测修复：Automation运行结果元数据与触发器启用确认分离，避免邮件生命周期挂载前的恢复计数丢失；配置/启停校验、未知不重试及公开schema不变。Automation仍14项capability/MCP索引、5触发器/2执行器，其余数量及系统Skill契约不变。
 
 - 2026-11-06 夜测修复：附加条件增删/清除恢复键盘焦点，空星期草稿摘要显示明确状态；不改变条件schema、执行闸门或权限。Automation仍14项capability/MCP索引、5触发器/2执行器，其余数量及公开MCP/Skill契约不变。
@@ -262,7 +264,7 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `database` | 30 | 30 |
 | `model_price` | 10 | 10 |
 | `repository` | 1 | 1 |
-| `automation` | 14 | 14 |
+| `automation` | 15 | 15 |
 | `workflow` | 19 | 19 |
 | `content` | 16 | 16 |
 | `drive` | 76 | 76 |
@@ -272,13 +274,13 @@ Meeting 是普通 System App（界面上的名字是「录音」），不新增 
 | `wecom` | 2 | 2 |
 | `skill_hub` | 10 | 10 |
 | `cloud_tables` | 21 | 21 |
-| 合计 | 364 | 360 |
+| 合计 | 365 | 361 |
 
 企业微信的 2 项 capability / MCP 索引保持不变。消息工具描述和系统 Skill 指向当前正式安装源，提供直接参数示例，区分本人、单聊、群聊和上下文指代；默认走已连接机器人，仅显式指定或任务已绑定时走 Webhook，不自动回退渠道。此次只调整使用指引，不新增 System App、Dock、Workflow、Automation Action 或 Deep Link，公开 MCP 仍为 `search`、`invoke` 两个。
 
 `synapse-tool-router` 的 `search`、`invoke` 是所有 MCP 客户端的**唯一**公开工具表面：`/mcp` 的 `tools/list` 只返回这两个工具，`initialize` 返回说明两段式调用流程的 instructions。内置 Agent 会话通过 SDK 注入进程内 server（名字前缀 `synapse-tool-router`），外部客户端通过 `/mcp` 看到的是 `synapse-mcp` 的 `search`、`invoke`，两者共用同一实现、同一 instructions 与同一 action router。
 
-上表 360 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
+上表 361 个工具仍注册在 capability catalog 与 `MCP_TOOL_ACTIONS` 中，作为 `search` 的索引和 `invoke` 的 action 映射，但不再出现在 `tools/list` 里。它们计入 MCP Tool 数，不计入公开工具数——公开工具数恒为 2。
 
 `app` domain 中不映射 MCP tool 的四个 capability 固定为：
 

@@ -1,4 +1,5 @@
-import { BadRequestException, Logger, NotFoundException, PayloadTooLargeException } from "@nestjs/common"
+import { BadRequestException, GoneException, Logger, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from "@nestjs/common"
+import { createHash } from "node:crypto"
 import { LIVE_MESSAGE_TYPES, WEBHOOK_DELIVERY_STATUS } from "@synapse/shared"
 import { PrismaClient, type Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
@@ -66,6 +67,28 @@ function createPrismaMock() {
 }
 
 describe("WebhookService", () => {
+  it("reads only the owner's complete immutable snapshot without changing delivery state", async () => {
+    const prisma = createPrismaMock()
+    const bodyText = '{"state":null,"zero":0,"enabled":false}'
+    prisma.webhookDelivery.findFirst.mockResolvedValue({ id: "delivery-1", webhookPublicId: "wh_public", receivedAt: new Date("2026-11-06T12:00:00Z"), bodyKind: "json",
+      bodyText, bodyBytes: Buffer.byteLength(bodyText), bodySha256: createHash("sha256").update(bodyText).digest("hex"), payloadVersion: 1, bodyContentType: "application/json" })
+    const service = new WebhookService(prisma as never)
+    const result = await service.getDeliveryBodyForUser("user-1", "delivery-1")
+    expect(prisma.webhookDelivery.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "delivery-1", userId: "user-1" } }))
+    expect(result).toMatchObject({ bodyText, complete: true, retention: "latest-100-per-webhook", expiresAt: null })
+    expect(prisma.webhookDelivery.update).not.toHaveBeenCalled()
+    expect(prisma.webhookDeliveryReceipt.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("rejects inaccessible, historical and corrupted payloads instead of returning previews", async () => {
+    const prisma = createPrismaMock(); const service = new WebhookService(prisma as never)
+    prisma.webhookDelivery.findFirst.mockResolvedValue(null)
+    await expect(service.getDeliveryBodyForUser("other", "delivery-1")).rejects.toBeInstanceOf(NotFoundException)
+    prisma.webhookDelivery.findFirst.mockResolvedValue({ payloadVersion: null, bodyPreview: "preview" })
+    await expect(service.getDeliveryBodyForUser("user-1", "delivery-1")).rejects.toBeInstanceOf(GoneException)
+    prisma.webhookDelivery.findFirst.mockResolvedValue({ payloadVersion: 1, bodyText: "{}", bodyBytes: 2, bodySha256: "incorrect" })
+    await expect(service.getDeliveryBodyForUser("user-1", "delivery-1")).rejects.toBeInstanceOf(ServiceUnavailableException)
+  })
   it("creates a webhook for the current user and returns the full URL in the webhook dto", async () => {
     const prisma = createPrismaMock()
     const tx = {

@@ -26,6 +26,13 @@ afterEach(() => {
 })
 
 describe("WebhookDashboardController", () => {
+  it("scopes body reads to the authenticated account", () => {
+    const getDeliveryBodyForUser = vi.fn()
+    const controller = new WebhookDeliveryDashboardController({ getDeliveryBodyForUser } as unknown as WebhookService)
+    controller.getBody("delivery-1", createRequest() as never)
+    expect(getDeliveryBodyForUser).toHaveBeenCalledWith("user-1", "delivery-1", "203.0.113.20")
+    expect(() => controller.getBody("../escape", createRequest() as never)).toThrow()
+  })
   it("mounts console and legacy dashboard webhook routes", () => {
     expect(Reflect.getMetadata(PATH_METADATA, WebhookDashboardController)).toEqual([
       "/api/console",

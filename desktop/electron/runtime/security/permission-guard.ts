@@ -38,6 +38,7 @@ export type PermissionAction =
   | "secret.write"
   | "scheduler.mutate"
   | "automation.read"
+  | "automation.webhook.body.read"
   | "automation.mutate"
   | "workflow.run"
   | "workflow.read"

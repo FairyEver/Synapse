@@ -23,6 +23,21 @@ const testActionSchema = z.object({ message: z.string().min(1) }).passthrough()
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationExecutionService", () => {
+  it("persists only webhook identity before the executor starts", async () => {
+    let observed: AutomationRun | null = null
+    const h = await createExecutionHarness({ action: { ...testAction, execute: async () => {
+      observed = await h.runs.get("automation-run:1")
+      return { status: "success", summary: "ok" }
+    } } })
+    const run = await h.service.runItem({ ...h.item, trigger: { type: "builtin.webhook", config: {} } }, "trigger", {}, {
+      triggeredBy: "trigger", triggeredAt: "2026-11-06T12:00:01Z", scheduledAt: "2026-11-06T12:00:01Z",
+      event: { source: "webhook", type: "webhook.delivery.received", occurredAt: "2026-11-06T12:00:00Z", receivedAt: "2026-11-06T12:00:01Z",
+        payload: { deliveryId: "delivery-1", webhook: { publicId: "wh_public" }, request: { body: { secret: "never-store" } } } },
+    })
+    expect(observed).toMatchObject({ webhookDelivery: { deliveryId: "delivery-1", webhookPublicId: "wh_public", triggeredAt: "2026-11-06T12:00:00Z" } })
+    expect(run.webhookDelivery).toEqual(observed!.webhookDelivery)
+    expect(JSON.stringify(observed)).not.toContain("never-store")
+  })
   it.each([1, 3])("rejects schema version %s before creating an execution", async schemaVersion => {
     const harness = await createExecutionHarness()
     await expect(harness.service.runItem({ ...harness.item, schemaVersion }, "manual")).rejects.toThrow("配置需要更新")

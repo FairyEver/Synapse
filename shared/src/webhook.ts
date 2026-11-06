@@ -139,3 +139,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0
 }
+/** Immutable, sanitized body snapshot; never a raw credential-bearing request. */
+export interface WebhookDeliveryBodyDto {
+  readonly schemaVersion: 1
+  readonly payloadVersion: 1
+  readonly deliveryId: string
+  readonly webhookPublicId: string
+  readonly receivedAt: string
+  readonly contentType: string | null
+  readonly bodyKind: string
+  readonly bodyText: string
+  readonly bodyBytes: number
+  readonly bodySha256: string
+  readonly complete: true
+  readonly redactionPolicy: "webhook-v1"
+  readonly retention: "latest-100-per-webhook"
+  readonly expiresAt: null
+}

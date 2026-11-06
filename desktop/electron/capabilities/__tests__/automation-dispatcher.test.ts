@@ -178,12 +178,15 @@ function serviceMock() {
     runAutomationNow: vi.fn(),
     stopRun: vi.fn(),
     automationRunList: vi.fn(async () => [baseRun]),
+    automationWebhookRunContext: vi.fn(async (runId: string, deliveryId: string) => ({ runId, automationId: "automation:1", deliveryId, webhookPublicId: "wh_public", triggeredAt: "2026-11-06T12:00:00Z" })),
     automationRuntimeInspect: vi.fn(() => ({ timers: ["automation:1"], runningItemIds: ["automation:1"] })),
   }
 }
 
 function accountServiceMock() {
   return {
+    getWebhookDeliveryBody: vi.fn(async (deliveryId: string) => ({ schemaVersion: 1 as const, payloadVersion: 1 as const, deliveryId,
+      webhookPublicId: "wh_public", receivedAt: "2026-11-06T12:00:00Z", contentType: "application/json", bodyKind: "json", bodyText: '{"private":"body"}', bodyBytes: 18, bodySha256: "hash", complete: true as const, redactionPolicy: "webhook-v1" as const, retention: "latest-100-per-webhook" as const, expiresAt: null })),
     listWebhooks: vi.fn(async () => [{
       id: "webhook-row:1",
       publicId: "wh_public",
@@ -236,6 +239,25 @@ function createHarness(options: {
 }
 
 describe("automation capability dispatcher", () => {
+  it("reads body with a distinct permission and no body in audit metadata", async () => {
+    const h = createHarness()
+    const result = await h.dispatcher.dispatch("app.automation.webhook_delivery.get", { deliveryId: "delivery-1", runId: "run-1" }, { source: "mcp-http" })
+    expect(h.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({ action: "automation.webhook.body.read" }))
+    expect(h.service.automationWebhookRunContext).toHaveBeenCalledWith("run-1", "delivery-1")
+    expect(result.data).toMatchObject({ externalData: true, value: { bodyText: '{"private":"body"}', runContext: { runId: "run-1" } } })
+    expect(JSON.stringify(h.auditSink.record.mock.calls)).not.toContain("private")
+  })
+
+  it("denies body read before network access and rejects run mismatch or extra params", async () => {
+    const denied = createHarness({ permissionResult: { allowed: false, reason: "body denied" } })
+    await expect(denied.dispatcher.dispatch("app.automation.webhook_delivery.get", { deliveryId: "delivery-1" }, { source: "mcp-http" })).rejects.toThrow("body denied")
+    expect(denied.accountService.getWebhookDeliveryBody).not.toHaveBeenCalled()
+    const h = createHarness()
+    h.service.automationWebhookRunContext.mockRejectedValueOnce(new Error("run mismatch"))
+    await expect(h.dispatcher.dispatch("app.automation.webhook_delivery.get", { deliveryId: "delivery-1", runId: "wrong" }, { source: "mcp-http" })).rejects.toThrow("run mismatch")
+    expect(h.accountService.getWebhookDeliveryBody).not.toHaveBeenCalled()
+    await expect(h.dispatcher.dispatch("app.automation.webhook_delivery.get", { deliveryId: "delivery-1", userId: "other" }, { source: "mcp-http" })).rejects.toThrow()
+  })
   it("keeps unknown future configuration out of public MCP summaries", () => {
     const { triggers, actions } = registries()
     const future = Object.assign({}, baseItem, {

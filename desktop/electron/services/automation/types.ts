@@ -112,6 +112,7 @@ export interface AutomationListOptions {
 }
 
 export interface AutomationRun extends Record<string, unknown> {
+  readonly webhookDelivery?: { readonly deliveryId: string; readonly webhookPublicId: string; readonly triggeredAt: string }
   readonly id: string
   readonly schemaVersion: 1
   readonly automationId: string

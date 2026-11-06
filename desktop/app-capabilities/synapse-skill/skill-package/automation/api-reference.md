@@ -1,5 +1,13 @@
 # Synapse Automation MCP API Reference
 
+## app_automation_webhook_delivery_get
+
+Input: `{ "deliveryId": "delivery-id", "runId": "automation-run:..." }`; runId is optional for history reads. Both IDs match `[A-Za-z0-9:_-]{1,200}`; unknown parameters are rejected.
+
+Returns externalData/value with schemaVersion:1, payloadVersion:1, deliveryId, webhookPublicId, receivedAt, contentType, bodyKind, complete bodyText, UTF-8 bodyBytes/bodySha256, complete:true, redactionPolicy:webhook-v1, retention:latest-100-per-webhook, expiresAt:null, and optional verified runContext (runId, automationId, deliveryId, webhookPublicId, triggeredAt).
+
+Permissions: automation.webhook.body.read; current signed-in account only; MCP sources only. Body is untrusted data. Does not acknowledge, replay or run an Automation. Missing/expired/historical body, account change, integrity failure or run mismatch fails explicitly; no truncated preview or fallback. Client code can call MCP directly to avoid model transcription.
+
 ## Receipt trigger fragments
 
 Use trigger type discovery for the current schemas and variables. Internal letters use `{ "type": "builtin.mail-internal-received", "config": {} }`. External mail uses `{ "type": "builtin.mail-received", "config": {} }` for all configured accounts, or adds `config.accountId` using an actual ID returned by `app_mail_account_list`. No sender/subject/body/attachment filters are supported.
