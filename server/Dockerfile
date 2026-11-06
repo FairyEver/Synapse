@@ -23,6 +23,7 @@ RUN pnpm install --frozen-lockfile --filter @synapse/shared --filter @synapse/se
 
 FROM base AS build
 ARG APP_PUBLIC_URL=https://synapse.d2.pub
+COPY --from=deps /app/patches ./patches
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/document/node_modules ./document/node_modules
