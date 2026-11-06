@@ -991,6 +991,84 @@ run_deployed_health_check() {
   run_remote_health_check true && check_public_desktop_update_page && check_public_document_page
 }
 
+cleanup_remote_images() {
+  ssh "$SERVER" "NEW_IMAGE_TAG='$NEW_IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+# 只回收本部署脚本生成的标签；不做全局 prune、不强制删除，也不清理构建缓存或数据卷。
+read_container_image_ids() {
+  local container_ids container_id image_ids image_id
+  local -a containers=()
+  container_ids=$(docker container ls --all --quiet --no-trunc) || return 1
+  if [ -z "$container_ids" ]; then return 0; fi
+  while IFS= read -r container_id; do containers+=("$container_id"); done <<< "$container_ids"
+  image_ids=$(docker container inspect --format '{{.Image}}' "${containers[@]}" </dev/null) || return 1
+  while IFS= read -r image_id; do
+    if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+      echo "invalid container image ID; cleanup stopped" >&2
+      return 1
+    fi
+  done <<< "$image_ids"
+  printf '%s\n' "$image_ids"
+}
+
+is_protected_image() {
+  case $'\n'"$protected_ids"$'\n' in
+    *$'\n'"$1"$'\n'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+image_rows=$(docker image ls --no-trunc --format '{{.Repository}} {{.Tag}} {{.ID}}')
+sorted_rows=$(printf '%s\n' "$image_rows" | LC_ALL=C sort -r -k2,2)
+protected_ids=$(read_container_image_ids)
+
+# 先完整核对两个仓库，再删除任何标签。按回滚标签中的部署时间排序，不按镜像创建时间。
+for repository in synapse-server synapse-pdf-renderer; do
+  current_found=false
+  rollback_count=0
+  while read -r repo tag image_id; do
+    if [ "$repo" != "$repository" ]; then continue; fi
+    if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+      echo "invalid image ID for $repository; cleanup stopped" >&2
+      exit 1
+    fi
+    if [ "$tag" = "$NEW_IMAGE_TAG" ]; then
+      protected_ids+=$'\n'"$image_id"
+      current_found=true
+    elif [[ "$tag" =~ ^rollback-[0-9]{8}_[0-9]{6}$ ]] && [ "$rollback_count" -lt 3 ]; then
+      protected_ids+=$'\n'"$image_id"
+      rollback_count=$((rollback_count + 1))
+    fi
+  done <<< "$sorted_rows"
+  if [ "$current_found" != true ]; then
+    echo "current image $repository:$NEW_IMAGE_TAG missing; cleanup stopped" >&2
+    exit 1
+  fi
+done
+
+while read -r repository tag image_id; do
+  case "$repository" in synapse-server|synapse-pdf-renderer) ;; *) continue ;; esac
+  if [[ ! "$tag" =~ ^(deploy|rollback)-[0-9]{8}_[0-9]{6}$ ]]; then continue; fi
+  if is_protected_image "$image_id"; then continue; fi
+
+  # 每次删除前重新核对所有容器（包括已停止的容器），并跳过盘点后发生改指向的标签。
+  container_image_ids=$(read_container_image_ids)
+  protected_ids+=$'\n'"$container_image_ids"
+  if is_protected_image "$image_id"; then continue; fi
+  reference="$repository:$tag"
+  actual_id=$(docker image inspect --format '{{.Id}}' "$reference" </dev/null)
+  if [ "$actual_id" != "$image_id" ]; then
+    printf 'image tag changed; keeping %s\n' "$reference"
+    continue
+  fi
+  docker image rm --no-prune "$reference" </dev/null
+done <<< "$sorted_rows"
+
+echo "image cleanup complete: current deployment, latest 3 rollback versions and all container images retained"
+REMOTE_SCRIPT
+}
+
 run_remote_rollback_health_check() {
   if ssh "$SERVER" "test \"\$(cat '$PDF_RENDERER_ROLLBACK_STATE_FILE')\" = present"; then
     run_remote_health_check false true
@@ -1109,6 +1187,12 @@ else
   printf "[%d/%d] 健康检查 .......... FAILED\n" 19 "$TOTAL_STEPS"
   recover_previous_service_after_failure
   exit 1
+fi
+
+echo ""
+echo "清理旧部署镜像（保留当前版本、最近 3 个回滚版本及所有容器引用的镜像）"
+if ! cleanup_remote_images 2>&1 | sed 's/^/  /'; then
+  echo "警告：部署健康检查已通过，但旧镜像清理失败；请检查上述错误，不回滚已上线服务。" >&2
 fi
 
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
