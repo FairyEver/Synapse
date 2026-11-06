@@ -225,7 +225,7 @@
       "node_modules/path-is-absolute/**",
       "node_modules/xmlbuilder/**",
       "dist-electron/action-packages/shared/**",
-      "dist-electron/electron/services/automation/retired-executor-cleanup-worker.js",
+      "dist-electron/electron/services/automation/retired-executor-cleanup-worker.js*",
       "dist-electron/app-capabilities/html-generator/**",
       "dist-electron/app-capabilities/text-extractor/**",
       "dist-electron/app-capabilities/skill-hub/main/package-worker.js*",
