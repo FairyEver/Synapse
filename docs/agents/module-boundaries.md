@@ -158,7 +158,7 @@
 - `workspace.delete` 只走正常终止：它不提供 `force`，也不替调用方补一个（ADR 0049），会话仍在停止中时如实报告剩余项而不是等待。标签级写入与手机持格（ADR 0219）的关系同会话级：被手机持格的那个会话所在标签不得由 MCP 写入。
 - pane 顶栏最大化只属于 Renderer 临时视图状态：沿目标 pane 的布局祖先路径将每个兄弟分支固定为 100px，进入前记录当前实时布局；切换到其它 pane、切换 workspace 或修改布局时必须还原。最大化状态和临时比例不得持久化，也不得新增 IPC/MCP 能力。
 - pane 顶栏平分操作以目标 pane 的直接父级方向为准，向上合并连续同方向 split，并将该组中的并列区段等宽或等高分配；正交方向子树视为一个区段且保持内部比例。平分结果必须作为一次原子 workspace 布局修订持久化；最大化期间触发时先退出最大化。该操作只属于 UI IPC，不新增 MCP 工具。
-- 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+W` 关闭当前 pane、`Cmd+R` 重命名当前会话；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane、`Ctrl+Shift+R` 重命名当前会话（`Ctrl+R` 归命令行的历史搜索）。`Cmd+R` 可用是因为应用菜单里没有「重新加载」：整页重载会丢掉未持久化的活动应用，界面回落成默认应用。
+- 分屏快捷键固定为：macOS `Cmd+D` 向右、`Cmd+Shift+D` 向下、`Option+Cmd+方向键` 切换、`Cmd+Shift+W` 关闭当前 pane、`Cmd+R` 重命名当前会话；Windows `Alt+Shift++` 向右、`Alt+Shift+-` 向下、`Alt+方向键` 切换、`Ctrl+Shift+W` 关闭当前 pane、`Ctrl+Shift+R` 重命名当前会话（`Ctrl+R` 归命令行的历史搜索）。`Cmd+W` 保持 macOS 标准窗口关闭语义，由应用菜单的 `close` role 负责；`Cmd+R` 可用是因为应用菜单里没有「重新加载」：整页重载会丢掉未持久化的活动应用，界面回落成默认应用。
 - Terminal 粘贴必须保持文本优先；仅图片剪贴板通过 UI 私有 IPC 转为用户数据目录下的私有临时 PNG，再把 shell 转义后的路径交给 PTY。单张 PNG 上限 10 MB，超过 24 小时的同类临时文件在后续图片粘贴时清理；该链路不得注册 MCP 工具。
 - Terminal pane 文件树允许按系统平台使用 `Cmd/Ctrl` 切换选择、`Shift` 连续选择，并把全部选中路径拖入当前 session；路径必须由文件树 scope 在主进程解析，按现有终端路径规则转义后写入，不得伪造成外部文件或新增 MCP 工具。
 - Terminal pane 的 Git 状态与同步始终按该 session 的实时工作目录执行，不能借用「代码仓库」登记信息；状态只给界面分支、未提交文件数与增删行数及上游差异，同步沿用现有 Terminal Git 的快进规则，不在界面实现另一套 Git 命令。

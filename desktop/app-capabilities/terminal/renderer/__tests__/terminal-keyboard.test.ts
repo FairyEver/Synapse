@@ -40,7 +40,7 @@ describe("terminal pane shortcuts", () => {
     ["Cmd+D", "darwin", { metaKey: true, shiftKey: false, key: "d" }, "split-right"],
     ["Cmd+Shift+D", "darwin", { metaKey: true, shiftKey: true, key: "D" }, "split-down"],
     ["Option+Cmd+Left", "darwin", { altKey: true, metaKey: true, shiftKey: false, key: "ArrowLeft" }, "focus-left"],
-    ["Cmd+W", "darwin", { metaKey: true, shiftKey: false, key: "w" }, "close-pane"],
+    ["Cmd+Shift+W", "darwin", { metaKey: true, shiftKey: true, key: "W" }, "close-pane"],
     ["Cmd+R", "darwin", { metaKey: true, shiftKey: false, key: "r" }, "rename-session"],
     ["Alt+Shift++", "win32", { altKey: true, shiftKey: true, key: "+" }, "split-right"],
     ["Alt+Shift+-", "win32", { altKey: true, shiftKey: true, key: "-" }, "split-down"],
@@ -59,6 +59,7 @@ describe("terminal pane shortcuts", () => {
   it.each([
     ["Ctrl+R, which the shell reads as reverse history search", "win32", { ctrlKey: true, shiftKey: false, key: "r" }],
     ["Cmd+Shift+R, which stays with the terminal", "darwin", { metaKey: true, shiftKey: true, key: "R" }],
+    ["Cmd+W, which closes the window", "darwin", { metaKey: true, shiftKey: false, key: "w" }],
   ])("leaves %s unclaimed", (_name, platform, overrides) => {
     expect(getTerminalPaneShortcut({
       ...SHIFT_ENTER_EVENT,

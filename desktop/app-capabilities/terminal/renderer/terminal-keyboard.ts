@@ -79,7 +79,7 @@ export function getTerminalPaneShortcut(
 
   if (platform === "darwin") {
     if (event.metaKey && !event.altKey && !event.ctrlKey && event.key.toLowerCase() === "w") {
-      return event.shiftKey ? null : "close-pane"
+      return event.shiftKey ? "close-pane" : null
     }
     if (event.metaKey && !event.altKey && !event.ctrlKey && event.key.toLowerCase() === "d") {
       return event.shiftKey ? "split-down" : "split-right"

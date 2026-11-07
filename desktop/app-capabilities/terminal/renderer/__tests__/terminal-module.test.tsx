@@ -4096,13 +4096,13 @@ describe("TerminalModule", () => {
     expect(targetPane.querySelector("[data-terminal-pane-drop-edge]")).toBeNull()
   })
 
-  it("closes the active pane with Cmd+W", async () => {
+  it("closes the active pane with Cmd+Shift+W", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "开发终端" })]
 
     await renderModule()
     await act(async () => {
-      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "W", metaKey: true, shiftKey: true }))
       await Promise.resolve()
     })
 
@@ -4139,7 +4139,7 @@ describe("TerminalModule", () => {
 
     await renderModule()
     await act(async () => {
-      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "W", metaKey: true, shiftKey: true }))
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -4151,8 +4151,8 @@ describe("TerminalModule", () => {
     const secondPane = document.body.querySelector<HTMLElement>('[aria-label="终端会话：终端二"]')
     await act(async () => {
       secondPane?.click()
-      xtermState.instances[1]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
-      xtermState.instances[1]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      xtermState.instances[1]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "W", metaKey: true, shiftKey: true }))
+      xtermState.instances[1]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "W", metaKey: true, shiftKey: true }))
       await Promise.resolve()
     })
 
@@ -4183,9 +4183,9 @@ describe("TerminalModule", () => {
 
     await renderModule()
     await act(async () => {
-      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "W", metaKey: true, shiftKey: true }))
       await flushPromises()
-      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "W", metaKey: true, shiftKey: true }))
       await flushPromises()
     })
 
@@ -4211,7 +4211,7 @@ describe("TerminalModule", () => {
 
     await renderModule()
     await act(async () => {
-      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "w", metaKey: true }))
+      xtermState.instances[0]?.emitKeyEvent(new KeyboardEvent("keydown", { key: "W", metaKey: true, shiftKey: true }))
       await Promise.resolve()
     })
     await clickSessionDelete("开发终端")

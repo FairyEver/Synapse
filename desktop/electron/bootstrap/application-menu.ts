@@ -15,6 +15,9 @@ import { Menu, type MenuItemConstructorOptions } from "electron"
  * Every item that stays mirrors what the default menu offered, so this is not a redesign of the
  * menu bar. `viewMenu` is spelled out by hand only because the built-in `viewMenu` role is the one
  * that carries the reload items.
+ *
+ * The macOS File menu is required for its built-in `close` role, which owns `⌘W` for every app
+ * window. The terminal uses `⌘⇧W` for closing a split pane so the system shortcut stays standard.
  */
 function buildApplicationMenuTemplate(): MenuItemConstructorOptions[] {
   const viewMenu: MenuItemConstructorOptions = {
@@ -30,7 +33,7 @@ function buildApplicationMenuTemplate(): MenuItemConstructorOptions[] {
     ],
   }
   return process.platform === "darwin"
-    ? [{ role: "appMenu" }, { role: "editMenu" }, viewMenu, { role: "windowMenu" }]
+    ? [{ role: "appMenu" }, { role: "fileMenu" }, { role: "editMenu" }, viewMenu, { role: "windowMenu" }]
     : [{ role: "fileMenu" }, { role: "editMenu" }, viewMenu, { role: "windowMenu" }]
 }
 

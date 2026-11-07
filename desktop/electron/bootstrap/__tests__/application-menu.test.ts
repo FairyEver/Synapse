@@ -61,6 +61,7 @@ describe("application menu", () => {
     setPlatform("darwin")
     expect(collectRoles(buildApplicationMenuTemplate() as readonly MenuItem[])).toEqual([
       "appMenu",
+      "fileMenu",
       "editMenu",
       "resetZoom",
       "zoomIn",
