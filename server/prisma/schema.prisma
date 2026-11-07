@@ -53,6 +53,11 @@ model User {
   customAvatarAssetId            String?                         @unique
   customAvatarAsset              UserAvatarAsset?                @relation("SelectedCustomAvatar", fields: [customAvatarAssetId], references: [id], onDelete: SetNull)
   avatarAssets                   UserAvatarAsset[]               @relation("UserAvatarAssets")
+  customApps                     UserCustomApp[]
+  customAppTombstones           UserCustomAppTombstone[]
+  customAppIconAssets            UserCustomAppIconAsset[]
+  customAppSettings              UserCustomAppSettings?
+  customAppOperations            UserCustomAppOperation[]
   adminNote                      String?                         @db.VarChar(500)
   passwordHash                   String
   passwordChangedAt              DateTime?
@@ -134,6 +139,82 @@ model UserAvatarAsset {
   @@index([userId, status, createdAt])
   @@index([status, createdAt])
   @@index([deletePending, updatedAt])
+}
+
+model UserCustomApp {
+  id             String                   @id @db.VarChar(64)
+  userId         String
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind           String                   @default("web") @db.VarChar(32)
+  name           String                   @db.VarChar(64)
+  startUrl       String                   @db.VarChar(2048)
+  iconId         String?                  @unique @db.VarChar(64)
+  icon           UserCustomAppIconAsset?  @relation("UserCustomAppCurrentIcon", fields: [iconId], references: [id], onDelete: SetNull)
+  iconSource     String                   @default("favicon") @db.VarChar(16)
+  version        Int                      @default(1)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  iconAssets     UserCustomAppIconAsset[] @relation("UserCustomAppIconAssets")
+
+  @@index([userId, createdAt, id])
+  @@index([kind, userId])
+}
+
+model UserCustomAppTombstone {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appId     String   @db.VarChar(64)
+  deletedAt DateTime @default(now())
+
+  @@id([userId, appId])
+  @@index([deletedAt])
+}
+
+model UserCustomAppIconAsset {
+  id            String         @id @db.VarChar(64)
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appId         String?        @db.VarChar(64)
+  app           UserCustomApp? @relation("UserCustomAppIconAssets", fields: [appId], references: [id], onDelete: SetNull)
+  storageKey    String         @unique @db.VarChar(255)
+  mimeType      String         @default("image/png") @db.VarChar(64)
+  byteSize      Int
+  status        String         @db.VarChar(24)
+  deletePending Boolean        @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  currentFor    UserCustomApp? @relation("UserCustomAppCurrentIcon")
+
+  @@index([userId, status, createdAt])
+  @@index([appId, createdAt])
+  @@index([deletePending, updatedAt])
+}
+
+model UserCustomAppSettings {
+  userId             String    @id
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dockAppIds         Json      @default("[]")
+  dockMigrationIds   Json      @default("[]")
+  dockCatalogVersion Int       @default(1)
+  revision           Int       @default(0)
+  initializedAt      DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model UserCustomAppOperation {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operationId    String   @db.VarChar(200)
+  operationHash  String   @db.VarChar(64)
+  resultRevision Int
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, operationId])
+  @@index([expiresAt])
 }
 
 model UserNotification {
