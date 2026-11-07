@@ -230,7 +230,7 @@ Vite `build.rollupOptions.input` 同时声明 Dashboard `index.html` 和更新�
 该精确路径至少设置：
 
 - `Content-Security-Policy`：脚本、样式和连接仅允许自身实际需要的来源；禁止 object；
-- `frame-ancestors 'none'` 或等价 `X-Frame-Options: DENY`，避免按钮被嵌入诱导点击；
+- 不设置 `frame-ancestors` 或 `X-Frame-Options`，允许任意来源通过 iframe 加载；
 - `Referrer-Policy: no-referrer`；
 - 合理的 `Cache-Control`，HTML 不长期固化，静态 hash 资源可长期缓存。
 
@@ -496,7 +496,7 @@ macOS 与 Windows runner 必须在上传安装包前验证正式打包产物的�
 - token 不进入浏览器地址栏、localStorage、renderer、数据库或持久化日志。
 - Electron 日志、协议解析错误和诊断导出必须掩码 `token` query。
 - 服务端 HTTP 日志不得记录验证请求 body 或签发响应。
-- 页面禁止 iframe 嵌入，减少 clickjacking。
+- 页面允许任意来源 iframe 嵌入；不把 frame ancestor 限制作为安全边界，更新授权继续依赖短时凭证和客户端验证。
 - 签发和验证接口分别限流，防止滥用和无意义验签负载。
 - 更新制品仍由现有 `electron-updater` provider 与签名机制校验；凭证只授权有中断性的自动流程，不代替制品完整性校验。
 - 用户点击网页按钮表示对本次中断性更新的确认，但不代表系统已检查任务安全。

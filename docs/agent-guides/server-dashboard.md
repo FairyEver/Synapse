@@ -36,6 +36,7 @@ Dashboard 保持上述普通用户/管理身份隔离，但两套导航与路由
 ### 通用边界
 
 - 普通用户文件路由位于 `dashboard/src/routes/`；管理应用使用独立的 `dashboard/src/admin-routes.tsx` 路由树和 `admin-main.tsx` 入口。
+- `/console/**`、`/admin/**`、公开分享和独立阅读页均允许任意来源通过 iframe 加载，不输出 `X-Frame-Options` 或 CSP `frame-ancestors`。不得以点击劫持防护为由恢复 frame ancestor 限制；鉴权、业务权限、sandbox 和其它 CSP 指令继续生效。
 - Dashboard 生产构建的最低语法目标为 Chrome 80；公开分享首屏不得依赖更新版本才提供且未经过兼容处理的浏览器 API。高级编辑器可以基于能力检测降级，但不得阻断只读预览。
 - 标准公开分享路径在 Dashboard 模块加载前执行能力检测；不满足完整页面 CSS/运行时要求时进入 `/share/:shareId/reader` 或对应子项 reader。Reader 必须由服务端直出、保持零脚本和基础 CSS，不得引入 Dashboard bundle、Tailwind、编辑器或客户端埋点依赖。
 - API 调用集中在 `dashboard/src/lib/api.ts`，并按用户/管理员会话分别处理 401。

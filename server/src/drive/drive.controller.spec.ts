@@ -1666,7 +1666,7 @@ describe("DriveController", () => {
     expect(drive.openShareBrowserItemDownload).not.toHaveBeenCalled()
   })
 
-  it("serves the no-script compatibility reader with restrictive headers", async () => {
+  it("serves the no-script compatibility reader with content protections but no frame restrictions", async () => {
     drive.resolvePublicShareAccess.mockResolvedValue({
       status: "ok",
       value: {
@@ -1686,8 +1686,8 @@ describe("DriveController", () => {
     expect(response.headers["cache-control"]).toBe("private, no-store")
     expect(response.headers.vary).toBe("Cookie")
     expect(response.headers["content-security-policy"]).toContain("default-src 'none'")
-    expect(response.headers["content-security-policy"]).toContain("frame-ancestors 'none'")
-    expect(response.headers["x-frame-options"]).toBe("DENY")
+    expect(response.headers["content-security-policy"]).not.toContain("frame-ancestors")
+    expect(response.headers["x-frame-options"]).toBeUndefined()
     expect(response.headers["x-content-type-options"]).toBe("nosniff")
     expect(response.headers["referrer-policy"]).toBe("no-referrer")
     expect(response.text).toContain("<pre><code>brief</code></pre>")
@@ -2585,7 +2585,7 @@ function driveAccessCookieName(kind: "share", publicId: string): string {
 
 function expectDriveHtmlRenderCsp(value: string | undefined, options: { readonly allowSameOrigin?: boolean } = {}): void {
   const allowSameOrigin = options.allowSameOrigin ?? true
-  expect(value).toContain("frame-ancestors 'self'")
+  expect(value).not.toContain("frame-ancestors")
   expect(value).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:")
   expect(value).toContain("connect-src 'self' https:")
   expect(value).toContain(allowSameOrigin

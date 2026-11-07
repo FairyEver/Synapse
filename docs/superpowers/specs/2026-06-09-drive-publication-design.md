@@ -283,7 +283,7 @@ Recommended first-version headers:
 ```http
 X-Content-Type-Options: nosniff
 Referrer-Policy: no-referrer
-Content-Security-Policy: default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'none';
+Content-Security-Policy: default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:;
 ```
 
 The CSP is intentionally permissive enough for user-authored static pages. Long term, published pages should be served from a dedicated pages domain.

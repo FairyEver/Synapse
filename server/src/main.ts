@@ -3,12 +3,12 @@ import { cloudTableCors, registerCloudTableIngress, registerCloudTableBodyErrors
 import { NestFactory } from "@nestjs/core"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import cookieParser from "cookie-parser"
-import helmet from "helmet"
 import { Logger, PinoLogger } from "nestjs-pino"
 import { AppModule } from "./app.module"
 import { AllExceptionsFilter } from "./common/all-exceptions.filter"
 import { registerHttpBodyParsers } from "./common/http-body-parser"
 import { registerHttpShutdownDeadline } from "./common/http-shutdown-deadline"
+import { createHttpSecurityMiddleware } from "./common/http-security"
 import { loadEnv } from "./config/env"
 import { LiveDesktopGateway } from "./live/live-desktop.gateway"
 import { DriveCollaborationGateway } from "./drive/drive-collaboration.gateway"
@@ -26,11 +26,7 @@ async function bootstrap(): Promise<void> {
   registerHttpBodyParsers(app)
   registerCloudTableBodyErrors(app)
   app.use(cookieParser())
-  app.use(
-    helmet({
-      contentSecurityPolicy: process.env.NODE_ENV === "production",
-    }),
-  )
+  app.use(createHttpSecurityMiddleware(process.env.NODE_ENV === "production"))
   app.enableCors((request, callback) => {
     callback(null, cloudTableCors(request.originalUrl ?? request.url ?? "") ?? (isProblemFeedbackPublicPath(request.originalUrl ?? request.url ?? "")
       ? { origin: false, preflightContinue: true }

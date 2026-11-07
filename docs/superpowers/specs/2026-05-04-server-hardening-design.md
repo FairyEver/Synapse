@@ -30,7 +30,7 @@ Synapse 后台服务（NestJS + PostgreSQL）即将进入团队内部试用。�
 
 ### 1.2 安全中间件
 
-- 引入 `helmet` 设置安全头（HSTS、CSP、X-Frame-Options、X-Content-Type-Options）
+- 引入 `helmet` 设置安全头（HSTS、CSP、X-Content-Type-Options）；不设置 `X-Frame-Options`，CSP 不包含 `frame-ancestors`，所有 Synapse Web 页面允许任意来源 iframe 加载
 - 配置 CORS：生产环境禁止跨域（admin 前端与 API 同源部署），开发环境允许 localhost 各端口
 - Admin cookie `sameSite` 从 `lax` 改为 `strict`
 

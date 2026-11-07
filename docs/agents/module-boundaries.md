@@ -213,6 +213,7 @@
 - 独立自定义应用窗口是专用网页窗口，不参与主窗口的 Native Surface occlusion；工具栏纯图标操作只保留 aria-label，不渲染文字 Tooltip，避免隐藏、重排原生网页视图或闪白。
 - `iframe` 模式尽量开启兼容能力：跨源页面可使用 `allow-same-origin`、表单、脚本、模态框和存储访问等 sandbox 能力，并委托自动播放、全屏、画中画、剪贴板写入、Web Share、WebAuthn 和 Storage Access 等 Permissions Policy；摄像头、麦克风、定位、屏幕捕获、剪贴板读取和设备权限继续拒绝。主进程必须阻止任何子框架导航到 Synapse renderer 自身 origin；与 renderer 同源的起始 URL 不得获得 `allow-same-origin`。父页面不读取 iframe 的 URL、DOM 或导航历史。
 - 网站嵌入策略、登录、弹窗、下载和跨站 Cookie 限制必须在创建选项中提前说明。`X-Frame-Options`、CSP `frame-ancestors` 和站点主动 frame-busting 不得绕过，应引导用户改用独立窗口。
+- 上述第三方嵌入限制只适用于目标网站。Synapse 自有 Web 页面，包括普通控制台、管理后台、文档分享、单 HTML 分享、兼容 reader、Drive Sites 和桌面更新页，不设置 `X-Frame-Options` 或 CSP `frame-ancestors`，允许任意来源通过 iframe 加载；鉴权、业务权限、CSP 资源限制和页面 sandbox 保持不变。
 - 应用与 Dock 配置断线只读；远端删除、非法孤儿 ID、认证失效和旧服务端都不得抛未处理异常。删除优先于旧设备修改，墓碑防止已删除应用被重放创建。
 - Dock 布局按同账号跨设备同步，首次登录只从旧本机 `core.config` 初始化一次；旧字段保作回退，新 Dock 编辑路径不得继续写入。
 
@@ -251,6 +252,8 @@
 - 原始事件保留 180 天，只能通过平台管理员保护的聚合统计接口查看；统计可提供活跃身份、会话时长、功能采用率、固定顺序漏斗和 D1/D7/D30 cohort 留存，但不得提供普通用户读取、原始事件列表、明细导出、用户排行或单个用户行为轨迹。完整设计见 `docs/superpowers/specs/2026-09-01-client-telemetry-design.md`。
 
 ## Drive
+
+- 文档分享、单 HTML `/render`、兼容 `/reader`、Drive Sites、公开素材和其它 Synapse Web 页面不得设置 `X-Frame-Options` 或 CSP `frame-ancestors`，任意来源均可嵌入。放开范围仅限 frame ancestor 限制，不改变分享访问、密码、有效期、sandbox、脚本和资源 CSP。
 
 - 浏览历史属于访问时浏览器登录账号，每次成功访问独立保存，同一账号的同一访问事件 ID 重试幂等。列表按桌面时区将同日同链接合并，使用当日最后一次访问的标题、作者及时间，多次打开时显示当天次数，跨天各保留一条。不采集匿名、iframe、子资源、MCP、失败页或后台刷新。不补录旧访问，无自动保留期限。标题、链接及作者身份快照用于本人搜索，昵称和邮箱只进入私有索引，列表作者只返回公开 handle；历史不保存密码、认证参数或正文，也不授予原链接访问权。桌面统一搜索、类型筛选和游标分页，默认浏览器打开链接；关闭、搜索变化、账号切换和清空均隔离迟到响应。确认清空仅擦除本人全部访问快照，保留事件去重凭据，失败保留列表及条件。`app.drive.browsing_history.list/clear` 仅为 UI 私有 IPC，不新增 MCP capability 或工具。
 

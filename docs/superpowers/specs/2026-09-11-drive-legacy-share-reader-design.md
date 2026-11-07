@@ -21,7 +21,7 @@ Public Drive shares remain readable when the browser cannot run the full Dashboa
 - The redirect uses feature detection rather than operating-system or browser-version matching. Reader, download, and render routes are excluded from redirect matching.
 - Reader HTML uses only server-rendered semantic markup and conservative CSS. It does not use CSS variables, cascade layers, modern color functions, custom fonts, or JavaScript.
 - Share access continues through the existing resolver and HttpOnly access cookie. Password query parameters are removed after successful access.
-- Reader responses are private and non-cacheable, cannot be framed, do not send referrers, and use a CSP that permits inline page CSS and safe same-origin or HTTPS images but no scripts.
+- Reader responses are private and non-cacheable, allow any origin to frame them, do not send referrers, and use a CSP that permits inline page CSS and safe same-origin or HTTPS images but no scripts.
 - Existing Markdown sanitization remains the only boundary allowed to emit source-derived HTML. All other text and attribute values are escaped.
 
 ## Verification

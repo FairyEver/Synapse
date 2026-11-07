@@ -23,6 +23,7 @@ Site creation is a one-way copy. After creation, the source Drive folder is only
 - A site may remember `sourceFolderItemId` and `sourceFolderName` for diagnostics and convenient republish, but public serving must not depend on the source folder.
 - The main flow creates one primary site from a folder. Advanced management may allow more than one site to be created from the same source folder later.
 - Public site URLs use `/sites/<siteId>/`.
+- Public site pages do not set `X-Frame-Options` or CSP `frame-ancestors`; any origin may embed them. Access checks, password handling, the HTML sandbox and all other CSP directives remain in force.
 - `siteId` is a public, URL-safe, non-guessable id.
 - Root `index.html` is the default entry page.
 - If root `index.html` is missing, the creation dialog lets the user choose an HTML file from the folder tree.

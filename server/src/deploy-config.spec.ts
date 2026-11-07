@@ -596,15 +596,19 @@ describe("server deployment configuration", () => {
     expect(nginx).toContain("proxy_pass http://127.0.0.1:3001")
   })
 
-  it("serves the independent desktop update page with focused security headers", () => {
+  it("serves the independent desktop update page with focused security headers and free framing", () => {
     const nginx = readRepoFile("server/nginx.conf")
+    const updateLocation = nginx.match(/location = \/desktop\/update \{[\s\S]*?\n  \}/u)?.[0]
 
     expect(nginx).toContain("location = /desktop/update")
     expect(nginx).toContain('if ($args != "") { return 404; }')
     expect(nginx).toContain("try_files /desktop-update.html =404;")
     expect(nginx).toContain("Content-Security-Policy")
-    expect(nginx).toContain("frame-ancestors 'none'")
-    expect(nginx).toContain("X-Frame-Options \"DENY\"")
+    expect(updateLocation).toBeDefined()
+    expect(nginx).not.toContain("frame-ancestors")
+    expect(nginx).not.toContain("X-Frame-Options")
+    expect(updateLocation).not.toContain("frame-ancestors")
+    expect(updateLocation).not.toContain("X-Frame-Options")
     expect(nginx).toContain("Referrer-Policy \"no-referrer\"")
     expect(nginx).toContain("Cache-Control \"no-cache, must-revalidate\"")
   })
