@@ -203,9 +203,11 @@ function formatAutomationNextRun(item: Pick<AutomationItem, "activeRun" | "condi
   if (!item.enabled) return "停用中"
   if (isCompletionAnchoredInterval(item) && item.activeRun?.status === "running") return "本次完成后计算"
   if (!item.nextRunAt) {
-    const isSchedule = rendererAutomationTriggerRegistry.list().some(
-      (definition) => definition.manifest.id === item.trigger.type && definition.manifest.kind === "schedule",
-    )
+    const triggerKind = rendererAutomationTriggerRegistry.list().find(
+      (definition) => definition.manifest.id === item.trigger.type,
+    )?.manifest.kind
+    if (triggerKind === "manual") return "等待手动触发"
+    const isSchedule = triggerKind === "schedule"
     if (!isSchedule) return "等待事件"
     return isSchedule && item.schemaVersion === 2
       ? "无匹配时间"

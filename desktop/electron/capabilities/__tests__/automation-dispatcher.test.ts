@@ -318,6 +318,7 @@ describe("automation capability dispatcher", () => {
     expect(entries.find(entry => entry.type === "builtin.webhook")?.manualRunUnavailableReason).toContain("Webhook 请求")
     expect(entries.find(entry => entry.type === "builtin.mail-received")?.manualRunUnavailableReason).toContain("信件上下文")
     expect(entries.find(entry => entry.type === "builtin.cron")?.manualRunUnavailableReason).toBeUndefined()
+    expect(entries.find(entry => entry.type === "builtin.manual")?.manualRunUnavailableReason).toBeUndefined()
   })
 
   it("lists trigger and executor descriptors from registries", async () => {

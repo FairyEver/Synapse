@@ -403,6 +403,16 @@ describe("AutomationModule", () => {
     expect(renderToStaticMarkup(<AutomationModule />)).toContain("无匹配时间")
   })
 
+  it("shows that a manual trigger waits for a manual run", () => {
+    mocks.useAutomationItems.mockReturnValue({
+      items: [createItem({ nextRunAt: undefined, trigger: { type: "builtin.manual", config: {} } })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+    expect(renderToStaticMarkup(<AutomationModule />)).toContain("等待手动触发")
+  })
+
   it("shows no matching time for an enabled interval beyond the date range", () => {
     mocks.useAutomationItems.mockReturnValue({
       items: [createItem({ nextRunAt: undefined, trigger: {

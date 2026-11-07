@@ -521,6 +521,19 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('#automation-trigger-cron-expr')).not.toBeNull()
   })
 
+  it("offers manual trigger in its own group without a trigger config form", async () => {
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
+    await act(async () => { findButtonContaining("Cron")!.click() })
+    await act(async () => { document.querySelector<HTMLButtonElement>('[aria-label="更换触发条件"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })) })
+    expect(document.body.textContent).toContain("按手动")
+    expect(document.body.textContent).toContain("手动触发")
+    await act(async () => { findButtonContaining("手动触发")!.click() })
+    await act(async () => { findButtonContaining("确认更换")!.click() })
+    expect(document.querySelector('#automation-trigger-cron-expr')).toBeNull()
+    expect(document.querySelector('[aria-label="查看触发变量"]')).not.toBeNull()
+  })
+
   it("preserves automation conditions when the trigger type changes", async () => {
     const conditions = { operator: "and" as const, items: [{ type: "weekdays" as const, days: [1, 3, 5] }] }
     const item = buildAutomationItem({

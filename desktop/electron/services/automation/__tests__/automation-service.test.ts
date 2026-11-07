@@ -293,6 +293,50 @@ describe("AutomationService", () => {
     expect(await harness.runs.listByAutomation(item.id)).toEqual([])
   })
 
+  it("runs a manual trigger without scheduling or applying conditions", async () => {
+    const harness = createHarness({ now: () => new Date("2026-11-07T12:00:00.000Z") })
+    const item = await harness.service.automationCreate({
+      ...createAutomationInput(),
+      trigger: { type: "builtin.manual", config: {} },
+      conditions: { operator: "and", items: [{ type: "weekdays", days: [1, 2, 3, 4, 5] }] },
+    })
+
+    await harness.service.start()
+    try {
+      expect(harness.service.automationRuntimeInspect().timers).toEqual([])
+      const run = await harness.service.runNow(item.id)
+      expect(run?.status).toBe("success")
+      expect(run?.triggeredBy).toBe("manual")
+      expect(harness.service.automationRuntimeInspect().timers).toEqual([])
+    } finally {
+      await harness.service.stop()
+    }
+  })
+
+  it("rejects manual runs for disabled automations", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate({
+      ...createAutomationInput(),
+      enabled: false,
+      trigger: { type: "builtin.manual", config: {} },
+    })
+
+    await expect(harness.service.runNow(item.id)).rejects.toThrow("automation is disabled")
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+  })
+
+  it("does not accept external events for a manual trigger", async () => {
+    const harness = createHarness()
+    const item = await harness.service.automationCreate({
+      ...createAutomationInput(),
+      trigger: { type: "builtin.manual", config: {} },
+    })
+
+    const runs = await harness.service.acceptEvent({ source: "test", type: "manual", payload: {}, receivedAt: "2026-11-07T12:00:00.000Z" })
+    expect(runs).toEqual([])
+    expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+  })
+
   it("runs an automation manually", async () => {
     const harness = createHarness()
     const item = await harness.service.automationCreate(createAutomationInput())

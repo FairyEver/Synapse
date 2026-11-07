@@ -58,7 +58,8 @@ export function TriggerExecutorBuilder({ step, conditions, fieldErrors, onAddPro
   const groups = isTrigger
     ? [
       { title: "按时间", options: options.filter(item => "kind" in item.manifest && item.manifest.kind === "schedule") },
-      { title: "按事件", options: options.filter(item => !("kind" in item.manifest) || item.manifest.kind !== "schedule") },
+      { title: "按事件", options: options.filter(item => "kind" in item.manifest && item.manifest.kind === "event") },
+      { title: "按手动", options: options.filter(item => "kind" in item.manifest && item.manifest.kind === "manual") },
     ]
     : [{ title: "执行操作", options }]
   const ConfigForm = isTrigger ? null : executor?.ConfigForm

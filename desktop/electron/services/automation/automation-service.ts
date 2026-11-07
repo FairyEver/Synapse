@@ -329,6 +329,7 @@ export class AutomationService {
       return null
     }
     if (item.schemaVersion === 1) throw new Error("旧版自动化不可运行，请新建自动化")
+    if (!item.enabled) throw new Error("automation is disabled")
     if (!this.isItemValid(item)) {
       const variableIssue = this.validateItem(item).issues.find(issue => issue.field === "executor.prompt")
       throw new Error(variableIssue?.message ?? NEEDS_UPDATE_MESSAGE)
