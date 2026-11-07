@@ -104,9 +104,10 @@ describe("AutomationTriggerRegistry", () => {
     expect(manualTriggerDefinition.manifest.title).toBe("手动触发")
     expect(manualTriggerDefinition.manifest.kind).toBe("manual")
     expect(manualTriggerDefinition.manifest.defaultConfig).toEqual({})
-    expect(manualTriggerDefinition.runtime.computeNextRunAt).toBeUndefined()
-    expect(manualTriggerDefinition.runtime.shouldAcceptEvent).toBeUndefined()
-    expect(manualTriggerDefinition.activationRequired).toBeUndefined()
+    const manual = createBuiltinAutomationTriggerRegistry().get("builtin.manual")
+    expect(manual.runtime.computeNextRunAt).toBeUndefined()
+    expect(manual.runtime.shouldAcceptEvent).toBeUndefined()
+    expect(manual.activationRequired).toBeUndefined()
   })
 
   it("computes builtin cron next run on the next active day", () => {
