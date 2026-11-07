@@ -151,10 +151,11 @@ export class CustomWebAppRuntimeService {
   destroyHost(host: BrowserWindow): void {
     const hostState = this.hosts.get(host)
     if (!hostState) return
+    const hostIsDestroyed = host.isDestroyed()
     for (const record of hostState.views.values()) {
-      host.contentView.removeChildView(record.view)
+      if (!hostIsDestroyed) host.contentView.removeChildView(record.view)
       closePopups(record)
-      record.view.webContents.close()
+      if (!record.view.webContents.isDestroyed()) record.view.webContents.close()
     }
     hostState.views.clear()
     hostState.currentAppId = null

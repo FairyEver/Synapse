@@ -73,6 +73,21 @@ describe("CustomWebAppRuntimeService", () => {
     expect(host.contentView.removeChildView).toHaveBeenCalledWith(createdViews[0])
   })
 
+  it("cleans up a host that Electron has already destroyed", async () => {
+    const { host, createdViews, runtime } = createHarness()
+    await runtime.attach(host, appId)
+    vi.mocked(host.isDestroyed).mockReturnValue(true)
+    vi.mocked(createdViews[0].webContents.isDestroyed).mockReturnValue(true)
+    vi.mocked(host.contentView.removeChildView).mockImplementation(() => {
+      throw new TypeError("Object has been destroyed")
+    })
+
+    expect(() => runtime.destroyHost(host)).not.toThrow()
+    expect(host.contentView.removeChildView).not.toHaveBeenCalled()
+    expect(createdViews[0].webContents.close).not.toHaveBeenCalled()
+    expect(runtime.appIdForHost(host)).toBeNull()
+  })
+
   it("updates navigation state from WebContents events", async () => {
     const { host, createdViews, runtime } = createHarness()
     await runtime.attach(host, appId)
@@ -151,6 +166,7 @@ function createHarness({
   })
   const host = {
     id: 1,
+    isDestroyed: vi.fn(() => false),
     getContentBounds: vi.fn(() => ({ x: 0, y: 0, width: 1200, height: 700 })),
     webContents: {
       getZoomFactor: vi.fn(() => zoomFactor),
@@ -170,6 +186,7 @@ function createFakeView() {
     loadURL: vi.fn().mockResolvedValue(undefined),
     reload: vi.fn(),
     close: vi.fn(),
+    isDestroyed: vi.fn(() => false),
     on: vi.fn((event: string, listener: (...args: never[]) => void) => {
       listeners.set(event, listener)
     }),
