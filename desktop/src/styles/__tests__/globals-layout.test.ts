@@ -20,4 +20,10 @@ describe("global app layout styles", () => {
   it("allows user-facing content text selection by default", () => {
     expect(globalsCss).toContain("#root {\n    @apply select-text;")
   })
+
+  it("defines the shared iOS-style custom app icon shape", () => {
+    expect(globalsCss).toContain(".app-icon-squircle {")
+    expect(globalsCss).toContain("border-radius: 24%;")
+    expect(globalsCss).toContain("corner-shape: squircle;")
+  })
 })

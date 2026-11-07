@@ -231,6 +231,16 @@
 
 }
 
+.app-icon-squircle {
+  border-radius: 24%;
+}
+
+@supports (corner-shape: squircle) {
+  .app-icon-squircle {
+    corner-shape: squircle;
+  }
+}
+
 .react-flow__handle {
   width: 20px;
   height: 20px;

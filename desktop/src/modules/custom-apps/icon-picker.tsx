@@ -6,13 +6,13 @@ type CustomAppIconPreviewProps = {
 }
 
 export function CustomAppIconPreview({ src, size = "sm" }: CustomAppIconPreviewProps) {
-  const className = size === "lg" ? "size-16 rounded-xl" : "size-5 rounded-md"
+  const className = size === "lg" ? "size-16" : "size-5"
   if (src) {
     return (
       <img
         src={src}
         alt=""
-        className={`${className} shrink-0 object-contain`}
+        className={`${className} app-icon-squircle shrink-0 object-contain`}
         onError={(event) => { event.currentTarget.hidden = true }}
       />
     )

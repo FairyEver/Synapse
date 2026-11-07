@@ -15,7 +15,7 @@ export function AppEntryIcon({ icon, className = "size-5" }: AppEntryIconProps) 
         data-app-icon
         src={icon.src}
         alt=""
-        className={`${className} shrink-0 object-contain`}
+        className={`${className} app-icon-squircle shrink-0 object-contain`}
         onError={() => setFailed(true)}
       />
     )
