@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { cronRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/cron/index.renderer"
 import { intervalRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/interval/index.renderer"
 import { webhookRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/webhook/index.renderer"
+import { manualRendererTriggerDefinition } from "../../../automation-trigger-packages/builtin/manual/index.renderer"
 import { rendererAutomationTriggerRegistry } from "../builtin-triggers"
 
 describe("rendererAutomationTriggerRegistry", () => {
@@ -17,6 +18,7 @@ describe("rendererAutomationTriggerRegistry", () => {
       { id: "builtin.webhook", kind: "event" },
       { id: "builtin.mail-internal-received", kind: "event" },
       { id: "builtin.mail-received", kind: "event" },
+      { id: "builtin.manual", kind: "manual" },
     ])
   })
 
@@ -83,5 +85,11 @@ describe("rendererAutomationTriggerRegistry", () => {
 
     expect(webhookRendererTriggerDefinition.manifest.id).toBe("builtin.webhook")
     expect(webhookRendererTriggerDefinition.ConfigForm).toBeTypeOf("function")
+
+    expect(manualRendererTriggerDefinition.manifest.id).toBe("builtin.manual")
+    expect(manualRendererTriggerDefinition.manifest.title).toBe("手动触发")
+    expect(manualRendererTriggerDefinition.manifest.kind).toBe("manual")
+    expect(manualRendererTriggerDefinition.ConfigForm).toBeUndefined()
+    expect(manualRendererTriggerDefinition.manualRunUnavailableReason).toBeUndefined()
   })
 })

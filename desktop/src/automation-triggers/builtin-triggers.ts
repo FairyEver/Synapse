@@ -4,6 +4,7 @@ import { webhookRendererTriggerDefinition } from "../../automation-trigger-packa
 import { RendererAutomationTriggerRegistry } from "./action-registry"
 import { mailInternalReceivedRendererDefinition } from "../../automation-trigger-packages/builtin/mail-internal-received/index.renderer"
 import { mailReceivedRendererDefinition } from "../../automation-trigger-packages/builtin/mail-received/index.renderer"
+import { manualRendererTriggerDefinition } from "../../automation-trigger-packages/builtin/manual/index.renderer"
 
 export const rendererAutomationTriggerRegistry = new RendererAutomationTriggerRegistry()
 rendererAutomationTriggerRegistry.register(cronRendererTriggerDefinition)
@@ -11,3 +12,4 @@ rendererAutomationTriggerRegistry.register(intervalRendererTriggerDefinition)
 rendererAutomationTriggerRegistry.register(webhookRendererTriggerDefinition)
 rendererAutomationTriggerRegistry.register(mailInternalReceivedRendererDefinition)
 rendererAutomationTriggerRegistry.register(mailReceivedRendererDefinition)
+rendererAutomationTriggerRegistry.register(manualRendererTriggerDefinition)

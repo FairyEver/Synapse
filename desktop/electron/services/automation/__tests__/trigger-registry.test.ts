@@ -5,6 +5,8 @@ import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 import { cronTriggerDefinition } from "../../../../automation-trigger-packages/builtin/cron/index.main"
 import { intervalTriggerDefinition } from "../../../../automation-trigger-packages/builtin/interval/index.main"
 import { webhookTriggerDefinition } from "../../../../automation-trigger-packages/builtin/webhook/index.main"
+import { manualTriggerDefinition } from "../../../../automation-trigger-packages/builtin/manual/index.main"
+import { manualTriggerConfigSchema } from "../../../../automation-trigger-packages/builtin/manual/index.shared"
 import { AutomationTriggerRegistry } from "../trigger-registry"
 import { createBuiltinAutomationTriggerRegistry } from "../builtin-triggers"
 
@@ -68,6 +70,11 @@ describe("AutomationTriggerRegistry", () => {
     expect(() => registry.register(testTrigger)).toThrow(/already registered/)
   })
 
+  it("accepts only an empty manual trigger config", () => {
+    expect(manualTriggerConfigSchema.parse({})).toEqual({})
+    expect(() => manualTriggerConfigSchema.parse({ unexpected: true })).toThrow()
+  })
+
   it("reports needs_update for unknown triggers", () => {
     const registry = new AutomationTriggerRegistry()
 
@@ -92,6 +99,14 @@ describe("AutomationTriggerRegistry", () => {
     expect(webhookTriggerDefinition.manifest.id).toBe("builtin.webhook")
     expect(webhookTriggerDefinition.manifest.kind).toBe("event")
     expect(webhookTriggerDefinition.runtime.shouldAcceptEvent).toBeTypeOf("function")
+
+    expect(manualTriggerDefinition.manifest.id).toBe("builtin.manual")
+    expect(manualTriggerDefinition.manifest.title).toBe("手动触发")
+    expect(manualTriggerDefinition.manifest.kind).toBe("manual")
+    expect(manualTriggerDefinition.manifest.defaultConfig).toEqual({})
+    expect(manualTriggerDefinition.runtime.computeNextRunAt).toBeUndefined()
+    expect(manualTriggerDefinition.runtime.shouldAcceptEvent).toBeUndefined()
+    expect(manualTriggerDefinition.activationRequired).toBeUndefined()
   })
 
   it("computes builtin cron next run on the next active day", () => {
