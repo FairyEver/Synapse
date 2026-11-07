@@ -13,6 +13,7 @@ import { managedBrowserWindow, type WindowManager } from "../runtime/window"
 import { getWindowIconPath } from "../services/app-icon-service"
 import { createMainLogger } from "../services/log-store"
 import { RendererHealthService } from "../services/renderer-health"
+import { shouldBlockRendererSubframeNavigation } from "./renderer-frame-navigation-guard"
 import { resolveWindowTitle } from "./window-title"
 
 const logger = createMainLogger("bootstrap.main-window")
@@ -101,6 +102,15 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
 
   window.webContents.on("preload-error", (_event, preloadPath, error) => {
     logger.error("Preload script failed.", { error })
+  })
+  window.webContents.on("will-frame-navigate", (event) => {
+    if (shouldBlockRendererSubframeNavigation({
+      url: event.url,
+      mainFrameUrl: window.webContents.getURL(),
+      isMainFrame: event.isMainFrame,
+    })) {
+      event.preventDefault()
+    }
   })
 
   // The renderer's own document title would replace this one as soon as the page

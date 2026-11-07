@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Custom apps remain account-level web apps and do not register MCP, Workflow, Automation, Deep Link or mobile surfaces.
-- `iframe` mode must not include `allow-same-origin`; it must not inherit Synapse renderer privileges.
+- `iframe` mode may include `allow-same-origin` only for a cross-origin page, while the main process blocks subframe navigation back into the Synapse renderer origin.
 - `window` mode is the only mode allowed to create a native web view or dedicated custom-app window.
 - Older payloads and cached snapshots without `openMode` normalize to `window`.
 - Keep the current shared custom-web session and all existing permission, download, popup and navigation hardening for window mode.
@@ -22,7 +22,7 @@
 
 - An old cached app without `openMode` opens safely instead of failing schema validation.
 - A window-mode app never renders inside the main window, including after a remote mode change.
-- An iframe-mode app cannot obtain `allow-same-origin` or create a dedicated web view.
+- An iframe-mode app cannot navigate back into the Synapse renderer origin or create a dedicated web view.
 - Switching modes while an app is open closes or exits the obsolete host without losing unrelated app state.
 - Narrow dialogs preserve equal option heights and disabled submit state until a mode is selected.
 
@@ -124,7 +124,7 @@ Run the dialog test command plus:
 
 - [x] **Step 1: Write failing rendering and host tests**
 
-Assert the iframe has the exact safe sandbox, disabled history controls and guarded external-open action. Assert iframe apps are rejected by window/runtime services and window-mode apps return the main shell to launcher.
+Assert the iframe has the compatibility sandbox and feature policy, disabled history controls and guarded external-open action. Assert iframe apps are rejected by window/runtime services and window-mode apps return the main shell to launcher.
 
 - [x] **Step 2: Run the targeted tests and verify they fail**
 
@@ -134,7 +134,7 @@ Run:
 
 - [x] **Step 3: Implement iframe content and route App/Dock opens**
 
-Iframe mode is rendered only in the main content area with `sandbox="allow-forms allow-scripts"` and no `allow-same-origin`. Window mode calls `customApps.window.open()` without selecting the app in the main navigation.
+Iframe mode uses the compatibility sandbox and feature policy. Same-origin renderer URLs omit `allow-same-origin`, and the main process blocks subframe navigation toward the renderer origin. Window mode calls `customApps.window.open()` without selecting the app in the main navigation.
 
 - [x] **Step 4: Guard obsolete hosts and mode changes**
 

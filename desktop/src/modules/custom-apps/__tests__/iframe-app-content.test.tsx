@@ -44,15 +44,23 @@ describe("IframeCustomAppContent", () => {
     vi.clearAllMocks()
   })
 
-  it("loads the app in a sandbox without same-origin access", async () => {
+  it("loads the app with the cross-origin compatibility sandbox", async () => {
     render()
 
     const iframe = document.querySelector<HTMLIFrameElement>("iframe")
     expect(iframe?.getAttribute("src")).toBe(app.startUrl)
-    expect(iframe?.getAttribute("sandbox")).toBe("allow-forms allow-scripts")
+    expect(iframe?.getAttribute("sandbox")).toContain("allow-same-origin")
+    expect(iframe?.getAttribute("sandbox")).toContain("allow-forms")
+    expect(iframe?.getAttribute("sandbox")).toContain("allow-scripts")
+    expect(iframe?.getAttribute("sandbox")).toContain("allow-modals")
     expect(iframe?.getAttribute("allow")).toContain("camera 'none'")
     expect(iframe?.getAttribute("allow")).toContain("clipboard-read 'none'")
-    expect(iframe?.getAttribute("referrerpolicy")).toBe("no-referrer")
+    expect(iframe?.getAttribute("allow")).toContain("autoplay *")
+    expect(iframe?.getAttribute("allow")).toContain("fullscreen *")
+    expect(iframe?.getAttribute("referrerpolicy")).toBe("strict-origin-when-cross-origin")
+    expect(iframe?.getAttribute("loading")).toBe("eager")
+    expect(iframe?.getAttribute("name")).toBe("synapse-custom-app")
+    expect(iframe?.allowFullscreen).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('button[aria-label="后退"]')?.disabled).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('button[aria-label="前进"]')?.disabled).toBe(true)
   })

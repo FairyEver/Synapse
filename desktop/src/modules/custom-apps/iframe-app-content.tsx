@@ -8,6 +8,10 @@ import { SystemAppWindowShell } from "@/modules/apps/components/system-app-windo
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { cn } from "@/lib/utils"
+import {
+  CUSTOM_APP_IFRAME_ALLOW,
+  customAppIframeSandbox,
+} from "./iframe-compatibility"
 
 const logger = createRendererLogger("custom-app.iframe")
 
@@ -15,6 +19,7 @@ export function IframeCustomAppContent({ app }: { readonly app: CustomAppDto }) 
   const [sourceUrl] = useState(app.startUrl)
   const [frameVersion, setFrameVersion] = useState(0)
   const [loading, setLoading] = useState(true)
+  const sandbox = customAppIframeSandbox(sourceUrl, window.location.href)
 
   const title = (
     <div className="flex min-w-0 items-center gap-2">
@@ -84,10 +89,13 @@ export function IframeCustomAppContent({ app }: { readonly app: CustomAppDto }) 
         <iframe
           key={frameVersion}
           src={sourceUrl}
+          name="synapse-custom-app"
           title={app.name}
-          sandbox="allow-forms allow-scripts"
-          allow="camera 'none'; microphone 'none'; geolocation 'none'; display-capture 'none'; clipboard-read 'none'; clipboard-write 'none'; fullscreen 'none'; payment 'none'; usb 'none'; serial 'none'; hid 'none'; midi 'none'"
-          referrerPolicy="no-referrer"
+          sandbox={sandbox}
+          allow={CUSTOM_APP_IFRAME_ALLOW}
+          allowFullScreen
+          loading="eager"
+          referrerPolicy="strict-origin-when-cross-origin"
           className="h-full w-full border-0 bg-background"
           onLoad={() => setLoading(false)}
         />

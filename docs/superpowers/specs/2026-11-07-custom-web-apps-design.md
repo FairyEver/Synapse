@@ -16,7 +16,7 @@
 - 打开方式必须显式选择：`iframe` 在主窗口内嵌显示；`window` 只能打开专用应用窗口。
 - 同一账号的应用定义与完整 Dock 布局跨设备同步；不同账号互不可见。
 - 所有 `window` 模式应用共用一套本机持久网页会话。切换 Synapse 账号不会清除或隔离网页 Cookie；同一台电脑上的不同 Synapse 账号可以看到之前保存的网站登录状态。
-- `iframe` 模式不使用共享网页 session，不授予 `allow-same-origin`，因此可能无法登录、使用弹窗或访问跨站 Cookie。
+- `iframe` 模式不使用共享网页 session；跨源页面启用 `allow-same-origin` 和存储访问以获得更好的站点兼容性，但摄像头、麦克风、定位、屏幕捕获、剪贴板读取和设备权限继续拒绝。
 - 每次全新打开应用或打开独立应用窗口都从配置的起始 URL 开始；同一次 `window` 运行中切走再回来保留当前页面和前进后退历史。
 - 应用顶栏不显示地址栏。`window` 模式保留后退、前进、刷新和在系统浏览器打开；`iframe` 模式只能刷新和在浏览器打开。
 - 网页自己发起的新窗口、`target="_blank"` 和 OAuth 弹窗留在 Synapse 内，共用网页会话。
@@ -47,7 +47,7 @@
 
 ## 失败条件
 
-- 在 `iframe` 中授予 `allow-same-origin`、允许访问 Synapse 默认 session，或把 iframe 失败伪装成承诺必定可用的加载方式。
+- 允许 iframe 导航到 Synapse renderer 自身 origin 后继续保留 `allow-same-origin`，或把 iframe 失败伪装成承诺必定可用的加载方式。
 - 把任意网页加载进 Synapse 自己的 renderer，或给网页注入 Synapse preload/bridge。
 - 远端删除一个已固定应用后，Dock 抛错、显示幽灵图标或应用启动失败。
 - 云端配置短暂不可用就清空本地应用列表或 Dock。
@@ -619,13 +619,16 @@ persist:synapse-custom-web
 ### iframe
 
 - `iframe` 模式只出现在主窗口应用内容区，不创建 BrowserWindow 或 WebContentsView。
-- iframe 必须设置 `sandbox="allow-forms allow-scripts"`，不得包含 `allow-same-origin`、`allow-top-navigation` 或弹出窗口权限。
-- iframe 的 Permissions Policy 固定拒绝摄像头、麦克风、定位、屏幕捕获、剪贴板、全屏、支付和 USB/串口/HID/MIDI。
-- iframe 使用 `no-referrer`，不加载 Synapse preload、bridge 或 Node，也不能访问父页面。
-- 父页面不读取 iframe 导航历史、URL 或 DOM。后退和前进始终禁用。
+- iframe 的 sandbox 默认包含表单、脚本、模态框、方向锁定、指针锁定、演示和存储访问；与 renderer 跨源时再加入 `allow-same-origin`。
+- 与 renderer 同源的起始 URL 不授予 `allow-same-origin`。主进程监听所有子框架导航，阻止目标 origin 等于 renderer origin 的导航，覆盖跨源页面后续自行跳回 Synapse origin 的情况。
+- 不授予 `allow-top-navigation`、弹出窗口或下载。网页弹窗和下载应引导使用独立窗口模式。
+- iframe 的 Permissions Policy 委托自动播放、加密媒体、全屏、画中画、屏幕唤醒、Web Share、传感器、游戏手柄、WebAuthn、FedCM、Storage Access 和剪贴板写入；固定拒绝摄像头、麦克风、定位、屏幕捕获、剪贴板读取、支付、广告主题、本地字体和 USB/串口/HID/MIDI 等敏感能力。
+- iframe 使用 `strict-origin-when-cross-origin` referrer、`loading="eager"` 和全屏能力。
+- iframe 不加载 Synapse preload、bridge 或 Node。父页面不读取其 URL、DOM 或导航历史。
+- 后退和前进始终禁用。
 - 刷新通过销毁并重建 iframe 回到起始 URL。
 - “在浏览器打开”只打开配置的起始 URL，并复用受权限保护的 shell external-open 入口。
-- 网站自身的 `X-Frame-Options`、CSP、登录、弹窗、下载或存储限制属于产品已提示的 iframe 限制，不尝试绕过。
+- 网站自身的 `X-Frame-Options`、CSP、frame-busting、登录、弹窗或下载限制属于产品已提示的 iframe 限制，不尝试通过修改响应头、关闭 web security 或注入脚本绕过。
 
 ### WebContentsView（window 模式）
 
@@ -683,7 +686,7 @@ preload: none
 
 ### 权限
 
-以下 session 权限策略只适用于 `window` 模式。`iframe` 模式由 sandbox 直接阻断 storage、弹窗、顶层导航和设备权限。
+以下 session 权限策略只适用于 `window` 模式。`iframe` 模式由 sandbox、Permissions Policy 和主进程子框架导航守卫约束。
 
 采用显式 allowlist。所有 permission request/check 和设备权限默认拒绝，只允许：
 

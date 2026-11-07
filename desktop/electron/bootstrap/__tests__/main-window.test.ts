@@ -132,6 +132,14 @@ describe("main window development shortcuts", () => {
 })
 
 describe("createMainWindow close behavior", () => {
+  it("installs the renderer subframe navigation guard", () => {
+    const state = { current: null }
+    createMainWindow({ state, isAppQuitting: () => false })
+    const window = mocks.windows.at(-1)
+
+    expect(window?.webContents.on).toHaveBeenCalledWith("will-frame-navigate", expect.any(Function))
+  })
+
   it("uses 1200×800 as the default size and 1000×800 as the minimum size", () => {
     const state = { current: null }
     createMainWindow({ state, isAppQuitting: () => false })

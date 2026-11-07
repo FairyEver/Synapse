@@ -217,7 +217,7 @@ export function CreateEditCustomAppDialog({
             <legend className="mb-2 text-sm font-medium">打开方式</legend>
             <div className="grid gap-3 sm:grid-cols-2">
               <OpenModeOption
-                description="通过 iframe 在主窗口内加载。部分网站会禁止嵌入，可能出现空白、登录失败、弹窗或跨站 Cookie 受限。"
+                description="通过 iframe 在主窗口内加载。部分网站会禁止嵌入，可能出现空白、登录失败、弹窗、下载或跨站 Cookie 受限。"
                 disabled={disabled || saving}
                 icon={PanelTop}
                 mode="iframe"
