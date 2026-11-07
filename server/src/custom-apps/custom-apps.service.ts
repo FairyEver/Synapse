@@ -451,7 +451,13 @@ export class CustomAppsService {
     run: (tx: Prisma.TransactionClient, settings: CustomAppSettingsRecord) => Promise<T>,
   ): Promise<T> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`
+      // PostgreSQL returns void for advisory locks, which Prisma cannot deserialize.
+      await tx.$queryRaw`
+        WITH lock AS MATERIALIZED (
+          SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))
+        )
+        SELECT 1 AS locked FROM lock
+      `
       const settings = await this.ensureSettings(tx, userId)
       return run(tx, settings)
     })

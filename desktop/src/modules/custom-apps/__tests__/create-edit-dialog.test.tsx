@@ -79,6 +79,19 @@ describe("CreateEditCustomAppDialog", () => {
     })
   })
 
+  it("closes an edit dialog without submitting when nothing changed", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    await renderDialog({
+      mode: "edit",
+      app: customApp(),
+      onSubmit,
+    })
+
+    await act(async () => button("保存").click())
+
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it("reuses the create attempt after a failed response", async () => {
     const onSubmit = vi.fn()
       .mockRejectedValueOnce(new Error("network lost"))

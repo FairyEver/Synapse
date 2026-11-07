@@ -134,6 +134,10 @@ export function CreateEditCustomAppDialog({
         if (!iconPngBase64 && iconSource === "favicon" && app.iconSource === "custom") {
           input.iconPngBase64 = null
         }
+        if (Object.keys(input).length === 1) {
+          onClose()
+          return
+        }
         await onSubmit(input)
       }
       createAttemptRef.current = null
@@ -202,7 +206,7 @@ export function CreateEditCustomAppDialog({
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" disabled={saving} onClick={onClose}>取消</Button>
-          <Button type="button" disabled={disabled || saving} onClick={() => { void submit() }}>
+          <Button type="button" disabled={disabled || saving || loadingFavicon} onClick={() => { void submit() }}>
             {saving ? "保存中" : mode === "create" ? "创建" : "保存"}
           </Button>
         </DialogFooter>

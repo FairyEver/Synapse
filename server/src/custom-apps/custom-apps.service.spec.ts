@@ -83,6 +83,9 @@ describe("CustomAppsService", () => {
     await service.create(userId, createInput())
 
     expect(prisma.$queryRaw).toHaveBeenCalled()
+    const query = (prisma.$queryRaw.mock.calls[0]?.[0] as readonly string[]).join("?")
+    expect(query).toContain("WITH lock AS MATERIALIZED")
+    expect(query).toContain("SELECT 1 AS locked")
     expect(prisma.$queryRaw.mock.invocationCallOrder[0])
       .toBeLessThan(prisma.userCustomApp.count.mock.invocationCallOrder[0])
   })

@@ -2,7 +2,7 @@ import * as React from "react"
 import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
+import { NativeSurfaceOcclusionBoundary } from "@/modules/custom-apps/native-surface-occlusion"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 import { track, mergeRefs } from "@/lib/ui-tracking"
@@ -75,7 +75,6 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
-  useNativeSurfaceOcclusion()
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -88,6 +87,7 @@ function SheetContent({
         )}
         {...props}
       >
+        <NativeSurfaceOcclusionBoundary />
         {children}
         {showCloseButton && (
           <SheetPrimitive.Close data-slot="sheet-close" asChild>

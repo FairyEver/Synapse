@@ -21,6 +21,7 @@ import {
 } from "../native-surface-occlusion"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { DropdownMenu, DropdownMenuContent } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -89,5 +90,30 @@ describe("NativeSurfaceOcclusionProvider", () => {
     ))
 
     expect(setOccluded).not.toHaveBeenCalled()
+  })
+
+  it("only acquires while a dialog is actually mounted", async () => {
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+
+    function Harness({ open }: { readonly open: boolean }) {
+      return (
+        <NativeSurfaceOcclusionProvider>
+          <Dialog open={open}>
+            <DialogContent>
+              <DialogTitle>验收</DialogTitle>
+            </DialogContent>
+          </Dialog>
+        </NativeSurfaceOcclusionProvider>
+      )
+    }
+
+    await act(async () => root!.render(<Harness open={false} />))
+    expect(setOccluded).not.toHaveBeenCalled()
+    await act(async () => root!.render(<Harness open />))
+    expect(setOccluded).toHaveBeenCalledWith(true)
+    await act(async () => root!.render(<Harness open={false} />))
+    expect(setOccluded).toHaveBeenLastCalledWith(false)
   })
 })

@@ -4,7 +4,7 @@ import * as React from "react"
 import { Popover as PopoverPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
+import { NativeSurfaceOcclusionBoundary } from "@/modules/custom-apps/native-surface-occlusion"
 import { track } from "@/lib/ui-tracking"
 
 function Popover({
@@ -34,12 +34,12 @@ function PopoverTrigger({
 
 function PopoverContent({
   className,
+  children,
   align = "center",
   sideOffset = 4,
   portalContainer,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content> & { portalContainer?: HTMLElement | null }) {
-  useNativeSurfaceOcclusion()
   return (
     <PopoverPrimitive.Portal container={portalContainer ?? undefined}>
       <PopoverPrimitive.Content
@@ -51,7 +51,10 @@ function PopoverContent({
           className
         )}
         {...props}
-      />
+      >
+        <NativeSurfaceOcclusionBoundary />
+        {children}
+      </PopoverPrimitive.Content>
     </PopoverPrimitive.Portal>
   )
 }

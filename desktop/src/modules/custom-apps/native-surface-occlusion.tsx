@@ -51,3 +51,8 @@ export function useNativeSurfaceOcclusion(open = true): void {
     return context?.acquire()
   }, [context, open])
 }
+
+export function NativeSurfaceOcclusionBoundary({ open = true }: { readonly open?: boolean }) {
+  useNativeSurfaceOcclusion(open)
+  return null
+}

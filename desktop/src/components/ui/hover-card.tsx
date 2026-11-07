@@ -2,7 +2,7 @@ import * as React from "react"
 import { HoverCard as HoverCardPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
+import { NativeSurfaceOcclusionBoundary } from "@/modules/custom-apps/native-surface-occlusion"
 
 function HoverCard({
   ...props
@@ -20,11 +20,11 @@ function HoverCardTrigger({
 
 function HoverCardContent({
   className,
+  children,
   align = "center",
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof HoverCardPrimitive.Content>) {
-  useNativeSurfaceOcclusion()
   return (
     <HoverCardPrimitive.Portal data-slot="hover-card-portal">
       <HoverCardPrimitive.Content
@@ -36,7 +36,10 @@ function HoverCardContent({
           className
         )}
         {...props}
-      />
+      >
+        <NativeSurfaceOcclusionBoundary />
+        {children}
+      </HoverCardPrimitive.Content>
     </HoverCardPrimitive.Portal>
   )
 }
