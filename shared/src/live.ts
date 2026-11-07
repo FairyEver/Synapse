@@ -15,6 +15,7 @@ import { isMobilePresencePayload } from "./mobile-live.js"
 import { isMeetingTranscriptionCompletedPayload } from "./meeting.js"
 import { isWebhookDeliveryReceivedPayload } from "./webhook.js"
 import type { TodoChangedPayload } from "./todos.js"
+import type { CustomAppsChangedPayload } from "./custom-apps.js"
 
 export const LIVE_MESSAGE_TYPES = {
   hello: "live.hello",
@@ -39,6 +40,7 @@ export const LIVE_MESSAGE_TYPES = {
   notificationChanged: "notification.changed",
   accountProfileChanged: "account.profile.changed",
   todosChanged: "todos.changed",
+  customAppsChanged: "custom-apps.changed",
 } as const
 
 /**
@@ -136,6 +138,7 @@ export type LiveDesktopServerMessage =
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.meetingTranscriptionCompleted, import("./meeting.js").MeetingTranscriptionCompletedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.notificationChanged, NotificationChangedPayload>
   | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.accountProfileChanged, AccountProfileChangedPayload>
+  | LiveEnvelope<typeof LIVE_MESSAGE_TYPES.customAppsChanged, CustomAppsChangedPayload>
 
 /**
  * A phone reuses the desktop handshake (hello/welcome/ping/pong) so there is one
@@ -254,6 +257,7 @@ export function isLiveDesktopServerMessage(value: unknown): value is LiveDesktop
   }
   if (value.type === LIVE_MESSAGE_TYPES.notificationChanged) return isNotificationChangedPayload(value.payload)
   if (value.type === LIVE_MESSAGE_TYPES.accountProfileChanged) return isAccountProfileChangedPayload(value.payload)
+  if (value.type === LIVE_MESSAGE_TYPES.customAppsChanged) return isCustomAppsChangedPayload(value.payload)
   return false
 }
 
@@ -271,6 +275,13 @@ function isAccountProfileChangedPayload(value: unknown): value is AccountProfile
   return isRecord(value) &&
     Object.keys(value).length === 1 &&
     boundedString(value.userId, 128)
+}
+
+function isCustomAppsChangedPayload(value: unknown): value is CustomAppsChangedPayload {
+  return isRecord(value) &&
+    Object.keys(value).length === 1 &&
+    Number.isSafeInteger(value.revision) &&
+    Number(value.revision) >= 0
 }
 
 function isHelloPayload(value: unknown): value is LiveDesktopHelloPayload {

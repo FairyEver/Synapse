@@ -1,28 +1,6 @@
-export const SYSTEM_APP_IDS = [
-  "agent",
-  "agent-personas",
-  "workflow",
-  "drive",
-  "mail-internal",
-  "mail",
-  "todos",
-  "automation",
-  "launcher",
-  "settings",
-  "resource-repository",
-  "git",
-  "database",
-  "synapse-skill",
-  "secrets",
-  "quick-input",
-  "terminal",
-  "editor-scan",
-  "model-price",
-  "connectors",
-  "meeting",
-] as const
+import { SYSTEM_APP_IDS, type SynapseSystemAppId } from "@synapse/shared"
 
-export type SynapseSystemAppId = (typeof SYSTEM_APP_IDS)[number]
+export { SYSTEM_APP_IDS, type SynapseSystemAppId }
 export type SynapseAppType = "system"
 export type SynapseSystemAppNamespace =
   | "agent"

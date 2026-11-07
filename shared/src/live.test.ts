@@ -101,6 +101,19 @@ describe("shared live protocol", () => {
     ))).toBe(false)
   })
 
+  it("recognizes custom app revision notifications", () => {
+    expect(isLiveDesktopServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.customAppsChanged,
+      { revision: 12 },
+      { id: "custom-apps-12", sentAt: "2026-11-07T08:00:00.000Z" },
+    ))).toBe(true)
+    expect(isLiveDesktopServerMessage(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.customAppsChanged,
+      { revision: -1 },
+      { id: "custom-apps-invalid", sentAt: "2026-11-07T08:00:00.000Z" },
+    ))).toBe(false)
+  })
+
   it("recognizes server webhook delivery messages", () => {
     expect(isLiveDesktopServerMessage(createLiveEnvelope(
       LIVE_MESSAGE_TYPES.webhookDeliveryReceived,

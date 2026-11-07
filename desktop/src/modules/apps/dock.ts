@@ -1,14 +1,10 @@
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "./types"
-import { listSystemAppDefinitions } from "./definitions"
 import { isSystemAppId } from "./types"
 import { isSystemAppEntryVisible } from "./visibility"
 import { INTERNAL_MAIL_RENAME_MIGRATION_ID, migrateInternalMailConfig } from "./mail-internal-migration"
+import { DEFAULT_DOCK_APP_IDS as SHARED_DEFAULT_DOCK_APP_IDS } from "@synapse/shared"
 
-export const DEFAULT_DOCK_APP_IDS: readonly SynapseSystemAppId[] =
-  listSystemAppDefinitions()
-    .filter((app) => app.dock.pinnedByDefault)
-    .sort((left, right) => left.dock.order - right.dock.order)
-    .map((app) => app.id)
+export const DEFAULT_DOCK_APP_IDS: readonly SynapseSystemAppId[] = SHARED_DEFAULT_DOCK_APP_IDS
 
 export const REQUIRED_DOCK_APP_ID = "launcher" as const satisfies SynapseSystemAppId
 
