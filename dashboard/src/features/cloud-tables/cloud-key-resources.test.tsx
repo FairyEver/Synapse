@@ -73,3 +73,16 @@ it('saves all-owned scope with an empty table id list', async () => {
     expect(save).toHaveBeenCalledWith('key', { mode: 'all_owned', tableIds: [] })
   } finally { await act(async () => root.unmount()); host.remove(); client.clear(); vi.restoreAllMocks() }
 })
+
+it('keeps the selected resources list independently scrollable', async () => {
+  vi.spyOn(cloudTableApi, 'list').mockResolvedValue({ data: [{ id: 'table-1', name: '团队待办清单' }], nextCursor: null })
+  const apiKey = { id: 'key', tableResources: { mode: 'selected', tableIds: ['table-1'] } } as DashboardApiKey
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const host = document.createElement('div'); document.body.append(host); const root = createRoot(host)
+  try {
+    await act(async () => root.render(<QueryClientProvider client={client}><CloudKeyResourcesDialog apiKey={apiKey} onClose={() => undefined} /></QueryClientProvider>))
+    await act(async () => { await new Promise(r => setTimeout(r, 30)) })
+    const panel = document.querySelector('[aria-labelledby="selected-resources-heading"]')!
+    expect(panel.querySelector('.max-h-72.overflow-y-auto')).not.toBeNull()
+  } finally { await act(async () => root.unmount()); host.remove(); client.clear(); vi.restoreAllMocks() }
+})

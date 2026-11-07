@@ -166,7 +166,7 @@ export function CloudKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboard
             </div>
             <span className='rounded-full bg-accent-soft px-2 py-1 text-xs font-medium text-accent-soft-foreground'>{selected.length}</span>
           </div>
-          <div className='min-h-0 flex-1 overflow-y-auto px-4'>
+          <div className='max-h-72 min-h-0 flex-1 overflow-y-auto px-4'>
             {selectedTables.length === 0 ? <p className='py-8 text-center text-sm text-muted'>尚未选择表</p> : selectedTables.map(table => <div key={table.id} className='flex items-center justify-between gap-3 border-b border-separator py-3 last:border-0'>
               <span className='min-w-0'>
                 <span className='block truncate text-sm font-medium'>{table.name}</span>
