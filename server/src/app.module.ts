@@ -1,4 +1,5 @@
 import { CloudTableModule } from "./cloud-tables/cloud-table.module"
+import { CustomAppsModule } from "./custom-apps/custom-apps.module"
 import { cloudTableLogRequest } from "./cloud-tables/cloud-table-log"
 import { TodosModule } from "./todos/todos.module"
 import { todoLogRequest } from "./todos/todo-log"
@@ -64,6 +65,7 @@ function hasSensitiveRequestUrl(url: string): boolean {
 @Module({
   imports: [
     CloudTableModule,
+    CustomAppsModule,
     ThrottlerModule.forRoot([{ name: "default", ttl: RATE_LIMIT_TTL_MS, limit: DEFAULT_API_RATE_LIMIT_PER_MINUTE }]),
     ScheduleModule.forRoot(),
     LoggerModule.forRoot({
