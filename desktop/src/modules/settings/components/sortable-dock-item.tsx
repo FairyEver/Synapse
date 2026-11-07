@@ -3,17 +3,18 @@ import { CSS } from "@dnd-kit/utilities"
 import { useSortable } from "@dnd-kit/sortable"
 import { ArrowDown, ArrowUp, GripVertical, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { systemAppPresentation } from "@/modules/apps/app-presentation"
 import { REQUIRED_DOCK_APP_ID, type DockMoveDirection } from "@/modules/apps/dock"
-import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
+import type { SynapseAppId } from "@/modules/apps/types"
+import { AppEntryIcon } from "@/modules/custom-apps/app-icon"
+import type { CloudDockEntry } from "@/modules/custom-apps/use-cloud-dock"
 
 type SortableDockItemProps = {
-  readonly app: SynapseSystemAppManifest
+  readonly app: CloudDockEntry
   readonly disabled: boolean
   readonly isFirst: boolean
   readonly isLast: boolean
-  readonly onMove: (appId: SynapseSystemAppId, direction: DockMoveDirection) => Promise<boolean>
-  readonly onRemove: (appId: SynapseSystemAppId) => void
+  readonly onMove: (appId: SynapseAppId, direction: DockMoveDirection) => Promise<boolean>
+  readonly onRemove: (appId: SynapseAppId) => void
 }
 
 function SortableDockItem({
@@ -28,7 +29,6 @@ function SortableDockItem({
     id: app.id,
     disabled,
   })
-  const Icon = systemAppPresentation[app.id].icon
   const removable = app.id !== REQUIRED_DOCK_APP_ID
   const moveUpRef = useRef<HTMLButtonElement>(null)
   const moveDownRef = useRef<HTMLButtonElement>(null)
@@ -60,7 +60,7 @@ function SortableDockItem({
       >
         <GripVertical className="size-4" />
       </button>
-      <Icon aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+      <AppEntryIcon icon={app.icon} className="size-5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{app.name}</span>
       <Button
         ref={moveUpRef}

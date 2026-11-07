@@ -15,10 +15,16 @@ import {
 import { systemAppPresentation } from "@/modules/apps/app-presentation"
 import { REQUIRED_DOCK_APP_ID } from "@/modules/apps/dock"
 import { DockAppMenuItems } from "@/modules/apps/components/dock-app-menu-items"
-import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
+import { isSystemAppId } from "@/modules/apps/types"
 import type { SynapseAppId } from "@synapse/shared"
+import { AppEntryIcon } from "@/modules/custom-apps/app-icon"
+import type { AppIconDescriptor } from "@/modules/custom-apps/app-adapter"
 
-type AppShellDockApp = Pick<SynapseSystemAppManifest, "id" | "name">
+type AppShellDockApp = {
+  readonly id: SynapseAppId
+  readonly name: string
+  readonly icon?: AppIconDescriptor | string
+}
 const ignoreDockPin = () => undefined
 const dockContextMenuCollisionPadding = 12
 
@@ -27,7 +33,7 @@ type AppShellDockProps = {
   readonly value: SynapseAppId
   readonly onValueChange: (value: SynapseAppId) => void
   readonly disabled?: boolean
-  readonly onRemoveApp?: (appId: SynapseSystemAppId) => Promise<boolean>
+  readonly onRemoveApp?: (appId: SynapseAppId) => Promise<boolean>
   readonly onManageDock?: () => void
 }
 
@@ -86,11 +92,13 @@ function DockButton({
   readonly app: AppShellDockApp
   readonly disabled: boolean
   readonly onManageDock?: () => void
-  readonly onRemoveApp?: (appId: SynapseSystemAppId) => Promise<boolean>
+  readonly onRemoveApp?: (appId: SynapseAppId) => Promise<boolean>
   readonly onValueChange: (value: SynapseAppId) => void
   readonly launcherButtonRef: RefObject<HTMLButtonElement | null>
 }) {
-  const Icon = systemAppPresentation[app.id].icon
+  const Icon = typeof app.id === "string" && isSystemAppId(app.id)
+    ? systemAppPresentation[app.id].icon
+    : null
   const button = (
     <Button
       ref={app.id === REQUIRED_DOCK_APP_ID ? launcherButtonRef : undefined}
@@ -102,7 +110,9 @@ function DockButton({
       aria-current={active ? "page" : undefined}
       onClick={() => onValueChange(app.id)}
     >
-      <Icon aria-hidden="true" className="size-5" strokeWidth={active ? 2.25 : 1.75} />
+      {typeof app.icon === "object"
+        ? <AppEntryIcon icon={app.icon} className="size-5" />
+        : Icon ? <Icon aria-hidden="true" className="size-5" strokeWidth={active ? 2.25 : 1.75} /> : null}
     </Button>
   )
 

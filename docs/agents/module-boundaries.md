@@ -205,6 +205,15 @@
 - 可选单图只对桌面 MCP 触发开放：`imagePath` 由桌面读取并上传，服务端保存单张私有图片并随通知 90 天保留期清理；删除单条通知或清空通知会在软删除的同时删除对象与图片行，不留孤儿对象。开放 API 三个发送形状继续拒绝图片字段。
 - System Notifier 的完整权威规格是 `docs/superpowers/specs/2026-07-23-system-notifier-v1-design.md`。修改前必须完整阅读，不得以本摘要代替。
 
+## 用户自定义网页应用
+
+- 自定义应用是账号级动态网页应用，不是 System App；它不注册 MCP capability/tool、Workflow Node、Automation Action 或 Deep Link，也不进入移动端。
+- 应用定义、图标、删除墓碑和完整 Dock 布局以服务端账号数据为准；网页 Cookie、缓存和登录状态只存在本机共享的 `persist:synapse-custom-web` session，不进入 DataRepository、云端或备份。
+- 所有自定义应用共用本机网页 session；网页内容不得加载 Synapse preload、Node、同步 bridge 或默认 session。仅允许 HTTP(S)，敏感权限和设备权限默认拒绝，只放行受保护媒体播放。
+- 主进程 `WebContentsView` 是唯一网页承载方式；renderer 只提供顶栏、视口占位和操作入口。视口必须按实际内容区域约束，任何应用浮层打开时隐藏原生视图，不得遮挡 Dialog、菜单或账号入口。
+- 应用与 Dock 配置断线只读；远端删除、非法孤儿 ID、认证失效和旧服务端都不得抛未处理异常。删除优先于旧设备修改，墓碑防止已删除应用被重放创建。
+- Dock 布局按同账号跨设备同步，首次登录只从旧本机 `core.config` 初始化一次；旧字段保作回退，新 Dock 编辑路径不得继续写入。
+
 ## MCP
 
 - 系统设置的 MCP 分类是全局 MCP Server 状态、URL 和外部客户端注册信息的唯一 UI 入口；MCP 不注册为 System App，Database 不得重复承载该视图。

@@ -3,9 +3,9 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { Plus, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { systemAppPresentation } from "@/modules/apps/app-presentation"
-import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
-import type { SynapseSystemAppId } from "@/modules/apps/types"
+import type { SynapseAppId } from "@/modules/apps/types"
+import { AppEntryIcon } from "@/modules/custom-apps/app-icon"
+import { useCloudDock } from "@/modules/custom-apps/use-cloud-dock"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import { SortableDockItem } from "@/modules/settings/components/sortable-dock-item"
 
@@ -14,11 +14,12 @@ type DockPanelProps = {
 }
 
 function DockPanel({ workflowEntryVisible }: DockPanelProps) {
-  const dock = useDockPreferences({ workflowEntryVisible })
+  const dock = useCloudDock({ workflowEntryVisible })
+  const disabled = !dock.canEdit || dock.saving
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const activeId = String(event.active.id) as SynapseSystemAppId
-    const overId = event.over ? String(event.over.id) as SynapseSystemAppId : null
+    const activeId = String(event.active.id) as SynapseAppId
+    const overId = event.over ? String(event.over.id) as SynapseAppId : null
     if (!overId || activeId === overId) {
       return
     }
@@ -41,7 +42,7 @@ function DockPanel({ workflowEntryVisible }: DockPanelProps) {
                   <SortableDockItem
                     key={app.id}
                     app={app}
-                    disabled={dock.saving}
+                    disabled={disabled}
                     isFirst={index === 0}
                     isLast={index === dock.pinnedApps.length - 1}
                     onMove={dock.moveDockApp}
@@ -65,16 +66,15 @@ function DockPanel({ workflowEntryVisible }: DockPanelProps) {
           ) : (
             <div className="divide-y divide-border">
               {dock.addableApps.map((app) => {
-                const Icon = systemAppPresentation[app.id].icon
                 return (
                   <div key={app.id} className="flex min-h-12 items-center gap-3 px-3 py-2">
-                    <Icon aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+                    <AppEntryIcon icon={app.icon} className="size-5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{app.name}</span>
                     <Button
                       type="button"
                       variant="outline"
                       size="default"
-                      disabled={dock.saving}
+                      disabled={disabled}
                       onClick={() => void dock.addDockApp(app.id)}
                     >
                       <Plus data-icon="inline-start" />
@@ -92,7 +92,7 @@ function DockPanel({ workflowEntryVisible }: DockPanelProps) {
         <Button
           type="button"
           variant="outline"
-          disabled={dock.saving}
+          disabled={disabled}
           onClick={() => void dock.restoreDefaultDock()}
         >
           <RotateCcw data-icon="inline-start" />

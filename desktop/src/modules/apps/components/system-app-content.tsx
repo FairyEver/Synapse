@@ -20,7 +20,7 @@ import { ResourceRepositoryModule } from "@/modules/resource-repository"
 import { SettingsModule } from "@/modules/settings"
 import { WorkflowModule } from "@/modules/workflow"
 import { getSynapseBridge } from "@/lib/electron-bridge"
-import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
+import { useCloudDock } from "@/modules/custom-apps/use-cloud-dock"
 import { CustomAppsProvider, useCustomApps } from "@/modules/custom-apps/context"
 import { CreateEditCustomAppDialog } from "@/modules/custom-apps/create-edit-dialog"
 import { DeleteCustomAppDialog } from "@/modules/custom-apps/delete-dialog"
@@ -214,7 +214,7 @@ function LauncherContentInner({
   const [launcherFocusAppId, setLauncherFocusAppId] =
     useState<SynapseSystemAppId | null>(null)
   const resetKeyRef = useRef(resetKey)
-  const dock = useDockPreferences({ workflowEntryVisible })
+  const dock = useCloudDock({ workflowEntryVisible })
   const customApps = useCustomApps()
   const [customDialog, setCustomDialog] = useState<{ mode: "create" | "edit"; app: CustomAppDto | null } | null>(null)
   const [deleteApp, setDeleteApp] = useState<CustomAppDto | null>(null)
@@ -304,13 +304,13 @@ function LauncherContentInner({
         apps={listLaunchableSystemApps({ workflowEntryVisible })}
         focusAppId={launcherFocusAppId}
         pinnedAppIds={dock.dockAppIds}
-        disabled={dock.saving}
+        disabled={!dock.canEdit || dock.saving}
         onOpenApp={openApp}
         onPinApp={(appId) => void dock.addDockApp(appId)}
         onUnpinApp={(appId) => void dock.removeDockApp(appId)}
         onManageDock={requestOpenSettingsDock}
         customApps={customApps.state.snapshot?.apps.filter((app) => app.kind === "web") ?? []}
-        canEditCustomApps={customApps.editable && !dock.saving}
+        canEditCustomApps={customApps.editable && dock.canEdit && !dock.saving}
         onCreateCustomApp={() => setCustomDialog({ mode: "create", app: null })}
         onOpenCustomApp={(app) => onOpenCustomApp?.(app.id)}
         onEditCustomApp={(app) => setCustomDialog({ mode: "edit", app })}

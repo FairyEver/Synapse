@@ -7,18 +7,18 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { appCategories, systemAppPresentation, type AppCategoryId } from "../app-presentation"
 import { REQUIRED_DOCK_APP_ID } from "../dock"
-import type { SynapseSystemAppId, SynapseSystemAppManifest } from "../types"
+import { isSystemAppId, type SynapseAppId, type SynapseSystemAppId, type SynapseSystemAppManifest } from "../types"
 import { DockAppMenuItems } from "./dock-app-menu-items"
 import { CustomAppIconPreview } from "@/modules/custom-apps/icon-picker"
 
 type AppLauncherListProps = {
   readonly apps: readonly SynapseSystemAppManifest[]
   readonly focusAppId?: SynapseSystemAppId | null
-  readonly pinnedAppIds: readonly SynapseSystemAppId[]
+  readonly pinnedAppIds: readonly SynapseAppId[]
   readonly disabled?: boolean
   readonly onOpenApp: (appId: SynapseSystemAppId) => void
-  readonly onPinApp: (appId: SynapseSystemAppId) => void
-  readonly onUnpinApp: (appId: SynapseSystemAppId) => void
+  readonly onPinApp: (appId: SynapseAppId) => void
+  readonly onUnpinApp: (appId: SynapseAppId) => void
   readonly onManageDock: () => void
   readonly customApps?: readonly CustomAppDto[]
   readonly canEditCustomApps?: boolean
@@ -65,7 +65,12 @@ export function AppLauncherList({
   const matches = (app: SynapseSystemAppManifest) => app.name.toLowerCase().includes(needle)
   const matchesCustom = (app: CustomAppDto) => app.name.toLowerCase().includes(needle)
   const pinnedApps = pinnedAppIds.flatMap((id) => {
+    if (!isSystemAppId(id)) return []
     const app = appsById.get(id)
+    return app ? [app] : []
+  })
+  const pinnedCustomApps = pinnedAppIds.flatMap((id) => {
+    const app = customApps.find((candidate) => candidate.id === id)
     return app ? [app] : []
   })
   const categories = appCategories.map((category) => ({
@@ -74,7 +79,7 @@ export function AppLauncherList({
   }))
   const filters = [
     { id: "all", name: "全部应用", icon: List, count: apps.length },
-    { id: "pinned", name: "已固定", icon: Pin, count: pinnedApps.length },
+    { id: "pinned", name: "已固定", icon: Pin, count: pinnedApps.length + pinnedCustomApps.length },
     ...(customApps.length > 0
       ? [{ id: "custom" as const, name: "自定义应用", icon: Globe, count: customApps.length }]
       : []),
@@ -87,9 +92,11 @@ export function AppLauncherList({
       : categories.filter((category) => filter === "all" || category.id === filter))
     .map((group) => ({ ...group, apps: group.apps.filter(matches) }))
     .filter((group) => group.apps.length > 0)
-  const visibleCustomApps = filter === "all" || filter === "custom"
-    ? customApps.filter(matchesCustom)
-    : []
+  const visibleCustomApps = filter === "pinned"
+    ? pinnedCustomApps.filter(matchesCustom)
+    : filter === "all" || filter === "custom"
+      ? customApps.filter(matchesCustom)
+      : []
   const resultCount = groups.reduce((count, group) => count + group.apps.length, 0)
     + visibleCustomApps.length
 
@@ -98,7 +105,7 @@ export function AppLauncherList({
     if (viewportRef.current) viewportRef.current.scrollTop = 0
   }
 
-  const unpin = (appId: SynapseSystemAppId) => {
+  const unpin = (appId: SynapseAppId) => {
     if (disabled) return
     if (filter === "pinned") pinnedFilterRef.current?.focus()
     onUnpinApp(appId)
@@ -214,7 +221,7 @@ export function AppLauncherList({
                               removable={removable}
                               includePinAction={canTogglePin}
                               itemKind="context"
-                              onOpen={onOpenApp}
+                              onOpen={(appId) => { if (isSystemAppId(appId)) onOpenApp(appId) }}
                               onPin={(appId) => { if (!disabled) onPinApp(appId) }}
                               onUnpin={unpin}
                               onManageDock={onManageDock}
@@ -261,6 +268,16 @@ export function AppLauncherList({
                         <CustomAppIconPreview src={app.iconUrl} />
                         <span className="min-w-0 wrap-anywhere">{app.name}</span>
                         <ChevronRight aria-hidden="true" className="ml-auto text-muted-foreground opacity-0 group-hover/app-row:opacity-100 group-focus-within/app-row:opacity-100" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={pinned.has(app.id) ? `从 Dock 移除${app.name}` : `固定${app.name}到 Dock`}
+                        disabled={!canEditCustomApps}
+                        onClick={() => pinned.has(app.id) ? onUnpinApp(app.id) : onPinApp(app.id)}
+                      >
+                        <Pin />
                       </Button>
                       {canEditCustomApps && onEditCustomApp && (
                         <Button type="button" variant="ghost" size="icon-sm" aria-label={`编辑${app.name}`} onClick={() => onEditCustomApp(app)}>

@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { ExternalLink, Pin, PinOff, Settings2 } from "lucide-react"
 import { ContextMenuItem } from "@/components/ui/context-menu"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
-import type { SynapseSystemAppId } from "@/modules/apps/types"
+import type { SynapseAppId } from "@/modules/apps/types"
 
 type DockAppMenuAction = "open" | "pin" | "unpin" | "manage"
 
@@ -14,11 +14,11 @@ type ResolveDockAppMenuActionsOptions = {
 }
 
 type DockAppMenuItemsProps = ResolveDockAppMenuActionsOptions & {
-  readonly appId: SynapseSystemAppId
+  readonly appId: SynapseAppId
   readonly itemKind: "dropdown" | "context"
-  readonly onOpen: (appId: SynapseSystemAppId) => void
-  readonly onPin: (appId: SynapseSystemAppId) => void
-  readonly onUnpin: (appId: SynapseSystemAppId) => void
+  readonly onOpen: (appId: SynapseAppId) => void
+  readonly onPin: (appId: SynapseAppId) => void
+  readonly onUnpin: (appId: SynapseAppId) => void
   readonly onManageDock: () => void
 }
 

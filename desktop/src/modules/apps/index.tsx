@@ -10,6 +10,7 @@ import { AppSwitchTransition } from "./components/app-switch-transition"
 import { EmbeddedSystemAppShell } from "./components/embedded-system-app-shell"
 import { SystemAppContent } from "./components/system-app-content"
 import { getSystemAppManifest, listLaunchableSystemApps } from "./registry"
+import { isSystemAppId } from "./types"
 import type { SynapseSystemAppId, SynapseSystemAppOpenOptions } from "./types"
 
 type AppsBridge = {
@@ -126,8 +127,8 @@ export function AppsModule({
       pinnedAppIds={dock.dockAppIds}
       disabled={dock.saving}
       onOpenApp={openApp}
-      onPinApp={(appId) => void dock.addDockApp(appId)}
-      onUnpinApp={(appId) => void dock.removeDockApp(appId)}
+      onPinApp={(appId) => { if (isSystemAppId(appId)) void dock.addDockApp(appId) }}
+      onUnpinApp={(appId) => { if (isSystemAppId(appId)) void dock.removeDockApp(appId) }}
       onManageDock={requestOpenSettingsDock}
     />
   )

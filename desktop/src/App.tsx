@@ -52,7 +52,7 @@ import { AgentConversationWindowPage } from "@/modules/agent/components/agent-co
 import {
   resolveDefaultDockAppId,
 } from "@/modules/apps/dock"
-import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
+import { useCloudDock } from "@/modules/custom-apps/use-cloud-dock"
 import { getSystemAppManifest, listSystemApps } from "@/modules/apps/registry"
 import { isSystemAppEntryVisible } from "@/modules/apps/visibility"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
@@ -98,7 +98,7 @@ function MainAppInner() {
     useState<ContentOpenRequest | null>(null)
   const [launcherResetKey, setLauncherResetKey] = useState(0)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(initialWorkflowEntryVisible)
-  const dock = useDockPreferences({ workflowEntryVisible })
+  const dock = useCloudDock({ workflowEntryVisible })
   const customApps = useCustomApps()
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
@@ -222,7 +222,7 @@ function MainAppInner() {
     const activeApp = isSystemAppId(activeAppId) ? getSystemAppManifest(activeAppId) : null
     if (activeApp && !isSystemAppEntryVisible(activeApp, { workflowEntryVisible })) {
       setActiveAppId(resolveDefaultDockAppId(listSystemApps(), {
-        dockAppIds: dock.dockAppIds,
+        dockAppIds: dock.dockAppIds.filter(isSystemAppId),
         workflowEntryVisible: false,
       }), "cheat-code")
     }
@@ -379,7 +379,7 @@ function MainAppInner() {
         dock={
           <AppShellDock
             apps={dock.pinnedApps}
-            disabled={dock.saving}
+            disabled={!dock.canEdit || dock.saving}
             value={activeAppId}
             onValueChange={handleDockValueChange}
             onRemoveApp={dock.removeDockApp}

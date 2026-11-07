@@ -22,9 +22,10 @@ vi.mock("@/lib/electron-bridge", () => ({
   }),
 }))
 
-vi.mock("@/modules/apps/hooks/use-dock-preferences", () => ({
-  useDockPreferences: () => ({
+vi.mock("@/modules/custom-apps/use-cloud-dock", () => ({
+  useCloudDock: () => ({
     addDockApp: mocks.addDockApp,
+    canEdit: true,
     dockAppIds: ["agent", "launcher"],
     removeDockApp: mocks.removeDockApp,
     saving: false,

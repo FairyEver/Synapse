@@ -32,10 +32,11 @@ const mocks = vi.hoisted(() => ({
   saving: false,
 }))
 
-vi.mock("@/modules/apps/hooks/use-dock-preferences", () => ({
-  useDockPreferences: () => ({
+vi.mock("@/modules/custom-apps/use-cloud-dock", () => ({
+  useCloudDock: () => ({
     addableApps: [apps.database],
     addDockApp: mocks.addDockApp,
+    canEdit: true,
     dockAppIds: ["agent", "launcher"],
     moveDockApp: mocks.moveDockApp,
     pinnedApps: [apps.agent, apps.launcher],
