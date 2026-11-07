@@ -6,7 +6,7 @@ You have access to Synapse Automation MCP tools for managing Automation items an
 
 ## Scope Boundary
 
-Use this skill only for Synapse Automation items, trigger/executor configuration, scheduled cron/interval or webhook triggers, enablement, manual runs, active run stopping, run history, and Automation runtime state.
+Use this skill only for Synapse Automation items, trigger/executor configuration, scheduled cron/interval, manual, or webhook triggers, enablement, manual runs, active run stopping, run history, and Automation runtime state.
 
 Do not call legacy `scheduler_*` tools; they are no longer part of the current Synapse MCP registry. Do not use this domain file for direct terminal control, Workflow definitions, database rows, Resource Repository publishing, provider settings, or editor installation. For another current Synapse MCP domain, return to `SKILL.md` for routing and read the matching `<domain>/index.md` attachment before using that domain's tools.
 
@@ -52,12 +52,13 @@ Known built-in trigger types include:
 - `builtin.webhook` - run when a matching Webhook delivery arrives.
 - `builtin.mail-internal-received` - receive any new internal letter; strict empty config.
 - `builtin.mail-received` - receive new external Inbox mail; omit `accountId` for all accounts or select one discovered local account.
+- `builtin.manual` - run only when a user or Agent explicitly invokes the existing manual-run operation; strict empty config and no automatic trigger.
 
 Use the returned `configSchema`, `defaultConfig`, and `variables` from `app_automation_trigger_type_list`. Do not guess fields that are not in the schema.
 
 Cron uses five fields with decimal integers, month/weekday aliases, lists, ranges and one optional `/step` per segment. Extra range/step separators, hexadecimal or exponent numbers, impossible calendar dates (for example February 30 with an unrestricted weekday), and invalid timezones are rejected even when saving disabled items. Leap days and the existing day-of-month/weekday OR semantics remain supported.
 
-All automatic trigger types can use the top-level `conditions` object:
+All built-in trigger types can use the top-level `conditions` object:
 
 ```json
 {
@@ -71,7 +72,7 @@ All automatic trigger types can use the top-level `conditions` object:
 
 Each condition type may appear once. Weekdays use `0=Sunday` through `6=Saturday`. Times use `HH:mm`; only the end may be `24:00`, and start must be earlier than end. Omit `conditions` for no restriction. On update, omit it to preserve the current value or pass `null` to clear it. The same relation applies to the whole set: `and` requires every condition, `or` requires any one.
 
-Cron uses its configured timezone; all other triggers use local time. The start is inclusive and the end is exclusive. Scheduled and missed-run catchups outside the condition set are skipped, while manual runs remain available and already-started runs continue. Cron/interval scheduling preserves cadence and searches at most five years. Webhook and mail events outside the condition set are discarded without replay.
+Cron uses its configured timezone; all other triggers use local time. The start is inclusive and the end is exclusive. Scheduled and missed-run catchups outside the condition set are skipped, while manual runs, including `builtin.manual`, remain available and already-started runs continue. Cron/interval scheduling preserves cadence and searches at most five years. Webhook and mail events outside the condition set are discarded without replay.
 
 New items are `schemaVersion: 2`. Existing `schemaVersion: 1` items are not migrated: they are automatically disabled during upgrade, remain readable with their original prompt and trigger config, and cannot be edited, enabled, or manually run. Create a new v2 Automation instead.
 
@@ -107,13 +108,13 @@ Webhook pickers show one canonical set: `trigger.request.body`, `.query`, and `.
 
 All supported prompt executors validate references on create/update/enable and before automatic execution. Use discovered canonical keys or their declared aliases. Retired `messageId`, unknown names, malformed templates/paths are rejected with corrective errors; legacy configurations are diagnosed without rewriting/deleting prompts. A declared alias does not mean a second value or a second picker entry.
 
-Common variables include `trigger.runId` (the actual run), `trigger.executedAt` (run start), `trigger.timezone` (effective IANA timezone), and `trigger.date` (YYYY-MM-DD). `trigger.triggeredAt` is source event occurrence or scheduled activation, not execution time. Event `trigger.receivedAt` is local receipt/enqueue: Webhook stores gateway occurrence separately; mail uses the durable receipt's createdAt. Schedules expose `trigger.scheduledAt` and derive date from the original plan, including catch-up; manual runs derive date from run start. Events derive date from source occurrence. Cron uses its configured timezone or system default; all others use system timezone. Timestamps use ISO UTC; an unknown external sentAt is empty.
+Common variables include `trigger.runId` (the actual run), `trigger.executedAt` (run start), `trigger.timezone` (effective IANA timezone), and `trigger.date` (YYYY-MM-DD). `trigger.triggeredAt` is source event occurrence, scheduled activation, or the manual request time. Event `trigger.receivedAt` is local receipt/enqueue: Webhook stores gateway occurrence separately; mail uses the durable receipt's createdAt. Schedules and event triggers expose `trigger.scheduledAt`; manual triggers do not. Manual runs derive date from run start, schedules derive it from the original plan including catch-up, and events derive it from source occurrence. Cron uses its configured timezone or system default; all others use system timezone. Timestamps use ISO UTC; an unknown external sentAt is empty.
 
 If a read result only shows `{ type, summary }`, that is expected. It is not enough to reconstruct private configs. Ask the user for the new desired config or use discovery defaults.
 
 ## Run Rules
 
-- `app_automation_run_execute` starts a manual schedule run and returns a safe run summary. Webhook and letter triggers require event context and reject this action before creating a run; send a real Webhook request or wait for a letter instead. Read `manualRunUnavailableReason` from trigger discovery. Treat tool failure as no run started.
+- `app_automation_run_execute` starts a manual run for an enabled Automation and returns a safe run summary. `builtin.manual`, Cron, and fixed interval triggers are valid manual targets. Webhook and letter triggers require event context and reject this action before creating a run; send a real Webhook request or wait for a letter instead. Read `manualRunUnavailableReason` from trigger discovery. Treat tool failure as no run started.
 - `app_automation_run_disable` stops an active run by run id. Treat tool failure as missing or no longer active. If the result has `stopRequested: true`, say the stop request was sent, not that the run has stopped; then check `app_automation_runtime_inspect` or `app_automation_run_list`.
 - `app_automation_run_list` returns recent run summaries without raw logs or outputs.
 - `app_automation_runtime_inspect` shows which items are scheduled or running.

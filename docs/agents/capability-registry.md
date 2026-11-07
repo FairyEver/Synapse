@@ -381,13 +381,16 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 ## 自动化收信触发器（2026-11-05）
 
-| Trigger ID | 名称 | 配置 | 信件 ID 变量 |
+| Trigger ID | 名称 | 配置 | 触发变量/说明 |
 | --- | --- | --- | --- |
 | `builtin.cron` | Cron | 保持现有配置 | 共用业务日期、有效时区、运行 ID；另有计划时间 |
 | `builtin.interval` | 固定间隔 | 保持现有配置 | 同上；间隔计算方式附枚举说明 |
 | `builtin.webhook` | Webhook | 保持现有配置 | 共用时间/运行 ID，短请求路径，aliases 兼容；禁止无事件手动运行 |
 | `builtin.mail-internal-received` | 收到站内信 | 严格空对象 | `trigger.payload.id`，站内信ID，`synapse://mail-internal/<id>` |
 | `builtin.mail-received` | 收到邮件 | 可选 accountId；缺省全部邮箱账号 | `trigger.payload.id`，邮件ID，`synapse://mail/em_...` |
+| `builtin.manual` | 手动触发 | 严格空对象；无自动来源 | 共用公共时间/运行 ID；不提供 `trigger.scheduledAt` |
+
+2026-11-07 新增 `builtin.manual` 手动触发器。它不创建定时器、不接受外部事件，只能由启用后的用户或 Agent 通过既有 Automation 手动运行入口触发；顶层星期/时间段条件继续保存，但手动运行不受其限制。Automation Trigger 共 6 项，Automation capability / MCP 索引仍为 14 / 14，不新增权限、IPC、MCP action、存储字段或迁移。
 
 2026-11-06 两类触发器各只提供一个信件 ID 变量，统一使用带类型的 synapse:// 引用，由既有触发器发现同时提供给界面和 MCP；旧 `trigger.payload.messageId` 不再出现在发现和运行时事件中，也不保留兼容别名，链接变量只作为显式兼容别名，不重复展示。触发器仍为 5 项，Automation 仍为 14 项 capability / MCP 索引，其余注册数量与例外不变；不新增权限、存储字段或迁移。
 

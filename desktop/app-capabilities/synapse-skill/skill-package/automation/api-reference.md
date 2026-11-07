@@ -24,7 +24,7 @@ Each tool maps to the same canonical Synapse API action.
 
 Use only canonical keys or aliases returned by discovery. Save/update/enable and automatic execution validate prompts; `trigger.payload.messageId` is retired without alias. `trigger.payload.url` is an explicit mail-id alias, not another picker entry. External mail adds senderAddresses/replyToAddresses JSON arrays and sentAt; internal mail adds senderId/senderKind, with empty senderId for system broadcasts. Attachments carry attachmentId and external assetId; no automatic downloads or hidden-recipient expansion.
 
-`trigger.triggeredAt` is source occurrence/activation, `trigger.receivedAt` is local event receipt/enqueue, `trigger.executedAt` is run start, and `trigger.runId` is the actual run. Schedules show scheduledAt and derive date from the original plan (catch-up included); manual date uses execution time, event date uses occurrence. date is YYYY-MM-DD in the effective timezone: configured Cron zone or system zone, other triggers use system zone. All timestamps are ISO UTC; unavailable external sentAt is empty.
+`trigger.triggeredAt` is source occurrence, schedule activation, or the manual request time; `trigger.receivedAt` is local event receipt/enqueue, `trigger.executedAt` is run start, and `trigger.runId` is the actual run. Schedules and event triggers expose `trigger.scheduledAt`; `builtin.manual` does not. Manual date uses execution time, event date uses occurrence, and scheduled date uses the original plan. `date` is YYYY-MM-DD in the effective timezone: configured Cron zone or system zone, other triggers use system zone. All timestamps are ISO UTC; unavailable external sentAt is empty.
 
 Webhook dynamic values use original data on demand, not the bounded compatibility flatten directory. Dot paths select nested properties; #/ JSON Pointer selects literal keys (use ~0/~1 and URI encoding for braces/spaces). Paths access only own properties and have explicit 64-segment/2048-character limits. Missing fields fail, null/empty remain empty, 0/false are preserved. Old payload.request paths remain declared aliases. Local JSON sample preview never runs Automation or uploads/stores samples. Webhook has no context-free manual run; use a real incoming request.
 
@@ -38,7 +38,7 @@ Input:
 {}
 ```
 
-Returns trigger descriptors with `type`, `title`, `kind`, `defaultConfig`, `configSchema`, optional `variables` (canonical key, label, description/example, dynamic paths and explicit aliases), and optional `manualRunUnavailableReason` for event triggers.
+Returns trigger descriptors with `type`, `title`, `kind`, `defaultConfig`, `configSchema`, optional `variables` (canonical key, label, description/example, dynamic paths and explicit aliases), and optional `manualRunUnavailableReason` for triggers that require event context. `kind: "manual"` identifies a trigger with no automatic source and a strict empty config.
 
 ### app_automation_executor_type_list
 
