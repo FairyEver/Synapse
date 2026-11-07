@@ -4,6 +4,7 @@ import { ContextMenu as ContextMenuPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 import { track, extractLabel } from "@/lib/ui-tracking"
+import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
 
 function ContextMenu({
   "data-track": dataTrack,
@@ -76,6 +77,7 @@ function ContextMenuContent({
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
 }) {
+  useNativeSurfaceOcclusion()
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content

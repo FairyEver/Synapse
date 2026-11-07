@@ -4,6 +4,7 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
 import { track, extractLabel } from "@/lib/ui-tracking"
+import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
 
 function DropdownMenu({
   "data-track": dataTrack,
@@ -49,6 +50,7 @@ function DropdownMenuContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  useNativeSurfaceOcclusion()
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content

@@ -5,6 +5,7 @@ import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { track, mergeRefs } from "@/lib/ui-tracking"
+import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
 
 const AlertDialogTrackContext = React.createContext<React.MutableRefObject<string | undefined> | null>(null)
 
@@ -67,6 +68,7 @@ function AlertDialogContent({
   className,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+  useNativeSurfaceOcclusion()
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />

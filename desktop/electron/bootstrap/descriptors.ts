@@ -921,19 +921,38 @@ export const coreCustomWebAppWindowDescriptor: ServiceDescriptor<CustomWebAppWin
   dependsOn: [CUSTOM_APPS_SERVICE_ID, CUSTOM_WEB_APP_RUNTIME_SERVICE_ID, "core.window-manager"],
   create(ctx) {
     const catalog = ctx.registry.get<CustomAppsCatalogService>(CUSTOM_APPS_SERVICE_ID)
-    return new CustomWebAppWindowService({
+    const runtime = ctx.registry.get<CustomWebAppRuntimeService>(CUSTOM_WEB_APP_RUNTIME_SERVICE_ID)
+    const service = new CustomWebAppWindowService({
       getApp: (appId) => catalog.getState().snapshot?.apps.find((app) => app.id === appId) ?? null,
       createWindow: (options) => new BrowserWindow(options),
       baseUrl: rendererBaseUrl,
       getPreloadPath: () => path.join(__dirname, "../preload.js"),
-      runtime: ctx.registry.get<CustomWebAppRuntimeService>(CUSTOM_WEB_APP_RUNTIME_SERVICE_ID),
+      runtime,
       windowManager: ctx.registry.get("core.window-manager"),
     })
+    let currentAccountId: string | null = null
+    const unsubscribe = catalog.subscribe((state) => {
+      if (state.accountId !== currentAccountId) {
+        currentAccountId = state.accountId
+        service.closeAll()
+        runtime.destroyAll()
+        return
+      }
+      if (state.snapshot) {
+        service.closeMissingApps(new Set(state.snapshot.apps.map((app) => app.id)))
+      }
+    })
+    customAppWindowDisposers.set(service, unsubscribe)
+    return service
   },
   stop(instance) {
+    customAppWindowDisposers.get(instance)?.()
+    customAppWindowDisposers.delete(instance)
     instance.closeAll()
   },
 }
+
+const customAppWindowDisposers = new WeakMap<CustomWebAppWindowService, () => void>()
 
 export const coreVoiceDescriptor: ServiceDescriptor<VoiceService> = {
   id: "core.voice",

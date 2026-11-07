@@ -113,6 +113,7 @@ async function bootstrapRenderer(): Promise<void> {
     const { AppNotificationsProvider } = await import("@/app-shell/notifications")
     const { AccountProvider } = await import("@/app-shell/account")
     const { ActiveRepositorySwitchProvider } = await import("@/app-shell/active-repository-switch")
+    const { CustomAppsProvider } = await import("@/modules/custom-apps/context")
     const { SystemAppWindowApp } = await import("@/modules/apps/system-app-window-app")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
@@ -123,7 +124,9 @@ async function bootstrapRenderer(): Promise<void> {
                 <AppNotificationsProvider>
                   <AccountProvider>
                     <ActiveRepositorySwitchProvider>
-                      <SystemAppWindowApp />
+                      <CustomAppsProvider>
+                        <SystemAppWindowApp />
+                      </CustomAppsProvider>
                     </ActiveRepositorySwitchProvider>
                   </AccountProvider>
                 </AppNotificationsProvider>
@@ -142,6 +145,7 @@ async function bootstrapRenderer(): Promise<void> {
     const { AccountProvider } = await import("@/app-shell/account")
     const { ActiveRepositorySwitchProvider } = await import("@/app-shell/active-repository-switch")
     const { CustomAppsProvider } = await import("@/modules/custom-apps/context")
+    const { NativeSurfaceOcclusionProvider } = await import("@/modules/custom-apps/native-surface-occlusion")
     const { CustomAppWindowApp } = await import("@/modules/custom-apps/custom-app-window-app")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
@@ -152,9 +156,11 @@ async function bootstrapRenderer(): Promise<void> {
                 <AppNotificationsProvider>
                   <AccountProvider>
                     <ActiveRepositorySwitchProvider>
-                      <CustomAppsProvider>
-                        <CustomAppWindowApp />
-                      </CustomAppsProvider>
+                      <NativeSurfaceOcclusionProvider>
+                        <CustomAppsProvider>
+                          <CustomAppWindowApp />
+                        </CustomAppsProvider>
+                      </NativeSurfaceOcclusionProvider>
                     </ActiveRepositorySwitchProvider>
                   </AccountProvider>
                 </AppNotificationsProvider>

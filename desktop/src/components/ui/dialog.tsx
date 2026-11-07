@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 import { track, mergeRefs } from "@/lib/ui-tracking"
+import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
 
 const DialogTrackContext = React.createContext<React.MutableRefObject<string | undefined> | null>(null)
 
@@ -72,6 +73,7 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  useNativeSurfaceOcclusion()
   return (
     <DialogPortal>
       <DialogOverlay />

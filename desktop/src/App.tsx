@@ -60,6 +60,7 @@ import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transi
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import { isSystemAppId, type SynapseSystemAppId, type SynapseAppId } from "@/modules/apps/types"
 import { CustomAppsProvider, useCustomApps } from "@/modules/custom-apps/context"
+import { NativeSurfaceOcclusionProvider } from "@/modules/custom-apps/native-surface-occlusion"
 import { CustomWebAppContent } from "@/modules/custom-apps/web-app-content"
 import type { CustomAppId } from "@synapse/shared"
 import { SynapseSkillAutoUpdateHost } from "../app-capabilities/synapse-skill/renderer/auto-update"
@@ -71,9 +72,11 @@ const logger = createRendererLogger("app")
 
 function MainApp() {
   return (
-    <CustomAppsProvider>
-      <MainAppInner />
-    </CustomAppsProvider>
+    <NativeSurfaceOcclusionProvider>
+      <CustomAppsProvider>
+        <MainAppInner />
+      </CustomAppsProvider>
+    </NativeSurfaceOcclusionProvider>
   )
 }
 

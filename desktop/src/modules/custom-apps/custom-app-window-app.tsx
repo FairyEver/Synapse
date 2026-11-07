@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useEffect, useMemo } from "react"
 import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import type { CustomAppId } from "@synapse/shared"
@@ -15,6 +15,10 @@ export function CustomAppWindowApp() {
   const app = appId
     ? customApps.state.snapshot?.apps.find((candidate) => candidate.id === appId) ?? null
     : null
+
+  useEffect(() => {
+    if (appId && customApps.state.syncState === "ready" && !app) window.close()
+  }, [app, appId, customApps.state.syncState])
 
   if (!appId) return <WindowError message="应用不存在。" />
   if (customApps.state.syncState === "loading" && !customApps.state.snapshot) {

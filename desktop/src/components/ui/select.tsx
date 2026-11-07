@@ -2,6 +2,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 import { track } from "@/lib/ui-tracking"
 
@@ -81,6 +82,7 @@ function SelectContent({
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  useNativeSurfaceOcclusion()
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content

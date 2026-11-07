@@ -74,6 +74,19 @@ describe("system app header architecture", () => {
     expect(source).toContain("embeddedLeftAddon={headerNavigation}")
   })
 
+  it("keeps custom web app actions on the shared window shell without an address bar", async () => {
+    const source = await readFile(new FileURL("../../../modules/custom-apps/web-app-content.tsx", import.meta.url), "utf8")
+    const toolbarSource = await readFile(new FileURL("../../../modules/custom-apps/web-app-toolbar-actions.tsx", import.meta.url), "utf8")
+
+    expect(source).toContain("<SystemAppWindowShell")
+    expect(source).toContain("<WebAppToolbarActions")
+    expect(source).not.toMatch(/<SystemAppTopBar(?:\s|>)/)
+    expect(toolbarSource).not.toContain('type="text"')
+    expect(toolbarSource).toContain('aria-label="后退"')
+    expect(toolbarSource).toContain('aria-label="刷新"')
+    expect(toolbarSource).toContain('aria-label="在浏览器打开"')
+  })
+
   it.each(["window", "dock", "launcher"] as const)("keeps mailbox switching in the %s header while changing the visible account", async (host) => {
     mocks.api.accountList.mockResolvedValue({ items: [{ ...account, aliases: [] }, { ...account, id: "ma_two", name: "个人", aliases: [] }], nextCursor: null })
     const mail = createElement(ExternalMailModule)

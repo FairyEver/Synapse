@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
 import { ImagePlus } from "lucide-react"
-import {
-  parseCustomAppUrl,
-  type CustomAppCreateInput,
-  type CustomAppDto,
-  type CustomAppUpdateInput,
-} from "@synapse/shared"
+import { parseCustomAppUrl } from "@synapse/shared/custom-apps-contracts"
+import type {
+  CustomAppCreateInput,
+  CustomAppDto,
+  CustomAppUpdateInput,
+} from "@synapse/shared/custom-apps-contracts"
 
 import { Button } from "@/components/ui/button"
 import {

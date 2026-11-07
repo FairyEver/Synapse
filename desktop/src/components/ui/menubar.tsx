@@ -2,6 +2,7 @@ import * as React from "react"
 import { Menubar as MenubarPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { useNativeSurfaceOcclusion } from "@/modules/custom-apps/native-surface-occlusion"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
 import { track, extractLabel } from "@/lib/ui-tracking"
 
@@ -70,6 +71,7 @@ function MenubarContent({
   sideOffset = 8,
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Content>) {
+  useNativeSurfaceOcclusion()
   return (
     <MenubarPortal>
       <MenubarPrimitive.Content

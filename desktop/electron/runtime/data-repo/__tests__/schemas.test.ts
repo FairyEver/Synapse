@@ -165,6 +165,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "app.connectors.items",
         "app.connectors.state",
         "app.connectors.wecom-mail",
+        "app.custom-apps.snapshots",
         "app.wecom.connection",
         "app.quick-input.items",
         "app.quick-input.settings",

@@ -99,6 +99,7 @@ vi.mock("@/modules/settings/components/mcp-settings-panel", () => ({
 }))
 
 import { SettingsModule } from "@/modules/settings"
+import { CustomAppsProvider } from "@/modules/custom-apps/context"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 ;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class {
@@ -193,7 +194,11 @@ async function renderSettingsModule() {
   roots.push(root)
 
   await act(async () => {
-    root.render(<SettingsModule />)
+    root.render(
+      <CustomAppsProvider>
+        <SettingsModule />
+      </CustomAppsProvider>,
+    )
   })
 
   return container

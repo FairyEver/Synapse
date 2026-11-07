@@ -1,6 +1,6 @@
 # 能力注册清单
 
-2026-11-07 用户自定义网页应用：桌面端新增账号级自定义应用与完整 Dock 布局同步，不注册新的 System App、MCP capability/tool、Workflow、Automation Action 或 Deep Link。System App 保持 21 项、默认 Dock 保持 9 项，现有全局 capability/MCP 索引数量不变；自定义应用只通过桌面 UI 和账号 API 管理。
+2026-11-07 用户自定义网页应用：桌面端新增账号级自定义应用与完整 Dock 布局同步，不注册新的 System App、MCP capability/tool、Workflow、Automation Action 或 Deep Link。System App 保持 21 项、默认 Dock 保持 9 项，全局 capability 保持 365 项、MCP 索引保持 361 项；自定义应用只通过桌面 UI 和账号 API 管理。
 
 2026-11-06 新增完整 Webhook 正文只读 MCP：Automation 14→15，全局 capability 364→365、MCP 索引 360→361；公开仍仅 search/invoke 两项。新增独立 automation.webhook.body.read 权限与本人认证的内部正文 REST，不新增 System App、Dock、IPC、Workflow、Automation Action 或 Deep Link。快照、运行绑定及升级边界见 docs/agent-guides/webhook-delivery-body.md。
 
