@@ -132,7 +132,7 @@ export class AutomationExecutionService {
         triggerInput: effectiveTriggerContext.event ?? {
           triggeredBy: effectiveTriggerContext.triggeredBy,
           triggeredAt: effectiveTriggerContext.triggeredAt,
-          scheduledAt: effectiveTriggerContext.scheduledAt,
+          ...(effectiveTriggerContext.triggerKind === "manual" ? {} : { scheduledAt: effectiveTriggerContext.scheduledAt }),
         },
         persistOutputs: async (outputs: Record<string, unknown>) => {
           effectiveSignal.throwIfAborted()

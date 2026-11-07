@@ -898,12 +898,12 @@ export class AutomationService {
   }
 
   private resolveNextRunAt(item: AutomationItem, preferredNextRunAt?: string): Date | null {
+    const trigger = this.deps.triggers.get(item.trigger.type)
+    if (trigger.manifest.kind !== "schedule") return null
     if (preferredNextRunAt) {
       const preferred = new Date(preferredNextRunAt)
       if (preferred.getTime() > this.now().getTime()) return preferred
     }
-    const trigger = this.deps.triggers.get(item.trigger.type)
-    if (trigger.manifest.kind !== "schedule") return null
     if (!trigger.runtime.computeNextRunAt) {
       throw new Error(`Automation trigger "${item.trigger.type}" does not support scheduling`)
     }

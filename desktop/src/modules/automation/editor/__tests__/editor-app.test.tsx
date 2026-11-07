@@ -534,6 +534,18 @@ describe("AutomationEditorApp", () => {
     expect(document.querySelector('[aria-label="查看触发变量"]')).not.toBeNull()
   })
 
+  it("does not describe manual trigger conditions as an execution gate", async () => {
+    const item = buildAutomationItem({
+      trigger: { type: "builtin.manual", config: {} },
+      conditions: { operator: "and", items: [{ type: "weekdays", days: [1, 2, 3, 4, 5] }] },
+    })
+    getItem.mockResolvedValue(item)
+    window.history.replaceState(null, "", "/?window=automation-editor&mode=edit&automationId=automation:1")
+    const container = document.createElement("div"); document.body.appendChild(container)
+    await act(async () => { createRoot(container).render(<AutomationEditorApp />) })
+    expect(document.querySelector('[aria-label="流程摘要"]')?.textContent).not.toContain("符合条件")
+  })
+
   it("preserves automation conditions when the trigger type changes", async () => {
     const conditions = { operator: "and" as const, items: [{ type: "weekdays" as const, days: [1, 3, 5] }] }
     const item = buildAutomationItem({

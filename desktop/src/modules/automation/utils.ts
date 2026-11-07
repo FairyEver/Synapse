@@ -153,7 +153,8 @@ export function summarizeAutomationDraft(draft: AutomationEditorDraft, projects:
     trigger = "触发条件尚未配置完成"
   }
   const conditionSummary = summarizeAutomationConditions(draft.conditions)
-  const conditionClause = conditionSummary ? `，并且符合条件「${conditionSummary}」` : ""
+  const triggerKind = rendererAutomationTriggerRegistry.list().find(item => item.manifest.id === draft.triggerType)?.manifest.kind
+  const conditionClause = conditionSummary && triggerKind !== "manual" ? `，并且符合条件「${conditionSummary}」` : ""
   if (!draft.executorType) return `当 ${trigger}${conditionClause} 时，选择要执行的操作。`
   const executor = rendererActionRegistry.list().find(action => action.manifest.id === draft.executorType)
   const projectId = draft.executorConfig.projectId

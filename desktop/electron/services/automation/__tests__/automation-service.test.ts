@@ -223,6 +223,21 @@ describe("AutomationService", () => {
     } finally { await harness.service.stop() }
   })
 
+  it("does not schedule a manual trigger with a stale persisted next run", async () => {
+    const harness = createHarness()
+    const item = createStoredAutomation({
+      trigger: { type: "builtin.manual", config: {} },
+      nextRunAt: "2099-01-01T00:00:00.000Z",
+    })
+    await harness.itemStore.upsert(item)
+
+    await harness.service.start()
+    try {
+      expect(harness.service.automationRuntimeInspect().timers).toEqual([])
+      expect(await harness.runs.listByAutomation(item.id)).toEqual([])
+    } finally { await harness.service.stop() }
+  })
+
   it("leaves an automation without a matching time unscheduled while allowing manual runs", async () => {
     const harness = createHarness({ now: () => new Date("2026-10-23T18:00:00Z") })
     const item = await harness.service.automationCreate({

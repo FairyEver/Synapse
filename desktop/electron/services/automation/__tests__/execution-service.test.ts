@@ -144,11 +144,13 @@ describe("AutomationExecutionService", () => {
 
   it("passes manual trigger variables without a scheduledAt value", async () => {
     let observedVariables: Record<string, string> | undefined
+    let observedTriggerInput: Record<string, unknown> | undefined
     const harness = await createExecutionHarness({
       action: {
         ...testAction,
         execute: async ({ context }) => {
           observedVariables = context.templateVariables
+          observedTriggerInput = context.triggerInput as Record<string, unknown>
           return { status: "success", summary: "ok" }
         },
       },
@@ -167,6 +169,7 @@ describe("AutomationExecutionService", () => {
       "trigger.triggeredAt": "2026-11-07T00:00:00.000Z",
     }))
     expect(observedVariables).not.toHaveProperty("trigger.scheduledAt")
+    expect(observedTriggerInput).not.toHaveProperty("scheduledAt")
   })
 
   it("runs raw script actions without permission checks or previous outputs", async () => {
