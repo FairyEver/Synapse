@@ -2,7 +2,7 @@ import type { SynapseSystemAppId, SynapseSystemAppManifest } from "./types"
 import { isSystemAppId } from "./types"
 import { isSystemAppEntryVisible } from "./visibility"
 import { INTERNAL_MAIL_RENAME_MIGRATION_ID, migrateInternalMailConfig } from "./mail-internal-migration"
-import { DEFAULT_DOCK_APP_IDS as SHARED_DEFAULT_DOCK_APP_IDS } from "@synapse/shared"
+import { DEFAULT_DOCK_APP_IDS as SHARED_DEFAULT_DOCK_APP_IDS } from "@synapse/shared/custom-apps-contracts"
 
 export const DEFAULT_DOCK_APP_IDS: readonly SynapseSystemAppId[] = SHARED_DEFAULT_DOCK_APP_IDS
 

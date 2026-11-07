@@ -2,6 +2,14 @@ import type { HubInstallOpenRequest } from "../../app-capabilities/skill-hub/sha
 import type { HubInstallPrepareResult } from "../../app-capabilities/skill-hub/shared/ipc-result"
 import type { DriveFileReplaceInput, DriveFileReplaceApplyInput, DriveFileReplacePreviewDto, DriveFileReplaceResultDto, DriveSyncRemovalInput, DriveSyncRemovalPreviewDto, DriveSyncRemovalResultDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
+  CustomAppCreateInput,
+  CustomAppDockOperation,
+  CustomAppId,
+  CustomAppSnapshotDto,
+  CustomAppUpdateInput,
+  CustomAppsClientState,
+} from "@synapse/shared/custom-apps-contracts" with { "resolution-mode": "import" }
+import type {
   DatabaseChangeEvent,
   DatabaseFolder,
   DatabaseOverview,
@@ -866,6 +874,20 @@ export type SynapseBridge = {
     onMailInternalOpenRequest: (
       listener: (request: SynapseSystemAppMailInternalOpenRequest) => void,
     ) => () => void
+  }
+  customApps: {
+    getSnapshot: () => Promise<CustomAppsClientState>
+    retry: () => Promise<CustomAppsClientState>
+    create: (input: CustomAppCreateInput) => Promise<CustomAppSnapshotDto>
+    update: (id: CustomAppId, input: CustomAppUpdateInput) => Promise<CustomAppSnapshotDto>
+    delete: (id: CustomAppId, operationId: string) => Promise<CustomAppSnapshotDto>
+    bootstrapDock: (input: {
+      operationId: string
+      dockAppIds: string[]
+      dockMigrationIds: string[]
+    }) => Promise<CustomAppSnapshotDto>
+    applyDockOperation: (input: CustomAppDockOperation) => Promise<CustomAppSnapshotDto>
+    onChanged: (listener: (state: CustomAppsClientState) => void) => () => void
   }
   documentTemplate: {
     template: { choose: () => Promise<string | null> }

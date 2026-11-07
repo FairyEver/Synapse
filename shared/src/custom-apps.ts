@@ -135,6 +135,25 @@ export const customAppSnapshotSchema = z.object({
 
 export type CustomAppSnapshotDto = z.infer<typeof customAppSnapshotSchema>
 
+export const customAppsSyncStateSchema = z.enum([
+  "signed-out",
+  "loading",
+  "ready",
+  "offline",
+  "unsupported",
+  "error",
+])
+
+export const customAppsClientStateSchema = z.object({
+  accountId: z.string().min(1).nullable(),
+  snapshot: customAppSnapshotSchema.nullable(),
+  syncState: customAppsSyncStateSchema,
+  errorCode: z.string().min(1).nullable(),
+}).strict()
+
+export type CustomAppsSyncState = z.infer<typeof customAppsSyncStateSchema>
+export type CustomAppsClientState = z.infer<typeof customAppsClientStateSchema>
+
 export const customAppCreateInputSchema = z.object({
   operationId: z.string().trim().min(1).max(200),
   id: customAppIdSchema,

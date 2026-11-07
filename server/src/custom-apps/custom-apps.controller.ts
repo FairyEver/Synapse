@@ -25,7 +25,7 @@ import {
   type CustomAppDockOperation,
   type CustomAppId,
   type CustomAppUpdateInput,
-} from "@synapse/shared"
+} from "@synapse/shared/custom-apps-contracts"
 import type { Request, Response } from "express"
 import { pipeline } from "node:stream/promises"
 import { z } from "zod"

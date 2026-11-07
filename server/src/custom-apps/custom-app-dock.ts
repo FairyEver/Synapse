@@ -2,7 +2,7 @@ import {
   applyCustomAppDockAction,
   normalizeCustomAppDockIds,
   type CustomAppDockAction,
-} from "@synapse/shared"
+} from "@synapse/shared/custom-apps-contracts"
 
 type DockReducerOptions = {
   readonly knownCustomAppIds: ReadonlySet<string>

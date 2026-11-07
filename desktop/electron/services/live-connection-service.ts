@@ -430,6 +430,17 @@ export class LiveConnectionService {
       return
     }
 
+    if (parsed.type === LIVE_MESSAGE_TYPES.customAppsChanged) {
+      this.startServerTimeout(this.heartbeatTimeoutMs)
+      this.eventBus?.emit({
+        domain: "account",
+        type: "custom-apps.changed",
+        payload: parsed.payload,
+        timestamp: this.now().toISOString(),
+      })
+      return
+    }
+
     if (parsed.type === LIVE_MESSAGE_TYPES.accountProfileChanged) {
       this.startServerTimeout(this.heartbeatTimeoutMs)
       await this.accountService.refreshFromStorage({ reason: "account-profile-changed" })

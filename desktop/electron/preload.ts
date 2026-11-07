@@ -26,6 +26,7 @@ import type {
   SynapseMeetingTranscriptionCompletedEvent,
 } from "../src/types/meeting"
 import type { SynapseLiveStateChangedEvent } from "../src/types/live"
+import type { CustomAppsClientState } from "@synapse/shared/custom-apps-contracts" with { "resolution-mode": "import" }
 import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
 import type { InstallStatusChangedEvent } from "../src/types/install-status"
@@ -428,6 +429,20 @@ const synapseBridge: SynapseBridge = {
     onMailInternalOpenRequest: createRawPayloadSubscription(
       subscribe,
       EVENT_CHANNELS.apps.mailInternalOpenRequest,
+    ),
+  },
+  customApps: {
+    getSnapshot: () => invoke(IPC_CHANNELS.customApps.getSnapshot)(),
+    retry: () => invoke(IPC_CHANNELS.customApps.retry)(),
+    create: (input) => invoke(IPC_CHANNELS.customApps.create)(input),
+    update: (id, input) => invoke(IPC_CHANNELS.customApps.update)({ id, input }),
+    delete: (id, operationId) => invoke(IPC_CHANNELS.customApps.delete)({ id, operationId }),
+    bootstrapDock: (input) => invoke(IPC_CHANNELS.customApps.bootstrapDock)(input),
+    applyDockOperation: (input) => invoke(IPC_CHANNELS.customApps.applyDockOperation)(input),
+    onChanged: createDomainEventPayloadSubscription<CustomAppsClientState>(
+      subscribe,
+      "account",
+      "custom-apps.changed",
     ),
   },
   documentTemplate: {

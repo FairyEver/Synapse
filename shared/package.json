@@ -72,6 +72,17 @@
       },
       "default": "./dist/todos.js"
     },
+    "./custom-apps-contracts": {
+      "import": {
+        "types": "./dist/custom-apps.d.ts",
+        "default": "./dist/custom-apps.js"
+      },
+      "require": {
+        "types": "./dist/custom-apps.d.cts",
+        "default": "./dist/custom-apps.cjs"
+      },
+      "default": "./dist/custom-apps.js"
+    },
     "./cloud-table-contracts": {
       "import": {
         "types": "./dist/cloud-table-contracts.d.ts",

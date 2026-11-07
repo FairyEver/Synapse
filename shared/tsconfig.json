@@ -30,6 +30,7 @@
     "src/cloud-table-contracts.ts",
     "src/skill-hub-contracts.ts",
     "src/skill-hub-package-node.ts",
-    "src/archive-package-node.ts"
+    "src/archive-package-node.ts",
+    "src/custom-apps.ts"
   ]
 }

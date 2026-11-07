@@ -1,4 +1,4 @@
-import { SYSTEM_APP_IDS, type SynapseSystemAppId } from "@synapse/shared"
+import { SYSTEM_APP_IDS, type SynapseSystemAppId } from "@synapse/shared/custom-apps-contracts"
 
 export { SYSTEM_APP_IDS, type SynapseSystemAppId }
 export type SynapseAppType = "system"

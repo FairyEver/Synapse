@@ -362,6 +362,16 @@ export const IPC_CHANNELS = {
     "skillHubInstallOpenRequest": "synapse:app:apps:operation:skill_hub_install_open_request",
     "todoOpenRequest": "synapse:app:apps:operation:todo_open_request",
   },
+  "customApps": {
+    "getSnapshot": "synapse:app:custom_apps:operation:get_state",
+    "retry": "synapse:app:custom_apps:sync:retry",
+    "create": "synapse:app:custom_apps:app:create",
+    "update": "synapse:app:custom_apps:app:update",
+    "delete": "synapse:app:custom_apps:app:delete",
+    "bootstrapDock": "synapse:app:custom_apps:dock:bootstrap",
+    "applyDockOperation": "synapse:app:custom_apps:dock:apply",
+    "changed": "synapse:app:custom_apps:operation:changed",
+  },
   "mcp": {
     "agentList": "synapse:app:mcp:agent:list",
     "agentSetEnabled": "synapse:app:mcp:agent:set_enabled",

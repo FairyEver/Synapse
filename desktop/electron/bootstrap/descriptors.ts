@@ -270,6 +270,7 @@ import { SkillHubCloudClient } from "../../app-capabilities/skill-hub/main/cloud
 import { HubPackageService } from "../../app-capabilities/skill-hub/main/package-service"
 import { skillHubPreparedSourcesSchema, type HubPreparedRecord } from "../runtime/data-repo/schemas/skill-hub"
 import { accountService } from "../services/account-service"
+import { CUSTOM_APPS_SERVICE_ID, CustomAppsCatalogService } from "../services/custom-apps/catalog-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
@@ -862,6 +863,25 @@ export const coreTodosDescriptor: ServiceDescriptor<TodoCloudService> = {
   dependsOn: ["core.event-bus"],
   create(ctx) { return new TodoCloudService({ account: accountService, eventBus: ctx.registry.get<EventBus>("core.event-bus") }) },
   stop(instance) { instance.dispose() },
+}
+
+export const coreCustomAppsDescriptor: ServiceDescriptor<CustomAppsCatalogService> = {
+  id: CUSTOM_APPS_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.event-bus"],
+  create(ctx) {
+    return new CustomAppsCatalogService({
+      account: accountService,
+      repository: ctx.registry.get<DataRepository>("core.data-repository"),
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
+    })
+  },
+  async start(instance) {
+    await instance.initialize()
+  },
+  stop(instance) {
+    instance.dispose()
+  },
 }
 
 export const coreVoiceDescriptor: ServiceDescriptor<VoiceService> = {

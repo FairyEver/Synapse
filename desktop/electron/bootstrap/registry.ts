@@ -63,6 +63,7 @@ import {
   coreConnectorsDescriptor,
   coreSecretsDescriptor,
   coreTodosDescriptor,
+  coreCustomAppsDescriptor,
   coreMailDescriptor,
   coreMailBackgroundDescriptor,
   coreSkillHubDescriptor,
@@ -175,6 +176,7 @@ export function buildServiceRegistry(
   registry.register(coreSkillHubInstallProviderDescriptor)
   registry.register(coreSkillHubBackgroundDescriptor)
   registry.register(coreTodosDescriptor)
+  registry.register(coreCustomAppsDescriptor)
   registry.register(coreAgentPersonasDescriptor)
   registry.register(coreVoiceDescriptor)
   registry.register(coreMeetingDescriptor)

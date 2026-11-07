@@ -2,6 +2,7 @@ import { skillHubPreparedSourcesSchema, skillHubWriteIntentsSchema } from "./ski
 import { agentShareImagesSchema } from "./agent-share"
 import { mailSchemas } from "./mail"
 import { automationMailSchemas } from "./automation-mail-triggers"
+import { customAppsSnapshotSchema } from "./custom-apps"
 export { mailSchemas, type MailRecord, type MailEntity } from "./mail"
 import { agentGeneratedUiStateSchema } from "./agent-generated-ui"
 export { agentTaskProgressSchema, type AgentTaskProgressEntryV1 } from "./agent-task-progress"
@@ -31,6 +32,11 @@ export {
   isLegacyCoreConfigV0,
   type CoreConfigV1,
 } from "./core-config"
+export {
+  CUSTOM_APPS_SNAPSHOT_NAMESPACE,
+  customAppsSnapshotSchema,
+  type CustomAppsSnapshotEntryV1,
+} from "./custom-apps"
 export {
   workflowMigrationStateSchema,
   type WorkflowMigrationStateEntryV1,
@@ -309,6 +315,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   skillHubPreparedSourcesSchema,
   skillHubWriteIntentsSchema,
   coreConfigSchema,
+  customAppsSnapshotSchema,
   clientTelemetryOutboxSchema,
   clientTelemetryEnvironmentSchema,
   coreIdentitySchema,

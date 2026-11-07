@@ -19,7 +19,7 @@ import {
   type CustomAppId,
   type CustomAppSnapshotDto,
   type CustomAppUpdateInput,
-} from "@synapse/shared"
+} from "@synapse/shared/custom-apps-contracts"
 import { createHash } from "node:crypto"
 import type { Prisma } from "@prisma/client"
 

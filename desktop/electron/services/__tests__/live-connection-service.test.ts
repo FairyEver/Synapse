@@ -378,6 +378,33 @@ describe("LiveConnectionService workspace file ownership", () => {
 })
 
 describe("LiveConnectionService", () => {
+  it("emits custom app revision changes to the account event bus", async () => {
+    const socket = new FakeSocket()
+    const eventBus = { emit: vi.fn() }
+    const service = new LiveConnectionService({
+      accountService: createAccountService() as never,
+      clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
+      createSocket: vi.fn(() => socket as never),
+    })
+    service.setEventBus(eventBus as never)
+    await connectAndWelcome(service, socket)
+
+    socket.emit("message", JSON.stringify(createLiveEnvelope(
+      LIVE_MESSAGE_TYPES.customAppsChanged,
+      { revision: 8 },
+      { id: "custom-apps-8", sentAt: new Date().toISOString() },
+    )))
+
+    await waitForCondition(() => eventBus.emit.mock.calls.some(([event]) =>
+      (event as { readonly type?: string }).type === "custom-apps.changed"))
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "account",
+      type: "custom-apps.changed",
+      payload: { revision: 8 },
+    }))
+    service.close()
+  })
+
   it("refreshes the message center and suppresses a second native alert on the originating desktop", async () => {
     nativeNotificationShow.mockClear()
     presented.calls.length = 0
