@@ -16,6 +16,7 @@ import { systemAppPresentation } from "@/modules/apps/app-presentation"
 import { REQUIRED_DOCK_APP_ID } from "@/modules/apps/dock"
 import { DockAppMenuItems } from "@/modules/apps/components/dock-app-menu-items"
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "@/modules/apps/types"
+import type { SynapseAppId } from "@synapse/shared"
 
 type AppShellDockApp = Pick<SynapseSystemAppManifest, "id" | "name">
 const ignoreDockPin = () => undefined
@@ -23,8 +24,8 @@ const dockContextMenuCollisionPadding = 12
 
 type AppShellDockProps = {
   readonly apps: readonly AppShellDockApp[]
-  readonly value: SynapseSystemAppId
-  readonly onValueChange: (value: SynapseSystemAppId) => void
+  readonly value: SynapseAppId
+  readonly onValueChange: (value: SynapseAppId) => void
   readonly disabled?: boolean
   readonly onRemoveApp?: (appId: SynapseSystemAppId) => Promise<boolean>
   readonly onManageDock?: () => void
@@ -86,7 +87,7 @@ function DockButton({
   readonly disabled: boolean
   readonly onManageDock?: () => void
   readonly onRemoveApp?: (appId: SynapseSystemAppId) => Promise<boolean>
-  readonly onValueChange: (value: SynapseSystemAppId) => void
+  readonly onValueChange: (value: SynapseAppId) => void
   readonly launcherButtonRef: RefObject<HTMLButtonElement | null>
 }) {
   const Icon = systemAppPresentation[app.id].icon

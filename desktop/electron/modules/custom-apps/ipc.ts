@@ -35,6 +35,10 @@ import {
   type CustomWebAppRuntimeService,
   type WebViewBounds,
 } from "../../services/custom-apps/runtime-service"
+import {
+  CUSTOM_WEB_APP_WINDOW_SERVICE_ID,
+  type CustomWebAppWindowService,
+} from "../../services/custom-apps/window-service"
 
 const iconResultSchema = z.object({
   pngBase64: z.string().min(1),
@@ -217,6 +221,15 @@ export const customAppIpcModule: IpcModule = {
         }
         await runtime.navigate(host, input.action)
         return runtime.state(host)
+      },
+    },
+    openWindow: {
+      kind: "invoke",
+      operationId: "app.custom_apps.window.open",
+      request: z.object({ appId: customAppIdSchema }).strict(),
+      response: z.void(),
+      handler: (ctx, input: { readonly appId: CustomAppId }) => {
+        return ctx.resolve<CustomWebAppWindowService>(CUSTOM_WEB_APP_WINDOW_SERVICE_ID).open(input.appId)
       },
     },
   },

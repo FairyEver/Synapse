@@ -21,6 +21,7 @@ describe("customAppIpcModule", () => {
     expect(customAppIpcModule.methods.setViewOccluded.operationId).toBe("app.custom_apps.view.set_occluded")
     expect(customAppIpcModule.methods.getNavigationState.operationId).toBe("app.custom_apps.navigation.get_state")
     expect(customAppIpcModule.methods.navigate.operationId).toBe("app.custom_apps.navigation.perform")
+    expect(customAppIpcModule.methods.openWindow.operationId).toBe("app.custom_apps.window.open")
     expect(customAppIpcModule.events.changed.operationId).toBe("app.custom_apps.operation.changed")
     expect(customAppIpcModule.events.navigationStateChanged.operationId).toBe("app.custom_apps.navigation.state_changed")
   })

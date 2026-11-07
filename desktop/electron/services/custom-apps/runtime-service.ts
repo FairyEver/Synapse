@@ -13,6 +13,7 @@ import {
 
 import type { EventBus } from "../../runtime/event-bus"
 import { isAllowedCustomWebUrl, getCustomWebSession } from "./web-session"
+import { planCustomWebAppWindowOpen } from "./window-service"
 
 export const CUSTOM_WEB_APP_RUNTIME_SERVICE_ID = "core.custom-app-web-runtime"
 
@@ -36,6 +37,8 @@ type ViewRecord = {
   readonly view: WebContentsView
   readonly state: CustomWebAppViewState
   loaded: boolean
+  popupCount: number
+  readonly popups: Set<BrowserWindow>
 }
 
 type HostState = {
@@ -134,9 +137,23 @@ export class CustomWebAppRuntimeService {
       if (!hostState || !record) continue
       if (hostState.currentAppId === appId) this.removeCurrentView(host, hostState)
       else host.contentView.removeChildView(record.view)
+      closePopups(record)
       record.view.webContents.close()
       hostState.views.delete(appId)
     }
+  }
+
+  destroyHost(host: BrowserWindow): void {
+    const hostState = this.hosts.get(host)
+    if (!hostState) return
+    for (const record of hostState.views.values()) {
+      host.contentView.removeChildView(record.view)
+      closePopups(record)
+      record.view.webContents.close()
+    }
+    hostState.views.clear()
+    hostState.currentAppId = null
+    this.hosts.delete(host)
   }
 
   destroyAll(): void {
@@ -145,6 +162,7 @@ export class CustomWebAppRuntimeService {
       if (!hostState) continue
       for (const record of hostState.views.values()) {
         host.contentView.removeChildView(record.view)
+        closePopups(record)
         record.view.webContents.close()
       }
       hostState.views.clear()
@@ -172,7 +190,13 @@ export class CustomWebAppRuntimeService {
       },
     })
     const state = { ...EMPTY_STATE }
-    const record: ViewRecord = { view, state, loaded: false }
+    const record: ViewRecord = {
+      view,
+      state,
+      loaded: false,
+      popupCount: 0,
+      popups: new Set(),
+    }
 
     view.webContents.on("did-navigate", (_event, url) => {
       record.state.currentUrl = isAllowedCustomWebUrl(url) ? url : record.state.currentUrl
@@ -203,9 +227,31 @@ export class CustomWebAppRuntimeService {
     view.webContents.on("will-navigate", (event, url) => {
       if (!isAllowedCustomWebUrl(url)) event.preventDefault()
     })
-    view.webContents.setWindowOpenHandler(({ url }) => ({
-      action: isAllowedCustomWebUrl(url) ? "allow" : "deny",
-    }))
+    view.webContents.setWindowOpenHandler(({ url }) => {
+      if (planCustomWebAppWindowOpen({ url, activePopupCount: record.popupCount }).action === "deny") {
+        return { action: "deny" }
+      }
+      record.popupCount += 1
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          webPreferences: {
+            session: (this.deps.getSession ?? getCustomWebSession)(),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true,
+            webSecurity: true,
+          },
+        },
+      }
+    })
+    view.webContents.on("did-create-window", (childWindow) => {
+      record.popups.add(childWindow)
+      childWindow.once("closed", () => {
+        record.popups.delete(childWindow)
+        record.popupCount = Math.max(0, record.popupCount - 1)
+      })
+    })
     return record
   }
 
@@ -259,4 +305,12 @@ export class CustomWebAppRuntimeService {
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
   return Math.min(max, Math.max(min, Math.round(value)))
+}
+
+function closePopups(record: ViewRecord): void {
+  for (const popup of record.popups) {
+    if (!popup.isDestroyed()) popup.close()
+  }
+  record.popups.clear()
+  record.popupCount = 0
 }

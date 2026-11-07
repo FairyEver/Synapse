@@ -908,6 +908,9 @@ export type SynapseBridge = {
         state: CustomWebAppViewState
       }) => void) => () => void
     }
+    window: {
+      open: (appId: CustomAppId) => Promise<void>
+    }
     onChanged: (listener: (state: CustomAppsClientState) => void) => () => void
   }
   documentTemplate: {

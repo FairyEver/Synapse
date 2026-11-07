@@ -58,15 +58,26 @@ import { isSystemAppEntryVisible } from "@/modules/apps/visibility"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transition"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
-import type { SynapseSystemAppId } from "@/modules/apps/types"
+import { isSystemAppId, type SynapseSystemAppId, type SynapseAppId } from "@/modules/apps/types"
+import { CustomAppsProvider, useCustomApps } from "@/modules/custom-apps/context"
+import { CustomWebAppContent } from "@/modules/custom-apps/web-app-content"
+import type { CustomAppId } from "@synapse/shared"
 import { SynapseSkillAutoUpdateHost } from "../app-capabilities/synapse-skill/renderer/auto-update"
 
-type ActiveAppId = SynapseSystemAppId
+type ActiveAppId = SynapseAppId
 type ActiveAppChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 
 const logger = createRendererLogger("app")
 
 function MainApp() {
+  return (
+    <CustomAppsProvider>
+      <MainAppInner />
+    </CustomAppsProvider>
+  )
+}
+
+function MainAppInner() {
   const { config } = useAppConfig()
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
@@ -88,6 +99,7 @@ function MainApp() {
   const [launcherResetKey, setLauncherResetKey] = useState(0)
   const [workflowEntryVisible, setWorkflowEntryVisible] = useState(initialWorkflowEntryVisible)
   const dock = useDockPreferences({ workflowEntryVisible })
+  const customApps = useCustomApps()
   const knowledgeBaseStorageMigration = useKnowledgeBaseStorageMigration()
 
   // 检查是否需要显示空状态页面
@@ -207,7 +219,7 @@ function MainApp() {
   }, [])
 
   useEffect(() => {
-    const activeApp = getSystemAppManifest(activeAppId)
+    const activeApp = isSystemAppId(activeAppId) ? getSystemAppManifest(activeAppId) : null
     if (activeApp && !isSystemAppEntryVisible(activeApp, { workflowEntryVisible })) {
       setActiveAppId(resolveDefaultDockAppId(listSystemApps(), {
         dockAppIds: dock.dockAppIds,
@@ -215,6 +227,17 @@ function MainApp() {
       }), "cheat-code")
     }
   }, [activeAppId, dock.dockAppIds, setActiveAppId, workflowEntryVisible])
+
+  const activeCustomApp = !isSystemAppId(activeAppId)
+    ? customApps.state.snapshot?.apps.find((app) => app.id === activeAppId) ?? null
+    : null
+
+  useEffect(() => {
+    if (isSystemAppId(activeAppId) || customApps.state.syncState !== "ready") return
+    if (!customApps.state.snapshot?.apps.some((app) => app.id === activeAppId)) {
+      setActiveAppId("launcher", "navigation")
+    }
+  }, [activeAppId, customApps.state.snapshot, customApps.state.syncState, setActiveAppId])
 
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
@@ -340,6 +363,15 @@ function MainApp() {
     setActiveAppId(value, "navigation")
   }, [setActiveAppId])
 
+  const openCustomApp = useCallback((appId: CustomAppId) => {
+    void runAppNavigation(() => {
+      discardMainTarget()
+      selectApp(appId, "navigation")
+    })
+  }, [discardMainTarget, selectApp])
+
+  const activeSystemApp = isSystemAppId(activeAppId) ? getSystemAppManifest(activeAppId) : null
+
   return (
     <IdentityGate>
       <AppShellLayout
@@ -366,31 +398,42 @@ function MainApp() {
         <div className="flex h-full min-h-0 flex-col">
           <ErrorBoundary fallbackTitle="应用出现问题">
             <AppSwitchTransition transitionKey={activeAppId}>
-              <EmbeddedSystemAppShell appName={getSystemAppManifest(activeAppId)?.name ?? ""} mode="dock">
-                <SystemAppContent
-                  appId={activeAppId}
-                  launcherResetKey={launcherResetKey}
-                  workflowEntryVisible={workflowEntryVisible}
-                  resourceContentOpenRequest={pending?.appId === "resource-repository" ? pending.target as ContentOpenRequest : pendingAppContentOpenRequest}
-                  onResourceContentOpenRequestConsumed={(requestId) => {
-                    completeTargetById(requestId)
-                    setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
-                  }}
-                  pendingAgentSession={pendingAgentSession}
-                  onPendingAgentSessionConsumed={handlePendingAgentSessionConsumed}
-                  terminalOpenRequest={pending?.appId === "terminal" ? pending.target : null}
-                  onTerminalOpenRequestConsumed={completeTargetById}
-                  meetingOpenRequest={pending?.appId === "meeting" ? pending.target : null}
-                  onMeetingOpenRequestConsumed={completeMainTargetWithoutId}
-                  gitOpenRequest={pending?.appId === "git" ? pending.target : null}
-                  onGitOpenRequestConsumed={completeTargetById}
-                  mailOpenRequest={pending?.appId === "mail" ? pending.target : null}
-                  onMailOpenRequestConsumed={completeTargetById}
-                  mailInternalOpenRequest={pending?.appId === "mail-internal" ? pending.target : null}
-                  onMailInternalOpenRequestConsumed={completeTargetById}
-                  todoOpenRequest={pending?.appId === "todos" ? pending.target : null}
-                  onTodoOpenRequestConsumed={completeTargetById}
-                />
+              <EmbeddedSystemAppShell
+                appName={activeCustomApp?.name ?? activeSystemApp?.name ?? ""}
+                mode="dock"
+                onOpenWindow={activeCustomApp
+                  ? () => { void getSynapseBridge()?.customApps.window.open(activeCustomApp.id) }
+                  : undefined}
+              >
+                {activeCustomApp ? (
+                  <CustomWebAppContent app={activeCustomApp} appId={activeCustomApp.id} />
+                ) : isSystemAppId(activeAppId) ? (
+                  <SystemAppContent
+                    appId={activeAppId}
+                    launcherResetKey={launcherResetKey}
+                    workflowEntryVisible={workflowEntryVisible}
+                    resourceContentOpenRequest={pending?.appId === "resource-repository" ? pending.target as ContentOpenRequest : pendingAppContentOpenRequest}
+                    onResourceContentOpenRequestConsumed={(requestId) => {
+                      completeTargetById(requestId)
+                      setPendingAppContentOpenRequest((current) => current?.requestId === requestId ? null : current)
+                    }}
+                    pendingAgentSession={pendingAgentSession}
+                    onPendingAgentSessionConsumed={handlePendingAgentSessionConsumed}
+                    terminalOpenRequest={pending?.appId === "terminal" ? pending.target : null}
+                    onTerminalOpenRequestConsumed={completeTargetById}
+                    meetingOpenRequest={pending?.appId === "meeting" ? pending.target : null}
+                    onMeetingOpenRequestConsumed={completeMainTargetWithoutId}
+                    gitOpenRequest={pending?.appId === "git" ? pending.target : null}
+                    onGitOpenRequestConsumed={completeTargetById}
+                    mailOpenRequest={pending?.appId === "mail" ? pending.target : null}
+                    onMailOpenRequestConsumed={completeTargetById}
+                    mailInternalOpenRequest={pending?.appId === "mail-internal" ? pending.target : null}
+                    onMailInternalOpenRequestConsumed={completeTargetById}
+                    todoOpenRequest={pending?.appId === "todos" ? pending.target : null}
+                    onTodoOpenRequestConsumed={completeTargetById}
+                    onOpenCustomApp={openCustomApp}
+                  />
+                ) : null}
               </EmbeddedSystemAppShell>
             </AppSwitchTransition>
           </ErrorBoundary>

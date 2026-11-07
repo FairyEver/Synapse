@@ -378,6 +378,7 @@ export const IPC_CHANNELS = {
     "setViewOccluded": "synapse:app:custom_apps:view:set_occluded",
     "getNavigationState": "synapse:app:custom_apps:navigation:get_state",
     "navigate": "synapse:app:custom_apps:navigation:perform",
+    "openWindow": "synapse:app:custom_apps:window:open",
     "changed": "synapse:app:custom_apps:operation:changed",
     "navigationStateChanged": "synapse:app:custom_apps:navigation:state_changed",
   },

@@ -43,7 +43,7 @@ import type {
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
 } from "../types"
-import type { CustomAppCreateInput, CustomAppDto, CustomAppUpdateInput } from "@synapse/shared"
+import type { CustomAppCreateInput, CustomAppDto, CustomAppId, CustomAppUpdateInput } from "@synapse/shared"
 
 type AppsBridge = {
   readonly openSystemApp?: (targetAppId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions) => Promise<void>
@@ -71,6 +71,7 @@ type SystemAppContentProps = {
   readonly mailInternalOpenRequest?: SynapseSystemAppMailInternalOpenRequest | null
   readonly onMailInternalOpenRequestConsumed?: (requestId: string) => void
   readonly onMeetingOpenRequestConsumed?: () => void
+  readonly onOpenCustomApp?: (appId: CustomAppId) => void
 }
 
 function SystemAppContent({
@@ -94,6 +95,7 @@ function SystemAppContent({
   mailInternalOpenRequest = null,
   onMailInternalOpenRequestConsumed,
   onMeetingOpenRequestConsumed,
+  onOpenCustomApp,
 }: SystemAppContentProps) {
   useEffect(() => {
     if (appId === "resource-repository" || !onContentOpenRequest) return undefined
@@ -122,6 +124,7 @@ function SystemAppContent({
         onPendingContentOpenRequestConsumed={onResourceContentOpenRequestConsumed}
         resetKey={launcherResetKey}
         workflowEntryVisible={workflowEntryVisible}
+          onOpenCustomApp={onOpenCustomApp}
       />
     )
   }
@@ -171,11 +174,13 @@ function LauncherContent({
   onPendingContentOpenRequestConsumed,
   resetKey = 0,
   workflowEntryVisible = false,
+  onOpenCustomApp,
 }: {
   readonly pendingContentOpenRequest?: ContentOpenRequest | null
   readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
   readonly resetKey?: number
   readonly workflowEntryVisible?: boolean
+  readonly onOpenCustomApp?: (appId: CustomAppId) => void
 }) {
   return (
     <CustomAppsProvider>
@@ -184,6 +189,7 @@ function LauncherContent({
         onPendingContentOpenRequestConsumed={onPendingContentOpenRequestConsumed}
         resetKey={resetKey}
         workflowEntryVisible={workflowEntryVisible}
+        onOpenCustomApp={onOpenCustomApp}
       />
     </CustomAppsProvider>
   )
@@ -194,11 +200,13 @@ function LauncherContentInner({
   onPendingContentOpenRequestConsumed,
   resetKey = 0,
   workflowEntryVisible = false,
+  onOpenCustomApp,
 }: {
   readonly pendingContentOpenRequest?: ContentOpenRequest | null
   readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
   readonly resetKey?: number
   readonly workflowEntryVisible?: boolean
+  readonly onOpenCustomApp?: (appId: CustomAppId) => void
 }) {
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
@@ -304,7 +312,7 @@ function LauncherContentInner({
         customApps={customApps.state.snapshot?.apps.filter((app) => app.kind === "web") ?? []}
         canEditCustomApps={customApps.editable && !dock.saving}
         onCreateCustomApp={() => setCustomDialog({ mode: "create", app: null })}
-        onOpenCustomApp={() => toast.error("应用运行组件尚未接入")}
+        onOpenCustomApp={(app) => onOpenCustomApp?.(app.id)}
         onEditCustomApp={(app) => setCustomDialog({ mode: "edit", app })}
         onDeleteCustomApp={setDeleteApp}
       />

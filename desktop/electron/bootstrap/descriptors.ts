@@ -274,6 +274,8 @@ import { CUSTOM_APPS_SERVICE_ID, CustomAppsCatalogService } from "../services/cu
 import { CUSTOM_APP_FAVICON_SERVICE_ID, CustomAppFaviconService } from "../services/custom-apps/favicon-service"
 import { configureCustomWebSession, getCustomWebSession } from "../services/custom-apps/web-session"
 import { CUSTOM_WEB_APP_RUNTIME_SERVICE_ID, CustomWebAppRuntimeService } from "../services/custom-apps/runtime-service"
+import { CUSTOM_WEB_APP_WINDOW_SERVICE_ID, CustomWebAppWindowService } from "../services/custom-apps/window-service"
+import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
@@ -910,6 +912,26 @@ export const coreCustomWebAppRuntimeDescriptor: ServiceDescriptor<CustomWebAppRu
   },
   stop(instance) {
     instance.destroyAll()
+  },
+}
+
+export const coreCustomWebAppWindowDescriptor: ServiceDescriptor<CustomWebAppWindowService> = {
+  id: CUSTOM_WEB_APP_WINDOW_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: [CUSTOM_APPS_SERVICE_ID, CUSTOM_WEB_APP_RUNTIME_SERVICE_ID, "core.window-manager"],
+  create(ctx) {
+    const catalog = ctx.registry.get<CustomAppsCatalogService>(CUSTOM_APPS_SERVICE_ID)
+    return new CustomWebAppWindowService({
+      getApp: (appId) => catalog.getState().snapshot?.apps.find((app) => app.id === appId) ?? null,
+      createWindow: (options) => new BrowserWindow(options),
+      baseUrl: rendererBaseUrl,
+      getPreloadPath: () => path.join(__dirname, "../preload.js"),
+      runtime: ctx.registry.get<CustomWebAppRuntimeService>(CUSTOM_WEB_APP_RUNTIME_SERVICE_ID),
+      windowManager: ctx.registry.get("core.window-manager"),
+    })
+  },
+  stop(instance) {
+    instance.closeAll()
   },
 }
 

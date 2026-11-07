@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { WebAppViewport } from "./web-app-viewport"
+import { WebAppToolbarActions } from "./web-app-toolbar-actions"
 
 const INITIAL_STATE: CustomWebAppViewState = {
   canGoBack: false,
@@ -22,9 +23,10 @@ const INITIAL_STATE: CustomWebAppViewState = {
 type CustomWebAppContentProps = {
   readonly app: CustomAppDto
   readonly appId: CustomAppId
+  readonly windowMode?: boolean
 }
 
-export function CustomWebAppContent({ app, appId }: CustomWebAppContentProps) {
+export function CustomWebAppContent({ app, appId, windowMode = false }: CustomWebAppContentProps) {
   const bridge = getSynapseBridge()?.customApps
   const [state, setState] = useState<CustomWebAppViewState>(INITIAL_STATE)
 
@@ -44,7 +46,10 @@ export function CustomWebAppContent({ app, appId }: CustomWebAppContentProps) {
   }, [appId, bridge])
 
   return (
-    <SystemAppWindowShell>
+    <SystemAppWindowShell
+      left={windowMode ? <h2 className="truncate text-sm font-semibold">{app.name}</h2> : undefined}
+      actions={<WebAppToolbarActions state={state} />}
+    >
       <div className="relative h-full min-h-0 bg-background">
         {state.error !== "none" && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-background p-6">

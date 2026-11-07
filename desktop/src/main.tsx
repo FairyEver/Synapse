@@ -133,6 +133,37 @@ async function bootstrapRenderer(): Promise<void> {
         </AppErrorBoundary>
       </StrictMode>,
     )
+  } else if (windowType === "custom-app") {
+    const { AppErrorBoundary } = await import("@/components/app-error-boundary")
+    const { AppConfigProvider } = await import("@/app-shell/config")
+    const { RepositoryManagerProvider } = await import("@/app-shell/repository")
+    const { IdentityProvider } = await import("@/app-shell/identity-context")
+    const { AppNotificationsProvider } = await import("@/app-shell/notifications")
+    const { AccountProvider } = await import("@/app-shell/account")
+    const { ActiveRepositorySwitchProvider } = await import("@/app-shell/active-repository-switch")
+    const { CustomAppsProvider } = await import("@/modules/custom-apps/context")
+    const { CustomAppWindowApp } = await import("@/modules/custom-apps/custom-app-window-app")
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <AppConfigProvider>
+            <RepositoryManagerProvider>
+              <IdentityProvider>
+                <AppNotificationsProvider>
+                  <AccountProvider>
+                    <ActiveRepositorySwitchProvider>
+                      <CustomAppsProvider>
+                        <CustomAppWindowApp />
+                      </CustomAppsProvider>
+                    </ActiveRepositorySwitchProvider>
+                  </AccountProvider>
+                </AppNotificationsProvider>
+              </IdentityProvider>
+            </RepositoryManagerProvider>
+          </AppConfigProvider>
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
   } else {
     const { default: App } = await import("@/App")
     const { AppErrorBoundary } = await import("@/components/app-error-boundary")

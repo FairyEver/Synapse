@@ -1,6 +1,10 @@
-import { SYSTEM_APP_IDS, type SynapseSystemAppId } from "@synapse/shared/custom-apps-contracts"
+import {
+  SYSTEM_APP_IDS,
+  type SynapseAppId,
+  type SynapseSystemAppId,
+} from "@synapse/shared/custom-apps-contracts"
 
-export { SYSTEM_APP_IDS, type SynapseSystemAppId }
+export { SYSTEM_APP_IDS, type SynapseAppId, type SynapseSystemAppId }
 export type SynapseAppType = "system"
 export type SynapseSystemAppNamespace =
   | "agent"

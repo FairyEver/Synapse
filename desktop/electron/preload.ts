@@ -460,6 +460,9 @@ const synapseBridge: SynapseBridge = {
         state: CustomWebAppViewState
       }>(subscribe, "account", "custom-apps.view.changed"),
     },
+    window: {
+      open: (appId: CustomAppId) => invoke(IPC_CHANNELS.customApps.openWindow)({ appId }),
+    },
     onChanged: createDomainEventPayloadSubscription<CustomAppsClientState>(
       subscribe,
       "account",
