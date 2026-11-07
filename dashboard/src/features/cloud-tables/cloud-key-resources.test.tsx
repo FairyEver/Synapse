@@ -47,6 +47,8 @@ it('filters the current page and bulk-selects visible tables without dropping cr
     })
     const selectVisible = Array.from(document.querySelectorAll('button')).find(button => button.textContent === '选择当前显示')!
     await act(async () => selectVisible.click())
+    expect(save).not.toHaveBeenCalled()
+    expect(document.querySelector('[aria-labelledby="selected-resources-heading"]')).not.toBeNull()
     const submit = Array.from(document.querySelectorAll('button')).find(button => button.textContent === '保存更改')!
     await act(async () => submit.click())
     expect(save).toHaveBeenCalledWith('key', { mode: 'selected', tableIds: ['page-two', 'prr_prs'] })

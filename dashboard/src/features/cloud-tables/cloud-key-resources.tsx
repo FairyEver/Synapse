@@ -134,7 +134,7 @@ export function CloudKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboard
           </div>
           <div className='flex items-center justify-between gap-3 px-4 pb-3 text-sm text-muted'>
             <span>显示 {visibleTables.length} 张</span>
-            <Button variant='ghost' size='sm' isDisabled={visibleTables.length === 0 || mutation.isPending} onPress={toggleVisibleTables}>
+            <Button type='button' variant='ghost' size='sm' isDisabled={visibleTables.length === 0 || mutation.isPending} onPress={toggleVisibleTables}>
               {visibleSelected ? '取消当前选择' : '选择当前显示'}
             </Button>
           </div>
@@ -153,8 +153,8 @@ export function CloudKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboard
             </Checkbox>) : null}
           </div>
           <div className='flex justify-end gap-2 border-t border-separator px-4 py-3'>
-            <Button variant='secondary' size='sm' isDisabled={!history.length || mutation.isPending} onPress={goPrevious}>上一页</Button>
-            <Button variant='secondary' size='sm' isDisabled={!tables.data?.nextCursor || mutation.isPending} onPress={goNext}>下一页</Button>
+            <Button type='button' variant='secondary' size='sm' isDisabled={!history.length || mutation.isPending} onPress={goPrevious}>上一页</Button>
+            <Button type='button' variant='secondary' size='sm' isDisabled={!tables.data?.nextCursor || mutation.isPending} onPress={goNext}>下一页</Button>
           </div>
         </section>
 
@@ -172,12 +172,12 @@ export function CloudKeyResourcesDialog({ apiKey, onClose }: { apiKey: Dashboard
                 <span className='block truncate text-sm font-medium'>{table.name}</span>
                 <span className='block truncate text-xs text-muted'>{table.id}</span>
               </span>
-              <Button variant='ghost' size='sm' isDisabled={mutation.isPending} aria-label={`移除表 ${table.id}`} onPress={() => removeSelected(table.id)}>移除</Button>
+              <Button type='button' variant='ghost' size='sm' isDisabled={mutation.isPending} aria-label={`移除表 ${table.id}`} onPress={() => removeSelected(table.id)}>移除</Button>
             </div>)}
           </div>
           <div className='flex items-center justify-between gap-3 border-t border-separator px-4 py-3'>
             <span className='text-sm text-muted'>{selected.length} 张表将获得访问权限</span>
-            <Button variant='ghost' size='sm' isDisabled={selected.length === 0 || mutation.isPending} onPress={() => setSelected([])}>全部移除</Button>
+            <Button type='button' variant='ghost' size='sm' isDisabled={selected.length === 0 || mutation.isPending} onPress={() => setSelected([])}>全部移除</Button>
           </div>
         </section>
       </div>}
