@@ -211,6 +211,14 @@ export type CustomAppDockOperation = CustomAppDockAction & {
   readonly operationId: string
 }
 
+export const customAppBootstrapInputSchema = z.object({
+  operationId: z.string().trim().min(1).max(200),
+  dockAppIds: z.array(z.string().trim().min(1).max(200)).max(200),
+  dockMigrationIds: z.array(z.string().trim().min(1).max(200)).max(200),
+}).strict()
+
+export type CustomAppBootstrapInput = z.infer<typeof customAppBootstrapInputSchema>
+
 export interface CustomAppsChangedPayload {
   readonly revision: number
 }

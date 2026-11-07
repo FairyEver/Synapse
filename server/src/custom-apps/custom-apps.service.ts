@@ -2,13 +2,19 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common"
+import { Cron } from "@nestjs/schedule"
 import {
   CUSTOM_APPS_API_PATHS,
   DOCK_CATALOG_VERSION,
+  customAppBootstrapInputSchema,
   customAppCreateInputSchema,
+  customAppDockOperationSchema,
   customAppUpdateInputSchema,
+  type CustomAppBootstrapInput,
   type CustomAppCreateInput,
+  type CustomAppDockOperation,
   type CustomAppDto,
   type CustomAppId,
   type CustomAppSnapshotDto,
@@ -18,8 +24,9 @@ import { createHash } from "node:crypto"
 import type { Prisma } from "@prisma/client"
 
 import { PrismaService } from "../prisma/prisma.service"
-import { normalizeServerDockLayout } from "./custom-app-dock"
+import { applyServerDockAction, normalizeServerDockLayout } from "./custom-app-dock"
 import { CustomAppIconsService } from "./custom-app-icons.service"
+import { CustomAppEvents } from "./custom-app-events"
 
 const MAX_CUSTOM_APPS = 100
 const OPERATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -53,6 +60,7 @@ export class CustomAppsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly icons: CustomAppIconsService,
+    @Optional() private readonly events?: CustomAppEvents,
   ) {}
 
   async snapshot(userId: string): Promise<CustomAppSnapshotDto> {
@@ -97,6 +105,7 @@ export class CustomAppsService {
       stagedIconId = staged.iconId
     }
 
+    let publishedRevision: number | null = null
     try {
       await this.prisma.$transaction(async (tx) => {
         const settings = await this.ensureSettings(tx, userId)
@@ -115,6 +124,7 @@ export class CustomAppsService {
           where: { userId },
           data: { revision: { increment: 1 }, dockCatalogVersion: DOCK_CATALOG_VERSION },
         })
+        publishedRevision = nextSettings.revision
         await this.recordOperation(tx, {
           userId,
           operationId: parsed.operationId,
@@ -132,6 +142,7 @@ export class CustomAppsService {
       throw error
     }
 
+    if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
     return this.snapshot(userId)
   }
 
@@ -162,6 +173,7 @@ export class CustomAppsService {
     }
     const clearIcon = parsed.iconPngBase64 === null
 
+    let publishedRevision: number | null = null
     try {
       await this.prisma.$transaction(async (tx) => {
         await this.ensureSettings(tx, userId)
@@ -180,6 +192,7 @@ export class CustomAppsService {
           where: { userId },
           data: { revision: { increment: 1 }, dockCatalogVersion: DOCK_CATALOG_VERSION },
         })
+        publishedRevision = nextSettings.revision
         await this.recordOperation(tx, {
           userId,
           operationId: parsed.operationId,
@@ -197,6 +210,7 @@ export class CustomAppsService {
     }
 
     if ((stagedIconId || clearIcon) && existing.iconId) await this.icons.discard(existing.iconId)
+    if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
     return this.snapshot(userId)
   }
 
@@ -231,6 +245,7 @@ export class CustomAppsService {
       { knownCustomAppIds },
     )
 
+    let publishedRevision: number | null = null
     await this.prisma.$transaction(async (tx) => {
       await tx.userCustomAppTombstone.upsert({
         where: { userId_appId: { userId, appId: id } },
@@ -247,6 +262,7 @@ export class CustomAppsService {
           revision: { increment: 1 },
         },
       })
+      publishedRevision = nextSettings.revision
       await this.recordOperation(tx, {
         userId,
         operationId,
@@ -257,7 +273,107 @@ export class CustomAppsService {
     })
 
     if (existing.iconId) await this.icons.discard(existing.iconId)
+    if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
     return this.snapshot(userId)
+  }
+
+  async bootstrap(
+    userId: string,
+    input: CustomAppBootstrapInput,
+  ): Promise<CustomAppSnapshotDto> {
+    const parsed = customAppBootstrapInputSchema.parse(input)
+    const operationHash = hashOperation("bootstrap", parsed)
+    if (await this.replayOperation(userId, parsed.operationId, operationHash)) {
+      return this.snapshot(userId)
+    }
+
+    let publishedRevision: number | null = null
+    await this.prisma.$transaction(async (tx) => {
+      const settings = await this.ensureSettings(tx, userId)
+      if (settings.initializedAt) return
+
+      const apps = await tx.userCustomApp.findMany({
+        where: { userId },
+        select: { id: true },
+      })
+      const dockAppIds = normalizeServerDockLayout(parsed.dockAppIds, {
+        knownCustomAppIds: new Set(apps.map((app) => app.id)),
+      })
+      const nextSettings = await tx.userCustomAppSettings.update({
+        where: { userId },
+        data: {
+          dockAppIds,
+          dockMigrationIds: [...new Set(parsed.dockMigrationIds)],
+          dockCatalogVersion: DOCK_CATALOG_VERSION,
+          initializedAt: new Date(),
+          revision: { increment: 1 },
+        },
+      })
+      publishedRevision = nextSettings.revision
+      await this.recordOperation(tx, {
+        userId,
+        operationId: parsed.operationId,
+        operationHash,
+        resultRevision: nextSettings.revision,
+      })
+    })
+
+    if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
+    return this.snapshot(userId)
+  }
+
+  async applyDockOperation(
+    userId: string,
+    input: CustomAppDockOperation,
+  ): Promise<CustomAppSnapshotDto> {
+    const parsed = customAppDockOperationSchema.parse(input) as CustomAppDockOperation
+    const operationHash = hashOperation("dock", parsed)
+    if (await this.replayOperation(userId, parsed.operationId, operationHash)) {
+      return this.snapshot(userId)
+    }
+
+    const { operationId, ...action } = parsed
+    let publishedRevision: number | null = null
+    await this.prisma.$transaction(async (tx) => {
+      const settings = await this.ensureSettings(tx, userId)
+      const apps = await tx.userCustomApp.findMany({
+        where: { userId },
+        select: { id: true },
+      })
+      const currentDock = normalizeServerDockLayout(asStringArray(settings.dockAppIds), {
+        knownCustomAppIds: new Set(apps.map((app) => app.id)),
+      })
+      const result = applyServerDockAction(currentDock, action, {
+        knownCustomAppIds: new Set(apps.map((app) => app.id)),
+        appliedMigrationIds: asStringArray(settings.dockMigrationIds),
+      })
+      const nextSettings = await tx.userCustomAppSettings.update({
+        where: { userId },
+        data: {
+          dockAppIds: result.dockAppIds,
+          dockMigrationIds: result.dockMigrationIds,
+          dockCatalogVersion: DOCK_CATALOG_VERSION,
+          revision: { increment: 1 },
+        },
+      })
+      publishedRevision = nextSettings.revision
+      await this.recordOperation(tx, {
+        userId,
+        operationId,
+        operationHash,
+        resultRevision: nextSettings.revision,
+      })
+    })
+
+    if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
+    return this.snapshot(userId)
+  }
+
+  @Cron("0 3 * * *")
+  async cleanupOperationReceipts(): Promise<void> {
+    await this.prisma.userCustomAppOperation.deleteMany({
+      where: { expiresAt: { lte: new Date() } },
+    })
   }
 
   private ensureSettings(

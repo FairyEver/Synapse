@@ -16,9 +16,13 @@ import {
 } from "@nestjs/common"
 import {
   customAppCreateInputSchema,
+  customAppBootstrapInputSchema,
+  customAppDockOperationSchema,
   customAppIdSchema,
   customAppUpdateInputSchema,
+  type CustomAppBootstrapInput,
   type CustomAppCreateInput,
+  type CustomAppDockOperation,
   type CustomAppId,
   type CustomAppUpdateInput,
 } from "@synapse/shared"
@@ -49,6 +53,22 @@ export class CustomAppsController {
     return this.service.create(
       requireUserId(request),
       parseBody(customAppCreateInputSchema, body, "自定义应用参数无效。") as CustomAppCreateInput,
+    )
+  }
+
+  @Post("/bootstrap")
+  bootstrap(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return this.service.bootstrap(
+      requireUserId(request),
+      parseBody(customAppBootstrapInputSchema, body, "Dock 初始化请求无效。") as CustomAppBootstrapInput,
+    )
+  }
+
+  @Post("/dock/operations")
+  applyDockOperation(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    return this.service.applyDockOperation(
+      requireUserId(request),
+      parseBody(customAppDockOperationSchema, body, "Dock 操作无效。") as CustomAppDockOperation,
     )
   }
 

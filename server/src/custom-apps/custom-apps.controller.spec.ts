@@ -27,6 +27,8 @@ describe("CustomAppsController", () => {
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    bootstrap: vi.fn(),
+    applyDockOperation: vi.fn(),
   }
 
   beforeEach(async () => {
@@ -43,6 +45,8 @@ describe("CustomAppsController", () => {
     service.create.mockResolvedValue(snapshot)
     service.update.mockResolvedValue(snapshot)
     service.delete.mockResolvedValue(snapshot)
+    service.bootstrap.mockResolvedValue(snapshot)
+    service.applyDockOperation.mockResolvedValue(snapshot)
 
     const moduleRef = await Test.createTestingModule({
       controllers: [CustomAppsController],
@@ -116,5 +120,29 @@ describe("CustomAppsController", () => {
 
     expect(service.create).not.toHaveBeenCalled()
     expect(service.update).not.toHaveBeenCalled()
+  })
+
+  it("routes Dock bootstrap and operations to the current user", async () => {
+    await request(app!.getHttpServer()).post("/api/custom-apps/bootstrap").send({
+      operationId: "bootstrap-1",
+      dockAppIds: ["agent", "launcher"],
+      dockMigrationIds: [],
+    }).expect(201)
+    expect(service.bootstrap).toHaveBeenCalledWith("user-1", {
+      operationId: "bootstrap-1",
+      dockAppIds: ["agent", "launcher"],
+      dockMigrationIds: [],
+    })
+
+    await request(app!.getHttpServer()).post("/api/custom-apps/dock/operations").send({
+      operationId: "pin-1",
+      type: "pin",
+      appId,
+    }).expect(201)
+    expect(service.applyDockOperation).toHaveBeenCalledWith("user-1", {
+      operationId: "pin-1",
+      type: "pin",
+      appId,
+    })
   })
 })

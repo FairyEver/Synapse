@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import type { PrismaService } from "../prisma/prisma.service"
 import { CustomAppIconsService } from "./custom-app-icons.service"
+import { CustomAppEvents } from "./custom-app-events"
 import { CustomAppsService } from "./custom-apps.service"
 
 const appId = "cwa_123e4567-e89b-42d3-a456-426614174000"
@@ -129,6 +130,75 @@ describe("CustomAppsService", () => {
       name: "新名称",
     })).rejects.toBeInstanceOf(NotFoundException)
   })
+
+  it("initializes Dock once from the first device", async () => {
+    const prisma = createPrisma()
+    const events = { publish: vi.fn() }
+    const service = new CustomAppsService(
+      prisma as unknown as PrismaService,
+      createIcons() as unknown as CustomAppIconsService,
+      events as unknown as CustomAppEvents,
+    )
+    prisma.userCustomAppOperation.findUnique.mockResolvedValue(null)
+    prisma.userCustomAppSettings.upsert
+      .mockResolvedValueOnce(settingsRow({
+        dockAppIds: [],
+        dockMigrationIds: [],
+        revision: 0,
+        initializedAt: null,
+      }))
+      .mockResolvedValueOnce(settingsRow({
+        dockAppIds: ["agent", "database", "launcher"],
+        dockMigrationIds: ["dock.mail-apps-introduction.v1"],
+        revision: 1,
+      }))
+    prisma.userCustomApp.findMany.mockResolvedValue([])
+    prisma.userCustomAppSettings.update.mockResolvedValue(settingsRow({
+      dockAppIds: ["agent", "database", "launcher"],
+      dockMigrationIds: ["dock.mail-apps-introduction.v1"],
+      revision: 1,
+    }))
+    prisma.userCustomAppOperation.create.mockResolvedValue({})
+    prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma))
+
+    await expect(service.bootstrap(userId, {
+      operationId: "bootstrap-1",
+      dockAppIds: ["agent", "database", "launcher"],
+      dockMigrationIds: ["dock.mail-apps-introduction.v1"],
+    })).resolves.toMatchObject({
+      initialized: true,
+      dockAppIds: ["agent", "database", "launcher"],
+    })
+    expect(events.publish).toHaveBeenCalledWith(userId, 1)
+  })
+
+  it("applies a Dock operation to the latest layout and publishes its revision", async () => {
+    const prisma = createPrisma()
+    const events = { publish: vi.fn() }
+    const service = new CustomAppsService(
+      prisma as unknown as PrismaService,
+      createIcons() as unknown as CustomAppIconsService,
+      events as unknown as CustomAppEvents,
+    )
+    prisma.userCustomAppOperation.findUnique.mockResolvedValue(null)
+    prisma.userCustomAppSettings.upsert.mockResolvedValue(settingsRow())
+    prisma.userCustomApp.findMany.mockResolvedValue([])
+    prisma.userCustomAppSettings.update.mockResolvedValue(settingsRow({
+      dockAppIds: ["drive", "agent", "launcher"],
+      revision: 2,
+    }))
+    prisma.userCustomAppOperation.create.mockResolvedValue({})
+    prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma))
+
+    await service.applyDockOperation(userId, {
+      operationId: "move-1",
+      type: "move",
+      appId: "drive",
+      beforeAppId: "agent",
+    })
+
+    expect(events.publish).toHaveBeenCalledWith(userId, 2)
+  })
 })
 
 function createInput() {
@@ -174,6 +244,7 @@ function createPrisma() {
     userCustomAppOperation: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      deleteMany: vi.fn(),
     },
     $transaction: vi.fn(),
   }
