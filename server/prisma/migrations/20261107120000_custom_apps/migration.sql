@@ -6,6 +6,7 @@ CREATE TABLE "UserCustomApp" (
     "startUrl" VARCHAR(2048) NOT NULL,
     "iconId" VARCHAR(64),
     "iconSource" VARCHAR(16) NOT NULL DEFAULT 'favicon',
+    "openMode" VARCHAR(16) NOT NULL DEFAULT 'window',
     "version" INTEGER NOT NULL DEFAULT 1,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
