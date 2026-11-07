@@ -12,7 +12,7 @@ export function mailTriggerVariables(external: boolean): AutomationTriggerVariab
   else common.push(["senderId", "发件人标识"], ["senderKind", "发件人类型"])
   if (external) common.push(["accountId", "邮箱账号 ID"], ["accountName", "邮箱账号名称"], ["accountAddress", "邮箱地址"])
   return [
-    ...commonTriggerVariables(false),
+    ...commonTriggerVariables("event"),
     { key: "trigger.receivedAt", label: "本机接收时间", group: "trigger", description: "本机发现并入队的时间，离线补收时与来源时间不同。" },
     ...common.map(([key, label]) => ({ key: `trigger.payload.${key}`, label: label!, group: "event" as const,
       ...(key === "id" ? { aliases: ["trigger.payload.url"], example: external ? "synapse://mail/em_…" : "synapse://mail-internal/…" } : {}),

@@ -5,7 +5,7 @@ import type {
 import type {
   AutomationConditions,
 } from "../../../automation-trigger-packages/schedule-constraints"
-import type { AutomationTriggerEvent } from "../../../automation-trigger-packages/types.shared"
+import type { AutomationTriggerEvent, AutomationTriggerKind } from "../../../automation-trigger-packages/types.shared"
 
 export type {
   AutomationTriggerEvent,
@@ -40,6 +40,7 @@ export type AutomationValidation = ActionStoredConfigValidation
 
 export interface AutomationTriggerRuntimeContext {
   readonly triggeredBy: AutomationRunTrigger
+  readonly triggerKind?: AutomationTriggerKind
   readonly triggeredAt: string
   readonly scheduledAt: string
   readonly event?: AutomationTriggerEvent

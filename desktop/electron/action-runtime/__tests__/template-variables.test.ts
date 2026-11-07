@@ -270,6 +270,30 @@ function webhookVariables(request: Record<string, unknown>) {
 
 
 describe("variable product contract", () => {
+  it("builds manual trigger variables without a scheduledAt value", () => {
+    const variables = buildAutomationTemplateVariables({
+      triggerKind: "manual",
+      triggerType: "builtin.manual",
+      triggerConfig: {},
+      triggeredBy: "manual",
+      triggeredAt: "2026-11-07T00:00:00.000Z",
+      executedAt: "2026-11-07T00:01:00.000Z",
+      scheduledAt: "2026-11-07T00:00:00.000Z",
+      automationId: "automation:manual",
+      automationName: "Manual run",
+    })
+
+    expect(variables).toEqual(expect.objectContaining({
+      "trigger.type": "builtin.manual",
+      "trigger.triggeredBy": "manual",
+      "trigger.triggeredAt": "2026-11-07T00:00:00.000Z",
+      "trigger.executedAt": "2026-11-07T00:01:00.000Z",
+      "trigger.date": "2026-11-07",
+    }))
+    expect(variables).not.toHaveProperty("trigger.scheduledAt")
+    expect(variables).not.toHaveProperty("trigger.payload")
+  })
+
   it("resolves deep paths and literal dotted/slashed keys without collisions or prototype traversal", () => {
     const variables = webhookVariables({ body: { "order.id": "literal", order: { id: "nested" }, "a/b": 0, nil: null } })
     expect(renderActionTemplate("{{trigger.request.body.order.id}}", variables)).toBe("nested")

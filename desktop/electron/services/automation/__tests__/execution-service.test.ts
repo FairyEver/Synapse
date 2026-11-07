@@ -126,6 +126,7 @@ describe("AutomationExecutionService", () => {
 
     await harness.service.runItem(harness.item, "trigger", {}, {
       triggeredBy: "trigger",
+      triggerKind: "schedule",
       triggeredAt: "2026-06-06T01:00:00.000Z",
       scheduledAt: "2026-06-06T01:00:00.000Z",
     })
@@ -139,6 +140,33 @@ describe("AutomationExecutionService", () => {
       "trigger.automationName": "Daily report",
       "trigger.cron": "0 9 * * *",
     }))
+  })
+
+  it("passes manual trigger variables without a scheduledAt value", async () => {
+    let observedVariables: Record<string, string> | undefined
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async ({ context }) => {
+          observedVariables = context.templateVariables
+          return { status: "success", summary: "ok" }
+        },
+      },
+    })
+
+    await harness.service.runItem({ ...harness.item, trigger: { type: "builtin.manual", config: {} } }, "manual", {}, {
+      triggeredBy: "manual",
+      triggerKind: "manual",
+      triggeredAt: "2026-11-07T00:00:00.000Z",
+      scheduledAt: "2026-11-07T00:00:00.000Z",
+    })
+
+    expect(observedVariables).toEqual(expect.objectContaining({
+      "trigger.type": "builtin.manual",
+      "trigger.triggeredBy": "manual",
+      "trigger.triggeredAt": "2026-11-07T00:00:00.000Z",
+    }))
+    expect(observedVariables).not.toHaveProperty("trigger.scheduledAt")
   })
 
   it("runs raw script actions without permission checks or previous outputs", async () => {

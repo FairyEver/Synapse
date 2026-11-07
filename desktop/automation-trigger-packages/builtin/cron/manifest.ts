@@ -6,7 +6,7 @@ import {
 } from "./schema"
 
 const cronTriggerVariables = [
-  ...commonTriggerVariables(true),
+  ...commonTriggerVariables("schedule"),
   { key: "trigger.cron", label: "Cron 表达式", group: "config", example: "0 9 * * *" },
 ] as const
 

@@ -1,4 +1,5 @@
 import { TEMPLATE_VARIABLE_RE, readVariablePath } from "../../automation-trigger-packages/variable-contract"
+import type { AutomationTriggerKind } from "../../automation-trigger-packages/types.shared"
 
 const MAX_FLATTEN_DEPTH = 8
 const MAX_FLATTEN_KEYS = 200
@@ -6,6 +7,7 @@ const MAX_FLATTEN_KEYS = 200
 const requestRoots = new WeakMap<Record<string, string>, Record<string, unknown>>()
 
 export type AutomationTemplateVariableInput = {
+  readonly triggerKind?: AutomationTriggerKind
   readonly executedAt?: string
   readonly runId?: string
   readonly triggerType: string
@@ -59,6 +61,7 @@ export function buildAutomationTemplateVariables(
   input: AutomationTemplateVariableInput,
 ): Record<string, string> {
   const executedAt = input.executedAt ?? input.triggeredAt
+  const triggerKind = input.triggerKind ?? (input.event ? "event" : input.triggeredBy === "manual" ? "schedule" : "event")
   const occurredAt = input.event?.occurredAt ?? input.event?.receivedAt ?? input.triggeredAt
   const timezone = typeof input.triggerConfig.timezone === "string" ? input.triggerConfig.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone
   const businessTime = input.triggeredBy === "manual" ? executedAt : input.event ? occurredAt : input.scheduledAt
@@ -72,10 +75,13 @@ export function buildAutomationTemplateVariables(
     "trigger.runId": input.runId ?? "",
     "trigger.timezone": timezone,
     "trigger.date": `${datePart("year")}-${datePart("month")}-${datePart("day")}`,
-    "trigger.scheduledAt": input.event ? occurredAt : input.scheduledAt,
     "trigger.automationId": input.automationId,
     "trigger.automationName": input.automationName,
   }
+
+  // Event triggers keep scheduledAt as a compatibility alias for triggeredAt;
+  // only the manual trigger has no scheduled timestamp at all.
+  if (triggerKind !== "manual") variables["trigger.scheduledAt"] = input.event ? occurredAt : input.scheduledAt
 
   if (typeof input.triggerConfig.expr === "string") {
     variables["trigger.cron"] = input.triggerConfig.expr

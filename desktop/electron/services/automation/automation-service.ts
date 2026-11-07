@@ -338,7 +338,13 @@ export class AutomationService {
     if (trigger.activationRequired) throw new Error("此触发器需要信件上下文，不能直接手动运行")
     this.cancel(id)
     try {
-      const run = await this.executeOrSkip(item, "manual")
+      const now = this.now().toISOString()
+      const run = await this.executeOrSkip(item, "manual", {
+        triggeredBy: "manual",
+        triggerKind: trigger.manifest.kind,
+        triggeredAt: now,
+        scheduledAt: now,
+      })
       this.deps.logger?.info("Automation manual run requested.", {
         boundary: "automation.run-now",
         automationId: id,
@@ -417,6 +423,7 @@ export class AutomationService {
       }
       const triggerContext: AutomationTriggerRuntimeContext = {
         triggeredBy: "trigger",
+        triggerKind: trigger.manifest.kind,
         triggeredAt: event.receivedAt,
         scheduledAt: event.receivedAt,
         event,
@@ -697,6 +704,7 @@ export class AutomationService {
     const triggeredAt = this.now().toISOString()
     const triggerContext: AutomationTriggerRuntimeContext = {
       triggeredBy,
+      triggerKind: trigger.manifest.kind,
       triggeredAt,
       scheduledAt: item.nextRunAt && !Number.isNaN(Date.parse(item.nextRunAt))
         ? item.nextRunAt
@@ -812,7 +820,7 @@ export class AutomationService {
       if (!this.isAutomaticRunAllowed(current, this.now())) return { kind: "skipped", reason: "outside-conditions" }
       const run = await this.deps.execution.runItem(current, "trigger", { reservedRunId: input.runId, scopeSignal: input.identitySignal,
         onRunStarted: started => this.emitAutomationChanged({ automationId: item.id, runId: started.id, reason: "run-started" }) },
-      { triggeredBy: "trigger", triggeredAt: input.event.receivedAt, scheduledAt: input.event.receivedAt, event: input.event })
+      { triggeredBy: "trigger", triggerKind: this.deps.triggers.get(current.trigger.type).manifest.kind, triggeredAt: input.event.receivedAt, scheduledAt: input.event.receivedAt, event: input.event })
       this.emitAutomationChanged({ automationId: item.id, runId: run.id, reason: "run-finished" })
       return { kind: "settled", run }
     } finally { this.runningItemIds.delete(input.automationId) }

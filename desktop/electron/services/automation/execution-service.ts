@@ -102,11 +102,13 @@ export class AutomationExecutionService {
       const nowIso = new Date().toISOString()
       const effectiveTriggerContext = triggerContext ?? {
         triggeredBy,
+        triggerKind: event ? "event" as const : triggeredBy === "manual" ? "schedule" as const : "event" as const,
         triggeredAt: nowIso,
         scheduledAt: nowIso,
       }
       const templateVariables = buildAutomationTemplateVariables({
         runId: run.id,
+        triggerKind: effectiveTriggerContext.triggerKind,
         executedAt: run.startedAt,
         triggerType: item.trigger.type,
         triggerConfig: item.trigger.config,

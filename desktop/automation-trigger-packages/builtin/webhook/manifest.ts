@@ -6,7 +6,7 @@ import {
 } from "./schema"
 
 const webhookTriggerVariables = [
-  ...commonTriggerVariables(false).map(variable => variable.key === "trigger.triggeredAt" ? { ...variable, aliases: ["trigger.scheduledAt", "trigger.payload.request.receivedAt"] } : variable),
+  ...commonTriggerVariables("event").map(variable => variable.key === "trigger.triggeredAt" ? { ...variable, aliases: ["trigger.scheduledAt", "trigger.payload.request.receivedAt"] } : variable),
   { key: "trigger.receivedAt", label: "本机接收时间", group: "trigger", description: "本机收到事件的时间，网络延迟时晚于来源触发时间。" },
   { key: "trigger.source", label: "事件来源", group: "event", example: "webhook" },
   { key: "trigger.eventType", label: "事件类型", group: "event", example: "webhook.delivery.received" },
