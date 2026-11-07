@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AlertCircle, ExternalLink } from "lucide-react"
+import { AlertCircle, AppWindow } from "lucide-react"
 import type {
   CustomAppDto,
   CustomAppId,
@@ -67,7 +67,7 @@ export function CustomWebAppContent({
               tooltip="新窗口打开"
               onClick={onOpenWindow}
             >
-              <ExternalLink />
+              <AppWindow />
             </SystemAppTopBarActionButton>
           ) : null}
         </>

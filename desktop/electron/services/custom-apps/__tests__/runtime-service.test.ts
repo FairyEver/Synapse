@@ -32,6 +32,19 @@ describe("CustomWebAppRuntimeService", () => {
     })
   })
 
+  it("converts renderer CSS bounds to window DIP when the host is zoomed", async () => {
+    const { host, createdViews, runtime } = createHarness({ zoomFactor: 1.1 })
+    await runtime.attach(host, appId)
+    runtime.setBounds(host, { x: 54, y: 0, width: 1000, height: 600 })
+
+    expect(createdViews[0].setBounds).toHaveBeenLastCalledWith({
+      x: 59,
+      y: 0,
+      width: 1100,
+      height: 660,
+    })
+  })
+
   it("hides without recreating and restores the active view", async () => {
     const { host, createdViews, runtime } = createHarness()
     await runtime.attach(host, appId)
@@ -97,7 +110,7 @@ describe("CustomWebAppRuntimeService", () => {
   })
 })
 
-function createHarness() {
+function createHarness({ zoomFactor = 1 }: { readonly zoomFactor?: number } = {}) {
   const app: CustomAppDto = {
     id: appId,
     kind: "web",
@@ -125,6 +138,9 @@ function createHarness() {
   const host = {
     id: 1,
     getContentBounds: vi.fn(() => ({ x: 0, y: 0, width: 1200, height: 700 })),
+    webContents: {
+      getZoomFactor: vi.fn(() => zoomFactor),
+    },
     contentView: {
       addChildView: vi.fn(),
       removeChildView: vi.fn(),

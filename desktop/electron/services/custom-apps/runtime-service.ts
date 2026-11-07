@@ -88,9 +88,10 @@ export class CustomWebAppRuntimeService {
 
   setBounds(host: BrowserWindow, bounds: WebViewBounds): void {
     const hostState = this.hostState(host)
-    hostState.bounds = bounds
+    const nextBounds = this.clampBounds(host, this.scaleRendererBounds(host, bounds))
+    hostState.bounds = nextBounds
     const record = hostState.currentAppId ? hostState.views.get(hostState.currentAppId) : null
-    record?.view.setBounds(this.clampBounds(host, bounds))
+    record?.view.setBounds(nextBounds)
   }
 
   detach(host: BrowserWindow): void {
@@ -310,6 +311,18 @@ export class CustomWebAppRuntimeService {
       y,
       width: clamp(bounds.width, 0, Math.max(0, content.width - x)),
       height: clamp(bounds.height, 0, Math.max(0, content.height - y)),
+    }
+  }
+
+  private scaleRendererBounds(host: BrowserWindow, bounds: WebViewBounds): WebViewBounds {
+    // DOM rectangles are zoomed CSS pixels; WebContentsView bounds use window DIP.
+    const zoomFactor = host.webContents.getZoomFactor()
+    const scale = Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1
+    return {
+      x: bounds.x * scale,
+      y: bounds.y * scale,
+      width: bounds.width * scale,
+      height: bounds.height * scale,
     }
   }
 }

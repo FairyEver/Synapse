@@ -2,6 +2,7 @@ import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { NativeSurfaceOcclusionBoundary } from "@/modules/custom-apps/native-surface-occlusion"
 
 function TooltipProvider({
   delayDuration = 0,
@@ -45,6 +46,7 @@ function TooltipContent({
         )}
         {...props}
       >
+        <NativeSurfaceOcclusionBoundary />
         {children}
         <TooltipPrimitive.Arrow className="fill-foreground" />
       </TooltipPrimitive.Content>

@@ -22,6 +22,12 @@ import {
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { DropdownMenu, DropdownMenuContent } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -115,5 +121,36 @@ describe("NativeSurfaceOcclusionProvider", () => {
     expect(setOccluded).toHaveBeenCalledWith(true)
     await act(async () => root!.render(<Harness open={false} />))
     expect(setOccluded).toHaveBeenLastCalledWith(false)
+  })
+
+  it("hides the native view while a tooltip is open", async () => {
+    const original = globalThis.ResizeObserver
+    globalThis.ResizeObserver = class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    } as never
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+
+    function Harness({ open }: { readonly open: boolean }) {
+      return (
+        <NativeSurfaceOcclusionProvider>
+          <TooltipProvider>
+            <Tooltip open={open}>
+              <TooltipTrigger>提示</TooltipTrigger>
+              <TooltipContent>完整提示</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </NativeSurfaceOcclusionProvider>
+      )
+    }
+
+    await act(async () => root!.render(<Harness open />))
+    expect(setOccluded).toHaveBeenCalledWith(true)
+    await act(async () => root!.render(<Harness open={false} />))
+    expect(setOccluded).toHaveBeenLastCalledWith(false)
+    globalThis.ResizeObserver = original
   })
 })

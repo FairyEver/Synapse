@@ -101,6 +101,10 @@ describe("WebAppViewport", () => {
     ))
 
     expect(document.body.textContent).toContain("阅读")
+    const browserButton = document.querySelector<HTMLButtonElement>('button[aria-label="在浏览器打开"]')
+    const windowButton = document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')
+    expect(browserButton?.querySelector("svg")?.classList.contains("lucide-external-link")).toBe(true)
+    expect(windowButton?.querySelector("svg")?.classList.contains("lucide-app-window")).toBe(true)
     await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')?.click())
     expect(onOpenWindow).toHaveBeenCalledTimes(1)
     globalThis.ResizeObserver = original
