@@ -95,7 +95,8 @@ export class CustomAppsHttpApi implements CustomAppsApiPort {
   ): Promise<CustomAppSnapshotDto> {
     const scope = this.account.captureAccountRequestScope()
     if (!scope) throw new CustomAppsAuthenticationError()
-    const response = await this.account.fetchAuthenticated(path, init, errorMessage, scope)
+    const url = new URL(path, this.account.getApiBaseUrlForLive()).toString()
+    const response = await this.account.fetchAuthenticated(url, init, errorMessage, scope)
     const json = await response.json()
     return withAbsoluteIconUrls(customAppSnapshotSchema.parse(json), this.account.getApiBaseUrlForLive())
   }
