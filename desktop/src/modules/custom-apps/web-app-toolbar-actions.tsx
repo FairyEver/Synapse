@@ -10,9 +10,14 @@ import { getSynapseBridge } from "@/lib/electron-bridge"
 type WebAppToolbarActionsProps = {
   readonly state: CustomWebAppViewState
   readonly onAction?: (action: CustomWebAppNavigationAction) => Promise<void>
+  readonly showTooltips?: boolean
 }
 
-export function WebAppToolbarActions({ state, onAction }: WebAppToolbarActionsProps) {
+export function WebAppToolbarActions({
+  state,
+  onAction,
+  showTooltips = true,
+}: WebAppToolbarActionsProps) {
   const perform = (action: CustomWebAppNavigationAction) => {
     void (onAction
       ? onAction(action)
@@ -25,7 +30,7 @@ export function WebAppToolbarActions({ state, onAction }: WebAppToolbarActionsPr
         iconOnly
         type="button"
         aria-label="后退"
-        tooltip="后退"
+        tooltip={showTooltips ? "后退" : undefined}
         disabled={!state.canGoBack}
         onClick={() => perform("back")}
       >
@@ -35,7 +40,7 @@ export function WebAppToolbarActions({ state, onAction }: WebAppToolbarActionsPr
         iconOnly
         type="button"
         aria-label="前进"
-        tooltip="前进"
+        tooltip={showTooltips ? "前进" : undefined}
         disabled={!state.canGoForward}
         onClick={() => perform("forward")}
       >
@@ -45,7 +50,7 @@ export function WebAppToolbarActions({ state, onAction }: WebAppToolbarActionsPr
         iconOnly
         type="button"
         aria-label="刷新"
-        tooltip="刷新"
+        tooltip={showTooltips ? "刷新" : undefined}
         onClick={() => perform("reload")}
       >
         <RotateCw className={state.isLoading ? "animate-spin" : undefined} />
@@ -54,7 +59,7 @@ export function WebAppToolbarActions({ state, onAction }: WebAppToolbarActionsPr
         iconOnly
         type="button"
         aria-label="在浏览器打开"
-        tooltip="在浏览器打开"
+        tooltip={showTooltips ? "在浏览器打开" : undefined}
         disabled={!state.currentUrl}
         onClick={() => perform("open-external")}
       >

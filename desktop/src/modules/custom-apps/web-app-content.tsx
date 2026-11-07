@@ -58,7 +58,7 @@ export function CustomWebAppContent({
       embeddedLeftAddon={<h2 className="truncate text-sm font-semibold">{app.name}</h2>}
       actions={(
         <>
-          <WebAppToolbarActions state={state} />
+          <WebAppToolbarActions state={state} showTooltips={!windowMode} />
           {!windowMode && onOpenWindow ? (
             <SystemAppTopBarActionButton
               iconOnly

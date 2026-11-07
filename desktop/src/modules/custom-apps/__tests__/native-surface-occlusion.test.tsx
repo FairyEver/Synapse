@@ -153,4 +153,23 @@ describe("NativeSurfaceOcclusionProvider", () => {
     expect(setOccluded).toHaveBeenLastCalledWith(false)
     globalThis.ResizeObserver = original
   })
+
+  it("disables occlusion entirely for dedicated custom app windows", async () => {
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+
+    function Overlay() {
+      useNativeSurfaceOcclusion()
+      return null
+    }
+
+    await act(async () => root!.render(
+      <NativeSurfaceOcclusionProvider enabled={false}>
+        <Overlay />
+      </NativeSurfaceOcclusionProvider>,
+    ))
+
+    expect(setOccluded).not.toHaveBeenCalled()
+  })
 })

@@ -184,7 +184,8 @@ SynapseNavigationAppId =
 - `window` 模式的后退和前进根据 WebContents 的实际历史是否可用决定禁用状态。
 - `iframe` 刷新重新加载起始 URL；`window` 刷新保留当前页面，不回到起始 URL。
 - “在浏览器打开”在 `iframe` 模式只打开配置的起始 URL，在 `window` 模式打开当前主框架 URL，并由系统默认浏览器处理。
-- 顶栏按钮使用 `SystemAppTopBarActionButton` 图标形态，必须有 aria-label 和 tooltip。
+- 主窗口 iframe 顶栏按钮使用 `SystemAppTopBarActionButton` 图标形态，必须有 aria-label 和 tooltip。
+- 独立应用窗口只保留 aria-label，不渲染文字 tooltip。该窗口禁用 Native Surface occlusion，工具栏浮层不得触发 WebContentsView 隐藏、重排或闪白。
 - 加载中可在刷新动作位置显示进度，但不得新增第二行工具栏。
 - 页面标题不能替换 Synapse 窗口标题或应用顶栏名称。
 
@@ -647,22 +648,13 @@ persist:synapse-custom-web
 - 窗口缩放、Dock 展开/隐藏、顶栏状态变化和内容重排都必须更新 bounds。
 - 视图 bounds 不得覆盖应用顶栏、左侧 Dock 或底部壳层区域。
 
-### 浮层与原生视图（window 模式）
+### 原生视图与浮层
 
-WebContentsView 位于 renderer DOM 之上，因此任何可能覆盖网页区域的应用内浮层都必须让网页视图暂时不可见，关闭后恢复：
-
-- Dialog / AlertDialog / Sheet
-- DropdownMenu / ContextMenu / Menubar
-- Select / Popover / HoverCard / Command
-
-实现使用应用级 Native Surface Occlusion Context/lease：
-
-- 浮层打开时获取 lease，主进程隐藏当前自定义应用视图。
-- 浮层关闭时释放 lease；计数为 0 后恢复视图。
-- 不销毁或 reload WebContents，因此页面状态和播放中的网页不丢失。
-- 没有自定义应用视图时所有 hook 为 no-op。
-- 覆盖独立应用窗口宿主。
-- 展开菜单与弹窗的实际视觉验收不能只检查关闭状态或源码。
+- 独立应用窗口是专用网页窗口，Native Surface occlusion 固定禁用。
+- 顶栏仅位于 WebContentsView 上方，不覆盖网页区域。纯图标操作只保留 aria-label，不渲染文字 Tooltip。
+- 不得让工具栏浮层触发 WebContentsView 隐藏、移除、重排或恢复动画，否则会出现用户可见的闪白。
+- 后续如在该窗口增加 Dialog、菜单或 Popover，必须先设计不覆盖原生网页视图的呈现方式，不得重新启用“打开浮层就隐藏网页”的策略。
+- 主窗口 iframe 是普通 DOM 内容，不参与 Native Surface occlusion。
 
 ### 导航与安全
 

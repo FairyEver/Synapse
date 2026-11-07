@@ -209,7 +209,8 @@
 
 - 自定义应用是账号级动态网页应用，不是 System App；它不注册 MCP capability/tool、Workflow Node、Automation Action 或 Deep Link，也不进入移动端。
 - 应用定义、图标、删除墓碑、完整 Dock 布局和打开方式以服务端账号数据为准。`openMode` 为 `iframe` 时只在主窗口内嵌；为 `window` 时只能在专用窗口运行；缺失该字段的旧数据按 `window` 处理。
-- `window` 模式共用本机 `persist:synapse-custom-web` session，网页 Cookie、缓存和登录状态不进入 DataRepository、云端或备份。`WebContentsView` 只用于该模式；renderer 负责顶栏、视口占位和原生视图遮挡协调。
+- `window` 模式共用本机 `persist:synapse-custom-web` session，网页 Cookie、缓存和登录状态不进入 DataRepository、云端或备份。`WebContentsView` 只用于该模式；renderer 负责顶栏和视口占位，不做原生视图遮挡协调。
+- 独立自定义应用窗口是专用网页窗口，不参与主窗口的 Native Surface occlusion；工具栏纯图标操作只保留 aria-label，不渲染文字 Tooltip，避免隐藏、重排原生网页视图或闪白。
 - `iframe` 模式尽量开启兼容能力：跨源页面可使用 `allow-same-origin`、表单、脚本、模态框和存储访问等 sandbox 能力，并委托自动播放、全屏、画中画、剪贴板写入、Web Share、WebAuthn 和 Storage Access 等 Permissions Policy；摄像头、麦克风、定位、屏幕捕获、剪贴板读取和设备权限继续拒绝。主进程必须阻止任何子框架导航到 Synapse renderer 自身 origin；与 renderer 同源的起始 URL 不得获得 `allow-same-origin`。父页面不读取 iframe 的 URL、DOM 或导航历史。
 - 网站嵌入策略、登录、弹窗、下载和跨站 Cookie 限制必须在创建选项中提前说明。`X-Frame-Options`、CSP `frame-ancestors` 和站点主动 frame-busting 不得绕过，应引导用户改用独立窗口。
 - 应用与 Dock 配置断线只读；远端删除、非法孤儿 ID、认证失效和旧服务端都不得抛未处理异常。删除优先于旧设备修改，墓碑防止已删除应用被重放创建。

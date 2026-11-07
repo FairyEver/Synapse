@@ -156,7 +156,7 @@ async function bootstrapRenderer(): Promise<void> {
                 <AppNotificationsProvider>
                   <AccountProvider>
                     <ActiveRepositorySwitchProvider>
-                      <NativeSurfaceOcclusionProvider>
+                      <NativeSurfaceOcclusionProvider enabled={false}>
                         <CustomAppsProvider>
                           <CustomAppWindowApp />
                         </CustomAppsProvider>

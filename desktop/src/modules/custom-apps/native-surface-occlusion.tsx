@@ -16,7 +16,13 @@ type OcclusionContextValue = {
 
 const NativeSurfaceOcclusionContext = createContext<OcclusionContextValue | null>(null)
 
-export function NativeSurfaceOcclusionProvider({ children }: { readonly children: ReactNode }) {
+export function NativeSurfaceOcclusionProvider({
+  children,
+  enabled = true,
+}: {
+  readonly children: ReactNode
+  readonly enabled?: boolean
+}) {
   const countRef = useRef(0)
 
   const setOccluded = useCallback((occluded: boolean) => {
@@ -25,6 +31,7 @@ export function NativeSurfaceOcclusionProvider({ children }: { readonly children
   }, [])
 
   const acquire = useCallback(() => {
+    if (!enabled) return () => undefined
     countRef.current += 1
     if (countRef.current === 1) setOccluded(true)
     let released = false
@@ -34,7 +41,7 @@ export function NativeSurfaceOcclusionProvider({ children }: { readonly children
       countRef.current = Math.max(0, countRef.current - 1)
       if (countRef.current === 0) setOccluded(false)
     }
-  }, [setOccluded])
+  }, [enabled, setOccluded])
 
   const value = useMemo(() => ({ acquire }), [acquire])
   return (

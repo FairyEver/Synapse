@@ -2,8 +2,21 @@
  * @vitest-environment jsdom
  */
 import { act } from "react"
+import type { ComponentProps, ReactNode } from "react"
 import { createRoot } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
+
+vi.mock("@/modules/apps/components/system-app-top-bar", () => ({
+  SystemAppTopBarActionButton: ({
+    children,
+    iconOnly: _iconOnly,
+    tooltip,
+    ...props
+  }: ComponentProps<"button"> & {
+    readonly iconOnly?: boolean
+    readonly tooltip?: ReactNode
+  }) => <button data-tooltip={tooltip ? String(tooltip) : ""} {...props}>{children}</button>,
+}))
 
 import { WebAppToolbarActions } from "../web-app-toolbar-actions"
 
@@ -44,5 +57,27 @@ describe("WebAppToolbarActions", () => {
     expect(document.querySelector('[aria-label="在浏览器打开"]')).not.toBeNull()
     expect(document.querySelector('[role="textbox"]')).toBeNull()
     expect(document.querySelector<HTMLButtonElement>('[aria-label="前进"]')?.disabled).toBe(true)
+  })
+
+  it("omits text tooltips for dedicated web app windows", async () => {
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+
+    await act(async () => root!.render(
+      <WebAppToolbarActions
+        showTooltips={false}
+        state={{
+          canGoBack: false,
+          canGoForward: false,
+          isLoading: false,
+          currentUrl: "https://example.com/read",
+          error: "none",
+        }}
+      />,
+    ))
+
+    expect([...document.querySelectorAll<HTMLButtonElement>("button")]
+      .map((button) => button.dataset.tooltip)).toEqual(["", "", "", ""])
   })
 })
