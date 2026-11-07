@@ -21,6 +21,15 @@ import {
   CUSTOM_APPS_SERVICE_ID,
   type CustomAppsCatalogService,
 } from "../../services/custom-apps/catalog-service"
+import {
+  CUSTOM_APP_FAVICON_SERVICE_ID,
+  type CustomAppFaviconService,
+} from "../../services/custom-apps/favicon-service"
+
+const iconResultSchema = z.object({
+  pngBase64: z.string().min(1),
+  dataUrl: z.string().startsWith("data:image/png;base64,"),
+}).strict().nullable()
 
 const updateRequestSchema = z.object({
   id: customAppIdSchema,
@@ -91,6 +100,22 @@ export const customAppIpcModule: IpcModule = {
       response: customAppSnapshotSchema as unknown as z.ZodType<CustomAppSnapshotDto>,
       handler: (ctx, input: CustomAppDockOperation) => ctx.resolve<CustomAppsCatalogService>(CUSTOM_APPS_SERVICE_ID)
         .applyDockOperation(input),
+    },
+    fetchFavicon: {
+      kind: "invoke",
+      operationId: "app.custom_apps.icon.fetch_favicon",
+      request: z.object({ url: z.string().min(1).max(2048) }).strict(),
+      response: iconResultSchema,
+      handler: (ctx, input: { readonly url: string }) => ctx.resolve<CustomAppFaviconService>(
+        CUSTOM_APP_FAVICON_SERVICE_ID,
+      ).fetchFavicon(input.url),
+    },
+    chooseIcon: {
+      kind: "invoke",
+      operationId: "app.custom_apps.icon.choose",
+      request: z.void(),
+      response: iconResultSchema,
+      handler: (ctx) => ctx.resolve<CustomAppFaviconService>(CUSTOM_APP_FAVICON_SERVICE_ID).chooseIcon(),
     },
   },
   events: {

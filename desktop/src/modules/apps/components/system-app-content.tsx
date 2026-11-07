@@ -21,6 +21,9 @@ import { SettingsModule } from "@/modules/settings"
 import { WorkflowModule } from "@/modules/workflow"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { useDockPreferences } from "@/modules/apps/hooks/use-dock-preferences"
+import { CustomAppsProvider, useCustomApps } from "@/modules/custom-apps/context"
+import { CreateEditCustomAppDialog } from "@/modules/custom-apps/create-edit-dialog"
+import { DeleteCustomAppDialog } from "@/modules/custom-apps/delete-dialog"
 import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas/renderer"
 import { SynapseSkillModule } from "../../../../app-capabilities/synapse-skill/renderer"
 import { SecretsModule } from "../../../../app-capabilities/secrets/renderer"
@@ -40,6 +43,7 @@ import type {
   SynapseSystemAppOpenOptions,
   SynapseSystemAppTerminalOpenRequest,
 } from "../types"
+import type { CustomAppCreateInput, CustomAppDto, CustomAppUpdateInput } from "@synapse/shared"
 
 type AppsBridge = {
   readonly openSystemApp?: (targetAppId: SynapseSystemAppId, options?: SynapseSystemAppOpenOptions) => Promise<void>
@@ -173,6 +177,29 @@ function LauncherContent({
   readonly resetKey?: number
   readonly workflowEntryVisible?: boolean
 }) {
+  return (
+    <CustomAppsProvider>
+      <LauncherContentInner
+        pendingContentOpenRequest={pendingContentOpenRequest}
+        onPendingContentOpenRequestConsumed={onPendingContentOpenRequestConsumed}
+        resetKey={resetKey}
+        workflowEntryVisible={workflowEntryVisible}
+      />
+    </CustomAppsProvider>
+  )
+}
+
+function LauncherContentInner({
+  pendingContentOpenRequest = null,
+  onPendingContentOpenRequestConsumed,
+  resetKey = 0,
+  workflowEntryVisible = false,
+}: {
+  readonly pendingContentOpenRequest?: ContentOpenRequest | null
+  readonly onPendingContentOpenRequestConsumed?: (requestId: string) => void
+  readonly resetKey?: number
+  readonly workflowEntryVisible?: boolean
+}) {
   const [activeAppId, setActiveAppId] = useState<SynapseSystemAppId | null>(null)
   const [resourceContentOpenRequest, setResourceContentOpenRequest] =
     useState<ContentOpenRequest | null>(null)
@@ -180,6 +207,9 @@ function LauncherContent({
     useState<SynapseSystemAppId | null>(null)
   const resetKeyRef = useRef(resetKey)
   const dock = useDockPreferences({ workflowEntryVisible })
+  const customApps = useCustomApps()
+  const [customDialog, setCustomDialog] = useState<{ mode: "create" | "edit"; app: CustomAppDto | null } | null>(null)
+  const [deleteApp, setDeleteApp] = useState<CustomAppDto | null>(null)
 
   useEffect(() => {
     if (!pendingContentOpenRequest) return
@@ -260,17 +290,49 @@ function LauncherContent({
   }
 
   return (
-    <AppLauncherList
-      key={resetKey}
-      apps={listLaunchableSystemApps({ workflowEntryVisible })}
-      focusAppId={launcherFocusAppId}
-      pinnedAppIds={dock.dockAppIds}
-      disabled={dock.saving}
-      onOpenApp={openApp}
-      onPinApp={(appId) => void dock.addDockApp(appId)}
-      onUnpinApp={(appId) => void dock.removeDockApp(appId)}
-      onManageDock={requestOpenSettingsDock}
-    />
+    <>
+      <AppLauncherList
+        key={resetKey}
+        apps={listLaunchableSystemApps({ workflowEntryVisible })}
+        focusAppId={launcherFocusAppId}
+        pinnedAppIds={dock.dockAppIds}
+        disabled={dock.saving}
+        onOpenApp={openApp}
+        onPinApp={(appId) => void dock.addDockApp(appId)}
+        onUnpinApp={(appId) => void dock.removeDockApp(appId)}
+        onManageDock={requestOpenSettingsDock}
+        customApps={customApps.state.snapshot?.apps.filter((app) => app.kind === "web") ?? []}
+        canEditCustomApps={customApps.editable && !dock.saving}
+        onCreateCustomApp={() => setCustomDialog({ mode: "create", app: null })}
+        onOpenCustomApp={() => toast.error("应用运行组件尚未接入")}
+        onEditCustomApp={(app) => setCustomDialog({ mode: "edit", app })}
+        onDeleteCustomApp={setDeleteApp}
+      />
+      <CreateEditCustomAppDialog
+        open={customDialog !== null}
+        mode={customDialog?.mode ?? "create"}
+        app={customDialog?.app}
+        disabled={!customApps.editable}
+        onClose={() => setCustomDialog(null)}
+        fetchFavicon={customApps.fetchFavicon}
+        chooseIcon={customApps.chooseIcon}
+        onSubmit={async (input) => {
+          if (customDialog?.mode === "create") {
+            await customApps.create(input as CustomAppCreateInput)
+          } else if (customDialog?.app) {
+            await customApps.update(customDialog.app.id, input as CustomAppUpdateInput)
+          }
+        }}
+      />
+      <DeleteCustomAppDialog
+        app={deleteApp}
+        onClose={() => setDeleteApp(null)}
+        onConfirm={async (app) => {
+          await customApps.delete(app.id, crypto.randomUUID())
+          setDeleteApp(null)
+        }}
+      />
+    </>
   )
 }
 

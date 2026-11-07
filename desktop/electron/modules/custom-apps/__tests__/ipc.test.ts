@@ -13,6 +13,8 @@ describe("customAppIpcModule", () => {
     expect(customAppIpcModule.methods.delete.operationId).toBe("app.custom_apps.app.delete")
     expect(customAppIpcModule.methods.bootstrapDock.operationId).toBe("app.custom_apps.dock.bootstrap")
     expect(customAppIpcModule.methods.applyDockOperation.operationId).toBe("app.custom_apps.dock.apply")
+    expect(customAppIpcModule.methods.fetchFavicon.operationId).toBe("app.custom_apps.icon.fetch_favicon")
+    expect(customAppIpcModule.methods.chooseIcon.operationId).toBe("app.custom_apps.icon.choose")
     expect(customAppIpcModule.events.changed.operationId).toBe("app.custom_apps.operation.changed")
   })
 

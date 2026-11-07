@@ -271,6 +271,7 @@ import { HubPackageService } from "../../app-capabilities/skill-hub/main/package
 import { skillHubPreparedSourcesSchema, type HubPreparedRecord } from "../runtime/data-repo/schemas/skill-hub"
 import { accountService } from "../services/account-service"
 import { CUSTOM_APPS_SERVICE_ID, CustomAppsCatalogService } from "../services/custom-apps/catalog-service"
+import { CUSTOM_APP_FAVICON_SERVICE_ID, CustomAppFaviconService } from "../services/custom-apps/favicon-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
@@ -881,6 +882,14 @@ export const coreCustomAppsDescriptor: ServiceDescriptor<CustomAppsCatalogServic
   },
   stop(instance) {
     instance.dispose()
+  },
+}
+
+export const coreCustomAppFaviconDescriptor: ServiceDescriptor<CustomAppFaviconService> = {
+  id: CUSTOM_APP_FAVICON_SERVICE_ID,
+  criticality: "degraded",
+  create() {
+    return new CustomAppFaviconService()
   },
 }
 

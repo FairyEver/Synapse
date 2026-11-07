@@ -887,6 +887,8 @@ export type SynapseBridge = {
       dockMigrationIds: string[]
     }) => Promise<CustomAppSnapshotDto>
     applyDockOperation: (input: CustomAppDockOperation) => Promise<CustomAppSnapshotDto>
+    fetchFavicon: (url: string) => Promise<{ pngBase64: string; dataUrl: string } | null>
+    chooseIcon: () => Promise<{ pngBase64: string; dataUrl: string } | null>
     onChanged: (listener: (state: CustomAppsClientState) => void) => () => void
   }
   documentTemplate: {

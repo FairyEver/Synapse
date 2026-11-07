@@ -48,12 +48,13 @@ export const CUSTOM_APPS_API_PATHS = {
   icons: "/api/custom-apps/icons",
 } as const
 
+export type CustomAppId = `cwa_${string}`
+
 export const customAppIdSchema = z.string().regex(
   /^cwa_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
   "Invalid custom app id.",
-)
+).transform((value) => value as CustomAppId)
 
-export type CustomAppId = `cwa_${string}`
 export type SynapseAppId = SynapseSystemAppId | CustomAppId
 
 export const customAppIconSourceSchema = z.enum(["favicon", "custom"])

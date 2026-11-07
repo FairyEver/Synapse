@@ -370,6 +370,8 @@ export const IPC_CHANNELS = {
     "delete": "synapse:app:custom_apps:app:delete",
     "bootstrapDock": "synapse:app:custom_apps:dock:bootstrap",
     "applyDockOperation": "synapse:app:custom_apps:dock:apply",
+    "fetchFavicon": "synapse:app:custom_apps:icon:fetch_favicon",
+    "chooseIcon": "synapse:app:custom_apps:icon:choose",
     "changed": "synapse:app:custom_apps:operation:changed",
   },
   "mcp": {

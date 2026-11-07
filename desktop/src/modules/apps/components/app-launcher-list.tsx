@@ -1,4 +1,5 @@
-import { ChevronRight, List, Pin, Search, X } from "lucide-react"
+import { ChevronRight, Globe, List, Pencil, Pin, Search, Trash2, X } from "lucide-react"
+import type { CustomAppDto } from "@synapse/shared"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
@@ -8,6 +9,7 @@ import { appCategories, systemAppPresentation, type AppCategoryId } from "../app
 import { REQUIRED_DOCK_APP_ID } from "../dock"
 import type { SynapseSystemAppId, SynapseSystemAppManifest } from "../types"
 import { DockAppMenuItems } from "./dock-app-menu-items"
+import { CustomAppIconPreview } from "@/modules/custom-apps/icon-picker"
 
 type AppLauncherListProps = {
   readonly apps: readonly SynapseSystemAppManifest[]
@@ -18,9 +20,15 @@ type AppLauncherListProps = {
   readonly onPinApp: (appId: SynapseSystemAppId) => void
   readonly onUnpinApp: (appId: SynapseSystemAppId) => void
   readonly onManageDock: () => void
+  readonly customApps?: readonly CustomAppDto[]
+  readonly canEditCustomApps?: boolean
+  readonly onCreateCustomApp?: () => void
+  readonly onOpenCustomApp?: (app: CustomAppDto) => void
+  readonly onEditCustomApp?: (app: CustomAppDto) => void
+  readonly onDeleteCustomApp?: (app: CustomAppDto) => void
 }
 
-type FilterId = "all" | "pinned" | AppCategoryId
+type FilterId = "all" | "pinned" | "custom" | AppCategoryId
 
 export function AppLauncherList({
   apps,
@@ -31,6 +39,12 @@ export function AppLauncherList({
   onPinApp,
   onUnpinApp,
   onManageDock,
+  customApps = [],
+  canEditCustomApps = false,
+  onCreateCustomApp,
+  onOpenCustomApp,
+  onEditCustomApp,
+  onDeleteCustomApp,
 }: AppLauncherListProps) {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<FilterId>("all")
@@ -49,6 +63,7 @@ export function AppLauncherList({
   const appsById = new Map(apps.map((app) => [app.id, app]))
   const pinned = new Set(pinnedAppIds)
   const matches = (app: SynapseSystemAppManifest) => app.name.toLowerCase().includes(needle)
+  const matchesCustom = (app: CustomAppDto) => app.name.toLowerCase().includes(needle)
   const pinnedApps = pinnedAppIds.flatMap((id) => {
     const app = appsById.get(id)
     return app ? [app] : []
@@ -60,14 +75,23 @@ export function AppLauncherList({
   const filters = [
     { id: "all", name: "全部应用", icon: List, count: apps.length },
     { id: "pinned", name: "已固定", icon: Pin, count: pinnedApps.length },
+    ...(customApps.length > 0
+      ? [{ id: "custom" as const, name: "自定义应用", icon: Globe, count: customApps.length }]
+      : []),
     ...categories.map(({ id, name, icon, apps }) => ({ id, name, icon, count: apps.length })),
   ] as const
   const groups = (filter === "pinned"
     ? [{ id: "pinned", name: "Dock", apps: pinnedApps }]
-    : categories.filter((category) => filter === "all" || category.id === filter))
+    : filter === "custom"
+      ? []
+      : categories.filter((category) => filter === "all" || category.id === filter))
     .map((group) => ({ ...group, apps: group.apps.filter(matches) }))
     .filter((group) => group.apps.length > 0)
+  const visibleCustomApps = filter === "all" || filter === "custom"
+    ? customApps.filter(matchesCustom)
+    : []
   const resultCount = groups.reduce((count, group) => count + group.apps.length, 0)
+    + visibleCustomApps.length
 
   const updateQuery = (nextQuery: string) => {
     setQuery(nextQuery)
@@ -141,12 +165,19 @@ export function AppLauncherList({
 
         <ScrollArea viewportRef={viewportRef} className="min-w-0 flex-1">
           <div className="mx-auto max-w-4xl px-4 pb-6 @xl/launcher:px-6">
+            {onCreateCustomApp && (
+              <div className="flex justify-end pt-3">
+                <Button type="button" disabled={!canEditCustomApps} onClick={onCreateCustomApp}>
+                  新建自定义应用
+                </Button>
+              </div>
+            )}
             <p role="status" className="sr-only">
               {resultCount} 个应用
             </p>
             {resultCount === 0 && (
               <p className="py-10 text-center text-sm text-muted-foreground">
-                {needle ? "未找到匹配的应用" : filter === "pinned" ? "暂无固定应用" : "暂无应用"}
+                {needle ? "未找到匹配的应用" : filter === "pinned" ? "暂无固定应用" : filter === "custom" ? "暂无自定义应用" : "暂无应用"}
               </p>
             )}
             {groups.map(({ id, name, apps }) => (
@@ -215,6 +246,37 @@ export function AppLauncherList({
                 </ul>
               </section>
             ))}
+            {visibleCustomApps.length > 0 && (
+              <section className="mt-4">
+                <h2 className="px-2 pb-1 text-xs font-medium text-muted-foreground">自定义应用</h2>
+                <ul className="divide-y divide-border/60">
+                  {visibleCustomApps.map((app) => (
+                    <li key={app.id} className="group/app-row flex min-h-10 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-auto min-h-10 min-w-0 flex-1 justify-start gap-3 px-2 py-2 text-left whitespace-normal"
+                        onClick={() => onOpenCustomApp?.(app)}
+                      >
+                        <CustomAppIconPreview src={app.iconUrl} />
+                        <span className="min-w-0 wrap-anywhere">{app.name}</span>
+                        <ChevronRight aria-hidden="true" className="ml-auto text-muted-foreground opacity-0 group-hover/app-row:opacity-100 group-focus-within/app-row:opacity-100" />
+                      </Button>
+                      {canEditCustomApps && onEditCustomApp && (
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`编辑${app.name}`} onClick={() => onEditCustomApp(app)}>
+                          <Pencil />
+                        </Button>
+                      )}
+                      {canEditCustomApps && onDeleteCustomApp && (
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`删除${app.name}`} onClick={() => onDeleteCustomApp(app)}>
+                          <Trash2 />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
         </ScrollArea>
       </div>

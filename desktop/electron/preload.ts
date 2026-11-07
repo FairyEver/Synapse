@@ -439,6 +439,8 @@ const synapseBridge: SynapseBridge = {
     delete: (id, operationId) => invoke(IPC_CHANNELS.customApps.delete)({ id, operationId }),
     bootstrapDock: (input) => invoke(IPC_CHANNELS.customApps.bootstrapDock)(input),
     applyDockOperation: (input) => invoke(IPC_CHANNELS.customApps.applyDockOperation)(input),
+    fetchFavicon: (url) => invoke(IPC_CHANNELS.customApps.fetchFavicon)({ url }),
+    chooseIcon: () => invoke(IPC_CHANNELS.customApps.chooseIcon)(),
     onChanged: createDomainEventPayloadSubscription<CustomAppsClientState>(
       subscribe,
       "account",

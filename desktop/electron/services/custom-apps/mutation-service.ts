@@ -15,6 +15,7 @@ export interface CustomAppsAccountPort {
   getState(): ReturnType<AccountService["getState"]>
   onStateChanged(listener: (state: SynapseAccountState) => void): () => void
   captureAccountRequestScope(): (AccountRequestScope & { readonly accountId: string }) | null
+  getApiBaseUrlForLive(): string
   fetchAuthenticated(
     pathOrUrl: string,
     init?: RequestInit,
@@ -96,7 +97,7 @@ export class CustomAppsHttpApi implements CustomAppsApiPort {
     if (!scope) throw new CustomAppsAuthenticationError()
     const response = await this.account.fetchAuthenticated(path, init, errorMessage, scope)
     const json = await response.json()
-    return customAppSnapshotSchema.parse(json)
+    return withAbsoluteIconUrls(customAppSnapshotSchema.parse(json), this.account.getApiBaseUrlForLive())
   }
 }
 
@@ -112,4 +113,16 @@ export function customAppsHttpStatus(error: unknown): number | null {
   const record = error as { readonly status?: unknown; readonly statusCode?: unknown }
   const value = typeof record.status === "number" ? record.status : record.statusCode
   return typeof value === "number" ? value : null
+}
+
+function withAbsoluteIconUrls(
+  snapshot: CustomAppSnapshotDto,
+  apiBaseUrl: string,
+): CustomAppSnapshotDto {
+  return {
+    ...snapshot,
+    apps: snapshot.apps.map((app) => app.iconUrl && app.iconUrl.startsWith("/")
+      ? { ...app, iconUrl: new URL(app.iconUrl, apiBaseUrl).toString() }
+      : app),
+  }
 }
