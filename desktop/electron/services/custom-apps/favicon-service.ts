@@ -2,7 +2,7 @@ import { dialog, nativeImage, session } from "electron"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
-export const CUSTOM_WEB_PARTITION = "persist:synapse-custom-web"
+import { CUSTOM_WEB_PARTITION } from "./web-session"
 export const CUSTOM_APP_FAVICON_SERVICE_ID = "core.custom-apps-favicon"
 
 const MAX_HTML_BYTES = 512 * 1024

@@ -272,6 +272,7 @@ import { skillHubPreparedSourcesSchema, type HubPreparedRecord } from "../runtim
 import { accountService } from "../services/account-service"
 import { CUSTOM_APPS_SERVICE_ID, CustomAppsCatalogService } from "../services/custom-apps/catalog-service"
 import { CUSTOM_APP_FAVICON_SERVICE_ID, CustomAppFaviconService } from "../services/custom-apps/favicon-service"
+import { configureCustomWebSession, getCustomWebSession } from "../services/custom-apps/web-session"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
@@ -764,6 +765,7 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
     })
   },
   async start(instance) {
+    configureCustomWebSession(getCustomWebSession())
     await instance.initialize()
   },
 }
