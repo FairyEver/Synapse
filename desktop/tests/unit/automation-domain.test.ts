@@ -29,6 +29,7 @@ describe("Automation capability domain", () => {
       "app.automation.run.list",
       "app.automation.runtime.inspect",
       "app.automation.webhook.list",
+      "app.automation.webhook_delivery.get",
       "app.automation.trigger_type.list",
       "app.automation.executor_type.list",
     ])
@@ -39,6 +40,7 @@ describe("Automation capability domain", () => {
     expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_item_create).toBe("app.automation.item.create")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_run_execute).toBe("app.automation.run.execute")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_webhook_list).toBe("app.automation.webhook.list")
+    expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_webhook_delivery_get).toBe("app.automation.webhook_delivery.get")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_trigger_type_list).toBe("app.automation.trigger_type.list")
     expect(AUTOMATION_MCP_TOOL_ACTIONS.app_automation_executor_type_list).toBe("app.automation.executor_type.list")
   })
@@ -60,6 +62,7 @@ describe("Automation capability domain", () => {
       "app_automation_run_execute",
       "app_automation_runtime_inspect",
       "app_automation_webhook_list",
+      "app_automation_webhook_delivery_get",
       "app_automation_trigger_type_list",
       "app_automation_executor_type_list",
     ]))

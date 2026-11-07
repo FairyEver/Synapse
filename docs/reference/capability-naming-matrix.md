@@ -11,14 +11,14 @@ Portal Link uses `app.connectors.portal_link.credential.get` / `app_connectors_p
 | `database_*` | `app_database_*` | 30 |
 | `model_price_*` | `app_model_price_*` | 10 |
 | `repository_*` | `app_settings_repository_*` | 1 |
-| `automation_*` | `app_automation_*` | 14 |
+| `automation_*` | `app_automation_*` | 15 |
 | `workflow_*` | `app_workflow_*` | 19 |
 | `content_*` | `app_resource_repository_*` | 16 |
 | `drive_*` | `app_drive_*` | 48 |
 
 The suffix after the prefix is unchanged. For example, `database_table_list` became `app_database_table_list`.
 
-For a two-column list of all 138 renamed tools, see [MCP tool name migration](./mcp-tool-name-migration.md).
+For a two-column list of all 148 renamed tools, see [MCP tool name migration](./mcp-tool-name-migration.md).
 For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bridge 名称迁移](./api-ipc-bridge-name-migration.md).
 
 | Capability id | MCP tool | HTTP action | Service method |
@@ -77,6 +77,7 @@ For HTTP action, IPC channel, and preload bridge changes, see [API、IPC 与 Bri
 | `app.automation.run.list` | `app_automation_run_list` | `app.automation.run.list` | `automationRunList` |
 | `app.automation.runtime.inspect` | `app_automation_runtime_inspect` | `app.automation.runtime.inspect` | `automationRuntimeInspect` |
 | `app.automation.webhook.list` | `app_automation_webhook_list` | `app.automation.webhook.list` | `automationWebhookList` |
+| `app.automation.webhook_delivery.get` | `app_automation_webhook_delivery_get` | `app.automation.webhook_delivery.get` | `accountService.getWebhookDeliveryBody` |
 | `app.automation.trigger_type.list` | `app_automation_trigger_type_list` | `app.automation.trigger_type.list` | `automationTriggerTypeList` |
 | `app.automation.executor_type.list` | `app_automation_executor_type_list` | `app.automation.executor_type.list` | `automationExecutorTypeList` |
 | `app.workflow.node_type.list` | `app_workflow_node_type_list` | `app.workflow.node_type.list` | `workflowNodeTypeList` |

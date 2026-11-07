@@ -194,6 +194,7 @@ export const LEXICON: readonly (readonly [term: string, token: string])[] = [
   ["执行器", "executor"],
   ["触发器", "trigger"],
   ["回调", "webhook"],
+  ["投递", "delivery"],
   ["运行时", "runtime"],
   ["预设", "preset"],
   ["配置项", "param"],

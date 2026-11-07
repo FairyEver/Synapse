@@ -4,7 +4,7 @@
 
 - 旧名称不再兼容，调用会返回 `Unknown tool`。
 - 名称只更换前缀，后半部分保持不变。
-- 共移除 138 个旧别名；当前 Synapse MCP 注册 174 个唯一工具。
+- 共移除 148 个旧别名；当前 Synapse MCP 注册 361 个唯一工具。
 
 ## 前缀汇总
 
@@ -74,7 +74,7 @@
 | --- | --- |
 | `repository_item_list` | `app_settings_repository_item_list` |
 
-## Automation（14）
+## Automation（15）
 
 | 旧名称（已移除） | 新名称（当前可用） |
 | --- | --- |
@@ -90,6 +90,7 @@
 | `automation_run_list` | `app_automation_run_list` |
 | `automation_runtime_inspect` | `app_automation_runtime_inspect` |
 | `automation_webhook_list` | `app_automation_webhook_list` |
+| `automation_webhook_delivery_get` | `app_automation_webhook_delivery_get` |
 | `automation_trigger_type_list` | `app_automation_trigger_type_list` |
 | `automation_executor_type_list` | `app_automation_executor_type_list` |
 
