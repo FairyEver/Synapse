@@ -5,7 +5,7 @@ import { CustomAppIconsService } from "./custom-app-icons.service"
 import { CustomAppEvents } from "./custom-app-events"
 import { CustomAppsService } from "./custom-apps.service"
 
-const appId = "cwa_123e4567-e89b-42d3-a456-426614174000"
+const appId = "cwa_123e4567-e89b-42d3-a456-426614174000" as const
 const userId = "user-1"
 
 describe("CustomAppsService", () => {
@@ -28,7 +28,7 @@ describe("CustomAppsService", () => {
       initialized: true,
       revision: 1,
       dockAppIds: ["agent", appId, "launcher"],
-      apps: [expect.objectContaining({ id: appId, name: "阅读" })],
+      apps: [expect.objectContaining({ id: appId, name: "阅读", openMode: "window" })],
     })
   })
 
@@ -88,6 +88,29 @@ describe("CustomAppsService", () => {
     expect(query).toContain("SELECT 1 AS locked")
     expect(prisma.$queryRaw.mock.invocationCallOrder[0])
       .toBeLessThan(prisma.userCustomApp.count.mock.invocationCallOrder[0])
+  })
+
+  it("persists the selected iframe mode when creating an app", async () => {
+    const prisma = createPrisma()
+    const service = new CustomAppsService(
+      prisma as unknown as PrismaService,
+      createIcons() as unknown as CustomAppIconsService,
+    )
+    prisma.userCustomAppOperation.findUnique.mockResolvedValue(null)
+    prisma.userCustomAppTombstone.findUnique.mockResolvedValue(null)
+    prisma.userCustomApp.findUnique.mockResolvedValue(null)
+    prisma.userCustomApp.count.mockResolvedValue(0)
+    prisma.userCustomApp.create.mockResolvedValue(appRow({ openMode: "iframe" }))
+    prisma.userCustomAppSettings.upsert.mockResolvedValue(settingsRow({ revision: 0 }))
+    prisma.userCustomAppSettings.update.mockResolvedValue(settingsRow({ revision: 1 }))
+    prisma.userCustomAppOperation.create.mockResolvedValue({})
+    prisma.userCustomApp.findMany.mockResolvedValue([appRow({ openMode: "iframe" })])
+
+    await service.create(userId, { ...createInput(), openMode: "iframe" })
+
+    expect(prisma.userCustomApp.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ openMode: "iframe" }),
+    })
   })
 
   it("hard-deletes the app and removes its Dock id in one transaction", async () => {
@@ -181,6 +204,34 @@ describe("CustomAppsService", () => {
     }))
   })
 
+  it("updates the open mode without touching unrelated fields", async () => {
+    const prisma = createPrisma()
+    const service = new CustomAppsService(
+      prisma as unknown as PrismaService,
+      createIcons() as unknown as CustomAppIconsService,
+    )
+    prisma.userCustomAppOperation.findUnique.mockResolvedValue(null)
+    prisma.userCustomApp.findFirst.mockResolvedValue(appRow())
+    prisma.userCustomApp.updateMany.mockResolvedValue({ count: 1 })
+    prisma.userCustomAppSettings.upsert.mockResolvedValue(settingsRow({ revision: 1 }))
+    prisma.userCustomAppSettings.update.mockResolvedValue(settingsRow({ revision: 2 }))
+    prisma.userCustomAppOperation.create.mockResolvedValue({})
+    prisma.userCustomApp.findMany.mockResolvedValue([appRow({ openMode: "iframe" })])
+
+    await service.update(userId, appId, {
+      operationId: "update-mode",
+      openMode: "iframe",
+    })
+
+    expect(prisma.userCustomApp.updateMany).toHaveBeenCalledWith({
+      where: { id: appId, userId },
+      data: expect.objectContaining({
+        openMode: "iframe",
+        version: { increment: 1 },
+      }),
+    })
+  })
+
   it("initializes Dock once from the first device", async () => {
     const prisma = createPrisma()
     const events = { publish: vi.fn() }
@@ -257,6 +308,7 @@ function createInput() {
     id: appId as `cwa_${string}`,
     name: "阅读",
     startUrl: "https://example.com/read",
+    openMode: "window" as const,
     iconSource: "favicon" as const,
   }
 }
@@ -326,6 +378,7 @@ function appRow(overrides: Record<string, unknown> = {}) {
     kind: "web",
     name: "阅读",
     startUrl: "https://example.com/read",
+    openMode: "window",
     iconId: null,
     iconSource: "favicon",
     version: 1,

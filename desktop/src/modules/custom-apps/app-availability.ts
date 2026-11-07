@@ -6,6 +6,7 @@ export function shouldReturnToLauncher(
   activeAppId: SynapseAppId,
   snapshot: CustomAppSnapshotDto | null,
 ): boolean {
-  return !isSystemAppId(activeAppId)
-    && !snapshot?.apps.some((app) => app.id === activeAppId)
+  if (isSystemAppId(activeAppId)) return false
+  const activeApp = snapshot?.apps.find((app) => app.id === activeAppId)
+  return !activeApp || activeApp.openMode === "window"
 }

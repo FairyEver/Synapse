@@ -32,13 +32,16 @@ export class CustomWebAppWindowService {
   constructor(private readonly deps: CustomWebAppWindowDependencies) {}
 
   async open(appId: CustomAppId): Promise<void> {
+    const app = this.deps.getApp(appId)
+    if (!app) throw new Error("Custom app does not exist.")
+    if (app.openMode !== "window") {
+      throw new Error("Custom app does not use a dedicated window.")
+    }
     const existing = this.windows.get(appId)
     if (existing && !existing.isDestroyed()) {
       this.focus(existing)
       return
     }
-    const app = this.deps.getApp(appId)
-    if (!app) throw new Error("Custom app does not exist.")
 
     const window = this.deps.createWindow({
       ...CUSTOM_APP_WINDOW_BOUNDS,

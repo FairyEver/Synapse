@@ -1,0 +1,2 @@
+ALTER TABLE "UserCustomApp"
+ADD COLUMN "openMode" VARCHAR(16) NOT NULL DEFAULT 'window';

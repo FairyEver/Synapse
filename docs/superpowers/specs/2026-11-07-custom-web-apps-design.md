@@ -2,21 +2,23 @@
 
 ## 意图
 
-允许用户在 Synapse 桌面端把任意 HTTP(S) 网页添加为一个应用。自定义应用与内置应用一样出现在应用中心、Dock 和独立窗口中，在 Synapse 内运行并复用统一应用顶栏。
+允许用户在 Synapse 桌面端把任意 HTTP(S) 网页添加为一个应用。自定义应用与内置应用一样出现在应用中心和 Dock，并可选择应用内嵌或独立窗口两种打开方式。
 
-应用定义与 Dock 布局属于同一个 Synapse 账号并跨设备同步。所有自定义应用共用本机的一套浏览器登录状态；网页 Cookie、缓存和当前浏览会话不跟随账号或跨设备同步。
+应用定义与 Dock 布局属于同一个 Synapse 账号并跨设备同步。独立窗口模式共用本机的一套浏览器登录状态；iframe 模式使用不透明来源的沙箱页面，不继承 Synapse renderer 的登录和存储访问。
 
 ## 已确认的产品决策
 
 - 首版只支持网页类型，但数据与导航模型必须为后续其他用户应用类型保留扩展位置。
 - 支持任意 HTTP(S) 网页，不维护站点白名单。
-- 用户可以设置名称、起始 URL、图标。
+- 用户可以设置名称、起始 URL、图标和打开方式。
 - 图标默认尝试网站 favicon，也允许用户选择本机图片覆盖。
-- 应用在应用中心和 Dock 中以普通应用出现，可固定、取消固定、排序、在主窗口内运行、在独立窗口打开。
+- 应用在应用中心和 Dock 中以普通应用出现，可固定、取消固定和排序。
+- 打开方式必须显式选择：`iframe` 在主窗口内嵌显示；`window` 只能打开专用应用窗口。
 - 同一账号的应用定义与完整 Dock 布局跨设备同步；不同账号互不可见。
-- 所有自定义应用共用一套本机持久网页会话。切换 Synapse 账号不会清除或隔离网页 Cookie；同一台电脑上的不同 Synapse 账号可以看到之前保存的网站登录状态。
-- 每次全新打开应用或打开独立应用窗口都从配置的起始 URL 开始；同一次运行中切走再回来保留当前页面和前进后退历史。
-- 应用顶栏不显示地址栏，只保留后退、前进、刷新和在系统浏览器打开。
+- 所有 `window` 模式应用共用一套本机持久网页会话。切换 Synapse 账号不会清除或隔离网页 Cookie；同一台电脑上的不同 Synapse 账号可以看到之前保存的网站登录状态。
+- `iframe` 模式不使用共享网页 session，不授予 `allow-same-origin`，因此可能无法登录、使用弹窗或访问跨站 Cookie。
+- 每次全新打开应用或打开独立应用窗口都从配置的起始 URL 开始；同一次 `window` 运行中切走再回来保留当前页面和前进后退历史。
+- 应用顶栏不显示地址栏。`window` 模式保留后退、前进、刷新和在系统浏览器打开；`iframe` 模式只能刷新和在浏览器打开。
 - 网页自己发起的新窗口、`target="_blank"` 和 OAuth 弹窗留在 Synapse 内，共用网页会话。
 - 首版支持普通浏览、登录、文件上传和下载；摄像头、麦克风、定位、系统通知、剪贴板读取等敏感权限统一拒绝。
 - 断线时可以使用缓存中的应用和 Dock，但新建、编辑、删除、固定、取消固定和排序全部禁用。首版不允许离线写入或排队。
@@ -25,7 +27,7 @@
 ## 目标
 
 - 提供从应用中心新建、编辑和删除自定义网页应用的完整路径。
-- 用原生网页视图承载不可信网站，不经过 `iframe`，也不向网页暴露 Synapse preload、bridge、Node 或本机能力。
+- 按打开方式隔离承载网页：`window` 使用原生网页视图，`iframe` 使用不透明来源的 sandbox；两种模式都不得向网页暴露 Synapse preload、bridge、Node 或本机能力。
 - 让自定义应用与内置应用共享现有应用壳层、Dock、窗口和键盘焦点约定。
 - 用账号级云端快照作为配置权威来源，并提供稳定的本地缓存、实时更新和冲突恢复。
 - 把 Dock 从仅存在于本机配置的固定系统应用列表，扩展为可同步内置应用和用户应用的账号级布局。
@@ -45,7 +47,7 @@
 
 ## 失败条件
 
-- 通过 `iframe` 承载网页，导致大量站点因 `X-Frame-Options` 或 CSP 无法使用。
+- 在 `iframe` 中授予 `allow-same-origin`、允许访问 Synapse 默认 session，或把 iframe 失败伪装成承诺必定可用的加载方式。
 - 把任意网页加载进 Synapse 自己的 renderer，或给网页注入 Synapse preload/bridge。
 - 远端删除一个已固定应用后，Dock 抛错、显示幽灵图标或应用启动失败。
 - 云端配置短暂不可用就清空本地应用列表或 Dock。
@@ -56,7 +58,8 @@
 
 - **System App**：现有静态注册的内置应用，ID 仍来自 `SYSTEM_APP_IDS`。
 - **自定义应用 / Custom App**：用户创建的动态应用。首版 `kind = "web"`。
-- **自定义网页会话**：所有自定义应用共用、按电脑持久化的 Chromium session。
+- **打开方式 / openMode**：`iframe` 表示主窗口内嵌；`window` 表示只能打开专用窗口。缺失该字段的旧数据归一化为 `window`。
+- **自定义网页会话**：所有 `window` 模式应用共用、按电脑持久化的 Chromium session。
 - **应用配置快照**：同一账号的应用列表、Dock 布局、迁移标记和同步 revision。
 
 自定义应用 ID 使用客户端生成且稳定的 `cwa_<uuid-v4>`，避免与内置应用 ID 冲突。应用记录删除后保留墓碑，防止旧设备重放创建请求把数据复活。
@@ -86,9 +89,9 @@ SynapseNavigationAppId =
 
 ### 选定方案
 
-采用“主进程原生 `WebContentsView` + 账号级云端快照 + 本机只读缓存”。
+采用“双打开方式 + 账号级云端快照 + 本机只读缓存”。
 
-网页内容由专用的主进程服务创建和控制，renderer 只负责提供视口占位、应用顶栏和操作入口。所有自定义应用使用同一个持久 partition；权限、下载、弹窗、外部协议和导航都由主进程统一约束。
+`window` 模式的网页由专用主进程服务创建和控制，所有该模式应用使用同一个持久 partition；权限、下载、弹窗、外部协议和导航由主进程统一约束。`iframe` 模式由主窗口 renderer 直接渲染 sandbox，不注册 WebContentsView、不进入共享网页 session，也不提供网页导航状态。
 
 云端采用“应用记录 + 单账号布局快照 + 聚合 revision + 幂等操作”的混合模型。应用记录支持按稳定 ID 独立创建、修改和删除；Dock 布局保存完整顺序；每次提交递增账号聚合 revision，并通过实时连接通知其他设备刷新。
 
@@ -99,10 +102,10 @@ SynapseNavigationAppId =
 - 优点：DOM 布局和现有 React 壳层最容易整合。
 - 不选原因：Electron 对 `<webview>` 有安全与稳定性警告；弹窗、下载和权限仍需主进程补第二套控制；单 JSON 文档难以表达并发操作和删除墓碑。
 
-**每个自定义应用只开独立 BrowserWindow，直接加载远程 URL**
+**所有自定义应用只开独立 BrowserWindow，直接加载远程 URL**
 
 - 优点：实现最简单，网页行为最接近普通浏览器。
-- 不选原因：不满足在主窗口和 Dock 内运行、保留 Synapse 应用顶栏的产品要求。
+- 不选原因：无法满足 `iframe` 模式在主窗口和 Dock 内运行的产品要求。
 
 **浏览器登录状态按 Synapse 账号隔离**
 
@@ -117,6 +120,7 @@ SynapseNavigationAppId =
 - 图标
 - 名称
 - 起始 URL
+- 打开方式
 - 取消、创建
 
 交互规则：
@@ -126,6 +130,8 @@ SynapseNavigationAppId =
 - favicon 获取失败、超时或页面拒绝访问不阻断创建，使用内置地球图标。
 - 名称必填，去掉首尾空白后 1 到 64 个字符。
 - URL 只允许绝对 `http:` 和 `https:`，最长 2048 个字符，不允许 URL 内嵌用户名或密码。
+- 新建时必须显式选择“应用内嵌”或“独立窗口”；未选择时不可提交。
+- “应用内嵌”的选项直接说明可能受网站嵌入策略、登录、弹窗、下载和跨站 Cookie 限制。
 - 创建期间禁用重复提交。成功后关闭表单、刷新应用中心，不自动固定到 Dock。
 - 创建失败保留表单字段并显示具体、简短错误。
 - 未登录或配置处于离线只读状态时不允许打开可提交的创建流程。
@@ -133,10 +139,11 @@ SynapseNavigationAppId =
 ### 编辑应用
 
 - 从应用行的右键菜单或更多菜单进入编辑。
-- 可修改名称、URL 和图标。
+- 可修改名称、URL、图标和打开方式。
 - URL 修改后，若图标来源仍是 favicon，则重新尝试获取网站图标；自定义图标不自动覆盖。
 - 保存后更新应用中心、Dock 和所有窗口中的名称与图标。
 - 正在运行的应用不因 URL 修改而跳转；当前页面和前进后退历史保持不变，下一次全新打开或新窗口使用新的起始 URL。
+- 打开方式改为 `window` 时退出主窗口内嵌视图；改为 `iframe` 时关闭该应用的专用窗口。
 - 删除使用独立确认弹窗。
 
 ### 删除应用
@@ -150,20 +157,18 @@ SynapseNavigationAppId =
 ### 打开应用
 
 - 从应用中心、Dock、通知式内部导航或已打开的独立窗口入口打开。
-- 主窗口内运行时只显示一条应用顶栏；内容区是原生网页视图。
-- 同一应用在主窗口中保留一个本次运行内的网页视图；切到其他应用时隐藏但保留 WebContents，切回后保留当前页面和前进后退历史。
+- `iframe` 模式在主窗口内运行；每次进入或点击刷新时重新加载起始 URL，不提供可读取的网页导航历史。
+- `window` 模式不占用主窗口内容区。从应用中心或 Dock 打开时只创建或聚焦专用窗口，当前主窗口应用保持不变。
 - 应用独立窗口沿用现有系统应用的“同 ID 单窗口、重复打开聚焦已有窗口”行为。
-- 新建独立应用窗口时始终加载起始 URL。
-- 同一次运行首次进入应用时加载起始 URL。
+- 新建独立应用窗口时始终加载起始 URL。切到其他主窗口应用不影响已打开的独立窗口。
 - 页面内部跳转不改变应用 ID、名称、图标或起始 URL。
 
 ### 应用顶栏
 
-顶栏沿用现有 System App 顶栏结构：
+顶栏沿用现有 System App 顶栏结构，按打开方式展示不同动作：
 
-- 启动台内嵌：左侧返回、应用名称；右侧应用动作和新窗口入口。
-- Dock 内嵌：左侧应用名称；右侧应用动作和新窗口入口。
-- 独立窗口：左侧应用名称；右侧应用动作，关闭由系统窗口按钮负责。
+- `iframe` 主窗口内嵌：左侧应用名称和“应用内嵌”标识；右侧只显示刷新和在浏览器打开。
+- `window` 独立窗口：左侧应用名称；右侧显示后退、前进、刷新和在浏览器打开，关闭由系统窗口按钮负责。
 
 应用动作固定为：
 
@@ -175,9 +180,10 @@ SynapseNavigationAppId =
 规则：
 
 - 不显示当前 URL 或地址栏。
-- 后退和前进根据 WebContents 的实际历史是否可用决定禁用状态。
-- 刷新保留当前页面，不回到起始 URL。
-- “在浏览器打开”只打开当前主框架 URL，并由系统默认浏览器处理。
+- `iframe` 模式的后退和前进始终不可用，因为跨源父页面无法读取 iframe 历史。
+- `window` 模式的后退和前进根据 WebContents 的实际历史是否可用决定禁用状态。
+- `iframe` 刷新重新加载起始 URL；`window` 刷新保留当前页面，不回到起始 URL。
+- “在浏览器打开”在 `iframe` 模式只打开配置的起始 URL，在 `window` 模式打开当前主框架 URL，并由系统默认浏览器处理。
 - 顶栏按钮使用 `SystemAppTopBarActionButton` 图标形态，必须有 aria-label 和 tooltip。
 - 加载中可在刷新动作位置显示进度，但不得新增第二行工具栏。
 - 页面标题不能替换 Synapse 窗口标题或应用顶栏名称。
@@ -203,6 +209,7 @@ userId       User 外键，onDelete Cascade
 kind         "web"
 name         VarChar(64)
 startUrl     VarChar(2048)
+openMode     "iframe" | "window"，默认 "window"
 iconId       可选，指向 UserCustomAppIconAsset
 iconSource   "favicon" | "custom"
 version      Int，默认 1
@@ -319,6 +326,7 @@ type CustomAppDto = {
   schemaVersion: 1
   name: string
   startUrl: string
+  openMode: "iframe" | "window"
   iconUrl: string | null
   iconSource: "favicon" | "custom"
   version: number
@@ -350,7 +358,7 @@ type CustomAppDto = {
 
 ### 创建与修改
 
-- 创建请求包含客户端生成的 `cwa_` ID、`operationId`、名称、URL、图标来源和可选 PNG 图标。
+- 创建请求包含客户端生成的 `cwa_` ID、`operationId`、名称、URL、打开方式、图标来源和可选 PNG 图标。旧客户端缺少打开方式时按 `window` 处理。
 - 同一账号重复创建相同 ID：
   - 记录仍有效且字段一致：幂等成功。
   - 记录已删除：按删除墓碑优先，不复活；客户端刷新快照。
@@ -449,6 +457,8 @@ app.custom-apps.snapshots
 | 云端删除正在编辑的应用 | 刷新快照，关闭编辑表单，显示“应用已在其他设备删除” |
 | 云端修改名称或图标 | 应用中心、Dock 和窗口立即更新；当前网页及历史不变 |
 | 云端修改 URL | 当前网页及历史不变；下一次新打开或新窗口使用新 URL |
+| 云端把打开方式改为 `window` | 主窗口退出 iframe，后续点击只创建或聚焦专用窗口 |
+| 云端把打开方式改为 `iframe` | 关闭对应专用窗口，后续点击在主窗口内嵌打开 |
 | 两台设备同时修改不同字段 | 部分更新合并，都保留 |
 | 两台设备同时修改同一字段 | 最后成功提交值生效，另一端由实时事件刷新 |
 | 旧设备尝试修改已删除应用 | 视为删除优先，不复活，不阻塞其他操作 |
@@ -599,22 +609,34 @@ customApps.external.openCurrent()
 persist:synapse-custom-web
 ```
 
-- 所有自定义应用和网页弹窗共用。
+- 所有 `window` 模式自定义应用和网页弹窗共用。
 - 跨应用重启持久化 Cookie、localStorage、IndexedDB、Cache Storage 和站点权限拒绝记录。
 - 不随 Synapse 账号切换、登出或删除应用清除。
 - 不与 Synapse 自己的 renderer、登录 Cookie 或网络 session 共享。
 
-### WebContentsView
+以上共享 session 只适用于 `window` 模式。`iframe` 模式不使用该 partition。
 
-- 每个已打开的自定义应用在本次运行中拥有一个 WebContents。
-- 主窗口切走时从 `contentView` 移除或隐藏，但保留 WebContents、当前 URL 和导航历史。
-- 切回时重新挂到宿主窗口；不重新加载起始 URL。
+### iframe
+
+- `iframe` 模式只出现在主窗口应用内容区，不创建 BrowserWindow 或 WebContentsView。
+- iframe 必须设置 `sandbox="allow-forms allow-scripts"`，不得包含 `allow-same-origin`、`allow-top-navigation` 或弹出窗口权限。
+- iframe 的 Permissions Policy 固定拒绝摄像头、麦克风、定位、屏幕捕获、剪贴板、全屏、支付和 USB/串口/HID/MIDI。
+- iframe 使用 `no-referrer`，不加载 Synapse preload、bridge 或 Node，也不能访问父页面。
+- 父页面不读取 iframe 导航历史、URL 或 DOM。后退和前进始终禁用。
+- 刷新通过销毁并重建 iframe 回到起始 URL。
+- “在浏览器打开”只打开配置的起始 URL，并复用受权限保护的 shell external-open 入口。
+- 网站自身的 `X-Frame-Options`、CSP、登录、弹窗、下载或存储限制属于产品已提示的 iframe 限制，不尝试绕过。
+
+### WebContentsView（window 模式）
+
+- 每个已打开的 `window` 应用在本次运行中拥有一个 WebContents。
+- 专用窗口关闭前切到其他应用不重建 WebContents；独立窗口关闭或应用被删除时销毁。
 - 独立应用窗口拥有自己的 WebContents，首次打开加载起始 URL。
 - 窗口关闭或应用被删除时销毁对应 WebContents。
 - 页面标题更新不得改变应用名称或窗口标题。
 - 网页主框架 URL 变化、加载状态和历史可用性通过受控事件同步给 renderer；renderer 不直接读取 WebContents。
 
-### 视口尺寸
+### 视口尺寸（window 模式）
 
 - Renderer 在内容区渲染只用于测量的占位元素。
 - `ResizeObserver` 把相对窗口内容区的 CSS 像素 bounds 发送给主进程。
@@ -622,7 +644,7 @@ persist:synapse-custom-web
 - 窗口缩放、Dock 展开/隐藏、顶栏状态变化和内容重排都必须更新 bounds。
 - 视图 bounds 不得覆盖应用顶栏、左侧 Dock 或底部壳层区域。
 
-### 浮层与原生视图
+### 浮层与原生视图（window 模式）
 
 WebContentsView 位于 renderer DOM 之上，因此任何可能覆盖网页区域的应用内浮层都必须让网页视图暂时不可见，关闭后恢复：
 
@@ -636,7 +658,7 @@ WebContentsView 位于 renderer DOM 之上，因此任何可能覆盖网页区�
 - 浮层关闭时释放 lease；计数为 0 后恢复视图。
 - 不销毁或 reload WebContents，因此页面状态和播放中的网页不丢失。
 - 没有自定义应用视图时所有 hook 为 no-op。
-- 必须覆盖内嵌和独立窗口两种宿主。
+- 覆盖独立应用窗口宿主。
 - 展开菜单与弹窗的实际视觉验收不能只检查关闭状态或源码。
 
 ### 导航与安全
@@ -656,9 +678,12 @@ preload: none
 - 阻止 `file:`、`data:`、`javascript:`、`about:`、`synapse:` 和自定义协议。
 - 不绕过证书错误、HTTP 认证提示或混合内容限制。
 - 不向网页注入 Synapse 脚本、token、Cookie 或 bridge。
+- `iframe` 模式只通过 sandbox 隔离；`window` 模式通过 WebContents 设置和共享 session 策略约束。
 - 页面标题、favicon、下载文件名和错误文本都按不可信外部数据处理，不写入包含 URL 的远程日志。
 
 ### 权限
+
+以下 session 权限策略只适用于 `window` 模式。`iframe` 模式由 sandbox 直接阻断 storage、弹窗、顶层导航和设备权限。
 
 采用显式 allowlist。所有 permission request/check 和设备权限默认拒绝，只允许：
 
@@ -780,6 +805,8 @@ Renderer 只显示三类用户可见状态：
 - 旧服务端 404 时缓存应用可打开但配置只读。
 - 创建、修改、删除、幂等重试、网络超时和 409 恢复。
 - WebContentsView 创建、bounds、隐藏、恢复、切应用保留历史、关闭销毁。
+- `window` 模式创建独立窗口；`iframe` 模式拒绝 WebContentsView 和独立窗口入口。
+- iframe sandbox 不包含 `allow-same-origin`，刷新重建页面，外部打开只使用起始 URL。
 - 远端删除关闭视图、移除 Dock 且不抛未处理异常。
 - 共享 partition 跨 WebContents 和重启持久化，且不与非自定义应用 session 混用。
 - 顶层导航协议、弹窗协议、opener、共享 Cookie、弹窗数量上限。
@@ -792,9 +819,10 @@ Renderer 只显示三类用户可见状态：
 
 - 应用中心显示自定义分类、新建入口、固定状态和上下文菜单。
 - 创建表单校验、favicon 成功/失败、本地上传覆盖、URL 错误和提交中禁用。
-- 编辑名称、URL、图标；运行中应用不跳转。
+- 新建必须选择打开方式，iframe 限制文案可见；编辑名称、URL、图标和打开方式。
 - 删除确认、删除当前应用和远端删除后的焦点与导航。
-- 顶栏后退、前进、刷新、在浏览器打开及禁用状态。
+- iframe 顶栏只有刷新和在浏览器打开；window 顶栏包含后退、前进、刷新和在浏览器打开。
+- 从应用中心或 Dock 打开 `window` 应用不占用主窗口；iframe 应用在主窗口内显示。
 - 内嵌启动台、Dock 和独立窗口三种宿主均只有一条应用顶栏。
 - 离线时所有配置编辑入口禁用。
 - 未登录或认证失效时自定义应用隐藏，内置 Dock 可用且管理入口只读。
@@ -824,8 +852,8 @@ pnpm --filter @synapse/desktop run check:packaged-asar
 
 1. 建立 shared 契约、Prisma 新表、服务端 API、图标存储和 live revision。
 2. 建立桌面主进程 catalog、缓存、同步、幂等 mutation 和账号生命周期处理。
-3. 扩展应用中心、Dock、主窗口和独立窗口的统一应用描述与导航。
-4. 实现 WebContentsView 运行服务、共享 session、安全策略、上传下载和网页弹窗。
+3. 扩展应用中心、Dock、主窗口和独立窗口的统一应用描述与打开方式导航。
+4. 实现 iframe sandbox 与 window 模式的 WebContentsView 运行服务、共享 session、安全策略、上传下载和网页弹窗。
 5. 实现应用中心创建/编辑/删除 UI、图标获取与预览。
 6. 接管 Dock 的账号级布局与首次 bootstrap，保留旧本机配置作为回退。
 7. 补齐 occlusion、错误态、文档、发布说明和专项验收。

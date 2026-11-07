@@ -37,6 +37,7 @@ type CustomAppRecord = {
   readonly kind: string
   readonly name: string
   readonly startUrl: string
+  readonly openMode: string
   readonly iconId: string | null
   readonly iconSource: string
   readonly version: number
@@ -99,7 +100,12 @@ export class CustomAppsService {
 
         const existing = await tx.userCustomApp.findUnique({ where: { id: parsed.id } })
         if (existing) {
-          if (existing.userId !== userId || existing.name !== parsed.name || existing.startUrl !== parsed.startUrl) {
+          if (
+            existing.userId !== userId
+            || existing.name !== parsed.name
+            || existing.startUrl !== parsed.startUrl
+            || existing.openMode !== parsed.openMode
+          ) {
             throw new ConflictException("自定义应用 ID 已存在。")
           }
           return { created: false, revision: null }
@@ -120,6 +126,7 @@ export class CustomAppsService {
             kind: "web",
             name: parsed.name,
             startUrl: parsed.startUrl,
+            openMode: parsed.openMode,
             iconId: stagedIconId,
             iconSource: parsed.iconSource,
           },
@@ -189,6 +196,7 @@ export class CustomAppsService {
           data: {
             ...(parsed.name !== undefined ? { name: parsed.name } : {}),
             ...(parsed.startUrl !== undefined ? { startUrl: parsed.startUrl } : {}),
+            ...(parsed.openMode !== undefined ? { openMode: parsed.openMode } : {}),
             ...(parsed.iconSource !== undefined ? { iconSource: parsed.iconSource } : {}),
             ...(stagedIconId ? { iconId: stagedIconId } : {}),
             ...(clearIcon ? { iconId: null } : {}),
@@ -528,6 +536,7 @@ function toDto(row: CustomAppRecord): CustomAppDto {
     schemaVersion: 1,
     name: row.name,
     startUrl: row.startUrl,
+    openMode: row.openMode === "iframe" ? "iframe" : "window",
     iconUrl: row.iconId
       ? `${CUSTOM_APPS_API_PATHS.icons}/${encodeURIComponent(row.iconId)}`
       : null,

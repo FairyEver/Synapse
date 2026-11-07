@@ -208,9 +208,9 @@
 ## 用户自定义网页应用
 
 - 自定义应用是账号级动态网页应用，不是 System App；它不注册 MCP capability/tool、Workflow Node、Automation Action 或 Deep Link，也不进入移动端。
-- 应用定义、图标、删除墓碑和完整 Dock 布局以服务端账号数据为准；网页 Cookie、缓存和登录状态只存在本机共享的 `persist:synapse-custom-web` session，不进入 DataRepository、云端或备份。
-- 所有自定义应用共用本机网页 session；网页内容不得加载 Synapse preload、Node、同步 bridge 或默认 session。仅允许 HTTP(S)，敏感权限和设备权限默认拒绝，只放行受保护媒体播放。
-- 主进程 `WebContentsView` 是唯一网页承载方式；renderer 只提供顶栏、视口占位和操作入口。视口必须按实际内容区域约束，任何应用浮层打开时隐藏原生视图，不得遮挡 Dialog、菜单或账号入口。
+- 应用定义、图标、删除墓碑、完整 Dock 布局和打开方式以服务端账号数据为准。`openMode` 为 `iframe` 时只在主窗口内嵌；为 `window` 时只能在专用窗口运行；缺失该字段的旧数据按 `window` 处理。
+- `window` 模式共用本机 `persist:synapse-custom-web` session，网页 Cookie、缓存和登录状态不进入 DataRepository、云端或备份。`WebContentsView` 只用于该模式；renderer 负责顶栏、视口占位和原生视图遮挡协调。
+- `iframe` 模式必须使用不透明来源的 sandbox（`allow-forms allow-scripts`，不含 `allow-same-origin`），不得加载 preload、Node、同步 bridge 或继承主 renderer 的网页存储；父页面不读取其 URL、DOM 或导航历史。网站嵌入策略、登录、弹窗和跨站 Cookie 限制必须在创建选项中提前说明。
 - 应用与 Dock 配置断线只读；远端删除、非法孤儿 ID、认证失效和旧服务端都不得抛未处理异常。删除优先于旧设备修改，墓碑防止已删除应用被重放创建。
 - Dock 布局按同账号跨设备同步，首次登录只从旧本机 `core.config` 初始化一次；旧字段保作回退，新 Dock 编辑路径不得继续写入。
 

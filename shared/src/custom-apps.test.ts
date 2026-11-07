@@ -77,6 +77,36 @@ describe("custom app contracts", () => {
     }).success).toBe(false)
   })
 
+  it("defaults legacy payloads to window mode and accepts iframe mode", () => {
+    expect(customAppCreateInputSchema.parse({
+      operationId: "create-legacy",
+      id: appId,
+      name: "阅读",
+      startUrl: "https://example.com/read",
+      iconSource: "favicon",
+    }).openMode).toBe("window")
+
+    expect(customAppCreateInputSchema.parse({
+      operationId: "create-iframe",
+      id: appId,
+      name: "阅读",
+      startUrl: "https://example.com/read",
+      iconSource: "favicon",
+      openMode: "iframe",
+    }).openMode).toBe("iframe")
+
+    const snapshot = customAppSnapshotSchema.parse({
+      schemaVersion: 1,
+      revision: 1,
+      initialized: true,
+      dockCatalogVersion: 1,
+      apps: [customAppDtoFixture()],
+      dockAppIds: ["launcher"],
+      dockMigrationIds: [],
+    })
+    expect(snapshot.apps[0]?.openMode).toBe("window")
+  })
+
   it("normalizes custom Dock ids and inserts new pins before launcher", () => {
     expect(normalizeCustomAppDockIds(
       [appId, "ghost", appId, "agent"],

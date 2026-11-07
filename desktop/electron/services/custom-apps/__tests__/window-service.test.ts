@@ -29,6 +29,13 @@ describe("CustomWebAppWindowService", () => {
     expect(window.close).toHaveBeenCalled()
     expect(runtime.destroyApp).toHaveBeenCalledWith(appId)
   })
+
+  it("rejects iframe apps without creating a dedicated window", async () => {
+    const { service, createWindow } = createHarness({ openMode: "iframe" })
+
+    await expect(service.open(appId)).rejects.toThrow("does not use a dedicated window")
+    expect(createWindow).not.toHaveBeenCalled()
+  })
 })
 
 describe("planCustomWebAppWindowOpen", () => {
@@ -51,8 +58,8 @@ describe("planCustomWebAppWindowOpen", () => {
   })
 })
 
-function createHarness() {
-  const app = customApp()
+function createHarness(overrides: Partial<CustomAppDto> = {}) {
+  const app = customApp(overrides)
   const runtime = { destroyApp: vi.fn(), destroyAll: vi.fn() }
   const window = {
     webContents: { id: 10 },
@@ -83,17 +90,19 @@ function createHarness() {
   return { service, createWindow, window, runtime }
 }
 
-function customApp(): CustomAppDto {
+function customApp(overrides: Partial<CustomAppDto> = {}): CustomAppDto {
   return {
     id: appId,
     kind: "web",
     schemaVersion: 1,
     name: "阅读",
     startUrl: "https://example.com/read",
+    openMode: "window",
     iconUrl: null,
     iconSource: "favicon",
     version: 1,
     createdAt: "2026-11-07T00:00:00.000Z",
     updatedAt: "2026-11-07T00:00:00.000Z",
+    ...overrides,
   }
 }

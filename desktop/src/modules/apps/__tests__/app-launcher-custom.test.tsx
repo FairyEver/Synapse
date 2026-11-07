@@ -52,6 +52,7 @@ describe("AppLauncherList custom apps", () => {
     await act(async () => button("新建自定义应用").click())
     expect(onCreateCustomApp).toHaveBeenCalledTimes(1)
 
+    expect(document.body.textContent).toContain("独立窗口")
     await act(async () => button("阅读").click())
     expect(onOpenCustomApp).toHaveBeenCalledWith(customApp)
 
@@ -69,6 +70,7 @@ const customApp: CustomAppDto = {
   schemaVersion: 1,
   name: "阅读",
   startUrl: "https://example.com/read",
+  openMode: "window",
   iconUrl: null,
   iconSource: "favicon",
   version: 1,
@@ -78,7 +80,7 @@ const customApp: CustomAppDto = {
 
 function button(label: string): HTMLButtonElement {
   const match = [...document.querySelectorAll<HTMLButtonElement>("button")]
-    .find((candidate) => candidate.textContent?.trim() === label)
+    .find((candidate) => candidate.textContent?.trim() === label || candidate.getAttribute("aria-label") === label)
   if (!match) throw new Error(`Missing button ${label}`)
   return match
 }

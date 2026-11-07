@@ -60,6 +60,7 @@ function app(name: string, iconUrl: string | null = null): CustomAppSnapshotDto[
     schemaVersion: 1,
     name,
     startUrl: "https://example.com/read",
+    openMode: "window",
     iconUrl,
     iconSource: iconUrl ? "custom" : "favicon",
     version: 1,

@@ -83,11 +83,13 @@ describe("CustomAppsController", () => {
       name: "阅读",
       startUrl: "https://example.com/read",
       iconSource: "favicon",
+      openMode: "iframe",
     }
     await request(app!.getHttpServer()).post("/api/custom-apps/apps").send(createBody).expect(201)
     expect(service.create).toHaveBeenCalledWith("user-1", expect.objectContaining({
       id: appId,
       name: "阅读",
+      openMode: "iframe",
     }))
 
     await request(app!.getHttpServer()).patch(`/api/custom-apps/apps/${appId}`).send({
@@ -113,6 +115,15 @@ describe("CustomAppsController", () => {
       iconSource: "favicon",
     }).expect(400)
 
+    await request(app!.getHttpServer()).post("/api/custom-apps/apps").send({
+      operationId: "create-2",
+      id: appId,
+      name: "阅读",
+      startUrl: "https://example.com/read",
+      iconSource: "favicon",
+      openMode: "tab",
+    }).expect(400)
+
     await request(app!.getHttpServer()).patch(`/api/custom-apps/apps/${appId}`).send({
       operationId: "update-1",
       name: "",
@@ -120,6 +131,20 @@ describe("CustomAppsController", () => {
 
     expect(service.create).not.toHaveBeenCalled()
     expect(service.update).not.toHaveBeenCalled()
+  })
+
+  it("defaults legacy create requests without an open mode to window", async () => {
+    await request(app!.getHttpServer()).post("/api/custom-apps/apps").send({
+      operationId: "create-legacy",
+      id: appId,
+      name: "阅读",
+      startUrl: "https://example.com/read",
+      iconSource: "favicon",
+    }).expect(201)
+
+    expect(service.create).toHaveBeenCalledWith("user-1", expect.objectContaining({
+      openMode: "window",
+    }))
   })
 
   it("routes Dock bootstrap and operations to the current user", async () => {

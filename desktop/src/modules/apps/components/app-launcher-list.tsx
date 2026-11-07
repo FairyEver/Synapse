@@ -2,6 +2,7 @@ import { ChevronRight, Globe, List, Pencil, Pin, Search, Trash2, X } from "lucid
 import type { CustomAppDto } from "@synapse/shared"
 import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -262,11 +263,15 @@ export function AppLauncherList({
                       <Button
                         type="button"
                         variant="ghost"
+                        aria-label={app.name}
                         className="h-auto min-h-10 min-w-0 flex-1 justify-start gap-3 px-2 py-2 text-left whitespace-normal"
                         onClick={() => onOpenCustomApp?.(app)}
                       >
                         <CustomAppIconPreview src={app.iconUrl} />
-                        <span className="min-w-0 wrap-anywhere">{app.name}</span>
+                        <span className="min-w-0 flex-1 wrap-anywhere">{app.name}</span>
+                        <Badge variant="outline">
+                          {app.openMode === "iframe" ? "应用内嵌" : "独立窗口"}
+                        </Badge>
                         <ChevronRight aria-hidden="true" className="ml-auto text-muted-foreground opacity-0 group-hover/app-row:opacity-100 group-focus-within/app-row:opacity-100" />
                       </Button>
                       <Button

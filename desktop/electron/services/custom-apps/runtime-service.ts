@@ -65,6 +65,9 @@ export class CustomWebAppRuntimeService {
   async attach(host: BrowserWindow, appId: CustomAppId): Promise<void> {
     const app = this.deps.getApp(appId)
     if (!app) throw new Error("Custom app does not exist.")
+    if (app.openMode !== "window") {
+      throw new Error("Custom app does not use a native web view.")
+    }
     const hostState = this.hostState(host)
     if (hostState.currentAppId === appId) {
       this.applyVisibility(host, hostState)

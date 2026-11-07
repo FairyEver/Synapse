@@ -148,6 +148,7 @@ model UserCustomApp {
   kind           String                   @default("web") @db.VarChar(32)
   name           String                   @db.VarChar(64)
   startUrl       String                   @db.VarChar(2048)
+  openMode       String                   @default("window") @db.VarChar(16)
   iconId         String?                  @unique @db.VarChar(64)
   icon           UserCustomAppIconAsset?  @relation("UserCustomAppCurrentIcon", fields: [iconId], references: [id], onDelete: SetNull)
   iconSource     String                   @default("favicon") @db.VarChar(16)

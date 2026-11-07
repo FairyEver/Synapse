@@ -60,6 +60,9 @@ export type SynapseAppId = SynapseSystemAppId | CustomAppId
 export const customAppIconSourceSchema = z.enum(["favicon", "custom"])
 export type CustomAppIconSource = z.infer<typeof customAppIconSourceSchema>
 
+export const customAppOpenModeSchema = z.enum(["iframe", "window"])
+export type CustomAppOpenMode = z.infer<typeof customAppOpenModeSchema>
+
 export const customAppKindSchema = z.string().trim().min(1).max(32)
 
 export function countUnicodeCodePoints(value: string): number {
@@ -104,6 +107,7 @@ export const customAppDtoSchema = z.object({
   schemaVersion: z.literal(1),
   name: z.string().min(1).max(256),
   startUrl: customAppUrlSchema,
+  openMode: customAppOpenModeSchema.default("window"),
   iconUrl: z.string().min(1).max(2048).nullable(),
   iconSource: customAppIconSourceSchema,
   version: z.number().int().positive(),
@@ -117,6 +121,7 @@ export type CustomAppDto = {
   readonly schemaVersion: 1
   readonly name: string
   readonly startUrl: string
+  readonly openMode: CustomAppOpenMode
   readonly iconUrl: string | null
   readonly iconSource: CustomAppIconSource
   readonly version: number
@@ -172,6 +177,7 @@ export const customAppCreateInputSchema = z.object({
   id: customAppIdSchema,
   name: customAppNameSchema,
   startUrl: customAppUrlSchema,
+  openMode: customAppOpenModeSchema.default("window"),
   iconSource: customAppIconSourceSchema,
   iconPngBase64: iconPngBase64Schema.optional(),
 }).strict()
@@ -182,11 +188,13 @@ export const customAppUpdateInputSchema = z.object({
   operationId: z.string().trim().min(1).max(200),
   name: customAppNameSchema.optional(),
   startUrl: customAppUrlSchema.optional(),
+  openMode: customAppOpenModeSchema.optional(),
   iconSource: customAppIconSourceSchema.optional(),
   iconPngBase64: iconPngBase64Schema.nullable().optional(),
 }).strict().refine(
   (value) => value.name !== undefined
     || value.startUrl !== undefined
+    || value.openMode !== undefined
     || value.iconSource !== undefined
     || value.iconPngBase64 !== undefined,
   "At least one field must change.",

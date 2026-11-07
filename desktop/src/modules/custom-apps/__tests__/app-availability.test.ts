@@ -11,13 +11,20 @@ describe("custom app availability", () => {
     expect(shouldReturnToLauncher(appId, snapshot([]))).toBe(true)
   })
 
-  it("keeps an available custom app and every system app active", () => {
-    expect(shouldReturnToLauncher(appId, snapshot([appId]))).toBe(false)
+  it("keeps iframe apps in the main shell and returns window-only apps to the launcher", () => {
+    expect(shouldReturnToLauncher(appId, snapshot([appId], "iframe"))).toBe(false)
+    expect(shouldReturnToLauncher(appId, snapshot([appId], "window"))).toBe(true)
+  })
+
+  it("keeps every system app active", () => {
     expect(shouldReturnToLauncher("agent", null)).toBe(false)
   })
 })
 
-function snapshot(appIds: readonly CustomAppId[]): CustomAppSnapshotDto {
+function snapshot(
+  appIds: readonly CustomAppId[],
+  openMode: "iframe" | "window" = "iframe",
+): CustomAppSnapshotDto {
   return {
     schemaVersion: 1 as const,
     revision: 1,
@@ -29,6 +36,7 @@ function snapshot(appIds: readonly CustomAppId[]): CustomAppSnapshotDto {
       schemaVersion: 1 as const,
       name: "阅读",
       startUrl: "https://example.com/read",
+      openMode,
       iconUrl: null,
       iconSource: "favicon" as const,
       version: 1,

@@ -17,7 +17,11 @@ export function CustomAppWindowApp() {
     : null
 
   useEffect(() => {
-    if (appId && customApps.state.syncState === "ready" && !app) window.close()
+    if (
+      appId
+      && customApps.state.syncState === "ready"
+      && (!app || app.openMode !== "window")
+    ) window.close()
   }, [app, appId, customApps.state.syncState])
 
   if (!appId) return <WindowError message="应用不存在。" />
@@ -32,6 +36,9 @@ export function CustomAppWindowApp() {
     return <WindowError message={
       customApps.state.syncState === "signed-out" ? "请先登录 Synapse。" : "应用不存在或已删除。"
     } />
+  }
+  if (app.openMode !== "window") {
+    return <WindowError message="该应用只在主窗口内打开。" />
   }
   return <CustomWebAppContent app={app} appId={app.id} windowMode />
 }

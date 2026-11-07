@@ -32,6 +32,7 @@ describe("CreateEditCustomAppDialog", () => {
     await setInput("名称", "阅读")
     await setInput("网址", "https://example.com/read")
     await act(async () => button("选择图片").click())
+    await act(async () => radio("应用内嵌").click())
     await act(async () => button("创建").click())
 
     expect(chooseIcon).toHaveBeenCalledTimes(1)
@@ -40,9 +41,39 @@ describe("CreateEditCustomAppDialog", () => {
       id: expect.stringMatching(/^cwa_/u),
       name: "阅读",
       startUrl: "https://example.com/read",
+      openMode: "iframe",
       iconSource: "custom",
       iconPngBase64: "iVBOR...",
     }))
+  })
+
+  it("requires an explicit open mode before creating", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    await renderDialog({ onSubmit })
+
+    await setInput("名称", "阅读")
+    await setInput("网址", "https://example.com/read")
+
+    expect(button("创建").disabled).toBe(true)
+    await act(async () => button("创建").click())
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("submits an open mode change when editing", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    await renderDialog({
+      mode: "edit",
+      app: customApp(),
+      onSubmit,
+    })
+
+    await act(async () => radio("应用内嵌").click())
+    await act(async () => button("保存").click())
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      operationId: expect.any(String),
+      openMode: "iframe",
+    })
   })
 
   it("retries favicon discovery when the URL changes and no custom icon is selected", async () => {
@@ -99,6 +130,7 @@ describe("CreateEditCustomAppDialog", () => {
     await renderDialog({ onSubmit })
     await setInput("名称", "阅读")
     await setInput("网址", "https://example.com/read")
+    await act(async () => radio("独立窗口").click())
 
     await act(async () => button("创建").click())
     await act(async () => button("创建").click())
@@ -159,6 +191,7 @@ function customApp(overrides: Partial<import("@synapse/shared").CustomAppDto> = 
     schemaVersion: 1 as const,
     name: "阅读",
     startUrl: "https://example.com/read",
+    openMode: "window" as const,
     iconUrl: null,
     iconSource: "favicon" as const,
     version: 1,
@@ -176,6 +209,12 @@ async function setInput(label: string, value: string) {
 function input(label: string): HTMLInputElement {
   const element = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)
   if (!element) throw new Error(`Missing input ${label}`)
+  return element
+}
+
+function radio(label: string): HTMLInputElement {
+  const element = document.querySelector<HTMLInputElement>(`input[type="radio"][aria-label="${label}"]`)
+  if (!element) throw new Error(`Missing radio ${label}`)
   return element
 }
 

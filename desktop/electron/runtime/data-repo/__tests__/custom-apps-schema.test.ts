@@ -26,6 +26,7 @@ describe("custom app DataRepository schema", () => {
           schemaVersion: 1,
           name: "阅读",
           startUrl: "https://example.com/read",
+            openMode: "window",
           iconUrl: null,
           iconSource: "favicon",
           version: 1,

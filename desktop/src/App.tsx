@@ -3,6 +3,7 @@ import type { MainNavigationInput } from "@/modules/apps/main-navigation"
 import { AgentShareRenderHost } from "@/modules/agent/share/render-host"
 import { runAppNavigation } from "@/app-shell/navigation-guard"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { isAccountUiVisible } from "@/app-shell/account-ui-visibility"
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { AppShellDock } from "@/app-shell/components/app-shell-dock"
@@ -58,11 +59,11 @@ import { isSystemAppEntryVisible } from "@/modules/apps/visibility"
 import { EmbeddedSystemAppShell } from "@/modules/apps/components/embedded-system-app-shell"
 import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transition"
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
-import { isSystemAppId, type SynapseSystemAppId, type SynapseAppId } from "@/modules/apps/types"
+import { isSystemAppId, type SynapseAppId } from "@/modules/apps/types"
 import { CustomAppsProvider, useCustomApps } from "@/modules/custom-apps/context"
 import { shouldReturnToLauncher } from "@/modules/custom-apps/app-availability"
 import { NativeSurfaceOcclusionProvider } from "@/modules/custom-apps/native-surface-occlusion"
-import { CustomWebAppContent } from "@/modules/custom-apps/web-app-content"
+import { IframeCustomAppContent } from "@/modules/custom-apps/iframe-app-content"
 import type { CustomAppId } from "@synapse/shared"
 import { SynapseSkillAutoUpdateHost } from "../app-capabilities/synapse-skill/renderer/auto-update"
 
@@ -355,7 +356,23 @@ function MainAppInner() {
 
   const accountUiVisible = isAccountUiVisible()
 
+  const openCustomAppWindow = useCallback((appId: CustomAppId) => {
+    const bridge = getSynapseBridge()
+    if (!bridge) return
+    void bridge.customApps.window.open(appId).catch((error) => {
+      logger.error("Failed to open custom app window.", { appId, error })
+      toast.error("打开应用失败")
+    })
+  }, [])
+
   const handleDockValueChange = useCallback((value: ActiveAppId) => {
+    if (!isSystemAppId(value)) {
+      const customApp = customApps.state.snapshot?.apps.find((app) => app.id === value)
+      if (customApp?.openMode === "window") {
+        openCustomAppWindow(customApp.id)
+        return
+      }
+    }
     if (value === activeAppIdRef.current) {
       if (value === "launcher") {
         setLauncherResetKey((current) => current + 1)
@@ -364,14 +381,20 @@ function MainAppInner() {
     }
 
     setActiveAppId(value, "navigation")
-  }, [setActiveAppId])
+  }, [customApps.state.snapshot, openCustomAppWindow, setActiveAppId])
 
   const openCustomApp = useCallback((appId: CustomAppId) => {
+    const app = customApps.state.snapshot?.apps.find((candidate) => candidate.id === appId)
+    if (!app) return
+    if (app.openMode === "window") {
+      openCustomAppWindow(app.id)
+      return
+    }
     void runAppNavigation(() => {
       discardMainTarget()
       selectApp(appId, "navigation")
     })
-  }, [discardMainTarget, selectApp])
+  }, [customApps.state.snapshot, discardMainTarget, openCustomAppWindow, selectApp])
 
   const activeSystemApp = isSystemAppId(activeAppId) ? getSystemAppManifest(activeAppId) : null
 
@@ -405,14 +428,8 @@ function MainAppInner() {
                 appName={activeCustomApp?.name ?? activeSystemApp?.name ?? ""}
                 mode="dock"
               >
-                {activeCustomApp ? (
-                  <CustomWebAppContent
-                    app={activeCustomApp}
-                    appId={activeCustomApp.id}
-                    onOpenWindow={() => {
-                      void getSynapseBridge()?.customApps.window.open(activeCustomApp.id)
-                    }}
-                  />
+                {activeCustomApp?.openMode === "iframe" ? (
+                  <IframeCustomAppContent key={activeCustomApp.id} app={activeCustomApp} />
                 ) : isSystemAppId(activeAppId) ? (
                   <SystemAppContent
                     appId={activeAppId}

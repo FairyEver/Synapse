@@ -19,6 +19,13 @@ describe("CustomWebAppRuntimeService", () => {
     expect(host.contentView.addChildView).toHaveBeenLastCalledWith(createdViews[0])
   })
 
+  it("rejects iframe apps from the native web view runtime", async () => {
+    const { host, createdViews, runtime } = createHarness({ openMode: "iframe" })
+
+    await expect(runtime.attach(host, appId)).rejects.toThrow("does not use a native web view")
+    expect(createdViews).toHaveLength(0)
+  })
+
   it("clamps a viewport below the app header and inside the window", async () => {
     const { host, createdViews, runtime } = createHarness()
     await runtime.attach(host, appId)
@@ -110,13 +117,20 @@ describe("CustomWebAppRuntimeService", () => {
   })
 })
 
-function createHarness({ zoomFactor = 1 }: { readonly zoomFactor?: number } = {}) {
+function createHarness({
+  openMode = "window",
+  zoomFactor = 1,
+}: {
+  readonly openMode?: "iframe" | "window"
+  readonly zoomFactor?: number
+} = {}) {
   const app: CustomAppDto = {
     id: appId,
     kind: "web",
     schemaVersion: 1,
     name: "阅读",
     startUrl: "https://example.com/read",
+    openMode,
     iconUrl: null,
     iconSource: "favicon",
     version: 1,

@@ -25,6 +25,26 @@ describe("CustomAppsCatalogService", () => {
     })
   })
 
+  it("normalizes legacy cached apps without an open mode", async () => {
+    const harness = createHarness()
+    const legacy = snapshot(4)
+    harness.cache.set("user-1", {
+      id: "user-1",
+      schemaVersion: 1,
+      accountId: "user-1",
+      cachedAt: "2026-11-07T00:00:00.000Z",
+      snapshot: {
+        ...legacy,
+        apps: legacy.apps.map(({ openMode: _openMode, ...app }) => app),
+      },
+    })
+    harness.account.setAuthenticatedOffline("user-1")
+
+    await harness.catalog.initialize()
+
+    expect(harness.catalog.getState().snapshot?.apps[0]?.openMode).toBe("window")
+  })
+
   it("discards a snapshot request after account switch", async () => {
     const harness = createHarness()
     const deferred = deferredValue<CustomAppSnapshotDto>()
@@ -178,6 +198,7 @@ describe("CustomAppsCatalogService", () => {
       id: appId,
       name: "阅读",
       startUrl: "https://example.com/read",
+      openMode: "window",
       iconSource: "favicon",
     })
     harness.account.signOut()
@@ -355,6 +376,7 @@ function snapshot(revision: number): CustomAppSnapshotDto {
       schemaVersion: 1,
       name: "阅读",
       startUrl: "https://example.com/read",
+      openMode: "window",
       iconUrl: null,
       iconSource: "favicon",
       version: 1,

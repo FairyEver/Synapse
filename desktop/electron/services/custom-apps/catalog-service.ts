@@ -1,5 +1,4 @@
 import {
-  CUSTOM_APPS_API_PATHS,
   customAppSnapshotSchema,
   customAppsClientStateSchema,
   type CustomAppCreateInput,
@@ -317,7 +316,11 @@ export class CustomAppsCatalogService {
   private async readCache(accountId: string): Promise<CustomAppsSnapshotEntryV1 | null> {
     try {
       const entry = await this.snapshots.get(accountId)
-      return entry?.accountId === accountId ? entry : null
+      if (entry?.accountId !== accountId) return null
+      return {
+        ...entry,
+        snapshot: customAppSnapshotSchema.parse(entry.snapshot),
+      }
     } catch {
       return null
     }
