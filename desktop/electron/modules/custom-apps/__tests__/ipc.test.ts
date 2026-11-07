@@ -15,7 +15,14 @@ describe("customAppIpcModule", () => {
     expect(customAppIpcModule.methods.applyDockOperation.operationId).toBe("app.custom_apps.dock.apply")
     expect(customAppIpcModule.methods.fetchFavicon.operationId).toBe("app.custom_apps.icon.fetch_favicon")
     expect(customAppIpcModule.methods.chooseIcon.operationId).toBe("app.custom_apps.icon.choose")
+    expect(customAppIpcModule.methods.attachView.operationId).toBe("app.custom_apps.view.attach")
+    expect(customAppIpcModule.methods.setViewBounds.operationId).toBe("app.custom_apps.view.set_bounds")
+    expect(customAppIpcModule.methods.detachView.operationId).toBe("app.custom_apps.view.detach")
+    expect(customAppIpcModule.methods.setViewOccluded.operationId).toBe("app.custom_apps.view.set_occluded")
+    expect(customAppIpcModule.methods.getNavigationState.operationId).toBe("app.custom_apps.navigation.get_state")
+    expect(customAppIpcModule.methods.navigate.operationId).toBe("app.custom_apps.navigation.perform")
     expect(customAppIpcModule.events.changed.operationId).toBe("app.custom_apps.operation.changed")
+    expect(customAppIpcModule.events.navigationStateChanged.operationId).toBe("app.custom_apps.navigation.state_changed")
   })
 
   it("validates create, update and Dock requests", () => {

@@ -273,6 +273,7 @@ import { accountService } from "../services/account-service"
 import { CUSTOM_APPS_SERVICE_ID, CustomAppsCatalogService } from "../services/custom-apps/catalog-service"
 import { CUSTOM_APP_FAVICON_SERVICE_ID, CustomAppFaviconService } from "../services/custom-apps/favicon-service"
 import { configureCustomWebSession, getCustomWebSession } from "../services/custom-apps/web-session"
+import { CUSTOM_WEB_APP_RUNTIME_SERVICE_ID, CustomWebAppRuntimeService } from "../services/custom-apps/runtime-service"
 import { liveConnectionService } from "../services/live-connection-service-instance"
 import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-constants"
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
@@ -892,6 +893,23 @@ export const coreCustomAppFaviconDescriptor: ServiceDescriptor<CustomAppFaviconS
   criticality: "degraded",
   create() {
     return new CustomAppFaviconService()
+  },
+}
+
+export const coreCustomWebAppRuntimeDescriptor: ServiceDescriptor<CustomWebAppRuntimeService> = {
+  id: CUSTOM_WEB_APP_RUNTIME_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: [CUSTOM_APPS_SERVICE_ID, "core.event-bus"],
+  create(ctx) {
+    const catalog = ctx.registry.get<CustomAppsCatalogService>(CUSTOM_APPS_SERVICE_ID)
+    return new CustomWebAppRuntimeService({
+      getApp: (appId) => catalog.getState().snapshot?.apps.find((app) => app.id === appId) ?? null,
+      getSession: getCustomWebSession,
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
+    })
+  },
+  stop(instance) {
+    instance.destroyAll()
   },
 }
 

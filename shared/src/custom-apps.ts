@@ -155,6 +155,18 @@ export const customAppsClientStateSchema = z.object({
 export type CustomAppsSyncState = z.infer<typeof customAppsSyncStateSchema>
 export type CustomAppsClientState = z.infer<typeof customAppsClientStateSchema>
 
+export const customWebAppNavigationActionSchema = z.enum(["back", "forward", "reload", "open-external"])
+export type CustomWebAppNavigationAction = z.infer<typeof customWebAppNavigationActionSchema>
+
+export const customWebAppViewStateSchema = z.object({
+  canGoBack: z.boolean(),
+  canGoForward: z.boolean(),
+  isLoading: z.boolean(),
+  currentUrl: z.string().min(1).nullable(),
+  error: z.enum(["none", "load_failed", "certificate"]),
+}).strict()
+export type CustomWebAppViewState = z.infer<typeof customWebAppViewStateSchema>
+
 export const customAppCreateInputSchema = z.object({
   operationId: z.string().trim().min(1).max(200),
   id: customAppIdSchema,

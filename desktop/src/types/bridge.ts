@@ -8,6 +8,8 @@ import type {
   CustomAppSnapshotDto,
   CustomAppUpdateInput,
   CustomAppsClientState,
+  CustomWebAppNavigationAction,
+  CustomWebAppViewState,
 } from "@synapse/shared/custom-apps-contracts" with { "resolution-mode": "import" }
 import type {
   DatabaseChangeEvent,
@@ -889,6 +891,23 @@ export type SynapseBridge = {
     applyDockOperation: (input: CustomAppDockOperation) => Promise<CustomAppSnapshotDto>
     fetchFavicon: (url: string) => Promise<{ pngBase64: string; dataUrl: string } | null>
     chooseIcon: () => Promise<{ pngBase64: string; dataUrl: string } | null>
+    view: {
+      attach: (input: {
+        appId: CustomAppId
+        bounds?: { x: number; y: number; width: number; height: number }
+      }) => Promise<void>
+      setBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<void>
+      detach: () => Promise<void>
+      setOccluded: (occluded: boolean) => Promise<void>
+    }
+    navigation: {
+      getState: () => Promise<CustomWebAppViewState>
+      perform: (action: CustomWebAppNavigationAction) => Promise<CustomWebAppViewState>
+      onStateChanged: (listener: (input: {
+        appId: CustomAppId
+        state: CustomWebAppViewState
+      }) => void) => () => void
+    }
     onChanged: (listener: (state: CustomAppsClientState) => void) => () => void
   }
   documentTemplate: {

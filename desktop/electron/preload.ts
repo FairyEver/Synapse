@@ -26,7 +26,12 @@ import type {
   SynapseMeetingTranscriptionCompletedEvent,
 } from "../src/types/meeting"
 import type { SynapseLiveStateChangedEvent } from "../src/types/live"
-import type { CustomAppsClientState } from "@synapse/shared/custom-apps-contracts" with { "resolution-mode": "import" }
+import type {
+  CustomAppId,
+  CustomAppsClientState,
+  CustomWebAppNavigationAction,
+  CustomWebAppViewState,
+} from "@synapse/shared/custom-apps-contracts" with { "resolution-mode": "import" }
 import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
 import type { InstallStatusChangedEvent } from "../src/types/install-status"
@@ -441,6 +446,20 @@ const synapseBridge: SynapseBridge = {
     applyDockOperation: (input) => invoke(IPC_CHANNELS.customApps.applyDockOperation)(input),
     fetchFavicon: (url) => invoke(IPC_CHANNELS.customApps.fetchFavicon)({ url }),
     chooseIcon: () => invoke(IPC_CHANNELS.customApps.chooseIcon)(),
+    view: {
+      attach: (input) => invoke(IPC_CHANNELS.customApps.attachView)(input),
+      setBounds: (bounds) => invoke(IPC_CHANNELS.customApps.setViewBounds)({ bounds }),
+      detach: () => invoke(IPC_CHANNELS.customApps.detachView)(),
+      setOccluded: (occluded) => invoke(IPC_CHANNELS.customApps.setViewOccluded)({ occluded }),
+    },
+    navigation: {
+      getState: () => invoke(IPC_CHANNELS.customApps.getNavigationState)(),
+      perform: (action: CustomWebAppNavigationAction) => invoke(IPC_CHANNELS.customApps.navigate)({ action }),
+      onStateChanged: createDomainEventPayloadSubscription<{
+        appId: CustomAppId
+        state: CustomWebAppViewState
+      }>(subscribe, "account", "custom-apps.view.changed"),
+    },
     onChanged: createDomainEventPayloadSubscription<CustomAppsClientState>(
       subscribe,
       "account",
