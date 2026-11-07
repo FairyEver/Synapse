@@ -1,8 +1,7 @@
 import { useState } from "react"
-import { ArrowLeft, ArrowRight, ExternalLink, Globe2, RotateCw } from "lucide-react"
+import { ArrowLeft, ArrowRight, ExternalLink, RotateCw } from "lucide-react"
 import type { CustomAppDto } from "@synapse/shared"
 
-import { Badge } from "@/components/ui/badge"
 import { createRendererLogger } from "@/app-shell/logging"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
 import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
@@ -21,13 +20,7 @@ export function IframeCustomAppContent({ app }: { readonly app: CustomAppDto }) 
   const [loading, setLoading] = useState(true)
   const sandbox = customAppIframeSandbox(sourceUrl, window.location.href)
 
-  const title = (
-    <div className="flex min-w-0 items-center gap-2">
-      <Globe2 className="size-4 shrink-0 text-muted-foreground" />
-      <h2 className="truncate text-sm font-semibold">{app.name}</h2>
-      <Badge variant="outline">应用内嵌</Badge>
-    </div>
-  )
+  const title = <h2 className="truncate text-sm font-semibold">{app.name}</h2>
 
   const actions = (
     <>

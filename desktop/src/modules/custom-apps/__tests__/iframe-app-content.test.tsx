@@ -48,7 +48,11 @@ describe("IframeCustomAppContent", () => {
     render()
 
     const iframe = document.querySelector<HTMLIFrameElement>("iframe")
+    const headerLeft = document.querySelector("[data-system-app-top-bar-left]")
     expect(iframe?.getAttribute("src")).toBe(app.startUrl)
+    expect(headerLeft?.textContent).toBe(app.name)
+    expect(headerLeft?.querySelector("svg")).toBeNull()
+    expect(headerLeft?.querySelector('[data-slot="badge"]')).toBeNull()
     expect(iframe?.getAttribute("sandbox")).toContain("allow-same-origin")
     expect(iframe?.getAttribute("sandbox")).toContain("allow-forms")
     expect(iframe?.getAttribute("sandbox")).toContain("allow-scripts")
