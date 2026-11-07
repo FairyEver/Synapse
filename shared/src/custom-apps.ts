@@ -109,7 +109,7 @@ export const customAppDtoSchema = z.object({
   version: z.number().int().positive(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
-}).strict()
+})
 
 export type CustomAppDto = {
   readonly id: CustomAppId
@@ -132,7 +132,7 @@ export const customAppSnapshotSchema = z.object({
   apps: z.array(customAppDtoSchema).max(100),
   dockAppIds: z.array(z.string().trim().min(1).max(200)).max(200),
   dockMigrationIds: z.array(z.string().trim().min(1).max(200)).max(200),
-}).strict()
+})
 
 export type CustomAppSnapshotDto = z.infer<typeof customAppSnapshotSchema>
 
@@ -206,7 +206,7 @@ const customAppDockMigrationSchema = z.object({
       appId: z.string().trim().min(1).max(200),
       targetAppId: z.string().trim().min(1).max(200),
     }).strict(),
-  ])).min(1).max(100),
+  ])).max(100),
 }).strict()
 
 export const customAppDockActionSchema = z.discriminatedUnion("type", [

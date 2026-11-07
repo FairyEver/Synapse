@@ -20,6 +20,7 @@ import {
   useNativeSurfaceOcclusion,
 } from "../native-surface-occlusion"
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { DropdownMenu, DropdownMenuContent } from "@/components/ui/dropdown-menu"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -68,6 +69,22 @@ describe("NativeSurfaceOcclusionProvider", () => {
         <ContextMenu>
           <ContextMenuTrigger>打开菜单</ContextMenuTrigger>
         </ContextMenu>
+      </NativeSurfaceOcclusionProvider>,
+    ))
+
+    expect(setOccluded).not.toHaveBeenCalled()
+  })
+
+  it("keeps force-mounted closed dropdown content from acquiring a lease", async () => {
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+
+    await act(async () => root!.render(
+      <NativeSurfaceOcclusionProvider>
+        <DropdownMenu>
+          <DropdownMenuContent forceMount>菜单</DropdownMenuContent>
+        </DropdownMenu>
       </NativeSurfaceOcclusionProvider>,
     ))
 

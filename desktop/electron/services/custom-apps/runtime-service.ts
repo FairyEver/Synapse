@@ -9,6 +9,7 @@ import {
   BrowserWindow,
   WebContentsView,
   type Session,
+  type WebContents,
 } from "electron"
 
 import type { EventBus } from "../../runtime/event-bus"
@@ -224,10 +225,21 @@ export class CustomWebAppRuntimeService {
     view.webContents.on("page-title-updated", (event) => {
       event.preventDefault()
     })
-    view.webContents.on("will-navigate", (event, url) => {
+    this.hardenWebContents(record, view.webContents)
+    return record
+  }
+
+  private hardenWebContents(
+    record: ViewRecord,
+    webContents: WebContents,
+  ): void {
+    webContents.on("will-navigate", (event, url) => {
       if (!isAllowedCustomWebUrl(url)) event.preventDefault()
     })
-    view.webContents.setWindowOpenHandler(({ url }) => {
+    webContents.on("will-redirect", (event, url) => {
+      if (!isAllowedCustomWebUrl(url)) event.preventDefault()
+    })
+    webContents.setWindowOpenHandler(({ url }) => {
       if (planCustomWebAppWindowOpen({ url, activePopupCount: record.popupCount }).action === "deny") {
         return { action: "deny" }
       }
@@ -245,14 +257,14 @@ export class CustomWebAppRuntimeService {
         },
       }
     })
-    view.webContents.on("did-create-window", (childWindow) => {
+    webContents.on("did-create-window", (childWindow) => {
       record.popups.add(childWindow)
+      this.hardenWebContents(record, childWindow.webContents)
       childWindow.once("closed", () => {
         record.popups.delete(childWindow)
         record.popupCount = Math.max(0, record.popupCount - 1)
       })
     })
-    return record
   }
 
   private refreshState(host: BrowserWindow, appId: CustomAppId, record: ViewRecord): void {

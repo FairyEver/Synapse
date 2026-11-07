@@ -32,6 +32,7 @@ vi.mock("@/app-shell/notifications", () => ({
 }))
 
 import { useCloudDock } from "../use-cloud-dock"
+import { DEFAULT_DOCK_MIGRATION_IDS } from "@/modules/apps/dock"
 
 const appId = "cwa_123e4567-e89b-42d3-a456-426614174000"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -92,6 +93,21 @@ describe("useCloudDock", () => {
       dockAppIds: ["agent", "launcher"],
     }))
   })
+
+  it("applies catalog migrations missing from an initialized cloud Dock", async () => {
+    mocks.customState = state("ready", snapshot(true, []))
+
+    await renderHook()
+    await act(async () => Promise.resolve())
+
+    expect(mocks.applyDockOperation).toHaveBeenCalledWith(expect.objectContaining({
+      type: "apply-migrations",
+      operationId: expect.any(String),
+      migrations: expect.arrayContaining(
+        DEFAULT_DOCK_MIGRATION_IDS.map((id) => expect.objectContaining({ id })),
+      ),
+    }))
+  })
 })
 
 async function renderHook() {
@@ -114,7 +130,10 @@ function state(syncState: CustomAppsClientState["syncState"], snapshotValue: Cus
   }
 }
 
-function snapshot(initialized = true): CustomAppSnapshotDto {
+function snapshot(
+  initialized = true,
+  dockMigrationIds = [...DEFAULT_DOCK_MIGRATION_IDS],
+): CustomAppSnapshotDto {
   return {
     schemaVersion: 1,
     revision: 1,
@@ -133,6 +152,6 @@ function snapshot(initialized = true): CustomAppSnapshotDto {
       updatedAt: "2026-11-07T00:00:00.000Z",
     }],
     dockAppIds: ["agent", appId, "launcher"],
-    dockMigrationIds: [],
+    dockMigrationIds,
   }
 }

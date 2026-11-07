@@ -21,7 +21,7 @@ import {
   type CustomAppUpdateInput,
 } from "@synapse/shared/custom-apps-contracts"
 import { createHash } from "node:crypto"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 
 import { PrismaService } from "../prisma/prisma.service"
 import { applyServerDockAction, normalizeServerDockLayout } from "./custom-app-dock"
@@ -64,36 +64,21 @@ export class CustomAppsService {
   ) {}
 
   async snapshot(userId: string): Promise<CustomAppSnapshotDto> {
-    const settings = await this.ensureSettings(this.prisma, userId)
-    const apps = await this.prisma.userCustomApp.findMany({
-      where: { userId },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    return this.prisma.$transaction(async (tx) => {
+      const settings = await this.ensureSettings(tx, userId)
+      const apps = await tx.userCustomApp.findMany({
+        where: { userId },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      })
+      return toSnapshot(settings, apps)
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
     })
-    return toSnapshot(settings, apps)
   }
 
   async create(userId: string, input: CustomAppCreateInput): Promise<CustomAppSnapshotDto> {
     const parsed = customAppCreateInputSchema.parse(input)
     const operationHash = hashOperation("create", parsed)
-    if (await this.replayOperation(userId, parsed.operationId, operationHash)) {
-      return this.snapshot(userId)
-    }
-
-    const existing = await this.prisma.userCustomApp.findUnique({ where: { id: parsed.id } })
-    if (existing) {
-      if (existing.userId !== userId || existing.name !== parsed.name || existing.startUrl !== parsed.startUrl) {
-        throw new ConflictException("自定义应用 ID 已存在。")
-      }
-      return this.snapshot(userId)
-    }
-
-    const tombstone = await this.prisma.userCustomAppTombstone.findUnique({
-      where: { userId_appId: { userId, appId: parsed.id } },
-    })
-    if (tombstone) throw new ConflictException("该应用已删除，不能重新创建。")
-
-    const count = await this.prisma.userCustomApp.count({ where: { userId } })
-    if (count >= MAX_CUSTOM_APPS) throw new ConflictException("自定义应用数量已达到上限。")
 
     let stagedIconId: string | null = null
     if (parsed.iconPngBase64) {
@@ -107,8 +92,27 @@ export class CustomAppsService {
 
     let publishedRevision: number | null = null
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const settings = await this.ensureSettings(tx, userId)
+      const result = await this.runLocked(userId, async (tx) => {
+        if (await this.replayOperation(tx, userId, parsed.operationId, operationHash)) {
+          return { created: false, revision: null }
+        }
+
+        const existing = await tx.userCustomApp.findUnique({ where: { id: parsed.id } })
+        if (existing) {
+          if (existing.userId !== userId || existing.name !== parsed.name || existing.startUrl !== parsed.startUrl) {
+            throw new ConflictException("自定义应用 ID 已存在。")
+          }
+          return { created: false, revision: null }
+        }
+
+        const tombstone = await tx.userCustomAppTombstone.findUnique({
+          where: { userId_appId: { userId, appId: parsed.id } },
+        })
+        if (tombstone) throw new ConflictException("该应用已删除，不能重新创建。")
+
+        const count = await tx.userCustomApp.count({ where: { userId } })
+        if (count >= MAX_CUSTOM_APPS) throw new ConflictException("自定义应用数量已达到上限。")
+
         const app = await tx.userCustomApp.create({
           data: {
             id: parsed.id,
@@ -135,10 +139,14 @@ export class CustomAppsService {
           where: { id: stagedIconId, userId, status: "pending" },
           data: { appId: app.id, status: "active", deletePending: false },
         })
-        void settings
+        return { created: true, revision: nextSettings.revision }
       })
+      if (!result.created && stagedIconId) await this.icons.discard(stagedIconId)
     } catch (error) {
       if (stagedIconId) await this.icons.discard(stagedIconId)
+      if (isPrismaUniqueConstraintError(error)) {
+        throw new ConflictException("自定义应用 ID 或操作标识已存在。")
+      }
       throw error
     }
 
@@ -153,14 +161,6 @@ export class CustomAppsService {
   ): Promise<CustomAppSnapshotDto> {
     const parsed = customAppUpdateInputSchema.parse(input)
     const operationHash = hashOperation("update", { id, ...parsed })
-    if (await this.replayOperation(userId, parsed.operationId, operationHash)) {
-      return this.snapshot(userId)
-    }
-
-    const existing = await this.prisma.userCustomApp.findFirst({
-      where: { id, userId },
-    })
-    if (!existing) throw new NotFoundException("自定义应用不存在。")
 
     let stagedIconId: string | null = null
     if (typeof parsed.iconPngBase64 === "string") {
@@ -175,10 +175,17 @@ export class CustomAppsService {
 
     let publishedRevision: number | null = null
     try {
-      await this.prisma.$transaction(async (tx) => {
-        await this.ensureSettings(tx, userId)
-        await tx.userCustomApp.update({
-          where: { id },
+      const result = await this.runLocked(userId, async (tx) => {
+        if (await this.replayOperation(tx, userId, parsed.operationId, operationHash)) {
+          return { updated: false, previousIconId: null }
+        }
+        const existing = await tx.userCustomApp.findFirst({
+          where: { id, userId },
+        })
+        if (!existing) throw new NotFoundException("自定义应用不存在。")
+
+        const updated = await tx.userCustomApp.updateMany({
+          where: { id, userId },
           data: {
             ...(parsed.name !== undefined ? { name: parsed.name } : {}),
             ...(parsed.startUrl !== undefined ? { startUrl: parsed.startUrl } : {}),
@@ -188,6 +195,7 @@ export class CustomAppsService {
             version: { increment: 1 },
           },
         })
+        if (updated.count === 0) throw new NotFoundException("自定义应用不存在。")
         const nextSettings = await tx.userCustomAppSettings.update({
           where: { userId },
           data: { revision: { increment: 1 }, dockCatalogVersion: DOCK_CATALOG_VERSION },
@@ -203,13 +211,20 @@ export class CustomAppsService {
           where: { id: stagedIconId, userId, status: "pending" },
           data: { appId: id, status: "active", deletePending: false },
         })
+        return { updated: true, previousIconId: existing.iconId }
       })
+      if (!result.updated && stagedIconId) await this.icons.discard(stagedIconId)
+      if (result.updated && (stagedIconId || clearIcon) && result.previousIconId) {
+        await this.icons.discard(result.previousIconId)
+      }
     } catch (error) {
       if (stagedIconId) await this.icons.discard(stagedIconId)
+      if (isPrismaUniqueConstraintError(error)) {
+        throw new ConflictException("操作标识已被使用。")
+      }
       throw error
     }
 
-    if ((stagedIconId || clearIcon) && existing.iconId) await this.icons.discard(existing.iconId)
     if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
     return this.snapshot(userId)
   }
@@ -222,57 +237,79 @@ export class CustomAppsService {
     const operationId = input.operationId.trim()
     if (!operationId) throw new ConflictException("操作标识无效。")
     const operationHash = hashOperation("delete", { id })
-    if (await this.replayOperation(userId, operationId, operationHash)) {
-      return this.snapshot(userId)
-    }
-
-    const tombstone = await this.prisma.userCustomAppTombstone.findUnique({
-      where: { userId_appId: { userId, appId: id } },
-    })
-    if (tombstone) return this.snapshot(userId)
-
-    const existing = await this.prisma.userCustomApp.findUnique({ where: { id } })
-    if (!existing || existing.userId !== userId) {
-      return this.snapshot(userId)
-    }
-    const currentSettings = await this.prisma.userCustomAppSettings.findUnique({ where: { userId } })
-    const currentDock = asStringArray(currentSettings?.dockAppIds)
-    const knownCustomAppIds = new Set(
-      currentDock.filter((value) => value.startsWith("cwa_")).concat(id),
-    )
-    const nextDock = normalizeServerDockLayout(
-      currentDock.filter((value) => value !== id),
-      { knownCustomAppIds },
-    )
 
     let publishedRevision: number | null = null
-    await this.prisma.$transaction(async (tx) => {
-      await tx.userCustomAppTombstone.upsert({
-        where: { userId_appId: { userId, appId: id } },
-        create: { userId, appId: id },
-        update: { deletedAt: new Date() },
-      })
-      await tx.userCustomApp.delete({ where: { id } })
-      const settings = await this.ensureSettings(tx, userId)
-      const nextSettings = await tx.userCustomAppSettings.update({
-        where: { userId },
-        data: {
-          dockAppIds: nextDock,
-          dockCatalogVersion: DOCK_CATALOG_VERSION,
-          revision: { increment: 1 },
-        },
-      })
-      publishedRevision = nextSettings.revision
-      await this.recordOperation(tx, {
-        userId,
-        operationId,
-        operationHash,
-        resultRevision: nextSettings.revision,
-      })
-      void settings
-    })
+    let deletedIconId: string | null = null
+    try {
+      const result = await this.runLocked(userId, async (tx, settings) => {
+        if (await this.replayOperation(tx, userId, operationId, operationHash)) {
+          return { deleted: false, iconId: null }
+        }
 
-    if (existing.iconId) await this.icons.discard(existing.iconId)
+        const tombstone = await tx.userCustomAppTombstone.findUnique({
+          where: { userId_appId: { userId, appId: id } },
+        })
+        if (tombstone) {
+          await this.recordOperation(tx, {
+            userId,
+            operationId,
+            operationHash,
+            resultRevision: settings.revision,
+          })
+          return { deleted: false, iconId: null }
+        }
+
+        const existing = await tx.userCustomApp.findFirst({ where: { id, userId } })
+        if (!existing) {
+          await this.recordOperation(tx, {
+            userId,
+            operationId,
+            operationHash,
+            resultRevision: settings.revision,
+          })
+          return { deleted: false, iconId: null }
+        }
+
+        const apps = await tx.userCustomApp.findMany({
+          where: { userId },
+          select: { id: true },
+        })
+        const nextDock = normalizeServerDockLayout(
+          asStringArray(settings.dockAppIds).filter((value) => value !== id),
+          { knownCustomAppIds: new Set(apps.map((app) => app.id).filter((appId) => appId !== id)) },
+        )
+        await tx.userCustomAppTombstone.upsert({
+          where: { userId_appId: { userId, appId: id } },
+          create: { userId, appId: id },
+          update: { deletedAt: new Date() },
+        })
+        await tx.userCustomApp.deleteMany({ where: { id, userId } })
+        const nextSettings = await tx.userCustomAppSettings.update({
+          where: { userId },
+          data: {
+            dockAppIds: nextDock,
+            dockCatalogVersion: DOCK_CATALOG_VERSION,
+            revision: { increment: 1 },
+          },
+        })
+        publishedRevision = nextSettings.revision
+        await this.recordOperation(tx, {
+          userId,
+          operationId,
+          operationHash,
+          resultRevision: nextSettings.revision,
+        })
+        return { deleted: true, iconId: existing.iconId }
+      })
+      deletedIconId = result.iconId
+    } catch (error) {
+      if (isPrismaUniqueConstraintError(error)) {
+        throw new ConflictException("操作标识已被使用。")
+      }
+      throw error
+    }
+
+    if (deletedIconId) await this.icons.discard(deletedIconId)
     if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
     return this.snapshot(userId)
   }
@@ -283,40 +320,52 @@ export class CustomAppsService {
   ): Promise<CustomAppSnapshotDto> {
     const parsed = customAppBootstrapInputSchema.parse(input)
     const operationHash = hashOperation("bootstrap", parsed)
-    if (await this.replayOperation(userId, parsed.operationId, operationHash)) {
-      return this.snapshot(userId)
-    }
 
     let publishedRevision: number | null = null
-    await this.prisma.$transaction(async (tx) => {
-      const settings = await this.ensureSettings(tx, userId)
-      if (settings.initializedAt) return
+    try {
+      await this.runLocked(userId, async (tx, settings) => {
+        if (await this.replayOperation(tx, userId, parsed.operationId, operationHash)) return
+        if (settings.initializedAt) {
+          await this.recordOperation(tx, {
+            userId,
+            operationId: parsed.operationId,
+            operationHash,
+            resultRevision: settings.revision,
+          })
+          return
+        }
 
-      const apps = await tx.userCustomApp.findMany({
-        where: { userId },
-        select: { id: true },
+        const apps = await tx.userCustomApp.findMany({
+          where: { userId },
+          select: { id: true },
+        })
+        const dockAppIds = normalizeServerDockLayout(parsed.dockAppIds, {
+          knownCustomAppIds: new Set(apps.map((app) => app.id)),
+        })
+        const nextSettings = await tx.userCustomAppSettings.update({
+          where: { userId },
+          data: {
+            dockAppIds,
+            dockMigrationIds: [...new Set(parsed.dockMigrationIds)],
+            dockCatalogVersion: DOCK_CATALOG_VERSION,
+            initializedAt: new Date(),
+            revision: { increment: 1 },
+          },
+        })
+        publishedRevision = nextSettings.revision
+        await this.recordOperation(tx, {
+          userId,
+          operationId: parsed.operationId,
+          operationHash,
+          resultRevision: nextSettings.revision,
+        })
       })
-      const dockAppIds = normalizeServerDockLayout(parsed.dockAppIds, {
-        knownCustomAppIds: new Set(apps.map((app) => app.id)),
-      })
-      const nextSettings = await tx.userCustomAppSettings.update({
-        where: { userId },
-        data: {
-          dockAppIds,
-          dockMigrationIds: [...new Set(parsed.dockMigrationIds)],
-          dockCatalogVersion: DOCK_CATALOG_VERSION,
-          initializedAt: new Date(),
-          revision: { increment: 1 },
-        },
-      })
-      publishedRevision = nextSettings.revision
-      await this.recordOperation(tx, {
-        userId,
-        operationId: parsed.operationId,
-        operationHash,
-        resultRevision: nextSettings.revision,
-      })
-    })
+    } catch (error) {
+      if (isPrismaUniqueConstraintError(error)) {
+        throw new ConflictException("操作标识已被使用。")
+      }
+      throw error
+    }
 
     if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
     return this.snapshot(userId)
@@ -328,42 +377,46 @@ export class CustomAppsService {
   ): Promise<CustomAppSnapshotDto> {
     const parsed = customAppDockOperationSchema.parse(input) as CustomAppDockOperation
     const operationHash = hashOperation("dock", parsed)
-    if (await this.replayOperation(userId, parsed.operationId, operationHash)) {
-      return this.snapshot(userId)
-    }
 
     const { operationId, ...action } = parsed
     let publishedRevision: number | null = null
-    await this.prisma.$transaction(async (tx) => {
-      const settings = await this.ensureSettings(tx, userId)
-      const apps = await tx.userCustomApp.findMany({
-        where: { userId },
-        select: { id: true },
+    try {
+      await this.runLocked(userId, async (tx, settings) => {
+        if (await this.replayOperation(tx, userId, operationId, operationHash)) return
+        const apps = await tx.userCustomApp.findMany({
+          where: { userId },
+          select: { id: true },
+        })
+        const currentDock = normalizeServerDockLayout(asStringArray(settings.dockAppIds), {
+          knownCustomAppIds: new Set(apps.map((app) => app.id)),
+        })
+        const result = applyServerDockAction(currentDock, action, {
+          knownCustomAppIds: new Set(apps.map((app) => app.id)),
+          appliedMigrationIds: asStringArray(settings.dockMigrationIds),
+        })
+        const nextSettings = await tx.userCustomAppSettings.update({
+          where: { userId },
+          data: {
+            dockAppIds: result.dockAppIds,
+            dockMigrationIds: result.dockMigrationIds,
+            dockCatalogVersion: DOCK_CATALOG_VERSION,
+            revision: { increment: 1 },
+          },
+        })
+        publishedRevision = nextSettings.revision
+        await this.recordOperation(tx, {
+          userId,
+          operationId,
+          operationHash,
+          resultRevision: nextSettings.revision,
+        })
       })
-      const currentDock = normalizeServerDockLayout(asStringArray(settings.dockAppIds), {
-        knownCustomAppIds: new Set(apps.map((app) => app.id)),
-      })
-      const result = applyServerDockAction(currentDock, action, {
-        knownCustomAppIds: new Set(apps.map((app) => app.id)),
-        appliedMigrationIds: asStringArray(settings.dockMigrationIds),
-      })
-      const nextSettings = await tx.userCustomAppSettings.update({
-        where: { userId },
-        data: {
-          dockAppIds: result.dockAppIds,
-          dockMigrationIds: result.dockMigrationIds,
-          dockCatalogVersion: DOCK_CATALOG_VERSION,
-          revision: { increment: 1 },
-        },
-      })
-      publishedRevision = nextSettings.revision
-      await this.recordOperation(tx, {
-        userId,
-        operationId,
-        operationHash,
-        resultRevision: nextSettings.revision,
-      })
-    })
+    } catch (error) {
+      if (isPrismaUniqueConstraintError(error)) {
+        throw new ConflictException("操作标识已被使用。")
+      }
+      throw error
+    }
 
     if (publishedRevision !== null) this.events?.publish(userId, publishedRevision)
     return this.snapshot(userId)
@@ -393,8 +446,24 @@ export class CustomAppsService {
     }) as Promise<CustomAppSettingsRecord>
   }
 
-  private async replayOperation(userId: string, operationId: string, operationHash: string): Promise<boolean> {
-    const prior = await this.prisma.userCustomAppOperation.findUnique({
+  private runLocked<T>(
+    userId: string,
+    run: (tx: Prisma.TransactionClient, settings: CustomAppSettingsRecord) => Promise<T>,
+  ): Promise<T> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`
+      const settings = await this.ensureSettings(tx, userId)
+      return run(tx, settings)
+    })
+  }
+
+  private async replayOperation(
+    client: Pick<PrismaService, "userCustomAppOperation"> | Prisma.TransactionClient,
+    userId: string,
+    operationId: string,
+    operationHash: string,
+  ): Promise<boolean> {
+    const prior = await client.userCustomAppOperation.findUnique({
       where: { userId_operationId: { userId, operationId } },
     })
     if (!prior) return false
@@ -418,6 +487,13 @@ export class CustomAppsService {
       },
     })
   }
+}
+
+function isPrismaUniqueConstraintError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && error.code === "P2002"
 }
 
 export function toSnapshot(

@@ -5,6 +5,7 @@ import {
   SYSTEM_APP_IDS,
   applyCustomAppDockAction,
   customAppCreateInputSchema,
+  customAppDockOperationSchema,
   customAppIdSchema,
   customAppSnapshotSchema,
   normalizeCustomAppDockIds,
@@ -136,6 +137,14 @@ describe("custom app contracts", () => {
     )).toEqual(result)
   })
 
+  it("accepts a no-op migration that only records its catalog id", () => {
+    expect(customAppDockOperationSchema.safeParse({
+      operationId: "dock.noop",
+      type: "apply-migrations",
+      migrations: [{ id: "dock.noop.v1", operations: [] }],
+    }).success).toBe(true)
+  })
+
   it("accepts unknown future app kinds without losing the snapshot", () => {
     const result = customAppSnapshotSchema.safeParse({
       schemaVersion: 1,
@@ -143,6 +152,21 @@ describe("custom app contracts", () => {
       initialized: true,
       dockCatalogVersion: 1,
       apps: [{ ...customAppDtoFixture(), kind: "future-kind" }],
+      dockAppIds: ["launcher"],
+      dockMigrationIds: [],
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it("accepts additive schema-1 fields without discarding the snapshot", () => {
+    const result = customAppSnapshotSchema.safeParse({
+      schemaVersion: 1,
+      revision: 2,
+      initialized: true,
+      dockCatalogVersion: 1,
+      futureSnapshotField: true,
+      apps: [{ ...customAppDtoFixture(), futureAppField: "ignored" }],
       dockAppIds: ["launcher"],
       dockMigrationIds: [],
     })

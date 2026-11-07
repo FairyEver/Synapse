@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ImagePlus } from "lucide-react"
 import { parseCustomAppUrl } from "@synapse/shared/custom-apps-contracts"
 import type {
@@ -53,6 +53,8 @@ export function CreateEditCustomAppDialog({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loadingFavicon, setLoadingFavicon] = useState(false)
+  const createAttemptRef = useRef<{ readonly id: `cwa_${string}`; readonly operationId: string } | null>(null)
+  const updateOperationIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -64,6 +66,11 @@ export function CreateEditCustomAppDialog({
     setError(null)
     setSaving(false)
     setLoadingFavicon(false)
+    createAttemptRef.current = {
+      id: `cwa_${crypto.randomUUID()}`,
+      operationId: crypto.randomUUID(),
+    }
+    updateOperationIdRef.current = crypto.randomUUID()
   }, [app, open])
 
   const applyIcon = (result: CustomAppIconResult | null, source: "favicon" | "custom") => {
@@ -73,14 +80,19 @@ export function CreateEditCustomAppDialog({
     setIconPngBase64(result.pngBase64)
   }
 
-  const loadFavicon = async (value: string) => {
-    if (iconSource === "custom" || disabled || !parseCustomAppUrl(value)) return
+  const fetchWebsiteIcon = async (value: string) => {
+    if (disabled || !parseCustomAppUrl(value)) return
     setLoadingFavicon(true)
     try {
       applyIcon(await fetchFavicon(value), "favicon")
     } finally {
       setLoadingFavicon(false)
     }
+  }
+
+  const loadFavicon = async (value: string) => {
+    if (iconSource === "custom") return
+    await fetchWebsiteIcon(value)
   }
 
   const submit = async () => {
@@ -99,27 +111,33 @@ export function CreateEditCustomAppDialog({
     setError(null)
     try {
       if (mode === "create") {
-        await onSubmit({
-          operationId: crypto.randomUUID(),
+        const attempt = createAttemptRef.current ??= {
           id: `cwa_${crypto.randomUUID()}`,
+          operationId: crypto.randomUUID(),
+        }
+        await onSubmit({
+          operationId: attempt.operationId,
+          id: attempt.id,
           name: trimmedName,
           startUrl: normalizedUrl,
           iconSource,
           ...(iconPngBase64 ? { iconPngBase64 } : {}),
         })
       } else if (app) {
-        await onSubmit({
-          operationId: crypto.randomUUID(),
-          name: trimmedName,
-          startUrl: normalizedUrl,
-          iconSource,
-          ...(iconPngBase64
-            ? { iconPngBase64 }
-            : iconSource === "favicon" && app.iconSource === "custom"
-              ? { iconPngBase64: null }
-              : {}),
-        })
+        const input: CustomAppUpdateInput = {
+          operationId: updateOperationIdRef.current ??= crypto.randomUUID(),
+        }
+        if (trimmedName !== app.name) input.name = trimmedName
+        if (normalizedUrl !== app.startUrl) input.startUrl = normalizedUrl
+        if (iconPngBase64) input.iconPngBase64 = iconPngBase64
+        if (iconSource !== app.iconSource) input.iconSource = iconSource
+        if (!iconPngBase64 && iconSource === "favicon" && app.iconSource === "custom") {
+          input.iconPngBase64 = null
+        }
+        await onSubmit(input)
       }
+      createAttemptRef.current = null
+      updateOperationIdRef.current = null
       onClose()
     } catch {
       setError("保存失败")
@@ -151,7 +169,7 @@ export function CreateEditCustomAppDialog({
                   setIconSource("favicon")
                   setIconPngBase64(null)
                   setIconPreview(null)
-                  void loadFavicon(startUrl)
+                  void fetchWebsiteIcon(startUrl)
                 }}>
                   使用网站图标
                 </Button>

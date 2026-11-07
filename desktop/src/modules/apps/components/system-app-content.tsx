@@ -233,6 +233,12 @@ function LauncherContentInner({
     void runAppNavigation(() => { setActiveAppId(null); setResourceContentOpenRequest(null) })
   }, [resetKey])
 
+  useEffect(() => {
+    const availableAppIds = new Set(customApps.state.snapshot?.apps.map((app) => app.id) ?? [])
+    if (customDialog?.app && !availableAppIds.has(customDialog.app.id)) setCustomDialog(null)
+    if (deleteApp && !availableAppIds.has(deleteApp.id)) setDeleteApp(null)
+  }, [customApps.state.snapshot, customDialog?.app, deleteApp])
+
   const openApp = useCallback((appId: SynapseSystemAppId) => {
     void runAppNavigation(() => {
       setLauncherFocusAppId(null)

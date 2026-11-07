@@ -272,7 +272,11 @@ import { skillHubPreparedSourcesSchema, type HubPreparedRecord } from "../runtim
 import { accountService } from "../services/account-service"
 import { CUSTOM_APPS_SERVICE_ID, CustomAppsCatalogService } from "../services/custom-apps/catalog-service"
 import { CUSTOM_APP_FAVICON_SERVICE_ID, CustomAppFaviconService } from "../services/custom-apps/favicon-service"
-import { configureCustomWebSession, getCustomWebSession } from "../services/custom-apps/web-session"
+import {
+  CUSTOM_WEB_SESSION_SERVICE_ID,
+  CustomWebSessionService,
+  getCustomWebSession,
+} from "../services/custom-apps/web-session"
 import { CUSTOM_WEB_APP_RUNTIME_SERVICE_ID, CustomWebAppRuntimeService } from "../services/custom-apps/runtime-service"
 import { CUSTOM_WEB_APP_WINDOW_SERVICE_ID, CustomWebAppWindowService } from "../services/custom-apps/window-service"
 import { rendererBaseUrl } from "../modules/shared/renderer-base-url"
@@ -281,6 +285,7 @@ import { CLIENT_TELEMETRY_SERVICE_ID } from "../services/client-telemetry-consta
 import { ClientTelemetryService, detectDesktopOperatingSystem } from "../services/client-telemetry-service"
 import { ClipboardSyncService, CLIPBOARD_SYNC_SERVICE_ID } from "../services/clipboard-sync-service"
 import { SYNAPSE_DESKTOP_DEPLOYMENT_CONFIG } from "../generated/deployment-config.generated"
+import type { CustomAppId } from "@synapse/shared/custom-apps-contracts"
 import { createDriveSyncService, type DriveSyncService } from "../services/drive-sync-service"
 import {
   AutomationExecutionService,
@@ -768,7 +773,6 @@ export const coreQuickInputDescriptor: ServiceDescriptor<QuickInputService> = {
     })
   },
   async start(instance) {
-    configureCustomWebSession(getCustomWebSession())
     await instance.initialize()
   },
 }
@@ -898,10 +902,28 @@ export const coreCustomAppFaviconDescriptor: ServiceDescriptor<CustomAppFaviconS
   },
 }
 
+export const coreCustomWebSessionDescriptor: ServiceDescriptor<CustomWebSessionService> = {
+  id: CUSTOM_WEB_SESSION_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  create(ctx) {
+    return new CustomWebSessionService({
+      permissionGuard: ctx.registry.get("core.permission-guard"),
+      auditSink: ctx.registry.get("core.audit-sink"),
+    })
+  },
+  start(instance) {
+    instance.start()
+  },
+  stop(instance) {
+    instance.stop()
+  },
+}
+
 export const coreCustomWebAppRuntimeDescriptor: ServiceDescriptor<CustomWebAppRuntimeService> = {
   id: CUSTOM_WEB_APP_RUNTIME_SERVICE_ID,
   criticality: "degraded",
-  dependsOn: [CUSTOM_APPS_SERVICE_ID, "core.event-bus"],
+  dependsOn: [CUSTOM_APPS_SERVICE_ID, CUSTOM_WEB_SESSION_SERVICE_ID, "core.event-bus"],
   create(ctx) {
     const catalog = ctx.registry.get<CustomAppsCatalogService>(CUSTOM_APPS_SERVICE_ID)
     return new CustomWebAppRuntimeService({
@@ -931,15 +953,22 @@ export const coreCustomWebAppWindowDescriptor: ServiceDescriptor<CustomWebAppWin
       windowManager: ctx.registry.get("core.window-manager"),
     })
     let currentAccountId: string | null = null
+    let knownAppIds = new Set<CustomAppId>()
     const unsubscribe = catalog.subscribe((state) => {
       if (state.accountId !== currentAccountId) {
         currentAccountId = state.accountId
+        knownAppIds = new Set<CustomAppId>(state.snapshot?.apps.map((app) => app.id) ?? [])
         service.closeAll()
         runtime.destroyAll()
         return
       }
       if (state.snapshot) {
-        service.closeMissingApps(new Set(state.snapshot.apps.map((app) => app.id)))
+        const nextAppIds = new Set<CustomAppId>(state.snapshot.apps.map((app) => app.id))
+        for (const appId of knownAppIds) {
+          if (!nextAppIds.has(appId)) runtime.destroyApp(appId)
+        }
+        knownAppIds = nextAppIds
+        service.closeMissingApps(nextAppIds)
       }
     })
     customAppWindowDisposers.set(service, unsubscribe)

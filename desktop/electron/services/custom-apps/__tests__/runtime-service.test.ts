@@ -67,6 +67,34 @@ describe("CustomWebAppRuntimeService", () => {
       canGoForward: false,
     })
   })
+
+  it("applies navigation and popup limits recursively to child windows", async () => {
+    const { host, createdViews, runtime } = createHarness()
+    await runtime.attach(host, appId)
+    const parentContents = createdViews[0].webContents
+    const openHandler = parentContents.setWindowOpenHandler.mock.calls[0][0] as (
+      details: { readonly url: string }
+    ) => { readonly action: "allow" | "deny" }
+
+    expect(openHandler({ url: "javascript:alert(1)" }).action).toBe("deny")
+    expect(openHandler({ url: "https://example.com/popup" }).action).toBe("allow")
+
+    const redirectEvent = { preventDefault: vi.fn() }
+    parentContents.trigger("will-redirect", redirectEvent, "file:///tmp/secret")
+    expect(redirectEvent.preventDefault).toHaveBeenCalled()
+
+    const child = createFakeWindow()
+    parentContents.trigger("did-create-window", child)
+    expect(child.webContents.setWindowOpenHandler).toHaveBeenCalled()
+    const childOpenHandler = child.webContents.setWindowOpenHandler.mock.calls[0][0] as (
+      details: { readonly url: string }
+    ) => { readonly action: "allow" | "deny" }
+    childOpenHandler({ url: "https://example.com/child-1" })
+    childOpenHandler({ url: "https://example.com/child-2" })
+    childOpenHandler({ url: "https://example.com/child-3" })
+    childOpenHandler({ url: "https://example.com/child-4" })
+    expect(childOpenHandler({ url: "https://example.com/child-5" }).action).toBe("deny")
+  })
 })
 
 function createHarness() {
@@ -132,6 +160,16 @@ function createFakeView() {
     webContents,
     setBounds: vi.fn(),
     setVisible: vi.fn(),
+  }
+}
+
+function createFakeWindow() {
+  const view = createFakeView()
+  return {
+    webContents: view.webContents,
+    once: vi.fn(),
+    isDestroyed: vi.fn(() => false),
+    close: vi.fn(),
   }
 }
 

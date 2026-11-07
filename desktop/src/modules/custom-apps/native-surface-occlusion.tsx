@@ -44,7 +44,10 @@ export function NativeSurfaceOcclusionProvider({ children }: { readonly children
   )
 }
 
-export function useNativeSurfaceOcclusion(): void {
+export function useNativeSurfaceOcclusion(open = true): void {
   const context = useContext(NativeSurfaceOcclusionContext)
-  useEffect(() => context?.acquire(), [context])
+  useEffect(() => {
+    if (!open) return undefined
+    return context?.acquire()
+  }, [context, open])
 }

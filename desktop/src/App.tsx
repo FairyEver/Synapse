@@ -60,6 +60,7 @@ import { AppSwitchTransition } from "@/modules/apps/components/app-switch-transi
 import { SystemAppContent } from "@/modules/apps/components/system-app-content"
 import { isSystemAppId, type SynapseSystemAppId, type SynapseAppId } from "@/modules/apps/types"
 import { CustomAppsProvider, useCustomApps } from "@/modules/custom-apps/context"
+import { shouldReturnToLauncher } from "@/modules/custom-apps/app-availability"
 import { NativeSurfaceOcclusionProvider } from "@/modules/custom-apps/native-surface-occlusion"
 import { CustomWebAppContent } from "@/modules/custom-apps/web-app-content"
 import type { CustomAppId } from "@synapse/shared"
@@ -236,11 +237,10 @@ function MainAppInner() {
     : null
 
   useEffect(() => {
-    if (isSystemAppId(activeAppId) || customApps.state.syncState !== "ready") return
-    if (!customApps.state.snapshot?.apps.some((app) => app.id === activeAppId)) {
+    if (shouldReturnToLauncher(activeAppId, customApps.state.snapshot)) {
       setActiveAppId("launcher", "navigation")
     }
-  }, [activeAppId, customApps.state.snapshot, customApps.state.syncState, setActiveAppId])
+  }, [activeAppId, customApps.state.snapshot, setActiveAppId])
 
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
   useEffect(() => {
@@ -404,12 +404,15 @@ function MainAppInner() {
               <EmbeddedSystemAppShell
                 appName={activeCustomApp?.name ?? activeSystemApp?.name ?? ""}
                 mode="dock"
-                onOpenWindow={activeCustomApp
-                  ? () => { void getSynapseBridge()?.customApps.window.open(activeCustomApp.id) }
-                  : undefined}
               >
                 {activeCustomApp ? (
-                  <CustomWebAppContent app={activeCustomApp} appId={activeCustomApp.id} />
+                  <CustomWebAppContent
+                    app={activeCustomApp}
+                    appId={activeCustomApp.id}
+                    onOpenWindow={() => {
+                      void getSynapseBridge()?.customApps.window.open(activeCustomApp.id)
+                    }}
+                  />
                 ) : isSystemAppId(activeAppId) ? (
                   <SystemAppContent
                     appId={activeAppId}

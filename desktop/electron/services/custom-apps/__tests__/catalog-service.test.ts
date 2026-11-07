@@ -38,6 +38,11 @@ describe("CustomAppsCatalogService", () => {
 
     const pending = harness.catalog.refresh("focus")
     harness.account.switchTo("user-2")
+    expect(harness.catalog.getState()).toMatchObject({
+      accountId: "user-2",
+      snapshot: null,
+      syncState: "loading",
+    })
     deferred.resolve(snapshot(4))
     await pending
     await vi.waitFor(() => expect(harness.catalog.getState().accountId).toBe("user-2"))
@@ -60,6 +65,126 @@ describe("CustomAppsCatalogService", () => {
 
     expect(harness.catalog.getState().snapshot?.revision).toBe(4)
     expect(harness.catalog.getState().syncState).toBe("error")
+  })
+
+  it("does not replace a newer local revision with an older refresh response", async () => {
+    const harness = createHarness()
+    harness.account.setAuthenticatedOnline("user-1")
+    vi.mocked(harness.api.fetchSnapshot)
+      .mockResolvedValueOnce(snapshot(5))
+      .mockResolvedValueOnce(snapshot(4))
+    await harness.catalog.initialize()
+
+    await harness.catalog.refresh("stale-response")
+
+    expect(harness.catalog.getState().snapshot?.revision).toBe(5)
+    expect(harness.cache.get("user-1")).toMatchObject({
+      snapshot: { revision: 5 },
+    })
+  })
+
+  it("does not leave the catalog loading when concurrent refreshes share one request", async () => {
+    const harness = createHarness()
+    const deferred = deferredValue<CustomAppSnapshotDto>()
+    harness.account.setAuthenticatedOnline("user-1")
+    vi.mocked(harness.api.fetchSnapshot)
+      .mockResolvedValueOnce(snapshot(4))
+      .mockReturnValueOnce(deferred.promise)
+      .mockResolvedValueOnce(snapshot(5))
+    await harness.catalog.initialize()
+
+    const first = harness.catalog.refresh("focus")
+    const second = harness.catalog.refresh("live")
+    deferred.resolve(snapshot(5))
+    await Promise.all([first, second])
+
+    expect(harness.catalog.getState()).toMatchObject({
+      syncState: "ready",
+      snapshot: { revision: 5 },
+    })
+  })
+
+  it("refreshes the catalog for an internal live revision", async () => {
+    const harness = createHarness()
+    harness.account.setAuthenticatedOnline("user-1")
+    vi.mocked(harness.api.fetchSnapshot)
+      .mockResolvedValueOnce(snapshot(4))
+      .mockResolvedValueOnce(snapshot(5))
+    await harness.catalog.initialize()
+
+    harness.eventBus.emitInternal("account", "custom-apps.revision", { revision: 5 })
+    await vi.waitFor(() => expect(harness.catalog.getState().snapshot?.revision).toBe(5))
+
+    expect(harness.api.fetchSnapshot).toHaveBeenCalledTimes(2)
+    expect(harness.listeners.at(-1)).toMatchObject({
+      accountId: "user-1",
+      syncState: "ready",
+      snapshot: { revision: 5 },
+    })
+  })
+
+  it("refreshes after the live connection recovers from a disconnect", async () => {
+    const harness = createHarness()
+    harness.account.setAuthenticatedOnline("user-1")
+    vi.mocked(harness.api.fetchSnapshot)
+      .mockResolvedValueOnce(snapshot(4))
+      .mockResolvedValueOnce(snapshot(5))
+    await harness.catalog.initialize()
+
+    harness.eventBus.emitInternal("live", "live.stateChanged", { status: "disconnected" })
+    harness.eventBus.emitInternal("live", "live.stateChanged", { status: "connected" })
+    await vi.waitFor(() => expect(harness.catalog.getState().snapshot?.revision).toBe(5))
+  })
+
+  it("does not restore account A state when sign-out races its cache read", async () => {
+    const harness = createHarness()
+    const cachedEntry = {
+      id: "user-1",
+      schemaVersion: 1,
+      accountId: "user-1",
+      cachedAt: "2026-11-07T00:00:00.000Z",
+      snapshot: snapshot(4),
+    }
+    const deferred = deferredValue<typeof cachedEntry>()
+    harness.cache.set("user-1", cachedEntry)
+    harness.account.setAuthenticatedOffline("user-1")
+    harness.namespace.get.mockImplementation(async (id: string) => id === "user-1"
+      ? deferred.promise
+      : null)
+
+    const pending = harness.catalog.initialize()
+    harness.account.signOut()
+    deferred.resolve(cachedEntry)
+    await pending
+    await vi.waitFor(() => expect(harness.catalog.getState().syncState).toBe("signed-out"))
+
+    expect(harness.catalog.getState()).toMatchObject({
+      accountId: null,
+      snapshot: null,
+      syncState: "signed-out",
+    })
+  })
+
+  it("rejects a mutation response after the account has changed", async () => {
+    const harness = createHarness()
+    const deferred = deferredValue<CustomAppSnapshotDto>()
+    harness.account.setAuthenticatedOnline("user-1")
+    vi.mocked(harness.api.fetchSnapshot).mockResolvedValue(snapshot(4))
+    await harness.catalog.initialize()
+    vi.mocked(harness.api.create).mockReturnValueOnce(deferred.promise)
+
+    const pending = harness.catalog.create({
+      operationId: "create-a",
+      id: appId,
+      name: "阅读",
+      startUrl: "https://example.com/read",
+      iconSource: "favicon",
+    })
+    harness.account.signOut()
+    deferred.resolve(snapshot(5))
+
+    await expect(pending).rejects.toThrow()
+    await vi.waitFor(() => expect(harness.catalog.getState().syncState).toBe("signed-out"))
   })
 
   it("clears the active app list when the account signs out but keeps the cache", async () => {
@@ -85,6 +210,7 @@ describe("CustomAppsCatalogService", () => {
 
 function createHarness() {
   const cache = new Map<string, unknown>()
+  const listeners = new Set<(state: never) => void>()
   const namespace = {
     get: vi.fn(async (id: string) => cache.get(id) ?? null),
     upsert: vi.fn(async (value: { readonly id: string }) => {
@@ -94,7 +220,6 @@ function createHarness() {
   const repository = {
     namespace: vi.fn(() => namespace),
   }
-  const listeners = new Set<(state: never) => void>()
   let state: Record<string, unknown> = { status: "unauthenticated" }
   let authRevision = 0
   const account = {
@@ -138,13 +263,69 @@ function createHarness() {
     bootstrap: vi.fn(),
     applyDockOperation: vi.fn(),
   }
+  const eventBus = createEventBusFake()
+  const emittedStates: unknown[] = []
   const catalog = new CustomAppsCatalogService({
     account: account as unknown as CustomAppsAccountPort,
     repository: repository as never,
     api,
+    eventBus: eventBus as never,
     now: () => new Date("2026-11-07T00:00:00.000Z"),
   })
-  return { catalog, account, api, cache }
+  catalog.subscribe((state) => emittedStates.push(state))
+  return {
+    catalog,
+    account,
+    api,
+    cache,
+    eventBus,
+    namespace,
+    get listeners() {
+      return emittedStates as Array<{
+        readonly accountId: string | null
+        readonly syncState: string
+        readonly snapshot: { readonly revision: number } | null
+      }>
+    },
+  }
+}
+
+function createEventBusFake() {
+  const listeners = new Map<string, Set<(event: {
+    readonly domain: "account" | "live"
+    readonly type: string
+    readonly payload: unknown
+    readonly timestamp: string
+  }) => void>>()
+  return {
+    emit: vi.fn(),
+    emitInternal(
+      domain: "account" | "live",
+      type: string,
+      payload: unknown,
+    ) {
+      const event = { domain, type, payload, timestamp: "2026-11-07T00:00:00.000Z" } as const
+      for (const listener of listeners.get(type) ?? []) listener(event)
+    },
+    onType(
+      domain: "account" | "live",
+      type: string,
+      listener: (event: {
+        readonly domain: "account" | "live"
+        readonly type: string
+        readonly payload: unknown
+        readonly timestamp: string
+      }) => void,
+    ) {
+      void domain
+      const entries = listeners.get(type) ?? new Set()
+      entries.add(listener)
+      listeners.set(type, entries)
+      return () => {
+        entries.delete(listener)
+      }
+    },
+  }
 }
 
 function authenticatedState(userId: string, connectivity: "online" | "offline") {

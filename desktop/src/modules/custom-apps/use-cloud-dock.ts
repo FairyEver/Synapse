@@ -8,6 +8,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   DEFAULT_DOCK_APP_IDS,
+  DOCK_MIGRATIONS,
   normalizeDockAppIds,
   type DockMoveDirection,
 } from "@/modules/apps/dock"
@@ -27,6 +28,7 @@ export function useCloudDock({ workflowEntryVisible }: { readonly workflowEntryV
   const [optimisticIds, setOptimisticIds] = useState<readonly SynapseAppId[] | null>(null)
   const [saving, setSaving] = useState(false)
   const bootstrappingRef = useRef(false)
+  const migrationSignatureRef = useRef<string | null>(null)
 
   const localDockIds = useMemo(
     () => normalizeDockAppIds(config.global.dockAppIds),
@@ -72,6 +74,27 @@ export function useCloudDock({ workflowEntryVisible }: { readonly workflowEntryV
       notifyError("初始化 Dock 失败")
     })
   }, [canEdit, cloudSnapshot, config.global.dockMigrationIds, customApps, localDockIds, notifyError])
+
+  useEffect(() => {
+    if (!cloudSnapshot?.initialized || !canEdit) return
+    const applied = new Set(cloudSnapshot.dockMigrationIds)
+    const missing = DOCK_MIGRATIONS.filter((migration) => !applied.has(migration.id))
+    if (missing.length === 0) return
+    const signature = missing.map((migration) => migration.id).join("|")
+    if (migrationSignatureRef.current === signature) return
+    migrationSignatureRef.current = signature
+    void customApps.applyDockOperation({
+      type: "apply-migrations",
+      operationId: crypto.randomUUID(),
+      migrations: missing.map((migration) => ({
+        id: migration.id,
+        operations: migration.operations.map((operation) => ({ ...operation })),
+      })),
+    }).catch(() => {
+      migrationSignatureRef.current = null
+      notifyError("同步 Dock 迁移失败")
+    })
+  }, [canEdit, cloudSnapshot, customApps, notifyError])
 
   const apply = async (action: CustomAppDockAction): Promise<boolean> => {
     if (!canEdit || saving) return false

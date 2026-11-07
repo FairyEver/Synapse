@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, ExternalLink } from "lucide-react"
 import type {
   CustomAppDto,
   CustomAppId,
@@ -8,6 +8,7 @@ import type {
 
 import { Button } from "@/components/ui/button"
 import { SystemAppWindowShell } from "@/modules/apps/components/system-app-window-shell"
+import { SystemAppTopBarActionButton } from "@/modules/apps/components/system-app-top-bar"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { WebAppViewport } from "./web-app-viewport"
 import { WebAppToolbarActions } from "./web-app-toolbar-actions"
@@ -24,9 +25,15 @@ type CustomWebAppContentProps = {
   readonly app: CustomAppDto
   readonly appId: CustomAppId
   readonly windowMode?: boolean
+  readonly onOpenWindow?: () => void
 }
 
-export function CustomWebAppContent({ app, appId, windowMode = false }: CustomWebAppContentProps) {
+export function CustomWebAppContent({
+  app,
+  appId,
+  windowMode = false,
+  onOpenWindow,
+}: CustomWebAppContentProps) {
   const bridge = getSynapseBridge()?.customApps
   const [state, setState] = useState<CustomWebAppViewState>(INITIAL_STATE)
 
@@ -47,8 +54,24 @@ export function CustomWebAppContent({ app, appId, windowMode = false }: CustomWe
 
   return (
     <SystemAppWindowShell
-      left={windowMode ? <h2 className="truncate text-sm font-semibold">{app.name}</h2> : undefined}
-      actions={<WebAppToolbarActions state={state} />}
+      left={<h2 className="truncate text-sm font-semibold">{app.name}</h2>}
+      embeddedLeftAddon={<h2 className="truncate text-sm font-semibold">{app.name}</h2>}
+      actions={(
+        <>
+          <WebAppToolbarActions state={state} />
+          {!windowMode && onOpenWindow ? (
+            <SystemAppTopBarActionButton
+              iconOnly
+              type="button"
+              aria-label="新窗口打开"
+              tooltip="新窗口打开"
+              onClick={onOpenWindow}
+            >
+              <ExternalLink />
+            </SystemAppTopBarActionButton>
+          ) : null}
+        </>
+      )}
     >
       <div className="relative h-full min-h-0 bg-background">
         {state.error !== "none" && (

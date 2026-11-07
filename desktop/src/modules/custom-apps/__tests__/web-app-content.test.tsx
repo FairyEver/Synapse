@@ -29,6 +29,7 @@ vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({ customApps: bridge }),
 }))
 
+import { CustomWebAppContent } from "../web-app-content"
 import { WebAppViewport } from "../web-app-viewport"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -65,6 +66,43 @@ describe("WebAppViewport", () => {
     await act(async () => root?.unmount())
     root = null
     expect(bridge.view.detach).toHaveBeenCalled()
+    globalThis.ResizeObserver = original
+  })
+
+  it("shows the app name and opens a detached window from the embedded header", async () => {
+    const original = globalThis.ResizeObserver
+    globalThis.ResizeObserver = class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    } as never
+    const onOpenWindow = vi.fn()
+    container = document.createElement("div")
+    document.body.append(container)
+    root = createRoot(container)
+
+    await act(async () => root!.render(
+      <CustomWebAppContent
+        appId={appId}
+        onOpenWindow={onOpenWindow}
+        app={{
+          id: appId,
+          kind: "web",
+          schemaVersion: 1,
+          name: "阅读",
+          startUrl: "https://example.com/read",
+          iconUrl: null,
+          iconSource: "favicon",
+          version: 1,
+          createdAt: "2026-11-07T00:00:00.000Z",
+          updatedAt: "2026-11-07T00:00:00.000Z",
+        }}
+      />,
+    ))
+
+    expect(document.body.textContent).toContain("阅读")
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="新窗口打开"]')?.click())
+    expect(onOpenWindow).toHaveBeenCalledTimes(1)
     globalThis.ResizeObserver = original
   })
 })

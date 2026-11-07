@@ -63,6 +63,30 @@ describe("CustomAppsService", () => {
     await expect(service.create(userId, createInput())).rejects.toBeInstanceOf(ConflictException)
   })
 
+  it("serializes creates through the account lock before checking the limit", async () => {
+    const prisma = createPrisma()
+    const icons = createIcons()
+    const service = new CustomAppsService(
+      prisma as unknown as PrismaService,
+      icons as unknown as CustomAppIconsService,
+    )
+    prisma.userCustomAppOperation.findUnique.mockResolvedValue(null)
+    prisma.userCustomAppTombstone.findUnique.mockResolvedValue(null)
+    prisma.userCustomApp.findUnique.mockResolvedValue(null)
+    prisma.userCustomApp.count.mockResolvedValue(0)
+    prisma.userCustomApp.create.mockResolvedValue(appRow())
+    prisma.userCustomAppSettings.upsert.mockResolvedValue(settingsRow({ revision: 0 }))
+    prisma.userCustomAppSettings.update.mockResolvedValue(settingsRow({ revision: 1 }))
+    prisma.userCustomAppOperation.create.mockResolvedValue({})
+    prisma.userCustomApp.findMany.mockResolvedValue([appRow()])
+
+    await service.create(userId, createInput())
+
+    expect(prisma.$queryRaw).toHaveBeenCalled()
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0])
+      .toBeLessThan(prisma.userCustomApp.count.mock.invocationCallOrder[0])
+  })
+
   it("hard-deletes the app and removes its Dock id in one transaction", async () => {
     const prisma = createPrisma()
     const icons = createIcons()
@@ -70,11 +94,9 @@ describe("CustomAppsService", () => {
       prisma as unknown as PrismaService,
       icons as unknown as CustomAppIconsService,
     )
-    prisma.userCustomAppTombstone.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
+    prisma.userCustomAppTombstone.findUnique.mockResolvedValue(null)
     prisma.userCustomAppOperation.findUnique.mockResolvedValue(null)
-    prisma.userCustomApp.findUnique.mockResolvedValue(appRow({
+    prisma.userCustomApp.findFirst.mockResolvedValue(appRow({
       iconId: "icon-1",
     }))
     prisma.userCustomAppSettings.findUnique.mockResolvedValue(settingsRow({
@@ -105,7 +127,7 @@ describe("CustomAppsService", () => {
     expect(prisma.userCustomAppTombstone.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { userId_appId: { userId, appId } },
     }))
-    expect(prisma.userCustomApp.delete).toHaveBeenCalledWith({ where: { id: appId } })
+    expect(prisma.userCustomApp.deleteMany).toHaveBeenCalledWith({ where: { id: appId, userId } })
     expect(prisma.userCustomAppSettings.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { userId },
       data: expect.objectContaining({
@@ -129,6 +151,31 @@ describe("CustomAppsService", () => {
       operationId: "update-1",
       name: "新名称",
     })).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  it("updates only the current user's app inside the account lock", async () => {
+    const prisma = createPrisma()
+    const service = new CustomAppsService(
+      prisma as unknown as PrismaService,
+      createIcons() as unknown as CustomAppIconsService,
+    )
+    prisma.userCustomAppOperation.findUnique.mockResolvedValue(null)
+    prisma.userCustomApp.findFirst.mockResolvedValue(appRow())
+    prisma.userCustomApp.updateMany.mockResolvedValue({ count: 1 })
+    prisma.userCustomAppSettings.upsert.mockResolvedValue(settingsRow({ revision: 1 }))
+    prisma.userCustomAppSettings.update.mockResolvedValue(settingsRow({ revision: 2 }))
+    prisma.userCustomAppOperation.create.mockResolvedValue({})
+    prisma.userCustomApp.findMany.mockResolvedValue([appRow({ name: "新名称" })])
+
+    await service.update(userId, appId as `cwa_${string}`, {
+      operationId: "update-1",
+      name: "新名称",
+    })
+
+    expect(prisma.$queryRaw).toHaveBeenCalled()
+    expect(prisma.userCustomApp.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: appId, userId },
+    }))
   })
 
   it("initializes Dock once from the first device", async () => {
@@ -204,7 +251,7 @@ describe("CustomAppsService", () => {
 function createInput() {
   return {
     operationId: "create-1",
-    id: appId,
+    id: appId as `cwa_${string}`,
     name: "阅读",
     startUrl: "https://example.com/read",
     iconSource: "favicon" as const,
@@ -229,7 +276,9 @@ function createPrisma() {
       findMany: vi.fn(),
       count: vi.fn(),
       create: vi.fn(),
+      updateMany: vi.fn(),
       update: vi.fn(),
+      deleteMany: vi.fn(),
       delete: vi.fn(),
     },
     userCustomAppTombstone: {
@@ -247,7 +296,9 @@ function createPrisma() {
       deleteMany: vi.fn(),
     },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
   }
+  prisma.$transaction.mockImplementation(async (callback: (tx: typeof prisma) => unknown) => callback(prisma))
   return prisma
 }
 

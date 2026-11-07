@@ -61,12 +61,66 @@ describe("CreateEditCustomAppDialog", () => {
 
     expect(fetchFavicon).toHaveBeenCalledWith("https://example.com/read")
   })
+
+  it("submits only changed fields when editing", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    await renderDialog({
+      mode: "edit",
+      app: customApp(),
+      onSubmit,
+    })
+
+    await setInput("名称", "阅读清单")
+    await act(async () => button("保存").click())
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      operationId: expect.any(String),
+      name: "阅读清单",
+    })
+  })
+
+  it("reuses the create attempt after a failed response", async () => {
+    const onSubmit = vi.fn()
+      .mockRejectedValueOnce(new Error("network lost"))
+      .mockResolvedValueOnce(undefined)
+    await renderDialog({ onSubmit })
+    await setInput("名称", "阅读")
+    await setInput("网址", "https://example.com/read")
+
+    await act(async () => button("创建").click())
+    await act(async () => button("创建").click())
+
+    expect(onSubmit).toHaveBeenCalledTimes(2)
+    expect(onSubmit.mock.calls[1][0]).toMatchObject({
+      operationId: onSubmit.mock.calls[0][0].operationId,
+      id: onSubmit.mock.calls[0][0].id,
+    })
+  })
+
+  it("fetches the website icon when switching away from a custom icon", async () => {
+    const fetchFavicon = vi.fn().mockResolvedValue({
+      pngBase64: "AAAA",
+      dataUrl: "data:image/png;base64,AAAA",
+    })
+    await renderDialog({
+      mode: "edit",
+      app: customApp({ iconSource: "custom", iconUrl: "https://example.com/icon.png" }),
+      fetchFavicon,
+    })
+
+    await act(async () => button("使用网站图标").click())
+    await act(async () => Promise.resolve())
+
+    expect(fetchFavicon).toHaveBeenCalledWith("https://example.com/read")
+  })
 })
 
 async function renderDialog(overrides: Partial<{
   onSubmit: (input: CustomAppCreateInput | CustomAppUpdateInput) => Promise<void>
   fetchFavicon: (url: string) => Promise<{ pngBase64: string; dataUrl: string } | null>
   chooseIcon: () => Promise<{ pngBase64: string; dataUrl: string } | null>
+  mode: "create" | "edit"
+  app: import("@synapse/shared").CustomAppDto
 }> = {}) {
   container = document.createElement("div")
   document.body.append(container)
@@ -74,7 +128,8 @@ async function renderDialog(overrides: Partial<{
   await act(async () => root!.render(
     <CreateEditCustomAppDialog
       open
-      mode="create"
+      mode={overrides.mode ?? "create"}
+      app={overrides.app}
       disabled={false}
       onClose={vi.fn()}
       onSubmit={overrides.onSubmit ?? vi.fn()}
@@ -82,6 +137,22 @@ async function renderDialog(overrides: Partial<{
       chooseIcon={overrides.chooseIcon ?? vi.fn().mockResolvedValue(null)}
     />,
   ))
+}
+
+function customApp(overrides: Partial<import("@synapse/shared").CustomAppDto> = {}) {
+  return {
+    id: "cwa_123e4567-e89b-42d3-a456-426614174000" as const,
+    kind: "web",
+    schemaVersion: 1 as const,
+    name: "阅读",
+    startUrl: "https://example.com/read",
+    iconUrl: null,
+    iconSource: "favicon" as const,
+    version: 1,
+    createdAt: "2026-11-07T00:00:00.000Z",
+    updatedAt: "2026-11-07T00:00:00.000Z",
+    ...overrides,
+  }
 }
 
 async function setInput(label: string, value: string) {

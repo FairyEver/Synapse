@@ -432,9 +432,9 @@ export class LiveConnectionService {
 
     if (parsed.type === LIVE_MESSAGE_TYPES.customAppsChanged) {
       this.startServerTimeout(this.heartbeatTimeoutMs)
-      this.eventBus?.emit({
+      this.eventBus?.emitInternal({
         domain: "account",
-        type: "custom-apps.changed",
+        type: "custom-apps.revision",
         payload: parsed.payload,
         timestamp: this.now().toISOString(),
       })

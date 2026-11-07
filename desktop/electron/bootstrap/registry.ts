@@ -66,6 +66,7 @@ import {
   coreCustomAppsDescriptor,
   coreCustomAppFaviconDescriptor,
   coreCustomWebAppRuntimeDescriptor,
+  coreCustomWebSessionDescriptor,
   coreCustomWebAppWindowDescriptor,
   coreMailDescriptor,
   coreMailBackgroundDescriptor,
@@ -181,6 +182,7 @@ export function buildServiceRegistry(
   registry.register(coreTodosDescriptor)
   registry.register(coreCustomAppsDescriptor)
   registry.register(coreCustomAppFaviconDescriptor)
+  registry.register(coreCustomWebSessionDescriptor)
   registry.register(coreCustomWebAppRuntimeDescriptor)
   registry.register(coreCustomWebAppWindowDescriptor)
   registry.register(coreAgentPersonasDescriptor)

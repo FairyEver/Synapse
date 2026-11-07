@@ -113,6 +113,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.config",
         "core.connectors",
         "core.custom-app-web-runtime",
+        "core.custom-app-web-session",
         "core.custom-app-window",
         "core.custom-apps",
         "core.custom-apps-favicon",
@@ -212,6 +213,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     ])
     expect(byId.get("core.data-maintenance")?.startupPhase).toBe("background")
     expect(byId.get("core.automation-cleanup")?.startupPhase).toBe("background")
+    expect(byId.get("core.custom-app-web-runtime")?.dependsOn).toContain("core.custom-app-web-session")
     expect(byId.get("core.automation-mail-triggers")?.startupPhase).toBe("background")
     expect(byId.get("core.connectors")?.dependsOn).toEqual([
       "core.data-repository",

@@ -378,9 +378,9 @@ describe("LiveConnectionService workspace file ownership", () => {
 })
 
 describe("LiveConnectionService", () => {
-  it("emits custom app revision changes to the account event bus", async () => {
+  it("keeps custom app revision changes inside the main-process event bus", async () => {
     const socket = new FakeSocket()
-    const eventBus = { emit: vi.fn() }
+    const eventBus = { emit: vi.fn(), emitInternal: vi.fn() }
     const service = new LiveConnectionService({
       accountService: createAccountService() as never,
       clientIdStore: { getDeviceName: vi.fn().mockResolvedValue(null), getMachineFingerprint: () => null, getOrCreate: vi.fn().mockResolvedValue("client-a") } as never,
@@ -395,11 +395,11 @@ describe("LiveConnectionService", () => {
       { id: "custom-apps-8", sentAt: new Date().toISOString() },
     )))
 
-    await waitForCondition(() => eventBus.emit.mock.calls.some(([event]) =>
-      (event as { readonly type?: string }).type === "custom-apps.changed"))
-    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+    await waitForCondition(() => eventBus.emitInternal.mock.calls.some(([event]) =>
+      (event as { readonly type?: string }).type === "custom-apps.revision"))
+    expect(eventBus.emitInternal).toHaveBeenCalledWith(expect.objectContaining({
       domain: "account",
-      type: "custom-apps.changed",
+      type: "custom-apps.revision",
       payload: { revision: 8 },
     }))
     service.close()

@@ -33,7 +33,7 @@ type CustomAppsCatalogDependencies = {
   readonly account: CustomAppsAccountPort
   readonly repository: Pick<DataRepository, "namespace">
   readonly api?: CustomAppsApiPort
-  readonly eventBus?: Pick<EventBus, "emit">
+  readonly eventBus?: Pick<EventBus, "emit" | "onType">
   readonly now?: () => Date
 }
 
@@ -41,10 +41,13 @@ export class CustomAppsCatalogService {
   private readonly account: CustomAppsAccountPort
   private readonly snapshots: CustomAppsSnapshotEntryV1Namespace
   private readonly api: CustomAppsApiPort
-  private readonly eventBus?: Pick<EventBus, "emit">
+  private readonly eventBus?: Pick<EventBus, "emit" | "onType">
   private readonly now: () => Date
   private readonly listeners = new Set<(state: CustomAppsClientState) => void>()
   private unsubscribeAccount: (() => void) | null = null
+  private unsubscribeLive: (() => void) | null = null
+  private unsubscribeLiveState: (() => void) | null = null
+  private liveConnected = false
   private state: CustomAppsClientState = signedOutState()
   private refreshGeneration = 0
   private refreshInFlight: Promise<void> | null = null
@@ -64,12 +67,38 @@ export class CustomAppsCatalogService {
     this.unsubscribeAccount ??= this.account.onStateChanged(() => {
       void this.refresh("account-change")
     })
+    this.unsubscribeLive ??= this.eventBus?.onType("account", "custom-apps.revision", (event) => {
+      const revision = typeof event.payload === "object" && event.payload !== null
+        && "revision" in event.payload
+        && typeof event.payload.revision === "number"
+        && Number.isInteger(event.payload.revision)
+        && event.payload.revision >= 0
+        ? event.payload.revision
+        : null
+      if (revision !== null) void this.handleLiveRevision(revision)
+    }) ?? null
+    this.unsubscribeLiveState ??= this.eventBus?.onType("live", "live.stateChanged", (event) => {
+      const status = typeof event.payload === "object" && event.payload !== null
+        && "status" in event.payload
+        && typeof event.payload.status === "string"
+        ? event.payload.status
+        : null
+      const connected = status === "connected"
+      if (connected && !this.liveConnected) void this.refresh("live-reconnect")
+      this.liveConnected = connected
+    }) ?? null
     await this.refresh("startup")
   }
 
   dispose(): void {
+    this.refreshGeneration += 1
     this.unsubscribeAccount?.()
     this.unsubscribeAccount = null
+    this.unsubscribeLive?.()
+    this.unsubscribeLive = null
+    this.unsubscribeLiveState?.()
+    this.unsubscribeLiveState = null
+    this.liveConnected = false
     this.listeners.clear()
   }
 
@@ -104,7 +133,16 @@ export class CustomAppsCatalogService {
     }
 
     const accountId = accountState.profile.user.id
+    if (this.state.accountId !== accountId) {
+      this.setState({
+        accountId,
+        snapshot: null,
+        syncState: "loading",
+        errorCode: null,
+      })
+    }
     const cached = await this.readCache(accountId)
+    if (!this.isCurrentAccount(accountId, generation)) return
     this.setState({
       accountId,
       snapshot: cached?.snapshot ?? null,
@@ -187,22 +225,30 @@ export class CustomAppsCatalogService {
       const snapshot = await this.api.fetchSnapshot()
       if (!this.isCurrent(accountId, authRevision, generation)) return
       const validated = customAppSnapshotSchema.parse(snapshot)
+      if (!this.shouldAcceptSnapshot(accountId, validated)) return
       await this.writeCache(accountId, validated)
-    this.setState(customAppsClientStateSchema.parse({
+      if (!this.isCurrent(accountId, authRevision, generation)) return
+      if (!this.shouldAcceptSnapshot(accountId, validated)) return
+      this.setState(customAppsClientStateSchema.parse({
         accountId,
         snapshot: validated,
         syncState: "ready",
         errorCode: null,
-    }))
+      }))
     } catch (error) {
       if (!this.isCurrent(accountId, authRevision, generation)) return
       const status = customAppsHttpStatus(error)
       const currentAccount = this.account.getState()
       const offline = currentAccount.status === "authenticated"
         && currentAccount.connectivity === "offline"
+      const fallback = this.state.accountId === accountId
+        && this.state.snapshot
+        && (!cached || this.state.snapshot.revision >= cached.revision)
+        ? this.state.snapshot
+        : cached
       this.setState({
         accountId,
-        snapshot: cached,
+        snapshot: fallback,
         syncState: status === 404 ? "unsupported" : offline ? "offline" : "error",
         errorCode: status === 404
           ? "unsupported"
@@ -216,16 +262,27 @@ export class CustomAppsCatalogService {
       throw new Error("自定义应用配置当前不可编辑。")
     }
     const accountId = this.state.accountId
+    const scope = this.account.captureAccountRequestScope()
+    if (!scope || scope.accountId !== accountId) throw new CustomAppsAuthenticationError()
     const snapshot = customAppSnapshotSchema.parse(await run())
-    if (this.state.accountId !== accountId) return snapshot
-    await this.writeCache(accountId, snapshot)
+    const currentSnapshot = this.state.accountId === accountId ? this.state.snapshot : null
+    const nextSnapshot = currentSnapshot && currentSnapshot.revision > snapshot.revision
+      ? currentSnapshot
+      : snapshot
+    if (!this.isCurrentMutationAccount(accountId, scope.authRevision)) {
+      throw new CustomAppsAuthenticationError()
+    }
+    await this.writeCache(accountId, nextSnapshot)
+    if (!this.isCurrentMutationAccount(accountId, scope.authRevision)) {
+      throw new CustomAppsAuthenticationError()
+    }
     this.setState({
       accountId,
-      snapshot,
+      snapshot: nextSnapshot,
       syncState: "ready",
       errorCode: null,
     })
-    return snapshot
+    return nextSnapshot
   }
 
   private isCurrent(accountId: string, authRevision: number, generation: number): boolean {
@@ -235,6 +292,26 @@ export class CustomAppsCatalogService {
       && accountState.status === "authenticated"
       && accountState.profile.user.id === accountId
       && scope?.authRevision === authRevision
+  }
+
+  private isCurrentAccount(accountId: string, generation: number): boolean {
+    const accountState = this.account.getState()
+    return generation === this.refreshGeneration
+      && accountState.status === "authenticated"
+      && accountState.profile.user.id === accountId
+  }
+
+  private isCurrentMutationAccount(accountId: string, authRevision: number): boolean {
+    const accountState = this.account.getState()
+    const scope = this.account.captureAccountRequestScope()
+    return accountState.status === "authenticated"
+      && accountState.profile.user.id === accountId
+      && scope?.authRevision === authRevision
+  }
+
+  private shouldAcceptSnapshot(accountId: string, snapshot: CustomAppSnapshotDto): boolean {
+    if (this.state.accountId !== accountId || !this.state.snapshot) return true
+    return snapshot.revision >= this.state.snapshot.revision
   }
 
   private async readCache(accountId: string): Promise<CustomAppsSnapshotEntryV1 | null> {
