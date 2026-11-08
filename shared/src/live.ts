@@ -83,6 +83,7 @@ export interface LiveDesktopHelloPayload {
   readonly appVersion: string
   readonly platform: string
   readonly deviceName: string
+  readonly webhookRawVersion?: 1
   readonly machineFingerprint?: string
 }
 

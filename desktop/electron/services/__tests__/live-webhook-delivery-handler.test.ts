@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { LIVE_MESSAGE_TYPES } from "@synapse/shared"
 import { LiveWebhookDeliveryHandler, createWebhookAutomationEvent } from "../live-webhook-delivery-handler"
+import { getEphemeralWebhookRequest } from "../automation/ephemeral-webhook-request"
 
 vi.mock("../log-store", () => ({
   createMainLogger: () => ({
@@ -26,6 +27,13 @@ const payload = {
 } as const
 
 describe("LiveWebhookDeliveryHandler", () => {
+  it("keeps original credentials outside serializable event state and rejects replay copies", async () => {
+    const rawRequest = { version: 1 as const, method: "GET", query: "token=private", headers: [["Authorization", "private"]] as [string, string][], bodyBase64: "", bodyBytes: 0, bodySha256: "a".repeat(64) }
+    const event = await createWebhookAutomationEvent({ ...payload, rawRequest })
+    expect(getEphemeralWebhookRequest(event)).toEqual(rawRequest)
+    expect(JSON.stringify(event)).not.toContain("private")
+    expect(getEphemeralWebhookRequest(JSON.parse(JSON.stringify(event)))).toBeUndefined()
+  })
   it("maps shared webhook payloads to automation trigger events", async () => {
     await expect(createWebhookAutomationEvent(payload, "2026-06-06T10:00:01.000Z")).resolves.toEqual({
       source: "webhook",

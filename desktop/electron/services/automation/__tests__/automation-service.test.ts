@@ -26,6 +26,14 @@ const testActionSchema = z.object({ message: z.string().min(1) })
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationService", () => {
+  it("rejects executor and trigger mismatches on create and partial updates", async () => {
+    const action = { ...testAction, manifest: { ...testAction.manifest, supportedTriggerTypes: ["builtin.webhook"] } }
+    const h = createHarness({ action })
+    await expect(h.service.automationCreate(createAutomationInput())).rejects.toThrow("只支持 Webhook")
+    const item = await h.service.automationCreate({ ...createAutomationInput(), trigger: { type: "builtin.webhook", config: { webhookPublicId: "wh_public" } } })
+    await expect(h.service.automationUpdate(item.id, { trigger: createAutomationInput().trigger })).rejects.toThrow("只支持 Webhook")
+    expect((await h.service.automationGet(item.id))?.trigger.type).toBe("builtin.webhook")
+  })
   it("waits beyond the UI stop receipt for terminal shutdown persistence", async () => {
     const controlled = manuallyResolvedAction()
     const h = createHarness({ action: { ...controlled.action, manifest: { ...controlled.action.manifest, id: "builtin.terminal" } } })

@@ -221,6 +221,7 @@ export class AutomationService {
     if (oldItem?.schemaVersion === 1) throw new Error("旧版自动化不可编辑，请新建自动化")
     if (oldItem && this.compatibilityIssue(oldItem)) throw new Error(AUTOMATION_UPGRADE_MESSAGE)
     const normalizedPatch = this.normalizeUpdateInput(patch)
+    if (oldItem) this.validateExecutorTrigger(normalizedPatch.executor ?? oldItem.executor, normalizedPatch.trigger ?? oldItem.trigger)
     this.cancel(id)
     try {
       const item = await this.deps.items.update(id, normalizedPatch)
@@ -956,6 +957,10 @@ export class AutomationService {
     }
     const compatibility = this.compatibilityIssue(item)
     if (compatibility) return { status: "needs_update", issues: [compatibility] }
+    const supportedTriggers = this.deps.actions.get(item.executor.type).manifest.supportedTriggerTypes
+    if (supportedTriggers && !supportedTriggers.includes(item.trigger.type)) return {
+      status: "needs_update", issues: [{ field: "executor.type", message: "此执行器只支持 Webhook 触发器" }],
+    }
     const triggerValidation = this.deps.triggers.validateStoredConfig(item.trigger.type, item.trigger.config)
     const executorValidation = this.deps.actions.validateStoredConfig(item.executor.type, item.executor.config)
     const scopeValidation = automationScopeSchema.safeParse(item.scope)
@@ -1028,8 +1033,14 @@ export class AutomationService {
     })
   }
 
+  private validateExecutorTrigger(executor: AutomationCreateInput["executor"], trigger: AutomationCreateInput["trigger"]): void {
+    const types = this.deps.actions.get(executor.type).manifest.supportedTriggerTypes
+    if (types && !types.includes(trigger.type)) throw new Error("此执行器只支持 Webhook 触发器")
+  }
+
   private normalizeCreateInput(input: AutomationCreateInput): AutomationCreateInput {
     automationCreateInputSchema.parse(input)
+    this.validateExecutorTrigger(input.executor, input.trigger)
     return {
       ...input,
       trigger: this.deps.triggers.normalize(input.trigger),

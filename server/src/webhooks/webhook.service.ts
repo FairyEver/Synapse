@@ -13,6 +13,7 @@ import {
   type WebhookDeliveryDto,
   type WebhookDeliveryReceivedPayload,
   type WebhookDeliveryStatus,
+  type WebhookRawRequest,
   type WebhookDeliveryBodyDto,
   type WebhookDeliveryClientReceiptDto,
 } from "@synapse/shared"
@@ -416,6 +417,8 @@ export class WebhookService implements OnModuleInit {
     readonly query: Record<string, string | readonly string[]>
     readonly headers: Record<string, unknown>
     readonly body: Buffer
+    readonly rawQuery?: string
+    readonly rawHeaders?: readonly string[]
     readonly contentType?: string | readonly string[]
     readonly remoteAddress?: string
     readonly publicAppUrl: string
@@ -433,7 +436,22 @@ export class WebhookService implements OnModuleInit {
     const contentType = firstHeader(input.contentType)
     const sanitizedHeaders = sanitizeWebhookHeaders(input.headers)
     const sanitizedQuery = sanitizeWebhookQuery(input.query)
-    const bodySummary = summarizeWebhookBody(input.body, contentType)
+    // Opaque/compressed/unparseable entities are still valid forwarding data.
+    // Only successfully sanitized content may enter history or legacy messages.
+    let bodySummary: ReturnType<typeof summarizeWebhookBody>
+    try {
+      if (input.headers["content-encoding"] && input.headers["content-encoding"] !== "identity") throw new Error("encoded")
+      bodySummary = summarizeWebhookBody(input.body, contentType)
+    } catch {
+      bodySummary = { bodyKind: "opaque", bodySize: input.body.length, body: null }
+    }
+    const rawRequest: WebhookRawRequest = {
+      version: 1, method, query: input.rawQuery ?? "",
+      headers: input.rawHeaders ? Array.from({ length: input.rawHeaders.length / 2 }, (_, index) =>
+        [input.rawHeaders![index * 2]!, input.rawHeaders![index * 2 + 1]!] as const) : [],
+      bodyBase64: input.body.toString("base64"), bodyBytes: input.body.length,
+      bodySha256: createHash("sha256").update(input.body).digest("hex"),
+    }
     const bodySnapshot = createWebhookBodySnapshot(bodySummary, contentType)
     const receivedAt = new Date()
     const receivedAtIso = receivedAt.toISOString()
@@ -492,7 +510,7 @@ export class WebhookService implements OnModuleInit {
     // Wait for that insert before matching the ack against the exact sent client.
     let finishReceiptWrite!: () => void
     this.pendingReceiptWrites.set(delivery.id, new Promise<void>((resolve) => { finishReceiptWrite = resolve }))
-    const broadcastResult = this.broadcastDelivery(webhook.userId, delivery.id, webhook.publicId, message)
+    const broadcastResult = this.broadcastDelivery(webhook.userId, delivery.id, webhook.publicId, message, rawRequest)
     const status = resolveBroadcastDeliveryStatus(broadcastResult)
 
     try {
@@ -523,6 +541,7 @@ export class WebhookService implements OnModuleInit {
     deliveryId: string,
     webhookPublicId: string,
     message: LiveDesktopServerMessage,
+    rawRequest: WebhookRawRequest,
   ): {
     readonly onlineClientCount: number
     readonly sentClientCount: number
@@ -538,7 +557,7 @@ export class WebhookService implements OnModuleInit {
     readonly error?: string
   } {
     try {
-      return this.liveDesktopGateway?.broadcastToUser(userId, message) ?? {
+      return this.liveDesktopGateway?.broadcastToUser(userId, message, rawRequest) ?? {
         onlineClientCount: 0,
         sentClientCount: 0,
         failedClientCount: 0,

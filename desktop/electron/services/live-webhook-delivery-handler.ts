@@ -1,3 +1,4 @@
+import { attachEphemeralWebhookRequest } from "./automation/ephemeral-webhook-request"
 import type { WebhookDeliveryReceivedPayload } from "@synapse/shared" with { "resolution-mode": "import" }
 import type { AutomationTriggerEvent } from "./automation/types"
 import type { AutomationService } from "./automation"
@@ -51,7 +52,7 @@ export async function createWebhookAutomationEvent(
   receivedAt = new Date().toISOString(),
 ): Promise<AutomationTriggerEvent> {
   const { LIVE_MESSAGE_TYPES } = await liveProtocolPromise
-  return {
+  const event: AutomationTriggerEvent = {
     source: "webhook",
     type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
     occurredAt: payload.request.receivedAt,
@@ -72,6 +73,8 @@ export async function createWebhookAutomationEvent(
       },
     },
   }
+  if (payload.rawRequest) attachEphemeralWebhookRequest(event, payload.rawRequest)
+  return event
 }
 
 function errorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {

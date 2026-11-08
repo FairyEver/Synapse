@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-08 新增 `builtin.webhook-forward`（接口转发），Automation Action 由 3 项增至 4 项；仅与 Webhook 组合，配置只有 URL。实时原文 v1 经能力协商传递，历史/MCP 正文仍脱敏；不新增 capability、MCP、IPC、System App、Dock、Workflow Node、Deep Link 或存储表。
+
 2026-11-08 终端自动化保留画面补充启动目录/脱敏命令展示；结束画面首次从头打开并在本窗口适配尺寸。复用既有快照和终端入口，不新增 capability、MCP tool、IPC、Action 或配置字段，既有汇总计数不变。
 
 2026-11-08 自动化新增独立 `builtin.terminal` 执行器，主进程、Renderer 与既有发现入口同步注册；当前执行器清单见下表，旧退役 ID 不恢复。同日改为与手动共用的交互式终端输入：zsh/bash 原生 prompt 回执确认命令完成，exit/exec 看真实 PTY 退出；保存日志及命令退出码后按配置关闭或保留可继续输入的 Shell。输入前确认桌面实测网格，无测量最多等60秒后失败；其他 Shell 在输入前明确拒绝。命令字面执行，不展开触发模板。私有回执和清理不新增 IPC/MCP 表面；复用既有 Automation MCP，不新增 capability/tool、System App、Dock、Workflow Node 或 Deep Link，所有汇总计数不变。
@@ -386,6 +388,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 | `builtin.agent` | 项目、供应商/模型、权限、提示词和会话策略等 | Agent Runtime 运行结束 |
 | `builtin.claude-code` | 项目、提示词、单次模式（可选，默认关闭） | 初始提示词提交回执；默认保留交互式 CLI，单次模式在 CLI 自然退出后清理终端 |
 | `builtin.terminal` | 可选已有项目 `projectId`、字面命令、`autoClose`（默认 true）、`timeoutMins`（默认 30，null 不限时） | 选项目使用其分组及当前设置；未选保留默认分组与原 cwd 规则。与手动共用交互式 Shell/配置/输入及实测网格；zsh/bash 原生 prompt 确认命令完成（exit/exec 看 PTY 退出），先保存真实转录（最多64 KiB，显式截断）、退出码与信号，再关闭或保留可继续输入的 Shell；取消/超时只处理本次 PTY 作业，停止未确认保留证据，重启不重放 |
+| `builtin.webhook-forward` | 字面 HTTP/HTTPS `url`；仅 `builtin.webhook` | 30秒内完整收到2xx；不代表业务完成；无终端、无重定向、只对明确发送前暂时连接错误重试两次 |
 
 
 ## 自动化收信触发器（2026-11-05）

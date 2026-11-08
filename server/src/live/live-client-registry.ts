@@ -14,6 +14,7 @@ interface RegisterLiveClientInput {
   readonly appVersion: string
   readonly platform: string
   readonly deviceName: string
+  readonly webhookRawVersion?: 1
   readonly machineFingerprint?: string
   readonly now: Date
   readonly onSupersede?: (connectionId: string) => void
@@ -71,6 +72,7 @@ export class LiveClientRegistry {
       connectionId: input.connectionId,
       status: "online",
       appVersion: input.appVersion,
+      ...(input.webhookRawVersion === 1 ? { webhookRawVersion: 1 as const } : {}),
       platform: input.platform,
       deviceName: input.deviceName,
       ...(input.machineFingerprint ? { machineFingerprint: input.machineFingerprint } : {}),

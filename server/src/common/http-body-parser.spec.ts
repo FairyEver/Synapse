@@ -4,6 +4,7 @@ import { Test } from "@nestjs/testing"
 import type { NestExpressApplication } from "@nestjs/platform-express"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { registerHttpBodyParsers } from "./http-body-parser"
+import { gzipSync } from "node:zlib"
 
 type SupertestChain = {
   readonly set: (name: string, value: string) => SupertestChain
@@ -20,6 +21,10 @@ let authLoginCalls = 0
 
 @Controller()
 class BodyParserTestController {
+  @Post("/webhooks/:token")
+  receiveWebhook(@Body() body: Buffer) {
+    return { base64: Buffer.isBuffer(body) ? body.toString("base64") : null }
+  }
   @Post("/json")
   receiveJson(@Body() body: { readonly value?: string }) {
     return { size: body.value?.length ?? 0 }
@@ -77,6 +82,29 @@ describe("HTTP body parser configuration", () => {
 
   afterEach(async () => {
     await app.close()
+  })
+
+  it.each(["/webhooks/example", "/WEBHOOKS/example"])("preserves compressed request bytes on %s", async (path) => {
+    const bytes = gzipSync(Buffer.from('{ "token": "private", "n":9007199254740993 }'))
+    const result = await request(app.getHttpServer()).post(path)
+      .set("content-type", "application/octet-stream").set("content-encoding", "gzip")
+      .send(bytes).expect(201)
+    expect(result.body).toEqual({ base64: bytes.toString("base64") })
+  })
+
+  it("keeps malformed JSON byte-for-byte instead of parsing it", async () => {
+    const raw = '{ "unfinished": '
+    const result = await request(app.getHttpServer()).post("/webhooks/example")
+      .set("content-type", "application/json").send(raw).expect(201)
+    expect(result.body).toEqual({ base64: Buffer.from(raw).toString("base64") })
+  })
+
+  it("accepts exactly 256 KiB and rejects larger raw bodies", async () => {
+    const bytes = Buffer.alloc(256 * 1024, 255)
+    await request(app.getHttpServer()).post("/webhooks/example")
+      .set("content-type", "application/octet-stream").send(bytes).expect(201)
+    await request(app.getHttpServer()).post("/webhooks/example")
+      .set("content-type", "application/octet-stream").send(Buffer.concat([bytes, Buffer.from([0])])).expect(413)
   })
 
   it("accepts JSON payloads above the Express default 100KB limit", async () => {

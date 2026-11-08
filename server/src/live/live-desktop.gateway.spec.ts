@@ -1234,17 +1234,20 @@ describe("LiveDesktopGateway", () => {
     gateway.bindAuthenticatedSocket(second as never, { userId: "user-1" })
     gateway.bindAuthenticatedSocket(other as never, { userId: "user-2" })
 
-    first.emit("message", JSON.stringify(helloFor("client-a")))
+    first.emit("message", JSON.stringify({ ...helloFor("client-a"), payload: { ...helloFor("client-a").payload, webhookRawVersion: 1 } }))
     second.emit("message", JSON.stringify(helloFor("client-b")))
     other.emit("message", JSON.stringify(helloFor("client-c")))
 
+    const raw = { version: 1 as const, method: "POST", query: "token=secret", headers: [["Authorization", "private"]] as [string, string][], bodyBase64: "", bodyBytes: 0, bodySha256: "a".repeat(64) }
     const result = gateway.broadcastToUser("user-1", {
       type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
       id: "delivery-msg-1",
       sentAt: "2026-06-06T10:00:02.000Z",
       payload: webhookDeliveryPayload(),
-    })
+    }, raw)
 
+    expect(JSON.parse(first.sent.at(-1)!).payload.rawRequest).toEqual(raw)
+    expect(JSON.parse(second.sent.at(-1)!).payload.rawRequest).toBeUndefined()
     expect(result).toMatchObject({
       onlineClientCount: 2,
       sentClientCount: 2,

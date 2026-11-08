@@ -1,3 +1,4 @@
+import type { WebhookRawRequest } from "@synapse/shared"
 import { randomUUID } from "node:crypto"
 import type { Server as HttpServer, IncomingMessage } from "node:http"
 import { Injectable, Logger, Optional, type OnApplicationShutdown } from "@nestjs/common"
@@ -467,6 +468,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
           platform: hello.platform,
           deviceName: hello.deviceName,
           machineFingerprint: hello.machineFingerprint,
+          webhookRawVersion: hello.webhookRawVersion,
           now: seenAt,
           onSupersede: (oldConnectionId) => {
             this.socketsByConnectionId.get(oldConnectionId)?.close(1000, "superseded")
@@ -659,7 +661,7 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
     }
   }
 
-  broadcastToUser(userId: string, message: LiveDesktopServerMessage): {
+  broadcastToUser(userId: string, message: LiveDesktopServerMessage, rawRequest?: WebhookRawRequest): {
     readonly onlineClientCount: number
     readonly sentClientCount: number
     readonly failedClientCount: number
@@ -681,7 +683,9 @@ export class LiveDesktopGateway implements OnApplicationShutdown {
       }
 
       try {
-        sendJson(socket, message)
+        sendJson(socket, rawRequest && client.webhookRawVersion === 1 && message.type === LIVE_MESSAGE_TYPES.webhookDeliveryReceived
+          ? { ...message, payload: { ...message.payload, rawRequest } }
+          : message)
         sentClientCount += 1
         clientResults.push(toBroadcastClientResult(client, sentAt, WEBHOOK_DELIVERY_CLIENT_RECEIPT_STATUS.sent))
       } catch (error) {

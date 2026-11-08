@@ -1,4 +1,7 @@
-import { Bot, SquareTerminal } from "lucide-react"
+import { webhookForwardActionManifest } from "../../action-packages/builtin/webhook-forward/manifest"
+import { WebhookForwardConfigForm } from "../../action-packages/builtin/webhook-forward/config.renderer"
+import type { WebhookForwardActionConfig } from "../../action-packages/builtin/webhook-forward/schema"
+import { Bot, SquareTerminal, Send } from "lucide-react"
 
 import { agentActionManifest, type AgentActionConfig } from "../../action-packages/builtin/agent"
 import { AgentConfigForm } from "../../action-packages/builtin/agent/config.renderer"
@@ -38,4 +41,10 @@ rendererActionRegistry.register<TerminalActionConfig>({
   summarizeConfig: config => config.command.split(/\r?\n/, 1)[0]!,
   ConfigForm: TerminalConfigForm,
   ResultView: TerminalResultView,
+})
+
+rendererActionRegistry.register<WebhookForwardActionConfig>({
+  manifest: webhookForwardActionManifest, icon: Send,
+  summarizeConfig: config => new URL(config.url).origin,
+  ConfigForm: WebhookForwardConfigForm, ResultView: ActionResultView,
 })

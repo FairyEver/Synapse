@@ -48,9 +48,9 @@ Input:
 {}
 ```
 
-Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig`, and `configFields`.
+Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig`, and `configFields`, plus optional `supportedTriggerTypes`.
 
-`builtin.agent`, `builtin.claude-code`, and `builtin.terminal` are registered. Claude Code accepts `{ "projectId": "project-id", "prompt": "Review {{trigger.payload.body}}", "singleRun": false }`; `singleRun` is optional and defaults to false. It reads the current default provider/model/permission mode at execution time and creates a terminal without navigating or taking focus. Omitted/false preserves interactive mode; true adds native `--print` and the terminal session/pane/empty tab is removed when the CLI exits (including failures). This does not change trigger frequency, does not forcibly close on Stop hooks, and does not guarantee CLI background tasks have finished. Success confirms the initial prompt submission, not task completion. Confirmation times out after 60 seconds without automatic resend; a created terminal is not forcibly stopped and remains available until its process exits.
+`builtin.agent`, `builtin.claude-code`, `builtin.terminal`, and `builtin.webhook-forward` are registered. Claude Code accepts `{ "projectId": "project-id", "prompt": "Review {{trigger.payload.body}}", "singleRun": false }`; `singleRun` is optional and defaults to false. It reads the current default provider/model/permission mode at execution time and creates a terminal without navigating or taking focus. Omitted/false preserves interactive mode; true adds native `--print` and the terminal session/pane/empty tab is removed when the CLI exits (including failures). This does not change trigger frequency, does not forcibly close on Stop hooks, and does not guarantee CLI background tasks have finished. Success confirms the initial prompt submission, not task completion. Confirmation times out after 60 seconds without automatic resend; a created terminal is not forcibly stopped and remains available until its process exits.
 
 Terminal configuration:
 
@@ -331,3 +331,10 @@ The current format is `schemaVersion: 2`, `formatRevision: 1`; historical V2 rec
 Read summaries can include `formatRevision`, `readOnly` and validation issues. If `readOnly` is true, preserve the task and upgrade the client before editing, enabling or running it; do not strip unknown fields or recreate the task automatically. Known invalid configurations can still be repaired when `readOnly` is false. V1 stays disabled and read-only.
 
 Unknown execution options are rejected instead of silently discarded. Trigger/executor updates replace their complete refs; omit untouched refs. Omit conditions to preserve them or pass null to clear them. Public summaries omit unrecognized scope/conditions/policy contents. Future formats survive backup/import as disabled data; unknown executors are preserved rather than treated as retired types.
+
+
+### 接口转发
+
+Use executor `{ "type": "builtin.webhook-forward", "config": { "url": "http://127.0.0.1:18765/v1/webhooks/gitee" } }` only with `builtin.webhook`. URL is literal, HTTP/HTTPS, no templates. Source method, original query (appended after target query), business headers including credentials and raw entity bytes are forwarded. Hop-by-hop headers are removed. No terminal or script is created.
+
+The 30-second total deadline includes at most two retries (1s/3s), only for positively proven pre-send transient connection failures. Redirects, certificates, HTTP errors, ambiguous sends and response failures are never retried. Complete 2xx means transfer success, not business completion. Cancellation terminates the request. Response bodies/headers are discarded. Missing v1 live raw payload fails; sanitized history cannot substitute. Original data stays in memory and is not replayed after offline/restart. Existing delivery-get returns sanitized historical data only.

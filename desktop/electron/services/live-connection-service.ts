@@ -807,6 +807,7 @@ export class LiveConnectionService {
     socket.send(JSON.stringify(createLiveEnvelope(LIVE_MESSAGE_TYPES.hello, {
       clientInstanceId,
       appVersion: this.appVersion(),
+      webhookRawVersion: 1,
       platform: this.platform(),
       deviceName: this.currentDeviceName(),
       ...(machineFingerprint ? { machineFingerprint } : {}),

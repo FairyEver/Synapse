@@ -21,7 +21,7 @@ describe("renderer action registry", () => {
   })
 
   it("offers Agent, Claude Code and terminal for Automation", () => {
-    expect(rendererActionRegistry.list().map(action => action.manifest.id)).toEqual(["builtin.agent", "builtin.claude-code", "builtin.terminal"])
+    expect(rendererActionRegistry.list().map(action => action.manifest.id)).toEqual(["builtin.agent", "builtin.claude-code", "builtin.terminal", "builtin.webhook-forward"])
     for (const type of ["command", "script", "http-request", "workflow", "javascript-run", "nodejs-run"]) {
       expect(() => rendererActionRegistry.get(`builtin.${type}`)).toThrow(/not registered/)
     }

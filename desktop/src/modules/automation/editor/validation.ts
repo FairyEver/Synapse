@@ -33,6 +33,8 @@ export function validateAutomationDraftFields(draft: AutomationEditorDraft): Aut
     const variableError = validateAutomationPrompt(draft.executorConfig.prompt, trigger?.manifest.variables)
     if (variableError) errors["executor.prompt"] = variableError
   }
+  const supportedTriggers = rendererActionRegistry.list().find(item => item.manifest.id === draft.executorType)?.manifest.supportedTriggerTypes
+  if (supportedTriggers && !supportedTriggers.includes(draft.triggerType ?? "")) errors["executor.type"] = "此执行器只支持 Webhook 触发器"
   return errors
 }
 

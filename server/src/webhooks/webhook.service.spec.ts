@@ -819,7 +819,7 @@ describe("WebhookService", () => {
     expect(result.response).toMatchObject({ ok: true, deliveryId: expect.any(String) })
     expect(harness.live.broadcastToUser).toHaveBeenCalledWith("user-1", expect.objectContaining({
       type: LIVE_MESSAGE_TYPES.webhookDeliveryReceived,
-    }))
+    }), expect.objectContaining({ version: 1 }))
     expect(harness.deliveries).toEqual([
       expect.objectContaining({
         webhookId: "webhook-1",
@@ -1254,21 +1254,13 @@ describe("WebhookService", () => {
     expect(harness.deliveries).toHaveLength(0)
   })
 
-  it("rejects invalid JSON bodies without broadcasting or accepting delivery", async () => {
+  it.each([Buffer.from('{"broken"'), Buffer.from(`${"[".repeat(20_000)}0${"]".repeat(20_000)}`), Buffer.from([0, 255, 13])])("forwards opaque bodies without storing original bytes", async (body) => {
     const harness = createWebhookReceiveHarness()
-
-    await expect(harness.receive({ body: Buffer.from("{\"broken\"") }))
-      .rejects.toThrow(BadRequestException)
-    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
-    expect(harness.deliveries).toHaveLength(0)
-  })
-
-  it("rejects deeply nested JSON without broadcasting or accepting delivery", async () => {
-    const harness = createWebhookReceiveHarness()
-    await expect(harness.receive({ body: Buffer.from(`${"[".repeat(20_000)}0${"]".repeat(20_000)}`) }))
-      .rejects.toThrow(BadRequestException)
-    expect(harness.live.broadcastToUser).not.toHaveBeenCalled()
-    expect(harness.deliveries).toHaveLength(0)
+    await expect(harness.receive({ body })).resolves.toMatchObject({ response: { ok: true } })
+    const raw = harness.live.broadcastToUser.mock.calls[0]?.[2]
+    expect(raw).toMatchObject({ version: 1, bodyBytes: body.length, bodyBase64: body.toString("base64"), bodySha256: createHash("sha256").update(body).digest("hex") })
+    expect(harness.deliveries[0]).toMatchObject({ bodyKind: "opaque", bodyText: "null" })
+    expect(JSON.stringify(harness.deliveries)).not.toContain(body.toString("base64"))
   })
 
   it("records broadcast_failed and returns accepted response when live broadcast throws", async () => {

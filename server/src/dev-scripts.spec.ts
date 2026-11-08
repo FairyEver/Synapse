@@ -33,7 +33,7 @@ describe("server dev scripts", () => {
       "--filter @synapse/server run dev",
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
-      "node scripts/dev/wait-for-http.mjs http://127.0.0.1:${SYNAPSE_SERVER_API_PORT:-19701}/healthz",
+      "node scripts/dev/wait-for-http.mjs http://127.0.0.1:${SYNAPSE_SERVER_API_PORT:-19701}/readyz --timeout-ms 180000",
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/dashboard run dev",

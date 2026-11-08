@@ -69,7 +69,7 @@ describe("MainActionRegistry", () => {
       launchClaudeCode: async () => { throw new Error("No terminal in registry discovery test") },
       runTerminal: async () => { throw new Error("No terminal in registry discovery test") },
     })
-    expect(registry.list().map(action => action.manifest.id)).toEqual(["builtin.agent", "builtin.claude-code", "builtin.terminal"])
+    expect(registry.list().map(action => action.manifest.id)).toEqual(["builtin.agent", "builtin.claude-code", "builtin.terminal", "builtin.webhook-forward"])
     expect(registry.parseConfig("builtin.claude-code", { projectId: "p1", prompt: "review" })).toEqual({ projectId: "p1", prompt: "review" })
     expect(() => registry.parseConfig("builtin.claude-code", { projectId: "p1", prompt: "review", providerId: "override" })).toThrow()
     for (const type of ["command", "script", "http-request", "workflow", "javascript-run", "nodejs-run"]) {

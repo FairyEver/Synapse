@@ -135,6 +135,7 @@ export function createAutomationCapabilityDispatcher(deps: AutomationCapabilityD
                 platform,
               ),
               configFields: definition.manifest.configFields,
+              ...(definition.manifest.supportedTriggerTypes ? { supportedTriggerTypes: definition.manifest.supportedTriggerTypes } : {}),
               }))
             result = { ok: true, data: descriptors, total: descriptors.length }
             break

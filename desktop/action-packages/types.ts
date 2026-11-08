@@ -79,6 +79,7 @@ export type ActionManifest<TConfig extends ActionConfig = ActionConfig> = {
   readonly permissions: readonly ActionPermissionName[]
   readonly authorization?: "permission_guard" | "none"
   readonly previousOutputs?: "last_success" | "none"
+  readonly supportedTriggerTypes?: readonly string[]
   readonly resultPersistence?: "sanitized" | "raw"
   readonly automationPolicy?: ActionAutomationPolicy
   readonly defaultConfig: TConfig

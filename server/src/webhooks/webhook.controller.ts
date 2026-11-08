@@ -110,6 +110,8 @@ export class WebhookPublicController {
       secret: token,
       method: request.method,
       path: request.path,
+      rawQuery: (request.originalUrl ?? request.url ?? "").includes("?") ? (request.originalUrl ?? request.url).slice((request.originalUrl ?? request.url).indexOf("?") + 1) : "",
+      rawHeaders: request.rawHeaders,
       query: normalizeRequestQuery(request.query),
       headers: request.headers,
       body: toRequestBodyBuffer(request.body),

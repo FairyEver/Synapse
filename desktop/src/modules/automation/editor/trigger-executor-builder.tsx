@@ -54,7 +54,7 @@ export function TriggerExecutorBuilder({ step, conditions, fieldErrors, onAddPro
   const selected = isTrigger ? trigger : executor
   const Icon = selected?.icon ?? (isTrigger ? Zap : Play)
   const discoverable = new Set(listDiscoverableBuiltinAutomationActionTypes(rendererActionRegistry.list().map(item => item.manifest.id)))
-  const options = isTrigger ? rendererAutomationTriggerRegistry.list() : rendererActionRegistry.list().filter(item => discoverable.has(item.manifest.id))
+  const options = isTrigger ? rendererAutomationTriggerRegistry.list() : rendererActionRegistry.list().filter(item => discoverable.has(item.manifest.id) && (!item.manifest.supportedTriggerTypes || item.manifest.supportedTriggerTypes.includes(triggerType ?? "")))
   const groups = isTrigger
     ? [
       { title: "按时间", options: options.filter(item => "kind" in item.manifest && item.manifest.kind === "schedule") },
