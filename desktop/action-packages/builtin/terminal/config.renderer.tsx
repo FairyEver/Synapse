@@ -3,11 +3,33 @@ import { Checkbox } from "../../../src/components/ui/checkbox"
 import { Field, FieldContent, FieldGroup, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { Textarea } from "../../../src/components/ui/textarea"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "../../../src/components/ui/select"
 import type { ActionConfigFormComponent } from "../../../src/action-runtime/action-registry"
 import type { TerminalActionConfig } from "./schema"
 
-export const TerminalConfigForm: ActionConfigFormComponent<TerminalActionConfig> = ({ value, onChange, fieldErrors }) => (
+export const TerminalConfigForm: ActionConfigFormComponent<TerminalActionConfig> = ({ value, onChange, fieldErrors, projects = [] }) => (
   <FieldGroup>
+    <Field>
+      <FieldLabel htmlFor="task-action-terminal-project">项目</FieldLabel>
+      <FieldContent>
+        <Select value={value.projectId ? `project:${value.projectId}` : "none"} onValueChange={selected => {
+          const config = { ...value }
+          if (selected === "none") delete config.projectId
+          else config.projectId = selected.slice("project:".length)
+          onChange(config)
+        }}>
+          <SelectTrigger {...configurationFieldProps(fieldErrors, "projectId", "task-action-terminal-project")} id="task-action-terminal-project" className="w-full">
+            <SelectValue placeholder="不指定项目" />
+          </SelectTrigger>
+          <SelectContent><SelectGroup>
+            <SelectItem value="none">不指定项目</SelectItem>
+            {value.projectId && !projects.some(project => project.id === value.projectId) ? <SelectItem value={`project:${value.projectId}`} disabled>项目已不可用</SelectItem> : null}
+            {projects.map(project => <SelectItem key={project.id} value={`project:${project.id}`}>{project.name}</SelectItem>)}
+          </SelectGroup></SelectContent>
+        </Select>
+        <ConfigurationFieldError errors={fieldErrors} name="projectId" id="task-action-terminal-project" />
+      </FieldContent>
+    </Field>
     <Field>
       <FieldLabel htmlFor="task-action-terminal-command">命令</FieldLabel>
       <FieldContent>

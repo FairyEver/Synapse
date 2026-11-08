@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -55,6 +55,19 @@ describe.skipIf(process.env.SYNAPSE_TERMINAL_REAL_PTY !== "1" || process.platfor
     expect(h.saved.at(-1)).toMatchObject({ exitCode: 0, terminalRetained: true })
     expect(service.listSessions()).toHaveLength(0)
     expect(state.sessions).toHaveLength(0)
+  })
+  it("runs in the selected project's group and directory instead of the Automation cwd", async () => {
+    const projectDirectory = path.join(directory, "selected project")
+    await mkdir(projectDirectory)
+    await service.syncProjectGroups([{ projectId: "project-alpha", name: "Alpha", path: projectDirectory }])
+    const h = start(`${quote(process.execPath)} -e ${quote("console.log('PROJECT_CWD:'+process.cwd())")}`, { projectId: "project-alpha", autoClose: false })
+    const result = await h.pending
+    expect(result).toMatchObject({ status: "success", outputs: { projectId: "project-alpha", terminalRetained: true } })
+    expect(result.outputs?.terminalOutput).toContain(`PROJECT_CWD:${await realpath(projectDirectory)}`)
+    const session = service.getSession({ sessionId: result.outputs!.sessionId as string })
+    expect(service.getGroup(session.groupId).projectId).toBe("project-alpha")
+    expect(h.saved[0]).toMatchObject({ projectId: "project-alpha", sessionId: session.id })
+    await service.deleteTerminalSession(session.id, "test")
   })
   it("runs Python with user-configured file redirection and preserves a nonzero exit in an ended terminal", async () => {
     const script = path.join(directory, "python test.py")

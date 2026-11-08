@@ -9,8 +9,9 @@ import type { ActionRunResult } from "../../types"
 export function TerminalResultView({ result, showDuration = true }: { readonly result: ActionRunResult; readonly showDuration?: boolean }) {
   const [opening, setOpening] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { sessionId, terminalRetained } = result.outputs ?? {}
-  const target = typeof sessionId === "string" && sessionId.length > 0 && terminalRetained === true ? { sessionId } : null
+  const { sessionId, terminalRetained, projectId } = result.outputs ?? {}
+  const target = typeof sessionId === "string" && sessionId.length > 0 && terminalRetained === true
+    ? { sessionId, ...(typeof projectId === "string" && projectId ? { projectId } : {}) } : null
 
   async function handleOpen() {
     if (!target || opening) return

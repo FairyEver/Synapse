@@ -331,7 +331,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_executor_type_list",
-      description: "List builtin.agent, builtin.claude-code, and builtin.terminal, including public config fields and defaults. Claude Code completes after initial prompt submission. Terminal executes a literal user command without trigger interpolation, waits for actual process exit, saves merged output and exit code, then closes by default. Timeout defaults to 30 minutes and null disables it.",
+      description: "List builtin.agent, builtin.claude-code, and builtin.terminal, including public config fields and defaults. Claude Code completes after initial prompt submission. Terminal accepts optional projectId to use the selected project's Terminal group and current launch settings (like its plus button); omitted preserves default group/cwd behavior. It executes a literal user command without trigger interpolation, waits for process exit, saves merged output and exit code, then closes by default. Timeout defaults to 30 minutes and null disables it.",
       inputSchema: { type: "object", properties: {} },
     },
   ], { sourcePrefix: "automation", primaryPrefix: "app_automation" })

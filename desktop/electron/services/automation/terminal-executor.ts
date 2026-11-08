@@ -1,5 +1,6 @@
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import type { TerminalSession } from "../../../app-capabilities/terminal/shared/schema"
+import { TerminalContractError } from "../../../app-capabilities/terminal/shared/errors"
 import type { RunAutomationTerminal } from "../../../action-packages/builtin/terminal/executor.main"
 import type { ActionRunResult } from "../../../action-packages/types"
 import { redactSensitiveText } from "../../../src/lib/agent-redaction"
@@ -17,6 +18,7 @@ type Terminal = Pick<TerminalService, "createAutomationSession" | "events" | "si
 export function createAutomationTerminalRunner(terminal: Terminal): RunAutomationTerminal {
   return async ({ config, context }) => {
     const started = Date.now()
+    const project = config.projectId ? { projectId: config.projectId } : {}
     let sessionId: string | undefined
     let launched = false
     let retained = false
@@ -72,10 +74,11 @@ export function createAutomationTerminalRunner(terminal: Terminal): RunAutomatio
       if (config.timeoutMins !== null) timeout = setTimeout(() => stop("timeout"), config.timeoutMins * 60_000)
       const created = await terminal.createAutomationSession({
         title: `自动化 · ${context.taskName || context.taskId}`.slice(0, 120), cwd: context.cwd, command: config.command,
+        ...project,
         onOutput: append, onExited: exit => complete(exit),
         onCreated: async id => {
           sessionId = id
-          await context.persistOutputs!({ sessionId: id, terminalRetained: true })
+          await context.persistOutputs!({ ...project, sessionId: id, terminalRetained: true })
           if (context.abortSignal.aborted || reason) throw new Error("执行在启动前已停止")
         },
       })
@@ -97,7 +100,7 @@ export function createAutomationTerminalRunner(terminal: Terminal): RunAutomatio
       }
       const status = reason ?? (exit.externalClose ? "cancelled" : stopError || exit.exitCode !== 0 || Boolean(exit.signal) ? "failed" : "success")
       const terminalOutput = redactSensitiveText(chunks.join(""))
-      const outputs = { sessionId, terminalOutput, outputTruncated: truncated, exitCode: exit.exitCode, signal: exit.signal ?? null,
+      const outputs = { ...project, sessionId, terminalOutput, outputTruncated: truncated, exitCode: exit.exitCode, signal: exit.signal ?? null,
         executionStatus: status, terminalRetained: retained }
       const summary = status === "timeout" ? "执行超时" : status === "cancelled" ? "已取消" : exit.signal ? `进程被信号 ${exit.signal} 终止` : `退出码 ${exit.exitCode ?? "未知"}`
       const result: ActionRunResult = {
@@ -120,8 +123,9 @@ export function createAutomationTerminalRunner(terminal: Terminal): RunAutomatio
         await ended
       }
       logger.warn("Automation terminal execution failed.", { runId: context.runId, sessionId, errorName: error instanceof Error ? error.name : "unknown" })
-      return { status: reason ?? (context.abortSignal.aborted ? "cancelled" : "failed"), summary: "终端执行未完成", error: "无法完成终端执行或保存记录，请查看关联终端",
-        outputs: { sessionId, terminalOutput: redactSensitiveText(chunks.join("")), terminalRetained: retained, outputTruncated: truncated,
+      const projectUnavailable = error instanceof TerminalContractError && error.payload.details?.reason === "automation_project_unavailable"
+      return { status: reason ?? (context.abortSignal.aborted ? "cancelled" : "failed"), summary: "终端执行未完成", error: projectUnavailable ? "所选项目已不可用，请重新选择项目" : "无法完成终端执行或保存记录，请查看关联终端",
+        outputs: { ...project, sessionId, terminalOutput: redactSensitiveText(chunks.join("")), terminalRetained: retained, outputTruncated: truncated,
           exitCode: finalExit?.exitCode ?? null, signal: finalExit?.signal ?? null },
         logs: [{ label: "终端输出", value: redactSensitiveText(chunks.join("")) }],
         metrics: { durationMs: Date.now() - started, exitCode: finalExit?.exitCode ?? null } }

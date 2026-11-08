@@ -11,6 +11,44 @@ const PROJECT_ALPHA = { projectId: "project-alpha", name: "Alpha" }
 const PROJECT_BETA = { projectId: "project-beta", name: "Beta" }
 
 describe("terminal project groups", () => {
+  it("starts an automation in the selected project's group with the same directory and shell as its plus button", async () => {
+    const h = await startedHarness()
+    try {
+      await h.service.syncProjectGroups([h.alpha, h.beta])
+      const group = projectGroupFor(h.service, h.alpha.projectId)!
+      await h.service.updateGroupSettings({ groupId: group.id, name: group.name, settings: { ...group.settings, shell: "/bin/bash" } })
+      const manual = await h.service.createSession({ groupId: group.id })
+      const automated = await h.service.createAutomationSession({ projectId: h.alpha.projectId, cwd: h.beta.path,
+        title: "automation", command: "node custom.js", onCreated: async () => undefined })
+      expect(automated).toMatchObject({ groupId: manual.groupId, cwd: h.alpha.path, shell: manual.shell })
+      // The project may move after the automation was configured; use the current group settings.
+      await h.service.syncProjectGroups([{ ...h.alpha, path: h.beta.path }, h.beta])
+      const moved = await h.service.createAutomationSession({ projectId: h.alpha.projectId, cwd: h.cwd,
+        title: "automation", command: "python3 custom.py", onCreated: async () => undefined })
+      expect(moved).toMatchObject({ groupId: group.id, cwd: h.beta.path })
+    } finally { await h.service.stop() }
+  })
+  it("keeps the existing group and explicit cwd behavior when no project is selected", async () => {
+    const h = await startedHarness()
+    try {
+      await h.service.syncProjectGroups([h.alpha])
+      const defaultGroup = h.service.listGroups().find(group => group.projectId === undefined)!
+      const session = await h.service.createAutomationSession({ cwd: h.beta.path, title: "automation", command: "echo ok", onCreated: async () => undefined })
+      expect(session).toMatchObject({ groupId: defaultGroup.id, cwd: h.beta.path })
+    } finally { await h.service.stop() }
+  })
+  it("refuses a deleted selected project before creating or associating any terminal", async () => {
+    const h = await startedHarness()
+    let associated = false
+    try {
+      await h.service.syncProjectGroups([h.alpha])
+      await h.service.syncProjectGroups([])
+      await expect(h.service.createAutomationSession({ projectId: h.alpha.projectId, cwd: h.cwd,
+        title: "automation", command: "echo must-not-run", onCreated: async () => { associated = true } })).rejects.toThrow()
+      expect(associated).toBe(false)
+      expect(h.service.listSessions()).toHaveLength(0)
+    } finally { await h.service.stop() }
+  })
   it("gives every project a group named after it, and keeps one group per project", async () => {
     const harness = await startedHarness()
 

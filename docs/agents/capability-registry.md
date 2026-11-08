@@ -381,7 +381,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 | --- | --- | --- |
 | `builtin.agent` | 项目、供应商/模型、权限、提示词和会话策略等 | Agent Runtime 运行结束 |
 | `builtin.claude-code` | 项目、提示词、单次模式（可选，默认关闭） | 初始提示词提交回执；默认保留交互式 CLI，单次模式在 CLI 自然退出后清理终端 |
-| `builtin.terminal` | 字面命令、`autoClose`（默认 true）、`timeoutMins`（默认 30，null 不限时） | 实际 PTY 退出；先保存合并输出（最多 64 KiB，显式截断）、退出码与信号，再关闭或保留只读已结束终端；取消/超时只作用于本次任务，重启不重放 |
+| `builtin.terminal` | 可选已有项目 `projectId`、字面命令、`autoClose`（默认 true）、`timeoutMins`（默认 30，null 不限时） | 选项目时使用其分组和当前启动设置，等效于该分组点加号；未选保留默认分组与原 cwd 规则。实际 PTY 退出后先保存合并输出（最多 64 KiB，显式截断）、退出码与信号，再关闭或保留只读已结束终端；取消/超时只作用于本次任务，重启不重放 |
 
 
 ## 自动化收信触发器（2026-11-05）

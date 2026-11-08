@@ -2381,11 +2381,16 @@ export function createTerminalService(deps: {
   /** Owned process execution; no user/MCP launch surface gains retention or arbitrary argv. */
   async function createAutomationSession(input: {
     readonly title: string; readonly cwd: string; readonly command: string
+    readonly projectId?: string
     readonly onCreated: (sessionId: string) => Promise<void>
     readonly onOutput?: (data: string) => void
     readonly onExited?: (exit: { exitCode: number; signal?: number }) => void
   }): Promise<TerminalSession> {
-    return createSessionRecord({ title: input.title, cwd: input.cwd }, "ui", {
+    const group = input.projectId ? findProjectGroup(input.projectId) : undefined
+    if (input.projectId && !group) throw terminalContractError("not_found", "not_found", {
+      details: { reason: "automation_project_unavailable" },
+    })
+    return createSessionRecord({ title: input.title, ...(group ? { groupId: group.id } : { cwd: input.cwd }) }, "ui", {
       automationCommand: input.command, onCreated: input.onCreated, persistEnvironment: false,
       onOutput: input.onOutput, onExited: input.onExited,
     })

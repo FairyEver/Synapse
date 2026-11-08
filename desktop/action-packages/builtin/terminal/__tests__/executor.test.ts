@@ -3,6 +3,12 @@ import { terminalActionConfigSchema } from "../schema"
 import { createTerminalAction } from "../executor.main"
 
 describe("terminal automation action", () => {
+  it("accepts an optional configured project and scopes authorization to it", () => {
+    const config = terminalActionConfigSchema.parse({ command: "node custom.js", projectId: "project-alpha" })
+    const action = createTerminalAction({ run: vi.fn() })
+    const context = { taskId: "a", runId: "r", cwd: "/unrelated", actor: { kind: "user" as const, id: "automation" }, triggeredBy: "manual" as const, abortSignal: new AbortController().signal }
+    expect(action.buildPermissionRequest({ config, context })).toMatchObject({ resource: "terminal-project:project-alpha", context: { projectId: "project-alpha" } })
+  })
   it("accepts arbitrary commands and defaults to closing after completion", () => {
     expect(terminalActionConfigSchema.parse({ command: "python3 custom.py && node other.mjs" })).toEqual({ command: "python3 custom.py && node other.mjs", autoClose: true, timeoutMins: 30 })
     expect(terminalActionConfigSchema.parse({ command: "my-custom-program", autoClose: false, timeoutMins: null })).toMatchObject({ autoClose: false, timeoutMins: null })

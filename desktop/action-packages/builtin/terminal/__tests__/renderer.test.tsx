@@ -7,6 +7,7 @@ import { TerminalConfigForm } from "../config.renderer"
 import { TerminalResultView } from "../result.renderer"
 import { terminalActionManifest } from "../manifest"
 import type { TerminalActionConfig } from "../schema"
+import type { SynapseProjectConfig } from "../../../../src/types/config"
 
 const open = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/open-terminal-session", () => ({ openTerminalSession: open }))
@@ -28,6 +29,26 @@ function edit(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
 }
 
 describe("terminal automation renderer", () => {
+  it("selects an existing project and can clear it back to the default behavior", async () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    const container = mount()
+    let value: TerminalActionConfig = { ...terminalActionManifest.defaultConfig }
+    const projects = [{ id: "project-alpha", name: "Alpha" }, { id: "project-beta", name: "Beta" }] as SynapseProjectConfig[]
+    const change = (next: TerminalActionConfig) => { value = next }
+    const render = () => act(async () => root!.render(<TerminalConfigForm value={value} onChange={change} projects={projects} />))
+    await render()
+    const expand = async () => act(async () => container.querySelector('[role="combobox"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })))
+    await expand()
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull()
+    expect(document.querySelector('[role="listbox"]')?.textContent).toContain("不指定项目")
+    const option = (name: string) => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(element => element.textContent === name)!
+    await act(async () => option("Alpha").click())
+    expect(value.projectId).toBe("project-alpha")
+    await render(); await expand()
+    await act(async () => option("不指定项目").click())
+    expect(value.projectId).toBeUndefined()
+    expect(value.command).toBe("")
+  })
   it("edits literal multiline commands and timeout without inserting trigger variables", async () => {
     const container = mount()
     let value: TerminalActionConfig = { ...terminalActionManifest.defaultConfig }
@@ -91,14 +112,15 @@ describe("terminal automation renderer", () => {
     expect(renderToStaticMarkup(<TerminalResultView result={{ status: "success", outputs }} />)).not.toContain("打开终端")
   })
 
-  it("opens only the retained session on explicit request and reports unavailable sessions", async () => {
+  it.each([undefined, "project-alpha"])("opens only the retained session on explicit request, with project %s", async projectId => {
     const container = mount()
     open.mockRejectedValueOnce(new Error("终端会话已不可用"))
-    await act(async () => root!.render(<TerminalResultView result={{ status: "success", outputs: { sessionId: "s1", terminalRetained: true } }} />))
+    const project = projectId ? { projectId } : {}
+    await act(async () => root!.render(<TerminalResultView result={{ status: "success", outputs: { ...project, sessionId: "s1", terminalRetained: true } }} />))
     expect(open).not.toHaveBeenCalled()
     const button = container.querySelector<HTMLButtonElement>("button")!
     await act(async () => button.click())
-    expect(open).toHaveBeenCalledWith({ sessionId: "s1" })
+    expect(open).toHaveBeenCalledWith({ ...project, sessionId: "s1" })
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("终端会话已不可用")
     expect(button.disabled).toBe(false)
     open.mockResolvedValueOnce(undefined)

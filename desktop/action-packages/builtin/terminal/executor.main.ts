@@ -8,9 +8,10 @@ export type RunAutomationTerminal = (input: ActionExecutionInput<TerminalActionC
 export function createTerminalAction(deps: { readonly run: RunAutomationTerminal }): MainActionDefinition<TerminalActionConfig> {
   return {
     manifest: terminalActionManifest,
-    buildPermissionRequest: ({ context }) => ({
-      action: "shell.exec", actor: context.actor, resource: context.cwd,
-      context: { source: "automation", actionType: terminalActionManifest.id, taskId: context.taskId, runId: context.runId },
+    buildPermissionRequest: ({ config, context }) => ({
+      action: "shell.exec", actor: context.actor, resource: config.projectId ? `terminal-project:${config.projectId}` : context.cwd,
+      context: { source: "automation", actionType: terminalActionManifest.id, taskId: context.taskId, runId: context.runId,
+        ...(config.projectId ? { projectId: config.projectId } : {}) },
     }),
     execute: deps.run,
   }

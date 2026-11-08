@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { TerminalSession } from "../../../../app-capabilities/terminal/shared/schema"
 import type { ActionRuntimeContext } from "../../../action-runtime/action-registry"
 import { terminalActionConfigSchema } from "../../../../action-packages/builtin/terminal/schema"
+import { terminalContractError } from "../../../../app-capabilities/terminal/shared/errors"
 
 vi.mock("../../log-store", () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
 import { createAutomationTerminalRunner } from "../terminal-executor"
@@ -54,6 +55,18 @@ function harness(options: { fast?: boolean; failStart?: boolean; ignoreStop?: bo
 
 afterEach(() => vi.useRealTimers())
 describe("automation terminal runner", () => {
+  it("saves selected project identity with the terminal association and final result", async () => {
+    const h = harness({ fast: true })
+    const result = await h.run({ projectId: "project-alpha" })
+    expect(h.saved[0]).toMatchObject({ projectId: "project-alpha", sessionId: "owned" })
+    expect(result.outputs?.projectId).toBe("project-alpha")
+  })
+  it("reports a missing selected project without offering a phantom terminal", async () => {
+    const h = harness()
+    h.terminal.createAutomationSession.mockRejectedValueOnce(terminalContractError("not_found", "not_found", { details: { reason: "automation_project_unavailable" } }))
+    expect(await h.run({ projectId: "project-gone" })).toMatchObject({ status: "failed", error: "所选项目已不可用，请重新选择项目", outputs: { terminalRetained: false } })
+    expect(h.saved).toHaveLength(0)
+  })
   it("captures output even before terminal publication, saves exit before closing, removes listeners", async () => {
     const h = harness({ fast: true })
     const result = await h.run()
