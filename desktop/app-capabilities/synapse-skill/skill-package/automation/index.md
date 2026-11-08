@@ -98,6 +98,8 @@ The terminal run saves merged stdout/stderr output up to 64 KiB with an explicit
 
 The old `builtin.command`, `builtin.script`, `builtin.http-request`, `builtin.workflow`, `builtin.javascript-run`, and `builtin.nodejs-run` Automation IDs remain retired; `builtin.terminal` does not restore those IDs. Existing v2 retired configurations are automatically deleted in the background, including configurations restored from a backup. Legacy v1 configurations are never auto-deleted. Supported Agent, Claude Code, and terminal configurations (including invalid configs) and run history are preserved. Workflow nodes and Workflow execution remain available through the Workflow domain.
 
+The Terminal screen shows the resolved launch directory and redacted literal command before program output. This heading is presentation only, not PTY input or program stdout. An ended retained screen opens from the beginning and fits the current desktop pane locally; it does not resize/restart the exited process or change archived grid dimensions. Existing scrollback limits still apply.
+
 ## Update Rules
 
 Use `app_automation_item_update` with a focused patch. The patch may include top-level `conditions`, `trigger`, or `executor`; trigger and executor refs replace the corresponding stored config. Legacy v1 items reject updates.

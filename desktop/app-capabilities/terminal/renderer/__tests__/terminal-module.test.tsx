@@ -825,6 +825,7 @@ vi.mock("@xterm/xterm", () => ({
       hasSelection: vi.fn(() => false),
       paste: vi.fn(),
       refresh: vi.fn(),
+      scrollToTop: vi.fn(),
       resize: vi.fn((cols: number, rows: number) => {
         instance.cols = cols
         instance.rows = rows
@@ -4780,6 +4781,29 @@ describe("TerminalModule", () => {
     })
   })
 
+  it.each(["ended", "failed", "lost"] as const)("fits a %s read-only snapshot to the pane without resizing a dead PTY", async status => {
+    bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
+    bridgeState.sessions = [createSession({ id: "session-1", groupId: "group-1", title: "自动化", status, cols: 80, rows: 24 })]
+    await renderModule()
+    const xterm = xtermState.instances[0]!
+    expect(xterm.cols).toBe(100)
+    expect(xterm.rows).toBe(30)
+    expect(xterm.scrollToTop).toHaveBeenCalled()
+    expect(terminalBridge.resizeSession).not.toHaveBeenCalled()
+    xtermState.fitInstances[0]!.proposeDimensions.mockReturnValue({ cols: 144, rows: 46 })
+    await act(async () => {
+      for (const observer of resizeObservers) observer.trigger()
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    })
+    expect(xterm.cols).toBe(144)
+    expect(xterm.rows).toBe(46)
+    expect(terminalBridge.resizeSession).not.toHaveBeenCalled()
+    expect(bridgeState.sessions[0]).toMatchObject({ cols: 80, rows: 24, status })
+    expect(xterm.options.disableStdin).toBe(true)
+    act(() => { xterm.emitInput("must-not-run\r") })
+    expect(terminalBridge.writeSession).not.toHaveBeenCalled()
+  })
+
   it("covers the pane a phone owns, and uncovers it once the grid is handed back", async () => {
     bridgeState.groups = [createGroup({ id: "group-1", name: "默认分组" })]
     bridgeState.sessions = [createSession({
@@ -5038,6 +5062,8 @@ describe("TerminalModule", () => {
     expect(xtermState.instances).toHaveLength(1)
     expect(xtermState.instances[0]?.dispose).not.toHaveBeenCalled()
     expect(xtermState.instances[0]?.options.disableStdin).toBe(true)
+    expect(xtermState.instances[0]?.cols).toBe(100)
+    expect(xtermState.instances[0]?.rows).toBe(30)
   })
 
   it("applies output before and after a resize at the authoritative output watermark", async () => {

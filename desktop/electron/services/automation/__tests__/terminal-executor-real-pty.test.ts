@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promi
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { Terminal as HeadlessTerminal } from "@xterm/headless"
 import { createTerminalService, type TerminalService } from "../../../../app-capabilities/terminal/main/service"
 import { terminalStoreStateSchema, type TerminalStore, type TerminalStoreState } from "../../../../app-capabilities/terminal/main/store"
 import { terminalActionConfigSchema, type TerminalActionConfig } from "../../../../action-packages/builtin/terminal/schema"
@@ -55,6 +56,35 @@ describe.skipIf(process.env.SYNAPSE_TERMINAL_REAL_PTY !== "1" || process.platfor
     expect(h.saved.at(-1)).toMatchObject({ exitCode: 0, terminalRetained: true })
     expect(service.listSessions()).toHaveLength(0)
     expect(state.sessions).toHaveLength(0)
+  })
+  it("keeps the launch heading and both ends of fast long output across reopen and display reflow", async () => {
+    const script = path.join(directory, "long-output.js")
+    await writeFile(script, "console.log('BEGIN_OUTPUT');for(let n=0;n<200;n++)console.log('row-'+n+' '+'x'.repeat(120));console.log('END_OUTPUT')")
+    const command = `${quote(process.execPath)} ${quote(script)}`
+    const result = await start(command, { autoClose: false }).pending
+    expect(result.status).toBe("success")
+    const sessionId = result.outputs!.sessionId as string
+    expect(result.outputs?.terminalOutput).not.toContain("执行命令:")
+    for (let reopen = 0; reopen < 10; reopen++) {
+      const snapshot = await service.attachSession({ sessionId })
+      expect(snapshot).toMatchObject({ degraded: false, scrollbackTruncated: false })
+      const view = new HeadlessTerminal({ cols: snapshot.cols, rows: snapshot.rows, scrollback: 5000, allowProposedApi: true })
+      try {
+        await new Promise<void>(resolve => view.write(snapshot.serialized!, resolve))
+        for (const [cols, rows] of [[120, 45], [40, 60], [100, 30], [20, 8], [200, 70]]) {
+          view.resize(cols!, rows!)
+          view.scrollToTop()
+          expect(view.buffer.active.viewportY).toBe(0)
+          const text = Array.from({ length: view.buffer.active.length }, (_, i) => view.buffer.active.getLine(i)?.translateToString(true) ?? "").join("\n")
+          expect(text).toContain("工作目录:")
+          expect(text).toContain("执行命令:")
+          expect(text).toContain("BEGIN_OUTPUT")
+          expect(text).toContain("END_OUTPUT")
+        }
+      } finally { view.dispose() }
+    }
+    expect(service.getSession({ sessionId })).toMatchObject({ cols: 80, rows: 24, status: "ended" })
+    await service.deleteTerminalSession(sessionId, "test")
   })
   it("runs in the selected project's group and directory instead of the Automation cwd", async () => {
     const projectDirectory = path.join(directory, "selected project")

@@ -75,3 +75,17 @@ SYNAPSE_TERMINAL_REAL_PTY=1 pnpm exec vitest run electron/services/automation/__
 - 主进程、Renderer、测试三类 TypeScript 检查通过；改动范围 ESLint、hard constraints、UI tracking coverage、diff 检查通过。
 
 未改动现有自动化配置，仍未打包、安装或发布。没有新增 capability、IPC、MCP 动作或数据库迁移。旧配置没有 projectId 时继续原行为；回退旧版前先清空新增项目字段或禁用该自动化，避免旧版严格配置校验将其判为待修复。
+
+## 后续：启动信息与结束画面适配（2026-11-08）
+
+截图问题已用失败测试复现：保留画面没有启动目录/命令；80×24 结束快照被当成运行中 PTY 发起 resize，导致无法适配窗口。修复后，新自动化将实际目录与脱敏命令展示头写入终端缓冲/快照，放在程序输出之前，转义控制字符，不修改用户命令、不发送给 PTY，也不混入程序输出回调和自动化 stdout 日志。已结束/失败/丢失快照按窗口尺寸本地排版，首次打开从头浏览；不修改归档网格，不调用 PTY resize 或重新启动。旧会话未记录的启动信息不能倒补，既有历史保留额度仍有效。
+
+验证结果：
+
+- 主进程回归 626 项、Renderer/自动化界面回归 497 项通过；主进程组跳过的 6 项原生场景另外真实执行全部通过，合计 1,129 项互不重复的测试通过。
+- 真实 Node 快速输出 200 行：10 次重新恢复归档快照、每次 5 组尺寸（120×45、40×60、100×30、20×8、200×70），共 50 次真实 xterm 内核重排，目录/命令、首行及末行均保留，能滚回顶部。归档仍为原 80×24，任务保持 ended。恢复使用实际快照和 @xterm/headless；不是用 mock 字符串替代真实缓冲。
+- UI 测试覆盖结束、失败、丢失三类状态首次适配和后续 ResizeObserver、只读输入限制，以及运行中转结束；完整终端 Renderer 回归还覆盖运行中 resize 屏障、手机尺寸所有权、隐藏/重新附着等行为。
+- 真实 Node/Python、项目路径、自动关闭、非零退出保留、超时、取消及无关终端隔离全部通过。目录/命令脱敏、终端控制符转义、展示头不混入程序 stdout 有专项测试。
+- 主进程、Renderer、测试三类 TypeScript 检查通过；新 helper 与主进程范围 ESLint、hard constraints、UI tracking coverage、diff 检查通过。Renderer 文件 ESLint 仍报告既有未使用类型导入 `SynapseTerminalOutputChunk`；对 HEAD 原文件执行同一检查复现相同错误，未把此问题算作本次修复通过，也未顺手清理无关导入。
+
+测试工具环境有既有 Electron app 路径 mock 和 jsdom canvas 未实现提示，无相关测试失败。本次没有启动应用、打包、安装或做真实窗口像素验收；已安装客户端仍需后续正常构建安装才会使用修复。未变更生产自动化配置，未推送或发布。

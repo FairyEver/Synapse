@@ -69,6 +69,8 @@ Terminal configuration:
 
 The old `builtin.command`, `builtin.script`, `builtin.http-request`, `builtin.workflow`, `builtin.javascript-run`, and `builtin.nodejs-run` IDs remain retired, rejected on create/update and removed in the background, including after backup restore. Supported types (including invalid configs) and run history are preserved.
 
+Retained terminal screens show the actual launch directory and redacted command before program output. This is display text, not program stdout or PTY input. An ended screen initially shows its beginning and adapts locally to the pane size without changing the archived grid or restarting the command; existing history limits apply.
+
 ## Items
 
 ### app_automation_item_list

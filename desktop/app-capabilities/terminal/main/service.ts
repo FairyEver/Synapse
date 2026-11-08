@@ -115,6 +115,7 @@ import {
   resolveTerminalShellArgs,
 } from "./environment"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
+import { formatAutomationLaunchOutput } from "./automation-launch-output"
 import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState, TerminalStructuralStoreState } from "./store"
 
 export type PtyDisposable = { dispose(): void }
@@ -1112,6 +1113,7 @@ export function createTerminalService(deps: {
   function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer, owner?: {
     readonly onOutput?: (data: string) => void
     readonly onExited?: (exit: { exitCode: number; signal?: number }) => void
+    readonly launchOutput?: string
   }): void {
     let flowWarningLogged = false
     let parseWarningLogged = false
@@ -1139,7 +1141,7 @@ export function createTerminalService(deps: {
         }
       },
     })
-    const dataDisposable = child.onData((data) => {
+    const acceptOutput = (data: string, programOutput = true) => {
       const current = sessions.get(session.id)
       const runtime = runtimes.get(session.id)
       if (!current || !runtime || (current.status !== "running" && current.status !== "stopping")) return
@@ -1162,7 +1164,7 @@ export function createTerminalService(deps: {
       sessions.set(session.id, updated)
       enforceGlobalOutputQuota()
       // Owners must observe fast output even before the session is published to UI subscribers.
-      owner?.onOutput?.(data)
+      if (programOutput) owner?.onOutput?.(data)
       if (!unpublishedSessions.has(session.id)) {
         events.emit("data", { sessionId: session.id, chunk })
         events.emit("stateChanged", {
@@ -1173,7 +1175,8 @@ export function createTerminalService(deps: {
         })
       }
       scheduleRuntimePersist(session.id)
-    })
+    }
+    const dataDisposable = child.onData(data => acceptOutput(data))
     const exitDisposable = child.onExit((event) => {
       const current = sessions.get(session.id)
       if (!current) return
@@ -1234,6 +1237,7 @@ export function createTerminalService(deps: {
       disposables: [dataDisposable, exitDisposable],
       desktopGrid: null,
     })
+    if (owner?.launchOutput) acceptOutput(owner.launchOutput, false)
   }
 
   function enforceGlobalOutputQuota(): void {
@@ -1425,7 +1429,11 @@ export function createTerminalService(deps: {
         env: integration?.env ?? launchEnvironment,
       })
       if (launchOverrides?.automationCommand !== undefined) automationSessions.set(session.id, child.pid)
-      attachRuntime(session, child, buffer, launchOverrides)
+      attachRuntime(session, child, buffer, {
+        ...launchOverrides,
+        ...(launchOverrides?.automationCommand !== undefined
+          ? { launchOutput: formatAutomationLaunchOutput(environment.cwd, launchOverrides.automationCommand) } : {}),
+      })
       await flushPersist()
       return getSessionOrThrow(session.id)
     } catch (error) {

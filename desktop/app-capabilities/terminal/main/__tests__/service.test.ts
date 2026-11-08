@@ -2159,6 +2159,27 @@ function fakePty(options: { readonly ptsName?: string } = {}) {
 }
 
 describe("automation command terminal lifecycle", () => {
+  it("shows redacted launch directory and command before fast output and keeps them in retained scrollback", async () => {
+    const pty = fakePty(), output = vi.fn()
+    const service = createTerminalService({ store: memoryStore(), spawnPty: () => pty, resolveDefaultCwd: () => os.tmpdir() })
+    try {
+      await service.start()
+      const session = await service.createAutomationSession({ title: "automation", cwd: os.tmpdir(),
+        command: "node task.js --token=private-launch-token\nls", onCreated: async () => undefined, onOutput: output })
+      pty.emitData("FIRST_PROGRAM_LINE\r\n" + Array.from({ length: 100 }, (_, index) => `line-${index}`).join("\r\n") + "\r\nLAST_PROGRAM_LINE\r\n")
+      pty.emitExit({ exitCode: 0 })
+      const snapshot = await service.attachSession({ sessionId: session.id })
+      expect(snapshot.serialized).toContain("工作目录:")
+      expect(snapshot.serialized).toContain(os.tmpdir())
+      expect(snapshot.serialized).toContain("执行命令:")
+      expect(snapshot.serialized).toContain("node task.js")
+      expect(snapshot.serialized).not.toContain("private-launch-token")
+      expect(snapshot.serialized!.indexOf("node task.js")).toBeLessThan(snapshot.serialized!.indexOf("FIRST_PROGRAM_LINE"))
+      expect(snapshot.serialized).toContain("LAST_PROGRAM_LINE")
+      // The synthetic launch heading is presentation, never passed off as program stdout.
+      expect(output.mock.calls.map(call => call[0]).join("")).not.toContain("执行命令:")
+    } finally { await service.stop() }
+  })
   it("passes literal commands through the native Windows shell argv", () => {
     expect(resolveAutomationCommandArgs("C:\\Windows\\System32\\cmd.exe", "node custom.js")).toEqual(["/d", "/s", "/c", "node custom.js"])
     expect(resolveAutomationCommandArgs("C:\\Program Files\\PowerShell\\7\\pwsh.exe", "python custom.py")).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "python custom.py"])

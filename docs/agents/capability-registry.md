@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-08 终端自动化保留画面补充启动目录/脱敏命令展示；结束画面首次从头打开并在本窗口适配尺寸。复用既有快照和终端入口，不新增 capability、MCP tool、IPC、Action 或配置字段，既有汇总计数不变。
+
 2026-11-08 自动化新增独立 `builtin.terminal` 执行器，主进程、Renderer 与既有执行器发现入口同步注册；当前执行器清单见下表。旧退役执行器 ID 不恢复。终端执行器等待实际 PTY 退出，保存日志及退出码后按配置关闭或保留已结束终端；命令字面执行，不展开触发模板。复用既有 Automation MCP 能力，不新增 MCP capability/tool、IPC、System App、Dock、Workflow Node 或 Deep Link，现有汇总计数不变。
 
 2026-11-07 用户自定义网页应用：桌面端新增账号级自定义应用与完整 Dock 布局同步，不注册新的 System App、MCP capability/tool、Workflow、Automation Action 或 Deep Link。System App 保持 21 项、默认 Dock 保持 9 项，全局 capability 保持 365 项、MCP 索引保持 361 项；自定义应用只通过桌面 UI 和账号 API 管理。

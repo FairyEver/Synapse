@@ -998,6 +998,9 @@ function TerminalPane({
     // stops input into a terminal that is not running — `writeTerminalInput`, the
     // paste path and Shift+Enter all gate on it.
     xterm.options.disableStdin = session.status !== "running" || remoteSized
+    if (session.status === "ended" || session.status === "failed" || session.status === "lost") {
+      syncTerminalGeometryRef.current?.(true)
+    }
   }, [remoteSized, session.status])
 
   useEffect(() => {
@@ -1178,6 +1181,14 @@ function TerminalPane({
       const rows = proposed?.rows ?? xterm.rows
       if (!cols || !rows) return
       if (xterm.cols === cols && xterm.rows === rows) return
+      // Ended output is a read-only projection. Fit this window without changing the
+      // archived grid or asking the main process to resize a PTY that no longer exists.
+      const status = sessionRef.current.status
+      if (status === "ended" || status === "failed" || status === "lost") {
+        xterm.resize(cols, rows)
+        requestedResize = { cols, rows }
+        return
+      }
       if (requestedResize.cols === cols && requestedResize.rows === rows) return
       requestedResize = { cols, rows }
       void terminalBridge.session.resize({ sessionId: session.id, cols, rows }).catch((error) => {
@@ -1449,6 +1460,9 @@ function TerminalPane({
       if (disposed || generation !== projectionGeneration || !projectionVisible || !projectionAvailable) return
       geometrySyncReady = true
       syncTerminalGeometry()
+      if (!reset && snapshot.session.status !== "running" && snapshot.session.status !== "stopping") {
+        xterm.scrollToTop()
+      }
       setProjectionReady(true)
     }
 
