@@ -356,7 +356,7 @@ describe("SynapseSkillService", () => {
     expect(driveApiText).toContain("A folder containing only `index.html` is valid")
     expect(driveApiText).toContain("republishing preserves the public site URL")
     expect(missingDriveTools).toEqual([])
-    expect(automationIndex).toContain("Automation executors are `builtin.agent` and `builtin.claude-code`")
+    expect(automationIndex).toContain("Automation executors are `builtin.agent`, `builtin.claude-code`, and `builtin.terminal`")
     expect(automationIndex).toContain("optional boolean `singleRun` (default `false`)")
     expect(automationApiText).toContain('"singleRun": false')
     expect(automationIndex).not.toContain("workflowId")
