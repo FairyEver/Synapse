@@ -21,4 +21,4 @@ MCP `app_automation_webhook_delivery_get` 输入 `{deliveryId,runId?}`，只接�
 
 ## 反向代理部署要求
 
-原文不落盘的边界包含宿主机入口代理和容器内 Nginx。Webhook location 必须大小写不敏感地匹配 `/webhooks/`，关闭 access log，error log 使用 `/dev/null crit`，设置 `client_max_body_size 256k`、`client_body_buffer_size 256k` 和 `proxy_request_buffering off`（上游 HTTP/1.1）。不可由上层 `location ^~ /` 抢先匹配。外层代理使用相同规则，避免查询凭据进入日志、正文进入 request-body 临时文件。变更前备份配置，`nginx -t` 成功后 reload；不改其他域名或清理既有日志。
+原文不落盘的边界包含宿主机入口代理和容器内 Nginx。生产入口实际为 shared-caddy-edge（不是遗留面板 Nginx）；仅 synapse.d2.pub 配置大小写不敏感的 Webhook matcher 和 log_skip，Caddy 保持默认流式代理，不启用 request_buffers。Webhook location 必须大小写不敏感地匹配 `/webhooks/`，关闭 access log，error log 使用 `/dev/null crit`，设置 `client_max_body_size 256k`、`client_body_buffer_size 256k` 和 `proxy_request_buffering off`（上游 HTTP/1.1）。不可由上层 `location ^~ /` 抢先匹配。外层代理使用相同规则，避免查询凭据进入日志、正文进入 request-body 临时文件。变更前备份配置，`nginx -t` 成功后 reload；不改其他域名或清理既有日志。

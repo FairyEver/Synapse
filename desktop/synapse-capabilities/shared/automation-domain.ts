@@ -221,7 +221,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_create",
-      description: "Create one schema-version-2 Synapse Automation with builtin.agent, builtin.claude-code, or builtin.terminal. Optional top-level conditions apply to every automatic trigger. Call automation_trigger_type_list and automation_executor_type_list before building configs.",
+      description: "Create one schema-version-2 Synapse Automation with builtin.agent, builtin.claude-code, builtin.terminal, or builtin.webhook-forward. Interface forwarding accepts only Webhook triggers and a literal target URL. Optional top-level conditions apply to every automatic trigger. Call automation_trigger_type_list and automation_executor_type_list before building configs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -331,7 +331,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_executor_type_list",
-      description: "List builtin.agent, builtin.claude-code, and builtin.terminal, including public config fields and defaults. Claude Code completes after initial prompt submission. Terminal accepts optional projectId to use the selected project's Terminal group and current launch settings (like its plus button); omitted preserves default group/cwd behavior. It executes a literal user command without trigger interpolation, waits for process exit, saves merged output and exit code, then closes by default. Timeout defaults to 30 minutes and null disables it.",
+      description: "List builtin.agent, builtin.claude-code, builtin.terminal, and builtin.webhook-forward, including public config fields and defaults. Claude Code completes after initial prompt submission. Terminal accepts optional projectId to use the selected project's Terminal group and current launch settings (like its plus button); omitted preserves default group/cwd behavior. It executes a literal user command without trigger interpolation, waits for process exit, saves merged output and exit code, then closes by default. Timeout defaults to 30 minutes and null disables it. Interface forwarding requires a live Webhook event, sends original method/query/headers/body to its URL without a terminal, and accepts only complete 2xx within 30 seconds; history cannot replay raw content.",
       inputSchema: { type: "object", properties: {} },
     },
   ], { sourcePrefix: "automation", primaryPrefix: "app_automation" })
