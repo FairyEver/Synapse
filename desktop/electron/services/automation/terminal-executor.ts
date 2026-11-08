@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder"
 import type { TerminalService } from "../../../app-capabilities/terminal/main/service"
 import { TerminalContractError } from "../../../app-capabilities/terminal/shared/errors"
 import type { RunAutomationTerminal } from "../../../action-packages/builtin/terminal/executor.main"
@@ -28,7 +29,7 @@ export function createAutomationTerminalRunner(terminal: Terminal): RunAutomatio
     const append = (data: string) => {
       const encoded = Buffer.from(data), remaining = OUTPUT_LIMIT - bytes
       if (encoded.length > remaining) truncated = true
-      if (remaining > 0) { chunks.push(encoded.subarray(0, remaining).toString("utf8")); bytes += Math.min(encoded.length, remaining) }
+      if (remaining > 0) { chunks.push(new StringDecoder("utf8").write(encoded.subarray(0, remaining))); bytes += Math.min(encoded.length, remaining) }
     }
     const outputs = (status: ActionRunStatus) => ({ ...project, sessionId, terminalOutput: redactSensitiveText(chunks.join("")),
       outputTruncated: truncated, exitCode: exit.exitCode, signal: exit.signal ?? null, executionStatus: status, terminalRetained: retained })
@@ -70,16 +71,26 @@ export function createAutomationTerminalRunner(terminal: Terminal): RunAutomatio
       }
       return result(reason ?? status, exit.stopConfirmed ? undefined : "停止未确认，请查看关联终端")
     } catch (error) {
+      let failureSaveFailed = false
       if (launched && !completed && !externalClose) {
-        ownClose = true
-        try { await terminal.closeAutomationSession(sessionId!) }
-        catch (closeError) { logger.warn("Terminal cleanup was not confirmed.", { runId: context.runId, errorName: closeError instanceof Error ? closeError.name : "unknown" }) }
+        try { await context.persistOutputs!(outputs(reason ?? "failed")) }
+        catch (saveError) {
+          failureSaveFailed = true
+          logger.warn("Terminal failure evidence could not be saved; terminal retained.", { runId: context.runId, errorName: saveError instanceof Error ? saveError.name : "unknown" })
+        }
+        if (!failureSaveFailed) {
+          ownClose = true
+          try { await terminal.closeAutomationSession(sessionId!) }
+          catch (closeError) { logger.warn("Terminal cleanup was not confirmed.", { runId: context.runId, errorName: closeError instanceof Error ? closeError.name : "unknown" }) }
+        }
       }
       logger.warn("Interactive terminal automation did not complete.", { runId: context.runId, errorName: error instanceof Error ? error.name : "unknown" })
       const why = error instanceof TerminalContractError ? error.payload.details?.reason : undefined
-      const message = why === "automation_project_unavailable" ? "所选项目已不可用，请重新选择项目"
+      const message = failureSaveFailed ? "无法保存终端运行记录，终端已保留，请查看关联终端"
+        : why === "automation_project_unavailable" ? "所选项目已不可用，请重新选择项目"
         : why === "shell_receipt_unsupported" ? "当前 Shell 不支持可靠的命令完成回执，请使用 zsh 或 bash"
         : why === "multiline_paste_unavailable" ? "当前 Shell 未启用多行粘贴，未执行命令"
+        : why === "literal_input_unavailable" ? "当前 Shell 不支持可靠的原样输入，未执行命令"
         : error instanceof Error && error.name === "TimeoutError" ? "未确认交互式 Shell 或终端尺寸就绪，未执行命令"
         : "无法完成交互式终端执行或保存记录，请查看关联终端"
       return result(reason ?? (context.abortSignal.aborted ? "cancelled" : "failed"), message)

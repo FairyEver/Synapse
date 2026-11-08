@@ -77,7 +77,7 @@ if [[ -n "${'${SYNAPSE_TERMINAL_SHELL_TOKEN:-}'}" && $- == *i* ]]; then
     PS1+="$_synapse_prompt_suffix"
     return "$_synapse_previous"
   }
-  if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == 'declare -a '* ]]; then
+  if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1) )) && [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == 'declare -a '* ]]; then
     if [[ " ${'${PROMPT_COMMAND[*]}'} " != *' _synapse_shell_capture '* ]]; then
       PROMPT_COMMAND=(_synapse_shell_capture "${'${PROMPT_COMMAND[@]}'}" _synapse_shell_prompt)
     fi

@@ -4,6 +4,8 @@
 
 2026-11-08 自动化新增独立 `builtin.terminal` 执行器，主进程、Renderer 与既有发现入口同步注册；当前执行器清单见下表，旧退役 ID 不恢复。同日改为与手动共用的交互式终端输入：zsh/bash 原生 prompt 回执确认命令完成，exit/exec 看真实 PTY 退出；保存日志及命令退出码后按配置关闭或保留可继续输入的 Shell。输入前确认桌面实测网格，无测量最多等60秒后失败；其他 Shell 在输入前明确拒绝。命令字面执行，不展开触发模板。私有回执和清理不新增 IPC/MCP 表面；复用既有 Automation MCP，不新增 capability/tool、System App、Dock、Workflow Node 或 Deep Link，所有汇总计数不变。
 
+同日边界测试补齐旧 Bash 数组提示符兼容、命令 ESC 原样输入、UTF-8 日志截断，以及启动失败先保存再关闭。保存失败仍保留终端及错误，不重放命令；没有新增字段、能力、IPC/MCP 或注册数量变更。
+
 2026-11-07 用户自定义网页应用：桌面端新增账号级自定义应用与完整 Dock 布局同步，不注册新的 System App、MCP capability/tool、Workflow、Automation Action 或 Deep Link。System App 保持 21 项、默认 Dock 保持 9 项，全局 capability 保持 365 项、MCP 索引保持 361 项；自定义应用只通过桌面 UI 和账号 API 管理。
 
 2026-11-06 新增完整 Webhook 正文只读 MCP：Automation 14→15，全局 capability 364→365、MCP 索引 360→361；公开仍仅 search/invoke 两项。新增独立 automation.webhook.body.read 权限与本人认证的内部正文 REST，不新增 System App、Dock、IPC、Workflow、Automation Action 或 Deep Link。快照、运行绑定及升级边界见 docs/agent-guides/webhook-delivery-body.md。

@@ -102,6 +102,8 @@ The old `builtin.command`, `builtin.script`, `builtin.http-request`, `builtin.wo
 
 The screen shows native prompts, command echo and program output, without a synthetic launch heading. Ended screens retain local fitting and start-of-history browsing within existing history quotas, without resizing/restarting exited processes.
 
+Native quoting preserves ESC bytes in command data instead of allowing them to end a bracketed paste. Older Bash prompt arrays keep their native first-element behavior. Log truncation stops at a whole UTF-8 character. Startup/readiness failures also save available output and an unknown command exit code before close; if that save fails, the terminal is retained and can still be running, with an explicit save error. The command is never automatically replayed.
+
 ## Update Rules
 
 Use `app_automation_item_update` with a focused patch. The patch may include top-level `conditions`, `trigger`, or `executor`; trigger and executor refs replace the corresponding stored config. Legacy v1 items reject updates.

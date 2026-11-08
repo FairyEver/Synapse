@@ -95,6 +95,23 @@ describe("automation terminal runner", () => {
     expect(result.outputs).toMatchObject({ terminalOutput: "fast-output", terminalRetained: true })
     expect(h.terminal.deleteTerminalSession).not.toHaveBeenCalled()
   })
+  it("saves startup failure output before closing an already-created shell", async () => {
+    const h = harness({ fast: true })
+    h.terminal.executeAutomationCommand.mockRejectedValueOnce(new DOMException("layout unavailable", "TimeoutError"))
+    const result = await h.run()
+    expect(result.status).toBe("failed")
+    expect(h.order).toEqual(["save", "close"])
+    expect(h.saved.at(-1)).toMatchObject({ terminalOutput: "fast-output", exitCode: null, executionStatus: "failed" })
+  })
+  it("retains startup evidence when failure output cannot be saved", async () => {
+    const h = harness({ fast: true, persistFail: true })
+    h.terminal.executeAutomationCommand.mockRejectedValueOnce(new DOMException("layout unavailable", "TimeoutError"))
+    const result = await h.run()
+    expect(result).toMatchObject({ status: "failed", outputs: { terminalRetained: true } })
+    expect(h.order).toEqual(["save"])
+    expect(h.terminal.closeAutomationSession).not.toHaveBeenCalled()
+    expect(result.error).toContain("保存")
+  })
   it("reports launch failure without a phantom retained terminal or cleanup signal", async () => {
     const h = harness({ failStart: true })
     expect(await h.run()).toMatchObject({ status: "failed", outputs: { terminalRetained: false }, metrics: { exitCode: null } })
@@ -137,6 +154,20 @@ describe("automation terminal runner", () => {
     expect(result.outputs?.terminalOutput).toHaveLength(64 * 1024)
     expect(result.outputs?.outputTruncated).toBe(true)
     expect(result.logs?.at(-1)?.value).toContain("64 KiB")
+  })
+  it("truncates UTF-8 logs at a whole character and never exceeds the byte quota", async () => {
+    const h = harness(), pending = h.run()
+    await h.ready()
+    h.output("a".repeat(65_535) + "🙂")
+    h.output("later output must stay omitted")
+    h.exit()
+    const result = await pending
+    const output = result.outputs!.terminalOutput as string
+    expect(output.length).toBe(65_535)
+    expect(output.endsWith("�")).toBe(false)
+    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(65_536)
+    expect(result.outputs!.outputTruncated).toBe(true)
+    expect(h.saved.at(-1)!.terminalOutput).toBe(output)
   })
   it("treats a signal exit as failure even when the PTY reports exitCode zero", async () => {
     const h = harness(), pending = h.run()

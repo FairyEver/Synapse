@@ -75,6 +75,8 @@ The old `builtin.command`, `builtin.script`, `builtin.http-request`, `builtin.wo
 
 Screens show native prompts, command echo and program output, without a synthetic launch heading. Ended screens initially show their beginning and adapt locally to the pane size without changing archived grids or restarting commands; existing history limits apply.
 
+ESC bytes in command data use native quoted insertion rather than bracketed paste delimiters. Older Bash prompt arrays preserve first-element execution. Truncated logs omit an incomplete final UTF-8 character. Startup/readiness failures also persist available output and an unknown command exit code before close; failed persistence retains the terminal (possibly still running) and reports a save error, without automatic replay.
+
 ## Items
 
 ### app_automation_item_list

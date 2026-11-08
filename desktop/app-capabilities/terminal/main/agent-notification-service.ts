@@ -1097,7 +1097,9 @@ const ZSH_OSC7_HOOK = [
 
 const BASH_OSC7_HOOK = [
   `_synapse_report_cwd() { ${OSC7_REPORT_COMMAND}; }`,
-  'if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then',
+  // Only Bash 5.1+ executes every PROMPT_COMMAND array element. Older versions
+  // execute element zero as a string; preserve that native behavior when wrapping.
+  'if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1) )) && [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then',
   '  if [[ " ${PROMPT_COMMAND[*]} " != *" _synapse_report_cwd "* ]]; then PROMPT_COMMAND=(_synapse_report_cwd "${PROMPT_COMMAND[@]}"); fi',
   'elif [[ "${PROMPT_COMMAND:-}" != *"_synapse_report_cwd"* ]]; then',
   '  PROMPT_COMMAND="_synapse_report_cwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"',

@@ -2469,9 +2469,12 @@ export function createTerminalService(deps: {
       await applySessionResize(sessionId, grid.cols, grid.rows, { kind: "desktop-layout" })
     }
     await runtime.emulator.ready()
-    const bracketed = runtime.emulator.bracketedPasteEvidence().enabled
+    // An ESC in user code can contain the bracketed-paste end marker itself.
+    // Use native quoted-insert for those bytes instead of letting ZLE consume it.
+    const bracketed = runtime.emulator.bracketedPasteEvidence().enabled && !command.includes("\x1b")
     const quoted = shellPrompts.get(sessionId)?.quotedInsert
     if (command.includes("\n") && !bracketed && !quoted) throw terminalContractError("unsupported", "capability", { details: { reason: "multiline_paste_unavailable" } })
+    if (command.includes("\x1b") && !quoted) throw terminalContractError("unsupported", "capability", { details: { reason: "literal_input_unavailable" } })
     signal.throwIfAborted()
     const sequence = shellPrompts.get(sessionId)!.sequence
     const completion = new Promise<{ exitCode: number | null; signal?: number; stopConfirmed: boolean }>((resolve, reject) => {

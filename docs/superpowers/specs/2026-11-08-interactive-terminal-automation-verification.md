@@ -64,3 +64,28 @@ node scripts/checks/check-ui-tracking-coverage.mjs
 改动和相关设计/Skill指南/发现描述/能力清单/发布说明在main本地提交，不push、不发布；未修改已有自动化配置、PR机器人、数据库结构或用户运行数据。已安装客户端没有通过本任务构建或安装，不能宣称其真实窗口已使用此实现。后续正常构建安装后仍应做真实窗口/用户主题和操作系统验收。
 
 需要回退时先停止仍在执行的终端自动化，保存未知结果证据，再回退对应客户端代码；保留运行记录，不重放命令。autoClose=false 现在保留活Shell，回退前按需正常关闭这些终端，不能按旧只读快照假设处理。
+
+## 后续：隐藏问题专项（2026-11-08，起点0c3c5bb9e）
+
+用户试用基本正常后要求继续主动测隐藏问题。本轮仍在同一仓库main原地修改，不启动/重启应用、服务或浏览器，不修改已有自动化配置，不打包、推送或发布。
+
+发现并以先失败后通过的测试修复四类问题：
+
+1. macOS Bash启动配置为数组PROMPT_COMMAND时，没有父Shell回执，自动化卡在准备阶段。旧Bash只执行首项，原集成却按新版数组逐项追加。现在按版本选择对应原生语义，保留用户首项hook及退出码。版本依据：[GNU Bash5.1发布说明](https://lists.gnu.org/archive/html/info-gnu/2020-12/msg00003.html)；本轮实际验证macOS自带Bash，未安装或假称实测新版Bash。
+2. zsh命令引号中含真实ESC和粘贴结束序列时，bracketed paste被提前结束，导致命令变化/错误。改用原生quoted-insert传递这些字节，od核验真实字节为`61 1b 5b 32 30 31 7e 62`；Bash同场景也通过，未使用eval/source包装。
+3. 64KiB边界切在中文/表情UTF-8中间时，toString会补乱码替换字符，还可能让编码后长度超过原额度。复用受控进程输出的StringDecoder方式，只保留完整字符，不把后续输出拼到被截断处；保存记录与返回日志一致。
+4. Shell已创建但就绪等待失败时，异常路径原来先关闭再存日志。现在先保存已有输出及未知命令退出码；保存失败则保留终端并明确报错。除单测验证顺序外，真实PTY验证在等待布局时取消：命令没有输入，成功保存后才观察到结束事件；模拟保存失败时Shell仍running且有保存错误。
+
+新增11项真实PTY边界测试，包含同一终端连续执行、12,000字符命令、here-doc、中文/表情/制表符、管道pipefail与不存在命令的退出码、特殊ESC、zsh/Bash的vi编辑模式、旧Bash提示符配置、五任务并行且结果/终端互不串扰、原始TTY模式下取消前台和后台作业并继续使用Shell，以及上述两种就绪取消收尾。原始TTY测试保留用户stty raw设置；最初误要求CRLF是断言问题，已改为核验原生LF。BSD od的双空格也只在断言中做空白归一化，没有将它计为产品故障。
+
+本轮独立验证（不与前轮1,248项重复累计）：
+
+- 主进程相关回归726通过；真实PTY单独执行30项全部通过，共756项，未重复累计前后补跑。
+- Electron与测试TypeScript检查、6个改动TypeScript文件ESLint、hard constraints及diff检查通过；没有改Renderer，未将前轮Renderer结果冒充本轮执行。
+- 复现主进程回归沿用上方命令。原生完整复现：
+
+```sh
+SYNAPSE_TERMINAL_REAL_PTY=1 pnpm exec vitest run --maxWorkers=2 app-capabilities/terminal/main/__tests__/interactive-edge-cases.test.ts app-capabilities/terminal/main/__tests__/interactive-parity.test.ts electron/services/automation/__tests__/terminal-executor-real-pty.test.ts
+```
+
+本轮临时日志：`/tmp/synapse-terminal-edge-first.log`（修复前）、`/tmp/synapse-terminal-startup-durability-red.log`（异常保存顺序失败）、`/tmp/synapse-terminal-hidden-native-final.log`、`/tmp/synapse-terminal-hidden-regression.log`及同前缀types/lint/constraints日志。永久复现证据是本次提交中的测试与源码。未跑全仓所有模块或已安装客户端真实窗口；仍保留上述Shell/平台/后台进程边界。回退点为本轮起点0c3c5bb9e，回退不重放运行。
