@@ -187,6 +187,7 @@ import { createRepositoryCapabilityDispatcher } from "../capabilities/repository
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { createClaudeCodeTerminalSession } from "../modules/agent/claude-code-terminal"
+import { createAutomationTerminalRunner } from "../services/automation/terminal-executor"
 import { createLocalAgentConversation } from "../modules/agent/conversation-creation"
 import { listTrustedSkillRoots } from "../services/editor-scan-roots"
 import { EditorInstallStagingRecovery } from "../services/editor-install-staging-recovery"
@@ -1427,6 +1428,7 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
       actor: { kind: "system", id: "repository-git" },
     })
     return createBuiltinMainActionRegistry({
+      runTerminal: input => createAutomationTerminalRunner(ctx.registry.get<TerminalService>("core.terminal"))(input),
       launchClaudeCode: input => createClaudeCodeTerminalSession(id => ctx.registry.get(id), input),
       builtinCapabilityRegistrations: {
         workflowNodeTypes: nodeTypeRegistry.listTypes(),
@@ -2922,6 +2924,8 @@ export const coreAutomationCleanupDescriptor: ServiceDescriptor<RetiredExecutorC
 export const coreAutomationDescriptor: ServiceDescriptor<AutomationService> = {
   id: "core.automation",
   criticality: "degraded",
+  // Order shutdown before PTY cleanup without disabling Agent automations if Terminal is unavailable.
+  startAfter: ["core.terminal"],
   dependsOn: [
     "core.data-repository",
     "core.permission-guard",

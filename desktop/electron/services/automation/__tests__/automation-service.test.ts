@@ -26,6 +26,25 @@ const testActionSchema = z.object({ message: z.string().min(1) })
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationService", () => {
+  it("waits beyond the UI stop receipt for terminal shutdown persistence", async () => {
+    const controlled = manuallyResolvedAction()
+    const h = createHarness({ action: { ...controlled.action, manifest: { ...controlled.action.manifest, id: "builtin.terminal" } } })
+    const input = createAutomationInput()
+    const item = await h.service.automationCreate({ ...input, executor: { ...input.executor, type: "builtin.terminal" } })
+    const running = h.service.runNow(item.id)
+    await waitFor(async () => h.service.automationRuntimeInspect().runningItemIds.includes(item.id))
+    vi.useFakeTimers()
+    try {
+      let stopped = false
+      const stopping = h.service.stop().then(() => { stopped = true })
+      await vi.advanceTimersByTimeAsync(3_100)
+      expect(stopped).toBe(false)
+      controlled.resolve()
+      await running; await stopping
+      expect(stopped).toBe(true)
+      expect((await h.runs.listByAutomation(item.id))[0]).toMatchObject({ status: "cancelled" })
+    } finally { vi.useRealTimers(); controlled.resolve(); await running }
+  })
   it("requires the saved webhook run binding instead of trusting caller identifiers", async () => {
     const h = createHarness()
     const run = await h.runs.start("automation:1", "trigger", { triggerType: "builtin.webhook", executorType: "builtin.claude-code",

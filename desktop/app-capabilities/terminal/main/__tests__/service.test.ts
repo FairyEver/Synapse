@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
-import { createTerminalService, ensureExecutableIfPresent, type PtyLike } from "../service"
+import { createTerminalService, ensureExecutableIfPresent, resolveAutomationCommandArgs, type PtyLike } from "../service"
 import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState, TerminalStructuralStoreUpdate } from "../store"
 import { collectTerminalPaneLeaves } from "../../shared/workspace"
 import * as emulatorModule from "../emulator"
@@ -2157,6 +2157,57 @@ function fakePty(options: { readonly ptsName?: string } = {}) {
   }
   return instance as typeof instance & PtyLike
 }
+
+describe("automation command terminal lifecycle", () => {
+  it("passes literal commands through the native Windows shell argv", () => {
+    expect(resolveAutomationCommandArgs("C:\\Windows\\System32\\cmd.exe", "node custom.js")).toEqual(["/d", "/s", "/c", "node custom.js"])
+    expect(resolveAutomationCommandArgs("C:\\Program Files\\PowerShell\\7\\pwsh.exe", "python custom.py")).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "python custom.py"])
+  })
+  it("does not let interactive integrations swallow a command, and observes output before publication", async () => {
+    const pty = fakePty(), output = vi.fn(), exited = vi.fn()
+    const agentNotifications = { prepareSession: () => ({ env: {}, shellArgs: ["-i"] }), unregisterSession: vi.fn() } as unknown as Parameters<typeof createTerminalService>[0]["agentNotifications"]
+    const spawnPty = vi.fn((_input: unknown) => pty)
+    const service = createTerminalService({ store: memoryStore(), spawnPty, resolveDefaultShell: () => "/bin/bash", agentNotifications })
+    try {
+      await service.start()
+      const pending = service.createAutomationSession({ title: "test", cwd: os.tmpdir(), command: "echo expected", onCreated: async () => undefined, onOutput: output, onExited: exited })
+      await vi.waitFor(() => expect(pty.onData).toHaveBeenCalled())
+      pty.emitData("fast"); pty.emitExit({ exitCode: 0 })
+      const session = await pending
+      expect(spawnPty.mock.calls[0]?.[0]).toMatchObject({ shellArgs: ["-l", "-c", "echo expected"] })
+      expect(output).toHaveBeenCalledWith("fast")
+      expect(exited).toHaveBeenCalledWith({ exitCode: 0 })
+      expect(service.getSession({ sessionId: session.id }).status).toBe("ended")
+    } finally { await service.stop() }
+  })
+  it("uses the resolved shell, retains output and exit code until its owner releases it", async () => {
+    const pty = fakePty(), spawnPty = vi.fn((_input: unknown) => pty)
+    const service = createTerminalService({ store: memoryStore(), spawnPty, resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir() })
+    try {
+      await service.start()
+      const session = await service.createAutomationSession({ title: "automation", cwd: os.tmpdir(), command: "python3 custom.py", onCreated: async () => undefined })
+      expect(spawnPty.mock.calls[0]?.[0]).toMatchObject({ shell: "/bin/zsh", shellArgs: ["-l", "-c", "python3 custom.py"] })
+      pty.emitData("output before exit\r\n")
+      pty.emitExit({ exitCode: 7 })
+      expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "ended", exitCode: 7 })
+      expect(service.readSession({ sessionId: session.id }).chunks.map(c => c.data).join("")).toContain("output before exit")
+      expect(await service.attachSession({ sessionId: session.id })).toMatchObject({ degraded: false, serialized: expect.stringContaining("output before exit") })
+      await service.deleteTerminalSession(session.id, "automation")
+      expect(() => service.getSession({ sessionId: session.id })).toThrow()
+    } finally { await service.stop() }
+  })
+
+  it("does not allow automation termination to target an ordinary terminal", async () => {
+    const pty = fakePty()
+    const service = createTerminalService({ store: memoryStore(), spawnPty: () => pty })
+    try {
+      await service.start()
+      const session = await service.createSession({})
+      expect(() => service.signalAutomationSession(session.id)).toThrow()
+      expect(pty.kill).not.toHaveBeenCalled()
+    } finally { await service.stop() }
+  })
+})
 
 describe("TerminalService session state: tty and agent block", () => {
   /** 一个只要被问就回答的 agent 通知依赖；档案本体不在这里，只有投影。 */

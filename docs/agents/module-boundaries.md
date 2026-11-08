@@ -6,10 +6,12 @@
 - Webhook 变量列表只显示 `trigger.request.body/query/headers`，旧 `trigger.payload.request.*` 通过 descriptor aliases 显式兼容。引用字段从原始数据按需读取，不受旧展平 200 键/8 层预算影响；其他事件的叶子展平仍保留该预算。点路径表示嵌套，`#/` JSON Pointer 表示精确键（~0/~1 转义，花括号/空格使用 URI 编码）；仅访问自有属性，路径最多 64 段/2048 字符，超限/缺失明确失败，null/空文本为空，0/false 保留。Webhook 无事件上下文时 UI/main/MCP 禁止手动运行；本地 JSON 样本仅预览变量，不执行、不持久化、不上传。
 - 所有内置自动化共用变量校验与时间语义：保存/更新/启用/自动执行前校验 canonical key 和 aliases，拼写错误、退役 messageId 和非法路径不得静默通过；保留无描述契约的自定义 trigger。旧配置诊断为待修复，不能删除或静默改写提示词。triggeredAt 为来源事件发生/调度触发时间，executedAt 为 run.startedAt，runId 关联当前运行；定时 scheduledAt 保留原计划。date 为有效时区的计划/事件日期，手动运行取执行日期；Cron 时区缺省及其他触发器使用系统实际时区。
 - Webhook 的本机内存待执行事件按任务串行；成功停用、切换触发配置或服务停止使原队列失效，重新启用不能恢复旧事件。保留已开始运行，保留新启用期间事件在原活动运行之后的串行顺序；仅改名或停用持久化失败不得丢弃队列。不新增持久队列、服务端重试或自动回放。
-- 自动化注册 `builtin.agent` 和 `builtin.claude-code`，禁止恢复命令、Shell、HTTP、工作流、JavaScript、Node.js 自动化执行入口。Claude Code 配置项目、提示词和默认不勾选的「单次模式」（`singleRun` 可选布尔）；不勾选或旧配置保持交互式，勾选则以原生 `--print` 单次执行，进程退出后按终端既有规则清理本次会话、分屏及空标签。复用 Command 点击项目加号的内置启动入口，在触发时读取默认供应商、模型和权限，以原生 argv 携带首条提示词；后台创建，不导航、不切换用户当前终端或焦点。
+- 自动化注册 `builtin.agent`、`builtin.claude-code` 和 `builtin.terminal`；旧 `builtin.command`、`builtin.script`、`builtin.http-request`、`builtin.workflow`、`builtin.javascript-run`、`builtin.nodejs-run` 仍退休，不恢复旧 ID 或专用入口。Claude Code 配置项目、提示词和默认不勾选的「单次模式」（`singleRun` 可选布尔）；不勾选或旧配置保持交互式，勾选则以原生 `--print` 单次执行，进程退出后按终端既有规则清理本次会话、分屏及空标签。复用 Command 点击项目加号的内置启动入口，在触发时读取默认供应商、模型和权限，以原生 argv 携带首条提示词；后台创建，不导航、不切换用户当前终端或焦点。
+- `builtin.terminal` 接受任意用户命令，不设命令白名单；`command` 按字面执行，不展开触发变量。不自动注入触发事件；参数和文件重定向由用户在命令中配置。使用现有终端 Shell 和自动化工作目录，需 `shell.exec` 权限与审计；后台创建，不导航或抢焦点。`autoClose` 默认 true，`timeoutMins` 默认 30、范围 1–1440，null 表示不限制超时。
+- 终端执行器等待真实 PTY 退出后结束运行，合并保留 stdout/stderr，不伪造分流；运行历史最多保存 64 KiB 输出并显式标记截断，同时保存退出码与信号。先持久化结果，再按 `autoClose` 清理本次终端；false 保留只读已结束会话，不保留空闲 Shell。持久化失败保留终端并报告失败。取消/超时只停止本次任务的进程组，保留对应状态与退出结果，不影响其他会话；应用重启不自动重放命令。日志沿用现有脱敏，命令与输出不得进入全局诊断。
 - Claude Code 收到匹配首条 `UserPromptSubmit` 回执即完成自动化，不等待任务结束；回执独立于通知开关，确认预算 60 秒，超时/取消不自动重发。启动前持久化终端关联，异常和应用重启恢复也保留入口；后续 CLI 不受已完成自动化的停止/停用控制。单次模式只改变 CLI 生命周期，不改变触发频率或首条提交即成功的语义；不以 Stop 事件、后台任务计数或固定延迟强制关闭，CLI 退出不保证业务成功或其后台任务全部完成。运行记录按运行保存的执行器类型渲染，关联会话不可用时不自动重建。
 - 提交回执的 `SYNAPSE_` 进程变量由主进程通过 TerminalService 的专用 `internalEnvironment` 层在用户环境校验后注入，不得混入用户环境、Provider settings、持久化 launch facts 或公开 UI/MCP 参数。该层只接收主进程构造的内部值，禁止转发用户环境映射；用户层保留变量保护不得放宽。
-- 不受支持的配置由主窗口后的后台 Worker 分批筛选，通过仓库写队列复验类型并删除；恢复/写入旧配置会再次清理。Worker、监听和队列复验共用受支持类型清单，两个受支持类型的配置（包括待修复配置）与运行历史原样保留，不自动转换，清理失败可重试。
+- 退役类型的配置由主窗口后的后台 Worker 分批筛选，通过仓库写队列复验类型并删除；恢复/写入旧配置会再次清理。Worker、监听和队列复验共用受支持类型清单，受支持类型的配置（包括待修复配置）与运行历史原样保留，不自动转换；未知类型不当作退役类型删除，清理失败可重试。
 - 工作流 HTTP/Shell 共用表单、schema、执行工具、JS/Node 的 capability、节点和 runtime 必须保留；移除自动化入口不得删掉这些共用文件。
 
 
@@ -139,6 +141,7 @@
 ### Terminal
 
 - app id `terminal`，capability 使用 `app.terminal.<subdomain>.<action>`，tool 名严格点转下划线。
+- 普通终端会话仍在进程自然退出后清理。仅自动化 `builtin.terminal` 内部创建的会话可延后清理：由执行器等待真实 PTY 退出，先保存有界输出、退出码与信号，再自动关闭或保留只读已结束会话；不得借此新增公开创建参数、MCP 专属终端或跨重启会话恢复。运行记录的终端入口只定位仍存在的精确 session，不自动重建。
 - 桌面终端的普通网页链接与 OSC 8 超链接均通过既有 Shell bridge 使用系统默认浏览器打开，不创建 Electron 网页窗口；OSC 8 保留打开前确认及 xterm 默认的 HTTP/HTTPS 协议限制，取消不打开，失败显示错误提示。
 - 桌面终端的全局主题通过现有 `config.update` 保存到 `core.config` 的 `global.terminalTheme`，未配置或无效值使用当前默认配色。外观页用草稿实时预览，取消／放弃恢复已保存主题；保存后由 EventBus 的 `system` 域 `config.terminal-theme.changed` 事件同步所有桌面窗口。预览组件仅绘制本地样例，不创建 PTY。切换主题不得重建会话、写入终端或触发网格 resize。手机端配色与帧协议不受影响。
 - 分屏顶栏与底部命令条的背景以当前终端主题的 background 为基底叠加 5% 黑色，普通文字和图标复用 foreground；语音与待执行条共享相同局部 token，随主题草稿预览、保存、取消和跨窗口同步更新，不改变应用侧栏、Dock 或弹层的主题。

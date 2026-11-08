@@ -1,4 +1,5 @@
 import { AUTOMATION_UPGRADE_MESSAGE, automationFormatIssue, parseAutomationConfig } from "../../../automation-trigger-packages/compatibility"
+import { terminalActionManifest } from "../../../action-packages/builtin/terminal/manifest"
 
 import type {
   MainActionDefinition,
@@ -135,7 +136,8 @@ export class AutomationExecutionService {
           ...(effectiveTriggerContext.triggerKind === "manual" ? {} : { scheduledAt: effectiveTriggerContext.scheduledAt }),
         },
         persistOutputs: async (outputs: Record<string, unknown>) => {
-          effectiveSignal.throwIfAborted()
+          // Terminal cancellation still has an exit code and logs which must survive cleanup.
+          if (item.executor.type !== terminalActionManifest.id) effectiveSignal.throwIfAborted()
           const sanitized = sanitizePersistableActionRunResult({ status: "success", outputs })
           await this.deps.runs.updateOutputs(run.id, sanitized.outputs ?? {})
         },
@@ -185,9 +187,12 @@ export class AutomationExecutionService {
         : await this.getLastSuccessOutputs(item.id)
       effectiveSignal.throwIfAborted()
       executorPending = true
-      const result = await executor.execute({ config, context, previousOutputs })
-      if (effectiveSignal.aborted) {
+      let result = await executor.execute({ config, context, previousOutputs })
+      if (effectiveSignal.aborted && item.executor.type !== terminalActionManifest.id) {
         throw new AutomationRunCancelledError()
+      }
+      if (effectiveSignal.aborted && item.executor.type === terminalActionManifest.id && result.status === "success") {
+        result = { ...result, status: "cancelled", summary: "已取消" }
       }
       executorPending = false
       if (result.status !== "success") {

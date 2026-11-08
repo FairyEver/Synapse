@@ -23,6 +23,26 @@ const testActionSchema = z.object({ message: z.string().min(1) }).passthrough()
 type TestActionConfig = z.infer<typeof testActionSchema>
 
 describe("AutomationExecutionService", () => {
+  it("saves terminal output after cancellation and keeps its actual exit metadata", async () => {
+    let entered!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    const h = await createExecutionHarness({ action: {
+      ...testAction, manifest: { ...testAction.manifest, id: "builtin.terminal" },
+      execute: async ({ context }) => {
+        entered()
+        await new Promise<void>(resolve => context.abortSignal.addEventListener("abort", () => resolve(), { once: true }))
+        await context.persistOutputs!({ sessionId: "owned", terminalOutput: "before stop", exitCode: 143 })
+        return { status: "cancelled", logs: [{ label: "终端输出", value: "before stop" }], outputs: { sessionId: "owned", terminalRetained: false }, metrics: { exitCode: 143 } }
+      },
+    } })
+    const pending = h.service.runItem({ ...h.item, executor: { ...h.item.executor, type: "builtin.terminal" } }, "manual")
+    await started
+    expect(h.service.stopRun("automation-run:1")).toBe(true)
+    const run = await pending
+    expect(run).toMatchObject({ status: "cancelled", result: { metrics: { exitCode: 143 }, logs: [{ label: "终端输出", value: "before stop" }] } })
+    expect(run.result?.outputs).toMatchObject({ sessionId: "owned", terminalRetained: false })
+    expect(h.auditEvents[0]).toMatchObject({ action: "shell.exec", outcome: "allowed" })
+  })
   it("persists only webhook identity before the executor starts", async () => {
     let observed: AutomationRun | null = null
     const h = await createExecutionHarness({ action: { ...testAction, execute: async () => {

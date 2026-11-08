@@ -1,8 +1,9 @@
 import { agentActionManifest } from "./builtin/agent/manifest"
 import { claudeCodeActionManifest } from "./builtin/claude-code/manifest"
+import { terminalActionManifest } from "./builtin/terminal/manifest"
 
 /** Shared with the retirement Worker and its queued deletion recheck. */
-export const supportedAutomationExecutorTypes: readonly string[] = [agentActionManifest.id, claudeCodeActionManifest.id]
+export const supportedAutomationExecutorTypes: readonly string[] = [agentActionManifest.id, claudeCodeActionManifest.id, terminalActionManifest.id]
 
 export function isSupportedAutomationExecutor(type: string): boolean {
   return supportedAutomationExecutorTypes.includes(type)

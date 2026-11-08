@@ -4,6 +4,13 @@ import { validateChangedTriggerVariables } from "../../utils"
 import type { AutomationEditorDraft } from "../../types"
 
 describe("automation read-only configuration", () => {
+  it("shows terminal commands, auto-close and disabled timeout in read-only details", () => {
+    expect(buildAutomationConfigurationFields({ command: "node task.js\npython3 task.py", autoClose: false, timeoutMins: null }, [])).toEqual([
+      { key: "command", label: "命令", value: "node task.js\npython3 task.py" },
+      { key: "autoClose", label: "执行完成后自动关闭终端", value: "否" },
+      { key: "timeoutMins", label: "超时分钟", value: "不限制" },
+    ])
+  })
   it.each([
     { providerId: "provider-1" },
     { modelTier: "haiku" },

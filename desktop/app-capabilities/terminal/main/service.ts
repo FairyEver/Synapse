@@ -365,6 +365,10 @@ export function createTerminalService(deps: {
   const runtimes = new Map<string, TerminalRuntime>()
   const buffers = new Map<string, TerminalOutputBuffer>()
   const endCallbacks = new Map<string, () => void>()
+  // Main-process automation owners persist results before releasing these ended PTYs.
+  const automationSessions = new Map<string, number | undefined>()
+  // An opted-out automation keeps its ended screen, never a live PTY or running slot.
+  const automationScreens = new Map<string, Pick<TerminalRuntime, "emulator">>()
   const checkpoints = new Map<string, TerminalStoreState["checkpoints"][number]>()
   const unpublishedSessions = new Map<string, number>()
   const leases = new Map<string, TerminalLeaseState>()
@@ -441,7 +445,7 @@ export function createTerminalService(deps: {
       outputChunks += buffer.retainedChunkCount
       pendingPersistenceBytes += buffer.byteLengthAfter(persistedOutputSeqBySession.get(sessionId) ?? 0)
     }
-    for (const runtime of runtimes.values()) {
+    for (const runtime of [...runtimes.values(), ...automationScreens.values()]) {
       const queue = runtime.emulator.getQueueDiagnostics()
       parserPendingBytes += queue.pendingBytes
       parserPendingTasks += queue.pendingTasks
@@ -1030,11 +1034,16 @@ export function createTerminalService(deps: {
     return runtime
   }
 
-  function cleanupRuntime(sessionId: string): void {
+  function cleanupRuntime(sessionId: string, retainScreen = false): void {
+    if (!retainScreen) {
+      automationScreens.get(sessionId)?.emulator.dispose()
+      automationScreens.delete(sessionId)
+    }
     const runtime = runtimes.get(sessionId)
     if (!runtime) return
     runtimes.delete(sessionId)
-    runtime.emulator.dispose()
+    if (retainScreen) automationScreens.set(sessionId, { emulator: runtime.emulator })
+    else runtime.emulator.dispose()
     for (const disposable of runtime.disposables) disposable.dispose()
   }
 
@@ -1100,7 +1109,10 @@ export function createTerminalService(deps: {
     }), input.state === "waiting" ? "attention.waiting" : "attention.cleared", "runtime")
   }
 
-  function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer): void {
+  function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer, owner?: {
+    readonly onOutput?: (data: string) => void
+    readonly onExited?: (exit: { exitCode: number; signal?: number }) => void
+  }): void {
     let flowWarningLogged = false
     let parseWarningLogged = false
     const emulator = createTerminalCoreEmulator({
@@ -1149,6 +1161,8 @@ export function createTerminalService(deps: {
       }
       sessions.set(session.id, updated)
       enforceGlobalOutputQuota()
+      // Owners must observe fast output even before the session is published to UI subscribers.
+      owner?.onOutput?.(data)
       if (!unpublishedSessions.has(session.id)) {
         events.emit("data", { sessionId: session.id, chunk })
         events.emit("stateChanged", {
@@ -1163,7 +1177,7 @@ export function createTerminalService(deps: {
     const exitDisposable = child.onExit((event) => {
       const current = sessions.get(session.id)
       if (!current) return
-      cleanupRuntime(session.id)
+      cleanupRuntime(session.id, automationSessions.has(session.id))
       const lease = leases.get(session.id)
       if (lease) {
         leases.delete(session.id)
@@ -1196,6 +1210,7 @@ export function createTerminalService(deps: {
       }
       sessions.set(session.id, updated)
       deps.agentNotifications?.unregisterSession(session.id)
+      owner?.onExited?.(event)
       if (operationId) completeOperation(operationId, updated.status, cause)
       const published = !unpublishedSessions.has(session.id)
       if (published) {
@@ -1207,7 +1222,7 @@ export function createTerminalService(deps: {
           changeTypes: ["lifecycle", "operation", "attention", "lease"],
         })
       }
-      const removed = removeTerminalSessionInMemory(session.id)
+      const removed = automationSessions.has(session.id) ? false : removeTerminalSessionInMemory(session.id)
       runEndCallback(session.id)
       if (published && removed) events.emit("sessionDeleted", { sessionId: session.id })
       void flushPersist()
@@ -1270,6 +1285,8 @@ export function createTerminalService(deps: {
       readonly shell?: string
       /** Explicit argv for the launched program; defaults to the shell's own arguments. */
       readonly args?: readonly string[]
+      /** User-owned command, never a rendered event template. Internal automation only. */
+      readonly automationCommand?: string
       readonly environment?: TerminalLaunchLayer["environment"]
       /** Trusted first-party process variables, injected after user-layer validation; never persisted. */
       readonly internalEnvironment?: Readonly<Record<string, string>>
@@ -1278,6 +1295,8 @@ export function createTerminalService(deps: {
       readonly persistEnvironment?: boolean
       readonly onCreated?: (sessionId: string) => Promise<void>
       readonly onEnded?: () => void
+      readonly onOutput?: (data: string) => void
+      readonly onExited?: (exit: { exitCode: number; signal?: number }) => void
     },
     createdByClientId?: string,
     commandLaunch?: TerminalLaunchLayer,
@@ -1376,7 +1395,9 @@ export function createTerminalService(deps: {
     if (launchOverrides?.onEnded) endCallbacks.set(session.id, launchOverrides.onEnded)
     try {
       await launchOverrides?.onCreated?.(session.id)
-      const defaultShellArgs = launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
+      const defaultShellArgs = launchOverrides?.automationCommand !== undefined
+        ? resolveAutomationCommandArgs(environment.shell, launchOverrides.automationCommand)
+        : launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
       /*
        * 身份在这里注入而不是在 `resolveTerminalEnvironment` 里：新标签页的 workspace 到
        * 这一步才建出来，而分屏出来的 pane 要到调用方的 `splitTerminalPane` 之后才归属
@@ -1396,13 +1417,15 @@ export function createTerminalService(deps: {
       })
       const child = (deps.spawnPty ?? spawnNodePty)({
         shell: environment.shell,
-        shellArgs: integration?.shellArgs ?? defaultShellArgs,
+        // Interactive shell integrations must not replace the user's command with an idle shell.
+        shellArgs: launchOverrides?.automationCommand !== undefined ? defaultShellArgs : integration?.shellArgs ?? defaultShellArgs,
         cwd: environment.cwd,
         cols: session.cols,
         rows: session.rows,
         env: integration?.env ?? launchEnvironment,
       })
-      attachRuntime(session, child, buffer)
+      if (launchOverrides?.automationCommand !== undefined) automationSessions.set(session.id, child.pid)
+      attachRuntime(session, child, buffer, launchOverrides)
       await flushPersist()
       return getSessionOrThrow(session.id)
     } catch (error) {
@@ -1956,6 +1979,7 @@ export function createTerminalService(deps: {
   }
 
   function removeSessionResources(sessionId: string): void {
+    automationSessions.delete(sessionId)
     deps.agentNotifications?.unregisterSession(sessionId)
     deps.workingDirectoryProbe?.forget(sessionId)
     cleanupRuntime(sessionId)
@@ -2354,6 +2378,33 @@ export function createTerminalService(deps: {
     return createSessionRecord(input, "ui")
   }
 
+  /** Owned process execution; no user/MCP launch surface gains retention or arbitrary argv. */
+  async function createAutomationSession(input: {
+    readonly title: string; readonly cwd: string; readonly command: string
+    readonly onCreated: (sessionId: string) => Promise<void>
+    readonly onOutput?: (data: string) => void
+    readonly onExited?: (exit: { exitCode: number; signal?: number }) => void
+  }): Promise<TerminalSession> {
+    return createSessionRecord({ title: input.title, cwd: input.cwd }, "ui", {
+      automationCommand: input.command, onCreated: input.onCreated, persistEnvironment: false,
+      onOutput: input.onOutput, onExited: input.onExited,
+    })
+  }
+
+  /** Signals only this executor's PTY group; deliberately detached sessions are outside its scope. */
+  function signalAutomationSession(sessionId: string, force = false): boolean {
+    if (!automationSessions.has(sessionId)) throw new Error("not_automation_terminal")
+    const pid = automationSessions.get(sessionId)
+    if (process.platform !== "win32" && pid !== undefined) {
+      try { process.kill(-pid, force ? "SIGKILL" : "SIGTERM"); return true }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error }
+    }
+    const runtime = runtimes.get(sessionId)
+    if (!runtime) return false
+    runtime.pty.kill(force && process.platform !== "win32" ? "SIGKILL" : undefined)
+    return true
+  }
+
   async function createMcpSession(input: TerminalMcpCreateSessionInput, clientId?: string): Promise<TerminalSession> {
     if (input.groupId) {
       const group = getGroupOrThrow(input.groupId)
@@ -2474,7 +2525,7 @@ export function createTerminalService(deps: {
   }
 
   async function attachSession(input: TerminalAttachSessionInput): Promise<TerminalAttachSessionResult> {
-    const runtime = runtimes.get(input.sessionId)
+    const runtime = runtimes.get(input.sessionId) ?? automationScreens.get(input.sessionId)
     if (runtime) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const snapshot = await runtime.emulator.captureSnapshot(TERMINAL_RENDERER_SNAPSHOT_MAX_BYTES)
@@ -3363,7 +3414,7 @@ export function createTerminalService(deps: {
   }
 
   async function getView(input: { sessionId: string; kind: "screen" | "scrollback"; tailLines?: number; maxBytes: number }) {
-    const runtime = runtimes.get(input.sessionId)
+    const runtime = runtimes.get(input.sessionId) ?? automationScreens.get(input.sessionId)
     if (!runtime) {
       const session = getSessionOrThrow(input.sessionId)
       const emulator = await restoreCheckpointEmulator(session)
@@ -3391,7 +3442,7 @@ export function createTerminalService(deps: {
    * session whose runtime is gone still yields its last known screen.
    */
   async function readLineWindow(input: { sessionId: string; maxLines: number }) {
-    const runtime = runtimes.get(input.sessionId)
+    const runtime = runtimes.get(input.sessionId) ?? automationScreens.get(input.sessionId)
     if (!runtime) {
       const session = getSessionOrThrow(input.sessionId)
       const emulator = await restoreCheckpointEmulator(session)
@@ -3432,7 +3483,7 @@ export function createTerminalService(deps: {
     from: number
     maxLines: number
   }): Promise<{ readonly lines: TerminalStyledLine[]; readonly startIndex: number }> {
-    const runtime = runtimes.get(input.sessionId)
+    const runtime = runtimes.get(input.sessionId) ?? automationScreens.get(input.sessionId)
     if (!runtime) return { lines: [], startIndex: 0 }
     await runtime.emulator.ready()
     return runtime.emulator.readLineRange({ from: input.from, maxLines: input.maxLines })
@@ -3699,6 +3750,8 @@ export function createTerminalService(deps: {
     commitGroupDelete,
     listSessions,
     createSession,
+    createAutomationSession,
+    signalAutomationSession,
     createMcpSession,
     createSessionOverride,
     createSessionWithEphemeralEnvironment,
@@ -3751,6 +3804,13 @@ export function createTerminalService(deps: {
     getResourceDiagnostics,
     get events() { return events },
   }
+}
+
+export function resolveAutomationCommandArgs(shell: string, command: string): string[] {
+  const name = path.win32.basename(path.basename(shell)).toLowerCase().replace(/\.exe$/, "")
+  if (name === "cmd") return ["/d", "/s", "/c", command]
+  if (name === "powershell" || name === "pwsh") return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  return [...resolveTerminalShellArgs(shell), "-c", command]
 }
 
 function spawnNodePty(input: SpawnPtyInput): PtyLike {

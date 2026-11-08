@@ -26,6 +26,7 @@ import type {
 
 const TIMER_MAX_DELAY_MS = 2_147_483_647
 const STOP_SETTLE_WAIT_MS = 3_000
+const TERMINAL_SHUTDOWN_SETTLE_WAIT_MS = 4_500
 const NEEDS_UPDATE_MESSAGE = "自动化配置需要更新"
 export const INTERRUPTED_RUN_ERROR = "应用异常退出，运行已在启动恢复时标记为失败。"
 
@@ -469,7 +470,7 @@ export class AutomationService {
     return this.deps.items.list()
   }
 
-  async stopRun(runId: string): Promise<{
+  async stopRun(runId: string, shuttingDown = false): Promise<{
     readonly stopped: boolean
     readonly alreadyFinished?: boolean
     readonly stopRequested?: boolean
@@ -480,7 +481,7 @@ export class AutomationService {
     const settled = abortRequested
       ? await Promise.race([
         this.deps.execution.waitForRunToSettle(runId),
-        delay(STOP_SETTLE_WAIT_MS).then(() => false),
+        delay(shuttingDown && run?.executorType === "builtin.terminal" ? TERMINAL_SHUTDOWN_SETTLE_WAIT_MS : STOP_SETTLE_WAIT_MS).then(() => false),
       ])
       : false
     const stopped = abortRequested && settled
@@ -595,7 +596,7 @@ export class AutomationService {
       const runId = this.deps.execution.getActiveRunIdForItem(itemId)
       if (runId) runIds.add(runId)
     }
-    await Promise.all([...runIds].map((runId) => this.stopRun(runId)))
+    await Promise.all([...runIds].map((runId) => this.stopRun(runId, true)))
   }
 
   private async scheduleOnStartup(item: AutomationItem): Promise<void> {

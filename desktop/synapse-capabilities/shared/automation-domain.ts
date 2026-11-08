@@ -221,7 +221,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_item_create",
-      description: "Create one schema-version-2 Synapse Automation with builtin.agent or builtin.claude-code. Optional top-level conditions apply to every automatic trigger. Call automation_trigger_type_list and automation_executor_type_list before building configs.",
+      description: "Create one schema-version-2 Synapse Automation with builtin.agent, builtin.claude-code, or builtin.terminal. Optional top-level conditions apply to every automatic trigger. Call automation_trigger_type_list and automation_executor_type_list before building configs.",
       inputSchema: {
         type: "object",
         properties: {
@@ -331,7 +331,7 @@ export function buildAutomationTools(): McpToolDefinition[] {
     },
     {
       name: "automation_executor_type_list",
-      description: "List builtin.agent and builtin.claude-code, including public config fields and defaults. Claude Code creates an interactive terminal in the background and completes after initial prompt submission, without waiting for the task result.",
+      description: "List builtin.agent, builtin.claude-code, and builtin.terminal, including public config fields and defaults. Claude Code completes after initial prompt submission. Terminal executes a literal user command without trigger interpolation, waits for actual process exit, saves merged output and exit code, then closes by default. Timeout defaults to 30 minutes and null disables it.",
       inputSchema: { type: "object", properties: {} },
     },
   ], { sourcePrefix: "automation", primaryPrefix: "app_automation" })

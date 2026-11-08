@@ -6,7 +6,7 @@ import { MODEL_TIERS, type ProviderModelSelection } from "@/types/provider-model
 export type AutomationConfigurationField = { key: string; label: string; value: string }
 
 const labels: Record<string, string> = {
-  accountId: "邮箱账号", singleRun: "终端模式",
+  accountId: "邮箱账号", singleRun: "终端模式", autoClose: "执行完成后自动关闭终端",
   expr: "Cron 表达式", timezone: "时区", activeDays: "活跃日", timeRange: "触发时段", start: "开始", end: "结束",
   everyMinutes: "间隔分钟", anchor: "起算方式", webhookName: "Webhook", webhookPublicId: "Webhook ID",
   command: "命令", script: "脚本", source: "代码", shell: "Shell", env: "环境变量", pathStrategy: "PATH 模式", posixLogin: "登录 Shell",

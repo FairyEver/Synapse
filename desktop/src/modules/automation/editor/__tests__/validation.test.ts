@@ -3,6 +3,10 @@ import { createDefaultAutomationDraft } from "../../utils"
 import { validateAutomationDraftFields } from "../validation"
 
 describe("automation field validation", () => {
+  it("keeps terminal command text literal", () => {
+    const draft = { ...createDefaultAutomationDraft("终端"), triggerType: "builtin.cron", triggerConfig: { expr: "0 9 * * *" }, executorType: "builtin.terminal", executorConfig: { command: "echo '{{arbitrary.literal}}'" } }
+    expect(validateAutomationDraftFields(draft)).toEqual({})
+  })
   it("keeps trigger and executor errors attached to their fields", () => {
     const draft = { ...createDefaultAutomationDraft("测试"), triggerType: "builtin.interval", triggerConfig: { everyMinutes: 0, anchor: "created_at" }, executorType: "builtin.claude-code", executorConfig: { projectId: "", prompt: "" } }
     expect(validateAutomationDraftFields(draft)).toMatchObject({ "trigger.everyMinutes": expect.any(String), "executor.projectId": expect.any(String), "executor.prompt": expect.any(String) })

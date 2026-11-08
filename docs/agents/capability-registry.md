@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-08 自动化新增独立 `builtin.terminal` 执行器，主进程、Renderer 与既有执行器发现入口同步注册；当前执行器清单见下表。旧退役执行器 ID 不恢复。终端执行器等待实际 PTY 退出，保存日志及退出码后按配置关闭或保留已结束终端；命令字面执行，不展开触发模板。复用既有 Automation MCP 能力，不新增 MCP capability/tool、IPC、System App、Dock、Workflow Node 或 Deep Link，现有汇总计数不变。
+
 2026-11-07 用户自定义网页应用：桌面端新增账号级自定义应用与完整 Dock 布局同步，不注册新的 System App、MCP capability/tool、Workflow、Automation Action 或 Deep Link。System App 保持 21 项、默认 Dock 保持 9 项，全局 capability 保持 365 项、MCP 索引保持 361 项；自定义应用只通过桌面 UI 和账号 API 管理。
 
 2026-11-06 新增完整 Webhook 正文只读 MCP：Automation 14→15，全局 capability 364→365、MCP 索引 360→361；公开仍仅 search/invoke 两项。新增独立 automation.webhook.body.read 权限与本人认证的内部正文 REST，不新增 System App、Dock、IPC、Workflow、Automation Action 或 Deep Link。快照、运行绑定及升级边界见 docs/agent-guides/webhook-delivery-body.md。
@@ -373,12 +375,13 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 
 2026-10-24：邮箱地址弹层新增「写邮件」，通过私有 `MailOpenRequest.compose.recipient` 预填新信收件人，并按账号及收件地址复用窗口。复用现有 draft.prepare/commit，无新增公开工具、App、Dock、Workflow、Automation 或 Deep Link；mail 44 项公开动作及全局数量不变，MCP schema 和系统 Skill 的新信创建契约不变。
 
-2026-11-05 自动化注销命令、Shell 脚本、HTTP、工作流、JavaScript、Node.js 六个 Automation Action，随后按用户确认新增独立 Claude Code 执行器。当前 Automation Action 共 2 个：`builtin.agent`（Agent Runtime 执行并等待结果）、`builtin.claude-code`（项目/提示词及可选 `singleRun`，沿用触发时默认设置，默认交互式，勾选单次模式使用原生 `--print` 并在进程退出后清理终端；确认首条提交即结束自动化）。主进程、Renderer 与 MCP 发现一致；JS/Node 能力包仍仅保留原 capability 和 Workflow Node，Automation surface 为空。后台 Worker、变更监听和仓库写队列共用支持清单，删除退役配置并保留两个受支持类型（含待修复配置）及运行历史；恢复后继续清理。运行记录按原执行器类型提供精确终端入口，失效不重建。不新增 IPC、MCP 工具、System App、Dock、Workflow Node 或 Deep Link；Automation 仍为 14 / 14。
+2026-11-05 自动化注销命令、Shell 脚本、HTTP、工作流、JavaScript、Node.js 六个 Automation Action，随后按用户确认新增独立 Claude Code 执行器。`builtin.agent` 由 Agent Runtime 执行并等待结果；`builtin.claude-code` 配置项目/提示词及可选 `singleRun`，沿用触发时默认设置，默认交互式，勾选单次模式使用原生 `--print` 并在进程退出后清理终端，确认首条提交即结束自动化。主进程、Renderer 与 MCP 发现一致；JS/Node 能力包仍仅保留原 capability 和 Workflow Node，Automation surface 为空。后台 Worker、变更监听和仓库写队列共用支持清单，删除退役配置并保留受支持类型（含待修复配置）及运行历史；恢复后继续清理。运行记录按原执行器类型提供精确终端入口，失效不重建。不新增 IPC、MCP 工具、System App、Dock、Workflow Node 或 Deep Link；Automation 仍为 14 / 14（当时基线，当前 MCP 数量见汇总表）。
 
 | Automation Action | 配置 | 完成条件 |
 | --- | --- | --- |
 | `builtin.agent` | 项目、供应商/模型、权限、提示词和会话策略等 | Agent Runtime 运行结束 |
 | `builtin.claude-code` | 项目、提示词、单次模式（可选，默认关闭） | 初始提示词提交回执；默认保留交互式 CLI，单次模式在 CLI 自然退出后清理终端 |
+| `builtin.terminal` | 字面命令、`autoClose`（默认 true）、`timeoutMins`（默认 30，null 不限时） | 实际 PTY 退出；先保存合并输出（最多 64 KiB，显式截断）、退出码与信号，再关闭或保留只读已结束终端；取消/超时只作用于本次任务，重启不重放 |
 
 
 ## 自动化收信触发器（2026-11-05）

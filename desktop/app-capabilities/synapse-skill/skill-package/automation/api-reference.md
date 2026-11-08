@@ -22,7 +22,7 @@ Each tool maps to the same canonical Synapse API action.
 
 ## Variable contract
 
-Use only canonical keys or aliases returned by discovery. Save/update/enable and automatic execution validate prompts; `trigger.payload.messageId` is retired without alias. `trigger.payload.url` is an explicit mail-id alias, not another picker entry. External mail adds senderAddresses/replyToAddresses JSON arrays and sentAt; internal mail adds senderId/senderKind, with empty senderId for system broadcasts. Attachments carry attachmentId and external assetId; no automatic downloads or hidden-recipient expansion.
+Use only canonical keys or aliases returned by discovery. Save/update/enable and automatic execution validate prompts; terminal `command` is literal and is not expanded or validated as a template. `trigger.payload.messageId` is retired without alias. `trigger.payload.url` is an explicit mail-id alias, not another picker entry. External mail adds senderAddresses/replyToAddresses JSON arrays and sentAt; internal mail adds senderId/senderKind, with empty senderId for system broadcasts. Attachments carry attachmentId and external assetId; no automatic downloads or hidden-recipient expansion.
 
 `trigger.triggeredAt` is source occurrence, schedule activation, or the manual request time; `trigger.receivedAt` is local event receipt/enqueue, `trigger.executedAt` is run start, and `trigger.runId` is the actual run. Schedules and event triggers expose `trigger.scheduledAt`; `builtin.manual` does not. Manual date uses execution time, event date uses occurrence, and scheduled date uses the original plan. `date` is YYYY-MM-DD in the effective timezone: configured Cron zone or system zone, other triggers use system zone. All timestamps are ISO UTC; unavailable external sentAt is empty.
 
@@ -50,7 +50,24 @@ Input:
 
 Returns executor descriptors with `type`, `title`, `permissions`, `defaultConfig`, and `configFields`.
 
-`builtin.agent` and `builtin.claude-code` are registered. Claude Code accepts `{ "projectId": "project-id", "prompt": "Review {{trigger.payload.body}}", "singleRun": false }`; `singleRun` is optional and defaults to false. It reads the current default provider/model/permission mode at execution time and creates a terminal without navigating or taking focus. Omitted/false preserves interactive mode; true adds native `--print` and the terminal session/pane/empty tab is removed when the CLI exits (including failures). This does not change trigger frequency, does not forcibly close on Stop hooks, and does not guarantee CLI background tasks have finished. Success confirms the initial prompt submission, not task completion. Confirmation times out after 60 seconds without automatic resend; a created terminal is not forcibly stopped and remains available until its process exits. Retired types are rejected on create/update and removed in the background, including after backup restore. Both supported types (including invalid configs) and run history are preserved.
+`builtin.agent`, `builtin.claude-code`, and `builtin.terminal` are registered. Claude Code accepts `{ "projectId": "project-id", "prompt": "Review {{trigger.payload.body}}", "singleRun": false }`; `singleRun` is optional and defaults to false. It reads the current default provider/model/permission mode at execution time and creates a terminal without navigating or taking focus. Omitted/false preserves interactive mode; true adds native `--print` and the terminal session/pane/empty tab is removed when the CLI exits (including failures). This does not change trigger frequency, does not forcibly close on Stop hooks, and does not guarantee CLI background tasks have finished. Success confirms the initial prompt submission, not task completion. Confirmation times out after 60 seconds without automatic resend; a created terminal is not forcibly stopped and remains available until its process exits.
+
+Terminal configuration:
+
+```json
+{
+  "type": "builtin.terminal",
+  "config": {
+    "command": "python3 task.py",
+    "autoClose": true,
+    "timeoutMins": 30
+  }
+}
+```
+
+`command` is required literal code, with no command allowlist or trigger template expansion. Trigger data is not automatically injected; users can configure command arguments or file redirection themselves. Use the configured terminal shell and top-level Automation `cwd`; no executor `projectId` is required. `autoClose` defaults to true; `timeoutMins` defaults to 30, accepts 1–1440, and may be null to disable the timeout. Execution requires `shell.exec` and waits for actual PTY exit. It persists merged stdout/stderr output up to 64 KiB with explicit truncation, exit code, and signal before terminal cleanup. False retains an ended read-only terminal, and a failed result save retains the terminal. Timeout/cancellation affects only this run's process group; restart never replays the command. The desktop provides a terminal entry only for an existing retained session. Public MCP run summaries still omit raw output and command text; no new MCP operation is introduced.
+
+The old `builtin.command`, `builtin.script`, `builtin.http-request`, `builtin.workflow`, `builtin.javascript-run`, and `builtin.nodejs-run` IDs remain retired, rejected on create/update and removed in the background, including after backup restore. Supported types (including invalid configs) and run history are preserved.
 
 ## Items
 

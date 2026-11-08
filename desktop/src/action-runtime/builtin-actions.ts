@@ -5,6 +5,9 @@ import { AgentConfigForm } from "../../action-packages/builtin/agent/config.rend
 import { claudeCodeActionManifest, type ClaudeCodeActionConfig } from "../../action-packages/builtin/claude-code"
 import { ClaudeCodeConfigForm } from "../../action-packages/builtin/claude-code/config.renderer"
 import { ClaudeCodeResultView } from "../../action-packages/builtin/claude-code/result.renderer"
+import { terminalActionManifest, type TerminalActionConfig } from "../../action-packages/builtin/terminal"
+import { TerminalConfigForm } from "../../action-packages/builtin/terminal/config.renderer"
+import { TerminalResultView } from "../../action-packages/builtin/terminal/result.renderer"
 import { ActionResultView } from "./action-result-view"
 import { RendererActionRegistry, type RendererActionDefinition } from "./action-registry"
 import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
@@ -28,4 +31,11 @@ rendererActionRegistry.register<ClaudeCodeActionConfig>({
   summarizeConfig: () => "默认设置",
   ConfigForm: ClaudeCodeConfigForm,
   ResultView: ClaudeCodeResultView,
+})
+rendererActionRegistry.register<TerminalActionConfig>({
+  manifest: terminalActionManifest,
+  icon: SquareTerminal,
+  summarizeConfig: config => config.command.split(/\r?\n/, 1)[0]!,
+  ConfigForm: TerminalConfigForm,
+  ResultView: TerminalResultView,
 })

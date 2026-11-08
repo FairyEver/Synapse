@@ -63,6 +63,16 @@ describe("automation detail provider display", () => {
     expect(document.body.textContent).toContain("完成后退出")
     expect(bridge.listProviders).not.toHaveBeenCalled()
   })
+
+  it("renders terminal configuration without provider or project controls", async () => {
+    const item = createItem({ type: "builtin.terminal", config: { command: "node task.js\npython3 task.py", autoClose: true, timeoutMins: 30 } })
+    await renderDetail(item, vi.fn())
+    expect(document.body.textContent).toContain("node task.js\npython3 task.py")
+    const autoClose = [...document.querySelectorAll("dt")].find(field => field.textContent === "执行完成后自动关闭终端")
+    expect(autoClose?.nextElementSibling?.textContent).toBe("是")
+    expect(document.querySelector("textarea")).toBeNull()
+    expect(bridge.listProviders).not.toHaveBeenCalled()
+  })
 })
 
 async function renderDetail(item: AutomationItem, onEdit: () => void) {
