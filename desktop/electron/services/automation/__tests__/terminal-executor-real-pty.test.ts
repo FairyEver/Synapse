@@ -1,10 +1,9 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises"
-import os from "node:os"
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Terminal as HeadlessTerminal } from "@xterm/headless"
-import { createTerminalService, type TerminalService } from "../../../../app-capabilities/terminal/main/service"
-import { terminalStoreStateSchema, type TerminalStore, type TerminalStoreState } from "../../../../app-capabilities/terminal/main/store"
+import { type TerminalService } from "../../../../app-capabilities/terminal/main/service"
+import { createInteractiveTerminalRig } from "../../../../app-capabilities/terminal/main/__tests__/interactive-terminal-fixture"
 import { terminalActionConfigSchema, type TerminalActionConfig } from "../../../../action-packages/builtin/terminal/schema"
 import type { ActionRuntimeContext } from "../../../action-runtime/action-registry"
 
@@ -19,19 +18,16 @@ const alive = (pid: number) => { try { process.kill(pid, 0); return true } catch
 describe.skipIf(process.env.SYNAPSE_TERMINAL_REAL_PTY !== "1" || process.platform === "win32")("terminal executor real PTY", () => {
   let service: TerminalService
   let directory: string
-  let state: TerminalStoreState
   beforeEach(async () => {
     diagnostics.warn.mockClear()
-    directory = await mkdtemp(path.join(os.tmpdir(), "synapse-automation-terminal-"))
-    state = terminalStoreStateSchema.parse({ groups: [], sessions: [], output: [] })
-    const store: TerminalStore = {
-      persistenceProtection: "available", loadState: async () => structuredClone(state),
-      saveState: async value => { state = terminalStoreStateSchema.parse(structuredClone(value)) },
-    }
-    service = createTerminalService({ store, resolveDefaultShell: () => "/bin/bash", resolveDefaultCwd: () => directory })
-    await service.start()
+    const rig = await createInteractiveTerminalRig("zsh")
+    service = rig.service; directory = rig.root
+    const prime = await service.createSession({})
+    await rig.ready(prime.id)
+    await service.resizeSession({ sessionId: prime.id, cols: 140, rows: 35 })
+    await service.stopSession({ sessionId: prime.id })
+    await vi.waitFor(() => expect(service.listSessions()).toHaveLength(0))
   })
-  afterEach(async () => { await service?.stop(); await rm(directory, { recursive: true, force: true }) })
   function start(command: string, config: Partial<TerminalActionConfig> = {}) {
     const controller = new AbortController()
     const saved: Record<string, unknown>[] = []
@@ -55,9 +51,8 @@ describe.skipIf(process.env.SYNAPSE_TERMINAL_REAL_PTY !== "1" || process.platfor
     expect(result.outputs?.terminalOutput).toContain("NODE_STDERR")
     expect(h.saved.at(-1)).toMatchObject({ exitCode: 0, terminalRetained: true })
     expect(service.listSessions()).toHaveLength(0)
-    expect(state.sessions).toHaveLength(0)
   })
-  it("keeps the launch heading and both ends of fast long output across reopen and display reflow", async () => {
+  it("keeps native prompts and both ends of fast long output across reopen and display reflow", async () => {
     const script = path.join(directory, "long-output.js")
     await writeFile(script, "console.log('BEGIN_OUTPUT');for(let n=0;n<200;n++)console.log('row-'+n+' '+'x'.repeat(120));console.log('END_OUTPUT')")
     const command = `${quote(process.execPath)} ${quote(script)}`
@@ -75,16 +70,22 @@ describe.skipIf(process.env.SYNAPSE_TERMINAL_REAL_PTY !== "1" || process.platfor
           view.resize(cols!, rows!)
           view.scrollToTop()
           expect(view.buffer.active.viewportY).toBe(0)
-          const text = Array.from({ length: view.buffer.active.length }, (_, i) => view.buffer.active.getLine(i)?.translateToString(true) ?? "").join("\n")
-          expect(text).toContain("工作目录:")
-          expect(text).toContain("执行命令:")
+          const logical: string[] = []
+          for (let i = 0; i < view.buffer.active.length; i++) {
+            const line = view.buffer.active.getLine(i), text = line?.translateToString(true) ?? ""
+            if (line?.isWrapped && logical.length) logical[logical.length - 1] += text
+            else logical.push(text)
+          }
+          const text = logical.join("\n")
+          expect(text).toContain("PARITY>")
+          expect(text).toContain("long-output.js")
           expect(text).toContain("BEGIN_OUTPUT")
           expect(text).toContain("END_OUTPUT")
         }
       } finally { view.dispose() }
     }
-    expect(service.getSession({ sessionId })).toMatchObject({ cols: 80, rows: 24, status: "ended" })
-    await service.deleteTerminalSession(sessionId, "test")
+    expect(service.getSession({ sessionId })).toMatchObject({ cols: 140, rows: 35, status: "running" })
+    await service.stopSession({ sessionId })
   })
   it("runs in the selected project's group and directory instead of the Automation cwd", async () => {
     const projectDirectory = path.join(directory, "selected project")
@@ -97,9 +98,9 @@ describe.skipIf(process.env.SYNAPSE_TERMINAL_REAL_PTY !== "1" || process.platfor
     const session = service.getSession({ sessionId: result.outputs!.sessionId as string })
     expect(service.getGroup(session.groupId).projectId).toBe("project-alpha")
     expect(h.saved[0]).toMatchObject({ projectId: "project-alpha", sessionId: session.id })
-    await service.deleteTerminalSession(session.id, "test")
+    await service.stopSession({ sessionId: session.id })
   })
-  it("runs Python with user-configured file redirection and preserves a nonzero exit in an ended terminal", async () => {
+  it("runs Python with user-configured file redirection and preserves a nonzero exit in a reusable interactive terminal", async () => {
     const script = path.join(directory, "python test.py")
     const inputFile = path.join(directory, "input.txt")
     await writeFile(inputFile, "x".repeat(6000))
@@ -109,15 +110,15 @@ describe.skipIf(process.env.SYNAPSE_TERMINAL_REAL_PTY !== "1" || process.platfor
     expect(result).toMatchObject({ status: "failed", metrics: { exitCode: 7 }, outputs: { terminalRetained: true } })
     expect(result.outputs?.terminalOutput).toContain("PYTHON_OK:6000")
     const sessionId = result.outputs!.sessionId as string
-    expect(service.getSession({ sessionId })).toMatchObject({ status: "ended", exitCode: 7 })
+    expect(service.getSession({ sessionId })).toMatchObject({ status: "running" })
     expect(await service.attachSession({ sessionId })).toMatchObject({ degraded: false, serialized: expect.stringContaining("PYTHON_OK:6000") })
-    expect(service.listSessions().filter(session => session.status === "running")).toHaveLength(0)
-    await service.deleteTerminalSession(sessionId, "test")
+    expect(service.listSessions().filter(session => session.status === "running")).toHaveLength(1)
+    await service.stopSession({ sessionId })
   })
-  it.each(["cancel", "timeout"] as const)("%s kills the owned process group, leaves another terminal running", async mode => {
+  it.each(["cancel", "timeout"] as const)("%s stops owned PTY jobs and leaves another terminal running", async mode => {
     const marker = path.join(directory, "child.pid")
     const script = path.join(directory, "long.py")
-    await writeFile(script, ["import os,sys,time,signal,subprocess", "signal.signal(signal.SIGTERM,signal.SIG_IGN)",
+    await writeFile(script, ["import os,sys,time,signal,subprocess", "signal.signal(signal.SIGTERM,signal.SIG_IGN); signal.signal(signal.SIGINT,signal.SIG_IGN)",
       "child=subprocess.Popen([sys.executable,'-c','import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)'])",
       `open(${JSON.stringify(marker)},'w').write(str(child.pid))`, "print('READY',flush=True)", "time.sleep(60)"].join("\n"))
     const other = await service.createSession({ cwd: directory })

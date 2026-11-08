@@ -2,7 +2,7 @@
 
 2026-11-08 终端自动化保留画面补充启动目录/脱敏命令展示；结束画面首次从头打开并在本窗口适配尺寸。复用既有快照和终端入口，不新增 capability、MCP tool、IPC、Action 或配置字段，既有汇总计数不变。
 
-2026-11-08 自动化新增独立 `builtin.terminal` 执行器，主进程、Renderer 与既有执行器发现入口同步注册；当前执行器清单见下表。旧退役执行器 ID 不恢复。终端执行器等待实际 PTY 退出，保存日志及退出码后按配置关闭或保留已结束终端；命令字面执行，不展开触发模板。复用既有 Automation MCP 能力，不新增 MCP capability/tool、IPC、System App、Dock、Workflow Node 或 Deep Link，现有汇总计数不变。
+2026-11-08 自动化新增独立 `builtin.terminal` 执行器，主进程、Renderer 与既有发现入口同步注册；当前执行器清单见下表，旧退役 ID 不恢复。同日改为与手动共用的交互式终端输入：zsh/bash 原生 prompt 回执确认命令完成，exit/exec 看真实 PTY 退出；保存日志及命令退出码后按配置关闭或保留可继续输入的 Shell。输入前确认桌面实测网格，无测量最多等60秒后失败；其他 Shell 在输入前明确拒绝。命令字面执行，不展开触发模板。私有回执和清理不新增 IPC/MCP 表面；复用既有 Automation MCP，不新增 capability/tool、System App、Dock、Workflow Node 或 Deep Link，所有汇总计数不变。
 
 2026-11-07 用户自定义网页应用：桌面端新增账号级自定义应用与完整 Dock 布局同步，不注册新的 System App、MCP capability/tool、Workflow、Automation Action 或 Deep Link。System App 保持 21 项、默认 Dock 保持 9 项，全局 capability 保持 365 项、MCP 索引保持 361 项；自定义应用只通过桌面 UI 和账号 API 管理。
 
@@ -383,7 +383,7 @@ Drive 已保存文本通过 `app.drive.file_content.inspect` 获取固定版本�
 | --- | --- | --- |
 | `builtin.agent` | 项目、供应商/模型、权限、提示词和会话策略等 | Agent Runtime 运行结束 |
 | `builtin.claude-code` | 项目、提示词、单次模式（可选，默认关闭） | 初始提示词提交回执；默认保留交互式 CLI，单次模式在 CLI 自然退出后清理终端 |
-| `builtin.terminal` | 可选已有项目 `projectId`、字面命令、`autoClose`（默认 true）、`timeoutMins`（默认 30，null 不限时） | 选项目时使用其分组和当前启动设置，等效于该分组点加号；未选保留默认分组与原 cwd 规则。实际 PTY 退出后先保存合并输出（最多 64 KiB，显式截断）、退出码与信号，再关闭或保留只读已结束终端；取消/超时只作用于本次任务，重启不重放 |
+| `builtin.terminal` | 可选已有项目 `projectId`、字面命令、`autoClose`（默认 true）、`timeoutMins`（默认 30，null 不限时） | 选项目使用其分组及当前设置；未选保留默认分组与原 cwd 规则。与手动共用交互式 Shell/配置/输入及实测网格；zsh/bash 原生 prompt 确认命令完成（exit/exec 看 PTY 退出），先保存真实转录（最多64 KiB，显式截断）、退出码与信号，再关闭或保留可继续输入的 Shell；取消/超时只处理本次 PTY 作业，停止未确认保留证据，重启不重放 |
 
 
 ## 自动化收信触发器（2026-11-05）

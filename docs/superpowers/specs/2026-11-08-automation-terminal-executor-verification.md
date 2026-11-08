@@ -1,5 +1,7 @@
 # 自动化终端执行器：实现与验证记录
 
+> 历史测试记录：下列结果仅证明对应的旧实现。非交互启动、合成展示头、只读保留等行为已由同日[交互式终端设计](2026-11-08-interactive-terminal-automation-design.md)替代；当前验收见[新验证记录](2026-11-08-interactive-terminal-automation-verification.md)。
+
 日期：2026-11-08。仓库：`/Users/liyang/Documents/code/github/Synapse`，开发分支：`main`。
 
 ## 交付行为

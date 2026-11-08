@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
-import { createTerminalService, ensureExecutableIfPresent, resolveAutomationCommandArgs, type PtyLike } from "../service"
+import { createTerminalService, ensureExecutableIfPresent, type PtyLike } from "../service"
 import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState, TerminalStructuralStoreUpdate } from "../store"
 import { collectTerminalPaneLeaves } from "../../shared/workspace"
 import * as emulatorModule from "../emulator"
@@ -2159,43 +2159,62 @@ function fakePty(options: { readonly ptsName?: string } = {}) {
 }
 
 describe("automation command terminal lifecycle", () => {
-  it("shows redacted launch directory and command before fast output and keeps them in retained scrollback", async () => {
+  it("does not authorize command geometry when the native resize fails", async () => {
+    const pty = fakePty()
+    const service = createTerminalService({ store: memoryStore(), spawnPty: () => pty })
+    try {
+      await service.start()
+      const session = await service.createSession({})
+      const measured = vi.fn()
+      service.events.on("desktopGrid", measured)
+      pty.resize.mockImplementationOnce(() => { throw new Error("resize_failed") })
+      await expect(service.resizeSession({ sessionId: session.id, cols: 140, rows: 35 })).rejects.toThrow("resize_failed")
+      expect(measured).not.toHaveBeenCalled()
+      expect(await service.createSession({})).toMatchObject({ cols: 80, rows: 24 })
+    } finally { await service.stop() }
+  })
+  it("rejects a failed native close and releases readiness listeners immediately", async () => {
+    const pty = fakePty()
+    const service = createTerminalService({ store: memoryStore(), spawnPty: () => pty })
+    try {
+      await service.start()
+      const session = await service.createAutomationSession({ title: "test", cwd: os.tmpdir(), onCreated: async () => undefined })
+      const before = service.events.listenerCount("sessionChanged")
+      pty.kill.mockImplementationOnce(() => { throw new Error("kill_failed") })
+      await expect(service.closeAutomationSession(session.id)).rejects.toThrow("kill_failed")
+      expect(service.events.listenerCount("sessionChanged")).toBe(before)
+    } finally { await service.stop() }
+  })
+  it("creates an idle interactive terminal without executing a command or injecting a synthetic prompt", async () => {
     const pty = fakePty(), output = vi.fn()
     const service = createTerminalService({ store: memoryStore(), spawnPty: () => pty, resolveDefaultCwd: () => os.tmpdir() })
     try {
       await service.start()
       const session = await service.createAutomationSession({ title: "automation", cwd: os.tmpdir(),
-        command: "node task.js --token=private-launch-token\nls", onCreated: async () => undefined, onOutput: output })
+         onCreated: async () => undefined, onOutput: output })
       pty.emitData("FIRST_PROGRAM_LINE\r\n" + Array.from({ length: 100 }, (_, index) => `line-${index}`).join("\r\n") + "\r\nLAST_PROGRAM_LINE\r\n")
       pty.emitExit({ exitCode: 0 })
       const snapshot = await service.attachSession({ sessionId: session.id })
-      expect(snapshot.serialized).toContain("工作目录:")
-      expect(snapshot.serialized).toContain(os.tmpdir())
-      expect(snapshot.serialized).toContain("执行命令:")
-      expect(snapshot.serialized).toContain("node task.js")
-      expect(snapshot.serialized).not.toContain("private-launch-token")
-      expect(snapshot.serialized!.indexOf("node task.js")).toBeLessThan(snapshot.serialized!.indexOf("FIRST_PROGRAM_LINE"))
+      expect(pty.write).not.toHaveBeenCalled()
+      expect(snapshot.serialized).not.toContain("执行命令:")
+      expect(snapshot.serialized).toContain("FIRST_PROGRAM_LINE")
       expect(snapshot.serialized).toContain("LAST_PROGRAM_LINE")
-      // The synthetic launch heading is presentation, never passed off as program stdout.
+      // No synthetic heading is injected into terminal output or owner logs.
       expect(output.mock.calls.map(call => call[0]).join("")).not.toContain("执行命令:")
     } finally { await service.stop() }
   })
-  it("passes literal commands through the native Windows shell argv", () => {
-    expect(resolveAutomationCommandArgs("C:\\Windows\\System32\\cmd.exe", "node custom.js")).toEqual(["/d", "/s", "/c", "node custom.js"])
-    expect(resolveAutomationCommandArgs("C:\\Program Files\\PowerShell\\7\\pwsh.exe", "python custom.py")).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "python custom.py"])
-  })
-  it("does not let interactive integrations swallow a command, and observes output before publication", async () => {
+  it("uses the same interactive integration argv as manual creation and observes output before publication", async () => {
     const pty = fakePty(), output = vi.fn(), exited = vi.fn()
     const agentNotifications = { prepareSession: () => ({ env: {}, shellArgs: ["-i"] }), unregisterSession: vi.fn() } as unknown as Parameters<typeof createTerminalService>[0]["agentNotifications"]
     const spawnPty = vi.fn((_input: unknown) => pty)
     const service = createTerminalService({ store: memoryStore(), spawnPty, resolveDefaultShell: () => "/bin/bash", agentNotifications })
     try {
       await service.start()
-      const pending = service.createAutomationSession({ title: "test", cwd: os.tmpdir(), command: "echo expected", onCreated: async () => undefined, onOutput: output, onExited: exited })
+      const pending = service.createAutomationSession({ title: "test", cwd: os.tmpdir(), onCreated: async () => undefined, onOutput: output, onExited: exited })
       await vi.waitFor(() => expect(pty.onData).toHaveBeenCalled())
       pty.emitData("fast"); pty.emitExit({ exitCode: 0 })
       const session = await pending
-      expect(spawnPty.mock.calls[0]?.[0]).toMatchObject({ shellArgs: ["-l", "-c", "echo expected"] })
+      expect(spawnPty.mock.calls[0]?.[0]).toMatchObject({ shellArgs: ["-i"] })
       expect(output).toHaveBeenCalledWith("fast")
       expect(exited).toHaveBeenCalledWith({ exitCode: 0 })
       expect(service.getSession({ sessionId: session.id }).status).toBe("ended")
@@ -2206,8 +2225,8 @@ describe("automation command terminal lifecycle", () => {
     const service = createTerminalService({ store: memoryStore(), spawnPty, resolveDefaultShell: () => "/bin/zsh", resolveDefaultCwd: () => os.tmpdir() })
     try {
       await service.start()
-      const session = await service.createAutomationSession({ title: "automation", cwd: os.tmpdir(), command: "python3 custom.py", onCreated: async () => undefined })
-      expect(spawnPty.mock.calls[0]?.[0]).toMatchObject({ shell: "/bin/zsh", shellArgs: ["-l", "-c", "python3 custom.py"] })
+      const session = await service.createAutomationSession({ title: "automation", cwd: os.tmpdir(), onCreated: async () => undefined })
+      expect(spawnPty.mock.calls[0]?.[0]).toMatchObject({ shell: "/bin/zsh", shellArgs: ["-l"] })
       pty.emitData("output before exit\r\n")
       pty.emitExit({ exitCode: 7 })
       expect(service.getSession({ sessionId: session.id })).toMatchObject({ status: "ended", exitCode: 7 })
@@ -2224,7 +2243,7 @@ describe("automation command terminal lifecycle", () => {
     try {
       await service.start()
       const session = await service.createSession({})
-      expect(() => service.signalAutomationSession(session.id)).toThrow()
+      await expect(service.closeAutomationSession(session.id)).rejects.toThrow("not_automation_terminal")
       expect(pty.kill).not.toHaveBeenCalled()
     } finally { await service.stop() }
   })

@@ -188,6 +188,7 @@ import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { createClaudeCodeTerminalSession } from "../modules/agent/claude-code-terminal"
 import { createAutomationTerminalRunner } from "../services/automation/terminal-executor"
+import { createAutomationJobTerminator } from "../../app-capabilities/terminal/main/automation-jobs"
 import { createLocalAgentConversation } from "../modules/agent/conversation-creation"
 import { listTrustedSkillRoots } from "../services/editor-scan-roots"
 import { EditorInstallStagingRecovery } from "../services/editor-install-staging-recovery"
@@ -596,6 +597,10 @@ export const coreTerminalDescriptor: ServiceDescriptor<TerminalService> = {
       appVersion: SYNAPSE_APP_VERSION,
       agentNotifications: ctx.registry.get<TerminalAgentNotificationService>(TERMINAL_AGENT_NOTIFICATION_SERVICE_ID),
       workingDirectoryProbe,
+      terminateAutomationJobs: createAutomationJobTerminator(createControlledProcessRunner({
+        permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+        auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      })),
     })
   },
   async start(instance) {

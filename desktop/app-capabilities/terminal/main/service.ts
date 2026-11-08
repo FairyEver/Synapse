@@ -1,5 +1,5 @@
 import type { MobileGroupCommandsEntry, MobileToolbarButton } from "@synapse/shared" with { "resolution-mode": "import" }
-import { createHash, randomUUID } from "node:crypto"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
 import { chmodSync, existsSync, statSync } from "node:fs"
 import { createRequire } from "node:module"
@@ -115,7 +115,7 @@ import {
   resolveTerminalShellArgs,
 } from "./environment"
 import { createTerminalOutputBuffer, type TerminalOutputBuffer } from "./output-buffer"
-import { formatAutomationLaunchOutput } from "./automation-launch-output"
+import { createShellReceiptDecoder, SHELL_QUOTED_INSERT } from "./shell-command-protocol"
 import type { TerminalRuntimeStoreUpdate, TerminalStore, TerminalStoreState, TerminalStructuralStoreState } from "./store"
 
 export type PtyDisposable = { dispose(): void }
@@ -351,6 +351,7 @@ export function createTerminalService(deps: {
     | "getAgentStateView">
   /** shell 报不出目录时的兜底（自定义 shell、pwsh / cmd……）。没有就只靠 OSC 7。 */
   readonly workingDirectoryProbe?: TerminalWorkingDirectoryProbe
+  readonly terminateAutomationJobs?: (input: { pid: number; tty: string }) => Promise<void>
 }) {
   const events = new EventEmitter()
   const groups = new Map<string, TerminalGroup>()
@@ -367,8 +368,11 @@ export function createTerminalService(deps: {
   const buffers = new Map<string, TerminalOutputBuffer>()
   const endCallbacks = new Map<string, () => void>()
   // Main-process automation owners persist results before releasing these ended PTYs.
-  const automationSessions = new Map<string, number | undefined>()
-  // An opted-out automation keeps its ended screen, never a live PTY or running slot.
+  const automationSessions = new Set<string>()
+  const shellPrompts = new Map<string, { sequence: number; exitCode: number; quotedInsert?: boolean }>()
+  const desktopGrids = new Map<string, { cols: number; rows: number }>()
+  let lastDesktopGrid: { cols: number; rows: number } | undefined
+  // Commands that explicitly exit keep an ended screen until their owner releases it.
   const automationScreens = new Map<string, Pick<TerminalRuntime, "emulator">>()
   const checkpoints = new Map<string, TerminalStoreState["checkpoints"][number]>()
   const unpublishedSessions = new Map<string, number>()
@@ -1113,7 +1117,7 @@ export function createTerminalService(deps: {
   function attachRuntime(session: TerminalSession, child: PtyLike, buffer: TerminalOutputBuffer, owner?: {
     readonly onOutput?: (data: string) => void
     readonly onExited?: (exit: { exitCode: number; signal?: number }) => void
-    readonly launchOutput?: string
+    readonly shellToken?: string
   }): void {
     let flowWarningLogged = false
     let parseWarningLogged = false
@@ -1141,7 +1145,7 @@ export function createTerminalService(deps: {
         }
       },
     })
-    const acceptOutput = (data: string, programOutput = true) => {
+    const acceptOutput = (data: string) => {
       const current = sessions.get(session.id)
       const runtime = runtimes.get(session.id)
       if (!current || !runtime || (current.status !== "running" && current.status !== "stopping")) return
@@ -1164,7 +1168,7 @@ export function createTerminalService(deps: {
       sessions.set(session.id, updated)
       enforceGlobalOutputQuota()
       // Owners must observe fast output even before the session is published to UI subscribers.
-      if (programOutput) owner?.onOutput?.(data)
+      owner?.onOutput?.(data)
       if (!unpublishedSessions.has(session.id)) {
         events.emit("data", { sessionId: session.id, chunk })
         events.emit("stateChanged", {
@@ -1176,7 +1180,16 @@ export function createTerminalService(deps: {
       }
       scheduleRuntimePersist(session.id)
     }
-    const dataDisposable = child.onData(data => acceptOutput(data))
+    const decoder = createShellReceiptDecoder(owner?.shellToken ?? "", () => child.pid)
+    const dataDisposable = child.onData(data => {
+      for (const event of decoder.push(data)) {
+        if (event.type === "output") acceptOutput(event.data)
+        else {
+          shellPrompts.set(session.id, { sequence: event.sequence, exitCode: event.exitCode, quotedInsert: event.quotedInsert })
+          events.emit("shellPrompt", { sessionId: session.id, sequence: event.sequence, exitCode: event.exitCode })
+        }
+      }
+    })
     const exitDisposable = child.onExit((event) => {
       const current = sessions.get(session.id)
       if (!current) return
@@ -1237,7 +1250,6 @@ export function createTerminalService(deps: {
       disposables: [dataDisposable, exitDisposable],
       desktopGrid: null,
     })
-    if (owner?.launchOutput) acceptOutput(owner.launchOutput, false)
   }
 
   function enforceGlobalOutputQuota(): void {
@@ -1289,8 +1301,8 @@ export function createTerminalService(deps: {
       readonly shell?: string
       /** Explicit argv for the launched program; defaults to the shell's own arguments. */
       readonly args?: readonly string[]
-      /** User-owned command, never a rendered event template. Internal automation only. */
-      readonly automationCommand?: string
+      /** Internal ownership flag; launch argv remain identical to ordinary terminals. */
+      readonly automationOwned?: boolean
       readonly environment?: TerminalLaunchLayer["environment"]
       /** Trusted first-party process variables, injected after user-layer validation; never persisted. */
       readonly internalEnvironment?: Readonly<Record<string, string>>
@@ -1329,6 +1341,7 @@ export function createTerminalService(deps: {
         ...(launchOverrides?.environment ? { environment: launchOverrides.environment } : {}),
       },
     })
+    const initialGrid = desktopGrids.get(group.id) ?? lastDesktopGrid
     const sessionId = randomUUID()
     const environment = resolveTerminalEnvironment({
       shell: resolvedLaunch.shell ?? deps.resolveDefaultShell?.(),
@@ -1350,8 +1363,8 @@ export function createTerminalService(deps: {
       createdAt: timestamp,
       updatedAt: timestamp,
       startedAt: timestamp,
-      cols: input.cols ?? DEFAULT_COLS,
-      rows: input.rows ?? DEFAULT_ROWS,
+      cols: input.cols ?? initialGrid?.cols ?? DEFAULT_COLS,
+      rows: input.rows ?? initialGrid?.rows ?? DEFAULT_ROWS,
       lastOutputSeq: 0,
       metadataRevision: 1,
       stateRevision: 1,
@@ -1383,8 +1396,8 @@ export function createTerminalService(deps: {
         environmentKeys: Object.keys(launchEnvironment).sort(),
         environmentEntries: [...resolvedLaunch.environmentEntries],
         overriddenFields: [...(launchOverrides?.overriddenFields ?? [])],
-        cols: input.cols ?? DEFAULT_COLS,
-        rows: input.rows ?? DEFAULT_ROWS,
+        cols: input.cols ?? initialGrid?.cols ?? DEFAULT_COLS,
+        rows: input.rows ?? initialGrid?.rows ?? DEFAULT_ROWS,
         legacyUnversioned: false,
       },
     }
@@ -1399,9 +1412,7 @@ export function createTerminalService(deps: {
     if (launchOverrides?.onEnded) endCallbacks.set(session.id, launchOverrides.onEnded)
     try {
       await launchOverrides?.onCreated?.(session.id)
-      const defaultShellArgs = launchOverrides?.automationCommand !== undefined
-        ? resolveAutomationCommandArgs(environment.shell, launchOverrides.automationCommand)
-        : launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
+      const defaultShellArgs = launchOverrides?.args ?? resolveTerminalShellArgs(environment.shell)
       /*
        * 身份在这里注入而不是在 `resolveTerminalEnvironment` 里：新标签页的 workspace 到
        * 这一步才建出来，而分屏出来的 pane 要到调用方的 `splitTerminalPane` 之后才归属
@@ -1412,6 +1423,8 @@ export function createTerminalService(deps: {
         sessionId,
         ...(sessionWorkspace ? { workspaceId: sessionWorkspace.id } : {}),
       })
+      const shellToken = randomBytes(16).toString("hex")
+      launchEnvironment.SYNAPSE_TERMINAL_SHELL_TOKEN = shellToken
       const integration = deps.agentNotifications?.prepareSession({
         sessionId,
         title: session.title,
@@ -1421,19 +1434,18 @@ export function createTerminalService(deps: {
       })
       const child = (deps.spawnPty ?? spawnNodePty)({
         shell: environment.shell,
-        // Interactive shell integrations must not replace the user's command with an idle shell.
-        shellArgs: launchOverrides?.automationCommand !== undefined ? defaultShellArgs : integration?.shellArgs ?? defaultShellArgs,
+        shellArgs: integration?.shellArgs ?? defaultShellArgs,
         cwd: environment.cwd,
         cols: session.cols,
         rows: session.rows,
         env: integration?.env ?? launchEnvironment,
       })
-      if (launchOverrides?.automationCommand !== undefined) automationSessions.set(session.id, child.pid)
+      if (launchOverrides?.automationOwned === true) automationSessions.add(session.id)
       attachRuntime(session, child, buffer, {
         ...launchOverrides,
-        ...(launchOverrides?.automationCommand !== undefined
-          ? { launchOutput: formatAutomationLaunchOutput(environment.cwd, launchOverrides.automationCommand) } : {}),
+        shellToken,
       })
+      if (initialGrid) runtimes.get(session.id)!.desktopGrid = { cols: session.cols, rows: session.rows }
       await flushPersist()
       return getSessionOrThrow(session.id)
     } catch (error) {
@@ -1988,6 +2000,7 @@ export function createTerminalService(deps: {
 
   function removeSessionResources(sessionId: string): void {
     automationSessions.delete(sessionId)
+    shellPrompts.delete(sessionId)
     deps.agentNotifications?.unregisterSession(sessionId)
     deps.workingDirectoryProbe?.forget(sessionId)
     cleanupRuntime(sessionId)
@@ -2388,7 +2401,7 @@ export function createTerminalService(deps: {
 
   /** Owned process execution; no user/MCP launch surface gains retention or arbitrary argv. */
   async function createAutomationSession(input: {
-    readonly title: string; readonly cwd: string; readonly command: string
+    readonly title: string; readonly cwd: string
     readonly projectId?: string
     readonly onCreated: (sessionId: string) => Promise<void>
     readonly onOutput?: (data: string) => void
@@ -2399,24 +2412,157 @@ export function createTerminalService(deps: {
       details: { reason: "automation_project_unavailable" },
     })
     return createSessionRecord({ title: input.title, ...(group ? { groupId: group.id } : { cwd: input.cwd }) }, "ui", {
-      automationCommand: input.command, onCreated: input.onCreated, persistEnvironment: false,
+      automationOwned: true, onCreated: input.onCreated, persistEnvironment: false,
       onOutput: input.onOutput, onExited: input.onExited,
     })
   }
 
-  /** Signals only this executor's PTY group; deliberately detached sessions are outside its scope. */
-  function signalAutomationSession(sessionId: string, force = false): boolean {
-    if (!automationSessions.has(sessionId)) throw new Error("not_automation_terminal")
-    const pid = automationSessions.get(sessionId)
-    if (process.platform !== "win32" && pid !== undefined) {
-      try { process.kill(-pid, force ? "SIGKILL" : "SIGTERM"); return true }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error }
-    }
-    const runtime = runtimes.get(sessionId)
-    if (!runtime) return false
-    runtime.pty.kill(force && process.platform !== "win32" ? "SIGKILL" : undefined)
-    return true
+  /** Observational hook state, not exposed through IPC/MCP. */
+  function getShellPrompt(sessionId: string) { return shellPrompts.get(sessionId) }
+
+  function waitForTerminalCondition<T>(sessionId: string, read: () => T | undefined, signal: AbortSignal): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const eventNames = ["shellPrompt", "desktopGrid", "sessionChanged", "sessionDeleted"]
+      const cleanup = () => { eventNames.forEach(name => events.off(name, check)); signal.removeEventListener("abort", check) }
+      const check = () => {
+        try {
+          signal.throwIfAborted()
+          const value = read()
+          if (value !== undefined) { cleanup(); resolve(value) }
+        } catch (error) { cleanup(); reject(error) }
+      }
+      eventNames.forEach(name => events.on(name, check))
+      signal.addEventListener("abort", check, { once: true })
+      check()
+    })
   }
+
+  async function terminateAutomationJobs(sessionId: string, ownedRuntime = runtimes.get(sessionId)): Promise<void> {
+    const runtime = ownedRuntime
+    if (!runtime) return
+    if (runtime.pty.pid && runtime.pty.ptsName && deps.terminateAutomationJobs) {
+      await deps.terminateAutomationJobs({ pid: runtime.pty.pid, tty: runtime.pty.ptsName })
+    } else if (process.platform !== "win32") {
+      throw terminalContractError("unsupported", "capability", { details: { reason: "job_termination_unavailable" } })
+    }
+  }
+
+  async function executeAutomationCommand(input: {
+    sessionId: string; command: string; signal: AbortSignal
+  }): Promise<{ exitCode: number | null; signal?: number; stopConfirmed: boolean }> {
+    const { sessionId, command, signal } = input
+    if (!automationSessions.has(sessionId)) throw new Error("not_automation_terminal")
+    const shell = path.basename(getSessionOrThrow(sessionId).shell).replace(/\.exe$/i, "").toLowerCase()
+    if (!["zsh", "bash"].includes(shell)) throw terminalContractError("unsupported", "capability", { details: { reason: "shell_receipt_unsupported" } })
+    const setupSignal = AbortSignal.any([signal, AbortSignal.timeout(60_000)])
+    const grid = await waitForTerminalCondition(sessionId, () => {
+      const session = getSessionOrThrow(sessionId)
+      if (session.status !== "running") throw new Error("shell_exited_before_command")
+      if (!shellPrompts.has(sessionId)) return undefined
+      if (session.sizeOwner?.kind === "mobile") return { cols: session.cols, rows: session.rows }
+      return runtimes.get(sessionId)?.desktopGrid ?? desktopGrids.get(session.groupId) ?? lastDesktopGrid
+    }, setupSignal)
+    const runtime = getRuntimeForInput(sessionId)
+    // Layout may arrive from another full desktop pane after this terminal was
+    // created. Apply that measured shape before entering any command text.
+    if (!runtime.desktopGrid && getSessionOrThrow(sessionId).sizeOwner?.kind !== "mobile") {
+      await applySessionResize(sessionId, grid.cols, grid.rows, { kind: "desktop-layout" })
+    }
+    await runtime.emulator.ready()
+    const bracketed = runtime.emulator.bracketedPasteEvidence().enabled
+    const quoted = shellPrompts.get(sessionId)?.quotedInsert
+    if (command.includes("\n") && !bracketed && !quoted) throw terminalContractError("unsupported", "capability", { details: { reason: "multiline_paste_unavailable" } })
+    signal.throwIfAborted()
+    const sequence = shellPrompts.get(sessionId)!.sequence
+    const completion = new Promise<{ exitCode: number | null; signal?: number; stopConfirmed: boolean }>((resolve, reject) => {
+      let dispatched = false, done = false
+      let termination: Promise<void> | undefined
+      let force: ReturnType<typeof setTimeout> | undefined, forceRoot: ReturnType<typeof setTimeout> | undefined, confirm: ReturnType<typeof setTimeout> | undefined
+      const cleanup = () => {
+        events.off("shellPrompt", prompt); events.off("sessionChanged", changed); events.off("sessionDeleted", removed)
+        signal.removeEventListener("abort", abort)
+        if (force) clearTimeout(force); if (forceRoot) clearTimeout(forceRoot); if (confirm) clearTimeout(confirm)
+      }
+      const finish = (result: { exitCode: number | null; signal?: number; stopConfirmed: boolean }) => {
+        if (done) return
+        done = true; cleanup(); resolve(result)
+      }
+      const fail = (error: unknown) => { if (!done) { done = true; cleanup(); reject(error) } }
+      const prompt = (event: { sessionId: string; sequence: number; exitCode: number }) => {
+        if (event.sessionId !== sessionId || !dispatched || event.sequence <= sequence) return
+        if (signal.aborted) {
+          termination ??= terminateAutomationJobs(sessionId, runtime)
+          void termination.then(() => finish({ exitCode: event.exitCode, stopConfirmed: true }), () => finish({ exitCode: event.exitCode, stopConfirmed: false }))
+        } else finish({ exitCode: event.exitCode, stopConfirmed: true })
+      }
+      const changed = (session: TerminalSession) => {
+        if (session.id === sessionId && ["ended", "failed", "lost"].includes(session.status)) {
+          if (dispatched) {
+            const result = { exitCode: session.exitCode ?? null, signal: session.signal, stopConfirmed: session.status === "ended" }
+            if (signal.aborted) {
+              termination ??= terminateAutomationJobs(sessionId, runtime)
+              void termination.then(() => finish(result), () => finish({ ...result, stopConfirmed: false }))
+            } else finish(result)
+          }
+          else fail(new Error("shell_exited_before_command"))
+        }
+      }
+      const removed = (event: { sessionId: string }) => { if (event.sessionId === sessionId) fail(new Error("terminal_closed")) }
+      const abort = () => {
+        try { runtime.pty.write("\x03") } catch (error) { deps.logger?.warn("Terminal interrupt could not be delivered.", { sessionId, error }) }
+        force = setTimeout(() => {
+          termination ??= terminateAutomationJobs(sessionId, runtime)
+          void termination.then(() => {
+            // exec or a Shell builtin can replace/block the root itself. Give the
+            // parent prompt time to return, then stop only this owned PTY root.
+            if (!done) forceRoot = setTimeout(() => {
+              try { runtime.pty.kill("SIGKILL") }
+              catch (error) { deps.logger?.warn("Terminal root could not be stopped.", { sessionId, error }) }
+            }, 500)
+          }).catch(error => {
+            deps.logger?.warn("Terminal command jobs could not be stopped.", { sessionId, error })
+          })
+        }, 2_000)
+        confirm = setTimeout(() => finish({ exitCode: null, stopConfirmed: false }), 4_000)
+      }
+      events.on("shellPrompt", prompt); events.on("sessionChanged", changed); events.on("sessionDeleted", removed)
+      signal.addEventListener("abort", abort, { once: true })
+      // Older Readline has no bracketed paste. Native quoted-insert inserts literal
+      // control/newline characters into the same editing buffer, without eval/source.
+      const literal = quoted ? command.replace(/\p{Cc}/gu, character => SHELL_QUOTED_INSERT + character) : command
+      const text = bracketed ? `\x1b[200~${command}\x1b[201~` : literal
+      void deliverCommandWrites(sessionId, text, () => {
+        signal.throwIfAborted(); dispatched = true
+      }).then(result => { if (result.outcome !== "accepted") fail(new Error("command_delivery_uncertain")) }, fail)
+    })
+    const result = await completion
+    await (runtimes.get(sessionId) ?? automationScreens.get(sessionId))?.emulator.ready()
+    return result
+  }
+
+  async function closeAutomationSession(sessionId: string): Promise<void> {
+    if (!automationSessions.has(sessionId)) throw new Error("not_automation_terminal")
+    const session = sessions.get(sessionId)
+    if (!session || session.status === "ended" || session.status === "failed" || session.status === "lost") return
+    const runtime = runtimes.get(sessionId)
+    if (!runtime) return
+    const controller = new AbortController()
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(4_000)])
+    const waiting = waitForTerminalCondition(sessionId, () => {
+      const current = sessions.get(sessionId)
+      return !current || current.status === "ended" ? true : undefined
+    }, signal)
+    const force = setTimeout(() => {
+      void terminateAutomationJobs(sessionId).catch(error => deps.logger?.warn("Terminal job cleanup failed.", { sessionId, error }))
+        .finally(() => { try { runtime.pty.kill("SIGKILL") } catch (error) { deps.logger?.warn("Terminal force close failed.", { sessionId, error }) } })
+    }, 2_000)
+    try {
+      try { runtime.pty.kill() } catch (error) { controller.abort(error) }
+      await waiting
+    } finally { controller.abort(); clearTimeout(force) }
+  }
+
+  function releaseAutomationSession(sessionId: string): void { automationSessions.delete(sessionId) }
 
   async function createMcpSession(input: TerminalMcpCreateSessionInput, clientId?: string): Promise<TerminalSession> {
     if (input.groupId) {
@@ -2823,7 +2969,7 @@ export function createTerminalService(deps: {
     })
   }
 
-  async function deliverCommandWrites(sessionId: string, text: string) {
+  async function deliverCommandWrites(sessionId: string, text: string, beforeEnter?: () => void) {
     const runtime = getRuntimeForInput(sessionId)
     const before = getSessionOrThrow(sessionId).inputRevision
     const operation = createOperation("input", sessionId, "terminal-controller")
@@ -2835,6 +2981,7 @@ export function createTerminalService(deps: {
       acceptedActionCount = 1
       acceptedBytes = Buffer.byteLength(text)
       await new Promise<void>((resolve) => setTimeout(resolve, COMMAND_ENTER_FLUSH_DELAY_MS))
+      beforeEnter?.()
       runtime.pty.write(KEY_BYTES.Enter)
       acceptedActionCount = 2
       acceptedBytes += Buffer.byteLength(KEY_BYTES.Enter)
@@ -3018,16 +3165,24 @@ export function createTerminalService(deps: {
       : undefined
     const ownerChanged = !sameSizeOwner(current.sizeOwner, nextOwner)
     const sizeChanged = current.cols !== cols || current.rows !== rows
+    // Only a successful native resize may authorize command delivery at this grid.
+    if (sizeChanged) runtime.pty.resize(cols, rows)
     // Before the early return below, not after: the record has to track the last
     // shape the layout asked for even when the grid did not move, or a restore
     // would put the terminal back at a shape the pane has since outgrown.
-    if (source.kind === "desktop-layout") runtime.desktopGrid = { cols, rows }
+    if (source.kind === "desktop-layout") {
+      runtime.desktopGrid = { cols, rows }
+      const workspace = getWorkspaceBySessionId(sessionId)
+      if (workspace?.layout.type === "leaf") {
+        desktopGrids.set(current.groupId, { cols, rows })
+        lastDesktopGrid = { cols, rows }
+      }
+      events.emit("desktopGrid", { sessionId })
+    }
     // Ownership can change with the grid unchanged — a phone adopting a session
     // that already happens to be its shape. The renderer still has to hear about
     // that, or the badge never appears.
     if (!sizeChanged && !ownerChanged) return current
-
-    if (sizeChanged) runtime.pty.resize(cols, rows)
 
     const updated: TerminalSession = {
       ...current,
@@ -3764,7 +3919,10 @@ export function createTerminalService(deps: {
     listSessions,
     createSession,
     createAutomationSession,
-    signalAutomationSession,
+    executeAutomationCommand,
+    closeAutomationSession,
+    releaseAutomationSession,
+    getShellPrompt,
     createMcpSession,
     createSessionOverride,
     createSessionWithEphemeralEnvironment,
@@ -3817,13 +3975,6 @@ export function createTerminalService(deps: {
     getResourceDiagnostics,
     get events() { return events },
   }
-}
-
-export function resolveAutomationCommandArgs(shell: string, command: string): string[] {
-  const name = path.win32.basename(path.basename(shell)).toLowerCase().replace(/\.exe$/, "")
-  if (name === "cmd") return ["/d", "/s", "/c", command]
-  if (name === "powershell" || name === "pwsh") return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
-  return [...resolveTerminalShellArgs(shell), "-c", command]
 }
 
 function spawnNodePty(input: SpawnPtyInput): PtyLike {

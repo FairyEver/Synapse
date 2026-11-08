@@ -13,6 +13,7 @@ import { createLocalNetworkHostLifecycle } from "../../../electron/runtime/netwo
 import type { AuditSink, PermissionGuard } from "../../../electron/runtime/security"
 import type { StructuredLogger } from "../../../electron/runtime/service-registry"
 import { terminalContractError } from "../shared/errors"
+import { ZSH_COMMAND_RECEIPT_HOOK, BASH_COMMAND_RECEIPT_HOOK } from "./shell-command-protocol"
 import type { TerminalAgentAttentionUpdate } from "../shared/contract-schema"
 import type {
   TerminalAgentNotificationSettings,
@@ -1091,13 +1092,17 @@ const OSC7_REPORT_COMMAND = String.raw`printf '\033]7;file://%s\a' "$PWD"`
 const ZSH_OSC7_HOOK = [
   `_synapse_report_cwd() { ${OSC7_REPORT_COMMAND}; }`,
   "autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _synapse_report_cwd",
+  ZSH_COMMAND_RECEIPT_HOOK,
 ].join("\n")
 
 const BASH_OSC7_HOOK = [
   `_synapse_report_cwd() { ${OSC7_REPORT_COMMAND}; }`,
-  'if [[ "${PROMPT_COMMAND:-}" != *"_synapse_report_cwd"* ]]; then',
+  'if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a "* ]]; then',
+  '  if [[ " ${PROMPT_COMMAND[*]} " != *" _synapse_report_cwd "* ]]; then PROMPT_COMMAND=(_synapse_report_cwd "${PROMPT_COMMAND[@]}"); fi',
+  'elif [[ "${PROMPT_COMMAND:-}" != *"_synapse_report_cwd"* ]]; then',
   '  PROMPT_COMMAND="_synapse_report_cwd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"',
   "fi",
+  BASH_COMMAND_RECEIPT_HOOK,
 ].join("\n")
 
 const FISH_OSC7_HOOK = `function _synapse_report_cwd --on-event fish_prompt; ${OSC7_REPORT_COMMAND}; end`

@@ -1,5 +1,7 @@
 # 自动化终端执行器
 
+> 历史记录：下文的非交互启动、合成展示头、只读保留和进程组清理已由同日[交互式终端设计](2026-11-08-interactive-terminal-automation-design.md)替代；当前验收见[新验证记录](2026-11-08-interactive-terminal-automation-verification.md)。
+
 用户已确认：新增可运行任意用户命令的终端执行器；默认勾选执行完成后自动关闭；关闭前保存日志与退出码；覆盖超时、取消并测试。此任务不恢复退役的 command/script/Node 专用执行器，不改现有自动化配置，不启动开发服务或打包。
 
 采用独立 `builtin.terminal` Action 与现有 TerminalService，而非让 AI 代发命令或每个业务脚本自行调用 MCP 关闭。命令使用终端配置的 Shell 与自动化工作目录；不限定 Node/Python。配置为 command、autoClose（默认true）、timeoutMins（默认30，null禁用）。命令是用户提供的代码，不把事件正文或模板变量插入可执行命令；程序参数、文件重定向由用户在命令中指定。此次不新增触发数据输入通道，避免将有行缓冲和控制字符语义的 PTY 当作字节管道。合并日志上限64KiB，超出明确标记截断；沿用已有脱敏规则。

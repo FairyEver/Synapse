@@ -12,31 +12,34 @@ type Launch = Parameters<Parameters<typeof createAutomationTerminalRunner>[0]["c
 function harness(options: { fast?: boolean; failStart?: boolean; ignoreStop?: boolean; persistFail?: boolean } = {}) {
   const events = new EventEmitter()
   let launch!: Launch
-  let retained = false
   const order: string[] = []
   const controller = new AbortController()
   const session = (status = "running", exitCode?: number) => ({ id: "owned", status, exitCode }) as TerminalSession
   const output = (text: string) => launch.onOutput?.(text)
-  const exit = (exitCode = 0, signal?: number) => {
-    launch.onExited?.({ exitCode, signal })
-    events.emit("sessionChanged", session("ended", exitCode))
-  }
+  let finish: ((value: { exitCode: number | null; signal?: number; stopConfirmed: boolean }) => void) | undefined
+  const exit = (exitCode = 0, signal?: number) => finish?.({ exitCode, signal, stopConfirmed: true })
   const terminal = {
     events,
     createAutomationSession: vi.fn(async (input: Launch) => {
       launch = input
       await input.onCreated("owned")
       if (options.failStart) return session("failed")
-      retained = true
-      if (options.fast) { output("fast-output"); exit() }
-      return session(options.fast ? "ended" : "running", options.fast ? 0 : undefined)
+      if (options.fast) output("fast-output")
+      return session("running")
     }),
-    signalAutomationSession: vi.fn((_id: string, _force?: boolean) => {
-      if (!retained) return false
-      if (!options.ignoreStop) { retained = false; exit(143) }
-      return options.ignoreStop ?? false
+    executeAutomationCommand: vi.fn(async (input: { sessionId: string; command: string; signal: AbortSignal }) => {
+      if (options.fast) return { exitCode: 0, stopConfirmed: true }
+      return new Promise<{ exitCode: number | null; signal?: number; stopConfirmed: boolean }>(resolve => {
+        finish = resolve
+        input.signal.addEventListener("abort", () => {
+          if (options.ignoreStop) setTimeout(() => resolve({ exitCode: null, stopConfirmed: false }), 4000)
+          else exit(130)
+        }, { once: true })
+      })
     }),
-    deleteTerminalSession: vi.fn(async () => { order.push("delete"); retained = false; return { deleteOperationId: "delete:1", sessionId: "owned", lifecycle: "ended" as const, retainedOutputChunks: 0 } }),
+    closeAutomationSession: vi.fn(async () => { order.push("close") }),
+    releaseAutomationSession: vi.fn(),
+    deleteTerminalSession: vi.fn(async () => { order.push("delete"); return { deleteOperationId: "delete:1", sessionId: "owned", lifecycle: "ended" as const, retainedOutputChunks: 0 } }),
   }
   const saved: Record<string, unknown>[] = []
   const context: ActionRuntimeContext = {
@@ -50,7 +53,7 @@ function harness(options: { fast?: boolean; failStart?: boolean; ignoreStop?: bo
   const run = (config: Record<string, unknown> = {}) => createAutomationTerminalRunner(terminal)({
     config: terminalActionConfigSchema.parse({ command: "user command", ...config }), context,
   })
-  return { terminal, context, run, output, exit, saved, order, controller, ready: () => vi.waitFor(() => expect(terminal.createAutomationSession).toHaveResolved()) }
+  return { terminal, context, run, output, exit, saved, order, controller, ready: () => vi.waitFor(() => expect(terminal.executeAutomationCommand).toHaveBeenCalled()) }
 }
 
 afterEach(() => vi.useRealTimers())
@@ -71,16 +74,15 @@ describe("automation terminal runner", () => {
     const h = harness({ fast: true })
     const result = await h.run()
     expect(result).toMatchObject({ status: "success", metrics: { exitCode: 0 }, outputs: { terminalOutput: "fast-output", terminalRetained: false } })
-    expect(h.order).toEqual(["save", "delete"])
+    expect(h.order).toEqual(["save", "close", "delete"])
     expect(h.saved.at(-1)).toMatchObject({ exitCode: 0, terminalOutput: "fast-output" })
     expect(h.terminal.events.listenerCount("sessionDeleted")).toBe(0)
   })
-  it("keeps an ended terminal when auto-close is disabled and treats nonzero as failure", async () => {
+  it("keeps the interactive shell when auto-close is disabled and treats nonzero as failure", async () => {
     const h = harness()
     const pending = h.run({ autoClose: false })
     await h.ready()
-    // The shell's group no longer exists after this explicit completion.
-    h.terminal.signalAutomationSession.mockReturnValue(false)
+    // Command completion is independent of the reusable shell's lifetime.
     h.output("stderr and stdout\r\n"); h.exit(7)
     expect(await pending).toMatchObject({ status: "failed", metrics: { exitCode: 7 }, outputs: { terminalRetained: true } })
     expect(h.terminal.deleteTerminalSession).not.toHaveBeenCalled()
@@ -96,7 +98,7 @@ describe("automation terminal runner", () => {
   it("reports launch failure without a phantom retained terminal or cleanup signal", async () => {
     const h = harness({ failStart: true })
     expect(await h.run()).toMatchObject({ status: "failed", outputs: { terminalRetained: false }, metrics: { exitCode: null } })
-    expect(h.terminal.signalAutomationSession).not.toHaveBeenCalled()
+    expect(h.terminal.closeAutomationSession).not.toHaveBeenCalled()
     expect(h.terminal.deleteTerminalSession).not.toHaveBeenCalled()
   })
   it("cancels only the owned terminal and saves logs and exit before closing", async () => {
@@ -104,9 +106,9 @@ describe("automation terminal runner", () => {
     const pending = h.run()
     await h.ready(); h.output("before cancellation"); h.controller.abort()
     const result = await pending
-    expect(result).toMatchObject({ status: "cancelled", metrics: { exitCode: 143 }, outputs: { terminalOutput: "before cancellation" } })
-    expect(h.terminal.signalAutomationSession.mock.calls.every(call => call[0] === "owned")).toBe(true)
-    expect(h.order).toEqual(["save", "delete"])
+    expect(result).toMatchObject({ status: "cancelled", metrics: { exitCode: 130 }, outputs: { terminalOutput: "before cancellation" } })
+    expect(h.terminal.closeAutomationSession).toHaveBeenCalledWith("owned")
+    expect(h.order).toEqual(["save", "close", "delete"])
   })
   it("times out, escalates, and retains evidence when exit is not confirmed", async () => {
     vi.useFakeTimers()
@@ -114,22 +116,22 @@ describe("automation terminal runner", () => {
     const pending = h.run({ timeoutMins: 1 })
     await vi.advanceTimersByTimeAsync(60_000 + 5_001)
     expect(await pending).toMatchObject({ status: "timeout", metrics: { exitCode: null }, outputs: { terminalRetained: true } })
-    expect(h.terminal.signalAutomationSession).toHaveBeenCalledWith("owned", true)
+    expect(h.terminal.closeAutomationSession).not.toHaveBeenCalled()
     expect(h.terminal.deleteTerminalSession).not.toHaveBeenCalled()
   })
   it("does not interpolate trigger values into the command", async () => {
     const h = harness()
     const pending = h.run({ command: "echo '{{trigger.payload}}'" })
     await h.ready()
-    expect(h.terminal.createAutomationSession.mock.calls[0][0].command).toBe("echo '{{trigger.payload}}'")
-    h.terminal.signalAutomationSession.mockReturnValue(false); h.exit()
+    expect(h.terminal.executeAutomationCommand.mock.calls[0][0].command).toBe("echo '{{trigger.payload}}'")
+    h.exit()
     await pending
   })
   it("marks truncated output and ignores another terminal's close", async () => {
     const h = harness()
     const pending = h.run()
     await h.ready(); h.terminal.events.emit("sessionDeleted", { sessionId: "other" })
-    h.output("x".repeat(70_000)); h.terminal.signalAutomationSession.mockReturnValue(false); h.exit()
+    h.output("x".repeat(70_000)); h.exit()
     const result = await pending
     expect(result.status).toBe("success")
     expect(result.outputs?.terminalOutput).toHaveLength(64 * 1024)
@@ -138,7 +140,7 @@ describe("automation terminal runner", () => {
   })
   it("treats a signal exit as failure even when the PTY reports exitCode zero", async () => {
     const h = harness(), pending = h.run()
-    await h.ready(); h.terminal.signalAutomationSession.mockReturnValue(false); h.exit(0, 15)
+    await h.ready(); h.exit(0, 15)
     expect(await pending).toMatchObject({ status: "failed", outputs: { signal: 15 }, summary: "进程被信号 15 终止" })
   })
   it("records manual terminal closure as cancellation", async () => {
@@ -155,7 +157,7 @@ describe("automation terminal runner", () => {
   })
   it("redacts secrets in saved output and result logs", async () => {
     const h = harness(), pending = h.run()
-    await h.ready(); h.output("Authorization: Bearer private-token\n"); h.terminal.signalAutomationSession.mockReturnValue(false); h.exit()
+    await h.ready(); h.output("Authorization: Bearer private-token\n"); h.exit()
     const result = await pending
     expect(JSON.stringify(result)).not.toContain("private-token")
     expect(JSON.stringify(h.saved)).not.toContain("private-token")
