@@ -18,3 +18,7 @@ MCP `app_automation_webhook_delivery_get` 输入 `{deliveryId,runId?}`，只接�
 ## 原样转发的区别（2026-11-08）
 
 公网接收上限实际为256 KiB；上文1 MiB是脱敏 JSON 快照编码上限，不是允许上传1 MiB请求。新接口转发执行器通过单独 Live v1 原文信封接收字节，不读取本工具。压缩内容不解压，二进制、multipart、解析失败 JSON 等以 opaque/null 留历史，不保存无法脱敏的原文。原文无离线补发或历史查询入口；新客户端未取得原文时转发失败，不能用 bodyText 替代。
+
+## 反向代理部署要求
+
+原文不落盘的边界包含宿主机入口代理和容器内 Nginx。Webhook location 必须大小写不敏感地匹配 `/webhooks/`，关闭 access log，error log 使用 `/dev/null crit`，设置 `client_max_body_size 256k`、`client_body_buffer_size 256k` 和 `proxy_request_buffering off`（上游 HTTP/1.1）。不可由上层 `location ^~ /` 抢先匹配。外层代理使用相同规则，避免查询凭据进入日志、正文进入 request-body 临时文件。变更前备份配置，`nginx -t` 成功后 reload；不改其他域名或清理既有日志。
