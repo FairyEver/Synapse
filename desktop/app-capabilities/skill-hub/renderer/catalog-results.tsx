@@ -165,6 +165,8 @@ export function CatalogResults({ query, refresh }: { query: string; refresh: () 
   const [failure, setFailure] = useState<{ message: string; reset: boolean }>()
   const [selection, setSelection] = useState<{ skill: SkillHubSummary; trigger: HTMLButtonElement }>()
   const [installing, setInstalling] = useState(false)
+  const scrollContainer = useRef<HTMLDivElement>(null)
+  const pageSentinel = useRef<HTMLDivElement>(null)
   const request = useRef<AbortController | null>(null)
   const installation = useRef<AbortController | null>(null)
 
@@ -203,6 +205,25 @@ export function CatalogResults({ query, refresh }: { query: string; refresh: () 
     }
   }, [loadPage])
 
+  useEffect(() => {
+    const root = scrollContainer.current
+    const sentinel = pageSentinel.current
+    if (!root || !sentinel || !nextCursor || loading || failure) return
+
+    let active = true
+    const observer = new IntersectionObserver((entries) => {
+      if (!active || !entries.some((entry) => entry.isIntersecting)) return
+      stopObserving()
+      void loadPage(nextCursor)
+    }, { root, rootMargin: "0px 0px 240px 0px" })
+    const stopObserving = () => {
+      active = false
+      observer.disconnect()
+    }
+    observer.observe(sentinel)
+    return stopObserving
+  }, [failure, loading, loadPage, nextCursor])
+
   async function install(skillId: string) {
     if (installation.current) return
     const controller = new AbortController()
@@ -221,7 +242,7 @@ export function CatalogResults({ query, refresh }: { query: string; refresh: () 
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-px pb-3">
+    <div ref={scrollContainer} className="min-h-0 flex-1 overflow-y-auto px-3 pt-px pb-3">
       {!loaded && !failure && (
         <div role="status" aria-label="正在加载技能" className={catalogGrid}>
           <Skeleton className="h-24" />
@@ -240,14 +261,10 @@ export function CatalogResults({ query, refresh }: { query: string; refresh: () 
       )}
       {failure ? (
         <CatalogMessage error action={failure.reset ? refresh : () => { void loadPage(nextCursor ?? undefined) }}>{failure.message}</CatalogMessage>
-      ) : loaded && items.length === 0 ? (
+      ) : loaded && items.length === 0 && !nextCursor ? (
         <CatalogMessage>{query ? "没有匹配的技能" : "暂无技能"}</CatalogMessage>
-      ) : nextCursor && (
-        <div className="flex justify-center py-3">
-          <Button type="button" variant="outline" data-track="skill-hub.catalog.more" disabled={loading}
-            onClick={() => { void loadPage(nextCursor) }}>{loading ? "加载中…" : "加载更多"}</Button>
-        </div>
-      )}
+      ) : loaded && loading ? <CatalogMessage>加载中…</CatalogMessage> : null}
+      {nextCursor && !failure && <div ref={pageSentinel} className="h-px" aria-hidden="true" />}
       {selection && <SkillDetail summary={selection.skill} trigger={selection.trigger} installing={installing}
         onClose={() => setSelection(undefined)} onInstall={() => { void install(selection.skill.id) }} />}
     </div>

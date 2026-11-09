@@ -29,9 +29,16 @@ const success = <T,>(value: T) => ({ ok: true, value })
 
 let root: Root
 let container: HTMLElement
+let pageObservers: Array<(entries: { isIntersecting: boolean }[]) => void>
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
+  pageObservers = []
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(notify: (entries: { isIntersecting: boolean }[]) => void) { pageObservers.push(notify) }
+    observe() {}
+    disconnect() {}
+  })
   mocks.account.id = "first"
   mocks.account.online = true
   mocks.list.mockReset().mockResolvedValue(success({ items: [skill], nextCursor: null }))
@@ -125,14 +132,48 @@ describe("SkillHub", () => {
     expect(dialog.textContent).not.toContain(createdBy.displayName)
   })
 
+  it("loads successive pages as the bottom approaches without a load-more button", async () => {
+    let resolveNext!: (value: unknown) => void
+    const next = { ...skill, id: "next", displayName: "第二页技能" }
+    const last = { ...skill, id: "last", displayName: "最后一页技能" }
+    mocks.list.mockResolvedValueOnce(success({ items: [skill], nextCursor: "page-2" }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveNext = resolve }))
+      .mockResolvedValueOnce(success({ items: [last], nextCursor: null }))
+
+    await render()
+    expect(container.textContent).not.toContain("加载更多")
+    expect(pageObservers).toHaveLength(1)
+    await act(async () => pageObservers[0]([{ isIntersecting: false }]))
+    expect(mocks.list).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      pageObservers[0]([{ isIntersecting: true }])
+      pageObservers[0]([{ isIntersecting: true }])
+    })
+    expect(mocks.list).toHaveBeenCalledTimes(2)
+    expect(container.textContent).toContain("团队技能")
+    expect(container.textContent).toContain("加载中…")
+
+    await act(async () => resolveNext(success({ items: [next], nextCursor: "page-3" })))
+    expect(pageObservers).toHaveLength(2)
+    await act(async () => pageObservers[1]([{ isIntersecting: true }]))
+    expect(mocks.list.mock.calls.map(([input]) => input.cursor)).toEqual([undefined, "page-2", "page-3"])
+    expect(container.querySelector("ul")?.textContent).toContain("团队技能")
+    expect(container.querySelector("ul")?.textContent).toContain("第二页技能")
+    expect(container.querySelector("ul")?.textContent).toContain("最后一页技能")
+    expect(pageObservers).toHaveLength(2)
+  })
+
   it("keeps the current page and retries the same cursor after a failed next page", async () => {
     mocks.list.mockResolvedValueOnce(success({ items: [skill], nextCursor: "page-2" }))
       .mockResolvedValueOnce({ ok: false, code: "HUB_CONNECTION_ERROR", message: "连接失败" })
       .mockResolvedValueOnce(success({ items: [{ ...skill, id: "next", displayName: "更多技能" }], nextCursor: null }))
     await render()
-    await click(button("加载更多"))
+    expect(pageObservers).toHaveLength(1)
+    await act(async () => pageObservers[0]([{ isIntersecting: true }]))
     expect(container.textContent).toContain("团队技能")
     expect(container.textContent).toContain("连接失败")
+    expect(pageObservers).toHaveLength(1)
     await click(button("重试"))
     expect(container.textContent).toContain("更多技能")
     expect(mocks.list.mock.calls.slice(1).map(([input]) => input.cursor)).toEqual(["page-2", "page-2"])
