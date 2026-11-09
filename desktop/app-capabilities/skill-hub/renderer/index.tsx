@@ -20,7 +20,7 @@ function SkillHubCatalog({ reload, refresh }: { reload: number; refresh: () => v
 
   return (
     <div className="@container flex h-full min-h-0 min-w-0 flex-col bg-surface">
-      <div className="shrink-0 p-3" role="search" aria-label="搜索技能">
+      <div className="flex shrink-0 justify-end p-3" role="search" aria-label="搜索技能">
         <InputGroup className="max-w-sm">
           <InputGroupAddon><Search /></InputGroupAddon>
           <InputGroupInput type="search" aria-label="搜索技能" placeholder="搜索技能" maxLength={200}
