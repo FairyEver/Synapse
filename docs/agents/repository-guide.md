@@ -75,6 +75,7 @@ pdf-renderer/           # 隔离的 Markdown PDF Chromium 渲染服务
 - `SKILL_REPOSITORY_COS_*`：仅供云端 Skills 下线时的一次性部署清理，不再是运行时业务域。`deploy.sh` 停止旧 API、生成并恢复验证最终备份后，显式运行 `server/scripts/retire-cloud-skills.cjs --execute-deployment`，清空独立桶中 `skill-repositories/` 前缀后再删表；清理失败阻止迁移，重试继续。普通开发、容器启动与通用迁移不得自动清理 COS。预演仅对 `synapse_preflight_*` 恢复库运行 `--rehearsal`，只清克隆元数据，不访问 COS。迁移包含对象引用保护。风险扫描仍遵循 `ALLOW_RISKY_MIGRATIONS=1` 的既有放行机制。
 - `PLATFORM_MEDIA_COS_*`：用户/智能体头像、系统图标、模板/分享封面、模型图标，以及浏览器文档正文、文末留言和回复编辑产生的平台托管图片。默认私有读写，客户端不直接接触 COS bucket/key；系统头像使用 `avatars/system/v1/512/`，自定义头像使用 `avatars/users/`，分别由 `/api/avatars/system/<id>` 和 `/api/avatars/users/<id>` 代理公开读取；文档图片使用 `document-images/` 前缀，由服务端 `/object/<objectId>` 代理公开读取。生产环境必须完整配置该组变量。
 - `SKILL_HUB_COS_*`：团队 Skill 包、主文件和图标，私有 `skill-hub/` 前缀。生产必填且必须使用与其他业务域及旧 Skill Repository 不同的桶。软删除和内部版本继续引用原对象，不进入回收。
+- 本地开发未配置 Skill Hub COS 时，默认将对象保存在 `server/data/skill-hub/`，可通过 `SYNAPSE_SKILL_HUB_LOCAL_ROOT` 覆盖。旧默认临时目录仍有对象时，将其 `skill-hub/` 子目录按原路径复制到新根目录，先核对大小和 SHA-256，不覆盖已有对象。临时文件已清除时，需要从备份恢复或由维护者重新上传。
 - `BACKUP_COS_*`：服务端灾备归档，当前 key 前缀为 `backups/`，不得承载运行时业务文件。
 
 待办原图与缩略图也使用 `PLATFORM_MEDIA_COS_*`，对象前缀为 `todo-images/`。读取经过待办账号鉴权，平台媒体备份清单覆盖此对象前缀与 `document-images/`。

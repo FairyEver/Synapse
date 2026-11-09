@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto"
 import { createReadStream } from "node:fs"
 import { lstat, mkdir, rm, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import type { Readable } from "node:stream"
 import COS from "cos-nodejs-sdk-v5"
@@ -114,5 +113,5 @@ export function createSkillHubStorage(): SkillHubStoragePort {
       SecretId: env.skillHubCosSecretId, SecretKey: env.skillHubCosSecretKey, Timeout: 15_000, UploadCheckContentMd5: true,
     }), env.skillHubCosBucket, env.skillHubCosRegion)
   }
-  return new LocalSkillHubStorage(env.skillHubLocalRoot ?? join(tmpdir(), "synapse-skill-hub"))
+  return new LocalSkillHubStorage(env.skillHubLocalRoot ?? resolve("data", "skill-hub"))
 }

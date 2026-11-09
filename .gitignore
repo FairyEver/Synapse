@@ -15,6 +15,7 @@ release
 !*.env.example
 server/.env
 server/.env.local
+/server/data/skill-hub/
 !*.env.example
 .superpowers/
 .worktrees/
