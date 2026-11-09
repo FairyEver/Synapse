@@ -194,7 +194,7 @@ function DialogFrameHeader({
         </>
       ) : (
         <>
-          <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className={cn("flex min-w-0 justify-between gap-3", description ? "items-start" : "items-center")}>
             {leftBlock}
             {rightBlock}
           </div>
