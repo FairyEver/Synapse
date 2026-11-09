@@ -26,6 +26,7 @@ function fixture(files?: Record<string, Buffer>) {
   const versions = new Map<string, Version>()
   const receipts = new Map<string, Receipt>()
   const active = new Set(["author", "member"])
+  const nicknames = new Map<string, string>()
   const uploads = new Map([
     ["upload-one", ["first-name", "a"]],
     ["upload-two", ["changed-name", "b"]],
@@ -34,8 +35,18 @@ function fixture(files?: Record<string, Buffer>) {
   const receiptKey = ({ actorKey, action, requestId }: Pick<Receipt, "actorKey" | "action" | "requestId">) => [actorKey, action, requestId].join(":")
   const lockActiveTeamMember = vi.fn(async (_tx, teamId: string, userId: string) => {
     if (teamId !== team.id || !active.has(userId)) throw hubError(403, "HUB_TEAM_UNAVAILABLE", "已离队")
-    return { id: userId, nickname: userId }
+    return { id: userId, nickname: nicknames.get(userId) ?? userId }
   })
+  function readSkill(select?: { createdBy?: unknown }) {
+    if (!skill) return null
+    return {
+      ...skill,
+      currentVersion: versions.get(skill.currentVersionId ?? ""),
+      ...(select?.createdBy ? {
+        createdBy: skill.createdById ? { nickname: nicknames.get(skill.createdById) ?? skill.createdById } : null,
+      } : {}),
+    }
+  }
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([{ id: "asset" }]),
     $executeRaw: vi.fn(),
@@ -54,15 +65,19 @@ function fixture(files?: Record<string, Buffer>) {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     skillHubSkill: {
+      findMany: vi.fn(async ({ select }) => {
+        const row = readSkill(select)
+        return row ? [row] : []
+      }),
       create: vi.fn(async ({ data }) => {
         skill = { ...data, id: "asset", team, revision: 1, currentVersionId: null, deletedAt: null } as Skill
         return { id: skill.id }
       }),
-      findFirst: vi.fn(async ({ where }) => {
+      findFirst: vi.fn(async ({ where, select }) => {
         if (!skill || where.id !== skill.id || skill.deletedAt) return null
         if (where.team && !active.has(where.team.members.some.userId)) return null
         if (where.maintainerUserId && where.maintainerUserId !== skill.maintainerUserId) return null
-        return { ...skill, currentVersion: versions.get(skill.currentVersionId ?? "") }
+        return readSkill(select)
       }),
       update: vi.fn(async ({ data }) => {
         const current = skill!
@@ -85,8 +100,27 @@ function fixture(files?: Record<string, Buffer>) {
   const repository = { lockActiveTeamMember, prisma: { $transaction: async (run: (client: typeof tx) => unknown) => run(tx) } }
   const open = vi.fn()
   const service = new SkillHubService(repository as unknown as SkillHubRepository, { put: vi.fn(), open, head: vi.fn(), remove: vi.fn() })
-  return { service, versions, active, tx, open, current: () => skill! }
+  return { service, versions, active, nicknames, tx, open, current: () => skill! }
 }
+
+it("uses the current creator nickname in the catalog and detail, and preserves attribution if the account is deleted", async () => {
+  const { service, nicknames, current } = fixture()
+  nicknames.set("author", "原昵称")
+  await service.create("author", createInput)
+  nicknames.set("author", "李杨")
+
+  await expect(service.list("member", {})).resolves.toMatchObject({
+    items: [{ createdBy: { id: "author", displayName: "李杨" } }],
+  })
+  await expect(service.get("member", "asset")).resolves.toMatchObject({
+    createdBy: { id: "author", displayName: "李杨" },
+  })
+
+  current().createdById = null
+  await expect(service.get("member", "asset")).resolves.toMatchObject({
+    createdBy: { id: null, displayName: "原昵称" },
+  })
+})
 
 it("previews only the requested latest UTF-8 file for current team members", async () => {
   const content = "# 说明\n<script>example()</script>\n"

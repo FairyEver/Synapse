@@ -23,7 +23,7 @@ const skill = {
   id: "sample", iconUrl: null, revision: 1,
   displayName: "团队技能", displayDescription: "示例简介",
   package: { name: "sample-skill" }, team: { id: "team", name: "产品组" },
-  createdBy: { displayName: "贡献者" }, currentVersion: { number: 2 },
+  createdBy: { id: "creator", displayName: "李杨" }, currentVersion: { number: 2 },
 }
 const success = <T,>(value: T) => ({ ok: true, value })
 
@@ -86,6 +86,8 @@ describe("SkillHub", () => {
 
   it("uses the installer from both entry points and shows main file content as text", async () => {
     await render()
+    expect(container.textContent).toContain("李杨")
+    expect(container.textContent).not.toContain("@李杨")
     await click(button("安装 团队技能"))
     expect(mocks.openInstaller).toHaveBeenCalledWith({ skillId: "sample" })
 
@@ -93,6 +95,8 @@ describe("SkillHub", () => {
     trigger.focus()
     await click(trigger)
     const dialog = document.querySelector('[role="dialog"]')!
+    expect(dialog.textContent).toContain("李杨")
+    expect(dialog.textContent).not.toContain("@李杨")
     expect(dialog.textContent).toContain("<script>fixture</script>")
     expect(dialog.textContent).not.toContain(skill.team.name)
     expect(dialog.querySelector("script, img[src^='https:']")).toBeNull()
@@ -101,6 +105,21 @@ describe("SkillHub", () => {
     await click(button("关闭"))
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)))
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it.each([
+    { id: "creator", displayName: "1711467488" },
+    { id: "creator", displayName: "creator" },
+  ])("omits an account identifier from the catalog and detail", async (createdBy) => {
+    const legacy = { ...skill, createdBy }
+    mocks.list.mockResolvedValue(success({ items: [legacy], nextCursor: null }))
+    mocks.detail.mockResolvedValue(success({ skill: legacy, content: "说明" }))
+    await render()
+    expect(container.textContent).not.toContain(createdBy.displayName)
+    await click(button("查看 团队技能"))
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect(dialog.textContent).toContain("说明")
+    expect(dialog.textContent).not.toContain(createdBy.displayName)
   })
 
   it("keeps the current page and retries the same cursor after a failed next page", async () => {

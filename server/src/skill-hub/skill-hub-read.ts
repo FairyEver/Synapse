@@ -12,6 +12,7 @@ const versionBase = {
 const skillBase = {
   id: true, teamId: true, team: { select: { id: true, name: true } }, displayName: true, displayDescription: true,
   iconObjectId: true, revision: true, createdById: true, createdByName: true,
+  createdBy: { select: { nickname: true } },
   maintainerUserId: true, maintainerName: true, publishedAt: true, deletedAt: true,
 } as const
 export const hubSummarySelect = {
@@ -24,7 +25,8 @@ export const hubDetailSelect = {
 } satisfies Prisma.SkillHubSkillSelect
 export const hubAdminSelect = {
   id: true, teamId: true, team: skillBase.team, displayName: true,
-  revision: true, createdById: true, createdByName: true, maintainerUserId: true, maintainerName: true,
+  revision: true, createdById: true, createdByName: true, createdBy: skillBase.createdBy,
+  maintainerUserId: true, maintainerName: true,
   deletedAt: true, currentVersion: { select: { number: true, packageName: true } },
 } satisfies Prisma.SkillHubSkillSelect
 
@@ -50,9 +52,9 @@ export async function hubMaintainers(db: Prisma.TransactionClient, rows: Maintai
   return ({ teamId, maintainerUserId }) => maintainerUserId !== null && active.has(memberKey(teamId, maintainerUserId))
 }
 
-function people(row: Pick<SummaryRow, "createdById" | "createdByName" | "maintainerUserId" | "maintainerName">, active: boolean) {
+function people(row: Pick<SummaryRow, "createdById" | "createdByName" | "createdBy" | "maintainerUserId" | "maintainerName">, active: boolean) {
   return {
-    createdBy: { id: row.createdById, displayName: row.createdByName },
+    createdBy: { id: row.createdById, displayName: row.createdBy?.nickname ?? row.createdByName },
     maintainer: { id: row.maintainerUserId, displayName: row.maintainerName, isActiveMember: active },
   }
 }

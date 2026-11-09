@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Package, PackagePlus } from "lucide-react"
 import { toast } from "sonner"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFrame, DialogFrameBody, DialogFrameHeader } from "@/components/ui/dialog"
@@ -9,6 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import type { SkillHubSummary } from "@synapse/shared/skill-hub-contracts"
 import type { HubCatalogDetail } from "../shared/ipc-result"
 import { catalog, CatalogError, catalogErrorMessage } from "./catalog-api"
+
+const catalogGrid = "grid grid-cols-1 gap-2.5 @2xl:grid-cols-2 @5xl:grid-cols-3"
 
 function SkillIcon({ skill }: { skill: Pick<SkillHubSummary, "id" | "iconUrl" | "revision"> }) {
   const { id, iconUrl, revision } = skill
@@ -32,13 +33,24 @@ function SkillIcon({ skill }: { skill: Pick<SkillHubSummary, "id" | "iconUrl" | 
   )
 }
 
-function SkillBadges({ skill }: { skill: Pick<SkillHubSummary, "createdBy" | "currentVersion"> }) {
-  const author = skill.createdBy.displayName.trim()
+function SkillMetadata({ skill, showPackage }: {
+  skill: Pick<SkillHubSummary, "createdBy" | "currentVersion" | "package">
+  showPackage?: boolean
+}) {
+  const name = skill.createdBy.displayName.trim()
+  const author = name !== skill.createdBy.id && !/^\d+$/.test(name) ? name : ""
   return (
-    <div className="flex min-w-0 flex-wrap gap-1.5">
-      {author && <Badge variant="outline" className="max-w-full" title={author}><span className="truncate">@{author}</span></Badge>}
-      <Badge variant="secondary">v{skill.currentVersion.number}</Badge>
-    </div>
+    <span className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted-foreground">
+      {author && <>
+        <span className="truncate" title={author}>{author}</span>
+        <span aria-hidden="true">·</span>
+      </>}
+      <span className="shrink-0">v{skill.currentVersion.number}</span>
+      {showPackage && <>
+        <span aria-hidden="true">·</span>
+        <span className="min-w-0 truncate font-mono" title={skill.package.name}>{skill.package.name}</span>
+      </>}
+    </span>
   )
 }
 
@@ -51,29 +63,27 @@ function SkillCard({ skill, installing, onOpen, onInstall }: {
   return (
     <Card asChild size="sm">
       <li>
-        <CardContent className="flex h-full min-w-0 flex-col gap-2">
+        <CardContent className="flex min-w-0 flex-1 items-center gap-2">
           <button
             type="button"
             aria-label={`查看 ${skill.displayName}`}
             data-track="skill-hub.skill.open"
             data-track-native="true"
-            className="group flex min-w-0 items-start gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group flex min-w-0 flex-1 cursor-pointer items-start gap-2 self-stretch rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={(event) => onOpen(event.currentTarget)}
           >
             <SkillIcon key={skill.revision} skill={skill} />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium group-hover:underline" title={skill.displayName}>{skill.displayName}</span>
-              <span className="mt-1 block truncate text-xs text-muted-foreground">{skill.displayDescription}</span>
-              <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground" title={skill.package.name}>{skill.package.name}</span>
+              <span className="mt-0.5 line-clamp-2 wrap-anywhere text-xs text-muted-foreground">{skill.displayDescription}</span>
+              <span className="mt-1 block"><SkillMetadata skill={skill} showPackage /></span>
             </span>
           </button>
-          <div className="min-w-0 pl-12"><SkillBadges skill={skill} /></div>
-          <div className="mt-auto flex justify-end">
-            <Button type="button" variant="outline" aria-label={`安装 ${skill.displayName}`} disabled={installing}
-              data-track="skill-hub.skill.install" onClick={onInstall}>
-              <PackagePlus />安装
-            </Button>
-          </div>
+          <Button type="button" variant="outline" aria-label={`安装 ${skill.displayName}`} disabled={installing}
+            className="relative after:absolute after:inset-x-0 after:-inset-y-1"
+            data-track="skill-hub.skill.install" onClick={onInstall}>
+            安装
+          </Button>
         </CardContent>
       </li>
     </Card>
@@ -123,7 +133,7 @@ function SkillDetail({ summary, trigger, installing, onClose, onInstall }: {
                   <div className="min-w-0 space-y-2">
                     <p className="whitespace-pre-wrap wrap-anywhere text-sm">{detail.skill.displayDescription}</p>
                     <p className="wrap-anywhere font-mono text-xs text-muted-foreground">{detail.skill.package.name}</p>
-                    <SkillBadges skill={detail.skill} />
+                    <SkillMetadata skill={detail.skill} />
                   </div>
                 </div>
                 <h3 className="font-mono text-sm font-medium">SKILL.md</h3>
@@ -216,15 +226,16 @@ export function CatalogResults({ query, refresh }: { query: string; refresh: () 
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-px pb-3">
       {!loaded && !failure && (
-        <div role="status" aria-label="正在加载技能" className="grid grid-cols-1 gap-2 @2xl:grid-cols-2">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
+        <div role="status" aria-label="正在加载技能" className={catalogGrid}>
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
         </div>
       )}
       {items.length > 0 && (
-        <ul aria-label="技能" className="grid grid-cols-1 gap-2 @2xl:grid-cols-2">
+        <ul aria-label="技能" className={catalogGrid}>
           {items.map((skill) => (
             <SkillCard key={skill.id} skill={skill} installing={installing}
               onOpen={(trigger) => setSelection({ skill, trigger })}
