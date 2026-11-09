@@ -32,12 +32,11 @@ function SkillIcon({ skill }: { skill: Pick<SkillHubSummary, "id" | "iconUrl" | 
   )
 }
 
-function SkillBadges({ skill }: { skill: Pick<SkillHubSummary, "createdBy" | "currentVersion" | "team"> }) {
+function SkillBadges({ skill }: { skill: Pick<SkillHubSummary, "createdBy" | "currentVersion"> }) {
   const author = skill.createdBy.displayName.trim()
   return (
     <div className="flex min-w-0 flex-wrap gap-1.5">
       {author && <Badge variant="outline" className="max-w-full" title={author}><span className="truncate">@{author}</span></Badge>}
-      <Badge variant="secondary" className="max-w-full" title={skill.team.name}><span className="truncate">{skill.team.name}</span></Badge>
       <Badge variant="secondary">v{skill.currentVersion.number}</Badge>
     </div>
   )
@@ -153,7 +152,7 @@ function CatalogMessage({ children, action, error }: {
   )
 }
 
-export function CatalogResults({ query, teamId, refresh }: { query: string; teamId?: string; refresh: () => void }) {
+export function CatalogResults({ query, refresh }: { query: string; refresh: () => void }) {
   const [items, setItems] = useState<SkillHubSummary[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -171,14 +170,14 @@ export function CatalogResults({ query, teamId, refresh }: { query: string; team
     setLoading(true)
     setFailure(undefined)
     try {
-      const page = await catalog.list(query, teamId, cursor)
+      const page = await catalog.list(query, cursor)
       if (controller.signal.aborted) return
       setItems((previous) => cursor ? [...new Map([...previous, ...page.items].map((item) => [item.id, item])).values()] : page.items)
       setNextCursor(page.nextCursor)
       setLoaded(true)
     } catch (cause) {
       if (!controller.signal.aborted) setFailure({
-        message: catalogErrorMessage(cause, "无法读取团队技能，请重试。"),
+        message: catalogErrorMessage(cause, "无法读取技能，请重试。"),
         reset: cause instanceof CatalogError && cause.code === "HUB_INVALID_CURSOR",
       })
     } finally {
@@ -187,7 +186,7 @@ export function CatalogResults({ query, teamId, refresh }: { query: string; team
         setLoading(false)
       }
     }
-  }, [query, teamId])
+  }, [query])
 
   useEffect(() => {
     void loadPage()
@@ -225,7 +224,7 @@ export function CatalogResults({ query, teamId, refresh }: { query: string; team
         </div>
       )}
       {items.length > 0 && (
-        <ul aria-label="团队技能" className="grid grid-cols-1 gap-2 @2xl:grid-cols-2">
+        <ul aria-label="技能" className="grid grid-cols-1 gap-2 @2xl:grid-cols-2">
           {items.map((skill) => (
             <SkillCard key={skill.id} skill={skill} installing={installing}
               onOpen={(trigger) => setSelection({ skill, trigger })}
@@ -236,7 +235,7 @@ export function CatalogResults({ query, teamId, refresh }: { query: string; team
       {failure ? (
         <CatalogMessage error action={failure.reset ? refresh : () => { void loadPage(nextCursor ?? undefined) }}>{failure.message}</CatalogMessage>
       ) : loaded && items.length === 0 ? (
-        <CatalogMessage>{query ? "没有匹配的技能" : "暂无团队技能"}</CatalogMessage>
+        <CatalogMessage>{query ? "没有匹配的技能" : "暂无技能"}</CatalogMessage>
       ) : nextCursor && (
         <div className="flex justify-center py-3">
           <Button type="button" variant="outline" data-track="skill-hub.catalog.more" disabled={loading}

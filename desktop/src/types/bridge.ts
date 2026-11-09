@@ -1,6 +1,6 @@
 import type { HubInstallOpenRequest } from "../../app-capabilities/skill-hub/shared/install-source"
 import type { HubCatalogDetail, HubCatalogResult, HubInstallPrepareResult } from "../../app-capabilities/skill-hub/shared/ipc-result"
-import type { SkillHubListInput, SkillHubPage, SkillHubTeamPage, SkillHubTeamQuery } from "@synapse/shared/skill-hub-contracts"
+import type { SkillHubListInput, SkillHubPage } from "@synapse/shared/skill-hub-contracts"
 import type { DriveFileReplaceInput, DriveFileReplaceApplyInput, DriveFileReplacePreviewDto, DriveFileReplaceResultDto, DriveSyncRemovalInput, DriveSyncRemovalPreviewDto, DriveSyncRemovalResultDto } from "@synapse/shared" with { "resolution-mode": "import" }
 import type {
   CustomAppCreateInput,
@@ -849,8 +849,7 @@ export type SynapseBridge = {
   }
   isPackaged: boolean
   skillHub: {
-    catalogTeams: (input: SkillHubTeamQuery) => Promise<HubCatalogResult<SkillHubTeamPage>>
-    catalogList: (input: Omit<SkillHubListInput, "createdByMe">) => Promise<HubCatalogResult<SkillHubPage>>
+    catalogList: (input: Omit<SkillHubListInput, "createdByMe" | "teamId">) => Promise<HubCatalogResult<SkillHubPage>>
     catalogDetail: (input: { skillId: string }) => Promise<HubCatalogResult<HubCatalogDetail>>
     catalogIcon: (input: { skillId: string }) => Promise<HubCatalogResult<string>>
     catalogOpenInstaller: (input: { skillId: string }) => Promise<HubCatalogResult<null>>

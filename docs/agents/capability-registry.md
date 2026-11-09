@@ -1,6 +1,6 @@
 # 能力注册清单
 
-2026-11-09 新增桌面 SkillHub（`skill-hub` / `skill_hub`），System App 21→22。可从启动台进入、独立开窗或手动固定；默认 Dock 仍为 9 项。目录、团队、详情与正文、图标和打开安装器共 5 个 UI 私有 IPC（`app.skill_hub.operation.catalog_*`）。原有安装器私有 IPC、安装深链及 10 项 Hub capability / MCP 索引不变。
+2026-11-09 新增桌面 SkillHub（`skill-hub` / `skill_hub`），System App 21→22。可从启动台进入、独立开窗或手动固定；默认 Dock 仍为 9 项。目录、详情与正文、图标和打开安装器共 4 个 UI 私有 IPC（`app.skill_hub.operation.catalog_*`）。原有安装器私有 IPC、安装深链及 10 项 Hub capability / MCP 索引不变。
 
 2026-11-08 新增 `builtin.webhook-forward`（接口转发），Automation Action 由 3 项增至 4 项；仅与 Webhook 组合，配置只有 URL。实时原文 v1 经能力协商传递，历史/MCP 正文仍脱敏；不新增 capability、MCP、IPC、System App、Dock、Workflow Node、Deep Link 或存储表。
 

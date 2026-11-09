@@ -398,7 +398,6 @@ const synapseBridge: SynapseBridge = {
   },
   isPackaged: !process.env.VITE_DEV_SERVER_URL,
   skillHub: {
-    catalogTeams: invoke(IPC_CHANNELS.skillHub.catalogTeams),
     catalogList: invoke(IPC_CHANNELS.skillHub.catalogList),
     catalogDetail: invoke(IPC_CHANNELS.skillHub.catalogDetail),
     catalogIcon: invoke(IPC_CHANNELS.skillHub.catalogIcon),

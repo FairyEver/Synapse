@@ -6,10 +6,7 @@ import {
   skillHubListInputSchema,
   skillHubMainResultSchema,
   skillHubPageSchema,
-  skillHubTeamPageSchema,
-  skillHubTeamQuerySchema,
   type SkillHubListInput,
-  type SkillHubTeamQuery,
 } from "@synapse/shared/skill-hub-contracts"
 import type { IpcHandlerContext, IpcModule } from "../../../electron/runtime/ipc/types"
 import { SYSTEM_APP_WINDOW_SERVICE_ID, type createSystemAppWindowService } from "../../../electron/services/system-app-window-service"
@@ -85,19 +82,12 @@ function installerSender(ctx: IpcHandlerContext) {
 export const skillHubIpcModule: IpcModule = {
   id: "skillHub",
   methods: {
-    catalogTeams: {
-      operationId: "app.skill_hub.operation.catalog_teams",
-      kind: "invoke",
-      request: sharedSchema(skillHubTeamQuerySchema),
-      response: catalogResponse(sharedSchema(skillHubTeamPageSchema)),
-      handler: (ctx, request: SkillHubTeamQuery) => catalogRequest(ctx, (hub, caller) => hub.teams(request, caller)),
-    },
     catalogList: {
       operationId: "app.skill_hub.operation.catalog_list",
       kind: "invoke",
-      request: sharedSchema(skillHubListInputSchema.omit({ createdByMe: true })),
+      request: sharedSchema(skillHubListInputSchema.omit({ createdByMe: true, teamId: true })),
       response: catalogResponse(sharedSchema(skillHubPageSchema)),
-      handler: (ctx, request: Omit<SkillHubListInput, "createdByMe">) => catalogRequest(ctx, (hub, caller) => hub.list(request, caller)),
+      handler: (ctx, request: Omit<SkillHubListInput, "createdByMe" | "teamId">) => catalogRequest(ctx, (hub, caller) => hub.list(request, caller)),
     },
     catalogDetail: {
       operationId: "app.skill_hub.operation.catalog_detail",

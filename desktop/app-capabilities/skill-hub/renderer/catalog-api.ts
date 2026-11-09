@@ -1,6 +1,5 @@
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
-import type { SkillHubTeam, SkillHubTeamPage } from "@synapse/shared/skill-hub-contracts"
 import type { HubCatalogResult } from "../shared/ipc-result"
 
 const logger = createRendererLogger("skill-hub.catalog")
@@ -53,30 +52,11 @@ function readIcon(skillId: string, signal: AbortSignal): Promise<string | undefi
 }
 
 export const catalog = {
-  list: (query: string, teamId?: string, cursor?: string) => unwrap(requireBridgeDomain("skillHub").catalogList({
+  list: (query: string, cursor?: string) => unwrap(requireBridgeDomain("skillHub").catalogList({
     ...(query ? { query } : {}),
-    ...(teamId ? { teamId } : {}),
     ...(cursor ? { cursor } : {}),
   })),
   detail: (skillId: string) => unwrap(requireBridgeDomain("skillHub").catalogDetail({ skillId })),
   icon: readIcon,
   install: (skillId: string) => unwrap(requireBridgeDomain("skillHub").catalogOpenInstaller({ skillId })),
-  async teams(signal: AbortSignal): Promise<{
-    items: SkillHubTeam[]
-    selectionState: SkillHubTeamPage["selectionState"]
-  }> {
-    const bridge = requireBridgeDomain("skillHub")
-    const items = new Map<string, SkillHubTeam>()
-    const cursors = new Set<string>()
-    let cursor: string | undefined
-    for (;;) {
-      signal.throwIfAborted()
-      const page = await unwrap(bridge.catalogTeams(cursor ? { cursor } : {}))
-      for (const team of page.items) items.set(team.id, team)
-      if (!page.nextCursor) return { items: Array.from(items.values()), selectionState: page.selectionState }
-      if (cursors.has(page.nextCursor)) throw new CatalogError("HUB_INVALID_CURSOR", "无法加载团队，请刷新重试。")
-      cursors.add(page.nextCursor)
-      cursor = page.nextCursor
-    }
-  },
 }

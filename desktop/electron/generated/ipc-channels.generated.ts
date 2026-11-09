@@ -134,7 +134,6 @@ export const IPC_CHANNELS = {
     "installSourceToEditorTargets": "synapse:app:installers:operation:install_source_to_editor_targets",
   },
   "skillHub": {
-    "catalogTeams": "synapse:app:skill_hub:operation:catalog_teams",
     "catalogList": "synapse:app:skill_hub:operation:catalog_list",
     "catalogDetail": "synapse:app:skill_hub:operation:catalog_detail",
     "catalogIcon": "synapse:app:skill_hub:operation:catalog_icon",

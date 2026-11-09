@@ -7,7 +7,6 @@ import { SkillHubModule } from "../index"
 
 const mocks = vi.hoisted(() => ({
   account: { id: "first", online: true },
-  teams: vi.fn(),
   list: vi.fn(),
   detail: vi.fn(),
   icon: vi.fn(),
@@ -35,9 +34,6 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true)
   mocks.account.id = "first"
   mocks.account.online = true
-  mocks.teams.mockReset().mockResolvedValue(success({
-    items: [skill.team], selectionState: "single", defaultTeamId: "team", nextCursor: null,
-  }))
   mocks.list.mockReset().mockResolvedValue(success({ items: [skill], nextCursor: null }))
   mocks.detail.mockReset().mockResolvedValue(success({
     skill, content: "![remote](https://example.invalid/track)\n<script>fixture</script>",
@@ -45,7 +41,7 @@ beforeEach(() => {
   mocks.openInstaller.mockReset().mockResolvedValue(success(null))
   mocks.icon.mockReset()
   vi.stubGlobal("synapse", { skillHub: {
-    catalogTeams: mocks.teams, catalogList: mocks.list, catalogDetail: mocks.detail,
+    catalogList: mocks.list, catalogDetail: mocks.detail,
     catalogOpenInstaller: mocks.openInstaller, catalogIcon: mocks.icon,
   } })
   container = document.createElement("div")
@@ -84,6 +80,8 @@ describe("SkillHub", () => {
     expect(container.querySelectorAll("[data-system-app-window-toolbar], [data-embedded-system-app-header]")).toHaveLength(1)
     expect(container.querySelector("aside, footer, [role='tablist']")).toBeNull()
     expect(container.textContent).toContain("sample-skill")
+    expect(container.querySelector('[aria-label="筛选团队"]')).toBeNull()
+    expect(container.textContent).not.toContain(skill.team.name)
   })
 
   it("uses the installer from both entry points and shows main file content as text", async () => {
@@ -96,6 +94,7 @@ describe("SkillHub", () => {
     await click(trigger)
     const dialog = document.querySelector('[role="dialog"]')!
     expect(dialog.textContent).toContain("<script>fixture</script>")
+    expect(dialog.textContent).not.toContain(skill.team.name)
     expect(dialog.querySelector("script, img[src^='https:']")).toBeNull()
     await click(button("安装"))
     expect(mocks.openInstaller).toHaveBeenCalledTimes(2)
@@ -117,12 +116,10 @@ describe("SkillHub", () => {
     expect(mocks.list.mock.calls.slice(1).map(([input]) => input.cursor)).toEqual(["page-2", "page-2"])
   })
 
-  it("shows a separate empty state for an account without teams", async () => {
-    mocks.teams.mockResolvedValue(success({ items: [], selectionState: "none", defaultTeamId: null, nextCursor: null }))
+  it("shows the empty state when the account cannot see any skills", async () => {
     mocks.list.mockResolvedValue(success({ items: [], nextCursor: null }))
     await render()
-    expect(container.textContent).toContain("当前账号没有所属团队")
-    expect(container.textContent).not.toContain("暂无团队技能")
+    expect(container.textContent).toContain("暂无技能")
   })
 
   it("searches the server and shows the search empty state", async () => {
