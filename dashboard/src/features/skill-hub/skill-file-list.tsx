@@ -33,7 +33,7 @@ function FilePreviewDialog({ session, id, version, path, onClose, reload }: {
 
   return <Modal.Backdrop isOpen onOpenChange={(open) => { if (!open) onClose() }}>
     <Modal.Container size="lg" scroll="inside">
-      <Modal.Dialog>
+      <Modal.Dialog className="sm:max-w-3xl">
         <Modal.CloseTrigger aria-label="关闭文件预览" />
         <Modal.Header className="pe-8">
           <Modal.Heading className="wrap-anywhere font-mono">{path}</Modal.Heading>
