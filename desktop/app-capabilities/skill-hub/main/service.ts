@@ -41,6 +41,21 @@ export class DesktopSkillHubService {
     return this.run(caller, "skill.list", (op) => this.deps.cloud.list(op, input))
   }
 
+  catalogDetail(skillId: string, caller: SkillHubCaller) {
+    return this.run(caller, "catalog.detail", async (op) => {
+      const skill = await this.deps.cloud.get(op, skillId)
+      const main = await this.deps.cloud.main(op, skillId, skill.currentVersion.id)
+      if (main.versionId !== skill.currentVersion.id) {
+        throw new SkillHubDesktopError("HUB_LATEST_CHANGED", "最新版已变化，请重新读取。")
+      }
+      return { skill, content: main.content }
+    })
+  }
+
+  catalogIcon(skillId: string, caller: SkillHubCaller) {
+    return this.run(caller, "catalog.icon", (op) => this.deps.cloud.icon(op, skillId))
+  }
+
   prepare(input: SkillHubMcpPrepareInput, caller: SkillHubCaller) {
     return this.run(caller, "package.prepare", async (op) => {
       const team = await this.team(op, input.teamId)

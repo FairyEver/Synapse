@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { SKILL_HUB_MCP_TOOL_ACTIONS } from "./capability"
+import { skillHubAppDefinition } from "./app-definition"
 
 export const HUB_INSTALL_HANDLER = "skill-hub.install"
 
@@ -10,7 +11,7 @@ export function parseSkillHubInstallLink(raw: string): string | null {
 
 export const skillHubCapabilityManifest = {
   id: "skill-hub",
-  app: null,
+  app: skillHubAppDefinition,
   deepLinks: [],
   capabilities: SKILL_HUB_MCP_TOOL_ACTIONS,
   protocolRoutes: [{

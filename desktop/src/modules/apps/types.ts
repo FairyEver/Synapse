@@ -18,6 +18,7 @@ export type SynapseSystemAppNamespace =
   | "launcher"
   | "settings"
   | "resource_repository"
+  | "skill_hub"
   | "git"
   | "database"
   | "synapse_skill"

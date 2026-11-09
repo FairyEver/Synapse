@@ -1,5 +1,7 @@
 # 能力注册清单
 
+2026-11-09 新增桌面 SkillHub（`skill-hub` / `skill_hub`），System App 21→22。可从启动台进入、独立开窗或手动固定；默认 Dock 仍为 9 项。目录、团队、详情与正文、图标和打开安装器共 5 个 UI 私有 IPC（`app.skill_hub.operation.catalog_*`）。原有安装器私有 IPC、安装深链及 10 项 Hub capability / MCP 索引不变。
+
 2026-11-08 新增 `builtin.webhook-forward`（接口转发），Automation Action 由 3 项增至 4 项；仅与 Webhook 组合，配置只有 URL。实时原文 v1 经能力协商传递，历史/MCP 正文仍脱敏；不新增 capability、MCP、IPC、System App、Dock、Workflow Node、Deep Link 或存储表。
 
 2026-11-08 终端自动化保留画面补充启动目录/脱敏命令展示；结束画面首次从头打开并在本窗口适配尺寸。复用既有快照和终端入口，不新增 capability、MCP tool、IPC、Action 或配置字段，既有汇总计数不变。
@@ -126,7 +128,7 @@ Portal Link 与 Portal Link Test 分别保留正式和测试环境授权、本�
 | Quick Input | 是 | 否 | — | — | — | — |
 | Rule Installer | 否 | 否 | — | — | — | — |
 | Secrets | 是 | 否 | — | — | 6 | — |
-| Skill Hub | 否 | 否 | — | — | 10 | 1（Skill 安装） |
+| SkillHub | 是（团队技能浏览和安装，可独立开窗） | 否（可手动固定） | — | — | 10 | 1（Skill 安装） |
 | 云端数据表 | 否 | 否 | — | — | 21 | — |
 | Skill Installer | 否 | 否 | — | — | — | — |
 | Skill Uninstaller | 否 | 否 | — | — | — | — |
@@ -254,7 +256,7 @@ Settings 已移除空置的“实验功能”分类及占位内容。此调整�
 
 桌面主窗口的 Dock 位于左侧。固定应用按现有配置从上到下排列，空间不足时仅应用列表纵向滚动，通知和账号固定在栏底；沉浸模式隐藏整条栏。Dock 默认数量、应用注册和 MCP、Workflow、Automation、Deep Link 入口不变。
 
-应用中心按用途分组，支持按应用名称搜索和按 Dock 固定状态筛选。应用中心、Dock 与 Dock 设置页共用同一套 Lucide 图标映射，站内信与邮箱分别使用收件托盘和信封。固定、取消固定和排序继续使用现有 Dock 偏好；21 个 System App、9 个默认 Dock 项及其顺序保持原注册，Workflow 仍按既有条件显示。MCP schema 和系统 Skill 操作契约一致。
+应用中心按用途分组，支持按应用名称搜索和按 Dock 固定状态筛选。应用中心、Dock 与 Dock 设置页共用同一套 Lucide 图标映射，站内信与邮箱分别使用收件托盘和信封。当前共有 22 个 System App 和 9 个默认 Dock 项，Workflow 按既有条件显示。SkillHub 使用现有 Dock 偏好，云同步服务须包含更新后的共享 System App ID 才能保留固定项。
 
 Dock 升级迁移按 `DOCK_MIGRATIONS` 的稳定 ID 顺序执行，完成记录保存在 `global.dockMigrationIds`，与 `global.dockAppIds` 一次原子写入。历史 `dock.mail-introduction.v1` 中的 `mail` 仍表示站内信；改名迁移先将其归入 `mail-internal`。新增 `dock.mail-apps-introduction.v1`，将末尾一次性排为 `mail-internal` → `mail` → `launcher`（「应用」），已有图标只移动且不重复，其它应用相对顺序不变，即使此前移除过站内信也会执行这次独立迁移。新安装默认包含两款邮件应用并预先记录当前迁移；用户之后移除任一邮件图标、排序或恢复默认不会重跑已完成迁移。备份同时携带布局和完成记录；缺少记录的历史备份视为待迁移配置。System App、MCP、Workflow、Automation 与 Deep Link 的注册数量均不变。
 

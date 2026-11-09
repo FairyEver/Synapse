@@ -1,6 +1,22 @@
 import { describe, expect, it, vi } from "vitest"
 import { DesktopSkillHubService } from "../service"
 
+it("reads the main file at the version captured by the detail request", async () => {
+  const detail = { id: "asset", currentVersion: { id: "v2" } }
+  const main = vi.fn().mockResolvedValue({ versionId: "v3", content: "new version" })
+  const operation = { scope: { accountId: "caller", authRevision: 1 }, signal: new AbortController().signal }
+  const service = new DesktopSkillHubService({
+    cloud: { capture: () => operation, assertActive: vi.fn(), get: vi.fn().mockResolvedValue(detail), main },
+    guard: { check: vi.fn().mockResolvedValue({ allowed: true }) }, audit: { record: vi.fn() },
+  } as never)
+  const caller = { actor: { kind: "user" as const }, clientId: "client" }
+
+  await expect(service.catalogDetail("asset", caller)).rejects.toMatchObject({ code: "HUB_LATEST_CHANGED" })
+  expect(main).toHaveBeenCalledWith(operation, "asset", "v2")
+  main.mockResolvedValue({ versionId: "v2", content: "current version" })
+  await expect(service.catalogDetail("asset", caller)).resolves.toEqual({ skill: detail, content: "current version" })
+})
+
 describe("Skill Hub desktop preparation", () => {
   it("does not read a source when the current account has no team", async () => {
     const prepare = vi.fn()

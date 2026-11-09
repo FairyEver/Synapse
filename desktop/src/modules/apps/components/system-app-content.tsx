@@ -26,6 +26,7 @@ import { CreateEditCustomAppDialog } from "@/modules/custom-apps/create-edit-dia
 import { DeleteCustomAppDialog } from "@/modules/custom-apps/delete-dialog"
 import { AgentPersonasModule } from "../../../../app-capabilities/agent-personas/renderer"
 import { SynapseSkillModule } from "../../../../app-capabilities/synapse-skill/renderer"
+import { SkillHubModule } from "../../../../app-capabilities/skill-hub/renderer"
 import { SecretsModule } from "../../../../app-capabilities/secrets/renderer"
 import { QuickInputModule } from "../../../../app-capabilities/quick-input/renderer"
 import { TerminalModule } from "../../../../app-capabilities/terminal/renderer"
@@ -137,6 +138,7 @@ function SystemAppContent({
       />
     )
   }
+  if (appId === "skill-hub") return <SkillHubModule />
   if (appId === "database") return <DatabaseModule />
   if (appId === "synapse-skill") return <SynapseSkillModule />
   if (appId === "secrets") return <SecretsModule />

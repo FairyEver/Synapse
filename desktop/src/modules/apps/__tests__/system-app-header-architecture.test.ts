@@ -22,6 +22,7 @@ const appEntrypoints = {
   launcher: { path: "../components/system-app-content.tsx", header: "none" },
   settings: { path: "../../settings/index.tsx", header: "none" },
   "resource-repository": { path: "../../resource-repository/index.tsx", header: "window-shell" },
+  "skill-hub": { path: "../../../../app-capabilities/skill-hub/renderer/index.tsx", header: "window-shell" },
   git: { path: "../../git/index.tsx", header: "window-shell" },
   database: { path: "../../database/index.tsx", header: "window-shell" },
   "synapse-skill": { path: "../../../../app-capabilities/synapse-skill/renderer/index.tsx", header: "window-shell" },

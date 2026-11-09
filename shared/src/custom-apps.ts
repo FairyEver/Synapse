@@ -12,6 +12,7 @@ export const SYSTEM_APP_IDS = [
   "launcher",
   "settings",
   "resource-repository",
+  "skill-hub",
   "git",
   "database",
   "synapse-skill",

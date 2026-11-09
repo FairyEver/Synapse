@@ -1,6 +1,6 @@
 import { sha256 } from "@synapse/shared/archive-package-node"
 import {
-  SKILL_HUB_LIMITS as limits, skillHubDeleteResultSchema, skillHubDetailSchema, skillHubIdSchema,
+  SKILL_HUB_LIMITS as limits, inspectHubIconInput, skillHubDeleteResultSchema, skillHubDetailSchema, skillHubIdSchema,
   skillHubMainResultSchema, skillHubPageSchema, skillHubReceiptSchema, skillHubTeamPageSchema,
   skillHubUploadResultSchema, skillHubWriteReplaySchema, skillHubWriteResultSchema,
   type SkillHubCreateInput, type SkillHubListInput, type SkillHubPublishInput, type SkillHubReceiptInput,
@@ -123,6 +123,22 @@ export class SkillHubCloudClient {
 
   main(op: HubAccountOperation, skillId: string, expectedVersionId?: string) {
     return this.json(op, requestPath(`/skills/${id(skillId)}/main${queryString({ expectedVersionId })}`), skillHubMainResultSchema)
+  }
+
+  async icon(op: HubAccountOperation, skillId: string) {
+    const signal = AbortSignal.any([op.signal, AbortSignal.timeout(20_000)])
+    const response = await this.request(op, requestPath(`/skills/${id(skillId)}/icon`), {}, signal)
+    if (response.headers.get("Content-Type") !== "image/png") {
+      await response.body?.cancel()
+      throw new SkillHubDesktopError("HUB_RESPONSE_INVALID", "Skill 图标格式无效。")
+    }
+    const bytes = await readBytes(response, limits.iconBytes, signal)
+    this.assertActive(op)
+    const icon = inspectHubIconInput(bytes)
+    if (icon?.type !== "image/png" || icon.width > limits.iconSize || icon.height > limits.iconSize) {
+      throw new SkillHubDesktopError("HUB_RESPONSE_INVALID", "Skill 图标格式无效。")
+    }
+    return bytes.toString("base64")
   }
 
   receipt(op: HubAccountOperation, input: SkillHubReceiptInput) {

@@ -121,6 +121,8 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
     pendingMainNavigation = request
     deps.windowManager?.broadcast(IPC_CHANNELS.apps.mainNavigationRequested, request, (window) => window.role === "main")
   }
+  const isMainNavigationSender = (id: number): boolean =>
+    deps.windowManager?.list().some((window) => window.role === "main" && window.webContentsId === id) ?? false
 
   return {
     focusMainWindow,
@@ -137,9 +139,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         deliverMainNavigation({ id, ownerId, destination })
       }
     },
-    isMainNavigationSender(id: number): boolean {
-      return deps.windowManager?.list().some((window) => window.role === "main" && window.webContentsId === id) ?? false
-    },
+    isMainNavigationSender,
     getPendingMainNavigation(): MainNavigationRequest | null {
       if (pendingMainNavigation?.ownerId && pendingMainNavigation.ownerId !== deps.getOwnerId?.()) {
         pendingMainNavigation = null
@@ -154,6 +154,9 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
       if (pendingMainNavigation?.id === id) pendingMainNavigation = null
     },
     isSkillInstallerSender(id: number) { return detachedWindows.get(HUB_INSTALLER_VIEW)?.webContents.id === id },
+    isSkillHubCatalogSender(id: number) {
+      return isMainNavigationSender(id) || detachedWindows.get("skill-hub")?.webContents.id === id
+    },
     async openSkillInstaller(request: HubInstallOpenRequest) {
       const existing = detachedWindows.get(HUB_INSTALLER_VIEW)
       if (existing) {

@@ -14,6 +14,7 @@ import { editorScanAppManifest } from "@/modules/editor-scan/app-manifest"
 import { gitAppManifest } from "@/modules/git/app-manifest"
 import { modelPriceAppManifest } from "@/modules/model-price/app-manifest"
 import { resourceRepositoryAppManifest } from "@/modules/resource-repository/app-manifest"
+import { skillHubAppManifest } from "../../../app-capabilities/skill-hub/renderer/app-manifest"
 import { settingsAppManifest } from "@/modules/settings/app-manifest"
 import { workflowAppManifest } from "@/modules/workflow/app-manifest"
 import { launcherAppManifest } from "./launcher-app-manifest"
@@ -35,6 +36,7 @@ const systemApps = [
   launcherAppManifest,
   settingsAppManifest,
   resourceRepositoryAppManifest,
+  skillHubAppManifest,
   gitAppManifest,
   databaseAppManifest,
   synapseSkillAppManifest,

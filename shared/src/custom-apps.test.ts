@@ -31,7 +31,7 @@ function customAppDtoFixture() {
 
 describe("custom app contracts", () => {
   it("keeps the canonical system app and default Dock catalogs stable", () => {
-    expect(SYSTEM_APP_IDS).toHaveLength(21)
+    expect(SYSTEM_APP_IDS).toHaveLength(22)
     expect(DEFAULT_DOCK_APP_IDS).toEqual([
       "agent",
       "drive",

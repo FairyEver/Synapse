@@ -1,6 +1,6 @@
 import {
   Bot, Cloud, Database, FolderOpen, GitBranch, Inbox, KeyRound, LayoutGrid, LibraryBig,
-  ListTodo, Mail, MessageCircle, Mic, PackageCheck, Plug, Settings, SquareCode, SquareTerminal,
+  ListTodo, Mail, MessageCircle, Mic, PackageCheck, PackageSearch, Plug, Settings, SquareCode, SquareTerminal,
   Tag, TextCursorInput, Timer, Workflow, type LucideIcon,
 } from "lucide-react"
 import type { SynapseSystemAppId } from "./types"
@@ -26,6 +26,7 @@ export const systemAppPresentation: Record<SynapseSystemAppId, {
   meeting: { icon: Mic, category: "collaboration" },
   drive: { icon: Cloud, category: "resources" },
   "resource-repository": { icon: LibraryBig, category: "resources" },
+  "skill-hub": { icon: PackageSearch, category: "resources" },
   database: { icon: Database, category: "resources" },
   "synapse-skill": { icon: PackageCheck, category: "resources" },
   "quick-input": { icon: TextCursorInput, category: "resources" },

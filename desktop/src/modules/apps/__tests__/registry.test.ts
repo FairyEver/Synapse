@@ -24,6 +24,7 @@ describe("system app registry", () => {
       "launcher",
       "settings",
       "resource-repository",
+      "skill-hub",
       "git",
       "database",
       "synapse-skill",
@@ -49,6 +50,12 @@ describe("system app registry", () => {
     })
     expect(getSystemAppManifest("resource-repository")).toMatchObject({
       namespace: "resource_repository",
+    })
+    expect(getSystemAppManifest("skill-hub")).toMatchObject({
+      name: "SkillHub",
+      namespace: "skill_hub",
+      dock: { pinnedByDefault: false, pinnable: true },
+      window: { openable: true },
     })
     expect(getSystemAppManifest("agent-personas")).toMatchObject({
       id: "agent-personas",

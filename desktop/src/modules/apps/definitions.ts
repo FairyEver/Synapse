@@ -14,6 +14,7 @@ import { editorScanAppDefinition } from "../editor-scan/app-definition"
 import { gitAppDefinition } from "../git/app-definition"
 import { modelPriceAppDefinition } from "../model-price/app-definition"
 import { resourceRepositoryAppDefinition } from "../resource-repository/app-definition"
+import { skillHubAppDefinition } from "../../../app-capabilities/skill-hub/shared/app-definition"
 import { settingsAppDefinition } from "../settings/app-definition"
 import { workflowAppDefinition } from "../workflow/app-definition"
 import { launcherAppDefinition } from "./launcher-app-definition"
@@ -34,6 +35,7 @@ const systemAppDefinitions = [
   launcherAppDefinition,
   settingsAppDefinition,
   resourceRepositoryAppDefinition,
+  skillHubAppDefinition,
   gitAppDefinition,
   databaseAppDefinition,
   synapseSkillAppDefinition,
