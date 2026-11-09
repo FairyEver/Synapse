@@ -53,6 +53,13 @@ const SYSTEM_APP_WINDOW_BOUNDS = {
   minHeight: 640,
 }
 
+const SKILL_INSTALLER_WINDOW_BOUNDS = {
+  width: 600,
+  height: 680,
+  minWidth: 420,
+  minHeight: 480,
+}
+
 const MAIL_COMPOSE_WINDOW_BOUNDS = {
   width: 800,
   height: 640,
@@ -163,7 +170,7 @@ export function createSystemAppWindowService(deps: SystemAppWindowServiceDeps) {
         key: HUB_INSTALLER_VIEW,
         payload: buildDetachedViewWindowUrl(deps.baseUrl(), params),
         options: {
-          ...SYSTEM_APP_WINDOW_BOUNDS,
+          ...SKILL_INSTALLER_WINDOW_BOUNDS,
           title: "Skill 安装",
           show: false,
           webPreferences: {

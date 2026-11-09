@@ -40,47 +40,40 @@ export function SkillInstallerModule({ hubRequest }: { hubRequest?: HubInstallOp
     void load()
   }, [load])
 
-  const editorStatus = (
-    <>
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner />
-          加载中
-        </div>
-      ) : null}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-    </>
-  )
+  const editorListStatus = isLoading ? (
+    <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Spinner />
+      正在读取编辑器
+    </p>
+  ) : error ? (
+    <div className="flex flex-wrap items-center gap-3">
+      <p role="alert" className="min-w-0 wrap-anywhere text-sm text-destructive">{error}</p>
+      <Button type="button" variant="outline" onClick={() => void load(true)}>重试</Button>
+    </div>
+  ) : null
 
-  const renderPageFrame = (content: ReactNode, splitEditorStep: boolean) => splitEditorStep ? (
-    <>
-      {isLoading || error ? <div className="px-6 pt-4">{editorStatus}</div> : null}
-      {content}
-    </>
-  ) : (
-    <div className="mx-auto w-full max-w-2xl p-3 sm:p-5">
+  const renderPageFrame = (content: ReactNode) => (
+    <div className="mx-auto w-full max-w-xl p-4 sm:p-6">
       <Card className="py-0">
-        <CardContent className="p-4 sm:p-5">
-          {editorStatus}
-          {content}
-        </CardContent>
+        <CardContent className="p-4 sm:p-6">{content}</CardContent>
       </Card>
     </div>
   )
 
   return (
     <SystemAppWindowShell>
-      <ScrollArea className="h-full min-h-0" viewportClassName="[&>div]:h-full">
+      <ScrollArea className="h-full min-h-0">
         {hubRequest ? (
-          <HubSourceInput request={hubRequest} renderStatus={(content) => renderPageFrame(content, false)}>
+          <HubSourceInput request={hubRequest} renderStatus={renderPageFrame}>
             {(source) => (
-              <SharedInstallerFlow editors={filteredAdapters} kind="skill" mode="page"
+              <SharedInstallerFlow editors={filteredAdapters} editorListStatus={editorListStatus} kind="skill" mode="page"
                 projects={config.global.projects} source={source} onCancel={() => window.close()}
                 onInstalled={() => { toast.success("安装完成") }} renderPageFrame={renderPageFrame} />
             )}
           </HubSourceInput>
         ) : <SharedInstallerFlow
           editors={filteredAdapters}
+          editorListStatus={editorListStatus}
           kind="skill"
           mode="page"
           projects={config.global.projects}

@@ -438,7 +438,7 @@ describe("SharedInstallerFlow", () => {
     expect(document.body.textContent).toContain("目标位置")
   })
 
-  it("shows the Hub Skill introduction during editor selection and its version at the install target", async () => {
+  it("shows the Hub Skill introduction, then the chosen editor and version at the install target", async () => {
     const source = {
       ...repositorySkillSource,
       origin: "skill-hub" as const,
@@ -452,11 +452,13 @@ describe("SharedInstallerFlow", () => {
     expect(document.body.textContent).not.toContain("本次安装")
 
     await act(async () => clickButton("Codex"))
-    expect(document.body.textContent).toContain("目标位置")
-    expect(document.body.textContent).toContain("本次安装v3")
+    expect(document.activeElement?.textContent).toBe("目标位置")
+    expect(document.body.textContent).toContain("Codex")
+    expect(document.body.textContent).toContain("本次安装 v3")
+    expect(mocks.installSourceToEditor).not.toHaveBeenCalled()
 
     await act(async () => clickButton("上一步"))
-    expect(document.body.textContent).toContain("选择编辑器")
+    expect(document.activeElement?.textContent).toBe("选择编辑器")
     expect(document.body.textContent).not.toContain("本次安装")
   })
 
