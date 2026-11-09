@@ -33,9 +33,8 @@ function SkillIcon({ skill }: { skill: Pick<SkillHubSummary, "id" | "iconUrl" | 
   )
 }
 
-function SkillMetadata({ skill, showPackage }: {
-  skill: Pick<SkillHubSummary, "createdBy" | "currentVersion" | "package">
-  showPackage?: boolean
+function SkillMetadata({ skill }: {
+  skill: Pick<SkillHubSummary, "createdBy" | "currentVersion">
 }) {
   const name = skill.createdBy.displayName.trim()
   const author = name !== skill.createdBy.id && !/^\d+$/.test(name) ? name : ""
@@ -46,10 +45,6 @@ function SkillMetadata({ skill, showPackage }: {
         <span aria-hidden="true">·</span>
       </>}
       <span className="shrink-0">v{skill.currentVersion.number}</span>
-      {showPackage && <>
-        <span aria-hidden="true">·</span>
-        <span className="min-w-0 truncate font-mono" title={skill.package.name}>{skill.package.name}</span>
-      </>}
     </span>
   )
 }
@@ -76,7 +71,7 @@ function SkillCard({ skill, installing, onOpen, onInstall }: {
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium group-hover:underline" title={skill.displayName}>{skill.displayName}</span>
               <span className="mt-0.5 line-clamp-2 wrap-anywhere text-xs text-muted-foreground">{skill.displayDescription}</span>
-              <span className="mt-1 block"><SkillMetadata skill={skill} showPackage /></span>
+              <span className="mt-1 block"><SkillMetadata skill={skill} /></span>
             </span>
           </button>
           <Button type="button" variant="outline" aria-label={`安装 ${skill.displayName}`} disabled={installing}

@@ -79,7 +79,9 @@ describe("SkillHub", () => {
     await render(host)
     expect(container.querySelectorAll("[data-system-app-window-toolbar], [data-embedded-system-app-header]")).toHaveLength(1)
     expect(container.querySelector("aside, footer, [role='tablist']")).toBeNull()
-    expect(container.textContent).toContain("sample-skill")
+    const card = button("查看 团队技能")
+    expect(card.textContent).toContain("李杨·v2")
+    expect(card.textContent).not.toContain(skill.package.name)
     expect(container.querySelector('[aria-label="筛选团队"]')).toBeNull()
     expect(container.textContent).not.toContain(skill.team.name)
   })
@@ -97,6 +99,7 @@ describe("SkillHub", () => {
     const dialog = document.querySelector('[role="dialog"]')!
     expect(dialog.textContent).toContain("李杨")
     expect(dialog.textContent).not.toContain("@李杨")
+    expect(dialog.textContent).toContain(skill.package.name)
     expect(dialog.textContent).toContain("<script>fixture</script>")
     expect(dialog.textContent).not.toContain(skill.team.name)
     expect(dialog.querySelector("script, img[src^='https:']")).toBeNull()
