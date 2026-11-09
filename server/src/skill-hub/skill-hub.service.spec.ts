@@ -1,4 +1,7 @@
+import { Readable } from "node:stream"
+import archiver from "archiver"
 import { describe, expect, it, vi } from "vitest"
+import { sha256 } from "@synapse/shared/archive-package-node"
 import type { SkillHubCreateInput } from "@synapse/shared/skill-hub-contracts"
 import type { SkillHubRepository } from "./skill-hub.repository"
 import { SkillHubService } from "./skill-hub.service"
@@ -12,12 +15,12 @@ const createInput: SkillHubCreateInput = {
   teamId: team.id, packageUploadId: "upload-one", requestId: "initial",
   displayName: "商店名", displayDescription: "商店介绍",
 }
-function fixture() {
+function fixture(files?: Record<string, Buffer>) {
   type Skill = {
     id: string; teamId: string; maintainerUserId: string | null; createdById: string | null; deletedAt: Date | null;
     currentVersionId: string | null; revision: number;
   }
-  type Version = { id: string; number: number; contentFingerprint: string }
+  type Version = { id: string; number: number; contentFingerprint: string; archiveObject: ReturnType<typeof object> }
   type Receipt = { actorKey: string; action: string; requestId: string; requestDigest: string; skillId: string; result: unknown }
   let skill: Skill | undefined
   const versions = new Map<string, Version>()
@@ -44,7 +47,8 @@ function fixture() {
       findFirst: vi.fn(async ({ where }: { where: { id: string; actorKey: string; teamId: string } }) => {
         const upload = uploads.get(where.id)
         if (!upload || where.teamId !== team.id || !active.has(where.actorKey)) return null
-        return { id: where.id, packageName: upload[0], packageDescription: `包内介绍 ${upload[0]}`, manifest,
+        const entries = files ? Object.entries(files).map(([path, bytes]) => ({ path, size: bytes.length, sha256: sha256(bytes) })) : manifest
+        return { id: where.id, packageName: upload[0], packageDescription: `包内介绍 ${upload[0]}`, manifest: entries,
           contentFingerprint: "sha256:" + upload[1].repeat(64), objects: [object("archive"), object("main")] }
       }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -79,9 +83,50 @@ function fixture() {
     },
   }
   const repository = { lockActiveTeamMember, prisma: { $transaction: async (run: (client: typeof tx) => unknown) => run(tx) } }
-  const service = new SkillHubService(repository as unknown as SkillHubRepository, { put: vi.fn(), open: vi.fn(), head: vi.fn(), remove: vi.fn() })
-  return { service, versions, active, tx, current: () => skill! }
+  const open = vi.fn()
+  const service = new SkillHubService(repository as unknown as SkillHubRepository, { put: vi.fn(), open, head: vi.fn(), remove: vi.fn() })
+  return { service, versions, active, tx, open, current: () => skill! }
 }
+
+it("previews only the requested latest UTF-8 file for current team members", async () => {
+  const content = "# 说明\n<script>example()</script>\n"
+  const path = "references/说明.md"
+  const files = { "SKILL.md": Buffer.from("# skill"), [path]: Buffer.from(content),
+    "empty.txt": Buffer.alloc(0), "binary.dat": Buffer.from([0, 1, 2]), "large.txt": Buffer.alloc(1024 * 1024 + 1, "a") }
+  const archive = archiver("zip")
+  const chunks: Buffer[] = []
+  archive.on("data", (chunk: Buffer) => chunks.push(chunk))
+  const ended = new Promise<void>((resolve, reject) => archive.once("end", resolve).once("error", reject))
+  for (const [name, bytes] of Object.entries(files)) archive.append(bytes, { name })
+  await Promise.all([ended, archive.finalize()])
+  const bytes = Buffer.concat(chunks)
+
+  const { service, tx, active, open } = fixture(files)
+  await service.create("author", createInput)
+  const row = await tx.skillHubSkill.findFirst({ where: { id: "asset" } })
+  Object.assign(row!.currentVersion!.archiveObject, { storageKey: "archive", size: bytes.length, sha256: sha256(bytes) })
+  open.mockImplementation(async () => ({ size: bytes.length, stream: Readable.from([bytes]) }))
+
+  await expect(service.openFile("outsider", "asset", { expectedVersionId: "v1", path }))
+    .rejects.toMatchObject({ response: { code: "HUB_NOT_AVAILABLE" } })
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v0", path }))
+    .rejects.toMatchObject({ response: { code: "HUB_LATEST_CHANGED" } })
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v1", path: "../SKILL.md" }))
+    .rejects.toMatchObject({ response: { code: "HUB_NOT_AVAILABLE" } })
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v1", path: "large.txt" }))
+    .rejects.toMatchObject({ response: { code: "HUB_PREVIEW_TOO_LARGE" } })
+  expect(open).not.toHaveBeenCalled()
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v1", path })).resolves.toEqual({ versionId: "v1", content })
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v1", path: "empty.txt" })).resolves.toEqual({ versionId: "v1", content: "" })
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v1", path: "binary.dat" }))
+    .rejects.toMatchObject({ response: { code: "HUB_PREVIEW_NOT_TEXT" } })
+  open.mockResolvedValueOnce({ size: bytes.length, stream: Readable.from([Buffer.alloc(bytes.length)]) })
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v1", path }))
+    .rejects.toMatchObject({ response: { code: "HUB_STORAGE_UNAVAILABLE" } })
+  active.delete("member")
+  await expect(service.openFile("member", "asset", { expectedVersionId: "v1", path }))
+    .rejects.toMatchObject({ response: { code: "HUB_NOT_AVAILABLE" } })
+})
 
 describe("Skill Hub writes", () => {
   it("creates v1 and publishes a complete renamed package without overwriting store metadata", async () => {

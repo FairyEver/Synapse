@@ -1,6 +1,7 @@
 import {
   SKILL_HUB_LIMITS as limits, SKILL_HUB_WEB_SESSION_HEADER,
-  skillHubDetailSchema, skillHubIdSchema, skillHubMainResultSchema, skillHubPageSchema, skillHubReceiptSchema, skillHubTeamPageSchema,
+  skillHubDetailSchema, skillHubFilePreviewQuerySchema, skillHubFilePreviewResultSchema, skillHubIdSchema,
+  skillHubMainResultSchema, skillHubPageSchema, skillHubReceiptSchema, skillHubTeamPageSchema,
   skillHubCreateInputSchema, skillHubDeleteResultSchema, skillHubPublishInputSchema, skillHubRevisionInputSchema,
   skillHubUpdateInputSchema, skillHubUploadInputSchema, skillHubUploadResultSchema, skillHubWriteReplaySchema, skillHubWriteResultSchema,
   type SkillHubCreateInput, type SkillHubPublishInput, type SkillHubRevisionInput, type SkillHubUpdateInput, type SkillHubUploadInput,
@@ -81,6 +82,12 @@ export const skillHubApi = {
     hubJson(session, hubSkillPath(id), skillHubDetailSchema, { signal }),
   main: (session: string, id: string, expectedVersionId: string, signal?: AbortSignal) =>
     hubJson(session, `${hubSkillPath(id)}/main${hubQuery({ expectedVersionId })}`, skillHubMainResultSchema, { signal }),
+  async preview(session: string, id: string, expectedVersionId: string, path: string, signal?: AbortSignal) {
+    const query = hubQuery(skillHubFilePreviewQuerySchema.parse({ expectedVersionId, path }))
+    const result = await hubJson(session, `${hubSkillPath(id)}/file${query}`, skillHubFilePreviewResultSchema, { signal })
+    if (result.versionId !== expectedVersionId) throw new ApiError('文件版本已变化，请重新读取。', 409, 'HUB_LATEST_CHANGED')
+    return result
+  },
   download: (session: string, id: string, expectedVersionId: string, signal?: AbortSignal) =>
     hubBinary(session, `${hubSkillPath(id)}/package${hubQuery({ expectedVersionId })}`, limits.uploadBytes, 'application/zip', signal, expectedVersionId),
   icon: (session: string, id: string, signal?: AbortSignal) =>

@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req, Res, StreamableFile, UseGuards } from "@nestjs/common"
 import {
-  skillHubCreateInputSchema, skillHubIdSchema, skillHubListInputSchema, skillHubPublishInputSchema,
+  skillHubCreateInputSchema, skillHubFilePreviewQuerySchema, skillHubIdSchema, skillHubListInputSchema, skillHubPublishInputSchema,
   skillHubReceiptInputSchema, skillHubRevisionInputSchema, skillHubUpdateInputSchema,
 } from "@synapse/shared/skill-hub-contracts"
 import type { Response } from "express"
@@ -100,6 +100,12 @@ export class SkillHubController {
   @Header("Cache-Control", "private, no-store")
   openMain(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query() query: unknown) {
     return this.hub.openMain(request.user!.id, idParam(id), expectedVersion(query))
+  }
+
+  @Get("skills/:id/file")
+  @Header("Cache-Control", "private, no-store")
+  openFile(@Req() request: AuthenticatedUserRequest, @Param("id") id: string, @Query() query: unknown) {
+    return this.hub.openFile(request.user!.id, idParam(id), parseHubInput(skillHubFilePreviewQuerySchema, query))
   }
 
   @Get("skills/:id/icon")

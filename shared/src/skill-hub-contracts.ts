@@ -5,6 +5,7 @@ export const SKILL_HUB_WEB_SESSION_HEADER = "X-Skill-Hub-Session"
 const MiB = 1024 * 1024
 export const SKILL_HUB_LIMITS = {
   mainBytes: MiB,
+  filePreviewBytes: MiB,
   attachmentBytes: 10 * MiB,
   packageBytes: 50 * MiB,
   uploadBytes: 50 * MiB,
@@ -59,8 +60,9 @@ export const skillHubPackageInfoSchema = z.strictObject({
   name: skillHubPackageNameSchema,
   description: z.string().min(1).max(SKILL_HUB_LIMITS.mainBytes),
 })
+const packagePath = z.string().min(1).max(1024)
 export const skillHubManifestSchema = z.array(z.strictObject({
-  path: z.string().min(1).max(1024),
+  path: packagePath,
   size: z.int().nonnegative().max(SKILL_HUB_LIMITS.attachmentBytes),
   sha256,
 })).min(1).max(SKILL_HUB_LIMITS.attachments + 1)
@@ -145,6 +147,8 @@ export const skillHubUploadResultSchema = z.strictObject({
   uploadId: id, expiresAt: utc, packageInfo: skillHubPackageInfoSchema.optional(),
 })
 export const skillHubMainResultSchema = z.strictObject({ content: z.string().max(SKILL_HUB_LIMITS.mainBytes), versionId: id })
+export const skillHubFilePreviewQuerySchema = z.strictObject({ path: packagePath, expectedVersionId: id })
+export const skillHubFilePreviewResultSchema = z.strictObject({ content: z.string().max(SKILL_HUB_LIMITS.filePreviewBytes), versionId: id })
 export const skillHubPreparedSourceSchema = z.strictObject({
   preparedSourceId: id,
   team: skillHubTeamSchema,

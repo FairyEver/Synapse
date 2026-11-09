@@ -39,3 +39,9 @@ export function useSkillHubMain(session: string, id: string, version: string, en
   return useQuery({ queryKey: [...hubScope(session), 'main', id, version], enabled: !!session && enabled, retry: false,
     queryFn: ({ signal }) => skillHubApi.main(session, id, version, signal) })
 }
+
+export function useSkillHubFilePreview(session: string, id: string, version: string, path: string) {
+  return useQuery({ queryKey: [...hubScope(session), 'file', id, version, path], enabled: !!session, gcTime: 0, retry: false,
+    refetchOnWindowFocus: false, refetchOnReconnect: false,
+    queryFn: ({ signal }) => skillHubApi.preview(session, id, version, path, signal) })
+}

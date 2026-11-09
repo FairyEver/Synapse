@@ -1,18 +1,18 @@
 import { Inject, Injectable } from "@nestjs/common"
 import { Prisma, type SkillHubWriteReceipt as ReceiptRow } from "@prisma/client"
 import {
-  SKILL_HUB_LIMITS as limits, skillHubIdSchema, skillHubReceiptResultSchema,
+  SKILL_HUB_LIMITS as limits, skillHubFilePreviewQuerySchema, skillHubIdSchema, skillHubManifestSchema, skillHubReceiptResultSchema,
   type SkillHubCreateInput, type SkillHubDeleteResult, type SkillHubDetail, type SkillHubListInput,
   type SkillHubPage, type SkillHubPublishInput, type SkillHubReceipt, type SkillHubReceiptInput,
   type SkillHubReceiptResult, type SkillHubRevisionInput, type SkillHubUpdateInput,
   type SkillHubWriteAction, type SkillHubWriteReplay, type SkillHubWriteResult,
 } from "@synapse/shared/skill-hub-contracts"
-import { decodeUtf8 } from "@synapse/shared/archive-package-node"
+import { decodeUtf8, readZipEntries, sha256 } from "@synapse/shared/archive-package-node"
 import { z } from "zod"
 import { hubPageLimit, SkillHubRepository } from "./skill-hub.repository"
 import { decodeHubCursor, encodeHubCursor } from "./skill-hub-cursor"
 import { hubError } from "./skill-hub-error"
-import { consumeVerifiedHubObject, openSkillHubObject } from "./skill-hub-object-read"
+import { consumeVerifiedHubObject, openSkillHubObject, type HubObjectLocation } from "./skill-hub-object-read"
 import { SKILL_HUB_STORAGE, type SkillHubStoragePort } from "./skill-hub-storage"
 import { hubDetail, hubDetailSelect, hubMaintainers, hubSummary, hubSummarySelect, hubUnavailable, readableHubSkills } from "./skill-hub-read"
 import {
@@ -28,9 +28,12 @@ const catalogCursor = {
 }
 const readIsolation = { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
 const storageUnavailable = () => hubError(503, "HUB_STORAGE_UNAVAILABLE", "Skill 文件暂不可用，请稍后重试。")
+const notPreviewable = () => hubError(415, "HUB_PREVIEW_NOT_TEXT", "此文件无法作为 UTF-8 文本预览。")
 
 @Injectable()
 export class SkillHubService {
+  private activeFilePreviews = 0
+
   constructor(
     private readonly repository: SkillHubRepository,
     @Inject(SKILL_HUB_STORAGE) private readonly storage: SkillHubStoragePort,
@@ -189,6 +192,50 @@ export class SkillHubService {
       return { content: decodeUtf8(Buffer.concat(chunks)), versionId: version.id }
     } catch {
       throw storageUnavailable()
+    }
+  }
+
+  async openFile(userId: string, skillId: string, { path, expectedVersionId }: z.infer<typeof skillHubFilePreviewQuerySchema>) {
+    const row = await this.latest(userId, skillId, expectedVersionId)
+    const version = row.currentVersion!
+    const file = skillHubManifestSchema.parse(version.manifest).find((entry) => entry.path === path)
+    if (!file) throw hubError(404, "HUB_NOT_AVAILABLE", "该文件不存在。")
+    if (file.size > limits.filePreviewBytes) throw hubError(413, "HUB_PREVIEW_TOO_LARGE", "此文件超过 1 MiB，无法预览。")
+    const bytes = await this.readPreviewBytes(version.archiveObject, file)
+    let content: string
+    try {
+      content = decodeUtf8(bytes)
+    } catch {
+      throw notPreviewable()
+    }
+    // Allow tabs, line breaks and form feeds while rejecting binary control bytes.
+    if (/[\u0000-\u0008\u000B\u000E-\u001F\u007F]/u.test(content)) throw notPreviewable()
+    return { content, versionId: version.id }
+  }
+
+  private async readPreviewBytes(object: HubObjectLocation, file: { path: string; size: number; sha256: string }) {
+    // Each read may buffer a full archive while extracting only the requested entry.
+    if (this.activeFilePreviews >= 2) throw hubError(503, "HUB_PREVIEW_BUSY", "文件预览繁忙，请稍后重试。")
+    this.activeFilePreviews++
+    try {
+      let archive: Buffer = Buffer.alloc(0)
+      let offset = 0
+      await consumeVerifiedHubObject(this.storage, object, limits.uploadBytes, (chunk) => {
+        if (archive.length === 0) archive = Buffer.alloc(object.size)
+        offset += chunk.copy(archive, offset)
+      })
+      const entry = readZipEntries(archive, {
+        maxCompressedBytes: limits.uploadBytes, maxEntries: limits.attachments + 1,
+        maxFileBytes: limits.attachmentBytes, maxManifestBytes: limits.mainBytes,
+        maxUncompressedBytes: limits.packageBytes, maxParseTimeMs: limits.parseTimeMs,
+        strict: { maxDirectories: 0, maxDepth: limits.directoryDepth },
+      }, file.path).get(file.path)
+      if (!entry || entry.bytes.length !== file.size || sha256(entry.bytes) !== file.sha256) throw storageUnavailable()
+      return entry.bytes
+    } catch {
+      throw storageUnavailable()
+    } finally {
+      this.activeFilePreviews--
     }
   }
 

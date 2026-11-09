@@ -8,6 +8,7 @@ import { Main } from '@/components/layout/main'
 import { SkillHubIcon, SkillInstallButton } from './skill-catalog-item'
 import { skillHubApi } from './skill-hub-api'
 import type { SkillHubSearch } from './skill-hub-navigation'
+import { SkillFileList } from './skill-file-list'
 import { SkillMaintenance } from "./skill-maintenance"
 import { SkillMainView } from './skill-main-view'
 import { useSkillHubDetail, useSkillHubMain, useSkillHubSession } from './use-skill-hub'
@@ -99,10 +100,7 @@ export function SkillDetail({ skill, session, reload, onDeleted = reload }: { sk
             </> : <Skeleton aria-label="正在读取说明" role="status" className="h-24 rounded-lg" />}
         </Tabs.Panel>
         <Tabs.Panel id="files" className="min-w-0 pt-4">
-          <ul className="divide-y divide-separator">{skill.files.map((file) => <li key={file.path} className="flex min-w-0 items-start gap-2 py-3 text-sm">
-            <File className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden="true" /><span className="min-w-0 flex-1 wrap-anywhere font-mono">{file.path}</span>
-            <span className="shrink-0 text-muted tabular-nums">{file.size.toLocaleString()} B</span>
-          </li>)}</ul>
+          <SkillFileList key={version.id} skill={skill} session={session} reload={reload} />
         </Tabs.Panel>
       </Tabs>
       <aside aria-label="包资料" className="min-w-0 border-t border-separator pt-4 @3xl/content:mt-12 @3xl/content:border-s @3xl/content:border-t-0 @3xl/content:ps-5 @3xl/content:pt-0">

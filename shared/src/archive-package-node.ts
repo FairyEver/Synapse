@@ -24,7 +24,7 @@ export function parseContentLength(value: string | null): number | undefined {
   return Number.isSafeInteger(parsed) ? parsed : undefined
 }
 
-export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): Map<string, ZipEntry> {
+export function readZipEntries(archive: Buffer, limits: InstallPackageLimits, onlyPath?: string): Map<string, ZipEntry> {
   const startedAt = performance.now()
   const strict = limits.strict
   if (strict && archive.length > limits.maxCompressedBytes) throw new Error("ZIP archive exceeds size limit")
@@ -47,6 +47,7 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
 
   if (strict && centralOffset + centralSize !== endOffset) throw new Error("invalid ZIP end record")
   const entries = new Map<string, ZipEntry>()
+  const seenNames = new Set<string>()
   const localRanges: [number, number][] = []
   let directories = 0
   let cursor = centralOffset
@@ -97,7 +98,8 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
       assertSafeZipExtra(archive, cursor + 46 + nameLength, extraLength, archive.subarray(cursor + 46, cursor + 46 + nameLength))
       localRanges.push([localOffset, strictLocalEnd(archive, localOffset, centralOffset, flags, crc, compressedSize, uncompressedSize)])
     }
-    if (entries.has(name)) throw new Error("duplicate ZIP entry")
+    if (seenNames.has(name)) throw new Error("duplicate ZIP entry")
+    seenNames.add(name)
     if ((flags & 0x0001) !== 0) throw new Error("encrypted ZIP entries are not supported")
     if (method !== 0 && method !== 8) throw new Error("unsupported ZIP compression method")
     if (((externalAttributes >>> 16) & 0o170000) === 0o120000) {
@@ -117,6 +119,8 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
     if (totalCompressed > limits.maxCompressedBytes) throw new Error("ZIP compressed data exceeds size limit")
     if (totalUncompressed > limits.maxUncompressedBytes) throw new Error("ZIP content exceeds size limit")
 
+    cursor = entryEnd
+    if (onlyPath !== undefined && name !== onlyPath) continue
     const bytes = readZipEntryData(
       archive,
       localOffset,
@@ -133,7 +137,6 @@ export function readZipEntries(archive: Buffer, limits: InstallPackageLimits): M
     }
     if (crc32(bytes) !== crc) throw new Error("ZIP entry CRC does not match")
     entries.set(name, directory ? { name, bytes, directory: true } : { name, bytes })
-    cursor = entryEnd
   }
 
   if (cursor !== centralOffset + centralSize) throw new Error("invalid ZIP central directory size")
